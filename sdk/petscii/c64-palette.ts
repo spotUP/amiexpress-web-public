@@ -30,7 +30,8 @@ export const PETSCII_COLOR_TO_VIC: { [key: number]: number } = {
   0x81: 8, 0x95: 9, 0x96: 10, 0x97: 11, 0x98: 12, 0x99: 13, 0x9A: 14, 0x9B: 15,
 };
 
-function hexToRgb(hex: string): [number, number, number] {
+/** '#RRGGBB' -> [r, g, b]. The ONE copy: the transducer's nearest-color search imports it from here. */
+export function hexToRgb(hex: string): [number, number, number] {
   return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
 }
 

@@ -16,13 +16,20 @@
  * sections 1.1 (control codes), 1.2-1.3 (KERNAL semantics), 3 (palette).
  */
 import { PetsciiMachine } from './petscii-machine';
-import { C64_PALETTE_COLODORE, PETSCII_COLOR_TO_VIC } from './c64-palette';
+import { C64_PALETTE_COLODORE, PETSCII_COLOR_TO_VIC, hexToRgb } from './c64-palette';
 import { screenCodeToPetscii } from './screen-codes';
 import { UNICODE_TO_PETSCII } from './unicode-to-petscii';
 
 const COLS = 40;
 const ROWS = 25;
 const ESC = '\x1b';
+/**
+ * Longest OSC/DCS/APC/PM/SOS string held across chunks while waiting for a
+ * BEL or ESC \ terminator. A sender that loses its terminator would
+ * otherwise make `pending` grow without bound and be rescanned from the top
+ * on every chunk (quadratic), with nothing after it ever reaching the wire.
+ */
+const STRING_SEQUENCE_MAX = 256;
 
 export interface AnsiToPetsciiOptions {
   /** VIC-II palette used for truecolor/256-color nearest matching. Defaults to Colodore. */
@@ -38,10 +45,6 @@ const VIC_TO_PETSCII_COLOR: number[] = (() => {
 
 export function vicColorToPetscii(vic: number): number {
   return VIC_TO_PETSCII_COLOR[vic & 0x0F];
-}
-
-function hexToRgb(hex: string): [number, number, number] {
-  return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
 }
 
 /** Nearest VIC index by squared RGB distance; an exact palette match wins immediately. */
@@ -68,11 +71,11 @@ export function sgrColorToVic(code: number, bold: boolean): number | null {
   return null;
 }
 
-/** xterm 256-color index -> RGB: 0-15 via the SGR tables' Colodore colors, 16-231 the 6x6x6 cube, 232-255 the grey ramp. */
-export function xterm256ToRgb(n: number): [number, number, number] {
+/** xterm 256-color index -> RGB: 0-15 via the SGR tables against `palette` (the transducer passes its own), 16-231 the 6x6x6 cube, 232-255 the grey ramp. */
+export function xterm256ToRgb(n: number, palette: readonly string[] = C64_PALETTE_COLODORE): [number, number, number] {
   if (n < 16) {
     const vic = n < 8 ? SGR_DIM[n] : SGR_BRIGHT[n - 8];
-    return hexToRgb(C64_PALETTE_COLODORE[vic]);
+    return hexToRgb(palette[vic]);
   }
   if (n <= 231) {
     const i = n - 16;
@@ -92,6 +95,17 @@ export class AnsiToPetsciiTransducer {
   /** What the ANSI stream asked for (SGR 7 latched); the oracle's `reverse` is what the C64 currently has. */
   private ansiReverse = false;
   private savedCursor: { x: number; y: number } | null = null;
+  /**
+   * Deferred wrap, xterm's "pending wrap" latch. Printing into column 39
+   * moves the KERNAL cursor immediately to column 0 of the row below; ANSI
+   * terminals instead stay at column 39 with a flag and only cross the
+   * boundary on the NEXT printable. A newline that arrives while the flag is
+   * set must therefore land on the row the wrap already reached, not the one
+   * after it - otherwise every line that is exactly a multiple of 40 columns
+   * long eats a blank row. Set by a printable that wrapped, cleared by any
+   * cursor-moving operation, consumed by newline().
+   */
+  private pendingWrap = false;
 
   constructor(opts: AnsiToPetsciiOptions = {}) {
     this.palette = opts.palette ?? C64_PALETTE_COLODORE;
@@ -103,11 +117,13 @@ export class AnsiToPetsciiTransducer {
     this.bold = false;
     this.ansiReverse = false;
     this.savedCursor = null;
+    this.pendingWrap = false;
   }
 
   /** Raw PETSCII bytes that reached the terminal without passing through transduce(). */
   observe(bytes: Uint8Array | number[]): void {
     this.machine.feed(bytes);
+    this.pendingWrap = false;
   }
 
   /** Resolve anything held across chunks (a trailing CR becomes a lone CR; a partial escape is dropped). */
@@ -140,7 +156,7 @@ export class AnsiToPetsciiTransducer {
         continue;
       }
       if (ch === '\n') { this.newline(out); i++; continue; }
-      if (code === 0x08 || code === 0x7F) { this.emit(out, 0x9D); i++; continue; }
+      if (code === 0x08 || code === 0x7F) { this.pendingWrap = false; this.emit(out, 0x9D); i++; continue; }
       if (ch === '\t') {
         const x = this.machine.state.cursorX;
         const next = Math.min(COLS - 1, (Math.floor(x / 8) + 1) * 8);
@@ -175,24 +191,49 @@ export class AnsiToPetsciiTransducer {
     if (this.machine.state.pen !== vic) this.emit(out, vicColorToPetscii(vic));
   }
 
+  /**
+   * Emit one printable byte and latch a deferred wrap when it crossed the
+   * right edge. Every path that puts a glyph on the screen goes through here
+   * so the latch can never be missed (plain text, inverse-only glyphs, PUA).
+   */
+  private emitPrintable(out: number[], byte: number): void {
+    const atLastColumn = this.machine.state.cursorX === COLS - 1;
+    this.emit(out, byte);
+    this.pendingWrap = atLastColumn && this.machine.state.cursorX === 0;
+  }
+
   /** Print one PETSCII byte as text: bank 1, reverse re-asserted from the ANSI state (RETURN cancels it on the C64). */
   private printByte(out: number[], byte: number): void {
     this.ensureBank(1, out);
     this.setReverse(this.ansiReverse, out);
-    this.emit(out, byte);
+    this.emitPrintable(out, byte);
   }
 
   /**
    * ANSI newline = column 0 of the NEXT physical row (scrolling at the
-   * bottom). The KERNAL's RETURN goes to the row after the END of the
-   * logical line, so when the oracle says the cursor row is linked to the
-   * row below (a print wrapped through column 39 earlier) a $0D would skip
-   * a row; deltas are exact there. At the bottom row $0D is the only way
-   * to scroll, and it is exact (the last row always ends its own line).
+   * bottom).
+   *
+   * Three cases:
+   *  - A deferred wrap is pending: the last printable already crossed onto
+   *    the next row (and already scrolled, if it happened on row 24). ANSI
+   *    would have held the cursor at column 39; the row this newline asks
+   *    for is the one the cursor is standing on, so only the walk back to
+   *    column 0 is emitted. A $0D here would cost a whole blank row.
+   *  - The cursor row is linked to the row below (an earlier print wrapped
+   *    through column 39): the KERNAL's RETURN goes to the row after the END
+   *    of the logical line and would skip a row, so deltas are used instead.
+   *    `logicalLineEndRow(ROWS - 1)` is always `ROWS - 1`, so this branch
+   *    cannot fire on the bottom row.
+   *  - Otherwise $0D, which is exact and is the only byte that scrolls.
    */
   private newline(out: number[]): void {
     const st = this.machine.state;
-    if (st.cursorY < ROWS - 1 && this.machine.logicalLineEndRow(st.cursorY) !== st.cursorY) {
+    if (this.pendingWrap) {
+      this.pendingWrap = false;
+      while (st.cursorX > 0) this.emit(out, 0x9D);
+      return;
+    }
+    if (this.machine.logicalLineEndRow(st.cursorY) !== st.cursorY) {
       this.moveTo(0, st.cursorY + 1, out);
       return;
     }
@@ -201,6 +242,7 @@ export class AnsiToPetsciiTransducer {
 
   /** Lone CR: column 0 of the same row. $9D never crosses a row boundary here because x lefts from column x stop at 0. */
   private carriageOnly(out: number[]): void {
+    this.pendingWrap = false;
     const x = this.machine.state.cursorX;
     for (let k = 0; k < x; k++) this.emit(out, 0x9D);
   }
@@ -226,7 +268,7 @@ export class AnsiToPetsciiTransducer {
     // Glyph only exists as the inverse of another PETSCII glyph.
     this.ensureBank(1, out);
     this.setReverse(true, out);
-    this.emit(out, mapped.rvs);
+    this.emitPrintable(out, mapped.rvs);
     this.setReverse(this.ansiReverse, out);
   }
 
@@ -236,7 +278,7 @@ export class AnsiToPetsciiTransducer {
     const sc = code & 0xFF;
     this.ensureBank(bank, out);
     this.setReverse((sc & 0x80) !== 0, out);
-    this.emit(out, screenCodeToPetscii(sc & 0x7F));
+    this.emitPrintable(out, screenCodeToPetscii(sc & 0x7F));
   }
 
   // ---- escape sequences ------------------------------------------------
@@ -259,15 +301,22 @@ export class AnsiToPetsciiTransducer {
       for (let j = i + 2; j < s.length; j++) {
         if (s[j] === '\x07') return j - i + 1;
         if (s[j] === ESC && s[j + 1] === '\\') return j - i + 2;
-        if (s[j] === ESC && s[j + 1] === undefined) return 0;
+        if (s[j] === ESC && s[j + 1] === undefined) break; // possible split ESC \: hold for the next chunk
+        // A CR or LF can never appear inside a well-formed string sequence:
+        // the sender lost its terminator. Drop the sequence and let the
+        // newline through rather than swallowing the rest of the session.
+        if (s[j] === '\r' || s[j] === '\n') return j - i;
       }
-      return 0;
+      // No terminator in what we have. Holding is right for a sequence split
+      // across chunks, but a runaway one is dropped at the cap instead of
+      // stalling every byte behind it for ever.
+      return s.length - i > STRING_SEQUENCE_MAX ? s.length - i : 0;
     }
     if (next === '(' || next === ')' || next === '*' || next === '+') return s[i + 2] === undefined ? 0 : 3; // charset designation
     if (next === '7') { const st = this.machine.state; this.savedCursor = { x: st.cursorX, y: st.cursorY }; return 2; }
     if (next === '8') { if (this.savedCursor) this.moveTo(this.savedCursor.x, this.savedCursor.y, out); return 2; }
     if (next === 'M') { const st = this.machine.state; this.moveTo(st.cursorX, Math.max(0, st.cursorY - 1), out); return 2; }
-    if (next === 'c') { this.emit(out, 0x93); this.bold = false; this.ansiReverse = false; return 2; }
+    if (next === 'c') { this.pendingWrap = false; this.emit(out, 0x93); this.bold = false; this.ansiReverse = false; return 2; }
     return 2; // ESC =, ESC >, ESC D, ESC E, ...: no C64 equivalent, dropped
   }
 
@@ -313,6 +362,7 @@ export class AnsiToPetsciiTransducer {
    */
   private moveTo(x: number, y: number, out: number[]): void {
     const st = this.machine.state;
+    this.pendingWrap = false; // any explicit cursor move settles the deferred wrap
     if (x === 0 && y === 0) { if (st.cursorX !== 0 || st.cursorY !== 0) this.emit(out, 0x13); return; }
     while (st.cursorY < y) this.emit(out, 0x11);
     while (st.cursorY > y) this.emit(out, 0x91);
@@ -321,7 +371,7 @@ export class AnsiToPetsciiTransducer {
   }
 
   private sgr(codes: number[], out: number[]): void {
-    if (codes.length === 0) codes = [0];
+    // `codes` is never empty: csi() splits on ';' and 'ESC[m' yields [NaN] -> [0].
     let p = 0;
     while (p < codes.length) {
       const c = codes[p];
@@ -333,11 +383,14 @@ export class AnsiToPetsciiTransducer {
       if (c === 38 || c === 48) {
         const mode = codes[p + 1];
         let rgb: [number, number, number] | null = null;
-        let step = 1;
-        if (mode === 2 && p + 4 < codes.length) { rgb = [codes[p + 2], codes[p + 3], codes[p + 4]]; step = 5; }
-        else if (mode === 5 && p + 2 < codes.length) { rgb = xterm256ToRgb(codes[p + 2]); step = 3; }
-        if (c === 38 && rgb) this.setPen(nearestVicForRgb(rgb[0], rgb[1], rgb[2], this.palette), out);
-        p += step;
+        if (mode === 2 && p + 4 < codes.length) rgb = [codes[p + 2], codes[p + 3], codes[p + 4]];
+        else if (mode === 5 && p + 2 < codes.length) rgb = xterm256ToRgb(codes[p + 2], this.palette);
+        // Truncated or unknown extended color ('38;2;255;0m'): everything
+        // left in this SGR belongs to it, not to the SGR vocabulary - a
+        // trailing '0' is a color component, never a reset.
+        if (!rgb) break;
+        if (c === 38) this.setPen(nearestVicForRgb(rgb[0], rgb[1], rgb[2], this.palette), out);
+        p += mode === 2 ? 5 : 3;
         continue;
       }
       const vic = sgrColorToVic(c, this.bold);
@@ -346,9 +399,73 @@ export class AnsiToPetsciiTransducer {
     }
   }
 
-  // ---- erase (Task 3 fills these in; stubs keep Task 2 compiling) --------
-  private eraseDisplay(_mode: number, _out: number[]): void {}
-  private eraseLine(_mode: number, _out: number[]): void {}
-  private eraseChars(_count: number, _out: number[]): void {}
-  private clearKeepingCursor(_out: number[], _x: number, _y: number): void {}
+  // ---- erase ------------------------------------------------------------
+
+  /**
+   * Blank columns x0..x1 of row r with plain spaces (the cursor ends up
+   * wherever the last print left it; callers restore it). Reverse is turned
+   * OFF for the fill - ANSI erase paints the background, and the latched
+   * `ansiReverse` is re-asserted by the next printable anyway. The pen is
+   * left alone, so the blanks take the current color like a real erase.
+   *
+   * Printing through column 39 makes the KERNAL wrap and link the row below
+   * into this logical line - harmless, because newline() consults
+   * logicalLineEndRow and never issues a $0D from a non-final row (Task 2).
+   * Cell (39,24) is never written: a print there scrolls the whole screen,
+   * which ANSI erase never does, and nothing can have been printed there
+   * without scrolling either, so it is blank whenever it matters.
+   */
+  private fillRow(r: number, x0: number, x1: number, out: number[]): void {
+    const last = r === ROWS - 1 ? Math.min(x1, COLS - 2) : Math.min(x1, COLS - 1);
+    if (last < x0) return;
+    this.moveTo(x0, r, out);
+    this.setReverse(false, out);
+    for (let x = x0; x <= last; x++) this.emit(out, 0x20);
+  }
+
+  /** ANSI erase never moves the cursor; the fill does, so it is walked back afterwards. */
+  private withCursorRestored(out: number[], fill: () => void): void {
+    const st = this.machine.state;
+    const save = { x: st.cursorX, y: st.cursorY };
+    fill();
+    this.moveTo(save.x, save.y, out);
+  }
+
+  /** EL: 0 = cursor to end of row, 1 = start of row through cursor, 2 = whole row. */
+  private eraseLine(mode: number, out: number[]): void {
+    const { cursorX: x, cursorY: y } = this.machine.state;
+    this.withCursorRestored(out, () => {
+      if (mode === 1) this.fillRow(y, 0, x, out);
+      else if (mode === 2) this.fillRow(y, 0, COLS - 1, out);
+      else this.fillRow(y, x, COLS - 1, out);
+    });
+  }
+
+  /** ED: 0 = cursor to end of screen, 1 = top through cursor, 2/3 = everything. */
+  private eraseDisplay(mode: number, out: number[]): void {
+    const { cursorX: x, cursorY: y } = this.machine.state;
+    if (mode === 2 || mode === 3) return this.clearKeepingCursor(out, x, y);
+    this.withCursorRestored(out, () => {
+      if (mode === 1) {
+        for (let r = 0; r < y; r++) this.fillRow(r, 0, COLS - 1, out);
+        this.fillRow(y, 0, x, out);
+      } else {
+        this.fillRow(y, x, COLS - 1, out);
+        for (let r = y + 1; r < ROWS; r++) this.fillRow(r, 0, COLS - 1, out);
+      }
+    });
+  }
+
+  /** ECH: blank `count` cells from the cursor, cursor unmoved. */
+  private eraseChars(count: number, out: number[]): void {
+    const { cursorX: x, cursorY: y } = this.machine.state;
+    this.withCursorRestored(out, () => this.fillRow(y, x, x + count - 1, out));
+  }
+
+  /** $93 clears AND homes on the C64; ANSI 2J does not home, so the cursor goes back to (x,y) afterwards. */
+  private clearKeepingCursor(out: number[], x: number, y: number): void {
+    this.pendingWrap = false;
+    this.emit(out, 0x93);
+    this.moveTo(x, y, out);
+  }
 }

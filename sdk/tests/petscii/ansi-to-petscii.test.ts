@@ -1,5 +1,6 @@
-import { AnsiToPetsciiTransducer, nearestVicForRgb, sgrColorToVic } from '../../petscii/ansi-to-petscii';
+import { AnsiToPetsciiTransducer, nearestVicForRgb, sgrColorToVic, xterm256ToRgb } from '../../petscii/ansi-to-petscii';
 import { PetsciiMachine } from '../../petscii/petscii-machine';
+import { C64_PALETTE_COLODORE, C64_PALETTE_PEPTO } from '../../petscii/c64-palette';
 
 /** Run text through a fresh transducer and replay its output into a fresh machine (the display side). */
 export function run(text: string) {
@@ -128,5 +129,227 @@ describe('AnsiToPetsciiTransducer core', () => {
     t.observe([0x8E, 0x1C]);          // the .seq switched to graphics bank and red
     expect(Array.from(t.transduce('b'))).toEqual([0x0E, 0x42]); // bank back to 1; the pen stays red until ANSI asks otherwise
     expect(t.machine.state.pen).toBe(2);
+  });
+});
+
+describe('AnsiToPetsciiTransducer cursor, erase and graphics', () => {
+  it('ESC[H is one HOME byte; ESC[r;cH is deltas from the oracle cursor', () => {
+    expect(run('ab\x1b[H').out.slice(-1)).toEqual([0x13]);
+    const { out, display } = run('\x1b[3;5H');
+    expect(out).toEqual([0x11, 0x11, 0x1D, 0x1D, 0x1D, 0x1D]);
+    expect([display.state.cursorX, display.state.cursorY]).toEqual([4, 2]);
+  });
+
+  it('cursor down at the bottom row does not scroll; cursor right at column 39 does not wrap', () => {
+    const { display } = run('\x1b[25;1Hbottom\x1b[5B');
+    expect(display.state.cursorY).toBe(24);
+    expect(cell(display, 0, 24)).toBe(scLower('b'));
+    const right = run('\x1b[1;40H\x1b[3C').display;
+    expect([right.state.cursorX, right.state.cursorY]).toEqual([39, 0]);
+  });
+
+  it('CHA (G), VPA (d), CUF (C), CUB (D) and HOME land on the right oracle cell', () => {
+    const g = run('\x1b[5;20H\x1b[10G').display;
+    expect([g.state.cursorX, g.state.cursorY]).toEqual([9, 4]);
+    const d = run('\x1b[5;20H\x1b[12d').display;
+    expect([d.state.cursorX, d.state.cursorY]).toEqual([19, 11]);
+    const cd = run('\x1b[1;10H\x1b[4C\x1b[6D').display;
+    expect([cd.state.cursorX, cd.state.cursorY]).toEqual([7, 0]);
+    const f = run('\x1b[7;8f').display;
+    expect([f.state.cursorX, f.state.cursorY]).toEqual([7, 6]);
+    const home = run('\x1b[5;20H\x1b[H').display;
+    expect([home.state.cursorX, home.state.cursorY]).toEqual([0, 0]);
+  });
+
+  it('out-of-range positioning (80-col authored) clamps to 40x25', () => {
+    const { display } = run('\x1b[30;70H');
+    expect([display.state.cursorX, display.state.cursorY]).toEqual([39, 24]);
+  });
+
+  it('ESC[2J clears the screen and restores the cursor; ESC[2J ESC[H homes', () => {
+    const { display } = run('\x1b[3;3Habc\x1b[2J');
+    expect(cell(display, 2, 2)).toBe(0x20);
+    expect([display.state.cursorX, display.state.cursorY]).toEqual([5, 2]);
+    const homed = run('abc\x1b[2J\x1b[H').display;
+    expect([homed.state.cursorX, homed.state.cursorY]).toEqual([0, 0]);
+  });
+
+  it('ESC[K erases to end of row without moving the cursor; reverse is not painted into the blanks but survives for the next printable', () => {
+    const { display } = run('\x1b[7mhello world\x1b[6D\x1b[K');
+    expect(cell(display, 4, 0) & 0x80).toBe(0x80);
+    for (let x = 5; x < 40; x++) expect(cell(display, x, 0)).toBe(0x20);
+    expect([display.state.cursorX, display.state.cursorY]).toEqual([5, 0]);
+    expect(display.state.reverse).toBe(false);
+    const next = run('\x1b[7mhello world\x1b[6D\x1b[KZ').display;
+    expect(cell(next, 5, 0)).toBe(scUpper('Z') | 0x80);
+  });
+
+  it('ESC[1K and ESC[2K erase before / the whole row', () => {
+    const one = run('abcdef\x1b[4D\x1b[1K').display;
+    expect(cell(one, 0, 0)).toBe(0x20);
+    expect(cell(one, 2, 0)).toBe(0x20);
+    expect(cell(one, 3, 0)).toBe(scLower('d'));
+    expect([one.state.cursorX, one.state.cursorY]).toEqual([2, 0]);
+    const two = run('abcdef\x1b[2K').display;
+    for (let x = 0; x < 40; x++) expect(cell(two, x, 0)).toBe(0x20);
+    expect([two.state.cursorX, two.state.cursorY]).toEqual([6, 0]);
+  });
+
+  it('ESC[nX blanks n cells from the cursor without moving it', () => {
+    const { display } = run('abcdef\x1b[6D\x1b[3X');
+    expect(cell(display, 0, 0)).toBe(0x20);
+    expect(cell(display, 2, 0)).toBe(0x20);
+    expect(cell(display, 3, 0)).toBe(scLower('d'));
+    expect([display.state.cursorX, display.state.cursorY]).toEqual([0, 0]);
+  });
+
+  it('ESC[K then CRLF lands on the very next row even though the fill linked it (the KERNAL RETURN trap)', () => {
+    const { display } = run('abc\x1b[K\r\nN');
+    expect(cell(display, 0, 1)).toBe(scUpper('N'));
+    expect(display.state.cursorY).toBe(1);
+  });
+
+  it('ESC[J from the cursor erases to the end of screen but never the bottom-right cell', () => {
+    const { display } = run('\x1b[25;40H\x1b[2;1Hxy\x1b[2;1H\x1b[J');
+    expect(cell(display, 0, 1)).toBe(0x20);
+    expect(cell(display, 1, 1)).toBe(0x20);
+    expect(display.state.cursorY).toBe(1);
+  });
+
+  it('ESC[1J erases from the top of the screen through the cursor cell', () => {
+    const { display } = run('\x1b[1;1Hrow0\x1b[2;1Hrow1\x1b[2;3H\x1b[1J');
+    expect(cell(display, 0, 0)).toBe(0x20);
+    expect(cell(display, 2, 1)).toBe(0x20);
+    expect(cell(display, 3, 1)).toBe(0x31);   // the '1' of 'row1' survives
+    expect([display.state.cursorX, display.state.cursorY]).toEqual([2, 1]);
+  });
+
+  it('the alternate screen (?1049h / ?47h) clears', () => {
+    const { display } = run('abc\x1b[?1049h');
+    expect(cell(display, 0, 0)).toBe(0x20);
+    expect([display.state.cursorX, display.state.cursorY]).toEqual([0, 0]);
+    const alt = run('abc\x1b[?47l').display;
+    expect(cell(alt, 0, 0)).toBe(0x20);
+  });
+
+  it('save/restore cursor (ESC[s ESC[u and ESC 7 ESC 8) returns to the saved cell', () => {
+    const a = run('\x1b[4;6H\x1b[s\x1b[10;1Hx\x1b[uY').display;
+    expect(cell(a, 5, 3)).toBe(scUpper('Y'));
+    const b = run('\x1b[4;6H\x1b7\x1b[10;1Hx\x1b8Y').display;
+    expect(cell(b, 5, 3)).toBe(scUpper('Y'));
+  });
+
+  it('OSC, DCS and private modes are swallowed; mouse-enable sequences never print', () => {
+    expect(run('\x1b]9999;sfx;{"x":1}\x07a').out).toEqual([0x0E, 0x41]);
+    expect(run('\x1b[?1000h\x1b[?25la').out).toEqual([0x0E, 0x41]);
+  });
+
+  it('box drawing renders as PETSCII line graphics identical in both charset banks', () => {
+    const { display } = run('┌─┐\r\n│x│\r\n└─┘');
+    expect(cell(display, 0, 0)).toBe(0x70); // top-left corner screen code
+    expect(cell(display, 1, 0)).toBe(0x40); // horizontal
+    expect(cell(display, 0, 1)).toBe(0x5D); // vertical
+    expect(cell(display, 2, 2)).toBe(0x7D); // bottom-right corner
+    expect(display.state.charsetBank).toBe(1);
+  });
+
+  it('a full block is a reverse space and reverse is restored afterwards', () => {
+    const { display, out } = run('█a');
+    expect(cell(display, 0, 0)).toBe(0xA0);
+    expect(cell(display, 1, 0)).toBe(scLower('a'));
+    expect(out).toContain(0x12);
+    expect(out).toContain(0x92);
+  });
+
+  it('unsupported glyphs and ASCII without a PETSCII code are substituted, never dropped', () => {
+    const { display } = run('é\\_|');
+    expect(cell(display, 0, 0)).toBe(0x3F);       // e-acute -> ?
+    expect(cell(display, 1, 0)).toBe(0x2F);       // backslash -> /
+    expect(cell(display, 2, 0)).toBe(0x64);       // underscore -> lower eighth block
+    expect(cell(display, 3, 0)).toBe(0x5D);       // pipe -> vertical bar
+  });
+
+  it('legacy PUA glyphs: reverse per glyph, bank per page', () => {
+    expect(run(String.fromCodePoint(0xE081, 0xE001)).out).toEqual([0x12, 0x41, 0x92, 0x41]);
+    expect(run(String.fromCodePoint(0xE141)).out[0]).toBe(0x0E);
+    expect(run('\x1b[7m' + String.fromCodePoint(0xE001)).out).toEqual([0x12, 0x92, 0x41]);
+  });
+});
+
+describe('AnsiToPetsciiTransducer deferred wrap (xterm pending-wrap parity)', () => {
+  it('exactly 40 printable columns then CRLF lands the next line on row 1, not row 2', () => {
+    const { t, out, display } = run('a'.repeat(40) + '\r\nN');
+    expect(out.filter((b) => b === 0x0D)).toHaveLength(0);   // the wrap already moved the cursor; no RETURN
+    expect(cell(display, 0, 1)).toBe(scUpper('N'));
+    expect(cell(display, 0, 2)).toBe(0x20);                  // row 2 stays untouched (no eaten blank row)
+    expect([display.state.cursorX, display.state.cursorY]).toEqual([1, 1]);
+    expect([t.machine.state.cursorX, t.machine.state.cursorY]).toEqual([1, 1]);
+  });
+
+  it('80 printable columns then CRLF lands on row 2', () => {
+    const { display } = run('a'.repeat(80) + '\r\nN');
+    expect(cell(display, 0, 2)).toBe(scUpper('N'));
+    expect(display.state.cursorY).toBe(2);
+  });
+
+  it('39 printable columns then CRLF still takes the ordinary RETURN path to row 1', () => {
+    const { out, display } = run('a'.repeat(39) + '\r\nN');
+    expect(out).toContain(0x0D);
+    expect(cell(display, 0, 1)).toBe(scUpper('N'));
+    expect(display.state.cursorY).toBe(1);
+  });
+
+  it('a cursor move after the 40th column clears the pending wrap and the CRLF behaves as the oracle does', () => {
+    const { display } = run('a'.repeat(40) + '\x1b[5C\r\nN');
+    expect(cell(display, 0, 2)).toBe(scUpper('N'));
+    expect([display.state.cursorX, display.state.cursorY]).toEqual([1, 2]);
+  });
+});
+
+describe('AnsiToPetsciiTransducer malformed string sequences never stall the stream', () => {
+  it('a well-formed OSC (BEL or ST terminated) is still consumed silently', () => {
+    expect(run('\x1b]0;title\x07a').out).toEqual([0x0E, 0x41]);
+    expect(run('\x1b]0;title\x1b\\a').out).toEqual([0x0E, 0x41]);
+  });
+
+  it('an unterminated OSC broken by a newline is dropped and the text after the newline is emitted', () => {
+    const { display } = run('\x1b]0;no terminator\r\nOK');
+    expect(cell(display, 0, 1)).toBe(scUpper('O'));
+    expect(cell(display, 1, 1)).toBe(scUpper('K'));
+  });
+
+  it('a runaway OSC past the 256-byte cap is dropped instead of being held for ever', () => {
+    const t = new AnsiToPetsciiTransducer();
+    expect(Array.from(t.transduce('\x1b]' + 'p'.repeat(300)))).toEqual([]);
+    expect(Array.from(t.transduce('OK'))).toEqual([0x0E, 0xCF, 0xCB]);
+  });
+
+  it('an unterminated OSC under the cap is still held across chunks and completed later', () => {
+    const t = new AnsiToPetsciiTransducer();
+    expect(Array.from(t.transduce('\x1b]0;ti'))).toEqual([]);
+    expect(Array.from(t.transduce('tle\x07a'))).toEqual([0x0E, 0x41]);
+  });
+});
+
+describe('AnsiToPetsciiTransducer SGR extended color parsing', () => {
+  it('a truncated truecolor SGR does not re-parse its own parameters as SGR codes', () => {
+    const short2 = run('\x1b[31m\x1b[38;2;255;0mR').display;
+    expect(color(short2, 0, 0)).toBe(2);   // still red; the trailing 0 is a truecolor parameter, not a reset
+    const short5 = run('\x1b[31m\x1b[38;5mR').display;
+    expect(color(short5, 0, 0)).toBe(2);
+  });
+
+  it('xterm256ToRgb resolves indices 0-15 through the caller palette', () => {
+    expect(xterm256ToRgb(1)).toEqual([0x81, 0x33, 0x38]);                      // Colodore red (default)
+    expect(xterm256ToRgb(1, C64_PALETTE_PEPTO)).toEqual([0x68, 0x37, 0x2B]);   // Pepto red
+    expect(xterm256ToRgb(196)).toEqual([255, 0, 0]);                           // 6x6x6 cube, palette-independent
+  });
+
+  it('the transducer resolves 256-color indices 0-15 through its own palette, not a hardcoded Colodore', () => {
+    const weird = C64_PALETTE_COLODORE.map((c, i) => (i === 2 ? '#00FF00' : c));
+    const t = new AnsiToPetsciiTransducer({ palette: weird });
+    const display = new PetsciiMachine();
+    display.feed(t.transduce('\x1b[38;5;1mR'));
+    expect(color(display, 0, 0)).toBe(2);
   });
 });
