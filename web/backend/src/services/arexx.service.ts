@@ -7,6 +7,7 @@ import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { AREXXFileIO } from './arexx-file-io';
 import { callersLogManager } from './CallersLogManager';
 import { getSystemTime } from '../utils/date-time.util';
+import { doorScreenWidth } from '../amiga-emulation/xim/screen-width.util';
 
 /**
  * AREXX Variable Storage
@@ -1921,7 +1922,14 @@ console.error('BBSCREATEDROPFILE error:', error);
       case 517: return String(session?.logonType ?? 3);                                // BB_LOGONTYPE (bbs-info.ts:260)
       case 518: return '0';                                                            // BB_SCRLEFT — screen left edge
       case 519: return '0';                                                            // BB_SCRTOP  — screen top edge
-      case 520: return String((user as any)?.linesPerScreen ?? 80);                    // BB_SCRWIDTH — terminal width
+      // BB_SCRWIDTH — terminal WIDTH. It used to answer
+      // user.linesPerScreen, which is a HEIGHT (23-24 on a normal account),
+      // so every AREXX door asking how wide the screen was got told 23 - and
+      // a C64 caller never heard 40. doorScreenWidth() is the one answer 68K
+      // doors already get (xim/bbs-info.ts handleScreenDimensions), so
+      // AREXX and XIM cannot disagree: 80 for ANSI, the session's width for
+      // a PETSCII caller.
+      case 520: return String(doorScreenWidth(session));                                 // BB_SCRWIDTH — terminal width
       case 521: return String((user as any)?.linesPerScreen ?? 24);                    // BB_SCRHEIGHT (height tracking on user struct)
       case 522:                                                                        // BB_PURGELINE — write clears input buffer
       case 523:                                                                        // BB_PURGELINESTART
