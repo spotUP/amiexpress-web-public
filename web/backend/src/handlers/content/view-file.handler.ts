@@ -19,6 +19,7 @@ import * as readline from 'readline';
 import { flagPause, initPauseState, setNonStopMode } from '../../utils/flag-pause.util';
 import { getMaxDirs } from '../../utils/max-dirs.util';
 import { getConferenceDir } from '../../utils/file-hold.util';
+import { sessionColumns } from '../../utils/door-min-columns.util';
 
 /**
  * View File Handler
@@ -194,9 +195,15 @@ console.log(`[SECURITY] User ${session.user?.username} attempted to read restric
       let lineCount = 0;
       const linesPerPage = 20;
 
+      // express.e:20492-20516 wraps at 79 on an 80-column screen. The width
+      // is the caller's, not a constant: 79 for every ANSI session
+      // (byte-identical), 39 for a C64. sessionColumns() is the one width
+      // source (delegates to doorScreenWidth) - C64/40-col plan, Task 4.
+      const wrapWidth = Math.max(20, sessionColumns(session as any) - 1);
+
       for (const line of lines) {
-        // Display line with wrapping at 79 characters - express.e:20492-20516
-        await this.displayLineWithWrapping(socket, line);
+        // Display line with wrapping at wrapWidth characters - express.e:20492-20516
+        await this.displayLineWithWrapping(socket, line, wrapWidth);
 
         lineCount++;
 
@@ -221,26 +228,31 @@ console.error('[VIEW FILE] Error reading file:', error);
   }
 
   /**
-   * Display line with wrapping at 79 characters
+   * Display line with wrapping at `wrapWidth` characters
    * Port from express.e:20492-20516
+   *
+   * `wrapWidth` is 79 for every 80-column session, which reproduces the old
+   * hard-coded pair (`length < 80` / break at 79) byte-for-byte, and 39 for
+   * a C64 - C64/40-col plan, Task 4.
    */
   private static async displayLineWithWrapping(
     socket: Socket,
-    line: string
+    line: string,
+    wrapWidth: number
   ): Promise<void> {
     // If line has CR or is short, display as-is - express.e:20494-20495
-    if (line.includes('\r') || line.length < 80) {
+    if (line.includes('\r') || line.length <= wrapWidth) {
       socket.emit('ansi-output', line + '\r\n');
       return;
     }
 
-    // Wrap long lines at 79 characters - express.e:20497-20514
+    // Wrap long lines at wrapWidth characters - express.e:20497-20514
     let remaining = line;
     while (remaining.length > 0) {
-      if (remaining.length > 79) {
-        const chunk = remaining.substring(0, 79);
+      if (remaining.length > wrapWidth) {
+        const chunk = remaining.substring(0, wrapWidth);
         socket.emit('ansi-output', chunk);
-        remaining = remaining.substring(79);
+        remaining = remaining.substring(wrapWidth);
 
         if (remaining.length > 0) {
           socket.emit('ansi-output', '\r\n');
@@ -350,3 +362,15 @@ console.error('[VIEW FILE] Error checking binary:', error);
     }
   }
 }
+
+/**
+ * Test seam for the width-parameterized wrapper (precedent:
+ * parseTooltypeStringForTest). The wrapper itself is private because only
+ * displayFile may decide the width; the tests need to drive it at both
+ * 79 and 39 without a whole file read - C64/40-col plan, Task 4.
+ */
+export const displayLineWithWrappingForTest = (
+  socket: Socket,
+  line: string,
+  wrapWidth: number
+): Promise<void> => (ViewFileHandler as any).displayLineWithWrapping(socket, line, wrapWidth);

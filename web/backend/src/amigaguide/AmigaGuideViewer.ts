@@ -17,12 +17,18 @@ export class AmigaGuideViewer {
   private parser: AmigaGuideParser;
   private state: ViewerState;
   private socket: Socket;
-  private width: number = 80;
+  private width: number;
   private maxLines: number = 20;
 
-  constructor(socket: Socket, parser: AmigaGuideParser, startNode?: string) {
+  /**
+   * @param width Screen columns to render at. Defaults to 80, so every
+   *   existing ANSI caller is byte-for-byte unchanged; a PETSCII caller
+   *   passes sessionColumns(session) and gets 40 - C64/40-col plan, Task 4.
+   */
+  constructor(socket: Socket, parser: AmigaGuideParser, startNode?: string, width: number = 80) {
     this.parser = parser;
     this.socket = socket;
+    this.width = width;
 
     const doc = parser.getDocument();
     const initialNode = startNode || doc.mainNode;
