@@ -62,10 +62,24 @@ export function repoViewCurationAllowed(mode: DoorRepoMode): boolean {
  * the Strip hint entirely rather than advertising a key that does nothing. */
 export function repoViewFooterParts(
   mode: DoorRepoMode,
-  opts: { installed: boolean; hasJunk: boolean; hasDoc: boolean }
+  opts: { installed: boolean; hasJunk: boolean; hasDoc: boolean; narrow?: boolean }
 ): string {
   const inst = opts.installed ? 'Uninst' : 'Inst';
   const curationAllowed = repoViewCurationAllowed(mode);
+  // A 40-column footer (the C64/PETSCII tier) holds five hints at most, and
+  // the nine below run to about eighty characters. Archive, Filter, System
+  // and Strip lose their hint there - the keys still work; the row simply
+  // cannot name them without folding onto the list above it.
+  if (opts.narrow) {
+    const narrowParts = [
+      `{${T.warn}-fg}R{/${T.warn}-fg}=${inst}`,
+      opts.hasDoc ? `{${T.warn}-fg}V{/${T.warn}-fg}=Doc` : null,
+      curationAllowed ? `{${T.warn}-fg}D{/${T.warn}-fg}=Del` : null,
+      `{${T.warn}-fg}ESC{/${T.warn}-fg}=Back`,
+      `{${T.warn}-fg}Q{/${T.warn}-fg}=Quit`,
+    ].filter(Boolean).join(' ');
+    return `{center}${narrowParts}{/center}`;
+  }
   // Every hint is "KEY=Label". It used to mix that with bare words whose
   // active letter was marked only by a colour highlight ("Strip", "Archive",
   // "Quit") - which is invisible on plenty of real terminals, and led to

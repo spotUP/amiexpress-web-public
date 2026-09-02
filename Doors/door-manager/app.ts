@@ -7,7 +7,6 @@
 import * as path from 'path';
 import { runSelectedDoor } from './run-door';
 import { installedFooter } from './installed-footer';
-import { typeBadge } from './type-badge';
 import { performDoorDelete } from './delete-door-action';
 import { isSafeToDelete, resolveDoorInstallDir } from './safe-install-dir';
 import { ActionLog, installLogPanel } from './action-log';
@@ -36,14 +35,15 @@ export type {
 } from './install-core';
 import * as fs from 'fs';
 import {
-  Screen, Panel, Box, List, ScrollableBox, ConfirmModal, Textbox,
+  Panel, Box, List, ScrollableBox, ConfirmModal, Textbox,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { DoorInputManager, createScreen } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { FileExplorerOverlay } from './FileExplorerOverlay';
 import { InfoEditorOverlay } from './InfoEditorOverlay';
 import { showAmigaGuideViewer } from './AmigaGuideViewer';
 import { ViewManager, BaseView, KeyBinder, sanitizeForTags, refreshDoorRegistry, resolveBbsRoot } from './ViewManager';
-import { DoormanLayout } from './doorman-layout';
+// formatSize lives alongside installedRow(), the row builder that sizes with it.
+import { DoormanLayout, formatSize } from './doorman-layout';
 import {
   getCatalogSvc, getInstallsRepo, getInstallRecorder,
   clearInstalledFilesViaRecorder, recordInstallViaRecorder, getStripLib,
@@ -86,12 +86,6 @@ type CatalogEntry = RepoCatalogEntry;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function formatSize(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1048576) return `${Math.round(bytes / 1024)} KB`;
-  return `${Math.round(bytes / 1048576)} MB`;
-}
 
 
 // The require.cache service getters moved to doorman-services.ts when app.ts
@@ -213,15 +207,7 @@ class InstalledView extends BaseView {
   }
 
   private refresh(selectIdx = 0): void {
-    const w = this.layout.width;
-    const items = this.doors.map(d => {
-      const badge = `[${typeBadge(d.type)}]`;
-      const sz = formatSize(d.size).padStart(6);
-      const nameW = Math.max(6, w - 14);
-      const name = d.name.length > nameW ? d.name.slice(0, nameW-1)+'…' : d.name.padEnd(nameW);
-      const st = d.enabled ? `{${T.ok}-fg}*{/${T.ok}-fg}` : `{${T.alert}-fg}-{/${T.alert}-fg}`;
-      return `${badge} ${name} ${st} ${sz}`;
-    });
+    const items = this.doors.map(d => this.layout.installedRow(d));
     this.layout.setListLabel(' INSTALLED DOORS ');
     this.layout.setListItems(items);
     // Same clamp as the repo view: uninstalling or deleting the last door in
@@ -257,7 +243,7 @@ class InstalledView extends BaseView {
 
   private updateFooter(): void {
     const d = this.door();
-    this.layout.setFooter(installedFooter(!d || d.enabled !== false));
+    this.layout.setFooter(installedFooter(!d || d.enabled !== false, this.layout.narrow));
   }
 
   enter(): void {
@@ -789,6 +775,7 @@ class RepoView extends BaseView {
       installed: !!e?.installed,
       hasJunk,
       hasDoc: entryHasDoc(e),
+      narrow: this.layout.narrow,
     }));
   }
 
@@ -1449,8 +1436,13 @@ export async function createApp(session: DoorSession): Promise<void> {
     bbs.write('\r\n\x1b[36mNo doors installed.\x1b[0m\r\n'); return;
   }
 
-  const screen = new Screen({ smartCSR: true, fullUnicode: true, title: 'DOORMAN v2',
-    output: (data: string) => bbs.write(data) } as any);
+  // Through createScreen, not `new Screen`: that helper is the ONE place
+  // that reads bbs.getTerminalSize() and turns a 40x25 PETSCII caller into a
+  // 40x25 canvas. Building the Screen directly is why a C64 got an
+  // 80-column layout folded onto a 40-column screen - the door was painting
+  // at a width nobody had. An 80x24 caller gets exactly what it got before,
+  // glyph for glyph (tests/doors/compact-40/doorman-layout.test.ts).
+  const screen = createScreen(bbs, { smartCSR: true, fullUnicode: true, title: 'DOORMAN v2' } as any);
 
   const inputManager = new DoorInputManager(session, screen, { enableGameMode:false, enableGrabKeys:false, enableMouse:true });
   inputManager.enable();

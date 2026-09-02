@@ -5,3 +5,4 @@ DESCRIPTION=Door Manager - browse and launch available doors
 MULTINODE=YES
 PRIORITY=SAME
 CATEGORY=Utilities
+MIN_COLUMNS=40

@@ -44,7 +44,6 @@ exports.createApp = createApp;
 const path = __importStar(require("path"));
 const run_door_1 = require("./run-door");
 const installed_footer_1 = require("./installed-footer");
-const type_badge_1 = require("./type-badge");
 const delete_door_action_1 = require("./delete-door-action");
 const safe_install_dir_1 = require("./safe-install-dir");
 const action_log_1 = require("./action-log");
@@ -67,6 +66,7 @@ const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helper
 const FileExplorerOverlay_1 = require("./FileExplorerOverlay");
 const InfoEditorOverlay_1 = require("./InfoEditorOverlay");
 const ViewManager_1 = require("./ViewManager");
+// formatSize lives alongside installedRow(), the row builder that sizes with it.
 const doorman_layout_1 = require("./doorman-layout");
 const doorman_services_1 = require("./doorman-services");
 const doc_strip_views_1 = require("./doc-strip-views");
@@ -81,15 +81,6 @@ const repo_client_1 = require("./repo-client");
 // server, so no LHA_BIN path probing is needed here anymore.
 const PROJECT_ROOT = (0, ViewManager_1.resolveBbsRoot)(__dirname);
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-function formatSize(bytes) {
-    if (bytes === 0)
-        return '0 B';
-    if (bytes < 1024)
-        return `${bytes} B`;
-    if (bytes < 1048576)
-        return `${Math.round(bytes / 1024)} KB`;
-    return `${Math.round(bytes / 1048576)} MB`;
-}
 // The require.cache service getters moved to doorman-services.ts when app.ts
 // reached the 2000-line ceiling.
 /** Adapts the local catalog service's getCatalogEntryByArchive into the
@@ -198,15 +189,7 @@ class InstalledView extends ViewManager_1.BaseView {
         this.layout.setHeader(`{center}{${door_theme_1.T.accent}-fg}DOORMAN v2{/${door_theme_1.T.accent}-fg}  {${door_theme_1.T.ink}-fg}${this.doors.length} doors, ${ec} enabled{/${door_theme_1.T.ink}-fg}{/center}`);
     }
     refresh(selectIdx = 0) {
-        const w = this.layout.width;
-        const items = this.doors.map(d => {
-            const badge = `[${(0, type_badge_1.typeBadge)(d.type)}]`;
-            const sz = formatSize(d.size).padStart(6);
-            const nameW = Math.max(6, w - 14);
-            const name = d.name.length > nameW ? d.name.slice(0, nameW - 1) + '…' : d.name.padEnd(nameW);
-            const st = d.enabled ? `{${door_theme_1.T.ok}-fg}*{/${door_theme_1.T.ok}-fg}` : `{${door_theme_1.T.alert}-fg}-{/${door_theme_1.T.alert}-fg}`;
-            return `${badge} ${name} ${st} ${sz}`;
-        });
+        const items = this.doors.map(d => this.layout.installedRow(d));
         this.layout.setListLabel(' INSTALLED DOORS ');
         this.layout.setListItems(items);
         // Same clamp as the repo view: uninstalling or deleting the last door in
@@ -239,14 +222,14 @@ class InstalledView extends ViewManager_1.BaseView {
             `{${door_theme_1.T.warn}-fg}Name:{/${door_theme_1.T.warn}-fg}    ${d.name}`,
             `{${door_theme_1.T.warn}-fg}Command:{/${door_theme_1.T.warn}-fg} ${d.command}`,
             `{${door_theme_1.T.warn}-fg}Type:{/${door_theme_1.T.warn}-fg}    ${d.type}`,
-            `{${door_theme_1.T.warn}-fg}Size:{/${door_theme_1.T.warn}-fg}    ${formatSize(d.size)}`,
+            `{${door_theme_1.T.warn}-fg}Size:{/${door_theme_1.T.warn}-fg}    ${(0, doorman_layout_1.formatSize)(d.size)}`,
             `{${door_theme_1.T.warn}-fg}Status:{/${door_theme_1.T.warn}-fg}  ${st}`,
             body,
         ].join('\n'));
     }
     updateFooter() {
         const d = this.door();
-        this.layout.setFooter((0, installed_footer_1.installedFooter)(!d || d.enabled !== false));
+        this.layout.setFooter((0, installed_footer_1.installedFooter)(!d || d.enabled !== false, this.layout.narrow));
     }
     enter() {
         this.layout.showInstalledLayout();
@@ -775,6 +758,7 @@ class RepoView extends ViewManager_1.BaseView {
             installed: !!e?.installed,
             hasJunk,
             hasDoc: (0, repo_view_helpers_2.entryHasDoc)(e),
+            narrow: this.layout.narrow,
         }));
     }
     enter() {
@@ -1410,8 +1394,13 @@ async function createApp(session) {
         bbs.write('\r\n\x1b[36mNo doors installed.\x1b[0m\r\n');
         return;
     }
-    const screen = new blessed_1.Screen({ smartCSR: true, fullUnicode: true, title: 'DOORMAN v2',
-        output: (data) => bbs.write(data) });
+    // Through createScreen, not `new Screen`: that helper is the ONE place
+    // that reads bbs.getTerminalSize() and turns a 40x25 PETSCII caller into a
+    // 40x25 canvas. Building the Screen directly is why a C64 got an
+    // 80-column layout folded onto a 40-column screen - the door was painting
+    // at a width nobody had. An 80x24 caller gets exactly what it got before,
+    // glyph for glyph (tests/doors/compact-40/doorman-layout.test.ts).
+    const screen = (0, blessed_helpers_1.createScreen)(bbs, { smartCSR: true, fullUnicode: true, title: 'DOORMAN v2' });
     const inputManager = new blessed_helpers_1.DoorInputManager(session, screen, { enableGameMode: false, enableGrabKeys: false, enableMouse: true });
     inputManager.enable();
     const nodeId = session.bbsSession?.nodeId ?? '?';

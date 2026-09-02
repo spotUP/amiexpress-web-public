@@ -50,11 +50,20 @@ export class DocView extends BaseView {
     // characters do not.
     const text = this.content.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '').replace(/[{}]/g, c => `\\${c}`);
     this.panel = new Panel({ parent: this.layout.screen, top: 0, left: 0, width: '100%',
-      height: '100%-3', label: ` ${this.title} `, tags: true, style: { border:{ fg: T.accent } } } as any);
-    const box = new ScrollableBox({ parent: this.panel, top: 1, left: 1, width: '100%-2',
-      height: '100%-2', tags: false, scrollable: true, alwaysScroll: true, content: text } as any);
-    this.hint = new Panel({ parent: this.layout.screen, bottom: 0, left: 0, width: '100%', height: 3,
-      tags: true, content: '{center}[Q/ESC] Close  [↑/↓/PgUp/PgDn] Scroll{/center}',
+      height: this.layout.compact.collapseChrome ? '100%-1' : '100%-3',
+      ...(this.layout.compact.borders ? {} : { border: undefined }),
+      label: ` ${this.title} `, tags: true, style: { border:{ fg: T.accent } } } as any);
+    const box = new ScrollableBox({ parent: this.panel,
+      ...(this.layout.compact.borders
+        ? { top: 1, left: 1, width: '100%-2', height: '100%-2' }
+        : { top: 0, left: 0, width: '100%', height: '100%' }),
+      tags: false, scrollable: true, alwaysScroll: true, content: text } as any);
+    this.hint = new Panel({ parent: this.layout.screen, bottom: 0, left: 0, width: '100%',
+      height: this.layout.compact.collapseChrome ? 1 : 3,
+      ...(this.layout.compact.borders ? {} : { border: undefined }),
+      tags: true, content: this.layout.narrow
+        ? '{center}[Q/ESC] Close  [Up/Dn] Scroll{/center}'
+        : '{center}[Q/ESC] Close  [↑/↓/PgUp/PgDn] Scroll{/center}',
       style: { fg: T.ink, bg: T.bar, border:{ fg: T.accentAlt } } } as any);
     this.layout.screen.render();
     this.keys.key(['up','down','pageup','pagedown'], (_: any, key: any) => {

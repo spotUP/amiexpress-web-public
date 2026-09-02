@@ -9,5 +9,5 @@
  * @param enabled whether the SELECTED door is enabled; the E key offers the
  *                opposite of the current state, and reads wrong otherwise.
  */
-export declare function installedFooter(enabled: boolean): string;
+export declare function installedFooter(enabled: boolean, narrow?: boolean): string;
 //# sourceMappingURL=installed-footer.d.ts.map

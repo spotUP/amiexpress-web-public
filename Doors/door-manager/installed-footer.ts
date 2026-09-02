@@ -11,8 +11,18 @@ import { T } from './door-theme';
  * @param enabled whether the SELECTED door is enabled; the E key offers the
  *                opposite of the current state, and reads wrong otherwise.
  */
-export function installedFooter(enabled: boolean): string {
+export function installedFooter(enabled: boolean, narrow = false): string {
   const en = enabled ? 'Dis' : 'En';
+  // A 40-column footer holds about five hints. These are the five: run it,
+  // read it, remove it, switch it off, leave. Upload/Files/doc/Strip/Tab
+  // still work - they are just not advertised on a screen with no room.
+  if (narrow) {
+    return (
+      `{center}{${T.warn}-fg}ENTER{/${T.warn}-fg}=Run {${T.warn}-fg}I{/${T.warn}-fg}=Info ` +
+      `{${T.warn}-fg}D{/${T.warn}-fg}=Del {${T.warn}-fg}E{/${T.warn}-fg}=${en} ` +
+      `{${T.warn}-fg}Q{/${T.warn}-fg}=Quit{/center}`
+    );
+  }
   return (
     `{center}{${T.warn}-fg}ENTER{/${T.warn}-fg}=Run {${T.warn}-fg}U{/${T.warn}-fg}pload ` +
     `{${T.warn}-fg}I{/${T.warn}-fg}nfo {${T.warn}-fg}F{/${T.warn}-fg}iles ` +

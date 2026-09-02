@@ -30,6 +30,7 @@ export declare function repoViewFooterParts(mode: DoorRepoMode, opts: {
     installed: boolean;
     hasJunk: boolean;
     hasDoc: boolean;
+    narrow?: boolean;
 }): string;
 /**
  * Whether [V]iew doc has anything to open for this entry.

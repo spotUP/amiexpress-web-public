@@ -61,6 +61,20 @@ function repoViewCurationAllowed(mode) {
 function repoViewFooterParts(mode, opts) {
     const inst = opts.installed ? 'Uninst' : 'Inst';
     const curationAllowed = repoViewCurationAllowed(mode);
+    // A 40-column footer (the C64/PETSCII tier) holds five hints at most, and
+    // the nine below run to about eighty characters. Archive, Filter, System
+    // and Strip lose their hint there - the keys still work; the row simply
+    // cannot name them without folding onto the list above it.
+    if (opts.narrow) {
+        const narrowParts = [
+            `{${door_theme_1.T.warn}-fg}R{/${door_theme_1.T.warn}-fg}=${inst}`,
+            opts.hasDoc ? `{${door_theme_1.T.warn}-fg}V{/${door_theme_1.T.warn}-fg}=Doc` : null,
+            curationAllowed ? `{${door_theme_1.T.warn}-fg}D{/${door_theme_1.T.warn}-fg}=Del` : null,
+            `{${door_theme_1.T.warn}-fg}ESC{/${door_theme_1.T.warn}-fg}=Back`,
+            `{${door_theme_1.T.warn}-fg}Q{/${door_theme_1.T.warn}-fg}=Quit`,
+        ].filter(Boolean).join(' ');
+        return `{center}${narrowParts}{/center}`;
+    }
     // Every hint is "KEY=Label". It used to mix that with bare words whose
     // active letter was marked only by a colour highlight ("Strip", "Archive",
     // "Quit") - which is invisible on plenty of real terminals, and led to
