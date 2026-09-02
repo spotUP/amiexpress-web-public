@@ -329,27 +329,32 @@ export function ScreenFilesPage() {
     {
       id: 'dir',
       header: 'Reads',
-      mono: true,
       value: res => res.dir,
       cell: res => (
-        <>
+        <span className="font-topaz">
           {res.dir}
           {res.dirIsShared && <span className="text-content-muted"> (shared)</span>}
-        </>
+        </span>
       ),
     },
     {
       id: 'file',
       header: 'File',
-      mono: true,
       value: res => res.file ?? '',
       cell: res => (res.file ? (
-        <button className="underline" onClick={() => setOpenFile(res.file)}>{res.file}</button>
+        <button className="underline font-topaz" onClick={() => setOpenFile(res.file)}>
+          {res.file}
+        </button>
       ) : (
         <span className="text-status-warn">nothing resolves</span>
       )),
     },
-    { id: 'variants', header: 'Variants', mono: true, value: res => res.variants.join(' ') },
+    {
+      id: 'variants',
+      header: 'Variants',
+      value: res => res.variants.join(' '),
+      cell: res => <span className="font-topaz">{res.variants.join(' ')}</span>,
+    },
     {
       id: 'actions',
       header: '',
@@ -428,7 +433,7 @@ export function ScreenFilesPage() {
           <ul className="space-y-1">
             {(data?.unused ?? []).map(item => (
               <li key={item.relPath} className="flex items-center gap-3">
-                <span className="font-mono text-content-primary">{item.relPath}</span>
+                <span className="font-topaz text-content-primary">{item.relPath}</span>
                 <span className="text-content-secondary">{item.bytes} bytes, {item.format}</span>
                 <a
                   className="underline"
@@ -615,7 +620,7 @@ export function ScreenFilesPage() {
         {editorWrite && pendingUpload && (
           <div className="space-y-2 p-4">
             <p className="text-sm text-content-primary">
-              Write <span className="font-mono">{openFile}</span> where?
+              Write <span className="font-topaz">{openFile}</span> where?
             </p>
             {options.map(option => (
               <button
@@ -700,8 +705,8 @@ export function ScreenFilesPage() {
             {pendingUpload && !editorWrite && (
               <div className="border border-border p-3 space-y-2 text-sm">
                 <p className="text-content-primary">
-                  Replace <span className="font-mono">{openFile}</span> with{' '}
-                  <span className="font-mono">{pendingUpload.name}</span>
+                  Replace <span className="font-topaz">{openFile}</span> with{' '}
+                  <span className="font-topaz">{pendingUpload.name}</span>
                 </p>
                 {options.map(option => (
                   <button
@@ -739,7 +744,7 @@ export function ScreenFilesPage() {
                   This screen runs things - {file.mci.length} MCI reference
                   {file.mci.length === 1 ? '' : 's'}
                 </h4>
-                <ul className="font-mono">
+                <ul className="font-topaz text-base">
                   {file.mci.map((ref: { code: string; target: string; resolves: boolean }, i: number) => (
                     <li key={i} className={ref.resolves ? 'text-content-primary' : 'text-status-danger'}>
                       ~{ref.code}_{ref.target} {ref.resolves ? '' : '- points at nothing'}

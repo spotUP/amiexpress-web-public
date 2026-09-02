@@ -144,7 +144,7 @@ export function ScreenEditor({ surface, mci = [], onChange, onSave, onCancel }: 
                 type="button"
                 aria-label={`Draw with ${char === ' ' ? 'a space' : char}`}
                 aria-pressed={surface.char === char}
-                className={`w-6 h-6 font-mono border ${
+                className={`w-6 h-6 font-topaz border ${
                   surface.char === char ? 'border-border-strong' : 'border-border'
                 }`}
                 onClick={() => onChange({ ...surface, char })}
@@ -212,7 +212,7 @@ export function ScreenEditor({ surface, mci = [], onChange, onSave, onCancel }: 
           <h4 className="text-content-primary">
             This screen runs things - {tokens.length} MCI code{tokens.length === 1 ? '' : 's'}
           </h4>
-          <ul className="font-mono">
+          <ul className="font-topaz text-base">
             {tokens.map((token, index) => (
               <li key={`${token.line}-${token.column}-${index}`}
                 className={token.resolves ? 'text-content-primary' : 'text-status-danger'}>

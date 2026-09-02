@@ -85,6 +85,9 @@ export default {
       fontFamily: {
         sans: ['system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', 'monospace'],
+        // The Amiga's own face, for the board's own strings: screen paths,
+        // MCI codes, tooltype keys. Declared in styles/tokens.css.
+        topaz: ['var(--font-topaz)'],
       },
       borderRadius: {
         sm: 'var(--radius-sm)',

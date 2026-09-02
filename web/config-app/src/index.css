@@ -1,5 +1,16 @@
 @import './styles/tokens.css';
 
+@font-face {
+  font-family: 'Topaz_a1200';
+  src: url('./fonts/Topaz_a1200_v1.0.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  /* block, not swap: a screen path rendered first in a proportional fallback
+     and then reflowed is worse than a beat of nothing. */
+  font-display: block;
+}
+
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

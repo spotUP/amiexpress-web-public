@@ -56,6 +56,18 @@
   --space-7: 32px;
   --space-8: 40px;
 
+  /*
+   * Topaz, the Amiga's own screen font.
+   *
+   * The board's screens were drawn in it, and the codes inside them - ~CC_,
+   * ~SS_, a path like Conf12/MENU.TXT - are what a sysop reads letter by
+   * letter. A UI monospace face makes that work harder than it needs to be:
+   * "the font used for the codes in the screen files are hard to read make it
+   * use topaz". Shipped with the admin rather than borrowed from the board's
+   * own bundle, so /admin renders the same wherever it is served.
+   */
+  --font-topaz: 'Topaz_a1200', 'TopazPlus_a1200', ui-monospace, 'Courier New', monospace;
+
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
