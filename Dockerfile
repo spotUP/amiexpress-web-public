@@ -65,6 +65,26 @@ RUN echo "[Build] Starting frontend vite build" && \
 # ============================================================================
 FROM node:20-alpine AS config-builder
 
+WORKDIR /app
+
+# The admin imports two things from OUTSIDE its own directory, both from
+# SOURCE, and both resolved by aliases in vite.config.ts / tsconfig.json:
+#
+#   sdk/engines/ui/ansi-editor  - the door's ANSI editor core, so the browser
+#                                 editor and the door run one implementation
+#   web/backend/src/screens,
+#   .../services/config-services - the board's own MCI parser and the
+#                                 findAcsLevel rule, rather than a second copy
+#
+# Source only: no dist, no node_modules. A stage that copies just
+# web/config-app builds fine on a developer's machine, where those paths exist
+# above it, and fails here with "Could not load .../core/file-ops" - which is
+# exactly how this was found. tests/dockerfile-copies-admin-sources.test.ts
+# fails when an import escapes what is copied here.
+COPY sdk/engines/ui/ansi-editor ./sdk/engines/ui/ansi-editor
+COPY web/backend/src/screens ./web/backend/src/screens
+COPY web/backend/src/services/config-services ./web/backend/src/services/config-services
+
 WORKDIR /app/web/config-app
 
 COPY web/config-app/package*.json ./
