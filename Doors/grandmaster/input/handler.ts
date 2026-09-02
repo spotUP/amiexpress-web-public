@@ -90,6 +90,13 @@ export class InputHandler {
   /** The player's own DAS/ARR, falling back to the TGM3-derived defaults. */
   private dasDelay: number = TIMING.DAS_DELAY;
   private arrRate: number = TIMING.ARR_RATE;
+  /**
+   * Soft-drop repeat interval. The player's own setting and the rotation
+   * system's reference multiplier both land here through setTiming() - see
+   * core/soft-drop.ts. It was a fixed constant, which is why
+   * PlayerSettings.softDropSpeed did nothing at all.
+   */
+  private softDropRate: number = TIMING.SOFT_DROP_RATE;
 
   constructor(
     private screen: Screen,
@@ -170,9 +177,10 @@ export class InputHandler {
    * turned the repeat down saw no change at all (found 2026-08-26 while
    * chasing "the sideways scrolling accelerates and goes too quick").
    */
-  setTiming(dasDelay?: number, arrRate?: number): void {
+  setTiming(dasDelay?: number, arrRate?: number, softDropRate?: number): void {
     if (typeof dasDelay === 'number' && dasDelay > 0) this.dasDelay = dasDelay;
     if (typeof arrRate === 'number' && arrRate > 0) this.arrRate = arrRate;
+    if (typeof softDropRate === 'number' && softDropRate > 0) this.softDropRate = softDropRate;
   }
 
   /** Shared press-edge logic for both input paths. */
@@ -341,7 +349,7 @@ export class InputHandler {
       this.repeatWhileHeld(
         () => this.softDropTimer,
         (value) => { this.softDropTimer = value; },
-        TIMING.SOFT_DROP_RATE,
+        this.softDropRate,
         () => this.triggerAction('soft_drop')
       );
     } else {

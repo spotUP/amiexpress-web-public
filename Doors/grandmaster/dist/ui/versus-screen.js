@@ -20,6 +20,7 @@ const block_glow_1 = require("../effects/block-glow");
 const line_clear_animation_1 = require("../effects/line-clear-animation");
 const items_1 = require("../core/items");
 const versus_goal_1 = require("../core/versus-goal");
+const up_key_lock_1 = require("../core/up-key-lock");
 /** Background colour used to render a TGM item cell, keyed by piece type. */
 const ITEM_CELL_COLORS = {
     I: 'cyan', O: 'yellow', T: 'magenta', S: 'green', Z: 'red', J: 'blue', L: 'white',
@@ -865,7 +866,7 @@ class VersusScreen {
         // ACE-ARS's up key locks (ars.c:331,361-389); every other rotation system
         // sonic drops and leaves the piece live, so only the lock gets the sound.
         this.inputHandler.on('sonic_drop', act(() => {
-            const locks = this.state.settings.rotationSystem === 'ACE-ARS';
+            const locks = (0, up_key_lock_1.lockedByUpKey)(this.state.settings.rotationSystem);
             if (this.engine.sonicDrop() && locks)
                 this.sounds.playSfx('hard_drop');
         }));

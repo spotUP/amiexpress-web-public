@@ -30,6 +30,7 @@ import { BlockGlowManager } from '../effects/block-glow';
 import { LineClearAnimationManager } from '../effects/line-clear-animation';
 import { applyEnemyItem, HARD_BLOCK_ITEM } from '../core/items';
 import { versusGoalReached, versusGoalTarget, DEFAULT_VERSUS_GOAL } from '../core/versus-goal';
+import { lockedByUpKey } from '../core/up-key-lock';
 
 /** Background colour used to render a TGM item cell, keyed by piece type. */
 const ITEM_CELL_COLORS: Record<string, string> = {
@@ -975,7 +976,7 @@ export class VersusScreen {
     // ACE-ARS's up key locks (ars.c:331,361-389); every other rotation system
     // sonic drops and leaves the piece live, so only the lock gets the sound.
     this.inputHandler.on('sonic_drop', act(() => {
-      const locks = this.state.settings.rotationSystem === 'ACE-ARS';
+      const locks = lockedByUpKey(this.state.settings.rotationSystem);
       if (this.engine.sonicDrop() && locks) this.sounds.playSfx('hard_drop');
     }));
     this.inputHandler.on('hold', act(() => {

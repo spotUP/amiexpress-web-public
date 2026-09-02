@@ -26,6 +26,7 @@ import { BlockGlowManager } from '../effects/block-glow';
 import { LineClearAnimationManager } from '../effects/line-clear-animation';
 import { ConnectedBlockRenderer } from '../effects/connected-blocks';
 import { isCellHidden, countHiddenCells, shadowDecayRate } from '../core/hidden';
+import { lockedByUpKey } from '../core/up-key-lock';
 
 /**
  * Main game screen
@@ -691,7 +692,7 @@ export class GameScreen {
       // ACE-ARS locks on this key (ars.c:331,361-389), every other rotation
       // system just lands the piece - so the trail and the landing sound are
       // for the locking case only.
-      const locks = this.state.settings.rotationSystem === 'ACE-ARS';
+      const locks = lockedByUpKey(this.state.settings.rotationSystem);
       if (locks) this.addHardDropTrail();
       if (this.engine.sonicDrop() && locks) {
         this.sounds.playSfx('hard_drop');

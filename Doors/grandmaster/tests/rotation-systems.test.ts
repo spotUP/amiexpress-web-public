@@ -430,8 +430,24 @@ export async function aceArsUpKeyLocksAPieceThatIsAlreadyGrounded(): Promise<voi
   assert.strictEqual(filledCells(engine), 4, 'a grounded ACE-ARS piece locks on the up key');
 }
 
+export async function theWorldFamilyExceptSrsXAlsoLocksOnTheUpKey(): Promise<void> {
+  // world.c:447 (grounded) and 478-517 (airborne) are both written as
+  // `rots != 7`, so TI-WORLD, ACE-SRS and DS-WORLD lock on the up key the
+  // way ACE-ARS does. SRS-X is the exception the `!= 7` carves out:
+  // world.c:519-540 drops the piece and clears bs/bk, leaving it live.
+  for (const system of ['TI-WORLD', 'ACE-SRS', 'DS-WORLD'] as const) {
+    const engine: any = new GameEngine('marathon', { ...baseSettings, rotationSystem: system }, sounds);
+    engine.start();
+
+    const result = engine.sonicDrop();
+
+    assert.strictEqual(result, true, `${system}: the up key must do something`);
+    assert.strictEqual(filledCells(engine), 4, `${system} locks on the up key (world.c:447)`);
+  }
+}
+
 export async function everyOtherSystemSonicDropsWithoutLocking(): Promise<void> {
-  for (const system of ['ARS', 'TI-ARS', 'SRS', 'TI-WORLD', 'ACE-SRS', 'DS-WORLD', 'SRS-X'] as const) {
+  for (const system of ['ARS', 'TI-ARS', 'SRS', 'SRS-X'] as const) {
     const engine: any = new GameEngine('marathon', { ...baseSettings, rotationSystem: system }, sounds);
     engine.start();
     const state = engine.getState();

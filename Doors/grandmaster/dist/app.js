@@ -50,6 +50,7 @@ const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helper
 const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const game_1 = require("./core/game");
+const soft_drop_1 = require("./core/soft-drop");
 const menu_1 = require("./ui/menu");
 const game_screen_1 = require("./ui/game-screen");
 const settings_screen_1 = require("./ui/settings-screen");
@@ -332,7 +333,7 @@ class GrandmasterApp {
         this.inputHandler = new handler_1.InputHandler(this.screen, session, this.state.settings.keyBindings);
         // The player's movement timing. Applied here AND after loadSettings,
         // because the handler is built before their saved settings are read.
-        this.inputHandler.setTiming(this.state.settings.das, this.state.settings.arr);
+        this.inputHandler.setTiming(this.state.settings.das, this.state.settings.arr, (0, soft_drop_1.softDropIntervalMs)(this.state.settings.softDropSpeed, this.state.settings.rotationSystem));
         // Initialize network manager if session has socket
         if (session.bbsSession?.socket) {
             this.network = new network_manager_1.GrandmasterNetworkManager(session.bbsSession);
@@ -445,7 +446,7 @@ class GrandmasterApp {
                 }
                 // Settings are loaded AFTER the input handler is built, so hand it
                 // the timing again - otherwise the saved DAS/ARR never reach it.
-                this.inputHandler?.setTiming(this.state.settings.das, this.state.settings.arr);
+                this.inputHandler?.setTiming(this.state.settings.das, this.state.settings.arr, (0, soft_drop_1.softDropIntervalMs)(this.state.settings.softDropSpeed, this.state.settings.rotationSystem));
                 console.log(`[GRANDMASTER] Loaded settings for ${this.session.user?.username}`);
             }
         }
@@ -2713,7 +2714,7 @@ class GrandmasterApp {
         this.inputHandler.updateConfig(this.state.settings.keyBindings);
         // ...and the movement timing, which the settings screen has always
         // offered and which never reached the handler before.
-        this.inputHandler.setTiming(this.state.settings.das, this.state.settings.arr);
+        this.inputHandler.setTiming(this.state.settings.das, this.state.settings.arr, (0, soft_drop_1.softDropIntervalMs)(this.state.settings.softDropSpeed, this.state.settings.rotationSystem));
         // Persist settings to disk for this user
         this.saveSettings();
     }

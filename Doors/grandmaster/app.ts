@@ -34,6 +34,7 @@ interface DoorSession {
 
 import { GameMode, AppState, GameResult } from './core/types';
 import { GameEngine } from './core/game';
+import { softDropIntervalMs } from './core/soft-drop';
 import { MenuScreen } from './ui/menu';
 import { GameScreen } from './ui/game-screen';
 import { SettingsScreen } from './ui/settings-screen';
@@ -345,7 +346,11 @@ export class GrandmasterApp {
     );
     // The player's movement timing. Applied here AND after loadSettings,
     // because the handler is built before their saved settings are read.
-    this.inputHandler.setTiming(this.state.settings.das, this.state.settings.arr);
+    this.inputHandler.setTiming(
+      this.state.settings.das,
+      this.state.settings.arr,
+      softDropIntervalMs(this.state.settings.softDropSpeed, this.state.settings.rotationSystem)
+    );
 
     // Initialize network manager if session has socket
     if (session.bbsSession?.socket) {
@@ -465,7 +470,11 @@ export class GrandmasterApp {
 
         // Settings are loaded AFTER the input handler is built, so hand it
         // the timing again - otherwise the saved DAS/ARR never reach it.
-        this.inputHandler?.setTiming(this.state.settings.das, this.state.settings.arr);
+        this.inputHandler?.setTiming(
+      this.state.settings.das,
+      this.state.settings.arr,
+      softDropIntervalMs(this.state.settings.softDropSpeed, this.state.settings.rotationSystem)
+    );
         console.log(`[GRANDMASTER] Loaded settings for ${this.session.user?.username}`);
       }
     } catch (error) {
@@ -3092,7 +3101,11 @@ export class GrandmasterApp {
     this.inputHandler.updateConfig(this.state.settings.keyBindings as any);
     // ...and the movement timing, which the settings screen has always
     // offered and which never reached the handler before.
-    this.inputHandler.setTiming(this.state.settings.das, this.state.settings.arr);
+    this.inputHandler.setTiming(
+      this.state.settings.das,
+      this.state.settings.arr,
+      softDropIntervalMs(this.state.settings.softDropSpeed, this.state.settings.rotationSystem)
+    );
 
     // Persist settings to disk for this user
     this.saveSettings();

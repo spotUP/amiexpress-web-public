@@ -18,6 +18,7 @@ const credit_roll_1 = require("./credit-roll");
 const time_limit_1 = require("./time-limit");
 const devil_grade_1 = require("./devil-grade");
 const hidden_1 = require("./hidden");
+const up_key_lock_1 = require("./up-key-lock");
 const animations_1 = require("../effects/animations");
 const block_glow_1 = require("../effects/block-glow");
 const items_1 = require("./items");
@@ -715,7 +716,7 @@ class GameEngine {
         const shape = this.pieceManager.getShape(piece.type, piece.rotation, !!piece.big);
         const ghostY = (0, board_1.getGhostY)(this.state.board, shape, piece.x, piece.y);
         const dropDistance = ghostY - piece.y;
-        const locksOnUp = this.settings.rotationSystem === 'ACE-ARS';
+        const locksOnUp = (0, up_key_lock_1.lockedByUpKey)(this.settings.rotationSystem);
         // Grounded and no lock to give: nothing happened.
         if (dropDistance <= 0 && !locksOnUp)
             return false;

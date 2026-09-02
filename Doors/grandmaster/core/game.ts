@@ -30,6 +30,7 @@ import { CreditRollManager, InvisiblePieceManager } from './credit-roll';
 import { checkTorikan } from './time-limit';
 import { devilGradeForLevel, devilFinalGrade, DEVIL_END_LEVEL } from './devil-grade';
 import { SHADOW_TIMER_FRAMES, shadowDecayRate } from './hidden';
+import { lockedByUpKey } from './up-key-lock';
 import type { SoundEngine } from '../audio/sounds';
 import { AnimationManager } from '../effects/animations';
 import { BlockGlowManager } from '../effects/block-glow';
@@ -864,7 +865,7 @@ export class GameEngine {
     const shape = this.pieceManager.getShape(piece.type, piece.rotation, !!piece.big);
     const ghostY = getGhostY(this.state.board, shape, piece.x, piece.y);
     const dropDistance = ghostY - piece.y;
-    const locksOnUp = this.settings.rotationSystem === 'ACE-ARS';
+    const locksOnUp = lockedByUpKey(this.settings.rotationSystem);
 
     // Grounded and no lock to give: nothing happened.
     if (dropDistance <= 0 && !locksOnUp) return false;

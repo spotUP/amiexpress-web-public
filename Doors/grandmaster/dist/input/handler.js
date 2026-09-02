@@ -70,6 +70,13 @@ class InputHandler {
         /** The player's own DAS/ARR, falling back to the TGM3-derived defaults. */
         this.dasDelay = config_1.TIMING.DAS_DELAY;
         this.arrRate = config_1.TIMING.ARR_RATE;
+        /**
+         * Soft-drop repeat interval. The player's own setting and the rotation
+         * system's reference multiplier both land here through setTiming() - see
+         * core/soft-drop.ts. It was a fixed constant, which is why
+         * PlayerSettings.softDropSpeed did nothing at all.
+         */
+        this.softDropRate = config_1.TIMING.SOFT_DROP_RATE;
         this.config = config;
         this.state = {
             heldKeys: new Set(),
@@ -143,11 +150,13 @@ class InputHandler {
      * turned the repeat down saw no change at all (found 2026-08-26 while
      * chasing "the sideways scrolling accelerates and goes too quick").
      */
-    setTiming(dasDelay, arrRate) {
+    setTiming(dasDelay, arrRate, softDropRate) {
         if (typeof dasDelay === 'number' && dasDelay > 0)
             this.dasDelay = dasDelay;
         if (typeof arrRate === 'number' && arrRate > 0)
             this.arrRate = arrRate;
+        if (typeof softDropRate === 'number' && softDropRate > 0)
+            this.softDropRate = softDropRate;
     }
     /** Shared press-edge logic for both input paths. */
     handleKeyEdge(keyName) {
@@ -308,7 +317,7 @@ class InputHandler {
         // Soft drop repeat, on its own clock.
         if (this.downPressed) {
             this.softDropTimer += dt;
-            this.repeatWhileHeld(() => this.softDropTimer, (value) => { this.softDropTimer = value; }, config_1.TIMING.SOFT_DROP_RATE, () => this.triggerAction('soft_drop'));
+            this.repeatWhileHeld(() => this.softDropTimer, (value) => { this.softDropTimer = value; }, this.softDropRate, () => this.triggerAction('soft_drop'));
         }
         else {
             this.softDropTimer = 0;

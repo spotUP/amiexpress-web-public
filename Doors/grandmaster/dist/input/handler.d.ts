@@ -74,6 +74,13 @@ export declare class InputHandler {
     /** The player's own DAS/ARR, falling back to the TGM3-derived defaults. */
     private dasDelay;
     private arrRate;
+    /**
+     * Soft-drop repeat interval. The player's own setting and the rotation
+     * system's reference multiplier both land here through setTiming() - see
+     * core/soft-drop.ts. It was a fixed constant, which is why
+     * PlayerSettings.softDropSpeed did nothing at all.
+     */
+    private softDropRate;
     constructor(screen: Screen, session: DoorSession, config?: KeyConfig);
     /** Map browser KeyboardEvent.key names onto blessed-style config names. */
     private static browserKeyName;
@@ -86,7 +93,7 @@ export declare class InputHandler {
      * turned the repeat down saw no change at all (found 2026-08-26 while
      * chasing "the sideways scrolling accelerates and goes too quick").
      */
-    setTiming(dasDelay?: number, arrRate?: number): void;
+    setTiming(dasDelay?: number, arrRate?: number, softDropRate?: number): void;
     /** Shared press-edge logic for both input paths. */
     private handleKeyEdge;
     /**

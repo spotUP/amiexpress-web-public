@@ -13,6 +13,7 @@ const block_glow_1 = require("../effects/block-glow");
 const line_clear_animation_1 = require("../effects/line-clear-animation");
 const connected_blocks_1 = require("../effects/connected-blocks");
 const hidden_1 = require("../core/hidden");
+const up_key_lock_1 = require("../core/up-key-lock");
 /**
  * Main game screen
  */
@@ -598,7 +599,7 @@ class GameScreen {
             // ACE-ARS locks on this key (ars.c:331,361-389), every other rotation
             // system just lands the piece - so the trail and the landing sound are
             // for the locking case only.
-            const locks = this.state.settings.rotationSystem === 'ACE-ARS';
+            const locks = (0, up_key_lock_1.lockedByUpKey)(this.state.settings.rotationSystem);
             if (locks)
                 this.addHardDropTrail();
             if (this.engine.sonicDrop() && locks) {
