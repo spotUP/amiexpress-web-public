@@ -74,8 +74,9 @@ import { resolveDoorRoot } from '@amiexpress/bbs-door-sdk/settings';
 import { loadMissionPack } from './core/mission-pack';
 import { MissionRun } from './core/mission-run';
 import { MissionProgress } from './core/mission-progress';
-import type { MissionPack } from './core/mission-types';
+import type { Mission, MissionPack } from './core/mission-types';
 import { showMissionSelect, formatClearTime } from './ui/mission-select';
+import { showMissionBriefing, pickMission } from './ui/mission-briefing';
 
 // Default gamepad button mapping for GrandMaster.
 // Parse a trigger string (e.g. "button:a", "dpad:left", "axis:left-x:negative")
@@ -823,8 +824,19 @@ export class GrandmasterApp {
       return;
     }
 
+    // Pick, read the briefing, and start - or go back to the pack. A player
+    // who has just chosen from a one-line list has not yet been told the
+    // clock, the starting speed, the garbage or the rule changes, and meets
+    // all of them at once when the first piece falls.
     this.inputManager.suspend();
-    const mission = await showMissionSelect(this.screen, pack, this.missionProgress, this.state.playerName);
+    const mission = await pickMission(
+      pack,
+      (missionId) => this.missionProgress.getClear(this.state.playerName, pack.name, missionId),
+      {
+        select: (p) => showMissionSelect(this.screen, p, this.missionProgress, this.state.playerName),
+        brief: (m, clear) => showMissionBriefing(this.screen, m, clear),
+      }
+    );
     this.inputManager.resume();
     if (!mission) return;
 

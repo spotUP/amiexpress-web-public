@@ -87,6 +87,7 @@ const mission_pack_1 = require("./core/mission-pack");
 const mission_run_1 = require("./core/mission-run");
 const mission_progress_1 = require("./core/mission-progress");
 const mission_select_1 = require("./ui/mission-select");
+const mission_briefing_1 = require("./ui/mission-briefing");
 // Default gamepad button mapping for GrandMaster.
 // Parse a trigger string (e.g. "button:a", "dpad:left", "axis:left-x:negative")
 // into a GamepadTrigger object. Returns null for unknown formats.
@@ -756,8 +757,15 @@ class GrandmasterApp {
             await this.showMessage('MISSIONS', `Could not load the mission pack:\n${error.message}`);
             return;
         }
+        // Pick, read the briefing, and start - or go back to the pack. A player
+        // who has just chosen from a one-line list has not yet been told the
+        // clock, the starting speed, the garbage or the rule changes, and meets
+        // all of them at once when the first piece falls.
         this.inputManager.suspend();
-        const mission = await (0, mission_select_1.showMissionSelect)(this.screen, pack, this.missionProgress, this.state.playerName);
+        const mission = await (0, mission_briefing_1.pickMission)(pack, (missionId) => this.missionProgress.getClear(this.state.playerName, pack.name, missionId), {
+            select: (p) => (0, mission_select_1.showMissionSelect)(this.screen, p, this.missionProgress, this.state.playerName),
+            brief: (m, clear) => (0, mission_briefing_1.showMissionBriefing)(this.screen, m, clear),
+        });
         this.inputManager.resume();
         if (!mission)
             return;

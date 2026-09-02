@@ -58,6 +58,7 @@ const TEST_MODULES = ['./versus-layout.test',
   './practice-goal.test',
   './mission-run.test',
   './mission-mode.test',
+  './mission-briefing.test',
 ];
 
 // Blessed screens and engines log freely; keep test output readable.
