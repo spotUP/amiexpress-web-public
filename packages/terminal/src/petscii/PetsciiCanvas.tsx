@@ -34,6 +34,14 @@ export interface PetsciiCanvasHandle {
 
 const COLS = 40;
 const ROWS = 25;
+// Screen codes that render as a blank space in BOTH charset banks (verified
+// against the PetMe64 glyph outlines: 0x20 and 0x60 are empty in bank 0 and
+// bank 1; their reverse-video counterparts, bit 7 set, are solid blocks and
+// must still paint). A C64 background is flat - nothing may be drawn for
+// these cells beyond the screen-background fill already laid down below.
+function isBlankScreenCode(screenCode: number): boolean {
+  return screenCode === 0x20 || screenCode === 0x60;
+}
 const CELL_PX = 8; // native C64 character cell, both axes (320x200 / 40x25)
 const ATLAS_PX_SIZE = 8; // atlas built 1:1 with the native cell; `scale` does the zoom
 const CURSOR_BLINK_MS = 500;
@@ -157,6 +165,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
       for (let x = 0; x < COLS; x++) {
         const idx = y * COLS + x;
         const screenCode = s.screen[idx];
+        if (isBlankScreenCode(screenCode)) continue; // background fill above is already correct - draw nothing
         const color = palette[s.colorRam[idx] & 0x0F];
         const tinted = atlasCache.get(color);
         const sx = glyphCellIndex(s.charsetBank, screenCode) * ATLAS_PX_SIZE;

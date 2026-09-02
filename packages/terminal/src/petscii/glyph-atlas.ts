@@ -37,7 +37,21 @@ export async function buildGlyphAtlas(pxSize: number): Promise<HTMLCanvasElement
     for (let sc = 0; sc < GLYPHS_PER_BANK; sc++) {
       const codepoint = 0xE000 + bank * 0x100 + sc;
       const x = (bank * GLYPHS_PER_BANK + sc) * pxSize;
+      // Clip each glyph's draw to its own cell. Without this, Chromium's
+      // anti-aliased rasterization of an inked glyph bleeds a faint
+      // (~7% alpha) fringe past its nominal advance box into the
+      // NEXT cell over - since all 512 glyphs sit edge-to-edge with no
+      // gutter, that fringe lands inside the neighboring screen code's
+      // slice. A blank cell (space) sitting next to an inked glyph in
+      // atlas order then carries a stray lit pixel forever: tinted and
+      // drawImage'd onto every occurrence of that screen code, it shows
+      // up as a faint dot in an otherwise-solid-background C64 cell.
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, 0, pxSize, pxSize);
+      ctx.clip();
       ctx.fillText(String.fromCodePoint(codepoint), x, 0);
+      ctx.restore();
     }
   }
 
