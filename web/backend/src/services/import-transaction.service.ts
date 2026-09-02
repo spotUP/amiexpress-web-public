@@ -14,6 +14,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import type { Database } from '../database';
+import { planScreenCollapse } from './screen-collapse';
+import { applyTooltypes } from '../utils/info-file.util';
 import { AmigaParserService } from './amiga-parser.service';
 import { ImportValidationService } from './import-validation.service';
 import { ImportMappingService } from './import-mapping.service';
@@ -787,7 +789,20 @@ console.log(`[ImportTransaction] Importing ${screens.length} screens`);
     const config = require('../config').config;
     const bbsRoot = config.get('dataDir');
 
-    for (const screen of screens) {
+    /*
+     * Collapse the per-node copies before writing anything.
+     *
+     * A board arriving from a real Amiga has a copy of every screen in every
+     * node directory - fine at the 32 nodes AmiExpress addressed
+     * (axcommon.e:28), unmaintainable at the 255 this port does. Where every
+     * node's copy is identical, one file goes to Screens/Node/ and the nodes
+     * are pointed at it with the SCREENS tooltype - AmiExpress's own
+     * mechanism (ACP.e:2666-2673), so nothing here is a format this board
+     * invented.
+     */
+    const plan = planScreenCollapse(screens);
+
+    for (const screen of plan.write) {
       try {
         // Confine to the board: a relPath out of the archive is attacker
         // input as far as this is concerned.
@@ -804,7 +819,21 @@ console.error(`[ImportTransaction] Error writing screen ${screen.relPath}:`, err
       }
     }
 
-console.log(`[ImportTransaction] Imported ${screens.length} screens into ${bbsRoot}`);
+    // The tooltype LAST, so a node is only pointed at the shared directory
+    // once that directory holds its screens. A node pointed at an empty
+    // directory shows a caller nothing at all.
+    for (const { node, screens: dir } of plan.pointNodesAt) {
+      try {
+        applyTooltypes(path.join(bbsRoot, `Node${node}.info`), [['SCREENS', dir]]);
+      } catch (error: any) {
+console.error(`[ImportTransaction] Could not point Node${node} at ${dir}:`, error.message);
+      }
+    }
+
+console.log(
+      `[ImportTransaction] Imported ${plan.write.length} screens into ${bbsRoot}`
+      + ` (${plan.collapsed.length} shared across ${plan.pointNodesAt.length} nodes)`
+    );
   }
 
   /**
