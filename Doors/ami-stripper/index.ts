@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
 import type { DoorContext } from '@amiexpress/bbs-door-sdk';
 import { runStripRepack } from './strip-repack';
+import { stripperHeader, stripperRule, pathColumn, showsReason } from './layout';
 
 const door = new Door({
   name: 'AmiStripper',
@@ -19,6 +20,13 @@ const door = new Door({
 
 door.onStart(async (ctx: DoorContext) => {
   const { output, input } = ctx;
+
+  // The caller's REAL width, read once per run. Everything below is sized
+  // from it - a 40-column C64 got an 80-wide header and a 40-character path
+  // column, and neither fits on the screen it has.
+  // Cast: the SDK's BBSApi interface does not declare getTerminalSize yet,
+  // though the backend's implementation has it (web/backend/src/doors/BBSApi.ts:216).
+  const termWidth = (ctx.bbs as any)?.getTerminalSize?.().width ?? 80;
 
   // Load from require cache (BBS server has already imported it via BBSApi)
   // Fall back to path probing for local dev.
@@ -61,11 +69,8 @@ door.onStart(async (ctx: DoorContext) => {
   }
 
   function showHeader() {
-    const right = `[scene db: ${patternCount()} patterns]`;
-    const left = ' AMIGA ARCHIVE STRIPPER';
-    const pad = 80 - left.length - right.length;
     output.write('\x1b[2J\x1b[H');
-    output.write('\x1b[0;37;44m' + left + ' '.repeat(Math.max(0, pad)) + right + '\x1b[0m\r\n\r\n');
+    output.write('\x1b[0;37;44m' + stripperHeader(patternCount(), termWidth) + '\x1b[0m\r\n\r\n');
   }
 
   while (true) {
@@ -102,18 +107,22 @@ door.onStart(async (ctx: DoorContext) => {
     await output.write(`\x1b[31mFILES TO STRIP (${result.stripped.length}):\x1b[0m\r\n`);
     for (const entry of result.stripped.slice(0, 20)) {
       const reason = result.reason[entry.path] ?? '';
-      await output.write(`  \x1b[31m${entry.path.substring(0, 38).padEnd(38)}\x1b[0m ${formatSize(entry.size).padStart(7)}  \x1b[90m[${reason}]\x1b[0m\r\n`);
+      const col = pathColumn(38, termWidth);
+      const tail = showsReason(termWidth) ? `  \x1b[90m[${reason}]\x1b[0m` : '';
+      await output.write(`  \x1b[31m${entry.path.substring(0, col).padEnd(col)}\x1b[0m ${formatSize(entry.size).padStart(7)}${tail}\r\n`);
     }
     if (result.stripped.length > 20)
       await output.write(`  \x1b[90m... and ${result.stripped.length - 20} more\x1b[0m\r\n`);
 
     await output.write(`\r\n\x1b[32mFILES KEPT (${result.kept.length}):\x1b[0m\r\n`);
-    for (const entry of result.kept.slice(0, 10))
-      await output.write(`  ${entry.path.substring(0, 40).padEnd(40)} ${formatSize(entry.size).padStart(7)}\r\n`);
+    for (const entry of result.kept.slice(0, 10)) {
+      const col = pathColumn(40, termWidth);
+      await output.write(`  ${entry.path.substring(0, col).padEnd(col)} ${formatSize(entry.size).padStart(7)}\r\n`);
+    }
     if (result.kept.length > 10)
       await output.write(`  \x1b[90m... and ${result.kept.length - 10} more\x1b[0m\r\n`);
 
-    await output.write('\r\n\x1b[0;37m' + '─'.repeat(80) + '\x1b[0m\r\n');
+    await output.write('\r\n\x1b[0;37m' + stripperRule(termWidth) + '\x1b[0m\r\n');
     await output.write('\x1b[33mS\x1b[0m Strip in-place  \x1b[33mA\x1b[0m Abort\r\n');
 
     const choice = await input.getChar();

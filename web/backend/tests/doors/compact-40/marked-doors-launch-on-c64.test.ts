@@ -33,7 +33,7 @@ setHelpers({
 const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
 
 /** Commands whose doors Task 6 adapted to 40 columns, in plan order. */
-const ADAPTED = ['THEME', 'DOORS', 'BUGS'];
+const ADAPTED = ['THEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP'];
 
 const UNROUTED = 'unrouted-gate-test-type' as unknown as Door['type'];
 
