@@ -98,42 +98,6 @@ vi.mock('../../../../../packages/terminal/node_modules/socket.io-client', () => 
   Socket: class {},
 }));
 
-/** Minimal socket.io-client double: records handlers so a test can fire
- * the server's events, records emits so a test can assert the client
- * asked for something. */
-class FakeSocket {
-  handlers = new Map<string, Function[]>();
-  emitted: Array<{ event: string; args: any[] }> = [];
-  id = 'fake-socket-id';
-  connected = true;
-  io = {
-    opts: { reconnection: true } as any,
-    on() {},
-    off() {},
-    engine: { transport: { name: 'websocket' } },
-  };
-  on(event: string, fn: Function) {
-    const list = this.handlers.get(event) ?? [];
-    list.push(fn);
-    this.handlers.set(event, list);
-    return this;
-  }
-  off() { return this; }
-  once(event: string, fn: Function) { return this.on(event, fn); }
-  onAny() { return this; }
-  offAny() { return this; }
-  emit(event: string, ...args: any[]) { this.emitted.push({ event, args }); return this; }
-  connect() { return this; }
-  disconnect() { return this; }
-  removeAllListeners() { this.handlers.clear(); return this; }
-  /** Fire a server->client event at the component. */
-  fire(event: string, ...args: any[]) {
-    for (const fn of [...(this.handlers.get(event) ?? [])]) fn(...args);
-  }
-  /** Did the client emit this event? */
-  didEmit(event: string) { return this.emitted.some((e) => e.event === event); }
-}
-
 // Imported after the mocks so the component picks them up. Source import,
 // not the built package - see the file header.
 import { BBSTerminal } from '../../../../../packages/terminal/src/components/BBSTerminal';
@@ -142,6 +106,8 @@ import {
   FONT_CACHE_KEY,
   fontFamilyFor,
 } from '../../../../../packages/terminal/src/utils/session-font';
+// The socket.io-client double, shared with the other BBSTerminal tests.
+import { FakeSocket } from './helpers/fake-socket';
 
 let socket: FakeSocket;
 

@@ -25,12 +25,6 @@ import { PetsciiCanvas, type PetsciiCanvasHandle } from '../petscii/PetsciiCanva
 import { petsciiSurfaceReducer, initialPetsciiSurface, type PetsciiSurface } from '../petscii/surface-state';
 import { processLoginKey, type LoginKeyContext } from '../utils/login-key-machine';
 
-// PETSCII byte pacing. `PETSCII_MAX_SOFT_CAP_BPS` mirrors
-// modem-emulator.ts's bps=0 soft cap (230400 bps / 10 bits-per-byte =
-// 23040 bytes/sec) so a full-speed connection still paints progressively
-// instead of the whole 40x25 frame landing in one tick.
-const PETSCII_MAX_SOFT_CAP_BPS = 230400;
-
 // RIP Graphics.
 //
 // The parser and renderer used to live in web/frontend/src/components/rip
@@ -248,17 +242,18 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
   // Full-canvas PETSCII session (petscii-full-canvas plan, Task 8). The
   // surface is either xterm (ANSI) or the PetsciiCanvas (a simulated C64):
-  // every byte for a 'P' session goes transducer -> pace queue -> machine ->
-  // canvas, including the login echo. Only a PETSCII event selects the
+  // every byte for a 'P' session goes transducer -> machine -> canvas,
+  // including the login echo. Only a PETSCII event selects the
   // canvas (surface-state.ts); a fresh session on this mounted component
   // resets to xterm via clearPetsciiSession (token login, restore failed,
   // reconnect failed - 'session-restored' is a continuation and keeps it).
   //
   // surfaceRef mirrors `surface` for the socket handlers and writeTerm,
   // which live inside the mount-once effect and would otherwise close over
-  // the first render's value forever. petsciiBpsRef mirrors the same
-  // 'modem-speed' event ModemEmulator listens to, so the C64 canvas draws
-  // at the same simulated baud rate as the ANSI/xterm path.
+  // the first render's value forever.
+  //
+  // There is NO client-side baud pacing on this path, deliberately - see
+  // enqueuePetscii below.
   const [surface, dispatchSurface] = useReducer(petsciiSurfaceReducer, initialPetsciiSurface);
   const surfaceRef = useRef<PetsciiSurface>(initialPetsciiSurface);
   const petsciiMachineRef = useRef<PetsciiMachine | null>(null);
@@ -268,32 +263,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const [petsciiMachine, setPetsciiMachine] = useState<PetsciiMachine | null>(null);
   const petsciiTransducerRef = useRef<AnsiToPetsciiTransducer | null>(null);
   const petsciiCanvasRef = useRef<PetsciiCanvasHandle | null>(null);
-  const petsciiBpsRef = useRef<number>(0);
-  const petsciiFeedQueue = useRef<number[]>([]);
-  const petsciiDrainActiveRef = useRef<boolean>(false);
-  // Bumped by clearPetsciiSession so an in-flight drain loop (it may be
-  // parked in its 5ms await) orphans itself instead of feeding the next
-  // session's machine, and so the next drain starts on a fresh elapsed-time
-  // budget rather than inheriting a huge accumulated allowance and dumping
-  // its first screen unpaced.
-  const petsciiDrainGenerationRef = useRef<number>(0);
-  // Mirrors ModemEmulator.setDoorActive (modem-emulator.ts:56): a running
-  // door's repaints must feel instant, so the pace queue is emptied in one
-  // go while this is true. The pacing is for BBS navigation only.
-  const petsciiDoorActiveRef = useRef<boolean>(false);
   const clearPetsciiSession = useCallback(() => {
     surfaceRef.current = 'xterm';
     petsciiMachineRef.current = null;
     setPetsciiMachine(null);
     petsciiTransducerRef.current = null;
-    petsciiFeedQueue.current.length = 0;
-    petsciiDrainGenerationRef.current += 1;
-    petsciiDrainActiveRef.current = false;
-    // A door left running when the session died would otherwise keep the
-    // pace queue in drain-everything mode for the NEXT session, which then
-    // dumps its first screens unpaced. Door-active is session state, so it
-    // dies with the session (the same reason the drain generation bumps).
-    petsciiDoorActiveRef.current = false;
     dispatchSurface({ type: 'session-reset' });
   }, []);
   // Published by the init effect so injectInput (imperative handle) and the
@@ -305,18 +279,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // effect (ZMODEM messages, the Ctrl+C door abort). Writing straight to
   // terminalInstance there would drop the text into a hidden xterm.
   const writeTermRef = useRef<(text: string) => void>(() => {});
-
-  // Classic BBS behaviour: any keypress dumps the rest of the pending
-  // screen instantly instead of making the user wait out the baud rate.
-  // The pacing loop (startPetsciiDrain, set up alongside the socket
-  // listeners below) re-reads petsciiFeedQueue.current on every iteration,
-  // so emptying it here is enough - no separate cancellation flag needed.
-  const flushPetsciiQueue = useCallback(() => {
-    const queue = petsciiFeedQueue.current;
-    if (queue.length === 0) return;
-    const rest = queue.splice(0, queue.length);
-    petsciiMachineRef.current?.feed(Uint8Array.from(rest));
-  }, []);
 
   // RIP Graphics state
   const [ripMode, setRipMode] = useState<boolean>(false);
@@ -839,56 +801,48 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Initialize modem emulator for client-side speed throttling
     modemEmulatorRef.current = new ModemEmulator(term);
 
-    // PETSCII pacing. Bytes destined for the canvas go through this queue
-    // rather than straight into the machine, mirroring
-    // ModemEmulator.sendThrottled (modem-emulator.ts:170-210): an
-    // elapsed-time token budget rather than a fixed-size interval tick, so
-    // the drain rate tracks bps smoothly instead of stair-stepping. bps=0
-    // (MAX) soft-caps to PETSCII_MAX_SOFT_CAP_BPS for the same reason
-    // ModemEmulator.enable() does - so a full C64 frame still draws
-    // progressively instead of landing in a single tick.
-    const startPetsciiDrain = () => {
-      if (petsciiDrainActiveRef.current) return; // already draining
-      petsciiDrainActiveRef.current = true;
-      const generation = petsciiDrainGenerationRef.current;
-      const start = performance.now();
-      let bytesSent = 0;
-      const step = async () => {
-        while (petsciiFeedQueue.current.length > 0) {
-          // A fresh session reset the surface while this loop was parked:
-          // its machine is gone and clearPetsciiSession already cleared the
-          // active flag, so orphan this loop rather than feed the new one.
-          if (petsciiDrainGenerationRef.current !== generation) return;
-          // Door output is not paced, exactly as ModemEmulator.write
-          // short-circuits on doorActive (modem-emulator.ts:119) - at 2400
-          // bps a paced 240 bytes/sec makes a door unusable.
-          if (petsciiDoorActiveRef.current) {
-            const queue = petsciiFeedQueue.current;
-            const chunk = queue.splice(0, queue.length);
-            petsciiMachineRef.current?.feed(Uint8Array.from(chunk));
-            continue;
-          }
-          const bps = petsciiBpsRef.current || PETSCII_MAX_SOFT_CAP_BPS;
-          const bytesPerSecond = Math.max(1, Math.floor(bps / 10)); // 10 bits/byte
-          const elapsedMs = performance.now() - start;
-          const allowed = Math.max(0, Math.floor(bytesPerSecond * (elapsedMs / 1000)) - bytesSent);
-          if (allowed <= 0) {
-            await new Promise((resolve) => setTimeout(resolve, 5));
-            continue;
-          }
-          const queue = petsciiFeedQueue.current;
-          const toSend = Math.min(allowed, queue.length, 64);
-          const chunk = queue.splice(0, toSend);
-          petsciiMachineRef.current?.feed(Uint8Array.from(chunk));
-          bytesSent += toSend;
-        }
-        if (petsciiDrainGenerationRef.current === generation) petsciiDrainActiveRef.current = false;
-      };
-      void step();
-    };
+    // Canvas bytes go STRAIGHT into the display machine. There is no
+    // client-side baud pacing here, and there must not be.
+    //
+    // There used to be: a queue drained against an elapsed-time token
+    // budget, mirroring ModemEmulator.sendThrottled. It made the board's
+    // animated logos crawl (sysop, 2026-09-02; measurements in
+    // .superpowers/sdd/2026-09-02-petscii-full-canvas/canvas-animation-speed.md),
+    // for two reasons that both say the budget does not belong on this side
+    // of the wire:
+    //
+    //  - It was a SECOND pacer. screen.handler's emitWithModem
+    //    (screen.handler.ts:2311-2370) already meters the same screen
+    //    server-side against session.modemBps, before the bytes reach any
+    //    surface, and the server ModemEmulator meters everything else. A
+    //    browser canvas has no baud of its own to emulate.
+    //  - It metered the wrong stream. Both of the other pacers write ANSI
+    //    escape sequences through FREE and charge only printable
+    //    characters. This one charged every byte AFTER transduction, where
+    //    each ANSI cursor move has become a 2x-inflated PETSCII cursor
+    //    walk. Screens/flt.txt is 10,963 bytes of which 9,773 are cursor
+    //    moves: 962 ms of paced canvas against 0.05 s of charged bytes on
+    //    xterm, a 19x gap on the exact screens the sysop reported.
+    //
+    // Feeding in one call is also ONE canvas repaint instead of one per 64
+    // bytes; PetsciiCanvas coalesces the rest to one per animation frame.
+    //
+    // The try/catch is load-bearing, and it is the price of dropping the
+    // async loop. The old drain ran detached, so anything the machine threw
+    // became an unhandled rejection and the session carried on. This runs
+    // INSIDE the socket handler that called it - and, on the login-echo
+    // path, inside a React event handler, where an uncaught throw unmounts
+    // the tree and drops the connection ("pressing P resets the BBS":
+    // transport close, then a reconnect inside the grace period). A screen
+    // the display machine chokes on must cost the picture, never the
+    // session.
     const enqueuePetscii = (bytes: Uint8Array | number[]) => {
-      for (const b of bytes) petsciiFeedQueue.current.push(b);
-      startPetsciiDrain();
+      if (bytes.length === 0) return;
+      try {
+        petsciiMachineRef.current?.feed(bytes);
+      } catch (e) {
+        console.error('[PETSCII] display machine threw on feed; screen dropped, session kept', e);
+      }
     };
     // Canvas mode starts here and only here. The transducer and the display
     // machine both start from power-on state and see the same byte sequence
@@ -2139,9 +2093,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
 
       if (surfaceRef.current === 'canvas') {
-        // Simulated C64: the whole session renders on the canvas. The pace
-        // queue (petsciiBpsRef, same 'modem-speed' as ModemEmulator) keeps
-        // the baud feel; xterm stays hidden.
+        // Simulated C64: the whole session renders on the canvas; xterm
+        // stays hidden. Unpaced on purpose - the server already threw this
+        // screen at the session's baud rate (see enqueuePetscii).
         //
         // NOT flushed per message on purpose: flush() DROPS a partially
         // parsed escape sequence (ansi-to-petscii.ts:129-135), and
@@ -2210,10 +2164,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (modemEmulatorRef.current) {
         modemEmulatorRef.current.enable(bps);
       }
-      // ModemEmulator.enable() maps bps=0 to its own soft cap; mirror the
-      // same convention for the PETSCII feeder (startPetsciiDrain reads 0
-      // as "use PETSCII_MAX_SOFT_CAP_BPS" too).
-      petsciiBpsRef.current = bps;
+      // Nothing to mirror for the canvas: the C64 surface is not paced
+      // client-side at all (see enqueuePetscii). Its "modem feel" comes
+      // from the server, which throttles the same bytes for both surfaces.
     });
 
     // Terminal resize handler (PETSCII mode uses 40x25)
@@ -2496,9 +2449,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // Skip the modem soft-cap while a door is running — door output
       // should feel instant. The pacing is for BBS navigation only.
       modemEmulatorRef.current?.setDoorActive(active);
-      // Same rule for the canvas pace queue (see petsciiDoorActiveRef).
-      petsciiDoorActiveRef.current = active;
-      if (active) startPetsciiDrain(); // let anything already queued go at once
+      // The canvas needs no equivalent: it is never paced (enqueuePetscii).
     });
 
     // Game mode: bypass OS key repeat for real-time game controls
@@ -2766,7 +2717,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // machine first, otherwise server. (xterm's own two callbacks below keep
     // their split because onData also delivers pastes that never hit onKey.)
     processInputKeyRef.current = (key: string) => {
-      flushPetsciiQueue();
       // Anything the transducer is still holding belongs to the BBS's own
       // output and must land BEFORE this keystroke's echo, not under it.
       if (surfaceRef.current === 'canvas' && petsciiTransducerRef.current) {
@@ -2782,10 +2732,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     term.onData((data: string) => {
-      // Classic BBS behaviour: don't make the user wait out the baud rate
-      // for a screen that's still drawing - any keypress dumps the rest
-      // immediately.
-      flushPetsciiQueue();
       if (isLoginBusy()) return; // handled (or swallowed) by onKey above
       sendInput(data);
     });
