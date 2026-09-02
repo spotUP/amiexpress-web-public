@@ -36,22 +36,35 @@ interface ScreenGalleryProps {
 /** One card. Draws nothing until it is scrolled to. */
 function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: string) => void }) {
   const ref = useRef<HTMLButtonElement>(null);
-  const [visible, setVisible] = useState(false);
+  /** Sticky: once a card has been reached, its bytes stay in the query cache. */
+  const [seen, setSeen] = useState(false);
+  /** Not sticky: pixels are only held for the cards actually on screen. */
+  const [onScreen, setOnScreen] = useState(false);
 
   useEffect(() => {
     const element = ref.current;
     // jsdom has no IntersectionObserver; a test environment simply draws.
     if (!element || typeof IntersectionObserver === 'undefined') {
-      setVisible(true);
+      setSeen(true);
+      setOnScreen(true);
       return;
     }
 
+    /*
+     * The observer STAYS connected, where it used to disconnect on the first
+     * sighting. Disconnecting made every card a card that never gives its
+     * canvas back: scroll to the end of 872 screens and every one of them is
+     * still holding pixels. Fetches are still made once - `seen` is sticky and
+     * react-query keeps the bytes - so scrolling back costs no request, only a
+     * repaint.
+     */
     const observer = new IntersectionObserver(entries => {
-      if (entries.some(entry => entry.isIntersecting)) {
-        setVisible(true);
-        observer.disconnect();
-      }
-    }, { rootMargin: '200px' });
+      const showing = entries.some(entry => entry.isIntersecting);
+      setOnScreen(showing);
+      if (showing) setSeen(true);
+      // 600px, not 200: a card just past the edge keeps its pixels, so an
+      // ordinary scroll does not flicker.
+    }, { rootMargin: '600px' });
 
     observer.observe(element);
     return () => observer.disconnect();
@@ -68,13 +81,14 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
    * invalidateQueries. Sharing the key also means opening a card costs no
    * second fetch.
    *
-   * `enabled: visible` keeps the laziness: 891 screens are not fetched to
-   * fill one screenful.
+   * `enabled: seen` keeps the laziness: 891 screens are not fetched to fill
+   * one screenful, and a card that has been scrolled past keeps its bytes
+   * cached even after it gives its pixels back.
    */
   const { data: content } = useQuery({
     queryKey: ['screen-file', item.path],
     queryFn: async () => (await apiClient.getScreenFile(item.path)).data,
-    enabled: visible,
+    enabled: seen,
   });
 
   const art = (content as { content?: string } | undefined)?.content;
@@ -87,7 +101,7 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
       onClick={() => onOpen(item.path)}
     >
       <div className="h-32 overflow-hidden bg-black">
-        {art
+        {art && onScreen
           ? <ScreenArt content={art} scale={0.28} />
           // A card that is waiting looks like it is waiting. Blank black reads
           // as an empty screen, which is a thing some of these actually are.

@@ -49,14 +49,19 @@ export function ScreenArt({ content, scale = 1, className }: ScreenArtProps) {
   }
   if (!canvas) return null;
 
+  /*
+   * The scale goes to the CANVAS, not to a CSS transform around it.
+   *
+   * `transform: scale(0.28)` shrank what a thumbnail looked like and left it
+   * allocating a full 1280x800 retina canvas - 4.1 MB a card, on a board with
+   * 872 screens, never released once drawn. That is what froze the gallery.
+   */
   return (
     <div
       className={`overflow-auto bg-black p-2 ${className ?? ''}`}
       style={scale === 1 ? undefined : { width: 'fit-content' }}
     >
-      <div style={scale === 1 ? undefined : { transform: `scale(${scale})`, transformOrigin: 'top left' }}>
-        <AnsiCanvas canvas={canvas} />
-      </div>
+      <AnsiCanvas canvas={canvas} scale={scale} />
     </div>
   );
 }

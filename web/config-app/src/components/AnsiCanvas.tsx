@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { Cell } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
-import { CELL_HEIGHT, CELL_WIDTH, paintScreen, type Highlight } from './ansi-canvas-paint';
+import { CELL_HEIGHT, CELL_WIDTH, canvasPixelSize, paintScreen, type Highlight } from './ansi-canvas-paint';
 
 export { CELL_HEIGHT, CELL_WIDTH } from './ansi-canvas-paint';
 
@@ -22,6 +22,15 @@ export { CELL_HEIGHT, CELL_WIDTH } from './ansi-canvas-paint';
  */
 export interface AnsiCanvasProps {
   canvas: Cell[][];
+  /**
+   * Drawn at this fraction of full size, backing store included.
+   *
+   * Not a CSS transform: a thumbnail asks for a SMALL canvas rather than a
+   * full one squeezed, which is the difference between 321 KB and 4.1 MB per
+   * card. Pointer coordinates divide by it, so a scaled canvas still reports
+   * the cell that was clicked.
+   */
+  scale?: number;
   /** Drawn as an outline; null or absent while no cursor is placed. */
   cursor?: { x: number; y: number } | null;
   /**
@@ -35,7 +44,7 @@ export interface AnsiCanvasProps {
   className?: string;
 }
 
-export function AnsiCanvas({ canvas, cursor, onCellPointer, highlights, className }: AnsiCanvasProps) {
+export function AnsiCanvas({ canvas, cursor, onCellPointer, highlights, className, scale = 1 }: AnsiCanvasProps) {
   const elementRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
 
@@ -51,24 +60,41 @@ export function AnsiCanvas({ canvas, cursor, onCellPointer, highlights, classNam
     const ctx = element.getContext('2d');
     if (!ctx) return;
 
-    const ratio = window.devicePixelRatio || 1;
-    element.width = Math.max(1, cols * CELL_WIDTH * ratio);
-    element.height = Math.max(1, rows * CELL_HEIGHT * ratio);
+    /*
+     * Sized to what is DISPLAYED, not to a full screen that CSS then shrinks.
+     *
+     * A gallery thumbnail used to allocate the same canvas as the editor -
+     * 80x8 by 25x16, doubled again for a retina display, so 1280x800 pixels,
+     * 4.1 MB of backing store - and hand it to `transform: scale(0.28)`,
+     * which changes what you see and not one byte of what was allocated. With
+     * 872 screens on this board and a card that never releases its canvas
+     * once drawn, scrolling the gallery reached gigabytes and froze the
+     * browser. Reported 2026-09-02: "this page is still super heavy. it froze
+     * the browser now".
+     *
+     * At 0.28 the same thumbnail is 358x224, which is 321 KB - and it is
+     * drawn at that size rather than drawn big and squeezed.
+     */
+    const { width, height, ratio } = canvasPixelSize(
+      cols, rows, scale, window.devicePixelRatio || 1,
+    );
+    element.width = width;
+    element.height = height;
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
 
     paintScreen(ctx, canvas, cursor, highlights);
-  }, [canvas, cols, rows, cursor, highlights]);
+  }, [canvas, cols, rows, cursor, highlights, scale]);
 
   const report = useCallback((event: React.PointerEvent, phase: 'down' | 'move' | 'up') => {
     if (!onCellPointer) return;
 
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = Math.floor((event.clientX - rect.left) / CELL_WIDTH);
-    const y = Math.floor((event.clientY - rect.top) / CELL_HEIGHT);
+    const x = Math.floor((event.clientX - rect.left) / (CELL_WIDTH * scale));
+    const y = Math.floor((event.clientY - rect.top) / (CELL_HEIGHT * scale));
     if (x < 0 || y < 0 || x >= cols || y >= rows) return;
 
     onCellPointer(x, y, phase);
-  }, [cols, rows, onCellPointer]);
+  }, [cols, rows, onCellPointer, scale]);
 
   return (
     <canvas
@@ -77,7 +103,10 @@ export function AnsiCanvas({ canvas, cursor, onCellPointer, highlights, classNam
       data-cols={cols}
       data-rows={rows}
       className={className}
-      style={{ width: `${cols * CELL_WIDTH}px`, height: `${rows * CELL_HEIGHT}px` }}
+      style={{
+        width: `${cols * CELL_WIDTH * scale}px`,
+        height: `${rows * CELL_HEIGHT * scale}px`,
+      }}
       onPointerDown={(event) => {
         drawingRef.current = true;
         // Keeps a stroke that leaves the canvas attached to it, so the pointer

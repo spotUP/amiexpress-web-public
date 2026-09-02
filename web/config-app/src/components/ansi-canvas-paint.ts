@@ -87,3 +87,25 @@ export function paintScreen(
     );
   }
 }
+
+/**
+ * How many real pixels a canvas of this many cells needs.
+ *
+ * Its own function because the number is the whole bug: a gallery thumbnail
+ * used to allocate a full 80x25 screen at device resolution - 1280x800, 4.1 MB
+ * - and hand it to `transform: scale(0.28)`, which changes what you see and
+ * not one byte of what was allocated. On a board with 872 screens, and a card
+ * that never releases its canvas once drawn, that froze the browser.
+ *
+ * Scaled here, the same thumbnail is 358x224 and 321 KB.
+ */
+export function canvasPixelSize(
+  cols: number, rows: number, scale: number, devicePixelRatio: number,
+): { width: number; height: number; ratio: number } {
+  const ratio = devicePixelRatio * scale;
+  return {
+    width: Math.max(1, Math.round(cols * CELL_WIDTH * ratio)),
+    height: Math.max(1, Math.round(rows * CELL_HEIGHT * ratio)),
+    ratio,
+  };
+}
