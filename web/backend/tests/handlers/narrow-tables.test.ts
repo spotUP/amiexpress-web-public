@@ -433,3 +433,121 @@ describe('5b room members (room-commands.handler.ts whoInRoom)', () => {
     expect(out).toContain('[MOD]');
   });
 });
+
+// ===========================================================================
+// 5c - protocol menu + ~CL./~CD./~ML./~MD. conference lists
+// ===========================================================================
+
+describe('5c transfer protocol menu (info-commands.handler.ts, W option 11)', () => {
+  async function driveProtocolMenu(driver: Driver) {
+    const info = require('../../src/handlers/commands/info-commands.handler');
+    // acs.util:174 - an explicit 'T' in securityFlags grants the permission,
+    // so the real checkSecurity() runs rather than being mocked out.
+    driver.session.user = {
+      id: 'u1',
+      username: 'SPOT',
+      secLevel: 255,
+      securityFlags: 'T'.repeat(64),
+    };
+    await info.handleWOptionSelectInput(driver.socket, driver.session, '11');
+  }
+
+  test('80-col PIN: the seven descriptive rows, byte-identical', async () => {
+    const driver = wide();
+    await driveProtocolMenu(driver);
+    const out = driver.output();
+
+    expect(out).toContain('\x1b[36mSelect Transfer Protocol:\r\n\x1b[0m');
+    expect(out).toContain('\x1b[34m[1] \x1b[0mZMODEM          - Fast, reliable, batch transfers (recommended)\r\n');
+    expect(out).toContain('\x1b[34m[6] \x1b[0mPunter (C64)    - Commodore 64/128 protocol\r\n');
+    expect(out).toContain('\x1b[34m[7] \x1b[0mWebSocket       - Browser-based transfers\r\n');
+    expect(out).toContain('Select (1-7) or <CR>=Cancel: ');
+  });
+
+  test('40-col: one protocol per line, full English names, nothing over 39 columns', async () => {
+    const driver = narrow();
+    await driveProtocolMenu(driver);
+    const out = driver.output();
+
+    expectFitsNarrow(out.split('\r\n').filter((l) => l.length > 0));
+    // Exact rows: a menu that only fits because the prose choke folded the
+    // 80-column descriptions fails here.
+    expect(out).toContain('\x1b[34m[1] \x1b[0mZMODEM (recommended)\r\n');
+    expect(out).toContain('\x1b[34m[2] \x1b[0mYMODEM (Batch)\r\n');
+    expect(out).toContain('\x1b[34m[6] \x1b[0mPunter (Commodore 64/128)\r\n');
+    expect(out).toContain('\x1b[34m[7] \x1b[0mWebSocket (browser)\r\n');
+    expect(out).toContain('Select (1-7) or <CR>=Cancel: ');
+  });
+});
+
+describe('5c conference / message-base MCI lists (screen.handler.ts parseMciCodes)', () => {
+  const CONFERENCES = [
+    { id: 1, name: 'Amiga Demo Scene Chat!' },
+    { id: 2, name: 'Commodore 64 Programming' },
+  ];
+  const BASES = [{ name: 'General Discussion' }, { name: 'Amiga Coding Corner' }];
+
+  let restoreMessageBases: (() => void) | null = null;
+
+  function prepare(driver: Driver) {
+    const screen = require('../../src/handlers/screen.handler');
+    screen.setConferences(CONFERENCES);
+    // `db` is a Proxy with no set trap (database.ts:3456), so it can only
+    // be stubbed on the class it delegates to.
+    const { Database } = require('../../src/database');
+    const original = Database.prototype.getMessageBases;
+    Database.prototype.getMessageBases = jest.fn().mockResolvedValue(BASES);
+    restoreMessageBases = () => {
+      Database.prototype.getMessageBases = original;
+    };
+    driver.session.user = { id: 'u1', username: 'SPOT', confAccess: 'XX' };
+    driver.session.currentConf = 1;
+    return screen;
+  }
+
+  afterEach(() => {
+    if (restoreMessageBases) restoreMessageBases();
+    restoreMessageBases = null;
+  });
+
+  async function render(driver: Driver, code: string): Promise<string> {
+    const screen = prepare(driver);
+    const result = await screen.parseMciCodes(code, driver.session);
+    return result.parsed;
+  }
+
+  test('80-col PIN: ~CL. and ~CD. rows byte-identical', async () => {
+    const driver = wide();
+    expect(await render(driver, '~CL.')).toBe(
+      '                     \x1b[32m  1\x1b[33m) \x1b[35m' + 'Amiga Demo Scene Chat!'.padEnd(30, ' ') + '\x1b[36m\x1b[0m\r\n' +
+        '                     \x1b[32m  2\x1b[33m) \x1b[35m' + 'Commodore 64 Programming'.padEnd(30, ' ') + '\x1b[36m\x1b[0m\r\n'
+    );
+    expect(await render(driver, '~CD.')).toBe(
+      '   \x1b[34m[\x1b[0m001\x1b[34m] \x1b[0m' + 'Amiga Demo Scene Chat!'.padEnd(30, ' ') +
+        '   \x1b[34m[\x1b[0m002\x1b[34m] \x1b[0m' + 'Commodore 64 Programming'.padEnd(30, ' ') + '\r\n'
+    );
+  });
+
+  test('80-col PIN: ~ML. and ~MD. rows byte-identical', async () => {
+    const driver = wide();
+    expect(await render(driver, '~ML.')).toBe(
+      '                     \x1b[32m1\x1b[33m) \x1b[35m' + 'General Discussion'.padEnd(30, ' ') + '\x1b[36m\x1b[0m\r\n' +
+        '                     \x1b[32m2\x1b[33m) \x1b[35m' + 'Amiga Coding Corner'.padEnd(30, ' ') + '\x1b[36m\x1b[0m\r\n'
+    );
+    expect(await render(driver, '~MD.')).toBe(
+      '   \x1b[34m[\x1b[0m1\x1b[34m] \x1b[0m' + 'General Discussion'.padEnd(30, ' ') +
+        '   \x1b[34m[\x1b[0m2\x1b[34m] \x1b[0m' + 'Amiga Coding Corner'.padEnd(30, ' ') + '\r\n'
+    );
+  });
+
+  test('40-col: every MCI list row fits 39 columns and keeps its number', async () => {
+    for (const code of ['~CL.', '~CD.', '~ML.', '~MD.']) {
+      const driver = narrow();
+      const parsed = await render(driver, code);
+      const lines = parsed.split('\r\n').filter((l) => l.length > 0);
+      expect(lines.length).toBe(2); // single column: one entry per row
+      expectFitsNarrow(lines);
+      expect(parsed).toContain(code.startsWith('~C') ? 'Amiga Demo Scene' : 'General Discussion');
+    }
+  });
+});

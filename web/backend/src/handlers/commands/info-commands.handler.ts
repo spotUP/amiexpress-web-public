@@ -14,6 +14,7 @@ import { config as appConfig } from '../../config';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/acs.util';
 import { AnsiUtil } from '../../utils/ansi.util';
+import { isNarrow } from '../../utils/table-format.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { db } from '../../database';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
@@ -531,6 +532,48 @@ console.log('[ENV] Stats');
 /**
  * Handle W option selection input (express.e:25832)
  */
+/**
+ * The transfer protocol menu, as ready-to-emit chunks (C64/40-col Task 5c).
+ *
+ * 80 columns: the seven descriptive rows, byte-identical.
+ * Narrow: the description column comes OFF the line rather than being
+ * abbreviated - full English protocol names, one per row, inside 39
+ * columns.
+ */
+export function buildProtocolMenuLines(narrow: boolean): string[] {
+  if (!narrow) {
+    return [
+      '\r\n',
+      AnsiUtil.colorize('Select Transfer Protocol:\r\n', 'cyan'),
+      '\r\n',
+      AnsiUtil.colorize('[1] ', 'blue') + 'ZMODEM          - Fast, reliable, batch transfers (recommended)\r\n',
+      AnsiUtil.colorize('[2] ', 'blue') + 'YMODEM (Batch)  - Batch transfers with file info\r\n',
+      AnsiUtil.colorize('[3] ', 'blue') + 'XMODEM-1K       - 1024-byte blocks with CRC\r\n',
+      AnsiUtil.colorize('[4] ', 'blue') + 'XMODEM-CRC      - 128-byte blocks with CRC-16\r\n',
+      AnsiUtil.colorize('[5] ', 'blue') + 'XMODEM          - 128-byte blocks with checksum (legacy)\r\n',
+      AnsiUtil.colorize('[6] ', 'blue') + 'Punter (C64)    - Commodore 64/128 protocol\r\n',
+      AnsiUtil.colorize('[7] ', 'blue') + 'WebSocket       - Browser-based transfers\r\n',
+      '\r\n',
+      'Select (1-7) or <CR>=Cancel: ',
+    ];
+  }
+
+  return [
+    '\r\n',
+    AnsiUtil.colorize('Select Transfer Protocol:\r\n', 'cyan'),
+    '\r\n',
+    AnsiUtil.colorize('[1] ', 'blue') + 'ZMODEM (recommended)\r\n',
+    AnsiUtil.colorize('[2] ', 'blue') + 'YMODEM (Batch)\r\n',
+    AnsiUtil.colorize('[3] ', 'blue') + 'XMODEM-1K\r\n',
+    AnsiUtil.colorize('[4] ', 'blue') + 'XMODEM-CRC\r\n',
+    AnsiUtil.colorize('[5] ', 'blue') + 'XMODEM (legacy)\r\n',
+    AnsiUtil.colorize('[6] ', 'blue') + 'Punter (Commodore 64/128)\r\n',
+    AnsiUtil.colorize('[7] ', 'blue') + 'WebSocket (browser)\r\n',
+    '\r\n',
+    'Select (1-7) or <CR>=Cancel: ',
+  ];
+}
+
 export async function handleWOptionSelectInput(socket: any, session: BBSSession, input: string): Promise<void> {
   const trimmed = input.trim();
 
@@ -648,18 +691,9 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
         return;
       }
       // Display protocol selection menu
-      emitText(socket, '\r\n');
-      emitText(socket, AnsiUtil.colorize('Select Transfer Protocol:\r\n', 'cyan'));
-      emitText(socket, '\r\n');
-      emitText(socket, AnsiUtil.colorize('[1] ', 'blue') + 'ZMODEM          - Fast, reliable, batch transfers (recommended)\r\n');
-      emitText(socket, AnsiUtil.colorize('[2] ', 'blue') + 'YMODEM (Batch)  - Batch transfers with file info\r\n');
-      emitText(socket, AnsiUtil.colorize('[3] ', 'blue') + 'XMODEM-1K       - 1024-byte blocks with CRC\r\n');
-      emitText(socket, AnsiUtil.colorize('[4] ', 'blue') + 'XMODEM-CRC      - 128-byte blocks with CRC-16\r\n');
-      emitText(socket, AnsiUtil.colorize('[5] ', 'blue') + 'XMODEM          - 128-byte blocks with checksum (legacy)\r\n');
-      emitText(socket, AnsiUtil.colorize('[6] ', 'blue') + 'Punter (C64)    - Commodore 64/128 protocol\r\n');
-      emitText(socket, AnsiUtil.colorize('[7] ', 'blue') + 'WebSocket       - Browser-based transfers\r\n');
-      emitText(socket, '\r\n');
-      emitText(socket, 'Select (1-7) or <CR>=Cancel: ');
+      for (const chunk of buildProtocolMenuLines(isNarrow(session))) {
+        emitText(socket, chunk);
+      }
       session.subState = LoggedOnSubState.W_EDIT_PROTOCOL;
       break;
 

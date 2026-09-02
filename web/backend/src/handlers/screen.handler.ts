@@ -39,6 +39,7 @@ import {
 // genuinely part of what the loader answers.
 export { resolveNodeScreenDir } from '../screens/screen-resolution';
 import { checkConfAccess } from './message/message-scan.handler';
+import { isNarrow } from '../utils/table-format.util';
 import { notifySysop } from '../utils/sysop-alert.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
@@ -460,6 +461,12 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       const confId = conferences[i].id;
       if (!checkConfAccess(session.user, confId)) continue;
       num++;
+      // C64/40-col Task 5c: narrow drops the 21-space centering indent and
+      // clips the name to the room a 39-column row leaves.
+      if (isNarrow(session)) {
+        confList += `  \x1b[32m${String(num).padStart(3)}\x1b[33m) \x1b[35m${conferences[i].name.substring(0, 32)}\x1b[0m\r\n`;
+        continue;
+      }
       const confName = conferences[i].name.padEnd(30, ' ');
       confList += `                     \x1b[32m${String(num).padStart(3)}\x1b[33m) \x1b[35m${confName}\x1b[36m\x1b[0m\r\n`;
     }
@@ -475,13 +482,19 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       const confId = conferences[i].id;
       if (!checkConfAccess(session.user, confId)) continue;
       num++;
+      // C64/40-col Task 5c: narrow is a SINGLE column - two 33-column
+      // entries per row cannot fit 40 whatever the names are.
+      if (isNarrow(session)) {
+        confDir += `   \x1b[34m[\x1b[0m${String(num).padStart(3, '0')}\x1b[34m] \x1b[0m${conferences[i].name.substring(0, 30)}\r\n`;
+        continue;
+      }
       const confName = conferences[i].name.padEnd(30, ' ');
       // express.e:5615: \r\z\d[3] = right-justified zero-padded 3-digit number
       confDir += `   \x1b[34m[\x1b[0m${String(num).padStart(3, '0')}\x1b[34m] \x1b[0m${confName}`;
       if (num % 2 === 0) confDir += '\r\n';
     }
     // Add final newline if odd number of entries
-    if (num % 2 !== 0) confDir += '\r\n';
+    if (!isNarrow(session) && num % 2 !== 0) confDir += '\r\n';
     parsed = parsed.replace(/~CD\./g, confDir);
   }
 
@@ -494,6 +507,10 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
         for (let i = 0; i < messageBases.length; i++) {
           const num = i + 1;
           const name = messageBases[i].name || 'Default';
+          if (isNarrow(session)) {
+            msgBaseList += `  \x1b[32m${num}\x1b[33m) \x1b[35m${name.substring(0, 32)}\x1b[0m\r\n`;
+            continue;
+          }
           const namePadded = name.padEnd(30, ' ');
           msgBaseList += `                     \x1b[32m${num}\x1b[33m) \x1b[35m${namePadded}\x1b[36m\x1b[0m\r\n`;
         }
@@ -525,11 +542,15 @@ console.error('[parseMciCodes] Error getting message base list:', error);
         for (let i = 0; i < messageBases.length; i++) {
           const num = i + 1;
           const name = messageBases[i].name || 'Default';
+          if (isNarrow(session)) {
+            msgBaseDesc += `   \x1b[34m[\x1b[0m${num}\x1b[34m] \x1b[0m${name.substring(0, 30)}\r\n`;
+            continue;
+          }
           msgBaseDesc += `   \x1b[34m[\x1b[0m${num}\x1b[34m] \x1b[0m${name.padEnd(30, ' ')}`;
           if (num % 2 === 0) msgBaseDesc += '\r\n'; // Two per line
         }
         // Add final newline if odd number
-        if (messageBases.length % 2 !== 0) msgBaseDesc += '\r\n';
+        if (!isNarrow(session) && messageBases.length % 2 !== 0) msgBaseDesc += '\r\n';
       } else {
         msgBaseDesc = '   \x1b[34m[\x1b[0m1\x1b[34m] \x1b[0mDefault                       \r\n';
       }
