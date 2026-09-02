@@ -19,6 +19,11 @@ export interface MciReference {
   code: 'CC' | 'SS' | 'SR' | 'CL';
   /** What it names: a command for CC, a path for SS and SR, nothing for CL. */
   target: string;
+  /**
+   * What the board CALLS the target - the door's own name behind `~CC_gwall`.
+   * Filled in by the index; a path target has none.
+   */
+  targetName?: string;
   /** Whether that command or file exists on this board. Filled in by the index. */
   resolves: boolean;
   /**

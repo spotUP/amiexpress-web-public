@@ -16,15 +16,26 @@ import { createSurface, type EditorSurface } from './screen-editor-state';
 import {
   toScreenRows, filterScreenRows,
   type ScreenIndexShape, type ScreenRow, type ScreenIndexEntryShape,
-  type ScopeResolutionShape,
+  type ScopeResolutionShape, type ConferenceShape, type ScreenReaderShape,
+  type MciReferenceShape, describeReader,
 } from './screen-index-view';
 
 /** Stable fallback: a fresh array each render invalidates the row model. */
 const EMPTY_ROWS: ScreenRow[] = [];
 
-function scopeName(scope: string, id: number | null): string {
+/**
+ * What a scope is called, in the board's own words.
+ *
+ * "Conf2" means nothing to a designer, and a renumbered board makes it worse:
+ * conference 1 lives in Conf2 here. The conference's NAME is what a sysop
+ * recognises - "Amiga Demoscene" - so it leads, with the number behind it.
+ */
+function scopeName(scope: string, id: number | null, conferences?: ConferenceShape[]): string {
   if (scope === 'node') return `Node ${id}`;
-  if (scope === 'conf') return `Conference ${id}`;
+  if (scope === 'conf') {
+    const conf = conferences?.find(c => c.id === id);
+    return conf ? `${conf.name} (conference ${id})` : `Conference ${id}`;
+  }
   return 'Board root';
 }
 
@@ -342,7 +353,12 @@ export function ScreenFilesPage() {
 
   /** One row per scope a screen resolves in - the same DataTable as everywhere else. */
   const resolutionColumns: DataTableColumn<ScopeResolutionShape>[] = [
-    { id: 'scope', header: 'Scope', value: res => scopeName(res.scope, res.id) },
+    {
+      id: 'scope',
+      header: 'Where',
+      value: res => scopeName(res.scope, res.id, data?.conferences),
+      sortable: true,
+    },
     {
       id: 'dir',
       header: 'Reads',
@@ -667,7 +683,44 @@ export function ScreenFilesPage() {
           <div className="space-y-3 p-4">
             <p className="text-sm text-content-secondary">
               {file.bytes} bytes, {file.format}
+              {file.sauce?.width && file.sauce?.height
+                ? `, ${file.sauce.width}x${file.sauce.height}`
+                : ''}
             </p>
+
+            {/* The artist signed it; the manager should say so. */}
+            {file.sauce && (file.sauce.title || file.sauce.author) && (
+              <p className="text-sm text-content-primary font-topaz">
+                {file.sauce.title || 'Untitled'}
+                {file.sauce.author && ` by ${file.sauce.author}`}
+                {file.sauce.group && ` of ${file.sauce.group}`}
+                {file.sauce.date && (
+                  <span className="text-content-secondary"> ({file.sauce.date})</span>
+                )}
+              </p>
+            )}
+
+            {/*
+              What this file IS, before anything else. A path like
+              Conf2/bull20.txt does not say "the bulletin a caller meets on
+              joining Amiga Demoscene, if their security level is 20 to 24" -
+              and that is the sentence a sysop or a designer needs.
+            */}
+            {file.readBy && file.readBy.length > 0 ? (
+              <div className="text-sm">
+                <h4 className="text-content-primary">Read by</h4>
+                <ul className="text-content-secondary">
+                  {file.readBy.map((reader: ScreenReaderShape, i: number) => (
+                    <li key={i}>{describeReader(reader)}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="text-sm text-status-warn">
+                No screen on this board reads this file - at any security level,
+                in any screen type, and no other screen includes it.
+              </p>
+            )}
 
             <div className="flex items-center gap-3 text-sm">
               <input
@@ -753,9 +806,13 @@ export function ScreenFilesPage() {
                   {file.mci.length === 1 ? '' : 's'}
                 </h4>
                 <ul className="font-topaz text-base">
-                  {file.mci.map((ref: { code: string; target: string; resolves: boolean }, i: number) => (
+                  {file.mci.map((ref: MciReferenceShape, i: number) => (
                     <li key={i} className={ref.resolves ? 'text-content-primary' : 'text-status-danger'}>
-                      ~{ref.code}_{ref.target} {ref.resolves ? '' : '- points at nothing'}
+                      ~{ref.code}_{ref.target}
+                      {ref.targetName && (
+                        <span className="text-content-secondary"> - {ref.targetName}</span>
+                      )}
+                      {ref.resolves ? '' : ' - points at nothing'}
                     </li>
                   ))}
                 </ul>

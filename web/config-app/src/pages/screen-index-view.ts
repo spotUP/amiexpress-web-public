@@ -15,9 +15,34 @@ export interface MciReferenceShape {
   target: string;
   resolves: boolean;
   scopeSpecific: boolean;
+  /** What the board calls the target - a door's own name behind ~CC_. */
+  targetName?: string;
 }
 
 import { describeScreen } from './screen-descriptions';
+
+/** Who reads a file: which screen, in which scope, at which level and type. */
+export interface ScreenReaderShape {
+  screen: string;
+  scope: 'node' | 'conf' | 'board';
+  id: number | null;
+  scopeName?: string;
+  securityLevel?: number;
+  screenType?: string;
+  /** The levels this variant actually serves - "20-29", "30 and above". */
+  serves?: string;
+  via: 'resolved' | 'variant' | 'include';
+}
+
+/** The artist's own credits, from the file's SAUCE record. */
+export interface SauceShape {
+  title: string;
+  author: string;
+  group: string;
+  date: string;
+  width?: number;
+  height?: number;
+}
 
 export interface ScreenFileShape {
   relPath: string;
@@ -25,6 +50,15 @@ export interface ScreenFileShape {
   format: 'ansi' | 'text' | 'rip' | 'petscii';
   sha256: string;
   mci: MciReferenceShape[];
+  readBy?: ScreenReaderShape[];
+  sauce?: SauceShape;
+}
+
+/** A conference as the board names it - `Conf2` means nothing to a designer. */
+export interface ConferenceShape {
+  id: number;
+  name: string;
+  dir: string;
 }
 
 export interface ScopeResolutionShape {
@@ -47,6 +81,7 @@ export interface ScreenIndexEntryShape {
 export interface ScreenIndexShape {
   screens: ScreenIndexEntryShape[];
   unused: ScreenFileShape[];
+  conferences?: ConferenceShape[];
   files: Record<string, ScreenFileShape>;
   builtAt: string;
 }
@@ -105,4 +140,30 @@ export function filterScreenRows(rows: ScreenRow[], query: string): ScreenRow[] 
   return rows.filter(row =>
     row.screen.toLowerCase().includes(needle)
     || describeScreen(row.screen).toLowerCase().includes(needle));
+}
+
+
+/**
+ * What a reader says, in one line a designer can act on.
+ *
+ * "CONF_BULL in Amiga Demoscene, security level 20" beats
+ * "Conf2/bull20.txt" - the sysop had to work the second one out by hand.
+ */
+export function describeReader(reader: ScreenReaderShape): string {
+  const where = reader.scope === 'node'
+    ? `node ${reader.id}`
+    : reader.scope === 'conf'
+      ? (reader.scopeName ? `${reader.scopeName} (conference ${reader.id})` : `conference ${reader.id}`)
+      : 'the whole board';
+
+  const qualifiers: string[] = [];
+  // The RANGE, not the number: express.e walks down in fives, so BULL20 is
+  // what levels 20 to 29 see, and reading "level 20" as "only level 20" is how
+  // a sysop concludes a live file is dead.
+  if (reader.serves) qualifiers.push(`callers at level ${reader.serves}`);
+  else if (reader.securityLevel !== undefined) qualifiers.push(`security level ${reader.securityLevel}`);
+  if (reader.screenType) qualifiers.push(`${reader.screenType} screens`);
+  if (reader.via === 'include') qualifiers.push('included by it');
+
+  return `${reader.screen} in ${where}${qualifiers.length ? ` - ${qualifiers.join(', ')}` : ''}`;
 }
