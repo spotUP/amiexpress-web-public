@@ -14,6 +14,15 @@
  * width-driven builders, so these assertions run on the real strings the
  * door hands to its List. The 80-column branch is pinned literally.
  */
+
+/**
+ * `export {}` makes this file a MODULE. Without it a test file that only
+ * `require()`s is a global script, and its top-level `const printable` collides
+ * with the identical helper in its sibling suites - which is what broke the
+ * repo's `typecheck:tests` (jest strips types and never noticed).
+ */
+export {};
+
 const doorsMenu = require('../../../../../Doors/doors-menu/app');
 const { buildCategoryRow, buildDoorRow, buildFooterContent } = doorsMenu;
 // The compiled modules the door actually loads (its package exports map

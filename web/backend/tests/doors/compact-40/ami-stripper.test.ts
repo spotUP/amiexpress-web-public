@@ -14,6 +14,15 @@
  * Every rule is now sized from the caller's real width, and the 80-column
  * strings are pinned literally below.
  */
+
+/**
+ * `export {}` makes this file a MODULE. Without it a test file that only
+ * `require()`s is a global script, and its top-level `const printable` collides
+ * with the identical helper in its sibling suites - which is what broke the
+ * repo's `typecheck:tests` (jest strips types and never noticed).
+ */
+export {};
+
 const {
   stripperHeader,
   stripperRule,

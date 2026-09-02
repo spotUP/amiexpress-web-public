@@ -73,7 +73,7 @@ describe('theme-picker compact (40-column) layout', () => {
     expect(printable(buildNote(plainStyles, compact))).toBeLessThanOrEqual(40);
     const hints = buildFooterHints(compact);
     // ' ' + 'Key: Does' joined by two spaces is what the footer renders.
-    const rendered = ' ' + hints.map(h => `${h.key}: ${h.does}`).join('  ');
+    const rendered = ' ' + hints.map((h: { key: string; does: string }) => `${h.key}: ${h.does}`).join('  ');
     expect(printable(rendered)).toBeLessThanOrEqual(40);
   });
 
@@ -101,7 +101,7 @@ describe('theme-picker compact (40-column) layout', () => {
         expect(spy).toHaveBeenCalledTimes(expected);
         if (expected === 1) {
           // ...and drawn to the SCREEN's width, not a constant.
-          expect(spy.mock.calls[0][2].width).toBe(79);
+          expect((spy.mock.calls[0][2] as { width: number }).width).toBe(79);
         }
         void run;
       }

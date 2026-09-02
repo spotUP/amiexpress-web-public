@@ -312,7 +312,9 @@ describe('40-column sweep: screens', () => {
     // The frames are composed 80 wide and bypass the choke; the surface's
     // answer is not to fit them but to not play them.
     expect(wipeEffectsEnabled(C64)).toBe(false);
-    expect(wipeEffectsEnabled({ screenWidth: 80 })).toBe(true);
+    // The gate is PETSCII, not width (screen-wipe.util.ts:622 reads
+    // petsciiMode and nothing else), so this is what an ordinary session is.
+    expect(wipeEffectsEnabled({ petsciiMode: false })).toBe(true);
   });
 });
 

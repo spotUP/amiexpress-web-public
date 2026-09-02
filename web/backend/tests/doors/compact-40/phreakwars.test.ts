@@ -18,6 +18,15 @@
  * are byte-for-byte what they were before (say() is a straight pass-through
  * at 80 and wider), pinned below on the two rows that used to be widest.
  */
+
+/**
+ * `export {}` makes this file a MODULE. Without it a test file that only
+ * `require()`s is a global script, and its top-level `const printable` collides
+ * with the identical helper in its sibling suites - which is what broke the
+ * repo's `typecheck:tests` (jest strips types and never noticed).
+ */
+export {};
+
 const ui = require('../../../../../Doors/phreakwars/lib/ui');
 const { createNewGameState } = require('../../../../../Doors/phreakwars/lib/player');
 

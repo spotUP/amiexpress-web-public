@@ -149,7 +149,7 @@ describe('DOORMAN layout on a 40x25 screen', () => {
       layout = new DoormanLayout(screen, 1);
       expect(spy).toHaveBeenCalledTimes(1);
       // ...and drawn to the SCREEN's width, not to a constant.
-      expect(spy.mock.calls[0][2].width).toBe(77);
+      expect((spy.mock.calls[0][2] as { width: number }).width).toBe(77);
     } finally {
       spy.mockRestore();
     }
