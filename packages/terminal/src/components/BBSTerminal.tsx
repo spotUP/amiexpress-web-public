@@ -3159,7 +3159,19 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           // The terminal box is the black thing on the page (see the outer
           // wrapper): in fixed mode it carries the background so the page
           // ground shows only around it.
-          ...(terminalMode === 'fixed' ? { maxWidth: '960px', backgroundColor: '#000000' } : { height: '100%' }),
+          ...(terminalMode === 'fixed'
+            ? {
+                maxWidth: '960px',
+                backgroundColor: '#000000',
+                // The bezel: a black border around the screen with rounded
+                // corners, so the terminal reads as a screen sitting on the
+                // page ground (sysop, 2026-09-02). Tokens owned by the host
+                // page; the fallbacks keep the package self-contained.
+                padding: 'var(--bbs-terminal-bezel, 16px)',
+                borderRadius: 'var(--bbs-terminal-radius, 12px)',
+                overflow: 'hidden',
+              }
+            : { height: '100%' }),
         }}
       >
       <div
@@ -3216,7 +3228,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         <div
           style={{
             position: 'absolute',
-            inset: 0,
+            inset: terminalMode === 'fixed' ? 'var(--bbs-terminal-bezel, 16px)' : 0,
             zIndex: 10,
             backgroundColor: '#000',
             // Centre the proportionally-scaled canvas; the leftover strips

@@ -195,5 +195,9 @@ describe('fixed 80x25 mode leaves the page ground to the page', () => {
     expect(outer.style.backgroundColor).toBe('transparent');
     expect(box.style.backgroundColor).toBe('rgb(0, 0, 0)');
     expect(box.style.maxWidth).toBe('960px');
+    // the bezel: a 16px black border with rounded corners around the screen
+    expect(box.style.padding).toBe('var(--bbs-terminal-bezel, 16px)');
+    expect(box.style.borderRadius).toBe('var(--bbs-terminal-radius, 12px)');
+    expect(box.style.overflow).toBe('hidden');
   });
 });

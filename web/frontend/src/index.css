@@ -89,6 +89,9 @@
    * against when TerminalPage letterboxes it (see .terminal-page--framed).
    */
   --bbs-page-bg: #141414;
+  /* The terminal's black bezel and its corner radius (fixed 80x25 mode). */
+  --bbs-terminal-bezel: 16px;
+  --bbs-terminal-radius: 12px;
   background-color: var(--bbs-page-bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
