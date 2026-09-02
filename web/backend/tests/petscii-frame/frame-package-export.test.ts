@@ -35,8 +35,13 @@ describe('@amiexpress/bbs-door-sdk/petscii/frame', () => {
     });
   });
 
-  it('is mirrored in typesVersions (moduleResolution:node walks the directory, not exports)', () => {
-    expect(pkg.typesVersions['*']['petscii/frame']).toEqual(['dist/petscii/frame/index.d.ts']);
+  it('resolves under moduleResolution:node because the package ships its source tree (no typesVersions on main)', () => {
+    // The backend image copies the whole sdk/ directory (Dockerfile: COPY --from=sdk-builder /app/sdk ./sdk),
+    // so tsc's directory walk lands on sdk/petscii/frame/index.ts itself; a typesVersions mirror is not needed.
+    const fs = require('fs');
+    const path = require('path');
+    expect(fs.existsSync(path.resolve(__dirname, '../../../../sdk/petscii/frame/index.ts'))).toBe(true);
+    expect(pkg.typesVersions).toBeUndefined();
   });
 
   it('resolves and carries the whole pipeline', () => {
