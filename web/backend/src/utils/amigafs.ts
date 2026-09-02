@@ -20,13 +20,54 @@ import * as path from 'path';
  * Find a file/directory with case-insensitive matching
  * Returns the actual path with correct casing, or null if not found
  */
+/**
+ * Directory listings, remembered until the directory changes.
+ *
+ * Every case-insensitive lookup used to readdir the whole directory, and the
+ * screen loader asks ~200 times per screen per scope: express.e's level walk
+ * tries 255 down to 5 in fives, each against four extensions. Building the
+ * screen index for this board - 30 screens across 41 nodes and 14 conferences
+ * - came to roughly a quarter of a million readdir calls and took TWELVE
+ * SECONDS, which is what made the manager feel slow and what made a delete
+ * (two index builds) look like it had done nothing.
+ *
+ * Validated by mtime rather than a timer: a stat is cheap, a readdir of a node
+ * directory is not, and a screen written by the admin bumps the directory's
+ * mtime, so the next lookup sees it.
+ */
+const listings = new Map<string, { mtimeMs: number; entries: string[] }>();
+
+function entriesOf(directory: string): string[] | null {
+  let mtimeMs: number;
+  try {
+    mtimeMs = fs.statSync(directory).mtimeMs;
+  } catch {
+    listings.delete(directory);
+    return null;
+  }
+
+  const cached = listings.get(directory);
+  if (cached && cached.mtimeMs === mtimeMs) return cached.entries;
+
+  try {
+    const entries = fs.readdirSync(directory);
+    listings.set(directory, { mtimeMs, entries });
+    return entries;
+  } catch {
+    return null;
+  }
+}
+
+/** Drop the remembered listings. For a caller that has just written files. */
+export function forgetDirectoryListings(): void {
+  listings.clear();
+}
+
 export function findCaseInsensitive(directory: string, filename: string): string | null {
   try {
-    if (!fs.existsSync(directory)) {
-      return null;
-    }
+    const entries = entriesOf(directory);
+    if (!entries) return null;
 
-    const entries = fs.readdirSync(directory);
     const lowerFilename = filename.toLowerCase();
 
     for (const entry of entries) {
