@@ -43,10 +43,16 @@ export const DEFAULT_MIN_COLUMNS = 80;
 export interface MinColumnsDoorShape {
   command?: string;
   id?: string;
+  /** TYPE= as registered ('XIM', 'TS', ...). formatDoorLine's entries carry doorType too. */
+  type?: string;
+  doorType?: string;
   minColumns?: number;
+  /** C64_ADAPT resolved once at registration, the way minColumns is. */
+  c64Adapt?: number;
   toolTypes?: Record<string, string>;
   doorInfo?: {
     minColumns?: number;
+    c64Adapt?: number;
     toolTypes?: Record<string, string>;
   };
 }
@@ -115,4 +121,65 @@ export function sessionColumns(session: { screenWidth?: number; petsciiMode?: bo
   if (session?.petsciiMode === true) return doorScreenWidth(session, DEFAULT_MIN_COLUMNS);
   const reported = validColumns(session?.screenWidth);
   return reported === null ? DEFAULT_MIN_COLUMNS : Math.max(DEFAULT_MIN_COLUMNS, reported);
+}
+
+/**
+ * The C64 door adapter (Phase 3, server/c64-door-adapter.ts) is the one way a
+ * gated 80-column door may still open for a 40-column caller: it replays the
+ * door's ANSI onto a virtual 80x25 grid and reduces each finished frame to the
+ * caller's width. That only works for output the adapter's seam actually sees
+ * - the socket handed to AmigaDoorSession - so the claim is meaningful for the
+ * 68K types that route to executeAmigaDoor and for nothing else. A TS door
+ * paints its own blessed UI and would be untouched by the adapter, so marking
+ * one C64_ADAPT must not open it.
+ */
+export const ADAPTED_DOOR_TYPES: ReadonlySet<string> = new Set(['XIM', 'DD', 'AMI', 'SIM', 'FIM']);
+
+/**
+ * The columns this door claims it reaches THROUGH the adapter, or null.
+ *
+ * A SEPARATE declaration from MIN_COLUMNS on purpose: MIN_COLUMNS=40 asserts
+ * "this door already fits 40", which is false of an unmodified 80-column 68K
+ * binary - reusing it would put a lie in the registry. C64_ADAPT=<columns>
+ * asserts "usable at N columns through the adapter". Same strict validColumns
+ * parser, same default-closed reading of anything malformed or absent, and the
+ * same source order as declaredMinColumns() so the two can never disagree
+ * about which registration object carries the truth.
+ */
+export function resolveDoorAdaptColumns(door: MinColumnsDoorShape): number | null {
+  return (
+    validColumns(door.c64Adapt) ??
+    validColumns(door.toolTypes?.['C64_ADAPT']) ??
+    validColumns(door.doorInfo?.c64Adapt) ??
+    validColumns(door.doorInfo?.toolTypes?.['C64_ADAPT'])
+  );
+}
+
+/**
+ * THE predicate: may this session enter this door through the C64 adapter?
+ *
+ * ONE answer, two readers - executeDoor's gate clause asks it whether a door
+ * the MIN_COLUMNS gate would refuse may open anyway, and executeAmigaDoor asks
+ * it whether to install the adapter on the socket. A second, separately-worded
+ * check at the install site is exactly how a door could be let in and then run
+ * unadapted (80-column bytes at a C64), so there is deliberately only one.
+ *
+ * Every clause is load-bearing:
+ *  - petsciiMode: an ANSI caller must never be routed through the
+ *    reconstructor, whatever the door declares. Its bytes stay byte-identical.
+ *  - ADAPTED_DOOR_TYPES: only doors whose output crosses the adapter's seam.
+ *  - a parsed claim: absent/malformed is unclassified, and unclassified is
+ *    closed (the same rule MIN_COLUMNS follows).
+ *  - have >= claim: a door that only reaches 64 columns is still refused to a
+ *    40-column caller rather than served a screen it cannot hold.
+ */
+export function doorOpensForC64(
+  door: MinColumnsDoorShape | null | undefined,
+  session: { screenWidth?: number; petsciiMode?: boolean } | null | undefined,
+): boolean {
+  if (!door || session?.petsciiMode !== true) return false;
+  const type = String(door.type ?? door.doorType ?? '').toUpperCase();
+  if (!ADAPTED_DOOR_TYPES.has(type)) return false;
+  const claim = resolveDoorAdaptColumns(door);
+  return claim !== null && sessionColumns(session) >= claim;
 }

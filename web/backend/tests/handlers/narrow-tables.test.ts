@@ -972,14 +972,22 @@ describe('5d doors list (door.handler.ts displayDoorMenu)', () => {
       type: 'XIM',
       size: 1,
     };
-    for (const fortyOk of [true, false]) {
+    // Both markers, and neither: '[C64]' (a door that reaches 40 only THROUGH
+    // the adapter, Phase 3 Task 5) is one column wider than '[40]', so it is
+    // the worst case for the name column's arithmetic.
+    const variants: Array<[string, any]> = [
+      ['[40]', { ...long, minColumns: 40 }],
+      ['[C64]', { ...long, toolTypes: { C64_ADAPT: '40' } }],
+      ['', long],
+    ];
+    for (const [marker, doorObj] of variants) {
       for (const selected of [false, true]) {
         const row = door
-          .formatDoorLine(fortyOk ? { ...long, minColumns: 40 } : long, selected, true)
+          .formatDoorLine(doorObj, selected, true)
           .replace(/\x1b\[2K/g, '');
         expect(printableLength(row)).toBeLessThanOrEqual(NARROW_ROW_WIDTH);
         // The marker outranks the name inside the name column.
-        if (fortyOk) expect(row).toContain('[40]');
+        if (marker) expect(row).toContain(marker);
         expect(row).toContain('VERYLONG');
       }
     }

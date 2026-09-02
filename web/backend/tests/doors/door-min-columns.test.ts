@@ -145,3 +145,74 @@ describe('amigaDoorManager MIN_COLUMNS parsing', () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 });
+
+/**
+ * C64_ADAPT resolver + the one adapter predicate (Phase 3 Task 5).
+ *
+ * MIN_COLUMNS=40 says "this door already fits 40". C64_ADAPT=<columns> says
+ * something different - "this door reaches N columns THROUGH the adapter" -
+ * so the two are separate declarations parsed by the SAME validColumns, and
+ * absent still means unclassified, which stays closed.
+ *
+ * doorOpensForC64 is the ONE predicate: the launch gate asks it whether a
+ * gated door may still open, and executeAmigaDoor asks it whether to install
+ * the adapter. They can never disagree because there is only one answer.
+ */
+describe('resolveDoorAdaptColumns', () => {
+  const { resolveDoorAdaptColumns } = require('../../src/utils/door-min-columns.util');
+
+  it('is null when nothing declares C64_ADAPT (default-closed)', () => {
+    expect(resolveDoorAdaptColumns({ command: 'X' })).toBeNull();
+    expect(resolveDoorAdaptColumns({ command: 'X', toolTypes: { ACCESS: '10' } })).toBeNull();
+  });
+
+  it('is null for MIN_COLUMNS alone - a different promise, not this one', () => {
+    expect(resolveDoorAdaptColumns({ command: 'X', minColumns: 40, toolTypes: { MIN_COLUMNS: '40' } })).toBeNull();
+  });
+
+  it('reads the BBSCMD tooltype, the installed record tooltype and the folded field', () => {
+    expect(resolveDoorAdaptColumns({ toolTypes: { C64_ADAPT: '40' } })).toBe(40);
+    expect(resolveDoorAdaptColumns({ doorInfo: { toolTypes: { C64_ADAPT: '40' } } })).toBe(40);
+    expect(resolveDoorAdaptColumns({ c64Adapt: 40 })).toBe(40);
+  });
+
+  it('applies the strict shared parser - a non-numeric claim is unclassified', () => {
+    for (const bad of ['yes', 'YES', '-1', '0', '40abc', '', ' ']) {
+      expect(resolveDoorAdaptColumns({ toolTypes: { C64_ADAPT: bad } })).toBeNull();
+    }
+  });
+});
+
+describe('doorOpensForC64', () => {
+  const { doorOpensForC64 } = require('../../src/utils/door-min-columns.util');
+  const c64 = { petsciiMode: true, screenWidth: 40 };
+  const ansi = { petsciiMode: false, screenWidth: 80 };
+
+  it('is true for a marked 68K door on a PETSCII session at a width it claims', () => {
+    for (const type of ['XIM', 'DD', 'AMI', 'SIM', 'FIM', 'xim', 'dd']) {
+      expect(doorOpensForC64({ type, toolTypes: { C64_ADAPT: '40' } }, c64)).toBe(true);
+    }
+  });
+
+  it('is false for an unmarked door of the same type', () => {
+    expect(doorOpensForC64({ type: 'XIM' }, c64)).toBe(false);
+    expect(doorOpensForC64({ type: 'XIM', toolTypes: { MIN_COLUMNS: '40' } }, c64)).toBe(false);
+  });
+
+  it('is false for a non-PETSCII session - 80-column callers never get the adapter', () => {
+    expect(doorOpensForC64({ type: 'XIM', toolTypes: { C64_ADAPT: '40' } }, ansi)).toBe(false);
+    expect(doorOpensForC64({ type: 'XIM', toolTypes: { C64_ADAPT: '40' } }, undefined)).toBe(false);
+    expect(doorOpensForC64({ type: 'XIM', toolTypes: { C64_ADAPT: '40' } }, { petsciiMode: false, screenWidth: 40 })).toBe(false);
+  });
+
+  it('is false for door types that never reach the adapter seam', () => {
+    for (const type of ['TS', 'typescript', 'AREXX', 'MCI', 'WEB', 'python', undefined]) {
+      expect(doorOpensForC64({ type, toolTypes: { C64_ADAPT: '40' } } as any, c64)).toBe(false);
+    }
+  });
+
+  it('is false when the door claims more columns than the caller has', () => {
+    expect(doorOpensForC64({ type: 'XIM', toolTypes: { C64_ADAPT: '64' } }, c64)).toBe(false);
+    expect(doorOpensForC64({ type: 'XIM', toolTypes: { C64_ADAPT: '40' } }, c64)).toBe(true);
+  });
+});

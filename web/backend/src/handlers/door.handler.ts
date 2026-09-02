@@ -24,8 +24,8 @@ import { BBSState } from '../index';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.util';
-import { resolveDoorMinColumns, declaredMinColumns, sessionColumns, DOOR_NEEDS_80_NOTICE } from '../utils/door-min-columns.util';
-import { installC64DoorAdapter, uninstallC64DoorAdapter, doorRequestsC64Adapt } from '../server/c64-door-adapter';
+import { resolveDoorMinColumns, declaredMinColumns, resolveDoorAdaptColumns, doorOpensForC64, sessionColumns, DOOR_NEEDS_80_NOTICE } from '../utils/door-min-columns.util';
+import { installC64DoorAdapter, uninstallC64DoorAdapter } from '../server/c64-door-adapter';
 import { isNarrow, NARROW_WIDTH, narrowClip } from '../utils/table-format.util';
 import { enableGameMode, disableGameMode } from '../server/socket-handlers';
 import { displayMainMenu } from './command-handler/menu';
@@ -526,6 +526,12 @@ export interface Door {
   // This is the field every later reader - the [40] marker and the launch
   // gate alike - resolves from, so they cannot disagree.
   minColumns?: number;
+  // C64_ADAPT resolved ONCE at registration, exactly like minColumns above and
+  // for the same reason: the [C64] marker is drawn from the menu entry while
+  // Enter re-dispatches BY COMMAND NAME onto this object, so a door marked
+  // only in its installed 68K record would otherwise show the marker and then
+  // be refused at the gate.
+  c64Adapt?: number;
 }
 
 interface DoorSession {
@@ -1177,6 +1183,7 @@ console.log(`[DOOR Command] Found ${availableDoors.length} TypeScript doors, ${a
     // does for BBSCMD doors, so the [40] marker never reads a source the
     // launch gate cannot see.
     minColumns: declaredMinColumns(door as any) ?? undefined,
+    c64Adapt: resolveDoorAdaptColumns(door as any) ?? undefined,
     doorType: door.type || 'AMI',  // Use door.type (XIM, AIM, etc.), not doorType
     type: door.type,  // Also pass through the type for executeDoor routing
     path: door.location,  // Pass location as path for executeDoor
@@ -1343,7 +1350,12 @@ export function formatDoorLine(door: any, isSelected: boolean, narrow: boolean =
   // Format name (pad to 30 chars). 40-ok doors carry an ASCII [40] token
   // inside the same column budget - the marker participates in truncation
   // and never widens the row (C64/40-col Task 1).
+  // Two different promises, one token each, never both: MIN_COLUMNS=40 says
+  // "already fits 40" ([40]); C64_ADAPT says "reaches 40 through the adapter"
+  // ([C64]). Both are read from the SAME resolved Door object the gate will
+  // judge, so a marker can never promise what the gate then refuses.
   const fortyOk = resolveDoorMinColumns(door) <= 40;
+  const mark = fortyOk ? ' [40]' : (resolveDoorAdaptColumns(door) !== null ? ' [C64]' : '');
   // Narrow row arithmetic, worst case (the widest type token is '[XIM]'):
   //   ' ' + '[XIM]'(5) + ' ' + command(8) + ' ' + name(24) = 40 columns,
   // which a CRLF-terminated row may use in full (see table-format.util.ts
@@ -1354,11 +1366,12 @@ export function formatDoorLine(door: any, isSelected: boolean, narrow: boolean =
   // open, so within the name column the NAME gives way to it, never the
   // other way round.
   const doorName = String(door.name || '');
+  const markCols = NARROW_DOOR_NAME_COLUMNS - mark.length;
   const name = narrow
-    ? (fortyOk
-        ? `${narrowClip(doorName, NARROW_DOOR_NAME_COLUMNS - 5).padEnd(NARROW_DOOR_NAME_COLUMNS - 5)} [40]`
+    ? (mark
+        ? `${narrowClip(doorName, markCols).padEnd(markCols)}${mark}`
         : narrowClip(doorName, NARROW_DOOR_NAME_COLUMNS).padEnd(NARROW_DOOR_NAME_COLUMNS))
-    : padString(fortyOk ? `${door.name} [40]` : door.name, 30);
+    : padString(mark ? `${door.name}${mark}` : door.name, 30);
 
   // Format size (right-aligned, 8 chars wide for proper column alignment)
   const sizeStr = formatDoorSize(door.size || 0);
@@ -1679,13 +1692,7 @@ console.log('Executing door:', door.name);
   // uninstall, but a crash between them would leave the socket's emit patched
   // and every later byte would go through a reconstructor with no owner. This
   // is a no-op on every ordinary launch (nothing is installed).
-  //
-  // SILENT, unlike every other uninstall: reaching here with a frame still
-  // pending means the previous door ended without its own teardown running, so
-  // that frame is stale by definition. Flushing it would paint a dead door's
-  // screen over the menu the caller is looking at, right as the next door
-  // starts.
-  uninstallC64DoorAdapter(socket, { silent: true });
+  uninstallC64DoorAdapter(socket);
 
   // MIN_COLUMNS gate (C64/40-col Task 1). Default-closed: every door type
   // (68K, AREXX, TS, MCI, ...) gates at 80 columns unless its registration
@@ -1699,7 +1706,17 @@ console.log('Executing door:', door.name);
   // It runs BEFORE session.currentDoorName is set: a refused launch is not
   // this door's event, and attributing it would show the caller as being in
   // a door they were never let into.
-  if (sessionColumns(session) < resolveDoorMinColumns(door as any)) {
+  //
+  // ONE extra clause, not a second gate: the C64 door adapter
+  // (server/c64-door-adapter.ts) reconstructs a 68K door's 80-column frames
+  // and reduces them to the caller's 40, so a door that declared C64_ADAPT is
+  // genuinely usable at 40 even though its own output is not. doorOpensForC64
+  // is the SAME predicate executeAmigaDoor asks before installing the adapter
+  // - a door let in here is therefore always a door that then runs adapted.
+  if (
+    sessionColumns(session) < resolveDoorMinColumns(door as any) &&
+    !doorOpensForC64(door as any, session)
+  ) {
     // emitPrompt is emitText(..., immediate): the notice must reach the
     // caller before the menu repaints over it.
     emitPrompt(socket, DOOR_NEEDS_80_NOTICE);
@@ -3029,7 +3046,7 @@ console.log(`[executeAmigaDoor] Detected GCC-compiled executable, running native
     // C64_ADAPT. Everything else (every ANSI caller, every unadapted door) is
     // byte-for-byte what it was: installC64DoorAdapter returns null without
     // touching socket.emit.
-    if (doorRequestsC64Adapt(door)) {
+    if (doorOpensForC64(door as any, session)) {
       installC64DoorAdapter(socket, session as any);
     }
 
@@ -4296,6 +4313,19 @@ console.warn(`[initializeDoors] installed-door scan unavailable for MIN_COLUMNS 
     });
     if (declared !== null) {
       door.minColumns = declared;
+    }
+
+    // Same fold for C64_ADAPT, for the same reason: the [C64] marker is drawn
+    // from the DOORS-menu entry (which carries the installed record as
+    // doorInfo) while Enter re-dispatches by command name onto THIS object,
+    // which has no doorInfo. Resolving once here keeps marker and gate on one
+    // value.
+    const adapt = resolveDoorAdaptColumns({
+      toolTypes: cmdDef.toolTypes,
+      doorInfo: installedByCommand.get(door.command),
+    });
+    if (adapt !== null) {
+      door.c64Adapt = adapt;
     }
 
     bbsCmdDoors.push(door);

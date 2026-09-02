@@ -42,12 +42,44 @@ const INSTALLED_RECORD = {
   minColumns: 40,
   toolTypes: { LOCATION: 'Doors:Gate40/Gate40', TYPE: 'XIM' },
 };
+// Mutable so a test can add a second installed record (the C64_ADAPT case
+// below registers one whose tooltype exists ONLY here, never in BBSCMD).
+const mockInstalledRecords: any[] = [INSTALLED_RECORD];
+// executeAmigaDoor resolves the executable under amigaDoorManager.bbsRoot, so
+// the stub has to carry the same temp root config.get('dataDir') returns.
+const mockRootRef = { value: '' };
 jest.mock('../../src/doors/amigaDoorManager', () => ({
   getAmigaDoorManager: () => ({
-    scanInstalledDoors: async () => [INSTALLED_RECORD],
-    getCachedDoors: () => [INSTALLED_RECORD],
+    bbsRoot: mockRootRef.value,
+    scanInstalledDoors: async () => mockInstalledRecords,
+    getCachedDoors: () => mockInstalledRecords,
     isCachePopulated: () => true,
   }),
+}));
+
+/**
+ * The 68K runtime, replaced by a door that paints one 80-column rule on the
+ * socket it was handed and exits. It records what was installed on that socket
+ * WHILE it ran, which is the only way to prove the adapter was actually on the
+ * wire rather than merely constructed: everything is uninstalled by the time
+ * executeDoor returns.
+ */
+const mockAdapterDuringRun: unknown[] = [];
+jest.mock('../../src/amiga-emulation/AmigaDoorSession', () => ({
+  AmigaDoorSession: class {
+    private socket: any;
+    constructor(socket: any) { this.socket = socket; }
+    async start() {
+      const { c64AdapterFor } = require('../../src/server/c64-door-adapter');
+      mockAdapterDuringRun.push(c64AdapterFor(this.socket));
+      this.socket.emit('ansi-output', '\x1b[2J\x1b[H');
+      this.socket.emit('ansi-output', '-'.repeat(76) + '\r\n');
+      // Real timers: the adapter's quiet-gap tick has to actually fire.
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    getExitState() { return {}; }
+    isDoorRunning() { return false; }
+  },
 }));
 
 import {
@@ -83,6 +115,7 @@ const bbsCmdDefinition = {
 
 beforeEach(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'min-col-dispatch-'));
+  mockRootRef.value = root;
   jest.spyOn(config, 'get').mockImplementation((key: any) =>
     key === 'dataDir' ? root : realConfigGet(key)
   );
@@ -181,5 +214,131 @@ describe('the [40] marker and the gate read one MIN_COLUMNS source', () => {
 
     expect(allOutput(socket)).toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');
     expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
+  });
+});
+
+
+/**
+ * Reachability for the C64 adapter gate hook (Phase 3 Task 5).
+ *
+ * Same chain as above - initializeDoors() -> getDoors() ->
+ * setDoorsForCommandHandler() -> handleCommand() -> executeDoor() - so nothing
+ * here is a source pin. createAllDropFiles is the "launch proceeded" sentinel
+ * and c64AdapterFor(socket) captured INSIDE the door's run is the "the adapter
+ * was on the wire" sentinel.
+ */
+describe('a C64_ADAPT door reached through the real Enter dispatch', () => {
+  const C64_CMD = {
+    name: 'C64DOOR',
+    type: 'XIM',
+    location: 'Doors/C64Door/C64Door',
+    access: 0,
+    toolTypes: { LOCATION: 'Doors:C64Door/C64Door', TYPE: 'XIM', C64_ADAPT: '40' },
+  };
+  const PLAIN_68K = {
+    name: 'PLAIN68K',
+    type: 'XIM',
+    location: 'Doors/C64Door/C64Door',
+    access: 0,
+    toolTypes: { LOCATION: 'Doors:C64Door/C64Door', TYPE: 'XIM' },
+  };
+
+  async function register(defs: any[]) {
+    const { commandCache } = require('../../src/handlers/command-execution.handler');
+    commandCache.bbscmd.clear();
+    for (const d of defs) commandCache.bbscmd.set(d.name, d);
+    await initializeDoors();
+    setDoorsForCommandHandler(getDoors());
+  }
+
+  beforeEach(async () => {
+    mockAdapterDuringRun.length = 0;
+    // executeAmigaDoor refuses a door whose executable is missing. Amiga hunk
+    // magic, so the native-GCC branch is not taken either.
+    fs.mkdirSync(path.join(root, 'Doors', 'C64Door'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'Doors', 'C64Door', 'C64Door'), Buffer.from([0x00, 0x00, 0x03, 0xf3]));
+    await register([C64_CMD, PLAIN_68K]);
+  });
+
+  afterEach(() => {
+    mockInstalledRecords.length = 1;
+  });
+
+  it('opens for a C64 session and runs it through the adapter, which is gone afterwards', async () => {
+    const socket = makeSocket();
+    const originalEmit = socket.emit;
+    const { c64AdapterFor } = require('../../src/server/c64-door-adapter');
+
+    await handleCommand(socket as any, { ...c64Session(), commandText: 'C64DOOR' }, '');
+
+    expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(1);
+    expect(allOutput(socket)).not.toContain('THIS DOOR NEEDS');
+    // The adapter was on the socket while the door ran...
+    expect(mockAdapterDuringRun).toHaveLength(1);
+    expect(mockAdapterDuringRun[0]).not.toBeNull();
+    // ...it reduced the door's 80-column rule...
+    expect(allOutput(socket)).not.toContain('-'.repeat(70));
+    // ...and it was uninstalled on the way out.
+    expect(c64AdapterFor(socket)).toBeNull();
+    expect(socket.emit).toBe(originalEmit);
+  });
+
+  it('an ANSI session on the SAME door launches identically with no adapter and untouched bytes', async () => {
+    const socket = makeSocket();
+    const originalEmit = socket.emit;
+    const { c64AdapterFor } = require('../../src/server/c64-door-adapter');
+
+    await handleCommand(
+      socket as any,
+      { ...c64Session(), petsciiMode: false, terminalType: 'modern', screenWidth: 80, screenHeight: 24, commandText: 'C64DOOR' },
+      '',
+    );
+
+    expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(1);
+    expect(mockAdapterDuringRun).toEqual([null]);
+    expect(allOutput(socket)).toContain('-'.repeat(76));
+    expect(c64AdapterFor(socket)).toBeNull();
+    expect(socket.emit).toBe(originalEmit);
+  });
+
+  it('a C64 session on a 68K door WITHOUT the tooltype is still refused', async () => {
+    const socket = makeSocket();
+    await handleCommand(socket as any, { ...c64Session(), commandText: 'PLAIN68K' }, '');
+    expect(allOutput(socket)).toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');
+    expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
+    expect(mockAdapterDuringRun).toHaveLength(0);
+  });
+
+  // The bug this pins (Task 3 review): a local copy of the per-door predicate
+  // that read only the two tooltype MAPS would say "no" here - the Door the
+  // Enter-by-command-name path hands executeAmigaDoor carries neither, only
+  // the value initializeDoors() resolved onto it - so the gate would let the
+  // door in and it would then run UNADAPTED, 80-column bytes at a C64. Marker,
+  // gate and install site must all read the one resolved value.
+  it('marker, gate AND the adapter install agree when C64_ADAPT lives ONLY in the installed 68K record', async () => {
+    mockInstalledRecords.push({
+      command: 'INSTONLY',
+      name: 'Installed Only',
+      location: 'Doors:C64Door/C64Door',
+      resolvedPath: path.join(root, 'Doors', 'C64Door', 'C64Door'),
+      access: 0,
+      type: 'XIM',
+      installed: true,
+      toolTypes: { LOCATION: 'Doors:C64Door/C64Door', TYPE: 'XIM', C64_ADAPT: '40' },
+    });
+    await register([{ ...PLAIN_68K, name: 'INSTONLY' }]);
+
+    const door = getDoors().find((d) => d.command === 'INSTONLY');
+    expect(door!.toolTypes?.['C64_ADAPT']).toBeUndefined();
+    const marked = formatDoorLine(door, false).includes('[C64]');
+
+    const socket = makeSocket();
+    await handleCommand(socket as any, { ...c64Session(), commandText: 'INSTONLY' }, '');
+    const launched = (doorDropFileManager.createAllDropFiles as jest.Mock).mock.calls.length === 1;
+    const adapted = mockAdapterDuringRun.length === 1 && mockAdapterDuringRun[0] !== null;
+
+    expect({ marked, launched, adapted }).toEqual({ marked: true, launched: true, adapted: true });
+    // And the door's 80-column rule never reached the caller.
+    expect(allOutput(socket)).not.toContain('-'.repeat(70));
   });
 });

@@ -242,6 +242,52 @@ describe('formatDoorLine 40-ok marker', () => {
     expect(marked.length).toBe(unmarked.length);
   });
 
+  // C64_ADAPT is a DIFFERENT promise from MIN_COLUMNS=40 ("fits 40 already"
+  // vs "reaches 40 through the adapter"), and a sysop reading the list needs
+  // to know which one a door is making - so it gets its own token, inside the
+  // same column budget.
+  it('marks a C64_ADAPT door with [C64] and leaves an unmarked door alone', () => {
+    const marked = formatDoorLine({ name: 'Who', command: 'WHO', type: 'XIM', toolTypes: { C64_ADAPT: '40' } }, false);
+    const unmarked = formatDoorLine({ name: 'Who', command: 'WHO', type: 'XIM' }, false);
+    expect(marked).toContain('[C64]');
+    expect(unmarked).not.toContain('[C64]');
+    expect(unmarked).not.toContain('[40]');
+  });
+
+  it('never both: a door declaring MIN_COLUMNS=40 and C64_ADAPT shows [40] only', () => {
+    const row = formatDoorLine(
+      { name: 'Who', command: 'WHO', type: 'XIM', toolTypes: { MIN_COLUMNS: '40', C64_ADAPT: '40' } },
+      false,
+    );
+    expect(row).toContain('[40]');
+    expect(row).not.toContain('[C64]');
+  });
+
+  it('the [C64] token lives inside the same 30-char name column - the row never widens', () => {
+    const marked = formatDoorLine({ name: 'Who', command: 'WHO', type: 'XIM', toolTypes: { C64_ADAPT: '40' } }, false);
+    const unmarked = formatDoorLine({ name: 'Who', command: 'WHO', type: 'XIM' }, false);
+    expect(marked.length).toBe(unmarked.length);
+  });
+
+  // The 80-column row for a door WITHOUT the tooltype is byte-identical to
+  // what it has always been - the marker work must not touch ANSI callers.
+  it('an ANSI 80-col row for an unmarked door is byte-for-byte the historic row', () => {
+    expect(formatDoorLine({ id: 'd', command: 'TRADE', name: 'Trade Wars 2002', type: 'AMI', size: 654321 }, false))
+      .toBe('\x1b[2K \x1b[33m[AMI]\x1b[0m ' + 'TRADE'.padEnd(10) + ' ' + 'Trade Wars 2002'.padEnd(30) +
+            '\x1b[36m' + '639KB'.padStart(8) + '\x1b[0m');
+  });
+
+  it('a narrow [C64] row still fits 40 columns and keeps the marker', () => {
+    const row = formatDoorLine(
+      { name: 'Neo-Blessed Widget Showcase', command: 'VERYLONGCOMMANDNAME', type: 'XIM', toolTypes: { C64_ADAPT: '40' }, size: 1 },
+      false,
+      true,
+    ).replace(/\x1b\[2K/g, '').replace(/\x1b\[[0-9;]*m/g, '');
+    expect(row.length).toBeLessThanOrEqual(40);
+    expect(row).toContain('[C64]');
+    expect(row).toContain('VERYLONG');
+  });
+
   it('a long 40-ok door name truncates rather than widening the row', () => {
     const longName = 'A Door With A Very Long Name Indeed';
     const marked = formatDoorLine({ name: longName, command: 'LONG', type: 'TS', minColumns: 40 }, false);
@@ -303,10 +349,10 @@ function petsciiScreenRows(ansi: string): string[] {
  * drives the product's own top-level door entry point and asserts on what the
  * CALLER received.
  *
- * MIN_COLUMNS=40 rides along with C64_ADAPT because Task 1's gate is
- * default-closed and would refuse a c64 session before executeAmigaDoor is
- * ever reached. Task 5 makes C64_ADAPT imply 40-ok; until it does, the two
- * tooltypes are declared together.
+ * C64_ADAPT stands ALONE here (Task 5): the door declares no MIN_COLUMNS, so
+ * the only reason a c64 session reaches executeAmigaDoor at all is the gate's
+ * adapter clause - and the only reason the adapter is on the socket is the
+ * same predicate. One answer, both readers.
  */
 describe('executeDoor installs the C64 door adapter for a 40-column caller', () => {
   // executeAmigaDoor refuses to launch a door whose executable is missing, so
@@ -321,7 +367,7 @@ describe('executeDoor installs the C64 door adapter for a 40-column caller', () 
     testDoor({
       type: 'XIM' as any,
       path: 'Doors/GateTest/GateTest',
-      toolTypes: { C64_ADAPT: '40', MIN_COLUMNS: '40' },
+      toolTypes: { C64_ADAPT: '40' },
     });
 
   it('a c64 session entering a C64_ADAPT door is served 40-column frames, and the adapter is gone afterwards', async () => {
@@ -375,6 +421,66 @@ describe('executeDoor installs the C64 door adapter for a 40-column caller', () 
       testDoor({ type: 'XIM' as any, path: 'Doors/GateTest/GateTest', toolTypes: { MIN_COLUMNS: '40' } }),
     );
     expect(doorOutput(socket)).toContain('-'.repeat(70));
+    expect(c64AdapterFor(socket)).toBeNull();
+  });
+});
+
+/**
+ * The gate's adapter clause (Phase 3 Task 5).
+ *
+ * One `if`, not two: `have < need && !doorOpensForC64(door, session)`. There
+ * is still exactly one place a door can be refused, and the door that is let
+ * in here is the same door the install site will put the adapter on, because
+ * both ask the same predicate.
+ */
+describe('executeDoor C64_ADAPT gate clause', () => {
+  beforeEach(() => {
+    fs.mkdirSync(path.join(root, 'Doors', 'GateTest'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'Doors', 'GateTest', 'GateTest'), Buffer.from([0x00, 0x00, 0x03, 0xf3]));
+  });
+
+  const adaptDoor = (toolTypes: Record<string, string>, type: string = 'XIM') =>
+    testDoor({ type: type as any, path: 'Doors/GateTest/GateTest', toolTypes });
+
+  it('C64_ADAPT=40 alone opens a door the MIN_COLUMNS gate would refuse', async () => {
+    const socket = makeSocket();
+    const session = c64Session();
+    await executeDoor(socket as any, session, adaptDoor({ C64_ADAPT: '40' }));
+    expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(1);
+    expect(allOutput(socket)).not.toContain('THIS DOOR NEEDS');
+  });
+
+  it('does NOT open a door type the adapter seam never sees, however it is marked', async () => {
+    for (const type of [UNROUTED as unknown as string, 'TS', 'arexx']) {
+      (doorDropFileManager.createAllDropFiles as jest.Mock).mockClear();
+      const socket = makeSocket();
+      await executeDoor(socket as any, c64Session(), adaptDoor({ C64_ADAPT: '40' }, type));
+      expect(allOutput(socket)).toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');
+      expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
+    }
+  });
+
+  it('does NOT open a door whose claim is wider than the caller (C64_ADAPT=64 at 40)', async () => {
+    const socket = makeSocket();
+    await executeDoor(socket as any, c64Session(), adaptDoor({ C64_ADAPT: '64' }));
+    expect(allOutput(socket)).toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');
+    expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
+  });
+
+  it('does NOT open on a malformed claim - unclassified stays closed', async () => {
+    const socket = makeSocket();
+    await executeDoor(socket as any, c64Session(), adaptDoor({ C64_ADAPT: 'YES' }));
+    expect(allOutput(socket)).toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');
+    expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
+  });
+
+  it('leaves the 80-column session untouched: it opens the door as it always did, with no adapter', async () => {
+    const socket = makeSocket();
+    const originalEmit = socket.emit;
+    await executeDoor(socket as any, eightyColSession(), adaptDoor({ C64_ADAPT: '40' }));
+    expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(1);
+    expect(allOutput(socket)).not.toContain('THIS DOOR NEEDS');
+    expect(socket.emit).toBe(originalEmit);
     expect(c64AdapterFor(socket)).toBeNull();
   });
 });
