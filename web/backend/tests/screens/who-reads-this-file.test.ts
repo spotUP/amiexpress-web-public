@@ -102,8 +102,10 @@ describe('what the board calls its conferences', () => {
   test('the index carries each conference name and directory', () => {
     const index = buildScreenIndex(root);
 
+    // fileAreas and messageBases came later; a conference carries its counts
+    // too, since neither is named anywhere on disk.
     expect(index.conferences).toEqual([
-      { id: 1, name: 'Amiga Demoscene', dir: 'Conf2' },
+      { id: 1, name: 'Amiga Demoscene', dir: 'Conf2', fileAreas: 0, messageBases: 0 },
     ]);
   });
 });

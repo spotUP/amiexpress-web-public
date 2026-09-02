@@ -9,6 +9,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as amigafs from '../utils/amigafs';
+import { conferenceDir, conferenceNumbers } from '../conferences/conference-paths';
 import { InfoFileParser } from './info-file-parser';
 import { ConferenceSetupService } from './conference-setup.service';
 import { getSystemTime } from '../utils/date-time.util';
@@ -37,6 +39,18 @@ export interface BBSHealthReport {
   totalIssues: number;
   autoFixableIssues: number;
   categories: HealthCheckResult[];
+}
+
+/**
+ * A board directory, found the way the volume finds it.
+ *
+ * AmigaOS is case-insensitive and every board writes `Doors/`, while this check
+ * looked for `doors/` - true on a developer's Mac, false in the Linux
+ * container, where it reported "doors/ directory missing" and offered to
+ * create a second one beside it.
+ */
+function boardDir(bbsRoot: string, name: string): string | null {
+  return amigafs.findCaseInsensitive(bbsRoot, name);
 }
 
 export class BBSHealthCheckService {
@@ -330,19 +344,26 @@ export class BBSHealthCheckService {
     // =========================================================
     const confScreens = ['MENU'];
 
-    // Check at least Conf1 has MENU
-    const conf1ScreensDir = path.join(this.bbsRoot, 'Conf1', 'Screens');
-    if (fs.existsSync(conf1ScreensDir)) {
+    // The FIRST conference, wherever it lives. `Conf1` is a directory name, not
+    // a conference: this board's conference 1 is in Conf2, because deleting a
+    // conference shifts the entries and leaves the directories alone.
+    const firstConference = conferenceNumbers(this.bbsRoot)[0];
+    const confScreensDir = firstConference === undefined
+      ? null
+      : path.join(conferenceDir(this.bbsRoot, firstConference), 'Screens');
+
+    if (confScreensDir && fs.existsSync(confScreensDir)) {
+      const label = path.basename(path.dirname(confScreensDir));
       for (const screen of confScreens) {
         checkedCount++;
-        if (!screenExists(conf1ScreensDir, screen)) {
+        if (!screenExists(confScreensDir, screen)) {
           issues.push({
             severity: 'warning',
             category: 'Screens',
-            description: `Conf1: ${screen} screen missing (.SEQ or .TXT)`,
-            path: conf1ScreensDir,
+            description: `${label}: ${screen} screen missing (.SEQ or .TXT)`,
+            path: confScreensDir,
             autoFixable: false,
-            fixAction: `Create ${screen}.SEQ or ${screen}.TXT in Conf1/Screens/`
+            fixAction: `Create ${screen}.SEQ or ${screen}.TXT in ${label}/Screens/`
           });
         }
       }
@@ -470,15 +491,15 @@ export class BBSHealthCheckService {
   private async checkDoors(): Promise<HealthCheckResult> {
     const issues: HealthIssue[] = [];
 
-    const doorsDirPath = path.join(this.bbsRoot, 'doors');
-    if (!fs.existsSync(doorsDirPath)) {
+    const doorsDirPath = boardDir(this.bbsRoot, 'Doors') ?? path.join(this.bbsRoot, 'Doors');
+    if (!boardDir(this.bbsRoot, 'Doors')) {
       issues.push({
         severity: 'info',
         category: 'Doors',
-        description: 'doors/ directory missing - no external programs available',
+        description: 'Doors/ directory missing - no external programs available',
         path: doorsDirPath,
         autoFixable: true,
-        fixAction: 'Create doors/ directory'
+        fixAction: 'Create Doors/ directory'
       });
       return {
         category: 'Door Programs',
@@ -555,8 +576,16 @@ export class BBSHealthCheckService {
       };
     }
 
-    // Check for XPR protocol files
-    const xprFiles = fs.readdirSync(protocolsDirPath).filter(f => f.startsWith('xpr') || f.endsWith('.xpr'));
+    // Every file in the directory, and the XPR ones among them.
+    //
+    // AmiExpress writes `XprZmodem.info`, and this matched `xpr` in lower case
+    // only - so a board with eight registered protocols was told it had none.
+    // The volume is case-insensitive; so is this now.
+    const protocolFiles = fs.readdirSync(protocolsDirPath);
+    const xprFiles = protocolFiles.filter(f => {
+      const lower = f.toLowerCase();
+      return lower.startsWith('xpr') || lower.endsWith('.xpr');
+    });
 
     if (xprFiles.length === 0) {
       issues.push({
@@ -572,7 +601,9 @@ export class BBSHealthCheckService {
       category: 'File Transfer Protocols',
       passed: true,
       issues,
-      checkedCount: xprFiles.length,
+      // What was LOOKED AT, not what matched: reporting "checked 0" beside a
+      // finding is how a check makes a sysop distrust it.
+      checkedCount: protocolFiles.length,
       errorCount: 0,
       warningCount: issues.filter(i => i.severity === 'warning').length
     };
