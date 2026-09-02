@@ -96,7 +96,11 @@ export class ListTable extends Box {
       this.on('click', (data: any) => {
         const rowIndex = this.getRowFromY(data.y);
         if (rowIndex >= 0) {
+          // A click is a CHOICE, the same as it is in List: move the
+          // highlight, then say the row was chosen.
           this.selectRow(rowIndex);
+          this.emit('action', this.rows[this.selectedRow], this.selectedRow);
+          this.emit('select', this.rows[this.selectedRow], this.selectedRow);
         }
       });
 
@@ -127,6 +131,7 @@ export class ListTable extends Box {
     }
 
     if (key.name === 'enter' || key.name === 'space') {
+      this.emit('action', this.rows[this.selectedRow], this.selectedRow);
       this.emit('select', this.rows[this.selectedRow], this.selectedRow);
       return true;
     }
@@ -235,11 +240,21 @@ export class ListTable extends Box {
   /**
    * Select a row
    */
+  /**
+   * Move the highlight.
+   *
+   * This emits 'select item', NOT 'select' - the same split List has kept
+   * since neo-blessed: 'select item' is "the highlight moved", 'select' is
+   * "the user chose this row". Emitting 'select' from here made the two
+   * indistinguishable, so a door could not act on a choice; CARD LOBBY had
+   * to bind J for "join", which is also this widget's own vi-style "down",
+   * so pressing it moved the cursor and joined nothing (2026-09-02).
+   */
   selectRow(index: number): void {
     if (index < 0 || index >= this.rows.length) return;
     this.selectedRow = index;
     this.updateContent();
-    this.emit('select', this.rows[index], index);
+    this.emit('select item', this.rows[index], index);
     if (this.screen) {
       this.screen.render();
     }

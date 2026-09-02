@@ -1367,8 +1367,9 @@ export class MultiplayerLobby extends EventEmitter {
       } as any,
     });
 
-    // Track selected table
-    this.tableListWidget.on('select', (_item: unknown, index: number) => {
+    // Track selected table. 'select item' is the highlight moving; 'select'
+    // now means the player CHOSE a row, which the screen-level keys own.
+    this.tableListWidget.on('select item', (_item: unknown, index: number) => {
       const tables = this.adapter.getTables?.() || [];
       if (tables[index]) {
         this.selectedTableId = tables[index].id;

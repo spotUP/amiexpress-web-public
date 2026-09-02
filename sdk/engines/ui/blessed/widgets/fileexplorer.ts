@@ -98,12 +98,16 @@ export class FileExplorer extends Box {
       }
     });
 
-    // When a file is selected in the list
-    this.fileList.on('select', (row: string[], index: number) => {
+    // The preview follows the highlight...
+    this.fileList.on('select item', (row: string[]) => {
       const fileName = row[0];
-      this.emit('file-select', fileName);
       this.preview.setContent(`{bold}Selected File:{/} ${fileName}\n{bold}Details:{/} ${row[1]}, ${row[2]}`);
       this.screen?.render();
+    });
+
+    // ...and a chosen file is an event the host acts on.
+    this.fileList.on('select', (row: string[]) => {
+      this.emit('file-select', row[0]);
     });
 
     // Focus switching
