@@ -281,7 +281,9 @@ describe('AnsiToPetsciiTransducer cursor, erase and graphics', () => {
 describe('AnsiToPetsciiTransducer CCGMS screen background ($02 <colour>)', () => {
   it('an ANSI background active at a full clear becomes the screen background: $93 then $02 <colour>', () => {
     const { t, out, display } = run('\x1b[44m\x1b[2J');
-    expect(out).toEqual([0x93, 0x02, 0x1F]);       // CLR, then background/border := blue (VIC 6)
+    // CLR, background/border := blue (VIC 6), then the pen re-asserted: a client
+    // WITHOUT the CCGMS convention ($02 inert) would otherwise have taken $1F as a pen change.
+    expect(out).toEqual([0x93, 0x02, 0x1F, 0x9A]);
     expect(t.machine.state.background).toBe(6);
     expect(t.machine.state.border).toBe(6);
     expect(display.state.background).toBe(6);
@@ -289,13 +291,13 @@ describe('AnsiToPetsciiTransducer CCGMS screen background ($02 <colour>)', () =>
 
   it('text after a coloured clear re-sends $02 <colour> after the $0E the bank switch emits', () => {
     const { out, display } = run('\x1b[44m\x1b[2Jhi');
-    expect(out).toEqual([0x93, 0x02, 0x1F, 0x0E, 0x02, 0x1F, 0x48, 0x49]);
+    expect(out).toEqual([0x93, 0x02, 0x1F, 0x9A, 0x0E, 0x02, 0x1F, 0x9A, 0x48, 0x49]);
     expect(display.state.background).toBe(6);       // $0E blacked it, the re-send restored it
     expect(display.state.border).toBe(6);
     expect(display.state.charsetBank).toBe(1);
   });
 
-  it('a clear with no ANSI background emits $93 alone', () => {
+  it('a clear with no ANSI background commits BLACK, and costs no bytes when the screen is already black', () => {
     const { out, display } = run('abc\x1b[2J');
     expect(out.filter((b) => b === 0x02)).toEqual([]);
     // $93 then the cursor walked back to column 3 (ANSI 2J does not home).
@@ -310,18 +312,46 @@ describe('AnsiToPetsciiTransducer CCGMS screen background ($02 <colour>)', () =>
   });
 
   it('the alternate screen carries the background too, and SGR 49 / SGR 0 clear it again', () => {
-    expect(Array.from(run('\x1b[41m\x1b[?1049h').out)).toEqual([0x93, 0x02, 0x1C]);
+    expect(Array.from(run('\x1b[41m\x1b[?1049h').out)).toEqual([0x93, 0x02, 0x1C, 0x9A]);
     const t = new AnsiToPetsciiTransducer();
     t.transduce('\x1b[44m\x1b[2J');
     expect(t.machine.state.background).toBe(6);
-    expect(Array.from(t.transduce('\x1b[49m\x1b[2J'))).toEqual([0x93]); // no new bg committed
+    // SGR 49 IS the BBS asking for the terminal default, which on CCGMS is black:
+    // the next clear must take the screen back to black, not strand the blue.
+    expect(Array.from(t.transduce('\x1b[49m\x1b[2J'))).toEqual([0x93, 0x02, 0x90, 0x9A]);
+    expect(t.machine.state.background).toBe(0);
     const t2 = new AnsiToPetsciiTransducer();
-    expect(Array.from(t2.transduce('\x1b[44m\x1b[0m\x1b[2J'))).toEqual([0x05, 0x93]); // SGR 0 drops the bg (and sets the white pen)
+    expect(Array.from(t2.transduce('\x1b[44m\x1b[0m\x1b[2J'))).toEqual([0x05, 0x93]); // SGR 0 drops the bg (white pen); screen already black, no bytes
   });
 
   it('256-colour and truecolor backgrounds map through the same nearest-VIC path', () => {
-    expect(Array.from(run('\x1b[48;5;2m\x1b[2J').out)).toEqual([0x93, 0x02, 0x1E]);       // xterm green -> VIC 5
-    expect(Array.from(run('\x1b[48;2;46;44;155m\x1b[2J').out)).toEqual([0x93, 0x02, 0x1F]); // exact Colodore blue -> VIC 6
+    expect(Array.from(run('\x1b[48;5;2m\x1b[2J').out)).toEqual([0x93, 0x02, 0x1E, 0x9A]);       // xterm green -> VIC 5
+    expect(Array.from(run('\x1b[48;2;46;44;155m\x1b[2J').out)).toEqual([0x93, 0x02, 0x1F, 0x9A]); // exact Colodore blue -> VIC 6
+  });
+
+  it('a later clear with no ANSI background takes the screen back to black instead of stranding it', () => {
+    // The stranded-background bug: `screenBg = ansiBg` (null) left the oracle on
+    // blue with no intent, so an arbitrary later $0E blacked the screen mid-art.
+    const t = new AnsiToPetsciiTransducer();
+    t.transduce('\x1b[44m\x1b[2Jhi');
+    expect(t.machine.state.background).toBe(6);
+    const out = Array.from(t.transduce('\x1b[0m\x1b[2J'));
+    // white pen, CLR, bg := black, pen re-asserted, cursor walked back to column 2 (2J does not home)
+    expect(out).toEqual([0x05, 0x93, 0x02, 0x90, 0x05, 0x1D, 0x1D]);
+    expect(t.machine.state.background).toBe(0);
+    expect(t.machine.state.border).toBe(0);
+    // ...and nothing later can resurrect the blue.
+    t.transduce('\x1b[8mx');
+    expect(t.machine.state.background).toBe(0);
+  });
+
+  it('ESC c (RIS) blacks the screen background instead of restoring it on the next bank switch', () => {
+    const t = new AnsiToPetsciiTransducer();
+    t.transduce('\x1b[44m\x1b[2Jhi');
+    const out = Array.from(t.transduce('\x1bca'));
+    expect(out).toEqual([0x93, 0x02, 0x90, 0x9A, 0x41]); // CLR, bg := black, pen re-asserted, 'A'
+    expect(t.machine.state.background).toBe(0);
+    expect(t.machine.state.border).toBe(0);
   });
 
   it('reset() forgets the screen background', () => {

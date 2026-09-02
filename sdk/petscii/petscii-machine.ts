@@ -24,8 +24,11 @@
  * implements:
  *  - `$02` followed by one of the 16 standard PETSCII colour bytes sets the
  *    BACKGROUND and the BORDER to that VIC colour. The two are always tied -
- *    no independent border control exists. `$02` followed by anything else is
- *    inert and that byte is processed normally.
+ *    no independent border control exists. `$02` followed by anything ELSE is
+ *    inert and that byte is processed normally - this project's chosen
+ *    behaviour, NOT a sourced CCGMS one (no CCGMS/PyCGMS source was read for
+ *    the non-colour case); it keeps a stray `$02` from eating the control code
+ *    behind it. See the reference doc, section 3.
  *  - `$0E` - the lowercase-charset switch - ALSO resets background and border
  *    to black. A sender that wants a coloured screen must re-send
  *    `$02 <colour>` after every `$0E` (AnsiToPetsciiTransducer does).
@@ -89,7 +92,7 @@ export class PetsciiMachine {
       this.bgPrefix = false;
       // CCGMS: `$02 <colour>` sets background AND border. Anything else after
       // a `$02` is not a background command - fall through and process the
-      // byte normally.
+      // byte normally (this project's choice, see the header comment).
       if (b in PETSCII_COLOR_TO_VIC) return this.setScreenColor(PETSCII_COLOR_TO_VIC[b]);
     }
     if (b in PETSCII_COLOR_TO_VIC) { s.pen = PETSCII_COLOR_TO_VIC[b]; return false; }

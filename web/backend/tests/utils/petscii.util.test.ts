@@ -19,6 +19,7 @@ import {
   C64_PALETTE_PEPTO,
   PETSCII_COLOR_TO_VIC,
   vicToSgrForeground,
+  vicToSgrBackground,
 } from '../../src/utils/c64-palette';
 
 // C64 terminal prologue: light blue pen (VIC 14). No background SGR - a C64
@@ -887,5 +888,46 @@ describe('PetsciiStreamConverter', () => {
     convertPetsciiToPetMe64(Buffer.from([0x12]));
     const out = convertPetsciiToPetMe64(Buffer.from([0x41]));
     expect(out).toContain(String.fromCodePoint(0xE001)); // fresh state, no reverse
+  });
+});
+
+describe('CCGMS background convention in the PETSCII -> host converters', () => {
+  // $02 <colour> sets background+border on a C64 terminal. Before this was
+  // handled, the catch-all control-code branch swallowed the $02 and the NEXT
+  // byte hit the foreground-colour branch, corrupting the ink for the rest of
+  // the art.
+  it('convertPetsciiToAnsi: $02 $1F emits a BACKGROUND SGR and leaves the pen alone', () => {
+    const out = convertPetsciiToAnsi(Buffer.from([0x02, 0x1F, 0x41]));
+    expect(out).toContain(vicToSgrBackground(6));            // blue background
+    expect(out).not.toContain(vicToSgrForeground(6));        // NOT an ink change
+    expect(out.split(vicToSgrForeground(14)).length).toBe(2); // pen still the power-on prologue only
+  });
+
+  it('convertPetsciiToPetMe64: $02 $1F emits a BACKGROUND SGR and leaves the pen alone', () => {
+    const out = convertPetsciiToPetMe64(Buffer.from([0x02, 0x1F, 0x41]));
+    expect(out).toContain(vicToSgrBackground(6));
+    expect(out).not.toContain(vicToSgrForeground(6));
+  });
+
+  it('$0E resets the background it set, and costs nothing when none was set', () => {
+    expect(convertPetsciiToAnsi(Buffer.from([0x02, 0x1F, 0x0E]))).toContain('\x1b[49m');
+    expect(convertPetsciiToAnsi(Buffer.from([0x0E]))).not.toContain('\x1b[49m');
+    expect(convertPetsciiToPetMe64(Buffer.from([0x02, 0x1F, 0x0E]))).toContain('\x1b[49m');
+    expect(convertPetsciiToPetMe64(Buffer.from([0x0E]))).not.toContain('\x1b[49m');
+  });
+
+  it('$02 followed by a non-colour byte is inert and the byte is still processed', () => {
+    const out = convertPetsciiToAnsi(Buffer.from([0x02, 0x41]));
+    expect(out).not.toContain('\x1b[48;2;');
+    expect(out).toContain('A');
+  });
+
+  it('the $02 prefix survives a chunk boundary on the streaming converter', () => {
+    const c = new PetsciiStreamConverter();
+    const first = c.convert(Buffer.from([0x02]));
+    const second = c.convert(Buffer.from([0x1F]));
+    expect(first).toBe('');
+    expect(second).toBe(vicToSgrBackground(6));
+    expect(second).not.toContain(vicToSgrForeground(6));
   });
 });

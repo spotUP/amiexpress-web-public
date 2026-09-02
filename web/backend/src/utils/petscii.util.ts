@@ -27,7 +27,7 @@
  */
 
 import * as fs from 'fs';
-import { PETSCII_COLOR_TO_VIC, vicToSgrForeground } from './c64-palette';
+import { PETSCII_COLOR_TO_VIC, vicToSgrForeground, vicToSgrBackground } from './c64-palette';
 import { SCREENCODE_TO_UNICODE } from './petscii-unicode-map';
 import { petsciiInputToAscii, AnsiToPetsciiTransducer } from '@amiexpress/bbs-door-sdk/petscii';
 
@@ -82,6 +82,15 @@ interface PetsciiState {
   reverseVideo: boolean;
   currentColor: string;
   shiftMode: boolean;  // false = unshifted/graphics, true = shifted/text
+  /**
+   * A `$02` has been seen and the NEXT byte is a candidate background colour
+   * (the CCGMS convention - see the reference doc, section 3). Lives on the
+   * state object, not in a local, so the prefix survives a chunk boundary on
+   * PetsciiStreamConverter.
+   */
+  bgPrefix: boolean;
+  /** True while a `$02 <colour>` background is in force, so `$0E` knows to reset it. */
+  backgroundSet: boolean;
 }
 
 /**
@@ -93,6 +102,8 @@ function createPetsciiState(): PetsciiState {
     reverseVideo: false,
     currentColor: vicToSgrForeground(14), // Light blue (C64 power-on pen)
     shiftMode: false,         // Start in unshifted/graphics mode
+    bgPrefix: false,
+    backgroundSet: false,     // Terminal default background until a $02 <colour> says otherwise
   };
 }
 
@@ -169,6 +180,14 @@ function petsciiToScreenCode(petscii: number): number {
  */
 function convertPetsciiByteForPetMe64(byte: number, state: PetsciiState): string {
   // ========================================
+  // BACKGROUND: $02 <colour> (CCGMS), checked BEFORE the pen branch so the
+  // colour byte is consumed as a background and never lands as ink.
+  // ========================================
+  const bg = takeBackgroundColor(byte, state);
+  if (bg !== null) return bg;
+  if (byte === 0x02) { state.bgPrefix = true; return ''; }
+
+  // ========================================
   // COLOR CONTROL CODES
   // ========================================
   if (byte in PETSCII_COLOR_TO_VIC) {
@@ -180,9 +199,10 @@ function convertPetsciiByteForPetMe64(byte: number, state: PetsciiState): string
   // CHARACTER SET SWITCHING
   // ========================================
   if (byte === 0x0E) {
-    // Switch to lowercase/text mode (shifted charset)
+    // Switch to lowercase/text mode (shifted charset). CCGMS ties this to a
+    // background reset.
     state.shiftMode = true;
-    return '';
+    return resetBackground(state);
   }
   if (byte === 0x8E) {
     // Switch to uppercase/graphics mode (unshifted charset)
@@ -236,6 +256,40 @@ function convertPetsciiByteForPetMe64(byte: number, state: PetsciiState): string
 }
 
 /**
+ * CCGMS background convention, host-side. `$02` followed by one of the 16
+ * standard PETSCII colour bytes sets the C64's background AND border; these
+ * converters render onto xterm, where a background SGR is the honest
+ * equivalent. Returns the string to emit, or null when this byte is not the
+ * colour half of a `$02` pair (the caller then processes it normally - a
+ * `$02` before a non-colour byte is inert).
+ *
+ * Without this, the catch-all control-code branch swallowed the `$02` and the
+ * NEXT byte fell into the foreground-colour branch, corrupting the ink for the
+ * rest of the art.
+ */
+function takeBackgroundColor(byte: number, state: PetsciiState): string | null {
+  if (!state.bgPrefix) return null;
+  state.bgPrefix = false;
+  if (!(byte in PETSCII_COLOR_TO_VIC)) return null;
+  state.backgroundSet = true;
+  return vicToSgrBackground(PETSCII_COLOR_TO_VIC[byte]);
+}
+
+/**
+ * `$0E` is both the lowercase-charset switch and, on CCGMS, a background reset.
+ * Emits the "default background" SGR only when a `$02 <colour>` actually set
+ * one, so the overwhelmingly common charset-prelude `$0E` still costs zero
+ * bytes and every existing golden byte sequence is unchanged. The default is
+ * the viewer's own background, matching `$93` on these paths - a C64 terminal
+ * runs black and so does every terminal these converters feed.
+ */
+function resetBackground(state: PetsciiState): string {
+  if (!state.backgroundSet) return '';
+  state.backgroundSet = false;
+  return '\x1b[49m';
+}
+
+/**
  * Convert a PETSCII byte code to ANSI output (for generic terminals without PetMe64)
  *
  * @param byte - PETSCII byte code (0x00-0xFF)
@@ -243,6 +297,11 @@ function convertPetsciiByteForPetMe64(byte: number, state: PetsciiState): string
  * @returns ANSI string output
  */
 function convertPetsciiByte(byte: number, state: PetsciiState): string {
+  // Background: $02 <colour> (CCGMS), before the pen branch - see takeBackgroundColor.
+  const bg = takeBackgroundColor(byte, state);
+  if (bg !== null) return bg;
+  if (byte === 0x02) { state.bgPrefix = true; return ''; }
+
   // Handle color codes
   if (byte in PETSCII_COLOR_TO_VIC) {
     state.currentColor = vicToSgrForeground(PETSCII_COLOR_TO_VIC[byte]);
@@ -252,7 +311,7 @@ function convertPetsciiByte(byte: number, state: PetsciiState): string {
   // Handle character set switching (affects character mapping)
   if (byte === 0x0E) {
     state.shiftMode = true;
-    return '';
+    return resetBackground(state); // CCGMS: $0E also resets background/border
   }
   if (byte === 0x8E) {
     state.shiftMode = false;

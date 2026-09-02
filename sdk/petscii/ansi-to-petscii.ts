@@ -114,13 +114,17 @@ export class AnsiToPetsciiTransducer {
    */
   private ansiBg: number | null = null;
   /**
-   * The screen-level background committed by the last full clear, i.e. what
-   * `$02 <colour>` was sent for. Null when the screen is on the terminal
-   * default. It is an INTENT, not a mirror: whether the C64 currently has it
-   * is read from the oracle (`machine.state.background`), because `$0E` blacks
-   * the screen behind our back on CCGMS and must be undone.
+   * The screen-level background committed by the last full clear (or reset).
+   * Never null: "no ANSI background" is not "no opinion", it is the TERMINAL
+   * DEFAULT, which on CCGMS/PyCGMS is black (0) - so a clear under SGR 0/49
+   * takes the screen back to black rather than stranding whatever colour a
+   * previous clear left there for an arbitrary later `$0E` to drop.
+   *
+   * It is an INTENT, not a mirror: whether the C64 currently has it is read
+   * from the oracle (`machine.state.background`), because `$0E` blacks the
+   * screen behind our back on CCGMS and must be undone.
    */
-  private screenBg: number | null = null;
+  private screenBg = 0;
 
   constructor(opts: AnsiToPetsciiOptions = {}) {
     this.palette = opts.palette ?? C64_PALETTE_COLODORE;
@@ -134,7 +138,7 @@ export class AnsiToPetsciiTransducer {
     this.savedCursor = null;
     this.pendingWrap = false;
     this.ansiBg = null;
-    this.screenBg = null;
+    this.screenBg = 0;
   }
 
   /** Raw PETSCII bytes that reached the terminal without passing through transduce(). */
@@ -207,11 +211,23 @@ export class AnsiToPetsciiTransducer {
     this.restoreScreenBg(out);
   }
 
-  /** Send `$02 <colour>` when the oracle's background is not the one `screenBg` asks for. */
+  /**
+   * Send `$02 <colour>` when the oracle's background is not the one `screenBg`
+   * asks for - which costs nothing in the common case (black screen, black
+   * intent).
+   *
+   * The pen is re-asserted afterwards. On a client that DOES implement the
+   * convention (CCGMS, Novaterm, PyCGMS) that byte is a no-op, and it is a
+   * no-op on the oracle too. On a client that does NOT (SyncTERM's C64 mode,
+   * sblendorio/petscii-bbs) the `$02` is inert and the colour byte lands as a
+   * PEN change the oracle does not know about - the re-assert puts the ink
+   * back where both sides agree it is.
+   */
   private restoreScreenBg(out: number[]): void {
-    if (this.screenBg === null || this.machine.state.background === this.screenBg) return;
+    if (this.machine.state.background === this.screenBg) return;
     this.emit(out, 0x02);
     this.emit(out, vicColorToPetscii(this.screenBg));
+    this.emit(out, vicColorToPetscii(this.machine.state.pen));
   }
 
   private setReverse(on: boolean, out: number[]): void {
@@ -347,7 +363,19 @@ export class AnsiToPetsciiTransducer {
     if (next === '7') { const st = this.machine.state; this.savedCursor = { x: st.cursorX, y: st.cursorY }; return 2; }
     if (next === '8') { if (this.savedCursor) this.moveTo(this.savedCursor.x, this.savedCursor.y, out); return 2; }
     if (next === 'M') { const st = this.machine.state; this.moveTo(st.cursorX, Math.max(0, st.cursorY - 1), out); return 2; }
-    if (next === 'c') { this.pendingWrap = false; this.emit(out, 0x93); this.bold = false; this.ansiReverse = false; return 2; }
+    if (next === 'c') {
+      // RIS: full reset. The screen background goes back to the terminal
+      // default (black) NOW - deferring it to the next $0E would black the
+      // screen at an arbitrary later moment, or never, if the bank never flips.
+      this.pendingWrap = false;
+      this.emit(out, 0x93);
+      this.bold = false;
+      this.ansiReverse = false;
+      this.ansiBg = null;
+      this.screenBg = 0;
+      this.restoreScreenBg(out);
+      return 2;
+    }
     return 2; // ESC =, ESC >, ESC D, ESC E, ...: no C64 equivalent, dropped
   }
 
@@ -507,14 +535,19 @@ export class AnsiToPetsciiTransducer {
    * A full clear is also the one moment a background belongs on a C64: the
    * ANSI background in force is committed as the SCREEN background and sent
    * as CCGMS `$02 <colour>` right after the `$93` (per-cell background stays
-   * dropped - plan decision 5). With no ANSI background in force nothing is
-   * sent: a bare `ESC[2J` must not repaint the screen black behind art that
-   * already set its own backdrop.
+   * dropped - plan decision 5).
+   *
+   * No ANSI background in force means SGR 0 / SGR 49, i.e. the BBS asking for
+   * the TERMINAL DEFAULT - black on CCGMS - so the commit is black, not "leave
+   * it alone". Leaving it alone stranded a previous clear's colour on the
+   * screen with nothing tracking it, and the next unrelated `$0E` then blacked
+   * the screen mid-art. `restoreScreenBg` emits nothing when the screen is
+   * already black, so the common case still costs zero bytes.
    */
   private clearKeepingCursor(out: number[], x: number, y: number): void {
     this.pendingWrap = false;
     this.emit(out, 0x93);
-    this.screenBg = this.ansiBg;
+    this.screenBg = this.ansiBg ?? 0;
     this.restoreScreenBg(out);
     this.moveTo(x, y, out);
   }
