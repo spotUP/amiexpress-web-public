@@ -342,6 +342,16 @@ class ApiClient {
     return this.request<ApiResponse>(`${API_BASE}/screens`);
   }
 
+  /** Every MCI code, with how many times this board writes each one. */
+  async getMciCatalog() {
+    return this.request<ApiResponse>(`${API_BASE}/screens/mci/catalog`);
+  }
+
+  /** What a code's argument can point at: commands, screens, doors or menus. */
+  async getMciTargets(kind: 'command' | 'screen' | 'door' | 'menu') {
+    return this.request<ApiResponse>(`${API_BASE}/screens/mci/targets?kind=${kind}`);
+  }
+
   async getScreenFile(filePath: string) {
     return this.request<ApiResponse>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`);
   }

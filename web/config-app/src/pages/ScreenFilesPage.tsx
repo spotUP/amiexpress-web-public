@@ -17,6 +17,10 @@ import { Modal } from '../components/ui/Modal';
 import { screenToCanvas } from './screen-bytes';
 import { createSurface, type EditorSurface } from './screen-editor-state';
 import {
+  groupMciCodes, filterMciCodes, describeMciUsage,
+  type MciCodeShape, type MciFamilyShape,
+} from './screen-mci';
+import {
   toScreenRows, filterScreenRows,
   type ScreenIndexShape, type ScreenRow, type ScreenIndexEntryShape,
   type ScopeResolutionShape, type ConferenceShape, type ScreenReaderShape,
@@ -25,6 +29,7 @@ import {
 
 /** Stable fallback: a fresh array each render invalidates the row model. */
 const EMPTY_ROWS: ScreenRow[] = [];
+const EMPTY_MCI: MciCodeShape[] = [];
 
 /**
  * What a scope is called, in the board's own words.
@@ -111,6 +116,20 @@ export function ScreenFilesPage() {
     queryKey: ['screen-index'],
     // The routes answer `{ success, data, ... }`; every admin page reads `.data`.
     queryFn: async () => (await apiClient.getScreenIndex()).data as ScreenIndexShape,
+  });
+
+  /**
+   * The MCI codes. Loaded with the page rather than on the tab, because the
+   * count beside each code comes from the same index the tables are drawn
+   * from and the answer is cached either way.
+   */
+  const { data: mci } = useQuery({
+    queryKey: ['mci-catalog'],
+    queryFn: async () => (await apiClient.getMciCatalog()).data as {
+      families: MciFamilyShape[];
+      codes: MciCodeShape[];
+      enablingTilde: { uses: number; files: number };
+    },
   });
 
   const { data: sharedDirs } = useQuery({
@@ -348,6 +367,53 @@ export function ScreenFilesPage() {
       showError(message);
     }
   };
+
+  /**
+   * The code list, in the catalog's family order and filtered by the same
+   * search box as everything else on this page.
+   */
+  const mciSections = useMemo(
+    () => groupMciCodes(filterMciCodes(mci?.codes ?? EMPTY_MCI, query), mci?.families ?? []),
+    [mci, query],
+  );
+
+  const mciColumns: DataTableColumn<MciCodeShape>[] = [
+    {
+      id: 'code',
+      header: 'Code',
+      value: row => row.code,
+      sortable: true,
+      mono: true,
+      // The tilde and the terminator ARE part of the answer: `~CL.` written as
+      // `~CL|` prints the letters "CL" at the caller.
+      cell: (row: MciCodeShape) =>
+        `${row.takesWidth ? '~[width]' : '~'}${row.code}`
+        + (row.argument.kind === 'none' ? '' : `<${row.argument.label ?? row.argument.kind}>`)
+        + row.terminator,
+    },
+    { id: 'summary', header: 'What it does', value: row => row.summary, sortable: true },
+    {
+      id: 'uses',
+      header: 'On this board',
+      value: row => row.uses,
+      align: 'right',
+      sortable: true,
+      cell: (row: MciCodeShape) => describeMciUsage(row),
+    },
+    {
+      // Where the code comes from, NOT the line it is implemented on: the
+      // admin is a sysop's tool, and a file:line citation on screen was
+      // reported once as comments left on the page.
+      id: 'source',
+      header: 'Comes from',
+      value: row => (row.aliasOf ? `alias ${row.aliasOf}` : row.source === 'web' ? 'web' : 'amiexpress'),
+      sortable: true,
+      cell: (row: MciCodeShape) =>
+        row.aliasOf
+          ? `Another way to write ~${row.aliasOf}`
+          : row.source === 'web' ? 'This board only' : 'AmiExpress',
+    },
+  ];
 
   const columns: DataTableColumn<ScreenRow>[] = [
     {
@@ -608,6 +674,38 @@ export function ScreenFilesPage() {
       id: 'board',
       label: `Board screens ${byScope.global.length}`,
       render: () => screenTable(byScope.global),
+    },
+    {
+      id: 'codes',
+      label: `Codes ${mci?.codes.length ?? 0}`,
+      render: () => (
+        <div className="space-y-3 text-sm">
+          <p className="text-content-secondary">
+            A screen file is a program: these are every code it can carry. The
+            board runs all of them - the count beside each one says how many of
+            YOUR files use it, and most of this list has never been tried here.
+          </p>
+          <p className="text-content-secondary">
+            None of them run unless the file's FIRST line starts with a tilde.
+            {' '}
+            {mci ? `${mci.enablingTilde.files} of this board's files carry it.` : ''}
+          </p>
+          {mciSections.length === 0 && (
+            <p className="text-content-secondary">No code matches that.</p>
+          )}
+          {mciSections.map(section => (
+            <section key={section.family} className="space-y-1">
+              <h3 className="text-content-primary">{section.label}</h3>
+              <DataTable
+                columns={mciColumns}
+                rows={section.codes}
+                getRowId={item => item.code}
+                emptyMessage="No code matches that."
+              />
+            </section>
+          ))}
+        </div>
+      ),
     },
     {
       id: 'unused',
