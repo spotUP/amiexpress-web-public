@@ -93,3 +93,50 @@ it('names the stage that has to satisfy them, so the reason survives', () => {
   expect(dockerfile).toContain('sdk/engines/ui/ansi-editor');
   expect(dockerfile).toContain('web/backend/src/screens');
 });
+
+/**
+ * The backend stage needs the SDK too, for the same reason.
+ *
+ * Its SDK usages were runtime `require()` calls, which tsc never resolves - so
+ * the stage built fine without the SDK anywhere near it. The PETSCII work
+ * added static imports, which ARE typechecked, and the deploy died with
+ * "Cannot find module '@amiexpress/bbs-door-sdk/petscii'" while every local
+ * build stayed green, because on a developer's machine ../../sdk is just
+ * there.
+ */
+describe('the backend image stage', () => {
+  const backendSources = (dir: string): string[] => {
+    const out: string[] = [];
+    const walk = (current: string) => {
+      for (const entry of require('fs').readdirSync(current, { withFileTypes: true })) {
+        const full = require('path').join(current, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (/\.ts$/.test(entry.name)) out.push(full);
+      }
+    };
+    walk(dir);
+    return out;
+  };
+
+  it('carries the SDK whenever the backend imports it statically', () => {
+    const src = path.join(REPO, 'web', 'backend', 'src');
+    const staticImport = /^\s*import\s[^;]*from\s+'@amiexpress\/bbs-door-sdk[^']*'/m;
+
+    const importers = backendSources(src)
+      .filter(file => staticImport.test(fs.readFileSync(file, 'utf8')))
+      .map(file => file.slice(REPO.length + 1));
+
+    if (importers.length === 0) return;
+
+    const dockerfile = fs.readFileSync(path.join(REPO, 'Dockerfile'), 'utf8');
+    const stage = dockerfile.slice(dockerfile.indexOf('FROM node:20-alpine AS backend-builder'));
+    // Anchor on the RUN line: the words "npm ci" also appear in the comment
+    // that explains why the copy has to come first.
+    const beforeInstall = stage.slice(0, stage.indexOf('RUN npm ci'));
+
+    // jest's expect takes one argument, unlike vitest's - the explanation goes
+    // in the assertion itself.
+    const copied = /COPY --from=sdk-builder \/app\/sdk/.test(beforeInstall);
+    expect({ copied, importers }).toEqual({ copied: true, importers });
+  });
+});

@@ -193,6 +193,17 @@ RUN set -eux; \
     for p in sz rz sb rb sx rx; do ln -sf "/usr/local/bin/l$p" "/usr/local/bin/$p"; done; \
     /usr/local/bin/sz --version
 
+# The SDK, built, before npm ci resolves `file:../../sdk`.
+#
+# The backend's SDK imports used to be runtime `require()` calls, which tsc
+# never resolves - so this stage could build without the SDK present at all.
+# The PETSCII work introduced static `import ... from
+# '@amiexpress/bbs-door-sdk/petscii'`, which IS typechecked, and the deploy
+# died with "Cannot find module '@amiexpress/bbs-door-sdk/petscii'" while every
+# local build stayed green - on a developer's machine ../../sdk is simply
+# there.
+COPY --from=sdk-builder /app/sdk /app/sdk
+
 WORKDIR /app/web/backend
 
 COPY web/backend/package*.json ./
