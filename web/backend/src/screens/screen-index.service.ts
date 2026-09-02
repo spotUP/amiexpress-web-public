@@ -21,7 +21,7 @@ import {
   ScreenDirType, SCREEN_DIR_MAP, getScreenDirType, getScreenFileName,
   resolveNodeScreenDir, screenSearchLocations, isScreenFile,
 } from './screen-resolution';
-import { countMciCodes } from './mci-catalog';
+import { countMciCodes, scanMciCodes } from './mci-catalog';
 import { readScreenFlags } from './screen-flags';
 import { parseMciReferences, type MciReference } from './mci-references';
 import { commandLocationIsLive, loadCommandFromInfo } from '../utils/amiga-command-parser.util';
@@ -120,6 +120,21 @@ export interface ScreenFileFacts {
    * listing a hundred codes with nothing to tell them apart.
    */
   mciCodes: Record<string, number>;
+  /**
+   * Nothing here but the codes the board runs - no art at all.
+   *
+   * A screen is a program, and 258 of this board's files are pure plumbing:
+   * `AWAITSCREEN.TXT` is `~CC_V-AWAIT|`, `LOGON10.TXT` is four includes and a
+   * pause. Strip the codes, strip the escapes, strip the whitespace, and
+   * nothing printable is left. An artist should never open one - the art they
+   * are looking for is in the file those codes PULL IN.
+   *
+   * Flagged, never hidden by the index. The manager decides what to show; a
+   * file the index refuses to report is a file a sysop cannot find, and this
+   * board has been told once already that its live screens were read by
+   * nothing.
+   */
+  codesOnly: boolean;
 }
 
 export type ScreenProblem = 'empty' | 'colour-codes-without-escape';
@@ -367,6 +382,26 @@ function classifyGenerated(
   }
 
   return undefined;
+}
+
+/**
+ * Is there anything in this file but codes?
+ *
+ * Take out every MCI code, then every ANSI escape, then all whitespace and
+ * control bytes. What remains is what a caller would SEE drawn by this file
+ * itself - and for a screen that only pulls other screens in, that is nothing.
+ */
+export function isCodesOnly(text: string): boolean {
+  let rest = text;
+  // Back to front, so an earlier removal never shifts a later offset.
+  for (const code of scanMciCodes(text).sort((a, b) => b.at - a.at)) {
+    rest = rest.slice(0, code.at) + rest.slice(code.at + code.text.length);
+  }
+
+  return rest
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+    .replace(/[\s\x00-\x1f\x7f]/g, '')
+    .length === 0;
 }
 
 function fileProblems(buf: Buffer, format: ScreenFormat): ScreenProblem[] {
@@ -688,6 +723,15 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
     ? []
     : resolveRefs(baseDir, parseMciReferences(buf.toString('latin1')));
 
+  /*
+   * Measured on the bytes already in hand, beside the MCI census. Only for a
+   * text-shaped screen: RIP and PETSCII carry their own conventions and
+   * "strip the escapes" means nothing in them.
+   */
+  const codesOnly = (format === 'ansi' || format === 'text') && buf.length > 0
+    ? isCodesOnly(buf.toString('latin1'))
+    : false;
+
   const facts: ScreenFileFacts = {
     // Readers are filled in by buildScreenIndex, which is the only place that
     // knows which nodes and conferences exist and what each one reads.
@@ -697,6 +741,7 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
     generated: classifyGenerated(path.relative(baseDir, absPath), buf, baseDir),
     // latin1: an Amiga high-bit byte is not UTF-8, and a code is ASCII either way.
     mciCodes: countMciCodes(buf.toString('latin1')),
+    codesOnly,
     relPath: path.relative(baseDir, absPath),
     bytes: buf.length,
     format,

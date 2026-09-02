@@ -29,7 +29,7 @@ import {
   toScreenRows, filterScreenRows,
   type ScreenIndexShape, type ScreenRow, type ScreenIndexEntryShape,
   type ScopeResolutionShape, type ConferenceShape, type ScreenReaderShape,
-  type MciReferenceShape, type ScreenFileShape, describeReader, describeProblem,
+  type MciReferenceShape, type ScreenFileShape, describeReader, describeProblem, isArt,
 } from './screen-index-view';
 
 /** Stable fallback: a fresh array each render invalidates the row model. */
@@ -761,7 +761,12 @@ export function ScreenFilesPage() {
   const screenTable = (rows: ScreenRow[]) => (
     <DataTable
       columns={columns}
-      rows={rows}
+      /*
+       * The same rule the gallery uses, so a screen cannot be art in one tab
+       * and plumbing in the next. Asked for directly: "so the ansi artists
+       * only see the screens they should touch".
+       */
+      rows={showGenerated ? rows : rows.filter(row => row.hasArt)}
       getRowId={row => row.screen}
       isLoading={isLoading}
       error={error as Error | null}
@@ -785,7 +790,7 @@ export function ScreenFilesPage() {
 
     const drawable = Object.values(data.files)
       .filter(file => file.format === 'ansi' || file.format === 'text')
-      .filter(file => showGenerated || !file.generated);
+      .filter(file => showGenerated || isArt(file));   // drawable-only is applied above
 
     /**
      * One card per piece of ART, not per file.
@@ -845,14 +850,6 @@ export function ScreenFilesPage() {
               Every screen and bulletin on the board, drawn - identical copies
               shown once. Click one to open it; thumbnails load as you scroll.
             </p>
-            <label className="flex items-center gap-2 text-sm text-content-secondary">
-              <input
-                type="checkbox"
-                checked={showGenerated}
-                onChange={e => setShowGenerated(e.target.checked)}
-              />
-              Show leftovers and files the board writes
-            </label>
           </div>
           <ScreenGallery
             isLoading={isLoading}
@@ -986,13 +983,29 @@ export function ScreenFilesPage() {
         )}
       </header>
 
-      <input
-        type="text"
-        value={query}
-        onChange={e => setQuery(e.target.value)}
-        placeholder="Search screens"
-        className="input-field w-full max-w-sm"
-      />
+      <div className="flex flex-wrap items-center gap-4">
+        <input
+          type="text"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Search screens"
+          className="input-field w-full max-w-sm"
+        />
+        {/*
+          Page-wide, not per tab. The filter applies to the gallery AND the
+          three screen tables, so a control that lived in the gallery left a
+          sysop on the Node tab with rows hidden and no way to say otherwise.
+        */}
+        <label className="flex items-center gap-2 text-sm text-content-secondary">
+          <input
+            type="checkbox"
+            checked={showGenerated}
+            onChange={e => setShowGenerated(e.target.checked)}
+          />
+          Show plumbing: screens that are only codes, leftovers, and files the
+          board writes
+        </label>
+      </div>
 
       <div className="flex items-center gap-4 text-sm">
         <a className="inline-flex items-center gap-1 underline" href="/api/screens/export?scope=all">

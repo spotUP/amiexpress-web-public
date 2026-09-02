@@ -56,6 +56,8 @@ export interface ScreenFileShape {
   sauce?: SauceShape;
   /** 'backup' or 'runtime' when a designer would never edit this file. */
   generated?: 'backup' | 'runtime';
+  /** Nothing but the codes the board runs - plumbing, not art. */
+  codesOnly?: boolean;
   /** What is wrong with the bytes: 'empty', 'colour-codes-without-escape'. */
   problems?: string[];
 }
@@ -134,6 +136,16 @@ export interface ScreenRow {
    * nowhere, or only to RIP and PETSCII, which this preview cannot draw.
    */
   previewPath: string | null;
+  /**
+   * Whether a person who draws would ever open this.
+   *
+   * False ONLY when every file behind the screen is known to be plumbing -
+   * all leftovers, all written by the board, or all pure MCI. A screen that
+   * resolves to nothing has no file to judge, and it stays visible: a missing
+   * screen is the single most important row on the page, and the first
+   * version of this filter hid exactly those.
+   */
+  hasArt: boolean;
 }
 
 const SCOPE_LABELS: Record<ScreenIndexEntryShape['dirType'], string> = {
@@ -141,6 +153,22 @@ const SCOPE_LABELS: Record<ScreenIndexEntryShape['dirType'], string> = {
   conf: 'conference scope',
   global: 'board root',
 };
+
+/**
+ * A file an artist would actually open.
+ *
+ * Not a leftover, not written by the board, not empty, and not pure plumbing.
+ * Asked for in those terms - "so the ansi artists only see the screens they
+ * should touch" - after a gallery of 669 files buried 400 pieces of art among
+ * 258 files of nothing but codes.
+ */
+export function isArt(file: ScreenFileShape): boolean {
+  // Format is deliberately NOT part of this. A RIP screen is somebody's art
+  // even though this preview cannot draw it, and filtering it out of the
+  // tables would put it beyond reach entirely. The gallery narrows to the
+  // formats it can DRAW; that is a different question from what is art.
+  return !file.generated && !file.codesOnly && file.bytes > 0;
+}
 
 export function toScreenRows(index: ScreenIndexShape): ScreenRow[] {
   return index.screens.map(entry => {
@@ -164,6 +192,7 @@ export function toScreenRows(index: ScreenIndexShape): ScreenRow[] {
       ),
       previewPath:
         files.find(f => f.format === 'ansi' || f.format === 'text')?.relPath ?? null,
+      hasArt: files.length === 0 || files.some(isArt),
     };
   });
 }
