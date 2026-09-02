@@ -81,3 +81,22 @@ export async function itFollowsTheTerminalWhenAltEnterIsPressed(): Promise<void>
     assert.strictEqual(modes.position.top, 5 + Math.floor((60 - 24) / 2));
   } finally { h.destroy(); }
 }
+
+/**
+ * And the ground it is drawn on is a ground, not a frame.
+ *
+ * "outer border broken" (2026-09-02): the full-screen background box gets no
+ * border key, and createBox's Panel default is a line - so the clearing box
+ * drew a rectangle around the entire terminal, one row and one column outside
+ * everything else.
+ */
+export async function theFullScreenBackgroundIsAGroundNotAFrame(): Promise<void> {
+  const h = await open(80, 25);
+  try {
+    const background = h.boxes().find((c: any) =>
+      c.options?.width === '100%' && c.options?.height === '100%');
+    assert.ok(background, 'the menu paints a full-screen background');
+    assert.ok(!background.border,
+      'it clears the screen; it must not outline the whole terminal');
+  } finally { h.destroy(); }
+}

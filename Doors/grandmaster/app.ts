@@ -1132,6 +1132,10 @@ export class GrandmasterApp {
     // Clear screen and add background
     this.screen.children.forEach(child => child.destroy());
     const background = createBox({
+      // A ground, not a frame: createBox draws a line border when no
+      // border key is given (Panel's default), which outlines the whole
+      // terminal.
+      border: undefined,
       parent: this.screen,
       top: 0,
       left: 0,

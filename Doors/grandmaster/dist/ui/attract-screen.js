@@ -84,6 +84,10 @@ class AttractScreen {
         this.screen.alloc();
         // Main container (for boot logo) - full screen black background
         this.mainBox = (0, blessed_helpers_1.createBox)({
+            // A ground, not a frame: createBox draws a line border when no
+            // border key is given (Panel's default), which outlines the whole
+            // terminal.
+            border: undefined,
             parent: this.screen,
             top: 0,
             left: 0,

@@ -13,6 +13,8 @@ export declare class LeaderboardScreen {
     private screen;
     private highScores;
     private sounds;
+    /** Removes the resize listener when the screen closes. */
+    private onClose?;
     private currentMode;
     private playerName;
     constructor(screen: Screen, highScores: HighScoreManager, sounds: SoundEngine, playerName: string);

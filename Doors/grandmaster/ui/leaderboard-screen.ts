@@ -14,6 +14,9 @@ import type { GameMode } from '../core/types';
  * Leaderboard screen
  */
 export class LeaderboardScreen {
+  /** Removes the resize listener when the screen closes. */
+  private onClose?: () => void;
+
   private currentMode: GameMode = 'master';
   private playerName: string;
 
@@ -43,6 +46,7 @@ export class LeaderboardScreen {
         if (key.name === 'escape' || key.name === 'q') {
           this.screen.unkey(['escape', 'q'], keyHandler);
           this.screen.unkey(['left', 'right', 'tab'], modeHandler);
+          this.onClose?.();
           this.sounds.playSfx('menu_select');
           resolve();
         }
@@ -61,6 +65,12 @@ export class LeaderboardScreen {
           this.render();
         }
       };
+
+      // Alt+Enter changes the room while the leaderboard is up; a
+      // composition measured once is right for one size only.
+      const onResize = () => this.render();
+      this.screen.on('resize', onResize);
+      this.onClose = () => this.screen.removeListener('resize', onResize);
 
       this.screen.key(['escape', 'q'], keyHandler);
       this.screen.key(['left', 'right', 'tab'], modeHandler);
@@ -92,13 +102,37 @@ export class LeaderboardScreen {
     // Clear screen
     this.screen.children.forEach(child => child.destroy());
 
+    // The composition is drawn from the terminal's CURRENT size.
+    //
+    // Every box here used to carry the numbers of an 80x24 screen - width 70
+    // and 76, left 2, top 6 and 20 - so on a terminal Alt+Enter had widened
+    // the whole leaderboard sat in the top-left corner of a much larger
+    // screen (reported 2026-09-02). Nothing re-ran on resize either; see the
+    // listener at the end of show().
+    const screenWidth = Number(this.screen.width) || 80;
+    const screenHeight = Number(this.screen.height) || 24;
+    const panelWidth = Math.max(40, Math.min(screenWidth - 4, 110));
+    const panelLeft = Math.max(0, Math.floor((screenWidth - panelWidth) / 2));
+    const headerWidth = Math.min(panelWidth, 70);
+
+    // Title 3, tabs 3, personal best 3, instructions 1: what is left is the
+    // table's.
+    const scoresTop = 6;
+    const personalHeight = 3;
+    const scoresHeight = Math.max(6, screenHeight - scoresTop - personalHeight - 2);
+    const personalTop = scoresTop + scoresHeight;
+
     // Title
     const title = createBox({
       parent: this.screen,
       top: 0,
       left: 'center',
-      width: 70,
+      width: headerWidth,
       height: 3,
+      // Text, not a frame: createBox draws a line border when no border key
+      // is given, which is where the boxes around the title, the tabs and the
+      // hint line came from.
+      border: undefined,
       content: '{bold}{yellow-fg}═══ LEADERBOARDS ═══{/yellow-fg}{/bold}',
     });
 
@@ -108,8 +142,9 @@ export class LeaderboardScreen {
       parent: this.screen,
       top: 3,
       left: 'center',
-      width: 70,
+      width: headerWidth,
       height: 3,
+      border: undefined,
       content: modeTabs,
     });
 
@@ -118,10 +153,10 @@ export class LeaderboardScreen {
     const scoresContent = this.renderScoresTable(topScores);
     const scoresBox = createBox({
       parent: this.screen,
-      top: 6,
-      left: 2,
-      width: 76,
-      height: 14,
+      top: scoresTop,
+      left: panelLeft,
+      width: panelWidth,
+      height: scoresHeight,
       border: { type: 'line' },
       style: { border: { fg: 'cyan' } },
       label: ` Top 10 - ${this.getModeName(this.currentMode)} `,
@@ -134,10 +169,10 @@ export class LeaderboardScreen {
     const personalContent = this.renderPersonalBest(personalBest);
     const personalBox = createBox({
       parent: this.screen,
-      top: 20,
-      left: 2,
-      width: 76,
-      height: 3,
+      top: personalTop,
+      left: panelLeft,
+      width: panelWidth,
+      height: personalHeight,
       border: { type: 'line' },
       style: { border: { fg: 'magenta' } },
       label: ' Your Best ',
@@ -150,8 +185,9 @@ export class LeaderboardScreen {
       parent: this.screen,
       bottom: 0,
       left: 'center',
-      width: 70,
+      width: headerWidth,
       height: 1,
+      border: undefined,
       content: '{gray-fg}← → / TAB: Change Mode  |  Q/ESC: Back{/gray-fg}',
     });
 
