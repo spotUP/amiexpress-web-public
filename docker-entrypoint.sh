@@ -298,24 +298,38 @@ sync_image_owned() {
 # no ConfConfig.info at all, this is a genuine first run and the image's list is
 # the only truth there is.
 
-# Tooltypes are NUL-separated strings inside the icon; splitting on NUL gives
-# one per line without needing a parser in shell.
+# Tooltypes are NUL-separated strings inside the icon, so splitting on NUL
+# gives roughly one per line - but each string is stored with a LENGTH BYTE
+# immediately in front of it, and that byte survives the split. A real
+# ConfConfig.info reads `\026LOCATION.1=BBS:Conf2/` and `\tNCONFS=5`, so a
+# pattern anchored with ^ matches nothing at all. It matched a hand-built
+# fixture, shipped, and read zero conferences on the live board. Everything
+# here matches the KEY wherever it sits in the line.
 conf_tooltype_lines() {
-    tr '\000' '\n' < "$BBS_DATA_DIR/ConfConfig.info" 2>/dev/null
+    # LC_ALL=C because the input is BINARY: a UTF-8 locale makes tr refuse the
+    # file outright ("Illegal byte sequence" on the macOS dev host), and a
+    # function that reads nothing answers "no conferences" without saying so.
+    LC_ALL=C tr '\000' '\n' < "$BBS_DATA_DIR/ConfConfig.info" 2>/dev/null
 }
 
+# Both readers run in a C locale for the same reason tr does: sed refuses a
+# binary line outright in UTF-8 ("RE error: illegal byte sequence"), and a
+# reader that returns nothing looks exactly like a board with no conferences.
+# The subshell keeps the locale from leaking into the rest of the entrypoint.
 conf_declared_count() {
-    conf_tooltype_lines | sed -n 's/^NCONFS=\([0-9][0-9]*\).*/\1/p' | head -1
+    ( LC_ALL=C; export LC_ALL
+      conf_tooltype_lines | sed -n 's/.*NCONFS=\([0-9][0-9]*\).*/\1/p' | head -1 )
 }
 
-# `LOCATION.5=BBS:Conf12/` -> `Conf12`
+# `\026LOCATION.5=BBS:Conf12/` -> `Conf12`
 conf_referenced_dirs() {
-    conf_tooltype_lines \
-        | sed -n 's/^LOCATION\.[0-9][0-9]*=//p' \
+    ( LC_ALL=C; export LC_ALL
+      conf_tooltype_lines \
+        | sed -n 's/.*LOCATION\.[0-9][0-9]*=//p' \
         | sed 's/[[:space:]]*$//' \
         | sed 's|[/\\]*$||' \
         | sed 's/^.*://' \
-        | sed 's|.*/||'
+        | sed 's|.*/||' )
 }
 
 # 0 (true) when this Conf<n> directory or Conf<n>.info icon still belongs to

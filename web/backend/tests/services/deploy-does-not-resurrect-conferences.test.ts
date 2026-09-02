@@ -37,14 +37,30 @@ function extractFunctions(): string {
 
 let root: string;
 
-/** A ConfConfig.info as the board writes it: tooltypes, NUL-separated. */
+/**
+ * A ConfConfig.info shaped the way a real Amiga icon is.
+ *
+ * This matters more than it looks. Each tooltype is stored with a LENGTH BYTE
+ * in front of it, so splitting the file on NUL yields `\x16LOCATION.1=BBS:Conf2/`
+ * and `\tNCONFS=5` - never a line that starts with the key. The first version
+ * of this helper wrote bare NUL-separated strings, the entrypoint's patterns
+ * were anchored with ^, both agreed, and the guard read ZERO conferences from
+ * the live board's real file. Verified against the bytes with `od -c` on the
+ * board, which is the only reason it was caught.
+ */
 function writeConfConfig(entries: { name: string; location: string }[]): void {
   const strings = [`NCONFS=${entries.length}`];
   entries.forEach((entry, i) => {
     strings.push(`NAME.${i + 1}=${entry.name}`);
     strings.push(`LOCATION.${i + 1}=${entry.location}`);
   });
-  const body = Buffer.concat(strings.map(s => Buffer.concat([Buffer.from(s, 'latin1'), Buffer.from([0])])));
+
+  const body = Buffer.concat(strings.map(text => Buffer.concat([
+    // The length byte the icon format writes, and the NUL that ends the string.
+    Buffer.from([Math.min(255, text.length + 1)]),
+    Buffer.from(text, 'latin1'),
+    Buffer.from([0]),
+  ])));
   fs.writeFileSync(path.join(root, 'volume', 'ConfConfig.info'), body);
 }
 
@@ -101,6 +117,28 @@ describe('what a deploy is allowed to seed', () => {
   test('a non-conference directory is never blocked by this rule', () => {
     expect(ask('Node7')).toBe(true);
     expect(ask('Screens')).toBe(true);
+  });
+});
+
+describe("the board's own ConfConfig.info", () => {
+  test('parses - the repository ships one, and it is the real format', () => {
+    // Not a fixture: the file this repo deploys. If the patterns ever stop
+    // reading it, they are wrong however green the synthetic cases are.
+    const real = path.join(__dirname, '..', '..', '..', '..', 'ConfConfig.info');
+    if (!fs.existsSync(real)) return;
+
+    fs.copyFileSync(real, path.join(root, 'volume', 'ConfConfig.info'));
+
+    const script = `
+      BBS_DATA_DIR="${root}/volume"
+      ${extractFunctions()}
+      echo "count=$(conf_declared_count)"
+      echo "dirs=$(conf_referenced_dirs | tr '\\n' ' ')"
+    `;
+    const out = execFileSync('sh', ['-c', script], { encoding: 'utf8' });
+
+    expect(out).toMatch(/count=[1-9][0-9]*/);
+    expect(out).toMatch(/dirs=.*Conf[0-9]/);
   });
 });
 
