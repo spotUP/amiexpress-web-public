@@ -58,6 +58,9 @@ class UIManager {
     buildTopBar(callbacks) {
         const { focusLobby, focusTable, showProfileWindow, showLeaderboardWindow, showAchievementsWindow, showBulletinsWindow, exitDoor, runAction } = callbacks;
         this.topBar = (0, blessed_helpers_1.createBox)({
+            // Panel adds a line border unless the key is present; these are
+            // bars and content areas, and the window around them carries the frame.
+            border: undefined,
             parent: this.desktop,
             top: 0,
             left: 0,
@@ -72,6 +75,9 @@ class UIManager {
             content: '',
         });
         this.topInfoBar = (0, blessed_helpers_1.createBox)({
+            // Panel adds a line border unless the key is present; these are
+            // bars and content areas, and the window around them carries the frame.
+            border: undefined,
             parent: this.desktop,
             top: 0,
             left: 0,
@@ -129,6 +135,9 @@ class UIManager {
         let left = 1;
         menuDefs.forEach((menu, index) => {
             const button = (0, blessed_helpers_1.createBox)({
+                // Panel adds a line border unless the key is present; these are
+                // bars and content areas, and the window around them carries the frame.
+                border: undefined,
                 parent: this.topBar,
                 top: 0,
                 left,
@@ -151,6 +160,9 @@ class UIManager {
     }
     buildStatusBar() {
         this.statusBar = (0, blessed_helpers_1.createBox)({
+            // Panel adds a line border unless the key is present; these are
+            // bars and content areas, and the window around them carries the frame.
+            border: undefined,
             parent: this.desktop,
             bottom: 0,
             left: 0,
@@ -217,6 +229,9 @@ class UIManager {
         let tableListMap = {};
         // Help text at top
         const helpBar = (0, blessed_helpers_1.createBox)({
+            // Panel adds a line border unless the key is present; these are
+            // bars and content areas, and the window around them carries the frame.
+            border: undefined,
             parent: this.lobbyWindow,
             top: 0,
             left: 0,
@@ -226,7 +241,7 @@ class UIManager {
             mouse: false,
             clickable: false,
             style: { fg: 'yellow', bg: 'blue' },
-            content: ' J:Join  O:Observe  C:Create ',
+            content: ' ENTER:Join  O:Observe  C:Create ',
         });
         // Use SDK ListTable for clean table display
         this.lobbyList = new blessed_1.ListTable({
@@ -252,11 +267,24 @@ class UIManager {
                 style: { fg: constants_1.UI_THEME.accent },
             },
         });
+        // The highlight moving is not a decision: it keeps the Table panel
+        // showing whatever row the cursor is on.
+        this.lobbyList.on('select item', (_, index) => {
+            onLobbySelect(index, tableListMap);
+        });
+        // ENTER (or a click) IS the decision. It used to be the J key, which is
+        // also this widget's vi-style "down", so the cursor moved and nothing
+        // joined ("the selected row moves down when i press j to join it doesnt
+        // join", 2026-09-02).
         this.lobbyList.on('select', (_, index) => {
             onLobbySelect(index, tableListMap);
+            runAction(() => joinSelectedTable());
         });
         // Action bar at bottom with clearer instructions
         this.lobbyActions = (0, blessed_helpers_1.createBox)({
+            // Panel adds a line border unless the key is present; these are
+            // bars and content areas, and the window around them carries the frame.
+            border: undefined,
             parent: this.lobbyWindow,
             bottom: 0,
             left: 0,
@@ -270,6 +298,9 @@ class UIManager {
         });
         // Use SDK box instead of blessed.scrollabletext
         this.tableContent = (0, blessed_helpers_1.createBox)({
+            // Panel adds a line border unless the key is present; these are
+            // bars and content areas, and the window around them carries the frame.
+            border: undefined,
             parent: this.tableWindow,
             top: 1,
             left: 1,
@@ -285,6 +316,9 @@ class UIManager {
             content: 'Select a table to view details.',
         });
         this.tableActions = (0, blessed_helpers_1.createBox)({
+            // Panel adds a line border unless the key is present; these are
+            // bars and content areas, and the window around them carries the frame.
+            border: undefined,
             parent: this.tableWindow,
             top: 0,
             left: 1,
@@ -393,6 +427,9 @@ class UIManager {
             style: panelStyle,
         });
         this.flopContent = (0, blessed_helpers_1.createBox)({
+            // Panel adds a line border unless the key is present; these are
+            // bars and content areas, and the window around them carries the frame.
+            border: undefined,
             parent: this.flopPanel,
             top: 1,
             left: 1,
@@ -455,6 +492,9 @@ class UIManager {
             style: panelStyle,
         });
         this.handContent = (0, blessed_helpers_1.createBox)({
+            // Panel adds a line border unless the key is present; these are
+            // bars and content areas, and the window around them carries the frame.
+            border: undefined,
             parent: this.handPanel,
             top: 1,
             left: 1,
@@ -640,6 +680,9 @@ class UIManager {
         // CRITICAL: Parent overlayShade to screen (not desktop) so it works in browser mode
         // Desktop gets hidden in browser mode, but overlayShade must always be visible
         this.overlayShade = (0, blessed_helpers_1.createBox)({
+            // Panel adds a line border unless the key is present; these are
+            // bars and content areas, and the window around them carries the frame.
+            border: undefined,
             parent: this.screen,
             top: 0,
             left: 0,

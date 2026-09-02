@@ -74,6 +74,9 @@ export class UIManager {
     const { focusLobby, focusTable, showProfileWindow, showLeaderboardWindow, showAchievementsWindow, showBulletinsWindow, exitDoor, runAction } = callbacks;
 
     this.topBar = createBox({
+      // Panel adds a line border unless the key is present; these are
+      // bars and content areas, and the window around them carries the frame.
+      border: undefined,
       parent: this.desktop,
       top: 0,
       left: 0,
@@ -89,6 +92,9 @@ export class UIManager {
     });
 
     this.topInfoBar = createBox({
+      // Panel adds a line border unless the key is present; these are
+      // bars and content areas, and the window around them carries the frame.
+      border: undefined,
       parent: this.desktop,
       top: 0,
       left: 0,
@@ -150,6 +156,9 @@ export class UIManager {
     let left = 1;
     menuDefs.forEach((menu, index) => {
       const button = createBox({
+      // Panel adds a line border unless the key is present; these are
+      // bars and content areas, and the window around them carries the frame.
+      border: undefined,
         parent: this.topBar,
         top: 0,
         left,
@@ -176,6 +185,9 @@ export class UIManager {
 
   buildStatusBar(): void {
     this.statusBar = createBox({
+      // Panel adds a line border unless the key is present; these are
+      // bars and content areas, and the window around them carries the frame.
+      border: undefined,
       parent: this.desktop,
       bottom: 0,
       left: 0,
@@ -258,6 +270,9 @@ export class UIManager {
 
     // Help text at top
     const helpBar = createBox({
+      // Panel adds a line border unless the key is present; these are
+      // bars and content areas, and the window around them carries the frame.
+      border: undefined,
       parent: this.lobbyWindow,
       top: 0,
       left: 0,
@@ -267,7 +282,7 @@ export class UIManager {
       mouse: false,
       clickable: false,
       style: { fg: 'yellow', bg: 'blue' },
-      content: ' J:Join  O:Observe  C:Create ',
+      content: ' ENTER:Join  O:Observe  C:Create ',
     });
 
     // Use SDK ListTable for clean table display
@@ -295,12 +310,26 @@ export class UIManager {
       } as any,
     }) as any;
 
+    // The highlight moving is not a decision: it keeps the Table panel
+    // showing whatever row the cursor is on.
+    this.lobbyList.on('select item', (_: any, index: number) => {
+      onLobbySelect(index, tableListMap);
+    });
+
+    // ENTER (or a click) IS the decision. It used to be the J key, which is
+    // also this widget's vi-style "down", so the cursor moved and nothing
+    // joined ("the selected row moves down when i press j to join it doesnt
+    // join", 2026-09-02).
     this.lobbyList.on('select', (_: any, index: number) => {
       onLobbySelect(index, tableListMap);
+      runAction(() => joinSelectedTable());
     });
 
     // Action bar at bottom with clearer instructions
     this.lobbyActions = createBox({
+      // Panel adds a line border unless the key is present; these are
+      // bars and content areas, and the window around them carries the frame.
+      border: undefined,
       parent: this.lobbyWindow,
       bottom: 0,
       left: 0,
@@ -315,6 +344,9 @@ export class UIManager {
 
     // Use SDK box instead of blessed.scrollabletext
     this.tableContent = createBox({
+      // Panel adds a line border unless the key is present; these are
+      // bars and content areas, and the window around them carries the frame.
+      border: undefined,
       parent: this.tableWindow,
       top: 1,
       left: 1,
@@ -331,6 +363,9 @@ export class UIManager {
     }) as any;
 
     this.tableActions = createBox({
+      // Panel adds a line border unless the key is present; these are
+      // bars and content areas, and the window around them carries the frame.
+      border: undefined,
       parent: this.tableWindow,
       top: 0,
       left: 1,
@@ -446,6 +481,9 @@ export class UIManager {
     });
 
     this.flopContent = createBox({
+      // Panel adds a line border unless the key is present; these are
+      // bars and content areas, and the window around them carries the frame.
+      border: undefined,
       parent: this.flopPanel,
       top: 1,
       left: 1,
@@ -512,6 +550,9 @@ export class UIManager {
     });
 
     this.handContent = createBox({
+      // Panel adds a line border unless the key is present; these are
+      // bars and content areas, and the window around them carries the frame.
+      border: undefined,
       parent: this.handPanel,
       top: 1,
       left: 1,
@@ -711,6 +752,9 @@ export class UIManager {
     // CRITICAL: Parent overlayShade to screen (not desktop) so it works in browser mode
     // Desktop gets hidden in browser mode, but overlayShade must always be visible
     this.overlayShade = createBox({
+      // Panel adds a line border unless the key is present; these are
+      // bars and content areas, and the window around them carries the frame.
+      border: undefined,
       parent: this.screen,
       top: 0,
       left: 0,

@@ -227,15 +227,9 @@ class CardLobbyApp {
                 this.runAction(() => this.manualRefresh());
             }
         });
-        this.screen.key(['j'], () => {
-            console.log('[KEY J] Pressed', { modalActive: this.modalActive, viewMode: this.viewMode, selectedTableId: this.selectedTableId });
-            // In browser mode, don't consume the event - let browser widget handle it
-            if (this.modalActive || this.viewMode !== 'lobby') {
-                console.log('[KEY J] Blocked:', { modalActive: this.modalActive, viewMode: this.viewMode });
-                return;
-            }
-            this.runAction(() => this.tableFlow.joinSelectedTable());
-        });
+        // J is NOT bound. The lobby list reads j/k as vi-style down/up, so a J
+        // that also joined moved the cursor and joined whatever the cursor had
+        // just left. ENTER joins, through the list's own 'select' event.
         this.screen.key(['o'], () => {
             if (this.modalActive || this.viewMode !== 'lobby')
                 return;
@@ -289,6 +283,9 @@ class CardLobbyApp {
             focusable: false,
             mouse: false,
             clickable: false,
+            // The desktop is the black ground the windows sit on, not a frame -
+            // Panel would give it a white line border for want of the key.
+            border: undefined,
             style: {
                 bg: 'black',
             },
@@ -977,7 +974,7 @@ class CardLobbyApp {
             rightLines.push(`Observers: ${table.observers.map((obs) => obs.username).join(', ')}`);
         }
         rightLines.push('');
-        rightLines.push('{yellow-fg}Actions{/}: J Join  O Observe');
+        rightLines.push('{yellow-fg}Actions{/}: ENTER Join  O Observe');
         rightLines.push('{yellow-fg}More{/}: C Create  R Refresh  F Filter');
         rightLines.push('{gray-fg}Auto-deal starts when enough players are seated.{/}');
         let lines = [];
