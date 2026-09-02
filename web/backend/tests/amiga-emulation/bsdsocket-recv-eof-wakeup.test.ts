@@ -178,11 +178,22 @@ describe('bsdsocket.library recv() at end of stream (regression)', () => {
         resolve((httpishServer!.address() as net.AddressInfo).port));
     });
 
+    // Answers, then RSTs - but the RST has to be provoked by the door's NEXT
+    // request, not by this write, and that is a portability fact rather than
+    // a style choice. Measured with a plain node client (node:22-alpine in
+    // docker, 10-20 runs per shape): on Linux a `sock.write(body)` followed
+    // by `sock.resetAndDestroy()` puts NO reset on the wire at all - the
+    // client sees a clean FIN, 20/20 in the same tick, 20/20 from the write
+    // callback, 20/20 from setImmediate, and 10/10 even with 64 KB, 1 MB or
+    // 4 MB of body still in flight. macOS answers ECONNRESET in every one of
+    // those, which is why this suite passed locally and failed in CI. A
+    // reset provoked by a later client write is the one shape both kernels
+    // deliver as ECONNRESET, 20/20 each.
     resetServer = net.createServer((sock) => {
       accepted.push(sock);
       sock.once('data', () => {
         sock.write(RESPONSE);
-        sock.resetAndDestroy();
+        sock.once('data', () => { sock.resetAndDestroy(); });
       });
     });
     resetPort = await new Promise<number>((resolve) => {
@@ -303,6 +314,7 @@ describe('bsdsocket.library recv() at end of stream (regression)', () => {
    */
   function driveDoorRequest(
     port: number,
+    pokeBeforeFinalRecv = false,
   ): { finalRecv: number; elapsedMs: number; body: string; errno: number } {
     const fake = new FakeEmulator();
     const lib = new BsdSocketLibrary(asEmu(fake));
@@ -325,6 +337,15 @@ describe('bsdsocket.library recv() at end of stream (regression)', () => {
     expect(firstLen).toBeGreaterThan(0);
     let body = '';
     for (let i = 0; i < firstLen; i++) body += String.fromCharCode(fake.readMemory(RECV_BUF + i));
+
+    // A door that keeps talking to a peer which has torn the connection down.
+    // Only used by the reset case: it is what makes the peer's RST reach this
+    // client on Linux at all (see resetServer). The send itself is expected
+    // to succeed - the socket is still open from this side.
+    if (pokeBeforeFinalRecv) {
+      const poke = 'GET /GlobalWall/api/WallItems?itemCount=11&pagenum=2 HTTP/1.0\r\n\r\n';
+      expect(callSend(lib, fake, fd, poke)).toBe(poke.length);
+    }
 
     // Second recv: the door asks for more, the peer has closed. THIS is the
     // call that used to spin for 30 seconds.
@@ -391,7 +412,7 @@ describe('bsdsocket.library recv() at end of stream (regression)', () => {
   }, IO_TEST_TIMEOUT_MS);
 
   test('a peer that resets the connection does not hold recv() for 30 seconds', async () => {
-    const { finalRecv, elapsedMs, errno } = driveDoorRequest(resetPort);
+    const { finalRecv, elapsedMs, errno } = driveDoorRequest(resetPort, true);
 
     // -1/ECONNRESET, not 0: the body this door got was truncated by a RST
     // and it must not be able to mistake that for a complete response.
