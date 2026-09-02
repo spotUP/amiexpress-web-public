@@ -15,18 +15,18 @@ exports.applyTheme = applyTheme;
 const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 exports.T = (0, theme_1.themeById)('classic').tokens;
 exports.S = (0, theme_1.themeStyles)((0, theme_1.themeById)('classic'));
-function applyTheme(bbs) {
-    const getTheme = bbs?.getTheme;
-    if (typeof getTheme !== 'function')
+/**
+ * Re-theme this door.
+ *
+ * Takes whatever names a theme: the theme itself, or the bbs handle that
+ * knows which one the caller chose. Called at startup with the bbs, and
+ * again with a THEME by the editor's View > Theme menu, which previews a
+ * theme that is not saved yet and so cannot be read back off the bbs.
+ */
+function applyTheme(source) {
+    const theme = (0, theme_1.resolveTheme)(source);
+    if (!theme)
         return;
-    try {
-        const theme = getTheme.call(bbs);
-        if (!theme?.tokens)
-            return;
-        exports.T = theme.tokens;
-        exports.S = (0, theme_1.themeStyles)(theme);
-    }
-    catch {
-        // A theme that will not resolve is not worth failing a door over.
-    }
+    exports.T = theme.tokens;
+    exports.S = (0, theme_1.themeStyles)(theme);
 }

@@ -62,7 +62,7 @@ class UIManager {
         return this.dealAnimationInProgress;
     }
     buildTopBar(callbacks) {
-        const { focusLobby, focusTable, showProfileWindow, showLeaderboardWindow, showAchievementsWindow, showBulletinsWindow, showCardStyleWindow, exitDoor, runAction } = callbacks;
+        const { focusLobby, focusTable, showProfileWindow, showLeaderboardWindow, showAchievementsWindow, showBulletinsWindow, showCardStyleWindow, showThemeWindow, exitDoor, runAction } = callbacks;
         this.topBar = (0, blessed_helpers_1.createBox)({
             // Panel adds a line border unless the key is present; these are
             // bars and content areas, and the window around them carries the frame.
@@ -114,6 +114,7 @@ class UIManager {
                     { label: 'Achievements', action: () => runAction(showAchievementsWindow) },
                     { label: 'Bulletins', action: () => runAction(showBulletinsWindow) },
                     { label: 'Card Style', action: () => runAction(showCardStyleWindow) },
+                    { label: 'Theme', action: () => runAction(showThemeWindow) },
                 ],
             },
             {

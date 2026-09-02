@@ -35,6 +35,7 @@ const buildMenuItems = () => ([
         label: 'View',
         items: [
             { label: 'Settings (Ctrl+S)', action: () => globalHandlers.onSettings?.() },
+            { label: 'Theme', action: () => globalHandlers.onTheme?.() },
             { label: 'Cycle Render Mode (r)', action: () => globalHandlers.onRenderMode?.() },
             { label: 'Fullscreen / Grid', action: () => globalHandlers.onToggleView?.() },
             { label: 'Toggle Sidebar', action: () => globalHandlers.onToggleSidebar?.() },

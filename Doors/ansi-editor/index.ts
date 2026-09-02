@@ -7,7 +7,7 @@
 
 import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
 import type { DoorContext, StorageAPI } from '@amiexpress/bbs-door-sdk';
-import { Screen, ANSIEditor, List, Box, Text, Textbox, DocModal } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { Screen, ANSIEditor, List, Box, Text, Textbox, DocModal, openThemeMenu } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createScreen, DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import {
   createTerminalModeSwitch, type TerminalModeSwitch,
@@ -624,6 +624,15 @@ export class ANSIEditorDoor {
       ],
 
       // Save callback (quick save to current file)
+      // View > Theme changes the editor's colours without closing it. T and
+      // S are this door's own captured tokens; the widget re-points them
+      // through this callback as the panel previews.
+      themeHost: (this.ctx as any).bbs,
+      onThemeChange: (theme: any) => {
+        T = theme.tokens;
+        S = themeStyles(theme);
+      },
+
       onSave: async (content: string) => {
         // Handle BBS file saving (sysop mode)
         if (this.isBBSFile && this.currentBBSPath) {

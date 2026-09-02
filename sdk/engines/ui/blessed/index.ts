@@ -96,6 +96,8 @@ export type { LoginModalOptions, LoginCredentials } from './widgets/login-modal'
 export { CategoryPicker, categoryPicker } from './widgets/category-picker';
 export type { CategoryPickerOptions, CategoryItem } from './widgets/category-picker';
 export { ConfirmModal, confirmModal } from './widgets/confirm-modal';
+export { openThemeMenu } from './widgets/theme-menu';
+export type { ThemeMenuOptions } from './widgets/theme-menu';
 export type { ConfirmModalOptions } from './widgets/confirm-modal';
 export { FKeyBar, fkeyBar } from './widgets/fkey-bar';
 export type { FKeyBarOptions, FKeyItem } from './widgets/fkey-bar';

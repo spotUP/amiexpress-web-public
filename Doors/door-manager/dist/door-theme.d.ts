@@ -20,9 +20,16 @@ export declare let S: ThemeStyles;
 /** The theme itself, for the few places that need its border or rail. */
 export declare let CURRENT: Theme;
 /**
- * Resolve the caller's theme. Safe to call with anything - a bbs without
- * getTheme (an older host, or a test) leaves the classic default in place,
- * which is the board exactly as it has always looked.
+ * Re-theme this door.
+ *
+ * Takes whatever names a theme: the theme itself, or the bbs handle that
+ * knows which one the caller chose. Safe to call with anything - a host
+ * with no theme leaves the classic default in place, which is the board
+ * exactly as it has always looked.
+ *
+ * Called at startup with the bbs, and again with a THEME by the in-door
+ * theme menu (openThemeMenu), which previews a theme that is not saved
+ * yet and so cannot be read back off the bbs.
  */
-export declare function applyTheme(bbs: unknown): void;
+export declare function applyTheme(source: unknown): void;
 //# sourceMappingURL=door-theme.d.ts.map

@@ -537,6 +537,14 @@ class ANSIEditorDoor {
                 },
             ],
             // Save callback (quick save to current file)
+            // View > Theme changes the editor's colours without closing it. T and
+            // S are this door's own captured tokens; the widget re-points them
+            // through this callback as the panel previews.
+            themeHost: this.ctx.bbs,
+            onThemeChange: (theme) => {
+                T = theme.tokens;
+                S = (0, theme_1.themeStyles)(theme);
+            },
             onSave: async (content) => {
                 // Handle BBS file saving (sysop mode)
                 if (this.isBBSFile && this.currentBBSPath) {

@@ -112,6 +112,10 @@ async function showComposer(screen: any, bbs: any, username: string, ctx: DoorCo
       showSidebar: true,
       showStatusBar: true,
 
+      // View > Theme, from the editor widget: the writer can change the
+      // board's colours without abandoning a half-written message.
+      themeHost: (ctx as any).bbs,
+
       // Save = save draft
       onSave: async (content: string) => {
         await saveDraft(username, {

@@ -11,6 +11,7 @@
 import {
   themeStyles,
   themeById,
+  resolveTheme,
   type Theme,
   type ThemeTokens,
   type ThemeStyles,
@@ -19,15 +20,17 @@ import {
 export let T: ThemeTokens = themeById('classic').tokens;
 export let S: ThemeStyles = themeStyles(themeById('classic'));
 
-export function applyTheme(bbs: unknown): void {
-  const getTheme = (bbs as { getTheme?: () => Theme } | undefined)?.getTheme;
-  if (typeof getTheme !== 'function') return;
-  try {
-    const theme = getTheme.call(bbs);
-    if (!theme?.tokens) return;
-    T = theme.tokens;
-    S = themeStyles(theme);
-  } catch {
-    // A theme that will not resolve is not worth failing a door over.
-  }
+/**
+ * Re-theme this door.
+ *
+ * Takes whatever names a theme: the theme itself, or the bbs handle that
+ * knows which one the caller chose. Called at startup with the bbs, and
+ * again with a THEME by the editor's View > Theme menu, which previews a
+ * theme that is not saved yet and so cannot be read back off the bbs.
+ */
+export function applyTheme(source: unknown): void {
+  const theme = resolveTheme(source);
+  if (!theme) return;
+  T = theme.tokens;
+  S = themeStyles(theme);
 }

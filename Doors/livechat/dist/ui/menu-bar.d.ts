@@ -16,6 +16,7 @@ export interface MenuBarHandlers {
     onSearch?: () => void;
     onThreads?: () => void;
     onSettings?: () => void;
+    onTheme?: () => void;
     onRenderMode?: () => void;
     onToggleView?: () => void;
     onToggleSidebar?: () => void;

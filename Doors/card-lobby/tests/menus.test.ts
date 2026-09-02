@@ -54,8 +54,9 @@ export async function viewsHoldsBothFocusEntriesAndTheWindows(): Promise<void> {
     const labels = views.items.map((item: any) => item.label);
 
     assert.deepStrictEqual(labels,
-      ['Lobby', 'Table', 'Profile', 'Leaders', 'Achievements', 'Bulletins', 'Card Style'],
-      'the two focus entries lead, then the windows, then how cards are drawn');
+      ['Lobby', 'Table', 'Profile', 'Leaders', 'Achievements', 'Bulletins',
+       'Card Style', 'Theme'],
+      'the two focus entries lead, then the windows, then how the door looks');
   } finally { app.screen?.destroy?.(); }
 }
 

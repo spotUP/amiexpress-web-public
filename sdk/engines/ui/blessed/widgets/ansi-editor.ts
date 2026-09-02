@@ -23,6 +23,7 @@ import { DocModal } from './doc-modal';
 import { ConfirmModal } from './confirm-modal';
 import { DropdownMenu, type DropdownMenuItem } from './dropdown-menu';
 import { Button } from './button';
+import { openThemeMenu } from './theme-menu';
 import type { ElementOptions } from '../core/types';
 import { trapModalInput } from '../utils/modal-helpers';
 
@@ -85,6 +86,18 @@ export interface ANSIEditorOptions extends ElementOptions {
    * two applications bolted together.
    */
   extraMenus?: HostMenu[];
+  /**
+   * The caller's BBS handle. Given one, View gains a Theme item that opens
+   * the in-door theme menu, so an editor's colours can be changed without
+   * leaving the editor. Omitted, the item is not shown at all - an item
+   * that cannot work is worse than no item.
+   */
+  themeHost?: unknown;
+  /**
+   * The host's own re-theming, for colours it captured at startup (a
+   * `door-theme.ts` module's bindings, a module-level T and S).
+   */
+  onThemeChange?: (theme: unknown) => void;
   /**
    * A one-row strip of the host's own controls, under the canvas.
    *
@@ -300,6 +313,8 @@ export class ANSIEditor extends Box {
 
   /** Host-contributed menus, in bar order after Help. */
   private extraMenus: HostMenu[] = [];
+  private themeHost: unknown;
+  private onThemeChange?: (theme: unknown) => void;
   private extraMenuDropdowns: DropdownMenu[] = [];
 
   /** Host-contributed controls, on the right of the status bar. */
@@ -555,6 +570,8 @@ export class ANSIEditor extends Box {
     // put the render and the hit-test on different grids, and a negative
     // one would build an empty row - a silently blank canvas.
     this.extraMenus = options.extraMenus ?? [];
+    this.themeHost = options.themeHost;
+    this.onThemeChange = options.onThemeChange;
     this.extraToolbar = options.extraToolbar ?? [];
     this.transparencyGuide = options.showTransparencyGuide ?? false;
     this.optCellScaleX = Math.max(1, Math.floor(options.cellScaleX ?? 1));
@@ -857,6 +874,22 @@ export class ANSIEditor extends Box {
   }
 
   /**
+   * Open the theme menu over the editor.
+   *
+   * The panel previews as the highlight moves - it re-tints every widget on
+   * screen, this editor included - and the host re-points whatever colours
+   * it captured at startup through `onThemeChange`.
+   */
+  private openThemePanel(): void {
+    if (!this.screen || !this.themeHost) return;
+    void openThemeMenu({
+      screen: this.screen,
+      bbs: this.themeHost,
+      onApply: (theme) => this.onThemeChange?.(theme),
+    }).then(() => this.screen?.render());
+  }
+
+  /**
    * Create dropdown menus for the menu bar
    */
   private createDropdownMenus(): void {
@@ -988,6 +1021,12 @@ export class ANSIEditor extends Box {
         { label: '────────────────', separator: true },
         { label: menuItemLabel('Text Mode', 'C-m'), action: () => this.mode !== 'text' && this.toggleMode() },
         { label: menuItemLabel('Draw Mode', 'C-m'), action: () => this.mode !== 'draw' && this.toggleMode() },
+        ...(this.themeHost
+          ? [
+              { label: '────────────────', separator: true },
+              { label: 'Theme...', action: () => this.openThemePanel() },
+            ]
+          : []),
       ],
     });
 
