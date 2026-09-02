@@ -360,6 +360,25 @@ export class BsdSocketLibrary {
    * This is necessary because 68K code expects synchronous behavior
    */
   /**
+   * Hands a blocked recv() whatever the stream can give it right now, and
+   * clears the resolver so it is answered exactly once.
+   *
+   * recv() parks in deasync.loopWhile(() => !done) with only `readResolve`
+   * and a 30s setTimeout to end the wait. Every event that ends the stream
+   * must therefore go through here, or the door spins for the full 30s on a
+   * socket that already reached EOF. That is precisely what happened to
+   * GWall: HTTP/1.0, so the server answers and closes; the door's next
+   * recv() should return 0 immediately, and instead the logon sat blank for
+   * ~33 seconds.
+   */
+  private wakeBlockedReader(state: SocketState): void {
+    if (!state.readResolve) return;
+    const resolve = state.readResolve;
+    state.readResolve = undefined;
+    resolve(state.readBuffer.shift() ?? null);
+  }
+
+  /**
    * Installs the data/close handlers every connected socket needs, whichever
    * connect path created it. Extracted so the blocking and non-blocking
    * paths cannot drift apart.
@@ -384,16 +403,28 @@ export class BsdSocketLibrary {
       }
       if (state.tee) state.tee.wire(data);
       state.readBuffer.push(data);
-      if (state.readResolve) {
-        const resolve = state.readResolve;
-        state.readResolve = undefined;
-        resolve(state.readBuffer.shift() || null);
-      }
+      this.wakeBlockedReader(state);
+    });
+
+    // FIN from the peer. The stream is over: mark it and wake any recv()
+    // already parked, so it returns 0/EOF now instead of at its 30s timeout.
+    state.socket.on('end', () => {
+      state.connected = false;
+      this.wakeBlockedReader(state);
     });
 
     state.socket.on('close', () => {
       console.log(`[BsdSocketLibrary] Socket closed`);
       state.connected = false;
+      this.wakeBlockedReader(state);
+    });
+
+    // A reset mid-read is an end of stream too. The connect paths have their
+    // own 'error' listeners for the connect outcome; this one exists only so
+    // a blocked reader is not left parked for 30s.
+    state.socket.on('error', () => {
+      state.connected = false;
+      this.wakeBlockedReader(state);
     });
   }
 
