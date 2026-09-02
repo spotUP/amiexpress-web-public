@@ -2,6 +2,7 @@
   "name": "whip",
   "category": "game",
   "version": "1.0.0",
+  "category": "utility",
   "description": "Demo Scene Project Management Door",
   "main": "dist/index.js",
   "bbsCommand": "WHIP",
@@ -10,12 +11,18 @@
   "doorPattern": "runDoor",
   "accessLevel": 0,
   "author": "AmiExpress Team",
-  "keywords": ["bbs", "door", "demo-scene", "project-management"],
+  "keywords": [
+    "bbs",
+    "door",
+    "demo-scene",
+    "project-management"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "npx tsx index.ts",
     "watch": "tsc --watch",
-    "build:watch": "tsc --watch"
+    "build:watch": "tsc --watch",
+    "test": "tsx tests/run-tests.ts"
   },
   "dependencies": {
     "@amiexpress/bbs-door-sdk": "file:../../sdk",

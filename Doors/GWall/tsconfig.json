@@ -1,5 +1,9 @@
 {
   "compilerOptions": {
+    // Without outDir, tsc emits index.js NEXT TO index.ts and dist/ stays
+    // empty - so package.json's `main: dist/index.js` named a file that was
+    // never produced and the board had nothing to launch (2026-09-02).
+    "outDir": "./dist",
     "target": "ES2020",
     "module": "commonjs",
     "lib": ["ES2020", "DOM"],

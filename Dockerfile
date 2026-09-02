@@ -111,10 +111,14 @@ COPY sdk/tools/preview/frontend ./
 RUN npm ci --ignore-scripts && npm run build
 
 # ============================================================================
-# Stage 6: Build TypeScript Doors (DISABLED - built at runtime or pre-built)
+# Stage 6: Build door-manager, and VERIFY every other door ships its dist
 # ============================================================================
-# Doors are now expected to be pre-built or built at runtime
-# This dramatically speeds up Docker builds
+# Only door-manager is compiled here. Every other TypeScript door reaches the
+# board with the dist/ that was committed - the image copies Doors/ as it
+# stands in git and the entrypoint syncs that onto the volume - which is why
+# the verification below exists. Three doors were shipping without an entry
+# point on 2026-09-02 (whip, Gwall, prompt-complete), each for a different
+# reason, and the board only found out when a sysop tried to open one.
 FROM node:20-alpine AS doors-builder
 WORKDIR /app
 # Copy SDK source (moduleResolution:node follows source .ts files in engines/ etc.)
@@ -123,8 +127,8 @@ COPY sdk ./sdk
 COPY --from=sdk-builder /app/sdk/dist ./sdk/dist
 COPY --from=sdk-builder /app/sdk/node_modules ./sdk/node_modules
 COPY Doors ./Doors
-# Build all TypeScript doors that have a dist/ convention.
-# This ensures dist/ is always fresh from source regardless of what was committed.
+# door-manager is built from source here. It is the only one: building every
+# door would need each door's own dependencies installed.
 WORKDIR /app/Doors/door-manager
 # npm install reads package.json and triggers the SDK's build scripts via
 # the file: dependency even with --ignore-scripts. Bypass by installing
@@ -135,6 +139,24 @@ RUN npm install -g typescript@5 && \
     ln -sf /app/sdk node_modules/@amiexpress/bbs-door-sdk && \
     tsc
 WORKDIR /app
+
+# A door whose package.json `main` names a file that is not in the image
+# cannot start on the board. Fail the BUILD instead of the sysop's evening.
+RUN set -eu; \
+    missing=''; \
+    for door in /app/Doors/*/; do \
+      [ -f "\$door/package.json" ] || continue; \
+      main=\$(node -p "(require('\$door/package.json').main || '')" 2>/dev/null || echo ''); \
+      case "\$main" in \
+        dist/*) [ -f "\$door\$main" ] || missing="\$missing \$(basename \$door)";; \
+      esac; \
+    done; \
+    if [ -n "\$missing" ]; then \
+      echo "ERROR: these doors ship no entry point:\$missing" >&2; \
+      echo "Build the door and commit its dist/ - see tests/doors/door-dist-is-shipped.test.ts" >&2; \
+      exit 1; \
+    fi; \
+    echo '[doors] every TypeScript door has the entry point its manifest names'
 
 # ============================================================================
 # Stage 7: Build Backend
