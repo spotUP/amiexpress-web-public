@@ -17,6 +17,7 @@ import { callersLogManager } from '../../services/CallersLogManager';
 
 import type { BBSSession, UploadSessionContext } from '../../index';
 import { formatLongDate } from '../../utils/date-time.util';
+import { isNarrow, narrowFileLines } from '../../utils/table-format.util';
 import { storeUploadContext } from '../../server/upload-session-store';
 
 // Dependencies (injected)
@@ -378,6 +379,36 @@ export async function handleFileMoveConfirmation(socket: any, session: BBSSessio
   session.tempData = undefined;
 }
 
+/**
+ * One file-search result as display lines (C64/40-col Task 5a).
+ *
+ * 80 columns: the historical single-line row, byte-identical.
+ * Narrow: the C64 two-line convention from table-format.util - the name
+ * and size on one row, the description stacked underneath, so nothing is
+ * clipped and no row reaches the prose wrap long enough to be folded.
+ */
+export function buildFileSearchLines(
+  session: { screenWidth?: number; petsciiMode?: boolean },
+  file: any
+): string[] {
+  const sizeKB = Math.ceil(file.size / 1024);
+  const description = file.fileid_diz || file.description;
+
+  if (!isNarrow(session)) {
+    const dateStr = formatLongDate(new Date(file.uploaddate));
+    return [
+      `${file.filename.padEnd(15)}${sizeKB.toString().padStart(5)}K ${dateStr} ${file.uploader}`,
+      `  ${description}`,
+      `  Area: ${file.areaname}`,
+    ];
+  }
+
+  return [
+    ...narrowFileLines({ filename: file.filename, sizeKB, description }),
+    ` Area: ${String(file.areaname).substring(0, 33)}`,
+  ];
+}
+
 // handleFileSearch() - Search files by pattern (FM S command)
 export async function handleFileSearch(socket: any, session: BBSSession, params: string[]) {
   if (params.length === 0) {
@@ -431,13 +462,10 @@ export async function handleFileSearch(socket: any, session: BBSSession, params:
     emitText(socket, `Found ${matchingFiles.length} file(s):\r\n\r\n`);
 
     matchingFiles.forEach((file: any) => {
-      const sizeKB = Math.ceil(file.size / 1024);
-      const dateStr = formatLongDate(new Date(file.uploaddate));
-      const description = file.fileid_diz || file.description;
-
-      emitText(socket, `${file.filename.padEnd(15)}${sizeKB.toString().padStart(5)}K ${dateStr} ${file.uploader}\r\n`);
-      emitText(socket, `  ${description}\r\n`);
-      emitText(socket, `  Area: ${file.areaname}\r\n\r\n`);
+      for (const line of buildFileSearchLines(session, file)) {
+        emitText(socket, `${line}\r\n`);
+      }
+      emitText(socket, '\r\n');
     });
   }
 
@@ -556,6 +584,44 @@ console.error('[displayNewFiles] ERROR:', error);
   }
 }
 
+/**
+ * One new-files row as display lines (C64/40-col Task 5a).
+ *
+ * 80 columns: the historical colorized row plus its indented description,
+ * byte-identical. Narrow: the same two-line convention as the search
+ * listing, name line green, description lines white.
+ */
+export function buildNewFileLines(
+  session: { screenWidth?: number; petsciiMode?: boolean },
+  file: any
+): string[] {
+  const sizeKB = Math.ceil(file.size / 1024);
+
+  if (!isNarrow(session)) {
+    const uploadDate = formatLongDate(new Date(file.uploaddate));
+    const lines = [
+      `\x1b[32m${file.filename.padEnd(20)}\x1b[0m ` +
+      `\x1b[36m${String(sizeKB).padStart(6)}KB\x1b[0m ` +
+      `\x1b[33m${uploadDate.padEnd(10)}\x1b[0m ` +
+      `\x1b[37m${file.uploader}\x1b[0m`,
+    ];
+    if (file.description) {
+      lines.push(`  \x1b[37m${file.description.substring(0, 70)}\x1b[0m`);
+    }
+    return lines;
+  }
+
+  const [nameLine, ...descLines] = narrowFileLines({
+    filename: file.filename,
+    sizeKB,
+    description: file.description,
+  });
+  return [
+    `\x1b[32m${nameLine}\x1b[0m`,
+    ...descLines.map((l) => `\x1b[37m${l}\x1b[0m`),
+  ];
+}
+
 // Display new files from database - express.e:27906-27950 myNewFiles()
 async function displayNewFilesFromDatabase(socket: any, session: BBSSession, searchDate: Date, areas: any[], nonStop: boolean) {
   const { checkForPause, flagPause } = require('../../utils/flag-pause.util');
@@ -628,22 +694,8 @@ console.log('[displayNewFilesFromDatabase] User stopped scan');
 
         // Display each new file with pause check
         for (const file of newFiles) {
-          const sizeKB = Math.ceil(file.size / 1024);
-          const uploadDate = formatLongDate(new Date(file.uploaddate));
-
-          // Format: filename  sizeKB  date  uploader
-          emitLine(
-            `\x1b[32m${file.filename.padEnd(20)}\x1b[0m ` +
-            `\x1b[36m${String(sizeKB).padStart(6)}KB\x1b[0m ` +
-            `\x1b[33m${uploadDate.padEnd(10)}\x1b[0m ` +
-            `\x1b[37m${file.uploader}\x1b[0m\r\n`,
-            1
-          );
-
-          // Show description if available
-          if (file.description) {
-            const desc = file.description.substring(0, 70);
-            emitLine(`  \x1b[37m${desc}\x1b[0m\r\n`, 1);
+          for (const line of buildNewFileLines(session, file)) {
+            emitLine(`${line}\r\n`, 1);
           }
 
           // Check for pause after each file listing
