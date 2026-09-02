@@ -14,6 +14,13 @@ import { InfoFileParser } from './info-file-parser';
 // files through it rather than keeping a second field layout.
 import { userFileManager } from './UserFileManager';
 import { readTooltypeMap } from '../utils/info-file.util';
+
+/**
+ * What the loader treats as a screen (express.e:6544-6640, and
+ * screen-index.service.ts's own list). The extension IS the routing: `.GR` is
+ * the graphics variant, `.SEQ` is PETSCII.
+ */
+const SCREEN_EXTENSIONS = ['.txt', '.gr', '.ibm', '.seq', '.rip', '.ans', '.asc'];
 // The AmiExpress on-disk header layout, which is NOT MessageIndexManager's -
 // see amiga-msgheader.ts for the two alignment pads and why they matter here.
 import { parseAmigaHeaderFile } from './amiga-msgheader';
@@ -1025,28 +1032,75 @@ console.error(`[AmigaParser] Error parsing ErrorLog:`, error.message);
   /**
    * Parse screens
    */
+  /**
+   * Every screen on the board, wherever the board keeps it.
+   *
+   * This used to read `<bbs>/Screens/` and nothing else, so a node's own
+   * screens and a conference's were never imported at all - and on a real
+   * board that is most of them. It also matched only `.txt` and `.ans`,
+   * missing `.gr`, `.ibm`, `.seq`, `.rip` and `.asc`, which the loader routes
+   * on (express.e:6544-6640).
+   */
   async parseScreens(bbsPath: string): Promise<AmigaScreen[]> {
     const screens: AmigaScreen[] = [];
-    const screensPath = path.join(bbsPath, 'Screens');
 
-    if (!(await this.fileExists(screensPath))) {
-      return screens;
-    }
+    for (const dir of await this.screenDirectories(bbsPath)) {
+      const full = path.join(bbsPath, dir);
 
-    const entries = await fs.readdir(screensPath);
-    const screenFiles = entries.filter(f => f.endsWith('.txt') || f.endsWith('.TXT') || f.endsWith('.ans') || f.endsWith('.ANS'));
+      let entries: string[];
+      try {
+        entries = await fs.readdir(full);
+      } catch {
+        continue;
+      }
 
-    for (const file of screenFiles) {
-      const content = await this.readTextFile(path.join(screensPath, file));
-      const type = file.toLowerCase().endsWith('.ans') ? 'ANSI' : 'ASCII';
-      screens.push({
-        name: file,
-        content,
-        type,
-      });
+      for (const file of entries) {
+        if (!SCREEN_EXTENSIONS.some(ext => file.toLowerCase().endsWith(ext))) continue;
+
+        const filePath = path.join(full, file);
+        try {
+          if (!(await fs.stat(filePath)).isFile()) continue;
+        } catch {
+          continue;
+        }
+
+        screens.push({
+          name: file,
+          relPath: path.join(dir, file),
+          // Bytes. A screen is art, and reading it as UTF-8 replaces every
+          // high-bit character with U+FFFD without raising anything.
+          content: await fs.readFile(filePath),
+          type: file.toLowerCase().endsWith('.ans') ? 'ANSI' : 'ASCII',
+        });
+      }
     }
 
     return screens;
+  }
+
+  /**
+   * The directories a board keeps screens in.
+   *
+   * `Screens/` at the root, each node's own directory and its `Screens/`
+   * subdirectory, and the same for every conference - which is where
+   * express.e looks (screen-resolution mirrors it).
+   */
+  private async screenDirectories(bbsPath: string): Promise<string[]> {
+    const dirs = ['Screens'];
+
+    let entries: string[];
+    try {
+      entries = await fs.readdir(bbsPath);
+    } catch {
+      return dirs;
+    }
+
+    for (const entry of entries) {
+      if (!/^(Node|Conf)\d+$/i.test(entry)) continue;
+      dirs.push(entry, path.join(entry, 'Screens'));
+    }
+
+    return dirs;
   }
 
   /**

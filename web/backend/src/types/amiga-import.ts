@@ -356,8 +356,27 @@ export interface AmigaBulletin {
  * Screen definition
  */
 export interface AmigaScreen {
+  /** The file's own name, e.g. `LOGON.TXT`. */
   name: string;
-  content: string; // ANSI/ASCII content
+  /**
+   * Where it sits on the board, relative to the BBS root - `Node3/LOGON.TXT`,
+   * `Conf2/Screens/Menu.txt`, `Screens/uprough.txt`.
+   *
+   * A screen's directory IS its routing: the same name means a different
+   * screen in `Node3/` and in `Conf2/Screens/`, and flattening them into one
+   * `Screens/` directory - which is what an import used to do - silently
+   * merges screens that were never the same file.
+   */
+  relPath: string;
+  /**
+   * The file's BYTES.
+   *
+   * Not a string: a screen is ANSI art full of high-bit Amiga characters, and
+   * `readFile(path, 'utf-8')` does not throw on those - it silently replaces
+   * each one with U+FFFD. An import read them that way and then wrote them
+   * back as UTF-8, so every imported screen lost its art.
+   */
+  content: Buffer;
   type: 'ANSI' | 'ASCII';
 }
 

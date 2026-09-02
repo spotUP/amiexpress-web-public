@@ -23,6 +23,7 @@ import type {
   ImportResult,
   ConflictResolutionStrategy,
   AmigaUserData,
+  AmigaScreen,
   AmigaConference,
   AmigaCommand,
   AmigaBBSConfig,
@@ -765,42 +766,45 @@ console.log(`[ImportTransaction] Imported ${bulletins.length} bulletins to ${bul
   }
 
   /**
-   * Import screens
+   * Write the imported screens onto the board.
+   *
+   * Three things were wrong here and each one lost art:
+   *
+   * - `config.get('bbsRoot')` is not a key this config has (`dataDir` is), so
+   *   it was always undefined and the screens went to `process.cwd()` -
+   *   `web/backend` for the running server, not the board at all.
+   * - Every screen was flattened into `Screens/`, so a node's LOGON.TXT and a
+   *   conference's overwrote each other. A screen's directory IS its routing.
+   * - The bytes were written as UTF-8 after being read as UTF-8, and a screen
+   *   is ANSI art: `readFile(path, 'utf-8')` does not throw on a high-bit
+   *   Amiga byte, it silently substitutes U+FFFD.
    */
-  private async importScreens(screens: any[]): Promise<void> {
+  private async importScreens(screens: AmigaScreen[]): Promise<void> {
 console.log(`[ImportTransaction] Importing ${screens.length} screens`);
 
-    if (screens.length === 0) {
-console.log('[ImportTransaction] No screens to import');
-      return;
-    }
+    if (screens.length === 0) return;
 
-    // Get BBS root directory from config
     const config = require('../config').config;
-    const bbsRoot = config.get('bbsRoot') || process.cwd();
-    const screensDir = path.join(bbsRoot, 'Screens');
+    const bbsRoot = config.get('dataDir');
 
-    // Ensure screens directory exists
-    if (!await fs.stat(screensDir).catch(() => null)) {
-      await fs.mkdir(screensDir, { recursive: true });
-console.log(`[ImportTransaction] Created screens directory: ${screensDir}`);
-    }
-
-    // Copy each screen file
     for (const screen of screens) {
       try {
-        const filename = screen.name;
-        const filePath = path.join(screensDir, filename);
+        // Confine to the board: a relPath out of the archive is attacker
+        // input as far as this is concerned.
+        const target = path.resolve(bbsRoot, screen.relPath);
+        if (target !== bbsRoot && !target.startsWith(bbsRoot + path.sep)) {
+          throw new Error(`outside the board root: ${screen.relPath}`);
+        }
 
-        // Preserve ANSI/ASCII content
-        await fs.writeFile(filePath, screen.content, 'utf8');
-console.log(`[ImportTransaction] Copied screen: ${filename} (${screen.type})`);
+        await fs.mkdir(path.dirname(target), { recursive: true });
+        // Bytes, exactly as they came off the other board.
+        await fs.writeFile(target, screen.content);
       } catch (error: any) {
-console.error(`[ImportTransaction] Error copying screen ${screen.name}:`, error.message);
+console.error(`[ImportTransaction] Error writing screen ${screen.relPath}:`, error.message);
       }
     }
 
-console.log(`[ImportTransaction] Imported ${screens.length} screens to ${screensDir}`);
+console.log(`[ImportTransaction] Imported ${screens.length} screens into ${bbsRoot}`);
   }
 
   /**
