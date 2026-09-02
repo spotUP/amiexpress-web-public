@@ -31,6 +31,15 @@
  * Fix:
  *   'end', 'close' and 'error' all wake a parked reader via
  *   wakeBlockedReader(), so recv() returns 0/EOF as soon as the stream ends.
+ *
+ * Second regression (same file, same wake-up path):
+ *   Waking a parked reader from 'error' made recv() return 0 there too, so a
+ *   peer RST was indistinguishable from a clean end of body. A 68K door that
+ *   branches on errno saw "the body ended" for a connection that had in fact
+ *   been torn down mid-transfer, and reported a truncated response as a
+ *   complete one. BSD recv() answers -1 with errno ECONNRESET (54, the
+ *   Roadshow value already exported by BsdSocketLibrary.ts); recv() now does
+ *   the same, while a clean 'end' still returns 0.
  */
 
 import {
@@ -38,6 +47,7 @@ import {
   AF_INET,
   SOCK_STREAM,
   FIONBIO,
+  ECONNRESET,
 } from '../../src/amiga-emulation/api/BsdSocketLibrary';
 import { BSDSOCKET_VECTORS } from '../../src/amiga-emulation/api/library-vectors/bsdsocket-vectors';
 import * as net from 'net';
@@ -141,9 +151,13 @@ describe('bsdsocket.library recv() at end of stream (regression)', () => {
   let httpishPort = 0;   // answers, then FINs (HTTP/1.0, the GWall shape)
   let resetPort = 0;     // answers, then RSTs
   let keepAlivePort = 0; // answers and stays open (HTTP/1.1 keep-alive)
+  let silentResetPort = 0; // answers NOTHING, then RSTs
+  let silentEndPort = 0;   // answers NOTHING, then FINs
   let httpishServer: net.Server | null = null;
   let resetServer: net.Server | null = null;
   let keepAliveServer: net.Server | null = null;
+  let silentResetServer: net.Server | null = null;
+  let silentEndServer: net.Server | null = null;
   const accepted: net.Socket[] = [];
 
   const RESPONSE =
@@ -185,18 +199,45 @@ describe('bsdsocket.library recv() at end of stream (regression)', () => {
       keepAliveServer!.listen(0, '127.0.0.1', () =>
         resolve((keepAliveServer!.address() as net.AddressInfo).port));
     });
+
+    // Writes nothing at all, so the door's recv() is definitely PARKED (no
+    // buffered bytes, connected still true) when the RST lands. That is the
+    // exact state the wake-up path has to classify; writing a body first
+    // would leave it up to the kernel whether the data or the reset wins.
+    silentResetServer = net.createServer((sock) => {
+      accepted.push(sock);
+      sock.once('data', () => { sock.resetAndDestroy(); });
+    });
+    silentResetPort = await new Promise<number>((resolve) => {
+      silentResetServer!.listen(0, '127.0.0.1', () =>
+        resolve((silentResetServer!.address() as net.AddressInfo).port));
+    });
+
+    // The control: same parked recv(), clean FIN instead of a RST.
+    silentEndServer = net.createServer((sock) => {
+      accepted.push(sock);
+      sock.once('data', () => { sock.end(); });
+    });
+    silentEndPort = await new Promise<number>((resolve) => {
+      silentEndServer!.listen(0, '127.0.0.1', () =>
+        resolve((silentEndServer!.address() as net.AddressInfo).port));
+    });
   }, IO_TEST_TIMEOUT_MS);
 
   afterAll(async () => {
     for (const sock of accepted) sock.destroy();
     accepted.length = 0;
-    for (const server of [httpishServer, resetServer, keepAliveServer]) {
+    for (const server of [
+      httpishServer, resetServer, keepAliveServer, silentResetServer, silentEndServer,
+    ]) {
       if (!server) continue;
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
     httpishServer = null;
     resetServer = null;
     keepAliveServer = null;
+    silentResetServer = null;
+    silentEndServer = null;
   }, IO_TEST_TIMEOUT_MS);
 
   function callSocket(lib: BsdSocketLibrary, fake: FakeEmulator): number {
@@ -260,7 +301,9 @@ describe('bsdsocket.library recv() at end of stream (regression)', () => {
    * Drives the exact call sequence the harness captured from GWall, up to the
    * recv() that used to hang, and returns how long that final recv() took.
    */
-  function driveDoorRequest(port: number): { finalRecv: number; elapsedMs: number; body: string } {
+  function driveDoorRequest(
+    port: number,
+  ): { finalRecv: number; elapsedMs: number; body: string; errno: number } {
     const fake = new FakeEmulator();
     const lib = new BsdSocketLibrary(asEmu(fake));
 
@@ -288,13 +331,46 @@ describe('bsdsocket.library recv() at end of stream (regression)', () => {
     const started = Date.now();
     const finalRecv = callRecv(lib, fake, fd, 8191);
     const elapsedMs = Date.now() - started;
+    // Read straight after the failing call: errno belongs to the call that
+    // set it, and CloseSocket below could move it.
+    const errno = lib.getErrno();
 
     // The door closes its socket; without this the 'close' handler's log
     // lands after jest has torn the suite down.
     fake.setRegister(0, fd);
     callVector('CloseSocket', lib, fake);
 
-    return { finalRecv, elapsedMs, body };
+    return { finalRecv, elapsedMs, body, errno };
+  }
+
+  /**
+   * Connects, sends a request and parks in recv() with NOTHING buffered -
+   * the state a peer's RST or FIN has to be classified in. Returns what that
+   * single parked recv() came back with.
+   */
+  function driveParkedRecv(port: number): { recvResult: number; elapsedMs: number; errno: number } {
+    const fake = new FakeEmulator();
+    const lib = new BsdSocketLibrary(asEmu(fake));
+
+    const fd = callSocket(lib, fake);
+    expect(fd).toBeGreaterThanOrEqual(0);
+    expect(setNonBlocking(lib, fake, fd, 1)).toBe(0);
+    expect(callConnect(lib, fake, fd, port)).toBe(-1); // EINPROGRESS
+    expect(waitWritable(lib, fake, fd, 10000)).toBeGreaterThan(0);
+    expect(setNonBlocking(lib, fake, fd, 0)).toBe(0);
+
+    const request = 'GET / HTTP/1.0\r\nHost:localhost\r\n\r\n';
+    expect(callSend(lib, fake, fd, request)).toBe(request.length);
+
+    const started = Date.now();
+    const recvResult = callRecv(lib, fake, fd, 8191);
+    const elapsedMs = Date.now() - started;
+    const errno = lib.getErrno();
+
+    fake.setRegister(0, fd);
+    callVector('CloseSocket', lib, fake);
+
+    return { recvResult, elapsedMs, errno };
   }
 
   /**
@@ -315,9 +391,31 @@ describe('bsdsocket.library recv() at end of stream (regression)', () => {
   }, IO_TEST_TIMEOUT_MS);
 
   test('a peer that resets the connection does not hold recv() for 30 seconds', async () => {
-    const { finalRecv, elapsedMs } = driveDoorRequest(resetPort);
+    const { finalRecv, elapsedMs, errno } = driveDoorRequest(resetPort);
 
-    expect(finalRecv).toBe(0);
+    // -1/ECONNRESET, not 0: the body this door got was truncated by a RST
+    // and it must not be able to mistake that for a complete response.
+    expect(finalRecv).toBe(-1);
+    expect(errno).toBe(ECONNRESET);
+    expect(elapsedMs).toBeLessThan(PROMPT_MS);
+    await settle();
+  }, IO_TEST_TIMEOUT_MS);
+
+  test('a RST while recv() is blocked returns -1 with errno ECONNRESET', async () => {
+    const { recvResult, elapsedMs, errno } = driveParkedRecv(silentResetPort);
+
+    expect(recvResult).toBe(-1);
+    expect(errno).toBe(ECONNRESET);
+    expect(errno).toBe(54); // the Roadshow value, spelled out
+    expect(elapsedMs).toBeLessThan(PROMPT_MS);
+    await settle();
+  }, IO_TEST_TIMEOUT_MS);
+
+  test('a clean FIN while recv() is blocked still returns 0, not an error', async () => {
+    const { recvResult, elapsedMs, errno } = driveParkedRecv(silentEndPort);
+
+    expect(recvResult).toBe(0);
+    expect(errno).not.toBe(ECONNRESET);
     expect(elapsedMs).toBeLessThan(PROMPT_MS);
     await settle();
   }, IO_TEST_TIMEOUT_MS);

@@ -104,6 +104,19 @@ interface SocketState {
   soError: number;
   /** True between a non-blocking connect() and its resolution. */
   connectPending: boolean;
+  /**
+   * The errno an ESTABLISHED stream DIED with, when it died with an error
+   * (a peer RST -> ECONNRESET) instead of a clean FIN. recv() reports it as
+   * -1 with the library errno once the already-received bytes are drained,
+   * and clears it, so a retrying door then sees plain EOF instead of
+   * spinning on -1 for ever - the same "error is delivered once, then EOF"
+   * order a real BSD stack uses.
+   *
+   * Distinct from `soError`, which is the CONNECT outcome that
+   * getsockopt(SO_ERROR) reads and clears. undefined means the stream has
+   * not failed, so a clean 'end' keeps returning 0.
+   */
+  streamErrno?: number;
   host?: string;
   port?: number;
   error?: number;
@@ -386,6 +399,39 @@ export class BsdSocketLibrary {
   private attachStreamHandlers(state: SocketState): void {
     if (!state.socket) return;
 
+    // Was the stream ever UP when it ended? `state.connected` cannot answer
+    // that: both connect paths register their own 'error' listener BEFORE
+    // this one and clear `state.connected` in it, so by the time the handlers
+    // below run the flag reads false for a mid-stream reset too. A local set
+    // from this listener set's own 'connect' - which fires only on a
+    // successful connection, and long before any stream error - is the one
+    // signal no other listener can race.
+    let established = false;
+    state.socket.on('connect', () => { established = true; });
+
+    /**
+     * The stream is over: classify it and wake a parked recv(), ONCE.
+     *
+     * The classification is read from the socket's own destroy error rather
+     * than from which listener happens to fire first. Measured: with the
+     * event loop being pumped by deasync (exactly how recv() waits), node
+     * delivers 'close' BEFORE 'error' for a peer RST, the reverse of the
+     * order a plain node client sees. Recording the errno only in the
+     * 'error' handler therefore woke the reader from 'close' with nothing
+     * recorded, and recv() reported a reset connection as a clean EOF.
+     * `socket.errored` is set inside destroy() before either event, so it is
+     * already correct whichever one arrives first.
+     */
+    const endStream = (err?: NodeJS.ErrnoException | null): void => {
+      const failure =
+        err ?? ((state.socket as { errored?: NodeJS.ErrnoException | null } | null)?.errored ?? null);
+      if (established && failure && state.streamErrno === undefined) {
+        state.streamErrno = amigaErrnoForNodeError(failure);
+      }
+      state.connected = false;
+      this.wakeBlockedReader(state);
+    };
+
     // Both connect paths converge here, so this is the one place a capture
     // can be started without the two drifting apart.
     state.tee = SocketTee.create(state.fd, state.host ?? '') ?? undefined;
@@ -408,24 +454,22 @@ export class BsdSocketLibrary {
 
     // FIN from the peer. The stream is over: mark it and wake any recv()
     // already parked, so it returns 0/EOF now instead of at its 30s timeout.
-    state.socket.on('end', () => {
-      state.connected = false;
-      this.wakeBlockedReader(state);
-    });
+    state.socket.on('end', () => endStream());
 
     state.socket.on('close', () => {
       console.log(`[BsdSocketLibrary] Socket closed`);
-      state.connected = false;
-      this.wakeBlockedReader(state);
+      endStream();
     });
 
-    // A reset mid-read is an end of stream too. The connect paths have their
-    // own 'error' listeners for the connect outcome; this one exists only so
-    // a blocked reader is not left parked for 30s.
-    state.socket.on('error', () => {
-      state.connected = false;
-      this.wakeBlockedReader(state);
-    });
+    // A reset mid-read ends the stream too - but as an ERROR, not as EOF.
+    // BSD recv() answers -1/ECONNRESET for a connection the peer tore down,
+    // and a 68K door branching on errno has to be able to tell "the peer is
+    // gone, the body is truncated" from "the body ended" (0). Recording the
+    // errno here and letting recv() report it keeps errno set by the call
+    // that fails, not by an async handler that could land between two
+    // unrelated calls. The connect paths have their own 'error' listeners
+    // for the connect outcome; this one covers an established stream.
+    state.socket.on('error', (err: NodeJS.ErrnoException) => endStream(err));
   }
 
   /**
@@ -643,6 +687,15 @@ export class BsdSocketLibrary {
       return copied;
     }
 
+    // Buffered bytes are handed over first (above); only once they are
+    // drained does the stream's ending matter. A stream that DIED reports
+    // -1/errno once, a stream that ended cleanly reports 0.
+    const failed = this.takeStreamError(state);
+    if (failed !== null) {
+      this.errno = failed;
+      return -1;
+    }
+
     if (!state.connected) {
       return 0; // EOF
     }
@@ -676,7 +729,28 @@ export class BsdSocketLibrary {
       return copyLen;
     }
 
+    // Woken with nothing: either the stream died (report the errno once) or
+    // it ended cleanly / the 30s fallback expired (EOF).
+    const wokenBy = this.takeStreamError(state);
+    if (wokenBy !== null) {
+      this.errno = wokenBy;
+      return -1;
+    }
+
     return 0; // EOF or timeout
+  }
+
+  /**
+   * Consumes the errno an established stream died with, or null when it did
+   * not die. Consuming is deliberate: a real BSD stack delivers the error to
+   * exactly one read and reports EOF afterwards, so a door that retries on
+   * -1 finishes instead of looping.
+   */
+  private takeStreamError(state: SocketState): number | null {
+    const errno = state.streamErrno;
+    if (errno === undefined) return null;
+    state.streamErrno = undefined;
+    return errno;
   }
 
   /**
