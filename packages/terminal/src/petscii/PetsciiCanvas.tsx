@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
 import { C64_PALETTE_COLODORE } from '@amiexpress/bbs-door-sdk/petscii';
 import { buildGlyphAtlas, glyphCellIndex, TintedAtlasCache } from './glyph-atlas';
@@ -19,18 +19,17 @@ export interface PetsciiCanvasProps {
   /** Keyboard input, already translated to PETSCII bytes. */
   onData?: (bytes: number[]) => void;
   /**
-   * Whether the canvas should be able to take keyboard focus (tabIndex 0).
-   * Defaults to false: the current consumer (BBSTerminal's login-linger
-   * overlay, Bug I fix - true-petscii login/font pass) draws this canvas as
-   * a purely transient "press a key to continue" title screen over xterm,
-   * which stays the REAL interaction surface (Finding 2's overlay ruling -
-   * see overlay-state.ts). A focusable canvas there, combined with a click
-   * during the overlay, used to let it steal keyboard focus away from
-   * xterm's login state machine with no visible sign anything was wrong.
-   * Pass `focusable` only for a genuine full-canvas door session that
-   * intends this canvas to own keyboard input directly via `onData`.
+   * Whether the canvas takes keyboard focus (tabIndex 0). BBSTerminal
+   * passes true for a full-canvas PETSCII session, where the canvas owns
+   * keyboard input via onData.
    */
   focusable?: boolean;
+  /** Focus the canvas as soon as it mounts (the full-canvas session makes it the keyboard surface). */
+  focusOnMount?: boolean;
+}
+
+export interface PetsciiCanvasHandle {
+  focus(): void;
 }
 
 const COLS = 40;
@@ -54,15 +53,20 @@ const UNIT_H = ROWS * CELL_PX + 2 * BORDER_PER_SCALE;
  * character ROM look stays crisp at any zoom level instead of blurring like a
  * font rendered at a fractional size would.
  */
-export const PetsciiCanvas: React.FC<PetsciiCanvasProps> = ({
+export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>(({
   machine,
   palette = C64_PALETTE_COLODORE,
   scale: maxScale = 4,
   onData,
   focusable = false,
-}) => {
+  focusOnMount = false,
+}, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  useImperativeHandle(ref, () => ({ focus: () => canvasRef.current?.focus() }), []);
+  useEffect(() => {
+    if (focusOnMount) canvasRef.current?.focus();
+  }, [focusOnMount]);
   const atlasCacheRef = useRef<TintedAtlasCache | null>(null);
   const [atlasReady, setAtlasReady] = useState(false);
   const [cursorOn, setCursorOn] = useState(true);
@@ -239,4 +243,6 @@ export const PetsciiCanvas: React.FC<PetsciiCanvasProps> = ({
       />
     </div>
   );
-};
+});
+
+PetsciiCanvas.displayName = 'PetsciiCanvas';

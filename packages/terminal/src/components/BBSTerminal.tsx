@@ -14,22 +14,16 @@ import { classifyKey } from '../utils/key-overrides';
 import { toggleFullscreen } from '../utils/fullscreen';
 import { GamepadManager } from '../utils/gamepad-manager';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
-import { PetsciiMachine, petsciiInputToAscii } from '@amiexpress/bbs-door-sdk/petscii';
-import { PetsciiCanvas } from '../petscii/PetsciiCanvas';
-import { petsciiOverlayReducer, initialPetsciiOverlayState } from '../petscii/overlay-state';
-import { resolveTerminalFontFamily } from '../petscii/font-gate';
+import { PetsciiMachine, AnsiToPetsciiTransducer, petsciiInputToAscii } from '@amiexpress/bbs-door-sdk/petscii';
+import { PetsciiCanvas, type PetsciiCanvasHandle } from '../petscii/PetsciiCanvas';
+import { petsciiSurfaceReducer, initialPetsciiSurface, type PetsciiSurface } from '../petscii/surface-state';
+import { processLoginKey, type LoginKeyContext } from '../utils/login-key-machine';
 
-// PETSCII raw-byte transport (Task 9). `MAX_SOFT_CAP_BPS` mirrors
+// PETSCII byte pacing. `PETSCII_MAX_SOFT_CAP_BPS` mirrors
 // modem-emulator.ts's bps=0 soft cap (230400 bps / 10 bits-per-byte =
 // 23040 bytes/sec) so a full-speed connection still paints progressively
 // instead of the whole 40x25 frame landing in one tick.
 const PETSCII_MAX_SOFT_CAP_BPS = 230400;
-
-// petsciiKeyBytesToCommand (packages/terminal/src/petscii/key-bytes-to-command.ts)
-// was folded into the SDK's shared petsciiInputToAscii (sdk/petscii/
-// petscii-input.ts, task 6 of the full-canvas PETSCII plan) so the web
-// canvas and real C64 telnet callers go through one table, including
-// cursor and function keys the old canvas-only helper dropped.
 
 // RIP Graphics.
 //
@@ -230,39 +224,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const guruPhaseRef = useRef<number>(0);
   const guruStaticRendered = useRef<boolean>(false);
   const normalFont = useRef<string>('TopazPlus_a1200, "Courier New", monospace');
-  // Bug F fix (true-petscii login/font pass): true once a PETSCII (C64)
-  // session is showing - set from every place that switches xterm to
-  // PetMe64 (ensurePetsciiTerminal itself, the one-shot 40x25
-  // 'terminal-resize' that precedes it, and the first 'petscii-bytes' event
-  // in case that ordering ever changes) so it's true as soon as PETSCII
-  // mode is known to be starting, not only once the async font-load
-  // promise inside ensurePetsciiTerminal resolves. Consumed by the
-  // font-preference/set-font handlers below (via resolveTerminalFontFamily)
-  // so a saved or user-picked Amiga font can never clobber PetMe64 while
-  // this is true.
-  //
-  // Re-review follow-up: no backend event un-does the 40x25 resize *within
-  // the same session* (grepped: pre-login.ts:158 is the only
-  // 'terminal-resize' emitter, and it only ever sends 40x25) - correct, a
-  // 'P' session stays PETSCII for its own lifetime. But this ref lives on
-  // the mounted React component, not the backend session, and three
-  // reconnection paths start a genuinely FRESH session on the SAME mounted
-  // component without remounting it: 'session-restore-failed' and
-  // 'reconnect_failed' (both below) and attemptTokenLogin's token-login
-  // branch (which skips the graphics prompt entirely). Left uncleared, a
-  // prior PETSCII session's flag would force-lock PetMe64 onto a brand new
-  // session that never answered 'P' - font-preference/set-font would keep
-  // "winning" for the wrong reason, with no undo short of a page reload.
-  // clearPetsciiSession() (declared right below) is called from all three;
-  // every re-SET site above still re-arms it correctly if the fresh session
-  // does turn out to answer 'P' again. A real 'session-restored' (the
-  // backend resuming the SAME session after a network blip) deliberately
-  // does NOT clear this - that is a continuation, not a fresh session, and
-  // must keep whatever font state it already had.
-  const petsciiSessionActiveRef = useRef<boolean>(false);
-  const clearPetsciiSession = useCallback(() => {
-    petsciiSessionActiveRef.current = false;
-  }, []);
   const transferState = useRef<{ direction: 'upload' | 'download' | null; paths?: string[] }>({
     direction: null,
     paths: [],
@@ -273,66 +234,39 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const sfxBufferRef = useRef<string>('');
   const modemEmulatorRef = useRef<ModemEmulator | null>(null);
 
-  // PETSCII raw-byte transport state (Task 9). petsciiMachineRef is created
-  // lazily on the first 'petscii-bytes' event and persists for the rest of
-  // the session (machine/queue survive across shows - see
-  // petsciiOverlayState's docs). petsciiBpsRef mirrors the same
+  // Full-canvas PETSCII session (petscii-full-canvas plan, Task 8). The
+  // surface is either xterm (ANSI) or the PetsciiCanvas (a simulated C64):
+  // every byte for a 'P' session goes transducer -> pace queue -> machine ->
+  // canvas, including the login echo. Only a PETSCII event selects the
+  // canvas (surface-state.ts); a fresh session on this mounted component
+  // resets to xterm via clearPetsciiSession (token login, restore failed,
+  // reconnect failed - 'session-restored' is a continuation and keeps it).
+  //
+  // surfaceRef mirrors `surface` for the socket handlers and writeTerm,
+  // which live inside the mount-once effect and would otherwise close over
+  // the first render's value forever. petsciiBpsRef mirrors the same
   // 'modem-speed' event ModemEmulator listens to, so the C64 canvas draws
   // at the same simulated baud rate as the ANSI/xterm path.
-  //
-  // Overlay visibility (final review wave, Finding 2 - the controller's
-  // overlay ruling): xterm stays visible/focused at ALL times as the
-  // interaction surface (term.onData IS the web login state machine).
-  // PetsciiCanvas is drawn OVER it while a raw PETSCII screen plays, and
-  // is dismissed - not the other way around, xterm was never hidden by
-  // this reducer's introduction - by petsciiOverlayReducer (see
-  // petscii/overlay-state.ts): the next ansi-output after the byte stream
-  // drains, or any keypress.
+  const [surface, dispatchSurface] = useReducer(petsciiSurfaceReducer, initialPetsciiSurface);
+  const surfaceRef = useRef<PetsciiSurface>(initialPetsciiSurface);
   const petsciiMachineRef = useRef<PetsciiMachine | null>(null);
-  const [petsciiOverlay, dispatchPetsciiOverlay] = useReducer(petsciiOverlayReducer, initialPetsciiOverlayState);
-  // Pixel box of xterm at the moment the overlay first appears. Kept from
-  // the pre-overlay 'fixed'-mode frame-snapshot fix (commit c4398c955):
-  // xterm no longer gets display:none'd, but pinning the wrapper's height
-  // to this snapshot avoids it visibly resizing out from under the
-  // overlay if xterm's own content height changes while the picture plays.
-  const [petsciiFrameSize, setPetsciiFrameSize] = useState<{ width: number; height: number } | null>(null);
-  // Sysop live-screenshot addendum to Finding 2: the overlay used to trust
-  // `inset:0` against the shared wrapper div to land exactly on xterm's
-  // real box. That's only true if the wrapper's CSS width (which flows
-  // through a `width:100%`/`max-width:960px` percentage chain) happens to
-  // resolve to the SAME pixels as terminalRef's actual rendered box - and
-  // terminalRef never calls fitAddon.fit() in 'fixed' mode (see
-  // fitTerminal()'s early return), so xterm renders at its own natural
-  // 80-col pixel width, not necessarily the wrapper's. A live screenshot
-  // showed the canvas centered in the (wider) wrapper, reading as shifted
-  // right of the actual (narrower) terminal underneath. Measuring
-  // terminalRef's real box directly - relative to the SAME offsetParent
-  // (the wrapper, its nearest positioned ancestor) inset:0 would have used
-  // - removes the CSS-resolution guesswork instead of hoping it converges.
-  const [petsciiFrameRect, setPetsciiFrameRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
-  useEffect(() => {
-    const el = terminalRef.current;
-    if (!el) return;
-    const measureRect = () => {
-      setPetsciiFrameRect({
-        left: el.offsetLeft,
-        top: el.offsetTop,
-        width: el.offsetWidth,
-        height: el.offsetHeight,
-      });
-    };
-    measureRect();
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', measureRect);
-      return () => window.removeEventListener('resize', measureRect);
-    }
-    const ro = new ResizeObserver(measureRect);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  const petsciiTransducerRef = useRef<AnsiToPetsciiTransducer | null>(null);
+  const petsciiCanvasRef = useRef<PetsciiCanvasHandle | null>(null);
   const petsciiBpsRef = useRef<number>(0);
   const petsciiFeedQueue = useRef<number[]>([]);
   const petsciiDrainActiveRef = useRef<boolean>(false);
+  const clearPetsciiSession = useCallback(() => {
+    surfaceRef.current = 'xterm';
+    petsciiMachineRef.current = null;
+    petsciiTransducerRef.current = null;
+    petsciiFeedQueue.current.length = 0;
+    dispatchSurface({ type: 'session-reset' });
+  }, []);
+  // Published by the init effect so injectInput (imperative handle) and the
+  // canvas (JSX) drive the SAME login/command path as physical keys.
+  const processInputKeyRef = useRef<(key: string) => void>(() => {});
+  const focusSurfaceRef = useRef<() => void>(() => {});
+  const fitTerminalRef = useRef<() => void>(() => {});
 
   // Classic BBS behaviour: any keypress dumps the rest of the pending
   // screen instantly instead of making the user wait out the baud rate.
@@ -521,14 +455,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       return false;
     }
 
-    // Re-review follow-up to the Bug F fix: every caller of this function
-    // (initial mount, the 'connect' handler's non-restore branch, and
-    // 'session-restore-failed') is, by definition, about to begin a FRESH
-    // session on this mounted component - either via the token-login
-    // branch below (which skips the graphics prompt outright) or by
-    // falling through to a brand new graphics-prompt/login flow. Either
-    // way a prior PETSCII session's font lock must not carry over; see
-    // petsciiSessionActiveRef's declaration above.
+    // Every caller of this function (initial mount, the 'connect' handler's
+    // non-restore branch, and 'session-restore-failed') is, by definition,
+    // about to begin a FRESH session on this mounted component - either via
+    // the token-login branch below (which skips the graphics prompt
+    // outright) or by falling through to a brand new graphics-prompt/login
+    // flow. Either way a prior PETSCII session must not carry its canvas
+    // surface over; see clearPetsciiSession's declaration above.
     clearPetsciiSession();
 
     const token = getStoredSharedToken();
@@ -763,7 +696,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // Expose methods to parent components
   useImperativeHandle(ref, () => ({
     focus: () => {
-      terminalInstance.current?.focus();
+      focusSurfaceRef.current();
     },
     sendCommand: (command: string) => {
       if (socketRef.current?.connected) {
@@ -771,117 +704,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
     },
     injectInput: (data: string) => {
-      const term = terminalInstance.current;
-      const socket = socketRef.current;
-      if (!term) return;
-
-      // Bug I fix (true-petscii login/font pass): the on-screen/mobile
-      // keyboard drives login through this method, not through xterm's own
-      // term.onKey — so it never reached the window 'keydown' listener
-      // (BBSTerminal.tsx, "Finding 2 (final review wave)") that dismisses
-      // the PetsciiCanvas overlay on physical typing. That left the overlay
-      // (opaque, on top of xterm) up forever on mobile: the user typed their
-      // username/password blind behind it and still got logged in, because
-      // the login state machine below runs regardless of what's drawn on
-      // screen. Mirror the physical-keyboard path unconditionally, exactly
-      // like that listener does — dismissing is a no-op via
-      // petsciiOverlayReducer's 'keypress' case when nothing is showing, so
-      // this is safe to call on every injected keystroke, login or not.
-      dispatchPetsciiOverlay({ type: 'keypress' });
-
-      // During login states onData is explicitly blocked — replicate onKey logic directly.
-      if (loginState.current === 'username') {
-        if (data === '\r' || data === '\n') {
-          socket?.emit('check-username', { username: username.current });
-          loginState.current = 'checking-username';
-          term.write('\r\n');
-        } else if (data === '\x7f' || data === '\x08') {
-          if (username.current.length > 0) {
-            username.current = username.current.slice(0, -1);
-            term.write('\b \b');
-          }
-        } else if (data.length === 1 && data >= ' ') {
-          username.current += data;
-          term.write(data);
-        }
-        return;
-      }
-
-      if (loginState.current === 'password') {
-        if (data === '\r' || data === '\n') {
-          socket?.emit('login', { username: username.current, password: password.current });
-          loginState.current = 'logging-in';
-          term.write('\r\n');
-        } else if (data === '\x7f' || data === '\x08') {
-          if (password.current.length > 0) {
-            password.current = password.current.slice(0, -1);
-            term.write('\b \b');
-          }
-        } else if (data.length === 1 && data >= ' ') {
-          password.current += data;
-          term.write(passwordMode.current ? data : '*');
-        }
-        return;
-      }
-
-      if (loginState.current === 'password-reset') {
-        if (data === '\r' || data === '\n') {
-          socket?.emit('password-reset-input', { input: passwordResetInput.current });
-          term.write('\r\n');
-          passwordResetInput.current = '';
-        } else if (data === '\x7f' || data === '\x08') {
-          if (passwordResetInput.current.length > 0) {
-            passwordResetInput.current = passwordResetInput.current.slice(0, -1);
-            term.write('\b \b');
-          }
-        } else if (data.length === 1 && data >= ' ') {
-          passwordResetInput.current += data;
-          term.write(passwordMode.current ? '*' : data);
-        }
-        return;
-      }
-
-      if (loginState.current === 'forced-pwd-change') {
-        if (data === '\r' || data === '\n') {
-          socket?.emit('forced-pwd-change-input', { input: forcedPwdChangeInput.current });
-          term.write('\r\n');
-          forcedPwdChangeInput.current = '';
-        } else if (data === '\x7f' || data === '\x08') {
-          if (forcedPwdChangeInput.current.length > 0) {
-            forcedPwdChangeInput.current = forcedPwdChangeInput.current.slice(0, -1);
-            term.write('\b \b');
-          }
-        } else if (data.length === 1 && data >= ' ') {
-          forcedPwdChangeInput.current += data;
-          term.write('*'); // always mask during forced change
-        }
-        return;
-      }
-
-      if (loginState.current === 'new-user-prompt') {
-        const promptUser = newUserPromptUsername.current || username.current || '';
-        const sendResponse = (response: string) => {
-          socket?.emit('new-user-response', { response, username: promptUser });
-        };
-        if (data === '\r' || data === '\n') {
-          term.write('\r\n');
-          sendResponse('');
-          setTimeout(() => { loginState.current = 'registering'; }, 0);
-        } else if (data.length === 1) {
-          term.write(data + '\r\n');
-          sendResponse(data);
-          setTimeout(() => { loginState.current = 'registering'; }, 0);
-        }
-        return;
-      }
-
-      // checking-username / logging-in: BBS is processing, discard input
-      if (loginState.current === 'checking-username' || loginState.current === 'logging-in') {
-        return;
-      }
-
-      // Post-login: fire onData → socket (normal path, not blocked outside login states)
-      term.input(data, true);
+      // On-screen/mobile keyboard. Same path as physical keys and the canvas.
+      processInputKeyRef.current(data);
     },
     getSocket: () => socketRef.current,
     getTerminal: () => terminalInstance.current,
@@ -962,6 +786,76 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Initialize modem emulator for client-side speed throttling
     modemEmulatorRef.current = new ModemEmulator(term);
 
+    // PETSCII pacing. Bytes destined for the canvas go through this queue
+    // rather than straight into the machine, mirroring
+    // ModemEmulator.sendThrottled (modem-emulator.ts:170-210): an
+    // elapsed-time token budget rather than a fixed-size interval tick, so
+    // the drain rate tracks bps smoothly instead of stair-stepping. bps=0
+    // (MAX) soft-caps to PETSCII_MAX_SOFT_CAP_BPS for the same reason
+    // ModemEmulator.enable() does - so a full C64 frame still draws
+    // progressively instead of landing in a single tick.
+    const startPetsciiDrain = () => {
+      if (petsciiDrainActiveRef.current) return; // already draining
+      petsciiDrainActiveRef.current = true;
+      const start = performance.now();
+      let bytesSent = 0;
+      const step = async () => {
+        while (petsciiFeedQueue.current.length > 0) {
+          const bps = petsciiBpsRef.current || PETSCII_MAX_SOFT_CAP_BPS;
+          const bytesPerSecond = Math.max(1, Math.floor(bps / 10)); // 10 bits/byte
+          const elapsedMs = performance.now() - start;
+          const allowed = Math.max(0, Math.floor(bytesPerSecond * (elapsedMs / 1000)) - bytesSent);
+          if (allowed <= 0) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            continue;
+          }
+          const queue = petsciiFeedQueue.current;
+          const toSend = Math.min(allowed, queue.length, 64);
+          const chunk = queue.splice(0, toSend);
+          petsciiMachineRef.current?.feed(Uint8Array.from(chunk));
+          bytesSent += toSend;
+        }
+        petsciiDrainActiveRef.current = false;
+      };
+      void step();
+    };
+    const enqueuePetscii = (bytes: Uint8Array | number[]) => {
+      for (const b of bytes) petsciiFeedQueue.current.push(b);
+      startPetsciiDrain();
+    };
+    // Canvas mode starts here and only here. The transducer and the display
+    // machine both start from power-on state and see the same byte sequence
+    // (transducer output + observed raw bytes), so they stay in lockstep.
+    const ensurePetsciiSession = () => {
+      if (!petsciiMachineRef.current) petsciiMachineRef.current = new PetsciiMachine();
+      if (!petsciiTransducerRef.current) petsciiTransducerRef.current = new AnsiToPetsciiTransducer();
+      if (surfaceRef.current !== 'canvas') {
+        surfaceRef.current = 'canvas';
+        dispatchSurface({ type: 'petscii-session-start' });
+      }
+    };
+    // ONE seam for every direct xterm write in this effect: identical bytes
+    // to xterm when it is the surface; transduced onto the canvas otherwise.
+    const writeTerm = (text: string) => {
+      if (surfaceRef.current === 'canvas') {
+        enqueuePetscii(petsciiTransducerRef.current!.transduce(text));
+        return;
+      }
+      term.write(text);
+    };
+    // term.writeln's seam (the Guru Meditation screen is the only caller).
+    // Routed through the same switch so a connection failure during a 'P'
+    // session renders as ONE screen on the live surface instead of half on
+    // the canvas and half into a hidden xterm.
+    const writeTermLn = (text: string) => writeTerm(text + '\r\n');
+    // Focus follows the surface: xterm's textarea is display:none while the
+    // canvas owns the session, so it cannot hold focus there.
+    const focusSurface = () => {
+      if (surfaceRef.current === 'canvas') petsciiCanvasRef.current?.focus();
+      else term.focus();
+    };
+    focusSurfaceRef.current = focusSurface;
+
     // Global keydown listener for Ctrl/Cmd+Shift+M mouse toggle
     // Must be on window because xterm.js may not pass modifier combos to attachCustomKeyEventHandler
     const mouseToggleHandler = (event: KeyboardEvent) => {
@@ -1025,6 +919,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Fit terminal to container, respecting mode
     const fitTerminal = () => {
+      if (surfaceRef.current === 'canvas') return; // xterm is display:none; fit() on a hidden element measures nothing
       // In fixed mode, DON'T resize - stay at 80x25
       if (terminalMode === 'fixed') {
         console.log(`[BBSTerminal] Fixed mode - ignoring resize, staying at 80x25`);
@@ -1061,6 +956,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         console.log(`[BBSTerminal] Emitted terminal-size event`);
       }
     };
+    fitTerminalRef.current = fitTerminal;
 
     // DON'T auto-fit on mount - terminal starts at 80x25 (fixed mode)
     // Only resize when:
@@ -1262,11 +1158,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
       // Clear screen and render static content on first render only
       if (!guruStaticRendered.current) {
-        term.write('\x1b[2J'); // Clear entire screen
-        term.write('\x1b[H');  // Move cursor to home (top-left)
+        writeTerm('\x1b[2J'); // Clear entire screen
+        writeTerm('\x1b[H');  // Move cursor to home (top-left)
       } else {
         // On subsequent renders, just position cursor at top for blinking frame
-        term.write('\x1b[H');
+        writeTerm('\x1b[H');
       }
 
       // Blink border between red and black backgrounds (like Amiga Guru Meditation)
@@ -1283,32 +1179,32 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       };
 
       // Draw solid red background frame (thicker than box-drawing chars)
-      term.write(`${borderBg}${' '.repeat(frameWidth)}${reset}\r\n`); // Top border (full width)
-      term.write(`${borderBg}  ${reset}${' '.repeat(interiorWidth)}${borderBg}  ${reset}\r\n`); // Empty line
-      term.write(centerLine('Software Failure.') + '\r\n');
-      term.write(centerLine('BBS Backend Connection Failed') + '\r\n');
-      term.write(centerLine('Guru Meditation') + '\r\n');
-      term.write(`${borderBg}  ${reset}${' '.repeat(interiorWidth)}${borderBg}  ${reset}\r\n`); // Empty line
-      term.write(`${borderBg}${' '.repeat(frameWidth)}${reset}\r\n`); // Bottom border (full width)
+      writeTerm(`${borderBg}${' '.repeat(frameWidth)}${reset}\r\n`); // Top border (full width)
+      writeTerm(`${borderBg}  ${reset}${' '.repeat(interiorWidth)}${borderBg}  ${reset}\r\n`); // Empty line
+      writeTerm(centerLine('Software Failure.') + '\r\n');
+      writeTerm(centerLine('BBS Backend Connection Failed') + '\r\n');
+      writeTerm(centerLine('Guru Meditation') + '\r\n');
+      writeTerm(`${borderBg}  ${reset}${' '.repeat(interiorWidth)}${borderBg}  ${reset}\r\n`); // Empty line
+      writeTerm(`${borderBg}${' '.repeat(frameWidth)}${reset}\r\n`); // Bottom border (full width)
 
       // Render the static content below on first render only
       if (!guruStaticRendered.current) {
         guruStaticRendered.current = true;
-        term.writeln('');
-        term.writeln('\x1b[33m[!] Cannot connect to BBS server at: \x1b[0m' + finalBackendUrl);
-        term.writeln('');
-        term.writeln('\x1b[37mThe BBS terminal requires the AmiExpress BBS backend to be running.\x1b[0m');
-        term.writeln('');
-        term.writeln('\x1b[32mTo start the BBS backend:\x1b[0m');
-        term.writeln('  \x1b[37m1. Open a new terminal\x1b[0m');
-        term.writeln('  \x1b[37m2. Navigate to project root: \x1b[36mcd amiexpress-web\x1b[0m');
-        term.writeln('  \x1b[37m3. Run: \x1b[36m./dev/scripts/start-servers.sh\x1b[0m');
-        term.writeln('');
-        term.writeln('\x1b[90m' + '-'.repeat(80) + '\x1b[0m');
-        term.writeln('');
-        term.writeln('\x1b[37mNote: You can still use the SDK preview for door development.\x1b[0m');
-        term.writeln('\x1b[37mThe BBS tab is optional and only needed for testing doors in a live BBS.\x1b[0m');
-        term.writeln('');
+        writeTermLn('');
+        writeTermLn('\x1b[33m[!] Cannot connect to BBS server at: \x1b[0m' + finalBackendUrl);
+        writeTermLn('');
+        writeTermLn('\x1b[37mThe BBS terminal requires the AmiExpress BBS backend to be running.\x1b[0m');
+        writeTermLn('');
+        writeTermLn('\x1b[32mTo start the BBS backend:\x1b[0m');
+        writeTermLn('  \x1b[37m1. Open a new terminal\x1b[0m');
+        writeTermLn('  \x1b[37m2. Navigate to project root: \x1b[36mcd amiexpress-web\x1b[0m');
+        writeTermLn('  \x1b[37m3. Run: \x1b[36m./dev/scripts/start-servers.sh\x1b[0m');
+        writeTermLn('');
+        writeTermLn('\x1b[90m' + '-'.repeat(80) + '\x1b[0m');
+        writeTermLn('');
+        writeTermLn('\x1b[37mNote: You can still use the SDK preview for door development.\x1b[0m');
+        writeTermLn('\x1b[37mThe BBS tab is optional and only needed for testing doors in a live BBS.\x1b[0m');
+        writeTermLn('');
       }
     };
 
@@ -1695,15 +1591,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // out is a reload. Start over instead.
     socket.io.on('reconnect_failed', () => {
       console.warn('[Terminal] Reconnection gave up - starting over rather than sitting dead');
-      // Re-review follow-up to the Bug F fix: "starting over" means the
-      // eventual reconnect either restores the old session (which
-      // legitimately keeps whatever font state it had) or - if that fails,
-      // or there was nothing to restore - runs the fresh-session path
-      // (session-restore-failed / attemptTokenLogin, both of which also
-      // clear this). Clearing here too, right where "starting over" is
-      // decided, means the flag is never left dangling through whatever
-      // gap exists before that eventual 'connect'/'session-restore-failed'
-      // fires.
+      // "Starting over" means the eventual reconnect either restores the
+      // old session (a continuation, which legitimately keeps its surface)
+      // or - if that fails, or there was nothing to restore - runs the
+      // fresh-session path (session-restore-failed / attemptTokenLogin,
+      // both of which also reset the surface). Resetting here too, right
+      // where "starting over" is decided, means the canvas is never left
+      // showing a dead session through whatever gap exists before that
+      // eventual 'connect'/'session-restore-failed' fires.
       clearPetsciiSession();
       socket.connect();
     });
@@ -2040,12 +1935,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // ANSI output handler
     socket.on('ansi-output', (data: string) => {
-      // Finding 2 (final review wave): text output arriving after a PETSCII
-      // byte stream drains means the art finished and the next prompt is
-      // being drawn underneath the overlay - dismiss it. The reducer itself
-      // guards against dismissing early if this happens mid-drain.
-      dispatchPetsciiOverlay({ type: 'ansi-output' });
-
       // DEBUG: Log first 20 chars of any incoming data to help identify why RIP mode isn't triggering
       if (data.includes('[1!') || data.includes('!|')) {
         console.log(`[Terminal] Incoming possible RIP data (len ${data.length}): ${JSON.stringify(data.slice(0, 50))}`);
@@ -2113,8 +2002,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         const parts = data.split(/\x1b\[1!|\u001b\[1!/);
         const textBefore = parts[0];
         if (textBefore) {
-          if (modemEmulatorRef.current) modemEmulatorRef.current.write(textBefore);
-          else term.write(textBefore);
+          // The modem emulator writes straight into xterm, so it is only the
+          // right pipe while xterm is the surface (writeTerm covers both).
+          if (surfaceRef.current !== 'canvas' && modemEmulatorRef.current) modemEmulatorRef.current.write(textBefore);
+          else writeTerm(textBefore);
         }
 
         console.log('[RIP] Entering RIP graphics mode');
@@ -2178,6 +2069,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         output = output.replace(/\x1b\[\?(1000|1002|1003|1006)h/g, '');
       }
 
+      if (surfaceRef.current === 'canvas') {
+        // Simulated C64: the whole session renders on the canvas. The pace
+        // queue (petsciiBpsRef, same 'modem-speed' as ModemEmulator) keeps
+        // the baud feel; xterm stays hidden.
+        enqueuePetscii(petsciiTransducerRef.current!.transduce(output));
+        return;
+      }
       // Use modem emulator for client-side speed throttling
       if (modemEmulatorRef.current) {
         modemEmulatorRef.current.write(output);
@@ -2187,104 +2085,19 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       term.refresh(0, term.rows - 1);
     });
 
-    // PETSCII output handler. The font MUST be loaded before xterm rasterizes
-    // PUA glyphs - a canvas renderer never triggers CSS @font-face loading, and
-    // xterm caches rasterized tofu in its texture atlas (audit A1/A2).
-    let petsciiFontReady: Promise<unknown> | null = null;
-    const ensurePetsciiTerminal = async () => {
-      // Set synchronously, before the await below, so a login-success that
-      // races ahead of the font-load promise still sees the PETSCII session
-      // as active (Bug F fix).
-      petsciiSessionActiveRef.current = true;
-      petsciiFontReady = petsciiFontReady ?? document.fonts.load('16px PetMe64');
-      await petsciiFontReady;
-      const currentFont = term.options.fontFamily;
-      if (!currentFont?.includes('PetMe64')) {
-        normalFont.current = currentFont || 'TopazPlus_a1200, "Courier New", monospace';
-        term.options.fontFamily = 'PetMe64, "Courier New", monospace';
-        (term as any).clearTextureAtlas?.(); // drop any cached fallback glyphs
-      }
-      if (term.cols !== 40 || term.rows !== 25) {
-        term.resize(40, 25); // PETSCII art is authored for 40x25 (audit A3)
-      }
-    };
+    // Legacy PUA text (command.handler's C64 prompts, BBSApi.writePetsciiLine).
+    // A PETSCII session by definition: the transducer decodes U+E000-E1FF.
     socket.on('petscii-output', (data: string) => {
-      void ensurePetsciiTerminal().then(() => {
-        // Same pacing queue as ANSI output - keeps ordering and lets art
-        // draw at modem speed instead of jumping the ANSI queue (audit B3).
-        if (modemEmulatorRef.current) {
-          modemEmulatorRef.current.write(data);
-        } else {
-          term.write(data);
-        }
-        term.refresh(0, term.rows - 1);
-      });
+      ensurePetsciiSession();
+      enqueuePetscii(petsciiTransducerRef.current!.transduce(data));
     });
 
-    // PETSCII raw-byte transport (Task 9). Unlike 'petscii-output' (a PUA
-    // string written straight to xterm), these are the exact bytes the
-    // server read off a .seq file (or a door's writePetscii(Buffer)),
-    // base64-encoded. Feed them to a PetsciiMachine and render through
-    // PetsciiCanvas instead of xterm - xterm has no concept of C64 screen
-    // codes/color RAM/charset banks, only PUA glyphs.
-    //
-    // Pacing mirrors ModemEmulator.sendThrottled (modem-emulator.ts:170-210):
-    // an elapsed-time token budget rather than a fixed-size interval tick,
-    // so the drain rate tracks bps smoothly instead of stair-stepping.
-    // bps=0 (MAX) soft-caps to PETSCII_MAX_SOFT_CAP_BPS for the same reason
-    // ModemEmulator.enable() does - so a full C64 frame still draws
-    // progressively instead of landing in a single tick.
-    const startPetsciiDrain = () => {
-      if (petsciiDrainActiveRef.current) return; // already draining
-      petsciiDrainActiveRef.current = true;
-      const start = performance.now();
-      let bytesSent = 0;
-      const step = async () => {
-        while (petsciiFeedQueue.current.length > 0) {
-          const bps = petsciiBpsRef.current || PETSCII_MAX_SOFT_CAP_BPS;
-          const bytesPerSecond = Math.max(1, Math.floor(bps / 10)); // 10 bits/byte
-          const elapsedMs = performance.now() - start;
-          const allowed = Math.max(0, Math.floor(bytesPerSecond * (elapsedMs / 1000)) - bytesSent);
-          if (allowed <= 0) {
-            await new Promise((resolve) => setTimeout(resolve, 5));
-            continue;
-          }
-          const queue = petsciiFeedQueue.current;
-          const toSend = Math.min(allowed, queue.length, 64);
-          const chunk = queue.splice(0, toSend);
-          petsciiMachineRef.current?.feed(Uint8Array.from(chunk));
-          bytesSent += toSend;
-        }
-        petsciiDrainActiveRef.current = false;
-        // The feed queue emptied - this screen finished painting. Gates the
-        // overlay reducer's 'ansi-output' auto-dismiss (Finding 2): a login
-        // prompt that lands mid-drain must not cut the picture short.
-        dispatchPetsciiOverlay({ type: 'drain-complete' });
-      };
-      void step();
-    };
+    // Raw .seq bytes (screen.handler emitPetsciiScreen, BBSApi.writePetscii(Buffer)).
     socket.on('petscii-bytes', (b64: string) => {
-      petsciiSessionActiveRef.current = true; // Bug F fix - see declaration
+      ensurePetsciiSession();
       const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-      if (!petsciiMachineRef.current) {
-        // Created once and kept for the rest of the session - the machine
-        // and its queue survive across shows (Finding 2's overlay ruling),
-        // so a second .seq screen later reuses the same instance instead of
-        // resetting it.
-        petsciiMachineRef.current = new PetsciiMachine();
-      }
-      // Snapshot xterm's current box (see petsciiFrameSize's declaration).
-      if (terminalRef.current) {
-        setPetsciiFrameSize({
-          width: terminalRef.current.clientWidth,
-          height: terminalRef.current.clientHeight,
-        });
-      }
-      // (Re)shows the overlay on top of xterm - including on a screen that
-      // arrives after an earlier one was dismissed, not just the first ever.
-      dispatchPetsciiOverlay({ type: 'bytes-arrived' });
-      for (const b of bytes) petsciiFeedQueue.current.push(b);
-      startPetsciiDrain();
+      petsciiTransducerRef.current!.observe(bytes); // the oracle must see what the screen now shows
+      enqueuePetscii(bytes);
     });
 
     // Modem speed emulation handler.
@@ -2308,12 +2121,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Terminal resize handler (PETSCII mode uses 40x25)
     socket.on('terminal-resize', (size: { cols: number; rows: number }) => {
       console.log('[Terminal] Resize request:', size.cols, 'x', size.rows);
-      term.resize(size.cols, size.rows);
-      // For PETSCII mode (40x25), also switch to PetMe64 font
       if (size.cols === 40 && size.rows === 25) {
-        petsciiSessionActiveRef.current = true; // Bug F fix - see declaration
-        void ensurePetsciiTerminal();
+        // The 'P' answer (pre-login.ts applyGraphicsAnswer): the session is a
+        // C64 from here on. xterm is not resized - it stays 80x24, hidden,
+        // ready for the next non-PETSCII session on this component.
+        ensurePetsciiSession();
+        return;
       }
+      term.resize(size.cols, size.rows);
     });
 
     // Cursor style for mouse hover feedback (CSS cursor property)
@@ -2461,7 +2276,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
 
       socket.emit('get-font-preference');
-      term.focus();
+      focusSurface();
     });
 
     socket.on('session-restored', (data: any) => {
@@ -2478,20 +2293,20 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         currentConf: data.currentConf,
       });
 
-      term.write('\r\n\x1b[32m[Session Restored] Welcome back!\x1b[0m\r\n');
-      term.focus();
+      writeTerm('\r\n\x1b[32m[Session Restored] Welcome back!\x1b[0m\r\n');
+      focusSurface();
     });
 
     socket.on('session-restore-failed', (reason: string) => {
       console.log('[Session Persistence] Session restoration failed:', reason);
-      // Re-review follow-up to the Bug F fix: the restore failed, so the
-      // backend is about to start a genuinely fresh session (a new
-      // graphics prompt, or the token-login fallback below) - not a
-      // continuation of whatever session (PETSCII or not) this component
-      // was previously showing. Clear explicitly here, before that fresh
-      // sequence begins, rather than relying solely on attemptTokenLogin's
-      // own clear (it already does this too, belt-and-suspenders, since it
-      // also runs when there's no token to fall back on).
+      // The restore failed, so the backend is about to start a genuinely
+      // fresh session (a new graphics prompt, or the token-login fallback
+      // below) - not a continuation of whatever session (PETSCII or not)
+      // this component was previously showing. Reset the surface explicitly
+      // here, before that fresh sequence begins, rather than relying solely
+      // on attemptTokenLogin's own reset (it already does this too,
+      // belt-and-suspenders, since it also runs when there's no token to
+      // fall back on).
       clearPetsciiSession();
       clearSessionState();
       reconnectPending.current = false;
@@ -2513,7 +2328,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (autoLoginEnabled) {
         localStorage.removeItem('bbs_saved_username');
         localStorage.removeItem('bbs_saved_password');
-        term.write('\r\n\x1b[33m[Quick Connect] Saved credentials cleared due to login failure\x1b[0m\r\n');
+        writeTerm('\r\n\x1b[33m[Quick Connect] Saved credentials cleared due to login failure\x1b[0m\r\n');
       }
 
       // If retrying from password, keep username and wait for prompt-password event
@@ -2530,7 +2345,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     socket.on('user-not-found', (data: { username: string; prompt: string }) => {
-      term.write('\x1b[33m' + data.prompt + '\x1b[0m');
+      writeTerm('\x1b[33m' + data.prompt + '\x1b[0m');
       loginState.current = 'new-user-prompt';
       newUserPromptUsername.current = data.username;
       username.current = '';
@@ -2548,7 +2363,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     socket.on('prompt-password', () => {
       loginState.current = 'password';
       password.current = '';
-      term.write('Password: ');
+      writeTerm('Password: ');
     });
 
     socket.on('password-mode', (enabled: boolean) => {
@@ -2702,7 +2517,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       console.log(`[ClientDoor] Loading door: ${data.doorId}`);
 
       const doorName = data.manifest?.name || data.doorId;
-      term.write(`\r\n\x1b[36mLoading ${doorName}...\x1b[0m\r\n`);
+      writeTerm(`\r\n\x1b[36mLoading ${doorName}...\x1b[0m\r\n`);
       doorActive.current = true;
       setActiveClientDoor(data.doorId);
       doorReadyMap.current[data.sessionId] = false;
@@ -2738,14 +2553,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
       script.onload = () => {
         console.log(`[ClientDoor] Bundle loaded successfully: ${data.doorId}`);
-        term.write('\x1b[32m[OK] Door bundle loaded\x1b[0m\r\n');
+        writeTerm('\x1b[32m[OK] Door bundle loaded\x1b[0m\r\n');
         doorReadyMap.current[data.sessionId] = true;
         flushDoorMessages(data.sessionId);
       };
 
       script.onerror = (error) => {
         console.error(`[ClientDoor] Failed to load bundle:`, error);
-        term.write('\r\n\x1b[31mError loading door bundle\x1b[0m\r\n');
+        writeTerm('\r\n\x1b[31mError loading door bundle\x1b[0m\r\n');
         doorActive.current = false;
         setActiveClientDoor(null);
         // A door that failed to load must not leave the pointer captured.
@@ -2801,7 +2616,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (document.pointerLockElement) {
         document.exitPointerLock?.();
       }
-      term.write(`\r\n\x1b[32mDoor closed\x1b[0m\r\n`);
+      writeTerm(`\r\n\x1b[32mDoor closed\x1b[0m\r\n`);
     });
 
     socket.on('set-font', (fontName: string) => {
@@ -2820,20 +2635,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       const requestedLineHeight = lineHeightMap[fontName] ?? 1.0;
       // Use calibrated size (fontSizeRef) — never override with hardcoded 16 on mobile
       const size = fontSizeRef.current;
-      // Bug F fix: a user-initiated font pick must not clobber PetMe64
-      // while a PETSCII (C64) session is showing — a simulated C64 has no
-      // business switching to an Amiga bitmap font mid-session. The pick is
-      // still remembered in normalFont.current so it applies once the user
-      // is back in a non-PETSCII session.
-      const petsciiActive = petsciiSessionActiveRef.current;
-      const fontFamily = resolveTerminalFontFamily(requestedFontFamily, petsciiActive);
-      term.options.fontFamily = fontFamily;
+      // xterm never shows a PETSCII session any more (the canvas does), so
+      // there is nothing to guard here: apply the pick straight to xterm.
+      term.options.fontFamily = requestedFontFamily;
       term.options.fontSize = size;
-      if (!petsciiActive) {
-        term.options.lineHeight = requestedLineHeight;
-      }
+      term.options.lineHeight = requestedLineHeight;
       normalFont.current = requestedFontFamily;
-      console.log('[Font] Applied font:', fontName, 'size:', size, 'lineHeight:', requestedLineHeight, 'petsciiActive:', petsciiActive);
+      console.log('[Font] Applied font:', fontName, 'size:', size, 'lineHeight:', requestedLineHeight);
     });
 
     // Handle font preference loaded from database on login
@@ -2850,199 +2658,66 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       const requestedLineHeight = lineHeightMap[fontName] ?? 1.0;
       // Use calibrated size (fontSizeRef) — never override with hardcoded 16 on mobile
       const size = fontSizeRef.current;
-      // Bug F fix: login-success unconditionally requests this the instant
-      // login completes, which used to land right after ensurePetsciiTerminal
-      // switched to PetMe64 for a 'P' (PETSCII) session and clobber it back
-      // to the saved Amiga font — the session stayed 40x25 but rendered in
-      // the wrong font. While a PETSCII session is active, keep PetMe64
-      // instead; the saved preference is still remembered in
-      // normalFont.current so it applies once the user is back in a
-      // non-PETSCII session.
-      const petsciiActive = petsciiSessionActiveRef.current;
-      const fontFamily = resolveTerminalFontFamily(requestedFontFamily, petsciiActive);
-      term.options.fontFamily = fontFamily;
+      // login-success requests this the instant login completes. It applies
+      // to xterm only - a 'P' session renders on the PetsciiCanvas, whose
+      // glyphs come from the character-ROM atlas, not from a CSS font - so
+      // a saved Amiga font can no longer clobber a C64 session's look.
+      term.options.fontFamily = requestedFontFamily;
       term.options.fontSize = size;
-      if (!petsciiActive) {
-        term.options.lineHeight = requestedLineHeight;
-      }
+      term.options.lineHeight = requestedLineHeight;
       normalFont.current = requestedFontFamily;
-      console.log('[Font Preference] Applied saved font:', fontName, 'size:', size, 'lineHeight:', requestedLineHeight, 'petsciiActive:', petsciiActive);
+      console.log('[Font Preference] Applied saved font:', fontName, 'size:', size, 'lineHeight:', requestedLineHeight);
     });
 
-    // Keyboard input handling
-    term.onKey(({ key, domEvent }) => {
-      // Bug fix (desktop PETSCII overlay dismiss): xterm's own keydown
-      // handler on its textarea calls cancel(ev, true) -> preventDefault() +
-      // stopPropagation() (node_modules/@xterm/xterm/lib/xterm.js), so while
-      // xterm has focus - exactly the desktop login case - the keydown never
-      // bubbles to the window 'keydown' listener below ("Finding 2 (final
-      // review wave)") that dismisses the PetsciiCanvas overlay. Dispatch
-      // here too, input-source-agnostic, mirroring the injectInput fix
-      // (mobile/on-screen keyboard path) above. Idempotent when hidden -
-      // petsciiOverlayReducer's 'keypress' case returns the same state - so
-      // firing on every physical keystroke is safe.
-      dispatchPetsciiOverlay({ type: 'keypress' });
-
-      if (!socket.connected) {
-        console.error('❌ Socket not connected, cannot send key');
-        return;
-      }
-
-      // Handle login input locally
-      if (loginState.current === 'checking-username' || loginState.current === 'logging-in') {
-        return;
-      }
-
-      if (loginState.current === 'username') {
-        if (key === '\r' || key === '\n') {
-          console.log('🔐 Username entered:', username.current);
-          socket.emit('check-username', { username: username.current });
-          loginState.current = 'checking-username';
-          term.write('\r\n');
-        } else if (key === '\x7f' || key === '\b') {
-          if (username.current.length > 0) {
-            username.current = username.current.slice(0, -1);
-            term.write('\b \b');
-          }
-        } else if (key.length === 1 && key >= ' ') {
-          username.current += key;
-          term.write(key);
-        }
-        return;
-      }
-
-      if (loginState.current === 'password') {
-        if (key === '\r' || key === '\n') {
-          console.log('🔐 Password entered, sending login');
-          socket.emit('login', { username: username.current, password: password.current });
-          loginState.current = 'logging-in';
-          term.write('\r\n');
-        } else if (key === '\x7f' || key === '\b') {
-          if (password.current.length > 0) {
-            password.current = password.current.slice(0, -1);
-            term.write('\b \b');
-          }
-        } else if (key.length === 1 && key >= ' ') {
-          password.current += key;
-          term.write(passwordMode.current ? key : '*');
-        }
-        return;
-      }
-
-      // Handle password reset flow - express.e:29152-29213
-      if (loginState.current === 'password-reset') {
-        if (key === '\r' || key === '\n') {
-          console.log('[PasswordReset] Sending input:', passwordResetInput.current.length > 0 ? '(has input)' : '(empty)');
-          socket.emit('password-reset-input', { input: passwordResetInput.current });
-          term.write('\r\n');
-          passwordResetInput.current = '';
-        } else if (key === '\x7f' || key === '\b') {
-          if (passwordResetInput.current.length > 0) {
-            passwordResetInput.current = passwordResetInput.current.slice(0, -1);
-            term.write('\b \b');
-          }
-        } else if (key.length === 1 && key >= ' ') {
-          passwordResetInput.current += key;
-          // passwordMode controls whether to show * or the actual character
-          term.write(passwordMode.current ? '*' : key);
-        }
-        return;
-      }
-
-      // Handle forced password change flow - express.e:29785-29845
-      if (loginState.current === 'forced-pwd-change') {
-        if (key === '\r' || key === '\n') {
-          console.log('[ForcedPwdChange] Sending input:', forcedPwdChangeInput.current.length > 0 ? '(has input)' : '(empty)');
-          socket.emit('forced-pwd-change-input', { input: forcedPwdChangeInput.current });
-          term.write('\r\n');
-          forcedPwdChangeInput.current = '';
-        } else if (key === '\x7f' || key === '\b') {
-          if (forcedPwdChangeInput.current.length > 0) {
-            forcedPwdChangeInput.current = forcedPwdChangeInput.current.slice(0, -1);
-            term.write('\b \b');
-          }
-        } else if (key.length === 1 && key >= ' ') {
-          forcedPwdChangeInput.current += key;
-          // Always mask: passwords are never echoed during forced change
-          term.write('*');
-        }
-        return;
-      }
-
-      // Handle new user prompt
-      if (loginState.current === 'new-user-prompt') {
-        const promptUser = newUserPromptUsername.current || username.current || '';
-        const sendResponse = (response: string) => {
-          socket.emit('new-user-response', { response, username: promptUser });
-        };
-
-        if (key === '\r' || key === '\n') {
-          term.write('\r\n');
-          sendResponse('');
-          // Delay state change so onData (which fires after onKey) still sees
-          // 'new-user-prompt' and skips this keystroke - prevents double echo
-          setTimeout(() => { loginState.current = 'registering'; }, 0);
-        } else {
-          const lower = key.toLowerCase();
-          if (lower === 'c') {
-            // Echo character only - backend sends the newline with next prompt
-            // express.e:6845 lineInput echoes char, then adds \b\n after
-            term.write('C');
-            sendResponse('C');
-            // Delay state change so onData still sees 'new-user-prompt' and skips
-            setTimeout(() => { loginState.current = 'registering'; }, 0);
-          } else if (lower === 'r') {
-            // Echo character only - backend sends \r\nUsername: which provides newline
-            term.write('R');
-            sendResponse('R');
-            // Delay state change so onData still sees 'new-user-prompt' and skips
-            setTimeout(() => { loginState.current = 'username'; }, 0);
-            username.current = '';
-            password.current = '';
-          } else {
-            term.write('\r\n\x1b[33mPress R to retry or C to continue as a new user\x1b[0m\r\n');
-          }
-        }
-        return;
-      }
-    });
-
-    // Send all other input directly to the backend (doors/commands)
-    term.onData((data: string) => {
-      // Classic BBS behaviour: don't make the user wait out the baud rate
-      // for a screen that's still drawing - any keypress dumps the rest
-      // immediately. xterm can still receive focus/onData while a PETSCII
-      // screen is paced (PetsciiCanvas's own onKeyDown is the primary
-      // surface, but this covers focus staying on the hidden xterm div).
-      flushPetsciiQueue();
-      if (!socket.connected) {
-        console.error('[Terminal] Socket not connected, cannot send data');
-        return;
-      }
-      // In game mode, keydown/keyup events are sent separately - skip onData
-      if (gameMode.current) {
-        return;
-      }
-      if (
-        loginState.current === 'username' ||
-        loginState.current === 'password' ||
-        loginState.current === 'new-user-prompt' ||
-        loginState.current === 'checking-username' ||
-        loginState.current === 'logging-in' ||
-        loginState.current === 'password-reset' ||
-        loginState.current === 'forced-pwd-change'
-        // Note: 'registering' removed - server handles registration input including pause prompts
-      ) {
-        return;
-      }
-      // Ctrl+C (0x03) while door is active: terminate the door
+    // Login state machine context (utils/login-key-machine.ts). The echo
+    // goes through writeTerm, so a 'P' session sees its own typing on the
+    // canvas; passwords are masked exactly as before.
+    const loginCtx: LoginKeyContext = {
+      state: loginState,
+      username, password, newUserPromptUsername, passwordResetInput, forcedPwdChangeInput, passwordMode,
+      emit: (event, payload) => { socket.emit(event, payload); },
+      echo: writeTerm,
+      defer: (fn) => { setTimeout(fn, 0); },
+      log: (m) => console.log('[Login] ' + m),
+    };
+    const isLoginBusy = () =>
+      loginState.current === 'username' || loginState.current === 'password' ||
+      loginState.current === 'new-user-prompt' || loginState.current === 'checking-username' ||
+      loginState.current === 'logging-in' || loginState.current === 'password-reset' ||
+      loginState.current === 'forced-pwd-change';
+    // Post-login input to the server (was the tail of term.onData).
+    const sendInput = (data: string) => {
+      if (!socket.connected) { console.error('[Terminal] Socket not connected, cannot send data'); return; }
+      if (gameMode.current) return; // keydown/keyup are sent separately in game mode
       if (data === '\x03' && doorActive.current) {
         console.log('[BBSTerminal] Ctrl+C pressed while door active - sending door:terminate');
-        term.write('\r\n\x1b[33m[Aborting door...]\x1b[0m\r\n');
+        writeTerm('\r\n\x1b[33m[Aborting door...]\x1b[0m\r\n');
         socket.emit('door:terminate');
         return;
       }
       socket.emit('command', data);
+    };
+    // The one input path for the on-screen keyboard and the canvas: login
+    // machine first, otherwise server. (xterm's own two callbacks below keep
+    // their split because onData also delivers pastes that never hit onKey.)
+    processInputKeyRef.current = (key: string) => {
+      flushPetsciiQueue();
+      if (processLoginKey(key, loginCtx)) return;
+      sendInput(key);
+    };
+
+    term.onKey(({ key }) => {
+      if (!socket.connected) { console.error('[Terminal] Socket not connected, cannot send key'); return; }
+      processLoginKey(key, loginCtx);
+    });
+
+    term.onData((data: string) => {
+      // Classic BBS behaviour: don't make the user wait out the baud rate
+      // for a screen that's still drawing - any keypress dumps the rest
+      // immediately.
+      flushPetsciiQueue();
+      if (isLoginBusy()) return; // handled (or swallowed) by onKey above
+      sendInput(data);
     });
 
     // Focus terminal on mount
@@ -3118,11 +2793,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     }
   }, [fontSize]);
 
-  // Focus terminal when clicking anywhere in the window
-  // This ensures keyboard input always goes to the terminal
+  // Focus the terminal when clicking anywhere in the window. This ensures
+  // keyboard input always goes to the live surface - xterm's textarea for
+  // an ANSI session, the PetsciiCanvas for a 'P' session (whose xterm is
+  // display:none and cannot hold focus at all).
   useEffect(() => {
     const handleWindowClick = () => {
-      terminalInstance.current?.focus();
+      focusSurfaceRef.current();
     };
 
     window.addEventListener('click', handleWindowClick);
@@ -3131,35 +2808,25 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     };
   }, []);
 
-  // Finding 2 (final review wave): while the PETSCII overlay is shown, ANY
-  // keypress dismisses it - the classic BBS "press a key to continue", same
-  // UX as the RIP screen-picture linger (armRipLinger, rip-linger.ts).
-  // Unlike that linger, this listener must NOT call preventDefault /
-  // stopPropagation: the controller's overlay ruling keeps xterm focused
-  // the whole time the overlay is up (it is the login state machine), so
-  // the same keystroke that dismisses the overlay is also meant to reach
-  // xterm's own listener and the server normally - swallowing it here
-  // would be exactly the "canvas bypasses the login state machine" bug
-  // this fix exists to close.
-  useEffect(() => {
-    if (!petsciiOverlay.visible) return;
-    const handleKeydown = () => dispatchPetsciiOverlay({ type: 'keypress' });
-    // Capture phase: xterm's own keydown handler on its textarea ends with
-    // cancel(ev, true) -> preventDefault() + stopPropagation()
-    // (node_modules/@xterm/xterm/lib/xterm.js), which stops this listener
-    // from ever seeing the event at the bubble phase while xterm has focus
-    // (the desktop login case). term.onKey now carries the primary dismiss
-    // dispatch for that path; this stays as a capture-phase belt-and-
-    // suspenders so any other focus target still dismisses the overlay.
-    window.addEventListener('keydown', handleKeydown, true);
-    return () => window.removeEventListener('keydown', handleKeydown, true);
-  }, [petsciiOverlay.visible]);
-
-  // Focus terminal when clicked
+  // Focus the live surface when clicked
   const handleClick = () => {
-    terminalInstance.current?.focus();
+    focusSurfaceRef.current();
     // Audio is now handled by MediaHandler (initialized on audio:play-sfx socket event)
   };
+
+  // A fresh session reset the surface back to xterm (clearPetsciiSession):
+  // xterm has just come back from display:none, so re-measure it and give
+  // it the keyboard again. Only on a real canvas -> xterm transition: the
+  // mount-time 'xterm' value must not trigger a fit (the terminal
+  // deliberately does not auto-fit on mount - see fitTerminal's callers).
+  const wasCanvasRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (surface === 'canvas') { wasCanvasRef.current = true; return; }
+    if (!wasCanvasRef.current) return;
+    wasCanvasRef.current = false;
+    fitTerminalRef.current();
+    terminalInstance.current?.focus();
+  }, [surface]);
 
   // Calculate terminal cell coordinates from mouse event
   const getTerminalCoordsFromPoint = (clientX: number, clientY: number): { x: number; y: number } | null => {
@@ -3484,20 +3151,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           position: 'relative',
           width: '100%',
           ...(terminalMode === 'fixed' ? { maxWidth: '960px' } : { height: '100%' }),
-          // In 'fixed' mode this div normally has no explicit height of its
-          // own - it sizes off terminalRef's rendered content (xterm has no
-          // height style either; see below). Finding 2 (final review wave)
-          // keeps xterm visible at all times now, so this no longer guards
-          // against a display:none collapse - it just pins the wrapper's
-          // height to the snapshot taken when the overlay first appeared,
-          // so the box doesn't visibly resize under the picture if xterm's
-          // own content height changes while it plays. 'wide' mode is
-          // unaffected: it already gets an explicit height:100% here, a
-          // real percentage of a sized ancestor that stays responsive to
-          // resizes.
-          ...(terminalMode === 'fixed' && petsciiOverlay.visible && petsciiFrameSize
-            ? { height: `${petsciiFrameSize.height}px` }
-            : {}),
         }}
       >
       <div
@@ -3517,77 +3170,32 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           // In wide mode: 100% height to fill screen (the wrapper carries
           // the fixed-mode max-width)
           ...(terminalMode === 'fixed' ? {} : { height: '100%' }),
-          // Finding 2 (final review wave, controller's overlay ruling):
-          // xterm stays VISIBLE and FOCUSED at all times, even while the
-          // PetsciiCanvas overlay is drawn on top of it - it is the
-          // interaction surface (term.onData IS the web login state
-          // machine). It used to get display:none'd here, which is exactly
-          // what made a web session that answered 'P' unable to log in:
-          // the login prompt rendered into a hidden xterm, invisible, with
-          // no focus. The overlay below draws over it instead.
+          // A 'P' session is a C64: the canvas below is the surface and xterm
+          // is hidden (kept mounted - RIP, ZMODEM and the modem emulator hold
+          // the instance). Nothing reads xterm's screen while hidden.
+          ...(surface === 'canvas' ? { display: 'none' } : {}),
         }}
       />
-      {petsciiOverlay.visible && petsciiMachineRef.current && (
+      {surface === 'canvas' && petsciiMachineRef.current && (
         <div
           style={{
-            position: 'absolute',
-            // True centering, both axes, over the ACTUAL terminal frame
-            // (sysop live-screenshot addendum): positioned from
-            // petsciiFrameRect - terminalRef's measured box, in the same
-            // offsetParent (this wrapper) coordinate space `inset:0` would
-            // use - rather than trusting `inset:0`/`100%` to land on the
-            // same pixels as xterm's real, natural-width render. Falls back
-            // to inset:0 only for the one frame before the measurement
-            // effect has run.
-            ...(petsciiFrameRect
-              ? {
-                  left: petsciiFrameRect.left,
-                  top: petsciiFrameRect.top,
-                  width: petsciiFrameRect.width,
-                  height: petsciiFrameRect.height,
-                }
-              : { inset: 0, width: '100%', height: '100%' }),
-            zIndex: 10,
-            overflow: 'hidden',
-            // Opaque: this sits directly over the still-visible, still-live
-            // xterm underneath (Finding 2) - it must fully occlude it while
-            // shown, not just visually layer on top.
+            width: '100%',
+            // 352x232 = one bordered C64 screen (PetsciiCanvas UNIT_W/UNIT_H).
+            ...(terminalMode === 'fixed' ? { aspectRatio: '352 / 232' } : { height: '100%' }),
             backgroundColor: '#000',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            // Bug I fix (true-petscii login/font pass): this overlay is
-            // purely a transient "press a key to continue" title-screen
-            // linger over the REAL interaction surface (xterm, still
-            // focused underneath - Finding 2's ruling). It used to default
-            // to pointerEvents:'auto', and the canvas below it has
-            // tabIndex - so a click anywhere on the overlay during login
-            // could focus the canvas instead of xterm's hidden input,
-            // silently stealing every subsequent keystroke away from the
-            // login state machine (which only listens on xterm/injectInput)
-            // with no visible sign anything was wrong. 'none' makes the
-            // whole overlay (including the canvas) transparent to the
-            // pointer, so a click during the linger falls through to the
-            // xterm container beneath it (whose own onClick focuses
-            // xterm) instead of ever reaching the canvas. This is the
-            // correct choice, not a stopgap: the canvas's onData prop below
-            // exists only for a hypothetical future full-canvas door
-            // session that owns the screen outright - not this login
-            // linger - so it does not need pointer input here at all.
-            pointerEvents: 'none',
           }}
         >
           <PetsciiCanvas
+            ref={petsciiCanvasRef}
             machine={petsciiMachineRef.current}
+            focusable
+            focusOnMount
             onData={(bytes) => {
-              // Full-canvas-door path (not the login path - see Finding 2's
-              // ruling): kept for a future door session that owns the
-              // canvas outright. Login/menu input flows through xterm's own
-              // term.onData while this overlay is up; this handler never
-              // fires for it because the overlay does not take focus.
-              flushPetsciiQueue();
-              const command = petsciiInputToAscii(bytes);
-              if (command) socketRef.current?.emit('command', command);
+              // keymap.ts bytes -> the same ASCII/ANSI the server reads from
+              // xterm, via the SDK's shared PETSCII input map (cursor and
+              // function keys included), then the one input path.
+              const text = petsciiInputToAscii(bytes);
+              if (text) processInputKeyRef.current(text);
             }}
           />
         </div>
