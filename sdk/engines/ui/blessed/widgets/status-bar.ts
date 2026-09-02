@@ -127,9 +127,11 @@ export class StatusBar extends Box {
    */
   private _render(): void {
     const parts: string[] = [];
+    const plain: string[] = [];
 
     for (const section of this._sections.values()) {
       let content = section.content;
+      plain.push(content);
 
       // Apply section color if different from base
       if (section.fg && section.fg !== this._baseFg) {
@@ -139,8 +141,43 @@ export class StatusBar extends Box {
       parts.push(content);
     }
 
-    this.setContent(' ' + parts.join(this._separator) + ' ');
+    this.setContent(' ' + this._fit(parts, plain).join(this._separator) + ' ');
     this.screen?.render();
+  }
+
+  /**
+   * Clip the bar to the row it has.
+   *
+   * A status bar is one row wide and it does not wrap: whatever runs past the
+   * right edge is simply gone. CARD LOBBY's bar ended mid-word - "Table is
+   * full of players. Please wait for curren" - because a notice was appended
+   * as its own section and nothing measured the result (reported 2026-09-02).
+   *
+   * The LAST section gives way first, since bars here are built with the
+   * identity fields in front and the running commentary at the end. It is
+   * clipped with a single ellipsis character, and dropped altogether when
+   * even that will not fit, rather than pushing the fields off the row.
+   *
+   * Measured on the PLAIN text: `{red-fg}` and friends cost no cells.
+   */
+  private _fit(parts: string[], plain: string[]): string[] {
+    const width = Number(this.width) || 0;
+    if (width <= 0 || parts.length === 0) return parts;
+
+    const sep = this._separator.length;
+    const budget = width - 2;   // the leading and trailing space
+    const total = plain.reduce((sum, p) => sum + p.length, 0) + sep * (parts.length - 1);
+    if (total <= budget) return parts;
+
+    const others = plain.slice(0, -1).reduce((sum, p) => sum + p.length, 0)
+      + sep * Math.max(0, parts.length - 1);
+    const room = budget - others;
+
+    // Not even room for the separator plus a character: drop the last section.
+    if (room < 2) return parts.slice(0, -1);
+
+    const last = plain[plain.length - 1];
+    return [...parts.slice(0, -1), last.slice(0, room - 1) + '.'];
   }
 
   /**
