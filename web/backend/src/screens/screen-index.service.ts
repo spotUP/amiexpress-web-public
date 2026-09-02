@@ -311,12 +311,36 @@ const BACKUP_NAME = /(\.bak\b|\.old\b|\.orig\b|\.stale\b|\.backup|~$|\.save\b|\.
  * callers display in screen form; the sysop identified it, and it is named
  * here rather than guessed at from content.
  */
-const RUNTIME_NAME = /^(callers!?\.txt|callerslog.*|.*\.log)$/i;
+const RUNTIME_NAME = /^(callers!?\.txt|callerslog.*|lastc\.txt|.*\.log)$/i;
 
-function classifyGenerated(relPath: string): 'backup' | 'runtime' | undefined {
+/**
+ * Signatures of the tools that WRITE screens on this board.
+ *
+ * Bulletins 1 to 6 are rewritten every boot - five by MultiTop-II, whose own
+ * header is in the art, and one by a last-callers generator. bull9 is
+ * hand-drawn and untouched since January. A designer opening the gallery
+ * should see the second kind, not the first.
+ *
+ * Content, not names: `bull6.txt` looks exactly like `bull9.txt` from the
+ * outside, and the file names carry no hint at all.
+ */
+const RUNTIME_CONTENT: { marker: RegExp; tool: string }[] = [
+  { marker: /MultiTop/i, tool: 'MultiTop-II' },
+  { marker: /l\s*AST\s*c\s*ALLERS|LAST CALLERS/i, tool: 'a last-callers generator' },
+];
+
+function classifyGenerated(relPath: string, buf: Buffer): 'backup' | 'runtime' | undefined {
   const name = path.basename(relPath);
   if (BACKUP_NAME.test(name)) return 'backup';
   if (RUNTIME_NAME.test(name)) return 'runtime';
+
+  // Only worth reading for a bulletin-sized file; a 240 KB RIP screen is not
+  // written by a stats door.
+  if (buf.length < 64_000) {
+    const text = buf.toString('latin1');
+    if (RUNTIME_CONTENT.some(({ marker }) => marker.test(text))) return 'runtime';
+  }
+
   return undefined;
 }
 
@@ -411,6 +435,30 @@ function resolveScreenReference(baseDir: string, target: string): string | null 
   return amigafs.findCaseInsensitive(path.dirname(full), path.basename(full));
 }
 
+/**
+ * Every numbered file a `~SR_` base can land on.
+ *
+ * formatNumberedFilename (SequentialFileManager) builds `NNN.<basename>` in the
+ * base's own directory, so `BBS:Screens/reference-board/reference-board.txt` covers
+ * `001.reference-board.txt` through `999.reference-board.txt` - a pool the board picks
+ * from at random, and art somebody drew.
+ */
+function numberedPool(baseDir: string, target: string): string[] {
+  const rel = target.replace(/^BBS:/i, '').replace(/\//g, path.sep);
+  const full = path.join(baseDir, rel);
+  const dir = path.dirname(full);
+  const basename = path.basename(full);
+  const stem = basename.replace(/\.[^.]*$/, '');
+
+  try {
+    return fs.readdirSync(dir)
+      .filter(name => new RegExp(`^\\d+\\.${stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.`, 'i').test(name))
+      .map(name => path.join(dir, name));
+  } catch {
+    return [];
+  }
+}
+
 function screenRefExists(baseDir: string, target: string): boolean {
   return !!resolveScreenReference(baseDir, target);
 }
@@ -442,7 +490,7 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
     readBy: [],
     sauce: readSauce(buf),
     problems: fileProblems(buf, format),
-    generated: classifyGenerated(path.relative(baseDir, absPath)),
+    generated: classifyGenerated(path.relative(baseDir, absPath), buf),
     relPath: path.relative(baseDir, absPath),
     bytes: buf.length,
     format,
@@ -638,14 +686,23 @@ export function buildScreenIndex(baseDir: string): ScreenIndex {
     const facts = factsFor(path.join(baseDir, rel));
     for (const ref of facts.mci) {
       if (ref.code !== 'SS' && ref.code !== 'SR') continue;
-      const target = resolveScreenReference(baseDir, ref.target);
-      if (!target) continue;
 
-      const targetRel = path.relative(baseDir, target);
-      readers.set(targetRel, [...(readers.get(targetRel) ?? []), {
-        ...existing[0],
-        via: 'include',
-      }]);
+      // `~<n>SR_<base>` shows a RANDOM numbered file from the base's directory
+      // - `Screens/reference-board/007.reference-board.txt` and its siblings
+      // (screen.handler.ts:851, express.e:5533-5554). There is no single file
+      // to resolve, so every one of them used to be read by nothing while the
+      // board showed them daily.
+      const targets = ref.code === 'SR'
+        ? numberedPool(baseDir, ref.target)
+        : [resolveScreenReference(baseDir, ref.target)].filter((t): t is string => !!t);
+
+      for (const target of targets) {
+        const targetRel = path.relative(baseDir, target);
+        readers.set(targetRel, [...(readers.get(targetRel) ?? []), {
+          ...existing[0],
+          via: 'include',
+        }]);
+      }
     }
   }
 
