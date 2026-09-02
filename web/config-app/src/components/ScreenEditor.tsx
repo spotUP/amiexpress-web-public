@@ -9,6 +9,7 @@ import {
 } from '../pages/screen-editor-state';
 import { findMciTokens, type MciToken, type MciReferenceShape } from '../pages/mci-tokens';
 import { MciPicker } from './MciPicker';
+import { CodeChip } from './CodeChip';
 import { tokenEdit, tokenRemoval } from '../pages/screen-mci';
 
 /** The code exactly as it is written on the canvas, tilde to terminator. */
@@ -137,7 +138,11 @@ export function ScreenEditor({
     // Topaz throughout: the tools name the board's own things - characters,
     // colours, MCI codes - and reading them in the interface face while the
     // canvas was in Topaz made the editor feel like two programs.
-    <section className="space-y-3 border border-border p-3 font-topaz">
+    // Topaz is the BOARD's font and belongs to the art. On the section it
+    // was inherited by every label, button and heading in the editor, so the
+    // tool looked like the thing it edits. The canvas draws its own font and
+    // the character picker below shows real board glyphs; those keep it.
+    <section className="space-y-3 border border-border p-3">
       <div className="flex flex-wrap items-center gap-2">
         {TOOLS.map(({ tool, label }) => (
           <button
@@ -274,10 +279,20 @@ export function ScreenEditor({
                   key={`${token.line}-${token.column}-${index}`}
                   className="flex flex-wrap items-baseline gap-2"
                 >
-                  <span className={`font-topaz text-base ${token.resolves ? 'text-content-primary' : 'text-status-danger'}`}>
-                    line {token.line + 1}, column {token.column + 1}: {tokenText(surface.canvas, token)}
-                    {token.resolves ? '' : ' - points at nothing'}
+                  <span className="text-content-secondary">
+                    line {token.line + 1}, column {token.column + 1}
                   </span>
+                  {/*
+                    A chip, not characters: a code is a thing the board RUNS,
+                    and drawn in the board's own font on a line of its own it
+                    reads as part of the picture.
+                  */}
+                  <CodeChip dead={!token.resolves}>
+                    {tokenText(surface.canvas, token)}
+                  </CodeChip>
+                  {!token.resolves && (
+                    <span className="text-status-danger">points at nothing</span>
+                  )}
                   <button
                     type="button"
                     className="underline text-content-secondary"

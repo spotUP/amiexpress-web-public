@@ -12,6 +12,7 @@ import {
   tokenEdit, tokenRemoval, splitToken,
   type MciCodeShape, type MciCanvas,
 } from '../pages/screen-mci';
+import { conferenceOfPath } from '../pages/ScreenFilesPage';
 
 /** Rows of characters, which is all these functions need of a canvas. */
 function canvasOf(...rows: string[]): MciCanvas {
@@ -262,5 +263,34 @@ describe('taking a written code apart', () => {
     const entry = codes.find(c => c.code === split.code)!;
 
     expect(buildMciToken(entry, split.argument, split.width)).toBe(written);
+  });
+});
+
+describe('naming the conference a file belongs to', () => {
+  const confs = [
+    { id: 1, name: 'Amiga Demoscene', dir: 'Conf2' },
+    { id: 2, name: 'C64 Demoscene', dir: 'Conf3' },
+  ];
+
+  it('names it, because a directory number is not a conference number', () => {
+    // express.e reads LOCATION.n from ConfConfig.info; on this board
+    // conference 1 lives in Conf2. Parsing the digits out of the path would
+    // report the wrong conference with total confidence.
+    expect(conferenceOfPath('Conf2/bull20.txt', confs)).toBe('Amiga Demoscene (conference 1)');
+    expect(conferenceOfPath('Conf3/bull20.txt', confs)).toBe('C64 Demoscene (conference 2)');
+  });
+
+  it('falls back to the directory rather than inventing a number', () => {
+    expect(conferenceOfPath('Conf9/bull20.txt', confs)).toBe('Conf9');
+  });
+
+  it('says nothing for a file that is not in a conference', () => {
+    expect(conferenceOfPath('Node1/LOGON.TXT', confs)).toBeNull();
+    expect(conferenceOfPath('Screens/uprough.txt', confs)).toBeNull();
+    expect(conferenceOfPath(null, confs)).toBeNull();
+  });
+
+  it('matches the directory case-insensitively, like the Amiga does', () => {
+    expect(conferenceOfPath('conf2/bull20.txt', confs)).toBe('Amiga Demoscene (conference 1)');
   });
 });

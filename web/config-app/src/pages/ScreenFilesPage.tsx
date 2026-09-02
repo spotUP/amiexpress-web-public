@@ -13,6 +13,7 @@ import { ScreenArt } from '../components/ScreenArt';
 import { ScreenGallery, type GalleryItem } from '../components/ScreenGallery';
 import { formatBytes } from '../lib/format';
 import { ScreenEditor } from '../components/ScreenEditor';
+import { CodeChip } from '../components/CodeChip';
 import { Modal } from '../components/ui/Modal';
 import { screenToCanvas } from './screen-bytes';
 import { createSurface, type EditorSurface } from './screen-editor-state';
@@ -42,6 +43,30 @@ const EMPTY_FAMILIES: MciFamilyShape[] = [];
  * conference 1 lives in Conf2 here. The conference's NAME is what a sysop
  * recognises - "Amiga Demoscene" - so it leads, with the number behind it.
  */
+/**
+ * The conference a file sits in, named the way a sysop knows it.
+ *
+ * The DIRECTORY number is not the conference number - express.e reads
+ * `LOCATION.n` from ConfConfig.info, and on this board conference 1 lives in
+ * `Conf2` - so this matches the directory against what each conference
+ * declares rather than parsing the digits out of the path.
+ */
+export function conferenceOfPath(
+  relPath: string | null,
+  conferences?: ConferenceShape[],
+): string | null {
+  if (!relPath) return null;
+
+  const dir = relPath.split(/[\\/]/)[0];
+  if (!/^Conf\d+$/i.test(dir)) return null;
+
+  const named = (conferences ?? []).find(c => c.dir?.toLowerCase() === dir.toLowerCase());
+  if (named) return `${named.name} (conference ${named.id})`;
+
+  // The board did not say - name the directory rather than invent a number.
+  return dir;
+}
+
 function scopeName(scope: string, id: number | null, conferences?: ConferenceShape[]): string {
   if (scope === 'node') return `Node ${id}`;
   if (scope === 'conf') {
@@ -574,7 +599,7 @@ export function ScreenFilesPage() {
       sortable: true,
       cell: row => (
         <span>
-          <span className="font-topaz text-content-primary">{row.screen}</span>
+          <span className="font-mono text-content-primary">{row.screen}</span>
           {/* The name is what the board calls the file; this is what the sysop
               was looking for. "I can't see the screen files that are shown when
               i join a conference" - they were CONF_BULL and MENU. */}
@@ -641,7 +666,7 @@ export function ScreenFilesPage() {
       header: 'Reads',
       value: res => res.dir,
       cell: res => (
-        <span className="font-topaz">
+        <span className="font-mono">
           {res.dir}
           {res.dirIsShared && <span className="text-content-muted"> (shared)</span>}
         </span>
@@ -652,7 +677,7 @@ export function ScreenFilesPage() {
       header: 'File',
       value: res => res.file ?? '',
       cell: res => (res.file ? (
-        <span className="font-topaz underline">{res.file}</span>
+        <span className="font-mono underline">{res.file}</span>
       ) : (
         <span className="text-status-warn">nothing resolves</span>
       )),
@@ -661,7 +686,7 @@ export function ScreenFilesPage() {
       id: 'variants',
       header: 'Variants',
       value: res => res.variants.join(' '),
-      cell: res => <span className="font-topaz">{res.variants.join(' ')}</span>,
+      cell: res => <span className="font-mono">{res.variants.join(' ')}</span>,
     },
   ];
 
@@ -672,7 +697,7 @@ export function ScreenFilesPage() {
       header: 'File',
       sortable: true,
       value: item => item.relPath,
-      cell: item => <span className="font-topaz underline">{item.relPath}</span>,
+      cell: item => <span className="font-mono underline">{item.relPath}</span>,
     },
     { id: 'format', header: 'Format', sortable: true, value: item => item.format },
     { id: 'bytes', header: 'Size', align: 'right', sortable: true, value: item => item.bytes,
@@ -984,7 +1009,7 @@ export function ScreenFilesPage() {
       {entry && (
         <section className="space-y-2" ref={detailRef} data-testid="screen-detail">
           <h2 className="text-lg text-content-primary">
-            <span className="font-topaz">{entry.screen}</span>
+            <span className="font-mono">{entry.screen}</span>
             {describeScreen(entry.screen) && (
               <span className="ml-3 text-sm text-content-secondary">
                 {describeScreen(entry.screen)}
@@ -1126,7 +1151,7 @@ export function ScreenFilesPage() {
         {editorWrite && pendingUpload && (
           <div className="space-y-2 p-4">
             <p className="text-sm text-content-primary">
-              Write <span className="font-topaz">{openFile}</span> where?
+              Write <span className="font-mono">{openFile}</span> where?
             </p>
             {options.map(option => (
               <button
@@ -1175,6 +1200,18 @@ export function ScreenFilesPage() {
                 That did not work: {fileError}
               </p>
             )}
+            {/*
+              Which conference this file belongs to, by NAME.
+              `Conf3/bull20.txt` says nothing about which board section a
+              designer is about to replace - and the directory number is not
+              the conference number: on this board conference 1 lives in
+              Conf2. The name is the only thing a sysop recognises.
+            */}
+            {conferenceOfPath(openFile, data?.conferences) && (
+              <p className="text-sm text-content-primary">
+                {conferenceOfPath(openFile, data?.conferences)}
+              </p>
+            )}
             <p className="text-sm text-content-secondary">
               {file.bytes} bytes, {file.format}
               {file.sauce?.width && file.sauce?.height
@@ -1184,7 +1221,7 @@ export function ScreenFilesPage() {
 
             {/* The artist signed it; the manager should say so. */}
             {file.sauce && (file.sauce.title || file.sauce.author) && (
-              <p className="text-sm text-content-primary font-topaz">
+              <p className="text-sm text-content-primary">
                 {file.sauce.title || 'Untitled'}
                 {file.sauce.author && ` by ${file.sauce.author}`}
                 {file.sauce.group && ` of ${file.sauce.group}`}
@@ -1266,8 +1303,8 @@ export function ScreenFilesPage() {
                 <div>
                   <h4 className="text-base text-content-primary">Replace this screen</h4>
                   <p className="text-content-secondary">
-                    <span className="font-topaz">{openFile}</span> becomes{' '}
-                    <span className="font-topaz">{pendingUpload.name}</span>
+                    <span className="font-mono">{openFile}</span> becomes{' '}
+                    <span className="font-mono">{pendingUpload.name}</span>
                   </p>
                 </div>
 
@@ -1282,9 +1319,9 @@ export function ScreenFilesPage() {
                       {describeCarry(carryVerdict)}
                     </p>
                     {carryVerdict.carried.length > 0 && (
-                      <ul className="font-topaz text-content-primary border-l-2 border-border pl-3">
+                      <ul className="space-y-1 border-l-2 border-border pl-3">
                         {carryVerdict.carried.map(line => (
-                          <li key={line}>{line}</li>
+                          <li key={line}><CodeChip>{line}</CodeChip></li>
                         ))}
                       </ul>
                     )}
@@ -1393,7 +1430,10 @@ export function ScreenFilesPage() {
             {file.format === 'ansi' || file.format === 'text' ? (
               // The editor's own renderer, so the view and the edit cannot
               // disagree about what the file looks like.
-              <ScreenArt content={file.content} />
+              // Tall art scrolls inside its own viewport rather than pushing
+              // everything below it off the page - the same treatment the
+              // editor's canvas gets.
+              <ScreenArt content={file.content} className="max-h-[60vh]" />
             ) : (
               <p className="text-sm text-status-warn">
                 {file.format === 'rip'
@@ -1408,14 +1448,18 @@ export function ScreenFilesPage() {
                   This screen runs things - {file.mci.length} MCI reference
                   {file.mci.length === 1 ? '' : 's'}
                 </h4>
-                <ul className="font-topaz text-base">
+                <ul className="mt-1 space-y-1">
                   {file.mci.map((ref: MciReferenceShape, i: number) => (
-                    <li key={i} className={ref.resolves ? 'text-content-primary' : 'text-status-danger'}>
-                      ~{ref.code}_{ref.target}
+                    <li key={i} className="flex flex-wrap items-baseline gap-2">
+                      <CodeChip dead={!ref.resolves}>
+                        ~{ref.code}{ref.target ? `_${ref.target}` : ''}
+                      </CodeChip>
                       {ref.targetName && (
-                        <span className="text-content-secondary"> - {ref.targetName}</span>
+                        <span className="text-content-secondary">{ref.targetName}</span>
                       )}
-                      {ref.resolves ? '' : ' - points at nothing'}
+                      {!ref.resolves && (
+                        <span className="text-status-danger">points at nothing</span>
+                      )}
                     </li>
                   ))}
                 </ul>

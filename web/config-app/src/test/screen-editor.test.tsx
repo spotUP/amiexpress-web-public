@@ -134,6 +134,28 @@ async function openTheFile(user: ReturnType<typeof userEvent.setup>) {
   await user.click(rows[0]);
 }
 
+/**
+ * One code in the list is one <li>: where it sits, the code itself as a chip,
+ * and - when it points at nothing - the reason. These tests match the row's
+ * whole text rather than a single node, so they stay about what a sysop reads
+ * and not about which span happens to hold which half of it.
+ */
+function codeRows(...parts: RegExp[]): HTMLElement[] {
+  return screen.queryAllByText((_content, element) => {
+    if (element?.tagName !== 'LI') return false;
+    const text = element.textContent ?? '';
+    return parts.every((part) => part.test(text));
+  });
+}
+
+async function findCodeRow(...parts: RegExp[]): Promise<HTMLElement> {
+  return await waitFor(() => {
+    const [row] = codeRows(...parts);
+    expect(row).toBeTruthy();
+    return row;
+  });
+}
+
 describe('editing a screen in the browser', () => {
   beforeEach(() => {
     fileFormat = 'ansi';
@@ -206,7 +228,7 @@ describe('editing a screen in the browser', () => {
     const user = userEvent.setup();
     await openTheFile(user);
 
-    expect(await screen.findByText(/~CC_nosuchdoor - points at nothing/)).toBeTruthy();
+    expect(await findCodeRow(/~CC_nosuchdoor/, /points at nothing/)).toBeTruthy();
   });
 
   it('inserts a code at the cursor, as one thing the sysop can undo', async () => {
@@ -217,10 +239,10 @@ describe('editing a screen in the browser', () => {
     await user.click(await screen.findByRole('button', { name: /~CL/ }));
     await user.click(await screen.findByRole('button', { name: 'Insert it' }));
 
-    expect(await screen.findByText(/line 1, column 1: ~CL\./)).toBeTruthy();
+    expect(await findCodeRow(/line 1, column 1(?!\d)/, /~CL\./)).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: /undo/i }));
-    expect(screen.queryByText(/line 1, column 1: ~CL\./)).toBeNull();
+    expect(codeRows(/line 1, column 1(?!\d)/, /~CL\./)).toHaveLength(0);
   });
 
   it('offers the board\'s own commands for a code that needs one, by the name the icon carries', async () => {
@@ -234,7 +256,7 @@ describe('editing a screen in the browser', () => {
     await user.selectOptions(await screen.findByRole('combobox'), 'gwall');
     await user.click(screen.getByRole('button', { name: 'Insert it' }));
 
-    expect(await screen.findByText(/line 1, column 1: ~CC_gwall/)).toBeTruthy();
+    expect(await findCodeRow(/line 1, column 1(?!\d)/, /~CC_gwall/)).toBeTruthy();
   });
 
   it('says so when the screen has no tilde on its first line, because then no code runs', async () => {
@@ -267,7 +289,7 @@ describe('editing a screen in the browser', () => {
 
     // Changed on the canvas, and the OLD code is gone - a shorter replacement
     // that did not pad would leave `~CC_ctop|all|` behind.
-    expect(await screen.findByText(/line 1, column 1: ~CC_ctop/)).toBeTruthy();
+    expect(await findCodeRow(/line 1, column 1(?!\d)/, /~CC_ctop/)).toBeTruthy();
     expect(screen.queryByText(/gwall/)).toBeNull();
   });
 
@@ -278,7 +300,7 @@ describe('editing a screen in the browser', () => {
     const user = userEvent.setup();
     await openTheFile(user);
 
-    expect(await screen.findByText(/line 1, column 1: ~CC_gwall/)).toBeTruthy();
+    expect(await findCodeRow(/line 1, column 1(?!\d)/, /~CC_gwall/)).toBeTruthy();
     await user.click(await screen.findByRole('button', { name: 'remove' }));
 
     expect(screen.queryByText(/~CC_gwall/)).toBeNull();
@@ -294,7 +316,11 @@ describe('editing a screen in the browser', () => {
     const user = userEvent.setup();
     await openTheFile(user);
 
-    const items = await screen.findAllByText(/line \d+, column 1: ~CC_/);
+    const items = await waitFor(() => {
+      const rows = codeRows(/line \d+, column 1(?!\d)/, /~CC_/);
+      expect(rows).toHaveLength(2);
+      return rows;
+    });
     expect(items[0].textContent).toContain('nosuchdoor');
     expect(items[0].textContent).toContain('points at nothing');
   });

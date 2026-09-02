@@ -94,7 +94,7 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
           : <div className="h-full w-full animate-pulse bg-surface-2/40" />}
       </div>
       <div className="text-xs">
-        <span className="block font-topaz text-content-primary truncate">{item.label}</span>
+        <span className="block font-mono text-content-primary truncate">{item.label}</span>
         {item.detail && (
           <span className={`block truncate ${item.problem ? 'text-status-warn' : 'text-content-secondary'}`}>
             {item.detail}

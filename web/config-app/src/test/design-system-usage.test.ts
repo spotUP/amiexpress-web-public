@@ -61,6 +61,15 @@ function offenders(pattern: RegExp): string[] {
   });
 }
 
+/**
+ * Where the board's own font belongs: the token file that defines it, and the
+ * character picker, which shows the glyphs a sysop is about to draw with.
+ */
+const TOPAZ_SURFACES = [
+  'styles/tokens.css',
+  'components/ScreenEditor.tsx',
+];
+
 describe('every admin page', () => {
   it('names no colour outside the token ramp', () => {
     const found = offenders(PALETTE);
@@ -70,6 +79,27 @@ describe('every admin page', () => {
 
   it('has stopped using the legacy bbs-* aliases', () => {
     const found = offenders(LEGACY_ALIAS);
+
+    expect(found, found.join('\n')).toEqual([]);
+  });
+
+  /**
+   * Topaz is the BOARD's font. Asked for in those terms - "dont use topaz for
+   * the ui only for the art" - after one `font-topaz` on the screen editor's
+   * <section> pushed it onto every label and button inside, and the MCI codes
+   * listed under the art in that face read as part of the drawing rather than
+   * as controls.
+   *
+   * The art itself does not need the class: the canvas names Topaz in
+   * `ctx.font`. What is left is the character picker, whose cells ARE board
+   * glyphs - a sysop is choosing the character that lands on the screen, so it
+   * has to be shown in the face the board will draw it in.
+   */
+  it('keeps Topaz for the art, not the interface', () => {
+    const found = sourceFiles(SRC)
+      .filter(file => /font-topaz/.test(readFileSync(file, 'utf8')))
+      .map(file => file.slice(SRC.length + 1))
+      .filter(rel => !TOPAZ_SURFACES.includes(rel));
 
     expect(found, found.join('\n')).toEqual([]);
   });
