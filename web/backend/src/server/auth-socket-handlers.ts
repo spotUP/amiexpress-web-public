@@ -161,11 +161,18 @@ console.log('[Session Restore] Found existing session for user, rebinding to new
         existingSession.socketId = socket.id;
         setSession(socket.id, existingSession);
 
-        // Belt to registration's brace: the ONE place a restored session could
-        // otherwise land on an unwrapped socket. Socket-keyed, so it is a
-        // no-op when registration already installed one - and it goes in
-        // BEFORE getModemEmulator(socket).install() below, which replaces
-        // socket.emit with a wrapper of its own that the choke must sit under.
+        // A GUARANTEED no-op, kept as the invariant's marker rather than as
+        // a working install (OC-3 review, I1). This handler can only run on a
+        // socket that already went through `registerSocketHandlers`, which
+        // installs the choke at `server/socket-handlers.ts:197` and only then
+        // registers these auth handlers (`:273`); the marker is on the SOCKET,
+        // so this second call returns immediately. It stays because it is the
+        // one line that says a restored session must never reach an unwrapped
+        // socket, and because its POSITION is load-bearing - ahead of
+        // getModemEmulator(socket).install() below, which replaces socket.emit
+        // with a wrapper the choke has to sit under. Should a future path ever
+        // restore a session onto a socket that skipped registration, this is
+        // what keeps that session's model fed.
         installPetsciiModelChoke(socket, () => getSessionBySocketId(socket.id));
 
         // The browser rebuilt its canvas and its own transducer from scratch
