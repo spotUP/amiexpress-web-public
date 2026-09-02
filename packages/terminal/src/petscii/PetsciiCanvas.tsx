@@ -211,6 +211,11 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
       // repaints again, which looks exactly like a crashed BBS.
       try {
         drawRef.current();
+      } catch (err) {
+        // A throwing paint costs one frame, never the session: the browser
+        // isolates a rAF throw, but the test runner and the console should
+        // not see an unhandled error either.
+        console.error('[PETSCII] paint failed', err);
       } finally {
         frameRef.current = null;
       }
