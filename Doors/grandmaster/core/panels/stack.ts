@@ -46,7 +46,7 @@ import {
   MAX_SCORE,
 } from './consts';
 import { checkMatches, MatchableStack, Coordinate } from './check-matches';
-import type { GeneratorSource } from './generator-source';
+import type { PanelSource } from './generator-source';
 import {
   COUNTDOWN_START, COUNTDOWN_LENGTH, COUNTDOWN_CURSOR_SPEED,
   DEFAULT_INPUT_REPEAT_DELAY, ENGINE_VERSION, ENGINE_VERSIONS,
@@ -83,7 +83,7 @@ export function defaultBehaviours(): StackBehaviours {
 
 export interface StackOptions {
   levelData: LevelData;
-  panelSource: GeneratorSource;
+  panelSource: PanelSource;
   behaviours?: Partial<StackBehaviours>;
   /** Stop time the board starts with, for puzzles that grant it. */
   startingStopTime?: number;
@@ -104,7 +104,7 @@ export class Stack implements MatchableStack {
 
   levelData: LevelData;
   behaviours: StackBehaviours;
-  panelSource: GeneratorSource;
+  panelSource: PanelSource;
 
   /** panels[row][column]; row 0 is the dimmed incoming row, columns from 1. */
   panels: PanelGrid = [];
@@ -239,7 +239,7 @@ export class Stack implements MatchableStack {
    * pushed back down after each row so it does not ride up with the stack.
    */
   startingState(): void {
-    const rowCount = 7; // GeneratorSource:getStartingBoardHeight
+    const rowCount = this.panelSource.getStartingBoardHeight?.() ?? 7;
     for (let i = 1; i <= rowCount + 1; i++) {
       this.newRow();
       this.curRow -= 1;

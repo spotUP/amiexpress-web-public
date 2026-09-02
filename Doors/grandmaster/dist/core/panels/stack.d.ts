@@ -35,7 +35,7 @@
 import { Panel, PanelGrid } from './panel';
 import type { LevelData } from './level-data';
 import { MatchableStack, Coordinate } from './check-matches';
-import type { GeneratorSource } from './generator-source';
+import type { PanelSource } from './generator-source';
 export declare const BOARD_WIDTH = 6;
 export declare const BOARD_HEIGHT = 12;
 /** The last frame of the countdown; physics begins on this frame. */
@@ -52,7 +52,7 @@ export interface StackBehaviours {
 export declare function defaultBehaviours(): StackBehaviours;
 export interface StackOptions {
     levelData: LevelData;
-    panelSource: GeneratorSource;
+    panelSource: PanelSource;
     behaviours?: Partial<StackBehaviours>;
     /** Stop time the board starts with, for puzzles that grant it. */
     startingStopTime?: number;
@@ -71,7 +71,7 @@ export declare class Stack implements MatchableStack {
     readonly height = 12;
     levelData: LevelData;
     behaviours: StackBehaviours;
-    panelSource: GeneratorSource;
+    panelSource: PanelSource;
     /** panels[row][column]; row 0 is the dimmed incoming row, columns from 1. */
     panels: PanelGrid;
     private panelsCreatedCount;

@@ -23,10 +23,27 @@
  */
 import { PanelGenerator } from './panel-generator';
 import type { LevelData } from './level-data';
-/** What the generator needs to know about the stack it is feeding. */
+/** What a panel source needs to know about the stack it is feeding. */
 export interface PanelSourceStack {
     width: number;
     levelData: LevelData;
+}
+/**
+ * The supply of panels a stack draws from.
+ *
+ * Two implementations exist and they are NOT interchangeable for a given game:
+ * GeneratorSource is the modern one, LegacyPanelSource reproduces engine
+ * versions 045-047 so replays from that era play on the board they were
+ * recorded on.
+ */
+export interface PanelSource {
+    clone(stack: PanelSourceStack): PanelSource;
+    nextRowColors(stack: PanelSourceStack, metalPanelsQueued: number): {
+        colors: number[];
+        metalPanelsQueued: number;
+    };
+    getGarbagePanelRowString(stack: PanelSourceStack): string;
+    getStartingBoardHeight?(): number;
 }
 /**
  * Is every colour present in this row present exactly twice?

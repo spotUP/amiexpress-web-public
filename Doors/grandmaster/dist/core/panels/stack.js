@@ -159,7 +159,7 @@ class Stack {
      * pushed back down after each row so it does not ride up with the stack.
      */
     startingState() {
-        const rowCount = 7; // GeneratorSource:getStartingBoardHeight
+        const rowCount = this.panelSource.getStartingBoardHeight?.() ?? 7;
         for (let i = 1; i <= rowCount + 1; i++) {
             this.newRow();
             this.curRow -= 1;
