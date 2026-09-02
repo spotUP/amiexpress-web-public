@@ -31,6 +31,15 @@ describe('chooseRule', () => {
     expect(isCroppable(row('title ' + '-'.repeat(74)), 40)).toBe(true);
     expect(isCroppable(row('x'.repeat(39) + ' ' + '-'.repeat(39) + '='), 40)).toBe(false);
   });
+
+  it('isCroppable: a REVERSE-VIDEO border in the right half is content, not a repeated glyph to throw away', () => {
+    const plain = row('x'.repeat(40) + '-'.repeat(40));
+    expect(isCroppable(plain, 40)).toBe(true);
+    const reversed = row('x'.repeat(40) + '-'.repeat(40));
+    for (let x = 40; x < 80; x++) (reversed[x] as Cell).rvs = true;
+    expect(isCroppable(reversed, 40)).toBe(false);
+    expect(chooseRule(reversed, 40)).not.toBe('crop');
+  });
 });
 
 describe('cropRow', () => {
@@ -95,8 +104,7 @@ describe('reflowRow (same breaks as wrapLineToWidth in the full-canvas Task 10 t
 
     const three = reflowRow(row('A'.repeat(90)), 30);
     expect(three.rows.length).toBe(3);
-    expect(str(three.rows[0])).toBe('A'.repeat(30));
-    expect(str(three.rows[2])).toBe('A'.repeat(20));
+    expect(three.rows.map(str)).toEqual(['A'.repeat(30), 'A'.repeat(30), 'A'.repeat(20)]);
   });
 
   it('keeps the leading indent on the first row only and carries cell colours with their characters', () => {
@@ -122,6 +130,59 @@ describe('reflowRow (same breaks as wrapLineToWidth in the full-canvas Task 10 t
 });
 
 /**
+ * A reverse-video space PAINTS (a coloured block), so `isBlank` calls it
+ * content. The text wrapper would call it a gap and is free to delete a gap
+ * at a break - which would silently eat a cell. `reflowRow` therefore hands
+ * the wrapper a substituted character for it and re-attaches the original
+ * cells afterwards. These pin that substitution.
+ */
+describe('reflowRow and reverse-video spaces', () => {
+  it('never deletes a reverse space at a break - it is part of its word', () => {
+    const src = row('A'.repeat(20) + ' BBBB');
+    (src[20] as Cell).rvs = true;
+    const r = reflowRow(src, 20);
+    expect(r.rows.length).toBe(2);
+    expect(str(r.rows[0])).toBe('A'.repeat(20));
+    expect(r.rows[1][0]).toMatchObject({ ch: ' ', rvs: true });
+    expect(r.rows[1].slice(1, 5).map((c) => c.ch).join('')).toBe('BBBB');
+    const rvsCount = (cs: ReadonlyArray<Cell>) => cs.filter((c) => c.rvs).length;
+    expect(r.rows.reduce((n, out) => n + rvsCount(out), 0)).toBe(rvsCount(src));
+  });
+
+  it('carries fg AND rvs per output column, following the characters through the wrap', () => {
+    const src = row('alpha BB CC delta and more words here');
+    for (let x = 0; x < 80; x++) (src[x] as Cell).fg = x % 16;
+    for (let x = 6; x <= 11; x++) (src[x] as Cell).rvs = true;   // 'BB CC ' - the two spaces inside PAINT
+    const r = reflowRow(src, 20);
+    expect(r.rows[0].slice(0, 12).map((c) => c.ch).join('')).toBe('alpha BB CC ');
+    for (let x = 0; x <= 11; x++) {
+      expect(r.rows[0][x].fg).toBe(x % 16);
+      expect(r.rows[0][x].rvs).toBe(x >= 6 && x <= 11);
+    }
+    const rvsCount = (cs: ReadonlyArray<Cell>) => cs.filter((c) => c.rvs).length;
+    expect(r.rows.reduce((n, out) => n + rvsCount(out), 0)).toBe(6);
+  });
+});
+
+describe('reflowRow and an indent wider than the screen', () => {
+  it('does not spend a row on nothing (the one deliberate divergence from wrapLineToWidth)', () => {
+    const line = ' '.repeat(25) + 'word more words after a very wide indent';
+    const r = reflowRow(row(line), 20);
+    expect(r.rows.map(str)[0]).toBe('word more words');
+    expect(r.rows.map(str)).not.toContain('');
+    // wrapLineToWidth itself breaks on the unfittable indent and emits an
+    // empty first line; reflowRow drops exactly that one line and nothing else.
+    expect(wrapLineToWidth(line.slice(0, 80), 20)[0]).toBe('');
+    expect(r.rows.map(str)).toEqual(wrapLineToWidth(line.slice(0, 80), 20).slice(1).map((l) => l.replace(/ +$/, '')));
+    for (const out of r.rows) expect(out.length).toBe(20);
+    // the dropped indent columns still map somewhere real
+    expect(r.map(0)).toEqual({ row: 0, x: 0 });
+    expect(r.map(24)).toEqual({ row: 0, x: 0 });
+    expect(r.map(25)).toEqual({ row: 0, x: 0 });
+  });
+});
+
+/**
  * The plan's binding decision: the cell wrapper does not fork a second
  * word-wrap algorithm, it consumes wrapLineToWidth's break decisions. These
  * cases include the exact sentences web/backend/tests/utils/wrap-for-session.util.test.ts
@@ -133,6 +194,7 @@ describe('reflowRow == wrapLineToWidth (break-decision equality pin)', () => {
     [PROSE, 20],
     [PROSE, 40],
     ['A'.repeat(90), 40],
+    ['A'.repeat(90), 30],
     ['short line', 40],
     ['    ' + PROSE, 30],
     ['word '.repeat(12).trim(), 20],
@@ -248,6 +310,14 @@ describe('adaptRows / adaptFrame', () => {
     expect(rows.filter((r) => r.source === 1).map((r) => r.rule)).toEqual(['crop']);
     expect(str(rows.find((r) => r.source === 1)!.cells)).toBe(PROSE.slice(0, 40).replace(/ +$/, ''));
     expect(rows.filter((r) => r.source === 3).every((r) => r.rule === 'split' || r.rule === 'gutter')).toBe(true);
+  });
+
+  it('a pinned rule applies unconditionally, including to a row that already fits', () => {
+    const fitting = textToFrame(['Name    Sysop    Node  1'], 80, 1);
+    expect(str(adaptRows(fitting).rows[0].cells)).toBe('Name    Sysop    Node  1');
+    const pinned = adaptRows(fitting, { regions: [{ rows: [0, 0], rule: 'gutter' }] });
+    expect(pinned.rows[0].rule).toBe('gutter');
+    expect(str(pinned.rows[0].cells)).toBe('Name Sysop Node 1');
   });
 
   it("an 'auto' pin is the same as no pin at all", () => {

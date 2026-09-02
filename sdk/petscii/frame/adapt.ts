@@ -9,6 +9,10 @@
  *
  * Rule 1 (pack override) and rule 6 (viewport) are Phases 4-5. A pinned
  * region names the rule for a span of source rows; 'auto' classifies.
+ * A pin applies its rule UNCONDITIONALLY, including to rows that already fit
+ * in `cols` - a pinned `gutter` collapses the double spaces of a 30-column
+ * row, a pinned `reflow` rewraps it. Pin `auto` (or leave the row out of
+ * every region) to keep the automatic ladder.
  *
  * Output invariant: every row has exactly `cols` cells. The row COUNT may
  * grow; adaptFrame shows the last `rows` of them - overflow pushes the frame
@@ -171,17 +175,27 @@ export function reflowRow(cells: Row, cols: number): RuleResult {
     .map((c) => (isBlank(c) ? ' ' : c.ch === ' ' ? RVS_SPACE : c.ch))
     .join('');
   const lines = wrapLineToWidth(text, cols);
+  // The ONE divergence from wrapLineToWidth: an indent wider than the screen
+  // is a whitespace piece the wrapper cannot fit, so it breaks on it and
+  // emits an empty first line. A 40x25 screen has 25 rows and none of them
+  // is worth spending on nothing, so that line is dropped here. (Only a
+  // LEADING run can do this: a mid-line run breaks a non-empty current line.)
+  while (lines.length > 1 && lines[0] === '') lines.shift();
 
   const rows: Cell[][] = [];
   const where: Array<RuleCursor | undefined> = new Array(cells.length);
   let si = 0;
   for (let li = 0; li < lines.length; li++) {
-    if (li > 0) {
-      // wrapLineToWidth deletes the whitespace run it broke on (and only
-      // that: no line after the first ever starts with a space). Those
-      // source columns map to the end of the row just closed.
+    if (lines[li][0] !== ' ') {
+      // wrapLineToWidth deletes the whitespace run it broke on. A produced
+      // line that starts with a space is the kept leading indent; anything
+      // else means the spaces sitting at `si` were deleted, so consume them
+      // and map them to the end of the row just closed (or to the start of
+      // the first row, for an over-wide indent dropped above).
       const prev = rows[rows.length - 1];
-      const at: RuleCursor = { row: rows.length - 1, x: clampCol(cols, prev.length) };
+      const at: RuleCursor = prev
+        ? { row: rows.length - 1, x: clampCol(cols, prev.length) }
+        : { row: 0, x: 0 };
       while (si < width && text[si] === ' ') { where[si] = at; si++; }
     }
     const line: Cell[] = [];
