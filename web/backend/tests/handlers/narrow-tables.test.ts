@@ -551,3 +551,307 @@ describe('5c conference / message-base MCI lists (screen.handler.ts parseMciCode
     }
   });
 });
+
+// ===========================================================================
+// 5d - message tables, node status, new-user picker, file status, doors list
+// ===========================================================================
+
+describe('5d mail scan row (message-scan.handler.ts buildMailScanRow)', () => {
+  const SCAN_MSG = {
+    isPrivate: false,
+    from: 'ZAPHOD BEEBLEBROX',
+    subject: 'Your Amiga demo is ready',
+    msgNum: 42,
+  };
+
+  test('80-col PIN: express.e:11720 row, byte-identical', () => {
+    const { buildMailScanRow } = require('../../src/handlers/message/message-scan.handler');
+    expect(buildMailScanRow(SCAN_MSG, false)).toEqual([
+      'Public ' +
+        '  ' +
+        SCAN_MSG.from.substring(0, 29).padEnd(29) +
+        '  ' +
+        SCAN_MSG.subject.substring(0, 21).padEnd(21) +
+        '  \x1b[0m000042',
+    ]);
+  });
+
+  test('40-col: number, sender and subject stacked, nothing over 39 columns', () => {
+    const { buildMailScanRow } = require('../../src/handlers/message/message-scan.handler');
+    const lines = buildMailScanRow(SCAN_MSG, true);
+    expect(lines.length).toBeGreaterThan(1);
+    expectFitsNarrow(lines);
+    expect(lines.join('\n')).toContain('000042');
+    expect(lines.join('\n')).toContain('ZAPHOD BEEBLEBROX');
+    expect(lines.join('\n')).toContain('Your Amiga demo is ready');
+  });
+});
+
+describe('5d message reader (messaging.handler.ts displaySingleMessage + msg list)', () => {
+  const MSG = {
+    id: 42,
+    msgNumber: 42,
+    author: 'ZAPHOD BEEBLEBROX',
+    toUser: 'SPOT',
+    subject: 'Your Amiga demo is ready',
+    body: 'Short body.',
+    isPrivate: false,
+    timestamp: new Date(Date.UTC(2026, 0, 2, 12, 0, 0)),
+  };
+
+  function prepare(driver: Driver) {
+    driver.session.user = { id: 'u1', username: 'SPOT', userFlags: 0 };
+    driver.session.currentConf = 1;
+    driver.session.currentMsgBase = 1;
+    driver.session.tempData = { msgReaderMessages: [MSG], msgReaderIndex: 0 };
+    return require('../../src/handlers/message/messaging.handler');
+  }
+
+  test('80-col PIN: the padded-30 header pairs, byte-identical', async () => {
+    const { formatLongDateTime } = require('../../src/utils/date-time.util');
+    const driver = wide();
+    const messaging = prepare(driver);
+    await messaging.displaySingleMessage(driver.socket, driver.session, 0);
+    const out = driver.output();
+
+    const dateStr = formatLongDateTime(MSG.timestamp);
+    expect(out).toContain(
+      `\x1b[32mDate   \x1b[33m: \x1b[0m${dateStr.padEnd(30)}   \x1b[32mNumber\x1b[33m: \x1b[0m42\r\n`
+    );
+    expect(out).toContain(
+      `\x1b[32mFrom   \x1b[33m: \x1b[0m${'ZAPHOD BEEBLEBROX'.padEnd(30)}   \x1b[32mStatus\x1b[33m: \x1b[0mPublic Message\r\n`
+    );
+    expect(out).toContain(`\x1b[32mSubject\x1b[33m: \x1b[0m${MSG.subject}\r\n`);
+  });
+
+  test('40-col: one field per line, nothing over 39 columns', async () => {
+    const driver = narrow();
+    const messaging = prepare(driver);
+    await messaging.displaySingleMessage(driver.socket, driver.session, 0);
+    const out = driver.output();
+
+    // The "Msg. Options:" navigation prompt is chrome, not a table, and it
+    // is emitted in three separate emitText chunks (messaging.handler.ts
+    // :646-656) - each chunk is short, so the Task 4 width choke never sees
+    // the 45-column line they concatenate into. Out of Task 5's scope;
+    // recorded in the task report.
+    expectFitsNarrow(
+      out.split('\r\n').filter((l) => l.length > 0 && !l.includes('Msg. Options:'))
+    );
+    expect(out).toContain('Number : 42');
+    expect(out).toContain('From   : ZAPHOD BEEBLEBROX');
+    expect(out).toContain('Subject: Your Amiga demo is ready');
+  });
+
+  test('80-col PIN: msg list row (express.e:8864), byte-identical', () => {
+    const { buildMsgListRow } = require('../../src/handlers/message/messaging.handler');
+    expect(buildMsgListRow({ msgNum: 42, isPrivate: false, from: MSG.author, subject: MSG.subject }, false)).toEqual([
+      '000042 Public   ' +
+        MSG.author.substring(0, 29).padEnd(29) +
+        '  ' +
+        MSG.subject.substring(0, 21).padEnd(21) +
+        '\x1b[0m',
+    ]);
+  });
+
+  test('40-col: msg list row stacked, nothing over 39 columns', () => {
+    const { buildMsgListRow } = require('../../src/handlers/message/messaging.handler');
+    const lines = buildMsgListRow(
+      { msgNum: 42, isPrivate: false, from: MSG.author, subject: MSG.subject },
+      true
+    );
+    expectFitsNarrow(lines);
+    expect(lines.join('\n')).toContain('000042');
+    expect(lines.join('\n')).toContain(MSG.subject);
+  });
+});
+
+describe('5d node status (message-commands.handler.ts handleNodeManagementCommand)', () => {
+  function driveNodeStatus(driver: Driver) {
+    const { BBSState, LoggedOnSubState } = require('../../src/constants/bbs-states');
+    const msgCommands = require('../../src/handlers/message/message-commands.handler');
+    msgCommands.setMessageCommandsDependencies({
+      messageBases: [],
+      conferences: [],
+      sessions: new Map<string, any>([
+        [
+          '2',
+          {
+            user: { username: 'ZAPHOD', location: 'Betelgeuse Five' },
+            state: BBSState.LOGGEDON,
+            blockOLM: false,
+            currentStat: 0,
+          },
+        ],
+      ]),
+      joinConference: jest.fn(),
+      displayScreen: jest.fn(),
+      resetNewMailScanPointers: jest.fn(),
+      resetLastMessageReadPointers: jest.fn(),
+      getConferenceStats: jest.fn(),
+      updateMessageNumberRange: jest.fn(),
+      getMailStatFile: jest.fn(),
+    });
+    driver.session.user = { id: 'u1', username: 'SPOT', securityFlags: 'T'.repeat(64) };
+    msgCommands.handleNodeManagementCommand(driver.socket, driver.session);
+    expect(driver.session.subState).toBe(LoggedOnSubState.NM_INPUT);
+  }
+
+  test('80-col PIN: the boxed table, byte-identical', () => {
+    const driver = wide();
+    driveNodeStatus(driver);
+    const out = driver.output();
+
+    expect(out).toContain(
+      '\x1b[34m.-----+---------------------+---------------------+---------------------+------.\x1b[0m\r\n'
+    );
+    expect(out).toContain(
+      '\x1b[34m|\x1b[33m 02  \x1b[34m|\x1b[33m ' +
+        'ZAPHOD'.padEnd(19) +
+        ' \x1b[34m|\x1b[35m ' +
+        'Betelgeuse Five'.padEnd(19) +
+        ' \x1b[34m|\x1b[0m ' +
+        'IDLE'.padEnd(19) +
+        ' \x1b[34m|\x1b[32m YES  \x1b[34m|\x1b[0m\r\n'
+    );
+    expect(out).toContain(
+      "\x1b[34m`-----+---------------------+---------------------+---------------------+------'\x1b[0m\r\n"
+    );
+  });
+
+  test('40-col: two unboxed lines per node, nothing over 39 columns', () => {
+    const driver = narrow();
+    driveNodeStatus(driver);
+    const out = driver.output();
+
+    expectFitsNarrow(out.split('\r\n').filter((l) => l.length > 0));
+    expect(out).toContain('ZAPHOD');
+    expect(out).toContain('IDLE');
+  });
+});
+
+describe('5d new-user computer picker (new-user.handler.ts handleLinesInput)', () => {
+  async function drivePicker(driver: Driver) {
+    const newUser = require('../../src/handlers/user/new-user.handler');
+    driver.session.newUserData = {};
+    await newUser.handleLinesInput(driver.socket, driver.session, '24');
+    return driver.session.newUserData.computerChoices as string[];
+  }
+
+  test('80-col PIN: the express.e two-column loop, byte-identical', async () => {
+    const driver = wide();
+    const choices = await drivePicker(driver);
+    const out = driver.output();
+
+    expect(choices.length).toBeGreaterThan(1);
+    expect(out).toContain(
+      ` 1> ${choices[0].padEnd(34, ' ')} 2> ${choices[1].padEnd(34, ' ')}\r\n`
+    );
+  });
+
+  test('40-col: one choice per line, nothing over 39 columns', async () => {
+    const driver = narrow();
+    const choices = await drivePicker(driver);
+    const out = driver.output();
+
+    expectFitsNarrow(out.split('\r\n').filter((l) => l.length > 0));
+    expect(out).toContain(` 1> ${choices[0]}\r\n`);
+    expect(out).toContain(` 2> ${choices[1]}\r\n`);
+  });
+});
+
+describe('5d file status (file-status.handler.ts handleFileStatusCommand)', () => {
+  async function driveFileStatus(driver: Driver) {
+    const { FileStatusHandler } = require('../../src/handlers/file/file-status.handler');
+    const handler = new FileStatusHandler(
+      {
+        getConferences: jest.fn().mockResolvedValue([
+          { id: 1, name: 'General', uploads: 12, bytesUpload: 1234567, downloads: 34, bytesDownload: 7654321, ratio: 3 },
+        ]),
+      },
+      {} as any
+    );
+    driver.session.user = {
+      id: 'u1',
+      username: 'SPOT',
+      securityFlags: 'T'.repeat(64),
+      confAccess: 'X',
+      byteLimit: 0,
+    };
+    driver.session.currentConf = 1;
+    await handler.handleFileStatusCommand(driver.socket, driver.session);
+  }
+
+  test('80-col PIN: the wide column header, byte-identical', async () => {
+    const driver = wide();
+    await driveFileStatus(driver);
+    const out = driver.output();
+
+    expect(out).toContain('\x1b[0m    ----  -------  -------------- -------  -------------- -----------  -----\x1b[0m\r\n');
+    expect(out).toContain(
+      '\x1b[33m    ' + '   1' + '> ' + '\x1b[33m' +
+      '12'.padEnd(7) + '  ' + '1234567'.padStart(14) + ' ' +
+      '34'.padEnd(7) + '  ' + '7654321'.padStart(14) + '   ' +
+      'Infinite'.padStart(9) + '   3:1\x1b[0m\r\n'
+    );
+  });
+
+  test('40-col: stacked per-conference block, nothing over 39 columns', async () => {
+    const driver = narrow();
+    await driveFileStatus(driver);
+    const out = driver.output();
+
+    expectFitsNarrow(out.split('\r\n').filter((l) => l.length > 0));
+    expect(out).toContain('UL');
+    expect(out).toContain('DL');
+  });
+});
+
+describe('5d doors list (door.handler.ts displayDoorMenu)', () => {
+  const DOORS = [
+    { id: 'd1', command: 'PENGO', name: 'Pengo Arcade Game', type: 'TS', size: 123456, minColumns: 40 },
+    { id: 'd2', command: 'TRADE', name: 'Trade Wars 2002', type: 'AMI', size: 654321 },
+  ];
+
+  async function driveDoorMenu(driver: Driver) {
+    const door = require('../../src/handlers/door.handler');
+    door.setDoors(DOORS);
+    driver.session.user = { id: 'u1', username: 'SPOT', securityFlags: 'T'.repeat(64) };
+    await door.displayDoorMenu(driver.socket, driver.session, '');
+  }
+
+  test('80-col PIN: masthead, footer rule and door row byte-identical', async () => {
+    const door = require('../../src/handlers/door.handler');
+    const driver = wide();
+    await driveDoorMenu(driver);
+    const out = driver.output();
+
+    expect(out).toContain('\x1b[1;1H\x1b[0;37;44m' + ' DOOR GAMES & UTILITIES '.padEnd(80) + '\x1b[0m');
+    expect(out).toContain('\x1b[0;37m' + '-'.repeat(80) + '\x1b[0m\r\n');
+    // formatDoorLine is exported and is what the list loop emits per row.
+    expect(door.formatDoorLine(DOORS[1], false)).toBe(
+      '\x1b[2K \x1b[33m[AMI]\x1b[0m ' + 'TRADE'.padEnd(10) + ' ' + 'Trade Wars 2002'.padEnd(30) + '\x1b[36m' + '639KB'.padStart(8) + '\x1b[0m'
+    );
+  });
+
+  test('40-col: masthead, rule and rows fit 39 columns, [40] marker kept', async () => {
+    const driver = narrow();
+    await driveDoorMenu(driver);
+    const out = driver.output();
+
+    const lines = out
+      .replace(/\x1b\[2J\x1b\[H/g, '')
+      // A cursor-position jump starts a new screen row, like a CRLF.
+      .replace(/\x1b\[\d+;1H/g, '\r\n')
+      .split('\r\n')
+      .filter((l) => l.replace(/\x1b\[2K/g, '').length > 0);
+    expectFitsNarrow(lines.map((l) => l.replace(/\x1b\[2K/g, '')));
+
+    // The [40] marker (Task 1) must survive the narrow row's truncation.
+    const door = require('../../src/handlers/door.handler');
+    const narrowRow = door.formatDoorLine(DOORS[0], false, true).replace(/\x1b\[2K/g, '');
+    expect(printableLength(narrowRow)).toBeLessThanOrEqual(NARROW_LINE_WIDTH);
+    expect(narrowRow).toContain('PENGO');
+    expect(narrowRow).toContain('[40]');
+  });
+});

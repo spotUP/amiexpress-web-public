@@ -25,6 +25,7 @@ import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.util';
 import { resolveDoorMinColumns, declaredMinColumns, sessionColumns, DOOR_NEEDS_80_NOTICE } from '../utils/door-min-columns.util';
+import { isNarrow, NARROW_LINE_WIDTH } from '../utils/table-format.util';
 import { enableGameMode, disableGameMode } from '../server/socket-handlers';
 import { displayMainMenu } from './command-handler/menu';
 import { emitDoorActivity } from '../services/bbs-event-emitter';
@@ -1246,10 +1247,16 @@ console.log(`[DOOR Command] Found door, executing via BBS command: ${doorCommand
 function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean = false): void {
   const { availableDoors, selectedIndex, scrollOffset, previousSelectedIndex, previousScrollOffset } = session.tempData;
 
+  // C64/40-col Task 5d: the chrome is drawn at the CALLER'S width, not a
+  // hard-coded 80 - a 40-column masthead padded to 80 wraps into a second
+  // inverse-video row and pushes the whole list down the screen.
+  const narrow = isNarrow(session);
+  const chromeWidth = narrow ? NARROW_LINE_WIDTH : 80;
+
   // Only clear screen on initial draw
   if (isInitialDraw) {
     emitText(socket, '\x1b[2J\x1b[H');
-    emitText(socket, '\x1b[1;1H\x1b[0;37;44m' + padString(' DOOR GAMES & UTILITIES ', 80) + '\x1b[0m');
+    emitText(socket, '\x1b[1;1H\x1b[0;37;44m' + padString(' DOOR GAMES & UTILITIES ', chromeWidth) + '\x1b[0m');
   }
 
   // Display doors (show up to 15 at a time)
@@ -1268,14 +1275,14 @@ function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean 
     if (prevLine >= 3 && prevLine < 3 + pageSize) {
       const prevDoor = availableDoors[previousSelectedIndex];
       emitText(socket, `\x1b[${prevLine};1H`);
-      emitText(socket, formatDoorLine(prevDoor, false));
+      emitText(socket, formatDoorLine(prevDoor, false, narrow));
     }
 
     // Redraw new line (select)
     if (newLine >= 3 && newLine < 3 + pageSize) {
       const newDoor = availableDoors[selectedIndex];
       emitText(socket, `\x1b[${newLine};1H`);
-      emitText(socket, formatDoorLine(newDoor, true));
+      emitText(socket, formatDoorLine(newDoor, true, narrow));
     }
 
     session.tempData.previousSelectedIndex = selectedIndex;
@@ -1287,7 +1294,7 @@ function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean 
   visibleDoors.forEach((door: any, index: number) => {
     const globalIndex = scrollOffset + index;
     const isSelected = globalIndex === selectedIndex;
-    emitText(socket, formatDoorLine(door, isSelected) + '\r\n');
+    emitText(socket, formatDoorLine(door, isSelected, narrow) + '\r\n');
   });
 
   // Clear any remaining lines from previous page
@@ -1297,8 +1304,10 @@ function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean 
 
   // Footer with instructions
   emitText(socket, '\r\n');
-  emitText(socket, '\x1b[0;37m' + '-'.repeat(80) + '\x1b[0m\r\n');
-  emitText(socket, '\x1b[33mArrows:\x1b[0m Navigate  \x1b[33mEnter:\x1b[0m Launch Door  \x1b[33mQ:\x1b[0m Quit\r\n');
+  emitText(socket, '\x1b[0;37m' + '-'.repeat(chromeWidth) + '\x1b[0m\r\n');
+  emitText(socket, narrow
+    ? '\x1b[33mUp/Dn:\x1b[0m Move \x1b[33mEnter:\x1b[0m Run \x1b[33mQ:\x1b[0m Quit\r\n'
+    : '\x1b[33mArrows:\x1b[0m Navigate  \x1b[33mEnter:\x1b[0m Launch Door  \x1b[33mQ:\x1b[0m Quit\r\n');
 
   session.tempData.previousSelectedIndex = selectedIndex;
   session.tempData.previousScrollOffset = scrollOffset;
@@ -1307,7 +1316,7 @@ function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean 
 /**
  * Format a single door line for display
  */
-export function formatDoorLine(door: any, isSelected: boolean): string {
+export function formatDoorLine(door: any, isSelected: boolean, narrow: boolean = false): string {
   // Get door type - handle both uppercase and lowercase variants
   const doorType = (door as any).doorType || door.type || 'AMI';
   const type = doorType === 'TS' || doorType === 'typescript' ? 'TS' :
@@ -1318,15 +1327,21 @@ export function formatDoorLine(door: any, isSelected: boolean): string {
               doorType === 'ARC' || doorType === 'archive' ? 'ARC' :
               doorType === 'WEB' || doorType === 'web' ? 'WEB' : 'AMI';
 
-  // Format command (pad to 10 chars)
+  // Format command (pad to 10 chars; 8 on a C64, where the row budget is 39)
   const command = door.command || door.id;
-  const commandDisplay = padString(command, 10);
+  const commandDisplay = padString(command, narrow ? 8 : 10);
 
   // Format name (pad to 30 chars). 40-ok doors carry an ASCII [40] token
   // inside the same column budget - the marker participates in truncation
   // and never widens the row (C64/40-col Task 1).
   const fortyOk = resolveDoorMinColumns(door) <= 40;
-  const name = padString(fortyOk ? `${door.name} [40]` : door.name, 30);
+  // Narrow row: ' ' + '[TS]'(<=5) + ' ' + command(8) + ' ' + name(18) = 39,
+  // and the size column comes off entirely. The [40] marker is what tells a
+  // C64 caller which doors will actually open, so on a narrow row the NAME
+  // gives way to it rather than the other way round.
+  const name = narrow
+    ? (fortyOk ? `${padString(door.name, 13)} [40]` : padString(door.name, 18))
+    : padString(fortyOk ? `${door.name} [40]` : door.name, 30);
 
   // Format size (right-aligned, 8 chars wide for proper column alignment)
   const sizeStr = formatDoorSize(door.size || 0);
@@ -1334,6 +1349,13 @@ export function formatDoorLine(door: any, isSelected: boolean): string {
 
   // Clear the entire line first (80 spaces)
   let line = '\x1b[2K';
+
+  if (narrow) {
+    // No size column: a C64 row has no place for it.
+    return isSelected
+      ? line + `\x1b[0;37;44m \x1b[33m[${type}]\x1b[0;37;44m ${commandDisplay} ${name}\x1b[0m`
+      : line + ` \x1b[33m[${type}]\x1b[0m ${commandDisplay} ${name}`;
+  }
 
   // Display door line (no checkbox, just type/command/name/size)
   if (isSelected) {

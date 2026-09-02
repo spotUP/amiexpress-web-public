@@ -11,6 +11,7 @@
  */
 
 import { injectable, inject } from 'tsyringe';
+import { isNarrow, narrowRule } from '../../utils/table-format.util';
 import { Socket } from 'socket.io';
 import { config } from '../../config';
 import { BBSSession } from '../../index';
@@ -87,19 +88,28 @@ console.log('[FileStatusHandler] Initialized with DI');
     const hasConfAccounting = checkSecurity(user, ACSPermission.CONFERENCE_ACCOUNTING);
 
     // Display header - express.e:24151-24157
+    // C64/40-col Task 5d: the seven-column table cannot be narrowed by
+    // clipping - it becomes a stacked per-conference block instead.
+    const narrow = isNarrow(session);
     socket.emit('ansi-output', '\x1b[2J\x1b[H');
     socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', '\x1b[32m              Uploads                 Downloads\x1b[0m\r\n');
+    socket.emit('ansi-output', narrow
+      ? '\x1b[32mFile Statistics\x1b[0m\r\n'
+      : '\x1b[32m              Uploads                 Downloads\x1b[0m\r\n');
     socket.emit('ansi-output', '\r\n');
 
     const creditByKB = getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true;
 
-    if (creditByKB) {
-      socket.emit('ansi-output', '\x1b[32m    Conf  Files    KBytes         Files    KBytes         KBytes Avail Ratio\x1b[0m\r\n');
+    if (narrow) {
+      socket.emit('ansi-output', `\x1b[0m${narrowRule()}\x1b[0m\r\n`);
     } else {
-      socket.emit('ansi-output', '\x1b[32m    Conf  Files    Bytes          Files    Bytes          Bytes Avail  Ratio\x1b[0m\r\n');
+      if (creditByKB) {
+        socket.emit('ansi-output', '\x1b[32m    Conf  Files    KBytes         Files    KBytes         KBytes Avail Ratio\x1b[0m\r\n');
+      } else {
+        socket.emit('ansi-output', '\x1b[32m    Conf  Files    Bytes          Files    Bytes          Bytes Avail  Ratio\x1b[0m\r\n');
+      }
+      socket.emit('ansi-output', '\x1b[0m    ----  -------  -------------- -------  -------------- -----------  -----\x1b[0m\r\n');
     }
-    socket.emit('ansi-output', '\x1b[0m    ----  -------  -------------- -------  -------------- -----------  -----\x1b[0m\r\n');
 
     // Determine which conferences to show - express.e:24161
     const startConf = currentOnly ? currentConf : 1;
@@ -164,6 +174,13 @@ console.log('[FileStatusHandler] Initialized with DI');
       const bytesAvailDisplay = bytesAvailStr.padStart(9, ' ');
 
       // Display line
+      if (narrow) {
+        socket.emit('ansi-output', `\x1b[${color}m${confDisplay}${indicator}\x1b[0m\r\n`);
+        socket.emit('ansi-output', ` UL ${uploadsDisplay} ${uploadBytesDisplay.trim().padStart(14)}\r\n`);
+        socket.emit('ansi-output', ` DL ${downloadsDisplay} ${downloadBytesDisplay.trim().padStart(14)}\r\n`);
+        socket.emit('ansi-output', ` Avail ${bytesAvailDisplay.trim()}  ${secLibrary > 0 ? `${ratio}:1` : 'DSBLD'}\r\n`);
+        continue;
+      }
       if (secLibrary > 0) {
         // Library enabled - show ratio - express.e:24181-24183
         const ratioDisplay = `${ratio}:1`;

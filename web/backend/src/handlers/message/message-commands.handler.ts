@@ -8,6 +8,7 @@
  */
 
 import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
+import { isNarrow, narrowClip, narrowRule } from '../../utils/table-format.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/acs.util';
 import { AnsiUtil } from '../../utils/ansi.util';
@@ -250,6 +251,32 @@ export function handleNodeManagementCommand(socket: any, session: BBSSession): v
 }
 
 /**
+ * One node-status row (C64/40-col Task 5d).
+ *
+ * 80 columns: the `|`-boxed express.e:24370-24375 row, byte-identical.
+ * Narrow: two unboxed lines - the box drawing alone costs 5 of 40 columns
+ * and there is no room for four 19-column fields.
+ */
+export function buildNodeStatusRow(
+  nodeStr: string,
+  nameStr: string,
+  locStr: string,
+  actStr: string,
+  chatStr: string,
+  narrow: boolean
+): string[] {
+  if (!narrow) {
+    return [
+      `\x1b[34m|\x1b[33m ${nodeStr}  \x1b[34m|\x1b[33m ${nameStr} \x1b[34m|\x1b[35m ${locStr} \x1b[34m|\x1b[0m ${actStr} \x1b[34m|${chatStr}\x1b[34m|\x1b[0m`,
+    ];
+  }
+  return [
+    narrowClip(`\x1b[33m${nodeStr} ${nameStr.trimEnd()}\x1b[0m`, 60),
+    narrowClip(`\x1b[0m   ${actStr.trimEnd()}\x1b[0m`, 60),
+  ];
+}
+
+/**
  * Display WHO-style node status list
  * From express.e:24204-24380 (who function)
  *
@@ -257,12 +284,19 @@ export function handleNodeManagementCommand(socket: any, session: BBSSession): v
  * @param session - Current BBS session
  */
 function displayNodeStatus(socket: any, session: BBSSession): void {
+  const narrow = isNarrow(session);
   emitText(socket, '\r\n\r\n');
 
   // Table header - enhanced design based on express.e:24219-24224
-  emitText(socket, '\x1b[34m.-----+---------------------+---------------------+---------------------+------.\x1b[0m\r\n');
-  emitText(socket, '\x1b[34m|\x1b[33m Nd# \x1b[34m|\x1b[36m Name/Handle         \x1b[34m|\x1b[36m Location            \x1b[34m|\x1b[36m Action              \x1b[34m|\x1b[36m Chat \x1b[34m|\x1b[0m\r\n');
-  emitText(socket, '\x1b[34m)-----+---------------------+---------------------+---------------------+------(\x1b[0m\r\n');
+  if (narrow) {
+    emitText(socket, `\x1b[34m${narrowRule()}\x1b[0m\r\n`);
+    emitText(socket, '\x1b[36mNd# Name/Handle\x1b[0m\r\n');
+    emitText(socket, `\x1b[34m${narrowRule()}\x1b[0m\r\n`);
+  } else {
+    emitText(socket, '\x1b[34m.-----+---------------------+---------------------+---------------------+------.\x1b[0m\r\n');
+    emitText(socket, '\x1b[34m|\x1b[33m Nd# \x1b[34m|\x1b[36m Name/Handle         \x1b[34m|\x1b[36m Location            \x1b[34m|\x1b[36m Action              \x1b[34m|\x1b[36m Chat \x1b[34m|\x1b[0m\r\n');
+    emitText(socket, '\x1b[34m)-----+---------------------+---------------------+---------------------+------(\x1b[0m\r\n');
+  }
 
   // Iterate over all sessions (keyed by nodeId)
   const nodeIds: number[] = [];
@@ -398,16 +432,22 @@ function displayNodeStatus(socket: any, session: BBSSession): void {
     const locStr = location.padEnd(19).slice(0, 19);
     const actStr = action.padEnd(19).slice(0, 19);
 
-    emitText(socket, `\x1b[34m|\x1b[33m ${nodeStr}  \x1b[34m|\x1b[33m ${nameStr} \x1b[34m|\x1b[35m ${locStr} \x1b[34m|\x1b[0m ${actStr} \x1b[34m|${chatStr}\x1b[34m|\x1b[0m\r\n`);
+    for (const line of buildNodeStatusRow(nodeStr, nameStr, locStr, actStr, chatStr, narrow)) {
+      emitText(socket, `${line}\r\n`);
+    }
   }
 
   // If no active nodes
   if (nodeIds.length === 0) {
-    emitText(socket, '\x1b[34m|\x1b[33m  No active nodes                                                              \x1b[34m|\x1b[0m\r\n');
+    emitText(socket, narrow
+      ? '\x1b[33m  No active nodes\x1b[0m\r\n'
+      : '\x1b[34m|\x1b[33m  No active nodes                                                              \x1b[34m|\x1b[0m\r\n');
   }
 
   // Table footer - matches header width
-  emitText(socket, '\x1b[34m`-----+---------------------+---------------------+---------------------+------\'\x1b[0m\r\n');
+  emitText(socket, narrow
+    ? `\x1b[34m${narrowRule()}\x1b[0m\r\n`
+    : '\x1b[34m`-----+---------------------+---------------------+---------------------+------\'\x1b[0m\r\n');
 }
 
 /**

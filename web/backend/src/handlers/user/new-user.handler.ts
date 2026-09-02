@@ -13,6 +13,7 @@
  */
 
 import { Socket } from 'socket.io';
+import { isNarrow, narrowClip } from '../../utils/table-format.util';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
@@ -868,6 +869,19 @@ export async function handleLinesInput(socket: Socket, session: any, input: stri
 async function promptForComputer(socket: Socket, session: any) {
   const choices = await getComputerChoices();
   session.newUserData.computerChoices = choices;
+
+  // C64/40-col Task 5d: a 40-column screen has room for ONE 34-column
+  // choice per row, so the express.e two-column loop becomes one column.
+  if (isNarrow(session)) {
+    for (let i = 0; i < choices.length; i++) {
+      socket.emit('ansi-output', narrowClip(`${String(i + 1).padStart(2, ' ')}> ${choices[i]}`) + '\r\n');
+    }
+    // 'Choose computer type (Enter for default): ' is 42 columns; the
+    // narrow form keeps every word and fits 39.
+    socket.emit('ansi-output', '\r\nChoose computer type (Enter=default): ');
+    session.inputBuffer = '';
+    return;
+  }
 
   // express.e:11315 - FOR stat:=0 TO computerTypes.count()-1 STEP 2
   for (let i = 0; i < choices.length; i += 2) {

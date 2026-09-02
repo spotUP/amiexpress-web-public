@@ -5,6 +5,7 @@
  */
 
 import { BBSSession } from '../../index';
+import { isNarrow, narrowClip, narrowField, narrowRule } from '../../utils/table-format.util';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
@@ -266,6 +267,67 @@ console.log('[ENV] Mail - Read');
  * Display a single message with navigation options
  * From express.e:8880-8970 (displayMessage) and express.e:11000-11250 (message navigation)
  */
+/**
+ * One message-list row (C64/40-col Task 5d).
+ *
+ * 80 columns: express.e:8864's row - number leading, then type, sender and
+ * subject - byte-identical. Narrow: the same stacked shape the mail scan
+ * uses, so the two tables read alike on a C64.
+ */
+export function buildMsgListRow(
+  m: { msgNum: number; isPrivate: boolean; from: string; subject: string },
+  narrow: boolean
+): string[] {
+  const typeStr = m.isPrivate ? 'Private' : 'Public ';
+  const msgNumStr = String(m.msgNum).padStart(6, '0');
+  if (!narrow) {
+    const fromPad = (m.from || '').substring(0, 29).padEnd(29);
+    const subjPad = (m.subject || '').substring(0, 21).padEnd(21);
+    return [`${msgNumStr} ${typeStr}  ${fromPad}  ${subjPad}\x1b[0m`];
+  }
+  return [
+    `${msgNumStr} ${typeStr}`,
+    narrowClip(`  ${m.from || ''}`),
+    narrowClip(`  ${m.subject || ''}`),
+  ];
+}
+
+/**
+ * The message-read header (C64/40-col Task 5d).
+ *
+ * 80 columns: express.e:8900-8937's padded-30 field pairs, byte-identical.
+ * Narrow: one field per line via narrowField, so nothing is clipped and no
+ * pair folds.
+ */
+export function buildMessageHeaderLines(fields: {
+  dateStr: string;
+  msgNumber: number | string;
+  toDisplay: string;
+  recvd: string;
+  from: string;
+  statusStr: string;
+  subject: string;
+}, narrow: boolean): string[] {
+  const { dateStr, msgNumber, toDisplay, recvd, from, statusStr, subject } = fields;
+  if (!narrow) {
+    return [
+      `\x1b[32mDate   \x1b[33m: \x1b[0m${dateStr.padEnd(30)}   \x1b[32mNumber\x1b[33m: \x1b[0m${msgNumber}`,
+      `\x1b[32mTo     \x1b[33m: \x1b[0m${toDisplay.padEnd(30)}  \x1b[32mRecv\x27d\x1b[33m: \x1b[0m${recvd}`,
+      `\x1b[32mFrom   \x1b[33m: \x1b[0m${from.padEnd(30)}   \x1b[32mStatus\x1b[33m: \x1b[0m${statusStr}`,
+      `\x1b[32mSubject\x1b[33m: \x1b[0m${subject}`,
+    ];
+  }
+  return [
+    narrowField('Date', dateStr),
+    narrowField('Number', String(msgNumber)),
+    narrowField('To', toDisplay),
+    narrowField("Recv'd", recvd),
+    narrowField('From', from),
+    narrowField('Status', statusStr),
+    narrowField('Subject', subject),
+  ];
+}
+
 export async function displaySingleMessage(socket: any, session: BBSSession, messageIndex: number): Promise<void> {
   const messages = session.tempData.msgReaderMessages;
   const msg = messages[messageIndex];
@@ -317,13 +379,9 @@ export async function displaySingleMessage(socket: any, session: BBSSession, mes
   // express.e format: [32mField[33m: [0mvalue (green field, yellow colon, reset value)
   // Column widths: field padded to 30 chars (\l\s[30])
   const dateStr = formatLongDateTime(msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp));
-  const datePadded = dateStr.padEnd(30);
-
-  // express.e:8900: Date   : <date padded 30>   Number: <msgNumb>
-  emitText(socket, `\x1b[32mDate   \x1b[33m: \x1b[0m${datePadded}   \x1b[32mNumber\x1b[33m: \x1b[0m${msgNumber}\r\n`);
 
   // express.e:8902-8910: EALL → "confName (ALL)", else toName
-  const toDisplay = formatRecipientDisplay(msg, session).padEnd(30);
+  const toDisplay = formatRecipientDisplay(msg, session);
   // express.e:8915-8926: if recv set → date; if toName='ALL' → N/A; else → No
   // Note: EALL check at 8922 is stringCompare(toName,'ALL') only — EALL shows 'No'
   let recvd: string;
@@ -334,15 +392,19 @@ export async function displaySingleMessage(socket: any, session: BBSSession, mes
   } else {
     recvd = 'No';
   }
-  emitText(socket, `\x1b[32mTo     \x1b[33m: \x1b[0m${toDisplay}  \x1b[32mRecv\x27d\x1b[33m: \x1b[0m${recvd}\r\n`);
-
   // express.e:8929-8935: status P/p = Public, R = Private
   const statusStr = (msg.isPrivate) ? 'Private Message' : 'Public Message';
-  const fromPadded = (msg.author || '').padEnd(30);
-  emitText(socket, `\x1b[32mFrom   \x1b[33m: \x1b[0m${fromPadded}   \x1b[32mStatus\x1b[33m: \x1b[0m${statusStr}\r\n`);
-
-  // express.e:8937: Subject: <subject>
-  emitText(socket, `\x1b[32mSubject\x1b[33m: \x1b[0m${msg.subject}\r\n`);
+  for (const line of buildMessageHeaderLines({
+    dateStr,
+    msgNumber,
+    toDisplay,
+    recvd,
+    from: msg.author || '',
+    statusStr,
+    subject: msg.subject,
+  }, isNarrow(session))) {
+    emitText(socket, `${line}\r\n`);
+  }
   emitText(socket, '\r\n');
 
   // Display message body - express.e:8965-8969.
@@ -469,13 +531,21 @@ async function displayMessagesNonStop(socket: any, session: BBSSession, startInd
       emitText(socket, '\r\n');
     }
     const dateStr = formatLongDateTime(msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp));
-    emitText(socket, `\x1b[32mDate   \x1b[33m: \x1b[0m${dateStr.padEnd(30)}   \x1b[32mNumber\x1b[33m: \x1b[0m${msgNumber}\r\n`);
-    const toDisplay = formatRecipientDisplay(msg, session).padEnd(30);
+    const toDisplay = formatRecipientDisplay(msg, session);
     const recvd = (msg.toUser || '').toUpperCase() === 'ALL' ? 'N/A' : 'No';
-    emitText(socket, `\x1b[32mTo     \x1b[33m: \x1b[0m${toDisplay}  \x1b[32mRecv\x27d\x1b[33m: \x1b[0m${recvd}\r\n`);
     const statusStr = msg.isPrivate ? 'Private Message' : 'Public Message';
-    emitText(socket, `\x1b[32mFrom   \x1b[33m: \x1b[0m${(msg.author || '').padEnd(30)}   \x1b[32mStatus\x1b[33m: \x1b[0m${statusStr}\r\n`);
-    emitText(socket, `\x1b[32mSubject\x1b[33m: \x1b[0m${msg.subject}\r\n\r\n`);
+    const headerLines = buildMessageHeaderLines({
+      dateStr,
+      msgNumber,
+      toDisplay,
+      recvd,
+      from: msg.author || '',
+      statusStr,
+      subject: msg.subject,
+    }, isNarrow(session));
+    for (let h = 0; h < headerLines.length; h++) {
+      emitText(socket, `${headerLines[h]}\r\n${h === headerLines.length - 1 ? '\r\n' : ''}`);
+    }
 
     // Body — express.e:8954-8958: nonStopMail=TRUE → displayFile with checkForPause=FALSE
     // Convert raw \n line breaks to \r\n so xterm.js returns to col 1 between lines.
@@ -1156,6 +1226,7 @@ export async function handleMsgListStartInput(socket: any, session: BBSSession, 
     return false;
   });
   let wroteHeader = false;
+  const listNarrow = isNarrow(session);
 
   emitText(socket, '\r\n');
 
@@ -1164,19 +1235,24 @@ export async function handleMsgListStartInput(socket: any, session: BBSSession, 
 
     if (!wroteHeader) {
       // express.e:8856-8858: '\b\n\b\n' then header
-      emitText(socket, '\r\n\r\n\x1b[32mMsg    Type     From                           Subject              \r\n');
-      emitText(socket, '\x1b[33m------ -------  -----------------------------  ---------------------\r\n');
+      if (listNarrow) {
+        emitText(socket, '\r\n\r\n\x1b[32mMsg    Type\r\n');
+        emitText(socket, `\x1b[33m${narrowRule()}\r\n`);
+      } else {
+        emitText(socket, '\r\n\r\n\x1b[32mMsg    Type     From                           Subject              \r\n');
+        emitText(socket, '\x1b[33m------ -------  -----------------------------  ---------------------\r\n');
+      }
       emitText(socket, '\x1b[0m');
       wroteHeader = true;
     }
 
-    // express.e:8863: P/p = Public, else Private
-    const typeStr = msg.isPrivate ? 'Private' : 'Public ';
-    // express.e:8864: \z\r\d[6] \s  \l\s[29]  \l\s[21]
-    const msgNumStr = String(msgNum).padStart(6, '0');  // express.e \z\r\d[6] = zero-fill
-    const fromPad = (msg.author || '').substring(0, 29).padEnd(29);
-    const subjPad = (msg.subject || '').substring(0, 21).padEnd(21);
-    emitText(socket, `${msgNumStr} ${typeStr}  ${fromPad}  ${subjPad}\x1b[0m\r\n`);
+    // express.e:8863-8864: P/p = Public, else Private; \z\r\d[6] \s  \l\s[29]  \l\s[21]
+    for (const line of buildMsgListRow(
+      { msgNum, isPrivate: !!msg.isPrivate, from: msg.author || '', subject: msg.subject || '' },
+      listNarrow
+    )) {
+      emitText(socket, `${line}\r\n`);
+    }
   }
 
   // express.e:8876-8877: no 'No messages found.' message — just exits if nothing matched

@@ -5,6 +5,7 @@
  */
 
 import { checkSecurity } from '../../utils/acs.util';
+import { isNarrow, narrowClip, narrowRule } from '../../utils/table-format.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { LoggedOnSubState } from '../../constants/bbs-states';
@@ -50,6 +51,32 @@ export function setMessageScanDependencies(
   _loadScreenFile = loadScreenFile;
   _conferences = conferences;
   _messageBases = messageBases;
+}
+
+/**
+ * One mail-scan row (C64/40-col Task 5d).
+ *
+ * 80 columns: express.e:11720's single row, byte-identical.
+ * Narrow: number+type on one line, sender and subject stacked underneath,
+ * so nothing is clipped away by a 29/21 column budget that does not exist
+ * on a C64.
+ */
+export function buildMailScanRow(
+  m: { isPrivate: boolean; from: string; subject: string; msgNum: number },
+  narrow: boolean
+): string[] {
+  const status = m.isPrivate ? 'Private' : 'Public ';
+  const num = String(m.msgNum).padStart(6, '0');
+  if (!narrow) {
+    const from = (m.from || '').substring(0, 29).padEnd(29);
+    const subj = (m.subject || '').substring(0, 21).padEnd(21);
+    return [`${status}  ${from}  ${subj}  \x1b[0m${num}`];
+  }
+  return [
+    `${num} ${status}`,
+    narrowClip(`  ${m.from || ''}`),
+    narrowClip(`  ${m.subject || ''}`),
+  ];
 }
 
 /**
@@ -507,14 +534,18 @@ export async function performSingleConfMailScan(socket: any, session: any, conf:
   }
 
   // express.e:11712-11715 — header + table
+  const narrow = isNarrow(session);
   socket.emit('ansi-output', '\r\n\r\n');
-  socket.emit('ansi-output', '\x1b[32mType     From                           Subject                Msg    \r\n');
-  socket.emit('ansi-output', '\x1b[33m-------  -----------------------------  ---------------------  -------\r\n');
+  if (narrow) {
+    socket.emit('ansi-output', '\x1b[32mMsg    Type\r\n');
+    socket.emit('ansi-output', `\x1b[33m${narrowRule()}\r\n`);
+  } else {
+    socket.emit('ansi-output', '\x1b[32mType     From                           Subject                Msg    \r\n');
+    socket.emit('ansi-output', '\x1b[33m-------  -----------------------------  ---------------------  -------\r\n');
+  }
   socket.emit('ansi-output', '\x1b[0m');
 
   for (const m of scanMsgs) {
-    const status = m.isPrivate ? 'Private' : 'Public ';
-    const from = (m.from || '').substring(0, 29).padEnd(29);
     let subject = (m.subject || '').trim();
     if (!subject) {
       try {
@@ -522,9 +553,9 @@ export async function performSingleConfMailScan(socket: any, session: any, conf:
         if (msg) subject = (msg.subject || '').trim();
       } catch (_e) { /* ignore */ }
     }
-    const subj = subject.substring(0, 21).padEnd(21);
-    const num = String(m.msgNum).padStart(6, '0');
-    socket.emit('ansi-output', `${status}  ${from}  ${subj}  \x1b[0m${num}\r\n`);
+    for (const line of buildMailScanRow({ ...m, subject }, narrow)) {
+      socket.emit('ansi-output', `${line}\r\n`);
+    }
   }
 }
 
@@ -730,9 +761,15 @@ console.warn('[advanceConferenceScan] no confScanState found');
       }
 
       // express.e:11712-11715 — blank lines + table header + reset
+      const narrow = isNarrow(session);
       socket.emit('ansi-output', '\r\n\r\n');
-      socket.emit('ansi-output', '\x1b[32mType     From                           Subject                Msg    \r\n');
-      socket.emit('ansi-output', '\x1b[33m-------  -----------------------------  ---------------------  -------\r\n');
+      if (narrow) {
+        socket.emit('ansi-output', '\x1b[32mMsg    Type\r\n');
+        socket.emit('ansi-output', `\x1b[33m${narrowRule()}\r\n`);
+      } else {
+        socket.emit('ansi-output', '\x1b[32mType     From                           Subject                Msg    \r\n');
+        socket.emit('ansi-output', '\x1b[33m-------  -----------------------------  ---------------------  -------\r\n');
+      }
       // express.e:11715 — `[0m` reset on its own line ends the header
       // block before the per-message rows. Audit D-9 flagged that the
       // newline was missing.
@@ -740,8 +777,6 @@ console.warn('[advanceConferenceScan] no confScanState found');
 
       // express.e:11720 - per-message row
       for (const m of scanMsgs) {
-        const status = m.isPrivate ? 'Private' : 'Public ';
-        const from = (m.from || '').substring(0, 29).padEnd(29);
         // For header-only entries we may have no subject yet; fill from disk
         let subject = (m.subject || '').trim();
         if (!subject) {
@@ -750,9 +785,9 @@ console.warn('[advanceConferenceScan] no confScanState found');
             if (msg) subject = (msg.subject || '').trim();
           } catch (_e) { /* ignore */ }
         }
-        const subj = subject.substring(0, 21).padEnd(21);
-        const num = String(m.msgNum).padStart(6, '0');
-        socket.emit('ansi-output', `${status}  ${from}  ${subj}  \x1b[0m${num}\r\n`);
+        for (const line of buildMailScanRow({ ...m, subject }, narrow)) {
+          socket.emit('ansi-output', `${line}\r\n`);
+        }
       }
 
       // express.e:11737 — '\b\nFound Mail!' (banner) before the prompt.
