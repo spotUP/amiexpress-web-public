@@ -65,7 +65,12 @@ export async function menuArrowHandlersDoNotResetTheSelection(): Promise<void> {
     );
 
     // 2. Every site that MOVES the selection must not then call a resetter.
-    const moveRe = /menuSelection\s*=\s*Math\.(?:max|min)\([\s\S]{0,120}?;/g;
+    // Any assignment to menuSelection that is not the reset itself. This used
+    // to look for `Math.max(` / `Math.min(` literally, and went stale the day
+    // the arcade doors moved that arithmetic into a `moveSelection()` helper:
+    // the test then reported "no menuSelection move sites found" for joust and
+    // failed in CI while the doors were fine.
+    const moveRe = /menuSelection\s*=\s*(?!0\s*;)[^;\n]{0,160};/g;
     let move: RegExpExecArray | null;
     let moveSites = 0;
     while ((move = moveRe.exec(src)) !== null) {
@@ -184,4 +189,110 @@ export async function arkanoidHighscorePathIsNotCwdRelative(): Promise<void> {
   } finally {
     process.chdir(originalCwd);
   }
+}
+
+/**
+ * A one-row box may not carry a border.
+ *
+ * `createBox` and `blessed.box` both build a `Panel`, and Panel draws a line
+ * border whenever the caller passes no `border` key
+ * (sdk/engines/ui/blessed/widgets/panel.ts:53). A box one row high has no
+ * interior once a frame takes its top and bottom rows, so its content never
+ * renders - the door paints a rule where the text was supposed to be.
+ *
+ * Found four times in one day, in four unrelated doors: GRANDMASTER's
+ * full-screen backgrounds, Scrollwars' footer, the widget showcase's header
+ * and status bars, and WHIP's four new-project field labels. None of them had
+ * ever shown a character.
+ *
+ * The doors below still contain the shape. They belong to other sessions'
+ * work in flight, so they are recorded rather than fixed - this test fails
+ * when the count in any of them CHANGES, in either direction: a new one is a
+ * new invisible bar, and a removed one means the entry should go.
+ */
+const THIN_BOX_BACKLOG: Record<string, number> = {
+  // Its four modal backdrops were fixed in 4a0d0aa29; these three are bars.
+  'Doors/bug-tracker/app.ts': 2,
+  'Doors/bug-tracker/dialogs.ts': 1,
+  // The busiest door on the board - eight of them, including the channel
+  // header and the user-status line.
+  'Doors/livechat/server.ts': 1,
+  'Doors/livechat/ui/channel-header.ts': 1,
+  'Doors/livechat/ui/user-status.ts': 1,
+  'Doors/livechat/ui/video-tile.ts': 1,
+  'Doors/livechat/overlays/settings-checkboxes-events.ts': 1,
+  'Doors/livechat/overlays/settings-overlay.ts': 1,
+  'Doors/livechat/features/drawing-canvas.ts': 1,
+  'Doors/livechat/features/video-grid.ts': 1,
+  'Doors/rip-browser/app.ts': 1,
+  // GRANDMASTER's remaining three, in the TetriNET screens.
+  'Doors/grandmaster/app.ts': 2,
+  'Doors/grandmaster/ui/menu.ts': 1,
+};
+
+/** Every `.ts` under Doors/, excluding builds and dependencies. */
+function doorSources(dir: string, found: string[] = []): string[] {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === 'node_modules' || entry.name === 'dist') continue;
+      doorSources(full, found);
+    } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
+      found.push(full);
+    }
+  }
+  return found;
+}
+
+/**
+ * The object literal a factory call opens, balanced by brace depth.
+ * A regex cannot do this: these literals nest style and border objects.
+ */
+function objectLiteralAt(src: string, from: number): string {
+  const open = src.indexOf('{', from);
+  if (open === -1) return '';
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}') {
+      depth--;
+      if (depth === 0) return src.slice(open, i + 1);
+    }
+  }
+  return '';
+}
+
+export async function oneRowBoxesDoNotCarryAFrame(): Promise<void> {
+  const factory = /\b(createBox|blessed\.box|createDockablePanel|createPanel)\s*\(\s*\{/g;
+  const counts: Record<string, number> = {};
+
+  for (const file of doorSources(path.join(REPO_ROOT, 'Doors'))) {
+    const src = fs.readFileSync(file, 'utf-8');
+    factory.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = factory.exec(src)) !== null) {
+      const body = objectLiteralAt(src, m.index + m[0].length - 1);
+      if (/\bborder\s*:/.test(body)) continue;
+      if (!/\bheight\s*:\s*(1|'1'|"1")\s*[,}]/.test(body)) continue;
+      const rel = path.relative(REPO_ROOT, file);
+      counts[rel] = (counts[rel] ?? 0) + 1;
+    }
+  }
+
+  const problems: string[] = [];
+  for (const [file, count] of Object.entries(counts)) {
+    const known = THIN_BOX_BACKLOG[file];
+    if (known === undefined) {
+      problems.push(`${file}: ${count} one-row box(es) with no border key - Panel frames them, and a framed one-row box paints no content. Pass border: undefined.`);
+    } else if (count !== known) {
+      problems.push(`${file}: ${count} one-row unbordered boxes, backlog says ${known} - update THIN_BOX_BACKLOG.`);
+    }
+  }
+  for (const file of Object.keys(THIN_BOX_BACKLOG)) {
+    if (counts[file] === undefined) {
+      problems.push(`${file}: fixed - remove it from THIN_BOX_BACKLOG.`);
+    }
+  }
+
+  assert.strictEqual(problems.length, 0, `\n  ${problems.join('\n  ')}`);
 }
