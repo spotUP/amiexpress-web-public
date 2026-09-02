@@ -4,6 +4,7 @@ import { FileImage, AlertTriangle, Download, Share2, Upload, Trash2, Pencil } fr
 import { apiClient, type ApiError } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import { fanOutOptions, type FanOutOption } from './screen-write-plan';
+import { describeScreen } from './screen-descriptions';
 import { summariseShare, type ShareSummary } from './screen-share-view';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { TabbedWorkspace, type TabDefinition } from '../components/ui/Tabs';
@@ -278,7 +279,23 @@ export function ScreenFilesPage() {
   };
 
   const columns: DataTableColumn<ScreenRow>[] = [
-    { id: 'screen', header: 'Screen', value: row => row.screen, mono: true, sortable: true },
+    {
+      id: 'screen',
+      header: 'Screen',
+      value: row => row.screen,
+      sortable: true,
+      cell: row => (
+        <span>
+          <span className="font-topaz text-content-primary">{row.screen}</span>
+          {/* The name is what the board calls the file; this is what the sysop
+              was looking for. "I can't see the screen files that are shown when
+              i join a conference" - they were CONF_BULL and MENU. */}
+          {describeScreen(row.screen) && (
+            <span className="block text-xs text-content-secondary">{describeScreen(row.screen)}</span>
+          )}
+        </span>
+      ),
+    },
     { id: 'scope', header: 'Reads from', value: row => row.scopeLabel, sortable: true },
     { id: 'resolved', header: 'Resolves', value: row => row.resolvedCount, align: 'right', sortable: true },
     {
@@ -513,10 +530,17 @@ export function ScreenFilesPage() {
 
       {entry && (
         <section className="space-y-2" ref={detailRef} data-testid="screen-detail">
-          <h2 className="text-lg text-content-primary">{entry.screen}</h2>
+          <h2 className="text-lg text-content-primary">
+            <span className="font-topaz">{entry.screen}</span>
+            {describeScreen(entry.screen) && (
+              <span className="ml-3 text-sm text-content-secondary">
+                {describeScreen(entry.screen)}
+              </span>
+            )}
+          </h2>
           <p className="text-sm text-content-secondary">
-            Where {entry.screen} resolves from, per node and conference. Edit
-            opens the art; the file name opens what the board knows about it.
+            Where it resolves from, per node and conference. Edit opens the art;
+            the file name opens what the board knows about it.
           </p>
 
           <DataTable

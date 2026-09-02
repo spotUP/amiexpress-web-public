@@ -17,6 +17,8 @@ export interface MciReferenceShape {
   scopeSpecific: boolean;
 }
 
+import { describeScreen } from './screen-descriptions';
+
 export interface ScreenFileShape {
   relPath: string;
   bytes: number;
@@ -90,8 +92,17 @@ export function toScreenRows(index: ScreenIndexShape): ScreenRow[] {
   });
 }
 
+/**
+ * Search the description as well as the name.
+ *
+ * A sysop looking for "the screen shown when you join a conference" does not
+ * know it is called CONF_BULL - that is the whole reason the descriptions
+ * exist. Searching only the name hides the answer behind the question.
+ */
 export function filterScreenRows(rows: ScreenRow[], query: string): ScreenRow[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return rows;
-  return rows.filter(row => row.screen.toLowerCase().includes(needle));
+  return rows.filter(row =>
+    row.screen.toLowerCase().includes(needle)
+    || describeScreen(row.screen).toLowerCase().includes(needle));
 }

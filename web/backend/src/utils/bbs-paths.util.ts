@@ -158,7 +158,11 @@ export class BBSPaths {
    * @param doorName Current door name (for PROGDIR: resolution)
    * @returns Absolute filesystem path
    */
-  resolveAmigaPath(amigaPath: string, nodeNum?: number, doorName?: string): string {
+  // nodeNum is part of the signature callers pass and is read from the path
+  // itself (NODE<n>:), not from the argument - underscored so it stays
+  // documented without tripping noUnusedParameters where this file is
+  // compiled from source.
+  resolveAmigaPath(amigaPath: string, _nodeNum?: number, doorName?: string): string {
     // NODE#: assigns
     const nodeMatch = amigaPath.match(/^NODE(\d+):(.*)$/i);
     if (nodeMatch) {
