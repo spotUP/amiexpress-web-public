@@ -22,6 +22,7 @@ import {
   resolveNodeScreenDir, screenSearchLocations,
 } from './screen-resolution';
 import { countMciCodes } from './mci-catalog';
+import { readScreenFlags } from './screen-flags';
 import { parseMciReferences, type MciReference } from './mci-references';
 import { conferenceDir, conferenceNumbers } from '../conferences/conference-paths';
 import { loadConfConfig } from '../services/conf-config.service';
@@ -352,7 +353,18 @@ const RUNTIME_CONTENT: { marker: RegExp; tool: string }[] = [
   { marker: /l\s*AST\s*c\s*ALLERS|LAST CALLERS/i, tool: 'a last-callers generator' },
 ];
 
-function classifyGenerated(relPath: string, buf: Buffer): 'backup' | 'runtime' | undefined {
+function classifyGenerated(
+  relPath: string,
+  buf: Buffer,
+  baseDir: string,
+): 'backup' | 'runtime' | undefined {
+  // The sysop's own answer first. `art` is an override that says the
+  // heuristics below are wrong about this file, so it returns nothing rather
+  // than a classification.
+  const flag = readScreenFlags(baseDir)[relPath];
+  if (flag === 'art') return undefined;
+  if (flag) return flag;
+
   const name = path.basename(relPath);
   if (BACKUP_NAME.test(name)) return 'backup';
   if (RUNTIME_NAME.test(name)) return 'runtime';
@@ -584,7 +596,7 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
     readBy: [],
     sauce: readSauce(buf),
     problems: fileProblems(buf, format),
-    generated: classifyGenerated(path.relative(baseDir, absPath), buf),
+    generated: classifyGenerated(path.relative(baseDir, absPath), buf, baseDir),
     // latin1: an Amiga high-bit byte is not UTF-8, and a code is ASCII either way.
     mciCodes: countMciCodes(buf.toString('latin1')),
     relPath: path.relative(baseDir, absPath),
@@ -867,5 +879,19 @@ export function getScreenIndex(baseDir: string): ScreenIndex {
 
 /** Called by every write route: the next read rebuilds. */
 export function invalidateScreenIndex(): void {
+  cached = null;
+}
+
+/**
+ * Forget what every file was, not just how the index was assembled.
+ *
+ * A file's facts are cached on its own size and mtime, which is right for an
+ * edit and WRONG for a sysop's flag: marking a screen as art changes what the
+ * manager should say about bytes that did not move. Without this the override
+ * was written to disk, read back correctly, and never reached the answer -
+ * caught by the test that marked a file and asked the index about it.
+ */
+export function invalidateScreenFacts(): void {
+  factsCache.clear();
   cached = null;
 }
