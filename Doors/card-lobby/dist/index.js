@@ -1,5 +1,4 @@
 "use strict";
-// @ts-nocheck
 /**
  * Card Lobby - Neo-Blessed Desktop UI
  *
@@ -9,15 +8,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.metadata = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const door_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/door-input-manager");
-const gamepad_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/gamepad-input-manager");
+const GamepadBindings_1 = require("./managers/GamepadBindings");
+const TableFlow_1 = require("./managers/TableFlow");
+const UnoEventBus_1 = require("./managers/UnoEventBus");
+const GameViews_1 = require("./managers/GameViews");
+const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const DoorLoader_1 = require("@amiexpress/bbs-door-sdk/utils/DoorLoader");
 const bbs_door_sdk_2 = require("@amiexpress/bbs-door-sdk");
 const uno_engine_1 = require("./lib/uno-engine");
 const lib_1 = require("./lib");
 const managers_1 = require("./managers");
-const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
-const CardLobbyBrowserAdapter_1 = require("./adapters/CardLobbyBrowserAdapter");
 exports.metadata = {
     name: 'Card Lobby',
     version: '2.0.0',
@@ -60,7 +61,9 @@ class CardLobbyApp {
     // Animation state and methods (delegated to UIManager)
     get dealAnimationInProgress() { return this.uiManager.getDealAnimationInProgress(); }
     runDealAnimation(boardCards, playerHand, flopCardSize, handCardSize) {
-        return this.uiManager.runDealAnimation(boardCards, playerHand, flopCardSize, handCardSize);
+        // The sound effects travel with the animation; UIManager cannot reach the
+        // door's own screen program to emit them.
+        return this.uiManager.runDealAnimation(boardCards, playerHand, flopCardSize, handCardSize, (id) => this.emitSfx(id));
     }
     renderBoardAndHand(boardCards, playerHand, flopCardSize, handCardSize, hasActiveHand) {
         return this.uiManager.renderBoardAndHand(boardCards, playerHand, flopCardSize, handCardSize, hasActiveHand);
@@ -80,18 +83,14 @@ class CardLobbyApp {
         this.autoDealInProgress = false;
         this.lastAnimatedHandStartedAt = null;
         this.actionInProgress = false;
-        this.browserAdapter = null;
-        this.browserWidget = null;
         this.lobby = null;
         this.profiles = {};
         this.currentProfile = null;
         this.lobbyFilters = { gameId: null, openSeatsOnly: false };
         this.notices = [];
-        this.refreshTimer = null;
         this.tableListMap = [];
         this.selectedTableId = null;
         this.selectedUnoCardIndex = null;
-        this.lastSeenUnoEventId = null;
         this.session = session;
     }
     async run() {
@@ -154,113 +153,8 @@ class CardLobbyApp {
             debugName: 'CardLobby'
         });
         this.inputManager.enable();
-        // Set up gamepad support
-        this.gamepadManager = new gamepad_input_manager_1.GamepadInputManager(this.session.socket, {
-            deadzone: 0.15,
-            pollRate: 16,
-        });
-        // D-pad navigation
-        this.gamepadManager.on('dpad:up', () => {
-            if (this.modalActive)
-                return;
-            // Simulate up arrow key press
-            this.screen.program.emit('keypress', null, { name: 'up' });
-        });
-        this.gamepadManager.on('dpad:down', () => {
-            if (this.modalActive)
-                return;
-            // Simulate down arrow key press
-            this.screen.program.emit('keypress', null, { name: 'down' });
-        });
-        this.gamepadManager.on('dpad:left', () => {
-            if (this.modalActive)
-                return;
-            if (this.viewMode === 'table') {
-                this.focusLobby();
-            }
-        });
-        this.gamepadManager.on('dpad:right', () => {
-            if (this.modalActive)
-                return;
-            if (this.viewMode === 'lobby' && this.currentProfile?.currentTableId) {
-                this.focusTable();
-            }
-        });
-        // Button A: Join/Select/Confirm
-        this.gamepadManager.on('button:a', (pressed) => {
-            if (!pressed || this.modalActive)
-                return;
-            if (this.viewMode === 'lobby') {
-                // Join selected table
-                this.runAction(() => this.joinSelectedTable());
-            }
-            else if (this.viewMode === 'table') {
-                // Trigger action (call/check/fold based on game state)
-                const table = this.currentProfile?.currentTableId
-                    ? this.findTableById(this.currentProfile.currentTableId)
-                    : null;
-                if (table) {
-                    if (table.gameId === 'poker' || table.gameId === 'poker-house') {
-                        this.triggerCall();
-                    }
-                    else if (table.gameId === 'uno' || table.gameId === 'uno-house') {
-                        // Play first card in hand
-                        const engine = this.gameStateManager.getUnoEngine();
-                        if (engine) {
-                            this.selectUnoCard(0);
-                        }
-                    }
-                }
-            }
-        });
-        // Button B: Back/Cancel
-        this.gamepadManager.on('button:b', (pressed) => {
-            if (!pressed || this.modalActive)
-                return;
-            if (this.viewMode === 'table') {
-                this.runAction(() => this.leaveCurrentTable());
-            }
-        });
-        // Button X: Fold (poker) or Draw card (UNO)
-        this.gamepadManager.on('button:x', (pressed) => {
-            if (!pressed || this.modalActive || this.viewMode !== 'table')
-                return;
-            const table = this.currentProfile?.currentTableId
-                ? this.findTableById(this.currentProfile.currentTableId)
-                : null;
-            if (table) {
-                if (table.gameId === 'poker' || table.gameId === 'poker-house') {
-                    this.triggerFold();
-                }
-                else if (table.gameId === 'uno' || table.gameId === 'uno-house') {
-                    this.drawUnoCard();
-                }
-            }
-        });
-        // Button Y: Raise (poker) or Call UNO
-        this.gamepadManager.on('button:y', (pressed) => {
-            if (!pressed || this.modalActive || this.viewMode !== 'table')
-                return;
-            const table = this.currentProfile?.currentTableId
-                ? this.findTableById(this.currentProfile.currentTableId)
-                : null;
-            if (table) {
-                if (table.gameId === 'poker' || table.gameId === 'poker-house') {
-                    this.triggerRaise();
-                }
-                else if (table.gameId === 'uno' || table.gameId === 'uno-house') {
-                    this.callUno();
-                }
-            }
-        });
-        // Start button: Refresh lobby
-        this.gamepadManager.on('button:start', (pressed) => {
-            if (!pressed || this.modalActive)
-                return;
-            if (this.viewMode === 'lobby') {
-                this.runAction(() => this.refreshLobby());
-            }
-        });
+        // The pad's decision table lives in managers/GamepadBindings.ts.
+        this.gamepadManager = (0, GamepadBindings_1.attachGamepadBindings)(this.session, this);
         // Reconnect handler for screen refresh
         if (this.session.bbsSession) {
             this.session.bbsSession.doorReconnectHandler = () => {
@@ -274,9 +168,6 @@ class CardLobbyApp {
             this.exitDoor();
         });
         this.screen.key(['q'], () => {
-            // In browser mode, don't consume the event - let browser widget handle it
-            if (this.viewMode === 'browser')
-                return false;
             if (this.modalActive)
                 return;
             this.exitDoor();
@@ -292,9 +183,6 @@ class CardLobbyApp {
             this.cycleFocus(-1);
         });
         this.screen.key(['f'], () => {
-            // In browser mode, don't consume the event - let browser widget handle it (search)
-            if (this.viewMode === 'browser')
-                return false;
             if (this.modalActive || this.viewMode !== 'table')
                 return;
             this.triggerFold();
@@ -307,66 +195,50 @@ class CardLobbyApp {
         this.screen.key(['c'], () => {
             if (this.modalActive)
                 return;
-            // In browser mode, don't consume the event - let browser widget handle it
-            if (this.viewMode === 'browser')
-                return false;
             if (this.viewMode === 'table') {
                 this.triggerCall();
             }
             else if (this.viewMode === 'lobby') {
-                this.runAction(() => this.createTableFlow());
+                this.runAction(() => this.tableFlow.createTableFlow());
             }
         });
         this.screen.key(['r'], () => {
             if (this.modalActive)
                 return;
-            // In browser mode, don't consume the event - let browser widget handle it
-            if (this.viewMode === 'browser')
-                return false;
             if (this.viewMode === 'table') {
                 this.triggerRaise();
             }
             else if (this.viewMode === 'lobby') {
-                this.runAction(() => this.refreshLobby());
+                this.runAction(() => this.manualRefresh());
             }
         });
         this.screen.key(['j'], () => {
             console.log('[KEY J] Pressed', { modalActive: this.modalActive, viewMode: this.viewMode, selectedTableId: this.selectedTableId });
             // In browser mode, don't consume the event - let browser widget handle it
-            if (this.viewMode === 'browser') {
-                console.log('[KEY J] Browser mode - passing to widget');
-                return false;
-            }
             if (this.modalActive || this.viewMode !== 'lobby') {
                 console.log('[KEY J] Blocked:', { modalActive: this.modalActive, viewMode: this.viewMode });
                 return;
             }
-            this.runAction(() => this.joinSelectedTable());
+            this.runAction(() => this.tableFlow.joinSelectedTable());
         });
         this.screen.key(['o'], () => {
-            // In browser mode, don't consume the event - let browser widget handle it
-            if (this.viewMode === 'browser')
-                return false;
             if (this.modalActive || this.viewMode !== 'lobby')
                 return;
-            this.runAction(() => this.observeSelectedTable());
+            this.runAction(() => this.tableFlow.observeSelectedTable());
         });
         this.screen.key(['l'], () => {
             if (this.modalActive || this.viewMode !== 'table')
                 return;
-            this.runAction(() => this.leaveCurrentTable());
+            this.runAction(() => this.tableFlow.leaveCurrentTable());
         });
         this.screen.key(['d'], () => {
-            // In browser mode, don't consume the event (no browser handler, but consistent pattern)
-            if (this.viewMode === 'browser')
-                return false;
             if (this.modalActive)
                 return;
             if (this.viewMode === 'table') {
                 this.runAction(() => this.dealHand());
             }
             else if (this.viewMode === 'lobby') {
-                this.runAction(() => this.deleteTableFlow());
+                this.runAction(() => this.tableFlow.deleteTableFlow());
             }
         });
         // UNO card selection keys (1-9, 0 for 10th card)
@@ -409,6 +281,9 @@ class CardLobbyApp {
         // Initialize managers
         this.uiManager = new managers_1.UIManager(this.screen, this.desktop);
         this.gameStateManager = new managers_1.GameStateManager();
+        this.tableFlow = new TableFlow_1.TableFlow(this);
+        this.unoEvents = new UnoEventBus_1.UnoEventBus(this, lib_1.REFRESH_INTERVAL_MS);
+        this.gameViews = new GameViews_1.GameViews(this);
         // Initialize AI system
         const ai = new bbs_door_sdk_2.CardGameAI();
         ai.registerStrategy(new bbs_door_sdk_2.PokerAIStrategy());
@@ -418,6 +293,22 @@ class CardLobbyApp {
         this.uiManager.buildOverlay();
         // Now create DialogManager with valid overlayShade
         this.dialogManager = new managers_1.DialogManager(this.screen, this.uiManager.overlayShade);
+        // 80x25 like the board, or the caller's whole terminal on Alt+Enter.
+        // A door looks like the board it opened from until the caller asks for
+        // more, so this starts FIXED; the panels are laid out from the screen's
+        // own size, which makes following a resize a re-layout and a repaint
+        // (sdk/utils/terminal-mode.ts).
+        this.terminalMode = (0, terminal_mode_1.createTerminalModeSwitch)({
+            bbs: this.session.bbs,
+            screen: this.screen,
+            start: 'fixed',
+            onRelayout: () => {
+                this.uiManager.layoutTablePanels();
+                this.uiManager.layoutActionButtons();
+                this.updateAllPanels();
+                this.screen.render();
+            },
+        });
         // Build UI via manager
         this.uiManager.buildTopBar({
             focusLobby: this.focusLobby.bind(this),
@@ -436,9 +327,9 @@ class CardLobbyApp {
                 this.updateTablePanel();
                 this.screen.render();
             },
-            createTableFlow: this.createTableFlow.bind(this),
+            createTableFlow: () => this.tableFlow.createTableFlow(),
             joinSelectedTable: this.joinSelectedTable.bind(this),
-            observeSelectedTable: this.observeSelectedTable.bind(this),
+            observeSelectedTable: () => this.tableFlow.observeSelectedTable(),
             toggleFilters: this.toggleFilters.bind(this),
             manualRefresh: this.manualRefresh.bind(this),
             runAction: this.runAction.bind(this),
@@ -446,7 +337,7 @@ class CardLobbyApp {
         // Enter key to join table
         this.uiManager.lobbyList.key('enter', () => {
             if (!this.modalActive && this.selectedTableId) {
-                this.runAction(() => this.joinSelectedTable());
+                this.runAction(() => this.tableFlow.joinSelectedTable());
             }
         });
         // Double-click to join table
@@ -455,7 +346,7 @@ class CardLobbyApp {
         this.uiManager.lobbyList.on('element click', () => {
             const now = Date.now();
             if (now - lastClickTime < doubleClickThreshold && this.selectedTableId) {
-                this.runAction(() => this.joinSelectedTable());
+                this.runAction(() => this.tableFlow.joinSelectedTable());
             }
             lastClickTime = now;
         });
@@ -502,9 +393,9 @@ class CardLobbyApp {
         void this.shutdown();
     }
     async shutdown() {
-        this.stopRefreshTimer();
+        this.unoEvents.stopRefreshTimer();
         if (this.currentProfile?.currentTableId) {
-            await this.leaveCurrentTable();
+            await this.tableFlow.leaveCurrentTable();
         }
         this.cleanup();
         // CRITICAL: Disable input manager FIRST (restores BBS input state)
@@ -539,175 +430,8 @@ class CardLobbyApp {
         if (this.session.bbsSession) {
             delete this.session.bbsSession.doorReconnectHandler;
         }
-        // Cleanup browser mode
-        if (this.browserWidget) {
-            this.browserWidget.destroy();
-            this.browserWidget = null;
-        }
-        this.browserAdapter = null;
-    }
-    /**
-     * Show SDK MultiplayerLobby browser mode
-     */
-    async showBrowser() {
-        console.log('[CardLobby] showBrowser() called');
-        console.log('[CardLobby] screen.grabKeys:', this.screen.program.grabKeys);
-        console.log('[CardLobby] viewMode before:', this.viewMode);
-        // Set viewMode to browser to prevent key conflicts
-        this.viewMode = 'browser';
-        console.log('[CardLobby] viewMode after:', this.viewMode);
-        // Hide old UI elements
-        this.uiManager.hide();
-        // NOTE: Don't suspend/resume here - keep inputManager active
-        // grabKeys is already enabled in config, screen handlers will work
-        // Create adapter
-        this.browserAdapter = new CardLobbyBrowserAdapter_1.CardLobbyBrowserAdapter(this.lobby, this.profiles);
-        console.log('[CardLobby] Browser adapter created');
-        // Update adapter when state changes
-        const updateAdapter = () => {
-            if (this.browserAdapter && this.lobby) {
-                this.browserAdapter.updateLobby(this.lobby);
-                this.browserAdapter.updateProfiles(this.profiles);
-            }
-        };
-        // Create browser widget with all SDK features
-        // NOTE: MultiplayerLobby destroys all screen children in setupUI(), including overlayShade
-        this.browserWidget = new blessed_1.MultiplayerLobby({
-            parent: this.screen,
-            adapter: this.browserAdapter,
-            localPlayerId: this.session.bbsSession?.userId || 'local',
-            modes: {}, // Not used in browser mode
-            title: 'CARD LOBBY - TABLE BROWSER',
-            // Enable all browser features
-            features: {
-                browserMode: true,
-                observe: false, // Not implemented yet
-                filters: true,
-            },
-            // Enable search
-            enableSearch: true,
-            // Enable quick filters
-            enableQuickFilters: true,
-            // Sorting
-            initialSortBy: 'players',
-            initialSortOrder: 'desc',
-            // Auto-refresh every 5 seconds
-            autoRefreshInterval: lib_1.REFRESH_INTERVAL_MS,
-            // Show table age
-            showTableAge: true,
-            // Custom headers
-            tableHeaders: ['ID', 'Game', 'Stakes', 'Players', 'Status', 'Age'],
-            // Empty state
-            emptyStateMessage: 'No tables available. Press C to create one.',
-            // Custom row formatting
-            formatTableRow: (table) => {
-                const playerCount = `${table.players}/${table.maxPlayers}`;
-                const statusColor = table.status === 'waiting' ? 'green' : table.status === 'starting' ? 'yellow' : 'red';
-                const status = `{${statusColor}-fg}${table.status.toUpperCase()}{/${statusColor}-fg}`;
-                return [
-                    String(table.id),
-                    table.gameName,
-                    table.stakes || '-',
-                    playerCount,
-                    status,
-                    table.age || '-',
-                ];
-            },
-            // Join validation
-            validateJoin: (table, localPlayerId) => {
-                const profile = this.profiles[localPlayerId];
-                if (!profile) {
-                    return 'Profile not found';
-                }
-                // Check if player has enough chips
-                const buyIn = table.extra?.buyIn || 0;
-                if (profile.chips < buyIn) {
-                    return `Need ${(0, lib_1.formatChips)(buyIn)} (you have ${(0, lib_1.formatChips)(profile.chips)})`;
-                }
-                // Check if already in game
-                const existingTable = this.lobby.tables.find(t => t.seats.some(s => s?.playerId === localPlayerId));
-                if (existingTable && existingTable.id !== table.id) {
-                    return 'Already playing at another table';
-                }
-                return null; // OK to join
-            },
-        });
-        // CRITICAL: Browser widget destroyed all screen children including desktop and overlayShade
-        // Recreate both and update references
-        console.log('[CardLobby] Recreating desktop and overlayShade after browser widget creation...');
-        this.desktop = (0, blessed_helpers_1.createBox)({
-            parent: this.screen,
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            ch: ' ',
-            focusable: false,
-            mouse: false,
-            clickable: false,
-            style: {
-                bg: 'black',
-            },
-        });
-        this.desktop.hide(); // Hide desktop in browser mode
-        this.uiManager.desktop = this.desktop; // Update UIManager's desktop reference
-        this.uiManager.buildOverlay();
-        this.dialogManager.overlayShade = this.uiManager.overlayShade;
-        console.log('[CardLobby] desktop and overlayShade recreated, references updated');
-        // Handle create table event
-        this.browserWidget.on('browser:create-table', async () => {
-            console.log('[CardLobby] browser:create-table event received!');
-            try {
-                // Show game/stakes selection dialogs
-                console.log('[CardLobby] Calling createTableFlow()...');
-                await this.createTableFlow();
-                console.log('[CardLobby] createTableFlow() completed');
-                // Refresh browser after creation
-                updateAdapter();
-            }
-            catch (error) {
-                console.error('[CardLobby] Error in create table:', error);
-                this.pushNotice(`Failed to create table: ${error instanceof Error ? error.message : 'Unknown error'}`);
-            }
-        });
-        console.log('[CardLobby] browser:create-table event handler registered');
-        // Show browser and wait for result
-        const result = await this.browserWidget.show('custom');
-        if (result.action === 'start' && result.lobbyId) {
-            // User joined a table - transition to table view
-            const tableId = Number(result.lobbyId);
-            this.selectedTableId = tableId;
-            // Hide browser
-            if (this.browserWidget) {
-                this.browserWidget.destroy();
-                this.browserWidget = null;
-            }
-            // NOTE: grabKeys remains enabled, inputManager handles everything
-            // Show table UI
-            this.uiManager.show();
-            this.viewMode = 'table';
-            // Join the table
-            await this.joinTable(tableId);
-            // Wait for user to leave table or exit
-            await new Promise((resolve) => {
-                this.screen.on('destroy', () => resolve());
-                // Add handler to return to browser when leaving table
-                const checkInterval = setInterval(() => {
-                    if (this.viewMode === 'lobby') {
-                        clearInterval(checkInterval);
-                        resolve();
-                    }
-                }, 500);
-            });
-            // Return to browser if didn't exit
-            if (this.viewMode === 'lobby' && !this.screen.destroyed) {
-                await this.showBrowser();
-            }
-        }
-        else {
-            // User exited browser - exit door
-            await this.shutdown();
-        }
+        // Put the caller's terminal back to 80x25 whatever the door was showing
+        this.terminalMode?.dispose();
     }
     async reloadState() {
         const globalStore = new bbs_door_sdk_2.Storage({
@@ -1079,7 +803,7 @@ class CardLobbyApp {
             return;
         if (table.gameId !== 'holdem')
             return;
-        if (this.isObserverForTable(table, this.currentProfile.userId))
+        if (this.tableFlow.isObserverForTable(table, this.currentProfile.userId))
             return;
         const seatedPlayers = table.players.filter((player) => player.role === 'player' && player.stack > 0);
         if (seatedPlayers.length < table.minPlayers)
@@ -1170,7 +894,7 @@ class CardLobbyApp {
             this.updateTableActions();
             return;
         }
-        const isObserver = this.isObserverForTable(table, this.currentProfile.userId);
+        const isObserver = this.tableFlow.isObserverForTable(table, this.currentProfile.userId);
         const showGameView = this.viewMode === 'table' && this.currentProfile?.currentTableId === table.id;
         if (showGameView) {
             this.tableContent.hide();
@@ -1182,10 +906,10 @@ class CardLobbyApp {
             this.layoutTablePanels();
             // Detect game type and render appropriately
             if (table.gameId === 'uno' || table.gameId === 'uno-house') {
-                this.renderUnoGameView(table);
+                this.gameViews.renderUnoGameView(table);
             }
             else {
-                this.renderPokerGameView(table);
+                this.gameViews.renderPokerGameView(table);
             }
             this.updateTableActions();
             this.updateTopInfoBar();
@@ -1266,7 +990,7 @@ class CardLobbyApp {
         if (!table) {
             return { table: null, isObserver: false, canAct: false, toCall: 0 };
         }
-        const isObserver = this.isObserverForTable(table, this.currentProfile.userId);
+        const isObserver = this.tableFlow.isObserverForTable(table, this.currentProfile.userId);
         let toCall = 0;
         const handState = this.loadTableHand(table);
         let canAct = false;
@@ -1497,7 +1221,7 @@ class CardLobbyApp {
             this.updateUnoActionButtons(table);
         }
         else {
-            this.updatePokerActionButtons(table);
+            this.updatePokerActionButtons(table ?? null);
         }
         this.layoutActionButtons();
     }
@@ -1650,298 +1374,17 @@ class CardLobbyApp {
         this.updateLobbyPanel();
         this.screen.render();
     }
+    /** The pad and the key bindings ask the door; the door asks the flow. */
+    joinSelectedTable() {
+        return this.tableFlow.joinSelectedTable();
+    }
+    leaveCurrentTable() {
+        return this.tableFlow.leaveCurrentTable();
+    }
     async manualRefresh() {
         if (this.modalActive)
             return;
         await this.reloadState();
-        this.updateAllPanels();
-    }
-    isObserverForTable(table, userId) {
-        const seated = table.players.find((player) => player.userId === userId && player.role === 'player');
-        if (seated)
-            return false;
-        return table.observers.some((obs) => obs.userId === userId);
-    }
-    async createTableFlow() {
-        console.log('[CardLobby] createTableFlow() - modalActive:', this.modalActive);
-        if (this.modalActive) {
-            console.log('[CardLobby] createTableFlow() BLOCKED by modalActive=true');
-            return;
-        }
-        const enabledGames = lib_1.GAME_CATALOG.filter((game) => game.enabled);
-        const gameIndex = await this.showListDialog('Select Game', enabledGames.map((game) => `${game.name}`));
-        if (gameIndex === null)
-            return;
-        const game = enabledGames[gameIndex];
-        const stakeIndex = await this.showListDialog('Select Stakes', game.stakes.map((stake) => `${stake.label} (Buy-in ${stake.buyIn})`));
-        if (stakeIndex === null)
-            return;
-        const maxPlayersStr = await this.showPromptDialog('Table Size', `Max players (${game.minPlayers}-${game.maxPlayers})`, String(game.maxPlayers));
-        if (maxPlayersStr === null)
-            return;
-        const maxPlayers = (0, lib_1.safeNumber)(maxPlayersStr);
-        if (maxPlayers === null || maxPlayers < game.minPlayers || maxPlayers > game.maxPlayers) {
-            await this.showMessageDialog('Invalid player count.', 'Max players must be within game limits.');
-            return;
-        }
-        const isPrivate = await this.showYesNoDialog('Private Table?', 'Create a private table?');
-        if (isPrivate === null)
-            return;
-        const autoStart = await this.showYesNoDialog('Auto Start?', 'Auto-start when table is full?');
-        if (autoStart === null)
-            return;
-        await this.finalizeCreateTable(game, stakeIndex, maxPlayers, isPrivate, autoStart);
-    }
-    async finalizeCreateTable(game, stakeIndex, maxPlayers, isPrivate, autoStart) {
-        await this.reloadState();
-        if (!this.lobby || !this.currentProfile)
-            return;
-        const stake = game.stakes[stakeIndex];
-        const buyIn = stake.buyIn;
-        const entryFee = (0, lib_1.calculateEntryFee)(buyIn);
-        if (this.currentProfile.wallet.chips < buyIn + entryFee) {
-            this.pushNotice('Not enough chips for buy-in + entry fee.');
-            return;
-        }
-        this.currentProfile.wallet.chips -= buyIn + entryFee;
-        this.currentProfile.wallet.lifetimeSpent += entryFee;
-        const tableId = this.lobby.lastTableId + 1;
-        this.lobby.lastTableId = tableId;
-        const table = {
-            id: tableId,
-            gameId: game.id,
-            gameName: game.name,
-            stakesLabel: stake.label,
-            smallBlind: stake.smallBlind,
-            bigBlind: stake.bigBlind,
-            buyIn,
-            entryFee,
-            minPlayers: game.minPlayers,
-            maxPlayers,
-            status: 'open',
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            hostUserId: this.currentProfile.userId,
-            autoStart,
-            isPrivate,
-            inviteCode: isPrivate ? String(Math.floor(Math.random() * 9000) + 1000) : undefined,
-            players: [],
-            observers: [],
-        };
-        table.players.push({
-            userId: this.currentProfile.userId,
-            username: this.currentProfile.username,
-            seat: 0,
-            stack: buyIn,
-            buyIn,
-            role: 'player',
-            joinedAt: Date.now(),
-            isBot: false,
-        });
-        this.syncBotsForTable(table);
-        this.updateTableStatus(table);
-        if (table.status === 'in-progress') {
-            this.emitLiveChat(`TABLE START: ${table.gameName} ${table.stakesLabel} (#${table.id})`);
-        }
-        this.currentProfile.status = 'table';
-        this.currentProfile.currentTableId = tableId;
-        this.lobby.tables.unshift(table);
-        this.pushEvent(`Table #${table.id} opened: ${table.gameName} ${table.stakesLabel}`);
-        this.emitLiveChat(`TABLE OPEN: ${table.gameName} ${table.stakesLabel} (#${table.id}) - /JOIN ${table.id}`);
-        await this.persistState();
-        this.selectedTableId = table.id;
-        this.applyViewMode('table');
-        this.updateAllPanels();
-    }
-    async joinSelectedTable() {
-        console.log('[joinSelectedTable] Called', {
-            modalActive: this.modalActive,
-            lobby: !!this.lobby,
-            currentProfile: !!this.currentProfile,
-            selectedTableId: this.selectedTableId,
-            viewMode: this.viewMode
-        });
-        if (this.modalActive || !this.lobby || !this.currentProfile) {
-            console.log('[joinSelectedTable] Early return:', { modalActive: this.modalActive, lobby: !!this.lobby, currentProfile: !!this.currentProfile });
-            return;
-        }
-        if (!this.selectedTableId) {
-            this.pushNotice('Select a table first.');
-            console.log('[joinSelectedTable] No table selected');
-            return;
-        }
-        await this.reloadState();
-        if (!this.lobby)
-            return;
-        const table = this.findTableById(this.selectedTableId);
-        if (!table) {
-            this.pushNotice('Table not found.');
-            return;
-        }
-        if (this.currentProfile.currentTableId && this.currentProfile.currentTableId !== table.id) {
-            this.pushNotice('Leave your current table first.');
-            return;
-        }
-        if (this.getOpenHumanSeats(table) <= 0) {
-            this.pushNotice('Table is full of players.');
-            return;
-        }
-        const buyIn = table.buyIn;
-        const entryFee = table.entryFee;
-        if (this.currentProfile.wallet.chips < buyIn + entryFee) {
-            this.pushNotice('Not enough chips for buy-in + entry fee.');
-            return;
-        }
-        const existingSeat = table.players.find((player) => player.userId === this.currentProfile?.userId && player.role === 'player');
-        if (existingSeat) {
-            this.currentProfile.currentTableId = table.id;
-            this.currentProfile.status = 'table';
-            this.applyViewMode('table');
-            this.updateAllPanels();
-            return;
-        }
-        const seat = this.findSeatForHuman(table);
-        if (seat === null) {
-            this.pushNotice('No seat available.');
-            return;
-        }
-        table.players = table.players.filter((player) => !(player.seat === seat && (0, lib_1.isBotPlayer)(player)));
-        this.currentProfile.wallet.chips -= buyIn + entryFee;
-        this.currentProfile.wallet.lifetimeSpent += entryFee;
-        table.players.push({
-            userId: this.currentProfile.userId,
-            username: this.currentProfile.username,
-            seat,
-            stack: buyIn,
-            buyIn,
-            role: 'player',
-            joinedAt: Date.now(),
-            isBot: false,
-        });
-        table.observers = table.observers.filter((observer) => observer.userId !== this.currentProfile?.userId);
-        table.updatedAt = Date.now();
-        this.currentProfile.status = 'table';
-        this.currentProfile.currentTableId = table.id;
-        const previousStatus = table.status;
-        this.syncBotsForTable(table);
-        this.updateTableStatus(table);
-        if (previousStatus !== 'in-progress' && table.status === 'in-progress') {
-            this.emitLiveChat(`TABLE START: ${table.gameName} ${table.stakesLabel} (#${table.id})`);
-        }
-        this.pushEvent(`${this.currentProfile.username} joined table #${table.id}`);
-        await this.persistState();
-        this.applyViewMode('table');
-        this.updateAllPanels();
-    }
-    /**
-     * Join a table by ID (used by browser mode)
-     */
-    async joinTable(tableId) {
-        this.selectedTableId = tableId;
-        await this.joinSelectedTable();
-    }
-    async observeSelectedTable() {
-        if (this.modalActive || !this.lobby || !this.currentProfile)
-            return;
-        if (!this.selectedTableId) {
-            this.pushNotice('Select a table first.');
-            return;
-        }
-        await this.reloadState();
-        if (!this.lobby)
-            return;
-        const table = this.findTableById(this.selectedTableId);
-        if (!table) {
-            this.pushNotice('Table not found.');
-            return;
-        }
-        const seated = table.players.find((player) => player.userId === this.currentProfile?.userId && player.role === 'player');
-        if (seated) {
-            this.currentProfile.currentTableId = table.id;
-            this.currentProfile.status = 'table';
-            this.applyViewMode('table');
-            this.updateAllPanels();
-            return;
-        }
-        const alreadyObserver = table.observers.find((obs) => obs.userId === this.currentProfile?.userId);
-        if (!alreadyObserver) {
-            table.observers.push({
-                userId: this.currentProfile.userId,
-                username: this.currentProfile.username,
-                joinedAt: Date.now(),
-            });
-        }
-        this.currentProfile.status = 'table';
-        this.currentProfile.currentTableId = table.id;
-        this.pushEvent(`${this.currentProfile.username} is observing table #${table.id}`);
-        await this.persistState();
-        this.applyViewMode('table');
-        this.updateAllPanels();
-    }
-    findSeatForHuman(table) {
-        const humanSeats = new Set(this.getHumanPlayers(table).map((player) => player.seat));
-        for (let seat = 0; seat < table.maxPlayers; seat += 1) {
-            if (!humanSeats.has(seat))
-                return seat;
-        }
-        return null;
-    }
-    async leaveCurrentTable() {
-        if (!this.currentProfile || !this.lobby)
-            return;
-        const tableId = this.currentProfile.currentTableId;
-        if (!tableId) {
-            this.pushNotice('You are not at a table.');
-            return;
-        }
-        await this.reloadState();
-        if (!this.lobby)
-            return;
-        const table = this.findTableById(tableId);
-        if (!table) {
-            this.currentProfile.currentTableId = undefined;
-            this.currentProfile.status = 'lobby';
-            this.applyViewMode('lobby');
-            await this.persistState();
-            this.updateAllPanels();
-            return;
-        }
-        const playerIndex = table.players.findIndex((player) => player.userId === this.currentProfile?.userId && player.role === 'player');
-        if (playerIndex >= 0 && table.hand) {
-            this.pushNotice('Hand in progress. Wait for it to finish before leaving.');
-            return;
-        }
-        if (playerIndex >= 0) {
-            const player = table.players[playerIndex];
-            const net = player.stack - player.buyIn;
-            this.currentProfile.wallet.chips += player.stack;
-            if (net > 0)
-                this.currentProfile.wallet.lifetimeEarned += net;
-            if (net < 0)
-                this.currentProfile.wallet.lifetimeSpent += Math.abs(net);
-            table.players.splice(playerIndex, 1);
-        }
-        const observerIndex = table.observers.findIndex((obs) => obs.userId === this.currentProfile?.userId);
-        if (observerIndex >= 0) {
-            table.observers.splice(observerIndex, 1);
-        }
-        this.currentProfile.status = 'lobby';
-        this.currentProfile.currentTableId = undefined;
-        table.updatedAt = Date.now();
-        const remainingHumans = this.getHumanPlayers(table);
-        if (remainingHumans.length === 0) {
-            this.lobby.tables = this.lobby.tables.filter((item) => item.id !== table.id);
-            this.pushEvent(`Table #${table.id} closed.`);
-        }
-        else {
-            this.syncBotsForTable(table);
-            if (table.hostUserId === this.currentProfile.userId && remainingHumans[0]) {
-                table.hostUserId = remainingHumans[0].userId;
-            }
-            this.updateTableStatus(table);
-        }
-        await this.persistState();
-        this.applyViewMode('lobby');
         this.updateAllPanels();
     }
     async dealHand() {
@@ -1958,7 +1401,7 @@ class CardLobbyApp {
             this.pushNotice('Table not found.');
             return;
         }
-        const isObserver = this.isObserverForTable(table, this.currentProfile.userId);
+        const isObserver = this.tableFlow.isObserverForTable(table, this.currentProfile.userId);
         if (isObserver) {
             this.pushNotice('Observers cannot deal hands.');
             return;
@@ -2092,7 +1535,7 @@ class CardLobbyApp {
             pushEvent: this.pushEvent.bind(this),
             persistState: this.persistState.bind(this),
             advanceUnoGame: this.advanceUnoGame.bind(this),
-            broadcastEvent: this.broadcastUnoEvent.bind(this),
+            broadcastEvent: this.unoEvents.broadcastUnoEvent.bind(this.unoEvents),
         });
     }
     async advanceUnoGame(table, engineOverride, beforeStacksOverride) {
@@ -2105,7 +1548,7 @@ class CardLobbyApp {
             finalizeUnoGame: this.finalizeUnoGame.bind(this),
             pushNotice: this.pushNotice.bind(this),
             pushEvent: this.pushEvent.bind(this),
-            broadcastEvent: this.broadcastUnoEvent.bind(this),
+            broadcastEvent: this.unoEvents.broadcastUnoEvent.bind(this.unoEvents),
         });
     }
     async performBotUnoAction(engine, playerId, pushEvent) {
@@ -2117,7 +1560,7 @@ class CardLobbyApp {
         const profiles = {};
         for (const player of table.players) {
             if (!player.isBot) {
-                const profile = await this.loadProfile(player.userId);
+                const profile = this.profiles[player.userId];
                 if (profile)
                     profiles[player.userId] = profile;
             }
@@ -2129,8 +1572,8 @@ class CardLobbyApp {
             handleAchievementUnlocks: this.handleAchievementUnlocks.bind(this),
             pushNotice: this.pushNotice.bind(this),
             pushEvent: this.pushEvent.bind(this),
-            emitLiveChat: (message) => this.rpc?.emit('liveChat', { message }),
-            broadcastEvent: this.broadcastUnoEvent.bind(this),
+            emitLiveChat: (message) => this.emitLiveChat(message),
+            broadcastEvent: this.unoEvents.broadcastUnoEvent.bind(this.unoEvents),
             persistState: this.persistState.bind(this),
         });
     }
@@ -2144,41 +1587,9 @@ class CardLobbyApp {
             advanceUnoGame: this.advanceUnoGame.bind(this),
             pushNotice: this.pushNotice.bind(this),
             pushEvent: this.pushEvent.bind(this),
-            broadcastEvent: this.broadcastUnoEvent.bind(this),
+            broadcastEvent: this.unoEvents.broadcastUnoEvent.bind(this.unoEvents),
             showColorSelectionDialog: () => this.dialogManager.showColorSelectionDialog(),
         });
-    }
-    async broadcastUnoEvent(tableId, type, data) {
-        if (!this.lobby)
-            return;
-        const table = this.findTableById(tableId);
-        if (!table || !table.hand)
-            return;
-        // Cast to UnoTableHandState to access events array
-        const hand = table.hand;
-        if (!hand.events) {
-            hand.events = [];
-        }
-        // Create event with unique ID
-        const event = {
-            id: `${tableId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            type: type,
-            playerId: data.playerId,
-            data,
-            timestamp: Date.now(),
-        };
-        // Add event to queue
-        hand.events.push(event);
-        // Keep only last 50 events to prevent unbounded growth
-        if (hand.events.length > 50) {
-            hand.events = hand.events.slice(-50);
-        }
-        // Persist state so other nodes can see the event
-        await this.persistState();
-        // Emit via socket for connected clients on this node
-        if (this.rpc) {
-            this.rpc.emit('unoEvent', { tableId, event });
-        }
     }
     selectUnoCard(index) {
         if (!this.currentProfile || !this.lobby)
@@ -2212,82 +1623,6 @@ class CardLobbyApp {
     // ============================================================================
     // GAME-SPECIFIC RENDERING
     // ============================================================================
-    renderPokerGameView(table) {
-        const flopInnerHeight = Math.max(0, Number(this.flopPanel.height) - 2);
-        const handInnerHeight = Math.max(0, Number(this.handPanel.height) - 2);
-        const flopCardSize = flopInnerHeight >= 7 ? 'full' : 'mini';
-        const handCardSize = handInnerHeight >= 7 ? 'full' : 'mini';
-        const handState = this.loadTableHand(table);
-        const boardCards = handState
-            ? (0, bbs_door_sdk_2.pokerCardsToCards)(handState.engine.state.board)
-            : (0, bbs_door_sdk_2.pokerCardsToCards)(table.lastHand?.board ?? []);
-        const playerSeat = handState?.engine.state.players.find((seat) => seat?.id === this.currentProfile?.userId);
-        const playerHand = (0, bbs_door_sdk_2.pokerCardsToCards)(playerSeat?.hand ?? table.lastHand?.hands[this.currentProfile.userId] ?? []);
-        const handStartedAt = table.hand?.startedAt ?? null;
-        const shouldAnimate = Boolean(handState &&
-            handStartedAt &&
-            handStartedAt !== this.lastAnimatedHandStartedAt &&
-            !this.dealAnimationInProgress);
-        if (shouldAnimate) {
-            this.lastAnimatedHandStartedAt = handStartedAt;
-            void this.runDealAnimation(boardCards, playerHand, flopCardSize, handCardSize);
-        }
-        else if (!this.dealAnimationInProgress) {
-            this.renderBoardAndHand(boardCards, playerHand, flopCardSize, handCardSize, Boolean(handState));
-        }
-        const seated = table.players
-            .filter((player) => player.role === 'player')
-            .sort((a, b) => a.seat - b.seat);
-        const playersWidth = Math.max(20, Number(this.playersPanel.width) - 2);
-        const seatWidth = 2;
-        const stackWidth = Math.min(8, Math.max(5, Math.floor(playersWidth * 0.35)));
-        const nameWidth = Math.max(8, playersWidth - seatWidth - stackWidth - 2);
-        const playersLines = seated.map((player) => {
-            const tag = (0, lib_1.isBotPlayer)(player) ? '*' : ' ';
-            const name = `${player.username}${tag}`.slice(0, nameWidth);
-            const nameValue = (0, lib_1.padColumn)(`{cyan-fg}${name}{/}`, nameWidth);
-            const stackValue = (0, lib_1.padColumn)(`{yellow-fg}${player.stack}{/}`, stackWidth);
-            return `${(0, lib_1.pad)(String(player.seat + 1), seatWidth)} ${nameValue} ${stackValue}`;
-        });
-        if (playersLines.length === 0) {
-            playersLines.push('No players seated.');
-        }
-        this.playersContent.setContent(playersLines.join('\n'));
-        this.playersContent.resetScroll();
-        this.updateActivityPanel(table, handState?.engine ?? null);
-    }
-    renderUnoGameView(table) {
-        const gameState = this.loadUnoGameState(table);
-        if (!gameState) {
-            // No active game - show waiting message
-            this.flopContent.setContent('Waiting for game to start...');
-            this.playersContent.setContent('No active UNO game.');
-            this.handContent.setContent('Press {cyan-fg}DEAL{/} to start.');
-            this.activityContent.setContent('');
-            return;
-        }
-        const engine = gameState.engine;
-        const state = engine.getGameState();
-        // Render discard pile (top card + color + direction)
-        const topCard = state.discardPile[state.discardPile.length - 1] || null;
-        this.uiManager.renderUnoDiscardPile(topCard, state.currentColor, state.direction);
-        // Render player status (all players with card counts)
-        const currentPlayer = engine.getCurrentPlayer();
-        const currentPlayerIndex = state.currentPlayerIndex;
-        this.uiManager.renderUnoPlayerStatus(state.players, currentPlayerIndex, this.currentProfile?.userId || '');
-        // Render player's hand (with playable indicators)
-        const player = state.players.find(p => p.id === this.currentProfile?.userId);
-        if (player) {
-            const playableIndices = engine.getPlayableCards(player.id);
-            const selectedIndex = this.selectedUnoCardIndex ?? null;
-            this.uiManager.renderUnoHand(player.hand, playableIndices, selectedIndex);
-        }
-        else {
-            this.handContent.setContent('Observing game...');
-        }
-        // Render activity/events
-        this.uiManager.renderUnoActivity(state.lastAction, state.challengeWindow);
-    }
     // Dialog delegation methods (called from setupScreen)
     // These are accessed via this.dialogManager.methodName() in setupScreen
     // Wrapper methods for backward compatibility
@@ -2302,138 +1637,5 @@ class CardLobbyApp {
     }
     showMessageDialog(title, text) {
         return this.dialogManager.showMessageDialog(title, text);
-    }
-    startRefreshTimer() {
-        if (this.refreshTimer)
-            return;
-        this.refreshTimer = setInterval(() => {
-            if (this.modalActive)
-                return;
-            this.reloadState()
-                .then(() => {
-                this.processNewUnoEvents();
-                this.updateAllPanels();
-            })
-                .catch(() => undefined);
-        }, lib_1.REFRESH_INTERVAL_MS);
-    }
-    processNewUnoEvents() {
-        if (!this.currentProfile || !this.lobby)
-            return;
-        const table = this.currentProfile.currentTableId
-            ? this.findTableById(this.currentProfile.currentTableId)
-            : null;
-        if (!table || !table.hand)
-            return;
-        // Only process events for UNO tables
-        if (table.gameId !== 'uno' && table.gameId !== 'uno-house')
-            return;
-        const hand = table.hand;
-        if (!hand.events || !Array.isArray(hand.events))
-            return;
-        // Find new events since last seen
-        const newEvents = this.lastSeenUnoEventId
-            ? hand.events.filter((e) => e.timestamp > this.getEventTimestamp(this.lastSeenUnoEventId))
-            : hand.events;
-        if (newEvents.length === 0)
-            return;
-        // Update last seen event ID
-        if (hand.events.length > 0) {
-            this.lastSeenUnoEventId = hand.events[hand.events.length - 1].id;
-        }
-        // Process each new event
-        for (const event of newEvents) {
-            this.handleUnoEvent(event);
-        }
-    }
-    getEventTimestamp(eventId) {
-        if (!eventId)
-            return 0;
-        // Event ID format: tableId-timestamp-random
-        const parts = eventId.split('-');
-        if (parts.length >= 2) {
-            return parseInt(parts[1], 10) || 0;
-        }
-        return 0;
-    }
-    handleUnoEvent(event) {
-        // Play sound or visual feedback based on event type
-        switch (event.type) {
-            case 'cardPlayed':
-                // Visual feedback handled by updateTablePanel
-                break;
-            case 'cardDrawn':
-                // Visual feedback handled by updateTablePanel
-                break;
-            case 'unoCalled':
-                this.pushEvent(`${event.data.playerName || 'Player'} called UNO!`);
-                break;
-            case 'challengeOpened':
-                this.pushEvent(`Challenge window opened! Press QUIT to challenge.`);
-                break;
-            case 'challengeClosed':
-                this.pushEvent(event.data.message || 'Challenge window closed.');
-                break;
-            case 'gameStarted':
-                this.pushEvent('UNO game started!');
-                break;
-            case 'gameEnded':
-                this.pushEvent(event.data.message || 'Game ended!');
-                break;
-        }
-    }
-    deleteTableFlow() {
-        if (!this.selectedTableId || !this.lobby)
-            return;
-        const table = this.lobby.tables.find((t) => t.id === this.selectedTableId);
-        if (!table)
-            return;
-        if (table.hostUserId !== this.currentProfile?.userId) {
-            this.pushNotice('Only the table host can delete the table.');
-            return;
-        }
-        this.dialogManager.showConfirmDialog('Delete Table', `Delete table #${table.id} (${table.gameName})?`, async (confirmed) => {
-            if (confirmed && this.selectedTableId) {
-                await this.deleteTable(this.selectedTableId);
-            }
-        });
-    }
-    async deleteTable(tableId) {
-        if (!this.lobby)
-            return;
-        const table = this.lobby.tables.find((t) => t.id === tableId);
-        if (!table) {
-            this.pushNotice('Table not found.');
-            return;
-        }
-        // Remove all players from table
-        table.players.forEach((player) => {
-            if (!(0, lib_1.isBotPlayer)(player)) {
-                const profile = this.profiles[player.userId];
-                if (profile) {
-                    profile.currentTableId = undefined;
-                    profile.status = 'lobby';
-                }
-            }
-        });
-        // Remove table from lobby
-        this.lobby.tables = this.lobby.tables.filter((t) => t.id !== tableId);
-        // If current user was at this table, return to lobby view
-        if (this.currentProfile?.currentTableId === tableId) {
-            this.currentProfile.currentTableId = undefined;
-            this.currentProfile.status = 'lobby';
-            this.focusLobby();
-        }
-        this.selectedTableId = null;
-        await this.persistState();
-        this.updateLobbyPanel();
-        this.pushEvent(`Table #${tableId} deleted.`);
-        this.pushNotice(`Table #${tableId} deleted.`);
-    }
-    stopRefreshTimer() {
-        if (!this.refreshTimer)
-            return;
-        clearInterval(this.refreshTimer);
-        this.refreshTimer = null;
     }
 }

@@ -21,11 +21,13 @@ import { join } from 'path';
 const repoRoot = join(__dirname, '..', '..', '..', '..');
 
 /** Doors that carry the switch, and the file that creates their screen. */
-// card-lobby is NOT here: its index.ts is 2826 lines, over this repo's
-// 2000-line ceiling, so the pre-commit hook refuses any change to it until
-// somebody extracts from it first. The switch is a ten-line change waiting
-// on that.
+// card-lobby joined on 2026-09-02. It could not before: its index.ts was
+// 2808 lines against this repo's 2000-line ceiling, so the pre-commit hook
+// refused any change to it. Table flows, the gamepad bindings, the UNO event
+// queue and the two game views moved into managers/, a dead browser mode came
+// out, and the file lost its `// @ts-nocheck` - see card-lobby-typechecks.test.ts.
 const DOORS: Array<[string, string]> = [
+  ['card-lobby', 'index.ts'],
   ['grandmaster', 'app.ts'],
   ['sprite-editor', 'studio.ts'],
   ['ansi-editor', 'index.ts'],
