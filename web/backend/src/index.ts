@@ -1,4 +1,6 @@
 import "reflect-metadata"; // Must be first import for tsyringe decorators
+// Type-only (erased at runtime, so it cannot displace reflect-metadata).
+import type { PetsciiRenderCtx, PetsciiSpan } from './handlers/petscii-screen.render';
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { createServer } from "http";
@@ -453,6 +455,15 @@ export interface BBSSession {
     inlineMode: boolean; // Whether inline mode was active
     eventName: "ansi-output" | "petscii-output";
     isFlowScreen: boolean; // Whether this is a display flow screen
+    // --- PETSCII `.seq` segments (plan 2026-09-02-mci-in-petscii-seq, Task 8)
+    /** Segments are latin-1 `.seq` bytes, already gated/pre-passed/tokenized. */
+    petscii?: boolean;
+    /** The render ctx (and therefore the PetsciiMachine) the paused screen
+     *  was drawn with: the resume continues the SAME bank and cursor. */
+    petsciiCtx?: PetsciiRenderCtx;
+    /** Substitution spans per segment, rebased onto it (index-aligned with
+     *  `segments`). */
+    petsciiSpans?: PetsciiSpan[][];
   };
   slowmo?: number; // Slow screen output speed (MCI ~SMO), 1-5 per express.e
   slowmoCount?: number; // Remaining byte budget before next slowmo delay

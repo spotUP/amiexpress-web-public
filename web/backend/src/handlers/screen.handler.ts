@@ -58,6 +58,7 @@ import {
   petsciiRenderCtxFor,
   petsciiMachineFor,
   type PetsciiSpan,
+  type PetsciiRenderCtx,
 } from './petscii-screen.render';
 
 /**
@@ -1425,10 +1426,96 @@ function emitPetsciiChunk(
   spans: readonly PetsciiSpan[] = [],
 ): boolean {
   if (text.length === 0) return false;
-  const bytes = renderChunkBytes(text, ctx, spans);
+  let bytes: Buffer;
+  try {
+    bytes = renderChunkBytes(text, ctx, spans);
+  } catch (error) {
+    // A screen degrades, it never stalls (Task 8, from Task 6's review).
+    // Most callers of displayScreen do not wrap it, so a throw from the
+    // encoder would leave the caller staring at a blank terminal with no
+    // way forward. The chunk's own bytes are what the board put on the
+    // wire before any of this existed, so falling back to them shows art
+    // with unsubstituted MCI rather than nothing at all.
+    // The oracle may already have seen part of this chunk before the throw,
+    // so the cursor it reports afterwards is best-effort - a degraded screen
+    // is allowed to be imprecise; a dead session is not.
+    console.error(`[PETSCII] chunk render failed, emitting raw bytes:`, error);
+    bytes = Buffer.from(text, 'latin1');
+    ctx.machine.feed(bytes);
+  }
   if (bytes.length === 0) return false;
   socket.emit('petscii-bytes', bytes.toString('base64'));
   return true;
+}
+
+/**
+ * The degrade path for a whole file: its own bytes on the wire, with the
+ * oracle still fed so the bank and cursor stay truthful for the next paint.
+ * This is exactly what the express.e art gate does for a non-MCI `.seq`, so
+ * the fallback is the board's previous behaviour rather than a guess.
+ */
+function emitRawPetscii(socket: any, machine: PetsciiMachine, buffer: Buffer): void {
+  machine.feed(buffer);
+  socket.emit('petscii-bytes', buffer.toString('base64'));
+}
+
+/**
+ * One PETSCII walk over already-tokenized `.seq` text (plan Task 8).
+ *
+ * Shared by the first paint (`emitPetsciiScreenInline`, over the whole
+ * plan) and by every `~SP` resume (`processNextScreenSegment`, over the
+ * remainder), which is what makes the pause continuous: the SAME ctx - and
+ * therefore the same `PetsciiMachine` - encodes both sides of the pause, so
+ * the bank, cursor, pen and reverse the art left behind carry across it.
+ *
+ * The text is NEVER re-gated and NEVER re-tokenized. express.e evaluates
+ * the `~` gate once, on the file's first byte (`express.e:6800-6806`); a
+ * remainder that happens to start with an art `~` is art, and running the
+ * tokenizer over it again would eat that byte and re-substitute values that
+ * are already substituted.
+ */
+async function renderPetsciiWalk(
+  socket: any,
+  session: BBSSession,
+  text: string,
+  spans: readonly PetsciiSpan[],
+  ctx: PetsciiRenderCtx,
+): Promise<{ hasPause: boolean; pending?: { text: string; spans: PetsciiSpan[] } }> {
+  /** The substitution spans that fall inside one chunk, rebased to it. */
+  const spansIn = (start: number, end: number): PetsciiSpan[] =>
+    spans
+      .filter(sp => sp.start >= start && sp.start + sp.len <= end)
+      .map(sp => ({ start: sp.start - start, len: sp.len, cmd: sp.cmd }));
+
+  // The two sentinel kinds the CHUNK renderer owns: they are resolved
+  // against the LIVE cursor while the chunk is encoded, so they must not
+  // break it.
+  const moveTag = MCI_SENTINELS.MOVE.slice(1);
+  const generatedTag = MCI_GENERATED.START.slice(1);
+
+  const walk = await walkInlineSentinels(socket, session, text, {
+    emitChunk: (chunk, start) =>
+      emitPetsciiChunk(socket, ctx, chunk, spansIn(start, start + chunk.length)),
+    emitCls: () => {
+      emitPetsciiChunk(socket, ctx, PETSCII_CLS);
+    },
+    emitClsBeforeRandomFile: () => {
+      emitPetsciiChunk(socket, ctx, PETSCII_CLS);
+    },
+    isChunkSentinel: payload =>
+      payload.startsWith(moveTag) || payload.startsWith(generatedTag),
+  });
+
+  if (walk.pendingInlineContent === undefined) return { hasPause: walk.hasPause };
+
+  // `pendingInlineContent` is a SUFFIX of `text` (the walker returns
+  // `text.substring(lastIndex)`), so its offset is the length difference -
+  // which is what the remaining spans have to be rebased onto.
+  const offset = text.length - walk.pendingInlineContent.length;
+  return {
+    hasPause: walk.hasPause,
+    pending: { text: walk.pendingInlineContent, spans: spansIn(offset, text.length) },
+  };
 }
 
 /**
@@ -1443,55 +1530,62 @@ function emitPetsciiChunk(
  * computed before it ran.
  *
  * `~SP` (decision 7) stops the walk with the remainder in
- * `pendingInlineContent`; resuming it after the keypress is Task 8, so for
- * now the pause flag is recorded and the remainder is dropped rather than
- * painted over the pause prompt.
+ * `pendingInlineContent`. It is stored on `session.screenSegments` together
+ * with THIS ctx, so the keypress resumes the same render machine
+ * (`processNextScreenSegment`) - same bank, same cursor, same pen. A `.seq`
+ * never takes the other, non-inline `~SP` route
+ * (`content.split(/~SP/).map(s => s.trim())`): `trim()` strips `$A0`, the
+ * PETSCII shifted space and a common solid art byte, silently deleting every
+ * run of it at a segment boundary.
  */
 export async function emitPetsciiScreenInline(
   socket: any,
   session: BBSSession,
   buffer: Buffer,
+  screenName: string = '',
 ): Promise<void> {
   const ctx = await petsciiRenderCtxFor(session);
-  const plan = await preparePetsciiSeq(buffer, session, ctx);
 
-  if (!plan.gated) {
-    // Defensive: the caller checks the gate byte, so reaching here means the
-    // file is art. Emit it exactly as the whole-file path would.
-    ctx.machine.feed(buffer);
-    socket.emit('petscii-bytes', buffer.toString('base64'));
+  let plan;
+  try {
+    plan = await preparePetsciiSeq(buffer, session, ctx);
+  } catch (error) {
+    // Degrade, never stall (Task 8, from Task 6's review): a malformed
+    // `.seq` - or a dispatch closure throwing on half-written user data -
+    // must not escape displayScreen into a caller that does not wrap it.
+    console.error(`[PETSCII] .seq render failed, emitting raw bytes:`, error);
+    emitRawPetscii(socket, ctx.machine, buffer);
     session.lastScreenHadPause = false;
     return;
   }
 
-  /** The plan's substitution spans that fall inside one chunk, rebased to it. */
-  const spansIn = (start: number, end: number): PetsciiSpan[] =>
-    plan.spans
-      .filter(sp => sp.start >= start && sp.start + sp.len <= end)
-      .map(sp => ({ start: sp.start - start, len: sp.len, cmd: sp.cmd }));
+  if (!plan.gated) {
+    // Defensive: the caller checks the gate byte, so reaching here means the
+    // file is art. Emit it exactly as the whole-file path would.
+    emitRawPetscii(socket, ctx.machine, buffer);
+    session.lastScreenHadPause = false;
+    return;
+  }
 
-  // The two sentinel kinds the CHUNK renderer owns: they are resolved against
-  // the LIVE cursor while the chunk is encoded, so they must not break it.
-  const moveTag = MCI_SENTINELS.MOVE.slice(1);
-  const generatedTag = MCI_GENERATED.START.slice(1);
+  const walk = await renderPetsciiWalk(socket, session, plan.text, plan.spans, ctx);
 
-  const walk = await walkInlineSentinels(socket, session, plan.text, {
-    emitChunk: (chunk, start) =>
-      emitPetsciiChunk(socket, ctx, chunk, spansIn(start, start + chunk.length)),
-    emitCls: () => {
-      emitPetsciiChunk(socket, ctx, PETSCII_CLS);
-    },
-    emitClsBeforeRandomFile: () => {
-      emitPetsciiChunk(socket, ctx, PETSCII_CLS);
-    },
-    isChunkSentinel: payload =>
-      payload.startsWith(moveTag) || payload.startsWith(generatedTag),
-  });
-
-  if (walk.pendingInlineContent !== undefined) {
-    screenDebug(
-      `[MCI] PETSCII ~SP: ${walk.pendingInlineContent.length} bytes pending (Task 8 resumes them)`,
-    );
+  if (walk.pending) {
+    screenDebug(`[MCI] PETSCII ~SP: ${walk.pending.text.length} bytes pending`);
+    session.screenSegments = {
+      segments: [walk.pending.text],
+      currentIndex: 0,
+      screenName,
+      inlineMode: true,
+      // Never used on this path: a petscii segment goes out over
+      // `petscii-bytes`. `petscii-output` is a STRING event that
+      // `connection-emitter.ts:120-127` re-transduces, double-encoding
+      // bytes that are already PETSCII.
+      eventName: 'petscii-output',
+      isFlowScreen: true,
+      petscii: true,
+      petsciiCtx: ctx,
+      petsciiSpans: [walk.pending.spans],
+    };
   }
   session.lastScreenHadPause = walk.hasPause;
 }
@@ -1550,8 +1644,17 @@ export async function emitPetsciiScreen(
     // paint because its values close over the clock, the conference and the
     // byte counters.
     const ctx = await petsciiRenderCtxFor(session);
-    const rendered = await renderPetsciiScreen(result.petsciiBuffer, session, ctx);
-    socket.emit('petscii-bytes', rendered.toString('base64'));
+    try {
+      const rendered = await renderPetsciiScreen(result.petsciiBuffer, session, ctx);
+      socket.emit('petscii-bytes', rendered.toString('base64'));
+    } catch (error) {
+      // Degrade, never stall (Task 8, from Task 6's review). The raw `.seq`
+      // is what a non-MCI art file puts on the wire anyway, so the caller
+      // sees the screen - unsubstituted - instead of an empty terminal and
+      // a dead session.
+      console.error(`[PETSCII] render failed for ${result.filePath}, emitting raw bytes:`, error);
+      emitRawPetscii(socket, ctx.machine, result.petsciiBuffer);
+    }
   } else {
     socket.emit('petscii-output', result.content);
   }
@@ -1634,7 +1737,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       // run as side effects in document order; anything else is art and is
       // painted as one frame.
       if (rawPetscii && petsciiBuffer![0] === PETSCII_MCI_GATE) {
-        await emitPetsciiScreenInline(socket, session, petsciiBuffer!);
+        await emitPetsciiScreenInline(socket, session, petsciiBuffer!, screenName);
       } else {
         await emitPetsciiScreen(socket, session, screenData);
       }
@@ -2551,9 +2654,25 @@ console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.li
     if (paged.onComplete) paged.onComplete();
     // Process all remaining screen segments without pausing
     if (session.screenSegments && session.screenSegments.segments.length > 0) {
-      const eventName = session.screenSegments.eventName;
-      while (session.screenSegments.segments.length > 0) {
-        const segment = session.screenSegments.segments.shift()!;
+      const segStateNS = session.screenSegments;
+      const eventName = segStateNS.eventName;
+      while (segStateNS.segments.length > 0) {
+        const segment = segStateNS.segments.shift()!;
+        const segmentSpans = segStateNS.petsciiSpans?.shift();
+        if (segStateNS.petscii && segStateNS.petsciiCtx) {
+          // Same rule as the paused path (plan Task 8): a petscii remainder
+          // is walked and encoded against its own ctx, never re-parsed, and
+          // never emitted over `eventName`.
+          const petsciiWalk = await renderPetsciiWalk(
+            socket, session, segment, segmentSpans ?? [], segStateNS.petsciiCtx,
+          );
+          if (petsciiWalk.pending) {
+            segStateNS.segments.push(petsciiWalk.pending.text);
+            if (!segStateNS.petsciiSpans) segStateNS.petsciiSpans = [];
+            segStateNS.petsciiSpans.push(petsciiWalk.pending.spans);
+          }
+          continue;
+        }
         const result = await parseMciCodes(segment, session, 'AmiExpress-Web', 'Sysop', 'The Internet', socket);
         // Only emit if inline mode didn't already emit everything
         if (!result.inlineEmitted) {
@@ -2628,11 +2747,39 @@ export async function processNextScreenSegment(socket: any, session: BBSSession)
   }
 
   const segment = segState.segments.shift()!;  // Get and remove first segment
+  const segmentSpans = segState.petsciiSpans?.shift();
   const segmentNum = segState.currentIndex + 1;
   segState.currentIndex = segmentNum;
 
-console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.length + segmentNum}: "${segment.substring(0, 100)}..."`);
-  screenDebug(`[processNextScreenSegment] Processing segment ${segmentNum}: ${segment.substring(0, 50)}...`);
+  // A petscii segment is latin-1 `.seq` bytes; logging it as text would put
+  // control codes and art bytes in the console.
+console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.length + segmentNum}: ${segState.petscii ? `${segment.length} PETSCII bytes` : `"${segment.substring(0, 100)}..."`}`);
+  screenDebug(`[processNextScreenSegment] Processing segment ${segmentNum}: ${segState.petscii ? segment.length + ' PETSCII bytes' : segment.substring(0, 50) + '...'}`);
+
+  if (segState.petscii && segState.petsciiCtx) {
+    // The PETSCII resume (plan Task 8, decision 7). The remainder is ALREADY
+    // gated, pre-passed and tokenized - it is a suffix of the plan this
+    // screen was rendered from - so it is walked and encoded, never parsed
+    // again: express.e evaluates the `~` gate once per FILE
+    // (`express.e:6800-6806`), and re-running it would eat an art `~` that
+    // happens to open the remainder.
+    //
+    // The ctx carries the same `PetsciiMachine` the first half rendered
+    // against, so the bank, cursor, pen and reverse continue across the
+    // pause. Bytes go out over `petscii-bytes` only, and there is NO
+    // `\x1b[0m` afterwards: a C64 has no all-attributes-off, so the reset
+    // the ANSI branch emits below would arrive as five garbage glyphs.
+    const petsciiWalk = await renderPetsciiWalk(
+      socket, session, segment, segmentSpans ?? [], segState.petsciiCtx,
+    );
+    if (petsciiWalk.pending) {
+      // A second `~SP` in the remainder: queue it on the SAME segment state
+      // so the pause below is armed and this ctx is reused again.
+      segState.segments.push(petsciiWalk.pending.text);
+      if (!segState.petsciiSpans) segState.petsciiSpans = [];
+      segState.petsciiSpans.push(petsciiWalk.pending.spans);
+    }
+  } else {
 
   // Parse and execute this segment's MCI codes
   const result = await parseMciCodes(segment, session, 'AmiExpress-Web', 'Sysop', 'The Internet', socket);
@@ -2656,6 +2803,8 @@ console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.leng
     socket.emit(segState.eventName, '\x1b[0m');
     screenDebug(`[processNextScreenSegment] Content already emitted inline`);
   }
+
+  } // end else (ANSI segment)
 
   // If there are more segments, set up another pause
   if (segState.segments.length > 0) {

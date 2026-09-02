@@ -24,6 +24,36 @@
  * are the state the caller's terminal is actually in at that point in the
  * file - positional, not guessed.
  *
+ * WHAT THE TOKENS MEAN ON A C64 (plan Task 8; the sysop-facing copy of
+ * this table is in `handoff.md`):
+ *
+ *  - `~WX` and the rest of the `~W*` family - wipes NEVER animate on a C64.
+ *    A wipe is an 80-column effect by construction (`getWipeFrames` composes
+ *    an 80-wide grid and pushes frames straight at the socket), so
+ *    `wipeEffectsEnabled` is false for a PETSCII session and the directive
+ *    is STRIPPED here, exactly as `displayScreen` strips it for the ANSI
+ *    path - code and its own line together. It is never printed.
+ *  - `~c0..~c7` - one VIC pen byte, in force until art or another token
+ *    changes it. There is no "colour off".
+ *  - `~b0..~b7` / `~z0..~z7` - the CCGMS pair `$02 <colour>`, which sets
+ *    the BACKGROUND and the BORDER together (they cannot be independent on
+ *    a VIC-II). Inert on SyncTERM's C64 mode, which ignores `$02`.
+ *  - `~f` - `$93` CLR: clears, homes the cursor and repaints the screen in
+ *    the current pen.
+ *  - `~q` - reverse off plus the default pen. A C64 has no
+ *    all-attributes-off; `\x1b[0m` on this wire is five garbage glyphs.
+ *  - `~CR` / `~n*` - `$0D`, which on a C64 ALSO cancels reverse
+ *    (`petscii-machine.ts:109`). Real KERNAL behaviour, not a bug.
+ *  - `~x` / `~y` - a RELATIVE `$11`/`$1D` walk from wherever the cursor is:
+ *    the C64 has no absolute cursor address.
+ *  - `~AK` - 13 plain rows, no colour. The ANSI SGR frame has no C64
+ *    equivalent worth faking.
+ *  - `~SP` - a real pause. The remainder of the file is rendered by THIS
+ *    ctx after the keypress, so the bank, cursor, pen and reverse the art
+ *    left behind carry across the pause (`screen.handler.ts`'s segment
+ *    machine). The gate is per FILE, so an art `~` in the remainder stays
+ *    art.
+ *
  * express.e parity: the first-byte `~` gate is `express.e:6800-6806`
  * (`IF linedata[0]<>"~" THEN allowMCI:=FALSE`, evaluated on the FIRST line of
  * the file only). A file without it is art and goes out byte for byte.
@@ -48,6 +78,7 @@ import {
   type MciDispatchState,
 } from './mci-dispatch';
 import { applyMciPrePasses, MCI_GENERATED, type MciPrePassResult } from './mci-pre-passes';
+import { parseWipeMCI } from '../utils/screen-wipe.util';
 
 /** express.e's MCI opt-in byte (`~`), tested on the file's FIRST byte only. */
 const GATE_BYTE = 0x7e;
@@ -228,7 +259,19 @@ export async function preparePetsciiSeq(
   // 2. latin1: one char per byte, lossless for $00-$FF. NEVER utf8 - it
   //    destroys every high-bit PETSCII byte in the art.
   const src = bytes.toString('latin1');
-  const pre = await applyMciPrePasses(src, session, {
+
+  // 2b. Wipe directives (decision 8). A `.seq` returns from `displayScreen`'s
+  //     `isPetscii` branch BEFORE the ANSI wipe detection runs, so the strip
+  //     has to happen here or the tokenizer's strict fall-through prints the
+  //     cmd text (`~WX` reaches a C64 as the letters `WX`). Effects are off
+  //     for a PETSCII session by construction - `wipeEffectsEnabled` is
+  //     false, a wipe being an 80-column effect - so the directive is
+  //     consumed and never animated. ONE regex, the ANSI path's own
+  //     (`parseWipeMCI`), including its own-line semantics: the code and its
+  //     line break go together.
+  const dewiped = parseWipeMCI(src).content;
+
+  const pre = await applyMciPrePasses(dewiped, session, {
     flavour: 'petscii',
     inlineMode: ctx.inlineMode,
     sentinels: MCI_SENTINELS,

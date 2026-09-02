@@ -111,3 +111,67 @@ describe('screen wipes on a PETSCII session', () => {
     expect(out).not.toContain('~WX');
   });
 });
+
+/**
+ * Task 8 of `thoughts/shared/plans/2026-09-02-mci-in-petscii-seq.md`
+ * (decision 8), the `.seq` half of the same rule.
+ *
+ * A gated `.seq` (first byte `~`) returns from `displayScreen`'s
+ * `isPetscii` branch BEFORE the wipe detection above it ever runs, so the
+ * directive reached the tokenizer instead: strict fall-through
+ * (express.e-exact) consumes the `~` and prints the cmd text, putting the
+ * letters `WX` on a C64's screen. A wipe is an 80-column effect by
+ * construction and never animates for a PETSCII session
+ * (`wipeEffectsEnabled`), so on this path the directive must be stripped
+ * exactly as the ANSI path strips it - same `parseWipeMCI`, same
+ * own-line semantics (the code and its line break go together) - and
+ * nothing of it may reach the wire.
+ *
+ * Fixture bytes are built in code; never write a `.seq` through
+ * Edit/Write (the UTF-8 round-trip destroys high-bit art bytes).
+ */
+describe('screen wipes inside a PETSCII .seq', () => {
+  const seqBytes = (...parts: Array<string | number>): Buffer =>
+    Buffer.from(
+      parts.flatMap((p) =>
+        typeof p === 'string' ? Array.from(Buffer.from(p, 'latin1')) : [p],
+      ),
+    );
+
+  it('plays no wipe and puts neither ~WX nor WX on the petscii wire', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'petscii-wipe-seq-'));
+    const seqPath = path.join(dir, 'WIPE.SEQ');
+    // `~WX` on its own line (the shipped MENU250.TXT idiom), then art:
+    // lower-case bank switch, three letters, a shifted space.
+    fs.writeFileSync(seqPath, seqBytes(0x7e, 'WX', 0x0d, 0x0e, 'HI', 0xa0));
+
+    const emitted: Array<{ event: string; data: any }> = [];
+    const socket = {
+      id: `petscii-wipe-seq-${Date.now()}`,
+      emit: (event: string, data: any) => { emitted.push({ event, data }); return true; },
+      on: () => {},
+    };
+    const session: any = { petsciiMode: true, screenWidth: 40, screenHeight: 25, nodeId: 0 };
+
+    expect(await displayScreen(socket as any, session, seqPath)).toBe(true);
+
+    // The effect never ran...
+    expect(getWipeFrames).not.toHaveBeenCalled();
+
+    const payloads = emitted
+      .filter((e) => e.event === 'petscii-bytes')
+      .map((e) => Buffer.from(e.data, 'base64'));
+    expect(payloads).toHaveLength(1);
+    const wire = payloads[0];
+
+    // ...the directive was consumed whole, not printed in any form...
+    expect(wire.toString('latin1')).not.toContain('~WX');
+    expect(wire.toString('latin1')).not.toContain('WX');
+    // ...and the art behind it is byte-identical, its high bit intact.
+    expect(Array.from(wire)).toEqual([0x0e, 0x48, 0x49, 0xa0]);
+
+    // Nothing ANSI reached a C64.
+    expect(wire.includes(0x1b)).toBe(false);
+    expect(emitted.filter((e) => e.event === 'ansi-output')).toHaveLength(0);
+  });
+});
