@@ -47,10 +47,13 @@ import {
   PETSCII_RAW_PREFIXES,
   type MciDispatchState,
 } from './mci-dispatch';
-import { applyMciPrePasses, type MciPrePassResult } from './mci-pre-passes';
+import { applyMciPrePasses, MCI_GENERATED, type MciPrePassResult } from './mci-pre-passes';
 
 /** express.e's MCI opt-in byte (`~`), tested on the file's FIRST byte only. */
 const GATE_BYTE = 0x7e;
+
+/** The only cursor-moving byte `encodePetsciiValue` can produce. */
+const PETSCII_RETURN = 0x0d;
 
 /**
  * A session carries its render-side oracle for the life of the connection.
@@ -66,7 +69,12 @@ export interface PetsciiRenderCtx {
    * cached on the session and the rest of this context is not.
    */
   machine: PetsciiMachine;
-  /** Rebuilt per render: the values close over the clock, the conference and the counters. */
+  /**
+   * Rebuilt per render - a CALLER CONTRACT, not something this module can
+   * enforce: build a fresh ctx with `petsciiRenderCtxFor` for every render
+   * (Task 6 does), because these values close over the clock, the conference
+   * and the byte counters. Reusing one ctx across paints freezes them.
+   */
   dispatch: MciDispatchMap;
   prefixDispatch: MciPrefixDispatchMap;
   /**
@@ -260,6 +268,42 @@ export async function renderPetsciiScreen(
   const clamp = (n: number, limit: number): number =>
     !Number.isFinite(n) ? 0 : n < 0 ? 0 : n > limit - 1 ? limit - 1 : n;
 
+  /**
+   * Emit ASCII text as PETSCII: a substituted MCI value, or a run of text the
+   * pre-passes generated (a conference list, the node list, a `~CR_` prompt).
+   * Both are ASCII the sysop never drew, so both go through the ONE
+   * ASCII->PETSCII table at the bank the art is currently in - never through
+   * a raw `charCodeAt & 0xff`, which would turn a code point above $FF into
+   * an arbitrary byte and possibly a control code.
+   *
+   * Decisions 5 and 6: the art's bank, pen and reverse state are inherited,
+   * so the encoder emits no $0E/$8E, no colour byte and no $12/$92 - the
+   * machine simply keeps the pen and reverse flag the art left it holding and
+   * writes them into the cells this text fills. `allowReverseToggle` stays
+   * OFF (its default), so an inverse-only glyph degrades to '?' rather than
+   * leaving a $12/$92 pair in the middle of the art; with it off the encoder
+   * never reads `reverseState`, so passing one would be a knob that moves
+   * nothing.
+   */
+  const emitEncoded = (text: string): void => {
+    for (const b of encodePetsciiValue(text, machine.state.charsetBank)) {
+      // Decision 4, the ROW half: `$0D` is the only cursor-moving byte the
+      // encoder produces, and on the bottom row `carriageReturn` SCROLLS the
+      // whole screen (`petscii-machine.ts` :131-146, :157-170). A value must
+      // never scroll, so on the last row the `$0D` ends it.
+      if (b === PETSCII_RETURN && machine.state.cursorY >= rows - 1) break;
+      // Decision 4, the COLUMN half. `PetsciiMachine` has no deferred-wrap
+      // latch: its printable path writes the cell and immediately calls
+      // cursorRight, which at column 40 wraps and can scroll. So the last
+      // column a value may occupy is `cols - 2` (38) - one written at 39
+      // would move the cursor the instant it landed. Bytes that do not print
+      // are exempt: a `$0D` inside a value (a `\n` in `~AK` or `~FL`)
+      // legitimately starts a new row, and the rest clips against THAT row.
+      if (advancesCursor(b) && machine.state.cursorX >= cols - 1) continue;
+      emit([b]);
+    }
+  };
+
   let i = 0;
   while (i < out.length) {
     // 4a. Structural sentinel - from a substitution or from a pre-pass.
@@ -284,6 +328,13 @@ export async function renderPetsciiScreen(
           walk,
         );
         emit(walk);
+      } else if (out.startsWith(MCI_GENERATED.START, i)) {
+        // Text the PRE-PASSES generated (`~CL.`, `~CD.`, `~ML.`, `~MD.`,
+        // `%NODELIST`, a `~CR_` prompt). It reaches the walk with no
+        // substitution span - the tokenizer never saw it substituted - so
+        // without this branch it would be copied as art and land on graphics
+        // glyphs in the `$0E` bank. Same encoding rules as a value.
+        emitEncoded(out.slice(i + MCI_GENERATED.START.length, end));
       } else {
         emitUnfed(latin1Bytes(out.slice(i, end + 1)));
       }
@@ -299,27 +350,7 @@ export async function renderPetsciiScreen(
         // Already PETSCII (colour, clear, DELETE, RETURN, the cursor walks).
         emit(latin1Bytes(text));
       } else {
-        // Decisions 5 and 6: the art's bank, pen and reverse state are
-        // inherited, so the encoder emits no $0E/$8E, no colour byte and no
-        // $12/$92 - the machine simply keeps the pen and the reverse flag the
-        // art left it holding, and writes them into the cells this value
-        // fills. `allowReverseToggle` stays OFF (its default), so an
-        // inverse-only glyph degrades to '?' rather than leaving a $12/$92
-        // pair in the middle of the art; with it off the encoder never reads
-        // `reverseState`, so passing one would be a knob that moves nothing.
-        const encoded = encodePetsciiValue(text, machine.state.charsetBank);
-        for (const b of encoded) {
-          // Decision 4's clip. `PetsciiMachine` has no deferred-wrap latch:
-          // its printable path writes the cell and immediately calls
-          // cursorRight, which at column 40 wraps and can SCROLL the screen.
-          // So the last column a value may occupy is `cols - 2` (38) - one
-          // written at 39 would move the cursor the instant it landed.
-          // Bytes that do not print are exempt: a $0D inside a value (from a
-          // `\n` in `~AK` or `~FL`) legitimately starts a new row, and the
-          // rest of the value clips against THAT row.
-          if (advancesCursor(b) && machine.state.cursorX >= cols - 1) continue;
-          emit([b]);
-        }
+        emitEncoded(text);
       }
       i += span.len;
       continue;

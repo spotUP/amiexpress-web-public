@@ -34,7 +34,7 @@ import * as fs from 'fs';
 
 process.env.SKIP_DB_INIT = '1';
 
-import { displayScreen } from '../../src/handlers/screen.handler';
+import { displayScreen, setConferences } from '../../src/handlers/screen.handler';
 
 /**
  * The shipped payload, byte for byte, built in code. Never write a `.seq`
@@ -485,5 +485,104 @@ describe('renderPetsciiScreen - structural tokens and the pre-pass hand-off (Tas
     // include files, slow mode) - the render returns bytes only.
     expect(ctx.lastPrePass).toBeDefined();
     expect(ctx.lastPrePass?.terminator).toBe('.');
+  });
+});
+
+/**
+ * Follow-ups to the Task 5 review.
+ *
+ * IMPORTANT 1 - the clip guarded the COLUMN but not the ROW: a `$0D` inside a
+ * value on row 24 reaches `PetsciiMachine.carriageReturn`, which scrolls the
+ * whole screen. Decision 4 is "never wrap, never scroll".
+ *
+ * IMPORTANT 2 - text the PRE-PASSES generate (`~CL.`, `~CD.`, `~ML.`, `~MD.`,
+ * `%NODELIST`, a `~CR_` prompt) reaches the walk with no substitution span,
+ * so it was copied byte for byte and landed on graphics glyphs in the `$0E`
+ * bank. Decision 1 (FULL parity) was unmet for those tokens. The pre-passes
+ * now wrap what they generate in `MCI_GENERATED` markers and the renderer
+ * encodes those runs per bank, exactly like a value.
+ */
+describe('renderPetsciiScreen - review follow-ups', () => {
+  const CONFERENCES = [
+    { id: 1, name: 'Main Conference' },
+    { id: 2, name: 'Amiga Chat' },
+  ];
+
+  afterAll(() => setConferences([]));
+
+  it('never scrolls: a multi-row value on the bottom row ends at the row edge', async () => {
+    // `~AK`-shaped: a value carrying its own newlines. Placed on row 25
+    // (0-based 24) by ~y25|, its second row would `carriageReturn` off the
+    // bottom and scroll row 0 away.
+    const session = petsciiSession({ user: { username: 'AB\nCD\nEF' } });
+    disposePetsciiRenderCtx(session);
+    const ctx = await petsciiRenderCtxFor(session);
+
+    // Paint a marker on row 0 first, so a scroll is visible.
+    await renderPetsciiScreen(seqBytes(GATE, 'MARK'), session, ctx);
+    const rowZeroBefore = row(ctx.machine, 0);
+    expect(rowZeroBefore[1]).toBe(0x0d);   // 'M' as a screen code
+
+    const out = await renderPetsciiScreen(seqBytes(GATE, '~y25|', '~N|'), session, ctx);
+
+    // The value stops at its first `$0D`: 'AB' lands, the rest is dropped.
+    expect(Array.from(out).filter((b) => b === 0x0d)).toEqual([]);
+    expect(Array.from(out.subarray(-2))).toEqual([0x41, 0x42]);
+    expect(ctx.machine.state.cursorY).toBe(ctx.machine.state.rows - 1);
+    // No scroll: row 0 still carries the marker painted before the value.
+    expect(row(ctx.machine, 0)).toEqual(rowZeroBefore);
+  });
+
+  it('encodes %NODELIST generated text per bank ($0E: lower-case bank codes)', async () => {
+    const session = petsciiSession({ nodeId: 0 });
+    const { out, machine } = await render(seqBytes(GATE, 0x0e, '%NODELIST'), session);
+
+    // "Node 0:  You" - 'N' and 'Y' are UPPER case, so in the $0E bank they
+    // must be $CE / $D9, not the raw ASCII $4E / $59 the art path would copy.
+    expect(out.includes(0xce)).toBe(true);
+    expect(out.includes(0xd9)).toBe(true);
+    expect(row(machine, 0).slice(1, 13)).toEqual([
+      0x4e, 0x0f, 0x04, 0x05, 0x20, 0x30, 0x3a, 0x20, 0x20, 0x59, 0x0f, 0x15,
+    ]);
+    // The rows are separated by a single $0D, never a raw \r\n pair.
+    expect(out.includes(0x0a)).toBe(false);
+  });
+
+  it('encodes ~CL. generated text per bank ($8E: folded to the upper bank)', async () => {
+    setConferences(CONFERENCES);
+    const session = petsciiSession({ user: { username: 'spot', confAccess: 'XXXXX' } });
+    const { out, machine } = await render(seqBytes(GATE, 0x8e, '~CL.'), session);
+
+    // Bank 0 has no $C1-$DA letters at all: 'M' of "Main Conference" folds to
+    // $4D, and nothing in the run may land in the graphics range.
+    expect(Array.from(out).some((b) => b >= 0xc1 && b <= 0xda)).toBe(false);
+    expect(out.includes(0x4d)).toBe(true);
+    // Row 0: "    1) Main Conference" narrow-clipped, starting at column 1.
+    const codes = row(machine, 0);
+    expect(codes.slice(8, 12)).toEqual([0x0d, 0x01, 0x09, 0x0e]);   // M A I N
+    // No SGR bytes survived into the PETSCII wire.
+    expect(out.includes(0x1b)).toBe(false);
+  });
+
+  it('maps a code point above $FF in generated text through the encoder, never a masked byte', async () => {
+    // `String.charCodeAt & 0xff` on U+2603 would emit $03 - a control byte.
+    // The encoder degrades an unsupported glyph to '?' ($3F) instead.
+    setConferences([{ id: 1, name: 'Snow☃man' }]);
+    const session = petsciiSession({ user: { username: 'spot', confAccess: 'XXXXX' } });
+    const { out } = await render(seqBytes(GATE, 0x0e, '~CL.'), session);
+
+    expect(out.includes(0x3f)).toBe(true);
+    expect(out.includes(0x03)).toBe(false);
+  });
+
+  it('~~ immediately before a token escapes it, exactly as the ANSI path does', async () => {
+    const session = petsciiSession({ user: { username: 'spot' } });
+    const { out } = await render(seqBytes(GATE, '~~~N|'), session);
+
+    // `~~N` falls through the tokenizer verbatim, then the `~~` unescape
+    // leaves `~N` - the token is shown, not substituted. parseMciCodes'
+    // trailing replace(/~~/g, '~') produces the same string.
+    expect(Array.from(out)).toEqual([0x20, 0x7e, 0x4e]);
+    expect(Buffer.from(out).toString('latin1')).not.toContain('spot');
   });
 });

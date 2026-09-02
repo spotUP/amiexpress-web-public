@@ -42,6 +42,29 @@ import { getBoardConfig } from '../services/bbs-config-file.service';
 import { config as appConfig } from '../config';
 import { MCI_SENTINELS, type MciFlavour, type MciSentinels } from './mci-dispatch';
 
+/**
+ * PETSCII flavour only: the delimiters that mark a run of GENERATED text -
+ * text this module composed (a conference list, the node list, a `~CR_`
+ * prompt) rather than art the sysop drew.
+ *
+ * Why a marker and not a span list: these passes are a chain of regex
+ * replaces, so an offset recorded by one pass is invalidated by the next, and
+ * `processMci` then shifts every offset again. A NUL-delimited marker travels
+ * WITH the text through every later pass and arrives in the tokenizer's
+ * output still wrapped around exactly the characters it was put around - the
+ * same trick `MCI_SENTINELS` already uses for structural tokens, and the
+ * reason the renderer can trust it without any offset arithmetic.
+ *
+ * The `.seq` renderer (`petscii-screen.render.ts`) encodes what lies between
+ * them through the ONE ASCII->PETSCII table, at the charset bank the art is
+ * in at that point on the screen. Without it, generated ASCII is copied byte
+ * for byte and lands on graphics glyphs in the `$0E` bank.
+ *
+ * ANSI flavour is untouched: `generated()` is the identity there, so the
+ * `.TXT` path stays byte-identical.
+ */
+export const MCI_GENERATED = { START: '\x00G:', END: '\x00' } as const;
+
 export interface MciPrePassOpts {
   flavour: MciFlavour;
   inlineMode: boolean;
@@ -95,6 +118,13 @@ export async function applyMciPrePasses(
   /** One rendered row: plain and clipped for a C64, untouched for ANSI. */
   const row = (value: string): string =>
     (petscii ? narrowClip(AnsiUtil.stripAnsi(value)) : value) + '\r\n';
+
+  /**
+   * Mark a run this module GENERATED, so the `.seq` renderer encodes it per
+   * bank instead of copying it as art. Identity in the ANSI flavour.
+   */
+  const generated = (value: string): string =>
+    petscii && value.length > 0 ? `${MCI_GENERATED.START}${value}${MCI_GENERATED.END}` : value;
 
   const content = text;
   let parsed = text;
@@ -191,7 +221,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
       const confName = conferences[i].name.padEnd(30, ' ');
       confList += `                     \x1b[32m${String(num).padStart(3)}\x1b[33m) \x1b[35m${confName}\x1b[36m\x1b[0m\r\n`;
     }
-    parsed = parsed.replace(/~CL\./g, confList);
+    parsed = parsed.replace(/~CL\./g, generated(confList));
   }
 
   if (parsed.includes('~CD.')) {
@@ -216,7 +246,7 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
     }
     // Add final newline if odd number of entries
     if (!narrow && num % 2 !== 0) confDir += '\r\n';
-    parsed = parsed.replace(/~CD\./g, confDir);
+    parsed = parsed.replace(/~CD\./g, generated(confDir));
   }
 
   if (parsed.includes('~ML.')) {
@@ -251,7 +281,7 @@ console.error('[parseMciCodes] Error getting message base list:', error);
       );
       msgBaseList = row('                     \x1b[32m1\x1b[33m) \x1b[35mDefault                       \x1b[36m\x1b[0m');
     }
-    parsed = parsed.replace(/~ML\./g, msgBaseList);
+    parsed = parsed.replace(/~ML\./g, generated(msgBaseList));
   }
 
   if (parsed.includes('~MD.')) {
@@ -287,7 +317,7 @@ console.error('[parseMciCodes] Error getting message base descriptions:', error)
       );
       msgBaseDesc = row('   \x1b[34m[\x1b[0m1\x1b[34m] \x1b[0mDefault                       ');
     }
-    parsed = parsed.replace(/~MD\./g, msgBaseDesc);
+    parsed = parsed.replace(/~MD\./g, generated(msgBaseDesc));
   }
 
   // Process %NODELIST before %N to avoid collision
@@ -317,7 +347,7 @@ console.error('[parseMciCodes] Error getting message base descriptions:', error)
         nodeList += `Node ${i}:  ${status}\r\n`;
       }
     }
-    parsed = parsed.replace(/%NODELIST/g, nodeList);
+    parsed = parsed.replace(/%NODELIST/g, generated(nodeList));
   }
 
   // ============================================================
@@ -344,7 +374,7 @@ console.error('[parseMciCodes] Error getting message base descriptions:', error)
     // it, so handle here before the tokenizer.
     parsed = parsed.replace(/~CR_([^|]+)\|\|/g, (_match, promptText) => {
       hasPause = true;
-      return promptText;
+      return generated(promptText);
     });
 
     // ~SM_<menuname>|| - set current menu name (express.e:5575-5585).
