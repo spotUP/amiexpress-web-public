@@ -1,0 +1,418 @@
+{
+  "N": {
+    "parsed": "user=PinUser",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "N-width": {
+    "parsed": "user=[PinUser]",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "P-password-never": {
+    "parsed": "pw=[]",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "UL-location": {
+    "parsed": "loc=Melbourne",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "hash-phone": {
+    "parsed": "phone=555-0101",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "counts": {
+    "parsed": "tc=91 tt=3 m=12 a=55 s=4242 ca=XYZ br=57600 hw=Web Browser",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "LC-lastcall": {
+    "parsed": "lc=Sun 30-Aug-2026 21:44:03",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "time": {
+    "parsed": "tl=120 tr=60",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "bytes": {
+    "parsed": "ub=1,048,576 su=1mb sd=3mb fu=5 fd=22 bd=9999",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "DT-eaten-by-terminator-regex": {
+    "parsed": "dt=|x",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "DB-eaten-by-terminator-regex": {
+    "parsed": "db=|x",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "node-identity": {
+    "parsed": "on=2 lg=2 in=pin@example.test rn=Pin Real Name nd=2",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "conference": {
+    "parsed": "cf=1 cn=Main mb=2 mn=Amiga",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "clocks": {
+    "parsed": "ct=09:15:30 vd=2.00 ve=AmiExpress-Web 2.0 ot=09:15:30 od=09-02-26 sc=17",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "flagged": {
+    "parsed": "fc=2 ff=demo1.lha demo2.lha",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "FL": {
+    "parsed": "FL:[                     demo1.lha\b\r\n                     demo2.lha\b\r\n]",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "AK": {
+    "parsed": "         \u001b[44;33m F1 \u001b[40;35m  }- \u001b[33mSysop Login             \u001b[44;33m F2 \u001b[40;35m  }- \u001b[33mLocal Login\r\n         \u001b[44;33m F3 \u001b[40;35m  }- \u001b[33mInstant Remote Logon    \u001b[44;33m F4 \u001b[40;35m  }- \u001b[33mReserve for a user\r\n         \u001b[44;33m F5 \u001b[40;35m  }- \u001b[33mConference Maintenance  \u001b[44;33m F6 \u001b[40;35m  }- \u001b[33mAccount Editing\r\n       \u001b[44;33m SH+F5 \u001b[40;35m }- \u001b[33mOpen Shell            \u001b[44;33m SH+F6 \u001b[40;35m }- \u001b[33mView Callerslog\r\n         \u001b[44;33m F7 \u001b[40;35m  }- \u001b[33mChat Toggle             \u001b[44;33m F8 \u001b[40;35m  }- \u001b[33mReprogram modem\r\n         \u001b[44;33m F9 \u001b[40;35m  }- \u001b[33mExit BBS               \u001b[44;33m F10 \u001b[40;35m  }- \u001b[33mExit BBS \u001b[33m(\u001b[37moff hook\u001b[33m)\u001b[0m\r\n                                       \u001b[44;33m SH+F10 \u001b[40;35m }- \u001b[33mClear tooltype cache\u001b[0m",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "CR": {
+    "parsed": "a\r\nb",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "NS": {
+    "parsed": "ab",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": true,
+    "currentMenuName": null
+  },
+  "SP": {
+    "parsed": "a\nb",
+    "commands": [],
+    "hasPause": true,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "SP-width-gated": {
+    "parsed": "aSPb",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "f-clear-noninline": {
+    "parsed": "a\u001b[2J\u001b[Hb",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "w-delay": {
+    "parsed": "abcd",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "colors-fg": {
+    "parsed": "\u001b[30m\u001b[31m\u001b[32m\u001b[33m\u001b[34m\u001b[35m\u001b[36m\u001b[37m",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "colors-bg": {
+    "parsed": "\u001b[40m\u001b[41m\u001b[42m\u001b[43m\u001b[44m\u001b[45m\u001b[46m\u001b[47m",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "colors-bg-z-alias": {
+    "parsed": "\u001b[40m\u001b[41m\u001b[42m\u001b[43m\u001b[44m\u001b[45m\u001b[46m\u001b[47m",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "newlines": {
+    "parsed": "\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "q-reset": {
+    "parsed": "a\u001b[0mb",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "h-backspace": {
+    "parsed": "a\bb",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "x-cursor-col": {
+    "parsed": "a\u001b[;10Hb",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "y-cursor-row": {
+    "parsed": "a\u001b[5;Hb",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "CC-noninline": {
+    "parsed": "ab",
+    "commands": [
+      "X"
+    ],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "SS-noninline": {
+    "parsed": "ab",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "SR-noninline": {
+    "parsed": "ab",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "D-dot-terminator": {
+    "parsed": "c3REDc4GREENPinUser",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "D-hash-terminator": {
+    "parsed": "c3REDPinUser",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "unknown-falls-through": {
+    "parsed": "aZZb",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "uppercase-F-is-not-clear": {
+    "parsed": "aFb",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "literal-tilde": {
+    "parsed": "a~b",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "mixed-row": {
+    "parsed": "\u001b[33mPinUser has 2 flagged on node 2\u001b[0m",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "inline-N": {
+    "parsed": "",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null,
+    "emitted": "hi PinUser!",
+    "inlineEmitted": true,
+    "pendingInlineContent": "",
+    "commandCalls": []
+  },
+  "inline-f-sentinel": {
+    "parsed": "",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null,
+    "emitted": "a\u001b[2J\u001b[Hb",
+    "inlineEmitted": true,
+    "pendingInlineContent": "",
+    "commandCalls": []
+  },
+  "inline-SP-sentinel": {
+    "parsed": "",
+    "commands": [],
+    "hasPause": true,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null,
+    "emitted": "a",
+    "inlineEmitted": true,
+    "pendingInlineContent": "\nb",
+    "commandCalls": []
+  },
+  "inline-CC-sentinel": {
+    "parsed": "",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null,
+    "emitted": "ab",
+    "inlineEmitted": true,
+    "pendingInlineContent": "",
+    "commandCalls": [
+      "X|"
+    ]
+  }
+}
