@@ -189,19 +189,50 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
   const drawRef = useRef(draw);
   useEffect(() => { drawRef.current = draw; }, [draw]);
 
+  // One paint per animation frame, never one per feed.
+  //
+  // `PetsciiMachine.feed()` fires onUpdate once per CALL, and how often it
+  // is called is decided by how the bytes arrive, not by how often the
+  // picture changes. The server's screen pacer emits every ANSI escape
+  // token as its own socket message, so one animated logo (Screens/flt.txt)
+  // reaches the canvas as ~2,600 separate feeds - which used to be ~2,600
+  // full 1,000-cell repaints, up to 2.6M drawImage calls, for a single
+  // screen (sysop's "the ANSI animated logos play super slow in PETSCII
+  // mode", 2026-09-02). draw() reads the machine's CURRENT state, so
+  // collapsing a burst to a single frame loses nothing: the one paint shows
+  // the state the last feed in that burst left behind.
+  const frameRef = useRef<number | null>(null);
+  const scheduleDraw = useCallback(() => {
+    if (frameRef.current !== null) return; // a paint is already queued for this frame
+    frameRef.current = requestAnimationFrame(() => {
+      // Clear the latch FIRST, and in a finally: a draw that throws (a lost
+      // context, a door's out-of-range palette) must not leave "a frame is
+      // already queued" standing for ever - that is a canvas that never
+      // repaints again, which looks exactly like a crashed BBS.
+      try {
+        drawRef.current();
+      } finally {
+        frameRef.current = null;
+      }
+    });
+  }, []);
+  useEffect(() => () => {
+    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+  }, []);
+
   // Subscribe to machine repaints once the atlas is ready. Wraps (rather
   // than replaces) any pre-existing onUpdate handler so PetsciiCanvas can
-  // coexist with other consumers of the machine (e.g. a baud-pacing feeder).
+  // coexist with other consumers of the machine.
   useEffect(() => {
     if (!atlasReady) return;
     drawRef.current();
     const prevOnUpdate = machine.onUpdate;
     machine.onUpdate = (fullRepaint) => {
       prevOnUpdate?.(fullRepaint);
-      drawRef.current();
+      scheduleDraw();
     };
     return () => { machine.onUpdate = prevOnUpdate; };
-  }, [machine, atlasReady]);
+  }, [machine, atlasReady, scheduleDraw]);
 
   // Repaint on every cursor blink toggle.
   useEffect(() => {

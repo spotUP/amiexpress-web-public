@@ -36,54 +36,17 @@ import { render, cleanup, waitFor } from '@testing-library/react';
 import { PetsciiCanvas } from '../../../../../packages/terminal/src/petscii/PetsciiCanvas';
 import { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
 
-interface RecordedCall {
-  method: string;
-  args: unknown[];
-}
+import {
+  ctxByCanvas,
+  installFakeCanvasContext,
+  stubDocumentFonts,
+  type FakeCtx,
+} from './helpers/fake-canvas-ctx';
 
-interface FakeCtx {
-  calls: RecordedCall[];
-}
-
-const RECORDED_METHODS = ['fillRect', 'drawImage', 'fillText', 'save', 'restore', 'beginPath', 'rect', 'clip'] as const;
-
-function makeFakeCtx(): FakeCtx {
-  const calls: RecordedCall[] = [];
-  const props: Record<string, unknown> = {};
-  const target: Record<string, unknown> = { calls };
-  for (const method of RECORDED_METHODS) {
-    target[method] = (...args: unknown[]) => { calls.push({ method, args }); };
-  }
-  return new Proxy(target, {
-    get(t, p) {
-      if (typeof p === 'string' && p in t) return t[p];
-      if (typeof p === 'string' && p in props) return props[p];
-      return undefined;
-    },
-    set(_t, p, v) {
-      if (typeof p === 'string') props[p] = v;
-      return true;
-    },
-  }) as unknown as FakeCtx;
-}
-
-// jsdom has no CSS Font Loading API; the glyph atlas awaits document.fonts.load.
-Object.defineProperty(document, 'fonts', {
-  configurable: true,
-  value: { load: () => Promise.resolve([]) },
-});
-
-const ctxByCanvas = new WeakMap<HTMLCanvasElement, FakeCtx>();
+stubDocumentFonts();
 
 beforeEach(() => {
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (this: HTMLCanvasElement) {
-    let ctx = ctxByCanvas.get(this);
-    if (!ctx) {
-      ctx = makeFakeCtx();
-      ctxByCanvas.set(this, ctx);
-    }
-    return ctx as unknown as RenderingContext;
-  });
+  installFakeCanvasContext();
 });
 
 afterEach(() => {
