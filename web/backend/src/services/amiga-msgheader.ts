@@ -66,7 +66,10 @@ export function parseAmigaMsgHeader(buffer: Buffer, offset: number): AmigaMsgHea
     subject: fixedString(buffer, offset + 68, 31),
     msgDate: buffer.readUInt32BE(offset + 100),
     recv: buffer.readUInt32BE(offset + 104),
-    extMsgNum: buffer.readUInt16BE(offset + 108),
+    // SIGNED, because axobjects.e:188 declares it INT and an Amiga E INT is
+    // a signed 16-bit word. Read unsigned, a stored -1 comes back as 65535
+    // and writing that value back overflows the field it came out of.
+    extMsgNum: buffer.readInt16BE(offset + 108),
   };
 }
 

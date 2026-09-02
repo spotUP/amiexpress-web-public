@@ -1,3 +1,5 @@
+import { parseAmigaMsgHeader } from './amiga-msgheader';
+import { classifyMsgHeaderRecord, portRecordToAmiga } from './msgheader-layout';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getRootConferenceDir } from '../utils/file-hold.util';
@@ -157,49 +159,40 @@ console.log(`[MessageIndexManager] Created MailLock for Conf${confNumber}`);
    * Serialize msgHeader struct to binary buffer (110 bytes)
    */
   private serializeMsgHeader(header: MsgHeader): Buffer {
+    /*
+     * Written in the layout AmiExpress uses, which is not the one this
+     * method used to write.
+     *
+     * Amiga E aligns a LONG to an even offset, so the real record carries a
+     * pad byte before msgNumb and another before msgDate. This wrote msgNumb
+     * at offset 1 - a 32-bit LONG at an odd address, which a 68000 cannot
+     * even fetch - and pushed both pads to the end. The files were
+     * self-consistent and unreadable by AmiExpress, by a 68K door reading
+     * HeaderFile directly, and by a real Amiga.
+     *
+     * See services/amiga-msgheader.ts for the layout and how it was checked
+     * against a reference board.
+     */
     const buffer = Buffer.alloc(this.MSGHEADER_SIZE);
-    let offset = 0;
 
-    // status: CHAR (1 byte)
-    buffer.writeUInt8(header.status, offset);
-    offset += 1;
+    const field = (text: string, at: number) => {
+      const padded = Buffer.alloc(31, 0);
+      // latin1, not ascii: an Amiga name carries high-bit characters, and
+      // 'ascii' masks them to 7 bits rather than keeping the byte.
+      Buffer.from(text.substring(0, 31), 'latin1').copy(padded);
+      padded.copy(buffer, at);
+    };
 
-    // msgNumb: LONG (4 bytes, big-endian)
-    buffer.writeInt32BE(header.msgNumb, offset);
-    offset += 4;
-
-    // toName[31]: ARRAY OF CHAR (31 bytes, null-padded)
-    const toName = Buffer.alloc(31, 0);
-    Buffer.from(header.toName.substring(0, 31), 'ascii').copy(toName);
-    toName.copy(buffer, offset);
-    offset += 31;
-
-    // fromName[31]: ARRAY OF CHAR (31 bytes, null-padded)
-    const fromName = Buffer.alloc(31, 0);
-    Buffer.from(header.fromName.substring(0, 31), 'ascii').copy(fromName);
-    fromName.copy(buffer, offset);
-    offset += 31;
-
-    // subject[31]: ARRAY OF CHAR (31 bytes, null-padded)
-    const subject = Buffer.alloc(31, 0);
-    Buffer.from(header.subject.substring(0, 31), 'ascii').copy(subject);
-    subject.copy(buffer, offset);
-    offset += 31;
-
-    // msgDate: LONG (4 bytes, big-endian)
-    buffer.writeInt32BE(header.msgDate, offset);
-    offset += 4;
-
-    // recv: LONG (4 bytes, big-endian)
-    buffer.writeInt32BE(header.recv, offset);
-    offset += 4;
-
-    // extMsgNum: INT (2 bytes, big-endian)
-    buffer.writeInt16BE(header.extMsgNum, offset);
-    offset += 2;
-
-    // Padding to 110 bytes (offset should be 108, need 2 more bytes)
-    // Already allocated, zero-filled
+    buffer.writeUInt8(header.status, 0);
+    // 1 is the pad that aligns msgNumb.
+    buffer.writeInt32BE(header.msgNumb, 2);
+    field(header.toName, 6);
+    field(header.fromName, 37);
+    field(header.subject, 68);
+    // 99 is the pad that aligns msgDate.
+    buffer.writeInt32BE(header.msgDate, 100);
+    buffer.writeInt32BE(header.recv, 104);
+    buffer.writeInt16BE(header.extMsgNum, 108);
 
     return buffer;
   }
@@ -208,41 +201,35 @@ console.log(`[MessageIndexManager] Created MailLock for Conf${confNumber}`);
    * Deserialize msgHeader struct from binary buffer
    */
   private deserializeMsgHeader(buffer: Buffer, offset: number): MsgHeader {
-    let pos = offset;
+    /*
+     * Reads BOTH layouts, because this board's files contain both.
+     *
+     * Conf1 holds messages dated March 1996 - written by the Amiga this board
+     * came from - next to messages this port appended in 2026, and Conf2
+     * record 130 is a lone AmiExpress record among 159 of the port's. Reading
+     * every record as the port's own layout returned msgNumb 0 for every
+     * original message, and the new-mail scan and message move/delete all
+     * look messages up BY NUMBER.
+     *
+     * A record nothing can identify is read as AmiExpress rather than
+     * guessed at differently each time; the migration reports those instead
+     * of rewriting them.
+     */
+    const layout = classifyMsgHeaderRecord(buffer, offset);
+    const record = layout === 'port'
+      ? portRecordToAmiga(buffer, offset)
+      : buffer.subarray(offset, offset + this.MSGHEADER_SIZE);
 
-    const status = buffer.readUInt8(pos);
-    pos += 1;
-
-    const msgNumb = buffer.readInt32BE(pos);
-    pos += 4;
-
-    const toName = buffer.toString('ascii', pos, pos + 31).replace(/\0/g, '');
-    pos += 31;
-
-    const fromName = buffer.toString('ascii', pos, pos + 31).replace(/\0/g, '');
-    pos += 31;
-
-    const subject = buffer.toString('ascii', pos, pos + 31).replace(/\0/g, '');
-    pos += 31;
-
-    const msgDate = buffer.readInt32BE(pos);
-    pos += 4;
-
-    const recv = buffer.readInt32BE(pos);
-    pos += 4;
-
-    const extMsgNum = buffer.readInt16BE(pos);
-    pos += 2;
-
+    const amiga = parseAmigaMsgHeader(record, 0);
     return {
-      status,
-      msgNumb,
-      toName,
-      fromName,
-      subject,
-      msgDate,
-      recv,
-      extMsgNum
+      status: amiga.status,
+      msgNumb: amiga.msgNumb,
+      toName: amiga.toName,
+      fromName: amiga.fromName,
+      subject: amiga.subject,
+      msgDate: amiga.msgDate,
+      recv: amiga.recv,
+      extMsgNum: amiga.extMsgNum,
     };
   }
 
