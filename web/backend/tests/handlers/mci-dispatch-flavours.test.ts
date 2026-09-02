@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * FULL-parity guard for the ONE MCI dispatch table (plan Task 4, tests 3
  * and the `~AK` / `~x` / `~y` rulings).
@@ -36,6 +35,8 @@ jest.mock('../../src/database', () => ({
   },
 }));
 
+import type { BBSSession } from '../../src/index';
+import type { MciFlavour, BuildMciDispatchOpts } from '../../src/handlers/mci-dispatch';
 import {
   buildMciDispatch,
   MCI_SENTINELS,
@@ -46,23 +47,24 @@ import {
   PETSCII_RAW_PREFIXES,
 } from '../../src/handlers/mci-dispatch';
 
-const session = () => ({
-  user: { id: 7, username: 'C64User', secLevel: 30 },
-  timeRemaining: 3600,
-  currentConf: 0,
-  currentConfName: 'Main',
-  currentMsgBase: 1,
-  nodeId: 3,
-});
+/**
+ * A session shaped exactly as the dispatch reads it. `as unknown as
+ * BBSSession` once, in the factory, rather than an `any` per call site.
+ */
+function session(): BBSSession {
+  return {
+    user: { id: 7, username: 'C64User', secLevel: 30 },
+    timeRemaining: 3600,
+    currentConf: 0,
+    currentConfName: 'Main',
+    currentMsgBase: 1,
+    nodeId: 3,
+  } as unknown as BBSSession;
+}
 
-const opts = (flavour: 'ansi' | 'petscii', inlineMode = false) => ({
-  flavour,
-  inlineMode,
-  bbsName: 'PinBBS',
-  sysopName: 'PinSysop',
-  location: 'PinLand',
-  sentinels: MCI_SENTINELS,
-});
+function opts(flavour: MciFlavour, inlineMode = false): BuildMciDispatchOpts {
+  return { flavour, inlineMode, sentinels: MCI_SENTINELS };
+}
 
 /** The `~AK` literal this table replaced, kept here as the byte-exact oracle. */
 const RETIRED_ACCESS_KEYS_LITERAL = [
@@ -117,28 +119,28 @@ describe('buildMciDispatch — shared entries are one definition', () => {
     const a = await buildMciDispatch(session(), opts('ansi'));
     const p = await buildMciDispatch(session(), opts('petscii'));
     for (const cmd of ['N', 'CN', 'ND', 'RN', 'TR', 'FC']) {
-      expect(p.dispatch[cmd](-1, '')).toBe(a.dispatch[cmd](-1, ''));
+      expect(p.dispatch[cmd](-1)).toBe(a.dispatch[cmd](-1));
     }
   });
 
   test('~SP returns the same sentinel in both flavours (inline)', async () => {
     const a = await buildMciDispatch(session(), opts('ansi', true));
     const p = await buildMciDispatch(session(), opts('petscii', true));
-    expect(p.dispatch.SP(-1, '')).toBe(MCI_SENTINELS.SP);
-    expect(a.dispatch.SP(-1, '')).toBe(MCI_SENTINELS.SP);
+    expect(p.dispatch.SP(-1)).toBe(MCI_SENTINELS.SP);
+    expect(a.dispatch.SP(-1)).toBe(MCI_SENTINELS.SP);
   });
 
   test('~SP sets state.hasPause (non-inline) rather than a captured local', async () => {
     const p = await buildMciDispatch(session(), opts('petscii', false));
     expect(p.state.hasPause).toBe(false);
-    expect(p.dispatch.SP(-1, '')).toBe('');
+    expect(p.dispatch.SP(-1)).toBe('');
     expect(p.state.hasPause).toBe(true);
   });
 
   test('~NS mutates the session, not the dispatch state', async () => {
     const s: any = session();
     const p = await buildMciDispatch(s, opts('petscii'));
-    expect(p.dispatch.NS(-1, '')).toBe('');
+    expect(p.dispatch.NS(-1)).toBe('');
     expect(s.nonStopText).toBe(true);
     expect(p.state.hasPause).toBe(false);
   });
@@ -174,38 +176,44 @@ describe('~AK — one shared key list, two renderings', () => {
 });
 
 describe('PETSCII transport encodings', () => {
-  const bytes = (s: string) => [...s].map(c => c.charCodeAt(0));
+  /** A dispatch value that MUST have substituted (undefined = fall-through). */
+  const substituted = (value: string | undefined): string => {
+    if (value === undefined) throw new Error('expected a substitution, got fall-through');
+    return value;
+  };
+  const bytes = (value: string | undefined): number[] =>
+    [...substituted(value)].map(c => c.charCodeAt(0));
 
   test('~c0..~c7 map onto the VIC pen table', async () => {
     const p = await buildMciDispatch(session(), opts('petscii'));
     // VIC 0,2,5,7,6,4,3,1 -> black, red, green, yellow, blue, purple, cyan, white
-    expect(bytes(p.dispatch.c0(-1, ''))).toEqual([0x90]);
-    expect(bytes(p.dispatch.c1(-1, ''))).toEqual([0x1c]); // plan T5 test 8
-    expect(bytes(p.dispatch.c2(-1, ''))).toEqual([0x1e]);
-    expect(bytes(p.dispatch.c7(-1, ''))).toEqual([0x05]);
+    expect(bytes(p.dispatch.c0(-1))).toEqual([0x90]);
+    expect(bytes(p.dispatch.c1(-1))).toEqual([0x1c]); // plan T5 test 8
+    expect(bytes(p.dispatch.c2(-1))).toEqual([0x1e]);
+    expect(bytes(p.dispatch.c7(-1))).toEqual([0x05]);
   });
 
   test('~b* and ~z* emit the CCGMS background pair ($02 + colour)', async () => {
     const p = await buildMciDispatch(session(), opts('petscii'));
-    expect(bytes(p.dispatch.b2(-1, ''))).toEqual([0x02, 0x1e]); // plan T8: $02 $1E
+    expect(bytes(p.dispatch.b2(-1))).toEqual([0x02, 0x1e]); // plan T8: $02 $1E
     for (let i = 0; i < 8; i++) {
-      expect(p.dispatch[`z${i}`](-1, '')).toBe(p.dispatch[`b${i}`](-1, ''));
-      expect(bytes(p.dispatch[`b${i}`](-1, ''))[0]).toBe(0x02);
+      expect(p.dispatch[`z${i}`](-1)).toBe(p.dispatch[`b${i}`](-1));
+      expect(bytes(p.dispatch[`b${i}`](-1))[0]).toBe(0x02);
     }
   });
 
   test('~q, ~f, ~h, ~CR, ~n3 are PETSCII control bytes', async () => {
     const p = await buildMciDispatch(session(), opts('petscii'));
-    expect(bytes(p.dispatch.q(-1, ''))).toEqual([0x92, 0x9a]); // reverse off + light blue
-    expect(bytes(p.dispatch.f(-1, ''))).toEqual([0x93]);       // CLR
-    expect(bytes(p.dispatch.h(-1, ''))).toEqual([0x14]);       // DEL
-    expect(bytes(p.dispatch.CR(-1, ''))).toEqual([0x0d]);
-    expect(bytes(p.dispatch.n3(-1, ''))).toEqual([0x0d, 0x0d, 0x0d]);
+    expect(bytes(p.dispatch.q(-1))).toEqual([0x92, 0x9a]); // reverse off + light blue
+    expect(bytes(p.dispatch.f(-1))).toEqual([0x93]);       // CLR
+    expect(bytes(p.dispatch.h(-1))).toEqual([0x14]);       // DEL
+    expect(bytes(p.dispatch.CR(-1))).toEqual([0x0d]);
+    expect(bytes(p.dispatch.n3(-1))).toEqual([0x0d, 0x0d, 0x0d]);
   });
 
   test('inline ~f still returns the F sentinel, not $93', async () => {
     const p = await buildMciDispatch(session(), opts('petscii', true));
-    expect(p.dispatch.f(-1, '')).toBe(MCI_SENTINELS.F);
+    expect(p.dispatch.f(-1)).toBe(MCI_SENTINELS.F);
   });
 
   test('~x/~y become MOVE sentinels in 0-based coordinates', async () => {
@@ -225,13 +233,13 @@ describe('PETSCII transport encodings', () => {
 
   test('NO petscii dispatch value contains an ESC byte', async () => {
     const p = await buildMciDispatch(session(), opts('petscii', true));
-    for (const [cmd, fn] of Object.entries<any>(p.dispatch)) {
-      const value = fn(-1, '');
+    for (const [cmd, fn] of Object.entries(p.dispatch)) {
+      const value = fn(-1);
       if (typeof value === 'string') {
         expect(`${cmd}:${value}`).not.toContain('\x1b');
       }
     }
-    for (const [prefix, fn] of Object.entries<any>(p.prefixDispatch)) {
+    for (const [prefix, fn] of Object.entries(p.prefixDispatch)) {
       const value = fn('1', -1);
       if (typeof value === 'string') {
         expect(`${prefix}:${value}`).not.toContain('\x1b');

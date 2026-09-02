@@ -66,33 +66,26 @@ describe('~FF flagged-files MCI output (G-FF, express.e:5439-5441 / 2830-2853)',
 
   async function ffEntry(flavour: 'ansi' | 'petscii' = 'ansi') {
     const { dispatch } = await buildMciDispatch(
-      { user: { id: FF_USER_ID }, timeRemaining: 0, currentConf: 0, nodeId: 1 } as any,
-      {
-        flavour,
-        inlineMode: false,
-        bbsName: 'B',
-        sysopName: 'S',
-        location: 'L',
-        sentinels: MCI_SENTINELS,
-      },
+      { user: { id: FF_USER_ID }, timeRemaining: 0, currentConf: 0, nodeId: 1 },
+      { flavour, inlineMode: false, sentinels: MCI_SENTINELS },
     );
     return dispatch.FF;
   }
 
   test('the FF entry emits the space-separated join at runtime', async () => {
     const FF = await ffEntry();
-    expect(FF(-1, '')).toBe('alpha.lha beta.lha');
+    expect(FF(-1)).toBe('alpha.lha beta.lha');
   });
 
   test('a width truncates it, express.e maxLen>0 style', async () => {
     const FF = await ffEntry();
-    expect(FF(9, '')).toBe('alpha.lha');
+    expect(FF(9)).toBe('alpha.lha');
   });
 
   test('the C64 flavour shares the same definition', async () => {
     const ansi = await ffEntry('ansi');
     const petscii = await ffEntry('petscii');
-    expect(petscii(-1, '')).toBe(ansi(-1, ''));
+    expect(petscii(-1)).toBe(ansi(-1));
   });
 
   test('FF dispatch entry exists and applies width via applyMciWidth on the space-separated join', () => {

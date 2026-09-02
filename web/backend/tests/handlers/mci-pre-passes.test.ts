@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * ANSI byte-identity pin for the MCI pre-pass extraction (plan
  * `thoughts/shared/plans/2026-09-02-mci-in-petscii-seq.md`, Task 4b).
@@ -75,11 +74,24 @@ jest.mock('../../src/handlers/command.handler', () => ({
 import { parseMciCodes, setConferences } from '../../src/handlers/screen.handler';
 import { MCI_SENTINELS } from '../../src/handlers/mci-dispatch';
 import { flushOutput } from '../../src/utils/output.util';
+import type { Socket } from 'socket.io';
+import type { BBSSession } from '../../src/index';
 
 const SNAPSHOT_PATH = path.join(__dirname, '__fixtures__', 'mci-pre-passes-ansi-pin.json');
 const UPDATE = process.env.UPDATE_MCI_PIN === '1';
 
-function makeSession(overrides: any = {}): any {
+/**
+ * `~NS` / `~NSF` write this flag straight onto the session object -
+ * screen.handler casts through `any` to do it, and BBSSession does not
+ * declare it. Named here so the assertions below stay typed.
+ */
+type SessionWithMciFlags = BBSSession & { nonStopText?: boolean };
+
+/**
+ * A session shaped as parseMciCodes reads it. One `as unknown as BBSSession`
+ * in the factory, rather than an `any` per call site.
+ */
+function makeSession(overrides: Record<string, unknown> = {}): BBSSession {
   return {
     user: {
       id: 4243,
@@ -96,7 +108,7 @@ function makeSession(overrides: any = {}): any {
     slowmo: 0,
     slowmoCount: 0,
     ...overrides,
-  };
+  } as unknown as BBSSession;
 }
 
 const NARROW = { petsciiMode: true, screenWidth: 40 };
@@ -192,9 +204,16 @@ const INLINE_FIXTURES: Array<{ name: string; content: string }> = [
   { name: 'inline-bare-tilde-line', content: 'a\n~\nb' },
 ];
 
-function makeMockSocket(name: string) {
+interface MockSocket {
+  emit(event: string, payload: string): void;
+  on(): void;
+  removeAllListeners(): void;
+  id: string;
+}
+
+function makeMockSocket(name: string): { socket: MockSocket; emitted: string[] } {
   const emitted: string[] = [];
-  const socket: any = {
+  const socket: MockSocket = {
     emit: (_event: string, payload: string) => emitted.push(payload),
     on: () => {},
     removeAllListeners: () => {},
@@ -227,7 +246,7 @@ beforeAll(async () => {
       hasPause: result.hasPause,
       slowmo: result.slowmo ?? 0,
       slowmoCount: result.slowmoCount ?? 0,
-      nonStopText: session.nonStopText === true,
+      nonStopText: (session as SessionWithMciFlags).nonStopText === true,
       currentMenuName: session.currentMenuName ?? null,
     };
   }
@@ -238,14 +257,14 @@ beforeAll(async () => {
     const result = await parseMciCodes(
       fixture.content, session, 'PinBBS', 'PinSysop', 'PinLand', socket,
     );
-    flushOutput(socket);
+    flushOutput(socket as unknown as Socket);
     actual[fixture.name] = {
       parsed: result.parsed,
       commands: result.commands,
       hasPause: result.hasPause,
       slowmo: result.slowmo ?? 0,
       slowmoCount: result.slowmoCount ?? 0,
-      nonStopText: session.nonStopText === true,
+      nonStopText: (session as SessionWithMciFlags).nonStopText === true,
       currentMenuName: session.currentMenuName ?? null,
       emitted: emitted.join(''),
       inlineEmitted: result.inlineEmitted === true,

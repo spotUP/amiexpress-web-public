@@ -36,6 +36,7 @@ import { sequentialFileManager, formatNumberedFilename } from '../services/Seque
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { isNarrow, narrowClip } from '../utils/table-format.util';
+import { AnsiUtil } from '../utils/ansi.util';
 import { checkConfAccess } from './message/message-scan.handler';
 import { getBoardConfig } from '../services/bbs-config-file.service';
 import { config as appConfig } from '../config';
@@ -72,8 +73,6 @@ function screenHandler(): typeof import('./screen.handler') {
 
 const screenDebug = (...args: any[]): void => screenHandler().screenDebug(...args);
 
-/** SGR runs never reach a C64. */
-const stripSgr = (value: string): string => value.replace(/\x1b\[[0-9;]*m/g, '');
 
 /**
  * ASYNC for the same reason buildMciDispatch is: `~ML.` / `~MD.` await
@@ -95,7 +94,7 @@ export async function applyMciPrePasses(
 
   /** One rendered row: plain and clipped for a C64, untouched for ANSI. */
   const row = (value: string): string =>
-    (petscii ? narrowClip(stripSgr(value)) : value) + '\r\n';
+    (petscii ? narrowClip(AnsiUtil.stripAnsi(value)) : value) + '\r\n';
 
   const content = text;
   let parsed = text;

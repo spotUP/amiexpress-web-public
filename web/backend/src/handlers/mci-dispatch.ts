@@ -74,10 +74,13 @@ export interface BuildMciDispatchOpts {
   flavour: MciFlavour;
   /** Drives the SENTINEL_* returns (express.e outdata=NIL mode). */
   inlineMode: boolean;
-  bbsName: string;
-  sysopName: string;
-  location: string;
   sentinels: MciSentinels;
+  /**
+   * The render's clock. Optional so a caller can leave it out, but pass it
+   * whenever the same render also reads the clock elsewhere: `~DT` here and
+   * the legacy `%D` in parseMciCodes must not straddle a second boundary.
+   */
+  now?: Date;
 }
 
 export interface BuiltMciDispatch {
@@ -231,8 +234,9 @@ export async function buildMciDispatch(
   const uploadBytes = user.uploadBytes || 0;
   const downloadBytes = user.downloadBytes || 0;
 
-  // Date/Time setup
-  const now = getSystemTime();
+  // Date/Time setup. ONE clock per render: the caller passes the same Date it
+  // uses for the legacy `%` codes, so `~DT` and `%D` can never disagree.
+  const now = opts.now ?? getSystemTime();
   // Logon time: session.logonTime is Unix seconds (set by time-tracking.util.ts)
   // Fall back to session.loginTime (ms) or current time if logonTime not yet set
   const logonDate = session.logonTime
