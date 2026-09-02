@@ -35,7 +35,10 @@ jest.mock('../../src/amiga-emulation/AmigaDoorSession', () => ({
         require('path').resolve(__dirname, '../../../../sdk/tests/petscii/frame/fixtures/what.txt'),
         'latin1',
       );
-      this.socket.emit('ansi-output', '\x1b[2J\x1b[H');
+      // Deliberately NO leading clear: the fixture carries no escape sequence at
+      // all, so a `\x1b[2J\x1b[H` anywhere in the caller's output can only have
+      // come from the adapter's own full-paint render. Emitting one here would
+      // make the assertion below pass whether or not the adapter ever ran.
       for (let i = 0; i < raw.length; i += 64) this.socket.emit('ansi-output', raw.slice(i, i + 64));
       // Real timers: the adapter's quiet-gap tick must actually fire. dispose()
       // clearing both timers is proven by the adapter unit test's case (9), so
@@ -327,8 +330,10 @@ describe('executeDoor installs the C64 door adapter for a 40-column caller', () 
     await executeDoor(socket as any, c64Session(), c64AdaptDoor());
     const out = doorOutput(socket);
 
-    // The adapter rendered at least one frame, and the first one is a full paint.
-    expect(out).toContain('\x1b[2J\x1b[H');
+    // The adapter rendered, and its FIRST frame is a full paint. The door itself
+    // emits no escape sequences (see the mock), so these bytes are the
+    // adapter's or nobody's.
+    expect(out.startsWith('\x1b[2J\x1b[H')).toBe(true);
 
     // Every cursor address the caller received is inside a C64 screen.
     const cups = [...out.matchAll(/\x1b\[(\d+);(\d+)H/g)];
@@ -357,6 +362,7 @@ describe('executeDoor installs the C64 door adapter for a 40-column caller', () 
     const originalEmit = socket.emit;
     await executeDoor(socket as any, eightyColSession(), c64AdaptDoor());
     expect(doorOutput(socket)).toContain('-'.repeat(70));
+    expect(doorOutput(socket)).not.toContain('\x1b[2J');   // nothing rendered a frame
     expect(c64AdapterFor(socket)).toBeNull();
     expect(socket.emit).toBe(originalEmit);
   });

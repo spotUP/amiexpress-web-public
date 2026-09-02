@@ -1679,7 +1679,13 @@ console.log('Executing door:', door.name);
   // uninstall, but a crash between them would leave the socket's emit patched
   // and every later byte would go through a reconstructor with no owner. This
   // is a no-op on every ordinary launch (nothing is installed).
-  uninstallC64DoorAdapter(socket);
+  //
+  // SILENT, unlike every other uninstall: reaching here with a frame still
+  // pending means the previous door ended without its own teardown running, so
+  // that frame is stale by definition. Flushing it would paint a dead door's
+  // screen over the menu the caller is looking at, right as the next door
+  // starts.
+  uninstallC64DoorAdapter(socket, { silent: true });
 
   // MIN_COLUMNS gate (C64/40-col Task 1). Default-closed: every door type
   // (68K, AREXX, TS, MCI, ...) gates at 80 columns unless its registration

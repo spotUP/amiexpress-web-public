@@ -244,6 +244,93 @@ describe('C64DoorFrameAdapter', () => {
     expect(f.socket.emit).toBe(original);
   });
 
+  /**
+   * A socket.io Socket inherits `emit` from its prototype. Assigning the
+   * captured original back on uninstall would pin that prototype method as an
+   * OWN property of the instance for the rest of the connection's life - a
+   * silent, permanent mutation of every web caller's socket, one per door.
+   */
+  it('(review 1) restores a PROTOTYPE emit by deleting our own property, not by pinning it', () => {
+    class ProtoEmitSocket {
+      readonly out: Array<[string, any]> = [];
+      readonly id = 'proto-1';
+      constructor(public session: any) {}
+      emit(ev: string, d?: any): boolean {
+        this.out.push([ev, d]);
+        return true;
+      }
+    }
+    const socket: any = new ProtoEmitSocket(c64());
+    expect(Object.prototype.hasOwnProperty.call(socket, 'emit')).toBe(false); // inherited to start
+
+    installC64DoorAdapter(socket, socket.session);
+    expect(Object.prototype.hasOwnProperty.call(socket, 'emit')).toBe(true);  // ours while installed
+
+    socket.emit('ansi-output', 'PROTO');
+    uninstallC64DoorAdapter(socket);
+
+    expect(Object.prototype.hasOwnProperty.call(socket, 'emit')).toBe(false); // and gone again
+    expect(socket.emit).toBe(ProtoEmitSocket.prototype.emit);
+    socket.emit('ansi-output', 'AFTER');
+    expect(socket.out[socket.out.length - 1]).toEqual(['ansi-output', 'AFTER']);
+  });
+
+  it('(review 2) the silent uninstall drops the pending frame instead of repainting it', () => {
+    const f = fakeSocket(c64());
+    installC64DoorAdapter(f.socket, f.socket.session);
+    f.socket.emit('ansi-output', 'STALE FRAME FROM A DEAD DOOR');
+
+    uninstallC64DoorAdapter(f.socket, { silent: true });
+
+    expect(f.out).toHaveLength(0);                     // nothing painted over the menu
+    expect(jest.getTimerCount()).toBe(0);
+    expect(c64AdapterFor(f.socket)).toBeNull();
+  });
+
+  it('(review 2) the ordinary uninstall still paints the door last frame', () => {
+    const f = fakeSocket(c64());
+    installC64DoorAdapter(f.socket, f.socket.session);
+    f.socket.emit('ansi-output', 'THE DOOR FINAL SCREEN');
+    uninstallC64DoorAdapter(f.socket);
+    expect(f.ansi()).toContain('SCREEN');
+  });
+
+  it('(review 3) does not restore over a wrapper layered above it', () => {
+    const f = fakeSocket(c64());
+    const originalEmit = f.socket.emit;
+    installC64DoorAdapter(f.socket, f.socket.session);
+    const layered = jest.fn();
+    f.socket.emit = layered;                           // something wrapped us after install
+
+    uninstallC64DoorAdapter(f.socket);
+
+    expect(f.socket.emit).toBe(layered);               // their layer survives
+    expect(f.socket.emit).not.toBe(originalEmit);
+    expect(c64AdapterFor(f.socket)).toBeNull();        // and the adapter is still gone
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('(review 3) a disposed-but-still-patched emit degrades to a pass-through', () => {
+    const f = fakeSocket(c64());
+    installC64DoorAdapter(f.socket, f.socket.session);
+    const ourPatch = f.socket.emit;
+    const layered = jest.fn();
+    f.socket.emit = layered;
+    uninstallC64DoorAdapter(f.socket);                 // cannot unpatch; adapter disposed
+
+    ourPatch('ansi-output', 'STRAIGHT THROUGH');       // whatever still holds our patch
+    expect(f.out).toEqual([['ansi-output', 'STRAIGHT THROUGH']]);
+    expect(jest.getTimerCount()).toBe(0);              // and it armed no timers
+  });
+
+  it('(review 6) removes the _directEmit it seeded', () => {
+    const f = fakeSocket(c64());
+    installC64DoorAdapter(f.socket, f.socket.session);
+    expect(f.socket._directEmit).toBeDefined();
+    uninstallC64DoorAdapter(f.socket);
+    expect('_directEmit' in f.socket).toBe(false);     // the socket ends as it started
+  });
+
   it('an existing _directEmit is not overwritten', () => {
     const f = fakeSocket(c64());
     const preset = jest.fn();
@@ -251,6 +338,7 @@ describe('C64DoorFrameAdapter', () => {
     installC64DoorAdapter(f.socket, f.socket.session);
     expect(f.socket._directEmit).toBe(preset);
     uninstallC64DoorAdapter(f.socket);
+    expect(f.socket._directEmit).toBe(preset);        // not ours to remove
   });
 
   it('honours tickMs/maxFrameMs overrides', () => {
