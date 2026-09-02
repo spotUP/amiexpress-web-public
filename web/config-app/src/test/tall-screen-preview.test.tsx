@@ -21,8 +21,20 @@ import { describe, expect, it } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { canvasPixelSize } from '../components/ansi-canvas-paint';
 import { ScreenArt } from '../components/ScreenArt';
+import { firstRows, screenToCanvas } from '../pages/screen-bytes';
 
-const tall = Array.from({ length: 3019 }, (_, i) => `line ${i}`).join('\r\n');
+// Chunked: spreading a megabyte of bytes into fromCharCode blows the stack,
+// which is a fact about the test helper and not about the code under test.
+const b64 = (text: string) => {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  }
+  return btoa(binary);
+};
+const lines = (count: number) => Array.from({ length: count }, (_, i) => `line ${i}`).join('\r\n');
+const tall = b64(lines(3019));
 
 describe('the pixels a tall file would cost', () => {
   it('is past what a browser will allocate, at full size', () => {
@@ -50,6 +62,40 @@ describe('the pixels a tall file would cost', () => {
   });
 });
 
+describe('a preview of an ENORMOUS file', () => {
+  it('parses a screenful, not a million lines', async () => {
+    /*
+     * The one that actually froze the page: this board keeps a 68klog.txt of
+     * 992,732 lines under its screen directories, indexed as ordinary
+     * drawable art. Slicing the CANVAS afterwards was far too late - parsing
+     * builds roughly 79 million cell objects first, and the tab is gone
+     * before anything asks for pixels.
+     *
+     * A tenth of the real file, and it still has to finish quickly.
+     */
+    // Counted in BYTES: firstRows is what keeps the parse affordable, and it
+    // is the piece that has to be right - `content` is base64, so a
+    // truncation that searched the STRING for a newline found none and did
+    // nothing at all.
+    const enormous = new TextEncoder().encode(lines(100_000));
+
+    expect(firstRows(enormous, 25).length).toBeLessThan(enormous.length / 1000);
+
+    const started = Date.now();
+    const canvas = await screenToCanvas(b64(lines(100_000)), 25);
+
+    expect(canvas.length).toBeLessThanOrEqual(26);
+    expect(Date.now() - started).toBeLessThan(3_000);
+  });
+
+  it('parses the whole thing when no limit is given', async () => {
+    // The editor's contract: every row, because the codes live below the art.
+    const canvas = await screenToCanvas(b64(lines(400)));
+
+    expect(canvas.length).toBeGreaterThanOrEqual(400);
+  });
+});
+
 describe('a preview of a very long file', () => {
   it('draws 25 rows, not three thousand', async () => {
     render(<ScreenArt content={tall} scale={0.28} maxRows={25} />);
@@ -61,7 +107,7 @@ describe('a preview of a very long file', () => {
   it('draws every row when no limit is given, which is what the editor needs', async () => {
     // The whole point of removing SAUCE's cap: codes live below the art, and
     // an editor that cannot see them deletes them on save.
-    render(<ScreenArt content={'one\r\ntwo\r\nthree'} />);
+    render(<ScreenArt content={b64('one\r\ntwo\r\nthree')} />);
 
     const canvas = await screen.findByTestId('ansi-canvas');
     await waitFor(() => expect(Number(canvas.getAttribute('data-rows'))).toBeGreaterThanOrEqual(3));

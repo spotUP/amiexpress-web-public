@@ -48,13 +48,15 @@ export function ScreenArt({ content, scale = 1, className, testId, maxRows }: Sc
     let cancelled = false;
     setFailed(false);
 
-    screenToCanvas(content)
+    // maxRows reaches the PARSER, not just the canvas: `content` is base64,
+    // so the truncation has to happen on the decoded bytes.
+    screenToCanvas(content, maxRows)
       .then(next => { if (!cancelled) setCanvas(next); })
       // A file that will not parse is a fact about the file, not a crash.
       .catch(() => { if (!cancelled) setFailed(true); });
 
     return () => { cancelled = true; };
-  }, [content]);
+  }, [content, maxRows]);
 
   if (failed) {
     return <p className="text-sm text-status-warn">This file could not be read as ANSI art.</p>;

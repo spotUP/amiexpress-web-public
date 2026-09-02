@@ -37,8 +37,34 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export async function screenToCanvas(base64: string): Promise<Cell[][]> {
-  const { canvas } = await loadANSFile(base64ToBytes(base64));
+/**
+ * The first `rows` rows of a screen's bytes.
+ *
+ * Counted in BYTES, before anything is parsed. This board keeps a
+ * `68klog.txt` of 992,732 lines under its screen directories, indexed as
+ * ordinary drawable art: parsing it whole builds something like 79 million
+ * cell objects, and the tab is gone long before a canvas is asked for.
+ *
+ * One row of slack so a cut never lands in the middle of the last row's
+ * escape sequence.
+ */
+export function firstRows(bytes: Uint8Array, rows: number): Uint8Array {
+  let seen = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] === 0x0a && ++seen > rows) return bytes.subarray(0, i);
+  }
+  return bytes;
+}
+
+/**
+ * @param maxRows draw only this many rows - for a PREVIEW. Absent means the
+ *                whole screen, which is what the editor needs: the codes a
+ *                screen runs sit below its art, and an editor that cannot see
+ *                them deletes them on save.
+ */
+export async function screenToCanvas(base64: string, maxRows?: number): Promise<Cell[][]> {
+  const bytes = base64ToBytes(base64);
+  const { canvas } = await loadANSFile(maxRows ? firstRows(bytes, maxRows) : bytes);
   return canvas;
 }
 
