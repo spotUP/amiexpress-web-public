@@ -11,7 +11,20 @@
  */
 import { Cell, isBlank } from './types';
 
-export type RowClass = 'blank' | 'art' | 'table' | 'prose';
+/**
+ * `'bordered'` (Phase 3 Task 2) is a row with COLUMN STRUCTURE and
+ * alphanumeric content - a box row or a gutter-separated menu row - and it is
+ * decided AHEAD of the art test, because `looksLikeAsciiArt` (frozen: the
+ * board's 80-column path shares it) calls most of them art and the ladder then
+ * split them in half, doubling a 25-row door screen to 34-46 rows.
+ *
+ * `'table'` is a vestige: every row this classifier used to call 'table'
+ * (`hasTabularGutters` plus alphanumerics) satisfies `hasColumnStructure` too,
+ * so 'bordered' now answers first and `classifyRow` no longer returns 'table'.
+ * The member stays because `RowClass -> AdaptRule` is a total map in
+ * adapt.ts's `chooseRule` and callers may still name it.
+ */
+export type RowClass = 'blank' | 'bordered' | 'art' | 'table' | 'prose';
 
 /**
  * CUP/HVP, cursor up/down/forward/back, column and line positioning, erase
@@ -123,9 +136,113 @@ export function hasTabularGutters(text: string): boolean {
   return (text.trim().match(/ {2,}/g) || []).length >= 2;
 }
 
+/**
+ * A HORIZONTAL RULE: every non-blank cell is non-alphanumeric and not reverse
+ * video. `.-----.`, `` `-----' ``, `|__|__|`, `|--v--v--|`. Truncating a rule
+ * to 40 columns still leaves a rule, so a rule is croppable - which
+ * `isCroppable`'s one-repeated-glyph test cannot see, because a rule mixes '-'
+ * with its corners. A reverse-video cell is excluded: it paints a coloured
+ * block, and cropping that drops content, not decoration.
+ */
+export function isRuleRow(cells: ReadonlyArray<Readonly<Cell>>): boolean {
+  const width = contentWidth(cells);
+  let any = false;
+  for (let x = 0; x < width; x++) {
+    const c = cells[x];
+    if (isBlank(c)) continue;
+    any = true;
+    if (c.rvs || /[A-Za-z0-9]/.test(c.ch)) return false;
+  }
+  return any;
+}
+
+/** Trim blanks off both ends of a span; an all-blank span comes back empty (`a === b`). */
+function trimSpan(cells: ReadonlyArray<Readonly<Cell>>, from: number, to: number): [number, number] {
+  let a = from;
+  let b = to;
+  while (a < b && isBlank(cells[a])) a++;
+  while (b > a && isBlank(cells[b - 1])) b--;
+  return [a, b];
+}
+
+/**
+ * The row's columns, in order, each trimmed and carrying its own cells (so a
+ * part keeps its colours).
+ *
+ * Split on '|' cells when there are two or more - the outer border parts are
+ * empty and drop out - otherwise on INTERIOR runs of two or more blanks, of
+ * which there must be at least two. A leading indent is not a column break,
+ * and neither is a single space, so "Local Console" stays one column.
+ *
+ * Returns [] when the row has no column structure at all, which is exactly
+ * what `hasColumnStructure` asks.
+ */
+export function columnParts(cells: ReadonlyArray<Readonly<Cell>>): Array<ReadonlyArray<Readonly<Cell>>> {
+  return columnSpans(cells).map(([a, b]) => cells.slice(a, b));
+}
+
+/**
+ * `columnParts` as SOURCE COLUMN RANGES `[start, end)`, trimmed and in order.
+ * `narrowRow` needs the indices, not just the cells: its cursor map answers in
+ * source columns, and a part that gets shortened has to know which source cell
+ * its truncation mark stands for.
+ */
+export function columnSpans(cells: ReadonlyArray<Readonly<Cell>>): Array<[number, number]> {
+  const width = contentWidth(cells);
+  if (width === 0) return [];
+
+  const bounds: number[] = [];               // exclusive end of each span, in source columns
+  const starts: number[] = [0];
+  let pipes = 0;
+  for (let x = 0; x < width; x++) if (cells[x].ch === '|') pipes++;
+
+  if (pipes >= 2) {
+    for (let x = 0; x < width; x++) {
+      if (cells[x].ch !== '|') continue;
+      bounds.push(x);
+      starts.push(x + 1);
+    }
+    bounds.push(width);
+  } else {
+    let indent = 0;
+    while (indent < width && isBlank(cells[indent])) indent++;
+    const runs: Array<[number, number]> = [];
+    for (let x = indent; x < width; x++) {
+      if (!isBlank(cells[x])) continue;
+      const start = x;
+      while (x < width && isBlank(cells[x])) x++;
+      if (x - start >= 2 && x < width) runs.push([start, x]);   // interior only
+    }
+    if (runs.length < 2) return [];
+    starts.length = 0;
+    starts.push(indent);
+    for (const [a, b] of runs) { bounds.push(a); starts.push(b); }
+    bounds.push(width);
+  }
+
+  const spans: Array<[number, number]> = [];
+  for (let i = 0; i < bounds.length; i++) {
+    const span = trimSpan(cells, starts[i], bounds[i]);
+    if (span[1] > span[0]) spans.push(span);
+  }
+  return spans;
+}
+
+/**
+ * The row is a table row `narrowRow` can shrink in place instead of splitting
+ * in half. ONE surviving column is enough when the structure is a border
+ * (`| WHAT: Transfer Activities v2.0 ... |`): the border is the evidence that
+ * the row is a box row, and narrowing keeps the box one row tall, which is the
+ * whole point of the rule.
+ */
+export function hasColumnStructure(cells: ReadonlyArray<Readonly<Cell>>): boolean {
+  return columnSpans(cells).length > 0;
+}
+
 export function classifyRow(cells: ReadonlyArray<Readonly<Cell>>): RowClass {
   if (contentWidth(cells) === 0) return 'blank';
   const text = rowText(cells);
+  if (/[A-Za-z0-9]/.test(text) && hasColumnStructure(cells)) return 'bordered';
   if (looksLikeAsciiArt(text)) return 'art';
   if (hasTabularGutters(text)) return 'table';
   return 'prose';

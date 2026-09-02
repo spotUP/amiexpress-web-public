@@ -1,4 +1,4 @@
-import { looksLikeAsciiArt, positionsCursorAbsolutely, hasTabularGutters, classifyRow, contentWidth, rowText } from '../../../petscii/frame/classify';
+import { looksLikeAsciiArt, positionsCursorAbsolutely, hasTabularGutters, classifyRow, contentWidth, rowText, isRuleRow, columnParts, hasColumnStructure } from '../../../petscii/frame/classify';
 import { textToFrame } from '../../../petscii/frame/types';
 
 const row = (s: string) => textToFrame([s], 80, 1).cells[0];
@@ -52,18 +52,87 @@ describe('hasTabularGutters', () => {
   });
 });
 
+/**
+ * A horizontal rule survives truncation: cut `.-----.` at 40 columns and what
+ * is left is still a rule. That is what lets `crop` take a row `isCroppable`
+ * refuses (its one-repeated-glyph test cannot see a rule, because a rule mixes
+ * '-' with its corners).
+ */
+describe('isRuleRow', () => {
+  it('every non-blank cell non-alphanumeric and not reverse', () => {
+    expect(isRuleRow(row('.----------------------------------.'))).toBe(true);
+    expect(isRuleRow(row('`----------------------------------\''))).toBe(true);
+    expect(isRuleRow(row('|__|__|__|'))).toBe(true);
+    expect(isRuleRow(row('|--+----------+-------+----|'))).toBe(true);
+    expect(isRuleRow(row('   ---   ---   '))).toBe(true);
+  });
+
+  it('one letter or digit makes it content, and an empty row is not a rule', () => {
+    // WHAT's junction rows draw their tees with the LETTER 'v'
+    // (`|--v---------v----|`), so they are not rules by this definition and
+    // they must not be: the test cannot tell that 'v' from a one-character
+    // cell of content. They still cost one row - the ladder narrows them.
+    expect(isRuleRow(row('|--v----------v-------v----|'))).toBe(false);
+    expect(isRuleRow(row('|--+-------- 2 -------+----|'))).toBe(false);
+    expect(isRuleRow(row('.--- WHAT ---.'))).toBe(false);
+    expect(isRuleRow(row(''))).toBe(false);
+    expect(isRuleRow(row('   '))).toBe(false);
+  });
+
+  it('a reverse-video block is paint, not a rule: cropping it would drop colour', () => {
+    const cells = row('----------');
+    (cells[3] as any).rvs = true;
+    expect(isRuleRow(cells)).toBe(false);
+  });
+});
+
+describe('columnParts / hasColumnStructure', () => {
+  const texts = (cells: ReturnType<typeof row>) => columnParts(cells).map((p) => p.map((c) => c.ch).join(''));
+
+  it("splits on '|' cells when there are two or more, dropping the outer border parts", () => {
+    expect(texts(row('|Nd| Username | Status |'))).toEqual(['Nd', 'Username', 'Status']);
+    expect(texts(row('| one column only |'))).toEqual(['one column only']);
+    expect(hasColumnStructure(row('| one column only |'))).toBe(true);
+  });
+
+  it('falls back to interior runs of two-or-more blanks, leading indent excluded', () => {
+    expect(texts(row('  [U] - UPLOAD  [D] - DOWNLOAD  [RZ] - ZMODEM'))).toEqual(['[U] - UPLOAD', '[D] - DOWNLOAD', '[RZ] - ZMODEM']);
+    expect(texts(row('Sysop            Local Console              1234 calls   ratio 1:3')))
+      .toEqual(['Sysop', 'Local Console', '1234 calls', 'ratio 1:3']);
+  });
+
+  it('one gutter, one pipe, prose and a blank row have no column structure', () => {
+    expect(columnParts(row('one  gap only'))).toEqual([]);
+    expect(columnParts(row('a | b'))).toEqual([]);
+    expect(columnParts(row('the quick brown fox jumps over the lazy dog'))).toEqual([]);
+    expect(columnParts(row(''))).toEqual([]);
+    expect(hasColumnStructure(row('one  gap only'))).toBe(false);
+  });
+
+  it('keeps the cells themselves, so a part carries its colours', () => {
+    const cells = row('|ab| cd |');
+    (cells[1] as any).fg = 7;
+    expect(columnParts(cells)[0][0]).toMatchObject({ ch: 'a', fg: 7 });
+  });
+});
+
 describe('classifyRow', () => {
-  it('blank / art / table / prose', () => {
+  it('blank / bordered / art / prose', () => {
     expect(classifyRow(row(''))).toBe('blank');
     expect(classifyRow(row('==============================================================================='))).toBe('art');
-    expect(classifyRow(row('Sysop            Local Console              1234 calls   ratio 1:3'))).toBe('table');
-    expect(classifyRow(row('?   - Show the current conf menu  B   - Bulletins'))).toBe('table');
+    // Was 'table' before Phase 3 Task 2: a row with column structure and
+    // alphanumeric content is now 'bordered', ahead of the art test, so the
+    // ladder can narrow it instead of splitting it in half.
+    expect(classifyRow(row('Sysop            Local Console              1234 calls   ratio 1:3'))).toBe('bordered');
+    expect(classifyRow(row('?   - Show the current conf menu  B   - Bulletins'))).toBe('bordered');
+    expect(classifyRow(row('| WHAT: Transfer Activities v2.0 [REL 2] |'))).toBe('bordered');
     expect(classifyRow(row('Below are the available AmiExpress commands with brief descriptions.'))).toBe('prose');
   });
 
-  it('colon-labelled stat rows classify as ART, not TABLE (see classify.ts doc comment)', () => {
+  it('a row with no column structure still classifies as ART, not TABLE (see classify.ts doc comment)', () => {
     expect(classifyRow(row('      uSeR nAME: Sysop                  dOWNLoADeD tODaY: 0 bYTeS'))).toBe('art');
-    expect(classifyRow(row('  ND#/Calls    User/PhoneNumber                Location/Action'))).toBe('art');
+    // Was 'art' before Phase 3 Task 2: two gutters make it bordered.
+    expect(classifyRow(row('  ND#/Calls    User/PhoneNumber                Location/Action'))).toBe('bordered');
   });
 
   it('a reverse-video space is content, not blank', () => {

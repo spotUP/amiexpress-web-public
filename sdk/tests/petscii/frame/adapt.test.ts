@@ -1,6 +1,6 @@
-import { adaptFrame, adaptRows, chooseRule, cropRow, gutterRow, reflowRow, splitRow, isCroppable, applyRule, AdaptRule } from '../../../petscii/frame/adapt';
+import { adaptFrame, adaptRows, chooseRule, cropRow, gutterRow, reflowRow, splitRow, deindentRow, narrowRow, isCroppable, applyRule, AdaptRule } from '../../../petscii/frame/adapt';
 import { textToFrame, makeFrame, frameText, Cell } from '../../../petscii/frame/types';
-import { contentWidth } from '../../../petscii/frame/classify';
+import { contentWidth, columnParts } from '../../../petscii/frame/classify';
 import { wrapLineToWidth } from '../../../petscii/wrap';
 
 const row = (s: string) => textToFrame([s], 80, 1).cells[0];
@@ -17,13 +17,31 @@ const ART = '|__|_____|_____|__| cOLORWALL v1.3 (w) bY sHADOW mAN/aFL `94 |__|__
 const RULE = '='.repeat(78);
 
 describe('chooseRule', () => {
-  it('fits -> crop; blank right half -> crop; repeated border -> crop; art -> split; table -> gutter; prose -> reflow', () => {
+  it('fits -> crop; blank right half -> crop; repeated border -> crop; columns -> narrow; prose -> reflow', () => {
     expect(chooseRule(row('short'), 40)).toBe('crop');
     expect(chooseRule(row('x'.repeat(40)), 40)).toBe('crop');
     expect(chooseRule(row(RULE), 40)).toBe('crop');
-    expect(chooseRule(row(ART), 40)).toBe('split');
-    expect(chooseRule(row(TABLE), 40)).toBe('gutter');
+    // Both were 'split' / 'gutter' before Phase 3 Task 2: a row with column
+    // structure now narrows in place instead of being cut in half.
+    expect(chooseRule(row(ART), 40)).toBe('narrow');
+    expect(chooseRule(row(TABLE), 40)).toBe('narrow');
     expect(chooseRule(row(PROSE), 40)).toBe('reflow');
+  });
+
+  /** The ladder, in order: crop (incl. rules) -> deindent -> narrow -> reflow/split. */
+  it('a horizontal rule crops, an over-wide row that fits once de-indented de-indents', () => {
+    expect(chooseRule(row('.' + '-'.repeat(76) + '.'), 40)).toBe('crop');
+    expect(chooseRule(row('`' + '-'.repeat(76) + "'"), 40)).toBe('crop');
+    expect(chooseRule(row(' '.repeat(24) + '----->>>> uSEr StAtS <<<<-----'), 40)).toBe('deindent');
+    expect(chooseRule(row(' '.repeat(30) + 'centred title'), 40)).toBe('deindent');
+    // a rule that lives entirely right of column 40 must not crop to nothing
+    expect(chooseRule(row(' '.repeat(45) + '.-----------------------------.'), 40)).toBe('deindent');
+  });
+
+  it('a row with no column structure that cannot be de-indented still reflows or splits', () => {
+    expect(chooseRule(row('  ' + PROSE), 40)).toBe('reflow');
+    expect(chooseRule(row('/\\'.repeat(30)), 40)).toBe('crop');            // a rule of its own
+    expect(chooseRule(row('aB'.repeat(30)), 40)).toBe('reflow');
   });
 
   it('isCroppable: right half must be blank or one repeated non-alphanumeric glyph', () => {
@@ -209,6 +227,124 @@ describe('reflowRow == wrapLineToWidth (break-decision equality pin)', () => {
   });
 });
 
+/**
+ * `deindent` is the LOSSLESS rung of the ladder: it drops leading blanks and
+ * nothing else, which is what saves a centred banner from being split in half.
+ */
+describe('deindentRow', () => {
+  const BANNER = ' '.repeat(24) + '----->>>> uSEr StAtS <<<<-----';
+
+  it('shifts the row left by its indent and keeps every non-blank cell', () => {
+    const r = deindentRow(row(BANNER), 40);
+    expect(r.rows.length).toBe(1);
+    expect(str(r.rows[0])).toBe(BANNER.trim());
+    expect(multiset(r.rows[0])).toEqual(multiset(row(BANNER)));
+    expect(r.applied).toBe('deindent');
+  });
+
+  it('carries the cells themselves, colours and all, and maps the cursor left', () => {
+    const src = row(BANNER);
+    for (let x = 0; x < 80; x++) (src[x] as Cell).fg = x % 16;
+    const r = deindentRow(src, 40);
+    expect(r.rows[0][0]).toMatchObject({ ch: '-', fg: 24 % 16 });
+    expect(r.map(24)).toEqual({ row: 0, x: 0 });
+    expect(r.map(30)).toEqual({ row: 0, x: 6 });
+    expect(r.map(0)).toEqual({ row: 0, x: 0 });          // inside the dropped indent
+    expect(r.map(79)).toEqual({ row: 0, x: 39 });
+  });
+
+  it('a row with no indent is unchanged', () => {
+    expect(str(deindentRow(row('no indent here'), 40).rows[0])).toBe('no indent here');
+  });
+});
+
+/**
+ * `narrow` is the LOSSY rung that keeps a table a table: one row out, every
+ * column still there and in order, paid for in characters. A shortened column
+ * ends in '>' - a plain PETSCII glyph, unlike an ellipsis.
+ */
+describe('narrowRow', () => {
+  const MENU = ' [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD';
+  const partsOf = (line: string) => columnParts(row(line)).map((p) => p.map((c) => c.ch).join(''));
+
+  it('emits exactly one row, no wider than the screen', () => {
+    const r = narrowRow(row(MENU), 40)!;
+    expect(r).not.toBeNull();
+    expect(r.rows.length).toBe(1);
+    expect(r.rows[0].length).toBe(40);
+    expect(contentWidth(r.rows[0])).toBeLessThanOrEqual(40);
+    expect(r.applied).toBe('narrow');
+  });
+
+  it('keeps the number and ORDER of the columns, each a prefix of its source column', () => {
+    const out = str(narrowRow(row(MENU), 40)!.rows[0]);
+    const parts = partsOf(MENU);
+    expect(parts.length).toBe(3);
+    const segments = out.split(' ').length;                    // sanity: the row is not empty
+    expect(segments).toBeGreaterThan(1);
+    let at = 0;
+    for (const p of parts) {
+      const kept = out.indexOf(p.slice(0, 2), at);
+      expect(kept).toBeGreaterThanOrEqual(at);                 // in order
+      at = kept + 1;
+    }
+    for (const seg of out.split(/(?<=>) /)) expect(seg.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("marks a shortened column with '>' and leaves an untouched column unmarked", () => {
+    const r = narrowRow(row('ab  ' + 'X'.repeat(50) + '  cd'), 40)!;
+    const out = str(r.rows[0]);
+    expect(out.length).toBe(40);
+    expect(out).toBe('ab ' + 'X'.repeat(33) + '> cd');         // narrow columns untouched and unmarked
+  });
+
+  /**
+   * ONE gutter is not column structure - a sentence with double spacing has
+   * one too - so a two-column gutter row is left to reflow/split. A BORDER is
+   * structure even with a single column inside it, which is what carries
+   * WHAT's title row (see the single-bordered-column case below).
+   */
+  it('needs two interior gutters, or a border', () => {
+    expect(narrowRow(row('ab  ' + 'X'.repeat(50)), 40)).toBeNull();
+    expect(narrowRow(row('| ' + 'X'.repeat(50) + ' |'), 40)).not.toBeNull();
+  });
+
+  it('shrinks the WIDEST column first, so a short column survives whole', () => {
+    const r = narrowRow(row('short  ' + 'Y'.repeat(30) + '  ' + 'Z'.repeat(30)), 40)!;
+    const out = str(r.rows[0]);
+    expect(out.startsWith('short ')).toBe(true);
+    const [a, b, c] = out.split(' ');
+    expect(a).toBe('short');
+    expect(Math.abs(b.length - c.length)).toBeLessThanOrEqual(1);
+  });
+
+  it('a single bordered column narrows too - the border is the structure', () => {
+    const title = '| WHAT: Transfer Activities v2.0 [REL 2] Copyright (c)1994-95 Bobo/Mystic! |';
+    expect(partsOf(title).length).toBe(1);
+    const out = str(narrowRow(row(title), 40)!.rows[0]);
+    expect(out.length).toBe(40);
+    expect(out.endsWith('>')).toBe(true);
+    expect(title).toContain(out.slice(0, -1));
+  });
+
+  it('DECLINES rather than dropping a column or cutting one below two cells', () => {
+    expect(narrowRow(row('abc  '.repeat(15).trimEnd()), 40)).toBeNull();
+    expect(narrowRow(row(PROSE), 40)).toBeNull();              // no column structure at all
+    expect(narrowRow(row(''), 40)).toBeNull();
+  });
+
+  it('the cursor map is total and lands on the surviving cell of its own column', () => {
+    const r = narrowRow(row(MENU), 40)!;
+    for (let x = 0; x < 80; x++) {
+      const m = r.map(x);
+      expect(m.row).toBe(0);
+      expect(m.x).toBeGreaterThanOrEqual(0);
+      expect(m.x).toBeLessThan(40);
+    }
+    expect(r.map(1).x).toBe(0);                                // '[' of the first column
+  });
+});
+
 describe('splitRow', () => {
   it('yields plain halves, keeps every cell, drops an all-blank second half', () => {
     const r = splitRow(row(ART), 40);
@@ -244,7 +380,7 @@ describe('rule invariants over a synthetic row corpus', () => {
     'word '.repeat(16).trim(),
     '  indented prose that runs on well past the fortieth column of the screen',
   ];
-  const rules: AdaptRule[] = ['crop', 'gutter', 'reflow', 'split'];
+  const rules: AdaptRule[] = ['crop', 'deindent', 'gutter', 'narrow', 'reflow', 'split'];
 
   it.each(corpus)('every rule emits rows of exactly 40 cells for %p', (line) => {
     for (const rule of rules) {
@@ -301,7 +437,8 @@ describe('adaptRows / adaptFrame', () => {
     for (const r of rows) { expect(r.cells.length).toBe(40); expect(contentWidth(r.cells)).toBeLessThanOrEqual(40); }
     expect(rows.filter((r) => r.source === 0).map((r) => r.rule)).toEqual(['crop']);
     expect(rows.filter((r) => r.source === 1).map((r) => r.rule)).toEqual(['reflow', 'reflow']);
-    expect(rows.filter((r) => r.source === 3).map((r) => r.rule)).toEqual(['split', 'split']);
+    // ART is a '|'-bordered row: it narrows to ONE row now (was ['split', 'split']).
+    expect(rows.filter((r) => r.source === 3).map((r) => r.rule)).toEqual(['narrow']);
     expect(rows.filter((r) => r.source === 4).length).toBe(1);
   });
 

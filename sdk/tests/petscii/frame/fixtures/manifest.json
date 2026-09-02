@@ -112,5 +112,56 @@
     "cwd": "web/backend",
     "binariesFrom": "1cdddac24^",
     "notes": "89-wide header with high-bit glyphs, numbered menu"
+  },
+  "rtw": {
+    "binary": "Doors/RTW/rtw",
+    "command": "RTW",
+    "script": [
+      "1000 \\r",
+      "3000 q\\r",
+      "5000 \\r"
+    ],
+    "bytes": 6208,
+    "sha256": "a2cfba68291f62e14182e1225cd14a772bd70bdd285f77053df18d0b6a920c18",
+    "encoding": "latin1",
+    "source": "dev/scripts/door-corpus/goldens/rtw/integration.txt",
+    "harness": "npx tsx dev/scripts/door-corpus/run.ts --capture rtw",
+    "cwd": "repo root",
+    "containsBbsMenu": true,
+    "notes": "Real Time Who v2.01: 78-column bordered node table, then the door exits and the BBS repaints its own menu - the capture's LAST frame is that menu (three-column command rows plus the prompt), which is why containsBbsMenu is true."
+  },
+  "ustats": {
+    "binary": "Doors/ustats/stats",
+    "command": "STATS",
+    "script": [
+      "1000 \\r",
+      "3000 q\\r",
+      "5000 \\r"
+    ],
+    "bytes": 13166,
+    "sha256": "f0d3d48ed5a1f3a4bf74e182fea9bdd152333ae863df17beb41e15f879d02a7b",
+    "encoding": "latin1",
+    "source": "dev/scripts/door-corpus/goldens/ustats/integration.txt",
+    "harness": "npx tsx dev/scripts/door-corpus/run.ts --capture ustats",
+    "cwd": "repo root",
+    "containsBbsMenu": true,
+    "notes": "uSEr StAtS v1.0: centred banners over label-dots-value rows; the capture continues past the door into the BBS menu and prompt, so the LAST frame is the menu."
+  },
+  "what": {
+    "binary": "Doors/What/WHAT",
+    "command": "WHAT",
+    "script": [
+      "1000 \\r",
+      "3000 q\\r",
+      "5000 \\r"
+    ],
+    "bytes": 804,
+    "sha256": "bb5863316dc3b294e7cabf66f3150d9324beeebe3937fe75976687a4bbdf084d",
+    "encoding": "latin1",
+    "source": "dev/scripts/door-corpus/goldens/what/integration.txt",
+    "harness": "npx tsx dev/scripts/door-corpus/run.ts --capture what",
+    "cwd": "repo root",
+    "containsBbsMenu": false,
+    "notes": "WHAT Transfer Activities v2.0: one static 78-column box table on an idle board. Door output only - the capture ends before the BBS repaints, so the LAST frame is the door's own screen."
   }
 }
