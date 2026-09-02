@@ -21,6 +21,7 @@ const line_clear_animation_1 = require("../effects/line-clear-animation");
 const items_1 = require("../core/items");
 const versus_goal_1 = require("../core/versus-goal");
 const up_key_lock_1 = require("../core/up-key-lock");
+const mission_run_1 = require("../core/mission-run");
 /** Background colour used to render a TGM item cell, keyed by piece type. */
 const ITEM_CELL_COLORS = {
     I: 'cyan', O: 'yellow', T: 'magenta', S: 'green', Z: 'red', J: 'blue', L: 'white',
@@ -1219,7 +1220,7 @@ class VersusScreen {
         this.renderBoard(gameState);
         // Render next queue
         // HIDE NEXT (item 7) - versus is where the item is thrown in the first place.
-        this.renderNextQueue(gameState.hideNextFrames > 0 ? [] : (gameState.nextQueue ?? []));
+        this.renderNextQueue((0, mission_run_1.nextIsHidden)(gameState) ? [] : (gameState.nextQueue ?? []));
         // Render hold piece
         this.renderHold(gameState);
         // Render garbage strip

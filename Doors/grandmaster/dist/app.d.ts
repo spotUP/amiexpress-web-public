@@ -53,6 +53,8 @@ export declare class GrandmasterApp {
     private terminalMode;
     private state;
     private gameEngine;
+    /** Who has cleared which mission, and how fast (core/mission-progress.ts). */
+    private missionProgress;
     private inputHandler;
     private inputManager;
     private sounds;
@@ -142,6 +144,17 @@ export declare class GrandmasterApp {
      * Show training level selector then start training game
      */
     private startTraining;
+    /**
+     * MISSION mode: pick one from the pack, play it, record a clear.
+     *
+     * The pack is JSON on disk (data/missions/starter.json) so a sysop can ship
+     * another without touching the door, and the loader refuses a pack whose
+     * objectives this engine cannot judge rather than handing the player a
+     * mission that can never end (core/mission-pack.ts).
+     */
+    private startMission;
+    /** Seconds the run that just ended lasted. */
+    private lastRunSeconds;
     /**
      * Start a game in specified mode
      */
@@ -266,6 +279,8 @@ export declare class GrandmasterApp {
     /**
      * Show high score notification
      */
+    /** A centred notice the player dismisses with any key. */
+    private showMessage;
     private showHighScoreNotification;
     /**
      * Compare two grades (-1, 0, 1)

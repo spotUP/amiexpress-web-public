@@ -31,6 +31,8 @@ import { checkTorikan } from './time-limit';
 import { devilGradeForLevel, devilFinalGrade, DEVIL_END_LEVEL } from './devil-grade';
 import { SHADOW_TIMER_FRAMES, shadowDecayRate } from './hidden';
 import { lockedByUpKey } from './up-key-lock';
+import type { LockEvent } from './mission-run';
+import { riseGarbageRow, seedGarbageRows } from './garbage';
 import {
   practiceGoalReached, practiceGoalTarget,
   type PracticeGoal,
@@ -87,6 +89,9 @@ export class GameEngine {
    * and never reach this callback.
    */
   private onItemCollectedCallback?: (itemId: number) => void;
+
+  /** See onLock(). */
+  private onLockCallback?: (event: LockEvent) => void;
 
   // Stats tracking
   private tetrisCount: number = 0;
@@ -345,6 +350,7 @@ export class GameEngine {
       rollRollPiecesRemaining: 0,
       rotateLockFrames: 0,
       hideNextFrames: 0,
+      missionModifiers: undefined,
       lrReverseFrames: 0,
       boostFrames: 0,
     };
@@ -364,6 +370,32 @@ export class GameEngine {
 
   itemsEnabled(): boolean {
     return this.itemsPreset !== null;
+  }
+
+  /**
+   * Called once per locked piece with everything a MISSION needs to judge it
+   * (core/mission-run.ts's LockEvent). The engine itself knows nothing about
+   * missions - it reports, and the run decides.
+   */
+  onLock(callback: (event: LockEvent) => void): void {
+    this.onLockCallback = callback;
+  }
+
+  /**
+   * Rules a mission switches on for its whole run. BIG, HIDE NEXT and ROLL
+   * ROLL exist as items too; a mission simply never lets them expire.
+   */
+  setMissionModifiers(modifiers: { big?: boolean; hideNext?: boolean; rollRoll?: boolean } | null): void {
+    this.state.missionModifiers = modifiers ?? undefined;
+  }
+
+  /**
+   * Fill the bottom `rows` rows with garbage before the run starts
+   * (HeborisCE's mission_erase, mission.c:226-236). Each row gets its own
+   * hole, so the stack is dug rather than merely tall.
+   */
+  seedGarbageRows(rows: number): void {
+    seedGarbageRows(this.state.board, rows);
   }
 
   /** See onItemCollectedCallback above. */
@@ -439,7 +471,9 @@ export class GameEngine {
     // Timed item effects are counted in PIECES, not frames or seconds
     // (gamestart.c:7092-7100 spends item_t once per piece and clears the
     // flag when it passes the item's own limit).
-    const big = this.state.bigPiecesRemaining > 0;
+    // A mission can make every piece BIG for its whole run; the item version
+    // is the same thing with a counter (gamestart.c's IsBigStart vs IsBig).
+    const big = this.state.missionModifiers?.big === true || this.state.bigPiecesRemaining > 0;
     if (big) this.state.bigPiecesRemaining--;
     if (this.state.rollRollPiecesRemaining > 0) this.state.rollRollPiecesRemaining--;
 
@@ -625,7 +659,7 @@ export class GameEngine {
     // versus and item mode the timing is `gametime % p_rollroll_timer == 0`
     // (ars.c:66-70), 30 frames (init.c:729).
     this.rollRollFrame++;
-    if (this.state.rollRollPiecesRemaining > 0
+    if ((this.state.rollRollPiecesRemaining > 0 || this.state.missionModifiers?.rollRoll === true)
         && this.rollRollFrame % ROLL_ROLL_PERIOD_FRAMES === 0) {
       this.rotate(1);
     }
@@ -1530,6 +1564,19 @@ export class GameEngine {
 
     // Spawn next piece (will happen after ARE delay)
     this.state.currentPiece = null;
+
+    // Report the lock. Everything a MISSION judges comes from here, which is
+    // why it is the LAST thing lockPiece does: lines are cleared, the combo
+    // and the level are settled, and the board is in the state the player
+    // will see (core/mission-run.ts).
+    this.onLockCallback?.({
+      lineCount,
+      tSpin: tSpin !== 'none',
+      allClear: isPerfectClear(this.state.board),
+      combo: this.state.combo,
+      piecesPlaced: this.state.piecesPlaced,
+      level: this.state.level,
+    });
   }
 
   /**
@@ -1616,21 +1663,7 @@ export class GameEngine {
    * Apply a line of garbage for Shirase mode
    */
   private applyShiraseGarbage(): void {
-    const board = this.state.board;
-    const holePosition = Math.floor(Math.random() * board.width);
-    
-    // Shift board up
-    for (let y = 0; y < board.height - 1; y++) {
-      board.grid[y] = board.grid[y + 1];
-    }
-    
-    // Add new garbage line
-    board.grid[board.height - 1] = Array(board.width).fill(0).map((_, x) => ({
-      filled: x !== holePosition,
-      color: null,
-      locked: true,
-    }));
-    
+    riseGarbageRow(this.state.board);
     this.sounds.playSfx('garbage');
   }
 

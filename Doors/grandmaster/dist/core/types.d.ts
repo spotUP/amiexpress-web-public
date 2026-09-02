@@ -49,7 +49,7 @@ export interface Board {
     height: number;
     grid: Cell[][];
 }
-export type GameMode = 'marathon' | 'sprint' | 'dig' | 'ultra' | 'blitz' | 'combo' | 'survival' | 'classic' | 'master' | 'death' | 'zen' | 'zone' | 'training' | 'versus' | 'cpu_battle' | 'tetrinet';
+export type GameMode = 'marathon' | 'sprint' | 'dig' | 'ultra' | 'blitz' | 'combo' | 'survival' | 'classic' | 'master' | 'death' | 'zen' | 'zone' | 'training' | 'mission' | 'versus' | 'cpu_battle' | 'tetrinet';
 export interface GameState {
     mode: GameMode;
     board: Board;
@@ -137,6 +137,17 @@ export interface GameState {
      */
     rotateLockFrames: number;
     hideNextFrames: number;
+    /**
+     * Rules a MISSION switched on for its whole run, as opposed to an item's
+     * timed version of the same thing. HeborisCE's own missions do this too -
+     * BIG, HIDE NEXT and ROLL ROLL are mission TYPES as well as items
+     * (mission_info.c's name list).
+     */
+    missionModifiers?: {
+        big?: boolean;
+        hideNext?: boolean;
+        rollRoll?: boolean;
+    };
     lrReverseFrames: number;
     boostFrames: number;
 }

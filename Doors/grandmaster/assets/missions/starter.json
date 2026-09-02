@@ -1,0 +1,37 @@
+{
+  "name": "STARTER",
+  "missions": [
+    { "id": "01", "name": "FIRST LINES",     "objective": "lines",       "norm": 5,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": {}, "hint": "Clear five lines. Any size counts." },
+    { "id": "02", "name": "TEN UP",          "objective": "lines",       "norm": 10,  "timeLimitSeconds": 120, "startLevel": 0,   "garbageRows": 0, "modifiers": {}, "hint": "Ten lines, two minutes." },
+    { "id": "03", "name": "ONE AT A TIME",   "objective": "single",      "norm": 5,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": {}, "hint": "Five clears of exactly one line." },
+    { "id": "04", "name": "TWO BY TWO",      "objective": "double",      "norm": 4,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": {}, "hint": "Four doubles. Singles do not count." },
+    { "id": "05", "name": "TRIPLE THREAT",   "objective": "triple",      "norm": 3,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": {}, "hint": "Three triples." },
+    { "id": "06", "name": "FOUR WIDE",       "objective": "tetris",      "norm": 3,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": {}, "hint": "Three tetrises. Dig the well." },
+    { "id": "07", "name": "THE FULL CYCLE",  "objective": "cycle",       "norm": 4,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": {}, "hint": "One clear of every size: 1, 2, 3 and 4." },
+    { "id": "08", "name": "DIG OUT",         "objective": "lines",       "norm": 8,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 6, "modifiers": {}, "hint": "Six rows of garbage to start. Clear eight lines." },
+    { "id": "09", "name": "CHAIN GANG",      "objective": "combo",       "norm": 4,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 4, "modifiers": {}, "hint": "Reach a four-combo. Clear on consecutive pieces." },
+    { "id": "10", "name": "SPOTLESS",        "objective": "allClear",    "norm": 1,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": {}, "hint": "Empty the whole board once." },
+
+    { "id": "11", "name": "STEADY HAND",     "objective": "pieces",      "norm": 40,  "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": {}, "hint": "Place forty pieces without topping out." },
+    { "id": "12", "name": "HOLD ON",         "objective": "survive",     "norm": 0,   "timeLimitSeconds": 60,  "startLevel": 300, "garbageRows": 0, "modifiers": {}, "hint": "Survive one minute at speed." },
+    { "id": "13", "name": "BLIND NEXT",      "objective": "lines",       "norm": 6,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": { "hideNext": true }, "hint": "Six lines with no preview." },
+    { "id": "14", "name": "FADING STACK",    "objective": "lines",       "norm": 6,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": { "hidden": "SLOW" }, "hint": "Blocks vanish after five seconds. They are still there." },
+    { "id": "15", "name": "BIG TROUBLE",     "objective": "lines",       "norm": 4,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": { "big": true }, "hint": "Every piece is BIG. Four lines." },
+    { "id": "16", "name": "SPIN CLASS",      "objective": "tspin",       "norm": 2,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": {}, "hint": "Two T-spin line clears." },
+    { "id": "17", "name": "TURNTABLE",       "objective": "lines",       "norm": 5,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": { "rollRoll": true }, "hint": "The piece turns by itself. Five lines." },
+    { "id": "18", "name": "AGAINST THE CLOCK","objective": "lines",      "norm": 20,  "timeLimitSeconds": 120, "startLevel": 0,   "garbageRows": 0, "modifiers": {}, "hint": "Twenty lines in two minutes." },
+    { "id": "19", "name": "DEEP DIG",        "objective": "lines",       "norm": 12,  "timeLimitSeconds": 180, "startLevel": 0,   "garbageRows": 10, "modifiers": {}, "hint": "Ten rows of garbage, twelve lines, three minutes." },
+    { "id": "20", "name": "CLIMB TO 100",    "objective": "level",       "norm": 100, "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": {}, "hint": "Reach level 100." },
+
+    { "id": "21", "name": "BACK TO BACK",    "objective": "b2bTetris",   "norm": 2,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": {}, "hint": "Two tetrises in a row. A smaller clear resets the count." },
+    { "id": "22", "name": "SPIN DOCTOR",     "objective": "tspinDouble", "norm": 1,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": {}, "hint": "One T-spin double." },
+    { "id": "23", "name": "FAST CYCLE",      "objective": "cycle",       "norm": 4,   "timeLimitSeconds": 150, "startLevel": 200, "garbageRows": 0, "modifiers": {}, "hint": "Every clear size, at speed, in two and a half minutes." },
+    { "id": "24", "name": "BIG BLIND",       "objective": "lines",       "norm": 4,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": { "big": true, "hideNext": true }, "hint": "BIG pieces and no preview." },
+    { "id": "25", "name": "GHOST STACK",     "objective": "lines",       "norm": 8,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 4, "modifiers": { "hidden": "FAST" }, "hint": "Blocks vanish in two and a half seconds. Eight lines." },
+    { "id": "26", "name": "ENDURANCE",       "objective": "survive",     "norm": 0,   "timeLimitSeconds": 120, "startLevel": 500, "garbageRows": 0, "modifiers": {}, "hint": "Two minutes at 20G." },
+    { "id": "27", "name": "HUNDRED PIECES",  "objective": "pieces",      "norm": 100, "timeLimitSeconds": 180, "startLevel": 200, "garbageRows": 0, "modifiers": {}, "hint": "A hundred pieces in three minutes." },
+    { "id": "28", "name": "PERFECT TWICE",   "objective": "allClear",    "norm": 2,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": {}, "hint": "Empty the board twice in one run." },
+    { "id": "29", "name": "SPIN AND VANISH", "objective": "tspin",       "norm": 3,   "timeLimitSeconds": 0,   "startLevel": 0,   "garbageRows": 0, "modifiers": { "hidden": "FASTEST" }, "hint": "Three T-spin clears with the stack disappearing." },
+    { "id": "30", "name": "THE LAST WORD",   "objective": "b2bTetris",   "norm": 3,   "timeLimitSeconds": 240, "startLevel": 300, "garbageRows": 4, "modifiers": { "hideNext": true }, "hint": "Three tetrises in a row, no preview, four minutes." }
+  ]
+}

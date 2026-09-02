@@ -81,6 +81,7 @@ class GameValidator {
             zen: 1000000,
             zone: 5000000, // Zone mode: triangular bonuses can compound highly
             training: 1000000,
+            mission: 1000000,
             tetrinet: 2000000, // TetriNET multiplayer
         };
         const maxScore = MAX_SCORES[result.mode] || 1000000;
@@ -130,6 +131,7 @@ class GameValidator {
             zen: 60000,
             zone: 60000, // Zone mode: no time limit, but minimum play time
             training: 30000,
+            mission: 30000,
             tetrinet: 30000, // TetriNET multiplayer
         };
         const minTime = MIN_TIMES[result.mode];
@@ -153,6 +155,7 @@ class GameValidator {
             zen: 3600000,
             zone: 3600000, // Zone mode: indefinite
             training: 3600000,
+            mission: 3600000,
             tetrinet: 1800000, // TetriNET multiplayer
         };
         const maxTime = MAX_TIMES[result.mode];

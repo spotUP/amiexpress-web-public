@@ -117,6 +117,7 @@ export type GameMode =
   | 'zen'
   | 'zone'          // Zone mode: fill meter, activate for massive clear bonus
   | 'training'
+  | 'mission'      // MISSION mode: one objective from a pack (core/mission-run.ts)
   | 'versus'
   | 'cpu_battle'
   | 'tetrinet';  // TetriNET mode with special blocks
@@ -233,6 +234,13 @@ export interface GameState {
    */
   rotateLockFrames: number;
   hideNextFrames: number;
+  /**
+   * Rules a MISSION switched on for its whole run, as opposed to an item's
+   * timed version of the same thing. HeborisCE's own missions do this too -
+   * BIG, HIDE NEXT and ROLL ROLL are mission TYPES as well as items
+   * (mission_info.c's name list).
+   */
+  missionModifiers?: { big?: boolean; hideNext?: boolean; rollRoll?: boolean };
   lrReverseFrames: number;
   boostFrames: number;
 }

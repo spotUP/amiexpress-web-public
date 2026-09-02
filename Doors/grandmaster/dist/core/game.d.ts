@@ -7,6 +7,7 @@ import type { GameState, GameMode, PlayerSettings, GameResult } from './types';
 import type { AttackManager } from '../network/attack-system';
 import { type Replay } from '../server/replay-manager';
 import { type Medal } from './medals';
+import type { LockEvent } from './mission-run';
 import { type PracticeGoal } from './practice-goal';
 import type { SoundEngine } from '../audio/sounds';
 import { AnimationManager } from '../effects/animations';
@@ -44,6 +45,8 @@ export declare class GameEngine {
      * and never reach this callback.
      */
     private onItemCollectedCallback?;
+    /** See onLock(). */
+    private onLockCallback?;
     private tetrisCount;
     private tSpinCount;
     private perfectClearCount;
@@ -120,6 +123,27 @@ export declare class GameEngine {
      */
     enableItems(preset?: ItemPresetName): void;
     itemsEnabled(): boolean;
+    /**
+     * Called once per locked piece with everything a MISSION needs to judge it
+     * (core/mission-run.ts's LockEvent). The engine itself knows nothing about
+     * missions - it reports, and the run decides.
+     */
+    onLock(callback: (event: LockEvent) => void): void;
+    /**
+     * Rules a mission switches on for its whole run. BIG, HIDE NEXT and ROLL
+     * ROLL exist as items too; a mission simply never lets them expire.
+     */
+    setMissionModifiers(modifiers: {
+        big?: boolean;
+        hideNext?: boolean;
+        rollRoll?: boolean;
+    } | null): void;
+    /**
+     * Fill the bottom `rows` rows with garbage before the run starts
+     * (HeborisCE's mission_erase, mission.c:226-236). Each row gets its own
+     * hole, so the stack is dug rather than merely tall.
+     */
+    seedGarbageRows(rows: number): void;
     /** See onItemCollectedCallback above. */
     onItemCollected(callback: (itemId: number) => void): void;
     /**

@@ -14,18 +14,26 @@ const line_clear_animation_1 = require("../effects/line-clear-animation");
 const connected_blocks_1 = require("../effects/connected-blocks");
 const hidden_1 = require("../core/hidden");
 const up_key_lock_1 = require("../core/up-key-lock");
+const mission_run_1 = require("../core/mission-run");
 /**
  * Main game screen
  */
 class GameScreen {
     constructor(screen, engine, input, // Null for attract mode (AI-controlled)
-    sounds, state, gamepadMapper = null) {
+    sounds, state, gamepadMapper = null, 
+    /**
+     * MISSION mode's judge. The screen owns the clock and the ending because
+     * it owns the loop; the run itself decides whether what happened counts
+     * (core/mission-run.ts).
+     */
+    missionRun = null) {
         this.screen = screen;
         this.engine = engine;
         this.input = input;
         this.sounds = sounds;
         this.state = state;
         this.gamepadMapper = gamepadMapper;
+        this.missionRun = missionRun;
         this.running = false;
         this.stoppedEarly = false; // True if stopped externally (not gameover)
         this.cleanedUp = false; // Prevent double cleanup
@@ -90,7 +98,7 @@ class GameScreen {
     async showReadyGo() {
         const state = this.engine.getState();
         // Show next queue preview during countdown
-        this.renderNext(state.hideNextFrames > 0 ? [] : state.nextQueue);
+        this.renderNext((0, mission_run_1.nextIsHidden)(state) ? [] : state.nextQueue);
         const readyBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 10,
@@ -188,8 +196,18 @@ class GameScreen {
                     this.render();
                     this.lastRender = now;
                 }
+                // MISSION: spend the clock, and stop the moment the run is decided.
+                if (this.missionRun && gameState.status === 'playing') {
+                    const elapsed = gameState.startTime ? (now - gameState.startTime) / 1000 : 0;
+                    if (this.missionRun.onTime(elapsed) !== 'playing') {
+                        this.running = false;
+                    }
+                }
                 // Check for game over or ultra completion
                 if (gameState.status === 'gameover' || gameState.status === 'complete') {
+                    if (this.missionRun && gameState.status === 'gameover') {
+                        this.missionRun.onTopOut();
+                    }
                     this.running = false;
                 }
             }, 16); // Logic at ~60 FPS
@@ -690,7 +708,7 @@ class GameScreen {
         // Update next/hold if changed
         // HIDE NEXT (item 7): draw an empty queue rather than the real one, and
         // keep lastNext in step so the preview comes back the frame it expires.
-        const hideNext = state.hideNextFrames > 0;
+        const hideNext = (0, mission_run_1.nextIsHidden)(state);
         const nextToDraw = hideNext ? [] : state.nextQueue.slice(0, 3);
         if (JSON.stringify(nextToDraw) !== JSON.stringify(this.lastNext)) {
             this.renderNext(nextToDraw);
@@ -855,6 +873,16 @@ class GameScreen {
             const color = timeLeft < 30 ? 'red' : 'yellow';
             statsContent += `\n\n  {${color}-fg}CREDIT{/${color}-fg}\n`;
             statsContent += `  {${color}-fg}${timeLeft}s{/${color}-fg}`;
+        }
+        // MISSION: what this run is for, and how far along it is. Without this
+        // the objective would live only on the select screen the player already
+        // left - the one thing a mission HUD has to say.
+        if (this.missionRun) {
+            const mission = this.missionRun.getMission();
+            const progress = this.missionRun.getProgress();
+            const colour = progress.outcome === 'cleared' ? 'green' : 'cyan';
+            statsContent += `\n\n  {${colour}-fg}${mission.name}{/${colour}-fg}\n`;
+            statsContent += `  {${colour}-fg}${this.missionRun.describe()}{/${colour}-fg}`;
         }
         this.statsBox.setContent(statsContent);
     }

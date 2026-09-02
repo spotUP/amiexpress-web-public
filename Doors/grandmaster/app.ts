@@ -69,6 +69,13 @@ import type { SoundEffect } from './audio/sounds';
 import { MultiplayerServer } from './server/multiplayer-server';
 import { showManual } from './ui/manual';
 import { showTrainingConfig } from './ui/training-config';
+import * as path from 'path';
+import { resolveDoorRoot } from '@amiexpress/bbs-door-sdk/settings';
+import { loadMissionPack } from './core/mission-pack';
+import { MissionRun } from './core/mission-run';
+import { MissionProgress } from './core/mission-progress';
+import type { MissionPack } from './core/mission-types';
+import { showMissionSelect, formatClearTime } from './ui/mission-select';
 
 // Default gamepad button mapping for GrandMaster.
 // Parse a trigger string (e.g. "button:a", "dpad:left", "axis:left-x:negative")
@@ -255,6 +262,8 @@ export class GrandmasterApp {
   private terminalMode: TerminalModeSwitch | null = null;
   private state: AppState;
   private gameEngine: GameEngine | null = null;
+  /** Who has cleared which mission, and how fast (core/mission-progress.ts). */
+  private missionProgress = new MissionProgress();
   private inputHandler: InputHandler;
   private inputManager: DoorInputManager;
   private sounds: SoundEngine;
@@ -757,6 +766,9 @@ export class GrandmasterApp {
       case 'training':
         await this.startTraining();
         break;
+      case 'mission':
+        await this.startMission();
+        break;
       case 'spectate':
         await this.showSpectate();
         break;
@@ -791,12 +803,67 @@ export class GrandmasterApp {
   }
 
   /**
+   * MISSION mode: pick one from the pack, play it, record a clear.
+   *
+   * The pack is JSON on disk (data/missions/starter.json) so a sysop can ship
+   * another without touching the door, and the loader refuses a pack whose
+   * objectives this engine cannot judge rather than handing the player a
+   * mission that can never end (core/mission-pack.ts).
+   */
+  private async startMission(): Promise<void> {
+    let pack: MissionPack;
+    try {
+      // assets/, not data/: a pack is CONTENT that ships with the door, and
+      // data/ is gitignored runtime state (the database, high scores, the
+      // mission progress record). A pack put there would never have reached
+      // the board at all.
+      pack = loadMissionPack(path.join(resolveDoorRoot(__dirname), 'assets', 'missions', 'starter.json'));
+    } catch (error) {
+      await this.showMessage('MISSIONS', `Could not load the mission pack:\n${(error as Error).message}`);
+      return;
+    }
+
+    this.inputManager.suspend();
+    const mission = await showMissionSelect(this.screen, pack, this.missionProgress, this.state.playerName);
+    this.inputManager.resume();
+    if (!mission) return;
+
+    const run = new MissionRun(mission);
+    await this.startGame('mission', mission.startLevel, null, run);
+
+    const progress = run.getProgress();
+    if (progress.outcome === 'cleared') {
+      const seconds = this.lastRunSeconds();
+      const clear = this.missionProgress.recordClear(
+        this.state.playerName, pack.name, mission.id, seconds
+      );
+      await this.showMessage(
+        'MISSION CLEAR',
+        `${mission.name}\n\n${run.describe()}\n\nBest: ${formatClearTime(clear.seconds)}`
+      );
+    } else {
+      await this.showMessage(
+        'MISSION FAILED',
+        `${mission.name}\n\n${run.describe()}\n\n${progress.failure ?? 'not finished'}`
+      );
+    }
+  }
+
+  /** Seconds the run that just ended lasted. */
+  private lastRunSeconds(): number {
+    const state = this.gameEngine?.getState();
+    if (!state?.startTime) return 0;
+    return ((state.endTime ?? Date.now()) - state.startTime) / 1000;
+  }
+
+  /**
    * Start a game in specified mode
    */
   private async startGame(
     mode: GameMode,
     startLevel: number = 0,
-    practiceGoal: PracticeGoal | null = null
+    practiceGoal: PracticeGoal | null = null,
+    missionRun: MissionRun | null = null
   ): Promise<void> {
     this.currentScreen = 'game';
     this.state.currentMode = mode;
@@ -810,6 +877,15 @@ export class GrandmasterApp {
     // PRACTICE goal (training only) - set before start(), which the game
     // screen calls, so the run knows its finish line from the first piece.
     this.gameEngine.setPracticeGoal(practiceGoal);
+
+    // MISSION: the modifiers hold for the whole run, the garbage is seeded
+    // before the first piece, and every lock is reported to the judge.
+    if (missionRun) {
+      const mission = missionRun.getMission();
+      this.gameEngine.setMissionModifiers(mission.modifiers);
+      this.gameEngine.onLock((event) => { missionRun.onLock(event); });
+      if (mission.garbageRows > 0) this.gameEngine.seedGarbageRows(mission.garbageRows);
+    }
 
     // Start replay recording
     const userId = this.session.user?.id || 'guest';
@@ -826,7 +902,8 @@ export class GrandmasterApp {
       this.inputHandler,
       this.sounds,
       this.state,
-      gamepadMapper
+      gamepadMapper,
+      missionRun
     );
 
     // Publish this game so "Watch a game" can find it.
@@ -3345,6 +3422,30 @@ export class GrandmasterApp {
   /**
    * Show high score notification
    */
+  /** A centred notice the player dismisses with any key. */
+  private async showMessage(title: string, body: string): Promise<void> {
+    const box = createBox({
+      parent: this.screen,
+      top: 'center',
+      left: 'center',
+      width: 50,
+      height: 12,
+      border: { type: 'line' },
+      style: { bg: 'black', border: { fg: 'cyan' } },
+      align: 'center',
+      valign: 'middle',
+      content: `{bold}{cyan-fg}${title}{/cyan-fg}{/bold}\n\n${body}\n\n`
+        + `{gray-fg}Press any key to continue...{/gray-fg}`,
+      fixed: true,
+      tags: true,
+    } as any);
+
+    this.screen.render();
+    await this.waitForKey();
+    box.destroy();
+    this.screen.render();
+  }
+
   private async showHighScoreNotification(rank: number, score: number): Promise<void> {
     const rankSuffix = (r: number): string => {
       if (r === 1) return 'st';

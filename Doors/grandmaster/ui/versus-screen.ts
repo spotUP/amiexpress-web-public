@@ -31,6 +31,7 @@ import { LineClearAnimationManager } from '../effects/line-clear-animation';
 import { applyEnemyItem, HARD_BLOCK_ITEM } from '../core/items';
 import { versusGoalReached, versusGoalTarget, DEFAULT_VERSUS_GOAL } from '../core/versus-goal';
 import { lockedByUpKey } from '../core/up-key-lock';
+import { nextIsHidden } from '../core/mission-run';
 
 /** Background colour used to render a TGM item cell, keyed by piece type. */
 const ITEM_CELL_COLORS: Record<string, string> = {
@@ -1347,7 +1348,7 @@ export class VersusScreen {
 
     // Render next queue
     // HIDE NEXT (item 7) - versus is where the item is thrown in the first place.
-    this.renderNextQueue(gameState.hideNextFrames > 0 ? [] : (gameState.nextQueue ?? []));
+    this.renderNextQueue(nextIsHidden(gameState) ? [] : (gameState.nextQueue ?? []));
 
     // Render hold piece
     this.renderHold(gameState);

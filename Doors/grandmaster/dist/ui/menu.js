@@ -127,6 +127,7 @@ class MenuScreen {
                     'VERSUS',
                     '{yellow-fg}TETRINET{/yellow-fg}',
                     'TRAINING',
+                    '{green-fg}MISSIONS{/green-fg}',
                     '{cyan-fg}ULTRA 2MIN{/cyan-fg}',
                     '{red-fg}DIG MODE{/red-fg}',
                     '{cyan-fg}ZONE MODE{/cyan-fg}',
@@ -217,6 +218,7 @@ class MenuScreen {
                     'versus',
                     'tetrinet',
                     'training',
+                    'mission',
                     'ultra',
                     'dig',
                     'zone',
@@ -319,6 +321,12 @@ ${p}|_____|__|__|__|__|_|___|____/|_|_|_|__|__|_____| |_| |_____|__|__|{/yellow-
                 'Practice mode.\n\n' +
                 'Learn techniques,\n' +
                 'no pressure.',
+            // MISSIONS
+            '{bold}{green-fg}MISSIONS{/green-fg}{/bold}\n\n' +
+                'Thirty objectives.\n\n' +
+                'Doubles, T-spins,\n' +
+                'BIG pieces, digs,\n' +
+                'vanishing stacks.',
             // ULTRA MODE
             '{bold}{cyan-fg}ULTRA 2MIN{/cyan-fg}{/bold}\n\n' +
                 'Score as many\n' +

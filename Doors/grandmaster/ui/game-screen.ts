@@ -27,6 +27,7 @@ import { LineClearAnimationManager } from '../effects/line-clear-animation';
 import { ConnectedBlockRenderer } from '../effects/connected-blocks';
 import { isCellHidden, countHiddenCells, shadowDecayRate } from '../core/hidden';
 import { lockedByUpKey } from '../core/up-key-lock';
+import { nextIsHidden, MissionRun } from '../core/mission-run';
 
 /**
  * Main game screen
@@ -110,7 +111,13 @@ export class GameScreen {
     private input: InputHandler | null,  // Null for attract mode (AI-controlled)
     private sounds: SoundEngine,
     private state: AppState,
-    private gamepadMapper: GamepadActionMapper<GameAction> | null = null
+    private gamepadMapper: GamepadActionMapper<GameAction> | null = null,
+    /**
+     * MISSION mode's judge. The screen owns the clock and the ending because
+     * it owns the loop; the run itself decides whether what happened counts
+     * (core/mission-run.ts).
+     */
+    private missionRun: MissionRun | null = null
   ) {
     // Initialize effect systems
     this.shaker = new ScreenShaker();
@@ -140,7 +147,7 @@ export class GameScreen {
     const state = this.engine.getState();
 
     // Show next queue preview during countdown
-    this.renderNext(state.hideNextFrames > 0 ? [] : state.nextQueue);
+    this.renderNext(nextIsHidden(state) ? [] : state.nextQueue);
 
     const readyBox = createBox({
       parent: this.screen,
@@ -252,8 +259,19 @@ export class GameScreen {
           this.lastRender = now;
         }
 
+        // MISSION: spend the clock, and stop the moment the run is decided.
+        if (this.missionRun && gameState.status === 'playing') {
+          const elapsed = gameState.startTime ? (now - gameState.startTime) / 1000 : 0;
+          if (this.missionRun.onTime(elapsed) !== 'playing') {
+            this.running = false;
+          }
+        }
+
         // Check for game over or ultra completion
         if (gameState.status === 'gameover' || gameState.status === 'complete') {
+          if (this.missionRun && gameState.status === 'gameover') {
+            this.missionRun.onTopOut();
+          }
           this.running = false;
         }
       }, 16); // Logic at ~60 FPS
@@ -789,7 +807,7 @@ export class GameScreen {
     // Update next/hold if changed
     // HIDE NEXT (item 7): draw an empty queue rather than the real one, and
     // keep lastNext in step so the preview comes back the frame it expires.
-    const hideNext = state.hideNextFrames > 0;
+    const hideNext = nextIsHidden(state);
     const nextToDraw: PieceType[] = hideNext ? [] : state.nextQueue.slice(0, 3);
     if (JSON.stringify(nextToDraw) !== JSON.stringify(this.lastNext)) {
       this.renderNext(nextToDraw);
@@ -969,6 +987,17 @@ export class GameScreen {
       const color = timeLeft < 30 ? 'red' : 'yellow';
       statsContent += `\n\n  {${color}-fg}CREDIT{/${color}-fg}\n`;
       statsContent += `  {${color}-fg}${timeLeft}s{/${color}-fg}`;
+    }
+
+    // MISSION: what this run is for, and how far along it is. Without this
+    // the objective would live only on the select screen the player already
+    // left - the one thing a mission HUD has to say.
+    if (this.missionRun) {
+      const mission = this.missionRun.getMission();
+      const progress = this.missionRun.getProgress();
+      const colour = progress.outcome === 'cleared' ? 'green' : 'cyan';
+      statsContent += `\n\n  {${colour}-fg}${mission.name}{/${colour}-fg}\n`;
+      statsContent += `  {${colour}-fg}${this.missionRun.describe()}{/${colour}-fg}`;
     }
 
     this.statsBox.setContent(statsContent);

@@ -202,6 +202,7 @@ class LeaderboardScreen {
             marathon: 'Marathon',
             versus: 'Versus Mode',
             training: 'Training Mode',
+            mission: 'Mission Mode',
             dig: 'Dig Mode',
             ultra: 'Ultra Mode',
             blitz: 'Blitz Mode',

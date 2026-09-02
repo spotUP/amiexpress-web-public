@@ -81,6 +81,12 @@ const tetrinet_board_1 = require("./core/tetrinet/tetrinet-board");
 const multiplayer_server_1 = require("./server/multiplayer-server");
 const manual_1 = require("./ui/manual");
 const training_config_1 = require("./ui/training-config");
+const path = __importStar(require("path"));
+const settings_1 = require("@amiexpress/bbs-door-sdk/settings");
+const mission_pack_1 = require("./core/mission-pack");
+const mission_run_1 = require("./core/mission-run");
+const mission_progress_1 = require("./core/mission-progress");
+const mission_select_1 = require("./ui/mission-select");
 // Default gamepad button mapping for GrandMaster.
 // Parse a trigger string (e.g. "button:a", "dpad:left", "axis:left-x:negative")
 // into a GamepadTrigger object. Returns null for unknown formats.
@@ -289,6 +295,8 @@ class GrandmasterApp {
          */
         this.terminalMode = null;
         this.gameEngine = null;
+        /** Who has cleared which mission, and how fast (core/mission-progress.ts). */
+        this.missionProgress = new mission_progress_1.MissionProgress();
         this.network = null;
         this.attackManager = null;
         this._currentScreen = 'menu';
@@ -694,6 +702,9 @@ class GrandmasterApp {
             case 'training':
                 await this.startTraining();
                 break;
+            case 'mission':
+                await this.startMission();
+                break;
             case 'spectate':
                 await this.showSpectate();
                 break;
@@ -725,9 +736,54 @@ class GrandmasterApp {
         await this.startGame('training', config.startLevel, config.goal);
     }
     /**
+     * MISSION mode: pick one from the pack, play it, record a clear.
+     *
+     * The pack is JSON on disk (data/missions/starter.json) so a sysop can ship
+     * another without touching the door, and the loader refuses a pack whose
+     * objectives this engine cannot judge rather than handing the player a
+     * mission that can never end (core/mission-pack.ts).
+     */
+    async startMission() {
+        let pack;
+        try {
+            // assets/, not data/: a pack is CONTENT that ships with the door, and
+            // data/ is gitignored runtime state (the database, high scores, the
+            // mission progress record). A pack put there would never have reached
+            // the board at all.
+            pack = (0, mission_pack_1.loadMissionPack)(path.join((0, settings_1.resolveDoorRoot)(__dirname), 'assets', 'missions', 'starter.json'));
+        }
+        catch (error) {
+            await this.showMessage('MISSIONS', `Could not load the mission pack:\n${error.message}`);
+            return;
+        }
+        this.inputManager.suspend();
+        const mission = await (0, mission_select_1.showMissionSelect)(this.screen, pack, this.missionProgress, this.state.playerName);
+        this.inputManager.resume();
+        if (!mission)
+            return;
+        const run = new mission_run_1.MissionRun(mission);
+        await this.startGame('mission', mission.startLevel, null, run);
+        const progress = run.getProgress();
+        if (progress.outcome === 'cleared') {
+            const seconds = this.lastRunSeconds();
+            const clear = this.missionProgress.recordClear(this.state.playerName, pack.name, mission.id, seconds);
+            await this.showMessage('MISSION CLEAR', `${mission.name}\n\n${run.describe()}\n\nBest: ${(0, mission_select_1.formatClearTime)(clear.seconds)}`);
+        }
+        else {
+            await this.showMessage('MISSION FAILED', `${mission.name}\n\n${run.describe()}\n\n${progress.failure ?? 'not finished'}`);
+        }
+    }
+    /** Seconds the run that just ended lasted. */
+    lastRunSeconds() {
+        const state = this.gameEngine?.getState();
+        if (!state?.startTime)
+            return 0;
+        return ((state.endTime ?? Date.now()) - state.startTime) / 1000;
+    }
+    /**
      * Start a game in specified mode
      */
-    async startGame(mode, startLevel = 0, practiceGoal = null) {
+    async startGame(mode, startLevel = 0, practiceGoal = null, missionRun = null) {
         this.currentScreen = 'game';
         this.state.currentMode = mode;
         // Disable mouse control during gameplay
@@ -737,6 +793,15 @@ class GrandmasterApp {
         // PRACTICE goal (training only) - set before start(), which the game
         // screen calls, so the run knows its finish line from the first piece.
         this.gameEngine.setPracticeGoal(practiceGoal);
+        // MISSION: the modifiers hold for the whole run, the garbage is seeded
+        // before the first piece, and every lock is reported to the judge.
+        if (missionRun) {
+            const mission = missionRun.getMission();
+            this.gameEngine.setMissionModifiers(mission.modifiers);
+            this.gameEngine.onLock((event) => { missionRun.onLock(event); });
+            if (mission.garbageRows > 0)
+                this.gameEngine.seedGarbageRows(mission.garbageRows);
+        }
         // Start replay recording
         const userId = this.session.user?.id || 'guest';
         const username = this.session.user?.username || this.state.playerName;
@@ -744,7 +809,7 @@ class GrandmasterApp {
         // Create gamepad mapper — merge user's saved bindings over the defaults
         const gamepadMapper = this.createGamepadMapper();
         // Create game screen
-        const gameScreen = new game_screen_1.GameScreen(this.screen, this.gameEngine, this.inputHandler, this.sounds, this.state, gamepadMapper);
+        const gameScreen = new game_screen_1.GameScreen(this.screen, this.gameEngine, this.inputHandler, this.sounds, this.state, gamepadMapper, missionRun);
         // Publish this game so "Watch a game" can find it.
         //
         // Only the versus lobby ever registered anything, so every solo mode was
@@ -2918,6 +2983,28 @@ class GrandmasterApp {
     /**
      * Show high score notification
      */
+    /** A centred notice the player dismisses with any key. */
+    async showMessage(title, body) {
+        const box = (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 'center',
+            left: 'center',
+            width: 50,
+            height: 12,
+            border: { type: 'line' },
+            style: { bg: 'black', border: { fg: 'cyan' } },
+            align: 'center',
+            valign: 'middle',
+            content: `{bold}{cyan-fg}${title}{/cyan-fg}{/bold}\n\n${body}\n\n`
+                + `{gray-fg}Press any key to continue...{/gray-fg}`,
+            fixed: true,
+            tags: true,
+        });
+        this.screen.render();
+        await this.waitForKey();
+        box.destroy();
+        this.screen.render();
+    }
     async showHighScoreNotification(rank, score) {
         const rankSuffix = (r) => {
             if (r === 1)

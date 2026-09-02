@@ -4,6 +4,7 @@ import type { GameEngine } from '../core/game';
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
 import type { AppState, GameAction } from '../core/types';
+import { MissionRun } from '../core/mission-run';
 /**
  * Main game screen
  */
@@ -14,6 +15,12 @@ export declare class GameScreen {
     private sounds;
     private state;
     private gamepadMapper;
+    /**
+     * MISSION mode's judge. The screen owns the clock and the ending because
+     * it owns the loop; the run itself decides whether what happened counts
+     * (core/mission-run.ts).
+     */
+    private missionRun;
     private running;
     private stoppedEarly;
     private cleanedUp;
@@ -73,7 +80,13 @@ export declare class GameScreen {
     private shineCells;
     private hardDropTrails;
     constructor(screen: Screen, engine: GameEngine, input: InputHandler | null, // Null for attract mode (AI-controlled)
-    sounds: SoundEngine, state: AppState, gamepadMapper?: GamepadActionMapper<GameAction> | null);
+    sounds: SoundEngine, state: AppState, gamepadMapper?: GamepadActionMapper<GameAction> | null, 
+    /**
+     * MISSION mode's judge. The screen owns the clock and the ending because
+     * it owns the loop; the run itself decides whether what happened counts
+     * (core/mission-run.ts).
+     */
+    missionRun?: MissionRun | null);
     /**
      * Show READY -> GO countdown before game starts.
      * Renders the next queue so the player can plan ahead.
