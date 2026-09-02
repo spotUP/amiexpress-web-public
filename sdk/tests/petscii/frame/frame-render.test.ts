@@ -52,6 +52,7 @@ describe('renderDiff', () => {
     const out = renderDiff(a, b);
     expect(out.replace(STRIP, '')).toBe('there');
     expect(out).toContain('\x1b[1;7H');
+    expect(out).toBe('\x1b[1;7H\x1b[27m\x1b[38;2;255;255;255mthere\x1b[0m' + cupTo(b.cursor));
     const c = textToFrame(['hello'], 40, 25);
     expect(renderDiff(b, c).replace(STRIP, '')).toBe(' '.repeat(5));   // 't','h','e','r','e' -> blanks; the space at column 5 was already a space
   });

@@ -10,9 +10,9 @@
  * non-blank cell. Bold and background are never emitted - the C64 has
  * neither; foreground goes out as truecolor from the VIC palette entry so
  * nearestVicForRgb() lands on the same index (the round-trip test pins it).
- * Cell.bg therefore never reaches the wire: the terminal's own background
- * IS the C64 background, and blank cells fall back to `DEFAULT_BG` in the
- * frame model without the renderer ever having to name a colour.
+ * Cell.bg therefore never reaches the wire: this renderer never emits a
+ * background SGR at all - background policy lives with the machine /
+ * transducer, not here.
  *
  * The bottom-right cell is never painted: a print there scrolls the KERNAL
  * screen (the transducer's fillRow has the same cap). Every render ends
