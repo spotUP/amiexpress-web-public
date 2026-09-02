@@ -89,6 +89,8 @@ These are the default bindings. Rebind anything in Settings.
   {yellow-fg}Right / D{/yellow-fg}          Move piece right
   {yellow-fg}Down / S{/yellow-fg}           Soft drop (faster fall)
   {yellow-fg}Up / Enter{/yellow-fg}         Hard drop (instant placement)
+  {yellow-fg}W{/yellow-fg}                  Sonic drop (fall to the floor, stay live)
+                       Under ACE-ARS this key drops AND locks.
 
 {bold}Rotation:{/bold}
   {green-fg}Z / Ctrl{/green-fg}             Rotate counter-clockwise
