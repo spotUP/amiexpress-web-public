@@ -112,6 +112,17 @@ describe('painting a screen', () => {
     expect(glyphs[0]).toMatchObject({ char: '~' });
   });
 
+  it('draws the art in Topaz, with a fallback stack behind it', () => {
+    // The board's screens were drawn on an Amiga in this face. The rest of the
+    // stack matters as much: a CP437 block Topaz has no glyph for falls back
+    // for that CHARACTER, not for the line.
+    const { ctx } = recordingContext();
+    paintScreen(ctx, createCanvas(2, 1));
+
+    expect(ctx.font).toMatch(/Topaz/);
+    expect(ctx.font).toMatch(/monospace/);
+  });
+
   it('clears the whole grid before drawing it', () => {
     const { ctx, rects } = recordingContext();
     paintScreen(ctx, createCanvas(80, 25));

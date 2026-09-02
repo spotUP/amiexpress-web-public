@@ -34,9 +34,12 @@ export function paintScreen(
   ctx.fillStyle = ansiColor(0);
   ctx.fillRect(0, 0, cols * CELL_WIDTH, rows * CELL_HEIGHT);
 
-  // The CP437 glyphs come from the same face the preview uses; the fallbacks
-  // keep a machine without it monospaced rather than proportional.
-  ctx.font = `${CELL_HEIGHT}px "IBM VGA", "Consolas", "Courier New", monospace`;
+  // Topaz first: the board's screens were drawn on an Amiga, in this face, and
+  // the editor should show the sysop what a caller sees. The rest of the stack
+  // is per-glyph fallback, which is how a CP437 block character that Topaz has
+  // no glyph for still lands - the browser falls back for that character alone,
+  // not for the line.
+  ctx.font = `${CELL_HEIGHT}px "Topaz_a1200", "IBM VGA", "Consolas", "Courier New", monospace`;
   ctx.textBaseline = 'top';
 
   for (let y = 0; y < rows; y++) {

@@ -109,7 +109,10 @@ export function ScreenEditor({ surface, mci = [], onChange, onSave, onCancel }: 
   );
 
   return (
-    <section className="space-y-3 border border-border p-3">
+    // Topaz throughout: the tools name the board's own things - characters,
+    // colours, MCI codes - and reading them in the interface face while the
+    // canvas was in Topaz made the editor feel like two programs.
+    <section className="space-y-3 border border-border p-3 font-topaz">
       <div className="flex flex-wrap items-center gap-2">
         {TOOLS.map(({ tool, label }) => (
           <button
