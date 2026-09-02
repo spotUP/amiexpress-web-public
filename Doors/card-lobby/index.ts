@@ -113,9 +113,6 @@ import {
   visibleWidth,
 } from './lib';
 import { UIManager, DialogManager, GameStateManager } from './managers';
-import {
-} from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-
 export const metadata = {
   name: 'Card Lobby',
   version: '2.0.0',

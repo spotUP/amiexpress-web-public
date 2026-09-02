@@ -100,6 +100,17 @@ jobs:
         working-directory: Doors/livechat
         run: npm install --ignore-scripts --no-audit --no-fund
 
+      # The 40-column suites load four more doors the same way. Until the
+      # type-check step above stopped failing first, jest never ran far enough
+      # to say so; the moment it did, six suites failed on "Cannot find module
+      # '@amiexpress/bbs-door-sdk/utils/terminal-mode' from
+      # Doors/doors-menu/app.ts". Same missing install, four more doors.
+      - name: Install 40-column door deps (SDK symlinks)
+        run: |
+          for door in ami-stripper doors-menu theme-picker bug-tracker; do
+            npm install --prefix "Doors/$door" --ignore-scripts --no-audit --no-fund
+          done
+
       - name: Type-check
         working-directory: web/backend
         run: npx tsc --noEmit
