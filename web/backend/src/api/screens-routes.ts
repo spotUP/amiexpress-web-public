@@ -39,6 +39,22 @@ export const screensRouter = express.Router();
  * Confinement is checked on the requested path AND on what it resolved to, so
  * a symlink cannot walk out of the board.
  */
+/**
+ * A path inside the board root, whether or not anything is there yet.
+ *
+ * resolveScreenPath() answers null for a path that does not exist, because it
+ * resolves through the Amiga filesystem's case-insensitive lookup. That is
+ * right for reading a file and wrong for naming a directory a sysop may be
+ * about to choose or create: the two questions were the same call, so "there
+ * is no Screens/Shared" was reported as "outside the board root".
+ */
+export function containedScreenPath(relativePath: string): string | null {
+  const bbsRoot = path.resolve(config.get('dataDir'));
+  const full = path.resolve(path.join(bbsRoot, relativePath));
+
+  return full === bbsRoot || full.startsWith(`${bbsRoot}${path.sep}`) ? full : null;
+}
+
 export function resolveScreenPath(relativePath: string): string | null {
   const bbsRoot = config.get('dataDir');
   const fullPath = path.join(bbsRoot, relativePath);
@@ -330,6 +346,46 @@ screensRouter.post('/upload', upload.single('file'), (req: Request, res: Respons
  * leaves the board in two states, and the sysop cannot see which node is in
  * which.
  */
+/**
+ * GET /api/screens/shared-directories
+ *
+ * Directories a node's SCREENS tooltype can point at: they exist, they hold
+ * screen files, and they belong to no single node or conference. This board's
+ * is `Screens/Node`, where 215 nodes already read from - the admin used to
+ * offer a hardcoded `Screens/Shared`, which does not exist here, and the share
+ * failed with a message about the board root.
+ */
+screensRouter.get('/shared-directories', (_req: Request, res: Response) => {
+  const baseDir = config.get('dataDir');
+  const found: { dir: string; files: number }[] = [];
+
+  const countScreens = (dir: string): number => {
+    try {
+      return fs.readdirSync(dir, { withFileTypes: true })
+        .filter(entry => entry.isFile() && isScreenFileName(entry.name))
+        .length;
+    } catch {
+      return 0;
+    }
+  };
+
+  const consider = (rel: string) => {
+    // A node's or a conference's own directory is not a shared one.
+    if (/^(Node|Conf)\d+(\/|$)/i.test(rel)) return;
+    const files = countScreens(path.join(baseDir, rel));
+    if (files > 0) found.push({ dir: rel, files });
+  };
+
+  consider('Screens');
+  try {
+    for (const entry of fs.readdirSync(path.join(baseDir, 'Screens'), { withFileTypes: true })) {
+      if (entry.isDirectory()) consider(`Screens/${entry.name}`);
+    }
+  } catch { /* a board with no Screens directory simply has none to offer */ }
+
+  return sendOk(res, { directories: found.sort((a, b) => b.files - a.files) });
+});
+
 screensRouter.post('/share', (req: Request, res: Response) => {
   const baseDir = config.get('dataDir');
   const nodes: number[] = Array.isArray(req.body?.nodes) ? req.body.nodes : [];
@@ -339,8 +395,20 @@ screensRouter.post('/share', (req: Request, res: Response) => {
   if (!nodes.length || !sharedDirRel) {
     return res.status(400).json({ success: false, error: 'nodes and sharedDir are required' });
   }
-  if (!resolveScreenPath(sharedDirRel)) {
+  // Containment and existence are different answers and the sysop needs the
+  // right one. resolveScreenPath() resolves THROUGH the Amiga filesystem, which
+  // returns null for a path that is simply not there - so asking to share
+  // `Screens/Shared` on a board that has no such directory was reported as an
+  // attempt to escape the board root. Reported live, 2026-09-02.
+  const sharedDirFull = containedScreenPath(sharedDirRel);
+  if (!sharedDirFull) {
     return res.status(400).json({ success: false, error: 'The shared directory is outside the board root' });
+  }
+  if (!fs.existsSync(sharedDirFull) || !fs.statSync(sharedDirFull).isDirectory()) {
+    return res.status(400).json({
+      success: false,
+      error: `No such directory: ${sharedDirRel}. Choose one that exists - the board reports them at /api/screens/shared-directories.`,
+    });
   }
 
   const checks = nodes.map(id => ({ id, check: checkShare(baseDir, id, sharedDirRel) }));

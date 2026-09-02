@@ -43,6 +43,14 @@ export function ScreenFilesPage() {
   const uploadInput = useRef<HTMLInputElement>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const [shareSummary, setShareSummary] = useState<ShareSummary | null>(null);
+  /**
+   * Which directory to point nodes at.
+   *
+   * This was hardcoded to `Screens/Shared`, which the live board does not have
+   * - so the action answered "The shared directory is outside the board root",
+   * which was not true either. The board reports what it has; this asks.
+   */
+  const [sharedDir, setSharedDir] = useState('');
   const [importPlan, setImportPlan] = useState<{ path: string; action: string; bytes: number }[] | null>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [editing, setEditing] = useState<EditorSurface | null>(null);
@@ -63,6 +71,13 @@ export function ScreenFilesPage() {
     queryFn: async () => (await apiClient.getScreenIndex()).data as ScreenIndexShape,
   });
 
+  const { data: sharedDirs } = useQuery({
+    queryKey: ['shared-screen-dirs'],
+    queryFn: async () => (await apiClient.getSharedScreenDirs()).data as {
+      directories: { dir: string; files: number }[];
+    },
+  });
+
   const { data: file } = useQuery({
     queryKey: ['screen-file', openFile],
     queryFn: async () => (await apiClient.getScreenFile(openFile as string)).data,
@@ -77,6 +92,11 @@ export function ScreenFilesPage() {
     // embedded browser.
     detailRef.current.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   }, [openScreen]);
+
+  useEffect(() => {
+    const first = sharedDirs?.directories?.[0]?.dir;
+    if (!sharedDir && first) setSharedDir(first);
+  }, [sharedDirs, sharedDir]);
 
   const rows = useMemo(() => (data ? toScreenRows(data) : EMPTY_ROWS), [data]);
   const visible = useMemo(() => filterScreenRows(rows, query), [rows, query]);
@@ -134,7 +154,7 @@ export function ScreenFilesPage() {
         const nodes = option.targets
           .map(t => Number(/^Node(\d+)/.exec(t)?.[1]))
           .filter(n => Number.isFinite(n));
-        await apiClient.shareScreens(nodes, 'Screens/Shared');
+        await apiClient.shareScreens(nodes, sharedDir);
       }
       const targets = option.choice === 'share-then-write' ? [openFile] : option.targets;
       await apiClient.putScreenFile(openFile, pendingUpload.bytes, targets);
@@ -159,7 +179,7 @@ export function ScreenFilesPage() {
     if (!nodes.length) return;
 
     try {
-      const res = await apiClient.shareScreens(nodes, 'Screens/Shared', true);
+      const res = await apiClient.shareScreens(nodes, sharedDir, true);
       setShareSummary(summariseShare(
         Object.fromEntries(nodes.map(id => [id, {
           ok: true, reasons: [], losing: [], gaining: [], nodeHasNoScreens: false,
@@ -181,8 +201,8 @@ export function ScreenFilesPage() {
 
   const applyShare = async (nodes: number[]) => {
     try {
-      await apiClient.shareScreens(nodes, 'Screens/Shared');
-      showSuccess(`${nodes.length} node${nodes.length === 1 ? '' : 's'} now read Screens/Shared`);
+      await apiClient.shareScreens(nodes, sharedDir);
+      showSuccess(`${nodes.length} node${nodes.length === 1 ? '' : 's'} now read ${sharedDir}`);
       setShareSummary(null);
       queryClient.invalidateQueries({ queryKey: ['screen-index'] });
     } catch (error) {
@@ -491,9 +511,28 @@ export function ScreenFilesPage() {
                 {group.paths.length} copies with identical content - they can be read from one
                 directory instead.
               </p>
-              <button className="underline" onClick={() => previewShare(group.paths)}>
-                Share from one directory
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="text-bbs-muted" htmlFor="shared-dir">Share from</label>
+                <select
+                  id="shared-dir"
+                  className="input-field"
+                  value={sharedDir}
+                  onChange={e => setSharedDir(e.target.value)}
+                >
+                  {(sharedDirs?.directories ?? []).map(option => (
+                    <option key={option.dir} value={option.dir}>
+                      {option.dir} ({option.files} screens)
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="underline"
+                  disabled={!sharedDir}
+                  onClick={() => previewShare(group.paths)}
+                >
+                  Check this directory
+                </button>
+              </div>
             </div>
           ))}
 

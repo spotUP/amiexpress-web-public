@@ -340,6 +340,11 @@ class ApiClient {
     return this.request<ApiResponse>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`, { method: 'DELETE' });
   }
 
+  /** Directories a node's SCREENS tooltype can point at, as the board reports them. */
+  async getSharedScreenDirs() {
+    return this.request<ApiResponse>(`${API_BASE}/screens/shared-directories`);
+  }
+
   async shareScreens(nodes: number[], sharedDir: string, dryRun = false) {
     return this.request<ApiResponse>(`${API_BASE}/screens/share`, {
       method: 'POST',
