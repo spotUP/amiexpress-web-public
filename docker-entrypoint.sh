@@ -791,6 +791,33 @@ EOF
         # so the U command uses the internal upload handler instead of the
         # slow UL-Logoff door wrapper.
         "$BBS_DATA_DIR/Commands/BBSCmd/U.info"
+
+        # An Amiga editor's trailing-underscore saves of logon20.txt: twelve
+        # byte-identical copies under Node2..Node13 and one at the board root.
+        # Nothing referenced the name - no screen, no .info, no code - and
+        # they differ from the live logon20.txt only by a leading ~ and a ~f
+        # between screens. Removed from git; named here so the volume, which
+        # the sync only ever ADDS to, converges too.
+        "$BBS_DATA_DIR/logon20.txt_.txt"
+        "$BBS_DATA_DIR/Node2/logon20.txt_.txt"
+        "$BBS_DATA_DIR/Node3/logon20.txt_.txt"
+        "$BBS_DATA_DIR/Node4/logon20.txt_.txt"
+        "$BBS_DATA_DIR/Node5/logon20.txt_.txt"
+        "$BBS_DATA_DIR/Node6/logon20.txt_.txt"
+        "$BBS_DATA_DIR/Node7/logon20.txt_.txt"
+        "$BBS_DATA_DIR/Node8/logon20.txt_.txt"
+        "$BBS_DATA_DIR/Node9/logon20.txt_.txt"
+        "$BBS_DATA_DIR/Node10/logon20.txt_.txt"
+        "$BBS_DATA_DIR/Node11/logon20.txt_.txt"
+        "$BBS_DATA_DIR/Node12/logon20.txt_.txt"
+        "$BBS_DATA_DIR/Node13/logon20.txt_.txt"
+
+        # 68klog.txt, a 42 MB / 992,731-line 68K emulator trace at the board
+        # root that the screen index read as drawable art - it is what froze
+        # the admin gallery. The sysop deleted it from the board by hand and
+        # it stopped being tracked in git one commit before this one; this
+        # line is what stops an older volume from keeping it.
+        "$BBS_DATA_DIR/68klog.txt"
     )
 
     # GWALL is the 68K door again.
