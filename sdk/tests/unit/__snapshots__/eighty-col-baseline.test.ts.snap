@@ -1,0 +1,88 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`80-column baseline: painted buffers centered bordered modal (modal-centring-shaped) 1`] = `
+[
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "               .------------------------------------------------.               ",
+  "               |                                                |               ",
+  "               |                                                |               ",
+  "               |                                                |               ",
+  "               |       Are you sure you want to continue?       |               ",
+  "               |                                                |               ",
+  "               |                                                |               ",
+  "               |                                                |               ",
+  "               |                                                |               ",
+  "               \`------------------------------------------------'               ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+]
+`;
+
+exports[`80-column baseline: painted buffers full-width list with selection 1`] = `
+[
+  "  Item number 1 with some descriptive text                                      ",
+  "  Item number 2 with some descriptive text                                      ",
+  "  Item number 3 with some descriptive text                                      ",
+  "> Item number 4 with some descriptive text                                      ",
+  "  Item number 5 with some descriptive text                                      ",
+  "  Item number 6 with some descriptive text                                      ",
+  "  Item number 7 with some descriptive text                                      ",
+  "  Item number 8 with some descriptive text                                      ",
+  "  Item number 9 with some descriptive text                                      ",
+  "  Item number 10 with some descriptive text                                     ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+  "                                                                                ",
+]
+`;
+
+exports[`80-column baseline: painted buffers masthead + footer + list/detail panel layout (doorman-shaped) 1`] = `
+[
+  ".------------------------------------------------------------------------------.",
+  "|                                                                              |",
+  "\`------------------------------------------------------------------------------'",
+  ".--------------------------..--------------------------------------------------.",
+  "|                          ||Detail panel content, eighty columns wide.        |",
+  "| > Alpha Door             ||                                                  |",
+  "|   Beta Door              ||                                                  |",
+  "|   Gamma Door             ||                                                  |",
+  "|   Delta Door             ||                                                  |",
+  "|                          ||                                                  |",
+  "|                          ||                                                  |",
+  "|                          ||                                                  |",
+  "|                          ||                                                  |",
+  "|                          ||                                                  |",
+  "|                          ||                                                  |",
+  "|                          ||                                                  |",
+  "|                          ||                                                  |",
+  "|                          ||                                                  |",
+  "|                          ||                                                  |",
+  "|                          ||                                                  |",
+  "\`--------------------------'\`--------------------------------------------------'",
+  ".------------------------------------------------------------------------------.",
+  "|                                                                              |",
+  "\`------------------------------------------------------------------------------'",
+]
+`;
