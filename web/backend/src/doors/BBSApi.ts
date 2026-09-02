@@ -33,6 +33,7 @@ import { deleteDoorAndRefresh } from './door-delete';
 import './ami-stripper.lib'; // ensure module is in require cache for DOORMAN
 
 import { doorScreenWidth } from '../amiga-emulation/xim/screen-width.util';
+import { wrapDoorTextForSession } from '../utils/wrap-for-session.util';
 import { getBoardConfig } from '../services/bbs-config-file.service';
 import { config as appConfig } from '../config';
 import { listOnlineNodes, type OnlineNode } from './who-is-online';
@@ -153,16 +154,27 @@ export class BBSApi {
   /**
    * Write text to user's terminal
    * Equivalent to AEDoor WriteStr() function
+   *
+   * A door's prose goes through the session wrap choke (C64/40-col plan,
+   * Task 8): on a PETSCII session a row wider than the C64's screen folds
+   * and eats the row beneath it, and fixing that per door - as Task 6 did
+   * for phreakwars and ami-stripper - is fixing it in the wrong place. The
+   * choke is identity for every ANSI caller at any width, and identity for
+   * positioned output, so a blessed door's frames are untouched byte for
+   * byte.
    */
   write(text: string): void {
-    this.socket.emit('ansi-output', text);
+    this.socket.emit('ansi-output', wrapDoorTextForSession(text, this.session));
   }
 
   /**
    * Write text with newline
+   *
+   * Through `write` so there is ONE wrap decision for a door's prose, not
+   * two that can drift apart.
    */
   writeLine(text: string): void {
-    this.socket.emit('ansi-output', text + '\r\n');
+    this.write(text + '\r\n');
   }
 
   /**

@@ -33,6 +33,7 @@
 import { printableLength, wrapLineToWidth } from '@amiexpress/bbs-door-sdk/petscii';
 import { doorOwnsTerminal } from './door-owns-terminal';
 import { positionsCursorAbsolutely } from './ascii-art.util';
+import { doorScreenWidth } from '../amiga-emulation/xim/screen-width.util';
 
 export { printableLength, wrapLineToWidth };
 
@@ -50,6 +51,41 @@ export function wrapForSession(
   const width = sessionWidth(session);
   if (width >= 80) return text;                       // 80-col: byte-identical
   if (doorOwnsTerminal(session as any)) return text;  // door paints the screen
+  return wrapPassingArt(text, width);
+}
+
+/**
+ * The same choke for a TypeScript door's own prose (`BBSApi.write` /
+ * `writeLine`) - C64/40-col plan, Task 8.
+ *
+ * Two things differ from `wrapForSession`, both because the caller here IS
+ * the door:
+ *  - the door-owned guard is deliberately absent. That guard exists to stop
+ *    the BBS painting over a door's screen; a door writing its own prose is
+ *    the case it must not swallow, and it swallowed all of it (every TS
+ *    door runs with subState DOOR_RUNNING).
+ *  - the width is `doorScreenWidth()`, the same authority
+ *    `BBSApi.getTerminalSize()` hands the door, so a PETSCII session still
+ *    carrying the stale 80 its browser xterm reported before the caller
+ *    answered `P` is wrapped at the 40 its screen actually is.
+ *
+ * Everything else is the same, and the positioned-output guard is what
+ * makes this safe for blessed doors: a screen frame carries absolute
+ * cursor motion, so it is returned untouched, byte for byte.
+ */
+export function wrapDoorTextForSession(
+  text: string,
+  session: { screenWidth?: number; petsciiMode?: boolean } | undefined
+): string {
+  if (!session) return text;
+  if (session.petsciiMode !== true) return text;      // non-C64: never wrapped, at any width
+  const width = doorScreenWidth(session, 80);
+  if (width >= 80) return text;                       // 80-col: byte-identical
+  return wrapPassingArt(text, width);
+}
+
+/** Wrap prose to `width`, passing anything that paints a screen untouched. */
+function wrapPassingArt(text: string, width: number): string {
   if (positionsCursorAbsolutely(text)) return text;   // positioned UI / art / clears / save-restore
   return text
     .split(/\r\n|\n/)
