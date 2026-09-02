@@ -76,7 +76,15 @@ export function buildTerminalBuffer(
  * Shared terminal settings for consistent appearance and behavior
  */
 export const XTERM_CONFIG = {
-  /** Default BBS font family - includes Unicode symbol fonts for braille/special chars */
+  /**
+   * Default BBS font family - includes Unicode symbol fonts for braille/special chars.
+   *
+   * NOTE: the BBS terminal no longer constructs xterm from this. The
+   * session font has one owner, utils/session-font.ts (the board default,
+   * the pre-login cache and the server preference); using mOsOul here is
+   * what made every pre-login screen - and every restored session -
+   * render in the wrong font. Kept for other consumers of XTERM_CONFIG.
+   */
   fontFamily: 'mosoul, "Segoe UI Symbol", "Apple Symbols", "DejaVu Sans", "Courier New", monospace',
 
   /** Default font size */

@@ -32,6 +32,24 @@ export {
   type FullscreenDocument,
   type FullscreenTarget,
 } from './utils/fullscreen';
+// The single owner of the BBS session font: the default, the CSS stack,
+// the line-height map, the pre-login cache and the applier.
+export {
+  DEFAULT_BBS_FONT,
+  BBS_FONTS,
+  FONT_CACHE_KEY,
+  FALLBACK_FONT_STACK,
+  fontFamilyFor,
+  lineHeightFor,
+  isBbsFont,
+  readCachedFont,
+  writeCachedFont,
+  waitForFontFace,
+  forceRemeasure,
+  applyFont,
+  type BbsFont,
+  type FontTarget,
+} from './utils/session-font';
 
 // Export true-PETSCII (C64 screen-editor emulation) components and utilities
 export { PetsciiMachine, type PetsciiMachineState } from '@amiexpress/bbs-door-sdk/petscii';

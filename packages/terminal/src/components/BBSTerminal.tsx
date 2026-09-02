@@ -7,6 +7,13 @@ import { io, Socket } from 'socket.io-client';
 import { reconnectPolicy, shouldReconnectNow } from '../utils/reconnect-policy';
 import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
+import {
+  DEFAULT_BBS_FONT,
+  applyFont,
+  fontFamilyFor,
+  lineHeightFor,
+  readCachedFont,
+} from '../utils/session-font';
 import { getZmodem } from '../utils/zmodem';
 import { MediaHandler } from '../utils/media-handler';
 import { ModemEmulator } from '../utils/modem-emulator';
@@ -233,7 +240,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const guruTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const guruPhaseRef = useRef<number>(0);
   const guruStaticRendered = useRef<boolean>(false);
-  const normalFont = useRef<string>('TopazPlus_a1200, "Courier New", monospace');
   const transferState = useRef<{ direction: 'upload' | 'download' | null; paths?: string[] }>({
     direction: null,
     paths: [],
@@ -766,10 +772,18 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Initialize xterm.js terminal for BBS connection
     // Start with standard BBS size (80x25), FitAddon will adjust based on mode
+    // The session font is owned by utils/session-font.ts. Open in the font
+    // this browser last saw the board use, falling back to the board
+    // default - NOT XTERM_CONFIG.fontFamily (mOsOul), which is what made
+    // every pre-login screen render in the wrong font while Topaz only
+    // arrived after login-success -> get-font-preference. The server
+    // preference still wins the moment it answers; this covers the window
+    // before it can.
+    const initialFont = readCachedFont() ?? DEFAULT_BBS_FONT;
     const term = new Terminal({
-      fontFamily: XTERM_CONFIG.fontFamily,
+      fontFamily: fontFamilyFor(initialFont),
       fontSize: fontSize,
-      lineHeight: XTERM_CONFIG.lineHeight,
+      lineHeight: lineHeightFor(initialFont),
       theme: XTERM_CONFIG.theme,
       ...XTERM_CONFIG.options,
       convertEol: false,
@@ -798,6 +812,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     term.open(el);
     el.addEventListener = _origAddEvent; // restore immediately after open()
     terminalInstance.current = term;
+
+    // "The font is correct after loading the site two times" (sysop,
+    // 2026-09-02). On a cold load the .ttf has not arrived by the time
+    // open() measures the cell, so xterm holds the FALLBACK's metrics for
+    // the whole session. applyFont awaits the face and then forces the
+    // re-measure; on a warm load the promise is already resolved.
+    void applyFont(term, initialFont, fontSizeRef.current);
 
     // When keepFocused is set, auto-refocus whenever the terminal loses focus.
     // Cooldown prevents a blur→focus→blur infinite loop on iOS.
@@ -2114,8 +2135,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         }
       }
 
-      const currentFont = term.options.fontFamily;
-
       // Strip mouse enable sequences when user has toggled mouse tracking off
       // This prevents blessed screen.render() from re-enabling mouse capture
       let output = data;
@@ -2377,6 +2396,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       });
 
       writeTerm('\r\n\x1b[32m[Session Restored] Welcome back!\x1b[0m\r\n');
+      // A restored session is a logged-in session: pull the saved font the
+      // same way login-success does. Without this the restore ran the whole
+      // session in whatever font the terminal was constructed with.
+      socket.emit('get-font-preference');
       focusSurface();
     });
 
@@ -2707,52 +2730,24 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.on('set-font', (fontName: string) => {
       console.log('[Font] Received set-font event:', fontName);
-      // Amiga bitmap fonts render gapless at 1.0 — pipe / box-drawing
-      // chars are designed to connect vertically across rows. Any value
-      // above 1.0 inserts a visible gap that breaks the ASCII art.
-      // Unknown fonts fall back to 1.0 too; the BBS catalog only ships
-      // bitmap fonts in this picker.
-      const lineHeightMap: Record<string, number> = {
-        'mosoul': 1.0, 'MicroKnight': 1.0, 'MicroKnightPlus': 1.0,
-        'P0T-NOoDLE': 1.0, 'Topaz_a500': 1.0, 'Topaz_a1200': 1.0,
-        'TopazPlus_a500': 1.0, 'TopazPlus_a1200': 1.0,
-      };
-      const requestedFontFamily = `${fontName}, "Courier New", monospace`;
-      const requestedLineHeight = lineHeightMap[fontName] ?? 1.0;
-      // Use calibrated size (fontSizeRef) — never override with hardcoded 16 on mobile
-      const size = fontSizeRef.current;
-      // xterm never shows a PETSCII session any more (the canvas does), so
-      // there is nothing to guard here: apply the pick straight to xterm.
-      term.options.fontFamily = requestedFontFamily;
-      term.options.fontSize = size;
-      term.options.lineHeight = requestedLineHeight;
-      normalFont.current = requestedFontFamily;
-      console.log('[Font] Applied font:', fontName, 'size:', size, 'lineHeight:', requestedLineHeight);
+      // One owner: utils/session-font.ts holds the stack, the line-height
+      // map and the cache. xterm never shows a PETSCII session any more
+      // (the canvas does), so the pick goes straight to xterm. The
+      // calibrated size (fontSizeRef) is passed through — never the
+      // hardcoded desktop 16 on mobile.
+      void applyFont(term, fontName, fontSizeRef.current);
     });
 
     // Handle font preference loaded from database on login
     socket.on('font-preference', (data: { font: string }) => {
       console.log('[Font Preference] Received saved preference:', data.font);
-      // See set-font handler above — bitmap fonts render gapless at 1.0.
-      const lineHeightMap: Record<string, number> = {
-        'mosoul': 1.0, 'MicroKnight': 1.0, 'MicroKnightPlus': 1.0,
-        'P0T-NOoDLE': 1.0, 'Topaz_a500': 1.0, 'Topaz_a1200': 1.0,
-        'TopazPlus_a500': 1.0, 'TopazPlus_a1200': 1.0,
-      };
-      const fontName = data.font;
-      const requestedFontFamily = `${fontName}, "Courier New", monospace`;
-      const requestedLineHeight = lineHeightMap[fontName] ?? 1.0;
-      // Use calibrated size (fontSizeRef) — never override with hardcoded 16 on mobile
-      const size = fontSizeRef.current;
-      // login-success requests this the instant login completes. It applies
-      // to xterm only - a 'P' session renders on the PetsciiCanvas, whose
-      // glyphs come from the character-ROM atlas, not from a CSS font - so
-      // a saved Amiga font can no longer clobber a C64 session's look.
-      term.options.fontFamily = requestedFontFamily;
-      term.options.fontSize = size;
-      term.options.lineHeight = requestedLineHeight;
-      normalFont.current = requestedFontFamily;
-      console.log('[Font Preference] Applied saved font:', fontName, 'size:', size, 'lineHeight:', requestedLineHeight);
+      // The server preference is the owner of the session font; this
+      // arrives after login-success AND after session-restored (both emit
+      // get-font-preference). It applies to xterm only - a 'P' session
+      // renders on the PetsciiCanvas, whose glyphs come from the
+      // character-ROM atlas, not from a CSS font - so a saved Amiga font
+      // can no longer clobber a C64 session's look.
+      void applyFont(term, data.font, fontSizeRef.current);
     });
 
     // Login state machine context (utils/login-key-machine.ts). The echo
