@@ -55,7 +55,17 @@
   justify-content: center;
 }
 
-.terminal-page__frame {
+/*
+ * The host is always in the tree (see TerminalPage.tsx): unframed it has no
+ * box of its own, so a handheld or canvas session lays out exactly as a
+ * direct child of the page would.
+ */
+.terminal-page__host {
+  display: contents;
+}
+
+.terminal-page__host.terminal-page__frame {
+  display: block;
   width: fit-content;
   height: fit-content;
   max-width: 100%;

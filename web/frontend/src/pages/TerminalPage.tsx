@@ -408,7 +408,13 @@ export function TerminalPage(): JSX.Element {
     <div
       className={`terminal-page${showOnscreenInput ? ' terminal-page--with-input' : ''}${showFrame ? ' terminal-page--framed' : ''}`}
     >
-      {showFrame ? <div className="terminal-page__frame">{terminal}</div> : terminal}
+      {/* ONE host element for the life of the page. The frame is a class,
+          never a structural wrapper: moving BBSTerminal between parents
+          remounts it, and its mount effect owns the socket - the P answer
+          (surface -> canvas) took the whole board down that way. */}
+      <div className={`terminal-page__host${showFrame ? ' terminal-page__frame' : ''}`}>
+        {terminal}
+      </div>
       {showOnscreenInput && (
         gameControls === null
           ? <MobileBBSKeyboard onKey={handleKey} />

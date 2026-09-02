@@ -22,11 +22,13 @@ const harness = vi.hoisted(() => ({
   releaseGameKey: vi.fn(),
   injectInput: vi.fn(),
   sendMouse: vi.fn(),
+  mounts: 0,
 }));
 
 vi.mock('@amiexpress/terminal', () => ({
   BBSTerminal: React.forwardRef((props: Record<string, any>, ref: React.Ref<unknown>) => {
     harness.props = props;
+    React.useEffect(() => { harness.mounts += 1; }, []);
     React.useImperativeHandle(ref, () => ({
       focus: () => undefined,
       sendCommand: () => undefined,
@@ -334,6 +336,40 @@ describe('TerminalPage desktop 80x25 framing', () => {
     });
 
     expect(document.querySelector('.terminal-page__frame')).toBeNull();
+  });
+});
+
+describe('TerminalPage keeps ONE terminal for the life of the session', () => {
+  // The socket lives in BBSTerminal's mount effect; a remount disconnects it
+  // and the board starts over. On 2026-09-02 the P answer did exactly that
+  // on the live board: the surface flip removed the frame wrapper, which
+  // moved the terminal to a different parent, and React remounted it.
+  it('the P answer (surface -> canvas) does not remount the terminal', () => {
+    setDesktopViewport();
+    harness.mounts = 0;
+    render(<TerminalPage />);
+    const before = screen.getByTestId('bbs-terminal');
+    expect(harness.mounts).toBe(1);
+
+    setSurface('canvas');
+
+    expect(harness.mounts).toBe(1);
+    expect(screen.getByTestId('bbs-terminal')).toBe(before);
+  });
+
+  it('a desktop session dropping to handheld sizing does not remount the terminal', () => {
+    setDesktopViewport();
+    harness.mounts = 0;
+    render(<TerminalPage />);
+    const before = screen.getByTestId('bbs-terminal');
+
+    act(() => {
+      setPhoneViewport();
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    expect(harness.mounts).toBe(1);
+    expect(screen.getByTestId('bbs-terminal')).toBe(before);
   });
 });
 
