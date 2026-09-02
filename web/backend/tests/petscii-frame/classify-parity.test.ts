@@ -27,6 +27,11 @@ const TABLE: string[] = [
   '-============================================================================-',
   'files   browse a door\'s own files on disk',
   '\x1b[9;3Hfiles       browse', '\x1b[0;37;40mplain coloured text', '\x1b[1;33mBOLD YELLOW\x1b[0m',
+  // Cursor control beyond CUP/SGR: erase line/display and save/restore. The
+  // widening of positionsCursorAbsolutely to J/K/s/u (Task 10) was unpinned
+  // here - the TABLE carried no line using any of them, so one copy could
+  // drop a letter and parity stayed green.
+  '\x1b[Kerased tail', '\x1b[2Jcleared', '\x1b[ssaved', '\x1b[urestored',
   // Reaches the artChars>=8 branch specifically (8 dashes, (letters+digits)/
   // length = 9/17 ~= 0.53): clears punctuationRatio>=0.6 (0.47<0.6) and the
   // dead-by-construction symbolCount>=3&&ratio<0.4 branch (0.53 is not <0.4).

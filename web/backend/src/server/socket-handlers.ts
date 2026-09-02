@@ -50,6 +50,7 @@ import { emitUserLogout } from '../services/bbs-event-emitter';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getSystemTime } from '../utils/date-time.util';
+import { applyClientReportedGeometry } from '../amiga-emulation/xim/screen-width.util';
 
 const DISCONNECT_GRACE_MS = 15000;
 
@@ -211,11 +212,19 @@ console.error(`[CONNECT ERROR] Socket ${socket.id} connect error:`, error.messag
     if (!session) return;
 
     const { cols, rows } = size;
-console.log(`[TERMINAL] Resize to ${cols}x${rows} for socket ${socket.id}`);
 
-    // Update session terminal dimensions
-    session.screenWidth = cols;
-    session.screenHeight = rows;
+    // A PETSCII caller is 40x25 by definition. The frontend emits
+    // terminal-size {80,25} as soon as a door asks for terminal-mode
+    // 'fixed', which used to clobber a C64 session's 40 and leave
+    // wrapForSession (identity at >=80) fighting doorScreenWidth (still 40).
+    // applyClientReportedGeometry is the single gate; a false return means
+    // the session keeps its geometry and no door hears a resize it did not
+    // have.
+    if (!applyClientReportedGeometry(session, cols, rows)) {
+console.log(`[TERMINAL] Ignoring client size ${cols}x${rows} for socket ${socket.id}: PETSCII session stays 40x25`);
+      return;
+    }
+console.log(`[TERMINAL] Resize to ${cols}x${rows} for socket ${socket.id}`);
 
     // Also update tempData for doors
     if (!session.tempData) {

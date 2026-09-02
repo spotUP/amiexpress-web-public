@@ -1052,6 +1052,7 @@ setNewUserDependencies({
 import { registerHttpRoutes } from "./server/routes-setup";
 import { getSystemTime } from './utils/date-time.util';
 import { getBoardConfig } from './services/bbs-config-file.service';
+import { applyClientReportedGeometry } from './amiga-emulation/xim/screen-width.util';
 
 // ===== HTTP Routes (now in server/routes-setup.ts) =====
 // Routes registered in startup section below
@@ -1269,8 +1270,16 @@ console.log(
   // Handle window size changes (NAWS)
   connection.on("window-size", (width: number, height: number) => {
     if (connection.session) {
-      connection.session.screenWidth = width;
-      connection.session.screenHeight = height;
+      // A C64 client can announce 80 columns over NAWS; a PETSCII session's
+      // geometry is 40x25 by definition and never takes a reported size.
+      // applyClientReportedGeometry is the single gate (shared with
+      // socket-handlers.ts terminal-size).
+      if (!applyClientReportedGeometry(connection.session, width, height)) {
+console.log(
+          `[${type.toUpperCase()}] Ignoring NAWS ${width}x${height}: PETSCII session stays 40x25`
+        );
+        return;
+      }
 
       // Fallback detection: If terminal type not yet determined, use screen size
       if (
