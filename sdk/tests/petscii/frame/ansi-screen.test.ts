@@ -80,6 +80,20 @@ describe('FrameReconstructor deferred wrap (xterm semantics, not the KERNAL)', (
     expect(f.cursor).toEqual({ x: 20, y: 1 });
   });
 
+  it('CR settles the pending wrap: the next printable lands at column 0 of the SAME row', () => {
+    const { f } = run('a'.repeat(80) + '\rX');
+    expect(at(f, 0, 0).ch).toBe('X');
+    expect(at(f, 0, 1).ch).toBe(' ');
+    expect(f.cursor).toEqual({ x: 1, y: 0 });
+  });
+
+  it('backspace settles the pending wrap and steps off column 79', () => {
+    const { f } = run('a'.repeat(80) + '\bZ');
+    expect(at(f, 78, 0).ch).toBe('Z');
+    expect(at(f, 79, 0).ch).toBe('a');
+    expect(at(f, 0, 1).ch).toBe(' ');
+  });
+
   it('any cursor movement settles the pending wrap', () => {
     const { r } = run('a'.repeat(80));
     r.write('\x1b[DZ');
@@ -103,6 +117,7 @@ describe('FrameReconstructor scrolling', () => {
     const { f } = run('\x1b[25;1H' + 'w'.repeat(81));
     expect(text(f, 23)).toBe('w'.repeat(80));
     expect(text(f, 24)).toBe('w');
+    expect(f.cursor).toEqual({ x: 1, y: 24 });
   });
 });
 
@@ -157,11 +172,44 @@ describe('FrameReconstructor snapshots', () => {
     expect(r.dirtyRows().length).toBe(25);
   });
 
+  it('a fresh reconstructor has no dirty rows; a mid-stream RIS dirties every row', () => {
+    expect(new FrameReconstructor().dirtyRows()).toEqual([]);
+    const r = new FrameReconstructor();
+    r.write('hi');
+    r.snapshot();
+    r.write('\x1bc');
+    expect(r.dirtyRows().length).toBe(25);
+  });
+
   it('reset returns to the power-on frame', () => {
     const r = new FrameReconstructor();
     r.write('\x1b[3;3Hzz');
     r.reset();
     expect(text(r.snapshot(), 2)).toBe('');
     expect(r.cursor).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe('FrameReconstructor CSI edge cases', () => {
+  it('a relative move with an explicit 0 parameter moves one cell (xterm treats 0 as 1)', () => {
+    expect(run('\x1b[10;10H\x1b[0A').f.cursor).toEqual({ x: 9, y: 8 });
+    expect(run('\x1b[10;10H\x1b[0B').f.cursor).toEqual({ x: 9, y: 10 });
+    expect(run('\x1b[10;10H\x1b[0C').f.cursor).toEqual({ x: 10, y: 9 });
+    expect(run('\x1b[10;10H\x1b[0D').f.cursor).toEqual({ x: 8, y: 9 });
+    expect(run('\x1b[10;10H\x1b[0E').f.cursor).toEqual({ x: 0, y: 10 });
+    expect(run('\x1b[10;10H\x1b[0F').f.cursor).toEqual({ x: 0, y: 8 });
+  });
+
+  it('a private-prefix CSI (< = > ?) is swallowed and never reaches SGR', () => {
+    expect(at(run('\x1b[31m\x1b[>4;2mX').f, 0, 0).fg).toBe(2);
+    expect(at(run('\x1b[31m\x1b[<0;0;0mX').f, 0, 0).fg).toBe(2);
+    expect(at(run('\x1b[31m\x1b[=0mX').f, 0, 0).fg).toBe(2);
+    expect(at(run('\x1b[31m\x1b[?7mX').f, 0, 0).fg).toBe(2);
+  });
+
+  it('an unterminated CSI is dropped at the same runaway cap as a string sequence', () => {
+    const { r } = run('\x1b[' + '1;'.repeat(200));
+    r.write('W');
+    expect(text(r.snapshot(), 0)).toBe('W');
   });
 });

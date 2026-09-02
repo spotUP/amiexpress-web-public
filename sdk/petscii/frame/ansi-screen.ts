@@ -105,6 +105,12 @@ export class FrameReconstructor {
       if (ch === '\n') { this.newline(); i++; continue; }
       if (code === 0x08) { if (this.x > 0) this.x--; this.pendingWrap = false; i++; continue; }
       if (ch === '\t') { this.pendingWrap = false; this.x = Math.min(this.cols - 1, (Math.floor(this.x / 8) + 1) * 8); i++; continue; }
+      // DEL (0x7F) is ignored here, as xterm ignores it. This is a deliberate
+      // divergence from AnsiToPetsciiTransducer, which folds DEL into backspace
+      // (it emits cursor-left for 0x08 and 0x7F alike) because Amiga CON: sends
+      // DEL for the key. The reconstructor models the wire, not the keyboard:
+      // a door that prints DEL means "nothing", and treating it as a move would
+      // shift a whole row of a frame that xterm would have left alone.
       if (code < 0x20 || code === 0x7F) { i++; continue; }
       this.put(String.fromCodePoint(code));
       i += code > 0xFFFF ? 2 : 1;
@@ -185,7 +191,10 @@ export class FrameReconstructor {
       let j = i + 2;
       let params = '';
       while (j < s.length && s.charCodeAt(j) >= 0x20 && s.charCodeAt(j) <= 0x3F) params += s[j++];
-      if (j >= s.length) return 0;
+      // No final byte yet: hold the tail for the next write(), unless the run of
+      // parameter bytes has grown past the same runaway cap the string sequences
+      // use - a CSI that lost its final is dropped, not buffered for ever.
+      if (j >= s.length) return s.length - i > STRING_SEQUENCE_MAX ? s.length - i : 0;
       this.csi(params, s[j]);
       return j - i + 1;
     }
@@ -209,10 +218,17 @@ export class FrameReconstructor {
   }
 
   private csi(params: string, final: string): void {
-    const isPrivate = params.startsWith('?');
+    // A private-parameter prefix ('?', and the '<' '=' '>' xterm uses for
+    // DECRQM / modifyOtherKeys / secondary DA) makes the whole sequence
+    // private: 'ESC[>4;2m' is not an SGR and must never reach sgr().
+    const prefix = /^[<=>?]/.test(params) ? params[0] : '';
+    const isPrivate = prefix !== '';
     const nums = (isPrivate ? params.slice(1) : params).split(';').map((p) => (p === '' ? NaN : parseInt(p, 10)));
     const n = (idx: number, dflt: number) => (Number.isNaN(nums[idx]) || nums[idx] === undefined ? dflt : nums[idx]);
+    /** Relative-move parameter: xterm reads an explicit 0 as 1, so 'ESC[0A' still moves a row. */
+    const step = (idx: number) => Math.max(1, n(idx, 1));
     if (isPrivate) {
+      if (prefix !== '?') return; // '<' '=' '>': terminal queries and key-modifier modes, nothing to model
       // ?47 / ?1049 alternate screen: blessed repaints a full frame on entry and the BBS repaints
       // on exit - a clear + home is the honest model (same call the transducer makes).
       if ((n(0, 0) === 47 || n(0, 0) === 1049) && (final === 'h' || final === 'l')) { this.clear(); this.moveTo(0, 0); }
@@ -220,12 +236,12 @@ export class FrameReconstructor {
     }
     switch (final) {
       case 'm': return this.sgr(nums.map((v) => (Number.isNaN(v) ? 0 : v)));
-      case 'A': return this.moveTo(this.x, this.y - n(0, 1));
-      case 'B': return this.moveTo(this.x, this.y + n(0, 1));
-      case 'C': return this.moveTo(this.x + n(0, 1), this.y);
-      case 'D': return this.moveTo(this.x - n(0, 1), this.y);
-      case 'E': return this.moveTo(0, this.y + n(0, 1));
-      case 'F': return this.moveTo(0, this.y - n(0, 1));
+      case 'A': return this.moveTo(this.x, this.y - step(0));
+      case 'B': return this.moveTo(this.x, this.y + step(0));
+      case 'C': return this.moveTo(this.x + step(0), this.y);
+      case 'D': return this.moveTo(this.x - step(0), this.y);
+      case 'E': return this.moveTo(0, this.y + step(0));
+      case 'F': return this.moveTo(0, this.y - step(0));
       case 'G': return this.moveTo(n(0, 1) - 1, this.y);
       case 'd': return this.moveTo(this.x, n(0, 1) - 1);
       case 'H': case 'f': return this.moveTo(n(1, 1) - 1, n(0, 1) - 1);
@@ -238,12 +254,83 @@ export class FrameReconstructor {
     }
   }
 
-  // Task 3 fills these four in; the skeleton keeps Task 2's tests honest about
-  // dispatch. Until then `palette`, `fillRow()` and the three transducer colour
-  // helpers imported above are the pieces those bodies are waiting for - they are
-  // the reason the imports exist, not leftovers.
-  private sgr(codes: number[]): void { void codes; void this.palette; void sgrColorToVic; void nearestVicForRgb; void xterm256ToRgb; }
-  private eraseDisplay(mode: number): void { void mode; void this.fillRow; }
-  private eraseLine(mode: number): void { void mode; }
-  private eraseChars(count: number): void { void count; }
+  // ---- attributes ------------------------------------------------------
+
+  /**
+   * SGR resolved into VIC indices with the transducer's own tables, so a cell's
+   * `fg` is the colour the transducer would have picked from the same bytes.
+   * Structure mirrors AnsiToPetsciiTransducer.sgr() line for line; the one
+   * addition is that a background lands in `bg` instead of being dropped (the
+   * C64 has a single background, but the adapter's rule ladder reads it).
+   */
+  private sgr(codes: number[]): void {
+    let p = 0;
+    while (p < codes.length) {
+      const c = codes[p];
+      if (c === 0) { this.attrs = { fg: DEFAULT_FG, bg: DEFAULT_BG, bold: false, rvs: false }; p++; continue; }
+      if (c === 1) { this.attrs.bold = true; p++; continue; }
+      if (c === 22) { this.attrs.bold = false; p++; continue; }
+      if (c === 7) { this.attrs.rvs = true; p++; continue; }
+      if (c === 27) { this.attrs.rvs = false; p++; continue; }
+      if (c === 38 || c === 48) {
+        const mode = codes[p + 1];
+        let rgb: [number, number, number] | null = null;
+        if (mode === 2 && p + 4 < codes.length) rgb = [codes[p + 2], codes[p + 3], codes[p + 4]];
+        else if (mode === 5 && p + 2 < codes.length) rgb = xterm256ToRgb(codes[p + 2], this.palette);
+        // Truncated extended colour ('38;2;255;0m'): everything left in this SGR
+        // belongs to it, so a trailing '0' is a colour component, never a reset.
+        if (!rgb) break;
+        const vic = nearestVicForRgb(rgb[0], rgb[1], rgb[2], this.palette);
+        if (c === 38) this.attrs.fg = vic; else this.attrs.bg = vic;
+        p += mode === 2 ? 5 : 3;
+        continue;
+      }
+      if (c === 49) { this.attrs.bg = DEFAULT_BG; p++; continue; }
+      if ((c >= 40 && c <= 47) || (c >= 100 && c <= 107)) {
+        // Same table as the foreground, shifted by 10 (40 -> 30, 100 -> 90).
+        const vic = sgrColorToVic(c - 10, this.attrs.bold);
+        if (vic !== null) this.attrs.bg = vic;
+        p++;
+        continue;
+      }
+      const vic = sgrColorToVic(c, this.attrs.bold);
+      if (vic !== null) this.attrs.fg = vic;
+      p++; // 2/3/4/5/24/25 ...: nothing to model
+    }
+  }
+
+  // ---- erase -----------------------------------------------------------
+  //
+  // Erased cells go back to the power-on attributes (white on blue, no bold,
+  // no reverse), not to the current pen: the frame is compared cell by cell
+  // downstream, and a blank that carries a pen would diff against a blank that
+  // does not. None of the three moves the cursor; all three settle a pending
+  // wrap, so the next printable lands in the column just erased.
+
+  /** ED: 0 = cursor to end of screen, 1 = top through cursor, 2/3 = everything. */
+  private eraseDisplay(mode: number): void {
+    this.pendingWrap = false;
+    if (mode === 2 || mode === 3) return this.clear();
+    if (mode === 1) {
+      for (let r = 0; r < this.y; r++) this.fillRow(r, 0, this.cols - 1);
+      this.fillRow(this.y, 0, this.x);
+      return;
+    }
+    this.fillRow(this.y, this.x, this.cols - 1);
+    for (let r = this.y + 1; r < this.rows; r++) this.fillRow(r, 0, this.cols - 1);
+  }
+
+  /** EL: 0 = cursor to end of row, 1 = start through cursor, 2 = whole row. */
+  private eraseLine(mode: number): void {
+    this.pendingWrap = false;
+    if (mode === 1) this.fillRow(this.y, 0, this.x);
+    else if (mode === 2) this.fillRow(this.y, 0, this.cols - 1);
+    else this.fillRow(this.y, this.x, this.cols - 1);
+  }
+
+  /** ECH: blank `count` cells from the cursor. */
+  private eraseChars(count: number): void {
+    this.pendingWrap = false;
+    this.fillRow(this.y, this.x, this.x + Math.max(1, count) - 1);
+  }
 }
