@@ -47,9 +47,11 @@ import { createBBSApi } from '../../src/doors/BBSApi';
 import { createDoorSocketWrapper } from '../../src/handlers/door.handler';
 import { buildConnectionEmitter } from '../../src/server/connection-emitter';
 
-// Only the two handlers under test are stubbed. The rest of the module has to
-// stay real: `src/index.ts` wires `setGroupChatDependencies` at import time,
-// and a bare factory would blank it and break the whole suite's boot.
+// A PARTIAL mock: only the two handlers these tests drive are stubbed, so their
+// bodies cannot run. Every other export stays real through `jest.requireActual`,
+// because the code under test reaches into the same module for the rest -
+// `BBSApi.ts:1275` requires `handleRoomLeave` and `:1289` `handleRoomMessage` -
+// and a bare factory would leave those undefined.
 jest.mock('../../src/handlers/chat/group-chat.handler', () => ({
   ...jest.requireActual('../../src/handlers/chat/group-chat.handler'),
   handleRoomJoin: jest.fn(async () => undefined),

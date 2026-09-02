@@ -44,6 +44,15 @@
  * `command.handler.ts` imports statically. The screen handler, the BBSApi, the
  * socket registrar and the connection emitter are all REAL - they are what is
  * under test.
+ *
+ * One note on what the stack pinned here contains: `registerSocketHandlers`
+ * installs the debug MCP `OutputTap` wrapper on `socket.emit` whenever
+ * `NODE_ENV !== 'production'` (`server/socket-handlers.ts:143`), and jest sets
+ * NODE_ENV to 'test', so that wrapper IS in the chain these tests measure
+ * through. It is transparent - it tees the string and calls the original emit -
+ * and production simply does not have it. The pinned stack is therefore a
+ * SUPERSET of production's: bytes identical here means bytes identical there,
+ * with one fewer transparent layer.
  */
 process.env.SKIP_DB_INIT = '1';
 

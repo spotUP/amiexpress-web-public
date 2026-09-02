@@ -6,7 +6,8 @@
  * The naive story - "the connect screen and the graphics prompt are transduced
  * into the model after the DEL-probe stamps c64" - is wrong, and a test built
  * on it would stage an order production never produces: the stamp
- * (`src/index.ts`, gated on terminalType being absent or 'unknown') happens on
+ * (`src/index.ts:1187`, gated at `:1178-1185` on a pre-login state with
+ * terminalType absent or 'unknown') happens on
  * a dispatch whose screens were emitted while it still WAS, and the dispatch
  * that follows takes a c64 branch with no emit in between
  * (`handlers/command.handler.ts`'s own comment says exactly this).
@@ -27,6 +28,16 @@
  * The model state is sampled ABOVE the choke, immediately BEFORE each emit is
  * transduced, which is what "the model at the flip" means: the cursor the
  * first post-flip byte is encoded against.
+ *
+ * ONE pairing here is a HARNESS, not production. Test 1 drains its poisoned
+ * chunk through the WEB choke (`installPetsciiModelChoke` on a socket.io
+ * socket) while stamping terminalType the way the DEL probe does. In
+ * production the DEL probe is a TELNET/SSH path - `src/index.ts:1187` sits in
+ * the telnet data handler - so the byte it classifies is paired with the
+ * telnet emitter's choke (`server/connection-emitter.ts`), never with a
+ * socket.io socket. The choke under test is the same code either way and the
+ * drain window is the real one; only the transport carrying it is the
+ * convenient one to drive.
  *
  * Mock harness copied from `tests/handlers/c64-connect-probe.test.ts`, the
  * suite that already drives this dispatcher safely (command.handler.ts has

@@ -254,10 +254,11 @@ describe('structural MCI tokens in a PETSCII .seq (Task 7)', () => {
     // the flavour only decides how the text AROUND the token is encoded.
     (processCommand as jest.Mock).mockClear();
     const ansiEmits: Emit[] = [];
-    const ansiSocket = makeSocket(ansiEmits, { nodeId: 0 });
+    const ansiSession = { nodeId: 0, user: { username: 'spot' } } as any;
+    const ansiSocket = makeSocket(ansiEmits, ansiSession);
     await parseMciCodes(
       'AA~CC_JOIN|BB',
-      { nodeId: 0, user: { username: 'spot' } } as any,
+      ansiSession,
       undefined,
       undefined,
       undefined,
