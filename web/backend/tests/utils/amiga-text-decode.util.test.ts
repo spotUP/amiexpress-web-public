@@ -105,7 +105,12 @@ describe('amiga-text-decode: SAUCE handling', () => {
     sauce[95] = 1; // fileType: ANSI
     sauce.writeUInt16LE(80, 96); // tInfo1: width
     sauce.writeUInt16LE(25, 98); // tInfo2: height
-    sauce[104] = 0x01; // iCE colors flag
+    // TFlags is at +105. This fixture wrote the flag at +104 - the COMMENTS
+    // count - which is where the parser used to read it, so the two agreed
+    // with each other and with nothing else. SAUCE 00 is
+    // ID(5) Version(2) Title(35) Author(20) Group(20) Date(8) FileSize(4)
+    // DataType(1) FileType(1) TInfo1-4(8) Comments(1) TFlags(1) TInfoS(22).
+    sauce[105] = 0x01; // TFlags: iCE colors
     const buf = Buffer.concat([Buffer.from('artwork '), sauce]);
 
     const info = parseSauceMetadata(buf);
@@ -165,7 +170,7 @@ describe('amiga-text-decode: readAmigaTextFile', () => {
     sauce[95] = 1;
     sauce.writeUInt16LE(80, 96);
     sauce.writeUInt16LE(25, 98);
-    sauce[104] = 0;
+    sauce[105] = 0; // TFlags: blink left on
     // CP437: 0xC4 = ─, 0xCD = ═, 0xDA = ┌
     const body = Buffer.from([0xda, 0xc4, 0xcd]);
     const buf = Buffer.concat([body, sauce]);
@@ -234,7 +239,7 @@ describe('amiga-text-decode: iCE colors transform', () => {
     sauce[95] = 1;
     sauce.writeUInt16LE(80, 96);
     sauce.writeUInt16LE(25, 98);
-    sauce[104] = 0x01; // iCE on
+    sauce[105] = 0x01; // TFlags: iCE on
     const body = Buffer.from('\x1b[5;44mblink-bg-on');
     mockFiles.set('/ice.ans', { content: Buffer.concat([body, sauce]), mtime: 1 });
 

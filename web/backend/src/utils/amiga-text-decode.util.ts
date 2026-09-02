@@ -18,6 +18,7 @@
  * so they all funnel through the functions here.
  */
 
+import { isAmigaFont } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/cp437';
 import * as path from "path";
 import { fileCache } from "./file-cache.util";
 
@@ -35,6 +36,8 @@ export interface SauceInfo {
   tInfo2?: number; // Height in characters
   tInfoFlags?: number; // Flags: bit 0 = non-blink (iCE colors)
   iceColors?: boolean; // True if iCE colors (blink disabled, 16 bg colors)
+  /** TInfoS: the font the artist drew in, which decides the ENCODING. */
+  fontName?: string;
 }
 
 export interface AmigaTextResult {
@@ -63,7 +66,20 @@ export function parseSauceMetadata(buffer: Buffer): SauceInfo {
     const fileType = buffer[markerIndex + 95];
     const tInfo1 = buffer.readUInt16LE(markerIndex + 96);
     const tInfo2 = buffer.readUInt16LE(markerIndex + 98);
-    const tInfoFlags = buffer[markerIndex + 104] || 0;
+    /*
+     * TFlags is at +105. This read +104, which is the COMMENTS count - the
+     * number of comment lines in the SAUCE block - so iCE colours were being
+     * taken from an unrelated byte. It agreed by accident on every file with
+     * no comments, which is most of them.
+     */
+    const tInfoFlags = buffer[markerIndex + 105] || 0;
+    // TInfoS at +106, 22 bytes: the font name, and the only thing that says
+    // whether the high bytes are CP437 or Latin-1.
+    const fontName = buffer
+      .subarray(markerIndex + 106, markerIndex + 128)
+      .toString('latin1')
+      .replace(/\0/g, '')
+      .trim();
     const iceColors = (tInfoFlags & 0x01) !== 0;
     return {
       hasSauce: true,
@@ -73,6 +89,7 @@ export function parseSauceMetadata(buffer: Buffer): SauceInfo {
       tInfo2,
       tInfoFlags,
       iceColors,
+      fontName,
     };
   } catch {
     return { hasSauce: true };
@@ -107,7 +124,23 @@ export function detectEncoding(
   filePath: string,
   sauceInfo: SauceInfo,
 ): "cp437" | "iso-8859-1" {
-  if (sauceInfo.hasSauce) return "cp437";
+  /*
+   * A SAUCE record does not mean CP437. It means the artist told us which
+   * font they drew in, and that is what decides how the high bytes read.
+   *
+   * `uptown-c-up.ans` says `Amiga Topaz 1+`: its 0xAF is a macron `¯`, the
+   * overline that pairs with the `_` its logo is built from, and its 0xFC is
+   * `ü`. Forced through CP437 those became `»` and `ⁿ` - the same file the
+   * admin drew correctly, wrong on the board, reported with a screenshot of
+   * each.
+   *
+   * The rule is the SDK's isAmigaFont, so the board and the manager cannot
+   * disagree about a file: a font name beginning "Amiga" is Latin-1, and
+   * everything else - the IBM VGA family, or no name at all - is CP437.
+   */
+  if (sauceInfo.hasSauce) {
+    return isAmigaFont(sauceInfo.fontName) ? "iso-8859-1" : "cp437";
+  }
 
   const ext = path.extname(filePath).toLowerCase();
   if (ext === ".ans") return "cp437";

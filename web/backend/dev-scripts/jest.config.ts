@@ -35,6 +35,10 @@ module.exports = {
     // The PETSCII core is imported by backend source through the package
     // exports map (sdk/dist). Tests resolve it to the SDK SOURCE instead so a
     // RED/GREEN cycle never depends on a stale sdk/dist build.
+    // The CP437/Latin-1 tables and the font rule the BOARD and the manager
+    // must agree on. Source, so a RED/GREEN cycle never rides on sdk/dist.
+    '^@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/cp437$':
+      '<rootDir>/../../sdk/engines/ui/ansi-editor/core/cp437.ts',
     '^@amiexpress/bbs-door-sdk/petscii$': '<rootDir>/../../sdk/petscii/index.ts',
     '^@amiexpress/bbs-door-sdk/petscii/frame$': '<rootDir>/../../sdk/petscii/frame/index.ts',
   },

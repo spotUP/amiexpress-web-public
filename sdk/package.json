@@ -115,6 +115,10 @@
       "types": "./dist/engines/ui/ansi-editor/core/file-ops.d.ts",
       "default": "./dist/engines/ui/ansi-editor/core/file-ops.js"
     },
+    "./engines/ui/ansi-editor/core/cp437": {
+      "types": "./dist/engines/ui/ansi-editor/core/cp437.d.ts",
+      "default": "./dist/engines/ui/ansi-editor/core/cp437.js"
+    },
     "./utils/wasm-loader": {
       "types": "./dist/utils/wasm-loader.d.ts",
       "default": "./dist/utils/wasm-loader.js"
