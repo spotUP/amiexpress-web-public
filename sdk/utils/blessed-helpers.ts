@@ -758,6 +758,26 @@ export function getCompatibilityMode(): CompatibilityConfig {
  * Maps to: [fallbackChar, fgColor, bgColor] or just [fallbackChar] for simple replacement
  * When bgColor is specified, we use a space with that background color.
  */
+/**
+ * Solid blocks become a filled cell in the colour they were already drawn in.
+ *
+ * A terminal without Unicode cannot draw U+2588, and substituting a glyph
+ * throws the colour away: GRANDMASTER over telnet rendered its playfield as
+ * "#" (reported 2026-09-02), and the mapped block below turned every piece
+ * white regardless of what colour the door had set.
+ *
+ * Reverse video solves both. `ESC[7m` swaps foreground and background for
+ * one space, so the cell fills with whatever colour the door was ALREADY
+ * writing in - the same look the web client gets from the real block - and
+ * `ESC[27m` turns it off again without touching any other attribute. No
+ * colour table, no state tracking, and nothing to keep in step with the
+ * door's own palette.
+ */
+const SOLID_BLOCKS = new Set(['\u2588', '\u25A0']);   // full block, black square
+
+const REVERSE_ON = ESC + '[7m';
+const REVERSE_OFF = ESC + '[27m';
+
 const UNICODE_TO_ANSI_FALLBACK: Record<string, [string, string?, string?]> = {
   // Block fill characters -> space with background color
   '█': [' ', undefined, 'white'],   // Full block -> white bg
@@ -841,6 +861,18 @@ export function convertToAmigaCompat(str: string, inheritBg?: string): string {
       continue;
     }
 
+    // Solid blocks are checked BEFORE sparklines on purpose.
+    //
+    // SPARKLINE_CHARS ends in the full block, so every solid block in every
+    // door - a playfield cell, a bar, a filled panel - was being read as the
+    // top bar of a sparkline and mapped to "#". That is what GRANDMASTER
+    // looked like over telnet (reported 2026-09-02). A full block inside a
+    // real sparkline still reads correctly as a filled cell.
+    if (SOLID_BLOCKS.has(char)) {
+      result += `${REVERSE_ON} ${REVERSE_OFF}`;
+      continue;
+    }
+
     // Handle sparklines
     if (isSparklineChar(char)) {
       if (compatConfig.keepSparklines) {
@@ -857,10 +889,14 @@ export function convertToAmigaCompat(str: string, inheritBg?: string): string {
     if (fallback) {
       const [fallbackChar, _fg, bg] = fallback;
       if (bg) {
-        // Use ANSI background color: ESC[4Xm where X is color code
+        // Background only, then default background only.
+        //
+        // This used to close with ESC[0m, a FULL reset, which threw away the
+        // foreground colour and every attribute the door had set - so the
+        // text after any shaded cell lost its colour until the next SGR.
+        // ESC[49m puts the background back and leaves the rest alone.
         const bgCode = getAnsiColorCode(bg, true);
-        const resetCode = ESC + '[0m';
-        result += `${bgCode}${fallbackChar}${resetCode}`;
+        result += `${bgCode}${fallbackChar}${ESC}[49m`;
       } else {
         result += fallbackChar;
       }
