@@ -429,6 +429,30 @@ COPY batch0 batch1 batch2 batch3 batch4 batch5 batch6 batch000 /app/default-data
 COPY acp.dat acpConnections.dat BBSHelp.txt SystemStats cplistan1000.dat /app/default-data/
 COPY express /app/default-data/express
 
+# The defaults a NEW board is seeded with must not be THIS board's history.
+#
+# The COPYs above take whole directories, and this board's node directories
+# hold its running logs: measured 2026-09-02, /app/default-data would carry
+# 4,384 files and 57.8 MB of which 40.2 MB is log data - 14.5 MB of
+# DLogBackup, 11.9 MB of UDLog-, 7.7 MB of UDLog, and 40 CallersLog files
+# naming this board's own callers. A sysop installing amiexpress-web was
+# seeded with uprough's download history and caller log.
+#
+# Every name here is written BY THE BOARD and recreated on demand, so taking
+# them out of the template costs a new install nothing. Config and content
+# stay: Conf.DB, the .info icons and the screens are what a board needs.
+#
+# tests/dockerfile-seeds-no-board-history.test.ts fails if a log this repo
+# carries is not named here.
+# -iname, not -name: the Amiga's filesystem is case-insensitive and this
+# tree came off one, so CALLS.LOG and calls.log are the same file to the
+# board. Matching case-sensitively is how Conf12/Hold/CALLS.LOG survived the
+# first version of this step.
+RUN find /app/default-data \( \
+        -iname '*.log' -o -iname '*log' -o -iname '*log-' \
+        -o -iname '*logbackup' -o -iname '*log.back' \
+    \) -type f -delete
+
 # Copy entrypoint script
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 
