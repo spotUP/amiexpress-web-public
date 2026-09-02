@@ -276,7 +276,7 @@ export function LanguagesPage() {
                   onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
                   className="w-4 h-4"
                 />
-                <label htmlFor="enabled" className="text-sm text-bbs-text">Enabled</label>
+                <label htmlFor="enabled" className="text-sm text-content-primary">Enabled</label>
               </div>
 
               <div className="flex justify-end space-x-2 pt-2">

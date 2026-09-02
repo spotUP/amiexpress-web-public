@@ -345,7 +345,7 @@ export function ProtocolsPage() {
                     onChange={(e) => setFormData({ ...formData, batch_upload: e.target.checked })}
                     className="w-4 h-4"
                   />
-                  <label htmlFor="batch_upload" className="text-sm text-bbs-text">Batch Upload</label>
+                  <label htmlFor="batch_upload" className="text-sm text-content-primary">Batch Upload</label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <input
@@ -355,7 +355,7 @@ export function ProtocolsPage() {
                     onChange={(e) => setFormData({ ...formData, batch_download: e.target.checked })}
                     className="w-4 h-4"
                   />
-                  <label htmlFor="batch_download" className="text-sm text-bbs-text">Batch Download</label>
+                  <label htmlFor="batch_download" className="text-sm text-content-primary">Batch Download</label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <input
@@ -365,7 +365,7 @@ export function ProtocolsPage() {
                     onChange={(e) => setFormData({ ...formData, bidirectional: e.target.checked })}
                     className="w-4 h-4"
                   />
-                  <label htmlFor="bidirectional" className="text-sm text-bbs-text">Bi-directional</label>
+                  <label htmlFor="bidirectional" className="text-sm text-content-primary">Bi-directional</label>
                 </div>
               </div>
 
@@ -378,7 +378,7 @@ export function ProtocolsPage() {
                     onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
                     className="w-4 h-4"
                   />
-                  <label htmlFor="enabled" className="text-sm text-bbs-text">Enabled</label>
+                  <label htmlFor="enabled" className="text-sm text-content-primary">Enabled</label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <input
@@ -388,7 +388,7 @@ export function ProtocolsPage() {
                     onChange={(e) => setFormData({ ...formData, is_default: e.target.checked })}
                     className="w-4 h-4"
                   />
-                  <label htmlFor="is_default" className="text-sm text-bbs-text">Default</label>
+                  <label htmlFor="is_default" className="text-sm text-content-primary">Default</label>
                 </div>
               </div>
 
@@ -405,7 +405,7 @@ export function ProtocolsPage() {
                 </button>
               </div>
             </form>
-            <p className="text-xs text-bbs-muted mt-3">
+            <p className="text-xs text-content-secondary mt-3">
               Supported protocols: ZMODEM (batch), YMODEM (batch), XMODEM (checksum/CRC/1K), Punter (C64/C128), WebSocket (browser).
             </p>
         </Modal>

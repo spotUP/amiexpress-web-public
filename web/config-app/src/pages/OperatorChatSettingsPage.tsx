@@ -216,7 +216,7 @@ export function OperatorChatSettingsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-bbs-muted">Loading configuration...</div>
+        <div className="text-content-secondary">Loading configuration...</div>
       </div>
     );
   }
@@ -224,19 +224,19 @@ export function OperatorChatSettingsPage() {
   return (
     <div className="p-6 max-w-5xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-bbs-text flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-content-primary flex items-center gap-2">
           <MessageSquare className="w-7 h-7" />
           Operator Chat Settings
         </h1>
-        <p className="text-bbs-muted mt-2">
+        <p className="text-content-secondary mt-2">
           Configure operator chat, grumpy bot, and notification settings
         </p>
       </div>
 
       <div className="space-y-8">
         {/* General Settings */}
-        <section className="bg-bbs-surface border border-bbs-border rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-bbs-text mb-4 flex items-center gap-2">
+        <section className="bg-surface-1 border border-border rounded-lg p-6">
+          <h2 className="text-xl font-semibold text-content-primary mb-4 flex items-center gap-2">
             <MessageSquare className="w-5 h-5" />
             General Settings
           </h2>
@@ -249,13 +249,13 @@ export function OperatorChatSettingsPage() {
                 {...register('enabled')}
                 className="w-4 h-4"
               />
-              <label htmlFor="enabled" className="text-bbs-text">
+              <label htmlFor="enabled" className="text-content-primary">
                 Enable Operator Chat (allows users to page sysop with O command)
               </label>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-bbs-text mb-2">
+              <label className="block text-sm font-medium text-content-primary mb-2">
                 Page Timeout (seconds)
               </label>
               <input
@@ -265,15 +265,15 @@ export function OperatorChatSettingsPage() {
                   min: 10,
                   max: 300
                 })}
-                className="w-full px-3 py-2 bg-bbs-bg border border-bbs-border text-bbs-text rounded focus:outline-none focus:ring-2 focus:ring-bbs-accent"
+                className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded focus:outline-none focus:ring-2 focus:ring-accent"
               />
-              <p className="text-sm text-bbs-muted mt-1">
+              <p className="text-sm text-content-secondary mt-1">
                 How long to wait before grumpy bot activates (10-300 seconds)
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-bbs-text mb-2">
+              <label className="block text-sm font-medium text-content-primary mb-2">
                 Page Cooldown (seconds)
               </label>
               <input
@@ -283,15 +283,15 @@ export function OperatorChatSettingsPage() {
                   min: 0,
                   max: 3600
                 })}
-                className="w-full px-3 py-2 bg-bbs-bg border border-bbs-border text-bbs-text rounded focus:outline-none focus:ring-2 focus:ring-bbs-accent"
+                className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded focus:outline-none focus:ring-2 focus:ring-accent"
               />
-              <p className="text-sm text-bbs-muted mt-1">
+              <p className="text-sm text-content-secondary mt-1">
                 Minimum time between page requests from same user
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-bbs-text mb-2">
+              <label className="block text-sm font-medium text-content-primary mb-2">
                 Max Active Pages Per User
               </label>
               <input
@@ -301,9 +301,9 @@ export function OperatorChatSettingsPage() {
                   min: 1,
                   max: 10
                 })}
-                className="w-full px-3 py-2 bg-bbs-bg border border-bbs-border text-bbs-text rounded focus:outline-none focus:ring-2 focus:ring-bbs-accent"
+                className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded focus:outline-none focus:ring-2 focus:ring-accent"
               />
-              <p className="text-sm text-bbs-muted mt-1">
+              <p className="text-sm text-content-secondary mt-1">
                 Maximum pending pages a user can have at once
               </p>
             </div>
@@ -315,7 +315,7 @@ export function OperatorChatSettingsPage() {
                 {...register('requireCarrier')}
                 className="w-4 h-4"
               />
-              <label htmlFor="requireCarrier" className="text-bbs-text">
+              <label htmlFor="requireCarrier" className="text-content-primary">
                 Require Carrier (disable for web/telnet users)
               </label>
             </div>
@@ -323,14 +323,14 @@ export function OperatorChatSettingsPage() {
         </section>
 
         {/* Security Settings */}
-        <section className="bg-bbs-surface border border-bbs-border rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-bbs-text mb-4 flex items-center gap-2">
+        <section className="bg-surface-1 border border-border rounded-lg p-6">
+          <h2 className="text-xl font-semibold text-content-primary mb-4 flex items-center gap-2">
             <Shield className="w-5 h-5" />
             Security Settings
           </h2>
 
           <div>
-            <label className="block text-sm font-medium text-bbs-text mb-2">
+            <label className="block text-sm font-medium text-content-primary mb-2">
               Allowed Security Levels
             </label>
             <div className="grid grid-cols-2 gap-2">
@@ -341,7 +341,7 @@ export function OperatorChatSettingsPage() {
                 // disappear from the form that owns it.
                 config?.allowedSecLevels?.map(Number) ?? [],
               ).map((level) => (
-                <label key={level.value} className="flex items-center gap-2 text-bbs-text">
+                <label key={level.value} className="flex items-center gap-2 text-content-primary">
                   <input
                     type="checkbox"
                     value={level.value}
@@ -352,15 +352,15 @@ export function OperatorChatSettingsPage() {
                 </label>
               ))}
             </div>
-            <p className="text-sm text-bbs-muted mt-2">
+            <p className="text-sm text-content-secondary mt-2">
               Users must have one of these security levels to page the operator
             </p>
           </div>
         </section>
 
         {/* Quiet Hours */}
-        <section className="bg-bbs-surface border border-bbs-border rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-bbs-text mb-4 flex items-center gap-2">
+        <section className="bg-surface-1 border border-border rounded-lg p-6">
+          <h2 className="text-xl font-semibold text-content-primary mb-4 flex items-center gap-2">
             <Clock className="w-5 h-5" />
             Quiet Hours
           </h2>
@@ -373,7 +373,7 @@ export function OperatorChatSettingsPage() {
                 {...register('quietHours.enabled')}
                 className="w-4 h-4"
               />
-              <label htmlFor="quietHours.enabled" className="text-bbs-text">
+              <label htmlFor="quietHours.enabled" className="text-content-primary">
                 Enable Quiet Hours (disable paging during specific times)
               </label>
             </div>
@@ -382,7 +382,7 @@ export function OperatorChatSettingsPage() {
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-bbs-text mb-2">
+                    <label className="block text-sm font-medium text-content-primary mb-2">
                       Start Time
                     </label>
                     <div className="flex gap-2">
@@ -394,9 +394,9 @@ export function OperatorChatSettingsPage() {
                           min: 0,
                           max: 23
                         })}
-                        className="w-20 px-3 py-2 bg-bbs-bg border border-bbs-border text-bbs-text rounded"
+                        className="w-20 px-3 py-2 bg-surface-0 border border-border text-content-primary rounded"
                       />
-                      <span className="text-bbs-text py-2">:</span>
+                      <span className="text-content-primary py-2">:</span>
                       <input
                         type="number"
                         placeholder="Minute"
@@ -405,13 +405,13 @@ export function OperatorChatSettingsPage() {
                           min: 0,
                           max: 59
                         })}
-                        className="w-20 px-3 py-2 bg-bbs-bg border border-bbs-border text-bbs-text rounded"
+                        className="w-20 px-3 py-2 bg-surface-0 border border-border text-content-primary rounded"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-bbs-text mb-2">
+                    <label className="block text-sm font-medium text-content-primary mb-2">
                       End Time
                     </label>
                     <div className="flex gap-2">
@@ -423,9 +423,9 @@ export function OperatorChatSettingsPage() {
                           min: 0,
                           max: 23
                         })}
-                        className="w-20 px-3 py-2 bg-bbs-bg border border-bbs-border text-bbs-text rounded"
+                        className="w-20 px-3 py-2 bg-surface-0 border border-border text-content-primary rounded"
                       />
-                      <span className="text-bbs-text py-2">:</span>
+                      <span className="text-content-primary py-2">:</span>
                       <input
                         type="number"
                         placeholder="Minute"
@@ -434,20 +434,20 @@ export function OperatorChatSettingsPage() {
                           min: 0,
                           max: 59
                         })}
-                        className="w-20 px-3 py-2 bg-bbs-bg border border-bbs-border text-bbs-text rounded"
+                        className="w-20 px-3 py-2 bg-surface-0 border border-border text-content-primary rounded"
                       />
                     </div>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-bbs-text mb-2">
+                  <label className="block text-sm font-medium text-content-primary mb-2">
                     Custom Message (optional)
                   </label>
                   <textarea
                     {...register('quietHours.customMessage')}
                     rows={2}
-                    className="w-full px-3 py-2 bg-bbs-bg border border-bbs-border text-bbs-text rounded focus:outline-none focus:ring-2 focus:ring-bbs-accent"
+                    className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded focus:outline-none focus:ring-2 focus:ring-accent"
                     placeholder="The sysop is not available during quiet hours."
                   />
                 </div>
@@ -457,8 +457,8 @@ export function OperatorChatSettingsPage() {
         </section>
 
         {/* Notification Settings */}
-        <section className="bg-bbs-surface border border-bbs-border rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-bbs-text mb-4 flex items-center gap-2">
+        <section className="bg-surface-1 border border-border rounded-lg p-6">
+          <h2 className="text-xl font-semibold text-content-primary mb-4 flex items-center gap-2">
             <Bell className="w-5 h-5" />
             Notification Settings
           </h2>
@@ -471,7 +471,7 @@ export function OperatorChatSettingsPage() {
                 {...register('notifyOnPage')}
                 className="w-4 h-4"
               />
-              <label htmlFor="notifyOnPage" className="text-bbs-text">
+              <label htmlFor="notifyOnPage" className="text-content-primary">
                 Show in-system notifications when users page
               </label>
             </div>
@@ -483,7 +483,7 @@ export function OperatorChatSettingsPage() {
                 {...register('notifyDiscord')}
                 className="w-4 h-4"
               />
-              <label htmlFor="notifyDiscord" className="text-bbs-text">
+              <label htmlFor="notifyDiscord" className="text-content-primary">
                 Send Discord notifications via webhook
               </label>
             </div>
@@ -491,32 +491,32 @@ export function OperatorChatSettingsPage() {
             {notifyDiscordEnabled && (
               <>
                 <div>
-                  <label className="block text-sm font-medium text-bbs-text mb-2 flex items-center gap-2">
+                  <label className="block text-sm font-medium text-content-primary mb-2 flex items-center gap-2">
                     <Webhook className="w-4 h-4" />
                     Discord Webhook URL
                   </label>
                   <input
                     type="url"
                     {...register('discordWebhook')}
-                    className="w-full px-3 py-2 bg-bbs-bg border border-bbs-border text-bbs-text rounded focus:outline-none focus:ring-2 focus:ring-bbs-accent"
+                    className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded focus:outline-none focus:ring-2 focus:ring-accent"
                     placeholder="https://discord.com/api/webhooks/..."
                   />
-                  <p className="text-sm text-bbs-muted mt-1">
+                  <p className="text-sm text-content-secondary mt-1">
                     Create a webhook in your Discord server settings
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-bbs-text mb-2">
+                  <label className="block text-sm font-medium text-content-primary mb-2">
                     Discord User ID (for @mention)
                   </label>
                   <input
                     type="text"
                     {...register('discordUserId')}
-                    className="w-full px-3 py-2 bg-bbs-bg border border-bbs-border text-bbs-text rounded focus:outline-none focus:ring-2 focus:ring-bbs-accent"
+                    className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded focus:outline-none focus:ring-2 focus:ring-accent"
                     placeholder="123456789012345678"
                   />
-                  <p className="text-sm text-bbs-muted mt-1">
+                  <p className="text-sm text-content-secondary mt-1">
                     Your Discord user ID. Right-click your name in Discord {'>'} Copy User ID (requires Developer Mode in Discord settings)
                   </p>
                 </div>
@@ -524,8 +524,8 @@ export function OperatorChatSettingsPage() {
             )}
 
             {/* Push Notifications */}
-            <div className="border-t border-bbs-border pt-4 mt-4">
-              <h3 className="text-lg font-medium text-bbs-text mb-3 flex items-center gap-2">
+            <div className="border-t border-border pt-4 mt-4">
+              <h3 className="text-lg font-medium text-content-primary mb-3 flex items-center gap-2">
                 <Smartphone className="w-4 h-4" />
                 Browser Push Notifications
               </h3>
@@ -572,7 +572,7 @@ export function OperatorChatSettingsPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <p className="text-sm text-bbs-muted">
+                  <p className="text-sm text-content-secondary">
                     Enable push notifications to receive alerts on this device when users page you,
                     even when the admin panel is closed.
                   </p>
@@ -588,7 +588,7 @@ export function OperatorChatSettingsPage() {
                       type="button"
                       onClick={() => push.subscribe()}
                       disabled={push.loading}
-                      className="px-4 py-2 bg-bbs-accent hover:bg-bbs-accent/80 text-content-inverse rounded flex items-center gap-2 disabled:opacity-50"
+                      className="px-4 py-2 bg-accent hover:bg-accent/80 text-content-inverse rounded flex items-center gap-2 disabled:opacity-50"
                     >
                       <BellRing className="w-4 h-4" />
                       {push.loading ? 'Enabling...' : 'Enable Push Notifications'}
@@ -604,8 +604,8 @@ export function OperatorChatSettingsPage() {
         </section>
 
         {/* VAPID Server Configuration */}
-        <section className="bg-bbs-surface border border-bbs-border rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-bbs-text mb-4 flex items-center gap-2">
+        <section className="bg-surface-1 border border-border rounded-lg p-6">
+          <h2 className="text-xl font-semibold text-content-primary mb-4 flex items-center gap-2">
             <Server className="w-5 h-5" />
             Push Notification Server Configuration
           </h2>
@@ -648,28 +648,28 @@ export function OperatorChatSettingsPage() {
                 )}
                 {vapidLoading ? 'Generating...' : 'Generate New VAPID Keys'}
               </button>
-              <p className="text-sm text-bbs-muted mt-1">
+              <p className="text-sm text-content-secondary mt-1">
                 Warning: Generating new keys will invalidate all existing push subscriptions
               </p>
             </div>
 
             {/* Public Key */}
             <div>
-              <label className="block text-sm font-medium text-bbs-text mb-2">
+              <label className="block text-sm font-medium text-content-primary mb-2">
                 VAPID Public Key
               </label>
               <input
                 type="text"
                 value={vapidConfig.vapid_public_key}
                 onChange={(e) => setVapidConfig(prev => ({ ...prev, vapid_public_key: e.target.value }))}
-                className="w-full px-3 py-2 bg-bbs-bg border border-bbs-border text-bbs-text rounded focus:outline-none focus:ring-2 focus:ring-bbs-accent font-mono text-sm"
+                className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded focus:outline-none focus:ring-2 focus:ring-accent font-mono text-sm"
                 placeholder="BGXxxxxx..."
               />
             </div>
 
             {/* Private Key */}
             <div>
-              <label className="block text-sm font-medium text-bbs-text mb-2">
+              <label className="block text-sm font-medium text-content-primary mb-2">
                 VAPID Private Key
               </label>
               <div className="relative">
@@ -677,35 +677,35 @@ export function OperatorChatSettingsPage() {
                   type={showPrivateKey ? 'text' : 'password'}
                   value={vapidConfig.vapid_private_key}
                   onChange={(e) => setVapidConfig(prev => ({ ...prev, vapid_private_key: e.target.value }))}
-                  className="w-full px-3 py-2 pr-10 bg-bbs-bg border border-bbs-border text-bbs-text rounded focus:outline-none focus:ring-2 focus:ring-bbs-accent font-mono text-sm"
+                  className="w-full px-3 py-2 pr-10 bg-surface-0 border border-border text-content-primary rounded focus:outline-none focus:ring-2 focus:ring-accent font-mono text-sm"
                   placeholder="xxxxxxxxxxxxx..."
                 />
                 <button
                   type="button"
                   onClick={() => setShowPrivateKey(!showPrivateKey)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-bbs-muted hover:text-bbs-text"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-content-secondary hover:text-content-primary"
                 >
                   {showPrivateKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <p className="text-sm text-bbs-muted mt-1">
+              <p className="text-sm text-content-secondary mt-1">
                 Keep this secret - never share publicly
               </p>
             </div>
 
             {/* Contact Email */}
             <div>
-              <label className="block text-sm font-medium text-bbs-text mb-2">
+              <label className="block text-sm font-medium text-content-primary mb-2">
                 Contact Email
               </label>
               <input
                 type="email"
                 value={vapidConfig.vapid_contact_email}
                 onChange={(e) => setVapidConfig(prev => ({ ...prev, vapid_contact_email: e.target.value }))}
-                className="w-full px-3 py-2 bg-bbs-bg border border-bbs-border text-bbs-text rounded focus:outline-none focus:ring-2 focus:ring-bbs-accent"
+                className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded focus:outline-none focus:ring-2 focus:ring-accent"
                 placeholder="admin@example.com"
               />
-              <p className="text-sm text-bbs-muted mt-1">
+              <p className="text-sm text-content-secondary mt-1">
                 Contact email for push service providers (required)
               </p>
             </div>
@@ -740,8 +740,8 @@ export function OperatorChatSettingsPage() {
         </section>
 
         {/* Grumpy Bot Settings */}
-        <section className="bg-bbs-surface border border-bbs-border rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-bbs-text mb-4 flex items-center gap-2">
+        <section className="bg-surface-1 border border-border rounded-lg p-6">
+          <h2 className="text-xl font-semibold text-content-primary mb-4 flex items-center gap-2">
             <Bot className="w-5 h-5" />
             Grumpy Bot Settings
           </h2>
@@ -754,16 +754,16 @@ export function OperatorChatSettingsPage() {
               </p>
             </div>
 
-            <div className="text-sm text-bbs-muted space-y-1">
+            <div className="text-sm text-content-secondary space-y-1">
               <p>- <strong>Typing Speed:</strong> 40-180ms per character (variable)</p>
               <p>• <strong>Typo Rate:</strong> 8% chance per character</p>
               <p>• <strong>Typo Correction:</strong> 300ms pause, then backspace and correct</p>
               <p>• <strong>Personality:</strong> Grumpy 1990s BBS sysop with Amiga nostalgia</p>
             </div>
 
-            <div className="bg-bbs-bg border border-bbs-border rounded p-3">
-              <p className="text-sm font-medium text-bbs-text mb-2">Bot Personality Traits:</p>
-              <ul className="text-sm text-bbs-muted space-y-1 list-disc list-inside">
+            <div className="bg-surface-0 border border-border rounded p-3">
+              <p className="text-sm font-medium text-content-primary mb-2">Bot Personality Traits:</p>
+              <ul className="text-sm text-content-secondary space-y-1 list-disc list-inside">
                 <li>Veteran sysop since 1989, seen everything</li>
                 <li>Complains about newbies but eventually helps</li>
                 <li>Uses 90s BBS slang (warez, elite, phreaking)</li>
@@ -775,8 +775,8 @@ export function OperatorChatSettingsPage() {
         </section>
 
         {/* Quick Replies */}
-        <section className="bg-bbs-surface border border-bbs-border rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-bbs-text mb-4">
+        <section className="bg-surface-1 border border-border rounded-lg p-6">
+          <h2 className="text-xl font-semibold text-content-primary mb-4">
             Quick Replies
           </h2>
 
@@ -787,20 +787,20 @@ export function OperatorChatSettingsPage() {
                   type="text"
                   value={reply.label}
                   disabled
-                  className="px-3 py-2 bg-bbs-bg/50 border border-bbs-border text-bbs-text rounded"
+                  className="px-3 py-2 bg-surface-0/50 border border-border text-content-primary rounded"
                   placeholder="Label"
                 />
                 <input
                   type="text"
                   value={reply.message}
                   disabled
-                  className="col-span-2 px-3 py-2 bg-bbs-bg/50 border border-bbs-border text-bbs-text rounded"
+                  className="col-span-2 px-3 py-2 bg-surface-0/50 border border-border text-content-primary rounded"
                   placeholder="Message"
                 />
               </div>
             ))}
           </div>
-          <p className="text-sm text-bbs-muted mt-3">
+          <p className="text-sm text-content-secondary mt-3">
             Quick replies appear as buttons in the operator chat interface for fast responses
           </p>
         </section>
@@ -808,8 +808,8 @@ export function OperatorChatSettingsPage() {
         {/* Auto-save indicator */}
         <div className="flex justify-end gap-3 pt-4">
           {updateMutation.isPending && (
-            <div className="text-sm text-bbs-muted flex items-center gap-2">
-              <div className="w-4 h-4 border-2 border-bbs-accent border-t-transparent rounded-full animate-spin"></div>
+            <div className="text-sm text-content-secondary flex items-center gap-2">
+              <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin"></div>
               Saving...
             </div>
           )}

@@ -157,7 +157,7 @@ export function SecurityPage() {
         <Shield className="text-accent" size={24} />
         <div>
           <h1 className="text-xl font-semibold">Security Levels</h1>
-          <p className="text-sm text-bbs-muted">
+          <p className="text-sm text-content-secondary">
             Read and written as Access/ACS.&lt;level&gt;.info, the files the BBS reads.
           </p>
         </div>
@@ -165,15 +165,15 @@ export function SecurityPage() {
 
       {/* Levels that exist, plus a way to add one */}
       <div className="flex flex-wrap items-center gap-2">
-        {levelsQuery.isLoading && <span className="text-bbs-muted">Loading levels...</span>}
+        {levelsQuery.isLoading && <span className="text-content-secondary">Loading levels...</span>}
         {levels.map(level => (
           <button
             key={level}
             onClick={() => { setSelectedLevel(level); setViewingLevel(level); }}
             className={`px-3 py-1 rounded border ${
               level === selectedLevel
-                ? 'bg-bbs-accent/20 border-bbs-accent text-accent'
-                : 'border-bbs-muted/40 text-bbs-muted hover:border-bbs-accent/60'
+                ? 'bg-accent/20 border-accent text-accent'
+                : 'border-content-secondary/40 text-content-secondary hover:border-accent/60'
             }`}
           >
             Level {level}
@@ -185,12 +185,12 @@ export function SecurityPage() {
             value={newLevel}
             onChange={e => setNewLevel(e.target.value)}
             placeholder="new level"
-            className="w-24 px-2 py-1 bg-transparent border border-bbs-muted/40 rounded text-sm"
+            className="w-24 px-2 py-1 bg-transparent border border-content-secondary/40 rounded text-sm"
           />
           <button
             onClick={handleCreate}
             disabled={createMutation.isPending}
-            className="flex items-center gap-1 px-2 py-1 rounded border border-bbs-muted/40 hover:border-bbs-accent/60 text-sm"
+            className="flex items-center gap-1 px-2 py-1 rounded border border-content-secondary/40 hover:border-accent/60 text-sm"
             title="Creates ACS.<level>.info by copying the nearest lower level"
           >
             <Plus size={16} /> Add
@@ -199,7 +199,7 @@ export function SecurityPage() {
       </div>
 
       {levels.length === 0 && !levelsQuery.isLoading && (
-        <p className="text-bbs-muted">
+        <p className="text-content-secondary">
           No ACS level files found in the Access directory.
         </p>
       )}
@@ -210,7 +210,7 @@ export function SecurityPage() {
           level-30 caller is served out of ACS.20 (express.e:3025 rounds down
           to a multiple of five, then walks down). */}
       {inUse.length > 0 && (
-        <div className="p-3 rounded border border-bbs-muted/30 text-sm">
+        <div className="p-3 rounded border border-content-secondary/30 text-sm">
           <p className="mb-2 text-content-secondary">
             The levels your users hold, and the file that serves each. A level
             with no file of its own is served by the nearest lower one.
@@ -313,8 +313,8 @@ export function SecurityPage() {
               disabled={!dirty || saveMutation.isPending}
               className={`flex items-center gap-2 px-3 py-1 rounded border ${
                 dirty
-                  ? 'border-bbs-accent text-accent hover:bg-bbs-accent/10'
-                  : 'border-bbs-muted/30 text-bbs-muted'
+                  ? 'border-accent text-accent hover:bg-accent/10'
+                  : 'border-content-secondary/30 text-content-secondary'
               }`}
             >
               <Save size={16} /> {saveMutation.isPending ? 'Saving...' : 'Save to .info'}
@@ -327,7 +327,7 @@ export function SecurityPage() {
             onChange={e => setPermissionFilter(e.target.value)}
             placeholder="Filter permissions"
             aria-label="Filter permissions"
-            className="w-full max-w-xs px-2 py-1 bg-transparent border border-bbs-muted/40 rounded text-sm"
+            className="w-full max-w-xs px-2 py-1 bg-transparent border border-content-secondary/40 rounded text-sm"
           />
 
           {(flagsQuery.data?.data?.ambiguous?.length ?? 0) > 0 && (
@@ -347,9 +347,9 @@ export function SecurityPage() {
           )}
 
           {flagsQuery.isLoading ? (
-            <p className="text-bbs-muted">Loading flags...</p>
+            <p className="text-content-secondary">Loading flags...</p>
           ) : visibleCount === 0 ? (
-            <p className="text-bbs-muted">No permission matches "{permissionFilter}".</p>
+            <p className="text-content-secondary">No permission matches "{permissionFilter}".</p>
           ) : (
             <div className="space-y-5">
               {visibleGroups.map(group => (
@@ -370,15 +370,15 @@ export function SecurityPage() {
                           key={name}
                           onClick={() => toggle(name)}
                           aria-pressed={granted}
-                          className="flex items-start gap-2 px-3 py-2 rounded border border-bbs-muted/20 hover:border-bbs-accent/50 text-left"
+                          className="flex items-start gap-2 px-3 py-2 rounded border border-content-secondary/20 hover:border-accent/50 text-left"
                         >
                           {granted ? (
                             <ToggleRight className="mt-0.5 text-status-ok shrink-0" size={20} />
                           ) : (
-                            <ToggleLeft className="mt-0.5 text-bbs-muted shrink-0" size={20} />
+                            <ToggleLeft className="mt-0.5 text-content-secondary shrink-0" size={20} />
                           )}
                           <span className="min-w-0">
-                            <span className={`block ${granted ? 'text-content-primary' : 'text-bbs-muted'}`}>
+                            <span className={`block ${granted ? 'text-content-primary' : 'text-content-secondary'}`}>
                               {acsLabel(name)}
                             </span>
                             {/* The raw flag is what is written in the .info

@@ -328,12 +328,12 @@ export function SystemConfigPage() {
   };
 
   if (isLoading) {
-    return <div className="text-bbs-text">Loading system configuration...</div>;
+    return <div className="text-content-primary">Loading system configuration...</div>;
   }
 
   if (error) {
     return (
-      <div className="bg-bbs-accent/10 border border-bbs-accent text-accent px-4 py-3 rounded">
+      <div className="bg-accent/10 border border-accent text-accent px-4 py-3 rounded">
         Error loading system configuration: {(error as Error).message}
       </div>
     );
@@ -367,7 +367,7 @@ export function SystemConfigPage() {
         {/* Basic Information */}
         {shouldShowSection('Basic Information') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">Basic Information</h2>
+          <h2 className="text-xl font-semibold text-content-primary mb-6">Basic Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="bbs_name" className="label">
@@ -440,7 +440,7 @@ export function SystemConfigPage() {
         {/* Security Settings */}
         {shouldShowSection('Security Settings') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">Security Settings</h2>
+          <h2 className="text-xl font-semibold text-content-primary mb-6">Security Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="min_password_length" className="label">
@@ -521,7 +521,7 @@ export function SystemConfigPage() {
                 {...register('strict_password_policy')}
                 className="w-4 h-4"
               />
-              <label htmlFor="strict_password_policy" className="text-sm text-bbs-text">
+              <label htmlFor="strict_password_policy" className="text-sm text-content-primary">
                 Strict Password Policy
               </label>
             </div>
@@ -533,7 +533,7 @@ export function SystemConfigPage() {
                 {...register('auto_validate')}
                 className="w-4 h-4"
               />
-              <label htmlFor="auto_validate" className="text-sm text-bbs-text">
+              <label htmlFor="auto_validate" className="text-sm text-content-primary">
                 Auto Validate New Users
               </label>
             </div>
@@ -545,7 +545,7 @@ export function SystemConfigPage() {
                 {...register('confirm_deletions')}
                 className="w-4 h-4"
               />
-              <label htmlFor="confirm_deletions" className="text-sm text-bbs-text">
+              <label htmlFor="confirm_deletions" className="text-sm text-content-primary">
                 Confirm Deletions
               </label>
             </div>
@@ -556,7 +556,7 @@ export function SystemConfigPage() {
         {/* Session Settings */}
         {shouldShowSection('Session Settings') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">Session Settings</h2>
+          <h2 className="text-xl font-semibold text-content-primary mb-6">Session Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="default_time_limit" className="label">
@@ -571,7 +571,7 @@ export function SystemConfigPage() {
                   {...register('default_time_limit', { min: -1, max: 1440, valueAsNumber: true })}
                   className="input-field w-full"
                 />
-                <span className="text-xs text-bbs-muted self-center">-1 = unlimited</span>
+                <span className="text-xs text-content-secondary self-center">-1 = unlimited</span>
               </div>
             </div>
 
@@ -588,7 +588,7 @@ export function SystemConfigPage() {
                   {...register('max_session_time', { min: -1, max: 1440, valueAsNumber: true })}
                   className="input-field w-full"
                 />
-                <span className="text-xs text-bbs-muted self-center">-1 = unlimited</span>
+                <span className="text-xs text-content-secondary self-center">-1 = unlimited</span>
               </div>
             </div>
 
@@ -616,7 +616,7 @@ export function SystemConfigPage() {
         {/* New User Defaults */}
         {shouldShowSection('New User Defaults') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">New User Defaults</h2>
+          <h2 className="text-xl font-semibold text-content-primary mb-6">New User Defaults</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="new_user_sec_level" className="label">
@@ -654,7 +654,7 @@ export function SystemConfigPage() {
                   {...register('new_user_time_limit', { min: -1, max: 1440, valueAsNumber: true, value: -1 })}
                   className="input-field w-full"
                 />
-                <span className="text-xs text-bbs-muted self-center">-1 = unlimited</span>
+                <span className="text-xs text-content-secondary self-center">-1 = unlimited</span>
               </div>
             </div>
             <div>
@@ -670,7 +670,7 @@ export function SystemConfigPage() {
                   {...register('new_user_chat_limit', { min: -1, max: 1440, valueAsNumber: true, value: -1 })}
                   className="input-field w-full"
                 />
-                <span className="text-xs text-bbs-muted self-center">-1 = unlimited</span>
+                <span className="text-xs text-content-secondary self-center">-1 = unlimited</span>
               </div>
             </div>
             <div>
@@ -764,7 +764,7 @@ export function SystemConfigPage() {
                 className="input-field w-full"
                 placeholder="XXX"
               />
-              <p className="text-xs text-bbs-muted mt-1">ACS string applied to new accounts</p>
+              <p className="text-xs text-content-secondary mt-1">ACS string applied to new accounts</p>
             </div>
             <div className="flex items-center space-x-3">
               <input
@@ -773,7 +773,7 @@ export function SystemConfigPage() {
                 {...register('new_user_expert')}
                 className="w-4 h-4"
               />
-              <label htmlFor="new_user_expert" className="text-sm text-bbs-text">
+              <label htmlFor="new_user_expert" className="text-sm text-content-primary">
                 Start new users in Expert mode
               </label>
             </div>
@@ -784,7 +784,7 @@ export function SystemConfigPage() {
                 {...register('new_user_ansi')}
                 className="w-4 h-4"
               />
-              <label htmlFor="new_user_ansi" className="text-sm text-bbs-text">
+              <label htmlFor="new_user_ansi" className="text-sm text-content-primary">
                 Enable ANSI by default
               </label>
             </div>
@@ -795,7 +795,7 @@ export function SystemConfigPage() {
                 {...register('new_user_available_chat')}
                 className="w-4 h-4"
               />
-              <label htmlFor="new_user_available_chat" className="text-sm text-bbs-text">
+              <label htmlFor="new_user_available_chat" className="text-sm text-content-primary">
                 Allow chat by default
               </label>
             </div>
@@ -806,7 +806,7 @@ export function SystemConfigPage() {
                 {...register('new_user_quiet_node')}
                 className="w-4 h-4"
               />
-              <label htmlFor="new_user_quiet_node" className="text-sm text-bbs-text">
+              <label htmlFor="new_user_quiet_node" className="text-sm text-content-primary">
                 Quiet node (no join beeps)
               </label>
             </div>
@@ -817,7 +817,7 @@ export function SystemConfigPage() {
                 {...register('new_user_auto_rejoin')}
                 className="w-4 h-4"
               />
-              <label htmlFor="new_user_auto_rejoin" className="text-sm text-bbs-text">
+              <label htmlFor="new_user_auto_rejoin" className="text-sm text-content-primary">
                 Auto rejoin last conference
               </label>
             </div>
@@ -828,8 +828,8 @@ export function SystemConfigPage() {
         {/* Auto-Validation Settings */}
         {shouldShowSection('Auto-Validation Settings') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">Auto-Validation Settings</h2>
-          <p className="text-sm text-bbs-muted mb-6">
+          <h2 className="text-xl font-semibold text-content-primary mb-6">Auto-Validation Settings</h2>
+          <p className="text-sm text-content-secondary mb-6">
             Configure automatic validation for new users. Users can be validated after a delay period
             or instantly with a password.
           </p>
@@ -846,7 +846,7 @@ export function SystemConfigPage() {
                 className="input-field w-full"
                 placeholder="-1 to disable"
               />
-              <p className="text-xs text-bbs-muted mt-1">
+              <p className="text-xs text-content-secondary mt-1">
                 Hours to wait before auto-validating. -1 = disabled, 0 = immediate.
               </p>
             </div>
@@ -863,7 +863,7 @@ export function SystemConfigPage() {
                 className="input-field w-full"
                 placeholder="Preset name"
               />
-              <p className="text-xs text-bbs-muted mt-1">
+              <p className="text-xs text-content-secondary mt-1">
                 User preset to apply when auto-validating (from Presets directory).
               </p>
             </div>
@@ -880,7 +880,7 @@ export function SystemConfigPage() {
                 className="input-field w-full"
                 placeholder="Leave empty to disable"
               />
-              <p className="text-xs text-bbs-muted mt-1">
+              <p className="text-xs text-content-secondary mt-1">
                 Password users can enter for instant validation during signup.
               </p>
             </div>
@@ -891,7 +891,7 @@ export function SystemConfigPage() {
         {/* Password & Account Security */}
         {shouldShowSection('Password & Account Security') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">Password & Account Security</h2>
+          <h2 className="text-xl font-semibold text-content-primary mb-6">Password & Account Security</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="password_expiry_days" className="label">
@@ -905,7 +905,7 @@ export function SystemConfigPage() {
                 className="input-field w-full"
                 placeholder="0 = never expires"
               />
-              <p className="text-xs text-bbs-muted mt-1">
+              <p className="text-xs text-content-secondary mt-1">
                 Days until password expires and user must change it. 0 = never.
               </p>
             </div>
@@ -922,7 +922,7 @@ export function SystemConfigPage() {
                 className="input-field w-full"
                 placeholder="0 = never deactivate"
               />
-              <p className="text-xs text-bbs-muted mt-1">
+              <p className="text-xs text-content-secondary mt-1">
                 Days of inactivity before user account is deactivated. 0 = never.
               </p>
             </div>
@@ -933,7 +933,7 @@ export function SystemConfigPage() {
         {/* Display Settings */}
         {shouldShowSection('Display Settings') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">Display Settings</h2>
+          <h2 className="text-xl font-semibold text-content-primary mb-6">Display Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="flex items-center space-x-3">
               <input
@@ -942,7 +942,7 @@ export function SystemConfigPage() {
                 {...register('ansi_enabled')}
                 className="w-4 h-4"
               />
-              <label htmlFor="ansi_enabled" className="text-sm text-bbs-text">
+              <label htmlFor="ansi_enabled" className="text-sm text-content-primary">
                 ANSI Graphics Enabled
               </label>
             </div>
@@ -954,7 +954,7 @@ export function SystemConfigPage() {
                 {...register('allow_custom_screens')}
                 className="w-4 h-4"
               />
-              <label htmlFor="allow_custom_screens" className="text-sm text-bbs-text">
+              <label htmlFor="allow_custom_screens" className="text-sm text-content-primary">
                 Allow Custom Screens
               </label>
             </div>
@@ -965,7 +965,7 @@ export function SystemConfigPage() {
         {/* Language Settings */}
         {shouldShowSection('Language Settings') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">Language Settings</h2>
+          <h2 className="text-xl font-semibold text-content-primary mb-6">Language Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="language_base" className="label">
@@ -979,7 +979,7 @@ export function SystemConfigPage() {
                 className="input-field w-full"
                 placeholder="Languages"
               />
-              <p className="text-xs text-bbs-muted mt-1">Directory containing language files</p>
+              <p className="text-xs text-content-secondary mt-1">Directory containing language files</p>
             </div>
 
             <div>
@@ -1002,7 +1002,7 @@ export function SystemConfigPage() {
                     </option>
                   ))}
               </select>
-              <p className="text-xs text-bbs-muted mt-1">Language shown to new users</p>
+              <p className="text-xs text-content-secondary mt-1">Language shown to new users</p>
             </div>
           </div>
         </div>
@@ -1011,7 +1011,7 @@ export function SystemConfigPage() {
         {/* System Limits */}
         {shouldShowSection('System Limits') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">System Limits</h2>
+          <h2 className="text-xl font-semibold text-content-primary mb-6">System Limits</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="max_conferences" className="label">
@@ -1037,7 +1037,7 @@ export function SystemConfigPage() {
                 {...register('max_message_bases', { min: 1, max: 1024, valueAsNumber: true })}
                 className="input-field w-full"
               />
-              <p className="text-xs text-bbs-muted mt-1">Up to 1024; lower this if you want a tighter cap.</p>
+              <p className="text-xs text-content-secondary mt-1">Up to 1024; lower this if you want a tighter cap.</p>
             </div>
 
             <div>
@@ -1051,7 +1051,7 @@ export function SystemConfigPage() {
                 {...register('max_file_areas', { min: 1, max: 1024, valueAsNumber: true })}
                 className="input-field w-full"
               />
-              <p className="text-xs text-bbs-muted mt-1">Supports up to 1024 file areas.</p>
+              <p className="text-xs text-content-secondary mt-1">Supports up to 1024 file areas.</p>
             </div>
 
             <div>
@@ -1065,7 +1065,7 @@ export function SystemConfigPage() {
                 {...register('max_nodes', { min: 1, max: 255, valueAsNumber: true })}
                 className="input-field w-full"
               />
-              <p className="text-xs text-bbs-muted mt-1">Supports up to 255 nodes.</p>
+              <p className="text-xs text-content-secondary mt-1">Supports up to 255 nodes.</p>
             </div>
           </div>
         </div>
@@ -1074,7 +1074,7 @@ export function SystemConfigPage() {
         {/* File Management */}
         {shouldShowSection('File Management') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">File Management</h2>
+          <h2 className="text-xl font-semibold text-content-primary mb-6">File Management</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="flex items-center space-x-3">
               <input
@@ -1083,7 +1083,7 @@ export function SystemConfigPage() {
                 {...register('file_check_enabled')}
                 className="w-4 h-4"
               />
-              <label htmlFor="file_check_enabled" className="text-sm text-bbs-text">
+              <label htmlFor="file_check_enabled" className="text-sm text-content-primary">
                 File Check Enabled
               </label>
             </div>
@@ -1095,7 +1095,7 @@ export function SystemConfigPage() {
                 {...register('upload_check_virus')}
                 className="w-4 h-4"
               />
-              <label htmlFor="upload_check_virus" className="text-sm text-bbs-text">
+              <label htmlFor="upload_check_virus" className="text-sm text-content-primary">
                 Check Uploads for Viruses
               </label>
             </div>
@@ -1107,7 +1107,7 @@ export function SystemConfigPage() {
                 {...register('upload_check_dupe')}
                 className="w-4 h-4"
               />
-              <label htmlFor="upload_check_dupe" className="text-sm text-bbs-text">
+              <label htmlFor="upload_check_dupe" className="text-sm text-content-primary">
                 Check for Duplicate Uploads
               </label>
             </div>
@@ -1124,7 +1124,7 @@ export function SystemConfigPage() {
                 className="input-field w-full"
                 placeholder="RAM:uploads"
               />
-              <p className="text-xs text-bbs-muted mt-1">Default path for local file uploads.</p>
+              <p className="text-xs text-content-secondary mt-1">Default path for local file uploads.</p>
             </div>
 
             <div>
@@ -1139,7 +1139,7 @@ export function SystemConfigPage() {
                 className="input-field w-full"
                 placeholder="lha e {file} FILE_ID.DIZ"
               />
-              <p className="text-xs text-bbs-muted mt-1">Command to extract FILE_ID.DIZ from archives.</p>
+              <p className="text-xs text-content-secondary mt-1">Command to extract FILE_ID.DIZ from archives.</p>
             </div>
 
             <div>
@@ -1154,7 +1154,7 @@ export function SystemConfigPage() {
                 className="input-field w-full"
                 placeholder="25"
               />
-              <p className="text-xs text-bbs-muted mt-1">Maximum lines for file descriptions.</p>
+              <p className="text-xs text-content-secondary mt-1">Maximum lines for file descriptions.</p>
             </div>
 
             <div>
@@ -1169,7 +1169,7 @@ export function SystemConfigPage() {
                 className="input-field w-full"
                 placeholder="100"
               />
-              <p className="text-xs text-bbs-muted mt-1">Minimum access level to put files on hold.</p>
+              <p className="text-xs text-content-secondary mt-1">Minimum access level to put files on hold.</p>
             </div>
           </div>
         </div>
@@ -1178,7 +1178,7 @@ export function SystemConfigPage() {
         {/* Mail & SMTP Settings */}
         {shouldShowSection('Mail & SMTP Settings') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">Mail & SMTP Settings</h2>
+          <h2 className="text-xl font-semibold text-content-primary mb-6">Mail & SMTP Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="smtp_server" className="label">
@@ -1191,7 +1191,7 @@ export function SystemConfigPage() {
                 {...register('smtp_server')}
                 className="input-field w-full"
               />
-              <p className="text-xs text-bbs-muted mt-1">Hostname of your SMTP relay (e.g., smtp.example.com).</p>
+              <p className="text-xs text-content-secondary mt-1">Hostname of your SMTP relay (e.g., smtp.example.com).</p>
             </div>
 
             <div>
@@ -1205,7 +1205,7 @@ export function SystemConfigPage() {
                 {...register('smtp_port', { min: 1, max: 65535, valueAsNumber: true })}
                 className="input-field w-full"
               />
-              <p className="text-xs text-bbs-muted mt-1">Typical: 25, 465 (SSL), or 587 (STARTTLS).</p>
+              <p className="text-xs text-content-secondary mt-1">Typical: 25, 465 (SSL), or 587 (STARTTLS).</p>
             </div>
 
             <div>
@@ -1240,13 +1240,13 @@ export function SystemConfigPage() {
                 <button
                   type="button"
                   onClick={() => setShowSmtpPassword(!showSmtpPassword)}
-                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-bbs-muted hover:text-bbs-text transition-colors"
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-content-secondary hover:text-content-primary transition-colors"
                   title={showSmtpPassword ? 'Hide password' : 'Show password'}
                 >
                   {showSmtpPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
-              <p className="text-xs text-bbs-muted mt-1">Leave empty to keep existing encrypted credentials.</p>
+              <p className="text-xs text-content-secondary mt-1">Leave empty to keep existing encrypted credentials.</p>
             </div>
 
             <div>
@@ -1295,7 +1295,7 @@ export function SystemConfigPage() {
                 {...register('allow_internet_email')}
                 className="w-4 h-4"
               />
-              <label htmlFor="allow_internet_email" className="text-sm text-bbs-text">
+              <label htmlFor="allow_internet_email" className="text-sm text-content-primary">
                 Allow Internet Email
               </label>
             </div>
@@ -1307,14 +1307,14 @@ export function SystemConfigPage() {
                 {...register('smtp_ssl')}
                 className="w-4 h-4"
               />
-              <label htmlFor="smtp_ssl" className="text-sm text-bbs-text">
+              <label htmlFor="smtp_ssl" className="text-sm text-content-primary">
                 SMTP SSL/TLS
               </label>
             </div>
           </div>
 
           {/* SMTP Test Section */}
-          <div className="mt-6 pt-6 border-t border-bbs-border">
+          <div className="mt-6 pt-6 border-t border-border">
             <div className="flex items-center gap-4">
               <button
                 type="button"
@@ -1349,7 +1349,7 @@ export function SystemConfigPage() {
                 </div>
               )}
             </div>
-            <p className="text-xs text-bbs-muted mt-2">
+            <p className="text-xs text-content-secondary mt-2">
               Sends a test email to the sysop email address to verify SMTP configuration.
             </p>
           </div>
@@ -1359,8 +1359,8 @@ export function SystemConfigPage() {
         {/* Email Notification Events */}
         {shouldShowSection('Email Notification Events') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">Email Notification Events</h2>
-          <p className="text-sm text-bbs-muted mb-6">
+          <h2 className="text-xl font-semibold text-content-primary mb-6">Email Notification Events</h2>
+          <p className="text-sm text-content-secondary mb-6">
             Configure which BBS events trigger email notifications to the sysop.
             Requires SMTP to be configured above.
           </p>
@@ -1372,7 +1372,7 @@ export function SystemConfigPage() {
                 {...register('mail_on_new_user')}
                 className="w-4 h-4"
               />
-              <label htmlFor="mail_on_new_user" className="text-sm text-bbs-text">
+              <label htmlFor="mail_on_new_user" className="text-sm text-content-primary">
                 New User Registration
               </label>
             </div>
@@ -1384,7 +1384,7 @@ export function SystemConfigPage() {
                 {...register('mail_on_logon')}
                 className="w-4 h-4"
               />
-              <label htmlFor="mail_on_logon" className="text-sm text-bbs-text">
+              <label htmlFor="mail_on_logon" className="text-sm text-content-primary">
                 User Logon
               </label>
             </div>
@@ -1396,7 +1396,7 @@ export function SystemConfigPage() {
                 {...register('mail_on_logoff')}
                 className="w-4 h-4"
               />
-              <label htmlFor="mail_on_logoff" className="text-sm text-bbs-text">
+              <label htmlFor="mail_on_logoff" className="text-sm text-content-primary">
                 User Logoff
               </label>
             </div>
@@ -1408,7 +1408,7 @@ export function SystemConfigPage() {
                 {...register('mail_on_upload')}
                 className="w-4 h-4"
               />
-              <label htmlFor="mail_on_upload" className="text-sm text-bbs-text">
+              <label htmlFor="mail_on_upload" className="text-sm text-content-primary">
                 File Upload
               </label>
             </div>
@@ -1420,7 +1420,7 @@ export function SystemConfigPage() {
                 {...register('mail_on_sysop_comment')}
                 className="w-4 h-4"
               />
-              <label htmlFor="mail_on_sysop_comment" className="text-sm text-bbs-text">
+              <label htmlFor="mail_on_sysop_comment" className="text-sm text-content-primary">
                 Sysop Comment/Feedback
               </label>
             </div>
@@ -1432,7 +1432,7 @@ export function SystemConfigPage() {
                 {...register('mail_on_sysop_page')}
                 className="w-4 h-4"
               />
-              <label htmlFor="mail_on_sysop_page" className="text-sm text-bbs-text">
+              <label htmlFor="mail_on_sysop_page" className="text-sm text-content-primary">
                 Sysop Page Request
               </label>
             </div>
@@ -1444,7 +1444,7 @@ export function SystemConfigPage() {
                 {...register('mail_on_pwd_fail')}
                 className="w-4 h-4"
               />
-              <label htmlFor="mail_on_pwd_fail" className="text-sm text-bbs-text">
+              <label htmlFor="mail_on_pwd_fail" className="text-sm text-content-primary">
                 Password Failure (send reset link to user)
               </label>
             </div>
@@ -1455,7 +1455,7 @@ export function SystemConfigPage() {
         {/* FTP Server Settings */}
         {shouldShowSection('FTP Server Settings') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">FTP Server Settings</h2>
+          <h2 className="text-xl font-semibold text-content-primary mb-6">FTP Server Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="ftp_host" className="label">
@@ -1468,7 +1468,7 @@ export function SystemConfigPage() {
                 {...register('ftp_host')}
                 className="input-field w-full"
               />
-              <p className="text-xs text-bbs-muted mt-1">Bind address for FTP (blank = all interfaces).</p>
+              <p className="text-xs text-content-secondary mt-1">Bind address for FTP (blank = all interfaces).</p>
             </div>
 
             <div>
@@ -1482,7 +1482,7 @@ export function SystemConfigPage() {
                 {...register('ftp_port', { min: 1, max: 65535, valueAsNumber: true })}
                 className="input-field w-full"
               />
-              <p className="text-xs text-bbs-muted mt-1">Default 21; change if another service uses it.</p>
+              <p className="text-xs text-content-secondary mt-1">Default 21; change if another service uses it.</p>
             </div>
 
             <div>
@@ -1506,7 +1506,7 @@ export function SystemConfigPage() {
                 {...register('ftp_enabled')}
                 className="w-4 h-4"
               />
-              <label htmlFor="ftp_enabled" className="text-sm text-bbs-text">
+              <label htmlFor="ftp_enabled" className="text-sm text-content-primary">
                 FTP Server Enabled
               </label>
             </div>
@@ -1517,7 +1517,7 @@ export function SystemConfigPage() {
         {/* HTTP Server Settings */}
         {shouldShowSection('HTTP Server Settings') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">HTTP Server Settings</h2>
+          <h2 className="text-xl font-semibold text-content-primary mb-6">HTTP Server Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* HTTP Host was removed. express.e:15002 reads HTTPHOST out of
                 the PROTOCOL icon (TOOLTYPE_XFERLIB), per protocol - there has
@@ -1535,7 +1535,7 @@ export function SystemConfigPage() {
                 {...register('http_port', { min: 1, max: 65535, valueAsNumber: true })}
                 className="input-field w-full"
               />
-              <p className="text-xs text-bbs-muted mt-1">Default 3001 in this stack; adjust if port conflicts arise.</p>
+              <p className="text-xs text-content-secondary mt-1">Default 3001 in this stack; adjust if port conflicts arise.</p>
             </div>
 
             <div>
@@ -1546,11 +1546,11 @@ export function SystemConfigPage() {
                   {...register('http_enabled')}
                   className="w-4 h-4"
                 />
-                <label htmlFor="http_enabled" className="text-sm text-bbs-text">
+                <label htmlFor="http_enabled" className="text-sm text-content-primary">
                   Web Terminal Enabled
                 </label>
               </div>
-              <p className="text-xs text-bbs-muted mt-1">
+              <p className="text-xs text-content-secondary mt-1">
                 Serves the browser terminal at /. Unticking it takes the board off
                 the web without a restart; telnet, SSH and this admin keep running.
               </p>
@@ -1562,7 +1562,7 @@ export function SystemConfigPage() {
         {/* BBS Server Ports */}
         {shouldShowSection('BBS Server Ports') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">BBS Server Ports</h2>
+          <h2 className="text-xl font-semibold text-content-primary mb-6">BBS Server Ports</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="telnet_port" className="label">
@@ -1575,7 +1575,7 @@ export function SystemConfigPage() {
                 {...register('telnet_port', { min: 1, max: 65535, valueAsNumber: true })}
                 className="input-field w-full"
               />
-              <p className="text-xs text-bbs-muted mt-1">
+              <p className="text-xs text-content-secondary mt-1">
                 Default 2323; change if another service binds this port or if you’re behind NAT.
               </p>
             </div>
@@ -1591,13 +1591,13 @@ export function SystemConfigPage() {
                 {...register('ssh_port', { min: 1, max: 65535, valueAsNumber: true })}
                 className="input-field w-full"
               />
-              <p className="text-xs text-bbs-muted mt-1">
+              <p className="text-xs text-content-secondary mt-1">
                 Default 2222; open/forward this if you expect remote SSH logins.
               </p>
             </div>
           </div>
-          <div className="mt-4 p-4 bg-bbs-background border border-bbs-border rounded">
-            <p className="text-sm text-bbs-muted">
+          <div className="mt-4 p-4 bg-surface-0 border border-border rounded">
+            <p className="text-sm text-content-secondary">
               Note: Changing these ports requires restarting the BBS server for the changes to take effect. The current server is using the ports specified in the environment variables or these configured values.
             </p>
           </div>
@@ -1607,17 +1607,17 @@ export function SystemConfigPage() {
         {/* SSH Key Management */}
         {shouldShowSection('SSH Key Management') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6 flex items-center gap-2">
+          <h2 className="text-xl font-semibold text-content-primary mb-6 flex items-center gap-2">
             <Key size={24} />
             SSH Key Management
           </h2>
 
           <div className="space-y-4">
             {/* SSH Key Status */}
-            <div className="p-4 bg-bbs-background border border-bbs-border rounded">
+            <div className="p-4 bg-surface-0 border border-border rounded">
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-bbs-text">SSH Key Status:</span>
+                  <span className="text-sm font-semibold text-content-primary">SSH Key Status:</span>
                   <span className={`px-3 py-1 rounded text-sm font-semibold ${
                     sshKeyData?.data?.exists
                       ? 'bg-status-ok/20 text-status-ok border border-status-ok/30'
@@ -1631,8 +1631,8 @@ export function SystemConfigPage() {
                   <>
                     {sshKeyData.data.fingerprint && (
                       <div className="flex flex-col gap-1">
-                        <span className="text-xs text-bbs-muted">Fingerprint:</span>
-                        <code className="text-xs bg-bbs-background/50 p-2 rounded border border-bbs-border font-mono text-bbs-text break-all">
+                        <span className="text-xs text-content-secondary">Fingerprint:</span>
+                        <code className="text-xs bg-surface-0/50 p-2 rounded border border-border font-mono text-content-primary break-all">
                           {sshKeyData.data.fingerprint}
                         </code>
                       </div>
@@ -1641,20 +1641,20 @@ export function SystemConfigPage() {
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       {sshKeyData.data.keyType && (
                         <div>
-                          <span className="text-bbs-muted">Key Type:</span>
-                          <span className="ml-2 text-bbs-text font-semibold">{sshKeyData.data.keyType}</span>
+                          <span className="text-content-secondary">Key Type:</span>
+                          <span className="ml-2 text-content-primary font-semibold">{sshKeyData.data.keyType}</span>
                         </div>
                       )}
                       {sshKeyData.data.keySize && (
                         <div>
-                          <span className="text-bbs-muted">Key Size:</span>
-                          <span className="ml-2 text-bbs-text font-semibold">{sshKeyData.data.keySize} bits</span>
+                          <span className="text-content-secondary">Key Size:</span>
+                          <span className="ml-2 text-content-primary font-semibold">{sshKeyData.data.keySize} bits</span>
                         </div>
                       )}
                     </div>
 
                     {sshKeyData.data.createdAt && (
-                      <div className="text-xs text-bbs-muted">
+                      <div className="text-xs text-content-secondary">
                         Created: {new Date(sshKeyData.data.createdAt).toLocaleString()}
                       </div>
                     )}
@@ -1709,7 +1709,7 @@ export function SystemConfigPage() {
             {/* Info Box */}
             <div className="p-4 bg-accent/10 border border-accent/30 rounded">
               <h3 className="text-sm font-semibold text-status-info mb-2">Important Information</h3>
-              <ul className="text-xs text-bbs-muted space-y-1 list-disc list-inside">
+              <ul className="text-xs text-content-secondary space-y-1 list-disc list-inside">
                 <li>SSH keys are required for the SSH server to function</li>
                 <li>Generated keys are stored in the data/ssh directory</li>
                 <li>4096-bit RSA keys are generated by default for maximum security</li>
@@ -1724,7 +1724,7 @@ export function SystemConfigPage() {
         {/* System Behavior */}
         {shouldShowSection('System Behavior') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">System Behavior</h2>
+          <h2 className="text-xl font-semibold text-content-primary mb-6">System Behavior</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="flex items-center space-x-3">
               <input
@@ -1733,7 +1733,7 @@ export function SystemConfigPage() {
                 {...register('quiet_join')}
                 className="w-4 h-4"
               />
-              <label htmlFor="quiet_join" className="text-sm text-bbs-text">
+              <label htmlFor="quiet_join" className="text-sm text-content-primary">
                 Quiet Join (suppress conference join messages)
               </label>
             </div>
@@ -1745,7 +1745,7 @@ export function SystemConfigPage() {
                 {...register('convert_to_mb')}
                 className="w-4 h-4"
               />
-              <label htmlFor="convert_to_mb" className="text-sm text-bbs-text">
+              <label htmlFor="convert_to_mb" className="text-sm text-content-primary">
                 Convert to MB (display byte counts as megabytes)
               </label>
             </div>
@@ -1756,7 +1756,7 @@ export function SystemConfigPage() {
         {/* Logging Settings */}
         {shouldShowSection('Logging Settings') && (
         <div className="card">
-          <h2 className="text-xl font-semibold text-bbs-text mb-6">Logging Settings</h2>
+          <h2 className="text-xl font-semibold text-content-primary mb-6">Logging Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="log_level" className="label">
@@ -1800,7 +1800,7 @@ export function SystemConfigPage() {
                 {...register('debug_mode')}
                 className="w-4 h-4"
               />
-              <label htmlFor="debug_mode" className="text-sm text-bbs-text">
+              <label htmlFor="debug_mode" className="text-sm text-content-primary">
                 Debug Mode
               </label>
             </div>
@@ -1812,7 +1812,7 @@ export function SystemConfigPage() {
                 {...register('sysop_debug_enabled')}
                 className="w-4 h-4"
               />
-              <label htmlFor="sysop_debug_enabled" className="text-sm text-bbs-text">
+              <label htmlFor="sysop_debug_enabled" className="text-sm text-content-primary">
                 Sysop Debug Output (show [SYSOP DEBUG] messages to sysops)
               </label>
             </div>

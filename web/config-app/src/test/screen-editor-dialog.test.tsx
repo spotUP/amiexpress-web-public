@@ -114,13 +114,16 @@ describe('the editor as a dialog', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
-  it('closes on cancel without writing', async () => {
+  it('goes back to the file on cancel, without writing', async () => {
+    // Cancel leaves the EDITOR, not the file: the dialog is where the file's
+    // details, its preview and its MCI list live now.
     const user = userEvent.setup();
     const dialog = await openEditor(user);
 
     await user.click(within(dialog).getByRole('button', { name: /cancel editing/i }));
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('ansi-canvas')).toBeNull());
+    expect(screen.getByRole('dialog')).toBeTruthy();
     expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit)?.method === 'PUT')).toBe(false);
   });
 });

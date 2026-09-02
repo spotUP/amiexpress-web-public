@@ -14,7 +14,7 @@ export function AuditLogPage() {
   });
 
   if (isLoading) {
-    return <div className="text-bbs-text">Loading audit log...</div>;
+    return <div className="text-content-primary">Loading audit log...</div>;
   }
 
   const logs = data?.data || [];
@@ -66,12 +66,12 @@ export function AuditLogPage() {
           <div key={log.id} className="card">
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-start space-x-3">
-                <div className="p-2 bg-bbs-primary rounded">
+                <div className="p-2 bg-border rounded">
                   <History className="text-accent" size={20} />
                 </div>
                 <div>
                   <div className="flex items-center space-x-2">
-                    <h3 className="text-lg font-semibold text-bbs-text">
+                    <h3 className="text-lg font-semibold text-content-primary">
                       {log.table_name.replace('_', ' ').toUpperCase()}
                     </h3>
                     <span
@@ -86,7 +86,7 @@ export function AuditLogPage() {
                       {log.action}
                     </span>
                   </div>
-                  <div className="flex items-center space-x-4 mt-1 text-xs text-bbs-muted">
+                  <div className="flex items-center space-x-4 mt-1 text-xs text-content-secondary">
                     <div className="flex items-center space-x-1">
                       <User size={12} />
                       <span>{log.username}</span>
@@ -98,24 +98,24 @@ export function AuditLogPage() {
                   </div>
                 </div>
               </div>
-              <div className="text-xs text-bbs-muted font-mono">
+              <div className="text-xs text-content-secondary font-mono">
                 Record #{log.record_id}
               </div>
             </div>
 
             {log.action === 'UPDATE' && log.old_values && log.new_values && (
-              <div className="mt-4 p-4 bg-bbs-bg rounded">
-                <h4 className="text-sm font-semibold text-bbs-text mb-2">Changes:</h4>
+              <div className="mt-4 p-4 bg-surface-0 rounded">
+                <h4 className="text-sm font-semibold text-content-primary mb-2">Changes:</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                   <div>
-                    <div className="text-bbs-muted mb-1">Old Values:</div>
-                    <pre className="text-bbs-text bg-bbs-surface p-2 rounded overflow-x-auto">
+                    <div className="text-content-secondary mb-1">Old Values:</div>
+                    <pre className="text-content-primary bg-surface-1 p-2 rounded overflow-x-auto">
                       {JSON.stringify(log.old_values, null, 2)}
                     </pre>
                   </div>
                   <div>
-                    <div className="text-bbs-muted mb-1">New Values:</div>
-                    <pre className="text-bbs-text bg-bbs-surface p-2 rounded overflow-x-auto">
+                    <div className="text-content-secondary mb-1">New Values:</div>
+                    <pre className="text-content-primary bg-surface-1 p-2 rounded overflow-x-auto">
                       {JSON.stringify(log.new_values, null, 2)}
                     </pre>
                   </div>
@@ -123,7 +123,7 @@ export function AuditLogPage() {
               </div>
             )}
 
-            <div className="mt-3 pt-3 border-t border-bbs-primary text-xs text-bbs-muted">
+            <div className="mt-3 pt-3 border-t border-border text-xs text-content-secondary">
               <span>IP: {log.ip_address}</span>
               <span className="mx-2">|</span>
               <span>User Agent: {log.user_agent}</span>
@@ -133,7 +133,7 @@ export function AuditLogPage() {
       </div>
 
       {logs.length === 0 && (
-        <div className="card text-center text-bbs-muted">
+        <div className="card text-center text-content-secondary">
           No audit log entries found. Configuration changes will appear here.
         </div>
       )}

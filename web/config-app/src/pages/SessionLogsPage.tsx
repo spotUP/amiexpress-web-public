@@ -95,8 +95,8 @@ export function SessionLogsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-bbs-text">Session Logs</h1>
-          <p className="text-bbs-muted mt-1">Real-time BBS session terminal output viewer</p>
+          <h1 className="text-2xl font-bold text-content-primary">Session Logs</h1>
+          <p className="text-content-secondary mt-1">Real-time BBS session terminal output viewer</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -104,7 +104,7 @@ export function SessionLogsPage() {
             className={`px-4 py-2 rounded flex items-center gap-2 ${
               autoRefresh
                 ? 'bg-status-ok text-content-inverse hover:bg-status-ok/90'
-                : 'bg-bbs-surface text-bbs-text hover:bg-bbs-hover'
+                : 'bg-surface-1 text-content-primary hover:bg-surface-3'
             }`}
           >
             <RefreshCw className={`w-4 h-4 ${autoRefresh ? 'animate-spin' : ''}`} />
@@ -112,7 +112,7 @@ export function SessionLogsPage() {
           </button>
           <button
             onClick={() => queryClient.invalidateQueries({ queryKey: ['sessions'] })}
-            className="px-4 py-2 bg-bbs-surface text-bbs-text rounded hover:bg-bbs-hover flex items-center gap-2"
+            className="px-4 py-2 bg-surface-1 text-content-primary rounded hover:bg-surface-3 flex items-center gap-2"
           >
             <RefreshCw className="w-4 h-4" />
             Refresh
@@ -123,26 +123,26 @@ export function SessionLogsPage() {
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-bbs-surface p-4 rounded-lg border border-bbs-border">
-            <div className="flex items-center gap-2 text-bbs-muted mb-1">
+          <div className="bg-surface-1 p-4 rounded-lg border border-border">
+            <div className="flex items-center gap-2 text-content-secondary mb-1">
               <Users className="w-4 h-4" />
               <span className="text-sm">Total Sessions</span>
             </div>
-            <div className="text-2xl font-bold text-bbs-text">{stats.totalSessions}</div>
+            <div className="text-2xl font-bold text-content-primary">{stats.totalSessions}</div>
           </div>
-          <div className="bg-bbs-surface p-4 rounded-lg border border-bbs-border">
-            <div className="flex items-center gap-2 text-bbs-muted mb-1">
+          <div className="bg-surface-1 p-4 rounded-lg border border-border">
+            <div className="flex items-center gap-2 text-content-secondary mb-1">
               <Activity className="w-4 h-4" />
               <span className="text-sm">Total Log Lines</span>
             </div>
-            <div className="text-2xl font-bold text-bbs-text">{stats.totalLines.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-content-primary">{stats.totalLines.toLocaleString()}</div>
           </div>
-          <div className="bg-bbs-surface p-4 rounded-lg border border-bbs-border">
-            <div className="flex items-center gap-2 text-bbs-muted mb-1">
+          <div className="bg-surface-1 p-4 rounded-lg border border-border">
+            <div className="flex items-center gap-2 text-content-secondary mb-1">
               <Clock className="w-4 h-4" />
               <span className="text-sm">Oldest Session</span>
             </div>
-            <div className="text-sm font-mono text-bbs-text">
+            <div className="text-sm font-mono text-content-primary">
               {stats.oldestSession ? new Date(stats.oldestSession).toLocaleString() : 'N/A'}
             </div>
           </div>
@@ -151,12 +151,12 @@ export function SessionLogsPage() {
 
       {/* Active Sessions Grid */}
       <div>
-        <h2 className="text-xl font-semibold text-bbs-text mb-3">Active Sessions</h2>
-        <p className="text-bbs-muted text-sm mb-3">Click on a session to view its terminal output</p>
+        <h2 className="text-xl font-semibold text-content-primary mb-3">Active Sessions</h2>
+        <p className="text-content-secondary text-sm mb-3">Click on a session to view its terminal output</p>
         {sessionsLoading ? (
-          <div className="text-bbs-muted">Loading sessions...</div>
+          <div className="text-content-secondary">Loading sessions...</div>
         ) : sessions.length === 0 ? (
-          <div className="bg-bbs-surface p-8 rounded-lg border border-bbs-border text-center text-bbs-muted">
+          <div className="bg-surface-1 p-8 rounded-lg border border-border text-center text-content-secondary">
             No active sessions
           </div>
         ) : (
@@ -165,19 +165,19 @@ export function SessionLogsPage() {
               <button
                 key={session.sessionId}
                 onClick={() => setSelectedSessionId(session.sessionId)}
-                className={`bg-bbs-surface p-4 rounded-lg border text-left transition-all cursor-pointer ${
+                className={`bg-surface-1 p-4 rounded-lg border text-left transition-all cursor-pointer ${
                   selectedSessionId === session.sessionId
                     ? 'border-accent bg-accent/10'
-                    : 'border-bbs-border hover:border-bbs-text/30 hover:shadow-lg'
+                    : 'border-border hover:border-content-primary/30 hover:shadow-lg'
                 }`}
               >
                 <div className="flex items-center gap-2 mb-2">
                   <Eye className="w-4 h-4 text-accent" />
-                  <h3 className="font-semibold text-bbs-text">
+                  <h3 className="font-semibold text-content-primary">
                     {session.username || 'Guest'}
                   </h3>
                 </div>
-                <div className="space-y-1 text-sm text-bbs-muted">
+                <div className="space-y-1 text-sm text-content-secondary">
                   <div>Node: {session.nodeId || 'N/A'}</div>
                   <div>Started: {new Date(session.startTime).toLocaleTimeString()}</div>
                   <div>Last Activity: {new Date(session.lastActivity).toLocaleTimeString()}</div>
@@ -193,17 +193,17 @@ export function SessionLogsPage() {
       {selectedSessionId && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xl font-semibold text-bbs-text">
+            <h2 className="text-xl font-semibold text-content-primary">
               Session Log: {sessionLog?.username || 'Loading...'}
             </h2>
             <div className="flex gap-2">
-              <div className="flex bg-bbs-surface rounded">
+              <div className="flex bg-surface-1 rounded">
                 <button
                   onClick={() => setViewMode('raw')}
                   className={`px-3 py-2 rounded-l ${
                     viewMode === 'raw'
                       ? 'bg-accent text-content-inverse'
-                      : 'text-bbs-text hover:bg-bbs-hover'
+                      : 'text-content-primary hover:bg-surface-3'
                   }`}
                 >
                   Raw Text
@@ -213,7 +213,7 @@ export function SessionLogsPage() {
                   className={`px-3 py-2 rounded-r ${
                     viewMode === 'terminal'
                       ? 'bg-accent text-content-inverse'
-                      : 'text-bbs-text hover:bg-bbs-hover'
+                      : 'text-content-primary hover:bg-surface-3'
                   }`}
                 >
                   Terminal View
@@ -221,7 +221,7 @@ export function SessionLogsPage() {
               </div>
               <button
                 onClick={handleCopyLog}
-                className="px-3 py-2 bg-bbs-surface text-bbs-text rounded hover:bg-bbs-hover flex items-center gap-2"
+                className="px-3 py-2 bg-surface-1 text-content-primary rounded hover:bg-surface-3 flex items-center gap-2"
               >
                 <Copy className="w-4 h-4" />
                 Copy Log Content
@@ -229,7 +229,7 @@ export function SessionLogsPage() {
               <button
                 onClick={handleSaveToFile}
                 disabled={saveToFileMutation.isPending}
-                className="px-3 py-2 bg-bbs-surface text-bbs-text rounded hover:bg-bbs-hover flex items-center gap-2 disabled:opacity-50"
+                className="px-3 py-2 bg-surface-1 text-content-primary rounded hover:bg-surface-3 flex items-center gap-2 disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />
                 {saveToFileMutation.isPending ? 'Saving...' : 'Save to File (Get Path)'}
@@ -238,17 +238,17 @@ export function SessionLogsPage() {
           </div>
 
           {logLoading ? (
-            <div className="bg-bbs-surface p-8 rounded-lg border border-bbs-border text-center text-bbs-muted">
+            <div className="bg-surface-1 p-8 rounded-lg border border-border text-center text-content-secondary">
               Loading log...
             </div>
           ) : sessionLog ? (
             viewMode === 'terminal' ? (
-              <div className="border border-bbs-border rounded-lg overflow-hidden" style={{ height: '600px' }}>
+              <div className="border border-border rounded-lg overflow-hidden" style={{ height: '600px' }}>
                 <SessionLogTerminal content={sessionLog.output} />
               </div>
             ) : (
               <div
-                className="border border-bbs-border rounded-lg overflow-auto bg-surface-0 p-4 font-mono text-sm whitespace-pre text-status-ok"
+                className="border border-border rounded-lg overflow-auto bg-surface-0 p-4 font-mono text-sm whitespace-pre text-status-ok"
                 style={{ height: '600px', maxWidth: '100%' }}
               >
                 <div style={{ width: '80ch' }}>
@@ -257,7 +257,7 @@ export function SessionLogsPage() {
               </div>
             )
           ) : (
-            <div className="bg-bbs-surface p-8 rounded-lg border border-bbs-border text-center text-bbs-muted">
+            <div className="bg-surface-1 p-8 rounded-lg border border-border text-center text-content-secondary">
               Session log not found
             </div>
           )}
@@ -267,7 +267,7 @@ export function SessionLogsPage() {
       {/* Help Text */}
       <div className="bg-accent/10 border border-accent/30 p-4 rounded-lg">
         <h3 className="font-semibold text-status-info mb-2">About Session Logs</h3>
-        <ul className="text-sm text-bbs-muted space-y-1">
+        <ul className="text-sm text-content-secondary space-y-1">
           <li>• Session logs capture all terminal output including door launches, screen displays, and MCI codes</li>
           <li>• Keypresses are shown with visual markers like [ENTER], [BACKSPACE], etc.</li>
           <li>• ANSI codes are preserved when copying for debugging rendering issues</li>

@@ -28,19 +28,19 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-bbs-bg">
+    <div className="min-h-screen flex items-center justify-center bg-surface-0">
       <div className="w-full max-w-md">
         <div className="card">
           {/* Header */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-accent mb-2">AmiExpress</h1>
-            <p className="text-bbs-muted">BBS Configuration Portal</p>
+            <p className="text-content-secondary">BBS Configuration Portal</p>
           </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="bg-bbs-accent/10 border border-bbs-accent text-accent px-4 py-3 rounded">
+              <div className="bg-accent/10 border border-accent text-accent px-4 py-3 rounded">
                 {error}
               </div>
             )}
@@ -87,8 +87,8 @@ export function LoginPage() {
           </form>
 
           {/* Footer */}
-          <div className="mt-6 pt-6 border-t border-bbs-primary">
-            <p className="text-xs text-bbs-muted text-center">
+          <div className="mt-6 pt-6 border-t border-border">
+            <p className="text-xs text-content-secondary text-center">
               Sysop-level access required
             </p>
           </div>

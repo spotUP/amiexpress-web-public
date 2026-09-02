@@ -143,7 +143,7 @@ export function LogsPage() {
     if (lower.includes('success') || lower.includes('[ok]')) {
       return 'text-status-ok';
     }
-    return 'text-bbs-text';
+    return 'text-content-primary';
   };
 
   const highlightSearch = (line: string): JSX.Element => {
@@ -180,7 +180,7 @@ export function LogsPage() {
               <h3 className="text-sm font-semibold text-status-info mb-2">
                 Platform: {logData.environment.charAt(0).toUpperCase() + logData.environment.slice(1)}
               </h3>
-              <p className="text-xs text-bbs-muted mb-3">
+              <p className="text-xs text-content-secondary mb-3">
                 File-based logs are not available on this platform. All application output is captured by the platform and available through their logging system.
               </p>
               <div className="flex gap-2">
@@ -352,14 +352,14 @@ export function LogsPage() {
             <span>Clear Log</span>
           </button>
 
-          <label className="flex items-center space-x-2 px-4 py-2 bg-bbs-primary border border-bbs-border rounded cursor-pointer">
+          <label className="flex items-center space-x-2 px-4 py-2 bg-border border border-border rounded cursor-pointer">
             <input
               type="checkbox"
               checked={autoRefresh}
               onChange={(e) => setAutoRefresh(e.target.checked)}
               className="w-4 h-4"
             />
-            <span className="text-sm text-bbs-text">Auto-refresh (3s)</span>
+            <span className="text-sm text-content-primary">Auto-refresh (3s)</span>
           </label>
         </div>
       </div>
@@ -370,32 +370,32 @@ export function LogsPage() {
           <div className="flex items-center space-x-4 text-sm">
             <div className="flex items-center space-x-2">
               <Terminal size={16} className="text-accent" />
-              <span className="text-bbs-muted">Log Type:</span>
-              <span className="text-bbs-text font-semibold uppercase">{logType}</span>
+              <span className="text-content-secondary">Log Type:</span>
+              <span className="text-content-primary font-semibold uppercase">{logType}</span>
             </div>
             {logType === 'door68k' && doorLog && (
               <div className="flex items-center space-x-2">
-                <span className="text-bbs-muted">Log File:</span>
-                <span className="text-bbs-text font-semibold">{doorLog}</span>
+                <span className="text-content-secondary">Log File:</span>
+                <span className="text-content-primary font-semibold">{doorLog}</span>
               </div>
             )}
             <div className="flex items-center space-x-2">
               <Filter size={16} className="text-accent" />
-              <span className="text-bbs-muted">Total Lines:</span>
-              <span className="text-bbs-text font-semibold">
+              <span className="text-content-secondary">Total Lines:</span>
+              <span className="text-content-primary font-semibold">
                 {logData?.totalLines?.toLocaleString() || 0}
               </span>
             </div>
             <div className="flex items-center space-x-2">
-              <span className="text-bbs-muted">Displayed:</span>
-              <span className="text-bbs-text font-semibold">
+              <span className="text-content-secondary">Displayed:</span>
+              <span className="text-content-primary font-semibold">
                 {logData?.displayedLines?.toLocaleString() || 0}
               </span>
             </div>
           </div>
           {searchTerm && (
             <div className="flex items-center space-x-2 text-sm">
-              <span className="text-bbs-muted">Filtered by:</span>
+              <span className="text-content-secondary">Filtered by:</span>
               <span className="px-2 py-1 bg-status-warn/20 text-status-warn rounded">
                 {searchTerm}
               </span>
@@ -404,7 +404,7 @@ export function LogsPage() {
                   setSearchTerm('');
                   setSearchInput('');
                 }}
-                className="text-bbs-muted hover:text-bbs-text"
+                className="text-content-secondary hover:text-content-primary"
               >
                 Clear
               </button>
@@ -417,24 +417,24 @@ export function LogsPage() {
       <div className="card flex-1 overflow-hidden flex flex-col">
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
-            <div className="text-bbs-muted">Loading logs...</div>
+            <div className="text-content-secondary">Loading logs...</div>
           </div>
         ) : logData?.message ? (
           <div className="flex items-center justify-center h-64">
             <div className="text-center max-w-2xl px-4">
-              <Terminal size={48} className="text-bbs-muted mx-auto mb-4" />
-              <pre className="text-sm text-bbs-muted whitespace-pre-wrap text-left bg-bbs-bg p-4 rounded border border-bbs-border">
+              <Terminal size={48} className="text-content-secondary mx-auto mb-4" />
+              <pre className="text-sm text-content-secondary whitespace-pre-wrap text-left bg-surface-0 p-4 rounded border border-border">
                 {logData.message}
               </pre>
             </div>
           </div>
         ) : (
-          <div className="flex-1 overflow-auto bg-bbs-bg p-4 rounded font-mono text-xs">
+          <div className="flex-1 overflow-auto bg-surface-0 p-4 rounded font-mono text-xs">
             {logData?.lines && logData.lines.length > 0 ? (
               <div className="space-y-1">
                 {logData.lines.map((line, index) => (
-                  <div key={index} className="hover:bg-bbs-primary/30 px-2 py-1 rounded">
-                    <span className="text-bbs-muted mr-3 select-none">
+                  <div key={index} className="hover:bg-border/30 px-2 py-1 rounded">
+                    <span className="text-content-secondary mr-3 select-none">
                       {(logData.displayedLines - index).toString().padStart(4, '0')}
                     </span>
                     {highlightSearch(line)}
@@ -442,7 +442,7 @@ export function LogsPage() {
                 ))}
               </div>
             ) : (
-              <div className="text-center text-bbs-muted py-8">No log entries found</div>
+              <div className="text-center text-content-secondary py-8">No log entries found</div>
             )}
           </div>
         )}

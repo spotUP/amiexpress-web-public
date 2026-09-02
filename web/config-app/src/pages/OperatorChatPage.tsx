@@ -265,14 +265,14 @@ export function OperatorChatPage() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-bbs-bg">
+    <div className="h-screen flex flex-col bg-surface-0">
       {/* Header */}
-      <div className="bg-bbs-surface border-b border-bbs-border px-4 py-3">
+      <div className="bg-surface-1 border-b border-border px-4 py-3">
         <h1 className="text-2xl font-bold text-accent flex items-center gap-2">
           <MessageSquare className="w-6 h-6" />
           Operator Chat
         </h1>
-        <p className="text-sm text-bbs-muted mt-1">
+        <p className="text-sm text-content-secondary mt-1">
           {pendingPages.length} pending page{pendingPages.length !== 1 ? 's' : ''}
           {activeChat && ' - In active chat'}
         </p>
@@ -304,24 +304,24 @@ export function OperatorChatPage() {
         {activeChat ? (
           <div className="flex-1 flex flex-col">
             {/* Chat Header - Sticky caller info */}
-            <div className="bg-bbs-surface border-b border-bbs-border px-4 py-3">
+            <div className="bg-surface-1 border-b border-border px-4 py-3">
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-3 mb-2">
                     <div className="flex items-center gap-2">
                       <User className="w-4 h-4 text-accent" />
-                      <span className="font-bold text-bbs-text">{activeChat.userHandle}</span>
+                      <span className="font-bold text-content-primary">{activeChat.userHandle}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-bbs-muted">
+                    <div className="flex items-center gap-2 text-sm text-content-secondary">
                       <Hash className="w-3 h-3" />
                       <span>Node {activeChat.nodeId}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-bbs-muted">
+                    <div className="flex items-center gap-2 text-sm text-content-secondary">
                       <Clock className="w-3 h-3" />
                       <span>{formatDuration(activeChat.timeOnline)}</span>
                     </div>
                   </div>
-                  <div className="text-sm text-bbs-muted">
+                  <div className="text-sm text-content-secondary">
                     {activeChat.conferenceName} | Last: {activeChat.lastCommand}
                   </div>
                 </div>
@@ -330,8 +330,8 @@ export function OperatorChatPage() {
                     onClick={() => setUseTerminalMode(!useTerminalMode)}
                     className={`px-3 py-1 rounded text-sm flex items-center gap-1 ${
                       useTerminalMode
-                        ? 'bg-bbs-accent text-content-inverse'
-                        : 'bg-bbs-surface border border-bbs-border text-bbs-muted hover:border-bbs-accent'
+                        ? 'bg-accent text-content-inverse'
+                        : 'bg-surface-1 border border-border text-content-secondary hover:border-accent'
                     }`}
                   >
                     <Terminal className="w-4 h-4" />
@@ -399,14 +399,14 @@ export function OperatorChatPage() {
                 </div>
 
                 {/* Input Area */}
-                <div className="border-t border-bbs-border bg-bbs-surface p-4">
+                <div className="border-t border-border bg-surface-1 p-4">
                   {/* Quick Replies */}
                   <div className="flex flex-wrap gap-2 mb-3">
                     {QUICK_REPLIES.map((reply) => (
                       <button
                         key={reply.label}
                         onClick={() => handleQuickReply(reply.message)}
-                        className="px-3 py-2 bg-bbs-accent/20 hover:bg-bbs-accent/30 text-accent rounded text-sm"
+                        className="px-3 py-2 bg-accent/20 hover:bg-accent/30 text-accent rounded text-sm"
                       >
                         {reply.label}
                       </button>
@@ -427,13 +427,13 @@ export function OperatorChatPage() {
                         }
                       }}
                       placeholder="Type your message..."
-                      className="flex-1 px-4 py-3 bg-bbs-bg border border-bbs-border text-bbs-text rounded focus:outline-none focus:border-bbs-accent"
+                      className="flex-1 px-4 py-3 bg-surface-0 border border-border text-content-primary rounded focus:outline-none focus:border-accent"
                       autoFocus
                     />
                     <button
                       onClick={() => handleSendMessage()}
                       disabled={!inputMessage.trim()}
-                      className="px-6 py-3 bg-bbs-accent hover:bg-bbs-accent/80 text-content-inverse rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      className="px-6 py-3 bg-accent hover:bg-accent/80 text-content-inverse rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                       Send
                     </button>
@@ -446,35 +446,35 @@ export function OperatorChatPage() {
           /* Pending Pages List */
           <div className="flex-1 p-6">
             {pendingPages.length === 0 ? (
-              <div className="text-center text-bbs-muted mt-12">
+              <div className="text-center text-content-secondary mt-12">
                 <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-50" />
                 <p className="text-lg">No pending pages</p>
                 <p className="text-sm mt-2">You'll be notified when a user pages you</p>
               </div>
             ) : (
               <div className="space-y-4">
-                <h2 className="text-xl font-bold text-bbs-text mb-4">Pending Page Requests</h2>
+                <h2 className="text-xl font-bold text-content-primary mb-4">Pending Page Requests</h2>
                 {pendingPages.map((page) => (
                   <div
                     key={page.id}
-                    className="bg-bbs-surface border border-bbs-border rounded-lg p-4 hover:border-bbs-accent transition-colors"
+                    className="bg-surface-1 border border-border rounded-lg p-4 hover:border-accent transition-colors"
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <div className="flex items-center gap-3 mb-2">
-                          <span className="font-bold text-lg text-bbs-text">{page.userHandle}</span>
-                          <span className="text-sm text-bbs-muted">Node {page.nodeId}</span>
+                          <span className="font-bold text-lg text-content-primary">{page.userHandle}</span>
+                          <span className="text-sm text-content-secondary">Node {page.nodeId}</span>
                         </div>
-                        <div className="text-sm text-bbs-muted">
+                        <div className="text-sm text-content-secondary">
                           {page.conferenceName} | Online: {formatDuration(page.timeOnline)}
                         </div>
-                        <div className="text-xs text-bbs-muted mt-1">
+                        <div className="text-xs text-content-secondary mt-1">
                           Last command: {page.lastCommand} | {formatTime(page.createdAt)}
                         </div>
                       </div>
                       <button
                         onClick={() => handleAcceptPage(page)}
-                        className="px-4 py-2 bg-bbs-accent hover:bg-bbs-accent/80 text-content-inverse rounded"
+                        className="px-4 py-2 bg-accent hover:bg-accent/80 text-content-inverse rounded"
                       >
                         Accept
                       </button>

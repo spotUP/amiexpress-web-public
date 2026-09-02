@@ -317,12 +317,12 @@ export function FileCheckersPage() {
         )}
       />
 
-      <div className="mt-6 card bg-bbs-secondary">
+      <div className="mt-6 card bg-surface-2">
         <div className="flex items-start space-x-3">
           <Shield className="text-accent mt-1" size={20} />
           <div>
-            <h3 className="text-sm font-semibold text-bbs-text mb-2">About File Checkers</h3>
-            <p className="text-xs text-bbs-muted">
+            <h3 className="text-sm font-semibold text-content-primary mb-2">About File Checkers</h3>
+            <p className="text-xs text-content-secondary">
               File checkers are external programs that validate uploaded files. Common uses include virus scanning
               (ClamAV), archive integrity checking (unzip -t), and custom validation scripts. Configure error patterns
               to detect and handle specific failure conditions.
@@ -416,7 +416,7 @@ export function FileCheckersPage() {
                     onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
                     className="w-4 h-4"
                   />
-                  <label htmlFor="checker_enabled" className="text-sm text-bbs-text">Enabled</label>
+                  <label htmlFor="checker_enabled" className="text-sm text-content-primary">Enabled</label>
                 </div>
               </div>
 
@@ -444,7 +444,7 @@ export function FileCheckersPage() {
           maxWidth="max-w-xl"
         >
             <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-bbs-muted">{errorsChecker.checker_name}</p>
+              <p className="text-sm text-content-secondary">{errorsChecker.checker_name}</p>
               <button
                 className="btn-secondary"
                 onClick={closeErrorsDialog}
@@ -455,13 +455,13 @@ export function FileCheckersPage() {
 
             <div className="space-y-2 max-h-64 overflow-y-auto mb-4">
               {errors.length === 0 && (
-                <div className="text-bbs-muted text-sm">No error patterns configured.</div>
+                <div className="text-content-secondary text-sm">No error patterns configured.</div>
               )}
               {errors.map((err: FileCheckerError) => (
-                <div key={err.id} className="flex items-center justify-between border border-bbs-primary rounded px-2 py-1">
+                <div key={err.id} className="flex items-center justify-between border border-border rounded px-2 py-1">
                   <div>
-                    <span className="text-xs text-bbs-muted mr-2">#{err.error_number}</span>
-                    <span className="text-bbs-text text-sm font-mono">{err.error_pattern}</span>
+                    <span className="text-xs text-content-secondary mr-2">#{err.error_number}</span>
+                    <span className="text-content-primary text-sm font-mono">{err.error_pattern}</span>
                   </div>
                   <button
                     onClick={() => deleteErrorMutation.mutate(err.id)}
@@ -473,7 +473,7 @@ export function FileCheckersPage() {
               ))}
             </div>
 
-            <div className="border-t border-bbs-primary pt-3">
+            <div className="border-t border-border pt-3">
               <div className="grid grid-cols-5 gap-3 items-end">
                 <div className="col-span-1">
                   <label htmlFor="error_number" className="label text-xs">Number</label>

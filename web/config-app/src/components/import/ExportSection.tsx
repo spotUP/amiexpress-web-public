@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import { apiClient } from '../../api/client';
 import { useNotification } from '../../contexts/NotificationContext';
+import { DataTable, type DataTableColumn } from '../ui/DataTable';
 
 interface ExportOptions {
   includeUsers: boolean;
@@ -137,6 +138,35 @@ export function ExportSection() {
     return d.toLocaleString();
   };
 
+  /**
+   * The shared table, not a hand-rolled one: sorting, the empty state and the
+   * error state are the DataTable's, and they are the same on every admin page.
+   */
+  const exportColumns: DataTableColumn<ExportFile>[] = [
+    { id: 'filename', header: 'Filename', mono: true, sortable: true, value: (exp) => exp.filename },
+    { id: 'size', header: 'Size', align: 'right', sortable: true, value: (exp) => exp.size,
+      cell: (exp) => formatBytes(exp.size) },
+    // Sorted on the instant, shown in the sysop's locale.
+    { id: 'created', header: 'Created', sortable: true,
+      value: (exp) => new Date(exp.created).getTime(),
+      cell: (exp) => formatDate(exp.created) },
+    {
+      id: 'actions',
+      header: 'Actions',
+      align: 'right',
+      cell: (exp) => (
+        <span className="whitespace-nowrap">
+          <button onClick={() => handleDownload(exp.filename)} className="btn-small btn-primary mr-2">
+            Download
+          </button>
+          <button onClick={() => handleDelete(exp.filename)} className="btn-small btn-danger">
+            Delete
+          </button>
+        </span>
+      ),
+    },
+  ];
+
   return (
     <div className="export-section">
       <h2>Export BBS Data</h2>
@@ -223,39 +253,11 @@ export function ExportSection() {
       {exports.length > 0 && (
         <div className="exports-list">
           <h3>Available Exports</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Filename</th>
-                <th>Size</th>
-                <th>Created</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {exports.map((exp) => (
-                <tr key={exp.filename}>
-                  <td>{exp.filename}</td>
-                  <td>{formatBytes(exp.size)}</td>
-                  <td>{formatDate(exp.created)}</td>
-                  <td>
-                    <button
-                      onClick={() => handleDownload(exp.filename)}
-                      className="btn-small btn-primary"
-                    >
-                      Download
-                    </button>
-                    <button
-                      onClick={() => handleDelete(exp.filename)}
-                      className="btn-small btn-danger"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable
+            columns={exportColumns}
+            rows={exports}
+            getRowId={(exp) => exp.filename}
+          />
         </div>
       )}
     </div>

@@ -87,7 +87,7 @@ export function HealthCheckPage() {
       case 'info':
         return <Info size={16} className="text-status-info" />;
       default:
-        return <Info size={16} className="text-bbs-muted" />;
+        return <Info size={16} className="text-content-secondary" />;
     }
   };
 
@@ -100,7 +100,7 @@ export function HealthCheckPage() {
       case 'info':
         return 'text-status-info';
       default:
-        return 'text-bbs-muted';
+        return 'text-content-secondary';
     }
   };
 
@@ -137,7 +137,7 @@ export function HealthCheckPage() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="flex items-center gap-3">
           <RefreshCw className="animate-spin text-accent" size={24} />
-          <span className="text-bbs-text">Running BBS health check...</span>
+          <span className="text-content-primary">Running BBS health check...</span>
         </div>
       </div>
     );
@@ -152,8 +152,8 @@ export function HealthCheckPage() {
           <div className="card mb-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="text-xl font-semibold text-bbs-text mb-2">System Status</h2>
-                <p className="text-sm text-bbs-muted">
+                <h2 className="text-xl font-semibold text-content-primary mb-2">System Status</h2>
+                <p className="text-sm text-content-secondary">
                   Last checked: {new Date(report.timestamp).toLocaleString()}
                 </p>
               </div>
@@ -189,26 +189,26 @@ export function HealthCheckPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="p-4 bg-bbs-background border border-bbs-border rounded">
-                <div className="text-sm text-bbs-muted mb-1">Overall Status</div>
+              <div className="p-4 bg-surface-0 border border-border rounded">
+                <div className="text-sm text-content-secondary mb-1">Overall Status</div>
                 <div className="flex items-center gap-2">
                   {getStatusBadge(report.overallStatus)}
                 </div>
               </div>
 
-              <div className="p-4 bg-bbs-background border border-bbs-border rounded">
-                <div className="text-sm text-bbs-muted mb-1">Total Issues</div>
-                <div className="text-2xl font-bold text-bbs-text">{report.totalIssues}</div>
+              <div className="p-4 bg-surface-0 border border-border rounded">
+                <div className="text-sm text-content-secondary mb-1">Total Issues</div>
+                <div className="text-2xl font-bold text-content-primary">{report.totalIssues}</div>
               </div>
 
-              <div className="p-4 bg-bbs-background border border-bbs-border rounded">
-                <div className="text-sm text-bbs-muted mb-1">Auto-Fixable</div>
+              <div className="p-4 bg-surface-0 border border-border rounded">
+                <div className="text-sm text-content-secondary mb-1">Auto-Fixable</div>
                 <div className="text-2xl font-bold text-status-ok">{report.autoFixableIssues}</div>
               </div>
 
-              <div className="p-4 bg-bbs-background border border-bbs-border rounded">
-                <div className="text-sm text-bbs-muted mb-1">Categories Checked</div>
-                <div className="text-2xl font-bold text-bbs-text">{report.categories.length}</div>
+              <div className="p-4 bg-surface-0 border border-border rounded">
+                <div className="text-sm text-content-secondary mb-1">Categories Checked</div>
+                <div className="text-2xl font-bold text-content-primary">{report.categories.length}</div>
               </div>
             </div>
           </div>
@@ -232,8 +232,8 @@ export function HealthCheckPage() {
                         <XCircle size={24} className="text-status-danger flex-shrink-0" />
                       )}
                       <div>
-                        <h3 className="text-lg font-semibold text-bbs-text">{category.category}</h3>
-                        <div className="flex items-center gap-4 text-sm text-bbs-muted mt-1">
+                        <h3 className="text-lg font-semibold text-content-primary">{category.category}</h3>
+                        <div className="flex items-center gap-4 text-sm text-content-secondary mt-1">
                           <span>Checked: {category.checkedCount}</span>
                           {category.errorCount > 0 && (
                             <span className="text-status-danger">{category.errorCount} errors</span>
@@ -246,20 +246,20 @@ export function HealthCheckPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       {hasIssues && (
-                        <span className="px-2 py-1 rounded text-xs bg-bbs-accent/20 text-accent">
+                        <span className="px-2 py-1 rounded text-xs bg-accent/20 text-accent">
                           {category.issues.length} {category.issues.length === 1 ? 'issue' : 'issues'}
                         </span>
                       )}
-                      <span className="text-bbs-muted">{isExpanded ? '▼' : '▶'}</span>
+                      <span className="text-content-secondary">{isExpanded ? '▼' : '▶'}</span>
                     </div>
                   </button>
 
                   {isExpanded && hasIssues && (
-                    <div className="mt-4 pt-4 border-t border-bbs-border space-y-3">
+                    <div className="mt-4 pt-4 border-t border-border space-y-3">
                       {category.issues.map((issue, idx) => (
                         <div
                           key={idx}
-                          className="p-3 bg-bbs-background border border-bbs-border rounded flex gap-3"
+                          className="p-3 bg-surface-0 border border-border rounded flex gap-3"
                         >
                           <div className="flex-shrink-0 mt-0.5">
                             {getSeverityIcon(issue.severity)}
@@ -269,12 +269,12 @@ export function HealthCheckPage() {
                               {issue.description}
                             </div>
                             {issue.path && (
-                              <div className="text-xs text-bbs-muted mt-1 font-mono">
+                              <div className="text-xs text-content-secondary mt-1 font-mono">
                                 {issue.path}
                               </div>
                             )}
                             {issue.fixAction && (
-                              <div className="text-sm text-bbs-muted mt-2 flex items-start gap-2">
+                              <div className="text-sm text-content-secondary mt-2 flex items-start gap-2">
                                 <Wrench size={14} className="mt-0.5 flex-shrink-0" />
                                 <span>
                                   {issue.autoFixable ? (
@@ -292,7 +292,7 @@ export function HealthCheckPage() {
                   )}
 
                   {isExpanded && !hasIssues && (
-                    <div className="mt-4 pt-4 border-t border-bbs-border">
+                    <div className="mt-4 pt-4 border-t border-border">
                       <div className="text-center text-status-ok py-4">
                         <CheckCircle size={32} className="mx-auto mb-2" />
                         <p>No issues found in this category</p>

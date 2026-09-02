@@ -109,7 +109,7 @@ export function SystemFilesPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-bbs-text">Loading system files...</div>
+        <div className="text-content-primary">Loading system files...</div>
       </div>
     );
   }
@@ -131,7 +131,7 @@ export function SystemFilesPage() {
             placeholder="Search by name or path - try a node, like Node40"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex-1 px-4 py-2 bg-bbs-secondary border border-bbs-border rounded text-bbs-text"
+            className="flex-1 px-4 py-2 bg-surface-2 border border-border rounded text-content-primary"
           />
           <button
             onClick={() => refetch()}
@@ -151,8 +151,8 @@ export function SystemFilesPage() {
               onClick={() => setSelectedCategory(category)}
               className={`px-3 py-1 rounded text-sm ${
                 selectedCategory === category
-                  ? 'bg-bbs-accent text-bbs-background'
-                  : 'bg-bbs-secondary text-bbs-text hover:bg-bbs-secondary/80'
+                  ? 'bg-accent text-surface-0'
+                  : 'bg-surface-2 text-content-primary hover:bg-surface-2/80'
               }`}
             >
               {category}
@@ -162,19 +162,19 @@ export function SystemFilesPage() {
       </div>
 
       {/* File Count */}
-      <div className="mb-4 text-sm text-bbs-muted">
+      <div className="mb-4 text-sm text-content-secondary">
         Showing {files.length} file{files.length !== 1 ? 's' : ''}
       </div>
 
       {/* Files by Category */}
       {Object.keys(filesByCategory).length === 0 ? (
         <div className="card text-center py-12">
-          <p className="text-bbs-muted">No files found matching your criteria</p>
+          <p className="text-content-secondary">No files found matching your criteria</p>
         </div>
       ) : (
         Object.entries(filesByCategory).map(([category, categoryFiles]) => (
           <div key={category} className="mb-4">
-            <h2 className="text-xl font-semibold text-bbs-text mb-4 border-b border-bbs-border pb-2">
+            <h2 className="text-xl font-semibold text-content-primary mb-4 border-b border-border pb-2">
               {category} ({categoryFiles.length})
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -182,18 +182,18 @@ export function SystemFilesPage() {
                 <div key={file.path} className="card">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-start space-x-3 flex-1 min-w-0">
-                      <div className="p-2 bg-bbs-primary rounded flex-shrink-0">
+                      <div className="p-2 bg-border rounded flex-shrink-0">
                         <FileCode className="text-accent" size={20} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h3 className="text-lg font-semibold text-bbs-text truncate">
+                        <h3 className="text-lg font-semibold text-content-primary truncate">
                           {file.name}
                         </h3>
-                        <p className="text-xs text-bbs-muted font-mono truncate" title={file.path}>
+                        <p className="text-xs text-content-secondary font-mono truncate" title={file.path}>
                           {file.path}
                         </p>
                         {infoFileNote(file.path) && (
-                          <p className="text-xs text-bbs-muted mt-1">
+                          <p className="text-xs text-content-secondary mt-1">
                             {infoFileNote(file.path)}
                           </p>
                         )}
@@ -227,14 +227,14 @@ export function SystemFilesPage() {
           showHeader={false}
         >
             {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-bbs-border">
+            <div className="flex items-center justify-between p-6 border-b border-border">
               <div>
                 <h2 className="text-2xl font-bold text-accent">{editingFile.name}</h2>
-                <p className="text-sm text-bbs-muted font-mono">{editingFile.path}</p>
+                <p className="text-sm text-content-secondary font-mono">{editingFile.path}</p>
               </div>
               <button
                 onClick={closeModal}
-                className="text-bbs-muted hover:text-bbs-text"
+                className="text-content-secondary hover:text-content-primary"
               >
                 <X size={24} />
               </button>
@@ -243,16 +243,16 @@ export function SystemFilesPage() {
             {/* Modal Body - Tooltypes Editor */}
             <div className="flex-1 overflow-y-auto p-6">
               {tooltypes.length === 0 ? (
-                <div className="text-center py-8 text-bbs-muted">
+                <div className="text-center py-8 text-content-secondary">
                   <p>No tooltypes defined. Click "Add Tooltype" to create one.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {tooltypes.map((tooltype, index) => (
-                    <div key={index} className="flex items-start space-x-2 bg-bbs-secondary p-3 rounded">
+                    <div key={index} className="flex items-start space-x-2 bg-surface-2 p-3 rounded">
                       <button
                         onClick={() => handleTooltypeToggle(index)}
-                        className={`mt-1 ${tooltype.commented ? 'text-bbs-muted' : 'text-accent'}`}
+                        className={`mt-1 ${tooltype.commented ? 'text-content-secondary' : 'text-accent'}`}
                         title={tooltype.commented ? 'Commented (click to enable)' : 'Active (click to comment)'}
                       >
                         {tooltype.commented ? '!' : '*'}
@@ -263,8 +263,8 @@ export function SystemFilesPage() {
                           value={tooltype.key}
                           onChange={(e) => handleTooltypeUpdate(index, 'key', e.target.value)}
                           placeholder="KEY"
-                          className={`w-full px-3 py-1 bg-bbs-primary border border-bbs-border rounded text-sm font-mono ${
-                            tooltype.commented ? 'text-bbs-muted' : 'text-bbs-text'
+                          className={`w-full px-3 py-1 bg-border border border-border rounded text-sm font-mono ${
+                            tooltype.commented ? 'text-content-secondary' : 'text-content-primary'
                           }`}
                         />
                         <input
@@ -272,8 +272,8 @@ export function SystemFilesPage() {
                           value={tooltype.value}
                           onChange={(e) => handleTooltypeUpdate(index, 'value', e.target.value)}
                           placeholder="Value"
-                          className={`w-full px-3 py-1 bg-bbs-primary border border-bbs-border rounded text-sm ${
-                            tooltype.commented ? 'text-bbs-muted' : 'text-bbs-text'
+                          className={`w-full px-3 py-1 bg-border border border-border rounded text-sm ${
+                            tooltype.commented ? 'text-content-secondary' : 'text-content-primary'
                           }`}
                         />
                       </div>
@@ -298,7 +298,7 @@ export function SystemFilesPage() {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-6 border-t border-bbs-border flex items-center justify-between">
+            <div className="p-6 border-t border-border flex items-center justify-between">
               <div>
                 {infoDirty && (
                   <span className="text-status-warn text-sm">* Unsaved changes</span>

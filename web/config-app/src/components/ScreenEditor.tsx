@@ -98,8 +98,8 @@ export function ScreenEditor({ surface, mci = [], onChange, onSave, onCancel }: 
           aria-pressed={(which === 'fg' ? surface.fg : surface.bg) === index}
           className={`w-5 h-5 border ${
             (which === 'fg' ? surface.fg : surface.bg) === index
-              ? 'border-bbs-text'
-              : 'border-bbs-border'
+              ? 'border-border-strong'
+              : 'border-border'
           }`}
           style={{ backgroundColor: color }}
           onClick={() => onChange({ ...surface, [which]: index })}
@@ -109,7 +109,7 @@ export function ScreenEditor({ surface, mci = [], onChange, onSave, onCancel }: 
   );
 
   return (
-    <section className="space-y-3 border border-bbs-border p-3">
+    <section className="space-y-3 border border-border p-3">
       <div className="flex flex-wrap items-center gap-2">
         {TOOLS.map(({ tool, label }) => (
           <button
@@ -117,7 +117,7 @@ export function ScreenEditor({ surface, mci = [], onChange, onSave, onCancel }: 
             type="button"
             aria-pressed={surface.tool === tool}
             className={`px-2 py-1 text-sm border ${
-              surface.tool === tool ? 'border-bbs-text text-bbs-text' : 'border-bbs-border text-bbs-muted'
+              surface.tool === tool ? 'border-border-strong text-content-primary' : 'border-border text-content-secondary'
             }`}
             onClick={() => onChange({ ...surface, tool })}
           >
@@ -128,15 +128,15 @@ export function ScreenEditor({ surface, mci = [], onChange, onSave, onCancel }: 
 
       <div className="flex flex-wrap items-start gap-6 text-sm">
         <label className="space-y-1">
-          <span className="block text-bbs-muted">Foreground</span>
+          <span className="block text-content-secondary">Foreground</span>
           {swatches('fg')}
         </label>
         <label className="space-y-1">
-          <span className="block text-bbs-muted">Background</span>
+          <span className="block text-content-secondary">Background</span>
           {swatches('bg')}
         </label>
         <div className="space-y-1">
-          <span className="block text-bbs-muted">Character</span>
+          <span className="block text-content-secondary">Character</span>
           <div className="flex flex-wrap gap-1">
             {BRUSHES.map(char => (
               <button
@@ -145,7 +145,7 @@ export function ScreenEditor({ surface, mci = [], onChange, onSave, onCancel }: 
                 aria-label={`Draw with ${char === ' ' ? 'a space' : char}`}
                 aria-pressed={surface.char === char}
                 className={`w-6 h-6 font-mono border ${
-                  surface.char === char ? 'border-bbs-text' : 'border-bbs-border'
+                  surface.char === char ? 'border-border-strong' : 'border-border'
                 }`}
                 onClick={() => onChange({ ...surface, char })}
               >
@@ -156,6 +156,8 @@ export function ScreenEditor({ surface, mci = [], onChange, onSave, onCancel }: 
         </div>
       </div>
 
+      {/* Black because that is the SCREEN's own background - ANSI colour 0 -
+          not a surface of the admin's chrome. */}
       <div className="overflow-auto bg-black p-2">
         <AnsiCanvas
           canvas={surface.canvas}
@@ -174,13 +176,13 @@ export function ScreenEditor({ surface, mci = [], onChange, onSave, onCancel }: 
       </div>
 
       <div className="space-y-1 text-sm">
-        <span className="block text-bbs-muted">Insert a code</span>
+        <span className="block text-content-secondary">Insert a code</span>
         <div className="flex flex-wrap gap-2">
           {MCI_INSERTS.map(insert => (
             <button
               key={insert.code}
               type="button"
-              className="px-2 py-1 border border-bbs-border text-bbs-muted"
+              className="px-2 py-1 border border-border text-content-secondary"
               onClick={() => {
                 onChange(typeText(surface, cursor.x, cursor.y, insert.template));
                 setCursor(c => ({ ...c, x: Math.min(cols - 1, c.x + insert.template.length) }));
@@ -194,13 +196,13 @@ export function ScreenEditor({ surface, mci = [], onChange, onSave, onCancel }: 
 
       {tokens.length > 0 && (
         <div className="text-sm space-y-1">
-          <h4 className="text-bbs-text">
+          <h4 className="text-content-primary">
             This screen runs things - {tokens.length} MCI code{tokens.length === 1 ? '' : 's'}
           </h4>
           <ul className="font-mono">
             {tokens.map((token, index) => (
               <li key={`${token.line}-${token.column}-${index}`}
-                className={token.resolves ? 'text-bbs-text' : 'text-red-400'}>
+                className={token.resolves ? 'text-content-primary' : 'text-status-danger'}>
                 line {token.line + 1}, column {token.column + 1}: ~{token.code}
                 {token.target ? `_${token.target}` : '.'}
                 {token.resolves ? '' : ' - points at nothing'}
@@ -224,7 +226,7 @@ export function ScreenEditor({ surface, mci = [], onChange, onSave, onCancel }: 
           <Save size={14} /> Save
         </button>
         <button type="button" aria-label="Cancel editing"
-          className="inline-flex items-center gap-1 underline text-bbs-muted" onClick={onCancel}>
+          className="inline-flex items-center gap-1 underline text-content-secondary" onClick={onCancel}>
           <X size={14} /> Cancel
         </button>
       </div>

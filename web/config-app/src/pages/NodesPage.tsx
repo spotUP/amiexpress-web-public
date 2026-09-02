@@ -118,14 +118,14 @@ export function NodesPage() {
   );
 
   if (isLoading) {
-    return <div className="text-bbs-text">Loading node configurations...</div>;
+    return <div className="text-content-primary">Loading node configurations...</div>;
   }
 
   const columns: DataGridColumn<NodeRow>[] = [
     {
       key: 'node',
       header: 'Node',
-      render: (row) => <span className="font-semibold text-bbs-text">#{row.nodeNumber}</span>,
+      render: (row) => <span className="font-semibold text-content-primary">#{row.nodeNumber}</span>,
     },
     {
       key: 'start',
@@ -139,7 +139,7 @@ export function NodesPage() {
             className="input-field w-full"
           />
         ) : (
-          <span className="text-bbs-text font-mono">
+          <span className="text-content-primary font-mono">
             {row.config?.node_start || 'Not configured'}
           </span>
         ),
@@ -158,7 +158,7 @@ export function NodesPage() {
             className="input-field w-full"
           />
         ) : (
-          <span className="text-bbs-text">{row.config?.priority ?? '—'}</span>
+          <span className="text-content-primary">{row.config?.priority ?? '—'}</span>
         ),
     },
     {
@@ -174,7 +174,7 @@ export function NodesPage() {
             className="input-field w-full font-mono"
           />
         ) : (
-          <span className="text-bbs-text font-mono">
+          <span className="text-content-primary font-mono">
             {row.config?.screens || `Node${row.nodeNumber}/ (default)`}
           </span>
         ),
@@ -191,10 +191,10 @@ export function NodesPage() {
               onChange={(e) => setFormData({ ...formData, telnet: e.target.checked })}
               className="w-4 h-4"
             />
-            <span className="text-sm text-bbs-text">Enabled</span>
+            <span className="text-sm text-content-primary">Enabled</span>
           </label>
         ) : (
-          <span className="text-bbs-text">{row.config?.telnet ? 'Enabled' : 'Disabled'}</span>
+          <span className="text-content-primary">{row.config?.telnet ? 'Enabled' : 'Disabled'}</span>
         ),
     },
     {
@@ -209,10 +209,10 @@ export function NodesPage() {
               onChange={(e) => setFormData({ ...formData, ftp: e.target.checked })}
               className="w-4 h-4"
             />
-            <span className="text-sm text-bbs-text">Enabled</span>
+            <span className="text-sm text-content-primary">Enabled</span>
           </label>
         ) : (
-          <span className="text-bbs-text">{row.config?.ftp ? 'Enabled' : 'Disabled'}</span>
+          <span className="text-content-primary">{row.config?.ftp ? 'Enabled' : 'Disabled'}</span>
         ),
     },
     {
@@ -227,10 +227,10 @@ export function NodesPage() {
               onChange={(e) => setFormData({ ...formData, capitol_files: e.target.checked })}
               className="w-4 h-4"
             />
-            <span className="text-sm text-bbs-text">Enabled</span>
+            <span className="text-sm text-content-primary">Enabled</span>
           </label>
         ) : (
-          <span className="text-bbs-text">{row.config?.capitol_files ? 'Yes' : 'No'}</span>
+          <span className="text-content-primary">{row.config?.capitol_files ? 'Yes' : 'No'}</span>
         ),
     },
     {
@@ -249,7 +249,7 @@ export function NodesPage() {
               }
               className="input-field w-20"
             />
-            <span className="text-bbs-muted">/</span>
+            <span className="text-content-secondary">/</span>
             <input
               type="number"
               min="30"
@@ -262,7 +262,7 @@ export function NodesPage() {
             />
           </div>
         ) : (
-          <span className="text-bbs-text">
+          <span className="text-content-primary">
             Sysop {row.config?.sysop_chat_color ?? '—'} / User {row.config?.user_chat_color ?? '—'}
           </span>
         ),
@@ -272,11 +272,11 @@ export function NodesPage() {
       header: 'Status',
       render: (row) =>
         row.config ? (
-          <span className="text-bbs-muted">
+          <span className="text-content-secondary">
             Created {new Date(row.config.created_at).toLocaleDateString()}
           </span>
         ) : (
-          <span className="text-bbs-muted">Not configured</span>
+          <span className="text-content-secondary">Not configured</span>
         ),
     },
     {
@@ -322,7 +322,7 @@ export function NodesPage() {
             </button>
             <button
               onClick={() => handleDelete(row.nodeNumber)}
-              className="bg-bbs-accent hover:bg-bbs-accent/90 text-content-inverse font-medium py-2 px-4 rounded transition-colors flex items-center space-x-2"
+              className="bg-accent hover:bg-accent/90 text-content-inverse font-medium py-2 px-4 rounded transition-colors flex items-center space-x-2"
             >
               <Trash2 size={16} />
               <span>Delete</span>

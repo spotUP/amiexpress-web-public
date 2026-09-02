@@ -15,6 +15,7 @@ import { createSurface, type EditorSurface } from './screen-editor-state';
 import {
   toScreenRows, filterScreenRows,
   type ScreenIndexShape, type ScreenRow, type ScreenIndexEntryShape,
+  type ScopeResolutionShape,
 } from './screen-index-view';
 
 /** Stable fallback: a fresh array each render invalidates the row model. */
@@ -277,7 +278,7 @@ export function ScreenFilesPage() {
       sortable: true,
       value: row => row.missingCount,
       cell: row => (
-        <span className={row.missingCount > 0 ? 'text-amber-400' : 'text-bbs-text'}>
+        <span className={row.missingCount > 0 ? 'text-status-warn' : 'text-content-primary'}>
           {row.missingCount}
         </span>
       ),
@@ -289,7 +290,7 @@ export function ScreenFilesPage() {
       sortable: true,
       value: row => row.distinctContents,
       cell: row => (
-        <span className="text-bbs-text">
+        <span className="text-content-primary">
           {row.distinctContents}
           {row.distinctContents === 1 && row.resolvedCount > 1 ? ' (all identical)' : ''}
         </span>
@@ -303,12 +304,73 @@ export function ScreenFilesPage() {
       value: row => row.brokenReferences,
       cell: row =>
         row.brokenReferences > 0 ? (
-          <span className="text-red-400 inline-flex items-center gap-1">
+          <span className="text-status-danger inline-flex items-center gap-1">
             <AlertTriangle size={14} /> {row.brokenReferences}
           </span>
         ) : (
-          <span className="text-bbs-text">0</span>
+          <span className="text-content-primary">0</span>
         ),
+    },
+  ];
+
+  /** One row per scope a screen resolves in - the same DataTable as everywhere else. */
+  const resolutionColumns: DataTableColumn<ScopeResolutionShape>[] = [
+    { id: 'scope', header: 'Scope', value: res => scopeName(res.scope, res.id) },
+    {
+      id: 'dir',
+      header: 'Reads',
+      mono: true,
+      value: res => res.dir,
+      cell: res => (
+        <>
+          {res.dir}
+          {res.dirIsShared && <span className="text-content-muted"> (shared)</span>}
+        </>
+      ),
+    },
+    {
+      id: 'file',
+      header: 'File',
+      mono: true,
+      value: res => res.file ?? '',
+      cell: res => (res.file ? (
+        <button className="underline" onClick={() => setOpenFile(res.file)}>{res.file}</button>
+      ) : (
+        <span className="text-status-warn">nothing resolves</span>
+      )),
+    },
+    { id: 'variants', header: 'Variants', mono: true, value: res => res.variants.join(' ') },
+    {
+      id: 'actions',
+      header: '',
+      align: 'right',
+      cell: res => {
+        if (!res.file) return null;
+        // The index already knows each file's format, so a row can say whether
+        // there is art to edit rather than opening an editor that refuses.
+        const format = data?.files[res.file]?.format;
+        const editable = format === 'ansi' || format === 'text';
+
+        return (
+          <span className="whitespace-nowrap">
+            {editable && (
+              <button
+                className="inline-flex items-center gap-1 underline mr-3"
+                aria-label={`Edit ${res.file}`}
+                onClick={() => { setOpenFile(res.file); setPendingEdit(res.file); }}
+              >
+                <Pencil size={14} /> Edit
+              </button>
+            )}
+            <a
+              className="inline-flex items-center gap-1 underline"
+              href={`/api/screens/file?path=${encodeURIComponent(res.file)}&download=1`}
+            >
+              <Download size={14} /> Download
+            </a>
+          </span>
+        );
+      },
     },
   ];
 
@@ -349,22 +411,22 @@ export function ScreenFilesPage() {
       label: `Read by nothing ${data?.unused.length ?? 0}`,
       render: () => (
         <div className="space-y-2 text-sm">
-          <p className="text-bbs-muted">
+          <p className="text-content-secondary">
             On the volume, read by no screen the board can display. Safe to keep;
             safe to remove once you have looked.
           </p>
           <ul className="space-y-1">
             {(data?.unused ?? []).map(item => (
               <li key={item.relPath} className="flex items-center gap-3">
-                <span className="font-mono text-bbs-text">{item.relPath}</span>
-                <span className="text-bbs-muted">{item.bytes} bytes, {item.format}</span>
+                <span className="font-mono text-content-primary">{item.relPath}</span>
+                <span className="text-content-secondary">{item.bytes} bytes, {item.format}</span>
                 <a
                   className="underline"
                   href={`/api/screens/file?path=${encodeURIComponent(item.relPath)}&download=1`}
                 >
                   Download
                 </a>
-                <button className="underline text-red-400" onClick={() => removeFile(item.relPath)}>
+                <button className="underline text-status-danger" onClick={() => removeFile(item.relPath)}>
                   Delete
                 </button>
               </li>
@@ -379,9 +441,9 @@ export function ScreenFilesPage() {
     <div className="space-y-4">
       <header className="flex items-center gap-2">
         <FileImage size={20} />
-        <h1 className="text-xl text-bbs-text">Screen Files</h1>
+        <h1 className="text-xl text-content-primary">Screen Files</h1>
         {data && (
-          <span className="text-sm text-bbs-muted">
+          <span className="text-sm text-content-secondary">
             {Object.keys(data.files).length} files, {data.unused.length} read by nothing
           </span>
         )}
@@ -416,8 +478,8 @@ export function ScreenFilesPage() {
       </div>
 
       {importPlan && (
-        <div className="border border-bbs-border p-3 text-sm space-y-2">
-          <p className="text-bbs-text">{importPlan.length} files would be written:</p>
+        <div className="border border-border p-3 text-sm space-y-2">
+          <p className="text-content-primary">{importPlan.length} files would be written:</p>
           <ul className="font-mono max-h-48 overflow-auto">
             {importPlan.map(item => (
               <li key={item.path}>
@@ -426,7 +488,7 @@ export function ScreenFilesPage() {
             ))}
           </ul>
           <button className="underline" onClick={applyImport}>Import them</button>
-          <button className="block text-bbs-muted underline" onClick={() => { setImportPlan(null); setImportFile(null); }}>
+          <button className="block text-content-secondary underline" onClick={() => { setImportPlan(null); setImportFile(null); }}>
             cancel
           </button>
         </div>
@@ -436,92 +498,27 @@ export function ScreenFilesPage() {
 
       {entry && (
         <section className="space-y-2" ref={detailRef} data-testid="screen-detail">
-          <h2 className="text-lg text-bbs-text">{entry.screen}</h2>
-          <p className="text-sm text-bbs-muted">
+          <h2 className="text-lg text-content-primary">{entry.screen}</h2>
+          <p className="text-sm text-content-secondary">
             Where {entry.screen} resolves from, per node and conference. Edit
-            opens the art; the file name opens its details underneath.
+            opens the art; the file name opens what the board knows about it.
           </p>
 
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-bbs-muted text-left">
-                <th className="py-1">Scope</th>
-                <th>Reads</th>
-                <th>File</th>
-                <th>Variants</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {entry.resolutions.map(res => {
-                // The index already knows each file's format, so a row can say
-                // whether there is anything to edit rather than opening the
-                // editor and refusing.
-                const format = res.file ? data?.files[res.file]?.format : undefined;
-                const editable = format === 'ansi' || format === 'text';
-
-                return (
-                <tr key={`${res.scope}-${res.id}`} className="border-t border-bbs-border">
-                  <td className="py-1">{scopeName(res.scope, res.id)}</td>
-                  <td className="font-mono">
-                    {res.dir}
-                    {res.dirIsShared && <span className="text-bbs-muted"> (shared)</span>}
-                  </td>
-                  <td className="font-mono">
-                    {res.file ? (
-                      <button className="underline" onClick={() => setOpenFile(res.file)}>
-                        {res.file}
-                      </button>
-                    ) : (
-                      <span className="text-amber-400">nothing resolves</span>
-                    )}
-                  </td>
-                  <td className="font-mono text-bbs-muted">{res.variants.join(' ')}</td>
-                  <td className="text-right whitespace-nowrap">
-                    {res.file && editable && (
-                      <>
-                        <button
-                          className="inline-flex items-center gap-1 underline mr-3"
-                          aria-label={`Edit ${res.file}`}
-                          onClick={() => {
-                            setOpenFile(res.file);
-                            setPendingEdit(res.file);
-                          }}
-                        >
-                          <Pencil size={14} /> Edit
-                        </button>
-                        <a
-                          className="inline-flex items-center gap-1 underline"
-                          href={`/api/screens/file?path=${encodeURIComponent(res.file)}&download=1`}
-                        >
-                          <Download size={14} /> Download
-                        </a>
-                      </>
-                    )}
-                    {res.file && !editable && (
-                      <a
-                        className="inline-flex items-center gap-1 underline"
-                        href={`/api/screens/file?path=${encodeURIComponent(res.file)}&download=1`}
-                      >
-                        <Download size={14} /> Download
-                      </a>
-                    )}
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <DataTable
+            columns={resolutionColumns}
+            rows={entry.resolutions}
+            getRowId={res => `${res.scope}-${res.id}`}
+          />
 
           {entry.duplicateGroups.map(group => (
-            <div key={group.sha256} className="text-sm text-bbs-muted space-y-1">
+            <div key={group.sha256} className="text-sm text-content-secondary space-y-1">
               <p className="inline-flex items-center gap-2">
                 <Share2 size={14} />
                 {group.paths.length} copies with identical content - they can be read from one
                 directory instead.
               </p>
               <div className="flex flex-wrap items-center gap-2">
-                <label className="text-bbs-muted" htmlFor="shared-dir">Share from</label>
+                <label className="text-content-secondary" htmlFor="shared-dir">Share from</label>
                 <select
                   id="shared-dir"
                   className="input-field"
@@ -546,23 +543,23 @@ export function ScreenFilesPage() {
           ))}
 
           {shareSummary && (
-            <div className="border border-bbs-border p-3 text-sm space-y-2">
-              <p className="text-bbs-text">
+            <div className="border border-border p-3 text-sm space-y-2">
+              <p className="text-content-primary">
                 {shareSummary.canShare.length} node
-                {shareSummary.canShare.length === 1 ? '' : 's'} can read Screens/Shared.
+                {shareSummary.canShare.length === 1 ? '' : 's'} can read {sharedDir}.
               </p>
               {shareSummary.blocked.map(node => (
-                <p key={node.id} className="text-amber-400">
+                <p key={node.id} className="text-status-warn">
                   Node {node.id}: {node.reasons.join('; ')}
                 </p>
               ))}
               {shareSummary.canShare.length > 0 && (
                 <button className="underline" onClick={() => applyShare(shareSummary.canShare)}>
                   Point {shareSummary.canShare.length} node
-                  {shareSummary.canShare.length === 1 ? '' : 's'} at Screens/Shared
+                  {shareSummary.canShare.length === 1 ? '' : 's'} at {sharedDir}
                 </button>
               )}
-              <button className="block text-bbs-muted underline" onClick={() => setShareSummary(null)}>
+              <button className="block text-content-secondary underline" onClick={() => setShareSummary(null)}>
                 cancel
               </button>
             </div>
@@ -579,10 +576,15 @@ export function ScreenFilesPage() {
         choice is the last step of editing, not something to find afterwards.
       */}
       <Modal
-        open={!!editing || (editorWrite && !!pendingUpload)}
-        title={openFile ? `Editing ${openFile}` : 'Editing a screen'}
+        open={!!openFile}
+        title={openFile ?? 'A screen file'}
         maxWidth="max-w-5xl"
-        onClose={() => { setEditing(null); setEditorWrite(false); setPendingUpload(null); }}
+        onClose={() => {
+          setOpenFile(null);
+          setEditing(null);
+          setEditorWrite(false);
+          setPendingUpload(null);
+        }}
       >
         {editing && !pendingUpload && (
           <ScreenEditor
@@ -602,7 +604,7 @@ export function ScreenFilesPage() {
 
         {editorWrite && pendingUpload && (
           <div className="space-y-2 p-4">
-            <p className="text-sm text-bbs-text">
+            <p className="text-sm text-content-primary">
               Write <span className="font-mono">{openFile}</span> where?
             </p>
             {options.map(option => (
@@ -611,120 +613,135 @@ export function ScreenFilesPage() {
                 className="block text-left underline"
                 onClick={async () => {
                   await applyWrite(option);
+                  // The write was the task: close, rather than leaving the
+                  // sysop in a dialog with nothing left to do in it.
                   setEditing(null);
                   setEditorWrite(false);
+                  setOpenFile(null);
                 }}
               >
                 {option.label}
                 {option.choice === 'all-copies' && ` - ${option.targets.length} backups`}
-                {option.suggested && <span className="text-bbs-muted"> (suggested)</span>}
+                {option.suggested && <span className="text-content-secondary"> (suggested)</span>}
               </button>
             ))}
             <button
-              className="block text-left text-bbs-muted underline"
+              className="block text-left text-content-secondary underline"
               onClick={() => { setPendingUpload(null); setEditorWrite(false); }}
             >
               back to the editor
             </button>
           </div>
         )}
-      </Modal>
 
-      {openFile && file && (
-        <section className="space-y-2">
-          <h3 className="text-bbs-text font-mono">{openFile}</h3>
-          <p className="text-sm text-bbs-muted">
-            {file.bytes} bytes, {file.format}
-          </p>
+        {/*
+          The file itself: what it is, what it runs, and what a caller sees.
+          This was a section under the page, which is what made the page
+          "extremely tall and unmanageable" - the tab list, the screens table,
+          the resolutions and then all of this.
+        */}
+        {openFile && file && !editing && !editorWrite && (
+          <div className="space-y-3 p-4">
+            <p className="text-sm text-content-secondary">
+              {file.bytes} bytes, {file.format}
+            </p>
 
-          <div className="flex items-center gap-3">
-            <input
-              ref={uploadInput}
-              type="file"
-              className="hidden"
-              onChange={async e => {
-                const chosen = e.target.files?.[0];
-                if (!chosen) return;
-                setPendingUpload({ bytes: await readAsBase64(chosen), name: chosen.name });
-                e.target.value = '';
-              }}
-            />
-            <button
-              className="inline-flex items-center gap-1 underline"
-              onClick={() => uploadInput.current?.click()}
-            >
-              <Upload size={14} /> Replace
-            </button>
-            {(file.format === 'ansi' || file.format === 'text') && (
+            <div className="flex items-center gap-3 text-sm">
+              <input
+                ref={uploadInput}
+                type="file"
+                className="hidden"
+                onChange={async e => {
+                  const chosen = e.target.files?.[0];
+                  if (!chosen) return;
+                  setPendingUpload({ bytes: await readAsBase64(chosen), name: chosen.name });
+                  e.target.value = '';
+                }}
+              />
               <button
                 className="inline-flex items-center gap-1 underline"
-                aria-label="Edit this file"
-                onClick={async () => setEditing(createSurface(await screenToCanvas(file.content)))}
+                onClick={() => uploadInput.current?.click()}
               >
-                <Pencil size={14} /> Edit
+                <Upload size={14} /> Replace
               </button>
-            )}
-            <button
-              className="inline-flex items-center gap-1 underline text-red-400"
-              onClick={() => removeFile(openFile)}
-            >
-              <Trash2 size={14} /> Delete
-            </button>
-          </div>
-
-          {pendingUpload && !editorWrite && (
-            <div className="border border-bbs-border p-3 space-y-2">
-              <p className="text-sm text-bbs-text">
-                Replace <span className="font-mono">{openFile}</span> with{' '}
-                <span className="font-mono">{pendingUpload.name}</span>
-              </p>
-              {options.map(option => (
+              {(file.format === 'ansi' || file.format === 'text') && (
                 <button
-                  key={option.choice}
-                  className="block text-left underline"
-                  onClick={() => applyWrite(option)}
+                  className="inline-flex items-center gap-1 underline"
+                  aria-label="Edit this file"
+                  onClick={async () => setEditing(createSurface(await screenToCanvas(file.content)))}
                 >
-                  {option.label}
-                  {option.choice === 'all-copies' && ` - ${option.targets.length} backups`}
-                  {option.suggested && <span className="text-bbs-muted"> (suggested)</span>}
+                  <Pencil size={14} /> Edit
                 </button>
-              ))}
-              <button className="block text-left text-bbs-muted underline" onClick={() => setPendingUpload(null)}>
-                cancel
+              )}
+              <a
+                className="inline-flex items-center gap-1 underline"
+                href={`/api/screens/file?path=${encodeURIComponent(openFile)}&download=1`}
+              >
+                <Download size={14} /> Download
+              </a>
+              <button
+                className="inline-flex items-center gap-1 underline text-status-danger"
+                onClick={() => removeFile(openFile)}
+              >
+                <Trash2 size={14} /> Delete
               </button>
             </div>
-          )}
 
-          {file.format === 'ansi' || file.format === 'text' ? (
-            <ScreenPreview content={atob(file.content)} />
-          ) : (
-            <p className="text-sm text-amber-400">
-              {file.format === 'rip'
-                ? 'RIP graphics - preview arrives with the RIP editor in phase 3.'
-                : 'PETSCII - the board does not render this correctly yet, so no preview is shown rather than a misleading one.'}
-            </p>
-          )}
-
-          {/* While the editor is open it lists the codes itself, live and with
-              their positions; the file's own list would be the same facts twice
-              and one of the two would be stale the moment a code is typed. */}
-          {!editing && file.mci?.length > 0 && (
-            <div className="text-sm">
-              <h4 className="text-bbs-text">
-                This screen runs things - {file.mci.length} MCI reference
-                {file.mci.length === 1 ? '' : 's'}
-              </h4>
-              <ul className="font-mono">
-                {file.mci.map((ref: any, i: number) => (
-                  <li key={i} className={ref.resolves ? 'text-bbs-text' : 'text-red-400'}>
-                    ~{ref.code}_{ref.target} {ref.resolves ? '' : '- points at nothing'}
-                  </li>
+            {pendingUpload && !editorWrite && (
+              <div className="border border-border p-3 space-y-2 text-sm">
+                <p className="text-content-primary">
+                  Replace <span className="font-mono">{openFile}</span> with{' '}
+                  <span className="font-mono">{pendingUpload.name}</span>
+                </p>
+                {options.map(option => (
+                  <button
+                    key={option.choice}
+                    className="block text-left underline"
+                    onClick={() => applyWrite(option)}
+                  >
+                    {option.label}
+                    {option.choice === 'all-copies' && ` - ${option.targets.length} backups`}
+                    {option.suggested && <span className="text-content-secondary"> (suggested)</span>}
+                  </button>
                 ))}
-              </ul>
-            </div>
-          )}
-        </section>
-      )}
+                <button
+                  className="block text-left text-content-secondary underline"
+                  onClick={() => setPendingUpload(null)}
+                >
+                  cancel
+                </button>
+              </div>
+            )}
+
+            {file.format === 'ansi' || file.format === 'text' ? (
+              <ScreenPreview content={atob(file.content)} />
+            ) : (
+              <p className="text-sm text-status-warn">
+                {file.format === 'rip'
+                  ? 'RIP graphics - preview arrives with the RIP editor in phase 3.'
+                  : 'PETSCII - the board does not render this correctly yet, so no preview is shown rather than a misleading one.'}
+              </p>
+            )}
+
+            {file.mci?.length > 0 && (
+              <div className="text-sm">
+                <h4 className="text-content-primary">
+                  This screen runs things - {file.mci.length} MCI reference
+                  {file.mci.length === 1 ? '' : 's'}
+                </h4>
+                <ul className="font-mono">
+                  {file.mci.map((ref: { code: string; target: string; resolves: boolean }, i: number) => (
+                    <li key={i} className={ref.resolves ? 'text-content-primary' : 'text-status-danger'}>
+                      ~{ref.code}_{ref.target} {ref.resolves ? '' : '- points at nothing'}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
     </div>
   );
 }

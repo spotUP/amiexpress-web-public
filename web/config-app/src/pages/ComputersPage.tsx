@@ -237,7 +237,7 @@ export function ComputersPage() {
                   onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
                   className="w-4 h-4"
                 />
-                <label htmlFor="computer_enabled" className="text-sm text-bbs-text">
+                <label htmlFor="computer_enabled" className="text-sm text-content-primary">
                   Enabled
                 </label>
               </div>

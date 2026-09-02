@@ -55,7 +55,7 @@ export function Modal({
           }`}
         >
           <DialogPrimitive.Title
-            className={showHeader ? 'text-xl font-semibold text-bbs-text mb-4' : 'sr-only'}
+            className={showHeader ? 'text-xl font-semibold text-content-primary mb-4' : 'sr-only'}
           >
             {title}
           </DialogPrimitive.Title>

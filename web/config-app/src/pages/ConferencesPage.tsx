@@ -338,10 +338,10 @@ export function ConferencesPage() {
 
       {orphans.length > 0 && (
         <section className="mt-6 border border-status-warn/40 rounded p-4 space-y-2">
-          <h2 className="text-bbs-text">
+          <h2 className="text-content-primary">
             {orphans.length} director{orphans.length === 1 ? 'y' : 'ies'} no conference points at
           </h2>
-          <p className="text-sm text-bbs-muted">
+          <p className="text-sm text-content-secondary">
             Left behind when a conference was deleted without its files. The board
             never reads them - a conference's directory is whatever its LOCATION
             says - so they are dead weight until someone looks inside.
@@ -349,12 +349,12 @@ export function ConferencesPage() {
           <ul className="space-y-1 text-sm">
             {orphans.map((orphan) => (
               <li key={orphan.dir} className="flex items-center gap-3">
-                <span className="font-mono text-bbs-text">{orphan.dir}</span>
-                <span className="text-bbs-muted">
+                <span className="font-mono text-content-primary">{orphan.dir}</span>
+                <span className="text-content-secondary">
                   {orphan.files} file{orphan.files === 1 ? '' : 's'}, {formatBytes(orphan.bytes)}
                 </span>
                 <button
-                  className="underline text-red-400"
+                  className="underline text-status-danger"
                   aria-label={`Remove ${orphan.dir}`}
                   onClick={() => handleRemoveOrphan(orphan)}
                   disabled={removeOrphanMutation.isPending}
@@ -410,13 +410,13 @@ export function ConferencesPage() {
           maxWidth="max-w-2xl"
           showHeader={false}
         >
-            <div className="sticky top-0 bg-bbs-bg border-b border-bbs-primary p-6 flex justify-between items-center">
+            <div className="sticky top-0 bg-surface-0 border-b border-border p-6 flex justify-between items-center">
               <h2 className="text-2xl font-bold text-accent">
                 {editingConference ? 'Edit Conference' : 'Add Conference'}
               </h2>
               <button
                 onClick={closeModal}
-                className="text-bbs-muted hover:text-bbs-text transition-colors"
+                className="text-content-secondary hover:text-content-primary transition-colors"
               >
                 <X size={24} />
               </button>
@@ -435,7 +435,7 @@ export function ConferencesPage() {
                     className="input-field w-full"
                     required
                   />
-                  <p className="text-xs text-bbs-muted mt-1">
+                  <p className="text-xs text-content-secondary mt-1">
                     Written to ConfConfig.info as NAME.{formData.conference_id} - this is the
                     name the BBS shows in the conference list
                   </p>
@@ -451,7 +451,7 @@ export function ConferencesPage() {
                     readOnly
                     aria-readonly="true"
                   />
-                  <p className="text-xs text-bbs-muted mt-1">
+                  <p className="text-xs text-content-secondary mt-1">
                     {editingConference
                       ? 'A conference is a position on the board and keeps its number.'
                       : `Assigned automatically - a new conference goes on the end, after ${conferences.length}.`}
@@ -470,11 +470,11 @@ export function ConferencesPage() {
                     className="input-field w-full"
                     required
                   />
-                  <p className="text-xs text-bbs-muted mt-1">Max 16 directories per conference</p>
+                  <p className="text-xs text-content-secondary mt-1">Max 16 directories per conference</p>
                 </div>
 
                 <div className="md:col-span-2 space-y-3">
-                  <p className="text-xs text-bbs-muted">
+                  <p className="text-xs text-content-secondary">
                     File area paths follow{' '}
                     <span className="font-mono">{formData.location || 'this conference'}</span>{' '}
                     until you change one. A changed path is yours and is never rewritten.
@@ -495,11 +495,11 @@ export function ConferencesPage() {
                                 Dir {row.dir} {side === 'download' ? 'download' : 'upload'}
                               </label>
                               {cell.following ? (
-                                <span className="text-xs text-bbs-muted">follows</span>
+                                <span className="text-xs text-content-secondary">follows</span>
                               ) : (
                                 <button
                                   type="button"
-                                  className="text-xs underline text-bbs-muted"
+                                  className="text-xs underline text-content-secondary"
                                   aria-label={`Reset directory ${row.dir} ${side} path to the default`}
                                   onClick={() =>
                                     setFormData((current) =>
@@ -563,7 +563,7 @@ export function ConferencesPage() {
                       onChange={(e) => setFormData({ ...formData, force_newscan: e.target.checked })}
                       className="form-checkbox h-5 w-5 text-accent"
                     />
-                    <span className="text-bbs-text">Force Newscan</span>
+                    <span className="text-content-primary">Force Newscan</span>
                   </label>
 
                   <label className="flex items-center space-x-2 cursor-pointer">
@@ -573,7 +573,7 @@ export function ConferencesPage() {
                       onChange={(e) => setFormData({ ...formData, exclude_ftp: e.target.checked })}
                       className="form-checkbox h-5 w-5 text-accent"
                     />
-                    <span className="text-bbs-text">Exclude FTP</span>
+                    <span className="text-content-primary">Exclude FTP</span>
                   </label>
 
                   <label className="flex items-center space-x-2 cursor-pointer">
@@ -583,7 +583,7 @@ export function ConferencesPage() {
                       onChange={(e) => setFormData({ ...formData, private_conf: e.target.checked })}
                       className="form-checkbox h-5 w-5 text-accent"
                     />
-                    <span className="text-bbs-text">Private Conference</span>
+                    <span className="text-content-primary">Private Conference</span>
                   </label>
 
                   <label className="flex items-center space-x-2 cursor-pointer">
@@ -593,12 +593,12 @@ export function ConferencesPage() {
                       onChange={(e) => setFormData({ ...formData, read_only: e.target.checked })}
                       className="form-checkbox h-5 w-5 text-accent"
                     />
-                    <span className="text-bbs-text">Read Only</span>
+                    <span className="text-content-primary">Read Only</span>
                   </label>
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-4 pt-6 border-t border-bbs-primary">
+              <div className="flex justify-end space-x-4 pt-6 border-t border-border">
                 <button
                   type="button"
                   onClick={() => {

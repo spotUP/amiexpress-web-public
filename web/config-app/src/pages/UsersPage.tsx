@@ -207,7 +207,7 @@ export function UsersPage() {
     if (level >= 200) return 'text-status-warn';
     if (level >= 100) return 'text-status-warn';
     if (level >= 50) return 'text-status-ok';
-    return 'text-bbs-muted';
+    return 'text-content-secondary';
   };
 
   // Use stable reference for empty fallback to prevent infinite re-renders
@@ -354,13 +354,13 @@ export function UsersPage() {
           maxWidth="max-w-2xl"
           showHeader={false}
         >
-            <div className="sticky top-0 bg-bbs-bg border-b border-bbs-primary p-6 flex justify-between items-center">
+            <div className="sticky top-0 bg-surface-0 border-b border-border p-6 flex justify-between items-center">
               <h2 className="text-2xl font-bold text-accent">
                 {editingUser ? 'Edit User' : 'Add User'}
               </h2>
               <button
                 onClick={closeModal}
-                className="text-bbs-muted hover:text-bbs-text transition-colors"
+                className="text-content-secondary hover:text-content-primary transition-colors"
               >
                 <X size={24} />
               </button>
@@ -419,7 +419,7 @@ export function UsersPage() {
                     placeholder={editingUser ? 'Repeat the new password' : ''}
                   />
                   {formData.confirmPassword && formData.password !== formData.confirmPassword && (
-                    <p className="text-xs text-bbs-error mt-1">The passwords do not match</p>
+                    <p className="text-xs text-status-danger mt-1">The passwords do not match</p>
                   )}
                 </div>
 
@@ -491,7 +491,7 @@ export function UsersPage() {
                     className="input-field w-full"
                     required
                   />
-                  <p className="text-xs text-bbs-muted mt-1">
+                  <p className="text-xs text-content-secondary mt-1">
                     0-255 (255=Sysop, 200=Co-Sysop, 100=Privileged)
                   </p>
                 </div>
@@ -514,7 +514,7 @@ export function UsersPage() {
                     className="input-field w-full"
                     required
                   />
-                  <p className="text-xs text-bbs-muted mt-1">
+                  <p className="text-xs text-content-secondary mt-1">
                     -1 for unlimited time.
                   </p>
                 </div>
@@ -527,12 +527,12 @@ export function UsersPage() {
                       onChange={(e) => setFormData({ ...formData, expert: e.target.checked })}
                       className="form-checkbox h-5 w-5 text-accent"
                     />
-                    <span className="text-bbs-text">Expert Mode (skip prompts and menus)</span>
+                    <span className="text-content-primary">Expert Mode (skip prompts and menus)</span>
                   </label>
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-4 pt-6 border-t border-bbs-primary">
+              <div className="flex justify-end space-x-4 pt-6 border-t border-border">
                 <button
                   type="button"
                   onClick={() => {

@@ -195,7 +195,7 @@ export function BatchEditorPage() {
       <div className="card mb-4">
         <div className="flex flex-wrap items-center gap-3 mb-3">
           <div className="flex items-center space-x-2">
-            <Filter size={16} className="text-bbs-muted" />
+            <Filter size={16} className="text-content-secondary" />
             <input
               type="text"
               value={filter}
@@ -204,7 +204,7 @@ export function BatchEditorPage() {
               className="input-field"
             />
           </div>
-          <label className="flex items-center space-x-2 text-sm text-bbs-text">
+          <label className="flex items-center space-x-2 text-sm text-content-primary">
             <input
               type="checkbox"
               checked={hideComments}
@@ -229,7 +229,7 @@ export function BatchEditorPage() {
           </div>
         </div>
         {validation && (
-          <div className="text-sm text-bbs-text flex items-center space-x-4">
+          <div className="text-sm text-content-primary flex items-center space-x-4">
             <span>Lines: {validation.summary.total}</span>
             <span className="text-status-danger">Errors: {validation.summary.errors}</span>
             <span className="text-status-warn">Warnings: {validation.summary.warnings}</span>
@@ -239,12 +239,12 @@ export function BatchEditorPage() {
       </div>
 
       <div className="card">
-        <div className="grid grid-cols-12 gap-2 text-xs font-mono text-bbs-text">
-          <div className="col-span-1 text-bbs-muted">#</div>
-          <div className="col-span-10 text-bbs-muted">Command</div>
-          <div className="col-span-1 text-bbs-muted text-right">Status</div>
+        <div className="grid grid-cols-12 gap-2 text-xs font-mono text-content-primary">
+          <div className="col-span-1 text-content-secondary">#</div>
+          <div className="col-span-10 text-content-secondary">Command</div>
+          <div className="col-span-1 text-content-secondary text-right">Status</div>
         </div>
-        <div className="divide-y divide-bbs-border">
+        <div className="divide-y divide-border">
           {filteredLines.map(({ idx, text, isComment }) => {
             const lineNo = idx + 1;
             const issues = validationByLine.get(lineNo) || [];
@@ -257,7 +257,7 @@ export function BatchEditorPage() {
                 : 'text-status-ok';
             return (
               <div key={idx} className="grid grid-cols-12 gap-2 py-1 items-center">
-                <div className="col-span-1 text-xs text-bbs-muted">{lineNo}</div>
+                <div className="col-span-1 text-xs text-content-secondary">{lineNo}</div>
                 <div className="col-span-10">
                   <input
                     type="text"
@@ -268,10 +268,10 @@ export function BatchEditorPage() {
                       setContent(next.join('\n'));
                       setDirty(true);
                     }}
-                    className={`input-field w-full font-mono text-xs ${isComment ? 'text-bbs-muted' : 'text-bbs-text'}`}
+                    className={`input-field w-full font-mono text-xs ${isComment ? 'text-content-secondary' : 'text-content-primary'}`}
                   />
                   {issues.map((issue) => (
-                    <div key={issue.message + issue.status} className="text-[11px] text-bbs-muted">
+                    <div key={issue.message + issue.status} className="text-[11px] text-content-secondary">
                       {issue.status === 'error' ? 'Error' : 'Warning'}: {issue.message}
                     </div>
                   ))}

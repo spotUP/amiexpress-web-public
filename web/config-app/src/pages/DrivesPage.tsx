@@ -231,13 +231,13 @@ export function DrivesPage() {
           maxWidth="max-w-md"
           showHeader={false}
         >
-            <div className="border-b border-bbs-primary p-6 flex justify-between items-center">
+            <div className="border-b border-border p-6 flex justify-between items-center">
               <h2 className="text-2xl font-bold text-accent">
                 {editingDrive ? 'Edit Drive' : 'Add Drive'}
               </h2>
               <button
                 onClick={closeModal}
-                className="text-bbs-muted hover:text-bbs-text transition-colors"
+                className="text-content-secondary hover:text-content-primary transition-colors"
               >
                 <X size={24} />
               </button>
@@ -291,11 +291,11 @@ export function DrivesPage() {
                     onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
                     className="form-checkbox h-5 w-5 text-accent"
                   />
-                  <span className="text-bbs-text">Enabled</span>
+                  <span className="text-content-primary">Enabled</span>
                 </label>
               </div>
 
-              <div className="flex justify-end space-x-4 pt-6 border-t border-bbs-primary">
+              <div className="flex justify-end space-x-4 pt-6 border-t border-border">
                 <button
                   type="button"
                   onClick={() => {

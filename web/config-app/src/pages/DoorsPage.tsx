@@ -449,13 +449,13 @@ export function DoorsPage() {
           maxWidth="max-w-2xl"
           showHeader={false}
         >
-            <div className="sticky top-0 bg-bbs-bg border-b border-bbs-primary p-6 flex justify-between items-center">
+            <div className="sticky top-0 bg-surface-0 border-b border-border p-6 flex justify-between items-center">
               <h2 className="text-2xl font-bold text-accent">
                 {editingDoor ? 'Edit Door' : 'Add Door'}
               </h2>
               <button
                 onClick={closeDoorModal}
-                className="text-bbs-muted hover:text-bbs-text transition-colors"
+                className="text-content-secondary hover:text-content-primary transition-colors"
               >
                 <X size={24} />
               </button>
@@ -526,7 +526,7 @@ export function DoorsPage() {
                     placeholder="BBS:Doors/MyDoor/MyDoor"
                     required
                   />
-                  <p className="text-sm text-bbs-muted mt-2">
+                  <p className="text-sm text-content-secondary mt-2">
                     Written to the door's LOCATION tooltype, which is how
                     AmiExpress finds the program to run. The form had no field
                     for it and DoorSchema requires it, so Create Door could
@@ -556,9 +556,9 @@ export function DoorsPage() {
                       onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
                       className="form-checkbox h-5 w-5 text-accent"
                     />
-                    <span className="text-bbs-text">Enabled</span>
+                    <span className="text-content-primary">Enabled</span>
                   </label>
-                  <p className="text-sm text-bbs-muted mt-2">
+                  <p className="text-sm text-content-secondary mt-2">
                     AmiExpress has no on/off switch for a command, so turning a
                     door off parks its access level out of reach and remembers
                     the old level, restoring it when you switch the door back
@@ -583,9 +583,9 @@ export function DoorsPage() {
                 declares none sees no change here at all.
               */}
               {editingDoor?.has_settings && (
-                <div className="border-t border-bbs-primary pt-6">
+                <div className="border-t border-border pt-6">
                   <h3 className="text-lg text-accent mb-1">Door settings</h3>
-                  <p className="text-bbs-muted text-sm">
+                  <p className="text-content-secondary text-sm">
                     What this door says it can be configured with. Saved to the door, not to its registration.
                   </p>
                   <DoorSettingsForm
@@ -595,7 +595,7 @@ export function DoorsPage() {
                 </div>
               )}
 
-              <div className="flex justify-end space-x-4 pt-6 border-t border-bbs-primary">
+              <div className="flex justify-end space-x-4 pt-6 border-t border-border">
                 <button
                   type="button"
                   onClick={() => {
@@ -628,16 +628,16 @@ export function DoorsPage() {
           maxWidth="max-w-4xl"
           showHeader={false}
         >
-            <div className="sticky top-0 bg-bbs-bg border-b border-bbs-primary p-6 flex justify-between items-center">
+            <div className="sticky top-0 bg-surface-0 border-b border-border p-6 flex justify-between items-center">
               <div>
                 <h2 className="text-2xl font-bold text-accent">Edit .info File</h2>
-                <p className="text-bbs-muted text-sm mt-1">
+                <p className="text-content-secondary text-sm mt-1">
                   {editingInfoDoor.door_name} ({editingInfoDoor.door_command}.info)
                 </p>
               </div>
               <button
                 onClick={closeInfoEditor}
-                className="text-bbs-muted hover:text-bbs-text transition-colors"
+                className="text-content-secondary hover:text-content-primary transition-colors"
               >
                 <X size={24} />
               </button>
@@ -652,13 +652,13 @@ export function DoorsPage() {
                 usually looking for; the tooltypes underneath are what
                 AmiExpress reads.
               */}
-              <div className="mb-6 border-b border-bbs-primary/40 pb-6">
+              <div className="mb-6 border-b border-border/40 pb-6">
                 <h3 className="text-lg text-accent mb-1">Door settings</h3>
                 <DoorSettingsForm command={editingInfoDoor.door_command} />
               </div>
 
               <div className="mb-4 flex justify-between items-center">
-                <p className="text-bbs-muted text-sm">
+                <p className="text-content-secondary text-sm">
                   Edit tooltypes for this door. Changes are saved back to the .info file.
                 </p>
                 <button
@@ -670,21 +670,21 @@ export function DoorsPage() {
                 </button>
               </div>
 
-              <div className="border border-bbs-primary rounded overflow-hidden">
+              <div className="border border-border rounded overflow-hidden">
                 <table className="w-full">
-                  <thead className="bg-bbs-primary">
+                  <thead className="bg-border">
                     <tr>
-                      <th className="text-left p-3 text-bbs-text font-semibold w-12">Active</th>
-                      <th className="text-left p-3 text-bbs-text font-semibold">Key</th>
-                      <th className="text-left p-3 text-bbs-text font-semibold">Value</th>
-                      <th className="text-left p-3 text-bbs-text font-semibold w-20">Actions</th>
+                      <th className="text-left p-3 text-content-primary font-semibold w-12">Active</th>
+                      <th className="text-left p-3 text-content-primary font-semibold">Key</th>
+                      <th className="text-left p-3 text-content-primary font-semibold">Value</th>
+                      <th className="text-left p-3 text-content-primary font-semibold w-20">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {tooltypes.map((tt, index) => (
                       <tr
                         key={index}
-                        className={`border-t border-bbs-primary ${
+                        className={`border-t border-border ${
                           tt.commented ? 'opacity-50' : ''
                         }`}
                       >
@@ -693,7 +693,7 @@ export function DoorsPage() {
                             onClick={() => handleTooltypeToggle(index)}
                             className={`p-1 rounded transition-colors ${
                               tt.commented
-                                ? 'text-bbs-muted hover:text-bbs-text'
+                                ? 'text-content-secondary hover:text-content-primary'
                                 : 'text-status-ok hover:text-status-ok'
                             }`}
                             title={tt.commented ? 'Enable this tooltype' : 'Disable this tooltype'}
@@ -732,7 +732,7 @@ export function DoorsPage() {
                     ))}
                     {tooltypes.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="p-6 text-center text-bbs-muted">
+                        <td colSpan={4} className="p-6 text-center text-content-secondary">
                           No tooltypes defined. Click "Add Tooltype" to create one.
                         </td>
                       </tr>
@@ -741,7 +741,7 @@ export function DoorsPage() {
                 </table>
               </div>
 
-              <div className="flex justify-end space-x-4 pt-6 border-t border-bbs-primary mt-6">
+              <div className="flex justify-end space-x-4 pt-6 border-t border-border mt-6">
                 <button
                   onClick={() => {
                     if (infoDirty) {

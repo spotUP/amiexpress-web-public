@@ -258,7 +258,7 @@ export function ScreenTypesPage() {
                   onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
                   className="w-4 h-4"
                 />
-                <label htmlFor="screen_enabled" className="text-sm text-bbs-text">
+                <label htmlFor="screen_enabled" className="text-sm text-content-primary">
                   Enabled
                 </label>
               </div>
