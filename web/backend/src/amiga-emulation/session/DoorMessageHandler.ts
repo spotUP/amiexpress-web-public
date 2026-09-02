@@ -10,6 +10,7 @@ import { Socket } from "socket.io";
 import { ExecLibrary } from "../api/ExecLibrary.js";
 import { XIMProtocol, XIMCommand } from "../XIMProtocol.js";
 import { DoorConfig, DoorConstants, AEDoorCommand } from "../DoorTypes.js";
+import { doorScreenWidth } from "../xim/screen-width.util";
 import { logDoorMessage } from "../../utils/door-logging.util";
 import { checkSecurity } from "../../utils/acs.util.js";
 import { ACSPermission } from "../../constants/acs-permissions.js";
@@ -2061,9 +2062,12 @@ debugLog(`[DoorMessageHandler]   BB_SCRTOP: 0`);
         break;
 
       case XIMCommand.BB_SCRWIDTH:
-        // express.e:3865-3866: Screen width (80 columns standard)
-debugLog(`[DoorMessageHandler]   BB_SCRWIDTH: 80`);
-        this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, 80);
+        // express.e:3865-3866: msg.data:=screen.width - the same answer as xim/bbs-info.ts
+        {
+          const screenWidth = doorScreenWidth(this.config.bbsSession);
+debugLog(`[DoorMessageHandler]   BB_SCRWIDTH: ${screenWidth}`);
+          this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, screenWidth);
+        }
         break;
 
       case XIMCommand.BB_SCRHEIGHT:

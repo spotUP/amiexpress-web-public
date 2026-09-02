@@ -18,6 +18,13 @@ export class MemStub {
     this.writeMemory(a, v >>> 24); this.writeMemory(a + 1, v >>> 16);
     this.writeMemory(a + 2, v >>> 8); this.writeMemory(a + 3, v);
   }
+  readMemory16(a: number) { return ((this.readMemory(a) << 8) | this.readMemory(a + 1)) & 0xffff; }
+  writeMemory16(a: number, v: number) { this.writeMemory(a, v >>> 8); this.writeMemory(a + 1, v); }
+  readString(a: number, maxLength: number) {
+    let out = '';
+    for (let i = 0; i < maxLength; i++) { const b = this.readMemory(a + i); if (b === 0) break; out += String.fromCharCode(b); }
+    return out;
+  }
   getRegister(r: number) { return this.regs.get(r) ?? 0; }
   setRegister(r: number, v: number) { this.regs.set(r, v >>> 0); }
 }

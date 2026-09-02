@@ -24,6 +24,7 @@ import { ximLogger } from '../../utils/XIMLogger';
 // Debug log path - uses BBS_DATA_DIR env var or falls back to cwd
 const BB_DEBUG_LOG_PATH = path.join(process.env.BBS_DATA_DIR || process.cwd(), 'logs', 'bb-conflocal-debug.log');
 import { debugLog } from '../../utils/debug-log';
+import { doorScreenWidth } from './screen-width.util';
 
 export class XIMBBSInfoHandler {
   private emulator: MoiraEmulator;
@@ -373,8 +374,10 @@ debugLog('[XIMBBSInfo] Screen dimension query');
 
     switch (msg.command) {
       case XIMCommand.BB_SCRWIDTH:
-        value = 80;
-debugLog('  BB_SCRWIDTH: 80');
+        // express.e:3865-3866: msg.data:=screen.width. 80 for every ANSI
+        // caller (byte-identical to before); the session width for a C64.
+        value = doorScreenWidth(this.bbsSession);
+debugLog(`  BB_SCRWIDTH: ${value}`);
         break;
 
       case XIMCommand.BB_SCRHEIGHT:
@@ -398,8 +401,12 @@ debugLog('  BB_SCRTOP: 0');
         break;
     }
 
-    this.messageParser.writeData(msg.msgAddr, value);
-    this.reply(msg, 1);
+    // reply() itself writes msg.data (writeData) - the earlier hardcoded
+    // `this.reply(msg, 1)` here overwrote the value just computed above,
+    // so BB_SCRWIDTH/HEIGHT/LEFT/TOP always answered a 68K door with 1.
+    // Same class of bug already fixed for BB_CONFACCESS: pass the real
+    // value into reply(), don't write it then discard it.
+    this.reply(msg, value);
   }
 
   /**
