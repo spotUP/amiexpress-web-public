@@ -4,8 +4,9 @@
  */
 
 import blessed, { Screen, Box, List, Button, Log, Listbar, ScrollableText, DropdownMenu, ListTable, Overlay, StatusBar } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { createBox, createList, createButton, createText, createLog } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createBox, createList, createButton, createText, createLog, ansiToTags } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { CardEngine, pokerCardsToCards } from '@amiexpress/bbs-door-sdk';
+import type { UnoColor as EngineUnoColor, UnoValue as EngineUnoValue } from '@amiexpress/bbs-door-sdk';
 import { UI_THEME, ACTION_BUTTON_STYLES, ACTION_BUTTON_ORDER, type ActionButtonKey } from '../lib/constants';
 import { renderCardLines, stripBlessedTags } from '../lib/utils';
 import type { UnoCard, UnoColor, UnoPlayer } from '../lib/uno-engine';
@@ -87,8 +88,11 @@ export class UIManager {
       focusable: false,
       mouse: false,
       clickable: false,
+      tags: true,
       style: { fg: UI_THEME.topBar.fg, bg: UI_THEME.topBar.bg },
-      content: '',
+      // The theme's mark, right-aligned behind the menu items. `{|}` is
+      // blessed's right-align; the dropdown menus draw over the left end.
+      content: UI_THEME.rail ? `{|}${UI_THEME.rail} ` : '',
     });
 
     this.topInfoBar = createBox({
@@ -976,7 +980,6 @@ export class UIManager {
     // is the board's characters, nothing else (2026-09-02).
     const directionArrow = direction === 1 ? '{cyan-fg}>>{/}' : '{cyan-fg}<<{/}';
     lines.push(`Direction: ${directionArrow} ${direction === 1 ? 'Clockwise' : 'Counter-clockwise'}`);
-    lines.push('');
 
     // Add current color indicator
     const colorNames: Record<UnoColor, string> = {
@@ -988,11 +991,35 @@ export class UIManager {
     lines.push(`Current Color: ${colorNames[currentColor]}`);
     lines.push('');
 
-    // Render the card (using simplified ASCII representation)
-    lines.push('Top Card:');
+    // No "Top Card:" label - the card IS the top card, and the panel is eight
+    // rows: two lines of state, a gap and a four-row card fills it exactly.
+    // With the label and a second blank it ran one row past the panel and the
+    // card was cut off (2026-09-02).
     lines.push(this.renderUnoCardAscii(topCard));
 
     this.flopContent.setContent(lines.join('\n'));
+  }
+
+  /**
+   * The door's card values, in the vocabulary the SDK's card engine speaks.
+   *
+   * They are the same cards under different spellings - this door's engine
+   * says 'Skip' and 'Draw2', the SDK's says 'skip' and 'draw2' - which is why
+   * this file used to draw its own five-line box instead of asking the engine
+   * that already renders UNO cards. House-rule cards (HR1-HR5, WildChange)
+   * exist only in this door and have no engine equivalent; they keep a plain
+   * face of their own.
+   */
+  private toEngineUnoCard(card: UnoCard): { color: EngineUnoColor; value: EngineUnoValue } | null {
+    const values: Record<string, EngineUnoValue> = {
+      '0': '0', '1': '1', '2': '2', '3': '3', '4': '4',
+      '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
+      'Skip': 'skip', 'Reverse': 'reverse', 'Draw2': 'draw2',
+      'Wild': 'wild', 'Wild4': 'wild4',
+    };
+    const value = values[card.value];
+    if (!value) return null;
+    return { color: card.color as EngineUnoColor, value };
   }
 
   private renderUnoCardAscii(card: UnoCard): string {
@@ -1003,17 +1030,30 @@ export class UIManager {
       'Y': 'yellow-fg',
       'W': 'white-fg',
     };
-
     const colorTag = colorTags[card.color] || 'white-fg';
-    const displayValue = card.value.replace('Wild4', 'W+4').replace('Wild', 'W');
 
-    // Simple card representation
+    // The SDK's card engine draws the card, and colours it. `ascii` because
+    // the board is an Amiga, `mini` because the panel is four rows tall, and
+    // `ansi` because the engine knows which parts of a card are which colour
+    // - a flat blessed tag around the whole box does not. `ansiToTags` is how
+    // raw ANSI becomes something a blessed widget will render.
+    const engineCard = this.toEngineUnoCard(card);
+    if (engineCard) {
+      const lines = cardEngine.renderUnoCardLines(engineCard, {
+        style: 'ascii',
+        size: 'mini',
+        color: 'ansi',
+      });
+      return lines.map((line) => ` ${ansiToTags(line)}`).join('\n');
+    }
+
+    // A house-rule card: the engine has never heard of it.
+    const label = card.value.replace('WildChange', 'CHANGE');
     return [
-      ` {${colorTag}}._______. `,
-      ` {${colorTag}}|       | `,
-      ` {${colorTag}}|  ${displayValue.padEnd(4, ' ')} | `,
-      ` {${colorTag}}|       | `,
-      ` {${colorTag}}'-------' {/}`,
+      ` {${colorTag}}.---------.`,
+      ` {${colorTag}}|${label.padEnd(9, ' ')}|`,
+      ` {${colorTag}}|  HOUSE  |`,
+      ` {${colorTag}}'---------'{/}`,
     ].join('\n');
   }
 

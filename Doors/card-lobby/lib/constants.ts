@@ -101,6 +101,13 @@ export const UI_THEME = {
   warning: 'yellow',
   ok: 'green',
   error: 'red',
+  /**
+   * The theme's branding mark - the "//////" chrome every other themed door
+   * draws. This door mapped every token except this one, so its masthead was
+   * bare in a theme that has one ("the theme colors are correct but the
+   * chrome is missing", 2026-09-02).
+   */
+  rail: '',
 };
 
 /** Fill UI_THEME from a resolved SDK theme. Call before building the UI. */
@@ -120,6 +127,7 @@ export function applyTheme(theme: Theme): void {
   UI_THEME.warning = t.warn;
   UI_THEME.ok = t.ok;
   UI_THEME.error = t.alert;
+  UI_THEME.rail = theme.rail ?? '';
 
   // The action buttons follow the theme as well - except the UNO row, whose
   // colours ARE the game (a red card is red in every theme).
