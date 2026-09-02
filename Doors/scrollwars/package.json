@@ -6,7 +6,8 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "build:watch": "tsc --watch"
+    "build:watch": "tsc --watch",
+    "test": "tsx tests/run-tests.ts"
   },
   "keywords": ["bbs", "door", "chat", "multinode", "realtime"],
   "author": "AmiExpress",

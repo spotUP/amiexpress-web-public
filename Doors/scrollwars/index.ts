@@ -7,7 +7,8 @@
 
 import { ServerDoor, DoorContext, KeyPress } from '@amiexpress/bbs-door-sdk';
 import { createBox, createScreen } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
-import { DockablePanel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { DockablePanel, StatusBar } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import type { StatusBarSection, StatusBarOptions } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createTerminalModeSwitch } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
 
 /** Door metadata */
@@ -23,7 +24,7 @@ interface ParticipantUi {
   screen: any;
   userPanel: any;
   chatPanel: any;
-  statusBar: any;
+  statusBar: StatusBar;
 }
 
 interface Participant {
@@ -39,6 +40,8 @@ interface Participant {
 }
 
 const SCREEN_WIDTH = 80;
+/** StatusBar joins its sections with ' | '. */
+const SEPARATOR_WIDTH = 3;
 const SCREEN_HEIGHT = 25;
 const PANEL_HEIGHT = SCREEN_HEIGHT - 1;
 const MAX_USERS = PANEL_HEIGHT - 2;
@@ -119,11 +122,6 @@ function releaseLineIndex(index: number): void {
   }
 }
 
-function formatStatus(text: string): string {
-  if (text.length >= SCREEN_WIDTH) return text.slice(0, SCREEN_WIDTH);
-  return text.padEnd(SCREEN_WIDTH, ' ');
-}
-
 function sanitizeLabel(text: string, max: number): string {
   const ascii = text.replace(/[^\x20-\x7E]/g, '');
   return ascii.length > max ? ascii.slice(0, max) : ascii;
@@ -158,11 +156,38 @@ function buildUserLine(participant: Participant): string {
   return `{${participant.color}-fg}${nameText}{/${participant.color}-fg}`;
 }
 
-function buildStatusSequence(viewer: Participant): string {
+/**
+ * The footer, as the sections it is made of.
+ *
+ * This was one string padded to 80 columns and pushed into a `createBox`,
+ * which takes Panel's line border when the caller names none - a one-row box
+ * with a frame has no interior, so the bar drew a rule and no text. `StatusBar`
+ * is borderless by construction, fills its own row, and joins its sections
+ * with the same ` | ` this door was writing by hand.
+ */
+function statusSections(viewer: Participant): StatusBarSection[] {
   const count = roomState.participants.size;
   const name = sanitizeLabel(viewer.username, 16);
-  const statusText = `Scrollwars | Users ${count}/${MAX_USERS} | You ${name} | Line ${viewer.lineIndex + 1} | Enter clears line | Backspace deletes | ESC quit`;
-  return formatStatus(statusText);
+  const width = Number(viewer.ui.screen?.width) || SCREEN_WIDTH;
+
+  // The door's own name is the screen title and the panels are labelled;
+  // spending thirteen of eighty columns saying it again is what left no room
+  // for the keys.
+  const fields: StatusBarSection[] = [
+    { id: 'users', content: `Users ${count}/${MAX_USERS}` },
+    { id: 'you', content: `You ${name}` },
+    { id: 'line', content: `Line ${viewer.lineIndex + 1}` },
+  ];
+
+  // The full hint runs past eighty columns once the name is long, and the bar
+  // simply cut it off mid-word - the row ended "Backspace de" and the quit key
+  // was never on screen at all. Alt+Enter gives the room for all three; at 80
+  // the door names the two nobody can guess.
+  const full = 'Enter clears line | Backspace deletes | ESC quit';
+  const short = 'Enter clears | ESC quit';
+  const used = fields.reduce((n, f) => n + f.content.length + SEPARATOR_WIDTH, 2);
+
+  return [...fields, { id: 'keys', content: used + full.length <= width ? full : short }];
 }
 
 function updateLineContent(lineIndex: number): void {
@@ -188,7 +213,7 @@ function syncLineAcrossParticipants(lineIndex: number): void {
 
 function syncStatusBars(): void {
   for (const participant of roomState.participants.values()) {
-    participant.ui.statusBar.setContent(buildStatusSequence(participant));
+    participant.ui.statusBar.setSections(statusSections(participant));
     scheduleRender(participant);
   }
 }
@@ -200,7 +225,7 @@ function refreshAllLines(updateStatus: boolean): void {
   for (const participant of roomState.participants.values()) {
     participant.ui.userPanel.setContent(userContent);
     participant.ui.chatPanel.setContent(chatContent);
-    if (updateStatus) participant.ui.statusBar.setContent(buildStatusSequence(participant));
+    if (updateStatus) participant.ui.statusBar.setSections(statusSections(participant));
     scheduleRender(participant);
   }
 }
@@ -310,15 +335,13 @@ door.onStart(async (ctx: DoorContext) => {
     focusable: false, mouse: false, clickable: false,
   });
 
-  const statusBar = createBox({
+  const statusBar = new StatusBar({
     parent: screen,
-    bottom: 0,
-    width: '100%',
-    height: 1,
-    tags: true,
-    style: { fg: 'cyan', bg: 'blue' },
+    position: 'bottom',
+    fg: 'cyan',
+    bg: 'blue',
     focusable: false, mouse: false, clickable: false,
-  });
+  } as StatusBarOptions);
 
   const participant: Participant = {
     id, username, socket, bbsSession, lineIndex,
