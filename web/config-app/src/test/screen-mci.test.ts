@@ -8,9 +8,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   groupMciCodes, filterMciCodes, describeMciUsage, buildMciToken,
-  screenHasEnablingTilde, withEnablingTilde, insertMciToken,
-  type MciCodeShape,
+  firstLineEnablesMci, canvasEnablesMci, textUnder,
+  type MciCodeShape, type MciCanvas,
 } from '../pages/screen-mci';
+
+/** Rows of characters, which is all these functions need of a canvas. */
+function canvasOf(...rows: string[]): MciCanvas {
+  return rows.map(row => [...row].map(char => ({ char })));
+}
 
 function code(over: Partial<MciCodeShape> = {}): MciCodeShape {
   return {
@@ -122,39 +127,31 @@ describe('the text a picked code becomes', () => {
 
 describe('the tilde that switches MCI on', () => {
   it('is the first character of the first line, or the codes are just text', () => {
-    expect(screenHasEnablingTilde('~\r\nart\r\n')).toBe(true);
-    expect(screenHasEnablingTilde('~SS_x|\r\nart')).toBe(true);
-    expect(screenHasEnablingTilde('art\r\n~CC_gwall|')).toBe(false);
-    expect(screenHasEnablingTilde('\r\n~CC_gwall|')).toBe(false);
-    expect(screenHasEnablingTilde('')).toBe(false);
+    expect(firstLineEnablesMci('~')).toBe(true);
+    expect(firstLineEnablesMci('~SS_x|')).toBe(true);
+    expect(firstLineEnablesMci('art')).toBe(false);
+    expect(firstLineEnablesMci('   ')).toBe(false);
+    expect(firstLineEnablesMci('')).toBe(false);
   });
 
-  it('is added on a line of its own, in the file\'s own line ending', () => {
-    expect(withEnablingTilde('art\r\nmore\r\n')).toBe('~\r\nart\r\nmore\r\n');
-    expect(withEnablingTilde('art\nmore\n')).toBe('~\nart\nmore\n');
-  });
-
-  it('is not added twice', () => {
-    expect(withEnablingTilde('~\r\nart\r\n')).toBe('~\r\nart\r\n');
+  it('is read off the canvas the sysop is drawing on', () => {
+    expect(canvasEnablesMci(canvasOf('~', 'art'))).toBe(true);
+    expect(canvasEnablesMci(canvasOf('art', '~CC_gwall|'))).toBe(false);
+    expect(canvasEnablesMci([])).toBe(false);
   });
 });
 
-describe('where a code lands', () => {
-  it('goes under the enabling tilde, never above it', () => {
-    expect(insertMciToken('~\r\nart\r\n', '~f|', 'above')).toBe('~\r\n~f|\r\nart\r\n');
+describe('what typing a code would paint over', () => {
+  it('is nothing when the cells are blank', () => {
+    expect(textUnder(canvasOf('~', '          '), 0, 1, 5)).toBe('');
   });
 
-  it('goes on the first line when there is no enabling tilde yet', () => {
-    expect(insertMciToken('art\r\n', '~f|', 'above')).toBe('~f|\r\nart\r\n');
+  it('is the art itself when they are not', () => {
+    expect(textUnder(canvasOf('~', '####------'), 0, 1, 4)).toBe('####');
   });
 
-  it('goes on its own line at the end', () => {
-    expect(insertMciToken('~\r\nart\r\n', '~SP|', 'below')).toBe('~\r\nart\r\n~SP|\r\n');
-    expect(insertMciToken('~\r\nart', '~SP|', 'below')).toBe('~\r\nart\r\n~SP|\r\n');
-  });
-
-  it('goes exactly at the cursor when that is what was asked for', () => {
-    expect(insertMciToken('abcd', '~N|', 'cursor', 2)).toBe('ab~N|cd');
-    expect(insertMciToken('abcd', '~N|', 'cursor', 99)).toBe('abcd~N|');
+  it('is empty past the end of a row, so the end of a line is always free', () => {
+    expect(textUnder(canvasOf('~', 'ab'), 5, 1, 4)).toBe('');
+    expect(textUnder(canvasOf('~'), 0, 9, 4)).toBe('');
   });
 });

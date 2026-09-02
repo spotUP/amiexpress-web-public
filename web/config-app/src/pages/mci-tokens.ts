@@ -36,13 +36,10 @@ export interface MciToken {
   resolves: boolean;
 }
 
-/** The four codes this board's screens actually carry - 252 SS, 173 CC, 108 SR, 42 CL. */
-export const MCI_INSERTS: { code: MciReference['code']; label: string; template: string }[] = [
-  { code: 'CC', label: 'Run a command', template: '~CC_command|' },
-  { code: 'SS', label: 'Include a screen', template: '~SS_BBS:Screens/name.txt' },
-  { code: 'SR', label: 'Include and recurse', template: '~SR_BBS:Screens/name.txt' },
-  { code: 'CL', label: 'List the conferences', template: '~CL.' },
-];
+// The four-template insert bar that used to live here is gone. It typed
+// `~CC_command|` and left the sysop to know that `command` meant a door and to
+// spell it right; MciPicker offers the board's own command icons, screens and
+// doors instead, and every code rather than four.
 
 export function findMciTokens(canvas: Cell[][], known: MciReferenceShape[]): MciToken[] {
   const tokens: MciToken[] = [];

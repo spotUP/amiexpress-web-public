@@ -50,8 +50,36 @@ const envelope = (data: unknown) =>
     text: async () => JSON.stringify({ success: true, data }),
   } as unknown as Response);
 
+/**
+ * Two codes is enough to drive the picker: one that takes nothing and one
+ * that takes a command, which is the case the sysop asked for.
+ */
+const mciCatalog = () => ({
+  families: [
+    { family: 'include', label: 'Screens and commands' },
+    { family: 'conference', label: 'Conferences' },
+  ],
+  codes: [
+    {
+      code: 'CC_', summary: 'Run a BBS command', family: 'include',
+      argument: { kind: 'command' }, takesWidth: false, terminator: '|',
+      source: 'express.e:5555', handledBy: 'caller', uses: 0, files: 0,
+    },
+    {
+      code: 'CL', summary: 'Every conference the caller may join, one per line',
+      family: 'conference', argument: { kind: 'none' }, takesWidth: false,
+      terminator: '.', source: 'express.e:5588', handledBy: 'caller', uses: 42, files: 42,
+    },
+  ],
+  enablingTilde: { uses: 1, files: 1 },
+});
+
 const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
+  if (url.includes('/api/screens/mci/catalog')) return envelope(mciCatalog());
+  if (url.includes('/api/screens/mci/targets')) {
+    return envelope({ kind: 'command', targets: [{ value: 'gwall', label: 'Global Wall', detail: 'access 10' }] });
+  }
   if (url.includes('/api/screens/file') && init?.method === 'PUT') {
     return envelope({ written: ['Node1/BBSTITLE.txt'] });
   }
@@ -182,12 +210,37 @@ describe('editing a screen in the browser', () => {
     const user = userEvent.setup();
     await openTheFile(user);
 
-    await user.click(screen.getByRole('button', { name: 'List the conferences' }));
+    await user.click(screen.getByRole('button', { name: 'Insert a code' }));
+    await user.click(await screen.findByRole('button', { name: /~CL/ }));
+    await user.click(await screen.findByRole('button', { name: 'Insert it' }));
 
     expect(await screen.findByText(/line 1, column 1: ~CL\./)).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: /undo/i }));
     expect(screen.queryByText(/line 1, column 1: ~CL\./)).toBeNull();
+  });
+
+  it('offers the board\'s own commands for a code that needs one, by the name the icon carries', async () => {
+    const user = userEvent.setup();
+    await openTheFile(user);
+
+    await user.click(screen.getByRole('button', { name: 'Insert a code' }));
+    await user.click(await screen.findByRole('button', { name: /~CC_/ }));
+
+    // The picker asks the board, and the board answers with the icon's NAME.
+    await user.selectOptions(await screen.findByRole('combobox'), 'gwall');
+    await user.click(screen.getByRole('button', { name: 'Insert it' }));
+
+    expect(await screen.findByText(/line 1, column 1: ~CC_gwall/)).toBeTruthy();
+  });
+
+  it('says so when the screen has no tilde on its first line, because then no code runs', async () => {
+    const user = userEvent.setup();
+    await openTheFile(user);
+
+    await user.click(screen.getByRole('button', { name: 'Insert a code' }));
+
+    expect(await screen.findByText(/will not run ANY code/)).toBeTruthy();
   });
 
   it('offers no editor for a RIP screen, and says which phase owns it', async () => {

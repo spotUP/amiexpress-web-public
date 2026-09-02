@@ -10,7 +10,7 @@
  * the first to drift.
  */
 import { describe, expect, it } from 'vitest';
-import { findMciTokens, MCI_INSERTS } from '../pages/mci-tokens';
+import { findMciTokens } from '../pages/mci-tokens';
 import { createCanvas, setCell } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/canvas';
 import type { Cell } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
 
@@ -77,9 +77,5 @@ describe('the MCI codes on a canvas', () => {
     const canvas = canvasFromText('~CC_a| ~SS_b ~SR_c ~CL.');
 
     expect(findMciTokens(canvas, []).map(t => t.code)).toEqual(['CC', 'SS', 'SR', 'CL']);
-  });
-
-  it('the insert list offers the codes this board actually uses', () => {
-    expect(MCI_INSERTS.map(i => i.code)).toEqual(['CC', 'SS', 'SR', 'CL']);
   });
 });

@@ -30,6 +30,7 @@ import {
 /** Stable fallback: a fresh array each render invalidates the row model. */
 const EMPTY_ROWS: ScreenRow[] = [];
 const EMPTY_MCI: MciCodeShape[] = [];
+const EMPTY_FAMILIES: MciFamilyShape[] = [];
 
 /**
  * What a scope is called, in the board's own words.
@@ -373,7 +374,7 @@ export function ScreenFilesPage() {
    * search box as everything else on this page.
    */
   const mciSections = useMemo(
-    () => groupMciCodes(filterMciCodes(mci?.codes ?? EMPTY_MCI, query), mci?.families ?? []),
+    () => groupMciCodes(filterMciCodes(mci?.codes ?? EMPTY_MCI, query), mci?.families ?? EMPTY_FAMILIES),
     [mci, query],
   );
 
@@ -677,7 +678,7 @@ export function ScreenFilesPage() {
     },
     {
       id: 'codes',
-      label: `Codes ${mci?.codes.length ?? 0}`,
+      label: `Codes ${mci?.codes?.length ?? 0}`,
       render: () => (
         <div className="space-y-3 text-sm">
           <p className="text-content-secondary">
@@ -688,7 +689,7 @@ export function ScreenFilesPage() {
           <p className="text-content-secondary">
             None of them run unless the file's FIRST line starts with a tilde.
             {' '}
-            {mci ? `${mci.enablingTilde.files} of this board's files carry it.` : ''}
+            {mci?.enablingTilde ? `${mci.enablingTilde.files} of this board's files carry it.` : ''}
           </p>
           {mciSections.length === 0 && (
             <p className="text-content-secondary">No code matches that.</p>

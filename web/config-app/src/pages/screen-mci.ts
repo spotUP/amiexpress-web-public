@@ -12,6 +12,15 @@
  * a code written with the wrong one prints its own letters at the caller.
  */
 
+/**
+ * The editor's canvas, as much of it as this module needs.
+ *
+ * Structurally typed rather than importing the SDK's `Cell`: these are pure
+ * functions over rows of characters, and a test should not have to build an
+ * `EditorState` to ask what a row says.
+ */
+export type MciCanvas = ReadonlyArray<ReadonlyArray<{ char?: string } | undefined>>;
+
 export interface MciArgumentShape {
   kind: 'none' | 'command' | 'screen' | 'door' | 'menu' | 'text' | 'number' | 'char';
   label?: string;
@@ -122,73 +131,36 @@ export function buildMciToken(
 }
 
 /**
- * Whether MCI runs in this file at all.
+ * Whether MCI runs in this screen at all.
  *
  * The board parses codes ONLY when the first line starts with a tilde
- * (screen.handler.ts:1943, express.e:6800-6806). 587 of this board's files
- * carry it. Without it a perfect code is text a caller reads, which is the
- * failure that makes an inserter worth having a check in.
+ * (screen.handler.ts, mirroring express.e's allowMCI gate). 587 of this
+ * board's files carry it. Without it a perfect code is text a caller reads,
+ * which is the failure that makes a check worth having in front of an
+ * inserter.
  */
-export function screenHasEnablingTilde(text: string): boolean {
-  const firstNewline = text.indexOf('\n');
-  const firstLine = firstNewline >= 0 ? text.slice(0, firstNewline) : text;
+export function firstLineEnablesMci(firstLine: string): boolean {
   return firstLine.trimEnd().length > 0 && firstLine.startsWith('~');
 }
 
-/** The line ending this file already uses, so an insert does not mix them. */
-function lineEnding(text: string): string {
-  return text.includes('\r\n') ? '\r\n' : '\n';
+/** One row of the editor's canvas as the text a caller would see. */
+export function rowText(canvas: MciCanvas, y: number): string {
+  return (canvas[y] ?? []).map(cell => cell?.char ?? ' ').join('');
+}
+
+export function canvasEnablesMci(canvas: MciCanvas): boolean {
+  return firstLineEnablesMci(rowText(canvas, 0));
 }
 
 /**
- * Switch MCI on for a file that does not have it, leaving the art alone.
+ * What typing a code here would paint over.
  *
- * A line of its own, at the top: the tilde is the switch, not part of the
- * drawing.
+ * The editor's canvas is a fixed grid and typing OVERWRITES: a code dropped
+ * into the middle of a drawing replaces the cells it covers, and there is no
+ * reflow to notice it happening. So the inserter asks first, and this is the
+ * question - the characters that would be lost, or an empty string when the
+ * run is blank.
  */
-export function withEnablingTilde(text: string): string {
-  if (screenHasEnablingTilde(text)) return text;
-  return `~${lineEnding(text)}${text}`;
-}
-
-/**
- * Where a code goes.
- *
- * `above` and `below` are the head and tail blocks the board's own files
- * already use - measured across the 377 files that carry codes, 439 sit in the
- * first three lines and 272 in the last three. `cursor` is the third case, and
- * the one that shifts every column to the right of it.
- */
-export type MciPlacement = 'above' | 'below' | 'cursor';
-
-/**
- * Put a code into a screen, without disturbing what is drawn.
- *
- * `above` lands after the enabling tilde if there is one, so the switch stays
- * on the first line where the parser looks for it.
- */
-export function insertMciToken(
-  text: string,
-  token: string,
-  placement: MciPlacement,
-  cursorOffset = 0,
-): string {
-  const ending = lineEnding(text);
-
-  if (placement === 'cursor') {
-    const at = Math.max(0, Math.min(cursorOffset, text.length));
-    return text.slice(0, at) + token + text.slice(at);
-  }
-
-  if (placement === 'below') {
-    return text.endsWith(ending) || text === ''
-      ? `${text}${token}${ending}`
-      : `${text}${ending}${token}${ending}`;
-  }
-
-  if (!screenHasEnablingTilde(text)) return `${token}${ending}${text}`;
-
-  const firstNewline = text.indexOf('\n');
-  if (firstNewline < 0) return `${text}${ending}${token}${ending}`;
-  return `${text.slice(0, firstNewline + 1)}${token}${ending}${text.slice(firstNewline + 1)}`;
+export function textUnder(canvas: MciCanvas, x: number, y: number, length: number): string {
+  return rowText(canvas, y).slice(x, x + length).trimEnd();
 }

@@ -7,7 +7,8 @@ import { canvasToScreen } from '../pages/screen-bytes';
 import {
   pointerToCanvas, typeCharacter, typeText, undo, redo, type EditorSurface,
 } from '../pages/screen-editor-state';
-import { findMciTokens, MCI_INSERTS, type MciReferenceShape } from '../pages/mci-tokens';
+import { findMciTokens, type MciReferenceShape } from '../pages/mci-tokens';
+import { MciPicker } from './MciPicker';
 
 /**
  * A screen's art, editable.
@@ -58,6 +59,7 @@ export function ScreenEditor({
   surface, mci = [], filePath, onLoadFile, onChange, onSave, onCancel,
 }: ScreenEditorProps) {
   const [cursor, setCursor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [pickingCode, setPickingCode] = useState(false);
 
   // Re-found on every change rather than tracked: a code is edited character by
   // character, and half of one is not a code.
@@ -204,23 +206,31 @@ export function ScreenEditor({
       </div>
 
       <div className="space-y-1 text-sm">
-        <span className="block text-content-secondary">Insert a code</span>
-        <div className="flex flex-wrap gap-2">
-          {MCI_INSERTS.map(insert => (
-            <button
-              key={insert.code}
-              type="button"
-              className="px-2 py-1 border border-border text-content-secondary"
-              onClick={() => {
-                onChange(typeText(surface, cursor.x, cursor.y, insert.template));
-                setCursor(c => ({ ...c, x: Math.min(cols - 1, c.x + insert.template.length) }));
-              }}
-            >
-              {insert.label}
-            </button>
-          ))}
-        </div>
+        <span className="block text-content-secondary">
+          Codes go in at the text cursor - click where you want one first
+        </span>
+        <button
+          type="button"
+          className="px-2 py-1 border border-border text-content-secondary"
+          onClick={() => setPickingCode(true)}
+        >
+          Insert a code
+        </button>
       </div>
+
+      <MciPicker
+        open={pickingCode}
+        onClose={() => setPickingCode(false)}
+        canvas={surface.canvas}
+        cursor={cursor}
+        // The tilde that switches MCI on has to be the first character of the
+        // first line, and the canvas is a grid, so that is cell 0,0.
+        onEnable={() => onChange(typeText(surface, 0, 0, '~'))}
+        onInsert={token => {
+          onChange(typeText(surface, cursor.x, cursor.y, token));
+          setCursor(c => ({ ...c, x: Math.min(cols - 1, c.x + token.length) }));
+        }}
+      />
 
       {tokens.length > 0 && (
         <div className="text-sm space-y-1">
