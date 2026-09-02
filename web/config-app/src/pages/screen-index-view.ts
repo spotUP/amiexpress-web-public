@@ -51,6 +51,8 @@ export interface ScreenIndexShape {
 
 export interface ScreenRow {
   screen: string;
+  /** What KIND of screen this is - the page shows one tab per kind. */
+  dirType: ScreenIndexEntryShape['dirType'];
   scopeLabel: string;
   resolvedCount: number;
   missingCount: number;
@@ -73,6 +75,7 @@ export function toScreenRows(index: ScreenIndexShape): ScreenRow[] {
 
     return {
       screen: entry.screen,
+      dirType: entry.dirType,
       scopeLabel: SCOPE_LABELS[entry.dirType],
       resolvedCount: resolved.length,
       missingCount: entry.missingScopes,

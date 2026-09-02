@@ -11,6 +11,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+// The page's tabs keep the active one in the URL, so it needs a router.
+import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { base64ToBytes, bytesToBase64 } from '../pages/screen-bytes';
 
@@ -78,7 +80,11 @@ import { ScreenFilesPage } from '../pages/ScreenFilesPage';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <MemoryRouter>
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    </MemoryRouter>
+  );
 }
 
 /** Open BBSTITLE, then the file under it - what a sysop clicks to get here. */
@@ -100,7 +106,7 @@ describe('editing a screen in the browser', () => {
     const user = userEvent.setup();
     await openTheFile(user);
 
-    await user.click(await screen.findByRole('button', { name: /edit/i }));
+    await user.click(await screen.findByRole('button', { name: 'Edit this file' }));
     expect(await screen.findByTestId('ansi-canvas')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: /^save$/i }));
@@ -119,7 +125,7 @@ describe('editing a screen in the browser', () => {
   it('saves what was drawn, not what was loaded', async () => {
     const user = userEvent.setup();
     await openTheFile(user);
-    await user.click(await screen.findByRole('button', { name: /edit/i }));
+    await user.click(await screen.findByRole('button', { name: 'Edit this file' }));
 
     // A stroke on an empty row, in a colour the loaded screen does not carry.
     await user.click(screen.getByRole('button', { name: 'Bright green foreground' }));
@@ -145,7 +151,7 @@ describe('editing a screen in the browser', () => {
     const user = userEvent.setup();
     await openTheFile(user);
 
-    await user.click(await screen.findByRole('button', { name: /edit/i }));
+    await user.click(await screen.findByRole('button', { name: 'Edit this file' }));
     await user.click(screen.getByRole('button', { name: /cancel editing/i }));
 
     expect(screen.queryByTestId('ansi-canvas')).toBeNull();
@@ -161,7 +167,7 @@ describe('editing a screen in the browser', () => {
 
     const user = userEvent.setup();
     await openTheFile(user);
-    await user.click(await screen.findByRole('button', { name: /edit/i }));
+    await user.click(await screen.findByRole('button', { name: 'Edit this file' }));
 
     expect(await screen.findByText(/~CC_nosuchdoor - points at nothing/)).toBeTruthy();
   });
@@ -169,7 +175,7 @@ describe('editing a screen in the browser', () => {
   it('inserts a code at the cursor, as one thing the sysop can undo', async () => {
     const user = userEvent.setup();
     await openTheFile(user);
-    await user.click(await screen.findByRole('button', { name: /edit/i }));
+    await user.click(await screen.findByRole('button', { name: 'Edit this file' }));
 
     await user.click(screen.getByRole('button', { name: 'List the conferences' }));
 
@@ -186,5 +192,39 @@ describe('editing a screen in the browser', () => {
 
     expect(await screen.findByText(/RIP graphics/i)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /edit/i })).toBeNull();
+  });
+});
+
+describe('reaching the editor', () => {
+  beforeEach(() => {
+    fileFormat = 'ansi';
+    ansiBytes = new TextEncoder().encode('\x1b[31mHI');
+    fileMci = [];
+    fetchMock.mockClear();
+  });
+
+  it('opens the art straight from the screen row, in one click', async () => {
+    // Reported by the sysop: "there is no way to open the screen files? they
+    // are just listed". Clicking a screen DID reveal a panel below the table,
+    // then asked for the file path to be clicked, then for Edit - three clicks
+    // and no affordance saying so.
+    const user = userEvent.setup();
+    render(<ScreenFilesPage />, { wrapper });
+
+    await user.click(await screen.findByText('BBSTITLE'));
+    await user.click(await screen.findByRole('button', { name: /edit Node1\/BBSTITLE\.txt/i }));
+
+    expect(await screen.findByTestId('ansi-canvas')).toBeTruthy();
+  });
+
+  it('says a screen is openable, rather than leaving the row silent', async () => {
+    const user = userEvent.setup();
+    render(<ScreenFilesPage />, { wrapper });
+
+    await user.click(await screen.findByText('BBSTITLE'));
+
+    // The panel that opens has to announce itself, because it renders BELOW a
+    // table that fills the screen.
+    expect(await screen.findByTestId('screen-detail')).toBeTruthy();
   });
 });

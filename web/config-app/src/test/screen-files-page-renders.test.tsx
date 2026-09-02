@@ -16,6 +16,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+// The page's tabs keep the active one in the URL, so it needs a router.
+import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
 const screenIndex = {
@@ -77,7 +79,11 @@ import { ScreenFilesPage } from '../pages/ScreenFilesPage';
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <MemoryRouter>
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    </MemoryRouter>
+  );
 }
 
 describe('the Screen Files page', () => {

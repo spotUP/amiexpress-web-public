@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileImage, AlertTriangle, Download, Share2, Upload, Trash2, Pencil } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -6,6 +6,7 @@ import { useNotification } from '../contexts/NotificationContext';
 import { fanOutOptions, type FanOutOption } from './screen-write-plan';
 import { summariseShare, type ShareSummary } from './screen-share-view';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
+import { TabbedWorkspace, type TabDefinition } from '../components/ui/Tabs';
 import { ScreenPreview } from '../components/ScreenPreview';
 import { ScreenEditor } from '../components/ScreenEditor';
 import { screenToCanvas } from './screen-bytes';
@@ -45,6 +46,16 @@ export function ScreenFilesPage() {
   const [importPlan, setImportPlan] = useState<{ path: string; action: string; bytes: number }[] | null>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [editing, setEditing] = useState<EditorSurface | null>(null);
+  /**
+   * A file whose editor should open as soon as its bytes arrive.
+   *
+   * Reported as "there is no way to open the screen files? they are just
+   * listed": opening one meant clicking the row, finding the panel that
+   * appeared below a full-height table, clicking the path, then clicking Edit.
+   * Edit now sits on the row itself, and the bytes are fetched on the way.
+   */
+  const [pendingEdit, setPendingEdit] = useState<string | null>(null);
+  const detailRef = useRef<HTMLElement>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['screen-index'],
@@ -58,8 +69,47 @@ export function ScreenFilesPage() {
     enabled: !!openFile,
   });
 
+  useEffect(() => {
+    if (!openScreen || !detailRef.current) return;
+    // The table is as tall as the board has screens, so the panel opens off
+    // the bottom of the window and the click reads as "nothing happened".
+    // Optional call: jsdom has no scrollIntoView, and neither does every
+    // embedded browser.
+    detailRef.current.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [openScreen]);
+
   const rows = useMemo(() => (data ? toScreenRows(data) : EMPTY_ROWS), [data]);
   const visible = useMemo(() => filterScreenRows(rows, query), [rows, query]);
+
+  /**
+   * One table per kind of screen.
+   *
+   * Every screen the board can display used to sit in one table - node screens,
+   * conference screens and board screens one after another, 85 rows of them,
+   * with the detail panel below the lot. A node's BBSTITLE and a conference's
+   * MENU are different questions and they are asked separately now.
+   */
+  const byScope = useMemo(() => ({
+    node: visible.filter(row => row.dirType === 'node'),
+    conf: visible.filter(row => row.dirType === 'conf'),
+    global: visible.filter(row => row.dirType === 'global'),
+  }), [visible]);
+
+  useEffect(() => {
+    if (!pendingEdit || !file || openFile !== pendingEdit) return;
+    if (file.format !== 'ansi' && file.format !== 'text') {
+      setPendingEdit(null);
+      return;
+    }
+
+    let cancelled = false;
+    screenToCanvas(file.content).then(canvas => {
+      if (cancelled) return;
+      setEditing(createSurface(canvas));
+      setPendingEdit(null);
+    });
+    return () => { cancelled = true; };
+  }, [pendingEdit, file, openFile]);
 
   const entry: ScreenIndexEntryShape | undefined = data?.screens.find(s => s.screen === openScreen);
 
@@ -233,6 +283,69 @@ export function ScreenFilesPage() {
     },
   ];
 
+  const screenTable = (rows: ScreenRow[]) => (
+    <DataTable
+      columns={columns}
+      rows={rows}
+      getRowId={row => row.screen}
+      isLoading={isLoading}
+      error={error as Error | null}
+      onRowClick={(row: ScreenRow) => {
+        setOpenScreen(row.screen);
+        setOpenFile(null);
+      }}
+    />
+  );
+
+  const tabs: TabDefinition[] = [
+    {
+      id: 'node',
+      label: `Node screens ${byScope.node.length}`,
+      render: () => screenTable(byScope.node),
+    },
+    {
+      id: 'conference',
+      label: `Conference screens ${byScope.conf.length}`,
+      render: () => screenTable(byScope.conf),
+    },
+    {
+      id: 'board',
+      label: `Board screens ${byScope.global.length}`,
+      render: () => screenTable(byScope.global),
+    },
+    {
+      id: 'unused',
+      // Files nothing resolves to. Not a screen list: these are files on the
+      // volume that no screen, node or conference reads.
+      label: `Read by nothing ${data?.unused.length ?? 0}`,
+      render: () => (
+        <div className="space-y-2 text-sm">
+          <p className="text-bbs-muted">
+            On the volume, read by no screen the board can display. Safe to keep;
+            safe to remove once you have looked.
+          </p>
+          <ul className="space-y-1">
+            {(data?.unused ?? []).map(item => (
+              <li key={item.relPath} className="flex items-center gap-3">
+                <span className="font-mono text-bbs-text">{item.relPath}</span>
+                <span className="text-bbs-muted">{item.bytes} bytes, {item.format}</span>
+                <a
+                  className="underline"
+                  href={`/api/screens/file?path=${encodeURIComponent(item.relPath)}&download=1`}
+                >
+                  Download
+                </a>
+                <button className="underline text-red-400" onClick={() => removeFile(item.relPath)}>
+                  Delete
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <header className="flex items-center gap-2">
@@ -290,21 +403,15 @@ export function ScreenFilesPage() {
         </div>
       )}
 
-      <DataTable
-        columns={columns}
-        rows={visible}
-        getRowId={row => row.screen}
-        isLoading={isLoading}
-        error={error as Error | null}
-        onRowClick={(row: ScreenRow) => {
-          setOpenScreen(row.screen);
-          setOpenFile(null);
-        }}
-      />
+      <TabbedWorkspace tabs={tabs} />
 
       {entry && (
-        <section className="space-y-2">
+        <section className="space-y-2" ref={detailRef} data-testid="screen-detail">
           <h2 className="text-lg text-bbs-text">{entry.screen}</h2>
+          <p className="text-sm text-bbs-muted">
+            Where {entry.screen} resolves from, per node and conference. Edit
+            opens the art; the file name opens its details underneath.
+          </p>
 
           <table className="w-full text-sm">
             <thead>
@@ -317,7 +424,14 @@ export function ScreenFilesPage() {
               </tr>
             </thead>
             <tbody>
-              {entry.resolutions.map(res => (
+              {entry.resolutions.map(res => {
+                // The index already knows each file's format, so a row can say
+                // whether there is anything to edit rather than opening the
+                // editor and refusing.
+                const format = res.file ? data?.files[res.file]?.format : undefined;
+                const editable = format === 'ansi' || format === 'text';
+
+                return (
                 <tr key={`${res.scope}-${res.id}`} className="border-t border-bbs-border">
                   <td className="py-1">{scopeName(res.scope, res.id)}</td>
                   <td className="font-mono">
@@ -334,8 +448,28 @@ export function ScreenFilesPage() {
                     )}
                   </td>
                   <td className="font-mono text-bbs-muted">{res.variants.join(' ')}</td>
-                  <td className="text-right">
-                    {res.file && (
+                  <td className="text-right whitespace-nowrap">
+                    {res.file && editable && (
+                      <>
+                        <button
+                          className="inline-flex items-center gap-1 underline mr-3"
+                          aria-label={`Edit ${res.file}`}
+                          onClick={() => {
+                            setOpenFile(res.file);
+                            setPendingEdit(res.file);
+                          }}
+                        >
+                          <Pencil size={14} /> Edit
+                        </button>
+                        <a
+                          className="inline-flex items-center gap-1 underline"
+                          href={`/api/screens/file?path=${encodeURIComponent(res.file)}&download=1`}
+                        >
+                          <Download size={14} /> Download
+                        </a>
+                      </>
+                    )}
+                    {res.file && !editable && (
                       <a
                         className="inline-flex items-center gap-1 underline"
                         href={`/api/screens/file?path=${encodeURIComponent(res.file)}&download=1`}
@@ -345,7 +479,8 @@ export function ScreenFilesPage() {
                     )}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
 
@@ -415,6 +550,7 @@ export function ScreenFilesPage() {
             {(file.format === 'ansi' || file.format === 'text') && (
               <button
                 className="inline-flex items-center gap-1 underline"
+                aria-label="Edit this file"
                 onClick={async () => setEditing(createSurface(await screenToCanvas(file.content)))}
               >
                 <Pencil size={14} /> Edit
