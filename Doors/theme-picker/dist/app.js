@@ -100,15 +100,21 @@ async function createApp(session) {
         content: '',
         style: s.bar.style,
     });
-    const stopMasthead = (0, theme_1.attachMasthead)(mastheadRow, theme, {
-        title: 'DOOR THEME',
-        // One column short: writing a row's last cell leaves the terminal in a
-        // pending-wrap state and clips the final character.
-        width: Math.max(1, (screen.width || 80) - 1),
-        rail: s.accent,
-        ink: s.ink,
-        render: () => screen.render(),
-    });
+    // A 40-column screen has no spare cells for decoration, and a 20fps row
+    // repaint is a lot of PETSCII bytes for a C64 to swallow. The title still
+    // draws; it just stops moving. (SDK: effectsAllowed(), same call the other
+    // three compact doors make.)
+    const stopMasthead = (0, blessed_1.effectsAllowed)(screen.width || 80)
+        ? (0, theme_1.attachMasthead)(mastheadRow, theme, {
+            title: 'DOOR THEME',
+            // One column short: writing a row's last cell leaves the terminal in a
+            // pending-wrap state and clips the final character.
+            width: Math.max(1, (screen.width || 80) - 1),
+            rail: s.accent,
+            ink: s.ink,
+            render: () => screen.render(),
+        })
+        : (mastheadRow.setContent(' DOOR THEME '), () => undefined);
     const active = theme.id;
     const list = (0, blessed_helpers_1.createList)({
         parent: screen,

@@ -22,7 +22,7 @@ import {
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { themeStyles, themeById, attachMasthead, footerHints, footerStyle } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
-import { getCompactProfile } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { getCompactProfile, effectsAllowed } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { CompactProfile } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 interface DoorSession {
@@ -122,7 +122,12 @@ export async function createApp(session: DoorSession): Promise<void> {
     content: '',
     style: s.bar.style,
   });
-  const stopMasthead = attachMasthead(mastheadRow as any, theme, {
+  // A 40-column screen has no spare cells for decoration, and a 20fps row
+  // repaint is a lot of PETSCII bytes for a C64 to swallow. The title still
+  // draws; it just stops moving. (SDK: effectsAllowed(), same call the other
+  // three compact doors make.)
+  const stopMasthead = effectsAllowed(((screen as any).width as number) || 80)
+    ? attachMasthead(mastheadRow as any, theme, {
     title: 'DOOR THEME',
     // One column short: writing a row's last cell leaves the terminal in a
     // pending-wrap state and clips the final character.
@@ -130,7 +135,8 @@ export async function createApp(session: DoorSession): Promise<void> {
     rail: s.accent,
     ink: s.ink,
     render: () => screen.render(),
-  });
+      })
+    : ((mastheadRow as any).setContent(' DOOR THEME '), () => undefined);
 
   const active = theme.id;
 
