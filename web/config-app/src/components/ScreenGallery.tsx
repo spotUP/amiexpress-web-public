@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { ScreenArt } from './ScreenArt';
 
@@ -35,7 +36,6 @@ interface ScreenGalleryProps {
 /** One card. Draws nothing until it is scrolled to. */
 function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: string) => void }) {
   const ref = useRef<HTMLButtonElement>(null);
-  const [content, setContent] = useState<string | null>(null);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -57,16 +57,27 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
-    if (!visible || content !== null) return;
+  /**
+   * Through react-query, on the SAME key the file panel uses.
+   *
+   * This was a fetch into local state guarded by `content !== null`, which
+   * meant a card fetched once and never again: repairing a screen's escape
+   * bytes fixed the file, invalidated the queries, and left the thumbnail
+   * showing the damage - reported as "their thumbnail didnt regenerate in the
+   * gallery so they still look broken". Local state is invisible to
+   * invalidateQueries. Sharing the key also means opening a card costs no
+   * second fetch.
+   *
+   * `enabled: visible` keeps the laziness: 891 screens are not fetched to
+   * fill one screenful.
+   */
+  const { data: content } = useQuery({
+    queryKey: ['screen-file', item.path],
+    queryFn: async () => (await apiClient.getScreenFile(item.path)).data,
+    enabled: visible,
+  });
 
-    let cancelled = false;
-    apiClient.getScreenFile(item.path)
-      .then(res => { if (!cancelled) setContent((res.data as { content?: string })?.content ?? ''); })
-      .catch(() => { if (!cancelled) setContent(''); });
-
-    return () => { cancelled = true; };
-  }, [visible, content, item.path]);
+  const art = (content as { content?: string } | undefined)?.content;
 
   return (
     <button
@@ -76,8 +87,8 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
       onClick={() => onOpen(item.path)}
     >
       <div className="h-32 overflow-hidden bg-black">
-        {content
-          ? <ScreenArt content={content} scale={0.28} />
+        {art
+          ? <ScreenArt content={art} scale={0.28} />
           // A card that is waiting looks like it is waiting. Blank black reads
           // as an empty screen, which is a thing some of these actually are.
           : <div className="h-full w-full animate-pulse bg-surface-2/40" />}

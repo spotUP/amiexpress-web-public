@@ -402,6 +402,10 @@ export function ScreenFilesPage() {
         setFileError(`Refused: ${refused.map(r => `${r.path} (${r.reason})`).join('; ')}`);
       }
       queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+      // Every thumbnail as well as the index: the gallery draws each card from
+      // ['screen-file', path], and a repaired screen that still LOOKS broken
+      // is the bug being fixed.
+      queryClient.invalidateQueries({ queryKey: ['screen-file'] });
     } catch (error) {
       setFileError((error as Error).message);
       showError((error as Error).message);

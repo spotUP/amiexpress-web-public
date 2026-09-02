@@ -72,12 +72,13 @@ const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
 });
 vi.stubGlobal('fetch', fetchMock);
 
-const confirmed = vi.fn(async () => true);
+/** Typed on the argument, so a test can read what the sysop was actually asked. */
+const confirmed = vi.fn(async (_ask: { title: string; message: string; confirmText?: string }) => true);
 vi.mock('../contexts/NotificationContext', () => ({
   useNotification: () => ({
     showSuccess: vi.fn(),
     showError: vi.fn(),
-    confirm: (...args: unknown[]) => confirmed(...(args as [])),
+    confirm: confirmed,
   }),
 }));
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
@@ -103,7 +104,7 @@ describe('repairing every damaged screen at once', () => {
     await user.click(await screen.findByRole('button', { name: /Repair every damaged screen/i }));
 
     await waitFor(() => expect(confirmed).toHaveBeenCalled());
-    const asked = confirmed.mock.calls[0][0] as unknown as { title: string; message: string };
+    const asked = confirmed.mock.calls[0][0];
     expect(asked.title).toContain('Repair 2 screens');
     expect(asked.message).toContain('Node1/NODE_BULL.TXT');
     expect(asked.message).toContain('backed up');
