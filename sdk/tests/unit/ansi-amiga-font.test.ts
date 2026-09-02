@@ -21,7 +21,7 @@ import {
 import { loadANSFile } from '../../engines/ui/ansi-editor/core/file-ops';
 
 /** Build a one-line ANSI file with a SAUCE record naming `font`. */
-function ansWithFont(bytes: number[], font: string, width = 80): Uint8Array {
+function ansWithFont(bytes: number[], font: string, width = 80, height = 0): Uint8Array {
   const content = Uint8Array.from(bytes);
 
   const sauce = new Uint8Array(128);
@@ -47,6 +47,8 @@ function ansWithFont(bytes: number[], font: string, width = 80): Uint8Array {
   sauce[95] = 1;           // fileType: ANSi
   sauce[96] = width & 0xff;
   sauce[97] = width >> 8;
+  sauce[98] = height & 0xff;   // tInfo2: rows, as the art program counted them
+  sauce[99] = height >> 8;
   put(106, font, 22);      // tInfoS: font name
 
   const out = new Uint8Array(content.length + 1 + sauce.length);
@@ -122,5 +124,47 @@ describe('Amiga ANSI art decodes as Latin-1', () => {
     const { width } = await loadANSFile(file);
 
     expect(width).toBe(82);
+  });
+});
+
+/**
+ * A BBS screen is art PLUS the codes the board runs, and the codes sit on
+ * lines below the picture. Reported 2026-09-02: a sysop opened a screen in
+ * the browser editor and its ~SP / ~f / ~CC_ctop were not on the canvas.
+ *
+ * SAUCE said 21 rows because that is the height of the drawing; the file had
+ * 24 lines. Parsing to the declared height stopped above the codes - and
+ * saving wrote back only the rows the canvas held, so opening the screen and
+ * pressing Save DELETED them.
+ */
+describe('SAUCE row count is a hint, not a limit', () => {
+  const text = (value: string) => [...value].map(c => c.charCodeAt(0));
+
+  it('keeps lines the art program did not count, where the MCI codes live', async () => {
+    // Two rows of picture, one row of code under it, SAUCE declaring two.
+    const file = ansWithFont(text('AB\r\nCD\r\n~CC_ctop|'), 'Amiga mOsOul', 80, 2);
+
+    const { canvas, height } = await loadANSFile(file);
+
+    expect(height).toBe(3);
+    expect(canvas[2].slice(0, 9).map(cell => cell.char).join('')).toBe('~CC_ctop|');
+  });
+
+  it('does not grow a blank row for the newline that ends the file', async () => {
+    // Otherwise every open-and-save adds a line, for ever.
+    const file = ansWithFont(text('AB\r\n'), 'Amiga mOsOul', 80, 1);
+
+    const { height } = await loadANSFile(file);
+
+    expect(height).toBe(1);
+  });
+
+  it('still honours a declared height taller than the lines present', async () => {
+    // A 25-row screen whose art stops painting after two lines is 25 rows.
+    const file = ansWithFont(text('AB\r\nCD'), 'Amiga mOsOul', 80, 25);
+
+    const { height } = await loadANSFile(file);
+
+    expect(height).toBe(25);
   });
 });

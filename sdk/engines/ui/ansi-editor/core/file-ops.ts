@@ -172,7 +172,31 @@ export async function loadANSFile(data: Uint8Array): Promise<{ canvas: Cell[][],
   // sixteen Super Qix backgrounds are Amiga pieces, and every one of them
   // came out as box-drawing before this.
   const byteToChar = decoderForFont(sauce?.tInfoS);
-  const height = sauce?.tInfo2 || 25;
+
+  /*
+   * SAUCE's row count is a HINT, not a limit - the same lesson as its
+   * fileSize just above.
+   *
+   * An art program writes the height of the picture it drew. A BBS screen is
+   * that picture plus the MCI codes the board runs, and those sit on lines
+   * BELOW it: a 21-row piece in a file of 24 lines, with ~SP, ~f and ~CC_ctop
+   * underneath. Parsing to the declared height stops before them, so the
+   * editor never saw them - and saving wrote back only the rows it had, which
+   * deleted them.
+   *
+   * Counting newlines is a lower bound (cursor positioning can reach further)
+   * and it is the case that actually occurs.
+   */
+  const declaredHeight = sauce?.tInfo2 || 25;
+  let lineCount = 1;
+  for (let n = 0; n < content.length - 1; n++) {
+    // Stopping one short of the end is deliberate: a newline that ENDS the
+    // file closes the last row, it does not open another. Counting it would
+    // add a blank row, and saving writes the canvas back - so a screen would
+    // grow a line every time a sysop opened and saved it.
+    if (content[n] === 0x0a) lineCount++;
+  }
+  const height = Math.max(declaredHeight, lineCount);
   const iceColors = sauce ? (sauce.tFlags & 1) === 1 : false;
 
   const canvas = Canvas.createCanvas(width, height);
