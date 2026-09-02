@@ -1,0 +1,145 @@
+/**
+ * C64 40-col plan, Task 7 - REACHABILITY.
+ *
+ * tests/utils/ansi-art-detect.util.test.ts pins the decision function.
+ * This file proves the decision is WIRED: it drives the product's real
+ * entry point, `displayScreen(socket, session, screenName)`, through the
+ * real (unmocked) `loadScreenFile`, and asserts what actually goes on the
+ * wire for
+ *   - a PETSCII session on a prose .TXT   -> reflowed to 40 columns,
+ *   - a PETSCII session on an ANSI-art screen -> the skip token, no art,
+ *   - an ANSI session on the same files   -> byte-identical to before.
+ *
+ * The absolute-path seam (screenName forwarded verbatim into
+ * loadScreenFile's isAbsolutePath branch) and the emit-spy socket mock
+ * follow tests/handlers/petscii-bytes-transport.test.ts.
+ */
+import * as os from 'os';
+import * as path from 'path';
+import * as fs from 'fs';
+
+process.env.SKIP_DB_INIT = '1';
+
+import { displayScreen } from '../../src/handlers/screen.handler';
+import { ANSI_ART_SKIPPED_NOTICE } from '../../src/utils/ansi-art-detect.util';
+import { printableLength } from '../../src/utils/wrap-for-session.util';
+
+/** A paragraph whose every line is far wider than a C64's 40 columns. */
+const PROSE_LINES = [
+  'Welcome to the board! This opening line is deliberately much wider than forty columns.',
+  'Today we have new files in the Amiga conference, uploaded by the usual suspects.',
+  'Read the rules before you upload anything, and please do not flood the message base.',
+  'Enjoy your stay.',
+];
+const PROSE = PROSE_LINES.join('\r\n') + '\r\n';
+
+/** CP437 block elements: an 80-column picture, built as BYTES. */
+const ART_BYTES = Buffer.concat(
+  Array.from({ length: 10 }, () =>
+    Buffer.concat([
+      Buffer.from(Array.from({ length: 78 }, (_, i) => [0xdb, 0xdc, 0xdf, 0xb0, 0xb1, 0xb2][i % 6])),
+      Buffer.from('\r\n', 'latin1'),
+    ])
+  )
+);
+
+/**
+ * What the art file looks like ON THE WIRE: `loadScreenFile` maps CP437
+ * high bytes to their Unicode equivalents before `displayScreen` ever sees
+ * them, so 0xDB/0xDC/0xDF arrive as the full/lower/upper block glyphs.
+ */
+const UNICODE_BLOCKS = String.fromCharCode(0x2588, 0x2584, 0x2580);
+
+let tmpDir: string;
+let prosePath: string;
+let artPath: string;
+
+beforeAll(() => {
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'petscii-reflow-'));
+  prosePath = path.join(tmpDir, 'PROSE.TXT');
+  artPath = path.join(tmpDir, 'ARTSCRN.TXT');
+  fs.writeFileSync(prosePath, Buffer.from(PROSE, 'latin1'));
+  fs.writeFileSync(artPath, ART_BYTES);
+});
+
+let seq = 0;
+async function show(screenPath: string, session: any): Promise<string> {
+  const emitted: Array<{ event: string; data: any }> = [];
+  const socket = {
+    // getAnsiBuffer (reached via displayScreen's flushOutput) keys its
+    // buffer map on socket.id and registers a 'disconnect' listener.
+    id: `petscii-reflow-${seq++}`,
+    emit: (event: string, data: any) => emitted.push({ event, data }),
+    on: () => {},
+  };
+  const ok = await displayScreen(socket as any, session, screenPath);
+  expect(ok).toBe(true);
+  return emitted
+    .filter((e) => e.event === 'ansi-output')
+    .map((e) => String(e.data))
+    .join('');
+}
+
+/** Content rows of an emitted frame, with the frame's cursor-hide/show wrapper dropped. */
+function contentRows(out: string): string[] {
+  return out
+    .replace(/\x1b\[\?25[lh]/g, '')
+    .replace(/^\x1b\[[0-9;]*[HJ]/, '')
+    .split('\r\n')
+    .filter((l) => l.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').trim().length > 0);
+}
+
+describe('PETSCII text-screen fallback on the real displayScreen path', () => {
+  it('reflows a prose .TXT to 40 columns for a petsciiMode session', async () => {
+    const out = await show(prosePath, { petsciiMode: true, screenWidth: 40, nodeId: 0 });
+
+    const rows = contentRows(out);
+    // Every row now fits a C64 screen...
+    for (const row of rows) {
+      expect(printableLength(row)).toBeLessThanOrEqual(40);
+    }
+    // ...and the wide source lines were really split, not truncated: more
+    // rows out than in, and every word survives.
+    expect(rows.length).toBeGreaterThan(PROSE_LINES.length);
+    expect(out).not.toContain(PROSE_LINES[0]);
+    for (const word of PROSE_LINES[0].split(' ')) {
+      expect(out).toContain(word);
+    }
+  });
+
+  it('skips an ANSI-art screen with the ASCII token instead of smearing it', async () => {
+    const out = await show(artPath, { petsciiMode: true, screenWidth: 40, nodeId: 0 });
+
+    expect(out).toBe(ANSI_ART_SKIPPED_NOTICE);
+    expect(out).not.toContain(UNICODE_BLOCKS);
+  });
+
+  it('leaves an ANSI (non-petscii) session byte-identical on the SAME prose file', async () => {
+    const out = await show(prosePath, { nodeId: 0, screenWidth: 80 });
+
+    for (const line of PROSE_LINES) {
+      expect(out).toContain(line); // unwrapped, verbatim
+    }
+    expect(contentRows(out)).toHaveLength(PROSE_LINES.length);
+  });
+
+  it('leaves an ANSI (non-petscii) session byte-identical on the SAME art file', async () => {
+    const out = await show(artPath, { nodeId: 0, screenWidth: 80 });
+
+    expect(out).not.toContain(ANSI_ART_SKIPPED_NOTICE);
+    expect(out).toContain(UNICODE_BLOCKS);
+  });
+
+  /**
+   * An 80-column session that HAS opted into PETSCII (a C64 emulator in
+   * 80-col mode, or a petsciiMode session before the width probe answers)
+   * still gets no reflow: `wrapForSession` is identity at >= 80.
+   */
+  it('does not reflow a petsciiMode session that is 80 columns wide', async () => {
+    const out = await show(prosePath, { petsciiMode: true, screenWidth: 80, nodeId: 0 });
+
+    for (const line of PROSE_LINES) {
+      expect(out).toContain(line);
+    }
+  });
+});

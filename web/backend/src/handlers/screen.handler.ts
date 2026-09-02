@@ -50,6 +50,8 @@ import { fileCache } from '../utils/file-cache.util';
 import { processMci as processMciTokenizer, type MciDispatchMap, type MciPrefixDispatchMap, applyMciWidth } from '../utils/mci-tokenizer.util';
 import { getBoardConfig } from '../services/bbs-config-file.service';
 import { config as appConfig } from '../config';
+import { petsciiTextScreenPlan, ANSI_ART_SKIPPED_NOTICE } from '../utils/ansi-art-detect.util';
+import { wrapForSession } from '../utils/wrap-for-session.util';
 
 /**
  * Detect if content is an ANSI animation that should play at modem speed
@@ -1911,6 +1913,22 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       return true;
     }
 
+    // === PETSCII text fallback (C64/40-col Task 7) ===
+    // A petsciiMode session displaying a screen with no .seq variant:
+    // prose reflows to the session width (below, after MCI parsing);
+    // ANSI art is NEVER reflowed - skip it with the ASCII token. A
+    // skipped art screen also skips its MCI commands: art screens carry
+    // layout, not flow control, and smearing them is the worse failure.
+    // Every non-PETSCII session gets 'passthrough' and both this branch
+    // and the reflow hook below are no-ops, which is what keeps 80-column
+    // output byte-identical.
+    const petsciiTextPlan = petsciiTextScreenPlan(content, session);
+    if (petsciiTextPlan === 'art-skip') {
+      socket.emit('ansi-output', ANSI_ART_SKIPPED_NOTICE);
+      screenFlowLog(screenName, `PETSCII session: 80-col ANSI art screen skipped (${filePath})`);
+      return true;
+    }
+
     // [NEWLINE-DEBUG] Log raw content newlines
     const rawNewlines = (content.match(/\n/g) || []).length;
     const rawCRLF = (content.match(/\r\n/g) || []).length;
@@ -2162,6 +2180,12 @@ console.log(`[NEWLINE-DEBUG] AFTER addAnsiEscapes: ${parsed.length} bytes, ${aft
 
     // Normalize line endings for terminal display
     parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+
+    // PETSCII text fallback: reflow the parsed prose to the session width
+    // (wrapForSession is identity at >=80 and passes positioned payloads).
+    if (petsciiTextPlan === 'reflow') {
+      parsed = wrapForSession(parsed, session);
+    }
 
     // [NEWLINE-DEBUG] Log after line ending normalization (CRITICAL)
     const afterNormalizeNewlines = (parsed.match(/\n/g) || []).length;
