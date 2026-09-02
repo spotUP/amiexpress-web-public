@@ -234,11 +234,22 @@ exports.MinimapRenderer = MinimapRenderer;
 class OpponentTracker {
     constructor() {
         this.opponents = new Map();
+        /**
+         * Bumped on every update, so a renderer can tell what it has already drawn.
+         *
+         * The versus screen repaints at 60 Hz but opponents are SAMPLED at about
+         * 10 - so five frames in six, every opponent board was rebuilt from a state
+         * identical to the one already on screen. With a full field on a wide
+         * terminal that was the whole frame budget: 14 ms of the 16 ms tick went on
+         * boards that had not changed ("can gmasters battle royale be optimized?
+         * it's laggy with all the players and action on screen", 2026-09-02).
+         */
+        this.revision = 0;
     }
     updateOpponent(id, state) {
         const existing = this.opponents.get(id);
         if (existing) {
-            this.opponents.set(id, { ...existing, ...state });
+            this.opponents.set(id, { ...existing, ...state, revision: ++this.revision });
         }
         else {
             this.opponents.set(id, {
@@ -251,6 +262,7 @@ class OpponentTracker {
                 targeting: state.targeting || false,
                 rank: state.rank,
                 isBot: state.isBot ?? false,
+                revision: ++this.revision,
             });
         }
     }

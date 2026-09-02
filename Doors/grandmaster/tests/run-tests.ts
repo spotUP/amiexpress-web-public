@@ -15,6 +15,7 @@
 
 const TEST_MODULES = ['./versus-layout.test',
   './versus-render.test',
+  './versus-repaint.test',
   './fullscreen.test',
   './battle-royale.test',
   './menu-responsive.test',

@@ -68,6 +68,8 @@ export class VersusScreen {
   private nextBox: any;
   private holdBox: any;
   private opponentBoards: any[] = [];  // one full board per opponent that fits
+  /** What each opponent box currently shows, so an unchanged board is skipped. */
+  private drawnBoards: Array<{ id: string; revision?: number } | undefined> = [];
   private opponentInfoBox: any;    // 1v1 VS info / attack panel
   private minimapPanel: any;       // battle-royale minimap panel
   private minimapContainer: any;   // inner container for minimap widgets
@@ -261,6 +263,7 @@ export class VersusScreen {
     // Clear screen
     this.screen.children.forEach(child => child.destroy());
     this.opponentBoards = [];
+    this.drawnBoards = [];
     this.lastLayoutKey = '';
 
     // Player board
@@ -325,6 +328,7 @@ export class VersusScreen {
 
     // Opponent full board. More are created as the layout asks for them.
     this.opponentBoards = [this.createOpponentBoard(0)];
+    this.drawnBoards = [];
 
     // ── 1v1 right side (visible when ≤1 opponent) ──────────────────────────
     // VS info panel (21w)
@@ -1241,12 +1245,27 @@ export class VersusScreen {
 
     this.applyVersusLayout(layout);
 
+    // Only boards that CHANGED are rebuilt.
+    //
+    // This screen repaints at 60 Hz and the tracker samples opponents at
+    // about 10, so five frames in six every board was rebuilt from a state
+    // identical to the one already on it. On a wide terminal with a full
+    // field that was the entire frame budget - 14 ms of a 16 ms tick, all of
+    // it spent redrawing what was already there.
     for (let i = 0; i < onBoards.length; i++) {
       const box = this.opponentBoards[i];
       if (!box) continue;
-      this.renderOpponentBoard(box, onBoards[i]);
-      box.setLabel(` ${onBoards[i].name || 'CPU'} `);
+      const opp = onBoards[i];
+      const drawn = this.drawnBoards[i];
+      // A box is reused for whoever ranks into it, so the id has to match
+      // too - otherwise a reshuffle would show the previous opponent's board.
+      if (drawn && drawn.id === opp.id && drawn.revision === opp.revision) continue;
+      this.renderOpponentBoard(box, opp);
+      box.setLabel(` ${opp.name || 'CPU'} `);
+      this.drawnBoards[i] = { id: opp.id, revision: opp.revision };
     }
+    // Boxes beyond the current field must not keep a stale stamp.
+    this.drawnBoards.length = onBoards.length;
 
     if (onGrid.length > 0) {
       this.minimapRenderer.renderBuckets(

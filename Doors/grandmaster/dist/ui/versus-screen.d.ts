@@ -38,6 +38,8 @@ export declare class VersusScreen {
     private nextBox;
     private holdBox;
     private opponentBoards;
+    /** What each opponent box currently shows, so an unchanged board is skipped. */
+    private drawnBoards;
     private opponentInfoBox;
     private minimapPanel;
     private minimapContainer;
