@@ -1262,11 +1262,14 @@ export function ScreenFilesPage() {
             </div>
 
             {pendingUpload && !editorWrite && (
-              <div className="border border-border p-3 space-y-2 text-sm">
-                <p className="text-content-primary">
-                  Replace <span className="font-topaz">{openFile}</span> with{' '}
-                  <span className="font-topaz">{pendingUpload.name}</span>
-                </p>
+              <div className="card space-y-4 text-sm">
+                <div>
+                  <h4 className="text-base text-content-primary">Replace this screen</h4>
+                  <p className="text-content-secondary">
+                    <span className="font-topaz">{openFile}</span> becomes{' '}
+                    <span className="font-topaz">{pendingUpload.name}</span>
+                  </p>
+                </div>
 
                 {/*
                   A screen is a program and an ANSI editor writes no ~CC_. What
@@ -1274,19 +1277,22 @@ export function ScreenFilesPage() {
                   because the cost is the same whichever fan-out it is.
                 */}
                 {carryVerdict && (carryVerdict.carried.length > 0 || carryVerdict.lost.length > 0) && (
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     <p className={carryVerdict.lost.length ? 'text-status-warn' : 'text-content-secondary'}>
                       {describeCarry(carryVerdict)}
                     </p>
-                    <ul className="font-topaz">
-                      {carryVerdict.carried.map(line => (
-                        <li key={line} className="text-content-primary">{line}</li>
-                      ))}
-                    </ul>
-                    <label className="block text-content-secondary">
-                      Keep these codes
+                    {carryVerdict.carried.length > 0 && (
+                      <ul className="font-topaz text-content-primary border-l-2 border-border pl-3">
+                        {carryVerdict.carried.map(line => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    )}
+                    <div>
+                      <label className="label" htmlFor="carry-placement">Keep these codes</label>
                       <select
-                        className="input-field ml-2"
+                        id="carry-placement"
+                        className="input-field"
                         value={carryCodes}
                         onChange={e => setCarryCodes(e.target.value as 'none' | 'above' | 'below')}
                       >
@@ -1294,27 +1300,44 @@ export function ScreenFilesPage() {
                         <option value="below">all together, after the art</option>
                         <option value="none">do not keep them</option>
                       </select>
-                    </label>
+                    </div>
                   </div>
                 )}
 
-                {options.map(option => (
+                {/*
+                  Buttons, not links: one of these writes to the board and one
+                  throws the upload away, and as underlined text they looked
+                  identical. The suggested fan-out is the primary action.
+                */}
+                <div>
+                  <span className="label">Write it to</span>
+                  <div className="flex flex-wrap gap-2">
+                    {options.map(option => (
+                      <button
+                        key={option.choice}
+                        type="button"
+                        className={option.suggested ? 'btn-primary' : 'btn-secondary'}
+                        onClick={() => applyWrite(option)}
+                      >
+                        {option.label}
+                        {option.choice === 'all-copies' && ` (${option.targets.length} backups)`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 border-t border-border pt-3">
                   <button
-                    key={option.choice}
-                    className="block text-left underline"
-                    onClick={() => applyWrite(option)}
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => { setPendingUpload(null); setCarryVerdict(null); }}
                   >
-                    {option.label}
-                    {option.choice === 'all-copies' && ` - ${option.targets.length} backups`}
-                    {option.suggested && <span className="text-content-secondary"> (suggested)</span>}
+                    Cancel
                   </button>
-                ))}
-                <button
-                  className="block text-left text-content-secondary underline"
-                  onClick={() => { setPendingUpload(null); setCarryVerdict(null); }}
-                >
-                  cancel
-                </button>
+                  <span className="text-content-muted">
+                    Every file written is backed up beside itself first.
+                  </span>
+                </div>
               </div>
             )}
 
@@ -1323,25 +1346,28 @@ export function ScreenFilesPage() {
               who knows. `art` says the guess is wrong and a designer does edit
               this file - which is the case the gallery hides by default.
             */}
-            <label className="block text-sm text-content-secondary">
-              This file is
-              <select
-                className="input-field ml-2"
-                value={file.generated ?? 'art'}
-                onChange={e => flagFile(openFile, e.target.value as 'backup' | 'runtime' | 'art')}
-              >
-                <option value="art">art a designer edits</option>
-                <option value="runtime">written by the board</option>
-                <option value="backup">an old copy kept beside the real one</option>
-              </select>
+            <div className="flex flex-wrap items-end gap-2 text-sm">
+              <div>
+                <label className="label" htmlFor="screen-kind">This file is</label>
+                <select
+                  id="screen-kind"
+                  className="input-field"
+                  value={file.generated ?? 'art'}
+                  onChange={e => flagFile(openFile, e.target.value as 'backup' | 'runtime' | 'art')}
+                >
+                  <option value="art">art a designer edits</option>
+                  <option value="runtime">written by the board</option>
+                  <option value="backup">an old copy kept beside the real one</option>
+                </select>
+              </div>
               <button
                 type="button"
-                className="ml-2 underline"
+                className="btn-secondary"
                 onClick={() => flagFile(openFile, null)}
               >
-                use the manager's guess
+                Use the manager's guess
               </button>
-            </label>
+            </div>
 
             {file.problems && file.problems.length > 0 && (
               <div className="text-sm space-y-1">

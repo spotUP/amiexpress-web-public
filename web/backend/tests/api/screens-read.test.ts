@@ -75,3 +75,28 @@ test('a download answers the raw bytes as an attachment', async () => {
   expect(res.headers['content-disposition']).toContain('BBSTITLE.txt');
   expect(res.body).toEqual(Buffer.from([0xa1, 0x0d, 0x0a]));
 });
+
+/**
+ * The file panel says who reads a screen.
+ *
+ * `readBy` is filled in by buildScreenIndex - only the index knows which nodes
+ * and conferences exist and what each reads - and this route answered with the
+ * bare `screenFileFacts`, whose readBy is always empty. So the panel told the
+ * sysop "No screen on this board reads this file" about EVERY file he opened,
+ * including a live conference bulletin.
+ */
+test('GET /api/screens/file reports the screens that read the file', async () => {
+  const res = await request(app).get('/api/screens/file').query({ path: 'Node1/BBSTITLE.txt' });
+
+  expect(res.status).toBe(200);
+  expect(res.body.data.readBy).toBeDefined();
+  expect(res.body.data.readBy.map((r: { screen: string }) => r.screen)).toContain('BBSTITLE');
+});
+
+test('a file nothing reads still answers with an empty list, not a missing one', async () => {
+  // The difference matters: the panel renders "read by nothing" from an empty
+  // array and cannot tell that from a field the route forgot to send.
+  const res = await request(app).get('/api/screens/file').query({ path: 'Node1/BBSTITLE.txt' });
+
+  expect(Array.isArray(res.body.data.readBy)).toBe(true);
+});

@@ -136,8 +136,22 @@ screensRouter.get('/file', (req: Request, res: Response) => {
     return res.end(buf);
   }
 
+  const baseDir = config.get('dataDir');
+  const facts = screenFileFacts(baseDir, full);
+
+  /*
+   * `readBy` is filled in by buildScreenIndex, not by screenFileFacts - only
+   * the index knows which nodes and conferences exist and what each one reads.
+   * Answering with the bare facts meant this route reported EVERY file as read
+   * by nothing, and the panel said so in as many words: "No screen on this
+   * board reads this file." Reported by the sysop looking at Conf2/bull20.txt,
+   * which the index knows is CONF_BULL in conference 2 at level 20 and above.
+   */
+  const indexed = getScreenIndex(baseDir).files[facts.relPath];
+
   return sendOk(res, {
-    ...screenFileFacts(config.get('dataDir'), full),
+    ...facts,
+    readBy: indexed?.readBy ?? facts.readBy,
     content: buf.toString('base64'),
   });
 });
