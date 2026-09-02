@@ -60,7 +60,6 @@
  */
 import { Buffer } from 'buffer';
 import {
-  AnsiToPetsciiTransducer,
   PetsciiMachine,
   encodePetsciiValue,
   petsciiMoveTo,
@@ -134,35 +133,26 @@ export interface PetsciiRenderCtxOpts {
 }
 
 /**
- * The session's terminal model - the SAME object the transports feed.
- *
- * It is an `AnsiToPetsciiTransducer` and not a bare `PetsciiMachine` because
- * a PETSCII terminal receives BOTH flavours and BOTH reach it through a
- * choke: `ansi-output` / `petscii-output` are transduced there
- * (`server/connection-emitter.ts` for telnet/SSH/WS-terminal, the
- * registration-time `socket.emit` wrapper in `server/socket-handlers.ts` for
- * web), and every `petscii-bytes` payload is either observed there or - when
- * THIS render produced it - fed here as it was encoded and marked, so the
- * choke does not feed it twice (`utils/petscii-session-model.ts`).
- *
- * The render therefore owns no model of its own. It reads the one the
- * session already has, which is what makes the cursor it clips against the
- * cursor the caller's terminal is actually at, no matter what put it there:
- * a menu, a paginated `.TXT`, a door, a chat page from another node.
- */
-export function petsciiTransducerFor(session: BBSSession): AnsiToPetsciiTransducer {
-  return petsciiTerminalModelFor(session);
-}
-
-/**
  * The session's bank / cursor / pen oracle, created on first use.
+ *
+ * It IS the machine of the session's ONE terminal model
+ * (`utils/petscii-session-model.ts`) - the SAME object the transports feed.
+ * `ansi-output` / `petscii-output` are transduced at the choke
+ * (`server/connection-emitter.ts` for telnet/SSH/WS-terminal, the
+ * registration-time `socket.emit` wrapper installed from
+ * `server/socket-handlers.ts` for web), and every `petscii-bytes` payload is
+ * either observed there or - when THIS render produced it - fed here as it
+ * was encoded and marked, so the choke does not feed it twice.
+ *
+ * The render therefore owns no model of its own. It reads the one the session
+ * already has, which is what makes the cursor it clips against the cursor the
+ * caller's terminal is actually at, no matter what put it there: a menu, a
+ * paginated `.TXT`, a door, a chat page from another node.
  *
  * Exported because a caller that only needs to put a control byte on the wire
  * - the `$93` screen clear - must feed that byte to the SAME machine without
  * paying for a dispatch build (`buildMciDispatch` runs the message-base and
  * system-stats lookups its closures read).
- *
- * It IS the terminal model's machine: one screen, one model of it.
  */
 export function petsciiMachineFor(session: BBSSession): PetsciiMachine {
   return petsciiTerminalModelFor(session).machine;
