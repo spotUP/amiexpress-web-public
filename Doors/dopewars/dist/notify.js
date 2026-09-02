@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Notifier = void 0;
 const https = __importStar(require("https"));
 const http = __importStar(require("http"));
+const announce_1 = require("@amiexpress/bbs-door-sdk/core/announce");
 function formatMessage(ev) {
     switch (ev.type) {
         case 'join':
@@ -79,27 +80,48 @@ function postDiscord(webhookUrl, message) {
         // fire-and-forget — never throw
     }
 }
-function postLivechat(message) {
-    try {
-        const livechat = global[Symbol.for('aex-livechat')];
-        if (livechat && typeof livechat.broadcast === 'function') {
-            livechat.broadcast({ type: 'system', text: message });
-        }
-    }
-    catch {
-        // livechat not available — silent ignore
-    }
-}
+/**
+ * Which announcements leave the board, and as what.
+ *
+ * A retirement with a new high score is a score; the rest are announcements
+ * of the "something happened, come and look" kind. The board decides who
+ * actually receives them - see sdk/core/announce.ts and the sysop's webhook
+ * subscriptions - which is the whole point of routing through it.
+ */
 class Notifier {
-    constructor(cfg) {
+    /**
+     * `host` is the door's `ctx.bbs`. Without one - a test, a script - the
+     * announcer is a no-op and the game plays on.
+     */
+    constructor(cfg, host) {
         this.cfg = cfg;
+        this.announce = (0, announce_1.createAnnouncer)(host);
     }
     send(ev) {
         const msg = formatMessage(ev);
+        // Through the BOARD: LiveChat and whatever webhooks the sysop subscribed,
+        // with the board's PII policy and per-door filters applied. This door used
+        // to POST to a Discord URL of its own and shout into LiveChat through a
+        // global symbol, which meant a sysop could neither filter it nor stop it.
+        // notifyLivechat kept its meaning: a board that switched announcements
+        // off stays quiet, it just is not a global symbol any more.
+        if (this.cfg.notifyLivechat === false) {
+            if (this.cfg.discordWebhook)
+                postDiscord(this.cfg.discordWebhook, msg);
+            return;
+        }
+        if (ev.type === 'high_score') {
+            this.announce.score(ev.score, { turns: ev.turns, handle: ev.handle, message: msg });
+        }
+        else {
+            this.announce.custom(`dopewars_${ev.type}`, msg, { ...ev });
+        }
+        // The old direct hook still fires while a board has one configured, so
+        // nobody's Discord goes quiet on upgrade. DOPEWARS_DISCORD_WEBHOOK is
+        // deprecated: a webhook subscribed to door_announcement or door_score with
+        // a DOPEWARS filter does the same thing and obeys the board's rules.
         if (this.cfg.discordWebhook)
             postDiscord(this.cfg.discordWebhook, msg);
-        if (this.cfg.notifyLivechat)
-            postLivechat(msg);
     }
 }
 exports.Notifier = Notifier;

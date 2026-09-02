@@ -39,13 +39,19 @@ export class DopewarsServer extends EventEmitter {
     return g[SERVER_KEY];
   }
 
-  async init(doorDir: string, cfg: DopewarsConfig): Promise<void> {
+  /** The door's BBS handle, for announcements. Set by init()'s caller. */
+  private announceHost: unknown;
+
+  async init(doorDir: string, cfg: DopewarsConfig, announceHost?: unknown): Promise<void> {
+    this.announceHost = announceHost;
     if (this.initialised) return;
     this.initialised = true;
     this.doorDir  = doorDir;
     this.cfg      = cfg;
     this.db       = openDb(doorDir);
-    this.notifier = new Notifier(cfg);
+    // The announcer needs the door's own BBS handle; init() is called from
+    // onStart, which has it (src/index.ts).
+    this.notifier = new Notifier(cfg, this.announceHost);
     this.wasm     = await DopewarsWasmBindings.load(doorDir);
 
     this.wasm.registerCallbacks(

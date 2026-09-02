@@ -6,6 +6,7 @@
  */
 
 import { spawn, fork } from 'child_process';
+import { hasBrowserClient } from '../services/key-event-capable';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
@@ -1772,13 +1773,27 @@ console.log('Executing door:', door.name);
 
     // Client-only doors: Just load the client bundle and return
     if (doorManifest && doorManifest.runtime === 'client') {
+      // A browser-only door has no server half to fall back on.
+      if (!hasBrowserClient(session)) {
+        socket.emit('ansi-output',
+          `\r\n{yellow}${door.name} needs the web terminal - it has no telnet half.{/}\r\n`
+            .replace(/\{[a-z/]+\}/g, ''));
+        return;
+      }
       await executeClientDoor(socket, session, door, doorManifest);
       return;
     }
 
     // Hybrid doors: Load client bundle but ALSO continue to execute server part
     let hybridSessionId: string | null = null;
-    if (doorManifest && doorManifest.runtime === 'hybrid') {
+    // Only a browser can run the client half. Starting it for a telnet or
+    // SSH caller registers a 'command' listener that swallows every
+    // keystroke and hands it to a client that will never answer - which is
+    // why every hybrid door took no input at all over telnet (sysop,
+    // 2026-09-02). The server half draws the terminal perfectly well on its
+    // own; it just never saw a key. What a telnet caller loses is the
+    // client's audio, which telnet could not have played anyway.
+    if (doorManifest && doorManifest.runtime === 'hybrid' && hasBrowserClient(session)) {
 console.log(`[executeDoor] Hybrid door detected: ${door.name} - loading client AND server`);
       // Load client bundle and get session ID for RPC registration
       hybridSessionId = await executeClientDoor(socket, session, door, doorManifest);

@@ -72,3 +72,46 @@ describe('the game-mode gate in the character path', () => {
     expect(source).toContain('if (session.gameModeEnabled && deliversKeyEvents(session)) {');
   });
 });
+
+describe('a hybrid door over telnet', () => {
+  const { hasBrowserClient } = require('../src/services/key-event-capable');
+
+  it('knows a telnet caller has no browser to run a client half in', () => {
+    expect(hasBrowserClient({ connectionType: 'web' })).toBe(true);
+    expect(hasBrowserClient({ connectionType: 'telnet' })).toBe(false);
+    expect(hasBrowserClient({ connectionType: 'ssh' })).toBe(false);
+  });
+
+  it('is what door.handler.ts gates the client half on', () => {
+    // The bug this pins: executeClientDoor ran for every hybrid door whatever
+    // the transport. On telnet that registers a 'command' listener which the
+    // telnet input path prefers over session.doorInputHandler - so every
+    // keystroke went to a browser client that was never there, and GRANDMASTER
+    // and CARD LOBBY took no input at all (sysop, 2026-09-02, live).
+    const { readFileSync } = require('fs');
+    const { join } = require('path');
+    const source = readFileSync(join(__dirname, '..', 'src', 'handlers', 'door.handler.ts'), 'utf8');
+
+    expect(source).toContain("doorManifest.runtime === 'hybrid' && hasBrowserClient(session)");
+    // And a browser-only door says so rather than hanging.
+    expect(source).toContain('if (!hasBrowserClient(session)) {');
+  });
+
+  it('leaves the telnet path free to reach the door input handler', () => {
+    // The order in index.ts's telnet handler: a 'command' listener wins over
+    // doorInputHandler. With no client half there is no such listener, so the
+    // door gets its keys.
+    const { readFileSync } = require('fs');
+    const { join } = require('path');
+    const source = readFileSync(join(__dirname, '..', 'src', 'index.ts'), 'utf8');
+    const doorBlock = source.slice(
+      source.indexOf('// Check if door is active and needs input'),
+      source.indexOf('// No door active - route to BBS command handler'),
+    );
+
+    expect(doorBlock).toContain("emitter.listenerCount('command') > 0");
+    expect(doorBlock).toContain('session.doorInputHandler(input)');
+    expect(doorBlock.indexOf("listenerCount('command')"))
+      .toBeLessThan(doorBlock.indexOf('session.doorInputHandler(input)'));
+  });
+});

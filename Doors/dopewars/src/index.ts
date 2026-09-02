@@ -29,7 +29,7 @@ door.onStart(async (ctx: DoorContext) => {
   };
 
   const server = DopewarsServer.getInstance();
-  await server.init(doorDir, cfg);
+  await server.init(doorDir, cfg, ctx.bbs);
   await createApp(ctx, server);
 });
 

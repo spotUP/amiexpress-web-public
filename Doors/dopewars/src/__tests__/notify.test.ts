@@ -27,28 +27,61 @@ describe('Notifier', () => {
     events.forEach(ev => expect(() => n.send(ev)).not.toThrow());
   });
 
-  it('broadcasts to livechat when configured', () => {
-    const mockBroadcast = jest.fn();
-    (global as any)[Symbol.for('aex-livechat')] = { broadcast: mockBroadcast };
-    const n = new Notifier({ ...cfg, notifyLivechat: true });
+  it('announces through the board rather than a global symbol', () => {
+    // It used to reach LiveChat by looking up Symbol.for('aex-livechat') on
+    // the global object, and Discord by POSTing to a URL of its own - so a
+    // sysop could neither filter it nor stop it, and the board's PII policy
+    // never saw it. It goes through ctx.bbs now (sdk/core/announce.ts).
+    const seen: Array<{ type: string; message: string }> = [];
+    const host = { emitCustomEvent: (type: string, message: string) => { seen.push({ type, message }); } };
+
+    const n = new Notifier({ ...cfg, notifyLivechat: true }, host);
     n.send({ type: 'join', handle: 'SPOT' });
-    expect(mockBroadcast).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'system', text: expect.stringContaining('SPOT') })
-    );
-    delete (global as any)[Symbol.for('aex-livechat')];
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0].type).toBe('dopewars_join');
+    expect(seen[0].message).toContain('SPOT');
+  });
+
+  it('sends a retirement as a score, which is what the board routes to webhooks', () => {
+    const seen: Array<{ type: string; message: string; data?: any }> = [];
+    const host = {
+      emitCustomEvent: (type: string, message: string, data?: any) => { seen.push({ type, message, data }); },
+    };
+
+    const n = new Notifier({ ...cfg, notifyLivechat: true }, host);
+    n.send({ type: 'high_score', handle: 'SPOT', score: 99000, turns: 28 });
+
+    expect(seen[0].type).toBe('score');
+    expect(seen[0].data.score).toBe(99000);
+    expect(seen[0].data.turns).toBe(28);
   });
 
   it('formats all event messages correctly', () => {
-    // Test via livechat capture
-    const captured: string[] = [];
-    (global as any)[Symbol.for('aex-livechat')] = {
-      broadcast: (m: any) => captured.push(m.text),
-    };
-    const n = new Notifier({ ...cfg, notifyLivechat: true });
+    const seen: string[] = [];
+    const host = { emitCustomEvent: (_t: string, message: string) => { seen.push(message); } };
+
+    const n = new Notifier({ ...cfg, notifyLivechat: true }, host);
     n.send({ type: 'busted', handle: 'BOB', location: 'Brooklyn', drugsLost: 7 });
-    expect(captured[0]).toContain('BOB');
-    expect(captured[0]).toContain('Brooklyn');
-    expect(captured[0]).toContain('7');
-    delete (global as any)[Symbol.for('aex-livechat')];
+
+    expect(seen[0]).toContain('BOB');
+    expect(seen[0]).toContain('Brooklyn');
+    expect(seen[0]).toContain('7');
+  });
+
+  it('stays quiet when the board switched announcements off', () => {
+    const seen: string[] = [];
+    const host = { emitCustomEvent: (_t: string, m: string) => { seen.push(m); } };
+
+    const n = new Notifier({ ...cfg, notifyLivechat: false }, host);
+    n.send({ type: 'join', handle: 'SPOT' });
+
+    expect(seen).toEqual([]);
+  });
+
+  it('is harmless without a host at all', () => {
+    // A test, a script, an older board: the game plays on.
+    const n = new Notifier(cfg);
+    expect(() => n.send({ type: 'attack', attacker: 'A', target: 'B', location: 'Bronx' })).not.toThrow();
   });
 });

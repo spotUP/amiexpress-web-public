@@ -11,7 +11,9 @@ export declare class DopewarsServer extends EventEmitter {
     private pendingQuestions;
     private initialised;
     static getInstance(): DopewarsServer;
-    init(doorDir: string, cfg: DopewarsConfig): Promise<void>;
+    /** The door's BBS handle, for announcements. Set by init()'s caller. */
+    private announceHost;
+    init(doorDir: string, cfg: DopewarsConfig, announceHost?: unknown): Promise<void>;
     private applyTheme;
     getTitle(): string;
     getLocationNames(): string[];

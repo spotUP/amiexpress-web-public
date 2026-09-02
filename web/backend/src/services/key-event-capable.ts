@@ -23,5 +23,23 @@ export type ConnectionKind = 'web' | 'telnet' | 'ssh' | undefined;
  * sees nothing at all.
  */
 export function deliversKeyEvents(session: { connectionType?: ConnectionKind }): boolean {
+  return hasBrowserClient(session);
+}
+
+/**
+ * Is there a browser on the other end of this session?
+ *
+ * The same question as above, asked for a different reason: a HYBRID door has
+ * a client half - a JavaScript bundle that runs in the browser for audio, a
+ * canvas, key events - and a server half that draws the terminal. Starting
+ * the client half for a caller with no browser is worse than useless: it
+ * registers a 'command' listener that swallows every keystroke and hands it
+ * to a client that will never answer.
+ *
+ * That is why a hybrid door took no input at all over telnet - GRANDMASTER
+ * and CARD LOBBY alike (sysop, 2026-09-02). The server half is perfectly
+ * capable on its own; it just never saw a key.
+ */
+export function hasBrowserClient(session: { connectionType?: ConnectionKind }): boolean {
   return (session.connectionType ?? 'web') === 'web';
 }

@@ -60,7 +60,7 @@ door.onStart(async (ctx) => {
         theme: jamaica_1.JAMAICA_THEME,
     };
     const server = server_1.DopewarsServer.getInstance();
-    await server.init(doorDir, cfg);
+    await server.init(doorDir, cfg, ctx.bbs);
     await (0, app_1.createApp)(ctx, server);
 });
 exports.default = door;
