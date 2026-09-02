@@ -135,6 +135,26 @@ export function planMciCarry(oldText: string, newText: string): CarryPlan {
  * art has to put a tilde on the first line or it has carried nothing that
  * runs.
  */
+/**
+ * Where the art ends and the art program's own metadata begins.
+ *
+ * An ANSI editor appends a SAUCE record - 128 bytes, conventionally preceded
+ * by an EOF (0x1A) - carrying the title, author and group. The gallery reads
+ * it to credit the artist, and the board's `stripSauceMetadata` cuts the file
+ * from that marker onward before a caller ever sees it.
+ *
+ * Both of which mean a carried code must go BEFORE it. Appended after, the
+ * SAUCE stops being the last 128 bytes so no reader finds it - the editor
+ * renders it as text on the canvas - and the board, which cuts from the
+ * marker, throws away the very codes the carry promised to keep.
+ */
+function sauceOffset(text: string): number {
+  const marker = text.lastIndexOf('SAUCE00');
+  if (marker === -1 || marker < text.length - 512) return text.length;
+
+  return text[marker - 1] === '\x1a' ? marker - 1 : marker;
+}
+
 export function applyMciCarry(newText: string, plan: CarryPlan, placement: MciPlacement): string {
   if (placement === 'none' || plan.uploadHasCodes) return newText;
 
@@ -142,7 +162,9 @@ export function applyMciCarry(newText: string, plan: CarryPlan, placement: MciPl
   if (carried.length === 0) return newText;
 
   const ending = lineEnding(newText);
-  const body = newText;
+  const cut = sauceOffset(newText);
+  const body = newText.slice(0, cut);
+  const trailer = newText.slice(cut);
 
   const above = placement === 'above' ? plan.head : [];
   const below = placement === 'above' ? plan.tail : carried;
@@ -156,5 +178,5 @@ export function applyMciCarry(newText: string, plan: CarryPlan, placement: MciPl
   const head = lines.join(ending) + ending;
   const tail = below.length ? below.join(ending) + ending : '';
 
-  return head + body + (body.endsWith(ending) || body === '' ? '' : ending) + tail;
+  return head + body + (body.endsWith(ending) || body === '' ? '' : ending) + tail + trailer;
 }
