@@ -945,18 +945,31 @@ console.error(`[AmigaParser] Error parsing ErrorLog:`, error.message);
     const infoFiles = entries.filter(f => f.endsWith('.info'));
 
     for (const file of infoFiles) {
-      const name = file.replace('.info', '');
-      const infoPath = path.join(cmdPath, file);
-      const buffer = await fs.readFile(infoPath);
-      const settings = this.infoParser.parseCommandInfo(buffer, name);
+      const name = file.replace(/\.info$/i, '');
+      const settings = readTooltypeMap(path.join(cmdPath, file));
+
+      /*
+       * The tooltype names AmiExpress actually uses.
+       *
+       * This read ACCESS_LEVEL, PATH and FLAGS - none of which appear on an
+       * AmiExpress command icon. express.e reads ACCESS (4702), LOCATION
+       * (4751) and TYPE (4682-4700). So every command imported at the default
+       * level 10 with no location: on the reference-boardBBS reference tree that
+       * turned DEL, a sysop-only file manager at ACCESS=255, into a command
+       * any level-10 caller could run, and pointed it nowhere.
+       */
+      const access = parseInt(settings.get('ACCESS') ?? '', 10);
 
       commands.push({
         name,
         type,
-        path: settings.get('PATH'),
-        description: settings.get('DESCRIPTION'),
-        accessLevel: parseInt(settings.get('ACCESS_LEVEL') || '10', 10),
-        flags: parseInt(settings.get('FLAGS') || '0', 10),
+        path: settings.get('LOCATION'),
+        description: settings.get('NAME'),
+        // No ACCESS on the icon means the board's own default, not ours. -1
+        // is what readToolTypeInt answers for a missing key
+        // (tooltypes.e:176-181), and it is not a level anyone can reach.
+        accessLevel: Number.isFinite(access) ? access : -1,
+        flags: 0,
         settings,
       });
     }
