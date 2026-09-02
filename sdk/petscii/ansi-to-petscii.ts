@@ -141,7 +141,20 @@ export class AnsiToPetsciiTransducer {
     this.screenBg = 0;
   }
 
-  /** Raw PETSCII bytes that reached the terminal without passing through transduce(). */
+  /**
+   * Raw PETSCII bytes that reached the terminal without passing through
+   * transduce().
+   *
+   * `screenBg` is deliberately NOT resynced from the machine afterwards: it
+   * is an INTENT (what the last full clear committed), while the machine
+   * holds what the C64 actually has. A `$0E` inside these bytes blacks both
+   * sides identically - the machine's background goes to 0, and the intent
+   * is already 0 unless a clear committed a colour, in which case
+   * restoreScreenBg() (ensureBank, and every clear) sees the divergence
+   * against the oracle and re-sends `$02 <colour>`. Copying the machine's
+   * value in here would do the opposite: it would ADOPT the `$0E` as the new
+   * intent and silently forget the colour the door asked for.
+   */
   observe(bytes: Uint8Array | number[]): void {
     this.machine.feed(bytes);
     this.pendingWrap = false;

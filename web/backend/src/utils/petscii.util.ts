@@ -222,9 +222,9 @@ function convertPetsciiByteForPetMe64(byte: number, state: PetsciiState): string
   // ========================================
   // SCREEN CONTROL
   // ========================================
-  if (byte === 0x93) return '\x1b[2J\x1b[H'; // Clear + home. No background SGR: a C64 terminal's
-                                              // background is fixed black (CCGMS/Novaterm), the
-                                              // viewer's own default - PETSCII has no background byte.
+  if (byte === 0x93) return '\x1b[2J\x1b[H'; // Clear + home. No background SGR: a real C64 keeps
+                                              // the background it has across a clear, so a `$02
+                                              // <colour>` already in force survives ($0E resets it).
   if (byte === 0x14) return '\x08';          // Delete (backspace)
   if (byte === 0x94) return '\x1b[@';        // Insert character
 
@@ -334,9 +334,9 @@ function convertPetsciiByte(byte: number, state: PetsciiState): string {
   if (byte === 0x1D) return '\x1b[C';      // Cursor right
   if (byte === 0x9D) return '\x1b[D';      // Cursor left
   if (byte === 0x13) return '\x1b[H';      // Home
-  if (byte === 0x93) return '\x1b[2J\x1b[H'; // Clear + home. No background SGR: a C64 terminal's
-                                              // background is fixed black (CCGMS/Novaterm), the
-                                              // viewer's own default - PETSCII has no background byte.
+  if (byte === 0x93) return '\x1b[2J\x1b[H'; // Clear + home. No background SGR: a real C64 keeps
+                                              // the background it has across a clear, so a `$02
+                                              // <colour>` already in force survives ($0E resets it).
   if (byte === 0x14) return '\x08';          // Delete
   if (byte === 0x94) return '\x1b[@';        // Insert
 
@@ -388,10 +388,13 @@ export class PetsciiStreamConverter {
 
   /**
    * One-shot full-screen conversion: resets state, emits the C64 TERMINAL
-   * color prologue, converts the buffer, then resets SGR at the end. No
-   * background SGR is emitted - a C64 terminal (CCGMS/Novaterm) runs a fixed
-   * black screen/border, which is the viewer's own default background, and
-   * PETSCII has no background-colour byte for the BBS to override anyway.
+   * color prologue, converts the buffer, then resets SGR at the end. The
+   * prologue sets the PEN only; the background belongs to the STREAM, not
+   * to this wrapper. CCGMS's `$02 <colour>` is rendered as a background SGR
+   * (takeBackgroundColor) and `$0E` - which on CCGMS resets background and
+   * border along with the charset - emits `ESC[49m` back to the viewer's
+   * default (resetBackground), so whatever background the door painted
+   * survives the chunk boundaries this class exists to bridge.
    */
   convertScreen(buffer: Buffer): string {
     this.reset();

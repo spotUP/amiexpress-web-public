@@ -287,6 +287,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     petsciiFeedQueue.current.length = 0;
     petsciiDrainGenerationRef.current += 1;
     petsciiDrainActiveRef.current = false;
+    // A door left running when the session died would otherwise keep the
+    // pace queue in drain-everything mode for the NEXT session, which then
+    // dumps its first screens unpaced. Door-active is session state, so it
+    // dies with the session (the same reason the drain generation bumps).
+    petsciiDoorActiveRef.current = false;
     dispatchSurface({ type: 'session-reset' });
   }, []);
   // Published by the init effect so injectInput (imperative handle) and the

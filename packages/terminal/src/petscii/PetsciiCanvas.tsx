@@ -119,6 +119,11 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
       if (cancelled) return;
       atlasCacheRef.current = new TintedAtlasCache(atlas);
       setAtlasReady(true);
+    }).catch((e) => {
+      // A rejected atlas build (font fetch blocked, OffscreenCanvas denied)
+      // used to surface only as an unhandled rejection and a canvas that
+      // never draws. Say so.
+      console.error('[PETSCII] glyph atlas failed', e);
     });
     return () => { cancelled = true; };
   }, []);
