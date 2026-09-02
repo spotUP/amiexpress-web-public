@@ -44,6 +44,7 @@ jest.mock('../../src/database', () => {
 
 import { AnsiToPetsciiTransducer, PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
 import {
+  disposePetsciiSessionModel,
   installPetsciiModelChoke,
   petsciiTerminalModelFor,
   sessionWantsPetscii,
@@ -347,6 +348,60 @@ describe('OC-3: the web transport carries the session terminal model', () => {
       expect((session as any).checkPauseBuffer).toBe('A');
     } finally {
       deleteSession(socket.id);
+    }
+  });
+
+  it("a door's stale socket does not feed the model after a reconnect", () => {
+    // I2: a door captures its socket at launch and keeps writing through an
+    // `Object.create(socket)` proxy over it (`handlers/door.handler.ts`'s
+    // createDoorSocketWrapper). When the browser reconnects mid-door,
+    // `getSession(oldSocketId)` still resolves the SAME LIVE session for the
+    // 3 s grace, so the dead socket's choke would transduce into the model the
+    // restore had just disposed - and the first `.seq` after the reconnect
+    // would be encoded against a screen nobody has.
+    const deadEmits: Emit[] = [];
+    const liveEmits: Emit[] = [];
+    const dead = makeSocket('choke-stale-dead', deadEmits);
+    const live = makeSocket('choke-stale-live', liveEmits);
+    const { setSession, deleteSession, getSession, sessions } = sessionManager();
+    const session: any = {
+      nodeId: 77, socketId: dead.id, petsciiMode: true, screenWidth: 40, screenHeight: 25,
+    };
+    setSession(dead.id, session);
+    installPetsciiModelChoke(dead, () => getSession(dead.id));
+    const doorSocket = Object.create(dead);   // the door's own view of it
+
+    try {
+      // Before the reconnect the door's frames ARE the caller's screen.
+      doorSocket.emit('ansi-output', '\x1b[13;1HDOOR');
+      expect(cursorOf(session).y).toBe(12);
+
+      // The reconnect, as `auth-socket-handlers.ts` performs it.
+      session.socketId = live.id;
+      setSession(live.id, session);
+      disposePetsciiSessionModel(session);
+      installPetsciiModelChoke(live, () => getSession(live.id));
+      // The grace window is real: the dead id still resolves this session.
+      expect(getSession(dead.id)).toBe(session);
+
+      const transduce = jest.spyOn(AnsiToPetsciiTransducer.prototype, 'transduce');
+      doorSocket.emit('ansi-output', '\x1b[20;1HSTALE');
+
+      // Not one byte of the dead socket's output reaches the model...
+      expect(transduce).not.toHaveBeenCalled();
+      expect(session.petsciiTransducer).toBeUndefined();
+      // ...and the emit is still passed downstream untouched: this gate is
+      // about the MODEL, never about swallowing an event.
+      expect(deadEmits.filter((e) => e.event === 'ansi-output')).toHaveLength(2);
+
+      // The replacement socket feeds it, from a fresh screen.
+      live.emit('ansi-output', '\x1b[3;1HBACK');
+      expect(transduce).toHaveBeenCalledTimes(1);
+      expect(cursorOf(session)).toEqual({ x: 4, y: 2, bank: 1, pen: 14 });
+    } finally {
+      deleteSession(dead.id);
+      deleteSession(live.id);
+      sessions.delete('77');
     }
   });
 });

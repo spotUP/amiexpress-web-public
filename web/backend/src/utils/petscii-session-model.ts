@@ -152,6 +152,38 @@ export function disposePetsciiSessionModel(session: any): void {
 const PETSCII_MODEL_CHOKE = Symbol('petsciiModelChoke');
 
 /**
+ * Is this socket still the one the session lives on?
+ *
+ * A door captures its socket at launch and keeps writing through that capture
+ * (`handlers/door.handler.ts`'s `createDoorSocketWrapper`, an
+ * `Object.create(socket)` proxy over it). If the browser reconnects mid-door,
+ * the restore repoints the session at the REPLACEMENT socket
+ * (`server/auth-socket-handlers.ts`: `existingSession.socketId = socket.id`)
+ * and DISPOSES the model - but `getSession(oldSocketId)` keeps resolving the
+ * SAME live session for the whole 3 s reconnect grace, because
+ * `finalizeDisconnectCleanup` (`server/socket-handlers.ts`) only deletes the
+ * record once the grace expires. Without this check the dead socket's emits -
+ * which socket.io drops on the wire - would still be transduced into the
+ * freshly disposed model, and the first `.seq` after the reconnect would be
+ * encoded against a screen nobody has.
+ *
+ * Deliberately permissive: it withholds the MODEL only where it can positively
+ * see a MISMATCH, and it never withholds the EMIT. `session.socketId` is
+ * assigned in exactly two places, both web (`server/socket-handlers.ts` at
+ * registration and the restore above), so a telnet/SSH session has none and is
+ * never silenced by this - its choke is the connection emitter anyway, whose
+ * `id` is a connection id and not a socket id.
+ *
+ * OC-3 review carry-over I2.
+ */
+function socketStillCarriesSession(socket: any, session: any): boolean {
+  const live = session?.socketId;
+  const here = socket?.id;
+  if (!live || !here) return true;
+  return live === here;
+}
+
+/**
  * The web transport's model choke.
  *
  * Web does NO server-side PETSCII conversion - the browser converts
@@ -195,7 +227,7 @@ export function installPetsciiModelChoke(
   const downstream = socket.emit.bind(socket);
   const choked = function (event: string, ...args: any[]): any {
     const session = resolveSession();
-    if (session && sessionWantsPetscii(session)) {
+    if (session && sessionWantsPetscii(session) && socketStillCarriesSession(socket, session)) {
       if ((event === 'ansi-output' || event === 'petscii-output') && typeof args[0] === 'string') {
         transducePetsciiAtChoke(session, args[0]);
       } else if (event === 'petscii-bytes' && typeof args[0] === 'string') {
