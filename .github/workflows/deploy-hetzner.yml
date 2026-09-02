@@ -129,7 +129,34 @@
               # a hard fetch+reset guarantees the checkout matches the
               # commit the workflow expects.
               echo "== git fetch + hard reset =="
-              git fetch --prune origin main
+              # Retried, and never allowed to prompt.
+              #
+              # github.com answers an anonymous HTTPS fetch with a broken ref
+              # listing often enough to matter: git then falls back to asking
+              # for a username, there is no terminal on an ssh-action shell,
+              # and the deploy dies in 15 seconds with "could not read
+              # Username for 'https://github.com': No such device or address"
+              # preceded by "expected flush after ref listing". Four deploys
+              # failed that way on 2026-09-02 alone, all of them within
+              # minutes of a fetch that worked by hand. Nothing is wrong with
+              # the checkout or the credentials - the same command succeeds on
+              # the next attempt.
+              #
+              # GIT_TERMINAL_PROMPT=0 keeps a REAL credential problem failing
+              # fast and honestly instead of hiding behind the prompt error.
+              FETCH_OK=0
+              for attempt in 1 2 3 4 5; do
+                if GIT_TERMINAL_PROMPT=0 git fetch --prune origin main; then
+                  FETCH_OK=1
+                  break
+                fi
+                echo "fetch attempt $attempt failed; retrying in $((attempt * 5))s" >&2
+                sleep $((attempt * 5))
+              done
+              if [ "$FETCH_OK" != "1" ]; then
+                echo "ERROR: could not fetch origin/main after 5 attempts" >&2
+                exit 1
+              fi
               EXPECTED_SHA=$(git rev-parse origin/main)
               git reset --hard "$EXPECTED_SHA"
               ACTUAL_SHA=$(git rev-parse HEAD)
