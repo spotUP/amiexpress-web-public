@@ -28,6 +28,7 @@ import {
 } from './door-registration-paths';
 import { db } from '../database';
 import { isRealInfoFile } from '../utils/info-file.util';
+import { validColumns } from '../utils/door-min-columns.util';
 
 /**
  * AmigaDOS Assign Definitions
@@ -312,15 +313,15 @@ export class AmigaDoorManager {
         metadata.passParameters = parseInt(passParams, 10);
       }
 
-      // MIN_COLUMNS= (C64/40-col gate, Task 1). Absent stays undefined -
-      // the resolver then falls through to the closed default of 80, so an
-      // unclassified 68K door is never reachable from a 40-column caller.
-      const minColumns = tooltypes.get('MIN_COLUMNS');
-      if (minColumns) {
-        const parsed = parseInt(minColumns, 10);
-        if (Number.isFinite(parsed) && parsed > 0) {
-          metadata.minColumns = parsed;
-        }
+      // MIN_COLUMNS= (C64/40-col gate, Task 1). Absent OR malformed stays
+      // undefined - the resolver then falls through to the closed default of
+      // 80, so an unclassified 68K door is never reachable from a 40-column
+      // caller. validColumns() is the resolver's OWN strict parse, imported
+      // rather than re-implemented, so a value the gate would reject can
+      // never become a minColumns the marker trusts.
+      const minColumns = validColumns(tooltypes.get('MIN_COLUMNS'));
+      if (minColumns !== null) {
+        metadata.minColumns = minColumns;
       }
 
       const internal = tooltypes.get('INTERNAL');

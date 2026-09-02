@@ -14,6 +14,7 @@ import * as path from 'path';
 import {
   resolveDoorMinColumns,
   sessionColumns,
+  validColumns,
   DOOR_NEEDS_80_NOTICE,
 } from '../../src/utils/door-min-columns.util';
 
@@ -44,6 +45,33 @@ describe('resolveDoorMinColumns', () => {
     expect(resolveDoorMinColumns({ command: 'X', toolTypes: { MIN_COLUMNS: 'lots' } })).toBe(80);
     expect(resolveDoorMinColumns({ command: 'X', toolTypes: { MIN_COLUMNS: '-5' } })).toBe(80);
   });
+
+  // parseInt() read '40abc' as 40 and would have opened a door on a typo'd
+  // registration. A malformed value is unclassified, and unclassified is closed.
+  it('a half-numeric MIN_COLUMNS is unclassified, not 40', () => {
+    expect(resolveDoorMinColumns({ command: 'X', toolTypes: { MIN_COLUMNS: '40abc' } })).toBe(80);
+    expect(resolveDoorMinColumns({ command: 'X', toolTypes: { MIN_COLUMNS: '40 columns' } })).toBe(80);
+    expect(resolveDoorMinColumns({ command: 'X', toolTypes: { MIN_COLUMNS: '4o' } })).toBe(80);
+    expect(resolveDoorMinColumns({ command: 'X', toolTypes: { MIN_COLUMNS: '' } })).toBe(80);
+  });
+
+  it('tolerates surrounding whitespace on an otherwise numeric tooltype', () => {
+    expect(resolveDoorMinColumns({ command: 'X', toolTypes: { MIN_COLUMNS: ' 40 ' } })).toBe(40);
+  });
+});
+
+describe('validColumns (shared strict parse)', () => {
+  it('accepts only a whole trimmed run of digits', () => {
+    expect(validColumns('40')).toBe(40);
+    expect(validColumns(' 132 ')).toBe(132);
+    expect(validColumns(40)).toBe(40);
+    expect(validColumns('40abc')).toBeNull();
+    expect(validColumns('-5')).toBeNull();
+    expect(validColumns('0')).toBeNull();
+    expect(validColumns(40.5)).toBeNull();
+    expect(validColumns(undefined)).toBeNull();
+    expect(validColumns(null)).toBeNull();
+  });
 });
 
 describe('sessionColumns', () => {
@@ -65,6 +93,13 @@ describe('sessionColumns', () => {
   it('a narrow NON-PETSCII terminal is still 80 (a phone is not a C64)', () => {
     expect(sessionColumns({ screenWidth: 40 })).toBe(80);
     expect(sessionColumns({ screenWidth: 32, petsciiMode: false })).toBe(80);
+  });
+  it('a genuinely wide terminal reports its real width, so it can satisfy MIN_COLUMNS above 80', () => {
+    expect(sessionColumns({ screenWidth: 132 })).toBe(132);
+    expect(sessionColumns({ screenWidth: 200, petsciiMode: false })).toBe(200);
+  });
+  it('a wide PETSCII session is still 40 - a C64 has no other width', () => {
+    expect(sessionColumns({ petsciiMode: true, screenWidth: 132 })).toBe(40);
   });
 });
 
@@ -94,6 +129,19 @@ describe('amigaDoorManager MIN_COLUMNS parsing', () => {
     const meta = getAmigaDoorManager().parseInfoFile(infoPath);
     expect(meta?.minColumns).toBeUndefined();
     expect(resolveDoorMinColumns({ command: 'PLAINDOOR', doorInfo: meta as any })).toBe(80);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // Same strict rule as the resolver: the .info parse must not turn '40abc'
+  // into a 40 that opens the door.
+  it('refuses a half-numeric MIN_COLUMNS in a .info, leaving the door closed', () => {
+    const { getAmigaDoorManager } = require('../../src/doors/amigaDoorManager');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'adm-mincol-'));
+    const infoPath = path.join(root, 'TYPODOOR.info');
+    fs.writeFileSync(infoPath, 'LOCATION=Doors:TypoDoor/TypoDoor\nACCESS=10\nTYPE=XIM\nMIN_COLUMNS=40abc\n');
+    const meta = getAmigaDoorManager().parseInfoFile(infoPath);
+    expect(meta?.minColumns).toBeUndefined();
+    expect(resolveDoorMinColumns({ command: 'TYPODOOR', doorInfo: meta as any })).toBe(80);
     fs.rmSync(root, { recursive: true, force: true });
   });
 });

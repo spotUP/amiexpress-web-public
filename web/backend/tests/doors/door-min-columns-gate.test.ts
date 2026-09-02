@@ -70,12 +70,18 @@ function testDoor(overrides: Partial<Door & { minColumns: number; toolTypes: Rec
   } as Door;
 }
 
+// PROCESS_COMMAND is what door.handler's Enter handler sets before
+// re-dispatching (handleDoorSelectInput), and what command.handler is in when
+// it calls executeDoor. Starting here rather than at DISPLAY_MENU is what
+// makes the post-gate state assertion mean anything: a gate that returned
+// without touching subState would strand the session mid-command.
 function c64Session(): any {
   return {
-    state: 'loggedon', subState: LoggedOnSubState.DISPLAY_MENU,
+    state: 'loggedon', subState: LoggedOnSubState.PROCESS_COMMAND,
     user: { id: 'u1', username: 'C64USER', secLevel: 10 },
     nodeId: 1, terminalType: 'c64', petsciiMode: true,
     screenWidth: 40, screenHeight: 25, tempData: {},
+    menuPause: true,
   };
 }
 
@@ -98,7 +104,17 @@ describe('executeDoor MIN_COLUMNS gate', () => {
     await executeDoor(socket as any, session, testDoor());
     expect(allOutput(socket)).toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');
     expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
+    // The refusal must RETURN the caller to the menu, not leave them parked
+    // in PROCESS_COMMAND with no prompt and no way forward.
     expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+    expect(session.menuPause).toBe(false);
+  });
+
+  it('a refused launch is not attributed to the door (currentDoorName untouched)', async () => {
+    const socket = makeSocket();
+    const session = c64Session();
+    await executeDoor(socket as any, session, testDoor());
+    expect(session.currentDoorName).toBeUndefined();
   });
 
   it('blocks a web-P session (petsciiMode, terminalType modern) the same way', async () => {
@@ -114,6 +130,23 @@ describe('executeDoor MIN_COLUMNS gate', () => {
     await executeDoor(socket as any, c64Session(), testDoor({ toolTypes: { MIN_COLUMNS: '132' } }));
     expect(allOutput(socket)).toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');
     expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
+  });
+
+  // A door may honestly need more than 80, and a real wide terminal can give
+  // it. An 80-column caller gets the notice instead of a garbled screen.
+  it('MIN_COLUMNS=132: a 132-column terminal opens it, an 80-column one is refused', async () => {
+    const wideSocket = makeSocket();
+    const wide = { ...eightyColSession(), screenWidth: 132, screenHeight: 50 };
+    await executeDoor(wideSocket as any, wide, testDoor({ toolTypes: { MIN_COLUMNS: '132' } }));
+    expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(1);
+    expect(allOutput(wideSocket)).not.toContain('THIS DOOR NEEDS');
+
+    (doorDropFileManager.createAllDropFiles as jest.Mock).mockClear();
+
+    const narrowSocket = makeSocket();
+    await executeDoor(narrowSocket as any, eightyColSession(), testDoor({ toolTypes: { MIN_COLUMNS: '132' } }));
+    expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
+    expect(allOutput(narrowSocket)).toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');
   });
 
   it('80-col session: launch proceeds and output carries no gate bytes (byte-for-byte unchanged)', async () => {

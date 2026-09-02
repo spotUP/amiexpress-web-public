@@ -24,7 +24,7 @@ import { BBSState } from '../index';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.util';
-import { resolveDoorMinColumns, sessionColumns, DOOR_NEEDS_80_NOTICE } from '../utils/door-min-columns.util';
+import { resolveDoorMinColumns, declaredMinColumns, sessionColumns, DOOR_NEEDS_80_NOTICE } from '../utils/door-min-columns.util';
 import { enableGameMode, disableGameMode } from '../server/socket-handlers';
 import { displayMainMenu } from './command-handler/menu';
 import { emitDoorActivity } from '../services/bbs-event-emitter';
@@ -518,6 +518,12 @@ export interface Door {
   args?: string;
   toolTypes?: Record<string, string>;
   category?: string;  // Door category from CATEGORY= tooltype (e.g., "Games/Arcade", "Utilities")
+  // MIN_COLUMNS resolved ONCE at registration (initializeDoors), from the
+  // BBSCMD tooltypes AND the installed 68K record. Undefined means the door
+  // declared nothing, which the gate reads as the closed default of 80.
+  // This is the field every later reader - the [40] marker and the launch
+  // gate alike - resolves from, so they cannot disagree.
+  minColumns?: number;
 }
 
 interface DoorSession {
@@ -1165,6 +1171,10 @@ console.log(`[DOOR Command] Found ${availableDoors.length} TypeScript doors, ${a
     isAmigaDoor: isAmiga68kDoorType(door.type),
     command: door.command,
     doorInfo: door,  // Keep original door info for execution
+    // Resolve MIN_COLUMNS onto the entry itself, the same way initializeDoors
+    // does for BBSCMD doors, so the [40] marker never reads a source the
+    // launch gate cannot see.
+    minColumns: declaredMinColumns(door as any) ?? undefined,
     doorType: door.type || 'AMI',  // Use door.type (XIM, AIM, etc.), not doorType
     type: door.type,  // Also pass through the type for executeDoor routing
     path: door.location,  // Pass location as path for executeDoor
@@ -1625,29 +1635,33 @@ export async function applyPostDoorMenuAction(
 export async function executeDoor(socket: any, session: BBSSession, door: Door) {
 console.log('Executing door:', door.name);
 
-  // Attribute this door's events to its REGISTERED command, not to whatever
-  // the user typed. session.commandText carries aliases and arguments, and
-  // per-door webhook filters match the door name exactly.
-  session.currentDoorName = door.command || door.id;
-
   // MIN_COLUMNS gate (C64/40-col Task 1). Default-closed: every door type
   // (68K, AREXX, TS, MCI, ...) gates at 80 columns unless its registration
   // carries an explicit MIN_COLUMNS the session satisfies. This one check,
-  // ahead of token minting and drop files, is the blanket 68K + full-screen
-  // AREXX ruling (revised Phase 4, 2026-09-02) in a single provable place.
-  // sessionColumns() delegates to doorScreenWidth(), so ONLY a petsciiMode
-  // session is ever narrow - an ordinary web caller on a small screen keeps
-  // the door access it has always had.
+  // ahead of currentDoorName, token minting and drop files, is the blanket
+  // 68K + full-screen AREXX ruling (revised Phase 4, 2026-09-02) in a single
+  // provable place. sessionColumns() only ever narrows a petsciiMode
+  // session, so an ordinary web caller on a small screen keeps the door
+  // access it has always had.
+  //
+  // It runs BEFORE session.currentDoorName is set: a refused launch is not
+  // this door's event, and attributing it would show the caller as being in
+  // a door they were never let into.
   if (sessionColumns(session) < resolveDoorMinColumns(door as any)) {
     // emitPrompt is emitText(..., immediate): the notice must reach the
     // caller before the menu repaints over it.
     emitPrompt(socket, DOOR_NEEDS_80_NOTICE);
-    // Same return shape as launchAmigaDoor's executable-not-found path
-    // (door.handler.ts:665-669): back to the menu, no pause.
+    // Same return shape launchAmigaDoor() uses when the executable is
+    // missing: straight back to the menu, no pause.
     session.menuPause = false;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
+
+  // Attribute this door's events to its REGISTERED command, not to whatever
+  // the user typed. session.commandText carries aliases and arguments, and
+  // per-door webhook filters match the door name exactly.
+  session.currentDoorName = door.command || door.id;
 
   const nodeId = session.nodeId || 0;
   let doorSession: DoorSession | null = null;
@@ -4121,6 +4135,30 @@ export async function initializeDoors() {
     }
   };
 
+  // MIN_COLUMNS is resolved ONCE here, at registration, from BOTH registries.
+  //
+  // Why it cannot be left to the launch site: the door-list row is formatted
+  // from the entry displayDoorMenu built (which carries the installed 68K
+  // record as `doorInfo`), but Enter does NOT hand that entry to executeDoor -
+  // it re-dispatches by command name through command.handler's
+  // `getDoors().find(...)`, whose Door objects have no `doorInfo`. A door
+  // marked MIN_COLUMNS=40 only in its installed record printed [40] and was
+  // then refused. Folding the installed record in here gives the marker and
+  // the gate one number on one object.
+  //
+  // A scan failure must never stop door registration: doors then simply carry
+  // no declaration, which is the closed default - the safe direction.
+  const installedByCommand = new Map<string, any>();
+  try {
+    const { getAmigaDoorManager } = require('../doors/amigaDoorManager');
+    const installed = await getAmigaDoorManager().scanInstalledDoors();
+    for (const rec of installed || []) {
+      if (rec?.command) installedByCommand.set(String(rec.command).toUpperCase(), rec);
+    }
+  } catch (err: any) {
+console.warn(`[initializeDoors] installed-door scan unavailable for MIN_COLUMNS resolution: ${err?.message ?? err}`);
+  }
+
   // Convert CommandDefinition objects from BBSCMD to Door objects
   const bbsCmdDoors: Door[] = [];
 
@@ -4172,6 +4210,17 @@ export async function initializeDoors() {
           ? 'Amiga 68K'
           : undefined)
     };
+
+    // One resolved MIN_COLUMNS for the marker AND the gate. Left undefined
+    // when neither registry declares one, so "unclassified" stays visible and
+    // the closed default is applied once, at the gate.
+    const declared = declaredMinColumns({
+      toolTypes: cmdDef.toolTypes,
+      doorInfo: installedByCommand.get(door.command),
+    });
+    if (declared !== null) {
+      door.minColumns = declared;
+    }
 
     bbsCmdDoors.push(door);
 console.log(`[initializeDoors] Registered door: ${door.command}  ${door.path} (type: ${doorType})`);
