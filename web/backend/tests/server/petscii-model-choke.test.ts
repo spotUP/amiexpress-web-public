@@ -337,11 +337,21 @@ describe('OC-3: the web transport carries the session terminal model', () => {
       const command = socket.handlers['command'];
       expect(typeof command).toBe('function');
 
+      // OC-10 row R7's sentinel: `flush` is a method on the SAME prototype the
+      // other rows count, so a spy on it proves the model's flush RAN - not
+      // merely that the cursor ended up in the right column.
+      const flush = jest.spyOn(AnsiToPetsciiTransducer.prototype, 'flush');
+
       socket.emit('ansi-output', 'ready\r');
       // Held, not resolved: the CR is still pending inside the transducer.
       expect(cursorOf(session)).toEqual({ x: 5, y: 0, bank: 1, pen: 14 });
+      expect(flush).not.toHaveBeenCalled();
 
       command('A');
+
+      // Exactly one flush per keystroke, on THIS session's one model.
+      expect(flush).toHaveBeenCalledTimes(1);
+      expect(flush.mock.instances[0]).toBe(session.petsciiTransducer);
 
       // The lone CR's $9D walk: column 0 of the SAME row.
       expect(cursorOf(session)).toEqual({ x: 0, y: 0, bank: 1, pen: 14 });

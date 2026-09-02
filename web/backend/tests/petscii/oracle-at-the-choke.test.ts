@@ -156,9 +156,45 @@ function expectOracleMatchesWire(session: any, emits: Emit[]): void {
  * value is clipped and placed against the oracle, so it is the thing the
  * drift breaks.
  */
+/**
+ * The CALL-COUNT sentinel beside the state assertion - OC-10 ledger rows R5,
+ * R6, R9 and R10 (`~/.claude/REACHABILITY_PROTOCOL.md` gate 3b: prove the code
+ * RAN, do not merely show that the numbers came out right).
+ *
+ * PROTOTYPE spies. A spy on the module export `transducePetsciiAtChoke` or
+ * `observePetsciiBytesAtChoke` records ZERO whether the path runs or not - the
+ * transpiler binds intra-module calls locally - so it would pass on a build
+ * whose choke feeds nothing (plan I4).
+ *
+ * Assert these BEFORE `expectOracleMatchesWire`: `wireMirror` drives a fresh
+ * transducer through the same two prototype methods and would inflate the
+ * counts.
+ */
+function spyOnModel(): {
+  transduce: jest.SpyInstance;
+  observe: jest.SpyInstance;
+} {
+  return {
+    transduce: jest.spyOn(AnsiToPetsciiTransducer.prototype, 'transduce'),
+    observe: jest.spyOn(AnsiToPetsciiTransducer.prototype, 'observe'),
+  };
+}
+
+/** The MARKED branch: bytes the render already fed, so the choke clears the latch only. */
+const emptyObserves = (observe: jest.SpyInstance): any[] =>
+  observe.mock.calls.filter((c) => (c[0] as ArrayLike<number>).length === 0);
+
+/** The UNMARKED branch: bytes nothing had fed - a door's raw PETSCII. */
+const fullObserves = (observe: jest.SpyInstance): any[] =>
+  observe.mock.calls.filter((c) => (c[0] as ArrayLike<number>).length > 0);
+
 const VALUE_SEQ = seqBytes(0x7e, 0x20, '~N|', 'Z');
 
 describe('OC-1: the oracle follows the terminal between screens', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   afterAll(() => {
     for (const dir of tempDirs) fs.rmSync(dir, { recursive: true, force: true });
     tempDirs.length = 0;
@@ -176,6 +212,9 @@ describe('OC-1: the oracle follows the terminal between screens', () => {
     for (let i = 0; i < 40; i++) lines.push(`LINE ${i}`);
     const txt = writeScreen('PAGED.TXT', Buffer.from(lines.join('\r\n'), 'latin1'));
 
+    // OC-10 row R5's sentinel, installed before the first paint.
+    const { transduce, observe } = spyOnModel();
+
     expect(await displayScreen(socket, session, txt)).toBe(true);
     expect(session.paginatedScreen).toBeDefined();
 
@@ -186,6 +225,18 @@ describe('OC-1: the oracle follows the terminal between screens', () => {
     const seq = writeScreen('T.SEQ', VALUE_SEQ);
     expect(await displayScreen(socket, session, seq)).toBe(true);
 
+    // R5: the page `startPagination` put on the wire ran through the choke -
+    // the transducer, not a source pin, says so - and every one of the `.seq`
+    // render's own payloads took the MARKED branch, applied exactly once.
+    const payloads = emits.filter((e) => e.event === 'petscii-bytes');
+    expect(payloads.length).toBeGreaterThan(0);
+    expect(transduce.mock.calls.length).toBeGreaterThan(0);
+    for (const instance of transduce.mock.instances) {
+      expect(instance).toBe(session.petsciiTransducer);
+    }
+    expect(emptyObserves(observe)).toHaveLength(payloads.length);
+    expect(fullObserves(observe)).toHaveLength(0);
+
     expectOracleMatchesWire(session, emits);
   });
 
@@ -194,11 +245,32 @@ describe('OC-1: the oracle follows the terminal between screens', () => {
     const emits: Emit[] = [];
     const socket = makeSocket(emits, session);
 
+    // OC-10 rows R6 and R10's sentinel, installed before the first paint.
+    const { transduce, observe } = spyOnModel();
+
     const txt = writeScreen('SHORT.TXT', Buffer.from('HELLO\r\nTHERE\r\n', 'latin1'));
     expect(await displayScreen(socket, session, txt)).toBe(true);
 
+    // R6: the directly displayed `.TXT` reached the model.
+    const afterTxt = transduce.mock.calls.length;
+    expect(afterTxt).toBeGreaterThan(0);
+    const rowAfterTxt = petsciiMachineFor(session).state.cursorY;
+    expect(rowAfterTxt).toBeGreaterThan(0);
+
     const seq = writeScreen('T.SEQ', VALUE_SEQ);
     expect(await displayScreen(socket, session, seq)).toBe(true);
+
+    // R10: the render consults the cursor WHILE it encodes, so its bytes are
+    // already in the model when they reach the choke. Each payload takes the
+    // MARKED branch - `observe([])`, which clears the deferred-wrap latch and
+    // touches no cell - so the screen advances ONCE, not twice.
+    const payloads = emits.filter((e) => e.event === 'petscii-bytes');
+    expect(payloads.length).toBeGreaterThan(0);
+    expect(emptyObserves(observe)).toHaveLength(payloads.length);
+    expect(fullObserves(observe)).toHaveLength(0);
+    for (const instance of observe.mock.instances) {
+      expect(instance).toBe(session.petsciiTransducer);
+    }
 
     expectOracleMatchesWire(session, emits);
   });
@@ -226,8 +298,16 @@ describe('OC-1: the oracle follows the terminal between screens', () => {
 
     // `BBSApi.writePetscii(Buffer)` (`doors/BBSApi.ts:308`): clear, lower-case
     // bank, two cursor-downs. No server model observes it today.
+    const { observe } = spyOnModel();
+    const raw = Buffer.from([0x93, 0x8e, 0x11, 0x11]);
     const api = createBBSApi(socket, session);
-    api.writePetscii(Buffer.from([0x93, 0x8e, 0x11, 0x11]));
+    api.writePetscii(raw);
+
+    // R9: nothing had fed these bytes, so the choke observes them FOR REAL -
+    // exactly one non-empty feed, byte-for-byte the door's own buffer.
+    const doorFeeds = fullObserves(observe);
+    expect(doorFeeds).toHaveLength(1);
+    expect(Buffer.from(doorFeeds[0][0] as any).equals(raw)).toBe(true);
 
     const seq = writeScreen('T.SEQ', VALUE_SEQ);
     expect(await displayScreen(socket, session, seq)).toBe(true);
