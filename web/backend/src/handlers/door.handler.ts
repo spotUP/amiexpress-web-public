@@ -24,6 +24,7 @@ import { BBSState } from '../index';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.util';
+import { resolveDoorMinColumns, sessionColumns, DOOR_NEEDS_80_NOTICE } from '../utils/door-min-columns.util';
 import { enableGameMode, disableGameMode } from '../server/socket-handlers';
 import { displayMainMenu } from './command-handler/menu';
 import { emitDoorActivity } from '../services/bbs-event-emitter';
@@ -1296,7 +1297,7 @@ function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean 
 /**
  * Format a single door line for display
  */
-function formatDoorLine(door: any, isSelected: boolean): string {
+export function formatDoorLine(door: any, isSelected: boolean): string {
   // Get door type - handle both uppercase and lowercase variants
   const doorType = (door as any).doorType || door.type || 'AMI';
   const type = doorType === 'TS' || doorType === 'typescript' ? 'TS' :
@@ -1311,8 +1312,11 @@ function formatDoorLine(door: any, isSelected: boolean): string {
   const command = door.command || door.id;
   const commandDisplay = padString(command, 10);
 
-  // Format name (pad to 30 chars)
-  const name = padString(door.name, 30);
+  // Format name (pad to 30 chars). 40-ok doors carry an ASCII [40] token
+  // inside the same column budget - the marker participates in truncation
+  // and never widens the row (C64/40-col Task 1).
+  const fortyOk = resolveDoorMinColumns(door) <= 40;
+  const name = padString(fortyOk ? `${door.name} [40]` : door.name, 30);
 
   // Format size (right-aligned, 8 chars wide for proper column alignment)
   const sizeStr = formatDoorSize(door.size || 0);
@@ -1625,6 +1629,25 @@ console.log('Executing door:', door.name);
   // the user typed. session.commandText carries aliases and arguments, and
   // per-door webhook filters match the door name exactly.
   session.currentDoorName = door.command || door.id;
+
+  // MIN_COLUMNS gate (C64/40-col Task 1). Default-closed: every door type
+  // (68K, AREXX, TS, MCI, ...) gates at 80 columns unless its registration
+  // carries an explicit MIN_COLUMNS the session satisfies. This one check,
+  // ahead of token minting and drop files, is the blanket 68K + full-screen
+  // AREXX ruling (revised Phase 4, 2026-09-02) in a single provable place.
+  // sessionColumns() delegates to doorScreenWidth(), so ONLY a petsciiMode
+  // session is ever narrow - an ordinary web caller on a small screen keeps
+  // the door access it has always had.
+  if (sessionColumns(session) < resolveDoorMinColumns(door as any)) {
+    // emitPrompt is emitText(..., immediate): the notice must reach the
+    // caller before the menu repaints over it.
+    emitPrompt(socket, DOOR_NEEDS_80_NOTICE);
+    // Same return shape as launchAmigaDoor's executable-not-found path
+    // (door.handler.ts:665-669): back to the menu, no pause.
+    session.menuPause = false;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
 
   const nodeId = session.nodeId || 0;
   let doorSession: DoorSession | null = null;

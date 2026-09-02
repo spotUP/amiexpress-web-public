@@ -71,6 +71,7 @@ export interface DoorInfo {
   banner?: string;           // BANNER= filename
   mimicVer?: string;         // MIMICVER= version string
   passParameters?: number;   // PASS_PARAMETERS=#
+  minColumns?: number;       // MIN_COLUMNS= tooltype (C64/40-col gate; absent = closed default 80)
   internal?: string;         // INTERNAL= command redirection
   toolTypes?: Record<string, string>; // All parsed tooltypes (uppercased keys)
   description?: string;      // Description from archive
@@ -309,6 +310,17 @@ export class AmigaDoorManager {
       const passParams = tooltypes.get('PASS_PARAMETERS');
       if (passParams) {
         metadata.passParameters = parseInt(passParams, 10);
+      }
+
+      // MIN_COLUMNS= (C64/40-col gate, Task 1). Absent stays undefined -
+      // the resolver then falls through to the closed default of 80, so an
+      // unclassified 68K door is never reachable from a 40-column caller.
+      const minColumns = tooltypes.get('MIN_COLUMNS');
+      if (minColumns) {
+        const parsed = parseInt(minColumns, 10);
+        if (Number.isFinite(parsed) && parsed > 0) {
+          metadata.minColumns = parsed;
+        }
       }
 
       const internal = tooltypes.get('INTERNAL');
