@@ -22,7 +22,8 @@ import {
   displayUpgradesMenu,
   displayBBSExploration,
   displayStats,
-  displayHelp
+  displayHelp,
+  say,
 } from './ui';
 import { startTextMinigame } from './minigames';
 import { checkDailyLimit, deletePlayer, displayDailyLimits } from './player';
@@ -103,19 +104,19 @@ export function handleMainMenu(socket: Socket, gameState: PhreakWarsGameState, i
     case 'L':
       displayDailyLimits(socket, gameState);
       gameState.currentMode = 'waiting';
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      say(socket, gameState, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       break;
     case 'H':
       displayHelp(socket, gameState);
       break;
     case 'Q':
-      socket.emit('ansi-output', '\r\n\x1b[33mThanks for playing Phreak Wars!\x1b[0m\r\n');
-      socket.emit('ansi-output', '\x1b[36m"2600 Hz is the key to the kingdom..."\x1b[0m\r\n\r\n');
-      socket.emit('ansi-output', '\x1b[32mPress any key to exit...\x1b[0m');
+      say(socket, gameState, '\r\n\x1b[33mThanks for playing Phreak Wars!\x1b[0m\r\n');
+      say(socket, gameState, '\x1b[36m"2600 Hz is the key to the kingdom..."\x1b[0m\r\n\r\n');
+      say(socket, gameState, '\x1b[32mPress any key to exit...\x1b[0m');
       gameState.currentMode = 'quit';
       break;
     default:
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid choice. Press H for help.\x1b[0m\r\n');
+      say(socket, gameState, '\r\n\x1b[31mInvalid choice. Press H for help.\x1b[0m\r\n');
       displayMainMenu(socket, gameState);
   }
 }
@@ -127,15 +128,15 @@ export function handleCharacterCreation(socket: Socket, gameState: PhreakWarsGam
   if (!gameState.player.handle) {
     const handle = data.trim();
     if (handle.length < 3 || handle.length > 15) {
-      socket.emit('ansi-output', '\r\n\x1b[31mHandle must be 3-15 characters long.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\x1b[33mEnter your hacker handle:\x1b[0m ');
+      say(socket, gameState, '\r\n\x1b[31mHandle must be 3-15 characters long.\x1b[0m\r\n');
+      say(socket, gameState, '\x1b[33mEnter your hacker handle:\x1b[0m ');
       return;
     }
     gameState.player.handle = handle;
-    socket.emit('ansi-output', `\r\n\x1b[32mWelcome, ${handle}!\x1b[0m\r\n\r\n`);
-    socket.emit('ansi-output', '\x1b[36mYou are a curious teenager in 1985 with access to a computer and modem.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[36mYour journey from novice to master hacker begins now...\x1b[0m\r\n\r\n');
-    socket.emit('ansi-output', '\x1b[32mPress any key to start...\x1b[0m');
+    say(socket, gameState, `\r\n\x1b[32mWelcome, ${handle}!\x1b[0m\r\n\r\n`);
+    say(socket, gameState, '\x1b[36mYou are a curious teenager in 1985 with access to a computer and modem.\x1b[0m\r\n');
+    say(socket, gameState, '\x1b[36mYour journey from novice to master hacker begins now...\x1b[0m\r\n\r\n');
+    say(socket, gameState, '\x1b[32mPress any key to start...\x1b[0m');
     gameState.currentMode = 'main_menu';
   }
 }
@@ -147,9 +148,9 @@ export function handlePhreaking(socket: Socket, gameState: PhreakWarsGameState, 
   switch (input) {
     case 'R':
       if (checkDailyLimit(gameState, 'PHREAKING_ATTEMPTS', gameState.dailyLimits.phreakingAttempts)) {
-        socket.emit('ansi-output', '\r\n\x1b[31mDAILY LIMIT REACHED!\x1b[0m\r\n');
-        socket.emit('ansi-output', '\x1b[36mCome back tomorrow for more!\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        say(socket, gameState, '\r\n\x1b[31mDAILY LIMIT REACHED!\x1b[0m\r\n');
+        say(socket, gameState, '\x1b[36mCome back tomorrow for more!\x1b[0m\r\n');
+        say(socket, gameState, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         gameState.currentMode = 'waiting';
         break;
       }
@@ -159,13 +160,13 @@ export function handlePhreaking(socket: Socket, gameState: PhreakWarsGameState, 
 
     case 'B':
       if (!gameState.player.computer.hasBlueBox) {
-        socket.emit('ansi-output', '\r\n\x1b[31mYou need a blue box! Visit the black market.\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        say(socket, gameState, '\r\n\x1b[31mYou need a blue box! Visit the black market.\x1b[0m\r\n');
+        say(socket, gameState, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         gameState.currentMode = 'waiting';
       } else {
         if (checkDailyLimit(gameState, 'PHREAKING_ATTEMPTS', gameState.dailyLimits.phreakingAttempts)) {
-          socket.emit('ansi-output', '\r\n\x1b[31mDAILY LIMIT REACHED!\x1b[0m\r\n');
-          socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+          say(socket, gameState, '\r\n\x1b[31mDAILY LIMIT REACHED!\x1b[0m\r\n');
+          say(socket, gameState, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
           gameState.currentMode = 'waiting';
           break;
         }
@@ -180,8 +181,8 @@ export function handlePhreaking(socket: Socket, gameState: PhreakWarsGameState, 
 
     case 'H':
       if (checkDailyLimit(gameState, 'HACKING_ATTEMPTS', gameState.dailyLimits.hackingAttempts)) {
-        socket.emit('ansi-output', '\r\n\x1b[31mDAILY LIMIT REACHED!\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        say(socket, gameState, '\r\n\x1b[31mDAILY LIMIT REACHED!\x1b[0m\r\n');
+        say(socket, gameState, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         gameState.currentMode = 'waiting';
         break;
       }
@@ -194,7 +195,7 @@ export function handlePhreaking(socket: Socket, gameState: PhreakWarsGameState, 
       return;
 
     default:
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
+      say(socket, gameState, '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
       displayPhreakingMenu(socket, gameState);
   }
 }
@@ -206,8 +207,8 @@ export function handleProgramming(socket: Socket, gameState: PhreakWarsGameState
   switch (input) {
     case 'P':
       if (checkDailyLimit(gameState, 'PROGRAMMING_SESSIONS', gameState.dailyLimits.programmingSessions)) {
-        socket.emit('ansi-output', '\r\n\x1b[31mDAILY LIMIT REACHED!\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        say(socket, gameState, '\r\n\x1b[31mDAILY LIMIT REACHED!\x1b[0m\r\n');
+        say(socket, gameState, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         gameState.currentMode = 'waiting';
         break;
       }
@@ -220,7 +221,7 @@ export function handleProgramming(socket: Socket, gameState: PhreakWarsGameState
       return;
 
     default:
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
+      say(socket, gameState, '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
       displayProgrammingMenu(socket, gameState);
   }
 }
@@ -230,8 +231,8 @@ export function handleProgramming(socket: Socket, gameState: PhreakWarsGameState
  */
 export function handleTrading(socket: Socket, gameState: PhreakWarsGameState, input: string): void {
   if (checkDailyLimit(gameState, 'TRADING_VISITS', gameState.dailyLimits.tradingVisits)) {
-    socket.emit('ansi-output', '\r\n\x1b[31mDAILY LIMIT REACHED!\x1b[0m\r\n');
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    say(socket, gameState, '\r\n\x1b[31mDAILY LIMIT REACHED!\x1b[0m\r\n');
+    say(socket, gameState, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     gameState.currentMode = 'waiting';
     return;
   }
@@ -242,10 +243,10 @@ export function handleTrading(socket: Socket, gameState: PhreakWarsGameState, in
         gameState.player.money -= 75;
         gameState.player.computer.hasRedBox = true;
         gameState.player.inventory.push('Red Box');
-        socket.emit('ansi-output', '\r\n\x1b[32mPurchased Red Box for $75!\x1b[0m\r\n');
+        say(socket, gameState, '\r\n\x1b[32mPurchased Red Box for $75!\x1b[0m\r\n');
         gameState.dailyLimits.tradingVisits++;
       } else {
-        socket.emit('ansi-output', '\r\n\x1b[31mNot enough money!\x1b[0m\r\n');
+        say(socket, gameState, '\r\n\x1b[31mNot enough money!\x1b[0m\r\n');
       }
       break;
 
@@ -254,10 +255,10 @@ export function handleTrading(socket: Socket, gameState: PhreakWarsGameState, in
         gameState.player.money -= 150;
         gameState.player.computer.hasBlueBox = true;
         gameState.player.inventory.push('Blue Box');
-        socket.emit('ansi-output', '\r\n\x1b[32mPurchased Blue Box for $150!\x1b[0m\r\n');
+        say(socket, gameState, '\r\n\x1b[32mPurchased Blue Box for $150!\x1b[0m\r\n');
         gameState.dailyLimits.tradingVisits++;
       } else {
-        socket.emit('ansi-output', '\r\n\x1b[31mNot enough money!\x1b[0m\r\n');
+        say(socket, gameState, '\r\n\x1b[31mNot enough money!\x1b[0m\r\n');
       }
       break;
 
@@ -266,10 +267,10 @@ export function handleTrading(socket: Socket, gameState: PhreakWarsGameState, in
       return;
 
     default:
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
+      say(socket, gameState, '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
   }
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  say(socket, gameState, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   gameState.currentMode = 'waiting';
 }
 
@@ -282,9 +283,9 @@ export function handleUpgrades(socket: Socket, gameState: PhreakWarsGameState, i
       if (gameState.player.money >= 50) {
         gameState.player.money -= 50;
         gameState.player.computer.ram += 64;
-        socket.emit('ansi-output', `\r\n\x1b[32mRAM upgraded to ${gameState.player.computer.ram}KB!\x1b[0m\r\n`);
+        say(socket, gameState, `\r\n\x1b[32mRAM upgraded to ${gameState.player.computer.ram}KB!\x1b[0m\r\n`);
       } else {
-        socket.emit('ansi-output', '\r\n\x1b[31mNot enough money!\x1b[0m\r\n');
+        say(socket, gameState, '\r\n\x1b[31mNot enough money!\x1b[0m\r\n');
       }
       break;
 
@@ -292,9 +293,9 @@ export function handleUpgrades(socket: Socket, gameState: PhreakWarsGameState, i
       if (gameState.player.money >= 30) {
         gameState.player.money -= 30;
         gameState.player.computer.storage += 170;
-        socket.emit('ansi-output', `\r\n\x1b[32mStorage upgraded to ${gameState.player.computer.storage}KB!\x1b[0m\r\n`);
+        say(socket, gameState, `\r\n\x1b[32mStorage upgraded to ${gameState.player.computer.storage}KB!\x1b[0m\r\n`);
       } else {
-        socket.emit('ansi-output', '\r\n\x1b[31mNot enough money!\x1b[0m\r\n');
+        say(socket, gameState, '\r\n\x1b[31mNot enough money!\x1b[0m\r\n');
       }
       break;
 
@@ -302,9 +303,9 @@ export function handleUpgrades(socket: Socket, gameState: PhreakWarsGameState, i
       if (gameState.player.money >= 100) {
         gameState.player.money -= 100;
         gameState.player.computer.modemSpeed += 300;
-        socket.emit('ansi-output', `\r\n\x1b[32mModem upgraded to ${gameState.player.computer.modemSpeed} baud!\x1b[0m\r\n`);
+        say(socket, gameState, `\r\n\x1b[32mModem upgraded to ${gameState.player.computer.modemSpeed} baud!\x1b[0m\r\n`);
       } else {
-        socket.emit('ansi-output', '\r\n\x1b[31mNot enough money!\x1b[0m\r\n');
+        say(socket, gameState, '\r\n\x1b[31mNot enough money!\x1b[0m\r\n');
       }
       break;
 
@@ -313,10 +314,10 @@ export function handleUpgrades(socket: Socket, gameState: PhreakWarsGameState, i
       return;
 
     default:
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
+      say(socket, gameState, '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
   }
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  say(socket, gameState, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   gameState.currentMode = 'waiting';
 }
 
@@ -326,22 +327,22 @@ export function handleUpgrades(socket: Socket, gameState: PhreakWarsGameState, i
 export function handleBBSExploration(socket: Socket, gameState: PhreakWarsGameState, input: string): void {
   switch (input) {
     case 'R':
-      socket.emit('ansi-output', '\r\n\x1b[36m-= MESSAGES =-\x1b[0m\r\n\r\n');
+      say(socket, gameState, '\r\n\x1b[36m-= MESSAGES =-\x1b[0m\r\n\r\n');
       if (gameState.bbs.messages.length === 0) {
-        socket.emit('ansi-output', 'No messages.\r\n');
+        say(socket, gameState, 'No messages.\r\n');
       } else {
         gameState.bbs.messages.forEach((msg, idx) => {
-          socket.emit('ansi-output', `\x1b[32m[${idx + 1}]\x1b[0m ${msg.subject} (${msg.author})\r\n`);
+          say(socket, gameState, `\x1b[32m[${idx + 1}]\x1b[0m ${msg.subject} (${msg.author})\r\n`);
         });
       }
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      say(socket, gameState, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       gameState.currentMode = 'waiting';
       break;
 
     case 'P':
       if (checkDailyLimit(gameState, 'POSTS', gameState.dailyLimits.posts)) {
-        socket.emit('ansi-output', '\r\n\x1b[31mDAILY LIMIT REACHED!\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        say(socket, gameState, '\r\n\x1b[31mDAILY LIMIT REACHED!\x1b[0m\r\n');
+        say(socket, gameState, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         gameState.currentMode = 'waiting';
         break;
       }
@@ -350,8 +351,8 @@ export function handleBBSExploration(socket: Socket, gameState: PhreakWarsGameSt
 
     case 'H':
       if (checkDailyLimit(gameState, 'BBS_HACKS', gameState.dailyLimits.bbsHacks)) {
-        socket.emit('ansi-output', '\r\n\x1b[31mDAILY LIMIT REACHED!\x1b[0m\r\n');
-        socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        say(socket, gameState, '\r\n\x1b[31mDAILY LIMIT REACHED!\x1b[0m\r\n');
+        say(socket, gameState, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         gameState.currentMode = 'waiting';
         break;
       }
@@ -364,7 +365,7 @@ export function handleBBSExploration(socket: Socket, gameState: PhreakWarsGameSt
       return;
 
     default:
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
+      say(socket, gameState, '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
       displayBBSExploration(socket, gameState);
   }
 }
@@ -373,20 +374,20 @@ export function handleBBSExploration(socket: Socket, gameState: PhreakWarsGameSt
  * Display message choice menu for posting
  */
 export function displayMessageChoiceMenu(socket: Socket, gameState: PhreakWarsGameState): void {
-  socket.emit('ansi-output', '\x1b[2J\x1b[H');
-  socket.emit('ansi-output', '\x1b[36m-= POST MESSAGE TO BBS =-\x1b[0m\r\n\r\n');
+  say(socket, gameState, '\x1b[2J\x1b[H');
+  say(socket, gameState, '\x1b[36m-= POST MESSAGE TO BBS =-\x1b[0m\r\n\r\n');
 
-  socket.emit('ansi-output', '\x1b[32mChoose a message to post:\x1b[0m\r\n\r\n');
+  say(socket, gameState, '\x1b[32mChoose a message to post:\x1b[0m\r\n\r\n');
 
   shadowMessageTemplates.forEach((template, index) => {
-    socket.emit('ansi-output', `\x1b[33m[${index + 1}]\x1b[0m ${template.subject}\r\n`);
-    socket.emit('ansi-output', `    ${template.body.substring(0, 60)}...\r\n\r\n`);
+    say(socket, gameState, `\x1b[33m[${index + 1}]\x1b[0m ${template.subject}\r\n`);
+    say(socket, gameState, `    ${template.body.substring(0, 60)}...\r\n\r\n`);
   });
 
-  socket.emit('ansi-output', '\x1b[33m[C]\x1b[0m Custom message (free-form)\r\n');
-  socket.emit('ansi-output', '\x1b[33m[B]\x1b[0m Back to BBS menu\r\n\r\n');
+  say(socket, gameState, '\x1b[33m[C]\x1b[0m Custom message (free-form)\r\n');
+  say(socket, gameState, '\x1b[33m[B]\x1b[0m Back to BBS menu\r\n\r\n');
 
-  socket.emit('ansi-output', '\x1b[33mChoice:\x1b[0m ');
+  say(socket, gameState, '\x1b[33mChoice:\x1b[0m ');
   gameState.currentMode = 'message_choice';
   gameState.previousMode = 'bbs_exploration';
 }
@@ -401,8 +402,8 @@ export function handleMessageChoice(socket: Socket, gameState: PhreakWarsGameSta
   }
 
   if (input === 'C') {
-    socket.emit('ansi-output', '\r\n\x1b[36m-= CUSTOM MESSAGE =-\x1b[0m\r\n\r\n');
-    socket.emit('ansi-output', '\x1b[33mEnter subject:\x1b[0m ');
+    say(socket, gameState, '\r\n\x1b[36m-= CUSTOM MESSAGE =-\x1b[0m\r\n\r\n');
+    say(socket, gameState, '\x1b[33mEnter subject:\x1b[0m ');
     gameState.currentMode = 'posting_subject';
     gameState.previousMode = 'message_choice';
     return;
@@ -410,7 +411,7 @@ export function handleMessageChoice(socket: Socket, gameState: PhreakWarsGameSta
 
   const choice = parseInt(input) - 1;
   if (isNaN(choice) || choice < 0 || choice >= shadowMessageTemplates.length) {
-    socket.emit('ansi-output', '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
+    say(socket, gameState, '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
     displayMessageChoiceMenu(socket, gameState);
     return;
   }
@@ -427,8 +428,8 @@ export function handleMessageChoice(socket: Socket, gameState: PhreakWarsGameSta
 
   gameState.shadow.relationship = Math.min(100, gameState.shadow.relationship + template.relationshipBoost);
 
-  socket.emit('ansi-output', `\r\n\x1b[32mMessage posted successfully!\x1b[0m\r\n`);
-  socket.emit('ansi-output', `\x1b[32mShadow relationship increased by ${template.relationshipBoost} points!\x1b[0m\r\n`);
+  say(socket, gameState, `\r\n\x1b[32mMessage posted successfully!\x1b[0m\r\n`);
+  say(socket, gameState, `\x1b[32mShadow relationship increased by ${template.relationshipBoost} points!\x1b[0m\r\n`);
 
   if (Math.random() < template.replyChance) {
     gameState.shadow.pendingReplies.push({
@@ -436,10 +437,10 @@ export function handleMessageChoice(socket: Socket, gameState: PhreakWarsGameSta
       body: template.replyBody,
       timestamp: new Date(Date.now() + 24 * 60 * 60 * 1000)
     });
-    socket.emit('ansi-output', '\x1b[35m(Shadow might reply when you check back later...)\x1b[0m\r\n');
+    say(socket, gameState, '\x1b[35m(Shadow might reply when you check back later...)\x1b[0m\r\n');
   }
 
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+  say(socket, gameState, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
   gameState.currentMode = 'waiting';
 }
 
@@ -449,19 +450,19 @@ export function handleMessageChoice(socket: Socket, gameState: PhreakWarsGameSta
 export function handlePostingSubject(socket: Socket, gameState: PhreakWarsGameState, data: string): void {
   const subject = data.trim();
   if (subject.length === 0) {
-    socket.emit('ansi-output', '\r\n\x1b[31mSubject cannot be empty.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[33mEnter subject:\x1b[0m ');
+    say(socket, gameState, '\r\n\x1b[31mSubject cannot be empty.\x1b[0m\r\n');
+    say(socket, gameState, '\x1b[33mEnter subject:\x1b[0m ');
     return;
   }
   if (subject.length > 50) {
-    socket.emit('ansi-output', '\r\n\x1b[31mSubject too long (max 50 characters).\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[33mEnter subject:\x1b[0m ');
+    say(socket, gameState, '\r\n\x1b[31mSubject too long (max 50 characters).\x1b[0m\r\n');
+    say(socket, gameState, '\x1b[33mEnter subject:\x1b[0m ');
     return;
   }
 
   gameState.postingSubject = subject;
-  socket.emit('ansi-output', `\r\n\x1b[32mSubject: "${subject}"\x1b[0m\r\n`);
-  socket.emit('ansi-output', '\x1b[33mEnter message body (end with /END on a new line):\x1b[0m\r\n');
+  say(socket, gameState, `\r\n\x1b[32mSubject: "${subject}"\x1b[0m\r\n`);
+  say(socket, gameState, '\x1b[33mEnter message body (end with /END on a new line):\x1b[0m\r\n');
   gameState.currentMode = 'posting_body';
   gameState.inputBuffer = '';
 }
@@ -475,8 +476,8 @@ export function handlePostingBody(socket: Socket, gameState: PhreakWarsGameState
     const body = gameState.inputBuffer.trim();
 
     if (body.length === 0) {
-      socket.emit('ansi-output', '\r\n\x1b[31mMessage body cannot be empty.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\x1b[33mEnter message body (end with /END on a new line):\x1b[0m\r\n');
+      say(socket, gameState, '\r\n\x1b[31mMessage body cannot be empty.\x1b[0m\r\n');
+      say(socket, gameState, '\x1b[33mEnter message body (end with /END on a new line):\x1b[0m\r\n');
       return;
     }
 
@@ -489,12 +490,12 @@ export function handlePostingBody(socket: Socket, gameState: PhreakWarsGameState
       timestamp: new Date()
     });
 
-    socket.emit('ansi-output', '\r\n\x1b[32mMessage posted successfully!\x1b[0m\r\n');
+    say(socket, gameState, '\r\n\x1b[32mMessage posted successfully!\x1b[0m\r\n');
 
     delete gameState.postingSubject;
     gameState.inputBuffer = '';
 
-    socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+    say(socket, gameState, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     gameState.currentMode = 'waiting';
   } else {
     gameState.inputBuffer += data + '\n';
@@ -511,16 +512,16 @@ export function handleRomance(socket: Socket, gameState: PhreakWarsGameState, in
       return;
 
     case 'R':
-      socket.emit('ansi-output', '\r\n\x1b[36m-= SHADOW\'S MESSAGES =-\x1b[0m\r\n\r\n');
+      say(socket, gameState, '\r\n\x1b[36m-= SHADOW\'S MESSAGES =-\x1b[0m\r\n\r\n');
       if (gameState.shadow.pendingReplies.length === 0) {
-        socket.emit('ansi-output', 'No messages from Shadow yet.\r\n');
+        say(socket, gameState, 'No messages from Shadow yet.\r\n');
       } else {
         gameState.shadow.pendingReplies.forEach((msg, idx) => {
-          socket.emit('ansi-output', `\x1b[35m[${idx + 1}]\x1b[0m ${msg.subject}\r\n`);
-          socket.emit('ansi-output', `${msg.body}\r\n\r\n`);
+          say(socket, gameState, `\x1b[35m[${idx + 1}]\x1b[0m ${msg.subject}\r\n`);
+          say(socket, gameState, `${msg.body}\r\n\r\n`);
         });
       }
-      socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+      say(socket, gameState, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       gameState.currentMode = 'waiting';
       break;
 
@@ -529,7 +530,7 @@ export function handleRomance(socket: Socket, gameState: PhreakWarsGameState, in
       return;
 
     default:
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
+      say(socket, gameState, '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
       displayRomanceMenu(socket, gameState);
   }
 }
@@ -544,7 +545,7 @@ export function handleMultiplayer(socket: Socket, gameState: PhreakWarsGameState
       return;
 
     default:
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
+      say(socket, gameState, '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
       displayMultiplayerMenu(socket, gameState);
   }
 }
@@ -555,11 +556,11 @@ export function handleMultiplayer(socket: Socket, gameState: PhreakWarsGameState
 export function handleStatsMenu(socket: Socket, gameState: PhreakWarsGameState, input: string): void {
   switch (input) {
     case 'D':
-      socket.emit('ansi-output', '\r\n\x1b[31m-= DELETE PLAYER =-\x1b[0m\r\n\r\n');
-      socket.emit('ansi-output', '\x1b[31mWARNING: This will permanently delete your current player!\x1b[0m\r\n');
-      socket.emit('ansi-output', '\x1b[33m[Y]\x1b[0m Yes, delete player and create new\r\n');
-      socket.emit('ansi-output', '\x1b[33m[N]\x1b[0m No, keep current player\r\n\r\n');
-      socket.emit('ansi-output', '\x1b[33mChoice:\x1b[0m ');
+      say(socket, gameState, '\r\n\x1b[31m-= DELETE PLAYER =-\x1b[0m\r\n\r\n');
+      say(socket, gameState, '\x1b[31mWARNING: This will permanently delete your current player!\x1b[0m\r\n');
+      say(socket, gameState, '\x1b[33m[Y]\x1b[0m Yes, delete player and create new\r\n');
+      say(socket, gameState, '\x1b[33m[N]\x1b[0m No, keep current player\r\n\r\n');
+      say(socket, gameState, '\x1b[33mChoice:\x1b[0m ');
       gameState.currentMode = 'delete_confirmation';
       return;
 
@@ -568,7 +569,7 @@ export function handleStatsMenu(socket: Socket, gameState: PhreakWarsGameState, 
       return;
 
     default:
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
+      say(socket, gameState, '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
       displayStats(socket, gameState);
   }
 }
@@ -582,21 +583,21 @@ export function handleDeleteConfirmation(socket: Socket, gameState: PhreakWarsGa
       const userId = String(session.user!.id);
       const newGameState = deletePlayer(userId);
 
-      socket.emit('ansi-output', '\r\n\x1b[32mPlayer deleted successfully!\x1b[0m\r\n');
-      socket.emit('ansi-output', '\x1b[32mCreating new player...\x1b[0m\r\n\r\n');
-      socket.emit('ansi-output', '\x1b[33mEnter your hacker handle:\x1b[0m ');
+      say(socket, gameState, '\r\n\x1b[32mPlayer deleted successfully!\x1b[0m\r\n');
+      say(socket, gameState, '\x1b[32mCreating new player...\x1b[0m\r\n\r\n');
+      say(socket, gameState, '\x1b[33mEnter your hacker handle:\x1b[0m ');
       newGameState.currentMode = 'character_creation';
       session.tempData.gameState = newGameState;
       return;
 
     case 'N':
-      socket.emit('ansi-output', '\r\n\x1b[32mPlayer deletion cancelled.\x1b[0m\r\n');
+      say(socket, gameState, '\r\n\x1b[32mPlayer deletion cancelled.\x1b[0m\r\n');
       displayStats(socket, gameState);
       return;
 
     default:
-      socket.emit('ansi-output', '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\x1b[33mChoice:\x1b[0m ');
+      say(socket, gameState, '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
+      say(socket, gameState, '\x1b[33mChoice:\x1b[0m ');
       gameState.currentMode = 'delete_confirmation';
   }
 }

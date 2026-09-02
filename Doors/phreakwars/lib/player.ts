@@ -5,6 +5,7 @@
  */
 
 import { Socket } from 'socket.io';
+import { say } from './ui';
 import { PhreakWarsGameState, DAILY_LIMITS } from './types';
 
 // Global game states (in production, this would be stored in database)
@@ -190,7 +191,7 @@ export function checkDailyLimit(gameState: PhreakWarsGameState, limitType: keyof
  * Display daily limits status
  */
 export function displayDailyLimits(socket: Socket, gameState: PhreakWarsGameState): void {
-  socket.emit('ansi-output', '\x1b[36m-= DAILY ACTIVITY LIMITS =-\x1b[0m\r\n\r\n');
+  say(socket, gameState, '\x1b[36m-= DAILY ACTIVITY LIMITS =-\x1b[0m\r\n\r\n');
 
   const limits = [
     { name: 'Phreaking Attempts', current: gameState.dailyLimits.phreakingAttempts, max: DAILY_LIMITS.PHREAKING_ATTEMPTS },
@@ -205,10 +206,10 @@ export function displayDailyLimits(socket: Socket, gameState: PhreakWarsGameStat
 
   limits.forEach(limit => {
     const color = limit.current >= limit.max ? '\x1b[31m' : '\x1b[32m';
-    socket.emit('ansi-output', `${color}${limit.name}: ${limit.current}/${limit.max}\x1b[0m\r\n`);
+    say(socket, gameState, `${color}${limit.name}: ${limit.current}/${limit.max}\x1b[0m\r\n`);
   });
 
-  socket.emit('ansi-output', '\r\n\x1b[33mLimits reset daily at midnight!\x1b[0m\r\n');
+  say(socket, gameState, '\r\n\x1b[33mLimits reset daily at midnight!\x1b[0m\r\n');
 }
 
 /**

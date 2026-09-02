@@ -17,7 +17,7 @@ export const metadata = {
     command: 'PHREAKWARS',
 };
 import { gameStates, createNewGameState, checkAndResetDailyLimits } from './lib/player';
-import { displayMainMenu, titleBox, stateWidth } from './lib/ui';
+import { displayMainMenu, titleBox, stateWidth, say } from './lib/ui';
 import { handleMainMenu, handleCharacterCreation, handlePhreaking, handleBBSExploration, handleProgramming, handleTrading, handleRomance, handleMultiplayer, handleUpgrades, handlePostingSubject, handlePostingBody, handleMessageChoice, handleWaiting, handleStatsMenu, handleDeleteConfirmation } from './lib/handlers';
 import { handleTextMinigame } from './lib/minigames';
 /**
@@ -47,15 +47,15 @@ door.onStart(async (ctx) => {
     // Start the game
     if (gameState.player.handle === '') {
         // New player - show character creation
-        socket.emit('ansi-output', '\x1b[2J\x1b[H');
+        say(socket, gameState, '\x1b[2J\x1b[H');
         for (const row of titleBox([
             { text: 'PHREAK WARS', colour: '\x1b[32m' },
             { text: 'THE UNDERGROUND BBS EMPIRE', colour: '\x1b[33m' },
         ], stateWidth(gameState)))
-            socket.emit('ansi-output', row);
-        socket.emit('ansi-output', '\r\n');
-        socket.emit('ansi-output', '\x1b[36mWelcome to the underground world of 1980s phone phreaking!\x1b[0m\r\n\r\n');
-        socket.emit('ansi-output', '\x1b[33mEnter your hacker handle:\x1b[0m ');
+            say(socket, gameState, row);
+        say(socket, gameState, '\r\n');
+        say(socket, gameState, '\x1b[36mWelcome to the underground world of 1980s phone phreaking!\x1b[0m\r\n\r\n');
+        say(socket, gameState, '\x1b[33mEnter your hacker handle:\x1b[0m ');
         gameState.currentMode = 'character_creation';
     }
     else {
@@ -142,7 +142,7 @@ door.onInput(async (ctx, key) => {
     }
     catch (error) {
         console.error('[PhreakWars] Error handling input:', error);
-        socket.emit('ansi-output', '\r\n\x1b[31mAn error occurred. Returning to menu...\x1b[0m\r\n');
+        say(socket, gameState, '\r\n\x1b[31mAn error occurred. Returning to menu...\x1b[0m\r\n');
         displayMainMenu(socket, gameState);
     }
 });
