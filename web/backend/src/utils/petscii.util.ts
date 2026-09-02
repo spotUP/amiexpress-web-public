@@ -27,7 +27,7 @@
  */
 
 import * as fs from 'fs';
-import { PETSCII_COLOR_TO_VIC, vicToSgrForeground, vicToSgrBackground } from './c64-palette';
+import { PETSCII_COLOR_TO_VIC, vicToSgrForeground } from './c64-palette';
 import { SCREENCODE_TO_UNICODE } from './petscii-unicode-map';
 import { petsciiInputToAscii, AnsiToPetsciiTransducer } from '@amiexpress/bbs-door-sdk/petscii';
 
@@ -202,7 +202,9 @@ function convertPetsciiByteForPetMe64(byte: number, state: PetsciiState): string
   // ========================================
   // SCREEN CONTROL
   // ========================================
-  if (byte === 0x93) return vicToSgrBackground(6) + '\x1b[2J\x1b[H'; // Blue bg (fixed VIC 6) + clear + home
+  if (byte === 0x93) return '\x1b[2J\x1b[H'; // Clear + home. No background SGR: a C64 terminal's
+                                              // background is fixed black (CCGMS/Novaterm), the
+                                              // viewer's own default - PETSCII has no background byte.
   if (byte === 0x14) return '\x08';          // Delete (backspace)
   if (byte === 0x94) return '\x1b[@';        // Insert character
 
@@ -273,7 +275,9 @@ function convertPetsciiByte(byte: number, state: PetsciiState): string {
   if (byte === 0x1D) return '\x1b[C';      // Cursor right
   if (byte === 0x9D) return '\x1b[D';      // Cursor left
   if (byte === 0x13) return '\x1b[H';      // Home
-  if (byte === 0x93) return vicToSgrBackground(6) + '\x1b[2J\x1b[H'; // Blue bg (fixed VIC 6) + clear + home
+  if (byte === 0x93) return '\x1b[2J\x1b[H'; // Clear + home. No background SGR: a C64 terminal's
+                                              // background is fixed black (CCGMS/Novaterm), the
+                                              // viewer's own default - PETSCII has no background byte.
   if (byte === 0x14) return '\x08';          // Delete
   if (byte === 0x94) return '\x1b[@';        // Insert
 
@@ -324,15 +328,18 @@ export class PetsciiStreamConverter {
   }
 
   /**
-   * One-shot full-screen conversion: resets state, emits the C64 power-on
-   * color prologue, converts the buffer, then resets SGR at the end.
+   * One-shot full-screen conversion: resets state, emits the C64 TERMINAL
+   * color prologue, converts the buffer, then resets SGR at the end. No
+   * background SGR is emitted - a C64 terminal (CCGMS/Novaterm) runs a fixed
+   * black screen/border, which is the viewer's own default background, and
+   * PETSCII has no background-colour byte for the BBS to override anyway.
    */
   convertScreen(buffer: Buffer): string {
     this.reset();
-    return vicToSgrForeground(14) + vicToSgrBackground(6) + this.convert(buffer) + '\x1b[0m';
+    return vicToSgrForeground(14) + this.convert(buffer) + '\x1b[0m';
   }
 
-  /** Reset to the C64 power-on default state (light blue pen, unshifted, no reverse). */
+  /** Reset to the C64 terminal default state (light blue pen, unshifted, no reverse). */
   reset(): void {
     this.state = createPetsciiState();
   }
@@ -356,8 +363,10 @@ export function convertPetsciiToPetMe64(buffer: Buffer): string {
 export function convertPetsciiToAnsi(buffer: Buffer): string {
   const state = createPetsciiState();
 
-  // C64 power-on state: light blue pen on blue background
-  let output = vicToSgrForeground(14) + vicToSgrBackground(6);
+  // C64 terminal state: light blue pen. No background SGR - a C64 terminal
+  // (CCGMS/Novaterm) runs a fixed black screen/border, the viewer's own
+  // default background; PETSCII carries no background-colour byte.
+  let output = vicToSgrForeground(14);
 
   for (let i = 0; i < buffer.length; i++) {
     const byte = buffer[i];

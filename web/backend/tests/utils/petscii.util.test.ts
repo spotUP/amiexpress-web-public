@@ -19,11 +19,12 @@ import {
   C64_PALETTE_PEPTO,
   PETSCII_COLOR_TO_VIC,
   vicToSgrForeground,
-  vicToSgrBackground,
 } from '../../src/utils/c64-palette';
 
-// C64 power-on prologue: light blue pen (VIC 14) on blue background (VIC 6).
-const PROLOGUE = vicToSgrForeground(14) + vicToSgrBackground(6);
+// C64 terminal prologue: light blue pen (VIC 14). No background SGR - a C64
+// terminal (CCGMS/Novaterm) runs a fixed black screen/border, the viewer's
+// own default background.
+const PROLOGUE = vicToSgrForeground(14);
 
 describe('c64-palette', () => {
   it('maps all 16 PETSCII color codes to distinct VIC indices', () => {
@@ -60,15 +61,16 @@ describe('convertPetsciiToPetMe64 palette', () => {
     expect(brown).toContain('\x1b[38;2;85;56;0m');
   });
 
-  it('starts in C64 power-on state: light blue pen on blue background', () => {
+  it('starts in C64 terminal state: light blue pen, no background SGR', () => {
     const out = convertPetsciiToPetMe64(Buffer.from([0x41]));
-    expect(out.startsWith('\x1b[38;2;112;109;235m\x1b[48;2;46;44;155m')).toBe(true);
+    expect(out.startsWith('\x1b[38;2;112;109;235m')).toBe(true);
+    expect(out).not.toContain('\x1b[48;2;46;44;155m'); // no blue background - terminal stays black
   });
 
-  it('clear screen repaints the blue background', () => {
+  it('clear screen does not paint a blue background', () => {
     const out = convertPetsciiToPetMe64(Buffer.from([0x93]));
-    // bg SGR must be active before ESC[2J so xterm fills with blue
-    expect(out.indexOf('\x1b[48;2;46;44;155m')).toBeLessThan(out.indexOf('\x1b[2J'));
+    expect(out).not.toContain('\x1b[48;2;46;44;155m');
+    expect(out).toContain('\x1b[2J');
   });
 });
 
@@ -128,7 +130,7 @@ describe('petscii.util', () => {
       const buffer = Buffer.from([0x41, 0x42, 0x43]); // ABC
       const result = convertPetsciiToPetMe64(buffer);
 
-      expect(result).toContain(PROLOGUE); // C64 power-on colors (light blue pen, blue bg)
+      expect(result).toContain(PROLOGUE); // C64 terminal colors (light blue pen, no bg SGR)
       expect(result).toContain('\x1b[0m');  // Reset at end
     });
 
@@ -185,7 +187,7 @@ describe('petscii.util', () => {
       const buffer = Buffer.from([]);
       const result = convertPetsciiToPetMe64(buffer);
 
-      expect(result).toContain(PROLOGUE); // C64 power-on colors
+      expect(result).toContain(PROLOGUE); // C64 terminal colors
       expect(result).toContain('\x1b[0m');  // Reset
     });
 
@@ -739,7 +741,8 @@ describe('petscii.util', () => {
 
       const result = convertPetsciiToAnsi(buffer);
 
-      expect(result).toContain(vicToSgrBackground(6) + '\x1b[2J\x1b[H'); // Blue bg active before clear + home
+      expect(result).toContain('\x1b[2J\x1b[H'); // Clear + home
+      expect(result).not.toContain('\x1b[48;2;46;44;155m'); // no blue background
       expect(result).toContain(vicToSgrForeground(1)); // White
       expect(result).toContain(vicToSgrForeground(2)); // Red
       expect(result).toContain('HELLO');

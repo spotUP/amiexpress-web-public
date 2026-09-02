@@ -13,6 +13,13 @@
  * thoughts/shared/research/2026-09-01_true-petscii-reference.md sections
  * 1.2-1.3 (KERNAL semantics, logical lines) and 2 (screen codes) for the
  * behavioral rules this file implements.
+ *
+ * Background/border power on to C64 TERMINAL defaults (CCGMS/Novaterm: black
+ * screen, black border), NOT the KERNAL BASIC power-on defaults (blue/light
+ * blue) referenced in section 3 of that doc. This machine simulates a BBS
+ * terminal, never the BASIC READY. prompt, and PETSCII carries no
+ * background-colour byte - the terminal's default IS the background the BBS
+ * gets, so it must be black to match every C64 BBS's PETSCII art.
  */
 import { PETSCII_COLOR_TO_VIC } from './c64-palette';
 import { printablePetsciiToScreenCode } from './screen-codes';
@@ -27,8 +34,8 @@ export interface PetsciiMachineState {
   charsetBank: 0 | 1;    // 0 = uppercase/graphics (power-on), 1 = lowercase/uppercase
   reverse: boolean;
   pen: number;           // VIC index, power-on 14
-  background: number;    // VIC index, fixed 6 (no PETSCII code changes it)
-  border: number;        // VIC index, fixed 14
+  background: number;    // VIC index, fixed 0 (no PETSCII code changes it)
+  border: number;        // VIC index, fixed 0
 }
 
 export class PetsciiMachine {
@@ -37,7 +44,7 @@ export class PetsciiMachine {
     screen: new Uint8Array(CELLS).fill(0x20),
     colorRam: new Uint8Array(CELLS).fill(14),
     cursorX: 0, cursorY: 0, charsetBank: 0, reverse: false,
-    pen: 14, background: 6, border: 14,
+    pen: 14, background: 0, border: 0,
   };
   /** rowLinked[y] = true when row y is the continuation of row y-1 (logical 80-char line) */
   private rowLinked: boolean[] = new Array(ROWS).fill(false);
@@ -58,8 +65,8 @@ export class PetsciiMachine {
     s.charsetBank = 0;
     s.reverse = false;
     s.pen = 14;
-    s.background = 6;
-    s.border = 14;
+    s.background = 0;
+    s.border = 0;
     this.rowLinked.fill(false);
   }
 

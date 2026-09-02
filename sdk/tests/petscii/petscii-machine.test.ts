@@ -4,11 +4,12 @@ const cell = (m: PetsciiMachine, x: number, y: number) => m.state.screen[y * 40 
 const color = (m: PetsciiMachine, x: number, y: number) => m.state.colorRam[y * 40 + x];
 
 describe('PetsciiMachine', () => {
-  it('powers on: up/gfx charset, pen light blue, blue bg, clear screen', () => {
+  it('powers on: up/gfx charset, pen light blue, black bg/border (C64 terminal default, not KERNAL BASIC), clear screen', () => {
     const m = new PetsciiMachine();
     expect(m.state.charsetBank).toBe(0);
     expect(m.state.pen).toBe(14);
-    expect(m.state.background).toBe(6);
+    expect(m.state.background).toBe(0);
+    expect(m.state.border).toBe(0);
     expect(cell(m, 0, 0)).toBe(0x20);
   });
 
