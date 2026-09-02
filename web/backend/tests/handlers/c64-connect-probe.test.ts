@@ -238,6 +238,45 @@ describe('C64 DEL-probe reaches the live command.handler.ts dispatcher (task 6 f
     expect(session.tempData.inputBuffer).toBe('');
   });
 
+  test('(b2) the DEL-probe promotion resyncs the PETSCII oracle: first byte on the wire is $93 (clear+home), cursor lands at (0,0)', async () => {
+    // Unlike (b) above, this drives the REAL connection-emitter (not the
+    // {emitted: []} spy) so the transducer's ansi-output branch actually
+    // runs and the resync byte can be inspected on the "wire". Everything
+    // written before this point (welcome banner, node list, graphics
+    // prompt) went out over the plain-ANSI path while terminalType was
+    // still 'unknown' — the transducer was never even constructed, so it
+    // cannot have observed any of it. The fix must clear+home the oracle
+    // here so BBSTITLE.SEQ's absolute positioning starts from a true origin.
+    const { buildConnectionEmitter } = require('../../src/server/connection-emitter');
+    const { PetsciiMachine } = require('@amiexpress/bbs-door-sdk/petscii');
+    const written: Buffer[] = [];
+    const session = baseSession();
+    session.subState = LoggedOnSubState.ANSI_PROMPT;
+    session.terminalType = 'c64';
+    const connection: any = {
+      write: (b: Buffer | string) => written.push(Buffer.isBuffer(b) ? b : Buffer.from(b)),
+      session,
+      sessionId: 'del-probe-resync',
+      on() {}, off() {}, close() {},
+    };
+    const emitter = buildConnectionEmitter(connection);
+
+    await handleCommand(emitter, session, '\x7f');
+
+    expect(written.length).toBeGreaterThan(0);
+    expect(written[0][0]).toBe(0x93);
+    expect(session.petsciiTransducer).toBeDefined();
+
+    // Replay only the resync write (later writes - the "\r\n\r\n" before
+    // prompt-login - deliberately move the cursor on afterwards, so the
+    // live oracle's CURRENT position at the end of the whole flow isn't
+    // what's under test here).
+    const oracle = new PetsciiMachine();
+    oracle.feed(written[0]);
+    expect(oracle.state.cursorX).toBe(0);
+    expect(oracle.state.cursorY).toBe(0);
+  });
+
   test('(c) non-c64 terminal answering P gets the SIMULATING C64 confirmation line', async () => {
     const socket = makeSocket();
     const session = baseSession();

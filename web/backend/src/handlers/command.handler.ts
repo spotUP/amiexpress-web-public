@@ -1050,6 +1050,19 @@ function showMenuAfterCommand(socket: any, session: BBSSession, menuPauseDefault
  * sequence instead of a third hand-rolled duplicate.
  */
 async function completeRealC64Connect(socket: any, session: BBSSession): Promise<void> {
+  // Resync the session's PETSCII oracle before anything else is written.
+  // The welcome banner, node list and graphics prompt that already reached
+  // this caller (both the DISPLAY_CONNECT and ANSI_PROMPT c64 branches run
+  // AFTER those) went out through the non-PETSCII 'ansi-output' path,
+  // since terminalType only just flipped to 'c64' - the transducer never
+  // saw any of it and its oracle still thinks the cursor is at (0,0) on a
+  // blank screen. Node1/BBSTITLE.SEQ starts with plain spaces, not $93, so
+  // observe() cannot resync it either. Emitting the clear+home here does
+  // double duty: it wipes whatever ANSI left on the real C64's screen AND
+  // - because this goes through the transducer, not connection.write -
+  // brings the oracle's cursor/bank state back to a known (0,0) origin
+  // before BBSTITLE.SEQ's absolute positioning is computed against it.
+  socket.emit('ansi-output', '\x1b[2J\x1b[H');
   session.tempData = { inputBuffer: '' };
   const { getSystemPassword } = require('./command-handler/pre-login');
   const sysPassC64 = getSystemPassword();
