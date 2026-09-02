@@ -29,6 +29,8 @@ export interface ScreenReaderShape {
   scopeName?: string;
   securityLevel?: number;
   screenType?: string;
+  /** What the board calls that type - "Amiga Ansi", from ScreenTypes.info. */
+  screenTypeName?: string;
   /** The levels this variant actually serves - "20-29", "30 and above". */
   serves?: string;
   via: 'resolved' | 'variant' | 'include';
@@ -82,6 +84,8 @@ export interface ScreenIndexShape {
   screens: ScreenIndexEntryShape[];
   unused: ScreenFileShape[];
   conferences?: ConferenceShape[];
+  /** How many accounts sit at each security level, for "95 callers". */
+  callersByLevel?: Record<number, number>;
   files: Record<string, ScreenFileShape>;
   builtAt: string;
 }
@@ -149,7 +153,36 @@ export function filterScreenRows(rows: ScreenRow[], query: string): ScreenRow[] 
  * "CONF_BULL in Amiga Demoscene, security level 20" beats
  * "Conf2/bull20.txt" - the sysop had to work the second one out by hand.
  */
-export function describeReader(reader: ScreenReaderShape): string {
+/**
+ * How many accounts fall inside a variant's range.
+ *
+ * "Levels 30 and above" is a fact about the file; "99 callers" is a fact about
+ * the board, and it is the one that says whether this screen matters.
+ */
+export function describeCallers(
+  serves: string | undefined,
+  callersByLevel: Record<number, number> | undefined,
+): string {
+  if (!serves || !callersByLevel) return '';
+
+  const open = /^(\d+) and above$/.exec(serves);
+  const closed = /^(\d+)-(\d+)$/.exec(serves);
+  if (!open && !closed) return '';
+
+  const low = Number((open ?? closed)![1]);
+  const high = open ? Infinity : Number(closed![2]);
+
+  const callers = Object.entries(callersByLevel)
+    .filter(([level]) => Number(level) >= low && Number(level) <= high)
+    .reduce((total, [, count]) => total + count, 0);
+
+  return callers === 1 ? '1 caller' : callers === 0 ? 'no callers' : `${callers} callers`;
+}
+
+export function describeReader(
+  reader: ScreenReaderShape,
+  callersByLevel?: Record<number, number>,
+): string {
   const where = reader.scope === 'node'
     ? `node ${reader.id}`
     : reader.scope === 'conf'
@@ -160,9 +193,15 @@ export function describeReader(reader: ScreenReaderShape): string {
   // The RANGE, not the number: express.e walks down in fives, so BULL20 is
   // what levels 20 to 29 see, and reading "level 20" as "only level 20" is how
   // a sysop concludes a live file is dead.
-  if (reader.serves) qualifiers.push(`callers at level ${reader.serves}`);
-  else if (reader.securityLevel !== undefined) qualifiers.push(`security level ${reader.securityLevel}`);
-  if (reader.screenType) qualifiers.push(`${reader.screenType} screens`);
+  if (reader.serves) {
+    const callers = describeCallers(reader.serves, callersByLevel);
+    qualifiers.push(`level ${reader.serves}${callers ? ` (${callers})` : ''}`);
+  } else if (reader.securityLevel !== undefined) {
+    qualifiers.push(`security level ${reader.securityLevel}`);
+  }
+  // "Amiga Ansi" is what the board calls .GR; the suffix alone is a puzzle.
+  if (reader.screenTypeName) qualifiers.push(`${reader.screenTypeName} only`);
+  else if (reader.screenType) qualifiers.push(`${reader.screenType} screens only`);
   if (reader.via === 'include') qualifiers.push('included by it');
 
   return `${reader.screen} in ${where}${qualifiers.length ? ` - ${qualifiers.join(', ')}` : ''}`;

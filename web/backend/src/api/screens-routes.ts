@@ -22,6 +22,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
 import { config } from '../config';
+import { userFileManager } from '../services/UserFileManager';
 import { getSystemTime } from '../utils/date-time.util';
 import { screenSearchLocations } from '../screens/screen-resolution';
 import { checkShare } from '../screens/share-preconditions';
@@ -85,7 +86,27 @@ function sendOk<T>(res: Response, data: T, message?: string): void {
  * files nothing reads.
  */
 screensRouter.get('/', (_req: Request, res: Response) => {
-  sendOk(res, getScreenIndex(config.get('dataDir')));
+  const baseDir = config.get('dataDir');
+  const index = getScreenIndex(baseDir);
+
+  // How many accounts sit at each security level.
+  //
+  // Not part of the index: that is built from the screen directories and
+  // cached on their mtimes, while user.data changes every time somebody logs
+  // on. Counted here so a variant can say "95 callers" rather than "levels
+  // 30 and above", which is the fact a sysop is actually asking for.
+  const callersByLevel: Record<number, number> = {};
+  try {
+    for (const user of userFileManager.readAllUsers() ?? []) {
+      const level = Number((user as { secLevel?: number }).secLevel ?? 0);
+      if (!Number.isFinite(level)) continue;
+      callersByLevel[level] = (callersByLevel[level] ?? 0) + 1;
+    }
+  } catch (error) {
+    console.error('[Screens] could not count callers by level:', error);
+  }
+
+  sendOk(res, { ...index, callersByLevel });
 });
 
 /**

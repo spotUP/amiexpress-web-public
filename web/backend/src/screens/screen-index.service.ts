@@ -24,6 +24,7 @@ import {
 import { parseMciReferences, type MciReference } from './mci-references';
 import { conferenceDir, conferenceNumbers } from '../conferences/conference-paths';
 import { loadConfConfig } from '../services/conf-config.service';
+import { screenTypeNames } from './screen-metadata';
 
 export type ScreenFormat = 'ansi' | 'text' | 'rip' | 'petscii';
 
@@ -49,6 +50,8 @@ export interface ScreenReader {
   securityLevel?: number;
   /** GR, IBM, SEQ, RIP - the screen type a caller must have to see it. */
   screenType?: string;
+  /** What the BOARD calls that type, from ScreenTypes.info - "Amiga Ansi". */
+  screenTypeName?: string;
   /** How it is reached: the file the loader picks, a variant of it, or an include. */
   via: 'resolved' | 'variant' | 'include';
   /**
@@ -372,6 +375,8 @@ export function buildScreenIndex(baseDir: string): ScreenIndex {
     dir: path.relative(baseDir, conferenceDir(baseDir, id)),
   }));
   const conferenceNames = new Map(conferences.map(conf => [conf.id, conf.name]));
+  // The board names its own screen types; `.GR` means nothing to a designer.
+  const typeNames = screenTypeNames(baseDir);
 
   for (const [screen, dirType] of Object.entries(SCREEN_DIR_MAP)) {
     const fileName = getScreenFileName(screen);
@@ -431,6 +436,7 @@ export function buildScreenIndex(baseDir: string): ScreenIndex {
           scopeName: scope === 'conf' && id ? conferenceNames.get(id) : undefined,
           securityLevel: level,
           screenType: variant.screenType,
+          screenTypeName: variant.screenType ? typeNames[variant.screenType] : undefined,
           serves: level === undefined
             ? undefined
             : next !== undefined ? `${level}-${next - 1}` : `${level} and above`,

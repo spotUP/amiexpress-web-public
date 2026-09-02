@@ -5,6 +5,7 @@ import { apiClient, type ApiError } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import { fanOutOptions, type FanOutOption } from './screen-write-plan';
 import { describeScreen } from './screen-descriptions';
+import { callSitesFor } from './screen-provenance';
 import { summariseShare, type ShareSummary } from './screen-share-view';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { TabbedWorkspace, type TabDefinition } from '../components/ui/Tabs';
@@ -525,6 +526,16 @@ export function ScreenFilesPage() {
             the file name opens what the board knows about it.
           </p>
 
+          {/* Generated from express.e, so the claim cites the source this port
+              is 1:1 with rather than somebody's memory of AmiExpress. */}
+          {callSitesFor(entry.screen).length > 0 && (
+            <p className="text-xs text-content-muted">
+              Shown by {callSitesFor(entry.screen)
+                .map(site => `${site.proc}() - express.e:${site.line}`)
+                .join(', ')}
+            </p>
+          )}
+
           {/*
             The ROW opens the art. "Make all screens open the edit dialog when
             i click their lines in the table" - so there is no Edit button to
@@ -711,7 +722,7 @@ export function ScreenFilesPage() {
                 <h4 className="text-content-primary">Read by</h4>
                 <ul className="text-content-secondary">
                   {file.readBy.map((reader: ScreenReaderShape, i: number) => (
-                    <li key={i}>{describeReader(reader)}</li>
+                    <li key={i}>{describeReader(reader, data?.callersByLevel)}</li>
                   ))}
                 </ul>
               </div>
