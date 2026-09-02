@@ -717,7 +717,16 @@ class CardLobbyApp {
      * an UNO discard pile.
      */
     async chooseCardStyle() {
-        const chosen = await this.dialogManager.showCardStyleWindow(this.currentProfile, Boolean(this.session.bbs?.unicodeCapable));
+        const unicodeCapable = Boolean(this.session.bbs?.unicodeCapable);
+        // The panel stays open; every change lands on the profile and repaints
+        // the table straight away, so a style is judged on real cards.
+        const chosen = await this.dialogManager.showCardStyleWindow(this.currentProfile, unicodeCapable, (preferences) => {
+            if (!this.currentProfile)
+                return;
+            this.currentProfile.cards = preferences;
+            this.applyCardPreferences();
+            this.updateAllPanels();
+        });
         if (!chosen || !this.currentProfile)
             return;
         this.currentProfile.cards = chosen;

@@ -762,15 +762,27 @@ class UIManager {
             this.screen.render();
         });
     }
+    /**
+     * The engine options for cards drawn in a panel of this capacity.
+     *
+     * `capacity` is the panel's own answer to whether a full-size card fits;
+     * the player's preference decides what to do with that room (always big,
+     * always small, or fit the panel), along with faces, colour, back, hand
+     * layout and spacing.
+     */
+    cardOptions(capacity, extra = {}) {
+        const chrome = (0, card_style_1.resolveCardStyle)(this.cardPreferences, capacity === 'mini' ? card_style_1.FULL_CARD_ROWS - 1 : card_style_1.FULL_CARD_ROWS, this.unicodeCapable);
+        return { ...(0, card_style_1.toRenderOptions)(chrome), ...extra };
+    }
     renderBoardAndHand(boardCards, playerHand, flopCardSize, handCardSize, hasLiveHand) {
         if (boardCards.length > 0) {
-            this.flopContent.setContent((0, utils_1.renderCardLines)(boardCards, { layout: 'flat-condensed', size: flopCardSize }).join('\n'));
+            this.flopContent.setContent((0, utils_1.renderCardLines)(boardCards, this.cardOptions(flopCardSize)).join('\n'));
         }
         else {
             this.flopContent.setContent('Board not dealt yet.');
         }
         if (playerHand.length > 0) {
-            this.handContent.setContent((0, utils_1.renderCardLines)(playerHand, { layout: 'flat-condensed', size: handCardSize }).join('\n'));
+            this.handContent.setContent((0, utils_1.renderCardLines)(playerHand, this.cardOptions(handCardSize)).join('\n'));
         }
         else {
             this.handContent.setContent(hasLiveHand ? 'Waiting for cards...' : 'No hand on record.');
@@ -791,7 +803,7 @@ class UIManager {
                 ...card,
                 face: index < flipped ? 'front' : 'back',
             }));
-            this.flopContent.setContent((0, utils_1.renderCardLines)(framed, { layout: 'flat-condensed', size }).join('\n'));
+            this.flopContent.setContent((0, utils_1.renderCardLines)(framed, this.cardOptions(size)).join('\n'));
         };
         const renderMixedPlayerHand = (cards, flipped, size) => {
             if (cards.length === 0)
@@ -800,13 +812,13 @@ class UIManager {
                 ...card,
                 face: index < flipped ? 'front' : 'back',
             }));
-            this.handContent.setContent((0, utils_1.renderCardLines)(framed, { layout: 'flat-condensed', size }).join('\n'));
+            this.handContent.setContent((0, utils_1.renderCardLines)(framed, this.cardOptions(size)).join('\n'));
         };
         try {
             if (boardCards.length > 0) {
                 for (let i = 1; i <= boardCards.length; i += 1) {
                     const partial = boardCards.slice(0, i);
-                    this.flopContent.setContent((0, utils_1.renderCardLines)(partial, { layout: 'flat-condensed', size: flopCardSize, face: 'back' }).join('\n'));
+                    this.flopContent.setContent((0, utils_1.renderCardLines)(partial, this.cardOptions(flopCardSize, { face: 'back' })).join('\n'));
                     emitSfx('card-flap');
                     this.screen.render();
                     await sleep(drawDelay);
@@ -823,7 +835,7 @@ class UIManager {
             if (playerHand.length > 0) {
                 for (let i = 1; i <= playerHand.length; i += 1) {
                     const partial = playerHand.slice(0, i);
-                    this.handContent.setContent((0, utils_1.renderCardLines)(partial, { layout: 'flat-condensed', size: handCardSize, face: 'back' }).join('\n'));
+                    this.handContent.setContent((0, utils_1.renderCardLines)(partial, this.cardOptions(handCardSize, { face: 'back' })).join('\n'));
                     emitSfx('card-flap');
                     this.screen.render();
                     await sleep(drawDelay);
@@ -917,11 +929,7 @@ class UIManager {
             // the same rule, plus whatever the player asked for (lib/card-style.ts).
             const chrome = (0, card_style_1.resolveCardStyle)(this.cardPreferences, this.panelRows(this.flopContent) - 3, // two state lines and a gap
             this.unicodeCapable);
-            const lines = cardEngine.renderUnoCardLines(engineCard, {
-                style: chrome.style,
-                size: chrome.size,
-                color: 'ansi',
-            });
+            const lines = cardEngine.renderUnoCardLines(engineCard, (0, card_style_1.toRenderOptions)(chrome));
             return lines.map((line) => ` ${(0, blessed_helpers_1.ansiToTags)(line)}`).join('\n');
         }
         // A house-rule card: the engine has never heard of it.
@@ -966,9 +974,8 @@ class UIManager {
             const engineCard = this.toEngineUnoCard(card);
             if (!engineCard)
                 return null; // a house-rule card has no art
-            drawnCards.push(cardEngine.renderUnoCardLines(engineCard, {
-                style: chrome.style, size: chrome.size, color: 'ansi',
-            }).map((line) => (0, blessed_helpers_1.ansiToTags)(line)));
+            drawnCards.push(cardEngine.renderUnoCardLines(engineCard, (0, card_style_1.toRenderOptions)(chrome))
+                .map((line) => (0, blessed_helpers_1.ansiToTags)(line)));
         }
         if (drawnCards.length === 0)
             return null;

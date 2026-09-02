@@ -41,6 +41,7 @@ exports.DialogManager = void 0;
 const blessed_1 = __importStar(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const lib_1 = require("../lib");
+const CardStyleDialog_1 = require("./CardStyleDialog");
 class DialogManager {
     constructor(screen, overlayShade) {
         this.modalActive = false;
@@ -142,33 +143,19 @@ class DialogManager {
         return lines.join('\n');
     }
     /**
-     * Pick how cards are drawn. The engine offers the choices already
-     * (sdk/engines/cards: ascii or unicode faces, four backs, full or mini);
-     * this is the door asking which one, and remembering the answer.
+     * Pick how cards are drawn. The panel lives in CardStyleDialog: it
+     * stays open while the player cycles settings, and reports each change
+     * through `onChange` so the board behind redraws as they go.
      */
-    async showCardStyleWindow(profile, unicodeCapable) {
+    async showCardStyleWindow(profile, unicodeCapable, onChange) {
         if (!profile)
             return null;
-        const current = profile.cards ?? {};
-        const options = [
-            { label: `Card size: ${current.size === 'mini' ? 'ALWAYS SMALL' : 'FIT THE PANEL'}`,
-                apply: (p) => { p.size = p.size === 'mini' ? 'auto' : 'mini'; } },
-            { label: `Card faces: ${current.style === 'unicode' ? 'UNICODE' : 'ASCII'}`
-                    + (unicodeCapable ? '' : '  (this terminal draws ASCII)'),
-                apply: (p) => { p.style = p.style === 'unicode' ? 'ascii' : 'unicode'; } },
-            { label: `Card backs: ${(current.back ?? 'lined').toUpperCase()}`,
-                apply: (p) => {
-                    const backs = ['lined', 'dotted', 'classic', 'shiny'];
-                    const at = backs.indexOf(p.back ?? 'lined');
-                    p.back = backs[(at + 1) % backs.length];
-                } },
-        ];
-        const choice = await this.showListDialog('Card Style', options.map((o) => o.label));
-        if (choice === null)
-            return null;
-        const next = { ...current };
-        options[choice]?.apply(next);
-        return next;
+        return (0, CardStyleDialog_1.showCardStyleDialog)({
+            screen: this.screen,
+            overlayShade: this.overlayShade,
+            setModalActive: (value) => this.setModalActive(value),
+            isModalActive: () => this.isModalActive(),
+        }, profile.cards ?? {}, unicodeCapable, onChange);
     }
     async showBulletinsWindow(session) {
         // Only offer bulletins that are actually on the board. The list was

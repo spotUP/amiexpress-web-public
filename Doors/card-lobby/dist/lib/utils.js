@@ -147,7 +147,10 @@ const mergeColumns = (left, right, leftWidth, rightWidth, gap) => {
     return merged;
 };
 exports.mergeColumns = mergeColumns;
-const renderCardLines = (cards, options) => cardEngine.renderHandLines(cards, options).map(exports.ansiToBlessedTags);
+const renderCardLines = (cards, 
+// Whatever the card engine takes: layout, size, face, backStyle, style,
+// color and spacing (sdk/engines/cards/card-engine.ts).
+options) => cardEngine.renderHandLines(cards, options).map(exports.ansiToBlessedTags);
 exports.renderCardLines = renderCardLines;
 const initLobbyState = () => ({
     tables: [],

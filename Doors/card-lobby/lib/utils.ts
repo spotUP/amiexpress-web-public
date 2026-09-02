@@ -163,7 +163,9 @@ export const mergeColumns = (left: string[], right: string[], leftWidth: number,
 
 export const renderCardLines = (
   cards: ReturnType<typeof pokerCardsToCards>,
-  options: { layout?: string; size?: string; face?: 'front' | 'back'; backStyle?: string },
+  // Whatever the card engine takes: layout, size, face, backStyle, style,
+  // color and spacing (sdk/engines/cards/card-engine.ts).
+  options: Record<string, unknown>,
 ) => cardEngine.renderHandLines(cards, options as any).map(ansiToBlessedTags);
 
 export const initLobbyState = (): LobbyState => ({
