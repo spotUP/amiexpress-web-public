@@ -1,7 +1,12 @@
 node_modules/
-dist/
-*.js
-*.d.ts
-*.js.map
-*.d.ts.map
 data/*.json
+
+# dist/ is NOT ignored here.
+#
+# Every TypeScript door ships its compiled dist/ - it is what the board
+# actually runs, and the root .gitignore re-includes Doors/*/dist/ for
+# exactly that reason. This file used to ignore `dist/`, `*.js` and `*.d.ts`
+# on its own, which overrides the root's re-include, so WHIP reached the
+# live board as sources with no entry point at all: its package.json main is
+# dist/index.js, and /app/data/bbs/Doors/whip had no dist directory
+# (2026-09-02). The door could not start.
