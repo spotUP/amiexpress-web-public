@@ -4,6 +4,7 @@
  */
 
 import type { Colors } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/types';
+import type { Theme } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import type { GameDefinition, AchievementDefinition, BulletinEntry } from './types';
 
 export type ActionButtonKey = 'fold' | 'check' | 'call' | 'raise' | 'quit';
@@ -73,17 +74,64 @@ export const ANSI_TAGS: Record<string, string> = {
   '47': '{white-bg}',
 };
 
+/**
+ * The door's palette, DERIVED from the board's theme.
+ *
+ * It used to be a frozen literal, so CARD LOBBY looked the same whichever
+ * theme the sysop had chosen - cyan frames and a blue bar on a board running
+ * Quiet Phosphor. The SDK's themes carry exactly the tokens this needs
+ * (sdk/engines/ui/theme/tokens.ts); applyTheme() copies them in once at
+ * startup, before any widget is built.
+ *
+ * The object is mutated rather than replaced because the whole door imports
+ * this one binding. The theme stays the source of truth; this is a cache of
+ * it in the shape the widgets want.
+ */
 export const UI_THEME = {
-  topBar: { fg: 'gray', bg: 'blue', item: { fg: 'gray' }, selected: { fg: 'white' } },
+  topBar: { fg: 'white', bg: 'blue', item: { fg: 'gray' }, selected: { fg: 'white' } },
   statusBar: { fg: 'white', bg: 'blue' },
   windowBorder: { fg: 'cyan' },
   windowBg: 'black',
+  ink: 'white',
+  dim: 'gray',
   accent: 'cyan',
+  accentAlt: 'yellow',
   highlightBg: 'lightcyan',
+  highlightInk: 'black',
   warning: 'yellow',
   ok: 'green',
   error: 'red',
 };
+
+/** Fill UI_THEME from a resolved SDK theme. Call before building the UI. */
+export function applyTheme(theme: Theme): void {
+  const t = theme.tokens;
+
+  UI_THEME.topBar = { fg: t.barInk, bg: t.bar, item: { fg: t.dim }, selected: { fg: t.barInk } };
+  UI_THEME.statusBar = { fg: t.barInk, bg: t.bar };
+  UI_THEME.windowBorder = { fg: t.chrome };
+  UI_THEME.windowBg = t.ground;
+  UI_THEME.ink = t.ink;
+  UI_THEME.dim = t.dim;
+  UI_THEME.accent = t.accent;
+  UI_THEME.accentAlt = t.accentAlt;
+  UI_THEME.highlightBg = t.selectionBg;
+  UI_THEME.highlightInk = t.selectionInk;
+  UI_THEME.warning = t.warn;
+  UI_THEME.ok = t.ok;
+  UI_THEME.error = t.alert;
+
+  // The action buttons follow the theme as well - except the UNO row, whose
+  // colours ARE the game (a red card is red in every theme).
+  ACTION_BUTTON_STYLES.fold.base = { fg: t.ink, bg: t.alert };
+  ACTION_BUTTON_STYLES.fold.focus = { fg: t.ink, bg: t.accent };
+  ACTION_BUTTON_STYLES.check.base = { fg: t.ground, bg: t.ok };
+  ACTION_BUTTON_STYLES.call.base = { fg: t.ground, bg: t.dim };
+  ACTION_BUTTON_STYLES.raise.base = { fg: t.barInk, bg: t.bar };
+  ACTION_BUTTON_STYLES.raise.focus = { fg: t.ink, bg: t.accent };
+  ACTION_BUTTON_STYLES.quit.base = { fg: t.ink, bg: t.alert };
+  ACTION_BUTTON_STYLES.quit.focus = { fg: t.ink, bg: t.accent };
+}
 
 export type ButtonStyleSet = {
   base: Colors;

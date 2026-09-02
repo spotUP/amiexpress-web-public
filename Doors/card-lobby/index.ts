@@ -15,6 +15,7 @@ import {
   createTerminalModeSwitch,
   type TerminalModeSwitch,
 } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
+import { themeById, themeStyles, type ThemeStyles } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { GamepadButton } from '@amiexpress/bbs-door-sdk/types/gamepad';
 import type {
   Screen,
@@ -66,6 +67,7 @@ import {
   type UnoActionType,
   UI_THEME,
   type ActionButtonKey,
+  applyTheme,
   ACTION_BUTTON_STYLES,
   ACTION_BUTTON_ORDER,
   UNO_ACTION_BUTTON_STYLES,
@@ -148,6 +150,8 @@ export class CardLobbyApp {
   private unoEvents!: UnoEventBus;
   private gameViews!: GameViews;
   private terminalMode!: TerminalModeSwitch;
+  /** The board's theme, resolved once: tags, and the palette behind them. */
+  private styles!: ThemeStyles;
   /** Resolves the promise onStart is waiting on - see run(). */
   private exitResolve: (() => void) | null = null;
 
@@ -273,6 +277,13 @@ export class CardLobbyApp {
   }
 
   private setupScreen(): void {
+    // The board's theme decides every colour this door draws, and it has to
+    // be resolved BEFORE the first widget: they read UI_THEME as they are
+    // built. A door that skips this looks the same in all seven themes.
+    const theme = this.session.bbs?.getTheme ? this.session.bbs.getTheme() : themeById('classic');
+    applyTheme(theme);
+    this.styles = themeStyles(theme);
+
     const height = this.session.bbsSession?.screenHeight || 24;
 
     // Clear BBS output before creating blessed screen
@@ -427,7 +438,7 @@ export class CardLobbyApp {
       // Panel would give it a white line border for want of the key.
       border: undefined,
       style: {
-        bg: 'black',
+        bg: UI_THEME.windowBg,
       },
     });
 
@@ -927,9 +938,9 @@ export class CardLobbyApp {
     }
 
     const infoSegments = [
-      `{cyan-fg}${table.gameName}{/}`,
-      `{yellow-fg}Pot: ${pot}{/}`,
-      `{cyan-fg}Stakes: ${table.stakesLabel}{/}`,
+      `{${UI_THEME.accent}-fg}${table.gameName}{/}`,
+      `{${UI_THEME.accentAlt}-fg}Pot: ${pot}{/}`,
+      `{${UI_THEME.accent}-fg}Stakes: ${table.stakesLabel}{/}`,
       `{green-fg}Buy-in: ${table.buyIn}{/}`,
     ];
     if (turnLabel) {
@@ -954,25 +965,25 @@ export class CardLobbyApp {
       if (!engine) {
         const seatedPlayers = table.players.filter((player) => player.role === 'player' && player.stack > 0);
         if (seatedPlayers.length < table.minPlayers) {
-          hintLines.push('{yellow-fg}Waiting for players to join...{/}');
+          hintLines.push(`{${UI_THEME.warning}-fg}Waiting for players to join...{/}`);
         } else {
-          hintLines.push('{yellow-fg}Ready to deal. Press D or use Deal to start.{/}');
+          hintLines.push(`{${UI_THEME.warning}-fg}Ready to deal. Press D or use Deal to start.{/}`);
         }
       } else {
         const actionSeat = engine.state.actionTo;
         if (actionSeat === null || actionSeat === undefined) {
-          hintLines.push('{yellow-fg}Dealing in progress...{/}');
+          hintLines.push(`{${UI_THEME.warning}-fg}Dealing in progress...{/}`);
         } else {
           const actor = engine.state.players[actionSeat];
           if (actor?.id === this.currentProfile.userId) {
-            hintLines.push('{yellow-fg}Your turn. Choose an action below.{/}');
+            hintLines.push(`{${UI_THEME.warning}-fg}Your turn. Choose an action below.{/}`);
           } else if (actor?.name) {
-            hintLines.push(`{yellow-fg}Waiting for ${actor.name} to act...{/}`);
+            hintLines.push(`{${UI_THEME.warning}-fg}Waiting for ${actor.name} to act...{/}`);
           }
         }
       }
 
-      hintLines.push('{gray-fg}Keys: F Fold  X Check  C Call  R Raise  L Leave  D Deal{/}');
+      hintLines.push(`{${UI_THEME.dim}-fg}Keys: F Fold  X Check  C Call  R Raise  L Leave  D Deal{/}`);
     }
 
     const eventLines = this.lobby.events.length > 0
@@ -1093,9 +1104,9 @@ export class CardLobbyApp {
       this.tableContent.setContent([
         'Select a table to view details.',
         '',
-        '{yellow-fg}Quick start{/}:',
+        `{${UI_THEME.accent}-fg}Quick start{/}:`,
         'Use the lobby list to highlight a table.',
-        'Press {cyan-fg}J{/} to join, {cyan-fg}O{/} to observe, or {cyan-fg}C{/} to create a table.',
+        `Press {${UI_THEME.accent}-fg}ENTER{/} to join, {${UI_THEME.accent}-fg}O{/} to observe, or {${UI_THEME.accent}-fg}C{/} to create a table.`,
       ].join('\n'));
       this.updateTableActions();
       return;
@@ -1109,7 +1120,7 @@ export class CardLobbyApp {
       this.activityPanel.hide();
       this.tableActions.hide();
       this.tableContent.show();
-      this.tableContent.setContent('Table not found. Press {cyan-fg}R{/} to refresh the lobby.');
+      this.tableContent.setContent(`Table not found. Press {${UI_THEME.accent}-fg}R{/} to refresh the lobby.`);
       this.updateTableActions();
       return;
     }
@@ -1188,9 +1199,9 @@ export class CardLobbyApp {
     }
 
     rightLines.push('');
-    rightLines.push('{yellow-fg}Actions{/}: ENTER Join  O Observe');
-    rightLines.push('{yellow-fg}More{/}: C Create  R Refresh  F Filter');
-    rightLines.push('{gray-fg}Auto-deal starts when enough players are seated.{/}');
+    rightLines.push(`{${UI_THEME.accent}-fg}Actions{/}: ENTER Join  O Observe`);
+    rightLines.push(`{${UI_THEME.accent}-fg}More{/}: C Create  R Refresh  F Filter`);
+    rightLines.push(`{${UI_THEME.dim}-fg}Auto-deal starts when enough players are seated.{/}`);
 
     let lines: string[] = [];
     if (leftLines.length === 0) {

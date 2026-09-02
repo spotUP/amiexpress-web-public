@@ -174,7 +174,7 @@ export class DialogManager {
       height: 18,
       border: { type: 'ascii' },
       label: ` ${title} `,
-      style: { border: UI_THEME.windowBorder, bg: 'black' },
+      style: { border: UI_THEME.windowBorder, bg: UI_THEME.windowBg },
     });
 
     const textBottom = opts?.footer ? 2 : 1;
@@ -190,10 +190,10 @@ export class DialogManager {
       keys: true,
       mouse: true,
       content,
-      style: { fg: 'white', bg: 'black' },
+      style: { fg: UI_THEME.ink, bg: UI_THEME.windowBg },
       scrollbar: {
         ch: ' ',
-        style: { bg: 'blue' }
+        style: { bg: UI_THEME.topBar.bg }
       }
     });
 
@@ -267,9 +267,9 @@ export class DialogManager {
         label: ` ${title} `,
         style: {
           border: UI_THEME.windowBorder,
-          bg: 'black',
-          fg: 'white',
-          selected: { fg: 'black', bg: UI_THEME.highlightBg },
+          bg: UI_THEME.windowBg,
+          fg: UI_THEME.ink,
+          selected: { fg: UI_THEME.highlightInk, bg: UI_THEME.highlightBg },
         } as any,
         items,
         keys: true,
@@ -353,7 +353,7 @@ export class DialogManager {
         text,
         value,
         border: { type: 'ascii' },
-        style: { fg: 'white', bg: 'black', border: { fg: UI_THEME.windowBorder.fg } },
+        style: { fg: UI_THEME.ink, bg: UI_THEME.windowBg, border: { fg: UI_THEME.windowBorder.fg } },
       });
 
       const cleanup = (result: string | null): void => {
@@ -391,7 +391,7 @@ export class DialogManager {
         title: ` ${title} `,
         text,
         border: { type: 'ascii' },
-        style: { fg: 'white', bg: 'black', border: { fg: UI_THEME.windowBorder.fg } },
+        style: { fg: UI_THEME.ink, bg: UI_THEME.windowBg, border: { fg: UI_THEME.windowBorder.fg } },
       });
 
       const cleanup = (value: boolean | null): void => {
@@ -423,7 +423,7 @@ export class DialogManager {
         title: ` ${title} `,
         text,
         border: { type: 'ascii' },
-        style: { fg: 'white', bg: 'black', border: { fg: UI_THEME.windowBorder.fg } },
+        style: { fg: UI_THEME.ink, bg: UI_THEME.windowBg, border: { fg: UI_THEME.windowBorder.fg } },
       });
 
       const cleanup = (): void => {
@@ -469,7 +469,7 @@ export class DialogManager {
         label: ' Choose Color ',
         border: 'line',
         shadow: true,
-        style: { fg: 'white', bg: 'black', border: { fg: UI_THEME.windowBorder.fg } },
+        style: { fg: UI_THEME.ink, bg: UI_THEME.windowBg, border: { fg: UI_THEME.windowBorder.fg } },
       });
 
       const buttonWidth = 12;
@@ -542,7 +542,7 @@ export class DialogManager {
         label: ' Create House Rule ',
         border: 'line',
         shadow: true,
-        style: { fg: 'white', bg: 'black', border: { fg: UI_THEME.windowBorder.fg } },
+        style: { fg: UI_THEME.ink, bg: UI_THEME.windowBg, border: { fg: UI_THEME.windowBorder.fg } },
       });
 
       createText({
@@ -550,7 +550,7 @@ export class DialogManager {
         top: 1,
         left: 2,
         content: 'Rule Number (1-5):',
-        style: { fg: 'cyan' },
+        style: { fg: UI_THEME.accent },
       });
 
       const numberInput = createTextbox({
@@ -560,7 +560,7 @@ export class DialogManager {
         width: 10,
         height: 1,
         inputOnFocus: true,
-        style: { fg: 'white', bg: 'blue' },
+        style: { fg: UI_THEME.statusBar.fg, bg: UI_THEME.statusBar.bg },
       });
 
       createText({
@@ -568,7 +568,7 @@ export class DialogManager {
         top: 4,
         left: 2,
         content: 'Rule Name:',
-        style: { fg: 'cyan' },
+        style: { fg: UI_THEME.accent },
       });
 
       const nameInput = createTextbox({
@@ -578,7 +578,7 @@ export class DialogManager {
         width: dialogWidth - 4,
         height: 1,
         inputOnFocus: true,
-        style: { fg: 'white', bg: 'blue' },
+        style: { fg: UI_THEME.statusBar.fg, bg: UI_THEME.statusBar.bg },
       });
 
       createText({
@@ -586,7 +586,7 @@ export class DialogManager {
         top: 7,
         left: 2,
         content: 'Description:',
-        style: { fg: 'cyan' },
+        style: { fg: UI_THEME.accent },
       });
 
       const descInput = createTextbox({
@@ -596,7 +596,7 @@ export class DialogManager {
         width: dialogWidth - 4,
         height: 3,
         inputOnFocus: true,
-        style: { fg: 'white', bg: 'blue' },
+        style: { fg: UI_THEME.statusBar.fg, bg: UI_THEME.statusBar.bg },
       });
 
       const cleanup = (result: HouseRule | null): void => {
@@ -677,7 +677,7 @@ export class DialogManager {
         label: ' Active House Rules ',
         border: 'line',
         shadow: true,
-        style: { fg: 'white', bg: 'black', border: { fg: UI_THEME.windowBorder.fg } },
+        style: { fg: UI_THEME.ink, bg: UI_THEME.windowBg, border: { fg: UI_THEME.windowBorder.fg } },
       });
 
       const content: string[] = [];
@@ -710,9 +710,9 @@ export class DialogManager {
         vi: true,
         scrollbar: {
           ch: ' ',
-          style: { bg: 'blue' },
+          style: { bg: UI_THEME.topBar.bg },
         },
-        style: { fg: 'white', bg: 'black' },
+        style: { fg: UI_THEME.ink, bg: UI_THEME.windowBg },
       });
 
       const cleanup = (): void => {

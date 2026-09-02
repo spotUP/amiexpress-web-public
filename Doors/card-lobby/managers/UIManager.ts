@@ -87,7 +87,7 @@ export class UIManager {
       focusable: false,
       mouse: false,
       clickable: false,
-      style: { fg: 'white', bg: 'blue' },
+      style: { fg: UI_THEME.topBar.fg, bg: UI_THEME.topBar.bg },
       content: '',
     });
 
@@ -105,7 +105,7 @@ export class UIManager {
       focusable: false,
       mouse: false,
       clickable: false,
-      style: { fg: 'white', bg: 'blue' },
+      style: { fg: UI_THEME.topBar.fg, bg: UI_THEME.topBar.bg },
       content: ' Card Lobby v2.0.2-SDK ',
     });
 
@@ -165,7 +165,7 @@ export class UIManager {
         width: menu.label.length + 2,
         height: 1,
         content: `{bold}${menu.label}{/bold}`,
-        style: { fg: 'white', bg: 'blue', focus: { fg: 'black', bg: 'cyan' } },
+        style: { fg: UI_THEME.topBar.fg, bg: UI_THEME.topBar.bg, focus: { fg: UI_THEME.highlightInk, bg: UI_THEME.accent } },
         mouse: true,
         keys: true,
         clickable: true,
@@ -260,7 +260,7 @@ export class UIManager {
       focusable: false,
       mouse: false,
       clickable: false,
-      style: { fg: 'yellow', bg: 'blue' },
+      style: { fg: UI_THEME.accent, bg: UI_THEME.topBar.bg },
       content: ' ENTER:Join  O:Observe  C:Create ',
     });
 
@@ -278,13 +278,13 @@ export class UIManager {
       vi: true,     // Enable vi-style arrow key navigation
       mouse: true,  // Enable mouse clicks
       style: {
-        fg: 'white',
-        selected: { fg: 'black', bg: UI_THEME.highlightBg },
-        header: { fg: 'yellow', bold: true },
+        fg: UI_THEME.ink,
+        selected: { fg: UI_THEME.highlightInk, bg: UI_THEME.highlightBg },
+        header: { fg: UI_THEME.accent, bold: true },
       } as any,
       scrollbar: {
         ch: '|',
-        track: { ch: '|', bg: 'black' },
+        track: { ch: '|', bg: UI_THEME.windowBg },
         style: { fg: UI_THEME.accent },
       } as any,
     }) as any;
@@ -317,7 +317,7 @@ export class UIManager {
       focusable: false,
       mouse: false,
       clickable: false,
-      style: { fg: 'black', bg: 'cyan' },
+      style: { fg: UI_THEME.highlightInk, bg: UI_THEME.accent },
       content: ' F:Filter R:Refresh Q:Quit ',
     }) as any;
 
@@ -339,7 +339,7 @@ export class UIManager {
       focusable: true,
       mouse: true,
       clickable: false,
-      style: { fg: 'white' },
+      style: { fg: UI_THEME.ink },
       content: 'Select a table to view details.',
     }) as any;
 
@@ -355,7 +355,7 @@ export class UIManager {
       focusable: false,
       mouse: false,
       clickable: false,
-      style: { fg: 'white', bg: 'black' },
+      style: { fg: UI_THEME.ink, bg: UI_THEME.windowBg },
       hidden: true,
     });
 
@@ -419,15 +419,15 @@ export class UIManager {
       left: 0,
       width: '100%',
       height: logHeight,
-      border: { type: 'line', labelStyle: { fg: 'yellow' } },
+      border: { type: 'line', labelStyle: { fg: UI_THEME.accent } },
       label: ' Activity ',
       tags: true,
       scrollable: true,
       alwaysScroll: true,
-      style: { fg: 'white', border: UI_THEME.windowBorder, bg: 'black' },
+      style: { fg: UI_THEME.ink, border: UI_THEME.windowBorder, bg: UI_THEME.windowBg },
       scrollbar: {
         ch: '|',
-        track: { ch: '|', bg: 'black' },
+        track: { ch: '|', bg: UI_THEME.windowBg },
         style: { fg: UI_THEME.accent, bg: UI_THEME.accent },
       } as any,
     });
@@ -500,7 +500,7 @@ export class UIManager {
 
   buildTablePanels(): void {
     const panelStyle = { border: UI_THEME.windowBorder, bg: UI_THEME.windowBg };
-    const contentStyle = { fg: 'white', bg: 'black' };
+    const contentStyle = { fg: UI_THEME.ink, bg: UI_THEME.windowBg };
     const scrollbarStyle = { fg: UI_THEME.accent, bg: UI_THEME.accent };
 
     this.flopPanel = createBox({
@@ -515,7 +515,7 @@ export class UIManager {
       focusable: false,
       mouse: false,
       clickable: false,
-      border: { type: 'line', labelStyle: { fg: 'yellow' } },
+      border: { type: 'line', labelStyle: { fg: UI_THEME.accent } },
       style: panelStyle,
     });
 
@@ -548,7 +548,7 @@ export class UIManager {
       focusable: false,
       mouse: false,
       clickable: false,
-      border: { type: 'line', labelStyle: { fg: 'yellow' } },
+      border: { type: 'line', labelStyle: { fg: UI_THEME.accent } },
       style: panelStyle,
     });
 
@@ -566,7 +566,7 @@ export class UIManager {
       style: contentStyle,
       scrollbar: {
         ch: '|',
-        track: { ch: '|', bg: 'black' },
+        track: { ch: '|', bg: UI_THEME.windowBg },
         style: scrollbarStyle,
       } as any,
       content: '',
@@ -584,7 +584,7 @@ export class UIManager {
       focusable: false,
       mouse: false,
       clickable: false,
-      border: { type: 'line', labelStyle: { fg: 'yellow' } },
+      border: { type: 'line', labelStyle: { fg: UI_THEME.accent } },
       style: panelStyle,
     });
 
@@ -617,7 +617,7 @@ export class UIManager {
       focusable: false,
       mouse: false,
       clickable: false,
-      border: { type: 'line', labelStyle: { fg: 'yellow' } },
+      border: { type: 'line', labelStyle: { fg: UI_THEME.accent } },
       style: panelStyle,
     });
 
@@ -638,7 +638,7 @@ export class UIManager {
       style: contentStyle,
       scrollbar: {
         ch: '|',
-        track: { ch: '|', bg: 'black' },
+        track: { ch: '|', bg: UI_THEME.windowBg },
         style: scrollbarStyle,
       } as any,
       content: '',
@@ -1005,7 +1005,7 @@ export class UIManager {
     currentUserId: string,
   ): void {
     const lines: string[] = [];
-    lines.push('{cyan-fg}Players:{/}');
+    lines.push(`{${UI_THEME.accent}-fg}Players:{/}`);
     lines.push('');
 
     players.forEach((player, index) => {
@@ -1013,8 +1013,8 @@ export class UIManager {
       const isYou = player.id === currentUserId;
       const turnMarker = isCurrent ? '{yellow-fg}\u2192{/} ' : '  ';
       const unoMarker = player.hand.length === 1 ? ' {yellow-fg}\u26A0{/}' : '';
-      const youMarker = isYou ? ' {cyan-fg}(You){/}' : '';
-      const botMarker = player.isBot ? ' {gray-fg}[BOT]{/}' : '';
+      const youMarker = isYou ? ` {${UI_THEME.accent}-fg}(You){/}` : '';
+      const botMarker = player.isBot ? ` {${UI_THEME.dim}-fg}[BOT]{/}` : '';
 
       lines.push(
         `${turnMarker}${player.name}${youMarker}${botMarker}: ${player.hand.length} card${player.hand.length !== 1 ? 's' : ''}${unoMarker}`,
@@ -1035,7 +1035,7 @@ export class UIManager {
     }
 
     const lines: string[] = [];
-    lines.push('{cyan-fg}Your Hand:{/}');
+    lines.push(`{${UI_THEME.accent}-fg}Your Hand:{/}`);
     lines.push('');
 
     // Render cards with indices
@@ -1068,7 +1068,7 @@ export class UIManager {
     });
 
     lines.push('');
-    lines.push('{gray-fg}Press 1-9,0 to select, Enter to play{/}');
+    lines.push(`{${UI_THEME.dim}-fg}Press 1-9,0 to select, Enter to play{/}`);
 
     this.handContent.setContent(lines.join('\n'));
   }
@@ -1080,7 +1080,7 @@ export class UIManager {
     const lines: string[] = [];
 
     if (lastAction) {
-      lines.push(`{cyan-fg}Last Action:{/}`);
+      lines.push(`{${UI_THEME.accent}-fg}Last Action:{/}`);
       lines.push(lastAction);
       lines.push('');
     }
@@ -1090,7 +1090,7 @@ export class UIManager {
       const challengeType = challengeWindow.type === 'uno' ? 'UNO Challenge' : 'Wild Draw 4 Challenge';
 
       lines.push(`{yellow-bg}{black-fg} ${challengeType} OPEN! {/}{/}`);
-      lines.push(`{yellow-fg}Time remaining: ${timeLeft}s{/}`);
+      lines.push(`{${UI_THEME.warning}-fg}Time remaining: ${timeLeft}s{/}`);
       lines.push('');
     }
 

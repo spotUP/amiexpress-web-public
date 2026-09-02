@@ -13,6 +13,7 @@ const TableFlow_1 = require("./managers/TableFlow");
 const UnoEventBus_1 = require("./managers/UnoEventBus");
 const GameViews_1 = require("./managers/GameViews");
 const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
+const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const DoorLoader_1 = require("@amiexpress/bbs-door-sdk/utils/DoorLoader");
 const bbs_door_sdk_2 = require("@amiexpress/bbs-door-sdk");
@@ -138,6 +139,12 @@ class CardLobbyApp {
         });
     }
     setupScreen() {
+        // The board's theme decides every colour this door draws, and it has to
+        // be resolved BEFORE the first widget: they read UI_THEME as they are
+        // built. A door that skips this looks the same in all seven themes.
+        const theme = this.session.bbs?.getTheme ? this.session.bbs.getTheme() : (0, theme_1.themeById)('classic');
+        (0, lib_1.applyTheme)(theme);
+        this.styles = (0, theme_1.themeStyles)(theme);
         const height = this.session.bbsSession?.screenHeight || 24;
         // Clear BBS output before creating blessed screen
         this.session.bbs.write('\x1b[2J\x1b[H'); // Clear screen and move cursor to home
@@ -287,7 +294,7 @@ class CardLobbyApp {
             // Panel would give it a white line border for want of the key.
             border: undefined,
             style: {
-                bg: 'black',
+                bg: lib_1.UI_THEME.windowBg,
             },
         });
         // Initialize managers
@@ -727,9 +734,9 @@ class CardLobbyApp {
             }
         }
         const infoSegments = [
-            `{cyan-fg}${table.gameName}{/}`,
-            `{yellow-fg}Pot: ${pot}{/}`,
-            `{cyan-fg}Stakes: ${table.stakesLabel}{/}`,
+            `{${lib_1.UI_THEME.accent}-fg}${table.gameName}{/}`,
+            `{${lib_1.UI_THEME.accentAlt}-fg}Pot: ${pot}{/}`,
+            `{${lib_1.UI_THEME.accent}-fg}Stakes: ${table.stakesLabel}{/}`,
             `{green-fg}Buy-in: ${table.buyIn}{/}`,
         ];
         if (turnLabel) {
@@ -752,28 +759,28 @@ class CardLobbyApp {
             if (!engine) {
                 const seatedPlayers = table.players.filter((player) => player.role === 'player' && player.stack > 0);
                 if (seatedPlayers.length < table.minPlayers) {
-                    hintLines.push('{yellow-fg}Waiting for players to join...{/}');
+                    hintLines.push(`{${lib_1.UI_THEME.warning}-fg}Waiting for players to join...{/}`);
                 }
                 else {
-                    hintLines.push('{yellow-fg}Ready to deal. Press D or use Deal to start.{/}');
+                    hintLines.push(`{${lib_1.UI_THEME.warning}-fg}Ready to deal. Press D or use Deal to start.{/}`);
                 }
             }
             else {
                 const actionSeat = engine.state.actionTo;
                 if (actionSeat === null || actionSeat === undefined) {
-                    hintLines.push('{yellow-fg}Dealing in progress...{/}');
+                    hintLines.push(`{${lib_1.UI_THEME.warning}-fg}Dealing in progress...{/}`);
                 }
                 else {
                     const actor = engine.state.players[actionSeat];
                     if (actor?.id === this.currentProfile.userId) {
-                        hintLines.push('{yellow-fg}Your turn. Choose an action below.{/}');
+                        hintLines.push(`{${lib_1.UI_THEME.warning}-fg}Your turn. Choose an action below.{/}`);
                     }
                     else if (actor?.name) {
-                        hintLines.push(`{yellow-fg}Waiting for ${actor.name} to act...{/}`);
+                        hintLines.push(`{${lib_1.UI_THEME.warning}-fg}Waiting for ${actor.name} to act...{/}`);
                     }
                 }
             }
-            hintLines.push('{gray-fg}Keys: F Fold  X Check  C Call  R Raise  L Leave  D Deal{/}');
+            hintLines.push(`{${lib_1.UI_THEME.dim}-fg}Keys: F Fold  X Check  C Call  R Raise  L Leave  D Deal{/}`);
         }
         const eventLines = this.lobby.events.length > 0
             ? [...this.lobby.events].reverse().map((event) => event.message)
@@ -896,9 +903,9 @@ class CardLobbyApp {
             this.tableContent.setContent([
                 'Select a table to view details.',
                 '',
-                '{yellow-fg}Quick start{/}:',
+                `{${lib_1.UI_THEME.accent}-fg}Quick start{/}:`,
                 'Use the lobby list to highlight a table.',
-                'Press {cyan-fg}J{/} to join, {cyan-fg}O{/} to observe, or {cyan-fg}C{/} to create a table.',
+                `Press {${lib_1.UI_THEME.accent}-fg}ENTER{/} to join, {${lib_1.UI_THEME.accent}-fg}O{/} to observe, or {${lib_1.UI_THEME.accent}-fg}C{/} to create a table.`,
             ].join('\n'));
             this.updateTableActions();
             return;
@@ -911,7 +918,7 @@ class CardLobbyApp {
             this.activityPanel.hide();
             this.tableActions.hide();
             this.tableContent.show();
-            this.tableContent.setContent('Table not found. Press {cyan-fg}R{/} to refresh the lobby.');
+            this.tableContent.setContent(`Table not found. Press {${lib_1.UI_THEME.accent}-fg}R{/} to refresh the lobby.`);
             this.updateTableActions();
             return;
         }
@@ -979,9 +986,9 @@ class CardLobbyApp {
             rightLines.push(`Observers: ${table.observers.map((obs) => obs.username).join(', ')}`);
         }
         rightLines.push('');
-        rightLines.push('{yellow-fg}Actions{/}: ENTER Join  O Observe');
-        rightLines.push('{yellow-fg}More{/}: C Create  R Refresh  F Filter');
-        rightLines.push('{gray-fg}Auto-deal starts when enough players are seated.{/}');
+        rightLines.push(`{${lib_1.UI_THEME.accent}-fg}Actions{/}: ENTER Join  O Observe`);
+        rightLines.push(`{${lib_1.UI_THEME.accent}-fg}More{/}: C Create  R Refresh  F Filter`);
+        rightLines.push(`{${lib_1.UI_THEME.dim}-fg}Auto-deal starts when enough players are seated.{/}`);
         let lines = [];
         if (leftLines.length === 0) {
             lines = rightLines;

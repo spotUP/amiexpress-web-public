@@ -5,6 +5,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PROFILES_KEY = exports.LOBBY_KEY = exports.LOBBY_BULLETINS = exports.ACHIEVEMENTS = exports.GAME_CATALOG = exports.UNO_ACTION_BUTTON_ORDER = exports.UNO_ACTION_BUTTON_STYLES = exports.ACTION_BUTTON_ORDER = exports.ACTION_BUTTON_STYLES = exports.UI_THEME = exports.ANSI_TAGS = exports.PokerAction = exports.BOT_NAMES = exports.MAX_ACTIVITY_EVENTS = exports.REFRESH_INTERVAL_MS = exports.WEEKLY_BULLETIN_NUMBER = exports.WIN_REWARD = exports.ACTIVITY_REWARD = exports.ENTRY_FEE_RATE = exports.WEEK_MS = exports.DAILY_COOLDOWN_MS = exports.DAILY_BONUS = exports.STARTING_CHIPS = exports.CHIP_NAME = void 0;
+exports.applyTheme = applyTheme;
 exports.CHIP_NAME = 'BBS Chips';
 exports.STARTING_CHIPS = 1000;
 exports.DAILY_BONUS = 200;
@@ -65,17 +66,61 @@ exports.ANSI_TAGS = {
     '46': '{cyan-bg}',
     '47': '{white-bg}',
 };
+/**
+ * The door's palette, DERIVED from the board's theme.
+ *
+ * It used to be a frozen literal, so CARD LOBBY looked the same whichever
+ * theme the sysop had chosen - cyan frames and a blue bar on a board running
+ * Quiet Phosphor. The SDK's themes carry exactly the tokens this needs
+ * (sdk/engines/ui/theme/tokens.ts); applyTheme() copies them in once at
+ * startup, before any widget is built.
+ *
+ * The object is mutated rather than replaced because the whole door imports
+ * this one binding. The theme stays the source of truth; this is a cache of
+ * it in the shape the widgets want.
+ */
 exports.UI_THEME = {
-    topBar: { fg: 'gray', bg: 'blue', item: { fg: 'gray' }, selected: { fg: 'white' } },
+    topBar: { fg: 'white', bg: 'blue', item: { fg: 'gray' }, selected: { fg: 'white' } },
     statusBar: { fg: 'white', bg: 'blue' },
     windowBorder: { fg: 'cyan' },
     windowBg: 'black',
+    ink: 'white',
+    dim: 'gray',
     accent: 'cyan',
+    accentAlt: 'yellow',
     highlightBg: 'lightcyan',
+    highlightInk: 'black',
     warning: 'yellow',
     ok: 'green',
     error: 'red',
 };
+/** Fill UI_THEME from a resolved SDK theme. Call before building the UI. */
+function applyTheme(theme) {
+    const t = theme.tokens;
+    exports.UI_THEME.topBar = { fg: t.barInk, bg: t.bar, item: { fg: t.dim }, selected: { fg: t.barInk } };
+    exports.UI_THEME.statusBar = { fg: t.barInk, bg: t.bar };
+    exports.UI_THEME.windowBorder = { fg: t.chrome };
+    exports.UI_THEME.windowBg = t.ground;
+    exports.UI_THEME.ink = t.ink;
+    exports.UI_THEME.dim = t.dim;
+    exports.UI_THEME.accent = t.accent;
+    exports.UI_THEME.accentAlt = t.accentAlt;
+    exports.UI_THEME.highlightBg = t.selectionBg;
+    exports.UI_THEME.highlightInk = t.selectionInk;
+    exports.UI_THEME.warning = t.warn;
+    exports.UI_THEME.ok = t.ok;
+    exports.UI_THEME.error = t.alert;
+    // The action buttons follow the theme as well - except the UNO row, whose
+    // colours ARE the game (a red card is red in every theme).
+    exports.ACTION_BUTTON_STYLES.fold.base = { fg: t.ink, bg: t.alert };
+    exports.ACTION_BUTTON_STYLES.fold.focus = { fg: t.ink, bg: t.accent };
+    exports.ACTION_BUTTON_STYLES.check.base = { fg: t.ground, bg: t.ok };
+    exports.ACTION_BUTTON_STYLES.call.base = { fg: t.ground, bg: t.dim };
+    exports.ACTION_BUTTON_STYLES.raise.base = { fg: t.barInk, bg: t.bar };
+    exports.ACTION_BUTTON_STYLES.raise.focus = { fg: t.ink, bg: t.accent };
+    exports.ACTION_BUTTON_STYLES.quit.base = { fg: t.ink, bg: t.alert };
+    exports.ACTION_BUTTON_STYLES.quit.focus = { fg: t.ink, bg: t.accent };
+}
 exports.ACTION_BUTTON_STYLES = {
     fold: {
         base: { fg: 'white', bg: exports.UI_THEME.error },

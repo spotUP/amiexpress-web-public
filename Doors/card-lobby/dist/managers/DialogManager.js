@@ -185,7 +185,7 @@ class DialogManager {
             height: 18,
             border: { type: 'ascii' },
             label: ` ${title} `,
-            style: { border: lib_1.UI_THEME.windowBorder, bg: 'black' },
+            style: { border: lib_1.UI_THEME.windowBorder, bg: lib_1.UI_THEME.windowBg },
         });
         const textBottom = opts?.footer ? 2 : 1;
         const text = new blessed_1.ScrollableBox({
@@ -200,10 +200,10 @@ class DialogManager {
             keys: true,
             mouse: true,
             content,
-            style: { fg: 'white', bg: 'black' },
+            style: { fg: lib_1.UI_THEME.ink, bg: lib_1.UI_THEME.windowBg },
             scrollbar: {
                 ch: ' ',
-                style: { bg: 'blue' }
+                style: { bg: lib_1.UI_THEME.topBar.bg }
             }
         });
         if (opts?.footer) {
@@ -266,9 +266,9 @@ class DialogManager {
                 label: ` ${title} `,
                 style: {
                     border: lib_1.UI_THEME.windowBorder,
-                    bg: 'black',
-                    fg: 'white',
-                    selected: { fg: 'black', bg: lib_1.UI_THEME.highlightBg },
+                    bg: lib_1.UI_THEME.windowBg,
+                    fg: lib_1.UI_THEME.ink,
+                    selected: { fg: lib_1.UI_THEME.highlightInk, bg: lib_1.UI_THEME.highlightBg },
                 },
                 items,
                 keys: true,
@@ -339,7 +339,7 @@ class DialogManager {
                 text,
                 value,
                 border: { type: 'ascii' },
-                style: { fg: 'white', bg: 'black', border: { fg: lib_1.UI_THEME.windowBorder.fg } },
+                style: { fg: lib_1.UI_THEME.ink, bg: lib_1.UI_THEME.windowBg, border: { fg: lib_1.UI_THEME.windowBorder.fg } },
             });
             const cleanup = (result) => {
                 prompt.destroy();
@@ -372,7 +372,7 @@ class DialogManager {
                 title: ` ${title} `,
                 text,
                 border: { type: 'ascii' },
-                style: { fg: 'white', bg: 'black', border: { fg: lib_1.UI_THEME.windowBorder.fg } },
+                style: { fg: lib_1.UI_THEME.ink, bg: lib_1.UI_THEME.windowBg, border: { fg: lib_1.UI_THEME.windowBorder.fg } },
             });
             const cleanup = (value) => {
                 question.destroy();
@@ -400,7 +400,7 @@ class DialogManager {
                 title: ` ${title} `,
                 text,
                 border: { type: 'ascii' },
-                style: { fg: 'white', bg: 'black', border: { fg: lib_1.UI_THEME.windowBorder.fg } },
+                style: { fg: lib_1.UI_THEME.ink, bg: lib_1.UI_THEME.windowBg, border: { fg: lib_1.UI_THEME.windowBorder.fg } },
             });
             const cleanup = () => {
                 message.destroy();
@@ -438,7 +438,7 @@ class DialogManager {
                 label: ' Choose Color ',
                 border: 'line',
                 shadow: true,
-                style: { fg: 'white', bg: 'black', border: { fg: lib_1.UI_THEME.windowBorder.fg } },
+                style: { fg: lib_1.UI_THEME.ink, bg: lib_1.UI_THEME.windowBg, border: { fg: lib_1.UI_THEME.windowBorder.fg } },
             });
             const buttonWidth = 12;
             const buttonHeight = 3;
@@ -501,14 +501,14 @@ class DialogManager {
                 label: ' Create House Rule ',
                 border: 'line',
                 shadow: true,
-                style: { fg: 'white', bg: 'black', border: { fg: lib_1.UI_THEME.windowBorder.fg } },
+                style: { fg: lib_1.UI_THEME.ink, bg: lib_1.UI_THEME.windowBg, border: { fg: lib_1.UI_THEME.windowBorder.fg } },
             });
             (0, blessed_helpers_1.createText)({
                 parent: dialog,
                 top: 1,
                 left: 2,
                 content: 'Rule Number (1-5):',
-                style: { fg: 'cyan' },
+                style: { fg: lib_1.UI_THEME.accent },
             });
             const numberInput = (0, blessed_helpers_1.createTextbox)({
                 parent: dialog,
@@ -517,14 +517,14 @@ class DialogManager {
                 width: 10,
                 height: 1,
                 inputOnFocus: true,
-                style: { fg: 'white', bg: 'blue' },
+                style: { fg: lib_1.UI_THEME.statusBar.fg, bg: lib_1.UI_THEME.statusBar.bg },
             });
             (0, blessed_helpers_1.createText)({
                 parent: dialog,
                 top: 4,
                 left: 2,
                 content: 'Rule Name:',
-                style: { fg: 'cyan' },
+                style: { fg: lib_1.UI_THEME.accent },
             });
             const nameInput = (0, blessed_helpers_1.createTextbox)({
                 parent: dialog,
@@ -533,14 +533,14 @@ class DialogManager {
                 width: dialogWidth - 4,
                 height: 1,
                 inputOnFocus: true,
-                style: { fg: 'white', bg: 'blue' },
+                style: { fg: lib_1.UI_THEME.statusBar.fg, bg: lib_1.UI_THEME.statusBar.bg },
             });
             (0, blessed_helpers_1.createText)({
                 parent: dialog,
                 top: 7,
                 left: 2,
                 content: 'Description:',
-                style: { fg: 'cyan' },
+                style: { fg: lib_1.UI_THEME.accent },
             });
             const descInput = (0, blessed_helpers_1.createTextbox)({
                 parent: dialog,
@@ -549,7 +549,7 @@ class DialogManager {
                 width: dialogWidth - 4,
                 height: 3,
                 inputOnFocus: true,
-                style: { fg: 'white', bg: 'blue' },
+                style: { fg: lib_1.UI_THEME.statusBar.fg, bg: lib_1.UI_THEME.statusBar.bg },
             });
             const cleanup = (result) => {
                 dialog.destroy();
@@ -619,7 +619,7 @@ class DialogManager {
                 label: ' Active House Rules ',
                 border: 'line',
                 shadow: true,
-                style: { fg: 'white', bg: 'black', border: { fg: lib_1.UI_THEME.windowBorder.fg } },
+                style: { fg: lib_1.UI_THEME.ink, bg: lib_1.UI_THEME.windowBg, border: { fg: lib_1.UI_THEME.windowBorder.fg } },
             });
             const content = [];
             content.push('{cyan-fg}House Rules at this table:{/}\n');
@@ -650,9 +650,9 @@ class DialogManager {
                 vi: true,
                 scrollbar: {
                     ch: ' ',
-                    style: { bg: 'blue' },
+                    style: { bg: lib_1.UI_THEME.topBar.bg },
                 },
-                style: { fg: 'white', bg: 'black' },
+                style: { fg: lib_1.UI_THEME.ink, bg: lib_1.UI_THEME.windowBg },
             });
             const cleanup = () => {
                 dialog.destroy();

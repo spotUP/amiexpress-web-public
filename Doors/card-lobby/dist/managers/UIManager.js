@@ -71,7 +71,7 @@ class UIManager {
             focusable: false,
             mouse: false,
             clickable: false,
-            style: { fg: 'white', bg: 'blue' },
+            style: { fg: constants_1.UI_THEME.topBar.fg, bg: constants_1.UI_THEME.topBar.bg },
             content: '',
         });
         this.topInfoBar = (0, blessed_helpers_1.createBox)({
@@ -88,7 +88,7 @@ class UIManager {
             focusable: false,
             mouse: false,
             clickable: false,
-            style: { fg: 'white', bg: 'blue' },
+            style: { fg: constants_1.UI_THEME.topBar.fg, bg: constants_1.UI_THEME.topBar.bg },
             content: ' Card Lobby v2.0.2-SDK ',
         });
         const menuDefs = [
@@ -144,7 +144,7 @@ class UIManager {
                 width: menu.label.length + 2,
                 height: 1,
                 content: `{bold}${menu.label}{/bold}`,
-                style: { fg: 'white', bg: 'blue', focus: { fg: 'black', bg: 'cyan' } },
+                style: { fg: constants_1.UI_THEME.topBar.fg, bg: constants_1.UI_THEME.topBar.bg, focus: { fg: constants_1.UI_THEME.highlightInk, bg: constants_1.UI_THEME.accent } },
                 mouse: true,
                 keys: true,
                 clickable: true,
@@ -221,7 +221,7 @@ class UIManager {
             focusable: false,
             mouse: false,
             clickable: false,
-            style: { fg: 'yellow', bg: 'blue' },
+            style: { fg: constants_1.UI_THEME.accent, bg: constants_1.UI_THEME.topBar.bg },
             content: ' ENTER:Join  O:Observe  C:Create ',
         });
         // Use SDK ListTable for clean table display
@@ -238,13 +238,13 @@ class UIManager {
             vi: true, // Enable vi-style arrow key navigation
             mouse: true, // Enable mouse clicks
             style: {
-                fg: 'white',
-                selected: { fg: 'black', bg: constants_1.UI_THEME.highlightBg },
-                header: { fg: 'yellow', bold: true },
+                fg: constants_1.UI_THEME.ink,
+                selected: { fg: constants_1.UI_THEME.highlightInk, bg: constants_1.UI_THEME.highlightBg },
+                header: { fg: constants_1.UI_THEME.accent, bold: true },
             },
             scrollbar: {
                 ch: '|',
-                track: { ch: '|', bg: 'black' },
+                track: { ch: '|', bg: constants_1.UI_THEME.windowBg },
                 style: { fg: constants_1.UI_THEME.accent },
             },
         });
@@ -274,7 +274,7 @@ class UIManager {
             focusable: false,
             mouse: false,
             clickable: false,
-            style: { fg: 'black', bg: 'cyan' },
+            style: { fg: constants_1.UI_THEME.highlightInk, bg: constants_1.UI_THEME.accent },
             content: ' F:Filter R:Refresh Q:Quit ',
         });
         // Use SDK box instead of blessed.scrollabletext
@@ -295,7 +295,7 @@ class UIManager {
             focusable: true,
             mouse: true,
             clickable: false,
-            style: { fg: 'white' },
+            style: { fg: constants_1.UI_THEME.ink },
             content: 'Select a table to view details.',
         });
         this.tableActions = (0, blessed_helpers_1.createBox)({
@@ -310,7 +310,7 @@ class UIManager {
             focusable: false,
             mouse: false,
             clickable: false,
-            style: { fg: 'white', bg: 'black' },
+            style: { fg: constants_1.UI_THEME.ink, bg: constants_1.UI_THEME.windowBg },
             hidden: true,
         });
         this.actionButtons = {
@@ -372,15 +372,15 @@ class UIManager {
             left: 0,
             width: '100%',
             height: logHeight,
-            border: { type: 'line', labelStyle: { fg: 'yellow' } },
+            border: { type: 'line', labelStyle: { fg: constants_1.UI_THEME.accent } },
             label: ' Activity ',
             tags: true,
             scrollable: true,
             alwaysScroll: true,
-            style: { fg: 'white', border: constants_1.UI_THEME.windowBorder, bg: 'black' },
+            style: { fg: constants_1.UI_THEME.ink, border: constants_1.UI_THEME.windowBorder, bg: constants_1.UI_THEME.windowBg },
             scrollbar: {
                 ch: '|',
-                track: { ch: '|', bg: 'black' },
+                track: { ch: '|', bg: constants_1.UI_THEME.windowBg },
                 style: { fg: constants_1.UI_THEME.accent, bg: constants_1.UI_THEME.accent },
             },
         });
@@ -444,7 +444,7 @@ class UIManager {
     }
     buildTablePanels() {
         const panelStyle = { border: constants_1.UI_THEME.windowBorder, bg: constants_1.UI_THEME.windowBg };
-        const contentStyle = { fg: 'white', bg: 'black' };
+        const contentStyle = { fg: constants_1.UI_THEME.ink, bg: constants_1.UI_THEME.windowBg };
         const scrollbarStyle = { fg: constants_1.UI_THEME.accent, bg: constants_1.UI_THEME.accent };
         this.flopPanel = (0, blessed_helpers_1.createBox)({
             parent: this.tableWindow,
@@ -458,7 +458,7 @@ class UIManager {
             focusable: false,
             mouse: false,
             clickable: false,
-            border: { type: 'line', labelStyle: { fg: 'yellow' } },
+            border: { type: 'line', labelStyle: { fg: constants_1.UI_THEME.accent } },
             style: panelStyle,
         });
         this.flopContent = (0, blessed_helpers_1.createBox)({
@@ -489,7 +489,7 @@ class UIManager {
             focusable: false,
             mouse: false,
             clickable: false,
-            border: { type: 'line', labelStyle: { fg: 'yellow' } },
+            border: { type: 'line', labelStyle: { fg: constants_1.UI_THEME.accent } },
             style: panelStyle,
         });
         this.playersContent = blessed_1.default.scrollabletext({
@@ -506,7 +506,7 @@ class UIManager {
             style: contentStyle,
             scrollbar: {
                 ch: '|',
-                track: { ch: '|', bg: 'black' },
+                track: { ch: '|', bg: constants_1.UI_THEME.windowBg },
                 style: scrollbarStyle,
             },
             content: '',
@@ -523,7 +523,7 @@ class UIManager {
             focusable: false,
             mouse: false,
             clickable: false,
-            border: { type: 'line', labelStyle: { fg: 'yellow' } },
+            border: { type: 'line', labelStyle: { fg: constants_1.UI_THEME.accent } },
             style: panelStyle,
         });
         this.handContent = (0, blessed_helpers_1.createBox)({
@@ -554,7 +554,7 @@ class UIManager {
             focusable: false,
             mouse: false,
             clickable: false,
-            border: { type: 'line', labelStyle: { fg: 'yellow' } },
+            border: { type: 'line', labelStyle: { fg: constants_1.UI_THEME.accent } },
             style: panelStyle,
         });
         this.activityContent = (0, blessed_helpers_1.createLog)({
@@ -574,7 +574,7 @@ class UIManager {
             style: contentStyle,
             scrollbar: {
                 ch: '|',
-                track: { ch: '|', bg: 'black' },
+                track: { ch: '|', bg: constants_1.UI_THEME.windowBg },
                 style: scrollbarStyle,
             },
             content: '',
@@ -867,15 +867,15 @@ class UIManager {
     }
     renderUnoPlayerStatus(players, currentPlayerIndex, currentUserId) {
         const lines = [];
-        lines.push('{cyan-fg}Players:{/}');
+        lines.push(`{${constants_1.UI_THEME.accent}-fg}Players:{/}`);
         lines.push('');
         players.forEach((player, index) => {
             const isCurrent = index === currentPlayerIndex;
             const isYou = player.id === currentUserId;
             const turnMarker = isCurrent ? '{yellow-fg}\u2192{/} ' : '  ';
             const unoMarker = player.hand.length === 1 ? ' {yellow-fg}\u26A0{/}' : '';
-            const youMarker = isYou ? ' {cyan-fg}(You){/}' : '';
-            const botMarker = player.isBot ? ' {gray-fg}[BOT]{/}' : '';
+            const youMarker = isYou ? ` {${constants_1.UI_THEME.accent}-fg}(You){/}` : '';
+            const botMarker = player.isBot ? ` {${constants_1.UI_THEME.dim}-fg}[BOT]{/}` : '';
             lines.push(`${turnMarker}${player.name}${youMarker}${botMarker}: ${player.hand.length} card${player.hand.length !== 1 ? 's' : ''}${unoMarker}`);
         });
         this.playersContent.setContent(lines.join('\n'));
@@ -886,7 +886,7 @@ class UIManager {
             return;
         }
         const lines = [];
-        lines.push('{cyan-fg}Your Hand:{/}');
+        lines.push(`{${constants_1.UI_THEME.accent}-fg}Your Hand:{/}`);
         lines.push('');
         // Render cards with indices
         hand.forEach((card, index) => {
@@ -915,13 +915,13 @@ class UIManager {
             lines.push(`[${indexLabel}] ${marker} {${colorTag}}${displayValue.padEnd(6, ' ')}{/}`);
         });
         lines.push('');
-        lines.push('{gray-fg}Press 1-9,0 to select, Enter to play{/}');
+        lines.push(`{${constants_1.UI_THEME.dim}-fg}Press 1-9,0 to select, Enter to play{/}`);
         this.handContent.setContent(lines.join('\n'));
     }
     renderUnoActivity(lastAction, challengeWindow) {
         const lines = [];
         if (lastAction) {
-            lines.push(`{cyan-fg}Last Action:{/}`);
+            lines.push(`{${constants_1.UI_THEME.accent}-fg}Last Action:{/}`);
             lines.push(lastAction);
             lines.push('');
         }
@@ -929,7 +929,7 @@ class UIManager {
             const timeLeft = Math.max(0, Math.floor((challengeWindow.expiresAt - Date.now()) / 1000));
             const challengeType = challengeWindow.type === 'uno' ? 'UNO Challenge' : 'Wild Draw 4 Challenge';
             lines.push(`{yellow-bg}{black-fg} ${challengeType} OPEN! {/}{/}`);
-            lines.push(`{yellow-fg}Time remaining: ${timeLeft}s{/}`);
+            lines.push(`{${constants_1.UI_THEME.warning}-fg}Time remaining: ${timeLeft}s{/}`);
             lines.push('');
         }
         if (this.activityContent) {
