@@ -21,9 +21,19 @@
  * and the geometry cases go through `createScreen()` - the entry point
  * every blessed door actually calls.
  *
+ * WHAT THE SNAPSHOT COVERS: both halves of every buffer cell. The buffer is
+ * `[y][x] = [attr, char]` with attr 27-bit packed as
+ * `(flags << 18) | (fg << 9) | bg` (screen.ts:38-41). Serialising only `char`
+ * would let a colour or highlight regression through silently, so each row
+ * appears TWICE in the snapshot: a `chr` line (the glyphs, delimited by `|` so
+ * trailing spaces stay visible) and an `att` line (the packed attrs, hex,
+ * run-length encoded as `<hex>*<count>` to keep the .snap reviewable). A glyph
+ * change breaks the `chr` line; a colour change breaks the `att` line.
+ *
  * To confirm the harness still bites, mutate one layout constant (e.g.
- * `sdk/engines/ui/blessed/core/screen.ts` line 107, `: 80` -> `: 79`) and
- * re-run: the geometry tests and the painted-buffer snapshots must fail.
+ * `sdk/engines/ui/blessed/core/screen.ts` line 107, `: 80` -> `: 79`) or one
+ * colour (e.g. a widget's default border fg) and re-run: the geometry tests
+ * and/or the painted-buffer snapshots must fail.
  */
 import { Screen } from '../../engines/ui/blessed/core/screen';
 import { Box } from '../../engines/ui/blessed/widgets/box';
@@ -37,6 +47,45 @@ function rows(screen: any): string[] {
   for (let y = 0; y < screen.height; y++) {
     const row = screen.buffer[y];
     out.push(row ? row.map((c: [number, string]) => c[1]).join('') : '');
+  }
+  return out;
+}
+
+/**
+ * The packed attributes of one row, run-length encoded as `<hex>*<count>`.
+ * Attr is `(flags << 18) | (fg << 9) | bg`, so this catches a foreground,
+ * background, bold or reverse change that leaves the glyphs untouched.
+ */
+function attrRuns(row: [number, string][] | undefined): string {
+  if (!row) return '';
+  const runs: string[] = [];
+  let current = row[0]?.[0];
+  let count = 0;
+  for (const cell of row) {
+    if (cell[0] === current) {
+      count++;
+    } else {
+      runs.push(`${(current >>> 0).toString(16)}*${count}`);
+      current = cell[0];
+      count = 1;
+    }
+  }
+  if (count > 0) runs.push(`${(current >>> 0).toString(16)}*${count}`);
+  return runs.join(' ');
+}
+
+/**
+ * The full painted screen: for each row, its glyphs AND its attributes.
+ * This - not `rows()` alone - is what gets snapshotted, so that a colour
+ * regression at 80 columns cannot pass silently.
+ */
+function paintedScreen(screen: any): string[] {
+  const out: string[] = [];
+  const chars = rows(screen);
+  for (let y = 0; y < chars.length; y++) {
+    const label = String(y).padStart(2, '0');
+    out.push(`${label} chr |${chars[y]}|`);
+    out.push(`${label} att ${attrRuns(screen.buffer[y])}`);
   }
   return out;
 }
@@ -92,9 +141,8 @@ describe('80-column baseline: painted buffers', () => {
       border: { type: 'line' }, tags: true, content: 'Detail panel content, eighty columns wide.',
     } as any);
     screen.render();
-    const painted = rows(screen);
-    expectEightyWide(painted);
-    expect(painted).toMatchSnapshot();
+    expectEightyWide(rows(screen));
+    expect(paintedScreen(screen)).toMatchSnapshot();
   });
 
   it('centered bordered modal (modal-centring-shaped)', () => {
@@ -105,9 +153,8 @@ describe('80-column baseline: painted buffers', () => {
       content: 'Are you sure you want to continue?',
     } as any);
     screen.render();
-    const painted = rows(screen);
-    expectEightyWide(painted);
-    expect(painted).toMatchSnapshot();
+    expectEightyWide(rows(screen));
+    expect(paintedScreen(screen)).toMatchSnapshot();
   });
 
   it('full-width list with selection', () => {
@@ -119,8 +166,7 @@ describe('80-column baseline: painted buffers', () => {
     } as any);
     (list as any).select(3);
     screen.render();
-    const painted = rows(screen);
-    expectEightyWide(painted);
-    expect(painted).toMatchSnapshot();
+    expectEightyWide(rows(screen));
+    expect(paintedScreen(screen)).toMatchSnapshot();
   });
 });
