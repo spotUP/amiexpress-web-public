@@ -167,6 +167,16 @@ export class Question extends Box {
       // was never drawn and the dialog showed two empty outlines
       // ("broken dialog", 2026-09-02). The container comment beside
       // buttonBox already said the buttons draw no frame; the code did.
+      //
+      // `inline` is what keeps them ONE row. A Button is touchFriendly by
+      // default, and that runs its height through enforceMinTouchHeight,
+      // which promotes anything under three rows to three - silently, after
+      // this call has asked for one. Two three-row buttons inside a one-row
+      // container are clipped to nothing while their own coordinates still
+      // hit-test, which is precisely what was reported: "it doesn't look
+      // like a standard dialog and there are no buttons", then "I can click
+      // the invisible buttons in that dialog" (2026-09-02).
+      inline: true,
       mouse: true,
       style: {
         fg: 'white',
@@ -186,6 +196,7 @@ export class Question extends Box {
       content: '[ No ]',
       align: 'center',
       valign: 'middle',
+      inline: true,   // as above: one row, not the touch floor's three
       mouse: true,
       style: {
         fg: 'white',
