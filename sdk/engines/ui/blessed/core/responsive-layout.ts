@@ -13,6 +13,15 @@
 
 import type { Element } from '../core/element';
 import type { Screen } from '../core/screen';
+import {
+  BREAKPOINT_XXS,
+  BREAKPOINT_XS,
+  BREAKPOINT_SM,
+  BREAKPOINT_MD,
+  BREAKPOINT_LG,
+  getBreakpointName,
+} from './responsive-constants';
+import type { BreakpointName } from './responsive-constants';
 
 export interface LayoutConstraints {
   minWidth?: number;
@@ -24,6 +33,7 @@ export interface LayoutConstraints {
 
 export interface ResponsiveConfig {
   breakpoints?: {
+    xxs?: number;      // < 41 cols (40-column C64/PETSCII)
     xs?: number;       // < 50 cols (Mobile Auto-Flow)
     small?: number;    // < 80 cols
     medium?: number;   // < 120 cols
@@ -61,10 +71,13 @@ export class ResponsiveLayoutManager {
     this.screen = screen;
     this.config = {
       breakpoints: {
-        xs: 50,
-        small: 80,
-        medium: 120,
-        large: 160,
+        // The thresholds live in responsive-constants.ts - this manager must
+        // never carry a second, drifting copy of them (see getBreakpoint()).
+        xxs: BREAKPOINT_XXS,
+        xs: BREAKPOINT_XS,
+        small: BREAKPOINT_SM,
+        medium: BREAKPOINT_MD,
+        large: BREAKPOINT_LG,
         ...config.breakpoints,
       },
       enableAutoResize: config.enableAutoResize !== false,
@@ -197,10 +210,29 @@ export class ResponsiveLayoutManager {
   /**
    * Get current breakpoint
    */
-  getBreakpoint(): 'xs' | 'small' | 'medium' | 'large' {
+  getBreakpoint(): BreakpointName {
     const width = this.screen.width;
-    const { xs = 50, small = 80, medium = 120 } = this.config.breakpoints || {};
+    const {
+      xxs = BREAKPOINT_XXS,
+      xs = BREAKPOINT_XS,
+      small = BREAKPOINT_SM,
+      medium = BREAKPOINT_MD,
+    } = this.config.breakpoints || {};
 
+    // Default thresholds: defer to getBreakpointName() so there is exactly
+    // ONE ladder. This manager only owns a ladder of its own when a caller
+    // has actually overridden a threshold - a documented feature of
+    // ResponsiveConfig that a module-level function cannot express.
+    if (
+      xxs === BREAKPOINT_XXS &&
+      xs === BREAKPOINT_XS &&
+      small === BREAKPOINT_SM &&
+      medium === BREAKPOINT_MD
+    ) {
+      return getBreakpointName(width);
+    }
+
+    if (width < xxs) return 'xxs';
     if (width < xs) return 'xs';
     if (width < small) return 'small';
     if (width < medium) return 'medium';

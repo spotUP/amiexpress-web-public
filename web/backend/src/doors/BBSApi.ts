@@ -234,7 +234,10 @@ export class BBSApi {
     const reported = this.session?.screenWidth;
     return {
       width: doorScreenWidth(this.session, reported && reported > 0 ? reported : 80),
-      height: this.session?.screenHeight || 25
+      // Same rule for the other axis: a C64 text screen is 25 rows BY
+      // DEFINITION, so a stale 24 reported by a browser terminal before the
+      // caller answered `P` must not shrink a PETSCII door's canvas.
+      height: this.session?.petsciiMode === true ? 25 : (this.session?.screenHeight || 25)
     };
   }
 

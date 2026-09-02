@@ -336,6 +336,19 @@ export type {
   FileExplorerOptions,
 } from './engines/ui/blessed/core/types';
 
+// Responsive tier helpers. A door adapting to a 40-column C64/PETSCII canvas
+// reads these with the LIVE screen width (`screen.width`), never a constant:
+// getCompactProfile() for layout, effectsAllowed() to switch decorative
+// effects off, getBreakpointName()/isCompactWidth() to branch.
+export {
+  BREAKPOINT_XXS,
+  getBreakpointName,
+  getCompactProfile,
+  isCompactWidth,
+  effectsAllowed,
+} from './engines/ui/blessed/core/responsive-constants';
+export type { BreakpointName, CompactProfile } from './engines/ui/blessed/core/responsive-constants';
+
 export type { DropdownMenuOptions, DropdownMenuItem } from './engines/ui/blessed/widgets/dropdown-menu';
 
 // Export AutocompleteTextboxOptions separately (defined in widget file, not core/types)

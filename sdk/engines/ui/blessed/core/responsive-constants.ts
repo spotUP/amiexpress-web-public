@@ -167,7 +167,9 @@ export function calculateDialogWidth(screenWidth: number): number {
   if (screenWidth < BREAKPOINT_XXS) {
     // 40-col: nearly full width, borderless margins (compact profile).
     // DIALOG_EDGE_PADDING*2 would cost 4 of 40 columns - too much here.
-    return Math.max(MIN_DIALOG_WIDTH, screenWidth - 2);
+    // The outer Math.min keeps a dialog from exceeding a screen narrower
+    // than MIN_DIALOG_WIDTH itself (a 20-column PETSCII split, say).
+    return Math.min(screenWidth, Math.max(MIN_DIALOG_WIDTH, screenWidth - 2));
   }
   if (screenWidth < BREAKPOINT_XS) {
     // Mobile: nearly full width with padding

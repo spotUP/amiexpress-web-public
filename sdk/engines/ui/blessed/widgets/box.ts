@@ -16,6 +16,8 @@ import { MOBILE_PADDING, DEFAULT_PADDING } from '../core/responsive-constants';
 export interface BoxOptions extends ElementOptions {
   /** Responsive padding - different values per breakpoint */
   responsivePadding?: {
+    /** 40-column C64/PETSCII screens (XXS tier). Falls back to `xs`. */
+    xxs?: number | Padding;
     xs?: number | Padding;
     small?: number | Padding;
     medium?: number | Padding;
@@ -101,6 +103,14 @@ export class Box extends Element {
       case 'xs':
         newPadding = this._responsivePadding.xs ?? this._originalPadding;
         break;
+      case 'xxs':
+        // 40-column C64/PETSCII. Without this arm the switch fell through and
+        // a Box kept its desktop padding on the narrowest screen the board
+        // supports - 2 columns of every 40 spent on whitespace.
+        newPadding = this._responsivePadding.xxs ??
+                     this._responsivePadding.xs ??
+                     this._originalPadding;
+        break;
     }
 
     if (newPadding !== undefined) {
@@ -152,6 +162,7 @@ export class Box extends Element {
    */
   static getDefaultResponsivePadding(): BoxOptions['responsivePadding'] {
     return {
+      xxs: MOBILE_PADDING,
       xs: MOBILE_PADDING,
       small: MOBILE_PADDING,
       medium: DEFAULT_PADDING,

@@ -42,6 +42,7 @@ import type {
   ScreenOptions
 } from '../engines/ui/blessed/core/types';
 import type { Screen } from '../engines/ui/blessed/core/screen';
+import { isCompactWidth } from '../engines/ui/blessed/core/responsive-constants';
 import type { Box } from '../engines/ui/blessed/widgets/box';
 import { DockablePanel } from '../engines/ui/blessed/widgets/dockable-panel';
 import type { DockablePanelOptions } from '../engines/ui/blessed/widgets/dockable-panel';
@@ -922,12 +923,19 @@ export function createScreen(
   // Get initial terminal size from BBS if available
   const termSize = bbs?.getTerminalSize?.() || { width: 80, height: 25 };
 
-  // Responsive whenever the session terminal is NOT the classic 80 wide:
-  // wider (fullscreen browser) OR narrower (40-col C64/PETSCII, XXS tier).
-  // At exactly 80 the legacy fixed pipeline is untouched byte-for-byte -
-  // proven by sdk/tests/unit/eighty-col-baseline.test.ts (Task 2).
+  // Responsive for the two geometries that need it: WIDER than 80 (a
+  // fullscreen browser terminal, as before) and the compact XXS tier (a
+  // 40-column C64/PETSCII canvas, new).
+  //
+  // 41-79 deliberately stays on the legacy fixed-80 pipeline, exactly as it
+  // was: those callers have always been painted at 80 and the backend's prose
+  // wrap clamps a non-PETSCII session to max(80, reported), so a 60-wide
+  // responsive screen would paint at 60 while the BBS still wrapped at 80.
+  // At exactly 80 nothing changes either - proven byte-for-byte by
+  // sdk/tests/unit/eighty-col-baseline.test.ts (Task 2).
   // Callers can still force either way; `...options` spreads last.
-  const responsive = options?.responsive ?? (termSize.width !== 80 || undefined);
+  const responsive =
+    options?.responsive ?? (termSize.width > 80 || isCompactWidth(termSize.width) || undefined);
 
   // Check Unicode capability - use Amiga conversion only for non-Unicode terminals
   // Web terminals always support Unicode (xterm.js)

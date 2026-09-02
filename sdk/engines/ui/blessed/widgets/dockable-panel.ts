@@ -17,7 +17,7 @@ import type { Element } from '../core/element';
 import type { Screen } from '../core/screen';
 import type { ResponsiveState } from '../core/responsive-mixin';
 import type { BreakpointName } from '../core/responsive-constants';
-import { SWIPE_THRESHOLD } from '../core/responsive-constants';
+import { SWIPE_THRESHOLD, isCompactWidth } from '../core/responsive-constants';
 
 export type DockPosition = 'top' | 'bottom' | 'left' | 'right' | 'center' | 'float';
 
@@ -374,7 +374,10 @@ export class DockablePanel extends Panel {
     this.onScreenEvent('resize', () => {
       // Check for mobile mode (Auto-Flow)
       const breakpoint = this.screen.responsiveLayout.getBreakpoint();
-      const isMobile = breakpoint === 'xs';
+      // A 40-column C64/PETSCII screen is its own tier ('xxs'), so an
+      // equality test against 'xs' alone skipped auto-flow on the NARROWEST
+      // screen the board supports. isCompactWidth() is the shared rule.
+      const isMobile = isCompactWidth(this.screen.width) || breakpoint === 'xs';
       
       if (isMobile) {
         this.mobileMode = true;

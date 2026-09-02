@@ -49,6 +49,15 @@ describe('BBSApi.getTerminalSize', () => {
     expect(sizeFor({ petsciiMode: true, screenWidth: 80, screenHeight: 25 }).width).toBe(40);
   });
 
+  it('a PETSCII session carrying a stale 24 rows is still 25', () => {
+    // Same argument as the width: a C64 text screen is 25 rows by
+    // definition, and a browser terminal reports 24 before `P` is answered.
+    expect(sizeFor({ petsciiMode: true, screenWidth: 40, screenHeight: 24 })).toEqual({
+      width: 40,
+      height: 25,
+    });
+  });
+
   it('an ordinary ANSI session is unchanged at 80', () => {
     expect(sizeFor({ screenWidth: 80, screenHeight: 24 })).toEqual({ width: 80, height: 24 });
   });
