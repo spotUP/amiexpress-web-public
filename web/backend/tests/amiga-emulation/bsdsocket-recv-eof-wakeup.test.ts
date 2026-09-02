@@ -140,8 +140,10 @@ describe('bsdsocket.library recv() at end of stream (regression)', () => {
    */
   let httpishPort = 0;   // answers, then FINs (HTTP/1.0, the GWall shape)
   let resetPort = 0;     // answers, then RSTs
+  let keepAlivePort = 0; // answers and stays open (HTTP/1.1 keep-alive)
   let httpishServer: net.Server | null = null;
   let resetServer: net.Server | null = null;
+  let keepAliveServer: net.Server | null = null;
   const accepted: net.Socket[] = [];
 
   const RESPONSE =
@@ -173,17 +175,28 @@ describe('bsdsocket.library recv() at end of stream (regression)', () => {
       resetServer!.listen(0, '127.0.0.1', () =>
         resolve((resetServer!.address() as net.AddressInfo).port));
     });
+
+    // Answers and then says nothing and closes nothing - the keep-alive case.
+    keepAliveServer = net.createServer((sock) => {
+      accepted.push(sock);
+      sock.once('data', () => { sock.write(RESPONSE); });
+    });
+    keepAlivePort = await new Promise<number>((resolve) => {
+      keepAliveServer!.listen(0, '127.0.0.1', () =>
+        resolve((keepAliveServer!.address() as net.AddressInfo).port));
+    });
   }, IO_TEST_TIMEOUT_MS);
 
   afterAll(async () => {
     for (const sock of accepted) sock.destroy();
     accepted.length = 0;
-    for (const server of [httpishServer, resetServer]) {
+    for (const server of [httpishServer, resetServer, keepAliveServer]) {
       if (!server) continue;
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
     httpishServer = null;
     resetServer = null;
+    keepAliveServer = null;
   }, IO_TEST_TIMEOUT_MS);
 
   function callSocket(lib: BsdSocketLibrary, fake: FakeEmulator): number {
@@ -330,6 +343,69 @@ describe('bsdsocket.library recv() at end of stream (regression)', () => {
     const started = Date.now();
     expect(callRecv(lib, fake, fd, 8191)).toBe(0);
     expect(Date.now() - started).toBeLessThan(PROMPT_MS);
+
+    fake.setRegister(0, fd);
+    callVector('CloseSocket', lib, fake);
+    await settle();
+  }, IO_TEST_TIMEOUT_MS);
+  /**
+   * The other half of the same invariant, pinned so a future change to the
+   * wake-up path cannot break it: recv() must hand back what the stream has
+   * ALREADY given it and must never wait for more once any bytes are
+   * buffered. A peer that replies and keeps the connection open (HTTP/1.1
+   * keep-alive) never sends a FIN, so nothing but the arriving data can end
+   * the wait.
+   *
+   * These two pass against the unfixed handler as well - the 'data' path was
+   * always correct. They are here as invariants, not as the RED case.
+   */
+  test('a peer that replies and stays open still delivers the reply at once', async () => {
+    const fake = new FakeEmulator();
+    const lib = new BsdSocketLibrary(asEmu(fake));
+
+    const fd = callSocket(lib, fake);
+    expect(setNonBlocking(lib, fake, fd, 1)).toBe(0);
+    expect(callConnect(lib, fake, fd, keepAlivePort)).toBe(-1);
+    expect(waitWritable(lib, fake, fd, 10000)).toBeGreaterThan(0);
+    expect(setNonBlocking(lib, fake, fd, 0)).toBe(0);
+
+    const request = 'GET / HTTP/1.1\r\nHost:localhost\r\n\r\n';
+    callSend(lib, fake, fd, request);
+
+    const started = Date.now();
+    const got = callRecv(lib, fake, fd, 8191);
+    const elapsedMs = Date.now() - started;
+
+    expect(got).toBe(RESPONSE.length);
+    expect(elapsedMs).toBeLessThan(PROMPT_MS);
+
+    fake.setRegister(0, fd);
+    callVector('CloseSocket', lib, fake);
+    await settle();
+  }, IO_TEST_TIMEOUT_MS);
+
+  test('recv() hands back the buffered remainder without waiting for more data', async () => {
+    const fake = new FakeEmulator();
+    const lib = new BsdSocketLibrary(asEmu(fake));
+
+    const fd = callSocket(lib, fake);
+    expect(setNonBlocking(lib, fake, fd, 1)).toBe(0);
+    expect(callConnect(lib, fake, fd, keepAlivePort)).toBe(-1);
+    expect(waitWritable(lib, fake, fd, 10000)).toBeGreaterThan(0);
+    expect(setNonBlocking(lib, fake, fd, 0)).toBe(0);
+
+    callSend(lib, fake, fd, 'GET / HTTP/1.1\r\nHost:localhost\r\n\r\n');
+
+    // A door with a small buffer: the first recv takes 16 bytes, the rest
+    // stays queued. The next recv must return it immediately - the peer is
+    // still open and will send nothing more, so anything that waits hangs.
+    const first = callRecv(lib, fake, fd, 16);
+    expect(first).toBe(16);
+
+    const started = Date.now();
+    const second = callRecv(lib, fake, fd, 8191);
+    expect(Date.now() - started).toBeLessThan(PROMPT_MS);
+    expect(second).toBe(RESPONSE.length - 16);
 
     fake.setRegister(0, fd);
     callVector('CloseSocket', lib, fake);
