@@ -1,11 +1,21 @@
 /**
- * Row classification for the C64 adapter's rule ladder.
+ * Row classification for the C64 adapter's rule ladder - and, since Phase 3
+ * Task 1, the board's own art/paint detectors.
  *
- * `looksLikeAsciiArt` and `positionsCursorAbsolutely` are VERBATIM ports of
- * web/backend/src/utils/ascii-art.util.ts (the backend cannot be imported
- * from the SDK). web/backend/tests/petscii-frame/classify-parity.test.ts
- * pins the two copies equal; when the frame module gains a package export
- * (Phase 3) the backend file becomes a re-export of this one.
+ * `looksLikeAsciiArt` and `positionsCursorAbsolutely` LIVE HERE and nowhere
+ * else: web/backend/src/utils/ascii-art.util.ts:28 is one `export ... from`
+ * line onto this file, so the 80-COLUMN path reaches them through it -
+ * amiga-emulation/xim/io.ts's line-wrap safety net, wrap-for-session.util.ts,
+ * dir-file.util.ts. They are FROZEN. Changing either moves bytes on every ANSI
+ * session, PETSCII or not.
+ *
+ * Everything else in this file - `classifyRow`, `isRuleRow`, `columnSpans`,
+ * `columnParts`, `hasColumnStructure` - is ladder-only routing that no ANSI
+ * session reaches, which is exactly what lets the ladder change without moving
+ * one 80-column byte. Two tests hold that line:
+ * web/backend/tests/petscii-frame/classify-parity.test.ts (the re-export is
+ * real and no second copy crept back) and .../frozen-detectors-only.test.ts
+ * (the 80-column files import the two frozen names and nothing else).
  *
  * Pure TypeScript: no DOM, no Node imports.
  */
@@ -18,11 +28,13 @@ import { Cell, isBlank } from './types';
  * board's 80-column path shares it) calls most of them art and the ladder then
  * split them in half, doubling a 25-row door screen to 34-46 rows.
  *
- * `'table'` is a vestige: every row this classifier used to call 'table'
- * (`hasTabularGutters` plus alphanumerics) satisfies `hasColumnStructure` too,
- * so 'bordered' now answers first and `classifyRow` no longer returns 'table'.
- * The member stays because `RowClass -> AdaptRule` is a total map in
- * adapt.ts's `chooseRule` and callers may still name it.
+ * `'table'` is vestigial IN PRACTICE, not unreachable: almost every row this
+ * classifier used to call 'table' satisfies `hasColumnStructure` too, so
+ * 'bordered' answers first. The gap is REVERSE-VIDEO gutters - `isBlank` calls
+ * a reverse space content (it paints a coloured block) while
+ * `hasTabularGutters` reads its character, so a row whose gutters are reverse
+ * spaces has tabular gutters and no column structure, and still classifies
+ * 'table'. The member and its `chooseRule` case therefore stay live.
  */
 export type RowClass = 'blank' | 'bordered' | 'art' | 'table' | 'prose';
 
@@ -169,10 +181,16 @@ function trimSpan(cells: ReadonlyArray<Readonly<Cell>>, from: number, to: number
  * The row's columns, in order, each trimmed and carrying its own cells (so a
  * part keeps its colours).
  *
- * Split on '|' cells when there are two or more - the outer border parts are
- * empty and drop out - otherwise on INTERIOR runs of two or more blanks, of
- * which there must be at least two. A leading indent is not a column break,
- * and neither is a single space, so "Local Console" stays one column.
+ * Split on '|' cells when the row is BORDERED - its first and last non-blank
+ * cells are both '|', so the outer parts are empty and drop out - otherwise on
+ * INTERIOR runs of two or more blanks, of which there must be at least two. A
+ * leading indent is not a column break, and neither is a single space, so
+ * "Local Console" stays one column.
+ *
+ * The border test is what keeps prose out: `He said "a|b" and then wrote |c|`
+ * has two '|' glyphs and no border, and reading them as separators would
+ * delete them and truncate the sentence at a column boundary. Such a row falls
+ * through to the gutter branch, and on to reflow, exactly as before.
  *
  * Returns [] when the row has no column structure at all, which is exactly
  * what `hasColumnStructure` asks.
@@ -193,10 +211,11 @@ export function columnSpans(cells: ReadonlyArray<Readonly<Cell>>): Array<[number
 
   const bounds: number[] = [];               // exclusive end of each span, in source columns
   const starts: number[] = [0];
-  let pipes = 0;
-  for (let x = 0; x < width; x++) if (cells[x].ch === '|') pipes++;
+  let first = 0;
+  while (first < width && isBlank(cells[first])) first++;
+  const bordered = first < width && cells[first].ch === '|' && cells[width - 1].ch === '|' && first < width - 1;
 
-  if (pipes >= 2) {
+  if (bordered) {
     for (let x = 0; x < width; x++) {
       if (cells[x].ch !== '|') continue;
       bounds.push(x);

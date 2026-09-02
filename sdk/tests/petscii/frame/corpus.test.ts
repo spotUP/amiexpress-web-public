@@ -285,9 +285,10 @@ describe.each(Object.keys(EXPECTED_ROWS))('%s adapts without losing its header',
     expect({ id, rows: adaptRows(frame, { cols: COLS }).rows.length }).toEqual({ id, rows: EXPECTED_ROWS[id] });
   });
 
-  it('keeps the first non-blank source row first whenever the frame fits', () => {
+  // `adaptRows` does no tail-paging - that is `adaptFrame`'s policy - so this
+  // holds for every golden, including the two that come out at 26 rows.
+  it('keeps the first non-blank source row first', () => {
     const rows = adaptRows(frame, { cols: COLS }).rows;
-    if (rows.length > ROWS) return;              // tail-paging cannot be proved away; the count pin covers it
     const firstSrc = frame.cells.findIndex((r) => contentWidth(r) > 0);
     expect(rows.findIndex((r) => r.cells.some((c) => !isBlank(c)))).toBe(rows.findIndex((r) => r.source === firstSrc));
   });

@@ -38,6 +38,40 @@ describe('chooseRule', () => {
     expect(chooseRule(row(' '.repeat(45) + '.-----------------------------.'), 40)).toBe('deindent');
   });
 
+  /**
+   * The DECLINE path: fifteen three-character columns cannot fit in 40 cells
+   * even at the two-cell floor (15 * 2 + 14 separators = 44), so `narrowRow`
+   * returns null and the ladder falls back to what the row had before -
+   * `gutter` when there are gutters to squeeze, `split` otherwise.
+   */
+  it('a row narrow cannot fit falls back to gutter (or split), never to a dropped column', () => {
+    const MANY = 'abc  '.repeat(15).trimEnd();
+    expect(narrowRow(row(MANY), 40)).toBeNull();
+    expect(chooseRule(row(MANY), 40)).toBe('gutter');
+    expect(applyRule('narrow', row(MANY), 40).applied).toBe('split');   // a PINNED narrow falls back too
+    const bordered = '|' + 'ab|'.repeat(18);
+    expect(narrowRow(row(bordered), 40)).toBeNull();
+    expect(chooseRule(row(bordered), 40)).toBe('split');
+  });
+
+  /**
+   * The widened crop is LOSSY for a decorative row: `----->>>>` at 40 columns
+   * keeps its left half and drops the right, with no truncation mark - a rule
+   * carries no content to lose, and spending a second row of a 25-row screen
+   * on the tail of a decoration is the worse trade. Pinned here so the loss is
+   * a decision on the record, not a surprise.
+   */
+  it('cropping a rule drops its right-hand decoration unmarked', () => {
+    const decoration = '-'.repeat(40) + '<<<<' + '>>>>' + '-'.repeat(4);
+    expect(isCroppable(row(decoration), 40)).toBe(false);          // mixed glyphs: the old test says no
+    expect(chooseRule(row(decoration), 40)).toBe('crop');          // the rule test says yes
+    const out = str(cropRow(row(decoration), 40).rows[0]);
+    expect(out).toBe('-'.repeat(40));
+    expect(out).not.toContain('<');                                // '<' and '>' are gone...
+    expect(out).not.toContain('>');                                // ...with no truncation mark to say so
+    expect(multiset(row(decoration)).length).toBeGreaterThan(multiset(cropRow(row(decoration), 40).rows[0]).length);
+  });
+
   it('a row with no column structure that cannot be de-indented still reflows or splits', () => {
     expect(chooseRule(row('  ' + PROSE), 40)).toBe('reflow');
     expect(chooseRule(row('/\\'.repeat(30)), 40)).toBe('crop');            // a rule of its own
@@ -379,6 +413,7 @@ describe('rule invariants over a synthetic row corpus', () => {
     'a'.repeat(41),
     'word '.repeat(16).trim(),
     '  indented prose that runs on well past the fortieth column of the screen',
+    'abc  '.repeat(15).trimEnd(),          // fifteen narrow columns: narrowRow declines, the ladder falls back
   ];
   const rules: AdaptRule[] = ['crop', 'deindent', 'gutter', 'narrow', 'reflow', 'split'];
 

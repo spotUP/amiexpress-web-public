@@ -101,6 +101,24 @@ describe('columnParts / hasColumnStructure', () => {
       .toEqual(['Sysop', 'Local Console', '1234 calls', 'ratio 1:3']);
   });
 
+  /**
+   * Two '|' glyphs are not a border. A sentence that merely QUOTES pipes would
+   * otherwise be narrowed: its pipes deleted as separators and its words cut
+   * at the truncation mark. The row's first and last non-blank cells must both
+   * be '|' before pipes are read as column separators; anything else falls
+   * through to the gutter/prose path.
+   */
+  it("reads pipes as separators only inside a real border", () => {
+    const quoted = 'He said "a|b" and then wrote |c| somewhere in this long sentence of prose';
+    expect(columnParts(row(quoted))).toEqual([]);
+    expect(hasColumnStructure(row(quoted))).toBe(false);
+    expect(classifyRow(row(quoted))).toBe('prose');
+    expect(texts(row('|Nd| Username | Status |'))).toEqual(['Nd', 'Username', 'Status']);
+    expect(texts(row('  |Nd| Username | Status |  '))).toEqual(['Nd', 'Username', 'Status']);
+    // pipes inside a row that is NOT bordered still leave the gutter branch free
+    expect(texts(row('a|b   c|d   e|f'))).toEqual(['a|b', 'c|d', 'e|f']);
+  });
+
   it('one gutter, one pipe, prose and a blank row have no column structure', () => {
     expect(columnParts(row('one  gap only'))).toEqual([]);
     expect(columnParts(row('a | b'))).toEqual([]);
@@ -133,6 +151,20 @@ describe('classifyRow', () => {
     expect(classifyRow(row('      uSeR nAME: Sysop                  dOWNLoADeD tODaY: 0 bYTeS'))).toBe('art');
     // Was 'art' before Phase 3 Task 2: two gutters make it bordered.
     expect(classifyRow(row('  ND#/Calls    User/PhoneNumber                Location/Action'))).toBe('bordered');
+  });
+
+  /**
+   * 'table' is vestigial IN PRACTICE, not unreachable. `isBlank` calls a
+   * reverse-video space CONTENT (it paints a coloured block) while
+   * `hasTabularGutters` reads its character, so a row whose gutters are
+   * reverse spaces has tabular gutters and NO column structure - and still
+   * classifies 'table', which keeps `chooseRule`'s gutter case live.
+   */
+  it("still returns 'table' when the gutters are reverse-video spaces", () => {
+    const cells = row('alpha  beta  gamma');
+    for (const x of [5, 6, 11, 12]) (cells[x] as any).rvs = true;
+    expect(hasColumnStructure(cells)).toBe(false);
+    expect(classifyRow(cells)).toBe('table');
   });
 
   it('a reverse-video space is content, not blank', () => {
