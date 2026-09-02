@@ -203,7 +203,7 @@ export class UIManager {
   }
 
   buildWindows(callbacks: {
-    onLobbySelect: (index: number, tableListMap: Record<number, number | null>) => void;
+    onLobbySelect: (index: number) => void;
     createTableFlow: () => void | Promise<void>;
     joinSelectedTable: () => void | Promise<void>;
     observeSelectedTable: () => void | Promise<void>;
@@ -213,28 +213,8 @@ export class UIManager {
   }): void {
     const { onLobbySelect, createTableFlow, joinSelectedTable, observeSelectedTable, toggleFilters, manualRefresh, runAction } = callbacks;
 
-    const height = (this.screen.height as number) || 24;
-    const width = (this.screen.width as number) || 80;
-    const topOffset = 1;  // Space for top bar
-    const statusHeight = 1;  // Bottom status bar
-    const logHeight = 4;  // Activity log height
-    const mainHeight = height - topOffset - statusHeight - logHeight;  // Main content area
-
-    // Split: 30% lobby, 70% table (share border at junction)
-    const leftWidth = Math.max(25, Math.floor(width * 0.30));
-    const rightWidth = width - leftWidth + 1;  // +1 to share border with lobby
-
-    this.layout = {
-      width,
-      height,
-      topOffset,
-      statusHeight,
-      logHeight,
-      mainHeight,
-      tableHeight: mainHeight,
-      leftWidth,
-      rightWidth,
-    };
+    this.computeLayout();
+    const { topOffset, statusHeight, logHeight, mainHeight, leftWidth, rightWidth } = this.layout;
 
     // Lobby window - left side
     this.lobbyWindow = createBox({
@@ -266,7 +246,6 @@ export class UIManager {
       style: { border: UI_THEME.windowBorder, bg: UI_THEME.windowBg },
     });
 
-    let tableListMap: Record<number, number | null> = {};
 
     // Help text at top
     const helpBar = createBox({
@@ -313,7 +292,7 @@ export class UIManager {
     // The highlight moving is not a decision: it keeps the Table panel
     // showing whatever row the cursor is on.
     this.lobbyList.on('select item', (_: any, index: number) => {
-      onLobbySelect(index, tableListMap);
+      onLobbySelect(index);
     });
 
     // ENTER (or a click) IS the decision. It used to be the J key, which is
@@ -321,7 +300,7 @@ export class UIManager {
     // joined ("the selected row moves down when i press j to join it doesnt
     // join", 2026-09-02).
     this.lobbyList.on('select', (_: any, index: number) => {
-      onLobbySelect(index, tableListMap);
+      onLobbySelect(index);
       runAction(() => joinSelectedTable());
     });
 
@@ -355,8 +334,10 @@ export class UIManager {
       scrollable: true,
       alwaysScroll: true,
       keys: true,
-      focusable: false,
-      mouse: false,
+      // Tab reaches this panel so a long table can be scrolled; it was
+      // focusable: false, which is why Tab appeared to do nothing.
+      focusable: true,
+      mouse: true,
       clickable: false,
       style: { fg: 'white' },
       content: 'Select a table to view details.',
@@ -454,9 +435,67 @@ export class UIManager {
     this.buildTablePanels();
   }
 
-  setTableListMap(map: Record<number, number | null>): void {
-    // Method to allow setting tableListMap from outside
-    // This is a workaround since the callback closure captures the local variable
+  /**
+   * The window geometry, from the screen's CURRENT size.
+   *
+   * Two windows carry absolute numbers - the lobby's width and both windows'
+   * height - so they cannot follow a resize the way the percentage-sized
+   * widgets do. This is the one place those numbers are worked out, for the
+   * first paint and for every resize after it.
+   */
+  private computeLayout(): void {
+    const height = (this.screen.height as number) || 24;
+    const width = (this.screen.width as number) || 80;
+    const topOffset = 1;  // Space for top bar
+    const statusHeight = 1;  // Bottom status bar
+    const logHeight = 4;  // Activity log height
+    const mainHeight = height - topOffset - statusHeight - logHeight;
+
+    // Split: 30% lobby, 70% table (share border at junction)
+    const leftWidth = Math.max(25, Math.floor(width * 0.30));
+    const rightWidth = width - leftWidth + 1;  // +1 to share border with lobby
+
+    this.layout = {
+      width,
+      height,
+      topOffset,
+      statusHeight,
+      logHeight,
+      mainHeight,
+      tableHeight: mainHeight,
+      leftWidth,
+      rightWidth,
+    };
+  }
+
+  /**
+   * Follow a terminal resize.
+   *
+   * Alt+Enter asks the caller's terminal to grow (sdk/utils/terminal-mode.ts)
+   * and the bottom-docked widgets move on their own, but the lobby and table
+   * windows kept the size they were built with - so a wide terminal showed an
+   * 80-column door in its top-left corner (2026-09-02).
+   */
+  relayout(): void {
+    this.computeLayout();
+    const { topOffset, mainHeight, leftWidth, rightWidth } = this.layout;
+
+    if (this.lobbyWindow) {
+      this.lobbyWindow.top = topOffset;
+      this.lobbyWindow.left = 0;
+      this.lobbyWindow.width = leftWidth;
+      this.lobbyWindow.height = mainHeight;
+    }
+
+    if (this.tableWindow) {
+      this.tableWindow.top = topOffset;
+      this.tableWindow.left = leftWidth - 1;
+      this.tableWindow.width = rightWidth;
+      this.tableWindow.height = mainHeight;
+    }
+
+    this.layoutTablePanels();
+    this.layoutActionButtons();
   }
 
   buildTablePanels(): void {

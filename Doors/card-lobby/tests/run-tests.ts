@@ -8,7 +8,7 @@
 
 /* eslint-disable no-console */
 
-const TEST_MODULES = ['./opens.test', './keys.test'];
+const TEST_MODULES = ['./opens.test', './keys.test', './lobby.test'];
 
 // The door logs freely on startup; keep the report readable.
 const realLog = console.log;

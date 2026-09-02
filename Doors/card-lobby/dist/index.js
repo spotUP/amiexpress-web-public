@@ -315,8 +315,9 @@ class CardLobbyApp {
             screen: this.screen,
             start: 'fixed',
             onRelayout: () => {
-                this.uiManager.layoutTablePanels();
-                this.uiManager.layoutActionButtons();
+                // The windows carry absolute width/height, so following a resize is
+                // a re-layout, not just a repaint.
+                this.uiManager.relayout();
                 this.updateAllPanels();
                 this.screen.render();
             },
@@ -334,8 +335,12 @@ class CardLobbyApp {
         });
         this.uiManager.buildStatusBar();
         this.uiManager.buildWindows({
-            onLobbySelect: (index, tableListMap) => {
-                this.selectedTableId = tableListMap[index] ?? null;
+            onLobbySelect: (index) => {
+                // The door owns the row -> table id mapping; updateLobbyPanel fills
+                // it every time it sets the rows. UIManager used to pass its own
+                // copy, which nothing ever wrote to, so joining always failed with
+                // "Select a table first" (2026-09-02).
+                this.selectedTableId = this.tableListMap[index] ?? null;
                 this.updateTablePanel();
                 this.screen.render();
             },
@@ -1326,13 +1331,24 @@ class CardLobbyApp {
                 this.actionButtons.raise,
                 this.actionButtons.quit,
             ]
-            : [this.lobbyList, this.lobbyActions, this.tableContent];
-        const current = this.screen.focused;
-        const currentIndex = focusOrder.findIndex((item) => item === current);
+            : [this.lobbyList, this.tableContent];
+        // A ring may only contain widgets that can actually take focus. The
+        // lobby's ring held two hint bars built `focusable: false`, so Tab moved
+        // focus to something that refused it and the door looked dead - reported
+        // as "tab does nothing" (2026-09-02).
+        const ring = focusOrder.filter((item) => item && !item.hidden && typeof item.focus === 'function' && item.options?.focusable !== false);
+        if (ring.length === 0)
+            return;
+        // getFocused() is the focused ELEMENT. `screen.focused` is the boolean
+        // every Element carries for itself, so comparing widgets against it never
+        // matched: Tab re-focused the first widget in the ring every time, which
+        // is what "tab does nothing" looked like (2026-09-02).
+        const current = this.screen.getFocused();
+        const currentIndex = ring.findIndex((item) => item === current);
         const nextIndex = currentIndex === -1
             ? 0
-            : (currentIndex + direction + focusOrder.length) % focusOrder.length;
-        const next = focusOrder[nextIndex];
+            : (currentIndex + direction + ring.length) % ring.length;
+        const next = ring[nextIndex];
         if (next?.focus) {
             next.focus();
             this.screen.render();

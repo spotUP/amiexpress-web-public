@@ -39,7 +39,9 @@ export function showSelector(ctx: DialogHost, title: string, items: string[], ca
   // Capture the currently-focused element so we can restore it on cleanup.
   // Without this, after the dialog closes no widget has focus and key input
   // appears frozen until the user clicks something.
-  const previousFocus = (ctx.screen as any).focused;
+  // getFocused() is the focused ELEMENT; `screen.focused` is a boolean,
+  // so this used to stash `true` and restore nothing.
+  const previousFocus = (ctx.screen as any).getFocused?.() ?? null;
   // Defer to next tick to avoid Enter key propagation from parent
   setImmediate(() => {
     const previousView = ctx.currentView;
@@ -111,7 +113,9 @@ export function showSelector(ctx: DialogHost, title: string, items: string[], ca
 }
 
 export function showTextInput(ctx: DialogHost, title: string, defaultValue: string, multiline: boolean, callback: (value: string | null) => void): void {
-  const previousFocus = (ctx.screen as any).focused;
+  // getFocused() is the focused ELEMENT; `screen.focused` is a boolean,
+  // so this used to stash `true` and restore nothing.
+  const previousFocus = (ctx.screen as any).getFocused?.() ?? null;
   // Defer to next tick to avoid Enter key propagation from parent
   setImmediate(() => {
     const previousView = ctx.currentView;
@@ -214,7 +218,9 @@ export function showTextInput(ctx: DialogHost, title: string, defaultValue: stri
 }
 
 export function showMessage(ctx: DialogHost, title: string, message: string, callback?: () => void): void {
-  const previousFocus = (ctx.screen as any).focused;
+  // getFocused() is the focused ELEMENT; `screen.focused` is a boolean,
+  // so this used to stash `true` and restore nothing.
+  const previousFocus = (ctx.screen as any).getFocused?.() ?? null;
   // Defer to next tick to avoid key propagation from parent
   setImmediate(() => {
     const previousView = ctx.currentView;

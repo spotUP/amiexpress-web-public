@@ -45,7 +45,7 @@ import {
   createTextbox
 } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 function showSelector(ctx, title, items, callback) {
-  const previousFocus = ctx.screen.focused;
+  const previousFocus = ctx.screen.getFocused?.() ?? null;
   setImmediate(() => {
     const previousView = ctx.currentView;
     ctx.currentView = "dialog";
@@ -106,7 +106,7 @@ function showSelector(ctx, title, items, callback) {
   });
 }
 function showTextInput(ctx, title, defaultValue, multiline, callback) {
-  const previousFocus = ctx.screen.focused;
+  const previousFocus = ctx.screen.getFocused?.() ?? null;
   setImmediate(() => {
     const previousView = ctx.currentView;
     ctx.currentView = "dialog";
@@ -196,7 +196,7 @@ function showTextInput(ctx, title, defaultValue, multiline, callback) {
   });
 }
 function showMessage(ctx, title, message, callback) {
-  const previousFocus = ctx.screen.focused;
+  const previousFocus = ctx.screen.getFocused?.() ?? null;
   setImmediate(() => {
     const previousView = ctx.currentView;
     ctx.currentView = "dialog";
