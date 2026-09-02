@@ -58,6 +58,31 @@ describe('wrapForSession', () => {
     expect(wrapForSession(text, { screenWidth: 40, petsciiMode: false })).toBe(text);
     expect(wrapForSession(text, { screenWidth: 40 })).toBe(text);
   });
+  // THE index.ts LISTENER HOLE. web/backend/src/index.ts's terminal-type
+  // handler sets petsciiMode from TTYPE and then calls
+  // applyClientReportedGeometry(), which REFUSES to write geometry for a
+  // PETSCII session - so nothing on that path ever stamps screenWidth = 40.
+  // Such a session kept session-manager's default 80 here and went identity,
+  // while sessionColumns / doorScreenWidth / BB_SCRWIDTH / getTerminalSize
+  // all answered 40. One authority: doorScreenWidth(session, 80).
+  it('a PETSCII session still carrying a stale 80 wraps at 40, not at 80', () => {
+    const text = 'word '.repeat(30).trim();
+    const out = wrapForSession(text, { petsciiMode: true, screenWidth: 80 });
+    expect(out).not.toBe(text);
+    for (const l of out.split('\r\n')) expect(printableLength(l)).toBeLessThanOrEqual(40);
+  });
+  it('a PETSCII session whose width was NEVER recorded wraps at 40', () => {
+    const text = 'word '.repeat(30).trim();
+    const out = wrapForSession(text, { petsciiMode: true });
+    expect(out).not.toBe(text);
+    for (const l of out.split('\r\n')) expect(printableLength(l)).toBeLessThanOrEqual(40);
+  });
+  it('a PETSCII session carrying a nonsense width (0) wraps at 40', () => {
+    const text = 'word '.repeat(30).trim();
+    const out = wrapForSession(text, { petsciiMode: true, screenWidth: 0 });
+    expect(out).not.toBe(text);
+    for (const l of out.split('\r\n')) expect(printableLength(l)).toBeLessThanOrEqual(40);
+  });
   it('passes column/line positioning (ESC[nG, ESC[E) through untouched, matching positionsCursorAbsolutely', () => {
     const columnPositioned = '\x1b[5G' + 'x'.repeat(70);
     const nextLine = '\x1b[E' + 'y'.repeat(70);

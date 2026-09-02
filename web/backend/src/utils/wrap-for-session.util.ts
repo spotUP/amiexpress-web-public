@@ -37,18 +37,20 @@ import { doorScreenWidth } from '../amiga-emulation/xim/screen-width.util';
 
 export { printableLength, wrapLineToWidth };
 
-/** Width the session was told it has; 80 when unknown. The 40-col plan's Task 1 replaces this with sessionColumns(). */
-function sessionWidth(session: { screenWidth?: number }): number {
-  return session.screenWidth && session.screenWidth > 0 ? session.screenWidth : 80;
-}
-
 export function wrapForSession(
   text: string,
   session: { screenWidth?: number; petsciiMode?: boolean } | undefined
 ): string {
   if (!session) return text;
   if (session.petsciiMode !== true) return text;      // non-C64: never wrapped, at any width
-  const width = sessionWidth(session);
+  // doorScreenWidth() - the SAME authority BB_SCRWIDTH, the launch-time
+  // lineWrap, BBSApi.getTerminalSize() and wrapDoorTextForSession already
+  // use. A local `screenWidth || 80` read the stale 80 a PETSCII session
+  // keeps when nothing stamped 40 on it (index.ts's terminal-type listener
+  // sets petsciiMode and then calls applyClientReportedGeometry, which
+  // REFUSES to write geometry for a PETSCII session), and this file went
+  // identity while every other reader answered 40.
+  const width = doorScreenWidth(session, 80);
   if (width >= 80) return text;                       // 80-col: byte-identical
   if (doorOwnsTerminal(session as any)) return text;  // door paints the screen
   return wrapPassingArt(text, width);

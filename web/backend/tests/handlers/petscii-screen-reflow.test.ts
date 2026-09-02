@@ -185,13 +185,40 @@ describe('PETSCII text-screen fallback on the real displayScreen path', () => {
   });
 
   /**
-   * An 80-column session that HAS opted into PETSCII (a C64 emulator in
-   * 80-col mode, or a petsciiMode session before the width probe answers)
-   * still gets no reflow: `wrapForSession` is identity at >= 80.
+   * INVERTED 2026-09-02 (whole-run review, I1). This case used to assert that
+   * a petsciiMode session carrying screenWidth 80 got NO reflow, on the
+   * reading that such a caller is "a C64 emulator in 80-col mode". That is
+   * not what the number means anywhere else on the board: doorScreenWidth()
+   * - the one width authority, which BB_SCRWIDTH, the launch-time lineWrap
+   * and BBSApi.getTerminalSize() all read - treats a PETSCII session's 80 as
+   * the STALE 80 a web caller's xterm reported before the caller answered
+   * `P`, and answers 40. index.ts's terminal-type listener makes that the
+   * common case, not the exotic one: it sets petsciiMode and then calls
+   * applyClientReportedGeometry(), which refuses to write geometry for a
+   * PETSCII session, so nothing on that path ever stamps 40.
+   *
+   * The old assertion pinned the disagreement in place: prose ran off the
+   * right edge of a screen every other reader knew was forty columns wide.
    */
-  it('does not reflow a petsciiMode session that is 80 columns wide', async () => {
+  it('reflows a petsciiMode session carrying a stale 80 - one width authority', async () => {
     const out = await show(prosePath, { petsciiMode: true, screenWidth: 80, nodeId: 0 });
 
+    // The over-wide source lines are gone: they arrived folded. (The last
+    // PROSE_LINE is sixteen columns and survives a 40-column fold intact.)
+    for (const line of PROSE_LINES.filter((l) => l.length > 40)) {
+      expect(out).not.toContain(line);
+    }
+    for (const row of contentRows(out)) {
+      expect(printableLength(row)).toBeLessThanOrEqual(40);
+    }
+    // ...and the words survived the fold.
+    const flat = out.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/[\r\n]/g, ' ').replace(/\s+/g, ' ');
+    expect(flat).toContain('Welcome to the board!');
+    expect(flat).toContain('Enjoy your stay.');
+  });
+
+  it('an ANSI session at 80 is still byte-identical on the same prose', async () => {
+    const out = await show(prosePath, { screenWidth: 80, nodeId: 0 });
     for (const line of PROSE_LINES) {
       expect(out).toContain(line);
     }

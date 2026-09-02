@@ -69,4 +69,75 @@ describe('BBSApi.getTerminalSize', () => {
   it('a wide ANSI terminal keeps its reported width', () => {
     expect(sizeFor({ screenWidth: 132, screenHeight: 43 })).toEqual({ width: 132, height: 43 });
   });
+
+  // BINDING RULE (a): a non-PETSCII caller NEVER narrows. socket-handlers.ts
+  // writes the reported cols unfiltered for every web socket, so a phone in
+  // portrait really does arrive here at 40 - and createScreen() turns a width
+  // under 41 into the XXS single-column profile. Floored at 80, the same rule
+  // sessionColumns() applies at the door gate.
+  it('a NARROW ANSI terminal is floored at 80 - the gate and the canvas agree', () => {
+    expect(sizeFor({ screenWidth: 40, screenHeight: 25 })).toEqual({ width: 80, height: 25 });
+    expect(sizeFor({ screenWidth: 24, screenHeight: 20 })).toEqual({ width: 80, height: 20 });
+    expect(sizeFor({ screenWidth: 79, screenHeight: 24 })).toEqual({ width: 80, height: 24 });
+  });
+});
+
+/**
+ * THE SEAM, WITH NOTHING STUBBED IN THE MIDDLE.
+ *
+ * bbsapi-terminal-size proved the left half and compact-40/doorman-layout
+ * proved the right half - but the right half ran against a stub `bbs` whose
+ * getTerminalSize() hardcoded {width:40,height:25}, i.e. it stubbed the very
+ * value under test. Between them a real regression fitted: Task 3 made
+ * createScreen() flip `responsive` on for isCompactWidth (< 41) and added the
+ * XXS tier at 41, so a narrow ANSI caller who used to get the fixed 80-column
+ * layout started getting the C64 single-column profile.
+ *
+ * This drives the REAL createBBSApi -> the REAL createScreen with a
+ * non-PETSCII session at screenWidth 40 and asserts the 80-column frame.
+ */
+describe('createBBSApi -> createScreen, no stub between them', () => {
+  const { createScreen } = require('../../../../sdk/utils/blessed-helpers');
+
+  function screenFor(session: any) {
+    return createScreen(createBBSApi(new StubSocket() as any, session) as any, {
+      smartCSR: true,
+      title: 'seam',
+    });
+  }
+
+  it('a NON-PETSCII session reporting 40 columns gets the 80-column frame', () => {
+    const screen = screenFor({ screenWidth: 40, screenHeight: 25, petsciiMode: false });
+    try {
+      expect(screen.width).toBe(80);
+      // Not merely 80 wide: not on the responsive/compact tier at all.
+      expect(screen.responsive).not.toBe(true);
+    } finally {
+      screen.destroy();
+    }
+  });
+
+  it('a NON-PETSCII session reporting 40 columns builds the SAME frame as one reporting 80', () => {
+    const narrow = screenFor({ screenWidth: 40, screenHeight: 25 });
+    const wide = screenFor({ screenWidth: 80, screenHeight: 25 });
+    try {
+      expect([narrow.width, narrow.height, narrow.responsive]).toEqual([
+        wide.width,
+        wide.height,
+        wide.responsive,
+      ]);
+    } finally {
+      narrow.destroy();
+      wide.destroy();
+    }
+  });
+
+  it('a PETSCII session at 40 still gets the 40-column canvas through the same seam', () => {
+    const screen = screenFor({ screenWidth: 40, screenHeight: 25, petsciiMode: true });
+    try {
+      expect(screen.width).toBe(40);
+    } finally {
+      screen.destroy();
+    }
+  });
 });

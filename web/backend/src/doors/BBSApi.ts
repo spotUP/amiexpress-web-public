@@ -244,8 +244,17 @@ export class BBSApi {
    */
   getTerminalSize(): { width: number; height: number } {
     const reported = this.session?.screenWidth;
+    // FLOORED AT 80 for every non-PETSCII caller, the same rule
+    // sessionColumns() applies at the door gate: `max(80, reported)`, never
+    // narrower. createScreen() turns a width under 41 into the XXS
+    // single-column profile (blessed-helpers.ts responsive/isCompactWidth),
+    // so handing it a phone's raw 40 gave an ANSI caller the C64 layout - an
+    // 80-column regression on a live path (socket-handlers.ts writes the
+    // reported cols unfiltered for every web socket). One width authority,
+    // not two.
+    const floored = Math.max(80, reported && reported > 0 ? reported : 80);
     return {
-      width: doorScreenWidth(this.session, reported && reported > 0 ? reported : 80),
+      width: doorScreenWidth(this.session, floored),
       // Same rule for the other axis: a C64 text screen is 25 rows BY
       // DEFINITION, so a stale 24 reported by a browser terminal before the
       // caller answered `P` must not shrink a PETSCII door's canvas.
