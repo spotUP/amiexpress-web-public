@@ -80,6 +80,7 @@ import {
 } from "./handlers/screen.handler";
 import { registerSocketHandlers } from "./server/socket-handlers";
 import { decideAdminSocket } from "./server/admin-socket";
+import { launchChatOnlyLiveChat } from "./server/chat-only-launch";
 import { displaySystemBulletins } from "./server/database-helpers";
 import { initializeData } from "./server/initialization";
 import {
@@ -1373,20 +1374,14 @@ console.log(`Client connected from ${clientIp}`);
     // Copy session.user to bbsSession-equivalent fields so livechat finds it
     // (livechat checks ctx.bbsSession?.user — session here IS the bbsSession)
 
-    // Launch LiveChat door directly — user is already authenticated
-    const { executeDoor } = require("./handlers/door.handler");
-    const liveChatDoor = {
-      id: "livechat",
-      name: "LiveChat",
-      command: "livechat",
-      type: "typescript",
-      path: "Doors/livechat",
-    };
-
+    // Launch LiveChat door directly — user is already authenticated.
+    // server/chat-only-launch.ts: the launch goes through executeDoor and
+    // its MIN_COLUMNS gate, judged against the REGISTERED LiveChat door
+    // (Commands/BBSCmd/LIVECHAT.info), not a hand-built literal.
     console.log("[SSO] Executing LiveChat door for authenticated user");
     // Small delay to ensure client handlers are fully registered
     await new Promise((resolve) => setTimeout(resolve, 100));
-    executeDoor(socket, existingSession, liveChatDoor).catch((err: any) => {
+    launchChatOnlyLiveChat(socket, existingSession).catch((err: any) => {
       console.error("[SSO] LiveChat door execution failed:", err);
     });
     return;
@@ -1480,20 +1475,13 @@ console.log(
     } = require("./handlers/chat-only-login.handler");
     setupChatOnlyLoginHandler(socket, session);
 
-    // Launch LiveChat door immediately - it will show login modal and handle auth
-    const { executeDoor } = require("./handlers/door.handler");
-    const liveChatDoor = {
-      id: "livechat",
-      name: "LiveChat",
-      command: "livechat",
-      type: "typescript",
-      path: "Doors/livechat",
-    };
-
+    // Launch LiveChat door immediately - it will show login modal and handle
+    // auth. Same launch as the SSO branch above: through executeDoor and its
+    // MIN_COLUMNS gate, against the registered LiveChat door.
 console.log("[ChatOnly] Executing LiveChat door");
     // Small delay to ensure client handlers are fully registered
     await new Promise(resolve => setTimeout(resolve, 100));
-    await executeDoor(socket, session, liveChatDoor);
+    await launchChatOnlyLiveChat(socket, session);
 
     return;
   }
