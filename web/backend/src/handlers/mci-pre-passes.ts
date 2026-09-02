@@ -40,7 +40,12 @@ import { AnsiUtil } from '../utils/ansi.util';
 import { checkConfAccess } from './message/message-scan.handler';
 import { getBoardConfig } from '../services/bbs-config-file.service';
 import { config as appConfig } from '../config';
-import { MCI_SENTINELS, type MciFlavour, type MciSentinels } from './mci-dispatch';
+import {
+  MCI_SENTINELS,
+  MCI_EXACT_KEYS_STARTING_WITH_D,
+  type MciFlavour,
+  type MciSentinels,
+} from './mci-dispatch';
 
 /**
  * PETSCII flavour only: the delimiters that mark a run of GENERATED text -
@@ -98,6 +103,65 @@ const screenDebug = (...args: any[]): void => screenHandler().screenDebug(...arg
 
 
 /**
+ * Strips every `~D<char>` terminator change from `text` and returns the
+ * terminator in force at the end, the way express.e's processMciCmd tracks
+ * `mciterminator` (express.e:5743-5748). Exported for its regression test.
+ *
+ * Mirrors the tokenizer's boundary rule: the cmd after `~` runs to the next
+ * space, CR, LF, CURRENT terminator or end of text. When that cmd is an
+ * exact dispatch key (`DT`, `DB`) the `~D` is NOT a terminator change and is
+ * left in place for the tokenizer - express.e tries the exact keys first and
+ * `StrCmp(cmd,'D',1)` last. `~D` followed by CR / LF / end of text is not a
+ * terminator change either (byte-compatible with the `/~D(.)/` pass this
+ * replaces, whose `.` never matched a line break).
+ */
+export function consumeTerminatorChanges(
+  text: string,
+  initialTerminator: string = '|',
+  onChange?: (from: string, to: string) => void,
+): { text: string; terminator: string } {
+  let out = '';
+  let terminator = initialTerminator;
+  let pos = 0;
+  const len = text.length;
+
+  while (pos < len) {
+    const at = text.indexOf('~D', pos);
+    if (at < 0) {
+      out += text.slice(pos);
+      break;
+    }
+    const next = at + 2 < len ? text[at + 2] : '';
+    if (next === '' || next === '\n' || next === '\r') {
+      out += text.slice(pos, at + 2);
+      pos = at + 2;
+      continue;
+    }
+
+    // The cmd the tokenizer would read for this `~`.
+    let cmdEnd = at + 1;
+    while (cmdEnd < len) {
+      const c = text[cmdEnd];
+      if (c === ' ' || c === '\n' || c === '\r' || c === terminator) break;
+      cmdEnd++;
+    }
+    const cmd = text.slice(at + 1, cmdEnd);
+    if (MCI_EXACT_KEYS_STARTING_WITH_D.has(cmd)) {
+      out += text.slice(pos, cmdEnd);
+      pos = cmdEnd;
+      continue;
+    }
+
+    out += text.slice(pos, at);
+    onChange?.(terminator, next);
+    terminator = next;
+    pos = at + 3;
+  }
+
+  return { text: out, terminator };
+}
+
+/**
  * ASYNC for the same reason buildMciDispatch is: `~ML.` / `~MD.` await
  * `db.getMessageBases` and `%NODELIST` awaits `getBoardConfig`.
  */
@@ -138,31 +202,19 @@ export async function applyMciPrePasses(
   let slowmoApplied = slowmo;
   let slowmoAppliedCount = slowmoCount;
 
-  // PHASE 5: ~Dx MCI Terminator Support (express.e:5651-5735)
-  // Parse ~D<char> codes to change MCI terminator dynamically
-  // Default terminator is |, but ~D. changes it to . for subsequent codes
-  // Example: ~D. changes terminator to ., then ~c3RED~c4GREEN. uses . instead of |
-  let mciTerminator = '|'; // Default MCI terminator
-
-  // Extract all ~D terminator changes and apply them sequentially
-  // This allows screen files to change terminators mid-stream
-  const terminatorRegex = /~D(.)/g;
-  let match;
-  const terminatorChanges: Array<{index: number, char: string}> = [];
-
-  while ((match = terminatorRegex.exec(parsed)) !== null) {
-    terminatorChanges.push({
-      index: match.index,
-      char: match[1]
-    });
-  }
-
-  // Remove ~D codes from output (they're control codes, not display codes)
-  parsed = parsed.replace(terminatorRegex, (match, newTerm) => {
-    screenDebug(`[MCI] Terminator changed from '${mciTerminator}' to '${newTerm}'`);
-    mciTerminator = newTerm;
-    return '';
+  // PHASE 5: ~D<char> MCI terminator (express.e:5743-5748)
+  // `~D.` changes the terminator from `|` to `.` for the codes that follow
+  // (`~D.~c3RED.~c4GREEN.` uses `.` instead of `|`). express.e matches
+  // `StrCmp(cmd,'D',1)` LAST, after every exact key, so `~DT|` (date) and
+  // `~DB|` (download bytes) are exact matches and never a terminator change.
+  // The pre-pass used to run `/~D(.)/g` over the whole string, which consumed
+  // both before the dispatch could see them; consumeTerminatorChanges mirrors
+  // express.e's order instead.
+  const terminatorPass = consumeTerminatorChanges(parsed, '|', (from, to) => {
+    screenDebug(`[MCI] Terminator changed from '${from}' to '${to}'`);
   });
+  parsed = terminatorPass.text;
+  const mciTerminator = terminatorPass.terminator;
 
   // ~XC - Execute Command (CRITICAL for NI/NO tools)
   // Format: ~XC_<command> <params>||

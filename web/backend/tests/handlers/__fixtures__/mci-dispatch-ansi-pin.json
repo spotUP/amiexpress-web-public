@@ -80,8 +80,8 @@
     "nonStopText": false,
     "currentMenuName": null
   },
-  "DT-eaten-by-terminator-regex": {
-    "parsed": "dt=|x",
+  "DT-date": {
+    "parsed": "dt=09-02-26x",
     "commands": [],
     "hasPause": false,
     "slowmo": 0,
@@ -89,8 +89,8 @@
     "nonStopText": false,
     "currentMenuName": null
   },
-  "DB-eaten-by-terminator-regex": {
-    "parsed": "db=|x",
+  "DB-download-bytes": {
+    "parsed": "db=3,145,728x",
     "commands": [],
     "hasPause": false,
     "slowmo": 0,

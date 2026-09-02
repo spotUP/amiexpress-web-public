@@ -150,14 +150,12 @@ const FIXTURES: Array<{ name: string; content: string }> = [
   { name: 'LC-lastcall', content: 'lc=~LC|' },
   { name: 'time', content: 'tl=~TL| tr=~TR|' },
   { name: 'bytes', content: 'ub=~UB| su=~SU| sd=~SD| fu=~FU| fd=~FD| bd=~BD|' },
-  // PRE-EXISTING behaviour, deliberately pinned rather than fixed here: the
-  // `~D<char>` terminator regex (screen.handler.ts, `terminatorRegex`) runs
-  // over the WHOLE string before the tokenizer, so `~DT` (date) and `~DB`
-  // (download bytes) are consumed as "set terminator to T / B" and never
-  // reach the dispatch. Task 4 is a behaviour-free move; this row exists so
-  // the move cannot quietly change the collision either way.
-  { name: 'DT-eaten-by-terminator-regex', content: 'dt=~DT|x' },
-  { name: 'DB-eaten-by-terminator-regex', content: 'db=~DB|x' },
+  // `~DT` (date) and `~DB` (download bytes) used to be eaten by the
+  // `~D<char>` terminator pre-pass (`/~D(.)/g`) before the dispatch could see
+  // them; the pre-pass now skips exact D-keys the way express.e:5743 does.
+  // Regression detail: tests/handlers/mci-dt-db-reachable.test.ts.
+  { name: 'DT-date', content: 'dt=~DT|x' },
+  { name: 'DB-download-bytes', content: 'db=~DB|x' },
   { name: 'node-identity', content: 'on=~ON| lg=~LG| in=~IN| rn=~RN| nd=~ND|' },
   { name: 'conference', content: 'cf=~CF| cn=~CN| mb=~MB| mn=~MN|' },
   { name: 'clocks', content: 'ct=~CT| vd=~VD| ve=~VE| ot=~OT| od=~OD| sc=~SC|' },

@@ -45,6 +45,7 @@ import {
   renderAccessKeysPetscii,
   PETSCII_RAW_CMDS,
   PETSCII_RAW_PREFIXES,
+  MCI_EXACT_KEYS_STARTING_WITH_D,
 } from '../../src/handlers/mci-dispatch';
 
 /**
@@ -92,6 +93,17 @@ describe('buildMciDispatch — FULL-parity key sets', () => {
       expect(Object.keys(p.prefixDispatch).sort()).toEqual(Object.keys(a.prefixDispatch).sort());
     });
   }
+
+  test('MCI_EXACT_KEYS_STARTING_WITH_D is exactly the D-keys of the table, in both flavours', async () => {
+    // The ~D<char> terminator pre-pass skips these keys; a `D?` key added to
+    // the table without landing here would be eaten as a terminator change.
+    for (const flavour of ['ansi', 'petscii'] as const) {
+      const d = await buildMciDispatch(session(), opts(flavour));
+      const dKeys = Object.keys(d.dispatch).filter(k => k.startsWith('D')).sort();
+      expect(dKeys).toEqual([...MCI_EXACT_KEYS_STARTING_WITH_D].sort());
+      expect(Object.keys(d.prefixDispatch).filter(k => k.startsWith('D'))).toEqual([]);
+    }
+  });
 
   test('inline mode adds the three sentinel prefixes in BOTH flavours', async () => {
     for (const flavour of ['ansi', 'petscii'] as const) {

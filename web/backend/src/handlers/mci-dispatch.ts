@@ -204,6 +204,17 @@ export const PETSCII_RAW_CMDS: ReadonlySet<string> = new Set([
 /** Prefix dispatch has no exact key; match on the cmd's first char. */
 export const PETSCII_RAW_PREFIXES: ReadonlySet<string> = new Set(['x', 'y']);
 
+/**
+ * Exact dispatch keys that begin with `D`. The `~D<char>` terminator pre-pass
+ * (mci-pre-passes.ts) must leave these for the tokenizer: express.e:5743-5748
+ * matches `StrCmp(cmd,'D',1)` LAST, after every exact key, with the comment
+ * "this needs to be near the end otherwise it might pick up other commands
+ * starting with D". Pinned against the real table by
+ * tests/handlers/mci-dispatch-flavours.test.ts, so a new `D?` key cannot be
+ * added without landing here too.
+ */
+export const MCI_EXACT_KEYS_STARTING_WITH_D: ReadonlySet<string> = new Set(['DB', 'DT']);
+
 // ---------------------------------------------------------------------------
 // buildMciDispatch
 // ---------------------------------------------------------------------------
