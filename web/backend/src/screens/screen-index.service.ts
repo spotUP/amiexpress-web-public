@@ -19,7 +19,7 @@ import { findSecurityScreen } from '../utils/screen-security.util';
 import { readTooltypeMap } from '../utils/info-file.util';
 import {
   ScreenDirType, SCREEN_DIR_MAP, getScreenDirType, getScreenFileName,
-  resolveNodeScreenDir, screenSearchLocations,
+  resolveNodeScreenDir, screenSearchLocations, isScreenFile,
 } from './screen-resolution';
 import { countMciCodes } from './mci-catalog';
 import { readScreenFlags } from './screen-flags';
@@ -178,18 +178,6 @@ export interface ScreenIndex {
   conferences: ConferenceFacts[];
   bulletins: BulletinFacts[];
   builtAt: string;
-}
-
-/** The extensions the loader will accept for a screen (ScreenTypes.info plus this port's own). */
-const SCREEN_EXTENSIONS = ['.txt', '.gr', '.ibm', '.seq', '.rip', '.ans', '.asc'];
-
-function isScreenFile(name: string): boolean {
-  if (name.endsWith('.backup')) return false;
-  const lower = name.toLowerCase();
-  // `bbsConfig.info.txt` is a config file's text sidecar, not a screen - it
-  // ends in .txt and has nothing to do with what a caller sees.
-  if (lower.endsWith('.info') || lower.includes('.info.')) return false;
-  return SCREEN_EXTENSIONS.some(ext => lower.endsWith(ext));
 }
 
 function listDir(dir: string): string[] {

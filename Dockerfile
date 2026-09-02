@@ -395,6 +395,33 @@ COPY Conf1.info Conf2.info Conf3.info Conf4.info Conf5.info Conf6.info Conf7.inf
 COPY Conf8.info Conf9.info Conf10.info Conf11.info Conf12.info Conf13.info Conf14.info /app/default-data/
 COPY Node0.info Node1.info Node2.info Node3.info Node4.info Node5.info Node6.info /app/default-data/
 
+# The template ships ONE copy of each node screen, not forty-one.
+#
+# The COPYs above take whole node directories, and this repo is a running
+# 41-node board: measured 2026-09-02, /app/default-data carried 544 node
+# screen files that are 16 distinct screens. A sysop who wanted to change the
+# logon art had 41 files to edit and no way to tell which one their board
+# reads.
+#
+# This is AmiExpress's own mechanism and not an invention: SCREENS=<dir> on
+# Node<n>.info IS the node's screen directory, and a node whose icon does not
+# declare one reads Node<n>/ (ACP.e:2666-2673, ported in
+# web/backend/src/screens/screen-resolution.ts). The step below moves the
+# byte-identical copies into Screens/Node/ and writes that tooltype onto each
+# node icon - no symlinks, and nothing a real Amiga could not read.
+#
+# It must run AFTER the Node<n> directories and the Node<n>.info icons above,
+# and it only ever writes /app/default-data: an existing board's volume is
+# untouched, because docker-entrypoint.sh seeds a directory only when it is
+# absent.
+#
+# tests/seed-shares-node-screens.test.ts fails if this step stops running.
+# The binary by its path, not `npx`: npx with a missing package goes to the
+# network and installs one, which in a build turns a broken step into a slow
+# one. tsx is a production dependency of web/backend (it is what CMD runs).
+RUN /app/web/backend/node_modules/.bin/tsx \
+        /app/web/backend/scripts/collapse-default-screens.ts /app/default-data
+
 # Copy BBS config directories (access levels, protocols, file checkers, etc.)
 COPY Access /app/default-data/Access
 COPY Languages /app/default-data/Languages

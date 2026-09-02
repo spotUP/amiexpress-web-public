@@ -19,6 +19,27 @@ import { BBSPaths } from '../utils/bbs-paths.util';
 import { readTooltypeMap } from '../utils/info-file.util';
 import { conferenceDir } from '../conferences/conference-paths';
 
+/**
+ * The extensions the loader will accept for a screen (ScreenTypes.info plus
+ * this port's own).
+ *
+ * This lived inside screen-index.service.ts. It belongs beside the rest of
+ * "where a screen comes from": the admin's index is no longer the only reader
+ * - the image's seed step has to know which files in a node directory are
+ * screens before it can share them, and a second copy of the list is how the
+ * two would come to disagree about `.asc`.
+ */
+export const SCREEN_EXTENSIONS = ['.txt', '.gr', '.ibm', '.seq', '.rip', '.ans', '.asc'];
+
+export function isScreenFile(name: string): boolean {
+  if (name.endsWith('.backup')) return false;
+  const lower = name.toLowerCase();
+  // `bbsConfig.info.txt` is a config file's text sidecar, not a screen - it
+  // ends in .txt and has nothing to do with what a caller sees.
+  if (lower.endsWith('.info') || lower.includes('.info.')) return false;
+  return SCREEN_EXTENSIONS.some(ext => lower.endsWith(ext));
+}
+
 export enum ScreenDirType {
   NODE = 'node',      // nodeScreenDir - Node{X}/ or Node{X}/Screens/
   CONF = 'conf',      // confScreenDir - Conf{X}/Screens/

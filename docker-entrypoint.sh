@@ -126,7 +126,14 @@ IMAGE_OWNED_INFO="Doors.info NamesNotAllowed.info Access.info Commands.info Prot
 # and is left alone. See sync_tracked.
 TRACKED_INFO="ConfConfig.info ComputerList.info Drives.info ScreenTypes.info Languages.info FCheck.info"
 
-VOLUME_OWNED_INFO="Node0.info Node1.info Node2.info Node3.info Node4.info Node5.info Node6.info Conf1.info Conf2.info Conf3.info Conf4.info Conf5.info Conf6.info Conf7.info Conf8.info Conf9.info Conf10.info Conf11.info Conf12.info Conf13.info Conf14.info SysopStats.info"
+# Every node the image seeds a directory for, not just the seven that used to
+# have an icon. A node's SCREENS tooltype is what points it at the shared
+# Screens/Node/ directory (ACP.e:2666-2673), so a node whose icon never
+# reaches the volume reads Node<n>/ - which after the image's collapse step
+# holds no screens at all. Names with no file behind them are skipped by
+# sync_volume_owned, so listing all 41 costs nothing on a board that has
+# fewer.
+VOLUME_OWNED_INFO="Node0.info Node1.info Node2.info Node3.info Node4.info Node5.info Node6.info Node7.info Node8.info Node9.info Node10.info Node11.info Node12.info Node13.info Node14.info Node15.info Node16.info Node17.info Node18.info Node19.info Node20.info Node21.info Node22.info Node23.info Node24.info Node25.info Node26.info Node27.info Node28.info Node29.info Node30.info Node31.info Node32.info Node33.info Node34.info Node35.info Node36.info Node37.info Node38.info Node39.info Node40.info Conf1.info Conf2.info Conf3.info Conf4.info Conf5.info Conf6.info Conf7.info Conf8.info Conf9.info Conf10.info Conf11.info Conf12.info Conf13.info Conf14.info SysopStats.info"
 
 # Root data files (not .info - batch scripts, dat files, etc.)
 ROOT_DATA_FILES="batch0 batch1 batch2 batch3 batch4 batch5 batch6 batch000 acp.dat acpConnections.dat BBSHelp.txt SystemStats cplistan1000.dat express"
