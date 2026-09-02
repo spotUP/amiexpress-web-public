@@ -17,8 +17,8 @@ import { Modal } from '../components/ui/Modal';
 import { screenToCanvas } from './screen-bytes';
 import { createSurface, type EditorSurface } from './screen-editor-state';
 import {
-  groupMciCodes, filterMciCodes, describeMciUsage,
-  type MciCodeShape, type MciFamilyShape,
+  groupMciCodes, filterMciCodes, describeMciUsage, describeCarry,
+  type MciCodeShape, type MciFamilyShape, type CarryVerdict,
 } from './screen-mci';
 import {
   toScreenRows, filterScreenRows,
@@ -63,6 +63,16 @@ export function ScreenFilesPage() {
   const [openScreen, setOpenScreen] = useState<string | null>(null);
   const [openFile, setOpenFile] = useState<string | null>(null);
   const [pendingUpload, setPendingUpload] = useState<{ bytes: string; name: string } | null>(null);
+  /**
+   * What replacing this file would do to its MCI codes, from the board's own
+   * dry run - and what the sysop chose to do about it.
+   *
+   * A screen is a program, and an ANSI editor writes no `~CC_`. Replacing a
+   * file used to drop every code in it without a word: the menu still painted
+   * and the keys stopped working.
+   */
+  const [carryVerdict, setCarryVerdict] = useState<CarryVerdict | null>(null);
+  const [carryCodes, setCarryCodes] = useState<'none' | 'above' | 'below'>('above');
   const uploadInput = useRef<HTMLInputElement>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const [shareSummary, setShareSummary] = useState<ShareSummary | null>(null);
@@ -195,8 +205,18 @@ export function ScreenFilesPage() {
 
   const entry: ScreenIndexEntryShape | undefined = data?.screens.find(s => s.screen === openScreen);
 
+  /**
+   * The fan-out choices for whatever file is open.
+   *
+   * `openScreen` is set by a row in the tables and NOT by the gallery, and the
+   * gallery is how a designer reaches a screen. Without a screen name there
+   * were no options at all, so a replacement picked from the gallery had
+   * nothing to click: the file was chosen and the write could not be applied.
+   * `fanOutOptions` always offers "this file only", so the name is passed as
+   * empty rather than the whole list being skipped.
+   */
   const options: FanOutOption[] = useMemo(
-    () => (data && openScreen && openFile ? fanOutOptions(data, openScreen, openFile) : []),
+    () => (data && openFile ? fanOutOptions(data, openScreen ?? '', openFile) : []),
     [data, openScreen, openFile],
   );
 
@@ -209,6 +229,29 @@ export function ScreenFilesPage() {
       reader.readAsDataURL(chosen);
     });
 
+  /**
+   * Ask the board what replacing this file would do to its codes.
+   *
+   * A dry run: it answers 200 with the verdict and writes nothing, so it is
+   * safe to run the moment a file is picked and before anything is chosen.
+   * The verdict is for the file being replaced; every other target of a
+   * fan-out keeps its OWN codes, which is the board's rule and not this
+   * page's.
+   */
+  const previewCarry = async (filePath: string, bytes: string) => {
+    try {
+      const res = await apiClient.putScreenFile(filePath, bytes, [filePath], {
+        carryCodes: 'above',
+        dryRun: true,
+      });
+      setCarryVerdict((res.data?.targets ?? [])[0] ?? null);
+    } catch {
+      // A verdict is an aid, not a gate. If the board cannot answer, the
+      // replace still works exactly as it did before this existed.
+      setCarryVerdict(null);
+    }
+  };
+
   const applyWrite = async (option: FanOutOption) => {
     if (!pendingUpload || !openFile) return;
     try {
@@ -219,9 +262,12 @@ export function ScreenFilesPage() {
         await apiClient.shareScreens(nodes, sharedDir);
       }
       const targets = option.choice === 'share-then-write' ? [openFile] : option.targets;
-      await apiClient.putScreenFile(openFile, pendingUpload.bytes, targets);
+      // Per target: node 1's copy names Node1 and node 7's names Node7, so the
+      // board reads each target's own file rather than one plan for all.
+      await apiClient.putScreenFile(openFile, pendingUpload.bytes, targets, { carryCodes });
       showSuccess(`Wrote ${targets.length} file${targets.length === 1 ? '' : 's'}`);
       setPendingUpload(null);
+      setCarryVerdict(null);
       queryClient.invalidateQueries({ queryKey: ['screen-index'] });
       queryClient.invalidateQueries({ queryKey: ['screen-file', openFile] });
     } catch (error) {
@@ -322,6 +368,62 @@ export function ScreenFilesPage() {
     setImportPlan(null);
     setImportFile(null);
     queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+  };
+
+  /**
+   * Every damaged screen in one pass, after saying which ones and asking.
+   *
+   * 41 of this board's 47 are copies of one NODE_BULL.TXT, so one at a time is
+   * forty clicks for a single decision - but it is still a write to forty
+   * files, so the names come first and the sysop confirms them.
+   */
+  const repairAll = async () => {
+    setFileError(null);
+
+    try {
+      const preview = await apiClient.repairAllScreens(true);
+      const damaged: string[] = preview.data?.damaged ?? [];
+      if (!damaged.length) {
+        showSuccess('No screen on this board has colour codes missing their escape byte.');
+        return;
+      }
+
+      const ok = await confirm({
+        title: `Repair ${damaged.length} screen${damaged.length === 1 ? '' : 's'}?`,
+        message: `${damaged.slice(0, 12).join(', ')}${damaged.length > 12 ? `, and ${damaged.length - 12} more` : ''}. Each is backed up beside itself first.`,
+        confirmText: 'Repair them',
+      });
+      if (!ok) return;
+
+      const res = await apiClient.repairAllScreens(false);
+      const refused: { path: string; reason: string }[] = res.data?.refused ?? [];
+      showSuccess(res.message ?? 'Repaired');
+      if (refused.length) {
+        setFileError(`Refused: ${refused.map(r => `${r.path} (${r.reason})`).join('; ')}`);
+      }
+      queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+    } catch (error) {
+      setFileError((error as Error).message);
+      showError((error as Error).message);
+    }
+  };
+
+  /**
+   * What the sysop says a file IS, over what the manager guessed.
+   *
+   * The classification is a heuristic - by name, and by the signature of the
+   * tool that writes a file - and this board has been told once already that
+   * its live screens were read by nothing.
+   */
+  const flagFile = async (target: string, flag: 'backup' | 'runtime' | 'art' | null) => {
+    try {
+      const res = await apiClient.flagScreen(target, flag);
+      showSuccess(res.message ?? 'Marked');
+      queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+      queryClient.invalidateQueries({ queryKey: ['screen-file', target] });
+    } catch (error) {
+      showError((error as Error).message);
+    }
   };
 
   const repairFile = async (target: string) => {
@@ -773,6 +875,9 @@ export function ScreenFilesPage() {
         <button className="inline-flex items-center gap-1 underline" onClick={() => importInput.current?.click()}>
           <Upload size={14} /> Import an archive
         </button>
+        <button className="inline-flex items-center gap-1 underline" onClick={repairAll}>
+          <AlertTriangle size={14} /> Repair every damaged screen
+        </button>
       </div>
 
       {importPlan && (
@@ -1033,11 +1138,15 @@ export function ScreenFilesPage() {
               <input
                 ref={uploadInput}
                 type="file"
+                data-testid="screen-upload"
                 className="hidden"
                 onChange={async e => {
                   const chosen = e.target.files?.[0];
                   if (!chosen) return;
-                  setPendingUpload({ bytes: await readAsBase64(chosen), name: chosen.name });
+                  const bytes = await readAsBase64(chosen);
+                  setPendingUpload({ bytes, name: chosen.name });
+                  setCarryCodes('above');
+                  if (openFile) await previewCarry(openFile, bytes);
                   e.target.value = '';
                 }}
               />
@@ -1076,6 +1185,37 @@ export function ScreenFilesPage() {
                   Replace <span className="font-topaz">{openFile}</span> with{' '}
                   <span className="font-topaz">{pendingUpload.name}</span>
                 </p>
+
+                {/*
+                  A screen is a program and an ANSI editor writes no ~CC_. What
+                  a replace would cost is said BEFORE the fan-out is chosen,
+                  because the cost is the same whichever fan-out it is.
+                */}
+                {carryVerdict && (carryVerdict.carried.length > 0 || carryVerdict.lost.length > 0) && (
+                  <div className="space-y-1">
+                    <p className={carryVerdict.lost.length ? 'text-status-warn' : 'text-content-secondary'}>
+                      {describeCarry(carryVerdict)}
+                    </p>
+                    <ul className="font-topaz">
+                      {carryVerdict.carried.map(line => (
+                        <li key={line} className="text-content-primary">{line}</li>
+                      ))}
+                    </ul>
+                    <label className="block text-content-secondary">
+                      Keep these codes
+                      <select
+                        className="input-field ml-2"
+                        value={carryCodes}
+                        onChange={e => setCarryCodes(e.target.value as 'none' | 'above' | 'below')}
+                      >
+                        <option value="above">where they were, around the art</option>
+                        <option value="below">all together, after the art</option>
+                        <option value="none">do not keep them</option>
+                      </select>
+                    </label>
+                  </div>
+                )}
+
                 {options.map(option => (
                   <button
                     key={option.choice}
@@ -1089,12 +1229,37 @@ export function ScreenFilesPage() {
                 ))}
                 <button
                   className="block text-left text-content-secondary underline"
-                  onClick={() => setPendingUpload(null)}
+                  onClick={() => { setPendingUpload(null); setCarryVerdict(null); }}
                 >
                   cancel
                 </button>
               </div>
             )}
+
+            {/*
+              The manager's classification is a guess, and the sysop is the one
+              who knows. `art` says the guess is wrong and a designer does edit
+              this file - which is the case the gallery hides by default.
+            */}
+            <label className="block text-sm text-content-secondary">
+              This file is
+              <select
+                className="input-field ml-2"
+                value={file.generated ?? 'art'}
+                onChange={e => flagFile(openFile, e.target.value as 'backup' | 'runtime' | 'art')}
+              >
+                <option value="art">art a designer edits</option>
+                <option value="runtime">written by the board</option>
+                <option value="backup">an old copy kept beside the real one</option>
+              </select>
+              <button
+                type="button"
+                className="ml-2 underline"
+                onClick={() => flagFile(openFile, null)}
+              >
+                use the manager's guess
+              </button>
+            </label>
 
             {file.problems && file.problems.length > 0 && (
               <div className="text-sm space-y-1">

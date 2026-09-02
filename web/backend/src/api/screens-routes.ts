@@ -28,10 +28,12 @@ import { screenSearchLocations } from '../screens/screen-resolution';
 import { checkShare } from '../screens/share-preconditions';
 import { applyTooltypes } from '../utils/info-file.util';
 import {
-  getScreenIndex, invalidateScreenIndex, screenFileFacts, buildScreenIndex,
-  listScreenDirectories, listBbsCommands,
+  getScreenIndex, invalidateScreenIndex, invalidateScreenFacts, screenFileFacts,
+  buildScreenIndex, listScreenDirectories, listBbsCommands,
 } from '../screens/screen-index.service';
 import { MCI_CATALOG, MCI_FAMILY_ORDER, MCI_ENABLED_KEY } from '../screens/mci-catalog';
+import { planMciCarry, applyMciCarry, type MciPlacement } from '../screens/mci-carry';
+import { setScreenFlag, readScreenFlags, type ScreenFlag } from '../screens/screen-flags';
 
 export const screensRouter = express.Router();
 
@@ -189,7 +191,13 @@ function resolveScreenPathAllowingNew(relativePath: string): string | null {
  * restores every file already written - a replace across forty nodes is
  * all-or-nothing rather than half-applied.
  */
-function writeToTargets(targets: string[], buf: Buffer): string[] {
+/**
+ * `bytes` may differ PER TARGET - the MCI carry keeps each node's own codes,
+ * so node 1 and node 7 receive different files from one upload. Passing a
+ * function keeps that inside the all-or-nothing loop; writing each target with
+ * its own call would give up the rollback.
+ */
+function writeToTargets(targets: string[], bytes: Buffer | ((rel: string) => Buffer)): string[] {
   const done: { full: string; backup: string | null }[] = [];
 
   try {
@@ -202,7 +210,7 @@ function writeToTargets(targets: string[], buf: Buffer): string[] {
         backup = `${full}.backup`;
         fs.copyFileSync(full, backup);
       }
-      fs.writeFileSync(full, buf);
+      fs.writeFileSync(full, typeof bytes === 'function' ? bytes(rel) : bytes);
       done.push({ full, backup });
     }
   } catch (error) {
@@ -273,10 +281,38 @@ screensRouter.put('/file', (req: Request, res: Response) => {
     ? req.body.targets
     : [rename ? path.join(path.dirname(rel), rename) : rel];
 
+  const placement = readPlacement((req.body || {}).carryCodes);
+  if (!placement) {
+    return res.status(400).json({ success: false, error: 'carryCodes must be none, above or below' });
+  }
+
+  // Latin1 both ways: a screen carries Amiga high-bit bytes, and a UTF-8 round
+  // trip turns one into U+FFFD.
+  const uploaded = Buffer.from(content, 'base64').toString('latin1');
+  const plans = planCarryForTargets(targets, uploaded, placement);
+
+  // A dry run answers 200 with the verdicts and writes nothing, so the dialog
+  // can say what a replace would lose before the sysop chooses.
+  if ((req.body || {}).dryRun === true) {
+    return sendOk(res, {
+      dryRun: true,
+      targets: plans.map(({ path: target, carried, lost, uploadHasCodes }) =>
+        ({ path: target, carried, lost, uploadHasCodes })),
+    });
+  }
+
+  const byTarget = new Map(plans.map(entry => [entry.path, entry.plan]));
+
   try {
-    const written = writeToTargets(targets, Buffer.from(content, 'base64'));
-    return sendOk(res, { written: written.map(w => path.relative(config.get('dataDir'), w)) },
-      `Wrote ${written.length} file${written.length === 1 ? '' : 's'}`);
+    const written = writeToTargets(targets, target => {
+      const plan = byTarget.get(target);
+      return Buffer.from(plan ? applyMciCarry(uploaded, plan, placement) : uploaded, 'latin1');
+    });
+    return sendOk(res, {
+      written: written.map(w => path.relative(config.get('dataDir'), w)),
+      carried: plans.map(({ path: target, carried, lost }) => ({ path: target, carried, lost }))
+        .filter(t => t.carried.length || t.lost.length),
+    }, `Wrote ${written.length} file${written.length === 1 ? '' : 's'}`);
   } catch (error) {
     return res.status(400).json({ success: false, error: (error as Error).message });
   }
@@ -286,6 +322,49 @@ screensRouter.put('/file', (req: Request, res: Response) => {
  * DELETE /api/screens/file?path=...
  * Backs up, removes, and reports which scopes stop resolving because of it.
  */
+/**
+ * POST /api/screens/flag   Body: { path, flag: 'backup' | 'runtime' | 'art' | null }
+ *
+ * The sysop's own answer about a file, over the manager's guess.
+ *
+ * Today's classification is by name and by the signature of the tool that
+ * writes a file. Both are heuristics, and this board has been told once
+ * already that its live screens were read by nothing. `art` is the override
+ * that says the guess is wrong and a designer does edit this one; `null`
+ * removes the override so the heuristic applies again.
+ */
+screensRouter.post('/flag', (req: Request, res: Response) => {
+  const baseDir = config.get('dataDir');
+  const rel = String(req.body?.path || '');
+  const full = resolveScreenPath(rel);
+  if (!full) {
+    return res.status(400).json({ success: false, error: 'Path outside the board root' });
+  }
+
+  const raw = req.body?.flag;
+  const flag: ScreenFlag | null = raw === null || raw === undefined || raw === ''
+    ? null
+    : ['backup', 'runtime', 'art'].includes(String(raw)) ? String(raw) as ScreenFlag : null;
+
+  if (raw && flag === null) {
+    return res.status(400).json({
+      success: false,
+      error: 'flag must be backup, runtime, art, or null to clear it',
+    });
+  }
+
+  // Store it under the path the index reports, so a lookup by relPath finds
+  // it whatever casing the sysop typed.
+  const relPath = path.relative(baseDir, full);
+  setScreenFlag(baseDir, relPath, flag);
+  // The bytes did not move, so the per-file cache would answer with the old
+  // classification: the flag has to clear the FACTS, not just the index.
+  invalidateScreenFacts();
+
+  return sendOk(res, { path: relPath, flag, flags: readScreenFlags(baseDir) },
+    flag ? `Marked ${relPath} as ${flag}` : `Cleared the mark on ${relPath}`);
+});
+
 /**
  * POST /api/screens/repair   Body: { path }
  *
@@ -301,6 +380,47 @@ screensRouter.put('/file', (req: Request, res: Response) => {
  * screen is a real thing. And a backup is written first, the same one a delete
  * writes.
  */
+/**
+ * One file's repair, and the reason it was refused if it was.
+ *
+ * Split out so the bulk repair runs the SAME check per file rather than a
+ * looser one: forty files repaired by a second implementation is forty chances
+ * to write an escape byte into art.
+ */
+function repairOneFile(full: string): { repaired: number } | { refused: string } {
+  let text: string;
+  try {
+    text = fs.readFileSync(full, 'latin1');
+  } catch (error) {
+    return { refused: (error as Error).message };
+  }
+
+  if (text.includes('\x1b')) {
+    return {
+      refused: 'This file already contains escape bytes, so a bare [ may be art rather than damage. Nothing was changed.',
+    };
+  }
+
+  // The final byte of a CSI sequence is what says where it ends: m for colour,
+  // H for cursor position, J for clear, and the rest of the set.
+  const CSI = /\[([0-9;?]*)([A-Za-z])/g;
+  const matches = text.match(CSI);
+  if (!matches || matches.length === 0) {
+    return { refused: 'No colour codes found in this file - there is nothing to repair.' };
+  }
+
+  const repaired = text.replace(CSI, (_full, params, final) => `\x1b[${params}${final}`);
+
+  try {
+    fs.copyFileSync(full, `${full}.backup`);
+    fs.writeFileSync(full, repaired, 'latin1');
+  } catch (error) {
+    return { refused: (error as Error).message };
+  }
+
+  return { repaired: matches.length };
+}
+
 screensRouter.post('/repair', (req: Request, res: Response) => {
   const baseDir = config.get('dataDir');
   const rel = String(req.body?.path || '');
@@ -309,46 +429,68 @@ screensRouter.post('/repair', (req: Request, res: Response) => {
     return res.status(400).json({ success: false, error: 'Path outside the board root' });
   }
 
-  let text: string;
-  try {
-    text = fs.readFileSync(full, 'latin1');
-  } catch (error) {
-    return res.status(404).json({ success: false, error: (error as Error).message });
+  const outcome = repairOneFile(full);
+  if ('refused' in outcome) {
+    const missing = outcome.refused.includes('ENOENT');
+    return res.status(missing ? 404 : 400).json({ success: false, error: outcome.refused });
   }
 
-  if (text.includes('\x1b')) {
-    return res.status(400).json({
-      success: false,
-      error: 'This file already contains escape bytes, so a bare [ may be art rather than damage. Nothing was changed.',
-    });
-  }
-
-  // The final byte of a CSI sequence is what says where it ends: m for colour,
-  // H for cursor position, J for clear, and the rest of the set.
-  const CSI = /\[([0-9;?]*)([A-Za-z])/g;
-  const matches = text.match(CSI);
-  if (!matches || matches.length === 0) {
-    return res.status(400).json({
-      success: false,
-      error: 'No colour codes found in this file - there is nothing to repair.',
-    });
-  }
-
-  const repaired = text.replace(CSI, (_full, params, final) => `\x1b[${params}${final}`);
-
-  try {
-    fs.copyFileSync(full, `${full}.backup`);
-    fs.writeFileSync(full, repaired, 'latin1');
-    invalidateScreenIndex();
-  } catch (error) {
-    return res.status(500).json({ success: false, error: (error as Error).message });
-  }
+  invalidateScreenIndex();
 
   return sendOk(res, {
     path: path.relative(baseDir, full),
     backup: `${path.relative(baseDir, full)}.backup`,
-    repaired: matches.length,
-  }, `Put the escape byte back in front of ${matches.length} code${matches.length === 1 ? '' : 's'}`);
+    repaired: outcome.repaired,
+  }, `Put the escape byte back in front of ${outcome.repaired} code${outcome.repaired === 1 ? '' : 's'}`);
+});
+
+/**
+ * POST /api/screens/repair-all   Body: { dryRun?: boolean }
+ *
+ * Every file the index flags as damaged, repaired in one pass.
+ *
+ * 41 of this board's 47 damaged screens are copies of ONE NODE_BULL.TXT, so
+ * repairing them one at a time is forty clicks for one decision. The decision
+ * is still the sysop's: a dry run lists exactly which files would be written,
+ * and each one goes through the same `repairOneFile` - a file that has any
+ * escape byte in it is refused here as loudly as it is on its own.
+ *
+ * Reported per file rather than as a count, because "40 repaired, 7 refused"
+ * with no names is a report a sysop cannot act on.
+ */
+screensRouter.post('/repair-all', (req: Request, res: Response) => {
+  const baseDir = config.get('dataDir');
+  const index = getScreenIndex(baseDir);
+  const dryRun = req.body?.dryRun === true;
+
+  const damaged = Object.values(index.files)
+    .filter(f => f.problems.includes('colour-codes-without-escape'))
+    .map(f => f.relPath)
+    .sort((a, b) => a.localeCompare(b));
+
+  if (dryRun) {
+    return sendOk(res, { dryRun: true, damaged }, `${damaged.length} file${damaged.length === 1 ? '' : 's'} would be repaired`);
+  }
+
+  const repaired: { path: string; codes: number }[] = [];
+  const refused: { path: string; reason: string }[] = [];
+
+  for (const rel of damaged) {
+    const full = resolveScreenPath(rel);
+    if (!full) {
+      refused.push({ path: rel, reason: 'Path outside the board root' });
+      continue;
+    }
+    const outcome = repairOneFile(full);
+    if ('refused' in outcome) refused.push({ path: rel, reason: outcome.refused });
+    else repaired.push({ path: rel, codes: outcome.repaired });
+  }
+
+  if (repaired.length) invalidateScreenIndex();
+
+  return sendOk(res, { repaired, refused },
+    `Repaired ${repaired.length} file${repaired.length === 1 ? '' : 's'}`
+    + (refused.length ? `, refused ${refused.length}` : ''));
 });
 
 screensRouter.delete('/file', (req: Request, res: Response) => {
@@ -486,6 +628,36 @@ screensRouter.get('/mci/targets', (req: Request, res: Response) => {
   });
 });
 
+/**
+ * What a write would carry across, per target, and the bytes each one gets.
+ *
+ * Shared by the two routes that replace a screen - `PUT /file`, which is what
+ * the admin's replace and the editor's Save use, and `POST /upload`. One
+ * implementation, because "does this upload have codes of its own" is a
+ * question with one right answer and two callers.
+ */
+function planCarryForTargets(targets: string[], uploaded: string, placement: MciPlacement) {
+  return targets.map(target => {
+    const full = resolveScreenPath(target);
+    const before = full && fs.existsSync(full) ? fs.readFileSync(full).toString('latin1') : '';
+    const plan = planMciCarry(before, uploaded);
+
+    return {
+      path: target,
+      carried: placement === 'none' ? [] : [...plan.head, ...plan.tail],
+      lost: placement === 'none' ? [] : plan.lost,
+      uploadHasCodes: plan.uploadHasCodes,
+      plan,
+    };
+  });
+}
+
+/** `carryCodes` off the request, or an error naming what it may be. */
+function readPlacement(raw: unknown): MciPlacement | null {
+  const placement = String(raw || 'none');
+  return ['none', 'above', 'below'].includes(placement) ? placement as MciPlacement : null;
+}
+
 /** Uploads are held in memory: a screen is kilobytes, and the bytes go straight to disk. */
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
@@ -521,10 +693,45 @@ screensRouter.post('/upload', upload.single('file'), (req: Request, res: Respons
     return res.status(400).json({ success: false, error: 'targets must be a JSON array of paths' });
   }
 
+  const placement = readPlacement((req.body || {}).carryCodes);
+  if (!placement) {
+    return res.status(400).json({
+      success: false,
+      error: 'carryCodes must be none, above or below',
+    });
+  }
+  const dryRun = String((req.body || {}).dryRun || '') === 'true';
+
+  const uploaded = file.buffer.toString('latin1');
+
+  // PER TARGET. Node 1's copy of a screen says `~SS_BBS:Node1/...` and node
+  // 7's says Node7; one plan taken from the first target would hand every node
+  // node 1's screen.
+  const plans = planCarryForTargets(targets, uploaded, placement);
+
+  // A dry run answers 200 with the verdicts. The share endpoint learned the
+  // same lesson: a 409 for "here is what would happen" is logged by the
+  // browser as an error the sysop did not cause.
+  if (dryRun) {
+    return sendOk(res, {
+      dryRun: true,
+      targets: plans.map(({ path: target, carried, lost, uploadHasCodes }) =>
+        ({ path: target, carried, lost, uploadHasCodes })),
+    });
+  }
+
+  const byTarget = new Map(plans.map(entry => [entry.path, entry.plan]));
+
   try {
-    const written = writeToTargets(targets, file.buffer);
-    return sendOk(res, { written: written.map(w => path.relative(config.get('dataDir'), w)) },
-      `Uploaded to ${written.length} file${written.length === 1 ? '' : 's'}`);
+    const written = writeToTargets(targets, rel2 => {
+      const plan = byTarget.get(rel2);
+      return Buffer.from(plan ? applyMciCarry(uploaded, plan, placement) : uploaded, 'latin1');
+    });
+    return sendOk(res, {
+      written: written.map(w => path.relative(config.get('dataDir'), w)),
+      carried: plans.map(({ path: target, carried, lost }) => ({ path: target, carried, lost }))
+        .filter(t => t.carried.length || t.lost.length),
+    }, `Uploaded to ${written.length} file${written.length === 1 ? '' : 's'}`);
   } catch (error) {
     return res.status(400).json({ success: false, error: (error as Error).message });
   }

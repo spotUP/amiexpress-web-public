@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   groupMciCodes, filterMciCodes, describeMciUsage, buildMciToken,
-  firstLineEnablesMci, canvasEnablesMci, textUnder,
+  firstLineEnablesMci, canvasEnablesMci, textUnder, describeCarry,
   type MciCodeShape, type MciCanvas,
 } from '../pages/screen-mci';
 
@@ -153,5 +153,41 @@ describe('what typing a code would paint over', () => {
   it('is empty past the end of a row, so the end of a line is always free', () => {
     expect(textUnder(canvasOf('~', 'ab'), 5, 1, 4)).toBe('');
     expect(textUnder(canvasOf('~'), 0, 9, 4)).toBe('');
+  });
+});
+
+describe('what a replace costs', () => {
+  const verdict = (over = {}) => ({
+    path: 'Node1/LOGON.TXT', carried: [], lost: [], uploadHasCodes: false, ...over,
+  });
+
+  it('says plainly when the upload is the whole truth', () => {
+    expect(describeCarry(verdict({ uploadHasCodes: true, carried: ['~CC_gwall|'] })))
+      .toContain('codes of its own');
+  });
+
+  it('says there is nothing to keep when the screen has no codes', () => {
+    expect(describeCarry(verdict())).toBe('This screen carries no codes, so there is nothing to keep');
+  });
+
+  it('counts the lines it would keep', () => {
+    expect(describeCarry(verdict({ carried: ['~', '~CC_gwall|'] }))).toBe('2 lines of codes kept');
+    expect(describeCarry(verdict({ carried: ['~CC_gwall|'] }))).toBe('1 line of codes kept');
+  });
+
+  it('names the lines it cannot place, because those are the ones a sysop must redo', () => {
+    const text = describeCarry(verdict({
+      carried: ['~'],
+      lost: [{ text: '~CC_gwall|', line: 3 }, { text: '~SP', line: 9 }],
+    }));
+
+    expect(text).toContain('1 line of codes kept');
+    expect(text).toContain('2 among the art cannot be placed (line 3, line 9)');
+    expect(text).toContain('put them back');
+  });
+
+  it('is honest when nothing at all can be kept', () => {
+    expect(describeCarry(verdict({ lost: [{ text: '~SP', line: 4 }] })))
+      .toContain('No codes can be kept');
   });
 });

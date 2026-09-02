@@ -352,14 +352,50 @@ class ApiClient {
     return this.request<ApiResponse>(`${API_BASE}/screens/mci/targets?kind=${kind}`);
   }
 
+  /** Every damaged screen at once. `dryRun` names them and writes nothing. */
+  async repairAllScreens(dryRun = false) {
+    return this.request<ApiResponse>(`${API_BASE}/screens/repair-all`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dryRun }),
+    });
+  }
+
+  /**
+   * The sysop's own answer about what a file IS, over the manager's guess.
+   * `art` says the guess is wrong; null clears the mark.
+   */
+  async flagScreen(filePath: string, flag: 'backup' | 'runtime' | 'art' | null) {
+    return this.request<ApiResponse>(`${API_BASE}/screens/flag`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: filePath, flag }),
+    });
+  }
+
   async getScreenFile(filePath: string) {
     return this.request<ApiResponse>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`);
   }
 
-  async putScreenFile(filePath: string, contentBase64: string, targets?: string[]) {
+  /**
+   * `carryCodes` keeps the replaced file's MCI codes around the new art -
+   * 'above' puts its head block back on top and its tail below, 'below' puts
+   * everything after. Default 'none' writes exactly what was sent.
+   *
+   * `dryRun` answers what WOULD be carried and lost, per target, and writes
+   * nothing.
+   */
+  async putScreenFile(
+    filePath: string,
+    contentBase64: string,
+    targets?: string[],
+    options?: { carryCodes?: 'none' | 'above' | 'below'; dryRun?: boolean },
+  ) {
     return this.putJson<ApiResponse>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`, {
       content: contentBase64,
       targets,
+      carryCodes: options?.carryCodes,
+      dryRun: options?.dryRun,
     });
   }
 

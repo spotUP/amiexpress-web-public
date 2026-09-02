@@ -358,15 +358,36 @@ export function codeForCmd(cmd: string): MciCode | undefined {
  */
 export const MCI_ENABLED_KEY = '(enables MCI)';
 
-export function countMciCodes(text: string): Record<string, number> {
-  const counts: Record<string, number> = {};
-  const bump = (code: string) => { counts[code] = (counts[code] || 0) + 1; };
+/** One code found in a screen, and exactly which bytes it occupies. */
+export interface ScannedMciCode {
+  /** The catalog entry, or undefined for a `~` nobody defines. */
+  entry?: MciCode;
+  /** Offset of the leading tilde. */
+  at: number;
+  /** The whole thing as written - tilde, width, code, argument, terminator. */
+  text: string;
+}
+
+/**
+ * Walk a screen the way the parser does and report every code with its bytes.
+ *
+ * One scanner: `countMciCodes` counts what this finds, and the carry that
+ * moves codes across an upload moves what this finds. A second walk would be
+ * a second answer to "is that a code", which is the drift this file's header
+ * warns about.
+ *
+ * `~~` is a literal tilde and is reported as the `~` code, not as the start of
+ * one. A bare tilde with no cmd is the switch that enables MCI for the whole
+ * file and is reported with no entry and the `MCI_ENABLED_KEY` name.
+ */
+export function scanMciCodes(text: string): ScannedMciCode[] {
+  const found: ScannedMciCode[] = [];
 
   for (let i = 0; i < text.length; i++) {
     if (text[i] !== '~') continue;
 
     if (text[i + 1] === '~') {
-      bump('~');
+      found.push({ entry: MCI_BY_CODE.get('~'), at: i, text: '~~' });
       i++;
       continue;
     }
@@ -386,13 +407,31 @@ export function countMciCodes(text: string): Record<string, number> {
 
     const cmd = text.slice(start, end);
     if (!cmd) {
-      bump(MCI_ENABLED_KEY);
+      found.push({ at: i, text: '~' });
       continue;
     }
 
     const entry = codeForCmd(cmd);
-    if (entry) bump(entry.code);
-    i = end - 1;
+    // The terminator belongs to the code: `~CL.` without its period is not
+    // the code, and a carry that dropped it would move a dead one.
+    let stop = end;
+    if (entry && entry.terminator && text.startsWith(entry.terminator, end)) {
+      stop = end + entry.terminator.length;
+    }
+
+    found.push({ entry, at: i, text: text.slice(i, stop) });
+    i = stop - 1;
+  }
+
+  return found;
+}
+
+export function countMciCodes(text: string): Record<string, number> {
+  const counts: Record<string, number> = {};
+
+  for (const found of scanMciCodes(text)) {
+    const key = found.entry ? found.entry.code : found.text === '~' ? MCI_ENABLED_KEY : undefined;
+    if (key) counts[key] = (counts[key] || 0) + 1;
   }
 
   return counts;

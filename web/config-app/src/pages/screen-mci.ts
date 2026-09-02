@@ -164,3 +164,40 @@ export function canvasEnablesMci(canvas: MciCanvas): boolean {
 export function textUnder(canvas: MciCanvas, x: number, y: number, length: number): string {
   return rowText(canvas, y).slice(x, x + length).trimEnd();
 }
+
+/** What a replace would do to the codes in the file being replaced. */
+export interface CarryVerdict {
+  path: string;
+  /** Whole lines of codes that would be kept around the new art. */
+  carried: string[];
+  /** Codes that sat among the art and cannot be placed around new art. */
+  lost: { text: string; line: number }[];
+  /** The replacement has codes of its own, so it is the whole truth. */
+  uploadHasCodes: boolean;
+}
+
+/**
+ * One sentence about what a replace costs, in the terms the decision needs.
+ *
+ * Silence would be the wrong default here: the sysop's report was that codes
+ * "get wiped" with no word about it, so the case worth naming loudest is the
+ * one where something is lost.
+ */
+export function describeCarry(verdict: CarryVerdict): string {
+  if (verdict.uploadHasCodes) {
+    return 'The file you are uploading has codes of its own, so it is used exactly as it is';
+  }
+
+  const kept = verdict.carried.length;
+  const lost = verdict.lost.length;
+
+  if (!kept && !lost) return 'This screen carries no codes, so there is nothing to keep';
+
+  const keptPart = kept
+    ? `${kept} line${kept === 1 ? '' : 's'} of codes kept`
+    : 'No codes can be kept';
+  if (!lost) return keptPart;
+
+  const where = verdict.lost.map(l => `line ${l.line}`).join(', ');
+  return `${keptPart}, and ${lost} among the art cannot be placed (${where}) - put ${lost === 1 ? 'it' : 'them'} back with the editor`;
+}
