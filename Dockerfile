@@ -142,21 +142,18 @@ WORKDIR /app
 
 # A door whose package.json `main` names a file that is not in the image
 # cannot start on the board. Fail the BUILD instead of the sysop's evening.
-RUN set -eu; \
-    missing=''; \
-    for door in /app/Doors/*/; do \
-      [ -f "\$door/package.json" ] || continue; \
-      main=\$(node -p "(require('\$door/package.json').main || '')" 2>/dev/null || echo ''); \
-      case "\$main" in \
-        dist/*) [ -f "\$door\$main" ] || missing="\$missing \$(basename \$door)";; \
-      esac; \
-    done; \
-    if [ -n "\$missing" ]; then \
-      echo "ERROR: these doors ship no entry point:\$missing" >&2; \
-      echo "Build the door and commit its dist/ - see tests/doors/door-dist-is-shipped.test.ts" >&2; \
-      exit 1; \
-    fi; \
-    echo '[doors] every TypeScript door has the entry point its manifest names'
+#
+# The check is a FILE, not an escaped RUN one-liner: inlined, its `case`
+# collapsed onto one line and busybox sh rejected it with `syntax error:
+# unexpected "("`, which failed the deploy on 2026-09-02. A script can also
+# be run - and its failure modes tested - outside Docker.
+#
+# It lives in docker/ rather than dev/scripts because .dockerignore excludes
+# dev/scripts, and whether a `!` exception re-includes a file under an
+# excluded directory is exactly the kind of subtlety that should not stand
+# between a door and the board.
+COPY docker/verify-door-entries.sh /usr/local/bin/verify-door-entries.sh
+RUN sh /usr/local/bin/verify-door-entries.sh /app/Doors
 
 # ============================================================================
 # Stage 7: Build Backend
