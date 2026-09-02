@@ -10,6 +10,14 @@ import { GamepadInputManager, GamepadAxis } from '@amiexpress/bbs-door-sdk';
 import type {
   AppState, PlayerSettings, RotationSystem, KeyBindings, GamepadBindings, ItemMode,
 } from '../core/types';
+import { DEFAULT_VERSUS_GOAL, type VersusWinType } from '../core/versus-goal';
+
+/** The reference's own names for the three win types (gamestart.c:12756-12764). */
+const VERSUS_WIN_LABELS: Record<VersusWinType, string> = {
+  survival: 'SURVIVAL',
+  level: 'GOAL LV',
+  lines: 'GOAL LINE',
+};
 
 /**
  * One row of the settings menu: what it reads, what it says, what it does.
@@ -277,6 +285,18 @@ export class SettingsScreen {
         run: () => this.cycleItemMode(),
       },
       {
+        // WIN TYPE (gamestart.c:12755-12765). SURVIVAL is what this door
+        // always played, so it stays the default.
+        label: `Versus Win:        ${yellow(VERSUS_WIN_LABELS[s.versusWinType ?? 'survival'])}`,
+        description: 'How a versus match is won: survival, a level goal, or a line goal',
+        run: () => this.cycleVersusWinType(),
+      },
+      {
+        label: `Versus Goal:       ${yellow(s.versusGoal ?? DEFAULT_VERSUS_GOAL)}`,
+        description: 'Levels to reach (GOAL LV), or ten times the lines (GOAL LINE)',
+        run: () => this.adjustValue('versusGoal', DEFAULT_VERSUS_GOAL, 0, 2000, 50),
+      },
+      {
         label: `Music Volume:      ${yellow(`${Math.floor(s.musicVolume * 100)}%`)}`,
         description: 'Background music volume',
         run: () => this.adjustVolume('musicVolume'),
@@ -405,6 +425,13 @@ export class SettingsScreen {
     // Update menu items
     menu.setItems(this.getMenuItems());
     if (row.keepsSelection) menu.select(index);
+  }
+
+  /** Cycle SURVIVAL -> GOAL LV -> GOAL LINE (gamestart.c's wintype 2/0/1). */
+  private async cycleVersusWinType(): Promise<void> {
+    const types: VersusWinType[] = ['survival', 'level', 'lines'];
+    const current = types.indexOf(this.state.settings.versusWinType ?? 'survival');
+    this.state.settings.versusWinType = types[(current + 1) % types.length];
   }
 
   /**

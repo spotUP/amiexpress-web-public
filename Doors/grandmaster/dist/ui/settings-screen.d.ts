@@ -60,6 +60,8 @@ export declare class SettingsScreen {
      * Handle menu selection
      */
     private handleSelection;
+    /** Cycle SURVIVAL -> GOAL LV -> GOAL LINE (gamestart.c's wintype 2/0/1). */
+    private cycleVersusWinType;
     /**
      * Cycle the item mode - HeborisCE's item_mode[player], over the four
      * selection presets core/items.ts implements.

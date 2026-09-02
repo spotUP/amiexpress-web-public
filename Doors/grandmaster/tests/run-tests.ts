@@ -52,6 +52,7 @@ const TEST_MODULES = ['./versus-layout.test',
   './items.test',
   './items-engine.test',
   './devil-grade.test',
+  './versus-win-type.test',
 ];
 
 // Blessed screens and engines log freely; keep test output readable.

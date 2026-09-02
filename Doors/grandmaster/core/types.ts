@@ -262,6 +262,9 @@ export interface KeyBindings {
  */
 export type ItemMode = 'OFF' | 'TGM' | 'ALL' | 'FEW' | 'DS';
 
+export type { VersusWinType } from './versus-goal';
+import type { VersusWinType } from './versus-goal';
+
 export interface PlayerSettings {
   rotationSystem: RotationSystem;
   das: number;              // Delayed Auto-Shift (ms)
@@ -280,6 +283,14 @@ export interface PlayerSettings {
    * `|| item_mode[player]` half, and it reaches every other mode.
    */
   itemMode?: ItemMode;
+  /**
+   * VS WIN TYPE (gamestart.c:12755-12765). 'survival' is what this door has
+   * always played; 'level' and 'lines' are the reference's GOAL LV and GOAL
+   * LINE, both measured against versusGoal. See core/versus-goal.ts.
+   */
+  versusWinType?: VersusWinType;
+  /** vs_goal (init.c:115, default 200). GOAL LINE uses a tenth of it. */
+  versusGoal?: number;
 
   // Visual Effects Settings
   blockGlow: boolean;                 // Enable/disable block glow system

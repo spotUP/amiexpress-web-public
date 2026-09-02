@@ -161,6 +161,16 @@ export declare class VersusScreen {
      */
     run(): Promise<void>;
     /**
+     * GOAL LV / GOAL LINE (gamestart.c:9489-9519). Returns true when this
+     * player reached the goal first, false when an opponent did, and null
+     * while the match is still open - SURVIVAL always returns null, which is
+     * every match this door played before the setting existed.
+     *
+     * The reference ends the match by setting the loser's status to game over
+     * (9494-9503); here the screen resolves with the same result instead.
+     */
+    private checkWinTypeGoal;
+    /**
      * Brief WIN/LOSE overlay before resolving back to the menu.
      */
     private showMatchResult;

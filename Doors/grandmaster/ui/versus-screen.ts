@@ -29,6 +29,7 @@ import { AnimationManager, AnimationRenderer } from '../effects/animations';
 import { BlockGlowManager } from '../effects/block-glow';
 import { LineClearAnimationManager } from '../effects/line-clear-animation';
 import { applyEnemyItem, HARD_BLOCK_ITEM } from '../core/items';
+import { versusGoalReached, versusGoalTarget, DEFAULT_VERSUS_GOAL } from '../core/versus-goal';
 
 /** Background colour used to render a TGM item cell, keyed by piece type. */
 const ITEM_CELL_COLORS: Record<string, string> = {
@@ -815,6 +816,16 @@ export class VersusScreen {
           this.lastRender = now;
         }
 
+        // WIN TYPE: a goal match can end before anyone tops out.
+        const goalResult = this.checkWinTypeGoal();
+        if (goalResult !== null) {
+          this.victory = goalResult;
+          this.running = false;
+          clearInterval(updateInterval);
+          void this.showMatchResult(goalResult).then(resolve);
+          return;
+        }
+
         // Victory: every AI opponent topped out (CPU battle)...
         const cpuVictory = this.versusAI
           ? this.versusAI.getOpponents().length > 0 && this.versusAI.allDead()
@@ -849,6 +860,43 @@ export class VersusScreen {
         }
       }, 16);  // ~60 FPS
     });
+  }
+
+  /**
+   * GOAL LV / GOAL LINE (gamestart.c:9489-9519). Returns true when this
+   * player reached the goal first, false when an opponent did, and null
+   * while the match is still open - SURVIVAL always returns null, which is
+   * every match this door played before the setting existed.
+   *
+   * The reference ends the match by setting the loser's status to game over
+   * (9494-9503); here the screen resolves with the same result instead.
+   */
+  private checkWinTypeGoal(): boolean | null {
+    const winType = this.state.settings.versusWinType ?? 'survival';
+    const goal = this.state.settings.versusGoal ?? DEFAULT_VERSUS_GOAL;
+    if (versusGoalTarget(winType, goal) === null) return null;
+
+    const me = this.engine.getState();
+    if (versusGoalReached(winType, goal, { level: me.level, lines: me.lines })) return true;
+
+    for (const opp of this.versusAI?.getOpponents() ?? []) {
+      const state = opp?.engine?.getState?.();
+      if (!state || !opp.alive) continue;
+      if (versusGoalReached(winType, goal, { level: state.level, lines: state.lines })) return false;
+    }
+
+    // A networked opponent is only known through OpponentState, which
+    // carries a level but no line count (ui/minimap.ts). GOAL LV can be
+    // judged from it; GOAL LINE cannot, and is left to the loser's own
+    // client to report - the reference has both players in one process and
+    // never faces this.
+    if (winType === 'level') {
+      for (const opp of this.opponentTracker.getAliveOpponents()) {
+        if (versusGoalReached(winType, goal, { level: opp.level ?? 0, lines: 0 })) return false;
+      }
+    }
+
+    return null;
   }
 
   /**
