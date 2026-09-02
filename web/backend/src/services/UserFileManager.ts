@@ -123,9 +123,17 @@ export class UserFileManager {
   // Struct sizes (must match E structs exactly)
   // Correct struct sizes matching mtop.e and Amiga E alignment rules
   // See Documentation/7-Reference Sources/AmiExpressEDoorSources/MultiTop2/mtop.e
-  private readonly USER_STRUCT_SIZE = 232;     // mtop reads 232 bytes per user
-  private readonly USERKEYS_STRUCT_SIZE = 56;  // mtop reads 56 bytes per userKeys
-  private readonly USERMISC_STRUCT_SIZE = 248; // mtop reads 248 bytes per userMisc
+  //
+  // Public because the IMPORTER reads ANOTHER board's user files and has to
+  // walk them the same way. It carried its own copy of these numbers and its
+  // own field readers, written from the 239-byte struct listing in
+  // axobjects.e:11-68 rather than from what a door actually reads - so it
+  // walked 239 bytes at a 232-byte stride, ran off the end of the last
+  // record, threw, and returned zero users from every board it was pointed
+  // at.
+  public readonly USER_STRUCT_SIZE = 232;     // mtop reads 232 bytes per user
+  public readonly USERKEYS_STRUCT_SIZE = 56;  // mtop reads 56 bytes per userKeys
+  public readonly USERMISC_STRUCT_SIZE = 248; // mtop reads 248 bytes per userMisc
 
   constructor() {
     // BBS: logical assignment points to project root.
@@ -625,7 +633,7 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
    * Deserialize UserFileStruct from binary buffer (239 bytes)
    * Reverses serializeUserStruct()
    */
-  private deserializeUserStruct(buffer: Buffer, offset: number = 0): UserFileStruct {
+  public deserializeUserStruct(buffer: Buffer, offset: number = 0): UserFileStruct {
     let pos = offset;
 
     // Strings (null-padded to fixed width)
@@ -786,7 +794,7 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
    * Deserialize UserKeysFileStruct from binary buffer (56 bytes)
    * Reverses serializeUserKeysStruct()
    */
-  private deserializeUserKeysStruct(buffer: Buffer, offset: number = 0): UserKeysFileStruct {
+  public deserializeUserKeysStruct(buffer: Buffer, offset: number = 0): UserKeysFileStruct {
     let pos = offset;
 
     const userName = this.readString(buffer, pos, 31);
@@ -823,7 +831,7 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
    * Deserialize UserMiscFileStruct from binary buffer (248 bytes)
    * Reverses serializeUserMiscStruct()
    */
-  private deserializeUserMiscStruct(buffer: Buffer, offset: number = 0): UserMiscFileStruct {
+  public deserializeUserMiscStruct(buffer: Buffer, offset: number = 0): UserMiscFileStruct {
     let pos = offset;
 
     const internetName = this.readString(buffer, pos, 10);

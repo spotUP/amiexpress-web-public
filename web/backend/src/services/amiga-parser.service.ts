@@ -10,6 +10,9 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { InfoFileParser } from './info-file-parser';
+// The user-file format has one owner; the importer reads another board's
+// files through it rather than keeping a second field layout.
+import { userFileManager } from './UserFileManager';
 import { UserFileManager } from './UserFileManager';
 import { getSystemTime } from '../utils/date-time.util';
 import type {
@@ -980,47 +983,51 @@ console.log(`[AmigaParser]   Misc file: ${miscPath}`);
       const keysBuffer = await fs.readFile(keysPath);
       const miscBuffer = await fs.readFile(miscPath);
 
-      // Struct sizes verified against UserFileManager.ts (232/56/248)
-      const USER_STRUCT_SIZE = 232;
-      const USERKEYS_STRUCT_SIZE = 56;
-      const USERMISC_STRUCT_SIZE = 248;
+      // Read the records through UserFileManager, which OWNS this format.
+      //
+      // This used to walk the fields itself, from the 239-byte struct listing
+      // in axobjects.e:11-68. A door reads 232 (mtop.e, and Amiga E alignment
+      // is why they differ), so it read 239 bytes at a 232-byte stride: every
+      // record after the first was skewed, and the LAST one ran past the end
+      // of the file, threw, and the catch below returned an empty array. The
+      // importer produced zero users from every board it was ever pointed at -
+      // proved against the reference-boardBBS reference tree, whose User.data is
+      // exactly two records long.
+      const size = userFileManager.USER_STRUCT_SIZE;
+      const keysSize = userFileManager.USERKEYS_STRUCT_SIZE;
+      const miscSize = userFileManager.USERMISC_STRUCT_SIZE;
 
-      // Calculate number of users (should match across all three files)
-      const numUsersData = Math.floor(dataBuffer.length / USER_STRUCT_SIZE);
-      const numUsersKeys = Math.floor(keysBuffer.length / USERKEYS_STRUCT_SIZE);
-      const numUsersMisc = Math.floor(miscBuffer.length / USERMISC_STRUCT_SIZE);
+      const numUsersData = Math.floor(dataBuffer.length / size);
+      const numUsersKeys = Math.floor(keysBuffer.length / keysSize);
+      const numUsersMisc = Math.floor(miscBuffer.length / miscSize);
 
 console.log(`[AmigaParser] User counts: data=${numUsersData}, keys=${numUsersKeys}, misc=${numUsersMisc}`);
 
-      // Use minimum count (in case files are mismatched)
       const numUsers = Math.min(numUsersData, numUsersKeys, numUsersMisc);
 
-      // Parse each user record
       for (let i = 0; i < numUsers; i++) {
-        const dataOffset = i * USER_STRUCT_SIZE;
-        const keysOffset = i * USERKEYS_STRUCT_SIZE;
-        const miscOffset = i * USERMISC_STRUCT_SIZE;
+        const data = userFileManager.deserializeUserStruct(dataBuffer, i * size);
+        const keys = userFileManager.deserializeUserKeysStruct(keysBuffer, i * keysSize);
+        const misc = userFileManager.deserializeUserMiscStruct(miscBuffer, i * miscSize);
 
-        // Parse User.data record (239 bytes)
-        const userData = this.parseUserDataRecord(dataBuffer, dataOffset);
+        // An empty slot is a deleted account, not a caller to import.
+        if (!data.name || data.name.trim().length === 0) continue;
 
-        // Parse User.keys record (54 bytes)
-        const keysData = this.parseUserKeysRecord(keysBuffer, keysOffset);
-
-        // Parse user.misc record (256 bytes)
-        const miscData = this.parseUserMiscRecord(miscBuffer, miscOffset);
-
-        // Merge all three records
-        const user = {
-          ...userData,
-          ...keysData,
-          ...miscData,
-        };
-
-        users.push(user);
+        users.push({
+          ...data,
+          ...keys,
+          ...misc,
+          // The names this service's own callers read, mapped from the
+          // struct's E names rather than duplicated field reads.
+          username: data.name,
+          securityLevel: data.secStatus,
+          secLevel: data.secStatus,
+          phone: data.phoneNumber,
+          slotNumber: data.slotNumber,
+        });
       }
 
-console.log(`[AmigaParser] Parsed ${users.length} users from binary files`);
+      console.log(`[AmigaParser] Parsed ${users.length} users from binary files`);
       return users;
     } catch (error: any) {
 console.error(`[AmigaParser] Error parsing user binary files:`, error.message);

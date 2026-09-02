@@ -517,3 +517,11 @@ __pycache__/
 # VALUES never do - the deploy syncs a door's directory without deleting,
 # so a file the image does not carry is what survives a deploy.
 Doors/*/settings.json
+
+# Test fixtures are real board bytes, and are kept.
+#
+# The rules above ignore User.data, User.keys and user.misc because a LIVE
+# board's caller data must never be committed. A two-record excerpt that a
+# test reads is a different thing, and without this the importer's user test
+# passes for whoever created the fixture and fails for everyone else.
+!web/backend/tests/fixtures/**
