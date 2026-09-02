@@ -31,6 +31,12 @@ export interface AnsiCanvasProps {
    * the cell that was clicked.
    */
   scale?: number;
+  /**
+   * What a test calls this canvas. Defaults to the editor's name because the
+   * editor was here first; a thumbnail passes its own, so a page that shows
+   * both does not present a test with two canvases and one name.
+   */
+  testId?: string;
   /** Drawn as an outline; null or absent while no cursor is placed. */
   cursor?: { x: number; y: number } | null;
   /**
@@ -44,7 +50,10 @@ export interface AnsiCanvasProps {
   className?: string;
 }
 
-export function AnsiCanvas({ canvas, cursor, onCellPointer, highlights, className, scale = 1 }: AnsiCanvasProps) {
+export function AnsiCanvas({
+  canvas, cursor, onCellPointer, highlights, className, scale = 1,
+  testId = 'ansi-canvas',
+}: AnsiCanvasProps) {
   const elementRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
 
@@ -99,7 +108,7 @@ export function AnsiCanvas({ canvas, cursor, onCellPointer, highlights, classNam
   return (
     <canvas
       ref={elementRef}
-      data-testid="ansi-canvas"
+      data-testid={testId}
       data-cols={cols}
       data-rows={rows}
       className={className}

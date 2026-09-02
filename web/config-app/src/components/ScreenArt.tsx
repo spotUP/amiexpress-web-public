@@ -18,9 +18,11 @@ export interface ScreenArtProps {
   content: string;
   scale?: number;
   className?: string;
+  /** Passed to the canvas, so a thumbnail is distinguishable from the editor. */
+  testId?: string;
 }
 
-export function ScreenArt({ content, scale = 1, className }: ScreenArtProps) {
+export function ScreenArt({ content, scale = 1, className, testId }: ScreenArtProps) {
   const [canvas, setCanvas] = useState<Cell[][] | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -61,7 +63,7 @@ export function ScreenArt({ content, scale = 1, className }: ScreenArtProps) {
       className={`overflow-auto bg-black p-2 ${className ?? ''}`}
       style={scale === 1 ? undefined : { width: 'fit-content' }}
     >
-      <AnsiCanvas canvas={canvas} scale={scale} />
+      <AnsiCanvas canvas={canvas} scale={scale} testId={testId} />
     </div>
   );
 }

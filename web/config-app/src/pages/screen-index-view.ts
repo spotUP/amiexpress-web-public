@@ -125,6 +125,15 @@ export interface ScreenRow {
   missingCount: number;
   distinctContents: number;
   brokenReferences: number;
+  /**
+   * One file this screen actually resolves to, for a preview.
+   *
+   * A row is a screen NAME and a name has many files behind it - 71 identical
+   * Node<n>/BBSTITLE.txt on this board. Any of them draws the same picture, so
+   * the first drawable one is the row's face. Null when the screen resolves
+   * nowhere, or only to RIP and PETSCII, which this preview cannot draw.
+   */
+  previewPath: string | null;
 }
 
 const SCOPE_LABELS: Record<ScreenIndexEntryShape['dirType'], string> = {
@@ -153,6 +162,8 @@ export function toScreenRows(index: ScreenIndexShape): ScreenRow[] {
         (total, file) => total + file.mci.filter(ref => !ref.resolves).length,
         0,
       ),
+      previewPath:
+        files.find(f => f.format === 'ansi' || f.format === 'text')?.relPath ?? null,
     };
   });
 }

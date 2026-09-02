@@ -11,6 +11,7 @@ import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { TabbedWorkspace, type TabDefinition } from '../components/ui/Tabs';
 import { ScreenArt } from '../components/ScreenArt';
 import { ScreenGallery, type GalleryItem } from '../components/ScreenGallery';
+import { ScreenThumbnail } from '../components/ScreenThumbnail';
 import { formatBytes } from '../lib/format';
 import { ScreenEditor } from '../components/ScreenEditor';
 import { CodeChip } from '../components/CodeChip';
@@ -592,6 +593,35 @@ export function ScreenFilesPage() {
   ];
 
   const columns: DataTableColumn<ScreenRow>[] = [
+    {
+      /*
+       * The picture first, in every tab.
+       *
+       * Asked for directly: "it would be nice with thumbnails for all screen
+       * files in all the tabs". A designer recognises the art and never the
+       * path, and that was true of the gallery long before it was true of
+       * these tables - the tables listed BBSTITLE, MENU, CONF_BULL and left a
+       * person to guess which picture each one is.
+       *
+       * Affordable now: a thumbnail draws at thumbnail size and gives its
+       * pixels back when it scrolls away, so a table of 872 rows costs what
+       * is on screen rather than everything ever scrolled past.
+       */
+      id: 'art',
+      header: 'Art',
+      value: row => row.previewPath ?? '',
+      cell: row => (
+        row.previewPath
+          ? (
+            <div className="h-16 w-28 overflow-hidden bg-black">
+              <ScreenThumbnail path={row.previewPath} scale={0.14} className="h-full" />
+            </div>
+          )
+          // A screen that resolves nowhere has nothing to draw, and saying so
+          // is the row's most important fact.
+          : <span className="text-xs text-content-muted">nothing to draw</span>
+      ),
+    },
     {
       id: 'screen',
       header: 'Screen',

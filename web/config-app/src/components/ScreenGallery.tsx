@@ -1,7 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '../api/client';
-import { ScreenArt } from './ScreenArt';
+import { ScreenThumbnail } from './ScreenThumbnail';
 
 /**
  * Every screen file as a picture.
@@ -33,79 +30,18 @@ interface ScreenGalleryProps {
   isLoading?: boolean;
 }
 
-/** One card. Draws nothing until it is scrolled to. */
+/** One card. The picture comes from ScreenThumbnail, which both the gallery
+ * and the screen tables use - see that component for why the fetch and the
+ * pixels are governed separately. */
 function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: string) => void }) {
-  const ref = useRef<HTMLButtonElement>(null);
-  /** Sticky: once a card has been reached, its bytes stay in the query cache. */
-  const [seen, setSeen] = useState(false);
-  /** Not sticky: pixels are only held for the cards actually on screen. */
-  const [onScreen, setOnScreen] = useState(false);
-
-  useEffect(() => {
-    const element = ref.current;
-    // jsdom has no IntersectionObserver; a test environment simply draws.
-    if (!element || typeof IntersectionObserver === 'undefined') {
-      setSeen(true);
-      setOnScreen(true);
-      return;
-    }
-
-    /*
-     * The observer STAYS connected, where it used to disconnect on the first
-     * sighting. Disconnecting made every card a card that never gives its
-     * canvas back: scroll to the end of 872 screens and every one of them is
-     * still holding pixels. Fetches are still made once - `seen` is sticky and
-     * react-query keeps the bytes - so scrolling back costs no request, only a
-     * repaint.
-     */
-    const observer = new IntersectionObserver(entries => {
-      const showing = entries.some(entry => entry.isIntersecting);
-      setOnScreen(showing);
-      if (showing) setSeen(true);
-      // 600px, not 200: a card just past the edge keeps its pixels, so an
-      // ordinary scroll does not flicker.
-    }, { rootMargin: '600px' });
-
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-
-  /**
-   * Through react-query, on the SAME key the file panel uses.
-   *
-   * This was a fetch into local state guarded by `content !== null`, which
-   * meant a card fetched once and never again: repairing a screen's escape
-   * bytes fixed the file, invalidated the queries, and left the thumbnail
-   * showing the damage - reported as "their thumbnail didnt regenerate in the
-   * gallery so they still look broken". Local state is invisible to
-   * invalidateQueries. Sharing the key also means opening a card costs no
-   * second fetch.
-   *
-   * `enabled: seen` keeps the laziness: 891 screens are not fetched to fill
-   * one screenful, and a card that has been scrolled past keeps its bytes
-   * cached even after it gives its pixels back.
-   */
-  const { data: content } = useQuery({
-    queryKey: ['screen-file', item.path],
-    queryFn: async () => (await apiClient.getScreenFile(item.path)).data,
-    enabled: seen,
-  });
-
-  const art = (content as { content?: string } | undefined)?.content;
-
   return (
     <button
-      ref={ref}
       type="button"
       className="text-left border border-border hover:border-border-strong p-2 space-y-1"
       onClick={() => onOpen(item.path)}
     >
       <div className="h-32 overflow-hidden bg-black">
-        {art && onScreen
-          ? <ScreenArt content={art} scale={0.28} />
-          // A card that is waiting looks like it is waiting. Blank black reads
-          // as an empty screen, which is a thing some of these actually are.
-          : <div className="h-full w-full animate-pulse bg-surface-2/40" />}
+        <ScreenThumbnail path={item.path} scale={0.28} className="h-full" />
       </div>
       <div className="text-xs">
         <span className="block font-mono text-content-primary truncate">{item.label}</span>
