@@ -512,77 +512,78 @@ console.error('[AmigaParser] Error parsing ConfConfig.info:', error.message);
    * AmiExpress stores messages in MsgBase directory with binary HeaderFile
    * Format: HeaderFile contains message headers/bodies in proprietary binary format
    */
+  /**
+   * A conference's message bases, as the BOARD declares them.
+   *
+   * express.e reads `NMSGBASES` from `<conf>/MsgBases` and treats a missing
+   * key as ONE base (getConfMsgBaseCount, express.e:2048-2052). Each base's
+   * name is `NAME.<n>` (getMsgBaseName, 2054-2058) and its location is
+   * `LOCATION.<n>`, falling back to `<conf>/MsgBase/` when the count is
+   * absent or the index is out of range (getMsgBaseLocation, 2061-2073).
+   *
+   * This used to read none of that. It looked for a `MsgBase` directory, and
+   * if one existed invented a single base called
+   * `Conference <n> Messages` - so a board with three named message bases
+   * imported as one, under a name it had never had.
+   *
+   * Message CONTENT is still not imported. The board reads its own
+   * HeaderFile and bodies through `utils/message-file.util.ts`; wiring that
+   * in here is the next piece, and until it is done an import brings the
+   * bases and not the messages in them.
+   */
   async parseMessageBases(confPath: string, confNumber: number): Promise<AmigaMessageBase[]> {
-    const messageBases: AmigaMessageBase[] = [];
+    const declared = this.messageBaseTooltypes(confPath);
+    const count = this.messageBaseCount(declared);
 
-    // Check for MsgBase directory (primary location)
-    const msgBasePath = path.join(confPath, 'MsgBase');
-    const messagesPath = path.join(confPath, 'Messages');
+    const bases: AmigaMessageBase[] = [];
 
-    if (await this.fileExists(msgBasePath)) {
-      try {
-        // Read MsgBase directory contents
-        const entries = await fs.readdir(msgBasePath);
+    for (let n = 1; n <= count; n++) {
+      // `LOCATION.<n>` is an Amiga path like `BBS:Conf1/MsgBase`, absolute
+      // from the BOARD root and not from the conference - resolving it
+      // against the conference gives Conf1/Conf1/MsgBase.
+      const location = declared?.get(`LOCATION.${n}`)?.trim();
+      const basePath = location
+        ? path.resolve(path.dirname(confPath), location.replace(/^[^:]*:/, '').replace(/\/+$/, ''))
+        : path.join(confPath, 'MsgBase');
 
-        // Check for HeaderFile (contains message data in binary format)
-        const hasHeaderFile = entries.includes('HeaderFile');
-        const hasMailStats = entries.includes('MailStats');
+      if (!(await this.fileExists(basePath))) continue;
 
-        if (hasHeaderFile) {
-console.log(`[AmigaParser] Found MsgBase/HeaderFile in Conf${confNumber}`);
-
-          // Read HeaderFile to get basic info
-          const headerPath = path.join(msgBasePath, 'HeaderFile');
-          const headerBuffer = await fs.readFile(headerPath);
-
-          // Amiga message format is complex binary structure
-          // Full parsing requires reverse engineering - for now, detect and warn
-console.warn(`[AmigaParser] MsgBase/HeaderFile parsing not fully implemented`);
-console.warn(`[AmigaParser] HeaderFile size: ${headerBuffer.length} bytes`);
-console.warn(`[AmigaParser] Messages from Amiga BBS will need manual import`);
-
-          // Create placeholder message base entry
-          messageBases.push({
-            name: `Conference ${confNumber} Messages`,
-            path: msgBasePath,
-            messages: [], // Binary parsing not implemented - requires reverse engineering
-          });
-        }
-
-        if (hasMailStats) {
-          // MailStats contains message statistics (small binary file)
-          const statsPath = path.join(msgBasePath, 'MailStats');
-          const statsBuffer = await fs.readFile(statsPath);
-console.log(`[AmigaParser] MailStats size: ${statsBuffer.length} bytes`);
-        }
-      } catch (error: any) {
-console.error(`[AmigaParser] Error parsing MsgBase for Conf${confNumber}:`, error.message);
-      }
-    } else if (await this.fileExists(messagesPath)) {
-      // Alternative: Messages directory (older format or different configuration)
-console.log(`[AmigaParser] Found Messages directory in Conf${confNumber}`);
-
-      try {
-        const entries = await fs.readdir(messagesPath);
-        const messageFiles = entries.filter(f => !f.startsWith('.'));
-
-        if (messageFiles.length > 0) {
-console.log(`[AmigaParser] Found ${messageFiles.length} files in Messages directory`);
-
-          messageBases.push({
-            name: `Conference ${confNumber} Messages`,
-            path: messagesPath,
-            messages: [], // Individual message file parsing not implemented
-          });
-        }
-      } catch (error: any) {
-console.error(`[AmigaParser] Error parsing Messages for Conf${confNumber}:`, error.message);
-      }
-    } else {
-console.log(`[AmigaParser] No message base found for Conf${confNumber}`);
+      bases.push({
+        // The board's own name for it. An unnamed base is unnamed - inventing
+        // one is how `Conference 1 Messages` appeared on boards that never
+        // used the phrase.
+        name: declared?.get(`NAME.${n}`)?.trim() || `Message base ${n}`,
+        path: basePath,
+        messages: [],
+      });
     }
 
-    return messageBases;
+    if (bases.length === 0) {
+      // A board can keep messages in `Messages/` instead; express.e's
+      // fallback location is MsgBase, so this is only reached when neither
+      // is where the icon said.
+      const messagesPath = path.join(confPath, 'Messages');
+      if (await this.fileExists(messagesPath)) {
+        bases.push({ name: `Message base 1`, path: messagesPath, messages: [] });
+      }
+    }
+
+    return bases;
+  }
+
+  /** The `<conf>/MsgBases` icon's tooltypes, or undefined when there is none. */
+  private messageBaseTooltypes(confPath: string): Map<string, string> | undefined {
+    try {
+      return readTooltypeMap(path.join(confPath, 'MsgBases.info'));
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** `NMSGBASES`, or one - express.e:2051 turns a missing key into 1. */
+  private messageBaseCount(declared: Map<string, string> | undefined): number {
+    const raw = parseInt(declared?.get('NMSGBASES') ?? '', 10);
+    return Number.isFinite(raw) && raw >= 1 ? raw : 1;
   }
 
   /**
