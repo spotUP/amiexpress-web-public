@@ -246,3 +246,21 @@ export function formatShortTime(date: Date): string {
 
   return `${hours}:${minutes}`;
 }
+
+/**
+ * A two-digit year, as the board itself decides the century.
+ *
+ * AmiExpress writes dates through AmigaDOS DateToStr, which yields a two-digit
+ * year, and rebuilds the century on the way out with
+ * `IF dt.stamp.days>=8035 THEN 20 ELSE 19` (MiscFuncs.e:338). 8035 days after
+ * the Amiga epoch of 1978-01-01 is 2000-01-01, so the board's own rule is:
+ * anything before 2000 is 19xx and anything from 2000 on is 20xx. In
+ * two-digit terms that puts 78..99 in the 1900s and 00..77 in the 2000s.
+ *
+ * Not a guess and not a rolling window: a board's logs can start in 1990 and
+ * run to now, and this is the same line the board draws.
+ */
+export function expandAmigaYear(twoDigitYear: number): number {
+  if (twoDigitYear >= 100) return twoDigitYear;
+  return twoDigitYear >= 78 ? 1900 + twoDigitYear : 2000 + twoDigitYear;
+}

@@ -7,6 +7,8 @@
  * Reference: reference-boardBBS (~/Downloads/BBS_COPY)
  */
 
+import type { ConfBaseRecord } from '../services/amiga-confbase';
+
 import type { User } from '../types';
 import type { Conference } from '../database/types';
 
@@ -131,8 +133,12 @@ export interface AmigaConference {
 }
 
 /**
- * Conference database (Conf.DB) structure
- * Binary format - needs reverse engineering from reference-boardBBS
+ * What the importer knows about one conference.
+ *
+ * Named after Conf.DB, but most of it does NOT come from that file - see
+ * services/amiga-confbase.ts. Conf.DB is an array of per-USER records; the
+ * name comes from ConfConfig.info, and AmiExpress has no per-conference
+ * access level at all (access is per user, checkConfAccess express.e:8499).
  */
 export interface ConferenceDatabase {
   // Core settings
@@ -141,6 +147,11 @@ export interface ConferenceDatabase {
   description?: string;
 
   // Access control
+  /**
+   * NOT read from the board. AmiExpress grants conference access per USER,
+   * so there is nothing here to import; this stays at the port's own
+   * default, and the real per-user access rides along in userRecords[].
+   */
   accessLevel: number;
   uploadAccessLevel?: number;
   downloadAccessLevel?: number;
@@ -157,6 +168,15 @@ export interface ConferenceDatabase {
   // Limits and quotas
   maxMessages?: number;
   maxFiles?: number;
+
+  /**
+   * What Conf.DB really holds: one record per user slot - message
+   * pointer, ratio, byte counters, scan flags, answered vote topics.
+   * Only the slots the board has actually written.
+   */
+  userRecords?: ConfBaseRecord[];
+  /** How many slots the file has room for - 1000 on every real board. */
+  userSlots?: number;
 
   // Raw binary data (for preservation)
   rawData?: Buffer;

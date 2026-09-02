@@ -179,3 +179,40 @@ export function calculateRatio(uploadBytes: BCDValue, downloadBytes: BCDValue): 
  *   [uploadBytesBCD.toString(), userId]  // BigInt to string for PostgreSQL
  * );
  */
+
+/**
+ * A BCD counter as it sits in a FILE, rather than in memory.
+ *
+ * On disk AmiExpress keeps these as eight packed bytes, two decimal digits per
+ * byte, most significant pair first - `formatBCD` (bcd.e) walks index 0 to 7
+ * printing the high nibble then the low one. In this port a BCD value is a
+ * BigInt, so reading one is a decode and not a cast.
+ *
+ * Sixteen digits do not fit a JS number exactly, which is the whole reason
+ * AmiExpress used BCD for byte counters in the first place; the BigInt keeps
+ * them, and convertFromBCD is where a caller chooses to lose that.
+ */
+export function readPackedBCD(buffer: Buffer, offset: number, length = 8): BCDValue {
+  let value = 0n;
+  for (let i = 0; i < length; i++) {
+    const byte = buffer[offset + i] ?? 0;
+    // A nibble above 9 is not a decimal digit. Real boards carry them in
+    // never-written slots, so they are clamped rather than thrown over.
+    const high = BigInt(Math.min((byte >> 4) & 0x0f, 9));
+    const low = BigInt(Math.min(byte & 0x0f, 9));
+    value = value * 100n + high * 10n + low;
+  }
+  return value;
+}
+
+/** The inverse, for writing a record back in the shape the board reads. */
+export function writePackedBCD(value: BCDValue, length = 8): Buffer {
+  const out = Buffer.alloc(length);
+  let remaining = value < 0n ? 0n : value;
+  for (let i = length - 1; i >= 0; i--) {
+    const pair = Number(remaining % 100n);
+    out[i] = ((Math.floor(pair / 10) << 4) | (pair % 10)) & 0xff;
+    remaining /= 100n;
+  }
+  return out;
+}

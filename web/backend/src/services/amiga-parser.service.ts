@@ -23,9 +23,11 @@ import { readTooltypeMap } from '../utils/info-file.util';
 const SCREEN_EXTENSIONS = ['.txt', '.gr', '.ibm', '.seq', '.rip', '.ans', '.asc'];
 // The AmiExpress on-disk header layout, which is NOT MessageIndexManager's -
 // see amiga-msgheader.ts for the two alignment pads and why they matter here.
+import { parseConfDb } from './amiga-confbase';
 import { parseAmigaHeaderFile } from './amiga-msgheader';
 import { UserFileManager } from './UserFileManager';
 import { getSystemTime } from '../utils/date-time.util';
+import { expandAmigaYear } from '../utils/date-time.util';
 import type {
   AmigaBBSArchive,
   AmigaUserData,
@@ -401,16 +403,30 @@ console.warn(`[AmigaParser] Conf.DB not found in conference ${confNumber}`);
     }
 
     const buffer = await fs.readFile(dbPath);
-console.log(`[AmigaParser] Conf.DB size: ${buffer.length} bytes`);
 
-    // TODO: Parse binary structure
-    // For now, return placeholder with conference number
+    /*
+     * Conf.DB is an array of per-USER records, not conference settings.
+     * This used to read `TODO: Parse binary structure` over a hardcoded
+     * accessLevel of 10, so an import threw away every caller's message
+     * pointer, ratio, byte counters and new-scan flags for the conference
+     * and invented an access level the source system does not have.
+     * See services/amiga-confbase.ts for the layout and how it was checked.
+     */
+    const records = parseConfDb(buffer);
+    console.log(
+      `[AmigaParser] Conf.DB conference ${confNumber}: ${buffer.length} bytes, `
+      + `${records.length} user slots`,
+    );
+
     return {
       conferenceNumber: confNumber,
       conferenceName: metadata?.name || `Conference ${confNumber}`,
+      // Not from this file - see the field's own comment.
       accessLevel: 10,
       flags: 0,
       type: 'BOTH',
+      userRecords: records,
+      userSlots: records.length,
       rawData: buffer,
     };
   }
@@ -721,8 +737,19 @@ console.error(`[AmigaParser] Error parsing ${nodeDir.name}:`, error.message);
 
         // Parse login line: "Date (Time) [Slot] Username (ConnectString) Location"
         // or logoff line: "Date (Time) Username Off [reason]"
-        const loginMatch = line.match(/^(\d{2}-\w{3}-\d{4})\s+\((\d{2}:\d{2}:\d{2})\)\s+(?:NEW\s+)?\[(\d+)\]\s+(\S+)\s+\(([^)]+)\)\s+(.*)$/);
-        const logoffMatch = line.match(/^(\d{2}-\w{3}-\d{4})\s+\((\d{2}:\d{2}:\d{2})\)\s+(\S+)\s+Off\s+(.*)$/);
+        // The date is DD-Mon-YY or DD-Mon-YYYY and the time HH:MM or
+        // HH:MM:SS, parenthesised or bare: AmigaDOS DateToStr writes two
+        // digits and no seconds, while displayUserToCallersLog
+        // (express.e:16038) wraps the time in parentheses. Demanding a
+        // four-digit year AND parenthesised seconds matched not one line of
+        // this board's logs, so an import brought in zero caller history and
+        // said nothing about it.
+        const loginMatch = line.match(
+          /^(\d{1,2}-\w{3}-\d{2,4})\s+\(?(\d{1,2}:\d{2}(?::\d{2})?)\)?\s+(?:NEW\s+)?\[(\d+)\]\s+(\S+)\s+\(([^)]+)\)\s*(.*)$/,
+        );
+        const logoffMatch = line.match(
+          /^(\d{1,2}-\w{3}-\d{2,4})\s+\(?(\d{1,2}:\d{2}(?::\d{2})?)\)?\s+(\S+)\s+Off\s*(.*)$/,
+        );
 
         if (loginMatch) {
           // Save previous entry if exists
@@ -873,26 +900,39 @@ console.error(`[AmigaParser] Error parsing ErrorLog:`, error.message);
    * Helper: Parse Amiga date/time format
    * Format: "01-Jan-2026" and "12:34:56"
    */
+  /**
+   * A CallersLog timestamp, in the shape a real board writes.
+   *
+   * This assumed `DD-Mon-YYYY` with `HH:MM:SS` and got neither. AmiExpress
+   * builds the line from formatLongDate/formatLongTime (MiscFuncs.e:278-318),
+   * which go through AmigaDOS DateToStr - a TWO digit year - and this board's
+   * own logs read `26-May-26 16:55`, minutes and no seconds. Parsing
+   * "26-May-26" as written gave `new Date(26, 4, 26)`: the year 26 AD, and a
+   * missing seconds field made it an Invalid Date anyway.
+   *
+   * The century comes from expandAmigaYear, which is the board's own rule.
+   */
   private parseAmigaDateTime(dateStr: string, timeStr: string): Date {
     try {
-      // Parse "01-Jan-2026" format
       const months: Record<string, number> = {
-        Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
-        Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11
+        jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+        jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
       };
 
-      const [day, monthStr, year] = dateStr.split('-');
+      const [dayStr, monthStr, yearStr] = dateStr.split('-');
       const [hour, minute, second] = timeStr.split(':');
 
-      const month = months[monthStr] ?? 0;
+      const month = months[String(monthStr).toLowerCase()] ?? 0;
+      const year = expandAmigaYear(parseInt(yearStr, 10));
 
       return new Date(
-        parseInt(year, 10),
+        year,
         month,
-        parseInt(day, 10),
+        parseInt(dayStr, 10),
         parseInt(hour, 10),
         parseInt(minute, 10),
-        parseInt(second, 10)
+        // FORMAT_DOS carries no seconds, and a NaN here is an Invalid Date.
+        second === undefined ? 0 : parseInt(second, 10)
       );
     } catch (error) {
       return getSystemTime();
