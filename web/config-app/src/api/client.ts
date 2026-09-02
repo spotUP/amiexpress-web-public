@@ -341,6 +341,19 @@ class ApiClient {
     });
   }
 
+  // Conference directories nothing points at. A delete leaves the directory
+  // alone unless the sysop asks for it, so a board collects them.
+  async getOrphanConferenceDirs() {
+    return this.request<ApiResponse>(`${API_BASE}/config/conferences/orphan-directories`);
+  }
+
+  async removeOrphanConferenceDir(dir: string) {
+    return this.request<ApiResponse>(
+      `${API_BASE}/config/conferences/orphan-directories/${encodeURIComponent(dir)}`,
+      { method: 'DELETE' },
+    );
+  }
+
   async deleteConferenceConfig(confNumber: number, removeFiles = false) {
     const query = removeFiles ? '?removeFiles=true' : '';
     return this.request<ApiResponse>(`${API_BASE}/config/conferences/${confNumber}${query}`, {

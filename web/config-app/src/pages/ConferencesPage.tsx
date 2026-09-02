@@ -5,6 +5,7 @@ import { Edit2, Trash2, Plus, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { ConferenceConfig } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
+import { formatBytes } from '../lib/format';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { pathRows, applyPathEdit, resetPathToDerived, rowsToFormFields } from './conference-path-rows';
 
@@ -52,6 +53,48 @@ export function ConferencesPage() {
     queryKey: ['conferences'],
     queryFn: () => apiClient.getConferenceConfigs(),
   });
+
+  /**
+   * Conference directories nothing points at.
+   *
+   * A delete leaves the directory unless the sysop asks for it - the messages
+   * posted there and the files uploaded to it are real - so a board collects
+   * them, and until now nothing in the admin could see one. LOCATION.n decides:
+   * a Conf<n> directory no conference reads is dead weight, whatever its
+   * number.
+   */
+  const orphansQuery = useQuery({
+    queryKey: ['conference-orphan-dirs'],
+    queryFn: () => apiClient.getOrphanConferenceDirs(),
+  });
+  const orphans: { dir: string; files: number; bytes: number }[] =
+    orphansQuery.data?.data?.orphans ?? [];
+
+  const removeOrphanMutation = useMutation({
+    mutationFn: (dir: string) => apiClient.removeOrphanConferenceDir(dir),
+    onSuccess: (_res, dir) => {
+      showSuccess(`${dir} removed`);
+      queryClient.invalidateQueries({ queryKey: ['conference-orphan-dirs'] });
+    },
+    onError: (error: Error) => showError(`Could not remove it: ${error.message}`),
+  });
+
+  const handleRemoveOrphan = async (orphan: { dir: string; files: number; bytes: number }) => {
+    // No checkbox here, so confirm answers with a plain boolean.
+    const confirmed = await confirm({
+      title: `Delete ${orphan.dir}?`,
+      message:
+        `${orphan.dir} is not read by any conference - LOCATION.n points elsewhere - `
+        + `but it still holds ${orphan.files} file${orphan.files === 1 ? '' : 's'} `
+        + `(${formatBytes(orphan.bytes)}), including anything ever posted or uploaded there.\n\n`
+        + 'This deletes them. There is no backup of a directory this size.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger',
+      requireTypedConfirmation: orphan.dir,
+    });
+    if (confirmed) removeOrphanMutation.mutate(orphan.dir);
+  };
 
   const createMutation = useMutation({
     mutationFn: (conference: ConferenceFormData) => apiClient.createConferenceConfig(conference),
@@ -292,6 +335,37 @@ export function ConferencesPage() {
         </button>
       </div>
 
+
+      {orphans.length > 0 && (
+        <section className="mt-6 border border-status-warn/40 rounded p-4 space-y-2">
+          <h2 className="text-bbs-text">
+            {orphans.length} director{orphans.length === 1 ? 'y' : 'ies'} no conference points at
+          </h2>
+          <p className="text-sm text-bbs-muted">
+            Left behind when a conference was deleted without its files. The board
+            never reads them - a conference's directory is whatever its LOCATION
+            says - so they are dead weight until someone looks inside.
+          </p>
+          <ul className="space-y-1 text-sm">
+            {orphans.map((orphan) => (
+              <li key={orphan.dir} className="flex items-center gap-3">
+                <span className="font-mono text-bbs-text">{orphan.dir}</span>
+                <span className="text-bbs-muted">
+                  {orphan.files} file{orphan.files === 1 ? '' : 's'}, {formatBytes(orphan.bytes)}
+                </span>
+                <button
+                  className="underline text-red-400"
+                  aria-label={`Remove ${orphan.dir}`}
+                  onClick={() => handleRemoveOrphan(orphan)}
+                  disabled={removeOrphanMutation.isPending}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <DataTable
         columns={columns}

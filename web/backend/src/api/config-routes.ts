@@ -22,6 +22,7 @@ import * as bcrypt from 'bcryptjs';
 import { ConfigService } from '../services/config.service';
 import { describeValidationError } from '../services/config.schemas';
 import { ConferenceSetupService } from '../services/conference-setup.service';
+import { listOrphanConferenceDirs, removeOrphanConferenceDir } from '../conferences/orphan-conference-dirs';
 import { BBSHealthCheckService } from '../services/bbs-health-check.service';
 import { SSHKeyUtil } from '../utils/ssh-key.util';
 import { userFileManager } from '../services/UserFileManager';
@@ -255,6 +256,48 @@ console.error('Config API error:', error);
     try {
       const healthChecks = await conferenceSetup.checkAllConferences();
       sendResponse(res, healthChecks, 'Conference health check complete');
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * GET /api/config/conferences/orphan-directories
+   *
+   * The Conf<n> directories no conference reads any more. A delete leaves the
+   * directory alone unless the sysop asks for it, so a board accumulates them
+   * - nine on this one - and nothing could see them until now.
+   *
+   * Declared BEFORE /conferences/:conferenceId, or Express matches this path
+   * as a conference id.
+   */
+  router.get('/conferences/orphan-directories', async (_req: Request, res: Response) => {
+    try {
+      const bbsRoot = config.get('dataDir');
+      const orphans = listOrphanConferenceDirs(bbsRoot);
+      sendResponse(res, {
+        orphans,
+        bytes: orphans.reduce((total, o) => total + o.bytes, 0),
+      });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * DELETE /api/config/conferences/orphan-directories/:dir
+   *
+   * Removes one, having proved it is an orphan. Every refusal - a name that is
+   * not a conference directory, a board with no ConfConfig.info to check
+   * against, a directory a conference still points at - happens before a byte
+   * moves.
+   */
+  router.delete('/conferences/orphan-directories/:dir', async (req: Request, res: Response) => {
+    try {
+      const bbsRoot = config.get('dataDir');
+      const dir = String(req.params.dir);
+      removeOrphanConferenceDir(bbsRoot, dir);
+      sendResponse(res, { removed: dir }, `${dir} removed`);
     } catch (error) {
       handleError(res, error);
     }
