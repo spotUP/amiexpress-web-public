@@ -43,8 +43,19 @@ export function HealthCheckPage() {
   const autoFixMutation = useMutation({
     mutationFn: () => apiClient.autoFixHealth(),
     onSuccess: (response) => {
-      const { fixed, failed } = response.data;
-      showSuccess(`Auto-fix complete: ${fixed} issues fixed${failed > 0 ? `, ${failed} failed` : ''}`);
+      const { fixed, failed, failures } = response.data as {
+        fixed: number; failed: number; failures?: string[];
+      };
+      // A failure with no reason is a failure a sysop cannot act on, and this
+      // page reported "47 fixed" over an untouched board for long enough.
+      if (failed > 0) {
+        showError(
+          `Fixed ${fixed}, could not fix ${failed}`
+          + (failures?.length ? `: ${failures.join('; ')}` : ''),
+        );
+      } else {
+        showSuccess(`Auto-fix complete: ${fixed} issue${fixed === 1 ? '' : 's'} fixed`);
+      }
       queryClient.invalidateQueries({ queryKey: ['health'] });
     },
     onError: (error: Error) => {

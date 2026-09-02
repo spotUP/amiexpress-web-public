@@ -11,17 +11,47 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
 import { conferenceDir, conferenceNumbers } from '../conferences/conference-paths';
-import { buildScreenIndex } from '../screens/screen-index.service';
+import { buildScreenIndex, invalidateScreenIndex } from '../screens/screen-index.service';
+import { commandLocationIsLive, loadCommandFromInfo } from '../utils/amiga-command-parser.util';
+import { repairOneFile } from '../screens/screen-repair';
 import { InfoFileParser } from './info-file-parser';
 import { ConferenceSetupService } from './conference-setup.service';
 import { getSystemTime } from '../utils/date-time.util';
+
+/**
+ * What this issue's auto-fix actually DOES, named rather than described.
+ *
+ * Dispatch used to read the prose: `description.includes('directory missing')`.
+ * Only two spellings were ever matched, so eleven other issues declared
+ * themselves auto-fixable, ran nothing, threw nothing, and were counted as
+ * fixed - the health page reported "Fixed 47" over an untouched board. Naming
+ * the fix means the executor can switch on it, and an issue with a kind
+ * nothing handles fails loudly instead of lying.
+ */
+export type HealthFix =
+  /** mkdir -p the issue's path. */
+  | { kind: 'create-directory' }
+  /** Create the issue's path as an empty file, which is what the board expects. */
+  | { kind: 'create-file' }
+  /** Put the escape byte back in front of a screen's colour codes. */
+  | { kind: 'screen-escape-byte' }
+  /** Create what a conference is missing, through ConferenceSetupService. */
+  | { kind: 'conference-setup'; conferenceId: number };
 
 export interface HealthIssue {
   severity: 'error' | 'warning' | 'info';
   category: string;
   description: string;
   path?: string;
-  autoFixable: boolean;
+  /**
+   * Derived from `fix` when the report is assembled - never set at the place
+   * an issue is raised, which is why it is optional here and always present on
+   * the wire. Two fields that could disagree about whether something is
+   * fixable is how they came to disagree.
+   */
+  autoFixable?: boolean;
+  /** Absent when a person has to decide something. */
+  fix?: HealthFix;
   fixAction?: string;
 }
 
@@ -80,6 +110,17 @@ export class BBSHealthCheckService {
     categories.push(await this.checkProtocols());
     categories.push(await this.checkSystemDirectories());
 
+    /*
+     * `autoFixable` is DERIVED, here and nowhere else.
+     *
+     * It used to be typed in by hand beside each issue, and thirteen of them
+     * claimed a fix that autoFixIssue had no branch for. Deriving it means the
+     * button's count is the number of issues something will actually act on.
+     */
+    for (const category of categories) {
+      for (const issue of category.issues) issue.autoFixable = issue.fix !== undefined;
+    }
+
     // Calculate summary
     const totalIssues = categories.reduce((sum, cat) => sum + cat.issues.length, 0);
     const autoFixableIssues = categories.reduce(
@@ -112,7 +153,6 @@ export class BBSHealthCheckService {
         category: 'Core Files',
         description: 'ConfConfig.info missing - conference system will not work',
         path: confConfigPath,
-        autoFixable: false,
         fixAction: 'Create ConfConfig.info with at least NCONFS=1'
       });
     }
@@ -125,7 +165,6 @@ export class BBSHealthCheckService {
         category: 'Core Files',
         description: 'bbsConfig.info missing - using default system configuration',
         path: bbsConfigPath,
-        autoFixable: true,
         fixAction: 'Create default bbsConfig.info'
       });
     }
@@ -138,7 +177,6 @@ export class BBSHealthCheckService {
         category: 'Core Files',
         description: 'Access.info missing - using default security levels',
         path: accessInfoPath,
-        autoFixable: true,
         fixAction: 'Create default Access.info with security levels'
       });
     }
@@ -150,8 +188,7 @@ export class BBSHealthCheckService {
         severity: 'info',
         category: 'Core Files',
         description: 'Users.DB not found - using SQLite database instead (modern approach)',
-        path: usersDbPath,
-        autoFixable: false
+        path: usersDbPath
       });
     }
 
@@ -183,7 +220,12 @@ export class BBSHealthCheckService {
             severity: 'error',
             category: 'Conferences',
             description: `Conf${check.conferenceId} (${check.conferenceName}): ${issue}`,
-            autoFixable: check.canAutoFix,
+            // No `path` on purpose: what is missing is a set of files, and
+            // ConferenceSetupService is what knows which. autoFixAll used to
+            // require a path and skipped every one of these in silence.
+            fix: check.canAutoFix
+              ? { kind: 'conference-setup', conferenceId: check.conferenceId }
+              : undefined,
             fixAction: check.canAutoFix ? 'Auto-fix will create missing files/directories' : 'Manual fix required'
           });
         }
@@ -192,8 +234,7 @@ export class BBSHealthCheckService {
       issues.push({
         severity: 'error',
         category: 'Conferences',
-        description: `Failed to check conferences: ${error}`,
-        autoFixable: false
+        description: `Failed to check conferences: ${error}`
       });
     }
 
@@ -225,7 +266,7 @@ export class BBSHealthCheckService {
           category: 'Nodes',
           description: `Node${nodeNum}/ directory missing`,
           path: nodeDirPath,
-          autoFixable: true,
+          fix: { kind: 'create-directory' },
           fixAction: `Create Node${nodeNum}/ directory`
         });
         continue;
@@ -241,7 +282,7 @@ export class BBSHealthCheckService {
             category: 'Nodes',
             description: `Node${nodeNum}/${dir}/ directory missing`,
             path: dirPath,
-            autoFixable: true,
+            fix: { kind: 'create-directory' },
             fixAction: `Create Node${nodeNum}/${dir}/`
           });
         }
@@ -255,7 +296,7 @@ export class BBSHealthCheckService {
           category: 'Nodes',
           description: `Node${nodeNum}/CallersLog missing - will be created on first call`,
           path: callersLogPath,
-          autoFixable: true,
+          fix: { kind: 'create-file' },
           fixAction: `Create empty Node${nodeNum}/CallersLog`
         });
       }
@@ -291,7 +332,7 @@ export class BBSHealthCheckService {
         category: 'Screens',
         description: 'Screens/ directory missing - BBS will not display properly',
         path: screensDirPath,
-        autoFixable: true,
+        fix: { kind: 'create-directory' },
         fixAction: 'Create Screens/ directory'
       });
     }
@@ -332,7 +373,6 @@ export class BBSHealthCheckService {
               category: 'Screens',
               description: `Node0: ${screen} screen missing - check Node0/ or Node0/Screens/`,
               path: nodeScreensDir,
-              autoFixable: false,
               fixAction: `Create ${screen}.SEQ or ${screen}.TXT in Node0/Screens/`
             });
           }
@@ -364,7 +404,6 @@ export class BBSHealthCheckService {
             category: 'Screens',
             description: `${label}: ${screen} screen missing (.SEQ or .TXT)`,
             path: confScreensDir,
-            autoFixable: false,
             fixAction: `Create ${screen}.SEQ or ${screen}.TXT in ${label}/Screens/`
           });
         }
@@ -386,7 +425,6 @@ export class BBSHealthCheckService {
             category: 'Screens',
             description: `${screen} screen missing from global Screens/`,
             path: screensDirPath,
-            autoFixable: false,
             fixAction: `Create ${screen}.SEQ or ${screen}.TXT in Screens/`
           });
         }
@@ -417,7 +455,7 @@ export class BBSHealthCheckService {
         category: 'Commands',
         description: 'Commands/ directory missing - no commands available',
         path: commandsDirPath,
-        autoFixable: true,
+        fix: { kind: 'create-directory' },
         fixAction: 'Create Commands/ directory with BBSCmd/ and SysCmd/ subdirectories'
       });
       return {
@@ -440,7 +478,7 @@ export class BBSHealthCheckService {
         category: 'Commands',
         description: 'Commands/BBSCmd/ directory missing',
         path: bbsCmdPath,
-        autoFixable: true,
+        fix: { kind: 'create-directory' },
         fixAction: 'Create Commands/BBSCmd/ directory'
       });
     }
@@ -451,7 +489,7 @@ export class BBSHealthCheckService {
         category: 'Commands',
         description: 'Commands/SysCmd/ directory missing',
         path: sysCmdPath,
-        autoFixable: true,
+        fix: { kind: 'create-directory' },
         fixAction: 'Create Commands/SysCmd/ directory'
       });
     }
@@ -472,9 +510,50 @@ export class BBSHealthCheckService {
         severity: 'warning',
         category: 'Commands',
         description: 'No command .info files found - BBS will have limited functionality',
-        autoFixable: false,
         fixAction: 'Install command .info files in Commands/BBSCmd/'
       });
+    }
+
+    /*
+     * A registration whose door is gone.
+     *
+     * The icon still OWNS the command name - dispatch finds it and answers
+     * with an error rather than falling through - so an uninstalled door does
+     * not merely stop working, it can shadow a working command. A Doors/ wipe
+     * on 30 August left 277 of these, one of them registered under the
+     * internal goodbye command's name, and logging off was impossible until
+     * the .info was removed by hand.
+     *
+     * commandLocationIsLive is the board's own rule, the same one the loader
+     * uses when it decides to skip a registration, so this cannot disagree
+     * with what actually runs. Reported because a sysop asked for exactly it:
+     * "we have an mci command that doesnt find its door as its not installed
+     * but its not listed as a health issue".
+     */
+    for (const dir of [bbsCmdPath, sysCmdPath]) {
+      if (!fs.existsSync(dir)) continue;
+
+      for (const entry of fs.readdirSync(dir).filter(f => f.toLowerCase().endsWith('.info'))) {
+        const full = path.join(dir, entry);
+        let definition;
+        try {
+          definition = loadCommandFromInfo(full);
+        } catch {
+          continue;
+        }
+        if (!definition || commandLocationIsLive(this.bbsRoot, definition)) continue;
+
+        issues.push({
+          severity: 'warning',
+          category: 'Commands',
+          description:
+            `${entry.replace(/\.info$/i, '')} is registered but its door is not installed`
+            + ` - LOCATION is ${definition.location}`,
+          path: full,
+          fixAction:
+            'Install the door, or remove the .info so the command name is free again',
+        });
+      }
     }
 
     return {
@@ -500,7 +579,7 @@ export class BBSHealthCheckService {
         category: 'Doors',
         description: 'Doors/ directory missing - no external programs available',
         path: doorsDirPath,
-        autoFixable: true,
+        fix: { kind: 'create-directory' },
         fixAction: 'Create Doors/ directory'
       });
       return {
@@ -537,8 +616,7 @@ export class BBSHealthCheckService {
       issues.push({
         severity: 'info',
         category: 'Doors',
-        description: 'No door .info files found - install doors to add games/utilities',
-        autoFixable: false
+        description: 'No door .info files found - install doors to add games/utilities'
       });
     }
 
@@ -565,7 +643,7 @@ export class BBSHealthCheckService {
         category: 'Protocols',
         description: 'Protocols/ directory missing - file transfers may not work',
         path: protocolsDirPath,
-        autoFixable: true,
+        fix: { kind: 'create-directory' },
         fixAction: 'Create Protocols/ directory'
       });
       return {
@@ -594,7 +672,6 @@ export class BBSHealthCheckService {
         severity: 'warning',
         category: 'Protocols',
         description: 'No XPR protocol files found - file transfers will use built-in protocols only',
-        autoFixable: false,
         fixAction: 'Install XPR protocol libraries (xprzmodem, xprymodem, etc.)'
       });
     }
@@ -639,8 +716,53 @@ export class BBSHealthCheckService {
           category: 'Screens',
           description: `${file.relPath}: colour codes have no escape byte - callers see the codes as text`,
           path: path.join(this.bbsRoot, file.relPath),
-          autoFixable: true,
-          fixAction: 'Put the escape byte back (a backup is written first)',
+          fix: { kind: 'screen-escape-byte' },
+          fixAction: 'Put the escape byte back (a backup is written first)'
+        });
+      }
+
+      /*
+       * A screen is a PROGRAM. `~CC_<name>` is a menu item: the caller presses
+       * the key, the board looks for that command, and when the door behind it
+       * is not installed nothing happens - no error, no message, just a key
+       * that does nothing on a screen that still advertises it.
+       *
+       * Reported 2026-09-02 from the live board: the conference-join screen
+       * offers a conference request that runs a door this board does not have.
+       * The file panel had been saying so per file all along; the health page,
+       * which is where a sysop looks for what is wrong, said nothing.
+       *
+       * Grouped by the CODE, not the file. This board carries 153 files with a
+       * dead reference and exactly FOUR distinct dead codes - 42 copies of one
+       * Logoff.txt, 58 of one logon20.txt. A list of 153 is a list nobody
+       * reads, and the fix is one decision per code, not per copy.
+       *
+       * Not auto-fixable either way. The board cannot know whether the answer
+       * is to install the door or to stop advertising it.
+       */
+      const deadRefs = new Map<string, string[]>();
+      for (const file of files) {
+        for (const ref of file.mci ?? []) {
+          if (ref.resolves) continue;
+          const code = `~${ref.code}_${ref.target}`;
+          if (!deadRefs.has(code)) deadRefs.set(code, []);
+          deadRefs.get(code)!.push(file.relPath);
+        }
+      }
+
+      for (const [code, carriers] of [...deadRefs].sort((a, b) => b[1].length - a[1].length)) {
+        const where = carriers.length === 1
+          ? carriers[0]
+          : `${carriers[0]} and ${carriers.length - 1} other screen${carriers.length === 2 ? '' : 's'}`;
+        issues.push({
+          severity: 'warning',
+          category: 'Screens',
+          description:
+            `${code} points at something this board does not have`
+            + ` - a caller pressing that key gets nothing (${where})`,
+          // The first carrier, so the sysop has somewhere to open.
+          path: path.join(this.bbsRoot, carriers[0]),
+          fixAction: 'Install the missing door or screen, or take the code out',
         });
       }
 
@@ -651,8 +773,7 @@ export class BBSHealthCheckService {
           category: 'Screens',
           description: `${file.relPath}: empty, so it draws nothing`,
           path: path.join(this.bbsRoot, file.relPath),
-          autoFixable: false,
-          fixAction: 'Draw something, or delete it',
+          fixAction: 'Draw something, or delete it'
         });
       }
 
@@ -664,8 +785,7 @@ export class BBSHealthCheckService {
             `${index.unused.length} screen file(s) no screen reads - at any security level, `
             + 'in any screen type, and no other screen includes them',
           path: this.bbsRoot,
-          autoFixable: false,
-          fixAction: 'Look at them in Screen Files before removing any - art nobody reads is still art',
+          fixAction: 'Look at them in Screen Files before removing any - art nobody reads is still art'
         });
       }
     } catch (error) {
@@ -674,8 +794,7 @@ export class BBSHealthCheckService {
         category: 'Screens',
         description: `Could not read the screen index: ${(error as Error).message}`,
         path: this.bbsRoot,
-        autoFixable: false,
-        fixAction: 'Manual fix required',
+        fixAction: 'Manual fix required'
       });
     }
 
@@ -710,7 +829,7 @@ export class BBSHealthCheckService {
           category: 'System Directories',
           description: `${sysDir.name}/ directory missing - ${sysDir.description}`,
           path: dirPath,
-          autoFixable: true,
+          fix: { kind: 'create-directory' },
           fixAction: `Create ${sysDir.name}/ directory`
         });
       }
@@ -729,42 +848,84 @@ export class BBSHealthCheckService {
   /**
    * Auto-fix all fixable issues
    */
-  async autoFixAll(report: BBSHealthReport): Promise<{ fixed: number; failed: number }> {
+  /**
+   * Every issue that carries a fix, applied.
+   *
+   * A failure is REPORTED, not swallowed: this used to count an issue as fixed
+   * whenever autoFixIssue returned, and autoFixIssue returned immediately for
+   * everything it had no branch for. A sysop pressed Auto-Fix, read "Fixed 47
+   * issues", re-ran the check and saw the same 47 - which is a worse bug than
+   * having no button, because it costs a person their trust in the page.
+   */
+  async autoFixAll(report: BBSHealthReport): Promise<{ fixed: number; failed: number; failures: string[] }> {
     let fixed = 0;
-    let failed = 0;
+    const failures: string[] = [];
 
     for (const category of report.categories) {
       for (const issue of category.issues) {
-        if (!issue.autoFixable || !issue.path) continue;
+        if (!issue.fix) continue;
 
         try {
           await this.autoFixIssue(issue);
           fixed++;
-console.log(`[HealthCheck] Fixed: ${issue.description}`);
+          console.log(`[HealthCheck] Fixed: ${issue.description}`);
         } catch (error) {
-          failed++;
-console.error(`[HealthCheck] Failed to fix: ${issue.description}`, error);
+          failures.push(`${issue.description}: ${(error as Error).message}`);
+          console.error(`[HealthCheck] Failed to fix: ${issue.description}`, error);
         }
       }
     }
 
-    return { fixed, failed };
+    return { fixed, failed: failures.length, failures };
   }
 
   /**
-   * Auto-fix a single issue
+   * One issue's fix, chosen by what it says it is.
+   *
+   * Dispatch reads `fix.kind`, not the description prose. A kind with no
+   * branch THROWS - the point of the exhaustive default is that adding a fix
+   * kind and forgetting to implement it fails at the type check, and failing
+   * that, fails out loud at the sysop rather than reporting success.
    */
   private async autoFixIssue(issue: HealthIssue): Promise<void> {
-    if (!issue.path) return;
+    const fix = issue.fix;
+    if (!fix) throw new Error('No fix is defined for this issue');
 
-    // Determine what type of fix is needed
-    if (issue.description.includes('directory missing')) {
-      // Create missing directory
-      fs.mkdirSync(issue.path, { recursive: true });
-    } else if (issue.description.includes('file missing')) {
-      // Create empty file
-      fs.writeFileSync(issue.path, '', 'utf8');
+    switch (fix.kind) {
+      case 'create-directory': {
+        if (!issue.path) throw new Error('No path to create');
+        fs.mkdirSync(issue.path, { recursive: true });
+        return;
+      }
+
+      case 'create-file': {
+        if (!issue.path) throw new Error('No path to create');
+        fs.mkdirSync(path.dirname(issue.path), { recursive: true });
+        fs.writeFileSync(issue.path, '', 'utf8');
+        return;
+      }
+
+      case 'screen-escape-byte': {
+        if (!issue.path) throw new Error('No screen to repair');
+        const outcome = repairOneFile(issue.path);
+        if ('refused' in outcome) throw new Error(outcome.refused);
+        // The index caches per-file facts on size and mtime, and the repair
+        // changed both - but the damaged-file list is the index's, so it has
+        // to be rebuilt before the page asks again.
+        invalidateScreenIndex();
+        return;
+      }
+
+      case 'conference-setup': {
+        const check = this.conferenceSetup.checkConferenceHealthSync(fix.conferenceId);
+        await this.conferenceSetup.autoFixConference(fix.conferenceId, check);
+        return;
+      }
+
+      default: {
+        const unhandled: never = fix;
+        throw new Error(`No auto-fix is implemented for ${JSON.stringify(unhandled)}`);
+      }
     }
-    // Other fixes handled by category-specific services
   }
 }
