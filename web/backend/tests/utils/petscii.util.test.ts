@@ -631,20 +631,14 @@ describe('petscii.util', () => {
     });
 
     it('should handle cursor movement ANSI codes', () => {
-      const text = '\x1b[A\x1b[B\x1b[C\x1b[D';
-      const result = convertUnicodePuaToPetscii(text);
-
-      expect(result[0]).toBe(0x91); // Up
-      expect(result[1]).toBe(0x11); // Down
-      expect(result[2]).toBe(0x1D); // Right
-      expect(result[3]).toBe(0x9D); // Left
+      // A(up) at row 0 is a no-op on both sides; B, C, D move exactly one cell each.
+      const result = convertUnicodePuaToPetscii('\x1b[A\x1b[B\x1b[C\x1b[D');
+      expect(Array.from(result)).toEqual([0x11, 0x1D, 0x9D]);
     });
 
     it('should handle home ANSI code', () => {
-      const text = '\x1b[H';
-      const result = convertUnicodePuaToPetscii(text);
-
-      expect(result[0]).toBe(0x13); // Home
+      const result = convertUnicodePuaToPetscii('ab\x1b[H');
+      expect(result[result.length - 1]).toBe(0x13);
     });
 
     it('should handle clear screen ANSI code', () => {
@@ -661,13 +655,9 @@ describe('petscii.util', () => {
       expect(result[0]).toBe(0x0D); // PETSCII return
     });
 
-    it('should handle regular ASCII pass-through', () => {
-      const text = 'ABC';
-      const result = convertUnicodePuaToPetscii(text);
-
-      expect(result[0]).toBe(0x41); // A
-      expect(result[1]).toBe(0x42); // B
-      expect(result[2]).toBe(0x43); // C
+    it('uppercase ASCII displays uppercase on a shifted-charset C64 (case swap + prelude)', () => {
+      const result = convertUnicodePuaToPetscii('ABC');
+      expect(Array.from(result)).toEqual([0x0E, 0xC1, 0xC2, 0xC3]);
     });
 
     it('should handle reverse video codes', () => {
@@ -845,9 +835,9 @@ describe('convertUnicodePuaToPetscii ANSI parser', () => {
     const bytes = convertUnicodePuaToPetscii('\x1b[5C');
     expect(Array.from(bytes)).toEqual([0x1D, 0x1D, 0x1D, 0x1D, 0x1D]);
   });
-  it('converts absolute positioning to home + moves', () => {
+  it('converts absolute positioning to deltas from the current cursor', () => {
     const bytes = convertUnicodePuaToPetscii('\x1b[3;5H');
-    expect(Array.from(bytes)).toEqual([0x13, 0x11, 0x11, 0x1D, 0x1D, 0x1D, 0x1D]);
+    expect(Array.from(bytes)).toEqual([0x11, 0x11, 0x1D, 0x1D, 0x1D, 0x1D]);
   });
 });
 

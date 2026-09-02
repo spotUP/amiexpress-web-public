@@ -27,9 +27,9 @@
  */
 
 import * as fs from 'fs';
-import { PETSCII_COLOR_TO_VIC, vicToSgrForeground, vicToSgrBackground, C64_PALETTE_COLODORE } from './c64-palette';
+import { PETSCII_COLOR_TO_VIC, vicToSgrForeground, vicToSgrBackground } from './c64-palette';
 import { SCREENCODE_TO_UNICODE } from './petscii-unicode-map';
-import { petsciiInputToAscii } from '@amiexpress/bbs-door-sdk/petscii';
+import { petsciiInputToAscii, AnsiToPetsciiTransducer } from '@amiexpress/bbs-door-sdk/petscii';
 
 /**
  * PETSCII Control Codes - Complete Reference
@@ -150,48 +150,6 @@ function petsciiToScreenCode(petscii: number): number {
   }
   // $FF: Pi symbol -> $5E
   return 0x5E;
-}
-
-/**
- * Convert screen code back to PETSCII byte
- *
- * This is the reverse of petsciiToScreenCode(), used when sending
- * Unicode PUA content back to real C64 terminals.
- *
- * Defined ONLY for the 0x00-0x7F screen-code domain (the printable glyph
- * bank). Reverse video is a separate bit (screen code bit 7 / PUA +0x100)
- * carried by the caller as $12/$92 state, not folded into this table -
- * folding it in here previously mapped e.g. reverse 'A' (screen code 0x81)
- * straight onto PETSCII control byte 0x01 (audit E1). Callers MUST mask
- * off bit 7 before calling this and emit $12/$92 themselves.
- *
- * Conversion table:
- * | Screen Code   | Operation   | PETSCII Range     |
- * |---------------|-------------|-------------------|
- * | $00-$1F       | +$40        | $40-$5F           |
- * | $20-$3F       | +$00        | $20-$3F           |
- * | $40-$5F       | +$80        | $C0-$DF           |
- * | $60-$7F       | +$40        | $A0-$BF           |
- */
-function screenCodeToPetscii(screenCode: number): number {
-  // $00-$1F: Add $40 -> $40-$5F (@ A-Z)
-  if (screenCode <= 0x1F) {
-    return screenCode + 0x40;
-  }
-  // $20-$3F: Direct mapping (space, numbers, punctuation)
-  if (screenCode <= 0x3F) {
-    return screenCode;
-  }
-  // $40-$5F: Add $80 -> $C0-$DF (letters, shifted-mode PETSCII)
-  if (screenCode <= 0x5F) {
-    return screenCode + 0x80;
-  }
-  // $60-$7F: Add $40 -> $A0-$BF (shifted graphics)
-  if (screenCode <= 0x7F) {
-    return screenCode + 0x40;
-  }
-  // Out of domain (caller should have masked bit 7 off) - fallback space
-  return 0x20;
 }
 
 /**
@@ -495,188 +453,17 @@ console.error(`[PETSCII] Error writing file ${filePath}:`, error.message);
 }
 
 /**
- * Convert Unicode PUA (PetMe64 format) back to raw PETSCII bytes
- * Used when sending to real C64 terminals
+ * Convert a PetMe64-PUA / ANSI string to raw PETSCII bytes (one shot).
  *
- * @param data - String containing Unicode PUA characters and ANSI codes
- * @returns Buffer containing raw PETSCII byte codes
+ * Thin wrapper over the SDK's AnsiToPetsciiTransducer - the ONE ANSI parser
+ * shared with the frontend canvas and the telnet emitter. Streaming callers
+ * (connection-emitter.ts) keep a per-session instance instead so cursor,
+ * charset and reverse state carry across chunks; this one-shot form is for
+ * whole-string conversions and tests.
  */
 export function convertUnicodePuaToPetscii(data: string): Buffer {
-  const bytes: number[] = [];
-  let i = 0;
-  let currentShiftMode = false; // Track shift mode for output
-  let currentReverse = false;   // Track reverse-video state for output
-
-  while (i < data.length) {
-    const char = data[i];
-    const code = char.charCodeAt(0);
-
-    // Check for ANSI escape sequence
-    if (char === '\x1b' && i + 1 < data.length && data[i + 1] === '[') {
-      let j = i + 2;
-      let ansiCode = '';
-      while (j < data.length && !/[A-Za-z]/.test(data[j])) {
-        ansiCode += data[j];
-        j++;
-      }
-      const terminator = data[j] || '';
-
-      // Convert ANSI codes back to PETSCII. Multi-param SGR (e.g. "0;7") and
-      // counted cursor moves (e.g. ESC[5C) are real ANSI, not the
-      // single-param subset the old parser assumed (audit E2/E3).
-      if (terminator === 'm') {
-        const params = ansiCode.split(';');
-        let p = 0;
-        while (p < params.length) {
-          // Truecolor foreground: "38;2;R;G;B" -> nearest VIC index
-          if (params[p] === '38' && params[p + 1] === '2' && p + 4 < params.length) {
-            const r = parseInt(params[p + 2], 10);
-            const g = parseInt(params[p + 3], 10);
-            const b = parseInt(params[p + 4], 10);
-            bytes.push(vicColorToPetscii(nearestVicForRgb(r, g, b)));
-            p += 5;
-            continue;
-          }
-          const petsciiColor = ansiColorToPetscii(params[p]);
-          if (petsciiColor !== null) {
-            bytes.push(petsciiColor);
-            // Keep the reverse-video dedup state (used by the PUA branch
-            // below) in sync with SGR reverse toggles too - otherwise an
-            // SGR $12/$92 interleaved with PUA reverse glyphs desyncs the
-            // two, and a later PUA glyph's own $12/$92 gets silently
-            // swallowed by the stale dedup check (or omitted when it's
-            // actually needed to cancel a still-latched SGR reverse).
-            if (petsciiColor === 0x12) {
-              currentReverse = true;
-            } else if (petsciiColor === 0x92) {
-              currentReverse = false;
-            }
-          }
-          p++;
-        }
-      } else if (terminator === 'A' || terminator === 'B' || terminator === 'C' || terminator === 'D') {
-        const moveByte: { [key: string]: number } = { A: 0x91, B: 0x11, C: 0x1D, D: 0x9D };
-        const count = parseInt(ansiCode || '1', 10) || 1;
-        for (let k = 0; k < count; k++) {
-          bytes.push(moveByte[terminator]);
-        }
-      } else if (terminator === 'H') {
-        // Absolute cursor position ESC[r;cH -> HOME, then (r-1) downs and
-        // (c-1) rights (PETSCII has no direct "goto" control code).
-        const params = ansiCode.split(';').filter((p) => p !== '');
-        const row = params.length > 0 ? (parseInt(params[0], 10) || 1) : 1;
-        const col = params.length > 1 ? (parseInt(params[1], 10) || 1) : 1;
-        bytes.push(0x13); // Home
-        for (let k = 0; k < row - 1; k++) bytes.push(0x11); // Cursor down
-        for (let k = 0; k < col - 1; k++) bytes.push(0x1D); // Cursor right
-      } else if (terminator === 'J' && ansiCode === '2') {
-        bytes.push(0x93); // Clear screen
-      }
-
-      i = j + 1;
-      continue;
-    }
-
-    // Check for Unicode PUA range (U+E000-E1FF). The PUA contains SCREEN
-    // CODES with the reverse-video flag carried in bit 7 (both banks:
-    // E000-E0FF unshifted, E100-E1FF shifted) - see PetMe64 mapping doc
-    // above. screenCodeToPetscii() is defined only for 0x00-0x7F, so mask
-    // bit 7 off and emit $12/$92 ourselves instead of feeding it straight
-    // through (audit E1: that previously turned reverse 'A' into PETSCII
-    // control byte 0x01).
-    if (code >= 0xE000 && code <= 0xE1FF) {
-      const wantShift = code >= 0xE100;
-      if (wantShift !== currentShiftMode) {
-        bytes.push(wantShift ? 0x0E : 0x8E);
-        currentShiftMode = wantShift;
-      }
-      const screenCode = code & 0xFF;
-      const wantReverse = (screenCode & 0x80) !== 0;
-      if (wantReverse !== currentReverse) {
-        bytes.push(wantReverse ? 0x12 : 0x92);
-        currentReverse = wantReverse;
-      }
-      bytes.push(screenCodeToPetscii(screenCode & 0x7F));
-    } else if (char === '\r') {
-      // Skip CR, we'll handle LF
-    } else if (char === '\n') {
-      bytes.push(0x0D); // PETSCII return
-    } else if (code < 128) {
-      // Regular ASCII - pass through
-      bytes.push(code);
-    }
-
-    i++;
-  }
-
-  return Buffer.from(bytes);
-}
-
-/**
- * Convert ANSI color code to PETSCII color byte
- */
-function ansiColorToPetscii(ansiCode: string): number | null {
-  const ansiToPetscii: { [key: string]: number } = {
-    '97': 0x05,   // Bright white -> White
-    '37': 0x9B,   // White -> Light grey
-    '31': 0x1C,   // Red
-    '32': 0x1E,   // Green
-    '34': 0x1F,   // Blue
-    '33': 0x9E,   // Yellow
-    '30': 0x90,   // Black
-    '91': 0x96,   // Bright red -> Light red
-    '92': 0x99,   // Bright green -> Light green
-    '94': 0x9A,   // Bright blue -> Light blue
-    '93': 0x9E,   // Bright yellow -> Yellow
-    '35': 0x9C,   // Magenta -> Purple
-    '36': 0x9F,   // Cyan
-    '90': 0x97,   // Dark grey
-    '0': 0x05,    // Reset -> White
-    '7': 0x12,    // Reverse on
-    '27': 0x92,   // Reverse off
-  };
-
-  return ansiToPetscii[ansiCode] ?? null;
-}
-
-// PETSCII color control byte -> VIC index, inverted (see PETSCII_COLOR_TO_VIC
-// in c64-palette.ts). Every VIC index 0-15 has exactly one PETSCII byte.
-const VIC_TO_PETSCII_COLOR: number[] = (() => {
-  const table: number[] = new Array(16).fill(0x05); // Fallback: white
-  for (const [byteStr, vic] of Object.entries(PETSCII_COLOR_TO_VIC)) {
-    table[vic] = Number(byteStr);
-  }
-  return table;
-})();
-
-function vicColorToPetscii(vic: number): number {
-  return VIC_TO_PETSCII_COLOR[vic & 0x0F];
-}
-
-function hexToRgbTriplet(hex: string): [number, number, number] {
-  return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
-}
-
-/**
- * Map a truecolor RGB triplet (from an ANSI "38;2;R;G;B" sequence) to the
- * closest VIC-II color index in the Colodore palette: an exact match wins
- * immediately, otherwise the index with the smallest squared RGB distance.
- */
-function nearestVicForRgb(r: number, g: number, b: number): number {
-  let bestVic = 0;
-  let bestDistance = Infinity;
-  for (let vic = 0; vic < C64_PALETTE_COLODORE.length; vic++) {
-    const [pr, pg, pb] = hexToRgbTriplet(C64_PALETTE_COLODORE[vic]);
-    if (pr === r && pg === g && pb === b) {
-      return vic; // Exact match
-    }
-    const distance = (pr - r) ** 2 + (pg - g) ** 2 + (pb - b) ** 2;
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestVic = vic;
-    }
-  }
-  return bestVic;
+  const t = new AnsiToPetsciiTransducer();
+  return Buffer.concat([Buffer.from(t.transduce(data)), Buffer.from(t.flush())]);
 }
 
 /**
