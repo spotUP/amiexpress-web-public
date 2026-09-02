@@ -76,6 +76,15 @@ export function ScreenFilesPage() {
    * manager refuses to show is a file nobody can find.
    */
   const [showGenerated, setShowGenerated] = useState(false);
+  /**
+   * Why the last action on the open file failed.
+   *
+   * Reported as "i deleted a screen file but the dialog did not close and the
+   * gallery was not refreshed" - which is what a REFUSED delete looks like:
+   * the toast says why and then goes away, and the dialog is still sitting
+   * there with the file in it. The reason belongs where the action was taken.
+   */
+  const [fileError, setFileError] = useState<string | null>(null);
   const [importPlan, setImportPlan] = useState<{ path: string; action: string; bytes: number }[] | null>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [editing, setEditing] = useState<EditorSurface | null>(null);
@@ -304,6 +313,8 @@ export function ScreenFilesPage() {
     });
     if (!ok) return;
 
+    setFileError(null);
+
     try {
       const res = await apiClient.deleteScreenFile(target);
       const lost: string[] = res.data?.stopsResolving ?? [];
@@ -311,9 +322,15 @@ export function ScreenFilesPage() {
         ? `Deleted. These stop resolving: ${lost.join(', ')}`
         : 'Deleted. Nothing stops resolving.');
       setOpenFile(null);
+      // Both queries: the index decides the tables, and the gallery is drawn
+      // from the same answer.
       queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+      queryClient.invalidateQueries({ queryKey: ['screen-file', target] });
     } catch (error) {
-      showError((error as Error).message);
+      const status = (error as ApiError).status;
+      const message = (error as Error).message;
+      setFileError(status ? `${message} (HTTP ${status})` : message);
+      showError(message);
     }
   };
 
@@ -551,6 +568,7 @@ export function ScreenFilesPage() {
             </label>
           </div>
           <ScreenGallery
+            isLoading={isLoading}
             items={query.trim()
               ? galleryItems.filter(item =>
                   item.label.toLowerCase().includes(query.trim().toLowerCase())
@@ -698,6 +716,7 @@ export function ScreenFilesPage() {
             getRowId={res => `${res.scope}-${res.id}`}
             onRowClick={res => {
               if (!res.file) return;
+              setFileError(null);
               setOpenFile(res.file);
               const format = data?.files[res.file]?.format;
               if (format === 'ansi' || format === 'text') setPendingEdit(res.file);
@@ -841,8 +860,20 @@ export function ScreenFilesPage() {
           "extremely tall and unmanageable" - the tab list, the screens table,
           the resolutions and then all of this.
         */}
+        {openFile && !file && !editing && (
+          <div className="p-4 space-y-2" data-testid="file-skeleton">
+            <div className="h-3 w-1/3 animate-pulse rounded bg-surface-2" />
+            <div className="h-40 animate-pulse bg-surface-2" />
+          </div>
+        )}
+
         {openFile && file && !editing && !editorWrite && (
           <div className="space-y-3 p-4">
+            {fileError && (
+              <p className="text-sm text-status-danger">
+                That did not work: {fileError}
+              </p>
+            )}
             <p className="text-sm text-content-secondary">
               {file.bytes} bytes, {file.format}
               {file.sauce?.width && file.sauce?.height

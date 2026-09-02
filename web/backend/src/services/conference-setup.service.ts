@@ -12,15 +12,35 @@ import { deriveConferencePaths } from '../conferences/derive-conference-paths';
 import * as fs from 'fs';
 import { applyTooltypes, readTooltypeMap } from '../utils/info-file.util';
 import * as path from 'path';
+import { conferenceDir } from '../conferences/conference-paths';
 import { applyConferenceFields } from './config-services/conference-info-file.service';
+
+/**
+ * One thing wrong with a conference, and whether THIS thing can be fixed.
+ *
+ * Fixability used to be a single flag per conference: a `Bulletins` that was a
+ * file rather than a directory set it false, and every other issue - including
+ * "Missing Messages/", which is one mkdir - was then reported as needing a
+ * human. The sysop saw Conf4 offer a fix for exactly the same missing
+ * directory Conf6 called manual.
+ */
+export interface ConferenceIssue {
+  description: string;
+  autoFixable: boolean;
+  /** The path it is about, so a fix does not have to re-derive it. */
+  path: string;
+  kind: 'missing-directory' | 'missing-file' | 'not-a-directory';
+}
 
 export interface ConferenceHealthCheck {
   conferenceId: number;
   conferenceName: string;
   exists: boolean;
   issues: string[];
+  issueList: ConferenceIssue[];
   missingDirectories: string[];
   missingFiles: string[];
+  /** True when EVERY issue can be fixed; kept for callers that ask that way. */
   canAutoFix: boolean;
 }
 
@@ -75,53 +95,89 @@ export class ConferenceSetupService {
     this.bbsRoot = bbsRoot;
   }
 
+  /** Record an issue in every shape the callers read. */
+  private record(result: ConferenceHealthCheck, issue: ConferenceIssue): void {
+    result.issueList.push(issue);
+    result.issues.push(issue.description);
+    if (issue.kind === 'missing-directory') result.missingDirectories.push(issue.path);
+    if (issue.kind === 'missing-file') result.missingFiles.push(issue.path);
+    if (!issue.autoFixable) result.canAutoFix = false;
+  }
+
   /**
    * Perform health check on a single conference
    * 1:1 with express.e structure requirements
+   *
+   * Kept async for its callers; the work is all synchronous fs, so
+   * checkConferenceHealthSync is the same answer without the wrapper.
    */
   async checkConferenceHealth(conferenceId: number, conferenceName?: string): Promise<ConferenceHealthCheck> {
+    return this.checkConferenceHealthSync(conferenceId, conferenceName);
+  }
+
+  checkConferenceHealthSync(conferenceId: number, conferenceName?: string): ConferenceHealthCheck {
     const result: ConferenceHealthCheck = {
       conferenceId,
       conferenceName: conferenceName || `Conference ${conferenceId}`,
       exists: false,
       issues: [],
+      issueList: [],
       missingDirectories: [],
       missingFiles: [],
       canAutoFix: true
     };
 
     try {
-      // Check Conf{N}.info exists (express.e:5006 - reads from TOOLTYPE_CONF)
+      // Check Conf{N}.info exists (express.e:5006 - reads from TOOLTYPE_CONF).
+      // The ICON is named by position; the DIRECTORY is whatever LOCATION.n
+      // says, which is why the two are looked up differently here.
       const confInfoPath = path.join(this.bbsRoot, `Conf${conferenceId}.info`);
       if (!fs.existsSync(confInfoPath)) {
-        result.issues.push(`Missing Conf${conferenceId}.info file`);
-        result.missingFiles.push(confInfoPath);
+        this.record(result, {
+          description: `Missing Conf${conferenceId}.info file`,
+          autoFixable: true,
+          path: confInfoPath,
+          kind: 'missing-file',
+        });
       } else {
         result.exists = true;
       }
 
-      // Check conference directory exists
-      const confLocation = `Conf${conferenceId}`;
-      const confDirPath = path.join(this.bbsRoot, confLocation);
+      const confDirPath = conferenceDir(this.bbsRoot, conferenceId);
+      const confLocation = path.relative(this.bbsRoot, confDirPath) || `Conf${conferenceId}`;
       if (!fs.existsSync(confDirPath)) {
-        result.issues.push(`Missing ${confLocation}/ directory`);
-        result.missingDirectories.push(confDirPath);
+        this.record(result, {
+          description: `Missing ${confLocation}/ directory`,
+          autoFixable: true,
+          path: confDirPath,
+          kind: 'missing-directory',
+        });
       }
 
-      const requiredDirs = CONFERENCE_DIRECTORIES;
-
-      for (const dir of requiredDirs) {
-        const dirPath = path.join(this.bbsRoot, confLocation, dir);
+      for (const dir of CONFERENCE_DIRECTORIES) {
+        const dirPath = path.join(confDirPath, dir);
         if (!fs.existsSync(dirPath)) {
-          result.issues.push(`Missing ${confLocation}/${dir}/ directory`);
-          result.missingDirectories.push(dirPath);
-        } else {
-          // Check if it's actually a directory
-          const stats = fs.statSync(dirPath);
-          if (!stats.isDirectory()) {
-            result.issues.push(`${confLocation}/${dir} exists but is not a directory`);
-            result.canAutoFix = false;
-          }
+          this.record(result, {
+            description: `Missing ${confLocation}/${dir}/ directory`,
+            autoFixable: true,
+            path: dirPath,
+            kind: 'missing-directory',
+          });
+          continue;
+        }
+
+        if (!fs.statSync(dirPath).isDirectory()) {
+          // An EMPTY file standing where a directory belongs is safe to
+          // replace - eight conferences on this board are in that state, all
+          // of them 0 bytes and dated 2020. One with content in it is
+          // somebody's data and stays a human's decision.
+          const empty = fs.statSync(dirPath).size === 0;
+          this.record(result, {
+            description: `${confLocation}/${dir} exists but is not a directory`,
+            autoFixable: empty,
+            path: dirPath,
+            kind: 'not-a-directory',
+          });
         }
       }
 
@@ -314,11 +370,23 @@ console.log(`[ConferenceSetup] Created Conf${conferenceId}.info with ${tooltypes
    * Auto-fix issues found in health check
    */
   async autoFixConference(conferenceId: number, healthCheck: ConferenceHealthCheck): Promise<void> {
-    if (!healthCheck.canAutoFix) {
-      throw new Error(`Cannot auto-fix Conf${conferenceId}: ${healthCheck.issues.join(', ')}`);
-    }
-
+    // Fix what CAN be fixed rather than refusing the lot. One unfixable issue
+    // used to block every fixable one beside it, which is what the sysop met:
+    // a missing Messages/ directory reported as needing a human because a
+    // sibling Bulletins was a file.
 console.log(`[ConferenceSetup] Auto-fixing Conf${conferenceId}`);
+
+    for (const issue of healthCheck.issueList) {
+      if (!issue.autoFixable || issue.kind !== 'not-a-directory') continue;
+
+      // Proved empty when the check ran; proved again here, because the answer
+      // could be minutes old and this deletes something.
+      if (fs.existsSync(issue.path) && fs.statSync(issue.path).size === 0) {
+        fs.unlinkSync(issue.path);
+        fs.mkdirSync(issue.path, { recursive: true });
+console.log(`[ConferenceSetup] Replaced empty file with directory: ${issue.path}`);
+      }
+    }
 
     // Create missing directories
     for (const dirPath of healthCheck.missingDirectories) {

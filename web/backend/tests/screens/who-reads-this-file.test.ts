@@ -109,3 +109,38 @@ describe('what the board calls its conferences', () => {
     ]);
   });
 });
+
+/**
+ * The random pools.
+ *
+ * "Some screens are reported as read by nothing. but they may be read in some
+ * cases. there is an mci command that loads a random screen from a dir of
+ * numbered screens": `~<n>SR_<base>` picks `NNN.<basename>` from the base's
+ * directory (screen.handler.ts:851, express.e:5533-5554). There is no single
+ * file to resolve, so every screen in the pool was reported as read by
+ * nothing - and this board has three such pools.
+ */
+describe('a pool of numbered screens', () => {
+  test('every screen in it is read by whatever names the pool', () => {
+    write('Node1/LOGON.TXT', 'a farewell: ~99SR_BBS:Screens/reference-board/reference-board.txt\n');
+    write('Screens/reference-board/001.reference-board.txt', 'art one\n');
+    write('Screens/reference-board/007.reference-board.txt', 'art seven\n');
+
+    const index = buildScreenIndex(root);
+
+    expect(index.unused.map(f => f.relPath)).not.toContain('Screens/reference-board/007.reference-board.txt');
+    expect(index.files['Screens/reference-board/007.reference-board.txt'].readBy[0]).toMatchObject({
+      screen: 'LOGON', via: 'include',
+    });
+  });
+
+  test('a file in the directory that is not part of the pool stays unread', () => {
+    write('Node1/LOGON.TXT', '~99SR_BBS:Screens/reference-board/reference-board.txt\n');
+    write('Screens/reference-board/001.reference-board.txt', 'art one\n');
+    write('Screens/reference-board/notes.txt', 'not part of the pool\n');
+
+    const index = buildScreenIndex(root);
+
+    expect(index.unused.map(f => f.relPath)).toContain('Screens/reference-board/notes.txt');
+  });
+});

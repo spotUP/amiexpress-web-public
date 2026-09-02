@@ -73,3 +73,38 @@ describe('what the manager calls generated', () => {
     expect(Object.keys(index.files)).toContain('Conf2/Menu copy.txt');
   });
 });
+
+/**
+ * Bulletins a door rewrites every boot.
+ *
+ * "Many auto generated bulletin screens are shown in the screen gallery they
+ * should not." On this board bulletins 1 to 6 are rewritten at every start -
+ * five by MultiTop-II and one by a last-callers generator - while bull9 is
+ * hand-drawn and has not changed since January. The names say nothing; the
+ * content says everything.
+ */
+describe('bulletins written by a door', () => {
+  test('a MultiTop stats bulletin is runtime, not art', () => {
+    write('Bulletins/bull1.txt', '  MultiTop-II   Design Created (c)1994 Bobo/Mystic\nNo# Username\n');
+
+    const index = buildScreenIndex(root);
+
+    expect(index.files['Bulletins/bull1.txt']?.generated).toBe('runtime');
+  });
+
+  test('a last-callers bulletin is runtime too', () => {
+    write('Bulletins/bull6.txt', 'lAST cALLERS\n1. spot\n');
+
+    const index = buildScreenIndex(root);
+
+    expect(index.files['Bulletins/bull6.txt']?.generated).toBe('runtime');
+  });
+
+  test('hand-drawn art in the same directory is left alone', () => {
+    write('Bulletins/bull9.txt', '  _______\n _\\______   \\ ____\n');
+
+    const index = buildScreenIndex(root);
+
+    expect(index.files['Bulletins/bull9.txt']?.generated).toBeUndefined();
+  });
+});

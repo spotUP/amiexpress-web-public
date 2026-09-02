@@ -152,3 +152,32 @@ describe('the gallery', () => {
     await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
   });
 });
+
+/**
+ * Waiting looks like waiting.
+ *
+ * "Can we add skeleton + lazy loading to the screen pages? they are slow
+ * loading." The index is one request for the whole board, and each thumbnail
+ * is another - so there is a real wait before there is anything to draw.
+ */
+describe('while the board is still answering', () => {
+  it('draws placeholder cards instead of an empty page', async () => {
+    let release: (value: unknown) => void = () => {};
+    const held = new Promise(resolve => { release = resolve; });
+
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes('/screens/shared-directories')) {
+        return envelope({ directories: [] }) as unknown as Response;
+      }
+      await held;
+      return envelope(index) as unknown as Response;
+    }));
+
+    render(<ScreenFilesPage />, { wrapper });
+
+    expect(await screen.findByTestId('gallery-skeleton')).toBeTruthy();
+
+    release(null);
+    expect(await screen.findByTestId('screen-gallery')).toBeTruthy();
+  });
+});

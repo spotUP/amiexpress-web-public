@@ -28,6 +28,8 @@ export interface GalleryItem {
 interface ScreenGalleryProps {
   items: GalleryItem[];
   onOpen: (path: string) => void;
+  /** Draw placeholder cards while the board's index is on its way. */
+  isLoading?: boolean;
 }
 
 /** One card. Draws nothing until it is scrolled to. */
@@ -74,7 +76,11 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
       onClick={() => onOpen(item.path)}
     >
       <div className="h-32 overflow-hidden bg-black">
-        {content ? <ScreenArt content={content} scale={0.28} /> : null}
+        {content
+          ? <ScreenArt content={content} scale={0.28} />
+          // A card that is waiting looks like it is waiting. Blank black reads
+          // as an empty screen, which is a thing some of these actually are.
+          : <div className="h-full w-full animate-pulse bg-surface-2/40" />}
       </div>
       <div className="text-xs">
         <span className="block font-topaz text-content-primary truncate">{item.label}</span>
@@ -91,7 +97,27 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
   );
 }
 
-export function ScreenGallery({ items, onOpen }: ScreenGalleryProps) {
+export function ScreenGallery({ items, onOpen, isLoading = false }: ScreenGalleryProps) {
+  // The index is one request for the whole board - 891 files with their
+  // readers, their SAUCE and their problems - so the page has a real wait
+  // before there is anything to draw.
+  if (isLoading) {
+    return (
+      <div
+        data-testid="gallery-skeleton"
+        className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+      >
+        {Array.from({ length: 10 }, (_, index) => (
+          <div key={index} className="border border-border p-2 space-y-2">
+            <div className="h-32 animate-pulse bg-surface-2" />
+            <div className="h-3 w-2/3 animate-pulse rounded bg-surface-2" />
+            <div className="h-3 w-1/2 animate-pulse rounded bg-surface-2" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   if (items.length === 0) {
     return <p className="text-sm text-content-secondary">Nothing to show here.</p>;
   }
