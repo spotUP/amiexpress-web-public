@@ -39,13 +39,6 @@ export const NARROW_WIDTH = 40;
 export const NARROW_PROMPT_WIDTH = NARROW_WIDTH - 1;
 
 /**
- * @deprecated Row width; use NARROW_WIDTH. Kept only until
- * door.handler.ts's import moves (that file is serialized behind another
- * session's edit).
- */
-export const NARROW_LINE_WIDTH = NARROW_WIDTH;
-
-/**
  * Does this caller get the narrow layouts?
  *
  * `sessionColumns()` can only answer below 80 when `petsciiMode === true`

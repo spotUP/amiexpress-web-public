@@ -26,7 +26,7 @@ import { DebugLogger } from '../utils/debug-logger.util';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.util';
 import { resolveDoorMinColumns, declaredMinColumns, sessionColumns, DOOR_NEEDS_80_NOTICE } from '../utils/door-min-columns.util';
 import { installC64DoorAdapter, uninstallC64DoorAdapter, doorRequestsC64Adapt } from '../server/c64-door-adapter';
-import { isNarrow, NARROW_LINE_WIDTH } from '../utils/table-format.util';
+import { isNarrow, NARROW_WIDTH, narrowClip } from '../utils/table-format.util';
 import { enableGameMode, disableGameMode } from '../server/socket-handlers';
 import { displayMainMenu } from './command-handler/menu';
 import { emitDoorActivity } from '../services/bbs-event-emitter';
@@ -1252,7 +1252,7 @@ function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean 
   // hard-coded 80 - a 40-column masthead padded to 80 wraps into a second
   // inverse-video row and pushes the whole list down the screen.
   const narrow = isNarrow(session);
-  const chromeWidth = narrow ? NARROW_LINE_WIDTH : 80;
+  const chromeWidth = narrow ? NARROW_WIDTH : 80;
 
   // Only clear screen on initial draw
   if (isInitialDraw) {
@@ -1317,6 +1317,9 @@ function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean 
 /**
  * Format a single door line for display
  */
+/** Name column of a narrow door row - see the arithmetic in formatDoorLine. */
+const NARROW_DOOR_NAME_COLUMNS = 24;
+
 export function formatDoorLine(door: any, isSelected: boolean, narrow: boolean = false): string {
   // Get door type - handle both uppercase and lowercase variants
   const doorType = (door as any).doorType || door.type || 'AMI';
@@ -1328,20 +1331,33 @@ export function formatDoorLine(door: any, isSelected: boolean, narrow: boolean =
               doorType === 'ARC' || doorType === 'archive' ? 'ARC' :
               doorType === 'WEB' || doorType === 'web' ? 'WEB' : 'AMI';
 
-  // Format command (pad to 10 chars; 8 on a C64, where the row budget is 39)
-  const command = door.command || door.id;
-  const commandDisplay = padString(command, narrow ? 8 : 10);
+  // Format command (pad to 10 chars; 8 on a C64).
+  //
+  // CLIP, then pad. door.handler's local padString (:1540) does truncate,
+  // unlike utils/string-util.ts's - which is exactly why the narrow row
+  // must not depend on which one is in scope. narrowClip states the intent
+  // and survives that function being swapped.
+  const command = String(door.command || door.id || '');
+  const commandDisplay = narrow ? narrowClip(command, 8).padEnd(8) : padString(command, 10);
 
   // Format name (pad to 30 chars). 40-ok doors carry an ASCII [40] token
   // inside the same column budget - the marker participates in truncation
   // and never widens the row (C64/40-col Task 1).
   const fortyOk = resolveDoorMinColumns(door) <= 40;
-  // Narrow row: ' ' + '[TS]'(<=5) + ' ' + command(8) + ' ' + name(18) = 39,
-  // and the size column comes off entirely. The [40] marker is what tells a
-  // C64 caller which doors will actually open, so on a narrow row the NAME
-  // gives way to it rather than the other way round.
+  // Narrow row arithmetic, worst case (the widest type token is '[XIM]'):
+  //   ' ' + '[XIM]'(5) + ' ' + command(8) + ' ' + name(24) = 40 columns,
+  // which a CRLF-terminated row may use in full (see table-format.util.ts
+  // for the pendingWrap latch). '[TS]' is 4, so those rows come to 39.
+  // The size column comes off entirely.
+  //
+  // The [40] marker is what tells a C64 caller which doors will actually
+  // open, so within the name column the NAME gives way to it, never the
+  // other way round.
+  const doorName = String(door.name || '');
   const name = narrow
-    ? (fortyOk ? `${padString(door.name, 13)} [40]` : padString(door.name, 18))
+    ? (fortyOk
+        ? `${narrowClip(doorName, NARROW_DOOR_NAME_COLUMNS - 5).padEnd(NARROW_DOOR_NAME_COLUMNS - 5)} [40]`
+        : narrowClip(doorName, NARROW_DOOR_NAME_COLUMNS).padEnd(NARROW_DOOR_NAME_COLUMNS))
     : padString(fortyOk ? `${door.name} [40]` : door.name, 30);
 
   // Format size (right-aligned, 8 chars wide for proper column alignment)

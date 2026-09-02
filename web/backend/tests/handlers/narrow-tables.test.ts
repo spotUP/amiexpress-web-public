@@ -948,11 +948,40 @@ describe('5d doors list (door.handler.ts displayDoorMenu)', () => {
       .filter((l) => l.replace(/\x1b\[2K/g, '').length > 0);
     expectFitsNarrow(lines.map((l) => l.replace(/\x1b\[2K/g, '')));
 
-    // The [40] marker (Task 1) must survive the narrow row's truncation.
+    // Exact rows. The name column is 24, so the worst-case type token
+    // ('[XIM]', 5) still lands the row on exactly 40.
     const door = require('../../src/handlers/door.handler');
-    const narrowRow = door.formatDoorLine(DOORS[0], false, true).replace(/\x1b\[2K/g, '');
-    expect(printableLength(narrowRow)).toBeLessThanOrEqual(NARROW_ROW_WIDTH);
-    expect(narrowRow).toContain('PENGO');
-    expect(narrowRow).toContain('[40]');
+    expect(door.formatDoorLine(DOORS[0], false, true)).toBe(
+      '\x1b[2K \x1b[33m[TS]\x1b[0m ' + 'PENGO'.padEnd(8) + ' ' + 'Pengo Arcade Game'.padEnd(19) + ' [40]'
+    );
+    expect(door.formatDoorLine(DOORS[1], false, true)).toBe(
+      '\x1b[2K \x1b[33m[AMI]\x1b[0m ' + 'TRADE'.padEnd(8) + ' ' + 'Trade Wars 2002'.padEnd(24)
+    );
+    expect(door.formatDoorLine(DOORS[0], true, true)).toBe(
+      '\x1b[2K\x1b[0;37;44m \x1b[33m[TS]\x1b[0;37;44m ' + 'PENGO'.padEnd(8) + ' ' +
+        'Pengo Arcade Game'.padEnd(19) + ' [40]\x1b[0m'
+    );
+  });
+
+  test('40-col: a long name and a long command are clipped, never overflowed', () => {
+    const door = require('../../src/handlers/door.handler');
+    const long = {
+      id: 'd3',
+      command: 'VERYLONGCOMMANDNAME',
+      name: 'Neo-Blessed Widget Showcase', // 27 characters
+      type: 'XIM',
+      size: 1,
+    };
+    for (const fortyOk of [true, false]) {
+      for (const selected of [false, true]) {
+        const row = door
+          .formatDoorLine(fortyOk ? { ...long, minColumns: 40 } : long, selected, true)
+          .replace(/\x1b\[2K/g, '');
+        expect(printableLength(row)).toBeLessThanOrEqual(NARROW_ROW_WIDTH);
+        // The marker outranks the name inside the name column.
+        if (fortyOk) expect(row).toContain('[40]');
+        expect(row).toContain('VERYLONG');
+      }
+    }
   });
 });
