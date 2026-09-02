@@ -3125,7 +3125,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     <div
       className={`min-h-screen w-full ${terminalMode === 'fixed' ? 'flex items-center justify-center' : ''} ${className}`}
       style={{
-        backgroundColor: '#000000',
+        // Fixed 80x25 mode: the PAGE owns the ground (the host paints its
+        // near-black --bbs-page-bg around the terminal box); the black belongs
+        // to the terminal box below. Wide/fullscreen still paints black edge
+        // to edge - there is no page around a fullscreen door.
+        backgroundColor: terminalMode === 'fixed' ? 'transparent' : '#000000',
         overflow: 'hidden', // Prevent scrollbars
         // Explicit height for flex centering. fillParent hosts (the mobile BBS
         // page, which reserves a strip for the on-screen keyboard) size us from
@@ -3152,7 +3156,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         style={{
           position: 'relative',
           width: '100%',
-          ...(terminalMode === 'fixed' ? { maxWidth: '960px' } : { height: '100%' }),
+          // The terminal box is the black thing on the page (see the outer
+          // wrapper): in fixed mode it carries the background so the page
+          // ground shows only around it.
+          ...(terminalMode === 'fixed' ? { maxWidth: '960px', backgroundColor: '#000000' } : { height: '100%' }),
         }}
       >
       <div

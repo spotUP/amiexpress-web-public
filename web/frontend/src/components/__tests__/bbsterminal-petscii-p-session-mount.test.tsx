@@ -179,3 +179,21 @@ describe("answering 'P' at the graphics prompt", () => {
     expect(escaped).toEqual([]);
   });
 });
+
+
+/**
+ * "i dont see any difference between the web terminal bg and the body bg"
+ * (sysop, 2026-09-02). The outermost wrapper used to paint #000000 across
+ * the whole viewport, so the page's lighter ground never showed. In fixed
+ * 80x25 mode the page owns the ground and the terminal box owns the black.
+ */
+describe('fixed 80x25 mode leaves the page ground to the page', () => {
+  it('the outer wrapper is transparent and the terminal box is black', async () => {
+    const { container } = render(<BBSTerminal backendUrl="http://localhost:3001" />);
+    const outer = container.firstElementChild as HTMLElement;
+    const box = outer.firstElementChild as HTMLElement;
+    expect(outer.style.backgroundColor).toBe('transparent');
+    expect(box.style.backgroundColor).toBe('rgb(0, 0, 0)');
+    expect(box.style.maxWidth).toBe('960px');
+  });
+});
