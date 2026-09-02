@@ -3,6 +3,8 @@
  * EXISTING xim/io.ts wrapLine path (io.ts:1457) once state.lineWrap carries
  * doorScreenWidth(); an ANSI session's line is emitted byte-identical.
  */
+import * as fs from 'fs';
+import * as path from 'path';
 import { XIMIOHandler } from '../../src/amiga-emulation/xim/io';
 import { XIMCommand } from '../../src/amiga-emulation/xim/types';
 import { doorScreenWidth } from '../../src/amiga-emulation/xim/screen-width.util';
@@ -45,5 +47,33 @@ describe('68K door text on a PETSCII session', () => {
     const { handler, emits } = buildHandler(doorScreenWidth({ petsciiMode: false, screenWidth: 40 }, 80));
     serialOutput(handler, PROSE);
     expect(emits.join('').replace(/\r?\n$/, '')).toBe(PROSE);
+  });
+});
+
+/**
+ * The live 68K path (command-execution.handler.ts:512 -> executeDoor ->
+ * executeAmigaDoor) passes the LIVE session as bbsSession (door.handler.ts:2921).
+ * It carries no lineWrap, so XIMProtocol.ts:141's `?? 80` leaves the io.ts
+ * safety net at 80 - which is what the adapter needs, because wrapLine
+ * (line-wrap.util.ts:61-67) is a hard CHARACTER wrap with no word awareness and
+ * at 40 would cut words in half before the reconstructor ever saw the row.
+ * BB_SCRWIDTH still answers 40, so a width-aware door still self-adapts.
+ */
+describe('width consistency ruling: 80-column wrap, 40-column BB_SCRWIDTH', () => {
+  it('a PETSCII door on the live path wraps at 80, so words survive to the ladder', () => {
+    const { handler, emits } = buildHandler(80);
+    serialOutput(handler, PROSE);
+    expect(emits.join('').replace(/\r?\n$/, '').replace(STRIP, '')).toBe(PROSE);
+  });
+
+  it('BB_SCRWIDTH still answers 40 for a PETSCII session', () => {
+    expect(doorScreenWidth({ petsciiMode: true, screenWidth: 40 })).toBe(40);
+  });
+
+  it('a live-path bbsSession carries no lineWrap, so the XIM default of 80 applies', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '../../src/handlers/door.handler.ts'), 'utf8');
+    const block = src.slice(src.indexOf('async function executeAmigaDoor'), src.indexOf('async function executeMciDoor'));
+    expect(block).toContain('bbsSession: session');
+    expect(block).not.toContain('lineWrap:');
   });
 });
