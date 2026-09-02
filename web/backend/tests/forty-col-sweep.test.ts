@@ -302,7 +302,7 @@ describe('40-column sweep: the six adapted doors', () => {
 
   it('DOORMAN: an installed row on a real 40x25 screen', () => {
     const { Screen } = require('../../../sdk/engines/ui/blessed');
-    const { DoormanLayout } = require('../../../Doors/door-manager/app');
+    const { DoormanLayout } = require('../../../Doors/door-manager/doorman-layout');
     const screen = new Screen({ width: 40, height: 25, responsive: true } as any);
     const layout = new DoormanLayout(screen, 1);
     try {
