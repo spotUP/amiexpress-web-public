@@ -23,6 +23,8 @@
  * moves everything after the break to somewhere the door never asked for.
  */
 import { positionsCursorAbsolutely } from '../../src/utils/ascii-art.util';
+import { XIMIOHandler } from '../../src/amiga-emulation/xim/io';
+import { XIMCommand } from '../../src/amiga-emulation/xim/types';
 
 describe('recognising a door that paints rather than prints', () => {
   it('spots the cursor-position sequence a screen paint is built from', () => {
@@ -74,5 +76,61 @@ describe('the emitter uses it', () => {
   it('still wraps the doors the wrap was written for', () => {
     // The exemption must be a condition ON the wrap, not a removal of it.
     expect(source).toContain('wrapLine(');
+  });
+});
+
+/**
+ * positionsCursorAbsolutely gained J/K/s/u (petscii-full-canvas plan,
+ * Task 10) so wrap-for-session.util.ts could reuse it as the one
+ * cursor-control detector instead of keeping a second, drifted regex. This
+ * function has another consumer, though: io.ts's own line-wrap safety net
+ * (io.ts:~1455, `(lineLooksLikeArt || positionsCursorAbsolutely(line)) ?
+ * [line] : wrapLine(...)`), for EVERY session, ANSI or PETSCII.
+ *
+ * The widened match set changes that consumer's behavior too: a long line
+ * whose only control code is an erase (ESC[K/ESC[J) or a save/restore
+ * (ESC[s/ESC[u) - no cursor motion at all - is now exempt from the wrap
+ * the same way a positioned line already was. Ruling: correct - a door
+ * erasing or saving/restoring cursor state mid-line is composing a screen
+ * by the same principle as one that moves the cursor - but it shipped with
+ * no test pinning it. Pinned here against the real io.ts path (not just
+ * the predicate) using the same XIMIOHandler harness as
+ * petscii-door-linewrap.test.ts.
+ */
+describe('io.ts line-wrap safety net: erase and save/restore also exempt a line', () => {
+  function buildHandler(lineWrap: number) {
+    const emits: string[] = [];
+    const socket: any = { emit: (ev: string, payload: string) => { if (ev === 'ansi-output') emits.push(payload); return true; } };
+    const emulator: any = { pause: () => {}, resume: () => {}, readMemory: () => 0, readMemory32: () => 0, writeMemory: () => {} };
+    const execLibrary: any = { replyMsg: () => {}, putMsg: () => {} };
+    const messageParser: any = { writeCommand: () => {}, writeMessageString: () => {}, writeData: () => {}, getCommandName: () => 'JH_SO' };
+    const state: any = {
+      registered: true, shuttingDown: false, nonStopText: false, autoPauseEnabled: false, lineCount: 0,
+      lineWrap, pauseLines: 24, language: '', confAccess: '', carrierDropped: false, rawArrow: false,
+      transfering: false, doorSilent: false,
+    };
+    const handler = new XIMIOHandler(emulator, execLibrary, socket, messageParser, state, { user: { secLevel: 100 } } as any);
+    (handler as any).getMessageString = (m: any) => m.string || '';
+    return { handler, emits };
+  }
+
+  function serialOutput(handler: XIMIOHandler, text: string) {
+    handler.handleSerialOutput({ msgAddr: 0xdead0000, command: XIMCommand.JH_SO, data: 1, replyPort: 0, string: text } as any);
+  }
+
+  it('an 80+ column line whose only control code is ESC[K (erase to end of line) is not wrapped', () => {
+    const line = 'x'.repeat(90) + '\x1b[K';
+    const { handler, emits } = buildHandler(80);
+    serialOutput(handler, line);
+    // If wrapLine() had run, a newline would land INSIDE the 90-char run;
+    // stripping only the trailing newline would then leave a mismatch.
+    expect(emits.join('').replace(/\r?\n$/, '')).toBe(line);
+  });
+
+  it('an 80+ column line whose only control code is ESC[s (save cursor) is not wrapped', () => {
+    const line = 'y'.repeat(90) + '\x1b[s';
+    const { handler, emits } = buildHandler(80);
+    serialOutput(handler, line);
+    expect(emits.join('').replace(/\r?\n$/, '')).toBe(line);
   });
 });
