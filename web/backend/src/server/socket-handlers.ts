@@ -59,6 +59,7 @@ const DISCONNECT_GRACE_MS = 15000;
 // Re-exported here for backwards compatibility with handlers that already
 // import from socket-handlers.
 export { enableGameMode, disableGameMode } from '../services/game-mode.service';
+import { deliversKeyEvents } from '../services/key-event-capable';
 
 /**
  * Convert special key names to their corresponding characters or escape sequences
@@ -711,8 +712,16 @@ console.log('🎯 Input buffer contents:', JSON.stringify(session.inputBuffer));
       return;
     }
 
-    // If game mode is active, skip command handler - key-down events handle input
-    if (session.gameModeEnabled) {
+    // Game mode means the CLIENT sends key-down/key-up events instead of
+    // characters, so the character path steps aside and lets them do the
+    // work. Only a browser has that channel.
+    //
+    // A telnet or SSH caller has nothing but characters, so returning here
+    // dropped every keystroke they made: a door in game mode drew perfectly
+    // over telnet and took no input at all - GRANDMASTER, confirmed by the
+    // sysop on a live session (2026-09-02), and the same for every other
+    // game-mode door. Those connections keep the character path below.
+    if (session.gameModeEnabled && deliversKeyEvents(session)) {
       return;
     }
 

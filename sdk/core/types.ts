@@ -1,3 +1,4 @@
+import type { DoorAnnouncer } from './announce';
 /**
  * Core Type Definitions for AmiExpress BBS Door SDK
  *
@@ -735,6 +736,14 @@ export interface DoorContext {
 
   /** BBS API (optional advanced features) */
   bbs?: BBSApi;
+
+  /**
+   * Announcements: tell the board something worth telling other people -
+   * a table open to join, a match started, a winner, a score. Reaches
+   * LiveChat and the sysop's Discord/Slack webhooks. Always present; a no-op
+   * on a host that cannot carry it (core/announce.ts).
+   */
+  announce: DoorAnnouncer;
 
   /** Command parameters */
   params: string[];

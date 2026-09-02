@@ -109,6 +109,15 @@ class InputHandler {
         const bbs = this.session?.bbs;
         if (!bbs?.onKeyDown || !bbs?.onKeyUp)
             return;
+        // Those methods exist on every session, browser or not, so their
+        // presence proves nothing. Only a browser sends key-down/key-up; a
+        // telnet caller sends characters. Claiming key-state mode there
+        // switched off the keypress path below in favour of events that
+        // never arrive, and the game took no input at all (sysop, over
+        // telnet, 2026-09-02).
+        const transport = bbs.connectionType;
+        if (transport && transport !== 'web')
+            return;
         this.keyStateMode = true;
         // Register down FIRST, then up - BBSApi.onKeyUp wraps the existing
         // handler, producing one combined doorKeyStateHandler.

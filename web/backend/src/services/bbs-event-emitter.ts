@@ -231,11 +231,26 @@ console.log('[BBSEventEmitter] Initialized with Socket.IO server');
       }
     });
 
-    // Score and match result events also trigger Discord/Slack webhooks
-    if (data.eventType === 'score' || data.eventType === 'score_submitted' || data.eventType === 'match_result') {
+    // Which door events reach Discord and Slack, and as what.
+    //
+    // This was three hardcoded strings, so a door could say anything it
+    // liked and only 'score', 'score_submitted' and 'match_result' ever
+    // left the board. The SDK's announcer (sdk/core/announce.ts) emits
+    // these names, and this map is the other half of that contract - a
+    // name here and not there reaches LiveChat and stops.
+    const WEBHOOK_EVENT_TRIGGERS: Record<string, string> = {
+      score: 'door_score',
+      score_submitted: 'door_score',
+      match_result: 'door_score',
+      door_opened: 'door_announcement',
+      door_started: 'door_announcement',
+    };
+
+    const webhookTrigger = WEBHOOK_EVENT_TRIGGERS[data.eventType];
+    if (webhookTrigger) {
       try {
-        const { webhookService, WebhookTrigger } = require('./webhook.service');
-        webhookService.sendWebhook(WebhookTrigger.DOOR_SCORE, {
+        const { webhookService } = require('./webhook.service');
+        webhookService.sendWebhook(webhookTrigger, {
           username: data.username,
           userId: (data as any).userId,
           gdprConsented: !!(data as any).gdprConsented,

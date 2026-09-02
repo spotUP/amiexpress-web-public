@@ -22,6 +22,7 @@ import {
   isBotPlayer,
   safeNumber,
 } from '../lib';
+import type { DoorAnnouncer } from '@amiexpress/bbs-door-sdk/core/announce';
 
 export interface TableFlowHost {
   lobby: LobbyState | null;
@@ -30,6 +31,8 @@ export interface TableFlowHost {
   selectedTableId: number | null;
   readonly viewMode: 'lobby' | 'table';
   readonly modalActive: boolean;
+  /** Announcements out to LiveChat and the sysop's webhooks. */
+  readonly announce: DoorAnnouncer;
 
   applyViewMode(mode: 'lobby' | 'table'): void;
   findTableById(tableId: number): LobbyTable | undefined;
@@ -165,6 +168,10 @@ export class TableFlow {
     this.host.updateTableStatus(table);
     if (table.status === 'in-progress') {
       this.host.emitLiveChat(`TABLE START: ${table.gameName} ${table.stakesLabel} (#${table.id})`);
+      this.host.announce.started(
+        `${table.gameName} at table #${table.id} has started`,
+        { game: table.gameName, tableId: table.id, players: table.players.length },
+      );
     }
 
     this.host.currentProfile.status = 'table';
@@ -173,6 +180,19 @@ export class TableFlow {
     this.host.lobby.tables.unshift(table);
     this.host.pushEvent(`Table #${table.id} opened: ${table.gameName} ${table.stakesLabel}`);
     this.host.emitLiveChat(`TABLE OPEN: ${table.gameName} ${table.stakesLabel} (#${table.id}) - /JOIN ${table.id}`);
+    // ...and out to Discord/Slack, which is the point of opening a table
+    // nobody else is at yet.
+    this.host.announce.opened(
+      `${table.gameName} table #${table.id} is open (${table.stakesLabel}) - `
+      + `${table.players.length}/${table.maxPlayers} seats taken`,
+      {
+        game: table.gameName,
+        tableId: table.id,
+        stakes: table.stakesLabel,
+        seatsTaken: table.players.length,
+        seats: table.maxPlayers,
+      },
+    );
 
     await this.host.persistState();
     this.host.selectedTableId = table.id;

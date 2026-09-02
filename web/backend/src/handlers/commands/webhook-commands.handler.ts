@@ -419,7 +419,8 @@ export class WebhookCommandsHandler {
     { name: WebhookTrigger.PRIVATE_MESSAGE, desc: 'Private message sent' },
     { name: WebhookTrigger.USER_KICKED, desc: 'User kicked/banned' },
     { name: WebhookTrigger.MAIL_SCAN, desc: 'Mail scan performed' },
-    { name: WebhookTrigger.DOOR_SCORE, desc: 'Door score or match result submitted' }
+    { name: WebhookTrigger.DOOR_SCORE, desc: 'Door score or match result submitted' },
+    { name: WebhookTrigger.DOOR_ANNOUNCEMENT, desc: 'Door announcement - a game open to join, or started' }
   ];
 
   /**

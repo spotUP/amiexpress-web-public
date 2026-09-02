@@ -233,3 +233,43 @@ export async function aStalledFrameDoesNotRunTheGameForwardWithoutInput(): Promi
     `a 1000ms frame ran ${frames} game frames back to back with no input between them`
   );
 }
+
+export async function telnetKeepsTheKeypressPathAlive(): Promise<void> {
+  // "key input are still not working via telnet in gmaster" (sysop,
+  // 2026-09-02, on a live telnet session).
+  //
+  // setupKeyStateHandlers turned key-state mode on because bbs.onKeyDown and
+  // bbs.onKeyUp EXIST - they do on every session, browser or not - and the
+  // keypress handler returns early in key-state mode. Over telnet the events
+  // never arrive, so nothing was left to read the characters that do.
+  const { InputHandler } = await import('../input/handler');
+
+  const build = (connectionType?: string) => {
+    const keypressHandlers: Array<(ch: string | undefined, key: any) => void> = [];
+    const screen: any = {
+      on: (event: string, handler: any) => { if (event === 'keypress') keypressHandlers.push(handler); },
+      removeListener: () => {},
+    };
+    const bbs: any = {
+      onKeyDown: () => {}, onKeyUp: () => {},
+      ...(connectionType ? { connectionType } : {}),
+    };
+    const handler: any = new InputHandler(screen, { bbs } as any);
+    let moves = 0;
+    handler.on('left', () => { moves++; });
+    return {
+      handler,
+      press: (name: string) => keypressHandlers.forEach((fn) => fn(undefined, { name, full: name })),
+      moves: () => moves,
+    };
+  };
+
+  const telnet = build('telnet');
+  telnet.press('left');
+  assert.ok(telnet.moves() > 0, 'a telnet keypress has to move the piece - nothing else will');
+
+  const web = build('web');
+  web.press('left');
+  assert.strictEqual(web.moves(), 0,
+    'a browser keeps key-state mode: acting on characters too would move twice per press');
+}

@@ -200,3 +200,53 @@ describe('DoorInputManager held-key tracking', () => {
     expect(manager.isHeld('left')).toBe(false);
   });
 });
+
+describe('held-key tracking and the transport underneath it', () => {
+  /**
+   * "key input are still not working via telnet in gmaster and probably all
+   * our typescript doors" (sysop, 2026-09-02, confirmed on a live session).
+   *
+   * setupHeldKeyTracking checked that `bbs.onKeyDown` and `bbs.onKeyUp`
+   * EXIST - and BBSApi defines them for every session, browser or not. So
+   * key-state tracking switched itself on for a telnet caller, and every door
+   * that asks isKeyStateActive() before handling a character stood down in
+   * favour of key events that were never coming. The door drew perfectly and
+   * took no input at all.
+   *
+   * The file's own comment claimed the opposite - "Silently does nothing when
+   * the transport has no key events - telnet and SSH sessions, for instance.
+   * isKeyStateActive() then stays false" - which is what a claim looks like
+   * when nothing tests it.
+   */
+  const withTransport = (connectionType?: string) => {
+    const session: any = createSession();
+    if (connectionType) session.bbs.connectionType = connectionType;
+    return createManager(session);
+  };
+
+  it('tracks held keys for a browser', () => {
+    expect(withTransport('web').isKeyStateActive()).toBe(true);
+  });
+
+  it('leaves the character path alone on telnet and ssh', () => {
+    expect(withTransport('telnet').isKeyStateActive()).toBe(false);
+    expect(withTransport('ssh').isKeyStateActive()).toBe(false);
+  });
+
+  it('still tracks when the session does not say what it is', () => {
+    // Older hosts and test harnesses carry no connectionType; they are the
+    // browser sessions, and this is how every existing door keeps working.
+    expect(withTransport(undefined).isKeyStateActive()).toBe(true);
+  });
+
+  it('reports no held keys on telnet even if events somehow arrive', () => {
+    const session: any = createSession();
+    session.bbs.connectionType = 'telnet';
+    const manager = createManager(session);
+
+    session.press('ArrowLeft');
+
+    expect(manager.isKeyStateActive()).toBe(false);
+    expect(manager.isHeld('left')).toBe(false);
+  });
+});

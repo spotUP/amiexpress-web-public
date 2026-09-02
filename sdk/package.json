@@ -45,6 +45,10 @@
       "types": "./dist/core/types.d.ts",
       "default": "./dist/core/types.js"
     },
+    "./core/announce": {
+      "types": "./dist/core/announce.d.ts",
+      "default": "./dist/core/announce.js"
+    },
     "./engines/graphics/braille-graphics": {
       "types": "./dist/engines/graphics/braille-graphics.d.ts",
       "default": "./dist/engines/graphics/braille-graphics.js"

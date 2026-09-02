@@ -19,6 +19,7 @@ import type {
 import { Output } from './Output';
 import { Input } from './Input';
 import { Storage } from './Storage';
+import { createAnnouncer } from '../../core/announce';
 import { Audio } from '../../media/Audio';
 import { Video } from '../../media/Video';
 
@@ -196,6 +197,10 @@ export class Door {
       video,
       params,
       bbs,
+      // Every door gets one, whether or not the host can carry it: an
+      // announcer over a host without the bridge is a no-op, so a door
+      // never has to guard the call (core/announce.ts).
+      announce: createAnnouncer(bbs),
       socket,
       bbsSession,
       close: async () => {

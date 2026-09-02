@@ -20,18 +20,16 @@ const bbs_door_sdk_2 = require("@amiexpress/bbs-door-sdk");
 const uno_engine_1 = require("./lib/uno-engine");
 const lib_1 = require("./lib");
 const activity_hints_1 = require("./lib/activity-hints");
+const live_chat_1 = require("./lib/live-chat");
+const metadata_1 = require("./lib/metadata");
 const managers_1 = require("./managers");
-exports.metadata = {
-    name: 'Card Lobby',
-    version: '2.0.0',
-    description: 'Desktop-style card lobby with PokerEngine tables',
-    author: 'AmiExpress Team',
-    command: 'CARDLOBBY',
-};
+const announce_1 = require("@amiexpress/bbs-door-sdk/core/announce");
+var metadata_2 = require("./lib/metadata");
+Object.defineProperty(exports, "metadata", { enumerable: true, get: function () { return metadata_2.metadata; } });
 /**
  * Main door class
  */
-const door = new bbs_door_sdk_1.ServerDoor(exports.metadata);
+const door = new bbs_door_sdk_1.ServerDoor(metadata_1.metadata);
 door.onStart(async (ctx) => {
     const app = new CardLobbyApp(ctx);
     await app.run();
@@ -96,6 +94,7 @@ class CardLobbyApp {
         this.selectedTableId = null;
         this.selectedUnoCardIndex = null;
         this.session = session;
+        this.announcer = (0, announce_1.createAnnouncer)(session.bbs);
     }
     async run() {
         this.setupScreen();
@@ -682,6 +681,19 @@ class CardLobbyApp {
             this.notices.shift();
         this.updateStatusBar();
     }
+    /**
+     * Tell the board something worth telling other people - a table open to
+     * join, a game started, a winner. Reaches LiveChat and whatever Discord or
+     * Slack webhooks the sysop has subscribed to `door_announcement`
+     * (sdk/core/announce.ts).
+     *
+     * The door used to say these things only to the people already looking at
+     * it: pushEvent writes the door's own activity panel, and emitLiveChat
+     * reaches the board's chat. Neither leaves the building.
+     */
+    get announce() {
+        return this.announcer;
+    }
     pushEvent(message) {
         if (!this.lobby)
             return;
@@ -693,18 +705,7 @@ class CardLobbyApp {
         this.updateActivityPanel();
     }
     emitLiveChat(message) {
-        const socket = this.session.socket;
-        if (!socket?.emit)
-            return;
-        socket.emit('bbs:event', {
-            type: 'system_announcement',
-            details: { message },
-            visibility: 'all',
-            timestamp: new Date(),
-            userId: Number(this.session.user.id) || undefined,
-            username: this.session.user.username,
-            nodeId: this.session.bbsSession?.nodeId || 1,
-        });
+        (0, live_chat_1.emitLiveChatAnnouncement)(this.session, message);
     }
     updateStatusBar() {
         if (!this.currentProfile)

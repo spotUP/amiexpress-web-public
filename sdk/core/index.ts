@@ -47,3 +47,5 @@ export { readDoorSettings, readDoorSettingOverrides, readManifest, readValues, r
 
 // Export enums (these are values, not types)
 export { AnsiColor, AnsiStyle, SpecialKey } from './types';
+export { createAnnouncer, ANNOUNCE_EVENT_TYPES } from './announce';
+export type { DoorAnnouncer, AnnounceHost } from './announce';

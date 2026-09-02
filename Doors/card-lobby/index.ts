@@ -113,19 +113,16 @@ import {
   visibleWidth,
 } from './lib';
 import { buildActivityHints } from './lib/activity-hints';
+import { emitLiveChatAnnouncement } from './lib/live-chat';
+import { metadata as doorMetadata } from './lib/metadata';
 import { UIManager, DialogManager, GameStateManager } from './managers';
-export const metadata = {
-  name: 'Card Lobby',
-  version: '2.0.0',
-  description: 'Desktop-style card lobby with PokerEngine tables',
-  author: 'AmiExpress Team',
-  command: 'CARDLOBBY',
-};
+import { createAnnouncer, type DoorAnnouncer } from '@amiexpress/bbs-door-sdk/core/announce';
+export { metadata } from './lib/metadata';
 
 /**
  * Main door class
  */
-const door = new ServerDoor(metadata);
+const door = new ServerDoor(doorMetadata);
 
 door.onStart(async (ctx: DoorContext) => {
   const app = new CardLobbyApp(ctx as any);
@@ -217,8 +214,12 @@ export class CardLobbyApp {
   public selectedTableId: number | null = null;
   public selectedUnoCardIndex: number | null = null;
 
+  /** Announcements out to LiveChat and the sysop's webhooks. */
+  private readonly announcer: DoorAnnouncer;
+
   constructor(session: DoorSession) {
     this.session = session;
+    this.announcer = createAnnouncer((session as any).bbs);
   }
 
   async run(): Promise<void> {
@@ -880,6 +881,20 @@ export class CardLobbyApp {
     this.updateStatusBar();
   }
 
+  /**
+   * Tell the board something worth telling other people - a table open to
+   * join, a game started, a winner. Reaches LiveChat and whatever Discord or
+   * Slack webhooks the sysop has subscribed to `door_announcement`
+   * (sdk/core/announce.ts).
+   *
+   * The door used to say these things only to the people already looking at
+   * it: pushEvent writes the door's own activity panel, and emitLiveChat
+   * reaches the board's chat. Neither leaves the building.
+   */
+  public get announce(): DoorAnnouncer {
+    return this.announcer;
+  }
+
   public pushEvent(message: string): void {
     if (!this.lobby) return;
     this.lobby.events.unshift({ message, createdAt: Date.now() });
@@ -891,17 +906,7 @@ export class CardLobbyApp {
   }
 
   public emitLiveChat(message: string): void {
-    const socket = this.session.socket;
-    if (!socket?.emit) return;
-    socket.emit('bbs:event', {
-      type: 'system_announcement',
-      details: { message },
-      visibility: 'all',
-      timestamp: new Date(),
-      userId: Number(this.session.user.id) || undefined,
-      username: this.session.user.username,
-      nodeId: this.session.bbsSession?.nodeId || 1,
-    });
+    emitLiveChatAnnouncement(this.session as any, message);
   }
 
   private updateStatusBar(): void {

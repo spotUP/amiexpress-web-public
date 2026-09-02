@@ -260,6 +260,21 @@ export class DoorInputManager {
       return;
     }
 
+    // The methods EXIST on every session - BBSApi always defines them -
+    // so their presence says nothing about whether events will ever
+    // arrive. Only a browser sends key-down/key-up; a telnet or SSH
+    // caller sends characters and nothing else, for ever.
+    //
+    // Believing otherwise is why a game-mode door took no input at all
+    // over telnet (sysop, 2026-09-02): keyStateActive went true, and
+    // every door that asks isKeyStateActive() before handling a
+    // character stood down in favour of events that were never coming.
+    const transport = (bbs as { connectionType?: string }).connectionType;
+    if (transport && transport !== 'web') {
+      this.log(`Held-key tracking skipped: ${transport} sends characters, not key events`);
+      return;
+    }
+
     // Register down BEFORE up: onKeyUp wraps the existing handler to build a
     // single combined callback, so the order is not interchangeable.
     bbs.onKeyDown((key: string) => {

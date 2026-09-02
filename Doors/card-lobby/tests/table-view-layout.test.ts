@@ -111,6 +111,18 @@ export async function aResizeAtATableKeepsTheTableFullWidth(): Promise<void> {
   // relayout() re-imposed the lobby/table SPLIT - so the resize undid the view.
   const app = await openApp();
   try {
+    // Genuinely AT a table: updateAllPanels sends the view back to the lobby
+    // when the profile is not at one, and the resize below gives it the
+    // window to do that in.
+    app.lobby.tables = [{
+      id: 1, gameId: 'uno', gameName: 'UNO', stakesLabel: '10',
+      smallBlind: 10, bigBlind: 20, buyIn: 200, entryFee: 0,
+      minPlayers: 2, maxPlayers: 4, status: 'open',
+      createdAt: Date.now(), updatedAt: Date.now(), hostUserId: 'sysop',
+      autoStart: false, isPrivate: false, players: [], observers: [],
+    }];
+    app.currentProfile.currentTableId = 1;
+
     app.applyViewMode('table');
     const win = app.uiManager.tableWindow;
     assert.strictEqual(win.position.left, 0, 'full width before the resize');

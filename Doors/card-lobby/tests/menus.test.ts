@@ -76,3 +76,48 @@ export async function theFocusEntriesStillDoWhatTheyDid(): Promise<void> {
     assert.strictEqual(app.viewMode, 'lobby', 'Views > Lobby comes back');
   } finally { app.screen?.destroy?.(); }
 }
+
+// ---------------------------------------------------------------------------
+// Announcements: a table nobody else knows about is a table nobody joins.
+// ---------------------------------------------------------------------------
+
+export async function openingATableAnnouncesItOffTheBoard(): Promise<void> {
+  const announced: Array<{ type: string; message: string; data?: any }> = [];
+  const { CardLobbyApp } = await import('../index');
+
+  const bbs: any = {
+    write: () => {}, writeLine: () => {}, on: () => {},
+    getTerminalSize: () => ({ width: 100, height: 30 }),
+    enableWideMode: () => {}, disableWideMode: () => {},
+    getModemSpeed: () => 0, disableModemEmulation: () => {}, setModemSpeed: () => {},
+    connectionType: 'web', unicodeCapable: true,
+    emitCustomEvent: (type: string, message: string, data?: any) => {
+      announced.push({ type, message, data });
+    },
+  };
+  const socket: any = { on: () => {}, emit: () => {}, off: () => {}, removeAllListeners: () => {} };
+  const app: any = new CardLobbyApp({
+    bbs, socket, params: [],
+    bbsSession: { userId: 1, username: 'sysop', nodeId: 1, secLevel: 255, screenHeight: 30, socket },
+    user: { id: 1, username: 'sysop', name: 'sysop', accessLevel: 255 },
+  } as any);
+  void app.run();
+  await new Promise((r) => setTimeout(r, 1500));
+
+  try {
+    assert.strictEqual(app.announce.available, true, 'the host can carry announcements');
+
+    // Through the door's own creation path, past the dialogs.
+    const { GAME_CATALOG } = await import('../lib/constants');
+    const uno = GAME_CATALOG.find((game: any) => game.id === 'uno');
+    assert.ok(uno, 'the catalogue must offer UNO');
+    await app.tableFlow.finalizeCreateTable(uno, 0, 4, false, false);
+
+    const opened = announced.find((event) => event.type === 'door_opened');
+    assert.ok(opened, `no open announcement in: ${announced.map(a => a.type).join(', ') || 'nothing'}`);
+    assert.ok(/UNO/.test(opened!.message), `the message names the game: ${opened!.message}`);
+    assert.ok(/open/i.test(opened!.message), 'and says it is open');
+    assert.strictEqual(opened!.data.game, 'UNO');
+    assert.strictEqual(opened!.data.seats, 4, 'with the seats, so a reader knows there is room');
+  } finally { app.screen?.destroy?.(); }
+}

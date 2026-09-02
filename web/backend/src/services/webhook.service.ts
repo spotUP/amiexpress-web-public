@@ -24,7 +24,13 @@ export enum WebhookTrigger {
   PRIVATE_MESSAGE = 'private_message',
   USER_KICKED = 'user_kicked',
   MAIL_SCAN = 'mail_scan',
-  DOOR_SCORE = 'door_score'
+  DOOR_SCORE = 'door_score',
+  /**
+   * A door saying something worth joining or watching: a table open, a match
+   * started, a winner. Separate from DOOR_SCORE on purpose - a channel that
+   * wants "come and play" is rarely the channel that wants every high score.
+   */
+  DOOR_ANNOUNCEMENT = 'door_announcement'
 }
 
 /**
