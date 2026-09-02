@@ -1395,23 +1395,25 @@ class CardLobbyApp {
             return;
         this.viewMode = mode;
         const { width, leftWidth, rightWidth, mainHeight, tableHeight } = this.layout;
+        // LIVE properties, not `options`: that seeds a widget once and is never
+        // read again, so writing it left the window as narrow as it was built.
         if (mode === 'table') {
             this.lobbyWindow.hide();
             this.tableWindow.show();
-            this.tableWindow.options.left = 0;
-            this.tableWindow.options.width = width;
-            this.tableWindow.options.height = tableHeight;
+            this.tableWindow.left = 0;
+            this.tableWindow.width = width;
+            this.tableWindow.height = tableHeight;
             this.logWindow.hide();
             this.topBar.show();
             this.topInfoBar.hide();
         }
         else {
             this.lobbyWindow.show();
-            this.lobbyWindow.options.width = leftWidth;
+            this.lobbyWindow.width = leftWidth;
             this.tableWindow.show();
-            this.tableWindow.options.left = leftWidth;
-            this.tableWindow.options.width = rightWidth;
-            this.tableWindow.options.height = mainHeight;
+            this.tableWindow.left = leftWidth;
+            this.tableWindow.width = rightWidth;
+            this.tableWindow.height = mainHeight;
             this.logWindow.show();
             this.topBar.show();
             this.topInfoBar.hide();

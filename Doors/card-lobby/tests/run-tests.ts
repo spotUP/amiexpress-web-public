@@ -10,6 +10,7 @@
 
 const TEST_MODULES = ['./opens.test', './keys.test', './lobby.test', './theme.test', './dialogs.test',
   './uno-restore.test',
+  './table-view-layout.test',
 ];
 
 // The door logs freely on startup; keep the report readable.

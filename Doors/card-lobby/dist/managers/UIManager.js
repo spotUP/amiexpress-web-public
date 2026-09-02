@@ -417,7 +417,10 @@ class UIManager {
             statusHeight,
             logHeight,
             mainHeight,
-            tableHeight: mainHeight,
+            // The table view hides the activity log, so those rows are the table's:
+            // without this the four panels were sized for a band that is not on
+            // screen, and a seven-card hand had six rows to be drawn in.
+            tableHeight: mainHeight + logHeight,
             leftWidth,
             rightWidth,
         };
@@ -837,7 +840,9 @@ class UIManager {
         // Render the top discard card using CardEngine
         const lines = [];
         // Add direction indicator
-        const directionArrow = direction === 1 ? '{cyan-fg}\u21BB{/}' : '{cyan-fg}\u21BA{/}';
+        // ASCII only: a real Amiga (and a C64) has no U+21BB. The sysop's rule
+        // is the board's characters, nothing else (2026-09-02).
+        const directionArrow = direction === 1 ? '{cyan-fg}>>{/}' : '{cyan-fg}<<{/}';
         lines.push(`Direction: ${directionArrow} ${direction === 1 ? 'Clockwise' : 'Counter-clockwise'}`);
         lines.push('');
         // Add current color indicator
@@ -880,8 +885,8 @@ class UIManager {
         players.forEach((player, index) => {
             const isCurrent = index === currentPlayerIndex;
             const isYou = player.id === currentUserId;
-            const turnMarker = isCurrent ? '{yellow-fg}\u2192{/} ' : '  ';
-            const unoMarker = player.hand.length === 1 ? ' {yellow-fg}\u26A0{/}' : '';
+            const turnMarker = isCurrent ? '{yellow-fg}>{/} ' : '  ';
+            const unoMarker = player.hand.length === 1 ? ' {yellow-fg}!{/}' : '';
             const youMarker = isYou ? ` {${constants_1.UI_THEME.accent}-fg}(You){/}` : '';
             const botMarker = player.isBot ? ` {${constants_1.UI_THEME.dim}-fg}[BOT]{/}` : '';
             lines.push(`${turnMarker}${player.name}${youMarker}${botMarker}: ${player.hand.length} card${player.hand.length !== 1 ? 's' : ''}${unoMarker}`);
@@ -896,7 +901,13 @@ class UIManager {
         const lines = [];
         lines.push(`{${constants_1.UI_THEME.accent}-fg}Your Hand:{/}`);
         lines.push('');
-        // Render cards with indices
+        // Across the panel, not down it.
+        //
+        // One card per row needs eleven rows for a seven-card hand, and the panel
+        // has eight - so the sysop was dealt seven cards and shown none of them
+        // (2026-09-02). Each entry is about twelve columns and the panel is wide,
+        // so they are laid out in as many columns as fit.
+        const entries = [];
         hand.forEach((card, index) => {
             const isPlayable = playableIndices.includes(index);
             const isSelected = index === selectedIndex;
@@ -915,13 +926,22 @@ class UIManager {
                 marker = '{yellow-bg}{black-fg}>{/}{/}';
             }
             else if (isPlayable) {
-                marker = '{green-fg}\u2713{/}';
+                marker = '{green-fg}+{/}';
             }
             else {
-                marker = '{red-fg}\u2717{/}';
+                marker = '{red-fg}-{/}';
             }
-            lines.push(`[${indexLabel}] ${marker} {${colorTag}}${displayValue.padEnd(6, ' ')}{/}`);
+            entries.push(`[${indexLabel}] ${marker} {${colorTag}}${displayValue.padEnd(6, ' ')}{/}`);
         });
+        // One entry is "[n] m VALUE" - four visible columns plus the six the value
+        // is padded to, and a gap between neighbours.
+        const entryWidth = 14;
+        const coords = this.handContent._getCoords?.();
+        const panelWidth = (coords ? coords.xl - coords.xi : 0) || Number(this.handContent.width) || 36;
+        const perRow = Math.max(1, Math.floor(panelWidth / entryWidth));
+        for (let i = 0; i < entries.length; i += perRow) {
+            lines.push(entries.slice(i, i + perRow).join(' '));
+        }
         lines.push('');
         lines.push(`{${constants_1.UI_THEME.dim}-fg}Press 1-9,0 to select, Enter to play{/}`);
         this.handContent.setContent(lines.join('\n'));
