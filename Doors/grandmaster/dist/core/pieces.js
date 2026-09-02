@@ -444,6 +444,276 @@ const BARS_KICKS = {
     'O_3->0': [[0, 0]],
     'O_0->3': [[0, 0]],
 };
+// ============================================================================
+// CLASSIC block-data table (HeborisCE src/script/classic.c:3-23)
+//
+// Shared verbatim by statCMove (Heboris / TI-ARS) and statAMove (ACE-ARS /
+// ACE-ARS2) -- ars.c:1-2 says so explicitly ("block data ... reused from
+// classic.c"). Decoded from blkDataX/blkDataY (kind order 0=I,1=L,2=O,3=Z,
+// 4=T,5=J,6=S -- see the color-table comments at src/game/init.c:507-529)
+// with each kind's rot0..rot3 taken directly as this table's rotation index;
+// NOT re-aligned to SRS spawn orientation (T/J/L spawn "point-down"/flipped
+// relative to SRS -- the genuine TGM/ARS behavior, not a bug).
+// ============================================================================
+const CLASSIC_SHAPES = {
+    I: [
+        [[0, 0, 0, 0],
+            [1, 1, 1, 1],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0]],
+        [[0, 0, 1, 0],
+            [0, 0, 1, 0],
+            [0, 0, 1, 0],
+            [0, 0, 1, 0]],
+        [[0, 0, 0, 0],
+            [1, 1, 1, 1],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0]],
+        [[0, 0, 1, 0],
+            [0, 0, 1, 0],
+            [0, 0, 1, 0],
+            [0, 0, 1, 0]],
+    ],
+    L: [
+        [[0, 0, 0, 0],
+            [1, 1, 1, 0],
+            [1, 0, 0, 0],
+            [0, 0, 0, 0]],
+        [[1, 1, 0, 0],
+            [0, 1, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 0]],
+        [[0, 0, 0, 0],
+            [0, 0, 1, 0],
+            [1, 1, 1, 0],
+            [0, 0, 0, 0]],
+        [[0, 1, 0, 0],
+            [0, 1, 0, 0],
+            [0, 1, 1, 0],
+            [0, 0, 0, 0]],
+    ],
+    O: [
+        [[0, 0, 0, 0],
+            [0, 1, 1, 0],
+            [0, 1, 1, 0],
+            [0, 0, 0, 0]],
+        [[0, 0, 0, 0],
+            [0, 1, 1, 0],
+            [0, 1, 1, 0],
+            [0, 0, 0, 0]],
+        [[0, 0, 0, 0],
+            [0, 1, 1, 0],
+            [0, 1, 1, 0],
+            [0, 0, 0, 0]],
+        [[0, 0, 0, 0],
+            [0, 1, 1, 0],
+            [0, 1, 1, 0],
+            [0, 0, 0, 0]],
+    ],
+    Z: [
+        [[0, 0, 0, 0],
+            [1, 1, 0, 0],
+            [0, 1, 1, 0],
+            [0, 0, 0, 0]],
+        [[0, 0, 1, 0],
+            [0, 1, 1, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 0]],
+        [[0, 0, 0, 0],
+            [1, 1, 0, 0],
+            [0, 1, 1, 0],
+            [0, 0, 0, 0]],
+        [[0, 0, 1, 0],
+            [0, 1, 1, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 0]],
+    ],
+    T: [
+        [[0, 0, 0, 0],
+            [1, 1, 1, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 0]],
+        [[0, 1, 0, 0],
+            [1, 1, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 0]],
+        [[0, 0, 0, 0],
+            [0, 1, 0, 0],
+            [1, 1, 1, 0],
+            [0, 0, 0, 0]],
+        [[0, 1, 0, 0],
+            [0, 1, 1, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 0]],
+    ],
+    J: [
+        [[0, 0, 0, 0],
+            [1, 1, 1, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 0]],
+        [[0, 1, 0, 0],
+            [0, 1, 0, 0],
+            [1, 1, 0, 0],
+            [0, 0, 0, 0]],
+        [[0, 0, 0, 0],
+            [1, 0, 0, 0],
+            [1, 1, 1, 0],
+            [0, 0, 0, 0]],
+        [[0, 1, 1, 0],
+            [0, 1, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 0]],
+    ],
+    S: [
+        [[0, 0, 0, 0],
+            [0, 1, 1, 0],
+            [1, 1, 0, 0],
+            [0, 0, 0, 0]],
+        [[1, 0, 0, 0],
+            [1, 1, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 0]],
+        [[0, 0, 0, 0],
+            [0, 1, 1, 0],
+            [1, 1, 0, 0],
+            [0, 0, 0, 0]],
+        [[1, 0, 0, 0],
+            [1, 1, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 0]],
+    ],
+};
+// TI-ARS / ACE-ARS wall & floor kicks.
+//
+// classic.c:130-242 (statCMove, shared by Heboris rots==0 and TI-ARS rots==1):
+//   - the plain left/right wall kick for every non-I piece (classic.c:130-186)
+//     applies to BOTH Heboris and TI-ARS -- it is not gated on rots.
+//   - the T-piece "cyan" floor kick (classic.c:162-183, gated `rots[player]==1`)
+//     and the I-piece red wall/floor kick (classic.c:186-241, gated
+//     `rots[player]==1`) are TI-ARS exclusive; Heboris (rots==0) gets neither.
+// ars.c:83-234 (statAMove, shared by ACE-ARS rots==4 and ACE-ARS2 rots==5) runs
+// textually the same three kick branches (ars.c:112, ars.c:144-165, ars.c:168-223)
+// with NO rots gating at all, so ACE-ARS always gets what TI-ARS gets. The two
+// systems' kick data is therefore identical -- this is a traced fact, not a
+// shortcut; they differ in lock/drop mechanics (ARS1 vs Ti-style hard lock)
+// which this table does not model.
+//
+// Left/right kick priority: classic.c/ars.c test left-then-right with two
+// independent `if`s, so when both directions are open the right kick's
+// assignment executes last and wins -- hence right is listed before left below.
+//
+// T floor kick only fires landing in state 2 (point-up), classic.c:145/ars.c:145,
+// so it is only added to the T_1->2 / T_3->2 entries.
+//
+// I kick: horizontal targets (state 0 or 2) try x-1, x+1, x+2 in that order
+// (classic.c:193-199/ars.c:174-179); vertical targets (state 1 or 3) try a
+// grounded-only floor kick of y-1 then y-2 (classic.c:215-218/ars.c:196-199),
+// which is exactly the door's generic floorKickCount/maxFloorKicks mechanism
+// (core/game.ts rotate()) for any kick candidate with offsetY<0 while grounded.
+const CLASSIC_ARS_KICKS = {
+    'JLSZ_0->1': [[0, 0], [1, 0], [-1, 0]],
+    'JLSZ_1->0': [[0, 0], [1, 0], [-1, 0]],
+    'JLSZ_1->2': [[0, 0], [1, 0], [-1, 0]],
+    'JLSZ_2->1': [[0, 0], [1, 0], [-1, 0]],
+    'JLSZ_2->3': [[0, 0], [1, 0], [-1, 0]],
+    'JLSZ_3->2': [[0, 0], [1, 0], [-1, 0]],
+    'JLSZ_3->0': [[0, 0], [1, 0], [-1, 0]],
+    'JLSZ_0->3': [[0, 0], [1, 0], [-1, 0]],
+    'T_0->1': [[0, 0], [1, 0], [-1, 0]],
+    'T_1->0': [[0, 0], [1, 0], [-1, 0]],
+    'T_1->2': [[0, 0], [1, 0], [-1, 0], [0, -1]],
+    'T_2->1': [[0, 0], [1, 0], [-1, 0]],
+    'T_2->3': [[0, 0], [1, 0], [-1, 0]],
+    'T_3->2': [[0, 0], [1, 0], [-1, 0], [0, -1]],
+    'T_3->0': [[0, 0], [1, 0], [-1, 0]],
+    'T_0->3': [[0, 0], [1, 0], [-1, 0]],
+    'I_0->1': [[0, 0], [0, -1], [0, -2]],
+    'I_1->0': [[0, 0], [-1, 0], [1, 0], [2, 0]],
+    'I_1->2': [[0, 0], [-1, 0], [1, 0], [2, 0]],
+    'I_2->1': [[0, 0], [0, -1], [0, -2]],
+    'I_2->3': [[0, 0], [0, -1], [0, -2]],
+    'I_3->2': [[0, 0], [-1, 0], [1, 0], [2, 0]],
+    'I_3->0': [[0, 0], [-1, 0], [1, 0], [2, 0]],
+    'I_0->3': [[0, 0], [0, -1], [0, -2]],
+    'O_0->1': [[0, 0]],
+    'O_1->0': [[0, 0]],
+    'O_1->2': [[0, 0]],
+    'O_2->1': [[0, 0]],
+    'O_2->3': [[0, 0]],
+    'O_3->2': [[0, 0]],
+    'O_3->0': [[0, 0]],
+    'O_0->3': [[0, 0]],
+};
+// ============================================================================
+// WORLD block-data table (HeborisCE src/script/world.c:52-72).
+//
+// Verified byte-for-byte identical (position and shape, not just rotation
+// offset) to this file's own SRS_SHAPES above for every piece and rotation --
+// so TI-WORLD / ACE-SRS / DS-WORLD / SRS-X all reuse SRS_SHAPES directly; no
+// separate shape table is needed. ("ACE-SRS" is a HeborisCE display name for
+// what the engine actually runs through statWMove i.e. the WORLD family, per
+// game/gamestart.c:7613-7630 -- it does not use a different, SRS-native table.)
+// ============================================================================
+// TI-WORLD / ACE-SRS / DS-WORLD / SRS-X shared 90-degree wall kicks.
+//
+// world.c:139-357 (statWMove) is the single function behind all four of these
+// rulesets (game/gamestart.c:7613-7630: rots==2 TI-WORLD, rots==3 ACE-SRS/
+// "WORLD2", rots==6 DS-WORLD/"WORLD3", rots==7 SRS-X); its rotation/kick block
+// (world.c:203-357) is not gated on rots at all for the plain CW/CCW case, so
+// all four systems get identical 90-degree kick data -- again a traced fact,
+// not a guess. They differ in lock-delay/drop-speed constants passed into
+// statWMove (world.c:7613-7630) and, for SRS-X only, a dedicated 180-degree
+// path (world.c:211, 242-254) -- see SRS_X_KICKS below.
+//
+// Non-I offsets are the "回転補正(I以外共通)" table at world.c:29-37 (world_i_rot
+// defaults to 0 -- game/gamestart.c:975 -- so the I offsets are the symmetric
+// "Iのみ" table at world.c:40-43, not the asymmetric iBlockKickTable variant).
+const WORLD_KICKS = {
+    'JLSTZ_0->1': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+    'JLSTZ_0->3': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+    'JLSTZ_1->2': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+    'JLSTZ_3->2': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+    'JLSTZ_2->3': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+    'JLSTZ_2->1': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+    'JLSTZ_3->0': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+    'JLSTZ_1->0': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+    'I_0->1': [[0, 0], [-2, 0], [1, 0], [1, -2]],
+    'I_0->3': [[0, 0], [2, 0], [-1, 0], [-1, -2]],
+    'I_1->2': [[0, 0], [-1, 0], [2, 0], [-1, -2], [2, 1]],
+    'I_3->2': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
+    'I_2->3': [[0, 0], [-1, 0], [2, 0], [2, -1]],
+    'I_2->1': [[0, 0], [1, 0], [-2, 0], [-2, -1]],
+    'I_3->0': [[0, 0], [1, 0], [-2, 0], [-2, -1], [1, 2]],
+    'I_1->0': [[0, 0], [-1, 0], [2, 0], [2, -1], [-1, 2]],
+    'O_0->1': [[0, 0]],
+    'O_1->0': [[0, 0]],
+    'O_1->2': [[0, 0]],
+    'O_2->1': [[0, 0]],
+    'O_2->3': [[0, 0]],
+    'O_3->2': [[0, 0]],
+    'O_3->0': [[0, 0]],
+    'O_0->3': [[0, 0]],
+};
+// SRS-X dedicated 180-degree kicks (world.c:121-135, otherBlock180KickTable /
+// iBlock180KickTable), only reachable via statWMove's move==2 branch which is
+// exclusive to rots==7 / SRS-X (world.c:211). The trailing (0,0) padding rows
+// in iBlock180KickTable are dropped since [0,0] is already tried first by
+// every kick lookup in this file (the direct in-place rotation test that
+// precedes the wall-kick branch, e.g. world.c:231).
+const SRS_X_KICKS = {
+    'JLSTZ_0->2': [[0, 0], [1, 0], [2, 0], [1, 1], [2, 1], [-1, 0], [-2, 0], [-1, 1], [-2, 1], [0, -1], [3, 0], [-3, 0]],
+    'JLSTZ_1->3': [[0, 0], [0, 1], [0, 2], [-1, 1], [-1, 2], [0, -1], [0, -2], [-1, -1], [-1, -2], [1, 0], [0, 3], [0, -3]],
+    'JLSTZ_2->0': [[0, 0], [-1, 0], [-2, 0], [-1, -1], [-2, -1], [1, 0], [2, 0], [1, -1], [2, -1], [0, 1], [-3, 0], [3, 0]],
+    'JLSTZ_3->1': [[0, 0], [0, 1], [0, 2], [1, 1], [1, 2], [0, -1], [0, -2], [1, -1], [1, -2], [-1, 0], [0, 3], [0, -3]],
+    'I_0->2': [[0, 0], [-1, 0], [-2, 0], [1, 0], [2, 0], [0, 1]],
+    'I_1->3': [[0, 0], [0, 1], [0, 2], [0, -1], [0, -2], [-1, 0]],
+    'I_2->0': [[0, 0], [1, 0], [2, 0], [-1, 0], [-2, 0], [0, -1]],
+    'I_3->1': [[0, 0], [0, 1], [0, 2], [0, -1], [0, -2], [1, 0]],
+    'O_0->2': [[0, 0]],
+    'O_1->3': [[0, 0]],
+    'O_2->0': [[0, 0]],
+    'O_3->1': [[0, 0]],
+};
 // ================= ===========================================================
 // Rotation System Data
 // ============================================================================
@@ -488,6 +758,16 @@ class PieceManager {
                 return NRS_SHAPES[type][rotation];
             case 'BARS':
                 return BARS_SHAPES[type][rotation];
+            case 'TI-ARS':
+            case 'ACE-ARS':
+                // classic.c block-data table, shared verbatim by TI-ARS and ACE-ARS
+                return CLASSIC_SHAPES[type][rotation];
+            case 'TI-WORLD':
+            case 'ACE-SRS':
+            case 'DS-WORLD':
+            case 'SRS-X':
+                // world.c block-data table == SRS_SHAPES, byte-for-byte (see WORLD_KICKS comment)
+                return SRS_SHAPES[type][rotation];
             default:
                 return SRS_SHAPES[type][rotation];
         }
@@ -502,7 +782,13 @@ class PieceManager {
 
      */
     getKicks(type, fromRotation, toRotation) {
-        const piece = (type === 'I') ? 'I' : (type === 'O') ? 'O' : 'JLSTZ';
+        // classic.c gives the T-piece its own floor-kick branch (kicks it doesn't
+        // share with J/L/S/Z), so TI-ARS/ACE-ARS resolve kicks with a T-specific
+        // bucket instead of the generic 3-bucket (I/O/JLSTZ) scheme.
+        const isClassicFamily = this.rotationSystem === 'TI-ARS' || this.rotationSystem === 'ACE-ARS';
+        const piece = isClassicFamily
+            ? ((type === 'I') ? 'I' : (type === 'O') ? 'O' : (type === 'T') ? 'T' : 'JLSZ')
+            : ((type === 'I') ? 'I' : (type === 'O') ? 'O' : 'JLSTZ');
         const key = `${piece}_${fromRotation}->${toRotation}`;
         switch (this.rotationSystem) {
             case 'SRS':
@@ -514,6 +800,18 @@ class PieceManager {
                 return NRS_KICKS[key] || [[0, 0]];
             case 'BARS':
                 return BARS_KICKS[key] || [[0, 0]];
+            case 'TI-ARS':
+            case 'ACE-ARS':
+                return CLASSIC_ARS_KICKS[key] || [[0, 0]];
+            case 'TI-WORLD':
+            case 'ACE-SRS':
+            case 'DS-WORLD':
+                return WORLD_KICKS[key] || [[0, 0]];
+            case 'SRS-X':
+                // 180-degree transitions (e.g. 0->2) resolve from the dedicated
+                // SRS-X table first; 90-degree transitions fall back to WORLD_KICKS
+                // since SRS-X shares statWMove's plain rotation/kick block.
+                return SRS_X_KICKS[key] || WORLD_KICKS[key] || [[0, 0]];
             default:
                 return SRS_KICKS[key] || [[0, 0]];
         }
@@ -528,12 +826,14 @@ class PieceManager {
 
      */
     getSpawnPosition(type, boardWidth) {
-        if (this.rotationSystem === 'ARS') {
-            // ARS spawn: centered horizontally, fixed Y
+        if (this.rotationSystem === 'ARS' || this.rotationSystem === 'TI-ARS' || this.rotationSystem === 'ACE-ARS') {
+            // ARS/TI-ARS/ACE-ARS spawn: centered horizontally, fixed Y (TGM-lineage vanish zone)
             const x = type === 'O' ? 4 : 3;
             const y = 2; // TGM pieces spawn in the vanish zone
             return { x, y };
         }
+        // TI-WORLD / ACE-SRS / DS-WORLD / SRS-X reuse SRS_SHAPES (see WORLD_KICKS
+        // comment), so they fall through to the standard SRS spawn below.
         // Standard SRS spawn: centered horizontally, top of playfield
         const x = Math.floor((boardWidth - 4) / 2);
         const y = type === 'I' ? -1 : 0; // I piece spawns higher

@@ -33,22 +33,21 @@ export declare const DOOM_TORIKAN_FRAMES: Record<DoomDifficultyBand, number>;
  */
 export declare function doomTorikanFramesForLevel1000(band: DoomDifficultyBand): number;
 /**
- * Not reference-derived — a mapping decision, called out separately from
- * the numbers above.
+ * Which DOOM deadline a rotation system plays under.
  *
- * init.c:178-180 bands nine HeborisCE-native rotation *rules* (HEBORIS,
- * TI-ARS, TI-WORLD, ACE-SRS, ACE-ARS, ACE-ARS2, DS-World, SRS-X, D.R.S) by
- * difficulty. This door only implements four generic rotation *systems*
- * (SRS/ARS/NRS/BARS — core/types.ts:19) and none of them is one of those
- * nine rules, so there is no lookup table to port; picking a band per
- * system is a judgment call:
- *   - SRS is this door's default (app.ts) the way HEBORIS is the engine's
- *     own native default and sits in the Normal band -> normal.
- *   - ARS is the strict TGM-style system (tight kick allowance) and NRS has
- *     no kicks at all — both closer in spirit to the Hard band's
- *     TI-ARS/SRS-X/D.R.S (advanced-player rules) than to Easy -> hard.
- *   - BARS is the softer hybrid rule (core/pieces.ts) -> easy, the one
- *     band otherwise unused.
+ * For the six HeborisCE-native systems this is NOT a judgment call - the
+ * reference bands them by name at init.c:178-180:
+ *   Easy   (240*60) - ACE-SRS, ACE-ARS, DS-World
+ *   Normal (205*60) - Heboris, Ti-World, ACE-ARS2
+ *   Hard   (183*60) - Ti-ARS, SRS-X, D.R.S
+ *
+ * The door's own four generic systems are not in that list and never will
+ * be, so they still take a mapping DECISION, called out as such:
+ *   - SRS is this door's default the way HEBORIS is the engine's own, and
+ *     HEBORIS sits in Normal -> normal.
+ *   - ARS is the strict TGM-style system and NRS has no kicks at all, both
+ *     closer in spirit to Hard's advanced rules -> hard.
+ *   - BARS is the softer hybrid -> easy.
  */
 export declare function doomBandForRotationSystem(system: RotationSystem): DoomDifficultyBand;
 export interface TorikanCheckInput {

@@ -571,6 +571,14 @@ class GameScreen {
                     return;
                 }
             }
+            if (this.state.settings.rotationSystem === 'SRS-X') {
+                // SRS-X has a genuine single-step 180 kick table (HeborisCE
+                // world.c:121-135); every other system here has no such data, so
+                // they fall back to two 90-degree rotations below.
+                if (this.engine.rotate(2))
+                    this.sounds.playSfx('rotate');
+                return;
+            }
             // 180 = two CW rotations
             const r1 = this.engine.rotate(1);
             const r2 = this.engine.rotate(1);

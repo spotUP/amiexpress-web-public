@@ -16,7 +16,24 @@ export interface Piece {
   invisible?: boolean;  // Bone block flag (S13+ grades)
 }
 
-export type RotationSystem = 'SRS' | 'ARS' | 'NRS' | 'BARS';
+export type RotationSystem =
+  | 'SRS'
+  | 'ARS'
+  | 'NRS'
+  | 'BARS'
+  // HeborisCE-authentic rotation rulesets (Documentation/7-Reference Sources/HeborisCE-1.1.0).
+  // TI-ARS / ACE-ARS share classic.c's block-data table (src/script/classic.c:3-23) and its
+  // "Ti-style" wall/floor kicks (src/script/classic.c:130-242, src/script/ars.c:112-223).
+  | 'TI-ARS'
+  | 'ACE-ARS'
+  // TI-WORLD / ACE-SRS / DS-WORLD / SRS-X all run statWMove (src/script/world.c:139-357),
+  // whose block-data table (world.c:52-72) is byte-for-byte identical to SRS piece shapes,
+  // and share the wall-kick offsets documented at world.c:28-47. SRS-X additionally gets the
+  // dedicated 180-degree kick tables at world.c:121-135.
+  | 'TI-WORLD'
+  | 'ACE-SRS'
+  | 'DS-WORLD'
+  | 'SRS-X';
 
 // ============================================================================
 // Board

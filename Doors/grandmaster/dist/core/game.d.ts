@@ -89,9 +89,16 @@ export declare class GameEngine {
      */
     move(direction: -1 | 1): boolean;
     /**
-     * Rotate piece
+     * Rotate piece.
+     *
+     * `direction` is normally 1 (CW) or -1 (CCW). SRS-X additionally supports 2
+     * (a genuine single-step 180-degree rotation) because HeborisCE's SRS-X is
+     * the only ruleset with dedicated 180-degree kick tables (world.c:118-135,
+     * otherBlock180KickTable / iBlock180KickTable) -- every other rotation
+     * system here has no such data and must approximate 180 as two 90-degree
+     * rotations (see ui/game-screen.ts's rotate_180 handler).
      */
-    rotate(direction: 1 | -1): boolean;
+    rotate(direction: 1 | -1 | 2): boolean;
     /**
      * Soft drop (faster gravity)
      */

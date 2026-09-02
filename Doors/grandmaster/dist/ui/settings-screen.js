@@ -359,7 +359,10 @@ class SettingsScreen {
      * Cycle rotation system
      */
     async cycleRotationSystem() {
-        const systems = ['SRS', 'ARS', 'NRS', 'BARS'];
+        const systems = [
+            'SRS', 'ARS', 'NRS', 'BARS',
+            'TI-ARS', 'TI-WORLD', 'ACE-ARS', 'ACE-SRS', 'SRS-X', 'DS-WORLD',
+        ];
         const current = systems.indexOf(this.state.settings.rotationSystem);
         const next = (current + 1) % systems.length;
         this.state.settings.rotationSystem = systems[next];

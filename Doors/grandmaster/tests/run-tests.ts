@@ -48,6 +48,7 @@ const TEST_MODULES = ['./versus-layout.test',
   './tetrinet-layout.test',
   './speed-curve.test',
   './torikan.test',
+  './rotation-systems.test',
 ];
 
 // Blessed screens and engines log freely; keep test output readable.

@@ -9,7 +9,7 @@ export interface Piece {
     y: number;
     invisible?: boolean;
 }
-export type RotationSystem = 'SRS' | 'ARS' | 'NRS' | 'BARS';
+export type RotationSystem = 'SRS' | 'ARS' | 'NRS' | 'BARS' | 'TI-ARS' | 'ACE-ARS' | 'TI-WORLD' | 'ACE-SRS' | 'DS-WORLD' | 'SRS-X';
 export interface Cell {
     filled: boolean;
     color: PieceType | null;
