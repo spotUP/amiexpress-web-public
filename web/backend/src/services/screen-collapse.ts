@@ -125,6 +125,40 @@ export function planScreenCollapse(
     }
   }
 
+  /*
+   * Keeping one screen can force a node to keep another, so this settles
+   * rather than deciding in one pass.
+   *
+   * A screen only ONE sharing node has cannot go in the shared directory -
+   * there is nothing to share it with - so it stays in that node's own
+   * directory, and the node therefore has to go on reading that directory,
+   * and therefore keeps every OTHER screen it has too. Which can leave the
+   * next screen with only one sharer, and so on.
+   *
+   * Without this a node was pointed at the shared directory and simply
+   * stopped seeing the screen only it had. Found by review, not by a test -
+   * the board this was written against has no screen rarer than four copies,
+   * so nothing here would have caught it.
+   */
+  for (;;) {
+    let changed = false;
+
+    for (const [key, copies] of byName) {
+      const want = hash(chosen.get(key)!.content);
+      const sharers = copies
+        .map(c => nodeOf(c.relPath))
+        .filter((n): n is number => n !== null && !keptNodes.has(n)
+          && hash(copies.find(c => nodeOf(c.relPath) === n)!.content) === want);
+
+      if (sharers.length === 1 && !keptNodes.has(sharers[0])) {
+        keptNodes.add(sharers[0]);
+        changed = true;
+      }
+    }
+
+    if (!changed) break;
+  }
+
   const shareableNodes = [...nodes].filter(n => !keptNodes.has(n)).sort((a, b) => a - b);
 
   for (const [key, copies] of byName) {

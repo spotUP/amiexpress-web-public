@@ -124,6 +124,26 @@ test('collapsing keeps the bytes exactly, including high-bit art', () => {
   expect(plan.write[0].content.equals(bytes)).toBe(true);
 });
 
+test('a node keeping a screen only IT has is not pointed away from it', () => {
+  // Found by review: a screen one node has is written back to Node<n>/, but
+  // that node was still pointed at the shared directory - where its screen is
+  // not. SCREENS points a node at ONE directory, so it would simply stop
+  // seeing it.
+  const screens = [
+    ...identical('LOGON.TXT', [1, 2]),
+    { relPath: path.join('Node1', 'ONLY_MINE.TXT'), content: art('NODE 1 EXTRA') },
+  ];
+
+  const plan = planScreenCollapse(screens);
+  const written = plan.write.map(w => w.relPath);
+
+  expect(written).toContain(path.join('Node1', 'ONLY_MINE.TXT'));
+  // Node 1 must go on reading its own directory, and therefore keep its LOGON
+  // there too.
+  expect(plan.pointNodesAt.map(p => p.node)).not.toContain(1);
+  expect(written).toContain(path.join('Node1', 'LOGON.TXT'));
+});
+
 test('nothing to collapse means nothing is pointed anywhere', () => {
   const plan = planScreenCollapse([
     { relPath: path.join('Screens', 'uprough.txt'), content: art('LOGO') },
