@@ -9,6 +9,7 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import multer from "multer";
 import { buildConnectionEmitter, flushPendingPetscii } from "./server/connection-emitter";
+import { sessionWantsPetscii } from "./utils/petscii-session-model";
 import { handleC64Detected } from "./server/c64-detected-handler";
 import { resolveTelnetPetsciiPort } from "./utils/telnet-petscii-port.util";
 import {
@@ -1192,10 +1193,7 @@ console.log(
     // For C64/PETSCII terminals, convert PETSCII bytes to ASCII
     // For modern terminals, use UTF-8 encoding
     let input: string;
-    if (
-      connection.session?.petsciiMode ||
-      connection.session?.terminalType === "c64"
-    ) {
+    if (sessionWantsPetscii(connection.session)) {
       // PETSCII terminals send characters in PETSCII encoding, not ASCII
       // e.g., lowercase 'a' is 0xC1 in PETSCII, not 0x61 like ASCII
       input = convertPetsciiInputToAscii(data);

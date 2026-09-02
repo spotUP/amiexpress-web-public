@@ -18,17 +18,12 @@ import { EventEmitter } from "events";
 import type { TelnetConnection } from "./telnet-server";
 import type { SSHConnection } from "./ssh-server";
 import { convertPetsciiToPetMe64 } from "../utils/petscii.util";
-import { AnsiToPetsciiTransducer } from "@amiexpress/bbs-door-sdk/petscii";
-
-function isPetsciiSession(session: any): boolean {
-  return session?.terminalType === "c64" || !!session?.petsciiMode;
-}
-
-/** The session's one transducer (created on first use). Keyed on the session, not the emitter: handleC64Detected builds a second emitter for the same connection. */
-function petsciiTransducerFor(session: any): AnsiToPetsciiTransducer {
-  if (!session.petsciiTransducer) session.petsciiTransducer = new AnsiToPetsciiTransducer();
-  return session.petsciiTransducer;
-}
+import {
+  sessionWantsPetscii,
+  observePetsciiBytesAtChoke,
+  transducePetsciiAtChoke,
+  flushPetsciiModel,
+} from "../utils/petscii-session-model";
 
 /**
  * Flush the session's PETSCII transducer's held bytes straight to the wire
@@ -54,19 +49,19 @@ function petsciiTransducerFor(session: any): AnsiToPetsciiTransducer {
  * buffer-size-forced-flush path, neither of which means input is about to
  * be awaited - hooking there would tear apart an ordinary in-flight CRLF.
  *
- * No-op for web sessions: their transducer lives client-side (Task 8), so
- * `session.petsciiTransducer` is never set server-side for them - only a
- * telnet/SSH emitter's `petsciiTransducerFor` call creates one.
+ * No-op for a session that has no model yet: web sessions keep their
+ * transducer client-side (Task 8), so `session.petsciiTransducer` is set
+ * server-side only once something feeds the session model - which on
+ * telnet/SSH is this emitter's own choke
+ * (`utils/petscii-session-model.ts`).
  */
-export function flushPendingPetscii(connection: { session?: { petsciiTransducer?: AnsiToPetsciiTransducer } | null; write: (b: Buffer) => void }): void {
-  const transducer = connection.session?.petsciiTransducer;
-  if (!transducer) return;
-  // transducer.flush() (sdk/petscii/ansi-to-petscii.ts) only resolves a
+export function flushPendingPetscii(connection: { session?: any; write: (b: Buffer) => void }): void {
+  // flushPetsciiModel (utils/petscii-session-model.ts) only resolves a
   // held bare CR into its $9D-per-column walk; a held PARTIAL ESCAPE
   // SEQUENCE is silently dropped instead (pre-existing transducer
   // contract, not something this call site changes) - an output chunk
   // that ends mid-escape right at the input boundary loses those bytes.
-  const bytes = transducer.flush();
+  const bytes = flushPetsciiModel(connection.session);
   if (bytes.length > 0) connection.write(Buffer.from(bytes));
 }
 
@@ -95,13 +90,13 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
     emit: (event: string, data: any) => {
       const session = connection.session;
       if (event === "ansi-output") {
-        if (isPetsciiSession(session)) {
+        if (sessionWantsPetscii(session)) {
           // C64 caller: the ANSI stream (prompts, menus, blessed door frames)
           // becomes PETSCII with cursor positioning, colors and reverse video
           // computed against the session's KERNAL oracle. Binary payloads
           // (ZMODEM) pass untouched.
           if (typeof data === "string") {
-            connection.write(Buffer.from(petsciiTransducerFor(session).transduce(data)));
+            connection.write(Buffer.from(transducePetsciiAtChoke(session, data)));
           } else {
             connection.write(data);
           }
@@ -120,24 +115,26 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
           }
         }
       } else if (event === "petscii-output") {
-        if (isPetsciiSession(session)) {
+        if (sessionWantsPetscii(session)) {
           // Legacy PUA text: the transducer understands U+E000-E1FF glyphs
           // and keeps bank/reverse state in step with everything else.
-          connection.write(Buffer.from(petsciiTransducerFor(session).transduce(String(data))));
+          connection.write(Buffer.from(transducePetsciiAtChoke(session, String(data))));
         } else {
           connection.write(data);
         }
       } else if (event === "petscii-bytes") {
         // Raw-byte transport (Task 9): `data` is base64 of the exact .seq
         // bytes the loader read off disk.
-        const raw = Buffer.from(data as string, "base64");
-        if (isPetsciiSession(session)) {
+        if (sessionWantsPetscii(session)) {
           // Forward untouched (TelnetConnection.write doubles IAC itself) and
-          // let the oracle see what the screen now looks like.
-          petsciiTransducerFor(session).observe(raw);
+          // let the session's ONE terminal model see what the screen now
+          // looks like. The choke feeds it exactly once: a payload this
+          // server rendered was already fed while it was encoded (and is
+          // marked), a door's raw payload never was.
+          const raw = observePetsciiBytesAtChoke(session, data as string);
           connection.write(raw);
         } else {
-          connection.write(convertPetsciiToPetMe64(raw));
+          connection.write(convertPetsciiToPetMe64(Buffer.from(data as string, "base64")));
         }
       }
     },

@@ -48,6 +48,17 @@ import { fileCache } from '../utils/file-cache.util';
 import { processMci as processMciTokenizer } from '../utils/mci-tokenizer.util';
 import { petsciiTextScreenPlan, ANSI_ART_SKIPPED_NOTICE } from '../utils/ansi-art-detect.util';
 import { wrapForSession } from '../utils/wrap-for-session.util';
+/**
+ * The ONE "is this session PETSCII" predicate (plan OC-2). `petscii-bytes` is
+ * a SESSION-MODE gate, not just a transport choice: an ANSI web session can
+ * reach a `.seq` screen (the BBSTITLE fallback, an include) without ever
+ * having opted into PETSCII mode, and emitting `petscii-bytes` there would
+ * push the frontend's terminal irreversibly into canvas mode for a session
+ * that never asked for it. Only a session that already IS petsciiMode, or a
+ * real C64, gets the raw-byte transport; everyone else gets the legacy PUA
+ * `petscii-output`.
+ */
+import { sessionWantsPetscii } from '../utils/petscii-session-model';
 import { buildMciDispatch, MCI_SENTINELS } from './mci-dispatch';
 import { applyMciPrePasses, MCI_GENERATED } from './mci-pre-passes';
 import type { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
@@ -1407,20 +1418,6 @@ const PETSCII_MCI_GATE = 0x7e;
 /** PETSCII CLR ($93). A C64 has no `\x1b[2J\x1b[H`. */
 const PETSCII_CLS = '\x93';
 
-/**
- * `petscii-bytes` is a SESSION-MODE gate, not just a transport choice.
- *
- * An ANSI web session can reach a `.seq` screen (the BBSTITLE fallback, an
- * include) without ever having opted into PETSCII mode; emitting
- * `petscii-bytes` there would push the frontend's terminal irreversibly into
- * canvas mode for a session that never asked for it. Only a session that
- * already IS petsciiMode, or a real C64, gets the raw-byte transport;
- * everyone else gets the legacy PUA `petscii-output`.
- */
-function sessionWantsRawPetscii(session: BBSSession): boolean {
-  return !!session.petsciiMode || session.terminalType === 'c64';
-}
-
 /** Marks the `emit` an oracle tap installed (see `installPetsciiOracleTap`). */
 const PETSCII_ORACLE_TAP = Symbol('petsciiOracleTap');
 
@@ -1459,7 +1456,7 @@ const PETSCII_ORACLE_TAP = Symbol('petsciiOracleTap');
 function installPetsciiOracleTap(socket: any, session: BBSSession): () => void {
   const noop = () => {};
   if (!socket || typeof socket.emit !== 'function') return noop;
-  if (!sessionWantsRawPetscii(session)) return noop;
+  if (!sessionWantsPetscii(session)) return noop;
   if ((socket.emit as any)[PETSCII_ORACLE_TAP]) return noop;
 
   const transducer = petsciiTransducerFor(session);
@@ -1768,7 +1765,7 @@ export async function emitPetsciiScreen(
   session: BBSSession,
   result: { content: string; isPetscii: boolean; isRip: boolean; filePath: string; petsciiBuffer?: Buffer }
 ): Promise<void> {
-  if (result.petsciiBuffer && sessionWantsRawPetscii(session)) {
+  if (result.petsciiBuffer && sessionWantsPetscii(session)) {
     // ONE render, before the base64 and therefore before the transports
     // split. The context caches only the session's PetsciiMachine (the
     // positional bank/cursor/pen oracle); the dispatch is rebuilt here every
@@ -1838,7 +1835,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
     // (CONF_BULL with ~CC_ dRE!WAll etc.) bypass that path entirely, leaving old door content visible.
     // The raw-PETSCII transport is decided once, here: it gates BOTH the
     // clear below and the render path underneath it.
-    const rawPetscii = isPetscii && !!petsciiBuffer && sessionWantsRawPetscii(session);
+    const rawPetscii = isPetscii && !!petsciiBuffer && sessionWantsPetscii(session);
 
     if (shouldClear) {
       if (rawPetscii) {
