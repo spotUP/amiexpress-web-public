@@ -29,6 +29,27 @@ export interface PanelSourceStack {
     levelData: LevelData;
 }
 /**
+ * One panel, as a source describes it before the stack builds it.
+ *
+ * A colour is enough for a generated row, which is why the ordinary path only
+ * passes numbers. A PUZZLE row is not: an authored board can contain garbage,
+ * and a garbage panel carries a block identity - which block, where in it, how
+ * big it is - that a single digit cannot express. Upstream solves this by
+ * having the puzzle source build whole Panel objects; here the stack keeps
+ * ownership of its panels and a source describes them.
+ */
+export interface PanelSpec {
+    color: number;
+    isGarbage?: boolean;
+    garbageId?: number;
+    metal?: boolean;
+    xOffset?: number;
+    yOffset?: number;
+    width?: number;
+    height?: number;
+    shakeTime?: number;
+}
+/**
  * The supply of panels a stack draws from.
  *
  * Two implementations exist and they are NOT interchangeable for a given game:
@@ -44,6 +65,12 @@ export interface PanelSource {
     };
     getGarbagePanelRowString(stack: PanelSourceStack): string;
     getStartingBoardHeight?(): number;
+    /**
+     * A row that cannot be expressed as six colours - an authored puzzle row
+     * containing garbage. A source that implements this is asked for it INSTEAD
+     * of nextRowColors, never as well.
+     */
+    nextRowPanels?(stack: PanelSourceStack): PanelSpec[];
 }
 /**
  * Is every colour present in this row present exactly twice?

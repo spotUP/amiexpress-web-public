@@ -44,11 +44,21 @@ export declare const COUNTDOWN_END: number;
 /** Which way the cursor is being pushed this frame. */
 export type CursorDirection = 'up' | 'down' | 'left' | 'right' | null;
 /** Behaviour switches that game modes vary. */
+/** When a delayed board wakes up. */
+export type SimulationDelay = 'firstInput' | 'firstSwap' | 'countdownEnded' | null;
 export interface StackBehaviours {
     /** Does the stack rise on its own? Puzzle mode says no. */
     passiveRaise: boolean;
     /** May the player push the stack up? */
     allowManualRaise: boolean;
+    /**
+     * Hold physics until the player does something.
+     *
+     * A puzzle is a still picture until it is touched: the board must not tick
+     * while the player reads it, or a one-move puzzle would be lost by hesitating.
+     * The cursor still moves - only the simulation is held.
+     */
+    delaySimulationUntil: SimulationDelay;
 }
 export declare function defaultBehaviours(): StackBehaviours;
 export interface StackOptions {
@@ -57,6 +67,8 @@ export interface StackOptions {
     behaviours?: Partial<StackBehaviours>;
     /** Stop time the board starts with, for puzzles that grant it. */
     startingStopTime?: number;
+    /** Shake time the board starts with, likewise. */
+    startingShakeTime?: number;
     /** Play the 188-frame opening countdown before physics begins. */
     doCountdown?: boolean;
     /**
@@ -66,6 +78,16 @@ export interface StackOptions {
     engineVersion?: string;
     /** Cursor DAS, in ticks. Replays record the value they were played at. */
     cursorWaitTime?: number;
+    /** Where the left half of the cursor starts. Defaults to row 7, column 3. */
+    startingRow?: number;
+    startingColumn?: number;
+    /**
+     * Swaps the player is allowed, for a move-limited puzzle.
+     *
+     * Enforced in canSwap, not merely counted afterwards: a puzzle with no moves
+     * left must REFUSE the next swap, not accept it and then declare a loss.
+     */
+    maxSwaps?: number;
     /**
      * Frames of play after which the game ends, for Time Attack.
      *
@@ -116,9 +138,19 @@ export declare class Stack implements MatchableStack {
     gameOverClock: number;
     /** Frames of play before the game ends, or null for no limit. */
     timeLimit: number | null;
+    maxSwaps?: number;
     nActivePanels: number;
     nPrevActivePanels: number;
     swappingPanelCount: number;
+    /**
+     * Where the cursor sits. It starts at (7, 3), NOT at the origin.
+     *
+     * That looks like a decoration until a puzzle solution is replayed against
+     * it: the recorded inputs are relative to that spot, so a board that starts
+     * the cursor anywhere else performs a different set of swaps and fails a
+     * puzzle it was solving. Endless hides the mistake, because its countdown
+     * walks the cursor into place before the player ever touches it.
+     */
     curRow: number;
     curCol: number;
     topCurRow: number;
@@ -158,6 +190,24 @@ export declare class Stack implements MatchableStack {
      * pushed back down after each row so it does not ride up with the stack.
      */
     startingState(): void;
+    /**
+     * Panels that could still take part in a match.
+     *
+     * Colour 0 is air and colour 9 is garbage, which cannot be matched with
+     * anything; everything else counts. A move or chain puzzle is won when this
+     * reaches zero.
+     */
+    matchablePanelCount(): number;
+    /**
+     * Is there garbage left on the board for a clear puzzle to clear?
+     *
+     * Only what is ON SCREEN, rows 1 to height. A clear puzzle's board is
+     * deliberately taller than the playfield - the garbage stacked above the top
+     * is where it comes from - so counting those rows would mean the puzzle can
+     * never be won. Garbage already MATCHED does not count either: it is on its
+     * way out and the win lands a frame earlier for it.
+     */
+    hasMatchableGarbage(): boolean;
     /** Is any panel occupying the top row? */
     isToppedOut(): boolean;
     /**
@@ -198,6 +248,17 @@ export declare class Stack implements MatchableStack {
      */
     private runCountdown;
     run(): void;
+    /**
+     * A delayed board's first half-frame.
+     *
+     * Physics deliberately does NOT run on the frame that wakes the board: the
+     * swap is given a frame to queue first. Without that, a board sitting at one
+     * health with no stop time and already topped out dies to the passive raise
+     * on the very frame the player finally moves - the move that was meant to
+     * save it. The stopWatch is set to -1 so the increment at the end of this
+     * frame leaves it at zero.
+     */
+    private wakeIfPlayerActed;
     private runPhysics;
     private updatePanels;
     private updateActivePanelCount;
@@ -272,6 +333,14 @@ export declare class Stack implements MatchableStack {
     /** The highest garbage id ever cleared; keeps off-screen blocks matchable. */
     highestGarbageIdMatched: number;
     private garbageCreatedCount;
+    /**
+     * Claim the next garbage block identity.
+     *
+     * Garbage authored INTO a puzzle board shares the counter with garbage that
+     * arrives during play, or the two collide and one block's panels start
+     * answering to the other's id.
+     */
+    nextGarbageId(): number;
     /**
      * Where each width of garbage spawns, cycled so repeated attacks of the same
      * size do not stack in one column. Indexed by width.

@@ -75,15 +75,26 @@ const DIRECTION_COLUMN: Record<Exclude<CursorDirection, null>, number> = {
 export type CursorDirection = 'up' | 'down' | 'left' | 'right' | null;
 
 /** Behaviour switches that game modes vary. */
+/** When a delayed board wakes up. */
+export type SimulationDelay = 'firstInput' | 'firstSwap' | 'countdownEnded' | null;
+
 export interface StackBehaviours {
   /** Does the stack rise on its own? Puzzle mode says no. */
   passiveRaise: boolean;
   /** May the player push the stack up? */
   allowManualRaise: boolean;
+  /**
+   * Hold physics until the player does something.
+   *
+   * A puzzle is a still picture until it is touched: the board must not tick
+   * while the player reads it, or a one-move puzzle would be lost by hesitating.
+   * The cursor still moves - only the simulation is held.
+   */
+  delaySimulationUntil: SimulationDelay;
 }
 
 export function defaultBehaviours(): StackBehaviours {
-  return { passiveRaise: true, allowManualRaise: true };
+  return { passiveRaise: true, allowManualRaise: true, delaySimulationUntil: null };
 }
 
 export interface StackOptions {
@@ -92,6 +103,8 @@ export interface StackOptions {
   behaviours?: Partial<StackBehaviours>;
   /** Stop time the board starts with, for puzzles that grant it. */
   startingStopTime?: number;
+  /** Shake time the board starts with, likewise. */
+  startingShakeTime?: number;
   /** Play the 188-frame opening countdown before physics begins. */
   doCountdown?: boolean;
   /**
@@ -101,6 +114,16 @@ export interface StackOptions {
   engineVersion?: string;
   /** Cursor DAS, in ticks. Replays record the value they were played at. */
   cursorWaitTime?: number;
+  /** Where the left half of the cursor starts. Defaults to row 7, column 3. */
+  startingRow?: number;
+  startingColumn?: number;
+  /**
+   * Swaps the player is allowed, for a move-limited puzzle.
+   *
+   * Enforced in canSwap, not merely counted afterwards: a puzzle with no moves
+   * left must REFUSE the next swap, not accept it and then declare a loss.
+   */
+  maxSwaps?: number;
   /**
    * Frames of play after which the game ends, for Time Attack.
    *
@@ -163,14 +186,24 @@ export class Stack implements MatchableStack {
   gameOverClock = 0;
   /** Frames of play before the game ends, or null for no limit. */
   timeLimit: number | null;
+  maxSwaps?: number;
 
   nActivePanels = 0;
   nPrevActivePanels = 0;
   swappingPanelCount = 0;
 
   // --- cursor ---
-  curRow = 0;
-  curCol = 1;
+  /**
+   * Where the cursor sits. It starts at (7, 3), NOT at the origin.
+   *
+   * That looks like a decoration until a puzzle solution is replayed against
+   * it: the recorded inputs are relative to that spot, so a board that starts
+   * the cursor anywhere else performs a different set of swaps and fails a
+   * puzzle it was solving. Endless hides the mistake, because its countdown
+   * walks the cursor into place before the player ever touches it.
+   */
+  curRow = 7;
+  curCol = 3;
   topCurRow: number;
   cursorDirection: CursorDirection = null;
   swapThisFrame = false;
@@ -207,6 +240,7 @@ export class Stack implements MatchableStack {
   constructor(options: StackOptions) {
     this.levelData = options.levelData;
     this.behaviours = { ...defaultBehaviours(), ...options.behaviours };
+    if (this.behaviours.delaySimulationUntil) this.stopWatchIsRunning = false;
     this.panelSource = options.panelSource.clone(this);
 
     this.speed = this.levelData.startingSpeed;
@@ -219,10 +253,14 @@ export class Stack implements MatchableStack {
     this.health = this.levelData.maxHealth;
     this.riseTimer = SPEED_TO_RISE_TIME[this.speed];
     this.stopTime = options.startingStopTime ?? 0;
+    this.shakeTime = options.startingShakeTime ?? 0;
     this.topCurRow = this.behaviours.passiveRaise ? this.height - 1 : this.height;
     this.engineVersion = options.engineVersion ?? ENGINE_VERSION;
     this.curWaitTime = options.cursorWaitTime ?? DEFAULT_INPUT_REPEAT_DELAY;
     this.timeLimit = options.timeLimit ?? null;
+    this.maxSwaps = options.maxSwaps;
+    this.curRow = options.startingRow ?? this.curRow;
+    this.curCol = options.startingColumn ?? this.curCol;
 
     if (options.doCountdown) {
       // Physics is held off until the countdown ends.
@@ -264,6 +302,44 @@ export class Stack implements MatchableStack {
   }
 
   // --- queries ---
+
+  /**
+   * Panels that could still take part in a match.
+   *
+   * Colour 0 is air and colour 9 is garbage, which cannot be matched with
+   * anything; everything else counts. A move or chain puzzle is won when this
+   * reaches zero.
+   */
+  matchablePanelCount(): number {
+    let count = 0;
+    for (let row = 1; row <= this.height; row++) {
+      for (let col = 1; col <= this.width; col++) {
+        const color = this.panels[row][col].color;
+        if (color !== 0 && color !== 9) count += 1;
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Is there garbage left on the board for a clear puzzle to clear?
+   *
+   * Only what is ON SCREEN, rows 1 to height. A clear puzzle's board is
+   * deliberately taller than the playfield - the garbage stacked above the top
+   * is where it comes from - so counting those rows would mean the puzzle can
+   * never be won. Garbage already MATCHED does not count either: it is on its
+   * way out and the win lands a frame earlier for it.
+   */
+  hasMatchableGarbage(): boolean {
+    for (let row = this.height; row >= 1; row--) {
+      if (!this.panels[row]) continue;
+      for (let col = 1; col <= this.width; col++) {
+        const panel = this.panels[row][col];
+        if (panel?.isGarbage && panel.state !== 'matched') return true;
+      }
+    }
+    return false;
+  }
 
   /** Is any panel occupying the top row? */
   isToppedOut(): boolean {
@@ -421,7 +497,11 @@ export class Stack implements MatchableStack {
       if (this.clock === COUNTDOWN_END) this.stopWatchIsRunning = true;
     }
 
-    if (this.stopWatchIsRunning) this.runPhysics();
+    if (this.stopWatchIsRunning) {
+      this.runPhysics();
+    } else {
+      this.wakeIfPlayerActed();
+    }
 
     // Phase 3: what the player asked for this frame.
     this.applyCursorDirection(this.cursorDirection);
@@ -452,6 +532,25 @@ export class Stack implements MatchableStack {
       this.cursorDirection = null;
       this.swapThisFrame = false;
     }
+  }
+
+  /**
+   * A delayed board's first half-frame.
+   *
+   * Physics deliberately does NOT run on the frame that wakes the board: the
+   * swap is given a frame to queue first. Without that, a board sitting at one
+   * health with no stop time and already topped out dies to the passive raise
+   * on the very frame the player finally moves - the move that was meant to
+   * save it. The stopWatch is set to -1 so the increment at the end of this
+   * frame leaves it at zero.
+   */
+  private wakeIfPlayerActed(): void {
+    const delay = this.behaviours.delaySimulationUntil;
+    const woke = (delay === 'firstInput' && this.inputState !== INPUT_CHARS.idle)
+      || (delay === 'firstSwap' && this.swapThisFrame);
+    if (!woke) return;
+    this.stopWatchIsRunning = true;
+    this.stopWatch = -1;
   }
 
   private runPhysics(): void {
@@ -660,14 +759,36 @@ export class Stack implements MatchableStack {
 
     const stackHeight = panels.length;
     panels[stackHeight] = [];
-    const { colors, metalPanelsQueued } = this.panelSource.nextRowColors(
-      this, this.metalPanelsQueued,
-    );
-    this.metalPanelsQueued = metalPanelsQueued;
-    for (let col = 1; col <= this.width; col++) {
-      const panel = this.createPanelAt(stackHeight, col);
-      panel.color = colors[col - 1];
-      panel.state = 'dimmed';
+    // A puzzle row can hold garbage, which six colours cannot describe; such a
+    // source hands over whole panel descriptions instead.
+    const specs = this.panelSource.nextRowPanels?.(this);
+    if (specs) {
+      for (let col = 1; col <= this.width; col++) {
+        const panel = this.createPanelAt(stackHeight, col);
+        const spec = specs[col - 1];
+        panel.color = spec.color;
+        panel.state = 'dimmed';
+        if (spec.isGarbage) {
+          panel.isGarbage = true;
+          panel.garbageId = spec.garbageId;
+          panel.metal = spec.metal;
+          panel.xOffset = spec.xOffset;
+          panel.yOffset = spec.yOffset;
+          panel.width = spec.width;
+          panel.height = spec.height;
+          panel.shakeTime = spec.shakeTime;
+        }
+      }
+    } else {
+      const { colors, metalPanelsQueued } = this.panelSource.nextRowColors(
+        this, this.metalPanelsQueued,
+      );
+      this.metalPanelsQueued = metalPanelsQueued;
+      for (let col = 1; col <= this.width; col++) {
+        const panel = this.createPanelAt(stackHeight, col);
+        panel.color = colors[col - 1];
+        panel.state = 'dimmed';
+      }
     }
 
     // Switching each panel down one refreshes its row/column bookkeeping.
@@ -746,6 +867,8 @@ export class Stack implements MatchableStack {
     if (Math.abs(panel1.column - panel2.column) !== 1 || panel1.row !== panel2.row) return false;
     // No swapping during the countdown, or on the first frame of a game.
     if (this.doCountdown || this.clock <= 1) return false;
+    // Every move in a move puzzle is spent, so there is nothing left to do.
+    if (this.maxSwaps !== undefined && this.swapCount >= this.maxSwaps) return false;
     if (panel1.color === 0 && panel2.color === 0) return false;
     if (!panel1.allowsSwap() || !panel2.allowsSwap()) return false;
 
@@ -886,6 +1009,18 @@ export class Stack implements MatchableStack {
   /** The highest garbage id ever cleared; keeps off-screen blocks matchable. */
   highestGarbageIdMatched = 0;
   private garbageCreatedCount = 0;
+
+  /**
+   * Claim the next garbage block identity.
+   *
+   * Garbage authored INTO a puzzle board shares the counter with garbage that
+   * arrives during play, or the two collide and one block's panels start
+   * answering to the other's id.
+   */
+  nextGarbageId(): number {
+    this.garbageCreatedCount += 1;
+    return this.garbageCreatedCount;
+  }
 
   /**
    * Where each width of garbage spawns, cycled so repeated attacks of the same
