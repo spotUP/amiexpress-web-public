@@ -4,6 +4,16 @@ exports.showLeaderboard = showLeaderboard;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const gamification_1 = require("../core/gamification");
 const door_theme_1 = require("../door-theme");
+const chrome_1 = require("./chrome");
+/** The keys this screen answers to, and the same keys shortened for 40 columns. */
+const HINTS = [
+    { key: 'Up/Down', does: 'Scroll' },
+    { key: 'Q/ESC', does: 'Back' },
+];
+const COMPACT_HINTS = [
+    { key: 'Up/Dn', does: 'Scroll' },
+    { key: 'Q', does: 'Back' },
+];
 async function showLeaderboard(screen, currentUser, dataManager) {
     return new Promise(async (resolve) => {
         screen.program.enableMouse();
@@ -21,8 +31,9 @@ async function showLeaderboard(screen, currentUser, dataManager) {
             width: '100%',
             height: 3,
             border: { type: 'line' },
-            content: `{center}{bold}{${door_theme_1.T.accent}-fg}TOP SCENERS{/${door_theme_1.T.accent}-fg}{/bold} - Demo Scene Leaderboard{/center}\n` +
-                `{center}Total Sceners: {bold}${sortedUsers.length}{/bold} | Your Rank: {bold}#${currentUser.rank}{/bold}{/center}`,
+            // Empty: a three-row framed box has ONE interior row, and the chrome's
+            // masthead owns it now. The centred title moved to `title` below.
+            content: '',
             style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accent } },
             tags: true,
             focusable: false,
@@ -98,13 +109,24 @@ async function showLeaderboard(screen, currentUser, dataManager) {
             width: '100%',
             height: 3,
             border: { type: 'line' },
-            content: ` {${door_theme_1.T.accent}-fg}[Up/Down]{/${door_theme_1.T.accent}-fg} Scroll   {${door_theme_1.T.alert}-fg}[Q/ESC]{/${door_theme_1.T.alert}-fg} Back\n` +
-                ` {${door_theme_1.T.dim}-fg}Scrollwheel supported{/${door_theme_1.T.dim}-fg}`,
+            // Filled by the chrome, from the SDK's hint builder.
+            content: '',
             style: { fg: door_theme_1.T.dim, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.dim } },
             tags: true,
             focusable: false,
             mouse: false,
             clickable: false,
+        });
+        // The whole chrome from the door's ONE call.
+        const chrome = (0, chrome_1.attachWhipChrome)({
+            screen,
+            header,
+            footer: instructions,
+            title: 'TOP SCENERS',
+            hints: HINTS,
+            compactHints: COMPACT_HINTS,
+            // The scrolling table is the only thing here with rows to spare.
+            glitch: table,
         });
         screen.render();
         const keyHandler = (ch, key) => {
@@ -118,6 +140,9 @@ async function showLeaderboard(screen, currentUser, dataManager) {
         };
         screen.on('keypress', keyHandler);
         const cleanup = () => {
+            // First: a rail timer still writing after these widgets are gone would
+            // paint into a screen that no longer holds them.
+            chrome.stop();
             screen.off('keypress', keyHandler);
             screen.remove(header);
             screen.remove(tableHeader);

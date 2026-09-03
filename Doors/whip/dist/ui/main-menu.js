@@ -6,8 +6,20 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.showMainMenu = showMainMenu;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
-const gamification_1 = require("../core/gamification");
 const door_theme_1 = require("../door-theme");
+const chrome_1 = require("./chrome");
+/** The keys this screen answers to, and the same keys shortened for 40 columns. */
+const HINTS = [
+    { key: 'Up/Down', does: 'Navigate' },
+    { key: 'Enter', does: 'Select' },
+    { key: 'Hotkey', does: 'Quick Action' },
+    { key: 'Q', does: 'Quit' },
+];
+const COMPACT_HINTS = [
+    { key: 'Up/Dn', does: 'Move' },
+    { key: 'Ent', does: 'Pick' },
+    { key: 'Q', does: 'Quit' },
+];
 async function showMainMenu(screen, user, dataManager) {
     return new Promise(async (resolve) => {
         // Enable mouse
@@ -24,10 +36,8 @@ async function showMainMenu(screen, user, dataManager) {
             ? Math.ceil((new Date(upcomingParty.date).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
             : null;
         // ========================================================================
-        // HEADER - Title and user stats (NOT focusable)
+        // HEADER - the chrome's masthead (NOT focusable)
         // ========================================================================
-        const levelColor = (0, gamification_1.getLevelColor)(user.level);
-        const levelStars = (0, gamification_1.getLevelStars)(user.level);
         const header = (0, blessed_helpers_1.createBox)({
             parent: screen,
             top: 0,
@@ -40,8 +50,10 @@ async function showMainMenu(screen, user, dataManager) {
                 bg: door_theme_1.T.ground,
                 border: { fg: door_theme_1.T.accent },
             },
-            content: `{center}{bold}{${door_theme_1.T.accent}-fg}W H I P   v 1 . 0{/${door_theme_1.T.accent}-fg}{/bold} - Demo Scene Project Management{/center}\n` +
-                `{center}Handle: {bold}${user.handle}{/bold}  |  Level: {${levelColor}-fg}${user.level.toUpperCase()}{/${levelColor}-fg} (${levelStars})  |  Points: {bold}${(0, gamification_1.formatPoints)(user.points)}{/bold}  |  Rank: {bold}#${user.rank}{/bold}{/center}`,
+            // Empty: a three-row framed box has ONE interior row, and the chrome's
+            // masthead owns it now. The centred title that used to sit there is the
+            // `title` handed to attachWhipChrome below.
+            content: '',
             tags: true,
             focusable: false,
             mouse: false,
@@ -188,12 +200,24 @@ async function showMainMenu(screen, user, dataManager) {
                 bg: door_theme_1.T.ground,
                 border: { fg: door_theme_1.T.dim },
             },
-            content: ` {${door_theme_1.T.accent}-fg}[Enter]{/${door_theme_1.T.accent}-fg} Select   {${door_theme_1.T.accent}-fg}[Hotkey]{/${door_theme_1.T.accent}-fg} Quick Action   {${door_theme_1.T.alert}-fg}[Q]{/${door_theme_1.T.alert}-fg} Quit\n` +
-                ` {${door_theme_1.T.dim}-fg}Arrow Keys to navigate | Mouse click supported{/${door_theme_1.T.dim}-fg}`,
+            // Filled by the chrome, from the SDK's hint builder.
+            content: '',
             tags: true,
             focusable: false,
             mouse: false,
             clickable: false,
+        });
+        // The whole chrome from the door's ONE call: the rail on the header's
+        // row, the theme's glitches on the menu, the hint line on the footer.
+        const chrome = (0, chrome_1.attachWhipChrome)({
+            screen,
+            header,
+            footer,
+            title: 'WHIP v1.0',
+            hints: HINTS,
+            compactHints: COMPACT_HINTS,
+            // The menu list is the only thing here with rows to spare.
+            glitch: list,
         });
         // Focus the list
         list.focus();
@@ -216,6 +240,9 @@ async function showMainMenu(screen, user, dataManager) {
         list.on('select', selectHandler);
         screen.on('keypress', keyHandler);
         const cleanup = () => {
+            // First: a rail timer still writing after these widgets are gone would
+            // paint into a screen that no longer holds them.
+            chrome.stop();
             screen.off('keypress', keyHandler);
             list.removeAllListeners('select');
             screen.remove(header);

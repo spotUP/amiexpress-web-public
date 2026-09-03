@@ -4,8 +4,21 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { UserStats } from '../types/user';
 import type { MenuSelection } from '../types/session';
 import type { DataManager } from '../core/data-manager';
-import { getLevelStars, getLevelColor, formatPoints } from '../core/gamification';
 import { T } from '../door-theme';
+import { attachWhipChrome, type FooterHint } from './chrome';
+
+/** The keys this screen answers to, and the same keys shortened for 40 columns. */
+const HINTS: readonly FooterHint[] = [
+  { key: 'Up/Down', does: 'Navigate' },
+  { key: 'Enter', does: 'Select' },
+  { key: 'Hotkey', does: 'Quick Action' },
+  { key: 'Q', does: 'Quit' },
+];
+const COMPACT_HINTS: readonly FooterHint[] = [
+  { key: 'Up/Dn', does: 'Move' },
+  { key: 'Ent', does: 'Pick' },
+  { key: 'Q', does: 'Quit' },
+];
 
 export async function showMainMenu(
   screen: Screen,
@@ -31,11 +44,8 @@ export async function showMainMenu(
       : null;
 
     // ========================================================================
-    // HEADER - Title and user stats (NOT focusable)
+    // HEADER - the chrome's masthead (NOT focusable)
     // ========================================================================
-    const levelColor = getLevelColor(user.level);
-    const levelStars = getLevelStars(user.level);
-
     const header = createBox({
       parent: screen,
       top: 0,
@@ -48,8 +58,10 @@ export async function showMainMenu(
         bg: T.ground,
         border: { fg: T.accent },
       },
-      content: `{center}{bold}{${T.accent}-fg}W H I P   v 1 . 0{/${T.accent}-fg}{/bold} - Demo Scene Project Management{/center}\n` +
-               `{center}Handle: {bold}${user.handle}{/bold}  |  Level: {${levelColor}-fg}${user.level.toUpperCase()}{/${levelColor}-fg} (${levelStars})  |  Points: {bold}${formatPoints(user.points)}{/bold}  |  Rank: {bold}#${user.rank}{/bold}{/center}`,
+      // Empty: a three-row framed box has ONE interior row, and the chrome's
+      // masthead owns it now. The centred title that used to sit there is the
+      // `title` handed to attachWhipChrome below.
+      content: '',
       tags: true,
       focusable: false,
       mouse: false,
@@ -205,12 +217,25 @@ export async function showMainMenu(
         bg: T.ground,
         border: { fg: T.dim },
       },
-      content: ` {${T.accent}-fg}[Enter]{/${T.accent}-fg} Select   {${T.accent}-fg}[Hotkey]{/${T.accent}-fg} Quick Action   {${T.alert}-fg}[Q]{/${T.alert}-fg} Quit\n` +
-               ` {${T.dim}-fg}Arrow Keys to navigate | Mouse click supported{/${T.dim}-fg}`,
+      // Filled by the chrome, from the SDK's hint builder.
+      content: '',
       tags: true,
       focusable: false,
       mouse: false,
       clickable: false,
+    });
+
+    // The whole chrome from the door's ONE call: the rail on the header's
+    // row, the theme's glitches on the menu, the hint line on the footer.
+    const chrome = attachWhipChrome({
+      screen,
+      header,
+      footer,
+      title: 'WHIP v1.0',
+      hints: HINTS,
+      compactHints: COMPACT_HINTS,
+      // The menu list is the only thing here with rows to spare.
+      glitch: list,
     });
 
     // Focus the list
@@ -239,6 +264,9 @@ export async function showMainMenu(
     screen.on('keypress', keyHandler);
 
     const cleanup = () => {
+      // First: a rail timer still writing after these widgets are gone would
+      // paint into a screen that no longer holds them.
+      chrome.stop();
       screen.off('keypress', keyHandler);
       list.removeAllListeners('select');
       screen.remove(header);

@@ -4,6 +4,18 @@ exports.showPartyTimeline = showPartyTimeline;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const gamification_1 = require("../core/gamification");
 const door_theme_1 = require("../door-theme");
+const chrome_1 = require("./chrome");
+/** The keys this screen answers to, and the same keys shortened for 40 columns. */
+const HINTS = [
+    { key: 'Up/Down', does: 'Scroll' },
+    { key: 'R', does: 'Refresh from demoparty.net' },
+    { key: 'Q/ESC', does: 'Back' },
+];
+const COMPACT_HINTS = [
+    { key: 'Up/Dn', does: 'Scroll' },
+    { key: 'R', does: 'Refresh' },
+    { key: 'Q', does: 'Back' },
+];
 async function showPartyTimeline(screen, user, dataManager, partyCalendar) {
     return new Promise(async (resolve) => {
         screen.program.enableMouse();
@@ -12,36 +24,57 @@ async function showPartyTimeline(screen, user, dataManager, partyCalendar) {
         // Note: Removed 200ms artificial delay for better responsiveness
         let parties = await dataManager.loadParties();
         let selectedIndex = 0;
-        let header, listBox, instructions;
+        let listBox;
         // Filter to upcoming parties and sort by date
         const upcomingParties = parties
             .filter(p => new Date(p.date) >= new Date())
             .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        // The header and the footer are built ONCE, outside render().
+        //
+        // They used to be torn down and rebuilt on every arrow key along with the
+        // list, which was harmless while they held static text and is not once
+        // they carry the chrome: the masthead and the hint row are attached to
+        // these two elements, and an element replaced under a running timer is an
+        // element the timer keeps painting after it has left the screen. Same
+        // geometry, same place, built once.
+        const header = (0, blessed_helpers_1.createBox)({
+            fixed: true,
+            parent: screen,
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: 3,
+            border: { type: 'line' },
+            // Empty: a three-row framed box has ONE interior row, and the chrome's
+            // masthead owns it now. The centred title moved to `title` below.
+            content: '',
+            style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accent } },
+            tags: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
+        // Footer - NOT focusable
+        const instructions = (0, blessed_helpers_1.createBox)({
+            fixed: true,
+            parent: screen,
+            bottom: 0,
+            left: 0,
+            width: '100%',
+            height: 3,
+            border: { type: 'line' },
+            // Filled by the chrome, from the SDK's hint builder.
+            content: '',
+            style: { fg: door_theme_1.T.dim, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.dim } },
+            tags: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
         const render = async () => {
-            // Remove old widgets
-            if (header)
-                screen.remove(header);
+            // Remove the old list. The header and the footer stay put - see above.
             if (listBox)
                 screen.remove(listBox);
-            if (instructions)
-                screen.remove(instructions);
-            // Header - NOT focusable
-            header = (0, blessed_helpers_1.createBox)({
-                fixed: true,
-                parent: screen,
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: 3,
-                border: { type: 'line' },
-                content: `{center}{bold}{${door_theme_1.T.accent}-fg}PARTY TIMELINE 2026{/${door_theme_1.T.accent}-fg}{/bold} - Upcoming Demo Parties{/center}\n` +
-                    `{center}Upcoming: {bold}${upcomingParties.length}{/bold} parties{/center}`,
-                style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accent } },
-                tags: true,
-                focusable: false,
-                mouse: false,
-                clickable: false,
-            });
             // Party list container - focusable (scrollable)
             listBox = (0, blessed_helpers_1.createBox)({
                 fixed: true,
@@ -113,25 +146,21 @@ async function showPartyTimeline(screen, user, dataManager, partyCalendar) {
                 listBox.setContent(content);
             }
             listBox.focus();
-            // Footer - NOT focusable
-            instructions = (0, blessed_helpers_1.createBox)({
-                fixed: true,
-                parent: screen,
-                bottom: 0,
-                left: 0,
-                width: '100%',
-                height: 3,
-                border: { type: 'line' },
-                content: ` {${door_theme_1.T.accent}-fg}[Up/Down]{/${door_theme_1.T.accent}-fg} Scroll   {${door_theme_1.T.accent}-fg}[R]{/${door_theme_1.T.accent}-fg} Refresh from demoparty.net   {${door_theme_1.T.alert}-fg}[Q/ESC]{/${door_theme_1.T.alert}-fg} Back\n` +
-                    ` {${door_theme_1.T.dim}-fg}Scrollwheel supported{/${door_theme_1.T.dim}-fg}`,
-                style: { fg: door_theme_1.T.dim, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.dim } },
-                tags: true,
-                focusable: false,
-                mouse: false,
-                clickable: false,
-            });
             screen.render();
         };
+        // The whole chrome from the door's ONE call.
+        const chrome = (0, chrome_1.attachWhipChrome)({
+            screen,
+            header,
+            footer: instructions,
+            title: 'PARTY TIMELINE 2026',
+            hints: HINTS,
+            compactHints: COMPACT_HINTS,
+            // A getter, not the element: render() builds a NEW list pane on every
+            // arrow key, and a pane captured once would be glitching a widget that
+            // is no longer on screen.
+            glitch: () => listBox,
+        });
         const keyHandler = (ch, key) => {
             switch (key.name) {
                 case 'up':
@@ -159,13 +188,14 @@ async function showPartyTimeline(screen, user, dataManager, partyCalendar) {
         };
         screen.on('keypress', keyHandler);
         const cleanup = () => {
+            // First: a rail timer still writing after these widgets are gone would
+            // paint into a screen that no longer holds them.
+            chrome.stop();
             screen.off('keypress', keyHandler);
-            if (header)
-                screen.remove(header);
+            screen.remove(header);
             if (listBox)
                 screen.remove(listBox);
-            if (instructions)
-                screen.remove(instructions);
+            screen.remove(instructions);
         };
         await render();
     });

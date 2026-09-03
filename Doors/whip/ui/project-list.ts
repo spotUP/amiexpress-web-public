@@ -13,8 +13,24 @@ import type { AchievementManager } from '../core/achievements';
 import { v4 as uuidv4 } from 'uuid';
 import { T } from '../door-theme';
 import { confirmDelete } from './confirm-delete';
+import { attachWhipChrome, type FooterHint } from './chrome';
 
 const PROJECT_TYPES: ProjectType[] = ['demo', 'intro', 'musicdisk', 'graphics', 'music', 'code', 'tools'];
+
+/** The keys this screen answers to, and the same keys shortened for 40 columns. */
+const HINTS: readonly FooterHint[] = [
+  { key: 'N', does: 'New' },
+  { key: 'E', does: 'Edit' },
+  { key: 'D', does: 'Delete' },
+  { key: 'Enter', does: 'Select' },
+  { key: 'Q/ESC', does: 'Back' },
+];
+const COMPACT_HINTS: readonly FooterHint[] = [
+  { key: 'N', does: 'New' },
+  { key: 'E', does: 'Edit' },
+  { key: 'D', does: 'Del' },
+  { key: 'Q', does: 'Back' },
+];
 
 export async function showProjectList(
   screen: Screen,
@@ -41,8 +57,9 @@ export async function showProjectList(
       width: '100%',
       height: 3,
       border: { type: 'line' },
-      content: `{center}{bold}{${T.accent}-fg}ALL PROJECTS{/${T.accent}-fg}{/bold} - Manage your demo scene projects{/center}\n` +
-               `{center}Total: {bold}${projects.length}{/bold} projects{/center}`,
+      // Empty: a three-row framed box has ONE interior row, and the chrome's
+      // masthead owns it now. The centred title moved to `title` below.
+      content: '',
       style: { fg: T.ink, bg: T.ground, border: { fg: T.accent } },
       tags: true,
       focusable: false,
@@ -97,8 +114,8 @@ export async function showProjectList(
       width: '100%',
       height: 3,
       border: { type: 'line' },
-      content: ` {${T.accent}-fg}[N]{/${T.accent}-fg} New   {${T.accent}-fg}[E]{/${T.accent}-fg} Edit   {${T.accent}-fg}[D]{/${T.accent}-fg} Delete   {${T.accent}-fg}[Enter]{/${T.accent}-fg} Select   {${T.alert}-fg}[Q/ESC]{/${T.alert}-fg} Back\n` +
-               ` {${T.dim}-fg}Arrow Keys to navigate | Mouse click supported{/${T.dim}-fg}`,
+      // Filled by the chrome, from the SDK's hint builder.
+      content: '',
       style: { fg: T.dim, bg: T.ground, border: { fg: T.dim } },
       tags: true,
       focusable: false,
@@ -106,7 +123,22 @@ export async function showProjectList(
       clickable: false,
     });
 
+    // The whole chrome from the door's ONE call.
+    const chrome = attachWhipChrome({
+      screen,
+      header,
+      footer,
+      title: 'ALL PROJECTS',
+      hints: HINTS,
+      compactHints: COMPACT_HINTS,
+      // The project list is the only thing here with rows to spare.
+      glitch: list,
+    });
+
     const cleanup = () => {
+      // First: a rail timer still writing after these widgets are gone would
+      // paint into a screen that no longer holds them.
+      chrome.stop();
       screen.off('keypress', keyHandler);
       screen.remove(header);
       screen.remove(listBox);

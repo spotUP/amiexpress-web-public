@@ -3,6 +3,17 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { UserStats, Achievement } from '../types/user';
 import type { DataManager } from '../core/data-manager';
 import { T } from '../door-theme';
+import { attachWhipChrome, type FooterHint } from './chrome';
+
+/** The keys this screen answers to, and the same keys shortened for 40 columns. */
+const HINTS: readonly FooterHint[] = [
+  { key: 'Up/Down', does: 'Scroll' },
+  { key: 'Q/ESC', does: 'Back' },
+];
+const COMPACT_HINTS: readonly FooterHint[] = [
+  { key: 'Up/Dn', does: 'Scroll' },
+  { key: 'Q', does: 'Back' },
+];
 
 /**
  * Smart text truncation with ellipsis
@@ -50,8 +61,9 @@ export async function showAchievements(
       width: '100%',
       height: 3,
       border: { type: 'line' },
-      content: `{center}{bold}{${T.accent}-fg}YOUR ACHIEVEMENTS{/${T.accent}-fg}{/bold} - Track your progress{/center}\n` +
-               `{center}Unlocked: {bold}{${T.ok}-fg}${unlocked.length}{/${T.ok}-fg}{/bold} / ${allAchievements.length}  |  Points from Achievements: {bold}${unlocked.reduce((sum, a) => sum + a.points, 0)}{/bold}{/center}`,
+      // Empty: a three-row framed box has ONE interior row, and the chrome's
+      // masthead owns it now. The centred title moved to `title` below.
+      content: '',
       style: { fg: T.ink, bg: T.ground, border: { fg: T.accent } },
       tags: true,
       focusable: false,
@@ -121,13 +133,25 @@ export async function showAchievements(
       width: '100%',
       height: 3,
       border: { type: 'line' },
-      content: ` {${T.accent}-fg}[Up/Down]{/${T.accent}-fg} Scroll   {${T.alert}-fg}[Q/ESC]{/${T.alert}-fg} Back\n` +
-               ` {${T.dim}-fg}Scrollwheel supported{/${T.dim}-fg}`,
+      // Filled by the chrome, from the SDK's hint builder.
+      content: '',
       style: { fg: T.dim, bg: T.ground, border: { fg: T.dim } },
       tags: true,
       focusable: false,
       mouse: false,
       clickable: false,
+    });
+
+    // The whole chrome from the door's ONE call.
+    const chrome = attachWhipChrome({
+      screen,
+      header,
+      footer: instructions,
+      title: 'YOUR ACHIEVEMENTS',
+      hints: HINTS,
+      compactHints: COMPACT_HINTS,
+      // The scrolling pane is the only thing here with rows to spare.
+      glitch: content,
     });
 
     screen.render();
@@ -145,6 +169,9 @@ export async function showAchievements(
     screen.on('keypress', keyHandler);
 
     const cleanup = () => {
+      // First: a rail timer still writing after these widgets are gone would
+      // paint into a screen that no longer holds them.
+      chrome.stop();
       screen.off('keypress', keyHandler);
       screen.remove(header);
       screen.remove(content);

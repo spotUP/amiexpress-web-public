@@ -10,7 +10,22 @@ const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/b
 const uuid_1 = require("uuid");
 const door_theme_1 = require("../door-theme");
 const confirm_delete_1 = require("./confirm-delete");
+const chrome_1 = require("./chrome");
 const PROJECT_TYPES = ['demo', 'intro', 'musicdisk', 'graphics', 'music', 'code', 'tools'];
+/** The keys this screen answers to, and the same keys shortened for 40 columns. */
+const HINTS = [
+    { key: 'N', does: 'New' },
+    { key: 'E', does: 'Edit' },
+    { key: 'D', does: 'Delete' },
+    { key: 'Enter', does: 'Select' },
+    { key: 'Q/ESC', does: 'Back' },
+];
+const COMPACT_HINTS = [
+    { key: 'N', does: 'New' },
+    { key: 'E', does: 'Edit' },
+    { key: 'D', does: 'Del' },
+    { key: 'Q', does: 'Back' },
+];
 async function showProjectList(screen, user, dataManager, achievementManager, bbsApi) {
     return new Promise(async (resolve) => {
         screen.program.enableMouse();
@@ -28,8 +43,9 @@ async function showProjectList(screen, user, dataManager, achievementManager, bb
             width: '100%',
             height: 3,
             border: { type: 'line' },
-            content: `{center}{bold}{${door_theme_1.T.accent}-fg}ALL PROJECTS{/${door_theme_1.T.accent}-fg}{/bold} - Manage your demo scene projects{/center}\n` +
-                `{center}Total: {bold}${projects.length}{/bold} projects{/center}`,
+            // Empty: a three-row framed box has ONE interior row, and the chrome's
+            // masthead owns it now. The centred title moved to `title` below.
+            content: '',
             style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accent } },
             tags: true,
             focusable: false,
@@ -81,15 +97,29 @@ async function showProjectList(screen, user, dataManager, achievementManager, bb
             width: '100%',
             height: 3,
             border: { type: 'line' },
-            content: ` {${door_theme_1.T.accent}-fg}[N]{/${door_theme_1.T.accent}-fg} New   {${door_theme_1.T.accent}-fg}[E]{/${door_theme_1.T.accent}-fg} Edit   {${door_theme_1.T.accent}-fg}[D]{/${door_theme_1.T.accent}-fg} Delete   {${door_theme_1.T.accent}-fg}[Enter]{/${door_theme_1.T.accent}-fg} Select   {${door_theme_1.T.alert}-fg}[Q/ESC]{/${door_theme_1.T.alert}-fg} Back\n` +
-                ` {${door_theme_1.T.dim}-fg}Arrow Keys to navigate | Mouse click supported{/${door_theme_1.T.dim}-fg}`,
+            // Filled by the chrome, from the SDK's hint builder.
+            content: '',
             style: { fg: door_theme_1.T.dim, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.dim } },
             tags: true,
             focusable: false,
             mouse: false,
             clickable: false,
         });
+        // The whole chrome from the door's ONE call.
+        const chrome = (0, chrome_1.attachWhipChrome)({
+            screen,
+            header,
+            footer,
+            title: 'ALL PROJECTS',
+            hints: HINTS,
+            compactHints: COMPACT_HINTS,
+            // The project list is the only thing here with rows to spare.
+            glitch: list,
+        });
         const cleanup = () => {
+            // First: a rail timer still writing after these widgets are gone would
+            // paint into a screen that no longer holds them.
+            chrome.stop();
             screen.off('keypress', keyHandler);
             screen.remove(header);
             screen.remove(listBox);

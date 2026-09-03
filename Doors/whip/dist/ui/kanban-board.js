@@ -10,6 +10,21 @@ const gamification_1 = require("../core/gamification");
 const task_editor_1 = require("./task-editor");
 const door_theme_1 = require("../door-theme");
 const confirm_delete_1 = require("./confirm-delete");
+const chrome_1 = require("./chrome");
+/** The keys this screen answers to, and the same keys shortened for 40 columns. */
+const HINTS = [
+    { key: 'Arrows', does: 'Navigate' },
+    { key: 'Enter', does: 'Edit' },
+    { key: 'N', does: 'New' },
+    { key: 'M', does: 'Move' },
+    { key: 'D', does: 'Delete' },
+    { key: 'Q', does: 'Back' },
+];
+const COMPACT_HINTS = [
+    { key: 'Arr', does: 'Move' },
+    { key: 'Ent', does: 'Edit' },
+    { key: 'Q', does: 'Back' },
+];
 const COLUMNS = ['todo', 'in-progress', 'testing', 'done'];
 const COLUMN_LABELS = {
     'todo': 'TODO',
@@ -51,8 +66,10 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
             height: 3,
             fixed: true,
             border: { type: 'line' },
-            content: `{center}{bold}{${door_theme_1.T.accent}-fg}PROJECT: ${project.name}{/${door_theme_1.T.accent}-fg}{/bold} - Kanban Board${partyInfo}{/center}\n` +
-                `{center}Tasks: {bold}${tasks.length}{/bold} | Todo: {bold}${tasks.filter(t => t.status === 'todo').length}{/bold} | In Progress: {bold}${tasks.filter(t => t.status === 'in-progress').length}{/bold} | Done: {bold}${tasks.filter(t => t.status === 'done').length}{/bold}{/center}`,
+            // Empty: a three-row framed box has ONE interior row, and the chrome's
+            // masthead owns it now. The project name and the party countdown that
+            // shared that row moved into `title` below.
+            content: '',
             style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accent } },
             tags: true,
             focusable: false,
@@ -116,13 +133,28 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
             height: 3,
             fixed: true,
             border: { type: 'line' },
-            content: ` {${door_theme_1.T.accent}-fg}[Arrows]{/${door_theme_1.T.accent}-fg} Navigate   {${door_theme_1.T.accent}-fg}[Enter]{/${door_theme_1.T.accent}-fg} Edit   {${door_theme_1.T.accent}-fg}[N]{/${door_theme_1.T.accent}-fg} New   {${door_theme_1.T.accent}-fg}[M]{/${door_theme_1.T.accent}-fg} Move   {${door_theme_1.T.accent}-fg}[D]{/${door_theme_1.T.accent}-fg} Delete   {${door_theme_1.T.alert}-fg}[Q/ESC]{/${door_theme_1.T.alert}-fg} Back\n` +
-                ` {${door_theme_1.T.accentAlt}-fg}Drag & Drop:{/${door_theme_1.T.accentAlt}-fg} Click and drag tasks between columns`,
+            // Filled by the chrome, from the SDK's hint builder. The old line ran
+            // past the frame and lost the word after `[Q/ESC]`; the SDK's is built
+            // to the width tier instead.
+            content: '',
             style: { fg: door_theme_1.T.dim, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.dim } },
             tags: true,
             focusable: false,
             mouse: false,
             clickable: false,
+        });
+        // The whole chrome from the door's ONE call.
+        const chrome = (0, chrome_1.attachWhipChrome)({
+            screen,
+            header,
+            footer,
+            title: `KANBAN: ${project.name}${partyInfo}`,
+            hints: HINTS,
+            compactHints: COMPACT_HINTS,
+            // A getter, not the element: the focused column changes with every
+            // left/right, so the tick must ask which list is live rather than
+            // damage whichever one happened to be focused at attach time.
+            glitch: () => columnLists[currentColumn],
         });
         // Debounce timer for navigation updates
         let updateTimeout = null;
@@ -160,9 +192,8 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                     columnLists[i].clearItems();
                     columnLists[i].setItems(items.length > 0 ? items : []);
                 }
-                // Update header with new counts
-                header.setContent(`{center}{bold}{${door_theme_1.T.accent}-fg}PROJECT: ${project.name}{/${door_theme_1.T.accent}-fg}{/bold} - Kanban Board${partyInfo}{/center}\n` +
-                    `{center}Tasks: {bold}${tasks.length}{/bold} | Todo: {bold}${tasks.filter(t => t.status === 'todo').length}{/bold} | In Progress: {bold}${tasks.filter(t => t.status === 'in-progress').length}{/bold} | Done: {bold}${tasks.filter(t => t.status === 'done').length}{/bold}{/center}`);
+                // The header is not repainted here any more: the chrome's masthead
+                // owns that row and redraws itself.
                 for (let i = 0; i < COLUMNS.length; i++) {
                     columnBoxes[i].style.border.fg = i === currentColumn ? 'yellow' : 'cyan';
                 }
@@ -330,6 +361,9 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
         // Listen on each column for mouseup in case screen doesn't get it
         columnLists.forEach(list => list.on('mouse', elementMouseHandler));
         const cleanup = () => {
+            // First: a rail timer still writing after these widgets are gone would
+            // paint into a screen that no longer holds them.
+            chrome.stop();
             if (updateTimeout)
                 clearTimeout(updateTimeout);
             screen.off('keypress', keyHandler);

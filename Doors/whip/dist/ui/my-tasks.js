@@ -5,6 +5,18 @@ const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helper
 const gamification_1 = require("../core/gamification");
 const task_editor_1 = require("./task-editor");
 const door_theme_1 = require("../door-theme");
+const chrome_1 = require("./chrome");
+/** The keys this screen answers to, and the same keys shortened for 40 columns. */
+const HINTS = [
+    { key: 'Enter', does: 'Edit Task' },
+    { key: 'Up/Down', does: 'Navigate' },
+    { key: 'Q/ESC', does: 'Back' },
+];
+const COMPACT_HINTS = [
+    { key: 'Ent', does: 'Edit' },
+    { key: 'Up/Dn', does: 'Move' },
+    { key: 'Q', does: 'Back' },
+];
 async function showMyTasks(screen, user, dataManager, achievementManager, bbsApi) {
     return new Promise(async (resolve) => {
         screen.program.enableMouse();
@@ -30,8 +42,9 @@ async function showMyTasks(screen, user, dataManager, achievementManager, bbsApi
             height: 3,
             fixed: true,
             border: { type: 'line' },
-            content: `{center}{bold}{${door_theme_1.T.accent}-fg}MY TASKS{/${door_theme_1.T.accent}-fg}{/bold} - ${user.handle}{/center}\n` +
-                `{center}Total: {bold}${myTasks.length}{/bold} | Active: {bold}${myTasks.filter(t => t.status !== 'done').length}{/bold} | Completed: {bold}${myTasks.filter(t => t.status === 'done').length}{/bold}{/center}`,
+            // Empty: a three-row framed box has ONE interior row, and the chrome's
+            // masthead owns it now. The title and the handle moved into `title`.
+            content: '',
             style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accent } },
             tags: true,
             focusable: false,
@@ -102,13 +115,24 @@ async function showMyTasks(screen, user, dataManager, achievementManager, bbsApi
             height: 3,
             fixed: true,
             border: { type: 'line' },
-            content: ` {${door_theme_1.T.accent}-fg}[Enter]{/${door_theme_1.T.accent}-fg} Edit Task   {${door_theme_1.T.accent}-fg}[Up/Down]{/${door_theme_1.T.accent}-fg} Navigate   {${door_theme_1.T.alert}-fg}[Q/ESC]{/${door_theme_1.T.alert}-fg} Back\n` +
-                ` {${door_theme_1.T.dim}-fg}Showing tasks assigned to you across all projects{/${door_theme_1.T.dim}-fg}`,
+            // Filled by the chrome, from the SDK's hint builder.
+            content: '',
             style: { fg: door_theme_1.T.dim, bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.dim } },
             tags: true,
             focusable: false,
             mouse: false,
             clickable: false,
+        });
+        // The whole chrome from the door's ONE call.
+        const chrome = (0, chrome_1.attachWhipChrome)({
+            screen,
+            header,
+            footer,
+            title: `MY TASKS - ${user.handle}`,
+            hints: HINTS,
+            compactHints: COMPACT_HINTS,
+            // The task list is the only thing here with rows to spare.
+            glitch: list,
         });
         list.focus();
         screen.render();
@@ -119,11 +143,14 @@ async function showMyTasks(screen, user, dataManager, achievementManager, bbsApi
             myTasks.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
             list.clearItems();
             list.setItems(myTasks.length > 0 ? myTasks.map(formatTaskItem) : []);
-            header.setContent(`{center}{bold}{${door_theme_1.T.accent}-fg}MY TASKS{/${door_theme_1.T.accent}-fg}{/bold} - ${user.handle}{/center}\n` +
-                `{center}Total: {bold}${myTasks.length}{/bold} | Active: {bold}${myTasks.filter(t => t.status !== 'done').length}{/bold} | Completed: {bold}${myTasks.filter(t => t.status === 'done').length}{/bold}{/center}`);
+            // The header is not repainted here any more: the chrome's masthead owns
+            // that row and redraws itself.
             screen.render();
         };
         const cleanup = () => {
+            // First: a rail timer still writing after these widgets are gone would
+            // paint into a screen that no longer holds them.
+            chrome.stop();
             screen.off('keypress', keyHandler);
             screen.remove(header);
             screen.remove(listBox);
