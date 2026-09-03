@@ -472,6 +472,25 @@ export interface ChromeTarget {
   setContent(text: string): void;
 }
 
+/**
+ * Something the theme's glitches can damage.
+ *
+ * Three shapes, because three are what doors actually hand over: a
+ * content-shaped element (a Box, a Log), a LIST - which has to be damaged
+ * through its items, since writing to its content is discarded on the next
+ * repaint - or a FUNCTION returning either, for a door that rebuilds its
+ * content pane per view.
+ *
+ * Declared rather than left as `unknown` so a door passes its widget
+ * straight in. `unknown` collapsed the union and made every call site write
+ * `as any`, which is eight places where a genuine mistake would not be
+ * caught.
+ */
+export type GlitchSource =
+  | GlitchTarget
+  | { items: unknown[]; setItems(rows: string[]): void }
+  | (() => GlitchSource | null | undefined);
+
 export interface DoorChromeOptions {
   /**
    * The LIVE screen width - `screen.width`, never a constant. Everything
@@ -512,7 +531,7 @@ export interface DoorChromeOptions {
    * The function is asked at each tick and may return nothing, which simply
    * skips that tick.
    */
-  glitch?: unknown | (() => unknown);
+  glitch?: GlitchSource;
   /** Passed straight through to `attachGlitches`. */
   glitchOptions?: GlitchOptions;
   /** The theme's paints. Defaults to `themeStyles(theme)`. */
@@ -633,22 +652,34 @@ export function attachDoorChrome(
   // The glitches, on whatever the door nominated. Does nothing at all for a
   // theme that did not ask for them, and nothing at all at XXS.
   //
-  // A function is resolved at every access rather than once, so a door whose
+  // A function is resolved per GLITCH, not per access, so a door whose
   // content pane is rebuilt per view still glitches the pane that is
-  // actually on screen. glitchTargetFor is applied to whatever comes back,
-  // because a LIST has to be damaged through its items - writing to its
-  // content is discarded on the next repaint.
+  // actually on screen - and still repairs the one it damaged.
+  //
+  // The pin is the whole point. A glitch is a read (getContent), a lie
+  // (setContent), and a repair (setContent again) up to 200ms later, and
+  // these doors change view on a keypress. Asking the getter a second time
+  // at repair handed pane B the rows read out of pane A, and because the
+  // repair is the LAST write, the door was left showing another view's list
+  // for good. So the element the READ resolved is the element every paired
+  // write goes to, whatever is on screen by then.
+  //
+  // glitchTargetFor is applied to whatever comes back, because a LIST has
+  // to be damaged through its items - writing to its content is discarded
+  // on the next repaint.
+  let pinned: unknown = null;
   const glitchTarget: GlitchTarget | null = !glitch
     ? null
     : typeof glitch === 'function'
       ? {
           getContent: () => {
-            const now = (glitch as () => unknown)();
-            return now ? glitchTargetFor(now).getContent() : '';
+            pinned = (glitch as () => unknown)();
+            return pinned ? glitchTargetFor(pinned).getContent() : '';
           },
           setContent: (text: string) => {
-            const now = (glitch as () => unknown)();
-            if (now) glitchTargetFor(now).setContent(text);
+            // Never resolves the getter: a write with no read before it has
+            // no pane of its own to belong to.
+            if (pinned) glitchTargetFor(pinned).setContent(text);
           },
         }
       : (glitch as GlitchTarget);

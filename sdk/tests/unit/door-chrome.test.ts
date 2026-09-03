@@ -153,6 +153,74 @@ describe('attachDoorChrome at 80 columns', () => {
     chrome.stop();
   });
 
+  it('repairs the pane it DAMAGED, not whichever one is up 200ms later', () => {
+    // The repair lands up to 200ms after the damage, and the doors this
+    // getter exists for swap their content pane on a keypress. Resolving
+    // the getter a second time at repair meant pane B was handed pane A's
+    // rows - the door showing another view's list, permanently, because the
+    // repair is the LAST write.
+    const viewA = listTarget(['aaaaaaaa', 'bbbbbbbb', 'cccccccc', 'dddddddd']);
+    const viewB = listTarget(['eeeeeeee', 'ffffffff', 'gggggggg', 'hhhhhhhh']);
+    let current: any = viewA;
+    const aBefore = viewA.items.join('\n');
+    const bBefore = viewB.items.join('\n');
+
+    const chrome = attachDoorChrome(NEON, {
+      width: 80,
+      title: 'T',
+      masthead: target(),
+      glitch: () => current,
+      styles: themeStyles(NEON),
+      render: () => undefined,
+      glitchOptions: { tickMs: 10, random: () => 0.01, now: () => 1_000_000 },
+    });
+
+    // Damage lands on A.
+    jest.advanceTimersByTime(20);
+    expect(viewA.items.join('\n')).not.toBe(aBefore);
+
+    // The door changes view while A is still damaged.
+    current = viewB;
+
+    // The repair fires. It must put A back and never touch B.
+    jest.advanceTimersByTime(1_000);
+    expect(viewA.items.join('\n')).toBe(aBefore);
+    expect(viewB.items.join('\n')).toBe(bBefore);
+
+    chrome.stop();
+    expect(viewB.items.join('\n')).toBe(bBefore);
+  });
+
+  it('stop() mid-glitch repairs the damaged pane, not the current one', () => {
+    // stop() calls the same repair, so a door closed while a glitch is up
+    // and a view behind it had changed would write the old rows into the
+    // new pane on the way out.
+    const viewA = listTarget(['aaaaaaaa', 'bbbbbbbb', 'cccccccc', 'dddddddd']);
+    const viewB = listTarget(['eeeeeeee', 'ffffffff', 'gggggggg', 'hhhhhhhh']);
+    let current: any = viewA;
+    const aBefore = viewA.items.join('\n');
+    const bBefore = viewB.items.join('\n');
+
+    const chrome = attachDoorChrome(NEON, {
+      width: 80,
+      title: 'T',
+      masthead: target(),
+      glitch: () => current,
+      styles: themeStyles(NEON),
+      render: () => undefined,
+      glitchOptions: { tickMs: 10, random: () => 0.01, now: () => 1_000_000 },
+    });
+
+    jest.advanceTimersByTime(20);
+    expect(viewA.items.join('\n')).not.toBe(aBefore);
+
+    current = viewB;
+    chrome.stop();
+
+    expect(viewA.items.join('\n')).toBe(aBefore);
+    expect(viewB.items.join('\n')).toBe(bBefore);
+  });
+
   it('starts no glitch timer for a theme that did not ask for one', () => {
     const list = listTarget(['aaaa', 'bbbb', 'cccc', 'dddd']);
     const before = list.items.join('\n');
