@@ -18,6 +18,7 @@
  */
 
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
+import { hostVars, BOARD_VERSION, type HostFacts } from '../utils/host-vars';
 
 export interface LocalVarData {
   name: string;
@@ -25,6 +26,12 @@ export interface LocalVarData {
   flags: number;
   nodeAddr: number;  // Address of LocalVar structure in emulator memory
 }
+
+/**
+ * What to publish when nobody said: a web caller on an ANSI terminal, which
+ * is what a door started outside a session (a test, a probe) is talking to.
+ */
+const DEFAULT_HOST_FACTS: HostFacts = { connection: 'web', client: 'ansi', version: BOARD_VERSION };
 
 export class EnvironmentManager {
   private emulator: MoiraEmulator;
@@ -226,7 +233,7 @@ console.log(`[EnvironmentManager] DeleteVar("${name}")`);
    * Pre-populate standard DOS and BBS environment variables
    * Called at session initialization
    */
-   public populateStandardVars(bbsRoot: string, nodeId: number, confId: number, username: string, secLevel: number): void {
+   public populateStandardVars(bbsRoot: string, nodeId: number, confId: number, username: string, secLevel: number, facts: HostFacts = DEFAULT_HOST_FACTS): void {
 console.log(`[EnvironmentManager] Populating standard environment variables`);
 
     // Standard AmigaDOS variables
@@ -276,6 +283,13 @@ console.log(`[EnvironmentManager] Populating standard environment variables`);
     // Connection/serial variables (doors may check these)
     this.setVar('BAUD', '115200', EnvironmentManager.GVF_LOCAL_VAR);
     this.setVar('SERIALRATE', '115200', EnvironmentManager.GVF_LOCAL_VAR);
+
+    // Where the door is running, and what this caller can be sent. A door
+    // under classic AmiExpress finds no AE_HOST at all and must fall back
+    // to 80x25 ANSI - see utils/host-vars.ts for the contract.
+    for (const [name, value] of Object.entries(hostVars(facts))) {
+      this.setVar(name, value, EnvironmentManager.GVF_LOCAL_VAR);
+    }
 
 console.log(`[EnvironmentManager] Populated ${this.variables.size} standard variables`);
   }
