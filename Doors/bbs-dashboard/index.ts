@@ -20,10 +20,9 @@ import { createScreen, createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-
 import {
   themeStyles,
   themeById,
-  attachGlitches,
-  attachMasthead,
-  footerHints,
+  attachDoorChrome,
   footerStyle,
+  type DoorChrome,
   type Theme,
   type ThemeTokens,
   type ThemeStyles,
@@ -72,8 +71,8 @@ class BBSDashboard {
   private nodesText!: Text;
   private statusText!: Text;
   private header!: any;
-  private stopMasthead: (() => void) | null = null;
-  private stopGlitches: (() => void) | null = null;
+  /** The masthead, the rail, the glitches and the hint line - one handle. */
+  private chrome: DoorChrome | null = null;
   private theme: Theme = themeById('classic');
   private updateInterval: NodeJS.Timeout | null = null;
   private terminalMode: TerminalModeSwitch | null = null;
@@ -260,29 +259,35 @@ class BBSDashboard {
       tags: true,
     });
 
-    // The animated masthead, from the SDK rather than hand-rolled here:
-    // six doors were about to grow six copies of the same timer.
-    this.stopMasthead = attachMasthead(this.header, this.theme, {
+    /**
+     * The whole chrome, from the ONE SDK call.
+     *
+     * This door was the closest to complete and still wired the pieces
+     * separately - and with no width gate at all, so on a 40-column C64 the
+     * rail animated and the glitches fired, which is exactly the stray
+     * glyphs mid-row the sysop reported from DOORMAN. attachDoorChrome
+     * carries the gate, so a door cannot forget it.
+     *
+     * Glitches go on the NODE list, the only thing here with rows to
+     * spare: damaging the masthead or the status line would read as the
+     * door being broken rather than as atmosphere.
+     */
+    this.chrome = attachDoorChrome(this.theme, {
+      width: ((this.screen as any).width as number) || 80,
       title: 'SYSOP DASHBOARD',
-      // One column short: writing a row's final cell leaves the terminal
-      // in a pending-wrap state and clips the last character.
-      width: Math.max(1, ((this.screen as any).width || 80) - 1),
-      rail: this.s.accent,
-      ink: this.s.ink,
+      masthead: this.header,
+      footer: this.statusText as any,
+      hints: [
+        { key: 'Q', does: 'Quit' },
+        { key: 'R/Space', does: 'Refresh' },
+      ],
+      footerPad: ' ',
+      glitch: this.nodesText as any,
+      glitchOptions: { tickMs: 400 },
+      styles: this.s,
       render: () => this.screen.render(),
       seed: ((this.ctx as any)?.nodeId ?? 1) * 7 + 3,
     });
-
-    // Glitches go on the NODE list, the only thing here with rows to spare.
-    // Damaging the masthead or the status line would read as the door being
-    // broken rather than as atmosphere. Does nothing at all on a theme that
-    // did not ask for them - no timer is started.
-    this.stopGlitches = attachGlitches(
-      this.nodesText as any,
-      this.theme,
-      () => this.screen.render(),
-      { tickMs: 400 }
-    );
 
     // Responsive breakpoint handling
     this.resizeHandler = (width, height) => {
@@ -408,18 +413,10 @@ class BBSDashboard {
 
     this.nodesText.setContent(nodesLines.join('\n'));
 
-    // Update status line
+    // Update status line. The hints belong to the chrome; only the clock
+    // after them is this door's, so only the clock is repainted here.
     const now = new Date().toLocaleTimeString();
-    this.statusText.setContent(
-      ' ' + footerHints(
-        [
-          { key: 'Q', does: 'Quit' },
-          { key: 'R/Space', does: 'Refresh' },
-        ],
-        { key: this.s.key, dim: this.s.dim },
-        this.s.rail
-      ) + `  ${this.s.dim('Last Update: ' + now)}`
-    );
+    this.chrome?.setFooterSuffix(`  ${this.s.dim('Last Update: ' + now)}`);
 
     this.screen.render();
   }
@@ -579,16 +576,12 @@ class BBSDashboard {
         clearInterval(this.updateInterval);
         this.updateInterval = null;
       }
-      // Stop the masthead, and stop the glitches - the latter also puts the
-      // true rows back, so a door that exits mid-glitch never leaves the
-      // damage as the last thing on screen.
-      if (this.stopMasthead) {
-        try { this.stopMasthead(); } catch { /* leaving anyway */ }
-        this.stopMasthead = null;
-      }
-      if (this.stopGlitches) {
-        try { this.stopGlitches(); } catch { /* leaving anyway */ }
-        this.stopGlitches = null;
+      // Stops every chrome timer, and puts the true rows back - so a door
+      // that exits mid-glitch never leaves the damage as the last thing on
+      // screen.
+      if (this.chrome) {
+        try { this.chrome.stop(); } catch { /* leaving anyway */ }
+        this.chrome = null;
       }
 
       // Remove resize handler
