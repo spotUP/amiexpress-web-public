@@ -30,6 +30,12 @@ function createSession() {
     bbs: {
       enableGameMode: () => {},
       disableGameMode: () => {},
+      // A WEB caller: socket.io delivers key-down / key-up edges, so the
+      // transport answers the capability question "yes". The manager asks
+      // this before it registers either handler - a telnet host defines the
+      // same two methods and still gets no tracking
+      // (door-input-manager-transport.test.ts).
+      deliversKeyEvents: true,
       onKeyDown: (cb: (key: string) => void) => { downHandler = cb; },
       onKeyUp: (cb: (key: string) => void) => { upHandler = cb; },
     },
@@ -145,8 +151,11 @@ describe('DoorInputManager held-key tracking', () => {
   });
 
   it('reports no key state when the session cannot deliver key events', () => {
-    // A telnet or SSH session: no onKeyDown/onKeyUp. Doors must fall back to
-    // their character handler rather than silently losing all movement.
+    // A host with no edge methods at all. Doors must fall back to their
+    // character handler rather than silently losing all movement. The
+    // transport-capability form of this case - a host that DOES define both
+    // methods over a byte transport, which is what the real BBSApi looks like
+    // - lives in door-input-manager-transport.test.ts.
     const session: any = { bbs: { enableGameMode: () => {}, disableGameMode: () => {} } };
     const manager = new DoorInputManager(session, undefined as any, {
       trackHeldKeys: true,

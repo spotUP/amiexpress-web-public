@@ -288,6 +288,35 @@ export class BBSApi {
   }
 
   /**
+   * Do key-down / key-up EDGES reach this door?
+   *
+   * False for every byte transport: telnet and SSH deliver a character stream
+   * with no key-up, and nothing server-side decodes one (the browser's
+   * key-down / key-up / keys:state arrive as socket.io events,
+   * server/socket-handlers.ts:493-569). Doors branch on this through
+   * DoorInputManager.isKeyStateActive() to choose held-key movement over their
+   * character handler; a door that believes it has edges and never gets one
+   * simply stops moving, which is what the eight arcade doors did on telnet.
+   *
+   * ONE fact answers it today - the same one `unicodeCapable` above starts
+   * from - and that is deliberate: when a future transport gains key edges,
+   * exactly one function changes and no door does.
+   *
+   * HAND-OVER, recorded so this does not become a second body of the same
+   * predicate. `thoughts/shared/plans/2026-09-03-ssh-telnet-parity.md` gives
+   * that function one home, `transportCapabilities(session).keyEvents` in
+   * `server/transport-adapter.ts` (task TP-3). TP-7 landed before TP-3, so the
+   * derivation is inline here for exactly as long as that takes; the answer is
+   * identical, because the struct derives every field from
+   * `session.connectionType` too. When the struct lands, this body becomes
+   * `return transportCapabilities(this.session).keyEvents;` and nothing else
+   * moves.
+   */
+  get deliversKeyEvents(): boolean {
+    return this.connectionType === 'web';
+  }
+
+  /**
    * Check if modem emulation is enabled
    * When true, output is throttled character-by-character to simulate modem speeds
    * Used by blessed SDK to enable slow connection mode (differential rendering)
