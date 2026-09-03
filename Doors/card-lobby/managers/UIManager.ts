@@ -7,7 +7,9 @@ import blessed, { Screen, Box, List, Button, Log, Listbar, ScrollableText, Dropd
 import { createBox, createList, createButton, createText, createLog, ansiToTags } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { CardEngine, pokerCardsToCards } from '@amiexpress/bbs-door-sdk';
 import type { UnoColor as EngineUnoColor, UnoValue as EngineUnoValue } from '@amiexpress/bbs-door-sdk';
-import { attachDoorChrome, type DoorChrome } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import {
+  attachDoorChrome, type DoorChrome, type GlitchSource,
+} from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { UI_THEME, ACTION_BUTTON_STYLES, ACTION_BUTTON_ORDER, activeTheme, type ActionButtonKey } from '../lib/constants';
 import { renderCardLines, stripBlessedTags, wrapTagged, padColumn } from '../lib/utils';
 import { resolveCardStyle, toRenderOptions, FULL_CARD_ROWS } from '../lib/card-style';
@@ -281,7 +283,7 @@ export class UIManager {
    * Re-callable: a resize changes what the menus leave, and a rail sized for
    * 80 columns would strand the title mid-screen in a wide terminal.
    */
-  attachChrome(): void {
+  attachChrome(options: { entry?: boolean } = {}): void {
     this.stopChrome();
     const theme = activeTheme();
     const fits = this.layoutMasthead();
@@ -291,10 +293,15 @@ export class UIManager {
       // 40-column tier turns them all off through this one number.
       width: (this.screen.width as number) || 80,
       title: MASTHEAD_TITLE,
-      masthead: fits ? (this.mastheadRow as any) : undefined,
+      masthead: fits ? this.mastheadRow : undefined,
       // The masthead sits inside the top bar to the right of the menus, so
       // its run is nothing like the screen's width.
       mastheadWidth: this.mastheadRun,
+      // The bar draws itself in when the door OPENS. On a resize it is
+      // already there, and replaying the draw-in makes the rail appear to
+      // stutter every time somebody widens the terminal - which reads as
+      // the resize having broken something.
+      entryFrames: options.entry === false ? 0 : undefined,
       // Asked at every tick, because this door swaps what is on screen.
       glitch: () => this.glitchPane(),
       glitchOptions: { tickMs: 400 },
@@ -323,7 +330,7 @@ export class UIManager {
    * pane is currently up and has rows to spare - and which that is changes,
    * which is why the SDK is handed a function rather than an element.
    */
-  private glitchPane(): unknown {
+  private glitchPane(): GlitchSource | null {
     // A hand is running: the activity log is the panel with rows to spare.
     if (this.activityPanel && !this.activityPanel.hidden) return this.activityContent;
     // The lobby: the table list is what everybody is looking at.
@@ -615,7 +622,8 @@ export class UIManager {
     this.buildTablePanels();
 
     // Last, because the glitches are aimed at panes built above this line.
-    this.attachChrome();
+    // The door is opening, so the bar draws itself in.
+    this.attachChrome({ entry: true });
   }
 
   /**
@@ -683,8 +691,10 @@ export class UIManager {
     this.layoutTablePanels();
     this.layoutActionButtons();
     // The menus leave a different run in a resized terminal, and the rail is
-    // sized once when it is attached.
-    this.attachChrome();
+    // sized once when it is attached - so it is re-attached here, WITHOUT
+    // the draw-in: the bar is already on screen and growing it again reads
+    // as the resize having broken it.
+    this.attachChrome({ entry: false });
   }
 
   buildTablePanels(): void {

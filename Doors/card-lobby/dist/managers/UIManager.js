@@ -238,7 +238,7 @@ class UIManager {
      * Re-callable: a resize changes what the menus leave, and a rail sized for
      * 80 columns would strand the title mid-screen in a wide terminal.
      */
-    attachChrome() {
+    attachChrome(options = {}) {
         this.stopChrome();
         const theme = (0, constants_1.activeTheme)();
         const fits = this.layoutMasthead();
@@ -251,6 +251,11 @@ class UIManager {
             // The masthead sits inside the top bar to the right of the menus, so
             // its run is nothing like the screen's width.
             mastheadWidth: this.mastheadRun,
+            // The bar draws itself in when the door OPENS. On a resize it is
+            // already there, and replaying the draw-in makes the rail appear to
+            // stutter every time somebody widens the terminal - which reads as
+            // the resize having broken something.
+            entryFrames: options.entry === false ? 0 : undefined,
             // Asked at every tick, because this door swaps what is on screen.
             glitch: () => this.glitchPane(),
             glitchOptions: { tickMs: 400 },
@@ -548,7 +553,8 @@ class UIManager {
         });
         this.buildTablePanels();
         // Last, because the glitches are aimed at panes built above this line.
-        this.attachChrome();
+        // The door is opening, so the bar draws itself in.
+        this.attachChrome({ entry: true });
     }
     /**
      * The window geometry, from the screen's CURRENT size.
@@ -609,8 +615,10 @@ class UIManager {
         this.layoutTablePanels();
         this.layoutActionButtons();
         // The menus leave a different run in a resized terminal, and the rail is
-        // sized once when it is attached.
-        this.attachChrome();
+        // sized once when it is attached - so it is re-attached here, WITHOUT
+        // the draw-in: the bar is already on screen and growing it again reads
+        // as the resize having broken it.
+        this.attachChrome({ entry: false });
     }
     buildTablePanels() {
         const panelStyle = { border: constants_1.UI_THEME.windowBorder, bg: constants_1.UI_THEME.windowBg };
