@@ -40,7 +40,7 @@
 #include <ctype.h>
 
 #include "aedoor.h"
-#include "flow.h"
+#include "ae_chunk.h"
 
 /* struct Process is only ever held here as an opaque pointer (JHMessage's
  * "task" field, BB_GETTASK result) -- never dereferenced -- so a forward

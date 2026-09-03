@@ -21,6 +21,16 @@
  * see the citations in aedoor_amiga.c.
  *
  * C89. ASCII only.
+  *
+ * MOVED HERE from examples/doorrepo-c (2026-09-03). This is the AEDoor
+ * protocol - the only way a 68K door talks to this board - and it belongs to
+ * every C door, not to the one that happened to implement it first. The two
+ * backends moved with it: src/ae_transport_amiga.c is the real exec message
+ * round trip, src/ae_transport_native.c the host stand-in the tests use.
+ *
+ * It is deliberately still the SAME API DoorRepo has always called, because
+ * that door is the proof this protocol works and a rewrite of its call sites
+ * would put that proof at risk for no gain.
  */
 
 #ifndef AEDOOR_H
