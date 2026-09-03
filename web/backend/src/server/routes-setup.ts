@@ -35,7 +35,7 @@ import { getConferenceDir } from '../utils/file-hold.util';
 import { webTerminalGate, isReservedPath } from './web-terminal-gate';
 import { AdminPermissionsHandler } from '../handlers/admin/admin-permissions.handler';
 import { SpriteManagerHandler } from '../handlers/admin/sprite-manager.handler';
-import { materialiseRemoteFile, storageFailureText } from '../storage/remote-download';
+import { materialiseCatalogEntry, materialiseRemoteFile, storageFailureText } from '../storage/remote-download';
 import { getStorageContext } from '../storage/storage-context';
 
 // Initialize handlers
@@ -98,6 +98,13 @@ const upload = multer({
  * @param app - Express application instance
  * @param io - Socket.IO server instance (for real-time features)
  */
+/**
+ * What an unreachable volume tells an unauthenticated caller. The real detail
+ * goes to the log - a backend's message can carry a bucket name, an endpoint
+ * or a key id, and none of that is the downloader's business.
+ */
+const STORAGE_UNAVAILABLE_BODY = 'File storage is unavailable - try again later';
+
 /**
  * Send one file as an attachment, from a real path on local disk.
  *
@@ -507,8 +514,12 @@ console.error('[Door Reload] Unexpected error:', error);
             return streamDownload(res, remote.fullPath, remote.name, remote.size);
           }
         } catch (storageError) {
+          // The detail is logged, not returned: this route is unauthenticated,
+          // and a backend's own message can name a bucket, an endpoint or a
+          // key id. The caller needs to know to come back, not where the
+          // board's storage lives.
 console.error(`[Download] ${filename} in conf ${confNum}:`, storageError);
-          return res.status(503).json({ error: storageFailureText(storageError) });
+          return res.status(503).json({ error: STORAGE_UNAVAILABLE_BODY });
         }
       }
 
@@ -569,6 +580,23 @@ console.error('[Download] Error:', error);
         return res.status(404).json({ error: 'File not found' });
       }
 
+      // The row already says where the object is - storage_volume and
+      // object_key came back mapped from the repository. Walking the local
+      // directories for it and answering 404 would report a pooled file as
+      // missing while holding its exact location.
+      const storage = getStorageContext();
+      if (storage) {
+        try {
+          const remote = await materialiseCatalogEntry(fileEntry, storage);
+          if (remote) {
+            return streamDownload(res, remote.fullPath, fileEntry.filename, remote.size);
+          }
+        } catch (storageError) {
+console.error(`[Download] file ${fileId} (${fileEntry.filename}):`, storageError);
+          return res.status(503).json({ error: STORAGE_UNAVAILABLE_BODY });
+        }
+      }
+
       const conferencePath = getConferenceDir(fileEntry.conferenceId || 1, config.get('dataDir'));
 
       let filePath: string | null = null;
@@ -592,23 +620,7 @@ console.error(`[Download] File not found on disk: ${fileEntry.filename}`);
         return res.status(404).json({ error: 'File not found on server' });
       }
 
-console.log(`[Download] Serving file: ${fileEntry.filename} from ${filePath}`);
-
-      res.setHeader('Content-Disposition', `attachment; filename="${fileEntry.filename}"`);
-      res.setHeader('Content-Type', 'application/octet-stream');
-      res.setHeader('Content-Length', fileEntry.size.toString());
-
-      const fileStream = fs.createReadStream(filePath);
-      fileStream.on('error', (err) => {
-        console.error('[Download] Stream read error (legacy):', err.message);
-        if (!res.headersSent) res.status(500).json({ error: 'File read error' });
-        else res.destroy();
-      });
-      res.on('error', (err) => {
-        console.error('[Download] Response write error (legacy, client disconnect?):', err.message);
-        fileStream.destroy();
-      });
-      fileStream.pipe(res);
+      return streamDownload(res, filePath, fileEntry.filename, fileEntry.size);
     } catch (error) {
 console.error('[Download] Error:', error);
       res.status(500).json({ error: 'Download failed' });

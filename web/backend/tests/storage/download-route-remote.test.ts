@@ -109,6 +109,18 @@ describe('GET /api/download/:confNum/:dirNum/:filename', () => {
     expect(JSON.stringify(res.body)).not.toContain('not found');
   });
 
+  it('keeps the backend detail out of the body on this unauthenticated route', async () => {
+    const { app, backend } = fixture();
+    await backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
+    backend.down = true;
+
+    const res = await request(app).get('/api/download/1/1/DEMO.LHA');
+
+    // A backend message can name a bucket, an endpoint or a key id.
+    expect(JSON.stringify(res.body)).not.toContain('DRIVE.2');
+    expect(JSON.stringify(res.body)).not.toContain('bucket');
+  });
+
   it('still answers 404 for a file the pooled area genuinely does not hold', async () => {
     const { app } = fixture();
 
@@ -124,6 +136,87 @@ describe('GET /api/download/:confNum/:dirNum/:filename', () => {
 
     expect(res.status).toBe(200);
     expect(Buffer.from(res.body).toString()).toBe('on-disk');
+    expect(backend.requests).toBe(0);
+  });
+});
+
+describe('GET /api/download/:fileId', () => {
+  /**
+   * The legacy by-id route hands back a MAPPED FileEntry - storageVolume and
+   * objectKey included - and then walked the local directories for it. For a
+   * pooled row that walk always failed, so the route answered "File not found
+   * on server" while holding the file's exact location.
+   */
+  interface CatalogRow {
+    id: number;
+    filename: string;
+    size: number;
+    storageVolume?: number;
+    objectKey?: string;
+  }
+
+  let restoreLookup: (() => void) | null = null;
+
+  function catalogRoute(entry: CatalogRow): express.Express {
+    // The exported `db` is a Proxy whose get trap always reads the lazy
+    // singleton, so assigning to it is invisible - the class method is what
+    // the route ends up calling.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Database } = require('../../src/database');
+    const original = Database.prototype.getFileEntry;
+    Database.prototype.getFileEntry = async () => ({ conferenceId: 1, areaId: 1, ...entry });
+    restoreLookup = () => { Database.prototype.getFileEntry = original; };
+    return buildApp();
+  }
+
+  afterEach(() => { restoreLookup?.(); restoreLookup = null; });
+
+  it('serves a pooled row from its recorded location', async () => {
+    const { backend } = fixture();
+    await backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
+    const app = catalogRoute({
+      id: 7,
+      filename: 'DEMO.LHA',
+      size: 7,
+      storageVolume: 2,
+      objectKey: 'Conf1/Files/DEMO.LHA',
+    });
+
+    const res = await request(app).get('/api/download/7');
+
+    expect(res.status).toBe(200);
+    expect(Buffer.from(res.body).toString()).toBe('payload');
+    expect(res.headers['content-disposition']).toContain('DEMO.LHA');
+  });
+
+  it('answers 503, not 404, when that volume cannot be reached', async () => {
+    const { backend } = fixture();
+    await backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
+    backend.down = true;
+    const app = catalogRoute({
+      id: 7,
+      filename: 'DEMO.LHA',
+      size: 7,
+      storageVolume: 2,
+      objectKey: 'Conf1/Files/DEMO.LHA',
+    });
+
+    const res = await request(app).get('/api/download/7');
+
+    expect(res.status).toBe(503);
+    expect(JSON.stringify(res.body)).not.toContain('not found');
+  });
+
+  it('leaves a local row on the disk walk it always used', async () => {
+    const { backend, dataDir } = fixture();
+    fs.mkdirSync(path.join(dataDir, 'Node0', 'Playpen'), { recursive: true });
+    fs.writeFileSync(path.join(dataDir, 'Node0', 'Playpen', 'LEGACY.TXT'), 'legacy');
+    const app = catalogRoute({ id: 8, filename: 'LEGACY.TXT', size: 6 });
+
+    const res = await request(app).get('/api/download/8');
+
+    expect(res.status).toBe(200);
+    expect(Buffer.from(res.body).toString()).toBe('legacy');
     expect(backend.requests).toBe(0);
   });
 });
