@@ -26,7 +26,7 @@ function applyTheme(source) {
   const theme = resolveTheme(source);
   if (!theme) return;
   setActiveTheme(theme);
-  CURRENT = theme;
+  THEME = theme;
   T = theme.tokens;
   S = themeStyles(theme);
 }
