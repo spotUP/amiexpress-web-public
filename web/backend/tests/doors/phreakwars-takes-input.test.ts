@@ -131,7 +131,7 @@ describe("a caller's keystroke reaches PHREAKWARS while it is running", () => {
     expect(after).toContain('Welcome, ZEROCOOL!');
   });
 
-  it('a 40-column caller gets the same input path an 80-column one does', async () => {
+  it('an 80-column caller gets the same input path the 40-column ones do', async () => {
     const run = launch('input-3', 80);
     await settle();
 

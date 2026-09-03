@@ -183,7 +183,7 @@ door.onInput(async (ctx: DoorContext, key: KeyPress) => {
   // then resolves on the next keystroke (sdk/src/core/Door.ts:212-217), which
   // is exactly the "Press any key to exit..." the quit handler prints.
   if (gameState.currentMode === 'quit') {
-    ctx.close();
+    await ctx.close();
   }
 });
 
