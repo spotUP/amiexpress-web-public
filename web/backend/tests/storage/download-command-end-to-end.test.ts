@@ -29,6 +29,7 @@ import { VolumeSet, type VolumeState } from '../../src/storage/volume-set';
 import { setStorageContext, type StorageContext } from '../../src/storage/storage-context';
 import type { RemoteArea } from '../../src/storage/remote-areas';
 import { config } from '../../src/config';
+import { FileFlagManager } from '../../src/utils/file-flag.util';
 import { FakeBackend } from './fake-backend';
 
 interface Session {
@@ -44,6 +45,7 @@ interface Session {
   subState?: unknown;
   tempData?: Record<string, unknown>;
   flaggedFiles?: { filename: string; confNum: number }[];
+  flagManager?: FileFlagManager;
   connectionType?: string;
 }
 
@@ -205,6 +207,65 @@ describe('typing D on a pooled area', () => {
     expect((h.session.tempData?.downloadFileList as { name: string }[]).map(f => f.name)).toEqual([
       'FLAGGED.LHA',
     ]);
+  });
+
+  it('resolves a name typed at the filespec prompt', async () => {
+    // The site a caller hits most: type D, get the prompt, type a name. It is
+    // a different call site from the params one, in a different method.
+    const h = harness();
+    await h.backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
+
+    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), '');
+    h.clear();
+    await DownloadHandler.handleFilenameInput(...asHandlerArgs(h), 'DEMO.LHA');
+
+    expect((h.session.tempData?.downloadFileList as { name: string }[]).map(f => f.name)).toEqual([
+      'DEMO.LHA',
+    ]);
+    expect(h.written()).not.toContain('File not found');
+  });
+
+  it('says the volume is unavailable at the filespec prompt, not that the file is missing', async () => {
+    const h = harness();
+    await h.backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
+
+    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), '');
+    h.backend.down = true;
+    h.clear();
+    await DownloadHandler.handleFilenameInput(...asHandlerArgs(h), 'DEMO.LHA');
+
+    expect(h.written()).toContain('DRIVE.2');
+    expect(h.written()).toContain('try again later');
+    expect(h.written()).not.toContain('File not found');
+  });
+
+  it('resolves a file flagged through the flag manager', async () => {
+    // The other flag producer: FileFlagManager, not session.flaggedFiles.
+    const h = harness();
+    await h.backend.put('Conf1/Files/FLAGGED.LHA', Buffer.from('flagged'));
+    const flags = new FileFlagManager(h.dataDir, 1, 1);
+    flags.addFlag('FLAGGED.LHA', 1);
+    h.session.flagManager = flags;
+
+    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), '');
+
+    expect((h.session.tempData?.downloadFileList as { name: string }[]).map(f => f.name)).toEqual([
+      'FLAGGED.LHA',
+    ]);
+  });
+
+  it('reports the pooled outage for a flag-manager file too', async () => {
+    const h = harness();
+    await h.backend.put('Conf1/Files/FLAGGED.LHA', Buffer.from('flagged'));
+    const flags = new FileFlagManager(h.dataDir, 1, 1);
+    flags.addFlag('FLAGGED.LHA', 1);
+    h.session.flagManager = flags;
+    h.backend.down = true;
+
+    await DownloadHandler.handleDownloadCommand(...asHandlerArgs(h), '');
+
+    expect(h.written()).toContain('unavailable');
+    expect(h.written()).not.toContain('File not found');
   });
 
   it('reports the pooled outage for a flagged file too', async () => {
