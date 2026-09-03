@@ -20,6 +20,12 @@
  * but the ceiling keeps an effect from ever being why a screen feels slow.
  */
 import type { Theme } from './tokens.js';
+import { themeStyles, type ThemeStyles } from './styles.js';
+import { attachGlitches, type GlitchOptions, type GlitchTarget } from './glitch-runner.js';
+// The width tier, from the ONE ladder. Imported from the module rather than
+// the blessed barrel: responsive-constants has no imports of its own, so the
+// theme engine stays free of the widget tree.
+import { effectsAllowed, getCompactProfile } from '../blessed/core/responsive-constants.js';
 
 /** The character a leader is drawn with. Middle dot reads as a rule, not text. */
 export const LEADER_CHAR = '·';
@@ -377,6 +383,14 @@ export function attachMasthead(
     startSliding();
   } else {
     let frame = 0;
+    // Frame zero goes on NOW, not in 60ms. Waiting for the first interval
+    // left the masthead row blank for a frame, which reads as the header
+    // arriving late rather than as it drawing itself in - and DOORS, which
+    // hand-rolled this, never had that gap because it painted the bar as
+    // the box's initial content.
+    barWidth = frames[0].trimEnd().length;
+    draw();
+    frame = 1;
     entryTimer = setInterval(() => {
       barWidth = frames[frame] ? frames[frame].trimEnd().length : runWidth;
       draw();
@@ -437,4 +451,206 @@ export function footerHints(
 /** The style a footer row takes: the bar's colours, dim text, no border. */
 export function footerStyle(theme: Theme): { fg: string; bg: string } {
   return { fg: theme.tokens.dim, bg: theme.tokens.bar };
+}
+
+// ===========================================================================
+// The ONE call
+// ===========================================================================
+
+/**
+ * What a door hands the chrome to draw into.
+ *
+ * Deliberately NOT a blessed element: geometry belongs to the door, which
+ * is the only thing that knows whether its masthead sits on row 0 of the
+ * screen or on the first content row inside a framed header. Handing the
+ * elements in is what lets a door gain the chrome without a single cell of
+ * its 80-column layout moving.
+ */
+export interface ChromeTarget {
+  setContent(text: string): void;
+}
+
+export interface DoorChromeOptions {
+  /**
+   * The LIVE screen width - `screen.width`, never a constant. Everything
+   * that moves is gated on this through `effectsAllowed()`.
+   */
+  width: number;
+  /** The headline, right of the rail. */
+  title: string;
+  /** The row the masthead draws into. */
+  masthead?: ChromeTarget;
+  /**
+   * Columns the masthead run may use. Defaults to one short of `width`,
+   * which is what a masthead on the screen itself wants; a door whose
+   * masthead sits inside a framed header passes its own (two less again).
+   */
+  mastheadWidth?: number;
+  /** The row the hint line draws into. */
+  footer?: ChromeTarget;
+  /** The hints, at the normal tiers. */
+  hints?: readonly FooterHint[];
+  /**
+   * Shorter hints for the 40-column tier. Falls back to `hints`, which is
+   * right for a door whose hints already fit.
+   */
+  compactHints?: readonly FooterHint[];
+  /** Leading pad for the footer row. Most doors indent by one column. */
+  footerPad?: string;
+  /** Text appended after the hints - a clock, a count. */
+  footerSuffix?: string;
+  /**
+   * The element the theme's glitches damage. Usually the LIST: damaging the
+   * masthead or the hint line reads as the door being broken rather than as
+   * atmosphere.
+   */
+  glitch?: unknown;
+  /** Passed straight through to `attachGlitches`. */
+  glitchOptions?: GlitchOptions;
+  /** The theme's paints. Defaults to `themeStyles(theme)`. */
+  styles?: ThemeStyles;
+  /** Repaint the screen. */
+  render: () => void;
+  /**
+   * Varies the irregular rail between nodes, so two people on the same
+   * board are not watching an identical bar. Node id is the usual source.
+   */
+  seed?: number;
+  /** Frames of the masthead draw-in. 0 goes straight to the moving bar. */
+  entryFrames?: number;
+}
+
+/** The handle a door keeps for as long as its screen is up. */
+export interface DoorChrome {
+  /**
+   * True when this width runs the moving parts. False at the 40-column
+   * tier, where the masthead is the static title and no timer exists.
+   */
+  readonly animated: boolean;
+  /** Stop every timer and put any glitched row back. */
+  stop(): void;
+  /** Replace the hints and repaint the footer row. */
+  setHints(hints: readonly FooterHint[]): void;
+  /** Replace the trailing text and repaint the footer row. */
+  setFooterSuffix(text: string): void;
+  /** The footer row exactly as it currently stands. */
+  footerContent(): string;
+}
+
+/**
+ * The whole chrome, from one call: masthead, animated rails, glitches and
+ * footer, honouring the theme and the width tier.
+ *
+ * Sysop, 2026-09-03: *"almost none of the doors that use it has the full
+ * chrome with the animated slashes and glitches etc - fix it, only colors
+ * makes no great theme"*. The pieces all existed; what did not was a single
+ * call that delivers the SET. Six doors each wired a different subset,
+ * nine wired none, and DOORS - the screen the sysop measured the others
+ * against - hand-rolled its own copy of the masthead timer and the footer
+ * builder. That is six drifting implementations of one look.
+ *
+ * At the XXS (40-column C64/PETSCII) tier every moving part is off:
+ * `effectsAllowed(width)` is the one gate, so a door cannot forget it. The
+ * masthead becomes the plain static title, the footer drops the branding
+ * tail and takes `compactHints`, and NO timer is started at all - a moving
+ * effect on a 40-column canvas leaves stray glyphs mid-row (DOORMAN,
+ * 2026-09-02).
+ *
+ * Geometry stays with the caller: this draws into elements the door made,
+ * so a door gains the chrome without its layout moving a cell.
+ */
+export function attachDoorChrome(
+  theme: Theme,
+  options: DoorChromeOptions
+): DoorChrome {
+  const {
+    width,
+    title,
+    masthead,
+    footer,
+    footerPad = '',
+    glitch,
+    glitchOptions,
+    render,
+    seed,
+    entryFrames,
+  } = options;
+
+  const s = options.styles ?? themeStyles(theme);
+  const animated = effectsAllowed(width);
+  const compact = getCompactProfile(width);
+
+  let hints: readonly FooterHint[] =
+    (compact.collapseChrome ? options.compactHints : options.hints)
+    ?? options.hints
+    ?? [];
+  let suffix = options.footerSuffix ?? '';
+  let footerText = '';
+
+  // The branding tail is decoration, and a 40-column row has no spare cells
+  // for it - the hints win.
+  const railTail = compact.collapseChrome ? '' : s.rail;
+
+  const paintFooter = () => {
+    footerText =
+      footerPad + footerHints(hints, { key: s.key, dim: s.dim }, railTail) + suffix;
+    footer?.setContent(footerText);
+  };
+  if (footer) {
+    paintFooter();
+    render();
+  }
+
+  // The masthead. At XXS the title still draws - it just never moves.
+  let stopMasthead: () => void = () => { /* nothing was started */ };
+  if (masthead) {
+    if (animated) {
+      stopMasthead = attachMasthead(masthead, theme, {
+        title,
+        // One column short of the screen: writing a row's final cell leaves
+        // the terminal in a pending-wrap state and clips the last glyph.
+        width: options.mastheadWidth ?? Math.max(1, width - 1),
+        rail: s.accent,
+        ink: s.ink,
+        render,
+        seed,
+        entryFrames,
+      });
+    } else {
+      masthead.setContent(` ${title} `);
+      render();
+    }
+  }
+
+  // The glitches, on whatever the door nominated. Does nothing at all for a
+  // theme that did not ask for them, and nothing at all at XXS.
+  const stopGlitches =
+    animated && glitch
+      ? attachGlitches(glitch as GlitchTarget, theme, render, glitchOptions ?? {})
+      : () => { /* nothing was started */ };
+
+  let stopped = false;
+
+  return {
+    animated,
+    stop() {
+      if (stopped) return;
+      stopped = true;
+      // Glitches first: stopping them restores the damaged row, and a
+      // masthead stop that repainted over a live glitch would race it.
+      try { stopGlitches(); } catch { /* leaving anyway */ }
+      try { stopMasthead(); } catch { /* leaving anyway */ }
+    },
+    setHints(next) {
+      hints = next;
+      if (footer) { paintFooter(); render(); }
+    },
+    setFooterSuffix(text) {
+      suffix = text;
+      if (footer) { paintFooter(); render(); }
+    },
+    footerContent() {
+      return footerText;
+    },
+  };
 }
