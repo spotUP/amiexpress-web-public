@@ -48,6 +48,13 @@
  * that switches to wide/fullscreen mode still fills the screen, because
  * BBSTerminal then switches itself to `position: absolute` and escapes this
  * flex layout entirely (see BBSTerminal.tsx).
+ *
+ * Shrinking is only possible when the terminal's content has an intrinsic
+ * width, as xterm's 80-column grid has. A PETSCII canvas is space-filling -
+ * it takes its scale from the box it is handed - so a fit-content frame
+ * around it freezes it at its current size instead of growing it. That
+ * session is centred inside BBSTerminal's own fixed-mode wrapper instead; see
+ * showFrame in TerminalPage.tsx.
  */
 .terminal-page--framed {
   display: flex;

@@ -287,10 +287,10 @@ describe('TerminalPage ARKANOID trackpad', () => {
  * jsdom does no layout (and this project's vitest config runs with
  * `css: false`), so there is no computed style to assert pixel centring
  * against. What IS reachable and real: the container class TerminalPage
- * puts on the DOM only in the desktop-fixed case (never for a handheld
+ * puts on the DOM only in the desktop-fixed xterm case (never for a handheld
  * session or a PETSCII canvas session, where the terminal must still fill
- * the viewport), and the CSS source that turns that class + the new token
- * into an actual centred, contrasting page.
+ * the viewport and is centred inside itself), and the CSS source that turns
+ * that class + the new token into an actual centred, contrasting page.
  */
 describe('TerminalPage desktop 80x25 framing', () => {
   it('centres the terminal in a frame on a desktop xterm session', () => {
@@ -314,7 +314,18 @@ describe('TerminalPage desktop 80x25 framing', () => {
     expect(document.querySelector('.terminal-page__frame')).toBeNull();
   });
 
-  it('does not frame a PETSCII canvas session - it already centres itself', () => {
+  // The page's frame is a shrink-wrap, and a PETSCII canvas cannot be
+  // shrink-wrapped: it takes its scale FROM the box it is handed, so a
+  // fit-content frame around it is a fixed point (measured in a 1280x800
+  // page: a 736x496 frame around the canvas's current 704x464 backing store,
+  // with no way to grow into the 960x644 there was room for). That session is
+  // centred by BBSTerminal's own fixed-mode wrapper instead - see
+  // "a PETSCII canvas session is framed and centred on a desktop like an
+  // xterm session" in components/__tests__/bbsterminal-petscii-p-session-mount.
+  // The reason recorded here until 2026-09-03 - "it already centres itself" -
+  // was not true: that wrapper's centring lived in Tailwind classes this app
+  // does not ship, and the PETSCII screen sat in the top-left corner.
+  it('does not shrink-wrap a PETSCII canvas session - the canvas is sized by the box, not the other way round', () => {
     setDesktopViewport();
     render(<TerminalPage />);
 

@@ -385,12 +385,26 @@ export function TerminalPage(): JSX.Element {
   // orientation, because there is no other keyboard to reach.
   const showOnscreenInput = isMobile || (isHandheld() && surface === 'canvas');
 
-  // The letterboxed frame only applies to the desktop ANSI terminal. The
-  // PETSCII canvas already centres itself (aspect-ratio box inside
-  // BBSTerminal's own fixed-mode wrapper), and a handheld session needs the
-  // terminal sized to the raw viewport for refit()'s measurements to stay
-  // stable - wrapping it here would make the frame's own fit-content size
-  // depend on the very font size refit() is trying to compute.
+  // The page's frame is a SHRINK-WRAP: `terminal-page--framed` centres a
+  // fit-content host (TerminalPage.css), which only has something to wrap when
+  // the terminal's content has an intrinsic width - xterm's 80 columns do.
+  //
+  // A PETSCII session does not. Its canvas is sized FROM the box it is given
+  // (PetsciiCanvas measures its container and picks a scale), so a fit-content
+  // frame around it is a fixed point: measured in a 1280x800 page, the frame
+  // wrapped the canvas's CURRENT 704x464 backing store into a 736x496 box and
+  // the canvas could never grow into the 960x644 there was room for. A canvas
+  // session is centred by BBSTerminal's own fixed-mode wrapper instead - the
+  // same wrapper that carries the bezel - so both surfaces end up as the same
+  // centred, bezelled screen on the page ground. (Until 2026-09-03 that
+  // wrapper's centring was Tailwind classes this app does not ship, and the
+  // PETSCII screen sat pinned in the top-left corner: "the petscii mode is not
+  // centered like the normal term".)
+  //
+  // A handheld session stays unframed too: it needs the terminal sized to the
+  // raw viewport for refit()'s measurements to stay stable - wrapping it here
+  // would make the frame's own fit-content size depend on the very font size
+  // refit() is trying to compute.
   const showFrame = !isHandheldMode && surface === 'xterm';
   const terminal = (
     <BBSTerminal

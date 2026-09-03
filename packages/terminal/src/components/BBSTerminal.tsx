@@ -3123,7 +3123,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
   return (
     <div
-      className={`min-h-screen w-full ${terminalMode === 'fixed' ? 'flex items-center justify-center' : ''} ${className}`}
+      className={`min-h-screen w-full ${className}`}
       style={{
         // Fixed 80x25 mode: the PAGE owns the ground (the host paints its
         // near-black --bbs-page-bg around the terminal box); the black belongs
@@ -3138,6 +3138,22 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         // In wide mode: use absolute positioning to break out of parent flex centering
         // In fixed mode: relative positioning for normal layout
         position: terminalMode === 'wide' ? 'absolute' : 'relative',
+        // Fixed mode centres the terminal box (below) in whatever space the
+        // host gives it. This used to be `flex items-center justify-center` in
+        // the className above - Tailwind utilities that web/frontend, the only
+        // consumer of this package, does not ship. Nothing defined them, so the
+        // box was pinned to the top-left corner. An xterm session hid that
+        // (the PAGE centres it: TerminalPage shrink-wraps a fit-content frame
+        // around xterm's intrinsic width), but a PETSCII session - whose canvas
+        // is space-filling and so cannot be shrink-wrapped - sat in the corner
+        // with the page ground down one side ("the petscii mode is not centered
+        // like the normal term", sysop, 2026-09-03). Inline, so the centring
+        // cannot go missing with a stylesheet again.
+        ...(terminalMode === 'fixed' && {
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }),
         ...(terminalMode === 'wide' && {
           top: 0,
           left: 0,

@@ -203,3 +203,46 @@ describe('fixed 80x25 mode leaves the page ground to the page', () => {
     expect(box.style.boxSizing).toBe('border-box');
   });
 });
+
+/**
+ * "the petscii mode is not centered like the normal term" (sysop, live board,
+ * 2026-09-03). The fixed-mode wrapper declared its centring as
+ * `flex items-center justify-center` in its className - Tailwind utilities
+ * that web/frontend, the only consumer of this package, does not ship, so
+ * nothing defined them and the terminal box sat pinned to the top-left
+ * corner. An xterm session hid the defect because the PAGE centres that one
+ * (TerminalPage shrink-wraps a fit-content frame around xterm's intrinsic
+ * 80-column width); a PETSCII canvas is space-filling and cannot be
+ * shrink-wrapped, so nothing centred it at all.
+ *
+ * jsdom does no layout, so what is asserted is the wrapper's own inline
+ * centring - the thing whose absence left the screen in the corner - and that
+ * it is identical for both surfaces.
+ */
+describe('a PETSCII canvas session is framed and centred on a desktop like an xterm session', () => {
+  const centring = (el: HTMLElement) => ({
+    display: el.style.display,
+    alignItems: el.style.alignItems,
+    justifyContent: el.style.justifyContent,
+  });
+
+  it('centres the bezelled terminal box for a canvas session, exactly as for an xterm session', async () => {
+    const { container } = render(<BBSTerminal backendUrl="http://localhost:3001" />);
+    const outer = container.firstElementChild as HTMLElement;
+    const asXterm = centring(outer);
+    expect(asXterm).toEqual({ display: 'flex', alignItems: 'center', justifyContent: 'center' });
+
+    pressP();
+    await waitFor(() => { expect(container.querySelector('canvas')).not.toBeNull(); });
+
+    // Same wrapper, same centring - the surface flip must not cost it.
+    expect(centring(container.firstElementChild as HTMLElement)).toEqual(asXterm);
+
+    // ...and the canvas sits inside the same bezelled box the xterm session gets.
+    const box = (container.firstElementChild as HTMLElement).firstElementChild as HTMLElement;
+    expect(box.style.padding).toBe('var(--bbs-terminal-bezel, 16px)');
+    expect(box.style.borderRadius).toBe('var(--bbs-terminal-radius, 12px)');
+    expect(box.contains(container.querySelector('canvas'))).toBe(true);
+    expect(escaped).toEqual([]);
+  });
+});
