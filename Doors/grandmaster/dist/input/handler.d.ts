@@ -71,6 +71,8 @@ export declare class InputHandler {
      * press/release edges, DAS/ARR runs exactly as configured.
      */
     private keyStateMode;
+    /** Watchers of raw press edges; see onKeyEdge. */
+    private keyEdgeHandlers;
     /**
      * Is this session delivering real key-down/key-up edges?
      *
@@ -104,6 +106,18 @@ export declare class InputHandler {
      * chasing "the sideways scrolling accelerates and goes too quick").
      */
     setTiming(dasDelay?: number, arrRate?: number, softDropRate?: number): void;
+    /**
+     * Watch every real press edge, by key name.
+     *
+     * The action callbacks above are Tetris-shaped - 'left', 'hard_drop',
+     * 'hold' - and a game with no pieces cannot use them. This reports the KEY
+     * instead, from the one place both input paths already agree a press
+     * happened, so a door mode gets the same edge-accurate input the TGM modes
+     * get without a second listener of its own.
+     *
+     * Returns the unsubscribe.
+     */
+    onKeyEdge(handler: (keyName: string) => void): () => void;
     /** Shared press-edge logic for both input paths. */
     private handleKeyEdge;
     /**

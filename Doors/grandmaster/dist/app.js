@@ -1178,59 +1178,64 @@ class GrandmasterApp {
             timeLimit: mode === 'timeattack' ? consts_2.TIME_ATTACK_FRAMES : undefined,
         });
         stack.startingState();
-        /** Telnet fallback: a keypress counts as held for this long. */
-        const HOLD_MS = 100;
-        const pressedUntil = new Map();
-        const onKeypress = (_ch, key) => {
-            if (!key || !key.name)
-                return;
-            pressedUntil.set(key.name, Date.now() + HOLD_MS);
-        };
-        this.screen.on('keypress', onKeypress);
-        // Held keys come from the DOOR'S OWN handler, which is where the real
-        // key-down/key-up edges already are (input/handler.ts). This asked the SDK
-        // input manager instead, whose held-key tracking is off unless a door opts
-        // in - so on the web it never answered, every mode fell through to the
-        // character path below, and the game inherited the client's auto-repeat:
-        // one move, a pause of nearly half a second, then a burst. That is exactly
-        // the stutter the TGM modes avoid, and it is why this felt slower than the
-        // rest of the door.
-        const isDown = (names) => {
-            if (this.inputHandler.isKeyStateMode()) {
-                const held = this.inputHandler.heldKeys();
-                return names.some((name) => held.has(name));
-            }
-            // Telnet has no key-up at all, so a keypress marks a key held for a
-            // short window and the player gets discrete steps rather than a hold.
-            const now = Date.now();
-            return names.some((name) => (pressedUntil.get(name) ?? 0) > now);
-        };
-        const readInput = () => ({
-            up: isDown(['up']),
-            down: isDown(['down']),
-            left: isDown(['left']),
-            right: isDown(['right']),
-            swap: isDown(['space', 'z']),
-            raise: isDown(['r', 'x']),
+        // INPUT COMES FROM THE DOOR'S OWN HANDLER, which is where the real press
+        // edges already are (input/handler.ts) and why the TGM modes feel the way
+        // they do. This used to poll the SDK input manager, whose held-key
+        // tracking is off unless a door opts in - so the answer was always no, and
+        // every session fell back to the character stream and inherited the
+        // client's auto-repeat: one move, a pause of nearly half a second, then a
+        // burst.
+        //
+        // Edges are QUEUED rather than sampled. Polling a held flag once a frame
+        // drops a tap that begins and ends between two polls, and tapping is how
+        // this game is played; an edge cannot be missed, and each one is worth
+        // exactly one frame of that key.
+        const pendingEdges = new Set();
+        const stopWatchingEdges = this.inputHandler.onKeyEdge((name) => {
+            pendingEdges.add(name);
         });
+        const isDown = (names) => {
+            // A press that has not been spent yet always counts.
+            const tapped = names.some((name) => pendingEdges.has(name));
+            // Real key-up only exists in a browser. On telnet the edge IS the whole
+            // input, and the player gets discrete steps rather than a hold.
+            const held = this.inputHandler.isKeyStateMode()
+                && names.some((name) => this.inputHandler.heldKeys().has(name));
+            return tapped || held;
+        };
+        const readInput = () => {
+            const input = {
+                up: isDown(['up']),
+                down: isDown(['down']),
+                left: isDown(['left']),
+                right: isDown(['right']),
+                swap: isDown(['space', 'z']),
+                raise: isDown(['r', 'x']),
+            };
+            // Spent: each edge is worth one frame. Clearing here rather than per key
+            // keeps a press of two keys on the same frame together, which is how a
+            // swap-while-moving reaches the engine as one input character.
+            pendingEdges.clear();
+            return input;
+        };
         if (mode === 'vsplayer') {
             await this.runPanelNetplay(sheet, readInput);
-            this.screen.removeListener('keypress', onKeypress);
+            stopWatchingEdges();
             return;
         }
         if (mode === 'replays') {
             await this.runReplayBrowser(sheet, readInput);
-            this.screen.removeListener('keypress', onKeypress);
+            stopWatchingEdges();
             return;
         }
         if (mode === 'stageclear') {
             await this.runStageClear(sheet, readInput);
-            this.screen.removeListener('keypress', onKeypress);
+            stopWatchingEdges();
             return;
         }
         if (mode === 'puzzle') {
-            await this.runPuzzleSet(sheet, readInput, onKeypress);
-            this.screen.removeListener('keypress', onKeypress);
+            await this.runPuzzleSet(sheet, readInput);
+            stopWatchingEdges();
             return;
         }
         // Vs CPU and Challenge share one screen: the two opponents differ in what
@@ -1316,7 +1321,7 @@ class GrandmasterApp {
             }
         }
         finally {
-            this.screen.removeListener('keypress', onKeypress);
+            stopWatchingEdges();
             this.screen.unkey(['escape', 'q', 'Q'], onEscape);
         }
     }
@@ -1335,7 +1340,7 @@ class GrandmasterApp {
      * mode working as intended. Leaving is ESC, and X or Y takes back a move -
      * the keys the original uses.
      */
-    async runPuzzleSet(sheet, readInput, onKeypress) {
+    async runPuzzleSet(sheet, readInput) {
         const sets = (0, puzzle_1.loadShippedPuzzles)();
         const chosen = await this.choosePuzzleSet(sets);
         if (chosen === null)
@@ -1384,7 +1389,6 @@ class GrandmasterApp {
             result.score = solved;
             this.highScores.addScore(this.state.playerName, result);
         }
-        void onKeypress;
     }
     /**
      * STAGE CLEAR: walk the ladder until a stage is failed or the player leaves.

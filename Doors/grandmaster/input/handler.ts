@@ -86,6 +86,8 @@ export class InputHandler {
    * press/release edges, DAS/ARR runs exactly as configured.
    */
   private keyStateMode: boolean = false;
+  /** Watchers of raw press edges; see onKeyEdge. */
+  private keyEdgeHandlers: Array<(keyName: string) => void> = [];
 
   /**
    * Is this session delivering real key-down/key-up edges?
@@ -208,8 +210,27 @@ export class InputHandler {
     if (typeof softDropRate === 'number' && softDropRate > 0) this.softDropRate = softDropRate;
   }
 
+  /**
+   * Watch every real press edge, by key name.
+   *
+   * The action callbacks above are Tetris-shaped - 'left', 'hard_drop',
+   * 'hold' - and a game with no pieces cannot use them. This reports the KEY
+   * instead, from the one place both input paths already agree a press
+   * happened, so a door mode gets the same edge-accurate input the TGM modes
+   * get without a second listener of its own.
+   *
+   * Returns the unsubscribe.
+   */
+  onKeyEdge(handler: (keyName: string) => void): () => void {
+    this.keyEdgeHandlers.push(handler);
+    return () => {
+      this.keyEdgeHandlers = this.keyEdgeHandlers.filter((entry) => entry !== handler);
+    };
+  }
+
   /** Shared press-edge logic for both input paths. */
   private handleKeyEdge(keyName: string): void {
+    for (const handler of this.keyEdgeHandlers) handler(keyName);
     const now = Date.now();
     if (this.config.left.includes(keyName)) {
       this.rightPressed = false;
