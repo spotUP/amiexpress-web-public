@@ -139,10 +139,34 @@ The masthead cuts the rail rather than the title, and the status line drops
 its right side rather than letting two strings collide mid-row - which is
 what a caller reads as corruption.
 
+## 5. Phase 3: a door reads a key and asks a question
+
+`ui_key.h` is `examples/doorrepo-c/flow.c`'s decoder, lifted with its
+reasoning intact - including the part its own comments say cost DOORMAN six
+debugging rounds. An ESC is ambiguous: it is either a keypress or the start
+of a sequence, and the only way to tell is to settle for a moment and ask,
+WITHOUT consuming, whether anything else arrived. A byte that turns out not
+to belong to the sequence is handed BACK, never eaten - which is why "ESC
+then Q" from a sub-screen no longer quits the whole door.
+
+`ui_input.h` is the same door's line editor and confirm dialog. The editing
+rules are unchanged; what changed is the coupling. Those read the key
+straight from the BBS and flushed straight to it, so neither could exist
+without a session, let alone be tested. Here the key source and the frame
+are the caller's, and the suite drives them keystroke by keystroke.
+
+Two rules in there look like details and are not: a cursor key inside a
+prompt is swallowed rather than inserting an escape sequence into text the
+door is about to act on, and the colours and cursor are put back before
+returning, or the caller's next screen is painted in the prompt's blue.
+
+A caller who hangs up mid-edit gets -1, not an empty string: a door must end
+the session rather than act on "".
+
 ## What is deliberately not here yet
 
-Input decoding and dialogs (phase 3); theme tokens and settings (phase 4);
-a real door ported end to end (phase 5).
+Theme tokens and settings (phase 4); a real door ported end to end, and the
+AEDoor transport lifted in behind `ae_transport_fn` (phase 5).
 
 And the real AEDoor transport: `examples/doorrepo-c/aedoor_amiga.c` still
 owns it, and `ui_screen`'s sink is deliberately the one place that changes
