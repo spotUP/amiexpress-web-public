@@ -2,8 +2,10 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { LocalBackend } from '../../src/storage/local-backend';
-import { StorageQuotaError } from '../../src/storage/storage-backend';
+import { StorageQuotaError, StorageUnavailableError } from '../../src/storage/storage-backend';
 import { FakeBackend } from './fake-backend';
+
+const runningAsRoot = typeof process.getuid === 'function' && process.getuid() === 0;
 
 describe('LocalBackend', () => {
   it('round-trips an object through a real directory', async () => {
@@ -25,6 +27,75 @@ describe('LocalBackend', () => {
   it('answers head with null rather than throwing for a missing object', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'localback2-'));
     expect(await new LocalBackend(1, root).head('nope')).toBeNull();
+  });
+
+  it('refuses a key that escapes the drive root with a ".." segment', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'localback-escape-'));
+    const backend = new LocalBackend(1, root);
+
+    await expect(backend.get('../escape')).rejects.toThrow(/\.\./);
+    await expect(backend.put('../escape', Buffer.from('x'))).rejects.toThrow(/\.\./);
+    await expect(backend.delete('../escape')).rejects.toThrow(/\.\./);
+    await expect(backend.list('../escape/')).rejects.toThrow(/\.\./);
+    await expect(backend.head('../escape')).rejects.toThrow(/\.\./);
+  });
+
+  it('refuses an absolute key', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'localback-abs-'));
+    const backend = new LocalBackend(1, root);
+    const absolute = path.join(os.tmpdir(), 'somewhere-else');
+
+    await expect(backend.get(absolute)).rejects.toThrow(/absolute/);
+    await expect(backend.put(absolute, Buffer.from('x'))).rejects.toThrow(/absolute/);
+    await expect(backend.delete(absolute)).rejects.toThrow(/absolute/);
+    await expect(backend.list(`${absolute}/`)).rejects.toThrow(/absolute/);
+    await expect(backend.head(absolute)).rejects.toThrow(/absolute/);
+  });
+
+  // chmod 000 does not restrict root, so this test cannot force EACCES there.
+  (runningAsRoot ? it.skip : it)(
+    'reports an unreadable directory as unavailable, not as a missing object',
+    async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'localback-unreadable-'));
+      const backend = new LocalBackend(1, root);
+      await backend.put('secret/DEMO.LHA', Buffer.from('payload'));
+
+      const secretDir = path.join(root, 'secret');
+      fs.chmodSync(secretDir, 0o000);
+      try {
+        await expect(backend.head('secret/DEMO.LHA')).rejects.toBeInstanceOf(StorageUnavailableError);
+        await expect(backend.get('secret/DEMO.LHA')).rejects.toBeInstanceOf(StorageUnavailableError);
+      } finally {
+        fs.chmodSync(secretDir, 0o700);
+      }
+    }
+  );
+
+  it('lists recursively, matching FakeBackend key-for-key on a two-level tree', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'localback-recursive-'));
+    const local = new LocalBackend(1, root);
+    const fake = new FakeBackend({ driveNumber: 1 });
+
+    const files: Record<string, string> = {
+      'Conf1/Files/DEMO.LHA': 'a',
+      'Conf1/Files/sub/NESTED.LHA': 'bb',
+      'Conf1/Files/OTHER.LHA': 'ccc',
+      'Conf1/Bulletins/BULL1.TXT': 'dddd',
+    };
+    for (const [key, content] of Object.entries(files)) {
+      await local.put(key, Buffer.from(content));
+      await fake.put(key, Buffer.from(content));
+    }
+
+    const localKeys = (await local.list('Conf1/Files/')).map((o) => o.key).sort();
+    const fakeKeys = (await fake.list('Conf1/Files/')).map((o) => o.key).sort();
+
+    expect(localKeys).toEqual(fakeKeys);
+    expect(localKeys).toEqual([
+      'Conf1/Files/DEMO.LHA',
+      'Conf1/Files/OTHER.LHA',
+      'Conf1/Files/sub/NESTED.LHA',
+    ]);
   });
 });
 
@@ -49,5 +120,60 @@ describe('FakeBackend', () => {
     await fake.put('a', Buffer.from('x'));
     fake.down = true;
     await expect(fake.get('a')).rejects.toThrow(/unavailable/i);
+  });
+
+  it('fails every call while gone', async () => {
+    const fake = new FakeBackend({ driveNumber: 2 });
+    fake.gone = true;
+    await expect(fake.get('a')).rejects.toThrow(/gone/i);
+  });
+
+  it('fails every call while rate limited', async () => {
+    const fake = new FakeBackend({ driveNumber: 2 });
+    fake.rateLimited = true;
+    await expect(fake.get('a')).rejects.toThrow(/rate limited/i);
+  });
+
+  it('refuses a call once the request budget is exhausted', async () => {
+    const fake = new FakeBackend({ driveNumber: 2, requestBudget: 2 });
+    await fake.put('a', Buffer.from('x')); // request 1
+    await fake.get('a'); // request 2
+    await expect(fake.get('a')).rejects.toBeInstanceOf(StorageUnavailableError); // request 3, over budget
+  });
+
+  it('counts a failed attempt against a down volume, not just successful ones', async () => {
+    const fake = new FakeBackend({ driveNumber: 2 });
+    fake.down = true;
+    await expect(fake.get('a')).rejects.toBeInstanceOf(StorageUnavailableError);
+    await expect(fake.get('a')).rejects.toBeInstanceOf(StorageUnavailableError);
+    await expect(fake.get('a')).rejects.toBeInstanceOf(StorageUnavailableError);
+    expect(fake.requests).toBe(3);
+  });
+
+  it('does not double-charge quota when overwriting an existing key', async () => {
+    const fake = new FakeBackend({ driveNumber: 2, quotaBytes: 5 });
+    await fake.put('a', Buffer.alloc(5));
+    await expect(fake.put('a', Buffer.alloc(5))).resolves.toBeUndefined();
+  });
+
+  it('tracks egress bytes on get', async () => {
+    const fake = new FakeBackend({ driveNumber: 2 });
+    await fake.put('a', Buffer.from('hello'));
+    await fake.get('a');
+    expect(fake.egressBytes).toBe(5);
+  });
+
+  it('counts head calls', async () => {
+    const fake = new FakeBackend({ driveNumber: 2 });
+    await fake.put('a', Buffer.from('x'));
+    await fake.head('a');
+    expect(fake.heads).toBe(1);
+  });
+
+  it('counts list calls', async () => {
+    const fake = new FakeBackend({ driveNumber: 2 });
+    await fake.put('a', Buffer.from('x'));
+    await fake.list('');
+    expect(fake.lists).toBe(1);
   });
 });

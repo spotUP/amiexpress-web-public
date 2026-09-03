@@ -35,11 +35,21 @@ export class FakeBackend implements StorageBackend {
     return total;
   }
 
+  /**
+   * Charges one request against the meter, then applies faults and the
+   * budget - in that order.
+   *
+   * The attempt is counted first, before any throw: a caller retrying
+   * against a down volume made three real requests and burned three
+   * requests against the budget, even though every one failed, so `requests`
+   * must show 3, not 0. Faults are checked before the budget so a volume
+   * that is down reports as down, not as merely out of requests.
+   */
   private charge(): void {
+    this.requests++;
     if (this.gone) throw new StorageUnavailableError(this.driveNumber, 'volume is gone');
     if (this.down) throw new StorageUnavailableError(this.driveNumber, 'volume is unavailable');
     if (this.rateLimited) throw new StorageUnavailableError(this.driveNumber, 'volume is rate limited');
-    this.requests++;
     if (this.requestBudget !== undefined && this.requests > this.requestBudget) {
       throw new StorageUnavailableError(this.driveNumber, 'request budget exhausted');
     }
@@ -63,7 +73,13 @@ export class FakeBackend implements StorageBackend {
 
   async put(key: string, body: Buffer): Promise<void> {
     this.charge();
-    if (this.quotaBytes !== undefined && this.usedBytes + body.length > this.quotaBytes) {
+    // Overwriting an existing key replaces it rather than adding to it, so
+    // the size it is about to stop occupying must be credited back before
+    // the quota check - otherwise re-uploading the same key twice charges
+    // it once for real and once as a phantom, which a real bucket never
+    // does.
+    const replaced = this.objects.get(key)?.length ?? 0;
+    if (this.quotaBytes !== undefined && this.usedBytes - replaced + body.length > this.quotaBytes) {
       throw new StorageQuotaError(this.driveNumber, 'quota exceeded');
     }
     this.puts++;
