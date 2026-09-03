@@ -66,6 +66,7 @@ import { executeDoor, setHelpers } from '../../../src/handlers/door.handler';
 import { doorDropFileManager } from '../../../src/services/DoorDropFileManager';
 import { parseInfoFile } from '../../../src/utils/info-file.util';
 import { loadCommandFromInfo } from '../../../src/utils/amiga-command-parser.util';
+import { ADAPTED_DOOR_TYPES } from '../../../src/utils/door-min-columns.util';
 import { config } from '../../../src/config';
 import { LoggedOnSubState } from '../../../src/constants/bbs-states';
 import type { Door } from '../../../src/types';
@@ -152,7 +153,23 @@ describe('Task 6 adapted doors are 40-ok on disk and launch on a C64', () => {
  * and they wait on the C64 file-view design - and so is E (5D-EnterMsg), a
  * full-screen 78-column ANSI editor that wants its own layout.
  */
-const C64_MARKED = ['WHO', 'RTW', 'S', 'WHAT', 'B', 'J', 'DOORREPO'];
+/**
+ * DERIVED from the adapter corpus manifest, never hand-maintained - the same
+ * source `tests/doors/door-min-columns-dispatch.test.ts` reads, and the same
+ * file each batch of marks updates. A door may claim C64_ADAPT only if it also
+ * ships a capture; the drift guard below then makes the board and the manifest
+ * agree in both directions, so a mark with no proof behind it, and a proof with
+ * no mark in front of it, are both red.
+ */
+const MANIFEST: Record<string, { installed?: string | string[] }> = JSON.parse(
+  fs.readFileSync(
+    path.resolve(__dirname, '../../../../../sdk/tests/petscii/frame/fixtures/manifest.json'),
+    'utf8',
+  ),
+);
+const C64_MARKED = Object.values(MANIFEST).flatMap((e) =>
+  e.installed === undefined ? [] : Array.isArray(e.installed) ? e.installed : [e.installed],
+);
 
 describe('C64_ADAPT doors are marked on disk and open through the DOORS-menu route', () => {
   let root: string;
@@ -203,7 +220,7 @@ describe('C64_ADAPT doors are marked on disk and open through the DOORS-menu rou
     expect(toolTypesFromDisk(command).C64_ADAPT).toBe('40');
     // A TS door paints its own blessed screen and never crosses the adapter's
     // seam, so the claim is only meaningful on a 68K type.
-    expect(definitionFromDisk(command).type).toBe('XIM');
+    expect(ADAPTED_DOOR_TYPES.has(definitionFromDisk(command).type)).toBe(true);
   });
 
   /**
@@ -220,7 +237,9 @@ describe('C64_ADAPT doors are marked on disk and open through the DOORS-menu rou
         try { return definitionFromDisk(command).toolTypes?.['C64_ADAPT'] !== undefined; }
         catch { return false; }
       });
-    expect(onDisk.map((c) => c.toUpperCase()).sort()).toEqual([...C64_MARKED].sort());
+    // Uppercased on both sides: `ulist.info` answers to the command ULIST.
+    expect(onDisk.map((c) => c.toUpperCase()).sort())
+      .toEqual(C64_MARKED.map((c) => c.toUpperCase()).sort());
   });
 
   it.each(C64_MARKED)('a C64 session opens %s and the adapter is on the wire inside the run', async (command) => {

@@ -37,18 +37,19 @@ interface ManifestEntry {
   /** Corpus capture fixtures (`<id>.ans`) only: the commit the door binaries were taken from. */
   binariesFrom?: string;
   /**
-   * INSTALLED capture fixtures (`<id>.ans`) only: the `Commands/BBSCmd/<CMD>.info`
-   * this capture's door is registered under, and which must carry `C64_ADAPT=40`.
+   * The `Commands/BBSCmd/<CMD>.info` registrations this fixture is the PROOF
+   * for - one command, or several when one binary is registered more than
+   * once (`Doors/RTW/RTW` answers to both RTW and WHO). Every command named
+   * here must carry `C64_ADAPT=40` in its real bytes, and its binary must be
+   * on disk.
    *
-   * A third provenance class, added 2026-09-03. The eight `binariesFrom`
-   * captures are of doors that LEFT the tree at `1cdddac24`; these are of doors
-   * that are installed and reachable RIGHT NOW, so the fixture can make the
-   * stronger claim the others cannot: the binary is still on disk, and the
-   * command is still marked. If a sysop unmarks the door or moves the binary,
-   * this fixture goes red rather than quietly describing a door nobody can
-   * reach.
+   * This field is the single source the launch suites derive their marked-door
+   * lists from, so a `.info` cannot be marked without a capture behind it and
+   * a capture cannot claim a door that is not marked. Absent on the eight
+   * `binariesFrom` captures, whose doors LEFT the tree at `1cdddac24` and
+   * survive only as fixtures.
    */
-  installed?: string;
+  installed?: string | string[];
   /**
    * Golden fixtures (`<id>.txt`) only. A door-corpus integration golden is
    * 8-bit door output with the ESC sequences already stripped, so it is read
@@ -67,6 +68,10 @@ interface ManifestEntry {
   notes: string;
 }
 const manifest: Record<string, ManifestEntry> = JSON.parse(fs.readFileSync(path.join(DIR, 'manifest.json'), 'utf8'));
+
+/** The registrations a fixture is the proof for, always as a list. */
+const installedOf = (e: ManifestEntry): string[] =>
+  e.installed === undefined ? [] : Array.isArray(e.installed) ? e.installed : [e.installed];
 
 /** A door-corpus integration golden (latin1 `<id>.txt`) rather than a harness capture (utf8 `<id>.ans`). */
 const isGolden = (e: ManifestEntry) => e.encoding === 'latin1';
@@ -169,33 +174,50 @@ for (const [id, entry] of Object.entries(manifest)) {
         expect({ id, same: fs.readFileSync(src).equals(raw) }).toEqual({ id, same: true });
         expect(entry.harness).toContain('door-corpus/run.ts --capture');
       } else if (entry.installed) {
-        // An INSTALLED capture: the door is on the board today. Assert what
-        // that makes assertable - the binary is still there, and the command
-        // still claims C64_ADAPT=40 - instead of a commit the binaries came
-        // from, which for these is meaningless.
-        expect(entry.harness).toContain('--doortype XIM');
+        // An INSTALLED capture: the door is on the board today.
+        // NOT `--doortype XIM`: these cover four adapter types (XIM, DD, FIM
+        // and SIM all reach executeAmigaDoor, which is where the adapter
+        // installs), so what is asserted is that the line names a type at all
+        // and drives one of the commands this entry claims.
+        expect(entry.harness).toContain('run-amiga-door.ts');
+        expect(entry.harness).toContain('--doortype ');
+        expect(entry.harness).toContain(`--command ${installedOf(entry)[0]}`);
         expect(entry.cwd).toEqual('web/backend');
-        const repo = path.resolve(__dirname, '../../../..');
-        const binary = path.join(repo, entry.binary);
-        expect({ id, binary: entry.binary, exists: fs.existsSync(binary) })
-          .toEqual({ id, binary: entry.binary, exists: true });
-        const infoPath = path.join(repo, 'Commands/BBSCmd', `${entry.installed}.info`);
-        expect({ id, info: entry.installed, exists: fs.existsSync(infoPath) })
-          .toEqual({ id, info: entry.installed, exists: true });
-        // Read the tooltype out of the real bytes. The .info files on this
-        // board come in two shapes - Amiga icon binaries and plain text - and
-        // both put the tooltype on its own `KEY=VALUE` run, so a latin1 scan
-        // for the exact assignment answers for either without dragging the
-        // backend's parser into an SDK test.
-        const infoBytes = fs.readFileSync(infoPath).toString('latin1');
-        expect({ id, info: entry.installed, marked: /(^|[^A-Z_])C64_ADAPT=40(\0|\n|\r|$)/.test(infoBytes) })
-          .toEqual({ id, info: entry.installed, marked: true });
       } else {
         expect(entry.harness).toContain('--doortype XIM');
         expect(entry.harness).toContain('--timeout 25');
         expect({ cwd: entry.cwd, from: entry.binariesFrom }).toEqual({ cwd: 'web/backend', from: '1cdddac24^' });
       }
     });
+
+    /**
+     * The two halves of a mark, checked against the REAL bytes: the door this
+     * fixture was captured from is still on disk, and every registration the
+     * fixture claims still declares C64_ADAPT=40. Runs for goldens as well as
+     * captures - `rtw` is a golden and it is the proof for two registrations.
+     */
+    (installedOf(entry).length > 0 ? it : it.skip)(
+      'is the proof for registrations that exist, are marked, and still have their binary',
+      () => {
+        const repo = path.resolve(__dirname, '../../../..');
+        const binary = path.join(repo, entry.binary);
+        expect({ id, binary: entry.binary, exists: fs.existsSync(binary) })
+          .toEqual({ id, binary: entry.binary, exists: true });
+        for (const command of installedOf(entry)) {
+          const infoPath = path.join(repo, 'Commands/BBSCmd', `${command}.info`);
+          expect({ id, command, exists: fs.existsSync(infoPath) })
+            .toEqual({ id, command, exists: true });
+          // Read the tooltype out of the real bytes. The .info files on this
+          // board come in two shapes - Amiga icon binaries and plain text -
+          // and both put the tooltype on its own `KEY=VALUE` run, so a latin1
+          // scan for the exact assignment answers for either without dragging
+          // the backend's parser into an SDK test.
+          const infoBytes = fs.readFileSync(infoPath).toString('latin1');
+          expect({ id, command, marked: /(^|[^A-Z_])C64_ADAPT=40(\0|\n|\r|$)/.test(infoBytes) })
+            .toEqual({ id, command, marked: true });
+        }
+      },
+    );
 
     it('is a real capture: raw ANSI with content', () => {
       expect(ansi.length).toBeGreaterThan(150);
@@ -325,6 +347,19 @@ const EXPECTED_ROWS: Record<string, number> = {
   b: 30,
   j: 27,
   doorrepo: 26,
+  // Batch 2, 2026-09-03. Five of these fit a C64 screen with rows to spare
+  // (`mrcstat1` and `chat` need no reduction at all); the three that come out
+  // over 25 do so by REFLOW, not by losing anything - `wall`'s comment stream
+  // simply occupies more rows at 40 than at 80.
+  size: 26,
+  ulist: 26,
+  wall: 40,
+  chat: 27,
+  mrcstat1: 25,
+  pager5d: 25,
+  dtagwall: 29,
+  avhbc: 25,
+  hackcheck: 26,
 };
 
 function lastFrameOf(id: string): Frame {

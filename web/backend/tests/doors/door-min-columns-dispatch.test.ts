@@ -435,26 +435,34 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
    * commands share its executable - the GWall case below), it is just no
    * longer the case that this particular door has one of each.
    *
-   * F, FR and N (AquaScan) are deliberately NOT here: their records lose
+   * F, FR and N (AquaScan) are deliberately absent: their records lose
    * filenames and sizes to `narrow` at 40, and they wait on the C64 file-view
-   * design rather than on a mark. E (5D-EnterMsg) is not here either - it is a
+   * design rather than on a mark. E (5D-EnterMsg) is absent too - it is a
    * full-screen 78-column ANSI editor and wants its own 40-column layout.
+   * Neither has a fixture, which is now the mechanism that keeps them out.
+   *
+   * DERIVED, never hand-maintained: the marked doors ARE the adapter corpus's
+   * `installed` fixtures, read out of the same manifest the batches update.
+   *
+   * A hand-written literal here rots the first time a batch lands - and worse,
+   * it lets a `.info` be marked with no capture behind it. Reading the
+   * manifest makes the two impossible to separate: a door may claim
+   * C64_ADAPT only if it also ships a fixture (which the SDK corpus then
+   * measures, pins an EXPECTED_ROWS row count for, and drives through the
+   * transducer onto the KERNAL oracle), and every such fixture is dispatched
+   * for real below. `binary` is the executable the capture was taken from,
+   * which is the same LOCATION the registration points at.
    */
-  const MARKED: Array<[string, string]> = [
-    ['WHO', 'Doors/RTW/RTW'],
-    ['RTW', 'Doors/RTW/RTW'],
-    ['S', 'Doors/ustats/stats'],
-    ['WHAT', 'Doors/What/What'],
-    // Marked 2026-09-03 after their real 40-column captures were measured
-    // (.superpowers/sdd/2026-09-03-c64-door-marks/progress.md, and the three
-    // captures are corpus fixtures `b`, `j`, `doorrepo`). B and J are also
-    // INTERNAL command names, which is precisely why this suite wires
-    // setCommandExecutionDependencies below: without it the BbsCommand branch
-    // falls through to the internal handler and the door is never reached.
-    ['B', 'Doors/EmP_Tools/Bulls'],
-    ['J', 'Doors/emp_tools/Joincnf'],
-    ['DOORREPO', 'Doors/DoorRepo/doorrepo.amiga'],
-  ];
+  const MANIFEST: Record<string, { binary: string; installed?: string | string[] }> = JSON.parse(
+    fs.readFileSync(
+      path.resolve(__dirname, '../../../../sdk/tests/petscii/frame/fixtures/manifest.json'),
+      'utf8',
+    ),
+  );
+  const MARKED: Array<[string, string]> = Object.values(MANIFEST).flatMap((e) =>
+    (e.installed === undefined ? [] : Array.isArray(e.installed) ? e.installed : [e.installed])
+      .map((command) => [command, e.binary] as [string, string]),
+  );
   /**
    * An unmarked TYPE=XIM registration, for the default-closed half: a 68K
    * door that declared nothing is refused at 40 no matter what its
@@ -529,17 +537,23 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
   it.each(MARKED)('%s.info carries C64_ADAPT=40 in its real bytes', (command) => {
     const def = definitionFromDisk(command);
     expect(def.toolTypes?.['C64_ADAPT']).toBe('40');
-    // ...and the 68K type that makes the claim meaningful (a TS door paints
-    // its own screen and would never cross the adapter's seam).
-    expect(def.type).toBe('XIM');
+    // ...and a type that makes the claim meaningful. Not literally 'XIM': the
+    // marked set spans XIM, DD (DayDream) and FIM (FAME), which all reach
+    // executeAmigaDoor and therefore the adapter's seam. A TS door paints its
+    // own blessed screen and would never cross it.
+    const { ADAPTED_DOOR_TYPES } = require('../../src/utils/door-min-columns.util');
+    expect(ADAPTED_DOOR_TYPES.has(def.type)).toBe(true);
   });
 
   it('nothing else in Commands/BBSCmd claims C64_ADAPT', () => {
-    const marked = MARKED.map(([c]) => c);
+    // Uppercased on both sides: the command a registration answers to is the
+    // uppercased filename (or its BBSCMD tooltype), so `ulist.info` IS the
+    // ULIST in this list and must not read as an unlisted extra.
+    const marked = MARKED.map(([c]) => c.toUpperCase());
     const others = fs
       .readdirSync(BBSCMD)
       .filter((f) => f.endsWith('.info'))
-      .filter((f) => !marked.includes(f.slice(0, -'.info'.length)))
+      .filter((f) => !marked.includes(f.slice(0, -'.info'.length).toUpperCase()))
       .filter((f) => {
         const def = (() => {
           try { return definitionFromDisk(f.slice(0, -'.info'.length)); } catch { return null; }
@@ -549,6 +563,31 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
     expect(others).toEqual([]);
   });
 
+  /**
+   * A registration carrying PASSWORD does not reach the door on the first
+   * Enter: `executeBbsCommand` parks it and prompts (express.e:4716-4730), and
+   * `handleCommandPasswordInput` runs it once the password is right.
+   *
+   * No marked door carries one today - NUKE did, and was unmarked because its
+   * `.info` is gitignored (it holds the door's password), so a mark on it
+   * could never be committed. The two-step route stays wired here because the
+   * next passworded door to be marked must be dispatched the way a caller
+   * really reaches it, not skipped.
+   */
+  function passwordOf(command: string): string | undefined {
+    return definitionFromDisk(command).password;
+  }
+
+  /** The real Enter route, both shapes: straight through, or via the password prompt. */
+  async function enter(socket: any, session: any, command: string) {
+    await handleCommand(socket as any, session, '');
+    const password = passwordOf(command);
+    if (password) {
+      const { handleCommandPasswordInput } = require('../../src/handlers/command-execution.handler');
+      await handleCommandPasswordInput(socket as any, session, password);
+    }
+  }
+
   it.each(MARKED)(
     'a C64 session reaches %s through the real Enter dispatch, with the adapter on the wire',
     async (command, location) => {
@@ -557,7 +596,7 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
       const originalEmit = socket.emit;
       const { c64AdapterFor } = require('../../src/server/c64-door-adapter');
 
-      await handleCommand(socket as any, sysopC64(command), '');
+      await enter(socket, sysopC64(command), command);
 
       // The gate let it in and the launch proceeded...
       expect(allOutput(socket)).not.toContain('THIS DOOR NEEDS');
@@ -583,8 +622,8 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
       const originalEmit = socket.emit;
       const { c64AdapterFor } = require('../../src/server/c64-door-adapter');
 
-      await handleCommand(
-        socket as any,
+      await enter(
+        socket,
         {
           ...sysopC64(command),
           petsciiMode: false,
@@ -592,7 +631,7 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
           screenWidth: 80,
           screenHeight: 24,
         },
-        '',
+        command,
       );
 
       expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(1);
