@@ -46,6 +46,9 @@ import { SoloBroadcast } from './network/solo-broadcast';
 import { LeaderboardScreen } from './ui/leaderboard-screen';
 import { PanelsScreen, type HeldInput, type PanelsResult } from './ui/panels-screen';
 import { loadShippedPuzzles, PuzzleGame } from './core/panels/puzzle';
+import { PanelReplayRecorder, loadReplayV3 } from './core/panels/replay-recorder';
+import { stackForReplay } from './core/panels/replay';
+import { PanelReplayStore, type StoredReplay } from './server/panel-replay-store';
 import {
   buildStages, StageClearGame, stageStackOptions, bossHealth, type Stage,
 } from './core/panels/stage-clear';
@@ -285,6 +288,8 @@ export class GrandmasterApp {
   private inputManager: DoorInputManager;
   private sounds: SoundEngine;
   private highScores: HighScoreManager;
+  /** TETRIS ATTACK replays, in panel-attack's own format. */
+  private panelReplays: PanelReplayStore;
   private network: GrandmasterNetworkManager | null = null;
   private attackManager: AttackManager | null = null;
   private multiplayerServer: MultiplayerServer;
@@ -336,6 +341,7 @@ export class GrandmasterApp {
     this.loadSettings();  // Load per-user settings from disk
     this.sounds = new SoundEngine(session);
     this.highScores = new HighScoreManager();
+    this.panelReplays = new PanelReplayStore();
     this.multiplayerServer = new MultiplayerServer();
 
     this.screen = this.createScreen();
@@ -1320,6 +1326,13 @@ export class GrandmasterApp {
       raise: isDown(['r', 'x']),
     });
 
+    if (mode === 'replays') {
+      await this.runReplayBrowser(sheet, readInput);
+      this.screen.removeListener('keypress', onKeypress);
+      this.currentScreen = 'menu';
+      return;
+    }
+
     if (mode === 'stageclear') {
       await this.runStageClear(sheet, readInput);
       this.screen.removeListener('keypress', onKeypress);
@@ -1353,6 +1366,19 @@ export class GrandmasterApp {
 
     if (versusOpponent && versusOpponent instanceof PanelStack) versusOpponent.startingState();
 
+    // Solo games are recorded in panel-attack's own format, so a caller can
+    // watch their game back here and open the same file in Panel Attack.
+    const recorder = versusOpponent ? undefined : new PanelReplayRecorder({
+      engineVersion: stack.engineVersion,
+      seed,
+      levelData: stack.levelData,
+      behaviours: stack.behaviours,
+      mode: mode === 'timeattack' ? 'timeattack' : 'endless',
+      playerName: this.state.playerName,
+      doCountdown: true,
+      shockEnabled: true,
+    });
+
     const panels = versusOpponent
       ? new PanelsVersusScreen({
         screen: this.screen,
@@ -1371,6 +1397,7 @@ export class GrandmasterApp {
         sheet,
         sounds: this.sounds,
         readInput,
+        recorder,
       });
 
     const onEscape = () => panels.quit();
@@ -1387,6 +1414,11 @@ export class GrandmasterApp {
         const beatTheOpponent = 'playerWon' in outcome ? outcome.playerWon : undefined;
         const result = buildPanelsResult(stack, mode, 'tetris_attack', beatTheOpponent);
         this.highScores.addScore(this.state.playerName, result);
+      }
+      // A replay is worth nothing beside the game it came from, so this is
+      // best-effort: the store swallows a write it cannot make.
+      if (recorder && recorder.frames > 0) {
+        this.panelReplays.save(recorder.fileName(finished), recorder.toReplayV3(finished));
       }
     } finally {
       this.screen.removeListener('keypress', onKeypress);
@@ -1577,6 +1609,130 @@ export class GrandmasterApp {
     return outcome.playerWon;
   }
 
+  /**
+   * Watch a game back.
+   *
+   * Playback is the ordinary screen with the inputs already in the stack's
+   * buffer: the engine is deterministic, so running it forward IS the replay.
+   * Nothing renders differently, because nothing about it is different.
+   */
+  private async runReplayBrowser(
+    sheet: Record<string, Sprite>,
+    readInput: () => HeldInput,
+  ): Promise<void> {
+    const replays = this.panelReplays.list();
+    if (replays.length === 0) {
+      await this.showPanelNotice('No replays yet. Play a game and it will be here.');
+      return;
+    }
+
+    const chosen = await this.chooseReplay(replays);
+    if (chosen === null) return;
+
+    const json = this.panelReplays.load(replays[chosen].id);
+    if (!json) {
+      await this.showPanelNotice('That replay could not be read.');
+      return;
+    }
+
+    const stack = stackForReplay(loadReplayV3(json));
+    const panels = new PanelsScreen({
+      screen: this.screen,
+      stack,
+      sheet,
+      sounds: this.sounds,
+      readInput,
+      playback: true,
+    });
+
+    const onEscape = () => panels.quit();
+    this.screen.key(['escape', 'q', 'Q'], onEscape);
+    try {
+      await panels.run();
+    } finally {
+      this.screen.unkey(['escape', 'q', 'Q'], onEscape);
+    }
+  }
+
+  /** Pick a replay to watch. */
+  private async chooseReplay(replays: StoredReplay[]): Promise<number | null> {
+    const labels = replays.map((replay) => {
+      const seconds = Math.round(replay.duration / 60);
+      const when = new Date(replay.timestamp * 1000).toISOString().slice(0, 16).replace('T', ' ');
+      const state = replay.completed ? '' : '  (unfinished)';
+      return `${when}  ${replay.playerName.padEnd(10, ' ')} ${replay.mode.padEnd(10, ' ')}`
+        + ` ${String(seconds).padStart(4, ' ')}s${state}`;
+    });
+    labels.push('Back');
+
+    return new Promise<number | null>((resolve) => {
+      const box = createBox({
+        parent: this.screen,
+        top: 'center',
+        left: 'center',
+        width: 60,
+        height: 18,
+        label: ' REPLAYS ',
+        tags: true,
+        style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+      });
+
+      const list = createList({
+        parent: box,
+        top: 1,
+        left: 1,
+        width: 56,
+        height: 14,
+        keys: true,
+        vi: true,
+        mouse: true,
+        tags: true,
+        items: labels,
+        style: { fg: 'white', bg: 'black', selected: { fg: 'black', bg: 'magenta' } },
+      });
+
+      const done = (choice: number | null) => {
+        box.destroy();
+        this.screen.render();
+        resolve(choice);
+      };
+
+      list.on('select', (_item: unknown, index: number) => {
+        done(index < replays.length ? index : null);
+      });
+      list.key(['escape', 'q', 'Q'], () => done(null));
+
+      list.focus();
+      this.screen.render();
+    });
+  }
+
+  /** A one-line message with a key to dismiss it. */
+  private async showPanelNotice(message: string): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const box = createBox({
+        parent: this.screen,
+        top: 'center',
+        left: 'center',
+        width: Math.min(this.screen.width - 4, message.length + 6),
+        height: 5,
+        label: ' TETRIS ATTACK ',
+        tags: true,
+        content: `\n {white-fg}${message}{/white-fg}`,
+        style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+      });
+      this.screen.render();
+
+      const dismiss = () => {
+        this.screen.unkey(['escape', 'q', 'Q', 'enter', 'space'], dismiss);
+        box.destroy();
+        this.screen.render();
+        resolve();
+      };
+      this.screen.key(['escape', 'q', 'Q', 'enter', 'space'], dismiss);
+    });
+  }
+
   /** Which puzzle set to work through. */
   private async choosePuzzleSet(
     sets: Array<{ name: string; puzzles: unknown[] }>,
@@ -1638,10 +1794,12 @@ export class GrandmasterApp {
       'CHALLENGE    the stage ladder, eight difficulties',
       'PUZZLE       235 arrangements, one right answer each',
       'STAGE CLEAR  thirty stages and two fights with Bowser',
+      'REPLAYS      watch a game back',
       'Back',
     ];
     const modes: (PanelsMode | null)[] = [
-      'endless', 'timeattack', 'vscpu', 'challenge', 'puzzle', 'stageclear', null,
+      'endless', 'timeattack', 'vscpu', 'challenge', 'puzzle', 'stageclear',
+      'replays', null,
     ];
 
     return new Promise<PanelsMode | null>((resolve) => {
@@ -1650,7 +1808,7 @@ export class GrandmasterApp {
         top: 'center',
         left: 'center',
         width: 56,
-        height: 13,
+        height: 14,
         label: ' TETRIS ATTACK ',
         tags: true,
         style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
@@ -1661,7 +1819,7 @@ export class GrandmasterApp {
         top: 1,
         left: 1,
         width: 52,
-        height: 8,
+        height: 9,
         keys: true,
         vi: true,
         mouse: true,

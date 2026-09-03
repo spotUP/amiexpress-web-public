@@ -75,6 +75,22 @@ export interface PanelsScreenOptions {
   onStep?: () => void;
   /** Is the mode finished? Asked alongside the board's own end conditions. */
   isOver?: () => boolean;
+  /**
+   * Records the game as it is played, one character per frame.
+   *
+   * Given the input the engine was ACTUALLY fed, at the point it is fed, so a
+   * replay cannot drift from the game it claims to be - there is no second
+   * path that could disagree.
+   */
+  recorder?: { record(inputCharacter: string): void };
+  /**
+   * Watching rather than playing.
+   *
+   * A replay's inputs are already in the stack's buffer, so the screen must
+   * not add the watcher's keypresses on top - that would append live input to
+   * a recorded game and play a third thing that never happened.
+   */
+  playback?: boolean;
   sheet: Record<string, Sprite>;
   sounds?: SoundEngine;
   /** Read the currently held keys. Called once per engine frame. */
@@ -100,6 +116,8 @@ export class PanelsScreen {
   private readonly soloStack?: Stack;
   private readonly onStep?: () => void;
   private readonly isOver?: () => boolean;
+  private readonly recorder?: { record(inputCharacter: string): void };
+  private readonly playback: boolean;
   private readonly sheet: Record<string, Sprite>;
   private readonly sounds?: SoundEngine;
   private readonly readInput: () => HeldInput;
@@ -133,6 +151,8 @@ export class PanelsScreen {
     this.soloStack = options.stack;
     this.onStep = options.onStep;
     this.isOver = options.isOver;
+    this.recorder = options.recorder;
+    this.playback = options.playback ?? false;
     if (!this.puzzle && !this.soloStack) {
       throw new Error('PanelsScreen needs either a stack or a puzzle');
     }
@@ -250,15 +270,20 @@ export class PanelsScreen {
 
         while (this.frameAccumulator >= FRAME_TIME) {
           this.frameAccumulator -= FRAME_TIME;
-          const input = this.inputCharacter();
-          if (this.puzzle) {
-            this.puzzle.receiveInput(input);
-            this.puzzle.run();
+          if (this.playback) {
+            this.stack.run();
           } else {
-            this.stack.receiveConfirmedInput(input);
-            // A mode that owns the frame steps the board itself.
-            if (this.onStep) this.onStep();
-            else this.stack.run();
+            const input = this.inputCharacter();
+            this.recorder?.record(input);
+            if (this.puzzle) {
+              this.puzzle.receiveInput(input);
+              this.puzzle.run();
+            } else {
+              this.stack.receiveConfirmedInput(input);
+              // A mode that owns the frame steps the board itself.
+              if (this.onStep) this.onStep();
+              else this.stack.run();
+            }
           }
         }
 

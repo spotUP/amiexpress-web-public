@@ -61,6 +61,9 @@ const solo_broadcast_1 = require("./network/solo-broadcast");
 const leaderboard_screen_1 = require("./ui/leaderboard-screen");
 const panels_screen_1 = require("./ui/panels-screen");
 const puzzle_1 = require("./core/panels/puzzle");
+const replay_recorder_1 = require("./core/panels/replay-recorder");
+const replay_1 = require("./core/panels/replay");
+const panel_replay_store_1 = require("./server/panel-replay-store");
 const stage_clear_1 = require("./core/panels/stage-clear");
 const stack_1 = require("./core/panels/stack");
 const generator_source_1 = require("./core/panels/generator-source");
@@ -326,6 +329,7 @@ class GrandmasterApp {
         this.loadSettings(); // Load per-user settings from disk
         this.sounds = new sounds_1.SoundEngine(session);
         this.highScores = new high_scores_1.HighScoreManager();
+        this.panelReplays = new panel_replay_store_1.PanelReplayStore();
         this.multiplayerServer = new multiplayer_server_1.MultiplayerServer();
         this.screen = this.createScreen();
         // Create input manager for centralized state management
@@ -1163,6 +1167,12 @@ class GrandmasterApp {
             swap: isDown(['space', 'z']),
             raise: isDown(['r', 'x']),
         });
+        if (mode === 'replays') {
+            await this.runReplayBrowser(sheet, readInput);
+            this.screen.removeListener('keypress', onKeypress);
+            this.currentScreen = 'menu';
+            return;
+        }
         if (mode === 'stageclear') {
             await this.runStageClear(sheet, readInput);
             this.screen.removeListener('keypress', onKeypress);
@@ -1193,6 +1203,18 @@ class GrandmasterApp {
                 : null;
         if (versusOpponent && versusOpponent instanceof stack_1.Stack)
             versusOpponent.startingState();
+        // Solo games are recorded in panel-attack's own format, so a caller can
+        // watch their game back here and open the same file in Panel Attack.
+        const recorder = versusOpponent ? undefined : new replay_recorder_1.PanelReplayRecorder({
+            engineVersion: stack.engineVersion,
+            seed,
+            levelData: stack.levelData,
+            behaviours: stack.behaviours,
+            mode: mode === 'timeattack' ? 'timeattack' : 'endless',
+            playerName: this.state.playerName,
+            doCountdown: true,
+            shockEnabled: true,
+        });
         const panels = versusOpponent
             ? new panels_versus_screen_1.PanelsVersusScreen({
                 screen: this.screen,
@@ -1211,6 +1233,7 @@ class GrandmasterApp {
                 sheet,
                 sounds: this.sounds,
                 readInput,
+                recorder,
             });
         const onEscape = () => panels.quit();
         this.screen.key(['escape', 'q', 'Q'], onEscape);
@@ -1224,6 +1247,11 @@ class GrandmasterApp {
                 const beatTheOpponent = 'playerWon' in outcome ? outcome.playerWon : undefined;
                 const result = (0, score_report_1.buildPanelsResult)(stack, mode, 'tetris_attack', beatTheOpponent);
                 this.highScores.addScore(this.state.playerName, result);
+            }
+            // A replay is worth nothing beside the game it came from, so this is
+            // best-effort: the store swallows a write it cannot make.
+            if (recorder && recorder.frames > 0) {
+                this.panelReplays.save(recorder.fileName(finished), recorder.toReplayV3(finished));
             }
         }
         finally {
@@ -1381,6 +1409,116 @@ class GrandmasterApp {
             return null;
         return outcome.playerWon;
     }
+    /**
+     * Watch a game back.
+     *
+     * Playback is the ordinary screen with the inputs already in the stack's
+     * buffer: the engine is deterministic, so running it forward IS the replay.
+     * Nothing renders differently, because nothing about it is different.
+     */
+    async runReplayBrowser(sheet, readInput) {
+        const replays = this.panelReplays.list();
+        if (replays.length === 0) {
+            await this.showPanelNotice('No replays yet. Play a game and it will be here.');
+            return;
+        }
+        const chosen = await this.chooseReplay(replays);
+        if (chosen === null)
+            return;
+        const json = this.panelReplays.load(replays[chosen].id);
+        if (!json) {
+            await this.showPanelNotice('That replay could not be read.');
+            return;
+        }
+        const stack = (0, replay_1.stackForReplay)((0, replay_recorder_1.loadReplayV3)(json));
+        const panels = new panels_screen_1.PanelsScreen({
+            screen: this.screen,
+            stack,
+            sheet,
+            sounds: this.sounds,
+            readInput,
+            playback: true,
+        });
+        const onEscape = () => panels.quit();
+        this.screen.key(['escape', 'q', 'Q'], onEscape);
+        try {
+            await panels.run();
+        }
+        finally {
+            this.screen.unkey(['escape', 'q', 'Q'], onEscape);
+        }
+    }
+    /** Pick a replay to watch. */
+    async chooseReplay(replays) {
+        const labels = replays.map((replay) => {
+            const seconds = Math.round(replay.duration / 60);
+            const when = new Date(replay.timestamp * 1000).toISOString().slice(0, 16).replace('T', ' ');
+            const state = replay.completed ? '' : '  (unfinished)';
+            return `${when}  ${replay.playerName.padEnd(10, ' ')} ${replay.mode.padEnd(10, ' ')}`
+                + ` ${String(seconds).padStart(4, ' ')}s${state}`;
+        });
+        labels.push('Back');
+        return new Promise((resolve) => {
+            const box = (0, blessed_helpers_1.createBox)({
+                parent: this.screen,
+                top: 'center',
+                left: 'center',
+                width: 60,
+                height: 18,
+                label: ' REPLAYS ',
+                tags: true,
+                style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+            });
+            const list = (0, blessed_helpers_1.createList)({
+                parent: box,
+                top: 1,
+                left: 1,
+                width: 56,
+                height: 14,
+                keys: true,
+                vi: true,
+                mouse: true,
+                tags: true,
+                items: labels,
+                style: { fg: 'white', bg: 'black', selected: { fg: 'black', bg: 'magenta' } },
+            });
+            const done = (choice) => {
+                box.destroy();
+                this.screen.render();
+                resolve(choice);
+            };
+            list.on('select', (_item, index) => {
+                done(index < replays.length ? index : null);
+            });
+            list.key(['escape', 'q', 'Q'], () => done(null));
+            list.focus();
+            this.screen.render();
+        });
+    }
+    /** A one-line message with a key to dismiss it. */
+    async showPanelNotice(message) {
+        return new Promise((resolve) => {
+            const box = (0, blessed_helpers_1.createBox)({
+                parent: this.screen,
+                top: 'center',
+                left: 'center',
+                width: Math.min(this.screen.width - 4, message.length + 6),
+                height: 5,
+                label: ' TETRIS ATTACK ',
+                tags: true,
+                content: `\n {white-fg}${message}{/white-fg}`,
+                style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+            });
+            this.screen.render();
+            const dismiss = () => {
+                this.screen.unkey(['escape', 'q', 'Q', 'enter', 'space'], dismiss);
+                box.destroy();
+                this.screen.render();
+                resolve();
+            };
+            this.screen.key(['escape', 'q', 'Q', 'enter', 'space'], dismiss);
+        });
+    }
     /** Which puzzle set to work through. */
     async choosePuzzleSet(sets) {
         // The shipped set names are translation keys; the readable part is the tail.
@@ -1434,10 +1572,12 @@ class GrandmasterApp {
             'CHALLENGE    the stage ladder, eight difficulties',
             'PUZZLE       235 arrangements, one right answer each',
             'STAGE CLEAR  thirty stages and two fights with Bowser',
+            'REPLAYS      watch a game back',
             'Back',
         ];
         const modes = [
-            'endless', 'timeattack', 'vscpu', 'challenge', 'puzzle', 'stageclear', null,
+            'endless', 'timeattack', 'vscpu', 'challenge', 'puzzle', 'stageclear',
+            'replays', null,
         ];
         return new Promise((resolve) => {
             const box = (0, blessed_helpers_1.createBox)({
@@ -1445,7 +1585,7 @@ class GrandmasterApp {
                 top: 'center',
                 left: 'center',
                 width: 56,
-                height: 13,
+                height: 14,
                 label: ' TETRIS ATTACK ',
                 tags: true,
                 style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
@@ -1455,7 +1595,7 @@ class GrandmasterApp {
                 top: 1,
                 left: 1,
                 width: 52,
-                height: 8,
+                height: 9,
                 keys: true,
                 vi: true,
                 mouse: true,

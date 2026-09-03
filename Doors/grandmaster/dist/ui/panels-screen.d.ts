@@ -56,6 +56,24 @@ export interface PanelsScreenOptions {
     onStep?: () => void;
     /** Is the mode finished? Asked alongside the board's own end conditions. */
     isOver?: () => boolean;
+    /**
+     * Records the game as it is played, one character per frame.
+     *
+     * Given the input the engine was ACTUALLY fed, at the point it is fed, so a
+     * replay cannot drift from the game it claims to be - there is no second
+     * path that could disagree.
+     */
+    recorder?: {
+        record(inputCharacter: string): void;
+    };
+    /**
+     * Watching rather than playing.
+     *
+     * A replay's inputs are already in the stack's buffer, so the screen must
+     * not add the watcher's keypresses on top - that would append live input to
+     * a recorded game and play a third thing that never happened.
+     */
+    playback?: boolean;
     sheet: Record<string, Sprite>;
     sounds?: SoundEngine;
     /** Read the currently held keys. Called once per engine frame. */
@@ -79,6 +97,8 @@ export declare class PanelsScreen {
     private readonly soloStack?;
     private readonly onStep?;
     private readonly isOver?;
+    private readonly recorder?;
+    private readonly playback;
     private readonly sheet;
     private readonly sounds?;
     private readonly readInput;

@@ -61,6 +61,8 @@ class PanelsScreen {
         this.soloStack = options.stack;
         this.onStep = options.onStep;
         this.isOver = options.isOver;
+        this.recorder = options.recorder;
+        this.playback = options.playback ?? false;
         if (!this.puzzle && !this.soloStack) {
             throw new Error('PanelsScreen needs either a stack or a puzzle');
         }
@@ -164,18 +166,24 @@ class PanelsScreen {
                 }
                 while (this.frameAccumulator >= FRAME_TIME) {
                     this.frameAccumulator -= FRAME_TIME;
-                    const input = this.inputCharacter();
-                    if (this.puzzle) {
-                        this.puzzle.receiveInput(input);
-                        this.puzzle.run();
+                    if (this.playback) {
+                        this.stack.run();
                     }
                     else {
-                        this.stack.receiveConfirmedInput(input);
-                        // A mode that owns the frame steps the board itself.
-                        if (this.onStep)
-                            this.onStep();
-                        else
-                            this.stack.run();
+                        const input = this.inputCharacter();
+                        this.recorder?.record(input);
+                        if (this.puzzle) {
+                            this.puzzle.receiveInput(input);
+                            this.puzzle.run();
+                        }
+                        else {
+                            this.stack.receiveConfirmedInput(input);
+                            // A mode that owns the frame steps the board itself.
+                            if (this.onStep)
+                                this.onStep();
+                            else
+                                this.stack.run();
+                        }
                     }
                 }
                 const puzzleOver = this.puzzle ? this.puzzle.result() !== 'playing' : false;

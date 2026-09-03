@@ -17,7 +17,7 @@ import type { Stack } from './stack';
 
 /** Which panel mode produced this result. */
 export type PanelsMode =
-  'endless' | 'timeattack' | 'vscpu' | 'challenge' | 'puzzle' | 'stageclear';
+  'endless' | 'timeattack' | 'vscpu' | 'challenge' | 'puzzle' | 'stageclear' | 'replays';
 
 /**
  * The score a panel game reports.

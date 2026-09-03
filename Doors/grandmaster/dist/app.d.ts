@@ -59,6 +59,8 @@ export declare class GrandmasterApp {
     private inputManager;
     private sounds;
     private highScores;
+    /** TETRIS ATTACK replays, in panel-attack's own format. */
+    private panelReplays;
     private network;
     private attackManager;
     private multiplayerServer;
@@ -219,6 +221,18 @@ export declare class GrandmasterApp {
     private playStage;
     /** A fight with Bowser: the versus screen against a health model. */
     private playBowser;
+    /**
+     * Watch a game back.
+     *
+     * Playback is the ordinary screen with the inputs already in the stack's
+     * buffer: the engine is deterministic, so running it forward IS the replay.
+     * Nothing renders differently, because nothing about it is different.
+     */
+    private runReplayBrowser;
+    /** Pick a replay to watch. */
+    private chooseReplay;
+    /** A one-line message with a key to dismiss it. */
+    private showPanelNotice;
     /** Which puzzle set to work through. */
     private choosePuzzleSet;
     private chooseTetrisAttackMode;
