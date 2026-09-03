@@ -34,6 +34,7 @@ import type { Socket } from 'socket.io';
 // audio; stub it so the suite exercises the door, not the tracker.
 jest.mock('tone', () => ({}), { virtual: true });
 
+import { createBBSApi } from '../../src/doors/BBSApi';
 import door from '../../../../Doors/phreakwars/server';
 
 interface RunningDoor {
@@ -42,10 +43,14 @@ interface RunningDoor {
   /** Deliver one keystroke the way socket-handlers.ts:779 does. */
   press: (key: string) => Promise<void>;
   /** The session object the backend owns; the handler hangs off it. */
-  session: { nodeId: number; doorInputHandler?: ((input: string) => void) | null };
+  session: {
+    nodeId: number;
+    screenWidth: number;
+    screenHeight: number;
+    doorInputHandler?: ((input: string) => void) | null;
+  };
   /** Resolves when `Door.execute()` returns, i.e. the door has left. */
   finished: Promise<void>;
-  disconnect: () => void;
 }
 
 /**
@@ -55,7 +60,6 @@ interface RunningDoor {
  */
 function launch(userId: string, columns = 40): RunningDoor {
   const chunks: string[] = [];
-  const disconnectHandlers: Array<() => void> = [];
   const socket = {
     id: `phreakwars-${userId}`,
     connected: true,
@@ -64,14 +68,15 @@ function launch(userId: string, columns = 40): RunningDoor {
       return true;
     },
     on: () => socket,
-    once: (event: string, handler: () => void) => {
-      if (event === 'disconnect') disconnectHandlers.push(handler);
-      return socket;
-    },
+    once: () => socket,
     off: () => socket,
     removeListener: () => socket,
   };
-  const session: RunningDoor['session'] = { nodeId: 1 };
+  // ONE session object: the BBSApi line reader installs its handler on the
+  // same property the door's input loop and both live routers use, so a copy
+  // here would hide every hand-off between them.
+  const session: RunningDoor['session'] = { nodeId: 1, screenWidth: columns, screenHeight: 25 };
+  const bbsApi = createBBSApi(socket as unknown as Socket, session as never);
   const finished = door.execute({
     socket: socket as unknown as Socket,
     bbsSession: session,
@@ -84,7 +89,10 @@ function launch(userId: string, columns = 40): RunningDoor {
       downloads: 0,
     },
     params: [],
-    bbs: { getTerminalSize: () => ({ width: columns, height: 25 }) },
+    // The REAL BBSApi the backend hands every TypeScript door
+    // (handlers/door.handler.ts:2297). The free-text fields are read with its
+    // getLine, so a stub here would test the stub.
+    bbs: bbsApi,
   });
 
   return {
@@ -97,7 +105,6 @@ function launch(userId: string, columns = 40): RunningDoor {
     },
     session,
     finished,
-    disconnect: () => disconnectHandlers.forEach((h) => h()),
   };
 }
 
@@ -105,6 +112,15 @@ function launch(userId: string, columns = 40): RunningDoor {
 async function settle(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
   await new Promise<void>((resolve) => setImmediate(resolve));
+}
+
+/**
+ * Type a free-text field the way a caller does - one keystroke at a time.
+ * The SDK line reader appends single key presses only, so a whole string
+ * handed over in one event is not a shortcut for this.
+ */
+async function type(run: RunningDoor, text: string): Promise<void> {
+  for (const ch of text) await run.press(ch);
 }
 
 describe("a caller's keystroke reaches PHREAKWARS while it is running", () => {
@@ -115,8 +131,9 @@ describe("a caller's keystroke reaches PHREAKWARS while it is running", () => {
     expect(run.output().length).toBeGreaterThan(0); // it painted
     expect(typeof run.session.doorInputHandler).toBe('function'); // ...and can be typed into
 
-    run.disconnect();
-    await run.finished;
+    // Left running on purpose: the door is sitting at the handle prompt, and
+    // the quit path has its own test below. Nothing is scheduled while it
+    // waits - the handler is the only thing holding it.
   });
 
   it('answers a keystroke: the handle typed at character creation is echoed back', async () => {
@@ -124,7 +141,8 @@ describe("a caller's keystroke reaches PHREAKWARS while it is running", () => {
     await settle();
 
     const before = run.output().length;
-    await run.press('ZEROCOOL');
+    await type(run, 'ZEROCOOL');
+    await run.press('\r');
 
     const after = run.output();
     expect(after.length).toBeGreaterThan(before);
@@ -136,20 +154,43 @@ describe("a caller's keystroke reaches PHREAKWARS while it is running", () => {
     await settle();
 
     expect(typeof run.session.doorInputHandler).toBe('function');
-    await run.press('ACIDBURN');
+    await type(run, 'ACIDBURN');
+    await run.press('\r');
     expect(run.output()).toContain('Welcome, ACIDBURN!');
+  });
+
+  it('typing a handle letter by letter echoes and submits on Enter, not per key', async () => {
+    const run = launch('input-5');
+    await settle();
+
+    // What the screen gains from each individual keystroke.
+    const echoed: string[] = [];
+    for (const ch of ['s', 'p', 'o', 't']) {
+      const before = run.output().length;
+      await run.press(ch);
+      echoed.push(run.output().slice(before));
+    }
+
+    // A free-text field is a LINE: each key echoes itself and nothing else.
+    // Validating per keystroke is what produced the sysop's report - the
+    // first 's' was judged as the whole handle and refused.
+    expect(echoed).toEqual(['s', 'p', 'o', 't']);
+    expect(run.output()).not.toContain('Handle must be 3-15 characters long');
+
+    await run.press('\r');
+    expect(run.output()).toContain('Welcome, spot!');
   });
 
   it('quitting ends the door: Q, then the "press any key to exit" key, and execute() returns', async () => {
     const run = launch('input-4');
     await settle();
 
-    await run.press('CRASHOVERRIDE');   // character creation -> main menu
-    await run.press('\r');              // main menu redraw
-    await run.press('Q');               // farewell + "Press any key to exit..."
+    await type(run, 'CRASHOVERRIDE');  // the handle, letter by letter
+    await run.press('\r');             // Enter submits it -> main menu
+    await run.press('Q');              // farewell + "Press any key to exit..."
     expect(run.output()).toContain('Thanks for playing Phreak Wars!');
 
-    await run.press(' ');               // the any-key that actually exits
+    await run.press(' ');              // the any-key that actually exits
     await expect(run.finished).resolves.toBeUndefined();
     expect(run.session.doorInputHandler).toBeNull();
   });

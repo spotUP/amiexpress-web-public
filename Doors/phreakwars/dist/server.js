@@ -18,7 +18,7 @@ export const metadata = {
 };
 import { gameStates, createNewGameState, checkAndResetDailyLimits } from './lib/player';
 import { displayMainMenu, titleBox, stateWidth, say } from './lib/ui';
-import { handleMainMenu, handleCharacterCreation, handlePhreaking, handleBBSExploration, handleProgramming, handleTrading, handleRomance, handleMultiplayer, handleUpgrades, handlePostingSubject, handlePostingBody, handleMessageChoice, handleWaiting, handleStatsMenu, handleDeleteConfirmation } from './lib/handlers';
+import { handleMainMenu, askForHandle, handlePhreaking, handleBBSExploration, handleProgramming, handleTrading, handleRomance, handleMultiplayer, handleUpgrades, handleMessageChoice, handleWaiting, handleStatsMenu, handleDeleteConfirmation } from './lib/handlers';
 import { handleTextMinigame } from './lib/minigames';
 /**
  * Main door class
@@ -55,8 +55,10 @@ door.onStart(async (ctx) => {
             say(socket, gameState, row);
         say(socket, gameState, '\r\n');
         say(socket, gameState, '\x1b[36mWelcome to the underground world of 1980s phone phreaking!\x1b[0m\r\n\r\n');
-        say(socket, gameState, '\x1b[33mEnter your hacker handle:\x1b[0m ');
-        gameState.currentMode = 'character_creation';
+        // A LINE, read here in onStart. The reader installs its own keystroke
+        // handler for the duration (lib/prompt.ts), so it composes with the input
+        // loop installed after this handler returns rather than competing with it.
+        await askForHandle(ctx, socket, gameState);
     }
     else {
         // Existing player - show main menu
@@ -91,9 +93,6 @@ door.onInput(async (ctx, key) => {
             case 'main_menu':
                 handleMainMenu(socket, gameState, input);
                 break;
-            case 'character_creation':
-                handleCharacterCreation(socket, gameState, data);
-                break;
             case 'phreaking':
                 handlePhreaking(socket, gameState, input);
                 break;
@@ -115,14 +114,8 @@ door.onInput(async (ctx, key) => {
             case 'upgrades':
                 handleUpgrades(socket, gameState, input);
                 break;
-            case 'posting_subject':
-                handlePostingSubject(socket, gameState, data);
-                break;
-            case 'posting_body':
-                handlePostingBody(socket, gameState, data);
-                break;
             case 'message_choice':
-                handleMessageChoice(socket, gameState, input);
+                await handleMessageChoice(ctx, socket, gameState, input);
                 break;
             case 'waiting':
                 handleWaiting(socket, gameState, input);
@@ -130,9 +123,15 @@ door.onInput(async (ctx, key) => {
             case 'stats_menu':
                 handleStatsMenu(socket, gameState, input);
                 break;
-            case 'delete_confirmation':
-                handleDeleteConfirmation(socket, gameState, input, ctx.rawSession || ctx);
+            case 'delete_confirmation': {
+                const replacement = await handleDeleteConfirmation(ctx, socket, gameState, input, String(ctx.user?.id ?? '0'));
+                // A deleted player is replaced by a fresh state, and the context has
+                // to point at the new one or every later keystroke edits the state
+                // that was just thrown away.
+                if (replacement)
+                    ctx.gameState = replacement;
                 break;
+            }
             case 'text_minigame':
                 handleTextMinigame(socket, gameState, input);
                 break;

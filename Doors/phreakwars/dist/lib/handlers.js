@@ -3,9 +3,15 @@
  *
  * All input handling logic for game modes.
  */
+import { readLine } from './prompt';
 import { displayMainMenu, displayPhreakingMenu, displayProgrammingMenu, displayTradingMenu, displayRomanceMenu, displayMultiplayerMenu, displayUpgradesMenu, displayBBSExploration, displayStats, displayHelp, say, } from './ui';
 import { startTextMinigame } from './minigames';
 import { checkDailyLimit, deletePlayer, displayDailyLimits } from './player';
+/** Length caps the SDK line reader enforces as the player types. */
+const HANDLE_MIN = 3;
+const HANDLE_MAX = 15;
+const SUBJECT_MAX = 50;
+const BODY_LINE_MAX = 255;
 // Shadow message templates
 export const shadowMessageTemplates = [
     {
@@ -98,15 +104,19 @@ export function handleMainMenu(socket, gameState, input) {
     }
 }
 /**
- * Handle character creation
+ * Ask for the hacker handle and keep asking until one is accepted.
+ *
+ * A LINE, not a keystroke: the SDK reader echoes what the player types and
+ * returns on Enter, so the 3-15 rule judges the finished handle instead of the
+ * first letter of it.
  */
-export function handleCharacterCreation(socket, gameState, data) {
-    if (!gameState.player.handle) {
-        const handle = data.trim();
-        if (handle.length < 3 || handle.length > 15) {
+export async function askForHandle(ctx, socket, gameState) {
+    for (;;) {
+        say(socket, gameState, '\x1b[33mEnter your hacker handle:\x1b[0m ');
+        const handle = (await readLine(ctx, HANDLE_MAX)).trim();
+        if (handle.length < HANDLE_MIN) {
             say(socket, gameState, '\r\n\x1b[31mHandle must be 3-15 characters long.\x1b[0m\r\n');
-            say(socket, gameState, '\x1b[33mEnter your hacker handle:\x1b[0m ');
-            return;
+            continue;
         }
         gameState.player.handle = handle;
         say(socket, gameState, `\r\n\x1b[32mWelcome, ${handle}!\x1b[0m\r\n\r\n`);
@@ -114,6 +124,7 @@ export function handleCharacterCreation(socket, gameState, data) {
         say(socket, gameState, '\x1b[36mYour journey from novice to master hacker begins now...\x1b[0m\r\n\r\n');
         say(socket, gameState, '\x1b[32mPress any key to start...\x1b[0m');
         gameState.currentMode = 'main_menu';
+        return;
     }
 }
 /**
@@ -346,16 +357,14 @@ export function displayMessageChoiceMenu(socket, gameState) {
 /**
  * Handle message choice input
  */
-export function handleMessageChoice(socket, gameState, input) {
+export async function handleMessageChoice(ctx, socket, gameState, input) {
     if (input === 'B') {
         displayBBSExploration(socket, gameState);
         return;
     }
     if (input === 'C') {
-        say(socket, gameState, '\r\n\x1b[36m-= CUSTOM MESSAGE =-\x1b[0m\r\n\r\n');
-        say(socket, gameState, '\x1b[33mEnter subject:\x1b[0m ');
-        gameState.currentMode = 'posting_subject';
         gameState.previousMode = 'message_choice';
+        await askForPost(ctx, socket, gameState);
         return;
     }
     const choice = parseInt(input) - 1;
@@ -387,37 +396,39 @@ export function handleMessageChoice(socket, gameState, input) {
     gameState.currentMode = 'waiting';
 }
 /**
- * Handle posting subject input
+ * Write a message: a subject line, then body lines until /END.
+ *
+ * Both are free text, so both are read with the SDK line reader. The old
+ * per-keystroke handlers judged the first letter of the subject as the whole
+ * subject and appended every single keystroke to the body as its own line.
  */
-export function handlePostingSubject(socket, gameState, data) {
-    const subject = data.trim();
-    if (subject.length === 0) {
+export async function askForPost(ctx, socket, gameState) {
+    say(socket, gameState, '\r\n\x1b[36m-= CUSTOM MESSAGE =-\x1b[0m\r\n\r\n');
+    let subject = '';
+    for (;;) {
+        say(socket, gameState, '\x1b[33mEnter subject:\x1b[0m ');
+        // The reader itself stops at SUBJECT_MAX, so "too long" is unreachable
+        // now; empty is the only subject left to refuse.
+        subject = (await readLine(ctx, SUBJECT_MAX)).trim();
+        if (subject.length > 0)
+            break;
         say(socket, gameState, '\r\n\x1b[31mSubject cannot be empty.\x1b[0m\r\n');
-        say(socket, gameState, '\x1b[33mEnter subject:\x1b[0m ');
-        return;
-    }
-    if (subject.length > 50) {
-        say(socket, gameState, '\r\n\x1b[31mSubject too long (max 50 characters).\x1b[0m\r\n');
-        say(socket, gameState, '\x1b[33mEnter subject:\x1b[0m ');
-        return;
     }
     gameState.postingSubject = subject;
     say(socket, gameState, `\r\n\x1b[32mSubject: "${subject}"\x1b[0m\r\n`);
     say(socket, gameState, '\x1b[33mEnter message body (end with /END on a new line):\x1b[0m\r\n');
-    gameState.currentMode = 'posting_body';
     gameState.inputBuffer = '';
-}
-/**
- * Handle posting body input
- */
-export function handlePostingBody(socket, gameState, data) {
-    if (data.trim().toUpperCase() === '/END') {
-        const subject = gameState.postingSubject;
+    for (;;) {
+        const line = await readLine(ctx, BODY_LINE_MAX);
+        if (line.trim().toUpperCase() !== '/END') {
+            gameState.inputBuffer += line + '\n';
+            continue;
+        }
         const body = gameState.inputBuffer.trim();
         if (body.length === 0) {
             say(socket, gameState, '\r\n\x1b[31mMessage body cannot be empty.\x1b[0m\r\n');
             say(socket, gameState, '\x1b[33mEnter message body (end with /END on a new line):\x1b[0m\r\n');
-            return;
+            continue;
         }
         gameState.dailyLimits.posts++;
         gameState.bbs.messages.push({
@@ -431,9 +442,7 @@ export function handlePostingBody(socket, gameState, data) {
         gameState.inputBuffer = '';
         say(socket, gameState, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
         gameState.currentMode = 'waiting';
-    }
-    else {
-        gameState.inputBuffer += data + '\n';
+        return;
     }
 }
 /**
@@ -503,25 +512,32 @@ export function handleStatsMenu(socket, gameState, input) {
 /**
  * Handle delete confirmation
  */
-export function handleDeleteConfirmation(socket, gameState, input, session) {
+export async function handleDeleteConfirmation(ctx, socket, gameState, input, userId) {
     switch (input) {
-        case 'Y':
-            const userId = String(session.user.id);
+        case 'Y': {
             const newGameState = deletePlayer(userId);
+            // The width was measured once, at door start; the replacement state has
+            // to inherit it or the new player is laid out for 80 columns.
+            newGameState.terminalWidth = gameState.terminalWidth;
             say(socket, gameState, '\r\n\x1b[32mPlayer deleted successfully!\x1b[0m\r\n');
             say(socket, gameState, '\x1b[32mCreating new player...\x1b[0m\r\n\r\n');
-            say(socket, gameState, '\x1b[33mEnter your hacker handle:\x1b[0m ');
-            newGameState.currentMode = 'character_creation';
-            session.tempData.gameState = newGameState;
-            return;
+            await askForHandle(ctx, socket, newGameState);
+            // Returned rather than written through a session object: the caller
+            // holds the live state on the door context, and the old code's
+            // `session.tempData.gameState = ...` wrote to a property that does not
+            // exist on a DoorContext - it threw, and the delete landed in the
+            // door's error handler instead of creating the new player.
+            return newGameState;
+        }
         case 'N':
             say(socket, gameState, '\r\n\x1b[32mPlayer deletion cancelled.\x1b[0m\r\n');
             displayStats(socket, gameState);
-            return;
+            return null;
         default:
             say(socket, gameState, '\r\n\x1b[31mInvalid choice.\x1b[0m\r\n');
             say(socket, gameState, '\x1b[33mChoice:\x1b[0m ');
             gameState.currentMode = 'delete_confirmation';
+            return null;
     }
 }
 /**

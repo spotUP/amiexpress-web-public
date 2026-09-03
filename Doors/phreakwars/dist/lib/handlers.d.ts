@@ -4,16 +4,7 @@
  * All input handling logic for game modes.
  */
 import { Socket } from 'socket.io';
-/** Minimal session interface for door operations */
-interface DoorSession {
-    user?: {
-        id: number;
-        username?: string;
-    };
-    tempData: {
-        gameState?: any;
-    };
-}
+import type { DoorContext } from '@amiexpress/bbs-door-sdk';
 import { PhreakWarsGameState } from './types';
 export declare const shadowMessageTemplates: {
     subject: string;
@@ -28,9 +19,13 @@ export declare const shadowMessageTemplates: {
  */
 export declare function handleMainMenu(socket: Socket, gameState: PhreakWarsGameState, input: string): void;
 /**
- * Handle character creation
+ * Ask for the hacker handle and keep asking until one is accepted.
+ *
+ * A LINE, not a keystroke: the SDK reader echoes what the player types and
+ * returns on Enter, so the 3-15 rule judges the finished handle instead of the
+ * first letter of it.
  */
-export declare function handleCharacterCreation(socket: Socket, gameState: PhreakWarsGameState, data: string): void;
+export declare function askForHandle(ctx: DoorContext, socket: Socket, gameState: PhreakWarsGameState): Promise<void>;
 /**
  * Handle phreaking input
  */
@@ -58,15 +53,15 @@ export declare function displayMessageChoiceMenu(socket: Socket, gameState: Phre
 /**
  * Handle message choice input
  */
-export declare function handleMessageChoice(socket: Socket, gameState: PhreakWarsGameState, input: string): void;
+export declare function handleMessageChoice(ctx: DoorContext, socket: Socket, gameState: PhreakWarsGameState, input: string): Promise<void>;
 /**
- * Handle posting subject input
+ * Write a message: a subject line, then body lines until /END.
+ *
+ * Both are free text, so both are read with the SDK line reader. The old
+ * per-keystroke handlers judged the first letter of the subject as the whole
+ * subject and appended every single keystroke to the body as its own line.
  */
-export declare function handlePostingSubject(socket: Socket, gameState: PhreakWarsGameState, data: string): void;
-/**
- * Handle posting body input
- */
-export declare function handlePostingBody(socket: Socket, gameState: PhreakWarsGameState, data: string): void;
+export declare function askForPost(ctx: DoorContext, socket: Socket, gameState: PhreakWarsGameState): Promise<void>;
 /**
  * Handle romance input
  */
@@ -82,9 +77,8 @@ export declare function handleStatsMenu(socket: Socket, gameState: PhreakWarsGam
 /**
  * Handle delete confirmation
  */
-export declare function handleDeleteConfirmation(socket: Socket, gameState: PhreakWarsGameState, input: string, session: DoorSession): void;
+export declare function handleDeleteConfirmation(ctx: DoorContext, socket: Socket, gameState: PhreakWarsGameState, input: string, userId: string): Promise<PhreakWarsGameState | null>;
 /**
  * Handle waiting mode (any key press continues)
  */
 export declare function handleWaiting(socket: Socket, gameState: PhreakWarsGameState, input: string): void;
-export {};
