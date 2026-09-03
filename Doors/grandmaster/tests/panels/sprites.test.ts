@@ -143,14 +143,21 @@ export async function theWideSheetDoesUseBackgrounds(): Promise<void> {
  * block and the two half blocks) and what Amiga ANSI art has always been made
  * of. Latin-1 punctuation is fine too; anything above that is not.
  */
-const AMIGA_SAFE = new Set([
-  // CP437 blocks and shades.
-  '█', '▓', '▒', '░', '▀', '▄', '▌', '▐',
-  // Quadrants, which the PETSCII table also maps.
-  '▚', '▞',
-  // Latin-1 and ASCII.
-  '·', '!', ' ',
-]);
+/** CP437's block elements, which the C64 sheet is drawn with. */
+const SAFE_BLOCKS = new Set(['█', '▓', '▒', '░', '▀', '▄', '▌', '▐', '▚', '▞']);
+
+/**
+ * Anything printable in ASCII, plus those blocks, plus the middle dot.
+ *
+ * The 80-column sheet is ASCII marks on a coloured ground - see the generator
+ * for why it is not blocks - and ASCII is the one thing every terminal that
+ * has ever called this board can draw.
+ */
+function amigaSafe(glyph: string): boolean {
+  if (SAFE_BLOCKS.has(glyph) || glyph === '·') return true;
+  const code = glyph.codePointAt(0) ?? 0;
+  return code >= 0x20 && code <= 0x7e;
+}
 
 /** Every glyph in one sprite file. */
 function glyphsOf(sprite: unknown): string[] {
@@ -179,7 +186,7 @@ export async function everySpriteGlyphExistsOnAnAmiga(): Promise<void> {
   for (const file of fs.readdirSync(directory).filter((n: string) => n.endsWith('.sprite.json'))) {
     const sprite = JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'));
     for (const glyph of glyphsOf(sprite)) {
-      if (!AMIGA_SAFE.has(glyph)) {
+      if (!amigaSafe(glyph)) {
         offenders.push(`${file}: ${glyph} (U+${glyph.codePointAt(0)?.toString(16).toUpperCase()})`);
       }
     }
@@ -191,7 +198,16 @@ export async function everySpriteGlyphExistsOnAnAmiga(): Promise<void> {
   );
 }
 
-/** Colour alone is not enough: no two panels may read alike in one colour. */
+/**
+ * No two panels may read alike.
+ *
+ * The signature is the whole cell - the glyph AND both colours - because the
+ * 80-column sheet draws every panel with the same character. It is a square
+ * pixel: an upper half block whose foreground is the top pixel and whose
+ * background is the bottom one, so what distinguishes two panels is the
+ * PATTERN of the four pixels and the two shades they are drawn in, not the
+ * glyph. Comparing glyphs alone would call all eight identical.
+ */
 export async function noTwoPanelsShareTheSameShape(): Promise<void> {
   const fs = require('fs');
   const path = require('path');
@@ -207,7 +223,7 @@ export async function noTwoPanelsShareTheSameShape(): Promise<void> {
       const sprite = JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'));
       // The normal state's two cells are what a player reads.
       const normal = sprite.animations?.normal?.frames?.[0]?.[0] ?? [];
-      const signature = normal.map((cell: unknown[]) => cell[0]).join('');
+      const signature = normal.map((cell: unknown[]) => cell.join(':')).join('|');
       const seen = shapes.get(signature);
       assert.strictEqual(
         seen, undefined,
@@ -216,5 +232,47 @@ export async function noTwoPanelsShareTheSameShape(): Promise<void> {
       shapes.set(signature, file);
     }
     assert.strictEqual(shapes.size, 8, `${variant}: eight distinct panels`);
+  }
+}
+
+/**
+ * A panel is FOUR SQUARE PIXELS and none of them is black.
+ *
+ * Two attempts got here. CP437 half blocks and shades paint the foreground
+ * over the ground, so half of every tile kept the ground colour - black, with
+ * a dark ink - and the board looked eaten into ("some blocks have black in
+ * them"). The answer was the one pengo and frogger already used: one
+ * character is an upper half block whose foreground is the top pixel and
+ * whose background is the bottom one, which makes a character cell two pixels
+ * that are each about square.
+ */
+export async function everyWidePanelIsFourSquarePixels(): Promise<void> {
+  const fs = require('fs');
+  const path = require('path');
+  const directory = path.join(__dirname, '..', '..', 'sprites');
+  const files = fs.readdirSync(directory)
+    .filter((n: string) => n.endsWith('.sprite.json') && !n.includes('-c64'));
+
+  assert.strictEqual(files.length, 8);
+
+  for (const file of files) {
+    const sprite = JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'));
+    for (const [name, animation] of Object.entries<any>(sprite.animations)) {
+      for (const frame of animation.frames) {
+        for (const row of frame) {
+          for (const cell of row) {
+            if (!cell) continue;
+            const [char, fg, bg] = cell;
+            assert.strictEqual(
+              char, '▀',
+              `${file} ${name}: a pixel pair is an upper half block, not "${char}"`,
+            );
+            // Black is the terminal showing through, not a colour a panel has.
+            assert.notStrictEqual(fg, 0, `${file} ${name}: a top pixel is black`);
+            assert.notStrictEqual(bg, 0, `${file} ${name}: a bottom pixel is black`);
+          }
+        }
+      }
+    }
   }
 }
