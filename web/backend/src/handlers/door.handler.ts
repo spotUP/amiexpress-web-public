@@ -6,7 +6,6 @@
  */
 
 import { spawn, fork } from 'child_process';
-import { hasBrowserClient } from '../services/key-event-capable';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
@@ -25,7 +24,8 @@ import { BBSState } from '../index';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.util';
-import { resolveDoorMinColumns, declaredMinColumns, resolveDoorAdaptColumns, doorOpensForC64, doorShowsC64Mark, ADAPTED_DOOR_TYPES, DEFAULT_MIN_COLUMNS, sessionColumns, DOOR_NEEDS_80_NOTICE } from '../utils/door-min-columns.util';
+import { resolveDoorMinColumns, declaredMinColumns, resolveDoorAdaptColumns, doorOpensForC64, doorShowsC64Mark, doorNeedsBrowser, type MinColumnsDoorShape, ADAPTED_DOOR_TYPES, DEFAULT_MIN_COLUMNS, sessionColumns, DOOR_NEEDS_80_NOTICE, DOOR_NEEDS_BROWSER_NOTICE, DOOR_NEEDS_BROWSER_MARK } from '../utils/door-min-columns.util';
+import { transportCapabilities } from '../server/transport-adapter';
 import { installC64DoorAdapter, uninstallC64DoorAdapter } from '../server/c64-door-adapter';
 import { isNarrow, NARROW_WIDTH, narrowClip } from '../utils/table-format.util';
 import { enableGameMode, disableGameMode } from '../server/socket-handlers';
@@ -546,6 +546,12 @@ export interface Door {
   // only in its installed 68K record would otherwise show the marker and then
   // be refused at the gate.
   c64Adapt?: number;
+  // CLIENT_ONLY resolved ONCE at registration, the same fold as the two above.
+  // True means "this door cannot run without a browser"; undefined means the
+  // registration declared nothing, which reads as "not browser-only" - a
+  // tooltype boolean states a restriction, never a permission, or every
+  // existing .info on every existing board would read it as off.
+  needsBrowser?: boolean;
 }
 
 interface DoorSession {
@@ -1248,6 +1254,25 @@ console.log(`[DOOR Command] Found door, executing via BBS command: ${doorCommand
     return;
   }
 
+  // Fold the manifest's `runtime` onto each entry, so the [WEB] marker reads
+  // ONE resolved value on the SAME object the gate will judge - the lesson the
+  // [40]/[C64] markers already carry in this file (initializeDoors resolves
+  // MIN_COLUMNS and C64_ADAPT once, for exactly this reason).
+  //
+  // Done ONLY for a caller with no browser, and that is the whole reason it is
+  // cheap and safe: a web caller reads no manifests here, so the web door list
+  // is byte-identical and not one extra file is opened for it. CLIENT_ONLY has
+  // already been resolved at registration and needs no disk read at all; the
+  // manifest is what registration cannot see.
+  if (!transportCapabilities(session).browser) {
+    const entries = allDoors as unknown as MinColumnsDoorShape[];
+    await Promise.all(entries.map(async (entry) => {
+      if (doorNeedsBrowser(entry, null)) { entry.needsBrowser = true; return; }
+      const manifest = await loadDoorManifestForExecution(entry as unknown as Door);
+      if (doorNeedsBrowser(entry, manifest)) entry.needsBrowser = true;
+    }));
+  }
+
   // Initialize door selection state
   session.tempData = {
     availableDoors: allDoors,
@@ -1268,6 +1293,11 @@ console.log(`[DOOR Command] Found door, executing via BBS command: ${doorCommand
  */
 function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean = false): void {
   const { availableDoors, selectedIndex, scrollOffset, previousSelectedIndex, previousScrollOffset } = session.tempData;
+
+  // Asked ONCE per paint, not once per row: the [WEB] marker is a property of
+  // the CALLER, and a per-row lookup is how a redraw could disagree with the
+  // initial draw.
+  const browserAbsent = !transportCapabilities(session).browser;
 
   // C64/40-col Task 5d: the chrome is drawn at the CALLER'S width, not a
   // hard-coded 80 - a 40-column masthead padded to 80 wraps into a second
@@ -1297,14 +1327,14 @@ function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean 
     if (prevLine >= 3 && prevLine < 3 + pageSize) {
       const prevDoor = availableDoors[previousSelectedIndex];
       emitText(socket, `\x1b[${prevLine};1H`);
-      emitText(socket, formatDoorLine(prevDoor, false, narrow));
+      emitText(socket, formatDoorLine(prevDoor, false, narrow, browserAbsent));
     }
 
     // Redraw new line (select)
     if (newLine >= 3 && newLine < 3 + pageSize) {
       const newDoor = availableDoors[selectedIndex];
       emitText(socket, `\x1b[${newLine};1H`);
-      emitText(socket, formatDoorLine(newDoor, true, narrow));
+      emitText(socket, formatDoorLine(newDoor, true, narrow, browserAbsent));
     }
 
     session.tempData.previousSelectedIndex = selectedIndex;
@@ -1316,7 +1346,7 @@ function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean 
   visibleDoors.forEach((door: any, index: number) => {
     const globalIndex = scrollOffset + index;
     const isSelected = globalIndex === selectedIndex;
-    emitText(socket, formatDoorLine(door, isSelected, narrow) + '\r\n');
+    emitText(socket, formatDoorLine(door, isSelected, narrow, browserAbsent) + '\r\n');
   });
 
   // Clear any remaining lines from previous page
@@ -1341,7 +1371,15 @@ function showDoorsList(socket: any, session: BBSSession, isInitialDraw: boolean 
 /** Name column of a narrow door row - see the arithmetic in formatDoorLine. */
 const NARROW_DOOR_NAME_COLUMNS = 24;
 
-export function formatDoorLine(door: any, isSelected: boolean, narrow: boolean = false): string {
+export function formatDoorLine(
+  door: any,
+  isSelected: boolean,
+  narrow: boolean = false,
+  /** The caller has no browser (telnet/SSH). Defaults false so every existing
+   *  caller - and every identity pin built on this function - renders exactly
+   *  the bytes it did before. */
+  browserAbsent: boolean = false,
+): string {
   // Get door type - handle both uppercase and lowercase variants
   const doorType = (door as any).doorType || door.type || 'AMI';
   const type = doorType === 'TS' || doorType === 'typescript' ? 'TS' :
@@ -1374,7 +1412,16 @@ export function formatDoorLine(door: any, isSelected: boolean, narrow: boolean =
   // predicate's door-side clauses (adaptable TYPE, a claim that parses and
   // reaches forty). A TS door tagged C64_ADAPT=40, or any door tagged
   // C64_ADAPT=64, used to be marked here and then refused at :1716.
-  const mark = fortyOk ? ' [40]' : (doorShowsC64Mark(door) ? ' [C64]' : '');
+  // [WEB] outranks both. A door the caller cannot open AT ALL is the more
+  // useful thing to say than how wide it is, and the marker promises exactly
+  // what the launch gate will do: doorNeedsBrowser() is the same predicate
+  // executeDoor asks, reading the same resolved `needsBrowser` on the same
+  // object (displayDoorMenu folds the manifest runtime onto it before the list
+  // is drawn), so a row can never be marked openable and then refused.
+  const needsBrowser = browserAbsent && doorNeedsBrowser(door, null);
+  const mark = needsBrowser
+    ? DOOR_NEEDS_BROWSER_MARK
+    : (fortyOk ? ' [40]' : (doorShowsC64Mark(door) ? ' [C64]' : ''));
   // Narrow row arithmetic, worst case (the widest type token is '[XIM]'):
   //   ' ' + '[XIM]'(5) + ' ' + command(8) + ' ' + name(24) = 40 columns,
   // which a CRLF-terminated row may use in full (see table-format.util.ts
@@ -1784,29 +1831,53 @@ console.log('Executing door:', door.name);
     // Check if this is a client door (needs to detect runtime from manifest)
     const doorManifest = await loadDoorManifestForExecution(door);
 
+    // What this caller's transport can actually do. ONE answer, read twice
+    // below - the gate and the hybrid clause must never disagree about whether
+    // a browser is present.
+    const callerCapabilities = transportCapabilities(session);
+
+    // TRANSPORT GATE, the browser cousin of the MIN_COLUMNS gate above, and
+    // deliberately the same shape: one predicate, one uppercase-ASCII notice,
+    // straight back to the menu - never a frozen screen.
+    //
+    // A client door's frames travel as `door:message:<id>`
+    // (doors/client-door-bridge.ts:426) and its bundle is fetched by the
+    // browser after `door:load-client` (executeClientDoor below) - on a byte
+    // transport the connection emitter renders neither, so the caller would sit
+    // in front of a frozen screen with a no-op doorInputHandler and a 30 s PING
+    // loop (client-door-bridge.ts:433-447) that nothing can stop. Refuse
+    // instead, and say why.
+    //
+    // It sits AFTER the manifest load because `runtime` is the primary source
+    // and is not known before it, and BEFORE executeClientDoor because a bridge
+    // session started here would have to be torn down again.
+    if (doorNeedsBrowser(door, doorManifest) && !callerCapabilities.browser) {
+      // emitPrompt is emitText(..., immediate), exactly as the MIN_COLUMNS
+      // notice above: the refusal must reach the caller before the menu
+      // repaints over it.
+      emitPrompt(socket, DOOR_NEEDS_BROWSER_NOTICE);
+      session.menuPause = false;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
     // Client-only doors: Just load the client bundle and return
     if (doorManifest && doorManifest.runtime === 'client') {
-      // A browser-only door has no server half to fall back on.
-      if (!hasBrowserClient(session)) {
-        socket.emit('ansi-output',
-          `\r\n{yellow}${door.name} needs the web terminal - it has no telnet half.{/}\r\n`
-            .replace(/\{[a-z/]+\}/g, ''));
-        return;
-      }
       await executeClientDoor(socket, session, door, doorManifest);
       return;
     }
 
-    // Hybrid doors: Load client bundle but ALSO continue to execute server part
+    // Hybrid doors: Load client bundle but ALSO continue to execute server part.
+    //
+    // `callerCapabilities.browser` is what makes the byte-transport caller fall
+    // THROUGH to the type switch below instead of returning: a hybrid without
+    // CLIENT_ONLY has a real server half (fourteen of the board's fifteen paint
+    // a usable blessed UI with no browser at all), and the `if
+    // (!hybridSessionId) return;` inside this block would otherwise abandon the
+    // launch the moment executeClientDoor was skipped. The gate above has
+    // already refused the hybrids that cannot stand alone.
     let hybridSessionId: string | null = null;
-    // Only a browser can run the client half. Starting it for a telnet or
-    // SSH caller registers a 'command' listener that swallows every
-    // keystroke and hands it to a client that will never answer - which is
-    // why every hybrid door took no input at all over telnet (sysop,
-    // 2026-09-02). The server half draws the terminal perfectly well on its
-    // own; it just never saw a key. What a telnet caller loses is the
-    // client's audio, which telnet could not have played anyway.
-    if (doorManifest && doorManifest.runtime === 'hybrid' && hasBrowserClient(session)) {
+    if (doorManifest && doorManifest.runtime === 'hybrid' && callerCapabilities.browser) {
 console.log(`[executeDoor] Hybrid door detected: ${door.name} - loading client AND server`);
       // Load client bundle and get session ID for RPC registration
       hybridSessionId = await executeClientDoor(socket, session, door, doorManifest);
@@ -4381,6 +4452,19 @@ console.warn(`[initializeDoors] installed-door scan unavailable for MIN_COLUMNS 
     });
     if (adapt !== null) {
       door.c64Adapt = adapt;
+    }
+
+    // And the same fold for CLIENT_ONLY, for the same reason: Enter
+    // re-dispatches by command name onto THIS object, which has no doorInfo, so
+    // a tooltype declared only in the installed record would mark one thing and
+    // gate another. Written only when the declaration exists, so "unclassified"
+    // stays visible as undefined - and unclassified here means "not
+    // browser-only", the safe direction for a flag that states a restriction.
+    if (doorNeedsBrowser({
+      toolTypes: cmdDef.toolTypes,
+      doorInfo: installedByCommand.get(door.command),
+    }, null)) {
+      door.needsBrowser = true;
     }
 
     bbsCmdDoors.push(door);

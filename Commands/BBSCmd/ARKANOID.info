@@ -5,3 +5,4 @@ DESCRIPTION=Classic Arkanoid/Breakout game with ANSI graphics
 MULTINODE=YES
 PRIORITY=SAME
 CATEGORY=Games/Arcade
+CLIENT_ONLY=YES
