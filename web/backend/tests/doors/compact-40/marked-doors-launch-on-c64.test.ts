@@ -1,15 +1,27 @@
 /**
- * The doors adapted in Task 6 are marked MIN_COLUMNS=40 IN THEIR REAL
- * Commands/BBSCmd/<CMD>.info BYTES, and a C64 session really launches them.
+ * BOTH marks, read out of the REAL Commands/BBSCmd/<CMD>.info BYTES, and a C64
+ * session really launching each door.
  *
  * This is deliberately not a source pin and not a fabricated tooltype map:
  * the .info file on disk is parsed by the same parser registration uses, the
  * resulting toolTypes go onto a Door, and the door goes through the REAL
  * executeDoor gate. createAllDropFiles is the "launch proceeded" sentinel,
  * exactly as in door-min-columns-gate.test.ts.
+ *
+ * TWO ENTRY POINTS, TWO FILES. A door is reached two ways in production, and
+ * they take different objects:
+ *  - by COMMAND NAME (`handleCommand` -> `executeDoor`), which is what Enter
+ *    on the menu does - proven in tests/doors/door-min-columns-dispatch.test.ts
+ *    against a Door built by `initializeDoors()`;
+ *  - by the DOORS-menu entry handed straight to `executeDoor`, which is this
+ *    file, against a Door carrying the .info's own toolTypes.
+ * The C64_ADAPT half below is the second route. It is not a copy of the first:
+ * the bug the two together rule out is a gate that agrees on one shape of Door
+ * and refuses the other.
  */
 import 'reflect-metadata';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 jest.mock('../../../src/index', () => ({
@@ -19,9 +31,42 @@ jest.mock('../../../src/index', () => ({
 jest.mock('../../../src/services/DoorDropFileManager');
 jest.mock('../../../src/services/CallersLogManager');
 
+/**
+ * The 68K runtime, replaced by a door that records what was installed on the
+ * socket WHILE it ran. Everything is uninstalled by the time executeDoor
+ * returns, so capturing from inside the run is the only way to prove the
+ * adapter was on the wire rather than merely constructed.
+ */
+const mockAdapterDuringRun: unknown[] = [];
+jest.mock('../../../src/amiga-emulation/AmigaDoorSession', () => ({
+  AmigaDoorSession: class {
+    private socket: any;
+    constructor(socket: any) { this.socket = socket; }
+    async start() {
+      const { c64AdapterFor } = require('../../../src/server/c64-door-adapter');
+      mockAdapterDuringRun.push(c64AdapterFor(this.socket));
+    }
+    getExitState() { return {}; }
+    isDoorRunning() { return false; }
+  },
+}));
+
+// executeAmigaDoor resolves the executable under amigaDoorManager.bbsRoot.
+const mockRootRef = { value: '' };
+jest.mock('../../../src/doors/amigaDoorManager', () => ({
+  getAmigaDoorManager: () => ({
+    bbsRoot: mockRootRef.value,
+    scanInstalledDoors: async () => [],
+    getCachedDoors: () => [],
+    isCachePopulated: () => true,
+  }),
+}));
+
 import { executeDoor, setHelpers } from '../../../src/handlers/door.handler';
 import { doorDropFileManager } from '../../../src/services/DoorDropFileManager';
 import { parseInfoFile } from '../../../src/utils/info-file.util';
+import { loadCommandFromInfo } from '../../../src/utils/amiga-command-parser.util';
+import { config } from '../../../src/config';
 import { LoggedOnSubState } from '../../../src/constants/bbs-states';
 import type { Door } from '../../../src/types';
 
@@ -91,5 +136,114 @@ describe('Task 6 adapted doors are 40-ok on disk and launch on a C64', () => {
     const out = socket.emitted.filter(e => e.event === 'ansi-output').map(e => e.data).join('');
     expect(out).not.toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');
     expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * The OTHER mark: `C64_ADAPT=40` on an installed 68K door, which opens it to a
+ * PETSCII caller through the frame adapter rather than by having been laid out
+ * at 40.
+ *
+ * WHO/RTW/S/WHAT landed with Phase 3; B, J and DOORREPO were added on
+ * 2026-09-03 after their real 40-column captures were measured (the captures
+ * are corpus fixtures `b`, `j` and `doorrepo`, and the verdicts are in
+ * `.superpowers/sdd/2026-09-03-c64-door-marks/progress.md`). F, FR and N
+ * (AquaScan) are deliberately absent - `narrow` eats their filenames and sizes,
+ * and they wait on the C64 file-view design - and so is E (5D-EnterMsg), a
+ * full-screen 78-column ANSI editor that wants its own layout.
+ */
+const C64_MARKED = ['WHO', 'RTW', 'S', 'WHAT', 'B', 'J', 'DOORREPO'];
+
+describe('C64_ADAPT doors are marked on disk and open through the DOORS-menu route', () => {
+  let root: string;
+  const realConfigGet = config.get.bind(config);
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'c64-marked-'));
+    mockRootRef.value = root;
+    jest.spyOn(config, 'get').mockImplementation((key: any) =>
+      key === 'dataDir' ? root : realConfigGet(key)
+    );
+    mockAdapterDuringRun.length = 0;
+    (doorDropFileManager.createAllDropFiles as jest.Mock).mockClear();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  /** The door's registration as the real parser reads it, straight off disk. */
+  function definitionFromDisk(command: string) {
+    const def = loadCommandFromInfo(path.join(BBSCMD, `${command}.info`));
+    if (!def) throw new Error(`Commands/BBSCmd/${command}.info did not parse`);
+    return def;
+  }
+
+  /**
+   * The Door the DOORS menu hands to executeDoor, built from the .info's own
+   * type and toolTypes - and the executable in place under the temp root,
+   * because executeAmigaDoor reaches the adapter install only after it has
+   * read the binary. Amiga hunk magic, so the native-GCC branch is not taken.
+   */
+  function doorFromDisk(command: string): Door {
+    const def = definitionFromDisk(command);
+    const full = path.join(root, ...def.location.split('/'));
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, Buffer.from([0x00, 0x00, 0x03, 0xf3]));
+    return {
+      id: command.toLowerCase(), name: command, description: '', command,
+      path: def.location, accessLevel: 0, enabled: true, type: def.type,
+      toolTypes: def.toolTypes,
+    } as unknown as Door;
+  }
+
+  it.each(C64_MARKED)('%s.info carries C64_ADAPT=40 and an adapter-eligible type', (command) => {
+    expect(fs.existsSync(path.join(BBSCMD, `${command}.info`))).toBe(true);
+    expect(toolTypesFromDisk(command).C64_ADAPT).toBe('40');
+    // A TS door paints its own blessed screen and never crosses the adapter's
+    // seam, so the claim is only meaningful on a 68K type.
+    expect(definitionFromDisk(command).type).toBe('XIM');
+  });
+
+  /**
+   * The list above and the board agree, in BOTH directions. Without this a
+   * door marked on disk and forgotten here would be silently untested, which
+   * is exactly how RTW spent Phase 3 marked in the docs and unmarked on disk.
+   */
+  it('is exactly the set of commands claiming C64_ADAPT on this board', () => {
+    const onDisk = fs
+      .readdirSync(BBSCMD)
+      .filter((f) => f.endsWith('.info'))
+      .map((f) => f.slice(0, -'.info'.length))
+      .filter((command) => {
+        try { return definitionFromDisk(command).toolTypes?.['C64_ADAPT'] !== undefined; }
+        catch { return false; }
+      });
+    expect(onDisk.map((c) => c.toUpperCase()).sort()).toEqual([...C64_MARKED].sort());
+  });
+
+  it.each(C64_MARKED)('a C64 session opens %s and the adapter is on the wire inside the run', async (command) => {
+    const socket = makeSocket();
+    await executeDoor(socket as any, c64Session(), doorFromDisk(command));
+    const out = socket.emitted.filter((e) => e.event === 'ansi-output').map((e) => e.data).join('');
+    expect(out).not.toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');
+    expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(1);
+    // Captured from INSIDE the door's run: merely constructing the adapter
+    // would not put it on socket.emit.
+    expect(mockAdapterDuringRun.length).toBe(1);
+    expect(mockAdapterDuringRun[0]).not.toBeNull();
+  });
+
+  it.each(C64_MARKED)('an ANSI session opens %s with NO adapter - the 80-column non-negotiable', async (command) => {
+    const socket = makeSocket();
+    const ansi = {
+      ...c64Session(), terminalType: 'modern', petsciiMode: false,
+      screenWidth: 80, screenHeight: 24,
+    };
+    await executeDoor(socket as any, ansi as any, doorFromDisk(command));
+    expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(1);
+    expect(mockAdapterDuringRun.length).toBe(1);
+    expect(mockAdapterDuringRun[0]).toBeNull();
   });
 });

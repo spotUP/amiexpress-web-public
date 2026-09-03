@@ -34,8 +34,21 @@ interface ManifestEntry {
   sha256: string;
   harness: string;
   cwd: string;
-  /** Capture fixtures (`<id>.ans`) only: the commit the door binaries were taken from. */
+  /** Corpus capture fixtures (`<id>.ans`) only: the commit the door binaries were taken from. */
   binariesFrom?: string;
+  /**
+   * INSTALLED capture fixtures (`<id>.ans`) only: the `Commands/BBSCmd/<CMD>.info`
+   * this capture's door is registered under, and which must carry `C64_ADAPT=40`.
+   *
+   * A third provenance class, added 2026-09-03. The eight `binariesFrom`
+   * captures are of doors that LEFT the tree at `1cdddac24`; these are of doors
+   * that are installed and reachable RIGHT NOW, so the fixture can make the
+   * stronger claim the others cannot: the binary is still on disk, and the
+   * command is still marked. If a sysop unmarks the door or moves the binary,
+   * this fixture goes red rather than quietly describing a door nobody can
+   * reach.
+   */
+  installed?: string;
   /**
    * Golden fixtures (`<id>.txt`) only. A door-corpus integration golden is
    * 8-bit door output with the ESC sequences already stripped, so it is read
@@ -155,6 +168,28 @@ for (const [id, entry] of Object.entries(manifest)) {
         expect({ id, exists: fs.existsSync(src) }).toEqual({ id, exists: true });
         expect({ id, same: fs.readFileSync(src).equals(raw) }).toEqual({ id, same: true });
         expect(entry.harness).toContain('door-corpus/run.ts --capture');
+      } else if (entry.installed) {
+        // An INSTALLED capture: the door is on the board today. Assert what
+        // that makes assertable - the binary is still there, and the command
+        // still claims C64_ADAPT=40 - instead of a commit the binaries came
+        // from, which for these is meaningless.
+        expect(entry.harness).toContain('--doortype XIM');
+        expect(entry.cwd).toEqual('web/backend');
+        const repo = path.resolve(__dirname, '../../../..');
+        const binary = path.join(repo, entry.binary);
+        expect({ id, binary: entry.binary, exists: fs.existsSync(binary) })
+          .toEqual({ id, binary: entry.binary, exists: true });
+        const infoPath = path.join(repo, 'Commands/BBSCmd', `${entry.installed}.info`);
+        expect({ id, info: entry.installed, exists: fs.existsSync(infoPath) })
+          .toEqual({ id, info: entry.installed, exists: true });
+        // Read the tooltype out of the real bytes. The .info files on this
+        // board come in two shapes - Amiga icon binaries and plain text - and
+        // both put the tooltype on its own `KEY=VALUE` run, so a latin1 scan
+        // for the exact assignment answers for either without dragging the
+        // backend's parser into an SDK test.
+        const infoBytes = fs.readFileSync(infoPath).toString('latin1');
+        expect({ id, info: entry.installed, marked: /(^|[^A-Z_])C64_ADAPT=40(\0|\n|\r|$)/.test(infoBytes) })
+          .toEqual({ id, info: entry.installed, marked: true });
       } else {
         expect(entry.harness).toContain('--doortype XIM');
         expect(entry.harness).toContain('--timeout 25');
@@ -271,7 +306,26 @@ for (const [id, entry] of Object.entries(manifest)) {
  * to two rows - correct behaviour, and not door output at all, which is what
  * `containsBbsMenu` in the manifest records.
  */
-const EXPECTED_ROWS: Record<string, number> = { what: 25, rtw: 26, ustats: 26 };
+const EXPECTED_ROWS: Record<string, number> = {
+  what: 25,
+  rtw: 26,
+  ustats: 26,
+  // The three doors marked on 2026-09-03. These are HARNESS captures, so the
+  // last frame is the door's own screen and no BBS menu rides along - the
+  // expansion above 25 is the ladder's, not the board's.
+  //
+  // `b` at 30: Bulls' five-row ASCII logo crops, and its three three-column
+  // bulletin rows each split into two, so five rows leave the top. The six
+  // entries, their labels and the prompt all stay on the glass, which is what
+  // the mark claims.
+  // `j` at 27: JoinCnf's bordered box; two rows leave the top and the
+  // conference list, the CURRENT CONFERENCE line and the prompt remain.
+  // `doorrepo` at 26: one row over, and DoorRepo's whole payload lives in the
+  // left 28 columns, so the crop drops only the empty right-hand pane.
+  b: 30,
+  j: 27,
+  doorrepo: 26,
+};
 
 function lastFrameOf(id: string): Frame {
   const frames = framesOf(fixtureText(id, manifest[id]));

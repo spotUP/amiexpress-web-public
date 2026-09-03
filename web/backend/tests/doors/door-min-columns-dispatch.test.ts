@@ -420,7 +420,7 @@ describe('a C64_ADAPT door reached through the real Enter dispatch', () => {
  * was actually on the wire" - everything is uninstalled by the time
  * executeDoor returns, so a post-hoc check could never prove it.
  */
-describe('WHO, RTW, S and WHAT open for a C64 from their real .info bytes', () => {
+describe('the marked doors open for a C64 from their real .info bytes', () => {
   const BBSCMD = path.resolve(__dirname, '../../../../Commands/BBSCmd');
   /**
    * The marked doors, and the binary each one launches.
@@ -434,12 +434,26 @@ describe('WHO, RTW, S and WHAT open for a C64 from their real .info bytes', () =
    * REGISTRATION (an unmarked command stays refused however many marked
    * commands share its executable - the GWall case below), it is just no
    * longer the case that this particular door has one of each.
+   *
+   * F, FR and N (AquaScan) are deliberately NOT here: their records lose
+   * filenames and sizes to `narrow` at 40, and they wait on the C64 file-view
+   * design rather than on a mark. E (5D-EnterMsg) is not here either - it is a
+   * full-screen 78-column ANSI editor and wants its own 40-column layout.
    */
   const MARKED: Array<[string, string]> = [
     ['WHO', 'Doors/RTW/RTW'],
     ['RTW', 'Doors/RTW/RTW'],
     ['S', 'Doors/ustats/stats'],
     ['WHAT', 'Doors/What/What'],
+    // Marked 2026-09-03 after their real 40-column captures were measured
+    // (.superpowers/sdd/2026-09-03-c64-door-marks/progress.md, and the three
+    // captures are corpus fixtures `b`, `j`, `doorrepo`). B and J are also
+    // INTERNAL command names, which is precisely why this suite wires
+    // setCommandExecutionDependencies below: without it the BbsCommand branch
+    // falls through to the internal handler and the door is never reached.
+    ['B', 'Doors/EmP_Tools/Bulls'],
+    ['J', 'Doors/emp_tools/Joincnf'],
+    ['DOORREPO', 'Doors/DoorRepo/doorrepo.amiga'],
   ];
   /**
    * An unmarked TYPE=XIM registration, for the default-closed half: a 68K

@@ -141,8 +141,19 @@ export function sessionColumns(session: { screenWidth?: number; petsciiMode?: bo
  * 68K types that route to executeAmigaDoor and for nothing else. A TS door
  * paints its own blessed UI and would be untouched by the adapter, so marking
  * one C64_ADAPT must not open it.
+ *
+ * AREXX IS NOT ON THIS LIST, AND MUST NOT BE ADDED. An AREXX door never
+ * constructs an AmigaDoorSession, so its output never crosses the adapter's
+ * seam and no amount of C64_ADAPT would reduce a single row of it; the caller
+ * would be let in and then served 80-column bytes. (Its 40-column story is
+ * BB_SCRWIDTH, fixed separately at 823825f39.) The list carried the string
+ * 'AMI' until 2026-09-03, which looked like AREXX was covered and was in fact
+ * dead - the enum spells that type 'AIM' (utils/amiga-command-parser.util.ts),
+ * so 'AMI' matched no door at all. The dead string is gone rather than
+ * corrected, and `adapted-door-types.test.ts` pins the membership so neither
+ * the typo nor a well-meaning "fix" can come back.
  */
-export const ADAPTED_DOOR_TYPES: ReadonlySet<string> = new Set(['XIM', 'DD', 'AMI', 'SIM', 'FIM']);
+export const ADAPTED_DOOR_TYPES: ReadonlySet<string> = new Set(['XIM', 'DD', 'SIM', 'FIM']);
 
 /**
  * The columns this door claims it reaches THROUGH the adapter, or null.

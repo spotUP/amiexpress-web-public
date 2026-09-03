@@ -135,6 +135,13 @@ const SIGNATURES: Record<string, Signature> = {
   rtw: { door: 'rTW v2.01', fromBbsMenu: true },
   ustats: { door: 'YoUr USeR StAtS', fromBbsMenu: true },
   what: { door: 'WHAT: Transfer Activities v2.0' },
+  // The three doors marked on 2026-09-03. Their captures are HARNESS captures,
+  // so no BBS menu rides along and `fromBbsMenu` stays false for all three.
+  // Each signature is picked from the part of the screen the MARK is a promise
+  // about - the working part, not the logo the crop is allowed to spoil.
+  b: { door: 'Top Uploaders' },
+  j: { door: 'Lamer Zone' },
+  doorrepo: { door: 'DoorRepo v1.0' },
 };
 
 // ---------------------------------------------------------------- sessions
