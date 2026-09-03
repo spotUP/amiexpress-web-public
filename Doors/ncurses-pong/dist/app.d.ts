@@ -62,7 +62,11 @@ export declare class PongDoor {
     handleKey(name: string): void;
     /**
      * Stop the game loop and leave ncurses mode. Idempotent: the door calls it
-     * from its close handler as well as from the ESC path.
+     * from its close handler as well as from the ESC path, and `endwin()` puts
+     * real bytes on the wire (show cursor, reset attributes, leave the alternate
+     * screen). The phase guard is what makes the second call a no-op HERE,
+     * rather than leaning on `endwin()`'s own `initialized` check
+     * (`sdk/engines/ui/ncurses/ncurses.ts:246-249`) to swallow it.
      */
     stop(): void;
     /** Original C: `end = true;` and the `endwin()` after the loop. */

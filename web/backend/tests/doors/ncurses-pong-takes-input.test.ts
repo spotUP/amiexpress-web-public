@@ -228,4 +228,27 @@ describe("a caller's keystroke reaches ncurses-pong while it is running", () => 
     await frames(4);
     expect(run.output().length).toBe(after);
   });
+
+  it('closing after ESC leaves the alternate screen exactly once', async () => {
+    const run = start(5);
+    await settle();
+
+    await run.press(' '); // leave the title screen
+    await frames(2);
+    await run.press('\x1b'); // ESC - quit() stops the loop and calls endwin()
+    await run.press(' '); // the any-key that resolves the input loop
+    await run.finished; // ...which then runs the door's close handler
+
+    // `endwin()` puts real bytes on the wire (`sdk/engines/ui/ncurses/
+    // ncurses.ts:246-263`) and the close handler calls `stop()` a second time,
+    // so this pins the OUTCOME: the caller is asked to pop the alternate
+    // screen once, not twice.
+    //
+    // Two independent guards hold it - `PongDoor.stop()`'s phase check and
+    // `endwin()`'s own `initialized` check - so removing either ALONE leaves
+    // this green. It is a cross-layer invariant pin, not a regression test for
+    // the door's guard, and the ledger says so.
+    const leaveAlternateScreen = run.output().split('\x1b[?1049l').length - 1;
+    expect(leaveAlternateScreen).toBe(1);
+  });
 });

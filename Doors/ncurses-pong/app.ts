@@ -265,9 +265,14 @@ export class PongDoor {
 
   /**
    * Stop the game loop and leave ncurses mode. Idempotent: the door calls it
-   * from its close handler as well as from the ESC path.
+   * from its close handler as well as from the ESC path, and `endwin()` puts
+   * real bytes on the wire (show cursor, reset attributes, leave the alternate
+   * screen). The phase guard is what makes the second call a no-op HERE,
+   * rather than leaning on `endwin()`'s own `initialized` check
+   * (`sdk/engines/ui/ncurses/ncurses.ts:246-249`) to swallow it.
    */
   stop(): void {
+    if (this.phase === "finished") return;
     if (this.loop) {
       clearInterval(this.loop);
       this.loop = null;

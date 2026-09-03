@@ -47,43 +47,43 @@ const door = new ServerDoor(metadata);
 const games = new Map<number, PongDoor>();
 
 // Parse escape sequences into key names
-function parseKeyData(data: string): { ch: string | undefined; key: { name?: string; sequence: string } } {
+function parseKeyData(data: string): { key: { name?: string; sequence: string } } {
   const sequence = data;
 
   // Arrow keys and special keys via escape sequences
   if (sequence.startsWith('\x1b[') || sequence.startsWith('\x1bO')) {
     // CSI sequences (ESC [ ...)
-    if (sequence === '\x1b[A' || sequence === '\x1bOA') return { ch: undefined, key: { name: 'up', sequence } };
-    if (sequence === '\x1b[B' || sequence === '\x1bOB') return { ch: undefined, key: { name: 'down', sequence } };
-    if (sequence === '\x1b[C' || sequence === '\x1bOC') return { ch: undefined, key: { name: 'right', sequence } };
-    if (sequence === '\x1b[D' || sequence === '\x1bOD') return { ch: undefined, key: { name: 'left', sequence } };
-    if (sequence === '\x1b[H' || sequence === '\x1bOH') return { ch: undefined, key: { name: 'home', sequence } };
-    if (sequence === '\x1b[F' || sequence === '\x1bOF') return { ch: undefined, key: { name: 'end', sequence } };
-    if (sequence === '\x1b[5~') return { ch: undefined, key: { name: 'pageup', sequence } };
-    if (sequence === '\x1b[6~') return { ch: undefined, key: { name: 'pagedown', sequence } };
-    if (sequence === '\x1b[2~') return { ch: undefined, key: { name: 'insert', sequence } };
-    if (sequence === '\x1b[3~') return { ch: undefined, key: { name: 'delete', sequence } };
+    if (sequence === '\x1b[A' || sequence === '\x1bOA') return { key: { name: 'up', sequence } };
+    if (sequence === '\x1b[B' || sequence === '\x1bOB') return { key: { name: 'down', sequence } };
+    if (sequence === '\x1b[C' || sequence === '\x1bOC') return { key: { name: 'right', sequence } };
+    if (sequence === '\x1b[D' || sequence === '\x1bOD') return { key: { name: 'left', sequence } };
+    if (sequence === '\x1b[H' || sequence === '\x1bOH') return { key: { name: 'home', sequence } };
+    if (sequence === '\x1b[F' || sequence === '\x1bOF') return { key: { name: 'end', sequence } };
+    if (sequence === '\x1b[5~') return { key: { name: 'pageup', sequence } };
+    if (sequence === '\x1b[6~') return { key: { name: 'pagedown', sequence } };
+    if (sequence === '\x1b[2~') return { key: { name: 'insert', sequence } };
+    if (sequence === '\x1b[3~') return { key: { name: 'delete', sequence } };
     // F1-F4 (SS3)
-    if (sequence === '\x1bOP') return { ch: undefined, key: { name: 'f1', sequence } };
-    if (sequence === '\x1bOQ') return { ch: undefined, key: { name: 'f2', sequence } };
-    if (sequence === '\x1bOR') return { ch: undefined, key: { name: 'f3', sequence } };
-    if (sequence === '\x1bOS') return { ch: undefined, key: { name: 'f4', sequence } };
+    if (sequence === '\x1bOP') return { key: { name: 'f1', sequence } };
+    if (sequence === '\x1bOQ') return { key: { name: 'f2', sequence } };
+    if (sequence === '\x1bOR') return { key: { name: 'f3', sequence } };
+    if (sequence === '\x1bOS') return { key: { name: 'f4', sequence } };
   }
 
   // ESC alone
-  if (sequence === '\x1b') return { ch: undefined, key: { name: 'escape', sequence } };
+  if (sequence === '\x1b') return { key: { name: 'escape', sequence } };
 
   // Backspace
-  if (sequence === '\x7f' || sequence === '\x08') return { ch: undefined, key: { name: 'backspace', sequence } };
+  if (sequence === '\x7f' || sequence === '\x08') return { key: { name: 'backspace', sequence } };
 
   // Enter
-  if (sequence === '\r' || sequence === '\n') return { ch: undefined, key: { name: 'enter', sequence } };
+  if (sequence === '\r' || sequence === '\n') return { key: { name: 'enter', sequence } };
 
   // Tab
-  if (sequence === '\t') return { ch: undefined, key: { name: 'tab', sequence } };
+  if (sequence === '\t') return { key: { name: 'tab', sequence } };
 
   // Regular character
-  return { ch: data, key: { name: data, sequence } };
+  return { key: { name: data, sequence } };
 }
 
 /** ncurses `initscr()` takes any object that can put bytes on the wire. */
