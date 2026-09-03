@@ -254,6 +254,31 @@ describe('the deferred wrap is honoured by every operation, not only by newline'
     expectTerminalParity(frames);
   });
 
+  it('a backspace at column 0 does not step onto the previous row', () => {
+    // The KERNAL's cursor-left wraps at column 0 (E858 -> E701); xterm stops
+    // there (`frame/ansi-screen.ts`: `if (this.x > 0) this.x--`). Emitting the
+    // byte anyway walked the caller onto the end of the row above.
+    const frames = ['\n\bR'];
+    const { display } = both(frames);
+    expect(display.state.screen[COLS]).toBe(scUpper('R')); // (0,1)
+    expect(display.state.screen[COLS - 1]).toBe(0x20);     // NOT (39,0)
+    expectTerminalParity(frames);
+    expectTerminalParity(['\x1b[1;1H\bZ']);              // and at the very home cell
+  });
+
+  it('saving the cursor after a 40-column row leaves the pending wrap standing', () => {
+    // `ESC 7` and `CSI s` READ the cursor; they do not move it, and the
+    // reference keeps the latch across them. Settling there both walked the
+    // cursor back and threw the wrap away, so the next glyph overwrote
+    // column 39 instead of crossing to the row below.
+    expectTerminalParity(['a'.repeat(40) + '\x1b7' + 'Z']);
+    expectTerminalParity(['a'.repeat(40) + '\x1b[s' + 'Z']);
+  });
+
+  it('an SGR after a 40-column row does not settle the wrap either', () => {
+    expectTerminalParity(['a'.repeat(40) + '\x1b[31m' + 'Z']);
+  });
+
   it('a tab after a row painted to column 40 does not step onto the row below', () => {
     expectTerminalParity(['a'.repeat(40) + '\tZ']);
   });

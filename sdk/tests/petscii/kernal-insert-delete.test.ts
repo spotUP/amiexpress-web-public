@@ -201,6 +201,34 @@ describe('INSERT asks whether the logical line has room (ROM E7F2-E826)', () => 
   });
 });
 
+describe('a logical line stops at 80 characters (ROM E6C1 -> E6F7 -> E87C)', () => {
+  it('printing off the end of a continuation row starts a fresh line, it does not link a third', () => {
+    const m = new PetsciiMachine();
+    moveTo(m, COLS - 1, 0);
+    m.feed([0x41]);                            // the wrap links row 1 into row 0's line
+    expect(m.logicalLineEndRow(0)).toBe(1);
+
+    moveTo(m, COLS - 1, 1);
+    m.feed([0x42]);                            // now print off the end of the CONTINUATION row
+    // E6C1 `CMP #$4F` / E6C3 -> E6F7 -> E87C: a newline, not a third row.
+    expect(m.logicalLineEndRow(0)).toBe(1);
+    expect(m.logicalLineStartRow(2)).toBe(2);
+    expect([m.state.cursorX, m.state.cursorY]).toEqual([0, 2]);
+  });
+
+  it('the cap is what stops DELETE and INSERT reaching across a third row', () => {
+    const m = new PetsciiMachine();
+    moveTo(m, COLS - 1, 0);
+    m.feed([0x41]);
+    moveTo(m, COLS - 1, 1);
+    m.feed([0x42]);
+    put(m, 3, 2, 0x43);
+    moveTo(m, 5, 0);
+    m.feed([0x14]);                            // DELETE inside the 80-char line
+    expect(cell(m, 3, 2)).toBe(0x03);          // row 2 is a different line and never moved
+  });
+});
+
 describe('DELETE at the last column (ROM E75C-E777)', () => {
   it('pulls the corner glyph one cell left, blanks the corner, and lands the cursor on it', () => {
     const m = new PetsciiMachine();

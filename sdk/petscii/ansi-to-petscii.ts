@@ -31,6 +31,12 @@ const ESC = '\x1b';
  */
 const STRING_SEQUENCE_MAX = 256;
 
+/**
+ * CSI finals whose behaviour depends on where the cursor IS, so the deferred
+ * wrap has to be settled before they run. See `csi()` for why the rest must not.
+ */
+const SETTLES_THE_WRAP = new Set(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'd', 'J', 'K', 'X']);
+
 export interface AnsiToPetsciiOptions {
   /** VIC-II palette used for truecolor/256-color nearest matching. Defaults to Colodore. */
   palette?: readonly string[];
@@ -231,7 +237,11 @@ export class AnsiToPetsciiTransducer {
       if (code === 0x08 || code === 0x7F) {
         // xterm clears the pending wrap and steps ONE cell left from column 39.
         this.settleWrap(out);
-        this.emit(out, 0x9D);
+        // ...but it STOPS at column 0 (`frame/ansi-screen.ts`: `if (this.x > 0)
+        // this.x--`), where the KERNAL's cursor-left wraps back to (39, y-1)
+        // (E858 -> E701). Emitting the byte there would walk the caller onto the
+        // end of the row above: "\n\bR" put R on (39,0) instead of (0,1).
+        if (this.machine.state.cursorX > 0) this.emit(out, 0x9D);
         i++;
         continue;
       }
@@ -455,6 +465,20 @@ export class AnsiToPetsciiTransducer {
     this.pendingWrap = 'none';
   }
 
+  /**
+   * Where an ANSI terminal's cursor IS, without moving the C64's or settling
+   * the latch - for `ESC 7` / `CSI s`, which read the cursor but leave the
+   * pending wrap standing (`frame/ansi-screen.ts` clears it in `moveTo`, and
+   * saving is not a move). Settling those would both walk the cursor back and
+   * throw the latch away, so the next printable overwrote column 39 instead of
+   * crossing to the row below.
+   */
+  private ansiCursor(): { x: number; y: number } {
+    const st = this.machine.state;
+    if (this.pendingWrap === 'wrapped') return { x: COLS - 1, y: Math.max(0, st.cursorY - 1) };
+    return { x: st.cursorX, y: st.cursorY };
+  }
+
   /** Lone CR: column 0 of the same row. $9D never crosses a row boundary here because x lefts from column x stop at 0. */
   private carriageOnly(out: number[]): void {
     // 'wrapped': the KERNAL is on (0, r+1) while ANSI still holds column 39 of
@@ -528,7 +552,7 @@ export class AnsiToPetsciiTransducer {
       return s.length - i > STRING_SEQUENCE_MAX ? s.length - i : 0;
     }
     if (next === '(' || next === ')' || next === '*' || next === '+') return s[i + 2] === undefined ? 0 : 3; // charset designation
-    if (next === '7') { this.settleWrap(out); const st = this.machine.state; this.savedCursor = { x: st.cursorX, y: st.cursorY }; return 2; }
+    if (next === '7') { this.savedCursor = this.ansiCursor(); return 2; }
     if (next === '8') { if (this.savedCursor) this.moveTo(this.savedCursor.x, this.savedCursor.y, out); return 2; }
     // RI: up one row, column kept. On row 0 an ANSI terminal scrolls the screen
     // DOWN; the KERNAL screen editor has no reverse scroll and no byte that asks
@@ -576,10 +600,17 @@ export class AnsiToPetsciiTransducer {
       if ((n(0, 0) === 47 || n(0, 0) === 1049) && (final === 'h' || final === 'l')) this.clearKeepingCursor(out, 0, 0);
       return;
     }
-    // Everything below except CUP/HVP reads the cursor - a relative move, a
-    // semi-absolute one that keeps the other axis, an erase anchored on it, or
-    // a save. They all have to act from the column ANSI is holding.
-    if (final !== 'H' && final !== 'f') this.settleWrap(out);
+    // Exactly the finals that READ or MOVE relative to the cursor: the relative
+    // moves, the semi-absolute ones that keep the other axis, and the erases
+    // anchored on it. They have to act from the column ANSI is holding.
+    //
+    // Everything else must NOT settle. `m` (SGR) and every dropped final change
+    // no position, and the reference leaves the pending wrap standing through
+    // them - settling would walk the cursor back AND discard the latch, so a
+    // colour change after a 40-column row would overwrite column 39. `H`/`f`
+    // are fully absolute and `u` restores, so their own move settles it. `s`
+    // saves without moving and is handled by `ansiCursor()`.
+    if (SETTLES_THE_WRAP.has(final)) this.settleWrap(out);
     switch (final) {
       case 'm': return this.sgr(nums.map((v) => (Number.isNaN(v) ? 0 : v)), out);
       case 'A': return this.moveTo(st.cursorX, Math.max(0, st.cursorY - n(0, 1)), out);
@@ -594,7 +625,7 @@ export class AnsiToPetsciiTransducer {
       case 'J': return this.eraseDisplay(n(0, 0), out);
       case 'K': return this.eraseLine(n(0, 0), out);
       case 'X': return this.eraseChars(n(0, 1), out);
-      case 's': this.savedCursor = { x: st.cursorX, y: st.cursorY }; return;
+      case 's': this.savedCursor = this.ansiCursor(); return;
       case 'u': if (this.savedCursor) this.moveTo(this.savedCursor.x, this.savedCursor.y, out); return;
       default: return; // L M @ P (insert/delete line/char), r (scroll region), n, t, h, l: dropped, documented
     }
