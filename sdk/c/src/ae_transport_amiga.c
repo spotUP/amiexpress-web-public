@@ -407,6 +407,78 @@ int ae_key(void)
     return (int)(unsigned char)msg->String[0];
 }
 
+/* ---- user and board fields (DT_ and BB_) --------------------------------
+ *
+ * ae_session's transport seam, on the real board. One field is one round
+ * trip with the field number as the command, exactly as express.e reads it
+ * (express.e:3900-3920's CASE over the DT_ constants).
+ *
+ * THE DIRECTION FLAG IS BACKWARDS FROM WHAT IT LOOKS LIKE. Data != 0 is a
+ * READ and Data == 0 is a WRITE (xim/data-query.ts:92, and express.e's own
+ * handler). Getting that the wrong way round does not error - it silently
+ * writes the door's uninitialised buffer into the caller's user record, so
+ * it is worth stating rather than inferring.
+ */
+
+int ae_field_read(int field, char *out, int cap)
+{
+    int len;
+
+    if (out == NULL || cap <= 0) {
+        return -1;
+    }
+    out[0] = '\0';
+    if (msg == NULL || bbs_port == NULL || carrier_lost) {
+        return -1;
+    }
+
+    msg->Command = field;
+    msg->Data = 1;                 /* != 0: read */
+    msg->String[0] = '\0';
+    xim_call();
+
+    if (msg->Data == -1) {
+        return -1;
+    }
+
+    /* The reply lands in the embedded String, which the BBS may not have
+     * NUL-terminated at the length it wrote - the buffer is reused between
+     * calls, and a short reply can leave a previous longer one's tail
+     * behind (the dRE!WAll case in xim/messages.ts:232). Copy up to the
+     * caller's room and terminate here. */
+    for (len = 0; len < cap - 1 && len < AE_MAX_LINE; len++) {
+        char c = msg->String[len];
+        if (c == '\0') {
+            break;
+        }
+        out[len] = c;
+    }
+    out[len] = '\0';
+    return len;
+}
+
+int ae_field_write(int field, const char *value)
+{
+    int i;
+
+    if (value == NULL) {
+        return -1;
+    }
+    if (msg == NULL || bbs_port == NULL || carrier_lost) {
+        return -1;
+    }
+
+    msg->Command = field;
+    msg->Data = 0;                 /* == 0: write */
+    for (i = 0; i < AE_MAX_LINE && value[i] != '\0'; i++) {
+        msg->String[i] = value[i];
+    }
+    msg->String[i] = '\0';
+    xim_call();
+
+    return (msg->Data == -1) ? -1 : 0;
+}
+
 void ae_delay_ticks(int ticks)
 {
     if (ticks > 0) {
