@@ -127,10 +127,22 @@ So the list widget and the ANSI layer under it are **3,048 bytes**, and a
 door that draws no list still costs 5,048 - the same number as before any of
 this existed.
 
+`ui_chrome.h` is the three bars a door wears. The one with history is the
+footer: DoorRepo's old one concatenated every key and cut at `cols`, which
+silently dropped `Q=Quit` on any row that had ads AND a doc. The rule lifted
+from `flow.c:1887` guarantees the opposite - the suffix is appended whatever
+the width, optional keys go in PRIORITY order, and a shorter lower-priority
+key never appears in place of a longer one that was dropped. A test walks
+every width from 10 to 200 and finds `Q=Quit` in all of them.
+
+The masthead cuts the rail rather than the title, and the status line drops
+its right side rather than letting two strings collide mid-row - which is
+what a caller reads as corruption.
+
 ## What is deliberately not here yet
 
-The masthead, the priority footer and the status line (the rest of phase 2);
-input decoding and dialogs (phase 3); theme tokens and settings (phase 4).
+Input decoding and dialogs (phase 3); theme tokens and settings (phase 4);
+a real door ported end to end (phase 5).
 
 And the real AEDoor transport: `examples/doorrepo-c/aedoor_amiga.c` still
 owns it, and `ui_screen`'s sink is deliberately the one place that changes
