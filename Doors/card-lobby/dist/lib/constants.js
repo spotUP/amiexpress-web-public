@@ -121,9 +121,17 @@ function activeTheme() {
 function applyTheme(theme) {
     activeThemeValue = theme;
     const t = theme.tokens;
-    exports.UI_THEME.topBar = { fg: t.barInk, bg: t.bar, item: { fg: t.dim }, selected: { fg: t.barInk } };
-    exports.UI_THEME.statusBar = { fg: t.barInk, bg: t.bar };
-    exports.UI_THEME.windowBorder = { fg: t.chrome };
+    // The bars ARE the theme's primary colour, with the ground on top of
+    // them, and every window frame takes the same colour: "the menu bg color
+    // should be the primary theme color and the texts and slashes black. all
+    // borders in the app needs to use the themes primary color as well"
+    // (sysop, 2026-09-03). The SDK's own styles.ts says the same thing for
+    // every door that draws from themeStyles; this door keeps its own palette
+    // object, so the rule is written here too - and pinned by
+    // tests/theme.test.ts so the two cannot drift.
+    exports.UI_THEME.topBar = { fg: t.ground, bg: t.accent, item: { fg: t.ground }, selected: { fg: t.ground } };
+    exports.UI_THEME.statusBar = { fg: t.ground, bg: t.accent };
+    exports.UI_THEME.windowBorder = { fg: t.accent };
     exports.UI_THEME.windowBg = t.ground;
     exports.UI_THEME.ink = t.ink;
     exports.UI_THEME.dim = t.dim;

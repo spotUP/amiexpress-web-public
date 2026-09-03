@@ -93,6 +93,31 @@ function tag(colour: string, text: string, bold = false): string {
  * Cheap to call and free of state - a door may call it once at startup or
  * per redraw, whichever reads better where it is used.
  */
+/**
+ * THE PRIMARY COLOUR CARRIES THE CHROME (sysop, 2026-09-03).
+ *
+ * "the menu bg color should be the primary theme color and the texts and
+ * slashes black. all borders in the app needs to use the themes primary
+ * color as well ... this goes for all apps using themes."
+ *
+ * So `accent` - the one colour a theme means by itself - is the bar's
+ * BACKGROUND and every border's colour, and a bar's text is the ground it
+ * sits on, which is black in all seven themes. Two consequences worth
+ * knowing:
+ *
+ *  - `chrome` no longer draws a border. It stays a token because a door may
+ *    still want the quieter rule for something of its own, and because
+ *    dropping it from the interface would break every door that reads it.
+ *  - FOCUS moves to `ink`. With every idle border already the accent, a
+ *    focused border in the accent would be invisible; ink is the brightest
+ *    thing a theme has, which is the same dim-versus-bright signal the
+ *    focused panel always relied on.
+ *
+ * This changes `classic` too - blue bars with white text become yellow bars
+ * with black - which the note at the top of tokens.ts used to promise it
+ * would not. The sysop asked for it across every themed door; that promise
+ * is superseded, and tokens.ts says so now.
+ */
 export function themeStyles(theme: Theme): ThemeStyles {
   const t = theme.tokens;
 
@@ -116,9 +141,9 @@ export function themeStyles(theme: Theme): ThemeStyles {
       style: {
         fg: t.ink,
         bg: t.ground,
-        border: { fg: theme.border === 'none' ? t.ground : t.chrome },
+        border: { fg: theme.border === 'none' ? t.ground : t.accent },
         label: { fg: t.accent, bg: t.ground },
-        focus: { border: { fg: t.accent } },
+        focus: { border: { fg: t.ink } },
       },
     },
     frame: {
@@ -129,14 +154,15 @@ export function themeStyles(theme: Theme): ThemeStyles {
         // Never `ground`. This is the whole point of the role: a frame
         // that sank into the background would put a dialog's text on top of
         // the screen it is covering.
-        border: { fg: t.chrome },
+        border: { fg: t.accent },
         label: { fg: t.accent, bg: t.ground },
-        focus: { border: { fg: t.accent } },
+        focus: { border: { fg: t.ink } },
       },
     },
 
     bar: {
-      style: { fg: t.barInk, bg: t.bar },
+      // The bar IS the theme's colour, with black on top of it.
+      style: { fg: t.ground, bg: t.accent },
     },
 
     list: {
@@ -144,11 +170,11 @@ export function themeStyles(theme: Theme): ThemeStyles {
       style: {
         fg: t.ink,
         bg: t.ground,
-        border: { fg: theme.border === 'none' ? t.ground : t.chrome },
+        border: { fg: theme.border === 'none' ? t.ground : t.accent },
         label: { fg: t.accent, bg: t.ground },
         item: { fg: t.dim, bg: t.ground },
         selected: { fg: t.selectionInk, bg: t.selectionBg, bold: true },
-        focus: { border: { fg: t.accent } },
+        focus: { border: { fg: t.ink } },
       },
     },
 

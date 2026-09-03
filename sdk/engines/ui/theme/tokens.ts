@@ -8,9 +8,14 @@
  * invented vocabulary: they were read off what the doors already do, so
  * `classic` can reproduce today's screens exactly.
  *
- * **`classic` is the default and is not a redesign.** A sysop who wants the
- * board to look as it always has changes nothing and sees nothing change.
- * The other themes are opt-in, per user.
+ * **`classic` was the default and no redesign.** That held until 2026-09-03,
+ * when the sysop asked for one rule across every themed door: "the menu bg
+ * color should be the primary theme color and the texts and slashes black.
+ * all borders in the app needs to use the themes primary color as well."
+ * `classic` takes that too - its bars are yellow with black text now, not
+ * blue with white - so the promise below is history rather than a rule. The
+ * mapping lives in styles.ts; the token VALUES here are still the colours
+ * the doors always drew with.
  *
  * **Backgrounds are NAMED colours, foregrounds may be hex.** Not taste - a
  * measurement. blessed resolves a dark hex background to the 256-colour
