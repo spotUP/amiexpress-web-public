@@ -10,6 +10,47 @@ export interface FileArea {
   dlPath: string;
   ulPath: string;
   description?: string;
+  /**
+   * The pooled drive this area's files live on - DRIVE.n in Drives.info.
+   * Undefined means local disk, which is every area on every board that has
+   * not configured a bucket.
+   *
+   * It is read HERE, off Conf<N>.info, and not from `file_areas.storage_volume`,
+   * because this loader's output is what the running board branches on: it is
+   * what `server/initialization.ts` hands to the file handler and the command
+   * handler. The SQL column is the admin page's mirror of the same fact.
+   */
+  storageVolume?: number;
+}
+
+/**
+ * `STORAGEDRIVE.<dir>` for one area, falling back to a conference-wide
+ * `STORAGEDRIVE`, and undefined when neither is set.
+ *
+ * An unreadable value leaves the area LOCAL and says so on stdout. The two
+ * alternatives are both worse: throwing would lose the conference's whole area
+ * list to this module's per-conference catch, silently, and guessing a drive
+ * would put a caller's upload in a bucket nobody chose.
+ */
+function readStorageDrive(
+  toolTypes: Map<string, string>,
+  conferenceId: number,
+  dirNum: number
+): number | undefined {
+  const perDir = toolTypes.get(`STORAGEDRIVE.${dirNum}`);
+  const key = perDir !== undefined ? `STORAGEDRIVE.${dirNum}` : 'STORAGEDRIVE';
+  const raw = perDir !== undefined ? perDir : toolTypes.get('STORAGEDRIVE');
+  if (raw === undefined || raw.trim() === '') return undefined;
+
+  const driveNumber = Number(raw.trim());
+  if (!Number.isInteger(driveNumber) || driveNumber < 1) {
+    process.stdout.write(
+      `[FileAreas] Conf${conferenceId}.info: ${key}="${raw}" is not a drive number - ` +
+        `dir ${dirNum} stays on local disk. Write the DRIVE.n number from Drives.info.\n`
+    );
+    return undefined;
+  }
+  return driveNumber;
 }
 
 /**
@@ -78,7 +119,8 @@ export function loadFileAreasFromDisk(bbsRoot: string, conferences: any[]): File
           name: `${conf.name} - Dir ${dirNum}`,
           dlPath: dlPath || ulPath, // Fallback to ulPath if dlPath missing
           ulPath: ulPath || dlPath, // Fallback to dlPath if ulPath missing
-          description: `File area ${dirNum} for ${conf.name}`
+          description: `File area ${dirNum} for ${conf.name}`,
+          storageVolume: readStorageDrive(toolTypes, conf.id, dirNum)
         });
       }
     } catch (error) {
