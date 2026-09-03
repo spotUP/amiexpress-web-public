@@ -171,6 +171,20 @@ void ae_return_command(const char *command);
 
 void ae_shutdown(void);
 
+/* ---- user and board fields --------------------------------------------
+ *
+ * One field, one round trip, with the field number as the command - the
+ * DT_ and BB_ numbers express.e reads (axcommon.e) and this board's own
+ * additions above MAX_CMD. sdk/c/include/ae_session.h names the ones a door
+ * is expected to use and is where the numbers are pinned against the
+ * board's table.
+ *
+ * ae_field_read returns the length written (0 for a field the board did not
+ * answer), or -1 on carrier loss; `out` is always a valid string.
+ * ae_field_write returns 0 when the board took it, -1 on carrier loss. */
+int ae_field_read(int field, char *out, int cap);
+int ae_field_write(int field, const char *value);
+
 /* TakeOffEh equivalent (AEDoor.c TakeOffEh(), lines 231-239): fatal-error
  * shutdown. Still notifies the BBS (JH_SHUTDOWN) before terminating -- the
  * mandate applies on every exit path, not just the happy one -- then calls

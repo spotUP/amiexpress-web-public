@@ -214,21 +214,28 @@ two of them is a fact about the protocol, not about DoorRepo.
 `ui_screen_flush()` writes through it now, so a frame composed by any widget
 in this SDK reaches a real caller in one `ae_put`.
 
-**What a 68K door still cannot do, and why the obvious phase 5 door is not
-here yet.** The plan named `Doors/theme-picker` as the port candidate. Its
-whole job is to SAVE a choice, and the AEDoor protocol's only outbound verb
-is `ae_return_command` - there is no `setTheme`, and no user-field write of
-any kind. A C theme-picker today would list the themes and be unable to keep
-one, which is worse than not having it.
+`ae_field_read`/`ae_field_write` are the round trips `ae_session` needed and
+DoorRepo never used, so the user fields work on a real board now.
+`ae_open_bbs()` is the one call a door makes to get a session wired to them.
 
-Two honest ways forward, in order of size:
+**The direction flag reads backwards from what it looks like**: `Data != 0`
+is a READ and `Data == 0` is a WRITE. Getting it the wrong way round does not
+error - it writes the door's uninitialised buffer into the caller's user
+record - so it is stated in the code rather than left to be inferred.
 
-1. The DT_* fetches (`ae_session`'s user fields) are specified in the plan
-   but not implemented in this transport - DoorRepo never needed them. That
-   is a protocol addition, not a port.
-2. A door whose job is expressible with what exists - reading and drawing -
-   is the better first proof. A bulletin reader is the obvious one: the
-   files are already on disk, and every widget it needs is built.
+### The proof door
+
+`examples/theme-picker/` is `Doors/theme-picker` (255 lines of TypeScript),
+ported: **19,856 bytes** of 68K binary, drawn with the SDK's widgets, reading
+and writing through the protocol.
+
+It is deliberately the same door. The theme in force is MARKED rather than
+merely highlighted, because the highlight follows the cursor and says nothing
+about what is saved. The screen is drawn in the theme you are leaving, so it
+is itself an example of what you have. And it asks where it is running before
+offering to save: on a classic AmiExpress it lists the themes and says
+plainly that the board cannot keep one, rather than pretending ENTER did
+something.
 
 And the real AEDoor transport: `examples/doorrepo-c/aedoor_amiga.c` still
 owns it, and `ui_screen`'s sink is deliberately the one place that changes

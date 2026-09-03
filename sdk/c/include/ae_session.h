@@ -107,6 +107,17 @@ void ae_set_writer(ae_session *s, ae_write_fn write);
 /** The AEDoor message size, which is the floor for `cap`. */
 #define AE_SESSION_MIN_STORAGE 264
 
+/**
+ * Open a session on the REAL board, using the AEDoor protocol.
+ *
+ * The convenience every door wants: ae_open with the transport already
+ * wired, reads and writes both. Declared here, implemented in its own
+ * module, so a door that never opens a session does not link the protocol.
+ *
+ * `node` is what AmiExpress passed as argv[1].
+ */
+int ae_open_bbs(ae_session *s, char *storage, long cap, int node);
+
 /** End a session. Safe on one that never opened. */
 void ae_close(ae_session *s);
 
