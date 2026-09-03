@@ -49,6 +49,11 @@ import { Stack as PanelStack } from './core/panels/stack';
 import { GeneratorSource } from './core/panels/generator-source';
 import { getClassicEndless } from './core/panels/level-data';
 import { buildPanelsResult, type PanelsMode } from './core/panels/score-report';
+import { PanelsVersusScreen } from './ui/panels-versus-screen';
+import { SimulatedStack } from './core/panels/simulated-stack';
+import { PanelAi, MAX_AI_LEVEL } from './ai/panel-ai';
+import { createStages } from './core/panels/challenge-mode';
+import { loadChallengeAttack, hasChallengeFile } from './core/panels/attack-patterns';
 import { TIME_ATTACK_FRAMES } from './core/panels/consts';
 import { AttractScreen } from './ui/attract-screen';
 import { InputHandler } from './input/handler';
@@ -1262,6 +1267,10 @@ export class GrandmasterApp {
       return;
     }
 
+    // Challenge starts at difficulty 1 stage 1; the ladder is walked by the
+    // mode's own screen once it exists.
+    const challengeStage = createStages(1, hasChallengeFile)[0];
+
     const seed = Math.floor(Math.random() * 2147483000) + 1;
     const stack = new PanelStack({
       levelData: getClassicEndless('normal'),
@@ -1306,25 +1315,58 @@ export class GrandmasterApp {
       raise: isDown(['r', 'x']),
     });
 
-    const panels = new PanelsScreen({
-      screen: this.screen,
-      stack,
-      sheet,
-      sounds: this.sounds,
-      readInput,
-    });
+    // Vs CPU and Challenge share one screen: the two opponents differ in what
+    // they ARE, not in how they are driven. Vs CPU faces a real board played by
+    // the bot; Challenge faces a boardless health model driven by an attack
+    // script, and its slot draws a danger bar instead of panels.
+    const versusOpponent = mode === 'vscpu'
+      ? new PanelStack({
+        levelData: getClassicEndless('normal'),
+        panelSource: new GeneratorSource(seed + 1, true),
+        doCountdown: true,
+      })
+      : mode === 'challenge'
+        ? new SimulatedStack({
+          attackSettings: loadChallengeAttack(1, challengeStage.attackStage),
+          healthSettings: challengeStage.healthSettings,
+        })
+        : null;
+
+    if (versusOpponent && versusOpponent instanceof PanelStack) versusOpponent.startingState();
+
+    const panels = versusOpponent
+      ? new PanelsVersusScreen({
+        screen: this.screen,
+        player: stack,
+        opponent: versusOpponent,
+        cpu: versusOpponent instanceof PanelStack
+          ? new PanelAi(versusOpponent, Math.min(5, MAX_AI_LEVEL))
+          : undefined,
+        sheet,
+        sounds: this.sounds,
+        readInput,
+      })
+      : new PanelsScreen({
+        screen: this.screen,
+        stack,
+        sheet,
+        sounds: this.sounds,
+        readInput,
+      });
 
     const onEscape = () => panels.quit();
     this.screen.key(['escape', 'q', 'Q'], onEscape);
 
     try {
-      await panels.run();
+      const outcome = await panels.run();
 
       // Only a game that actually finished counts. Leaving early with ESC is
       // not a score, and recording it would put junk on the leaderboard.
-      const finished = stack.gameEnded();
+      const finished = stack.gameEnded()
+        || (versusOpponent ? versusOpponent.gameEnded() : false);
       if (finished) {
-        const result = buildPanelsResult(stack, mode);
+        const beatTheOpponent = 'playerWon' in outcome ? outcome.playerWon : undefined;
+        const result = buildPanelsResult(stack, mode, 'tetris_attack', beatTheOpponent);
         this.highScores.addScore(this.state.playerName, result);
       }
     } finally {
@@ -1345,9 +1387,13 @@ export class GrandmasterApp {
     const labels = [
       'ENDLESS      play until the stack tops out',
       'TIME ATTACK  two minutes, score as high as you can',
+      'VS CPU       a real opponent on a real board',
+      'CHALLENGE    the stage ladder, eight difficulties',
       'Back',
     ];
-    const modes: (PanelsMode | null)[] = ['endless', 'timeattack', null];
+    const modes: (PanelsMode | null)[] = [
+      'endless', 'timeattack', 'vscpu', 'challenge', null,
+    ];
 
     return new Promise<PanelsMode | null>((resolve) => {
       const box = createBox({
@@ -1355,7 +1401,7 @@ export class GrandmasterApp {
         top: 'center',
         left: 'center',
         width: 56,
-        height: 9,
+        height: 11,
         label: ' TETRIS ATTACK ',
         tags: true,
         style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
@@ -1366,7 +1412,7 @@ export class GrandmasterApp {
         top: 1,
         left: 1,
         width: 52,
-        height: 4,
+        height: 6,
         keys: true,
         vi: true,
         mouse: true,

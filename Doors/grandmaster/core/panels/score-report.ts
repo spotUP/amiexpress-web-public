@@ -16,7 +16,7 @@ import type { GameResult, GameMode } from '../types';
 import type { Stack } from './stack';
 
 /** Which panel mode produced this result. */
-export type PanelsMode = 'endless' | 'timeattack';
+export type PanelsMode = 'endless' | 'timeattack' | 'vscpu' | 'challenge';
 
 /**
  * The score a panel game reports.
@@ -30,6 +30,7 @@ export function buildPanelsResult(
   stack: Stack,
   mode: PanelsMode,
   gameMode: GameMode = 'tetris_attack',
+  completed?: boolean,
 ): GameResult {
   return {
     mode: gameMode,
@@ -46,8 +47,9 @@ export function buildPanelsResult(
     tetrisCount: 0,
     tSpinCount: 0,
     perfectClears: 0,
-    // Endless is only ever survived, never completed; Time Attack IS completed
-    // by surviving to the end of the clock.
-    completed: mode === 'timeattack' ? stack.ranOutOfTime : false,
+    // Endless and Vs are survived, never completed. Time Attack is completed by
+    // surviving the clock; a Challenge stage by beating the opponent, which the
+    // caller knows and passes in.
+    completed: mode === 'timeattack' ? stack.ranOutOfTime : (completed ?? false),
   };
 }

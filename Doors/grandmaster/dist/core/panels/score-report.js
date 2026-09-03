@@ -22,7 +22,7 @@ exports.buildPanelsResult = buildPanelsResult;
  * makes a game get hard. `lines` is panels cleared - the nearest honest
  * equivalent, and the number the mode is actually about.
  */
-function buildPanelsResult(stack, mode, gameMode = 'tetris_attack') {
+function buildPanelsResult(stack, mode, gameMode = 'tetris_attack', completed) {
     return {
         mode: gameMode,
         score: stack.score,
@@ -38,9 +38,10 @@ function buildPanelsResult(stack, mode, gameMode = 'tetris_attack') {
         tetrisCount: 0,
         tSpinCount: 0,
         perfectClears: 0,
-        // Endless is only ever survived, never completed; Time Attack IS completed
-        // by surviving to the end of the clock.
-        completed: mode === 'timeattack' ? stack.ranOutOfTime : false,
+        // Endless and Vs are survived, never completed. Time Attack is completed by
+        // surviving the clock; a Challenge stage by beating the opponent, which the
+        // caller knows and passes in.
+        completed: mode === 'timeattack' ? stack.ranOutOfTime : (completed ?? false),
     };
 }
 //# sourceMappingURL=score-report.js.map

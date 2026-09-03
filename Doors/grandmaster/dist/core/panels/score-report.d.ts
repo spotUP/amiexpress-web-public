@@ -14,7 +14,7 @@
 import type { GameResult, GameMode } from '../types';
 import type { Stack } from './stack';
 /** Which panel mode produced this result. */
-export type PanelsMode = 'endless' | 'timeattack';
+export type PanelsMode = 'endless' | 'timeattack' | 'vscpu' | 'challenge';
 /**
  * The score a panel game reports.
  *
@@ -23,5 +23,5 @@ export type PanelsMode = 'endless' | 'timeattack';
  * makes a game get hard. `lines` is panels cleared - the nearest honest
  * equivalent, and the number the mode is actually about.
  */
-export declare function buildPanelsResult(stack: Stack, mode: PanelsMode, gameMode?: GameMode): GameResult;
+export declare function buildPanelsResult(stack: Stack, mode: PanelsMode, gameMode?: GameMode, completed?: boolean): GameResult;
 //# sourceMappingURL=score-report.d.ts.map

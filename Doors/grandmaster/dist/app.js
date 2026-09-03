@@ -64,6 +64,11 @@ const stack_1 = require("./core/panels/stack");
 const generator_source_1 = require("./core/panels/generator-source");
 const level_data_1 = require("./core/panels/level-data");
 const score_report_1 = require("./core/panels/score-report");
+const panels_versus_screen_1 = require("./ui/panels-versus-screen");
+const simulated_stack_1 = require("./core/panels/simulated-stack");
+const panel_ai_1 = require("./ai/panel-ai");
+const challenge_mode_1 = require("./core/panels/challenge-mode");
+const attack_patterns_1 = require("./core/panels/attack-patterns");
 const consts_1 = require("./core/panels/consts");
 const attract_screen_1 = require("./ui/attract-screen");
 const handler_1 = require("./input/handler");
@@ -1118,6 +1123,9 @@ class GrandmasterApp {
             this.currentScreen = 'menu';
             return;
         }
+        // Challenge starts at difficulty 1 stage 1; the ladder is walked by the
+        // mode's own screen once it exists.
+        const challengeStage = (0, challenge_mode_1.createStages)(1, attack_patterns_1.hasChallengeFile)[0];
         const seed = Math.floor(Math.random() * 2147483000) + 1;
         const stack = new stack_1.Stack({
             levelData: (0, level_data_1.getClassicEndless)('normal'),
@@ -1153,22 +1161,54 @@ class GrandmasterApp {
             swap: isDown(['space', 'z']),
             raise: isDown(['r', 'x']),
         });
-        const panels = new panels_screen_1.PanelsScreen({
-            screen: this.screen,
-            stack,
-            sheet,
-            sounds: this.sounds,
-            readInput,
-        });
+        // Vs CPU and Challenge share one screen: the two opponents differ in what
+        // they ARE, not in how they are driven. Vs CPU faces a real board played by
+        // the bot; Challenge faces a boardless health model driven by an attack
+        // script, and its slot draws a danger bar instead of panels.
+        const versusOpponent = mode === 'vscpu'
+            ? new stack_1.Stack({
+                levelData: (0, level_data_1.getClassicEndless)('normal'),
+                panelSource: new generator_source_1.GeneratorSource(seed + 1, true),
+                doCountdown: true,
+            })
+            : mode === 'challenge'
+                ? new simulated_stack_1.SimulatedStack({
+                    attackSettings: (0, attack_patterns_1.loadChallengeAttack)(1, challengeStage.attackStage),
+                    healthSettings: challengeStage.healthSettings,
+                })
+                : null;
+        if (versusOpponent && versusOpponent instanceof stack_1.Stack)
+            versusOpponent.startingState();
+        const panels = versusOpponent
+            ? new panels_versus_screen_1.PanelsVersusScreen({
+                screen: this.screen,
+                player: stack,
+                opponent: versusOpponent,
+                cpu: versusOpponent instanceof stack_1.Stack
+                    ? new panel_ai_1.PanelAi(versusOpponent, Math.min(5, panel_ai_1.MAX_AI_LEVEL))
+                    : undefined,
+                sheet,
+                sounds: this.sounds,
+                readInput,
+            })
+            : new panels_screen_1.PanelsScreen({
+                screen: this.screen,
+                stack,
+                sheet,
+                sounds: this.sounds,
+                readInput,
+            });
         const onEscape = () => panels.quit();
         this.screen.key(['escape', 'q', 'Q'], onEscape);
         try {
-            await panels.run();
+            const outcome = await panels.run();
             // Only a game that actually finished counts. Leaving early with ESC is
             // not a score, and recording it would put junk on the leaderboard.
-            const finished = stack.gameEnded();
+            const finished = stack.gameEnded()
+                || (versusOpponent ? versusOpponent.gameEnded() : false);
             if (finished) {
-                const result = (0, score_report_1.buildPanelsResult)(stack, mode);
+                const beatTheOpponent = 'playerWon' in outcome ? outcome.playerWon : undefined;
+                const result = (0, score_report_1.buildPanelsResult)(stack, mode, 'tetris_attack', beatTheOpponent);
                 this.highScores.addScore(this.state.playerName, result);
             }
         }
@@ -1189,16 +1229,20 @@ class GrandmasterApp {
         const labels = [
             'ENDLESS      play until the stack tops out',
             'TIME ATTACK  two minutes, score as high as you can',
+            'VS CPU       a real opponent on a real board',
+            'CHALLENGE    the stage ladder, eight difficulties',
             'Back',
         ];
-        const modes = ['endless', 'timeattack', null];
+        const modes = [
+            'endless', 'timeattack', 'vscpu', 'challenge', null,
+        ];
         return new Promise((resolve) => {
             const box = (0, blessed_helpers_1.createBox)({
                 parent: this.screen,
                 top: 'center',
                 left: 'center',
                 width: 56,
-                height: 9,
+                height: 11,
                 label: ' TETRIS ATTACK ',
                 tags: true,
                 style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
@@ -1208,7 +1252,7 @@ class GrandmasterApp {
                 top: 1,
                 left: 1,
                 width: 52,
-                height: 4,
+                height: 6,
                 keys: true,
                 vi: true,
                 mouse: true,
