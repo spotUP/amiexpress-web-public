@@ -71,16 +71,31 @@
  *    attempt that is skipped because one already failed inside this window
  *    must NOT fall through to "no candidates found, so answer null" - that
  *    is invariant 1's failure again, just reached through the throttle
- *    instead of through refresh() itself. lastAttemptError remembers the
+ *    instead of through refresh() itself. lastAttemptFailure remembers the
  *    outcome of the last attempt, not only its time: a MISS with a cached
- *    failure re-throws that failure (preserving its drive number) instead
- *    of degrading to "not found," on both the primed-but-stale path and the
- *    never-primed cold-start path, so attempts stay capped at one per
- *    window WITHOUT ever trading a wrong "not found" for the saved
- *    request. A HIT still answers from the primed maps regardless - the
- *    data behind a hit is real and was already trusted before the backend
- *    went down. The flag clears the moment a listing actually succeeds, so
- *    recovery is detected on the very next attempt the window allows.
+ *    failure re-throws instead of degrading to "not found," on both the
+ *    primed-but-stale path and the never-primed cold-start path, so
+ *    attempts stay capped at one per window WITHOUT ever trading a wrong
+ *    "not found" for the saved request. A HIT still answers from the primed
+ *    maps regardless - the data behind a hit is real and was already
+ *    trusted before the backend went down. Any failure is remembered,
+ *    whatever its type: a StorageUnavailableError, an adapter bug, a
+ *    malformed page - remembering only the expected type reopens the exact
+ *    "not found during an outage" hole through a type check.
+ *
+ * 5. Two DIFFERENT windows, because one number cannot mean two things.
+ *    "How long a miss is trusted before it is worth a request to re-check"
+ *    is a budget question, and the answer is long - an hour. "How long to
+ *    wait before retrying a backend we believe is down" is an outage-cadence
+ *    question, and the answer is seconds: the backend can recover one
+ *    millisecond after the failed attempt, and a caller sitting at the
+ *    File: prompt must not be told "storage unavailable" for the rest of
+ *    the hour because of it. staleAfterMs governs the miss-trust gate;
+ *    errorRetryAfterMs, an order of magnitude shorter, governs only the
+ *    cached-failure gate. Both are injectable. Inside the retry window the
+ *    invariant above still rules: a miss THROWS the cached failure, it never
+ *    answers null - the short window buys faster recovery, never a cheaper
+ *    lie.
  */
 import type { ObjectHead, StorageBackend } from './storage-backend';
 import { StorageUnavailableError } from './storage-backend';
@@ -92,14 +107,40 @@ import { StorageUnavailableError } from './storage-backend';
  */
 const DEFAULT_STALE_AFTER_MS = 60 * 60 * 1000;
 
+/**
+ * Fifteen seconds before a backend believed to be down is tried again.
+ *
+ * This is an outage cadence, not a budget window, and the two pull in
+ * opposite directions. Downward: a caller is a person at a File: prompt, and
+ * a volume that recovers a millisecond after the failed attempt must not keep
+ * answering "storage unavailable" - fifteen seconds is inside one human retry
+ * at the prompt, so recovery is noticed on the caller's next try rather than
+ * up to an hour later. Upward: every retry is a real request against Oracle's
+ * 50,000 a MONTH. Fifteen seconds caps a sustained outage at 240 attempts an
+ * hour per area even under continuous hammering - about a tenth of the
+ * monthly budget for a full day of outage on one area, where five seconds
+ * would spend a third of it. The top of the sane range is the right end to
+ * sit at when the budget is the binding constraint and the recovery gain from
+ * 15s to 5s is one prompt round-trip.
+ */
+const DEFAULT_ERROR_RETRY_AFTER_MS = 15 * 1000;
+
 interface PendingOp {
   readonly type: 'note' | 'forget';
   readonly key: string;
 }
 
+/** Error.cause exists on the runtime; the ES2020 lib this project targets does not type it. */
+type ErrorWithCause = Error & { cause?: unknown };
+
 export interface NameIndexOptions {
   /** How long a MISS is trusted before it forces a re-list. A HIT never re-lists. */
   staleAfterMs?: number;
+  /**
+   * How long a FAILED attempt is trusted before another one is allowed.
+   * Deliberately far shorter than staleAfterMs - see invariant 5.
+   */
+  errorRetryAfterMs?: number;
   /** Injectable clock so tests can move time without waiting on it. Defaults to Date.now. */
   now?: () => number;
 }
@@ -110,18 +151,25 @@ export class NameIndex {
   /** Real keys sharing a lowercased relative path - the case-insensitive fallback pool. */
   private byLowerName = new Map<string, Set<string>>();
   private primed = false;
-  /** When a listing was last ATTEMPTED, success or failure - what gates a stale-miss re-list. */
+  /** When a listing was last ATTEMPTED, success or failure - what both windows measure from. */
   private lastAttemptAt = 0;
   /**
-   * The failure from the last attempt, or null if the last attempt
-   * succeeded (or none has been made yet). This is what stops a throttled
-   * MISS from answering "not found" while the backend is known to be
-   * down - see invariant 4 above.
+   * The last attempt's failure, or null if the last attempt succeeded (or
+   * none has been made yet). This is what stops a throttled MISS from
+   * answering "not found" while the backend is known to be down - see
+   * invariant 4 above.
+   *
+   * Wrapped in an object rather than held as a bare value, so that an
+   * adapter throwing a falsy value (`throw null` is legal JavaScript) cannot
+   * read back as "the last attempt succeeded" and reopen the hole. The error
+   * inside is `unknown` on purpose: EVERY failure is remembered, not only
+   * the type we expect.
    */
-  private lastAttemptError: StorageUnavailableError | null = null;
+  private lastAttemptFailure: { readonly error: unknown } | null = null;
   private inFlight: Promise<void> | null = null;
   private pendingOps: PendingOp[] = [];
   private readonly staleAfterMs: number;
+  private readonly errorRetryAfterMs: number;
   private readonly now: () => number;
 
   constructor(
@@ -130,6 +178,7 @@ export class NameIndex {
     options: NameIndexOptions = {}
   ) {
     this.staleAfterMs = options.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
+    this.errorRetryAfterMs = options.errorRetryAfterMs ?? DEFAULT_ERROR_RETRY_AFTER_MS;
     this.now = options.now ?? Date.now;
   }
 
@@ -138,8 +187,44 @@ export class NameIndex {
     return key.startsWith(this.prefix) ? key.slice(this.prefix.length) : key;
   }
 
+  /**
+   * Is another listing attempt still off-limits?
+   *
+   * The window depends on what the last attempt actually did (invariant 5):
+   * after a FAILURE it is the short outage-retry cadence, because the only
+   * question open is "is the backend back yet"; after a SUCCESS it is the
+   * long miss-trust window, because the only question open is "has someone
+   * outside this process written the bucket since", and asking that costs
+   * budget for no operational urgency.
+   */
   private throttled(): boolean {
-    return this.now() - this.lastAttemptAt < this.staleAfterMs;
+    const windowMs = this.lastAttemptFailure !== null ? this.errorRetryAfterMs : this.staleAfterMs;
+    return this.now() - this.lastAttemptAt < windowMs;
+  }
+
+  /**
+   * The cached failure, re-raised for a caller that a throttle stopped from
+   * making its own attempt.
+   *
+   * A fresh error, not the cached object itself: one shared mutable Error
+   * handed to every caller in the window is an object any logger or wrapper
+   * can annotate on the way out, poisoning it for everyone after, and its
+   * stack points at an attempt up to a window ago rather than at this call.
+   * The original travels along as `cause`, so nothing is lost. The type is
+   * always StorageUnavailableError - "the volume cannot answer right now" is
+   * exactly what this is, whatever shape the underlying throw had, and a
+   * caller must not have to know two error types to avoid deleting a good
+   * catalog row.
+   */
+  private cachedFailure(): StorageUnavailableError {
+    const cause = this.lastAttemptFailure?.error;
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    const error = new StorageUnavailableError(
+      this.backend.driveNumber,
+      `volume is unavailable - the last listing attempt failed: ${detail}`
+    );
+    (error as ErrorWithCause).cause = cause;
+    return error;
   }
 
   /**
@@ -175,13 +260,17 @@ export class NameIndex {
         this.primed = true;
         // This attempt confirmed the data - any previously cached failure
         // no longer describes the backend's current state.
-        this.lastAttemptError = null;
+        this.lastAttemptFailure = null;
       } catch (err) {
-        // Only StorageUnavailableError is cached and re-served to a
-        // throttled miss (invariant 4) - an unexpected error of some other
-        // kind still propagates below, it just is not remembered as "the
-        // backend is known down."
-        if (err instanceof StorageUnavailableError) this.lastAttemptError = err;
+        // EVERY failure is remembered, whatever its type. Remembering only
+        // StorageUnavailableError would leave an adapter bug, a malformed
+        // page or an OOM looking exactly like a clean attempt: the next
+        // stale miss in this window would answer null - "no such file" for
+        // a file that is fine - and a never-primed index would re-list on
+        // every single resolve() call. Same two holes as invariant 4's,
+        // reached through a type check. The original error still propagates
+        // untouched to this attempt's own caller.
+        this.lastAttemptFailure = { error: err };
         throw err;
       } finally {
         // Runs on success AND failure - a down backend still advances the
@@ -232,13 +321,17 @@ export class NameIndex {
 
   async resolve(name: string): Promise<string | null> {
     if (!this.primed) {
-      // Never attempted, or the last attempt failed and this window has not
-      // rolled over yet: re-throw what we already know rather than spending
-      // a request to learn it again. A cold-start outage would otherwise
-      // cost one list() per resolve() call, hit or miss - the throttle
-      // this class exists to provide, skipped entirely on this path.
-      if (this.lastAttemptError !== null && this.throttled()) {
-        throw this.lastAttemptError;
+      // The last attempt failed and the retry window has not rolled over
+      // yet: re-raise what we already know rather than spending a request
+      // to learn it again. A cold-start outage would otherwise cost one
+      // list() per resolve() call, hit or miss - the throttle this class
+      // exists to provide, skipped entirely on this path. The window here
+      // is the SHORT one (invariant 5): an index that has never listed is
+      // wholly unusable while this stands, so it has to be seconds, not the
+      // hour that governs how long a successful listing's misses are
+      // trusted.
+      if (this.lastAttemptFailure !== null && this.throttled()) {
+        throw this.cachedFailure();
       }
       await this.refresh();
     }
@@ -249,12 +342,14 @@ export class NameIndex {
         await this.refresh();
         found = this.lookup(name);
       }
-      if (found === null && this.lastAttemptError !== null) {
-        // No candidates AND the backend is known down: answering null here
+      if (found === null && this.lastAttemptFailure !== null) {
+        // No candidates AND the last attempt failed: answering null here
         // would be indistinguishable from "no such object" to a caller
         // sweeping a catalog, and is exactly the wrong answer invariant 1
-        // exists to prevent. Re-throw the cached failure instead.
-        throw this.lastAttemptError;
+        // exists to prevent. Re-raise the cached failure instead - the short
+        // retry window shortens how long this lasts, it never licenses the
+        // cheaper answer.
+        throw this.cachedFailure();
       }
     }
     return found;

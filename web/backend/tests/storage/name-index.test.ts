@@ -1,6 +1,26 @@
 import { NameIndex } from '../../src/storage/name-index';
+import type { ObjectHead } from '../../src/storage/storage-backend';
 import { StorageUnavailableError } from '../../src/storage/storage-backend';
 import { FakeBackend } from './fake-backend';
+
+/**
+ * A volume whose list() breaks the way no adapter is supposed to let it -
+ * not a StorageUnavailableError, just a bug (a malformed page, a null
+ * dereference, an OOM). What the index has to remember is that the last
+ * attempt FAILED, never that it failed with the type we were expecting.
+ */
+class BrokenListBackend extends FakeBackend {
+  breakList = false;
+  listAttempts = 0;
+
+  async list(prefix: string): Promise<ObjectHead[]> {
+    this.listAttempts++;
+    if (this.breakList) {
+      throw new TypeError("Cannot read properties of undefined (reading 'Contents')");
+    }
+    return super.list(prefix);
+  }
+}
 
 describe('NameIndex', () => {
   it('resolves the caller spelling to the real key', async () => {
@@ -52,7 +72,11 @@ describe('NameIndex', () => {
     await backend.put('Files/FILE.LHA', Buffer.from('x'));
     backend.down = true;
     let clock = 0;
-    const index = new NameIndex(backend, 'Files/', { staleAfterMs: 1000, now: () => clock });
+    const index = new NameIndex(backend, 'Files/', {
+      staleAfterMs: 1000,
+      errorRetryAfterMs: 1000,
+      now: () => clock,
+    });
 
     await expect(index.resolve('file.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
 
@@ -292,7 +316,11 @@ describe('NameIndex', () => {
   it('(a) primed and down: every stale miss rejects, not just the first, and costs zero further requests', async () => {
     const backend = new FakeBackend({ driveNumber: 2 });
     let clock = 0;
-    const index = new NameIndex(backend, 'Files/', { staleAfterMs: 1000, now: () => clock });
+    const index = new NameIndex(backend, 'Files/', {
+      staleAfterMs: 1000,
+      errorRetryAfterMs: 1000,
+      now: () => clock,
+    });
 
     await index.resolve('ghost.lha'); // primes with a real listing
     expect(backend.lists).toBe(1);
@@ -341,26 +369,43 @@ describe('NameIndex', () => {
     expect(backend.requests).toBe(2); // the one setup put(), the one priming list()
   });
 
-  it('(c) unprimed and down: every resolve() call rejects, and costs exactly one attempt in total', async () => {
+  it('(c) unprimed and down: every resolve() call rejects, and costs one attempt per retry window', async () => {
     const backend = new FakeBackend({ driveNumber: 2 });
     backend.down = true;
-    const index = new NameIndex(backend, 'Files/', { staleAfterMs: 1000 });
+    let clock = 0;
+    const index = new NameIndex(backend, 'Files/', {
+      staleAfterMs: 1000,
+      errorRetryAfterMs: 100,
+      now: () => clock,
+    });
 
     await expect(index.resolve('anything')).rejects.toBeInstanceOf(StorageUnavailableError);
     const requestsAfterFirstAttempt = backend.requests;
 
     // Still unprimed, still down: the cold-start path is throttled exactly
     // like the stale-miss path above - without this, a cold-start outage
-    // costs one list() per resolve() call, hit or miss, unbounded.
+    // costs one list() per resolve() call, hit or miss, unbounded. The clock
+    // is injected rather than real: this assertion is about the window, and
+    // a test that only holds while three awaits happen to finish inside it
+    // is measuring the machine, not the code.
+    clock += 50; // inside the retry window
     await expect(index.resolve('anything')).rejects.toBeInstanceOf(StorageUnavailableError);
     await expect(index.resolve('anything')).rejects.toBeInstanceOf(StorageUnavailableError);
     expect(backend.requests).toBe(requestsAfterFirstAttempt); // no further attempts
+
+    clock += 100; // past the retry window: exactly one more attempt, and it still rejects
+    await expect(index.resolve('anything')).rejects.toBeInstanceOf(StorageUnavailableError);
+    expect(backend.requests).toBe(requestsAfterFirstAttempt + 1);
   });
 
   it('(d) once the backend recovers and the window rolls over, a miss answers null again', async () => {
     const backend = new FakeBackend({ driveNumber: 2 });
     let clock = 0;
-    const index = new NameIndex(backend, 'Files/', { staleAfterMs: 1000, now: () => clock });
+    const index = new NameIndex(backend, 'Files/', {
+      staleAfterMs: 1000,
+      errorRetryAfterMs: 1000,
+      now: () => clock,
+    });
 
     await index.resolve('ghost.lha'); // primes
     clock += 1500;
@@ -373,6 +418,124 @@ describe('NameIndex', () => {
     // A real, current answer - not the cached failure from before.
     expect(await index.resolve('ghost.lha')).toBeNull();
     expect(await index.resolve('ghost.lha')).toBeNull(); // stays null, no lingering error
+  });
+
+  // --- Recovery cadence: a believed-down backend is retried in SECONDS, while
+  // a miss stays trusted for the full budget window. One number cannot mean
+  // both. ---
+
+  it('(e) unprimed and down: recovery is picked up after the short retry window, not the long stale one', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    await backend.put('Files/FILE.LHA', Buffer.from('x'));
+    backend.down = true;
+    let clock = 0;
+    const index = new NameIndex(backend, 'Files/', {
+      staleAfterMs: 60 * 60 * 1000, // an hour: how long a MISS is trusted
+      errorRetryAfterMs: 15 * 1000, // fifteen seconds: how long a FAILURE is trusted
+      now: () => clock,
+    });
+
+    await expect(index.resolve('file.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+
+    // The volume comes back a moment after that attempt. An index that has
+    // never listed is wholly unusable until it can list - gating that retry
+    // on the hour-long miss-trust window means this area answers "storage
+    // unavailable" to a caller at the File: prompt for the rest of the hour
+    // while the volume is healthy.
+    backend.down = false;
+    clock += 20 * 1000; // past the retry window, nowhere near the stale window
+
+    expect(await index.resolve('file.lha')).toBe('Files/FILE.LHA');
+  });
+
+  it('(f) primed and down: a recovered volume answers again after the retry window, not an hour later', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    let clock = 0;
+    const index = new NameIndex(backend, 'Files/', {
+      staleAfterMs: 60 * 60 * 1000,
+      errorRetryAfterMs: 15 * 1000,
+      now: () => clock,
+    });
+
+    expect(await index.resolve('ghost.lha')).toBeNull(); // primes
+    clock += 61 * 60 * 1000; // the miss has gone stale
+    backend.down = true;
+    await expect(index.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+
+    backend.down = false;
+    clock += 20 * 1000; // one retry window later, not one stale window later
+
+    expect(await index.resolve('ghost.lha')).toBeNull();
+    expect(backend.lists).toBe(2); // the priming listing, and the one that confirmed recovery
+  });
+
+  it('(g) the default retry window is seconds - the defaults a registry-built index gets recover promptly', async () => {
+    // NameIndexRegistry constructs every index with the defaults, so whatever
+    // they are is what a real area on a real board behaves like.
+    const backend = new FakeBackend({ driveNumber: 2 });
+    await backend.put('Files/FILE.LHA', Buffer.from('x'));
+    backend.down = true;
+    let clock = 0;
+    const index = new NameIndex(backend, 'Files/', { now: () => clock });
+
+    await expect(index.resolve('file.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+
+    backend.down = false;
+    clock += 30 * 1000; // half a minute - deep inside the one-hour miss-trust default
+
+    expect(await index.resolve('file.lha')).toBe('Files/FILE.LHA');
+  });
+
+  // --- Any failure is remembered, not only the expected type: the "not found
+  // during an outage" hole must not be reachable through a type check. ---
+
+  it('(h) a non-storage failure is remembered too - a later stale miss rejects instead of answering not-found', async () => {
+    const backend = new BrokenListBackend({ driveNumber: 2 });
+    let clock = 0;
+    const index = new NameIndex(backend, 'Files/', {
+      staleAfterMs: 1000,
+      errorRetryAfterMs: 100,
+      now: () => clock,
+    });
+
+    expect(await index.resolve('ghost.lha')).toBeNull(); // primes
+    clock += 1500; // the miss has gone stale
+    backend.breakList = true;
+
+    // The attempt that actually ran surfaces the real bug, untouched.
+    await expect(index.resolve('ghost.lha')).rejects.toBeInstanceOf(TypeError);
+    expect(backend.listAttempts).toBe(2);
+
+    // Inside the retry window the miss must STILL reject. Answering null here
+    // is "there is no such file" for a file that is fine - the failure the
+    // whole cached-error gate exists to prevent, reached through the type
+    // check rather than through the throttle.
+    const raised: unknown = await index.resolve('ghost.lha').catch((err: unknown) => err);
+    expect(raised).toBeInstanceOf(StorageUnavailableError);
+    // Raised fresh rather than re-throwing one shared mutable object to every
+    // caller in the window; the original travels along untouched as `cause`.
+    expect((raised as { cause?: unknown }).cause).toBeInstanceOf(TypeError);
+    expect(backend.listAttempts).toBe(2); // no further attempt was spent to learn this
+  });
+
+  it('(i) a non-storage failure on the cold-start path is throttled too - not one listing per resolve()', async () => {
+    const backend = new BrokenListBackend({ driveNumber: 2 });
+    backend.breakList = true;
+    let clock = 0;
+    const index = new NameIndex(backend, 'Files/', {
+      staleAfterMs: 1000,
+      errorRetryAfterMs: 100,
+      now: () => clock,
+    });
+
+    await expect(index.resolve('anything')).rejects.toBeInstanceOf(TypeError);
+    await expect(index.resolve('anything')).rejects.toBeInstanceOf(StorageUnavailableError);
+    await expect(index.resolve('anything')).rejects.toBeInstanceOf(StorageUnavailableError);
+    expect(backend.listAttempts).toBe(1); // unbounded without this - one list() per call
+
+    clock += 150; // past the retry window
+    await expect(index.resolve('anything')).rejects.toBeInstanceOf(TypeError);
+    expect(backend.listAttempts).toBe(2);
   });
 
   // --- Important: the gap between the drain and the in-flight flag clearing ---
