@@ -51,13 +51,18 @@ describe('NameIndex', () => {
     const backend = new FakeBackend({ driveNumber: 2 });
     await backend.put('Files/FILE.LHA', Buffer.from('x'));
     backend.down = true;
-    const index = new NameIndex(backend, 'Files/');
+    let clock = 0;
+    const index = new NameIndex(backend, 'Files/', { staleAfterMs: 1000, now: () => clock });
 
     await expect(index.resolve('file.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
 
-    // The volume comes back: the index must still be able to resolve the
-    // real file, not have latched an empty result while the volume was down.
+    // The volume comes back, and once the throttle window has rolled over
+    // the index tries again (it does not retry on every call while
+    // unprimed and down - see the cold-start throttle tests below): it
+    // must be able to resolve the real file, not have latched an empty
+    // result while the volume was down.
     backend.down = false;
+    clock += 1500;
     expect(await index.resolve('file.lha')).toBe('Files/FILE.LHA');
   });
 
@@ -280,7 +285,11 @@ describe('NameIndex', () => {
     expect(backend.lists).toBe(1); // no extra listing
   });
 
-  it('a down backend past the staleness window costs one list attempt, not one per subsequent miss', async () => {
+  // --- CRITICAL: a stale miss must never degrade to "not found" while the
+  // backend is known to be down - only the ATTEMPT is throttled, never the
+  // honesty of the answer. ---
+
+  it('(a) primed and down: every stale miss rejects, not just the first, and costs zero further requests', async () => {
     const backend = new FakeBackend({ driveNumber: 2 });
     let clock = 0;
     const index = new NameIndex(backend, 'Files/', { staleAfterMs: 1000, now: () => clock });
@@ -291,16 +300,18 @@ describe('NameIndex', () => {
     clock += 1500; // past the window
     backend.down = true;
 
-    // The first stale miss after the outage begins still attempts, and
-    // still surfaces the real failure.
+    // The first stale miss after the outage begins attempts, and surfaces
+    // the real failure.
     await expect(index.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
     const requestsAfterFirstAttempt = backend.requests;
 
-    // Still down, clock unmoved: without a lastAttemptAt separate from the
-    // last SUCCESS, refreshedAt would never advance while down and every
-    // one of these would attempt (and fail) again on its own.
-    expect(await index.resolve('ghost.lha')).toBeNull();
-    expect(await index.resolve('ghost.lha')).toBeNull();
+    // Still down, clock unmoved: every later stale miss must ALSO reject -
+    // answering null here would be indistinguishable from "no such object"
+    // to a caller sweeping a catalog, and would delete a good row. No
+    // further requests are spent to know this; the throttle caps the
+    // ATTEMPT rate, not the honesty of the answer.
+    await expect(index.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+    await expect(index.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
     expect(backend.requests).toBe(requestsAfterFirstAttempt); // no further attempts
 
     // Once another full window has passed since that attempt, one more
@@ -308,6 +319,60 @@ describe('NameIndex', () => {
     clock += 1500;
     await expect(index.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
     expect(backend.requests).toBe(requestsAfterFirstAttempt + 1);
+  });
+
+  it('(b) primed and down: a hit still answers from the stale maps, no request spent', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    await backend.put('Files/FILE.LHA', Buffer.from('x'));
+    let clock = 0;
+    const index = new NameIndex(backend, 'Files/', { staleAfterMs: 1000, now: () => clock });
+
+    await index.resolve('file.lha'); // primes
+    expect(backend.lists).toBe(1);
+
+    clock += 1500; // past the window
+    backend.down = true;
+
+    // The object was real before the outage and nothing has said otherwise -
+    // a hit is trusted regardless of age (invariant 4), and answering it
+    // never touches the backend.
+    expect(await index.resolve('file.lha')).toBe('Files/FILE.LHA');
+    expect(backend.lists).toBe(1);
+    expect(backend.requests).toBe(2); // the one setup put(), the one priming list()
+  });
+
+  it('(c) unprimed and down: every resolve() call rejects, and costs exactly one attempt in total', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    backend.down = true;
+    const index = new NameIndex(backend, 'Files/', { staleAfterMs: 1000 });
+
+    await expect(index.resolve('anything')).rejects.toBeInstanceOf(StorageUnavailableError);
+    const requestsAfterFirstAttempt = backend.requests;
+
+    // Still unprimed, still down: the cold-start path is throttled exactly
+    // like the stale-miss path above - without this, a cold-start outage
+    // costs one list() per resolve() call, hit or miss, unbounded.
+    await expect(index.resolve('anything')).rejects.toBeInstanceOf(StorageUnavailableError);
+    await expect(index.resolve('anything')).rejects.toBeInstanceOf(StorageUnavailableError);
+    expect(backend.requests).toBe(requestsAfterFirstAttempt); // no further attempts
+  });
+
+  it('(d) once the backend recovers and the window rolls over, a miss answers null again', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    let clock = 0;
+    const index = new NameIndex(backend, 'Files/', { staleAfterMs: 1000, now: () => clock });
+
+    await index.resolve('ghost.lha'); // primes
+    clock += 1500;
+    backend.down = true;
+    await expect(index.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+
+    clock += 1500; // window rolls over again
+    backend.down = false; // the backend has genuinely recovered
+
+    // A real, current answer - not the cached failure from before.
+    expect(await index.resolve('ghost.lha')).toBeNull();
+    expect(await index.resolve('ghost.lha')).toBeNull(); // stays null, no lingering error
   });
 
   // --- Important: the gap between the drain and the in-flight flag clearing ---

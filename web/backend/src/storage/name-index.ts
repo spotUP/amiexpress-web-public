@@ -10,12 +10,15 @@
  * Four invariants this index has to hold at once, each earned from a real
  * failure mode:
  *
- * 1. Unavailability during refresh() must never look like an empty area. A
- *    caller reading a StorageUnavailableError as "no such file" deletes the
- *    catalog row for a file that is fine. refresh() only commits a new
- *    listing once backend.list() has actually succeeded; on failure the
- *    index keeps whatever it held before, and the error propagates instead
- *    of being swallowed.
+ * 1. Unavailability must never look like an empty area, or answer as one.
+ *    refresh() only commits a new listing once backend.list() has actually
+ *    succeeded; on failure the index keeps whatever it held before, and the
+ *    error propagates instead of being swallowed. That much is not enough by
+ *    itself, though - see invariant 4 below for the other half of this: a
+ *    MISS answered while the backend is known to be down must also never
+ *    look like "no such object" to a caller. A sysop sweeping a catalog
+ *    during an outage who gets "not found" instead of an error deletes a
+ *    row for a file that is fine.
  *
  * 2. note()/forget() that land WHILE a refresh() is outstanding must not be
  *    discarded by the listing that predates them - two nodes, one listing
@@ -59,15 +62,28 @@
  *    miss older than the window forces exactly one re-list before the
  *    answer is trusted; a miss inside the window, and every hit regardless
  *    of age, costs nothing. The window is measured from the last ATTEMPT
- *    (lastAttemptAt), not the last SUCCESS (refreshedAt): gating on success
- *    alone means a down backend never advances the stamp, so every single
- *    stale miss re-attempts (and re-fails) for as long as the outage lasts -
- *    one list call per miss instead of one per window. lastAttemptAt
- *    advances whether the attempt succeeded or failed, so only the first
- *    stale miss in a window pays for an attempt; the rest answer from
- *    whatever the index already holds until the window rolls over again.
+ *    (lastAttemptAt), not the last SUCCESS: gating on success alone means a
+ *    down backend never advances the stamp, so every single stale miss
+ *    re-attempts (and re-fails) for as long as the outage lasts - one list
+ *    call per miss instead of one per window.
+ *
+ *    Capping the attempt rate is not enough on its own, though: a throttled
+ *    attempt that is skipped because one already failed inside this window
+ *    must NOT fall through to "no candidates found, so answer null" - that
+ *    is invariant 1's failure again, just reached through the throttle
+ *    instead of through refresh() itself. lastAttemptError remembers the
+ *    outcome of the last attempt, not only its time: a MISS with a cached
+ *    failure re-throws that failure (preserving its drive number) instead
+ *    of degrading to "not found," on both the primed-but-stale path and the
+ *    never-primed cold-start path, so attempts stay capped at one per
+ *    window WITHOUT ever trading a wrong "not found" for the saved
+ *    request. A HIT still answers from the primed maps regardless - the
+ *    data behind a hit is real and was already trusted before the backend
+ *    went down. The flag clears the moment a listing actually succeeds, so
+ *    recovery is detected on the very next attempt the window allows.
  */
 import type { ObjectHead, StorageBackend } from './storage-backend';
+import { StorageUnavailableError } from './storage-backend';
 
 /**
  * One hour: cheap enough that a write from outside this process becomes
@@ -94,10 +110,15 @@ export class NameIndex {
   /** Real keys sharing a lowercased relative path - the case-insensitive fallback pool. */
   private byLowerName = new Map<string, Set<string>>();
   private primed = false;
-  /** When the maps were last actually replaced by a successful listing. */
-  private refreshedAt = 0;
   /** When a listing was last ATTEMPTED, success or failure - what gates a stale-miss re-list. */
   private lastAttemptAt = 0;
+  /**
+   * The failure from the last attempt, or null if the last attempt
+   * succeeded (or none has been made yet). This is what stops a throttled
+   * MISS from answering "not found" while the backend is known to be
+   * down - see invariant 4 above.
+   */
+  private lastAttemptError: StorageUnavailableError | null = null;
   private inFlight: Promise<void> | null = null;
   private pendingOps: PendingOp[] = [];
   private readonly staleAfterMs: number;
@@ -115,6 +136,10 @@ export class NameIndex {
   /** A path's location relative to this area's prefix - what gets lowercased and compared. */
   private relKey(key: string): string {
     return key.startsWith(this.prefix) ? key.slice(this.prefix.length) : key;
+  }
+
+  private throttled(): boolean {
+    return this.now() - this.lastAttemptAt < this.staleAfterMs;
   }
 
   /**
@@ -148,7 +173,16 @@ export class NameIndex {
         this.exactByRelKey = exact;
         this.byLowerName = byLower;
         this.primed = true;
-        this.refreshedAt = this.now();
+        // This attempt confirmed the data - any previously cached failure
+        // no longer describes the backend's current state.
+        this.lastAttemptError = null;
+      } catch (err) {
+        // Only StorageUnavailableError is cached and re-served to a
+        // throttled miss (invariant 4) - an unexpected error of some other
+        // kind still propagates below, it just is not remembered as "the
+        // backend is known down."
+        if (err instanceof StorageUnavailableError) this.lastAttemptError = err;
+        throw err;
       } finally {
         // Runs on success AND failure - a down backend still advances the
         // "last attempt" stamp, or every stale miss would keep re-trying
@@ -197,12 +231,31 @@ export class NameIndex {
   }
 
   async resolve(name: string): Promise<string | null> {
-    if (!this.primed) await this.refresh();
+    if (!this.primed) {
+      // Never attempted, or the last attempt failed and this window has not
+      // rolled over yet: re-throw what we already know rather than spending
+      // a request to learn it again. A cold-start outage would otherwise
+      // cost one list() per resolve() call, hit or miss - the throttle
+      // this class exists to provide, skipped entirely on this path.
+      if (this.lastAttemptError !== null && this.throttled()) {
+        throw this.lastAttemptError;
+      }
+      await this.refresh();
+    }
 
     let found = this.lookup(name);
-    if (found === null && this.now() - this.lastAttemptAt >= this.staleAfterMs) {
-      await this.refresh();
-      found = this.lookup(name);
+    if (found === null) {
+      if (!this.throttled()) {
+        await this.refresh();
+        found = this.lookup(name);
+      }
+      if (found === null && this.lastAttemptError !== null) {
+        // No candidates AND the backend is known down: answering null here
+        // would be indistinguishable from "no such object" to a caller
+        // sweeping a catalog, and is exactly the wrong answer invariant 1
+        // exists to prevent. Re-throw the cached failure instead.
+        throw this.lastAttemptError;
+      }
     }
     return found;
   }
