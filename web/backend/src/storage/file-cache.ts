@@ -55,6 +55,20 @@ export interface PendingEntry {
   localPath: string;
 }
 
+/**
+ * What a sidecar marker holds. The size and mtime are the staged file as it
+ * stood when the marker went down, and they exist for one case: nothing is
+ * fsynced before rename, so a power loss can leave a staged file
+ * PRESENT-BUT-TRUNCATED with its marker intact. Adopting that blindly uploads
+ * the short file over a perfectly good object and then removes the marker, so
+ * the good bytes are gone with nothing recording it. On disagreement recovery
+ * parks the file instead - loudly, still pinned, never uploaded.
+ */
+export interface DirtyMarker extends PendingEntry {
+  size?: number;
+  mtimeMs?: number;
+}
+
 export interface FileCacheOptions {
   cacheDir: string;
   volumes: VolumeSet;
@@ -68,6 +82,31 @@ export interface FileCacheOptions {
 
 /** Matches `BsdSocketLibrary.recv()` and `AmiSSLLibrary`, which both use 30 s. */
 export const DEFAULT_SYNC_TIMEOUT_MS = 30_000;
+
+export type BlockOutcome = 'value' | 'failure' | 'timeout';
+
+/**
+ * What a bounded wait decides when its loop stops - and deliberately CLOCK
+ * FREE.
+ *
+ * The obvious formulation reads the clock, and it is wrong in both directions.
+ * `done` is set by the fulfil handler AND by the bounding timer, so it cannot
+ * tell success from expiry on its own; `setTimeout` fires when
+ * `now - start >= N`, so `Date.now()` can read exactly the deadline. Deciding
+ * on `!done || Date.now() > deadline` then returns the never-assigned result -
+ * `undefined` handed back as a file path - on a call that timed out, and, in
+ * the mirror case, reports an upload that SUCCEEDED as unavailable after its
+ * marker was removed, its journal entry dropped and its bytes charged to the
+ * volume. The door is told the write failed when it landed.
+ *
+ * So the decision reads only what the handlers set. That sliver of a
+ * millisecond is a race by nature and cannot be reproduced in wall-clock time;
+ * making it unreachable is better than trying to test it.
+ */
+export function blockOutcome(succeeded: boolean, failed: boolean): BlockOutcome {
+  if (failed) return 'failure';
+  return succeeded ? 'value' : 'timeout';
+}
 
 /**
  * `instanceof` is not a reliable classifier under this repo's jest: a module
@@ -149,6 +188,8 @@ export class FileCache {
   private journalUntrusted = false;
 
   private shortfallBytes = 0;
+  private warnedEvictionDisabled = false;
+  private warnedShortfall = false;
 
   constructor(opts: FileCacheOptions) {
     this.cacheDir = opts.cacheDir;
@@ -265,14 +306,47 @@ export class FileCache {
   private writeMarker(entry: PendingEntry): void {
     try {
       fs.mkdirSync(path.dirname(entry.localPath), { recursive: true });
-      fs.writeFileSync(this.markerPathFor(entry.localPath), JSON.stringify(entry));
+      const marker: DirtyMarker = { ...entry, ...this.stampOf(entry.localPath) };
+      fs.writeFileSync(this.markerPathFor(entry.localPath), JSON.stringify(marker));
     } catch (err) {
-      // No marker means no per-file pin, so the shared journal is the only
-      // record and eviction must stop.
-      this.journalUntrusted = true;
+      // Warn, but do NOT disable eviction. This process's own record is
+      // intact - `dirty` holds the entry and `markDirty` journals it
+      // immediately - so nothing here is unsafe to evict. Disabling would
+      // deadlock the board in exactly the case eviction is the remedy for:
+      // ENOSPC fails the marker write, eviction switches off permanently, and
+      // the disk never recovers. What is lost is the pin's ability to outlive
+      // a lost journal, which is a degraded guarantee, not an unsafe one.
       console.warn(
-        `[storage] cannot write dirty marker for ${entry.localPath}: ${String(err)}; eviction is disabled until restart`
+        `[storage] cannot write dirty marker for ${entry.localPath}: ${String(err)}; ` +
+          `this upload is recorded only in the journal until it lands`
       );
+    }
+  }
+
+  /** Size and mtime of the staged file, or nothing if it cannot be stat'd. */
+  private stampOf(localPath: string): { size?: number; mtimeMs?: number } {
+    try {
+      const st = fs.statSync(localPath);
+      return { size: st.size, mtimeMs: st.mtimeMs };
+    } catch {
+      // The writer has not created it yet. Recovery will park rather than
+      // replay a file it cannot vouch for.
+      return {};
+    }
+  }
+
+  /**
+   * Whether the staged file is still byte-for-byte what the marker was written
+   * for. A marker with no stamp - written before the file existed, or by an
+   * older build - cannot vouch for anything and answers no.
+   */
+  private markerMatchesFile(marker: DirtyMarker, stagedPath: string): boolean {
+    if (marker.size === undefined || marker.mtimeMs === undefined) return false;
+    try {
+      const st = fs.statSync(stagedPath);
+      return st.size === marker.size && st.mtimeMs === marker.mtimeMs;
+    } catch {
+      return false;
     }
   }
 
@@ -290,7 +364,9 @@ export class FileCache {
    * It ADOPTS any sidecar marker whose entry the journal does not have - a
    * journal that was corrupt, unwritable, or clobbered by another node leaves
    * exactly that, and adopting turns "do not delete these bytes" into "upload
-   * these bytes", which is what was wanted all along.
+   * these bytes", which is what was wanted all along - but only when the
+   * staged file still matches the marker's stamp. It PARKS the file when it
+   * does not, and REMOVES a marker whose file is gone.
    *
    * And it sweeps `.tmp-<pid>-<n>` scratch left by a process that died between
    * writing a download and renaming it. Only temps whose pid is no longer
@@ -299,6 +375,7 @@ export class FileCache {
    */
   private recoverFromDisk(): void {
     const adopted: PendingEntry[] = [];
+    const parked: string[] = [];
 
     this.walkFiles(this.cacheDir, (full, name) => {
       const temp = TEMP_SUFFIX_PATTERN.exec(name);
@@ -314,14 +391,49 @@ export class FileCache {
       }
       if (!name.endsWith(MARKER_SUFFIX)) return;
 
-      const entry = this.readMarker(full);
-      if (!entry) return;
-      const id = this.id(entry.driveNumber, entry.key);
+      // The marker sits beside its file, so the file's path is derived from
+      // the marker's own location rather than trusted from its contents - it
+      // is right even for a marker too corrupt to parse.
+      const stagedPath = full.slice(0, -MARKER_SUFFIX.length);
+      if (!fs.existsSync(stagedPath)) {
+        // There are no bytes left to protect, and leaving the marker is not
+        // harmless: `evictTo` skips markers, so the next cold fetch of this
+        // key lands a perfectly clean copy at exactly this path and it is
+        // un-evictable for the life of the cache directory, across every
+        // restart. Nothing else ever removes one.
+        try {
+          fs.unlinkSync(full);
+        } catch {
+          // Someone else got there first.
+        }
+        console.warn(`[storage] removed dirty marker ${full}: the staged file it protected is gone`);
+        return;
+      }
+
+      const marker = this.readMarker(full);
+      if (!marker) return; // unreadable: still pinned by existing, not replayable
+      const id = this.id(marker.driveNumber, marker.key);
       if (this.dirty.has(id)) return;
-      if (!fs.existsSync(entry.localPath)) return; // marker outlived its file
-      this.dirty.set(id, entry);
-      adopted.push(entry);
+
+      if (!this.markerMatchesFile(marker, stagedPath)) {
+        // Present but not what was staged - the truncated-by-a-power-loss
+        // case. Uploading it would destroy a good object in the pool. Park it:
+        // the marker stays, so the file stays pinned, and nothing replays it
+        // until a person looks.
+        parked.push(stagedPath);
+        return;
+      }
+
+      this.dirty.set(id, { driveNumber: marker.driveNumber, key: marker.key, localPath: stagedPath });
+      adopted.push({ driveNumber: marker.driveNumber, key: marker.key, localPath: stagedPath });
     });
+
+    if (parked.length > 0) {
+      console.warn(
+        `[storage] ${parked.length} staged file(s) do not match the marker that was written for them and will NOT be ` +
+          `uploaded - they are kept and pinned pending a sysop: ${parked.join(', ')}`
+      );
+    }
 
     if (adopted.length > 0) {
       console.warn(
@@ -332,10 +444,10 @@ export class FileCache {
     }
   }
 
-  private readMarker(markerPath: string): PendingEntry | null {
+  private readMarker(markerPath: string): DirtyMarker | null {
     try {
       const parsed: unknown = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
-      return isPendingEntry(parsed) ? parsed : null;
+      return isPendingEntry(parsed) ? (parsed as DirtyMarker) : null;
     } catch {
       // A marker we cannot read still pins its file by existing - `evictTo`
       // checks for the file, not for its contents - it just cannot be
@@ -523,12 +635,31 @@ export class FileCache {
    *
    * Every other deasync loop in this backend arms a timer before spinning -
    * `BsdSocketLibrary.recv()` at :713, `AmiSSLLibrary` at :552,
-   * `door-message-callbacks` at :194 and :503 - and for two reasons, only one
-   * of which is obvious. It bounds the wait; and the armed timer is a live
-   * handle, which is what gives `uv_run(UV_RUN_ONCE)` something to wake on so
-   * the predicate is re-evaluated at all. Without it the deadlock described on
-   * `ensureLocalSync` is permanent and takes the whole board with it, rather
-   * than failing one door's file operation.
+   * `door-message-callbacks` at :194 and :503 - and the two mechanisms here
+   * are NOT interchangeable.
+   *
+   * `loopWhile` is `while (pred()) { drain ticks; uv_run(loop, UV_RUN_ONCE); }`
+   * and UV_RUN_ONCE blocks in the poll phase until some handle is ready,
+   * capped by the nearest due timer. So:
+   *
+   *   - THE TIMER IS LOAD-BEARING. A live uv_timer caps the poll timeout, so
+   *     the loop is bounded in every case, including the one that matters in
+   *     production - a real S3 socket parked in epoll_wait that never answers.
+   *   - The deadline in the predicate is a BACKSTOP for the timer callback not
+   *     being delivered. With nothing pollable, uv_run returns instantly and
+   *     the deadline stops a hot spin; but with a live handle that never
+   *     fires, uv_run stays in poll and the predicate is not re-evaluated
+   *     until something unrelated happens to wake it. Measured with the timer
+   *     removed and a listening socket in the loop: a 400 ms deadline overran
+   *     to roughly 9 s. The deadline alone does not bound anything usefully.
+   *
+   * Note it is the timer HANDLE that caps the poll, not its callback - with
+   * the callback stubbed out but the timer still armed, the wait stays inside
+   * its deadline. The callback flipping `done` is belt and braces on top.
+   *
+   * Unbounded - neither of them - the deadlock described on `ensureLocalSync`
+   * is permanent and takes the whole board with it, rather than failing one
+   * door's file operation.
    *
    * Expiry raises `StorageUnavailableError`: a volume that did not answer in
    * time is exactly "ask again later", and for a write-back the entry is
@@ -537,12 +668,14 @@ export class FileCache {
   private blockOn<T>(driveNumber: number, operation: string, work: Promise<T>): T {
     let result: T | undefined;
     let failure: unknown;
+    let succeeded = false;
     let failed = false;
     let done = false;
 
     work.then(
       (value) => {
         result = value;
+        succeeded = true;
         done = true;
       },
       (error: unknown) => {
@@ -560,14 +693,17 @@ export class FileCache {
     deasync.loopWhile(() => !done && Date.now() < deadline);
     clearTimeout(timer);
 
-    if (failed) throw failure;
-    if (!done || Date.now() > deadline) {
-      throw new StorageUnavailableError(
-        driveNumber,
-        `${operation} did not finish within ${this.syncTimeoutMs}ms on DRIVE.${driveNumber}`
-      );
+    switch (blockOutcome(succeeded, failed)) {
+      case 'failure':
+        throw failure;
+      case 'timeout':
+        throw new StorageUnavailableError(
+          driveNumber,
+          `${operation} did not finish within ${this.syncTimeoutMs}ms on DRIVE.${driveNumber}`
+        );
+      default:
+        return result as T;
     }
-    return result as T;
   }
 
   /**
@@ -711,14 +847,50 @@ export class FileCache {
    * which is the thing to fix.
    */
   evictTo(maxBytes: number = this.maxBytes): void {
+    const files = this.scanForEviction();
+    let total = files.reduce((sum, f) => sum + f.size, 0);
+
     if (this.journalUntrusted) {
-      console.warn(
-        '[storage] eviction is disabled: the record of which files are not yet uploaded is incomplete, ' +
-          'so no file can be proven safe to delete'
-      );
+      // The number still has to be right. `overBudgetBytes()` is the one value
+      // an admin surface would plot, and freezing it at its last reading -
+      // usually 0 - exactly while the disk fills is worse than not having it.
+      this.shortfallBytes = Math.max(0, total - maxBytes);
+      if (!this.warnedEvictionDisabled) {
+        this.warnedEvictionDisabled = true;
+        console.warn(
+          '[storage] eviction is disabled: the record of which files are not yet uploaded is incomplete, ' +
+            'so no file can be proven safe to delete'
+        );
+      }
       return;
     }
 
+    for (const file of files.filter((f) => f.evictable).sort((a, b) => a.used - b.used)) {
+      if (total <= maxBytes) break;
+      try {
+        fs.unlinkSync(file.full);
+      } catch {
+        continue; // could not remove it; it still counts against the budget
+      }
+      this.lastUsed.delete(path.resolve(file.full));
+      total -= file.size;
+    }
+
+    this.shortfallBytes = Math.max(0, total - maxBytes);
+    if (this.shortfallBytes === 0) {
+      // Back inside budget: a later recurrence is worth saying out loud again.
+      this.warnedShortfall = false;
+      return;
+    }
+    if (this.warnedShortfall) return; // once per episode - a per-call warning is noise operators filter out
+    this.warnedShortfall = true;
+    console.warn(
+      `[storage] cache is ${this.shortfallBytes} bytes over its ${maxBytes} byte budget and cannot shrink further: ` +
+        `${this.dirty.size} file(s) have not been uploaded yet and will not be deleted`
+    );
+  }
+
+  private scanForEviction(): Array<{ full: string; size: number; used: number; evictable: boolean }> {
     const pinnedPaths = new Set([...this.dirty.values()].map((e) => path.resolve(e.localPath)));
     const journal = path.resolve(this.journalPath);
 
@@ -752,25 +924,7 @@ export class FileCache {
       files.push({ full, size, used: Math.max(atime, this.lastUsed.get(resolved) ?? 0), evictable });
     });
 
-    let total = files.reduce((sum, f) => sum + f.size, 0);
-    for (const file of files.filter((f) => f.evictable).sort((a, b) => a.used - b.used)) {
-      if (total <= maxBytes) break;
-      try {
-        fs.unlinkSync(file.full);
-      } catch {
-        continue; // could not remove it; it still counts against the budget
-      }
-      this.lastUsed.delete(path.resolve(file.full));
-      total -= file.size;
-    }
-
-    this.shortfallBytes = Math.max(0, total - maxBytes);
-    if (this.shortfallBytes > 0) {
-      console.warn(
-        `[storage] cache is ${this.shortfallBytes} bytes over its ${maxBytes} byte budget and cannot shrink further: ` +
-          `${this.dirty.size} file(s) have not been uploaded yet and will not be deleted`
-      );
-    }
+    return files;
   }
 }
 

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { FileCache } from '../../src/storage/file-cache';
+import { FileCache, blockOutcome } from '../../src/storage/file-cache';
 import { VolumeSet, type VolumeState } from '../../src/storage/volume-set';
 import { StorageUnavailableError } from '../../src/storage/storage-backend';
 import { FakeBackend } from './fake-backend';
@@ -397,5 +397,172 @@ describe('FileCache download temp files', () => {
 
     expect(fs.existsSync(orphan)).toBe(false);
     expect(fs.existsSync(live)).toBe(true);
+  });
+});
+
+describe('blockOutcome', () => {
+  // The decision a bounded deasync wait makes when its loop stops. It takes no
+  // clock ON PURPOSE: `done` is set by the fulfil handler AND by the bounding
+  // timer, and setTimeout fires when now - start >= N, so Date.now() can read
+  // exactly the deadline. Deciding on the clock is wrong in both directions,
+  // and the sliver where it goes wrong is a race that cannot be reproduced in
+  // wall-clock time - so it is made unreachable instead of tested.
+  it('never reports a call that timed out as a value', () => {
+    // Nothing settled: `done` was flipped by the timer, not by the work. The
+    // clock-reading version returned `result` here - undefined, handed back to
+    // a door as a file path.
+    expect(blockOutcome(false, false)).toBe('timeout');
+  });
+
+  it('never reports work that succeeded as a timeout', () => {
+    // The mirror, and the worse one: the upload LANDED - marker removed,
+    // journal entry dropped, bytes charged to the volume - and the clock had
+    // just passed the deadline. Reporting that as unavailable tells the door
+    // its write failed when it did not.
+    expect(blockOutcome(true, false)).toBe('value');
+  });
+
+  it('reports a rejection as a failure, ahead of everything else', () => {
+    expect(blockOutcome(false, true)).toBe('failure');
+  });
+});
+
+describe('FileCache marker write failures', () => {
+  it('warns but leaves eviction enabled - this process record is still intact', () => {
+    const { cache, dir } = setup();
+    // A file where a directory should be, so the marker write fails the way
+    // ENOSPC would.
+    fs.writeFileSync(path.join(dir, 'blocked'), 'a file, not a directory');
+    const local = path.join(dir, 'blocked', 'staged.bin');
+
+    cache.markDirty(2, 'Files/X.DAT', local);
+
+    // `dirty` holds it and markDirty journalled it, so nothing here is unsafe
+    // to evict. Disabling would deadlock the board in exactly the case
+    // eviction is the remedy for.
+    expect(cache.isEvictionDisabled()).toBe(false);
+    expect(cache.isDirty(2, 'Files/X.DAT')).toBe(true);
+  });
+});
+
+describe('FileCache recovery refuses to overwrite good bytes with bad', () => {
+  it('parks a staged file that no longer matches its marker instead of uploading it', async () => {
+    const { cache, backend, dir, volumes } = setup();
+    await backend.put('Files/DOOR.DAT', Buffer.alloc(400, 1)); // the good object in the pool
+
+    const local = cache.localPathFor(2, 'Files/DOOR.DAT');
+    fs.mkdirSync(path.dirname(local), { recursive: true });
+    fs.writeFileSync(local, Buffer.alloc(400, 9));
+    backend.down = true;
+    await expect(cache.writeBack(2, 'Files/DOOR.DAT', local)).rejects.toThrow();
+
+    // Power loss: nothing was fsynced, so the staged file comes back
+    // truncated while its marker survived. The journal is gone, so the marker
+    // is the only record.
+    fs.writeFileSync(local, Buffer.alloc(120, 9));
+    fs.unlinkSync(path.join(dir, '.pending.json'));
+
+    const reborn = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+
+    // Parked, not adopted: nothing will replay it.
+    expect(reborn.isDirty(2, 'Files/DOOR.DAT')).toBe(false);
+
+    backend.down = false;
+    await reborn.flushPending();
+
+    // The good object in the pool is untouched.
+    expect((await backend.get('Files/DOOR.DAT')).length).toBe(400);
+    // And the local bytes are still there, still pinned, for a sysop to look at.
+    reborn.evictTo(0);
+    expect(fs.existsSync(local)).toBe(true);
+  });
+});
+
+describe('FileCache stale markers', () => {
+  it('removes a marker whose staged file is gone, so a later clean copy stays evictable', async () => {
+    const { cache, backend, dir, volumes } = setup();
+    const local = cache.localPathFor(2, 'Files/GONE.LHA');
+    fs.mkdirSync(path.dirname(local), { recursive: true });
+    fs.writeFileSync(local, Buffer.alloc(400, 7));
+    backend.down = true;
+    await expect(cache.writeBack(2, 'Files/GONE.LHA', local)).rejects.toThrow();
+
+    // The staged file is removed and the journal with it; only the marker is
+    // left behind.
+    fs.unlinkSync(local);
+    fs.unlinkSync(path.join(dir, '.pending.json'));
+
+    const reborn = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+    expect(fs.existsSync(`${local}.dirty`)).toBe(false);
+
+    // Without that sweep, the next cold fetch lands a clean copy at exactly
+    // this path and it is un-evictable for the life of the cache directory.
+    backend.down = false;
+    await backend.put('Files/GONE.LHA', Buffer.alloc(400, 1));
+    const fresh = await reborn.ensureLocal(2, 'Files/GONE.LHA');
+
+    reborn.evictTo(0);
+
+    expect(fs.existsSync(fresh)).toBe(false);
+  });
+});
+
+describe('FileCache.overBudgetBytes while eviction is disabled', () => {
+  it('keeps reporting the shortfall rather than freezing at its last reading', async () => {
+    const { cache, backend, dir, volumes } = setup();
+    const local = cache.localPathFor(2, 'Files/DOOR.DAT');
+    fs.mkdirSync(path.dirname(local), { recursive: true });
+    fs.writeFileSync(local, Buffer.alloc(400, 9));
+    backend.down = true;
+    await expect(cache.writeBack(2, 'Files/DOOR.DAT', local)).rejects.toThrow();
+    fs.writeFileSync(path.join(dir, '.pending.json'), '{ this is not json');
+
+    const reborn = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+    expect(reborn.isEvictionDisabled()).toBe(true);
+    // 0 before anything is measured - the value that would otherwise stick.
+    expect(reborn.overBudgetBytes()).toBe(0);
+
+    reborn.evictTo(0);
+
+    // The one number an admin surface would plot, live exactly when it matters.
+    expect(reborn.overBudgetBytes()).toBe(400);
+  });
+
+  it('warns once about a persistent shortfall, not once per call', async () => {
+    const { cache, backend, dir } = setup();
+    const dirtyFile = path.join(dir, 'dirty.bin');
+    fs.writeFileSync(dirtyFile, Buffer.alloc(400, 2));
+    backend.down = true;
+    await expect(cache.writeBack(2, 'Files/DIRTY.DAT', dirtyFile)).rejects.toThrow();
+
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      cache.evictTo(0);
+      cache.evictTo(0);
+      cache.evictTo(0);
+      const overBudget = warn.mock.calls.filter((call) => String(call[0]).includes('over its 0 byte budget'));
+      expect(overBudget).toHaveLength(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('says so again when the shortfall clears and comes back', async () => {
+    const { cache, backend, dir } = setup();
+    const dirtyFile = path.join(dir, 'dirty.bin');
+    fs.writeFileSync(dirtyFile, Buffer.alloc(400, 2));
+    backend.down = true;
+    await expect(cache.writeBack(2, 'Files/DIRTY.DAT', dirtyFile)).rejects.toThrow();
+
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      cache.evictTo(0); // over budget: warns
+      cache.evictTo(10_000); // inside budget: clears the latch
+      cache.evictTo(0); // over again: worth saying out loud a second time
+      const overBudget = warn.mock.calls.filter((call) => String(call[0]).includes('over its 0 byte budget'));
+      expect(overBudget).toHaveLength(2);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

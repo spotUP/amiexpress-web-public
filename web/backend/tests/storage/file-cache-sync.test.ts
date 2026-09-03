@@ -47,6 +47,12 @@ describe('FileCache emulator-thread forms (out of process)', () => {
       // way; these were the only unbounded ones.
       microtaskShapeRaisesUnavailable: true,
       microtaskShapeBounded: true,
+      // And the shape the deadline term alone would NOT bound: a live,
+      // pollable handle that never becomes ready, standing in for an S3 socket
+      // parked in epoll_wait. uv_run blocks in poll there, so the predicate is
+      // never re-evaluated and only the armed timer can cap the wait.
+      hungHandleShapeRaisesUnavailable: true,
+      hungHandleShapeBounded: true,
     });
   }, 120_000);
 });
