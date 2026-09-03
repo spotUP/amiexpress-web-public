@@ -60,6 +60,7 @@ const spectator_screen_1 = require("./ui/spectator-screen");
 const solo_broadcast_1 = require("./network/solo-broadcast");
 const leaderboard_screen_1 = require("./ui/leaderboard-screen");
 const panels_screen_1 = require("./ui/panels-screen");
+const puzzle_1 = require("./core/panels/puzzle");
 const stack_1 = require("./core/panels/stack");
 const generator_source_1 = require("./core/panels/generator-source");
 const level_data_1 = require("./core/panels/level-data");
@@ -1161,6 +1162,12 @@ class GrandmasterApp {
             swap: isDown(['space', 'z']),
             raise: isDown(['r', 'x']),
         });
+        if (mode === 'puzzle') {
+            await this.runPuzzleSet(sheet, readInput, onKeypress);
+            this.screen.removeListener('keypress', onKeypress);
+            this.currentScreen = 'menu';
+            return;
+        }
         // Vs CPU and Challenge share one screen: the two opponents differ in what
         // they ARE, not in how they are driven. Vs CPU faces a real board played by
         // the bot; Challenge faces a boardless health model driven by an attack
@@ -1225,16 +1232,121 @@ class GrandmasterApp {
      * menu; this is that choice, and it is where PUZZLE, STAGE CLEAR and VS will
      * be added rather than growing the main menu by one row per mode.
      */
+    /**
+     * Puzzle mode: pick a set, then work through it.
+     *
+     * The set is played in order and a solved puzzle advances; a failed one is
+     * offered again, because a puzzle you cannot yet see the answer to is the
+     * mode working as intended. Leaving is ESC, and X or Y takes back a move -
+     * the keys the original uses.
+     */
+    async runPuzzleSet(sheet, readInput, onKeypress) {
+        const sets = (0, puzzle_1.loadShippedPuzzles)();
+        const chosen = await this.choosePuzzleSet(sets);
+        if (chosen === null)
+            return;
+        const set = sets[chosen];
+        let index = 0;
+        let solved = 0;
+        while (index < set.puzzles.length) {
+            const game = new puzzle_1.PuzzleGame(set.puzzles[index]);
+            const panels = new panels_screen_1.PanelsScreen({
+                screen: this.screen,
+                puzzle: game,
+                sheet,
+                sounds: this.sounds,
+                readInput,
+            });
+            const onEscape = () => panels.quit();
+            const onUndo = () => panels.requestUndo();
+            this.screen.key(['escape', 'q', 'Q'], onEscape);
+            this.screen.key(['x', 'X', 'y', 'Y'], onUndo);
+            let outcome;
+            try {
+                outcome = await panels.run();
+            }
+            finally {
+                this.screen.unkey(['escape', 'q', 'Q'], onEscape);
+                this.screen.unkey(['x', 'X', 'y', 'Y'], onUndo);
+            }
+            if (outcome.puzzleOutcome === 'won') {
+                solved += 1;
+                index += 1;
+                continue;
+            }
+            if (outcome.puzzleOutcome === 'lost')
+                continue;
+            // Neither: the player left.
+            break;
+        }
+        if (solved > 0) {
+            const result = (0, score_report_1.buildPanelsResult)(
+            // The last board played carries the score; what a puzzle run is
+            // actually worth is how many of them came out.
+            new puzzle_1.PuzzleGame(set.puzzles[0]).stack, 'puzzle', 'tetris_attack', solved === set.puzzles.length);
+            result.lines = solved;
+            result.linesCleared = solved;
+            result.score = solved;
+            this.highScores.addScore(this.state.playerName, result);
+        }
+        void onKeypress;
+    }
+    /** Which puzzle set to work through. */
+    async choosePuzzleSet(sets) {
+        // The shipped set names are translation keys; the readable part is the tail.
+        const labels = sets.map((set, i) => {
+            const name = set.name.replace(/^puzzle_set_name_/, '').replace(/_/g, ' ').toUpperCase();
+            return `${String(i + 1).padStart(2, ' ')}  ${name}  (${set.puzzles.length})`;
+        });
+        labels.push('Back');
+        return new Promise((resolve) => {
+            const box = (0, blessed_helpers_1.createBox)({
+                parent: this.screen,
+                top: 'center',
+                left: 'center',
+                width: 56,
+                height: 18,
+                label: ' PUZZLE ',
+                tags: true,
+                style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+            });
+            const list = (0, blessed_helpers_1.createList)({
+                parent: box,
+                top: 1,
+                left: 1,
+                width: 52,
+                height: 14,
+                keys: true,
+                vi: true,
+                mouse: true,
+                tags: true,
+                items: labels,
+                style: { fg: 'white', bg: 'black', selected: { fg: 'black', bg: 'magenta' } },
+            });
+            const done = (choice) => {
+                box.destroy();
+                this.screen.render();
+                resolve(choice);
+            };
+            list.on('select', (_item, index) => {
+                done(index < sets.length ? index : null);
+            });
+            list.key(['escape', 'q', 'Q'], () => done(null));
+            list.focus();
+            this.screen.render();
+        });
+    }
     async chooseTetrisAttackMode() {
         const labels = [
             'ENDLESS      play until the stack tops out',
             'TIME ATTACK  two minutes, score as high as you can',
             'VS CPU       a real opponent on a real board',
             'CHALLENGE    the stage ladder, eight difficulties',
+            'PUZZLE       235 arrangements, one right answer each',
             'Back',
         ];
         const modes = [
-            'endless', 'timeattack', 'vscpu', 'challenge', null,
+            'endless', 'timeattack', 'vscpu', 'challenge', 'puzzle', null,
         ];
         return new Promise((resolve) => {
             const box = (0, blessed_helpers_1.createBox)({
@@ -1242,7 +1354,7 @@ class GrandmasterApp {
                 top: 'center',
                 left: 'center',
                 width: 56,
-                height: 11,
+                height: 12,
                 label: ' TETRIS ATTACK ',
                 tags: true,
                 style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
@@ -1252,7 +1364,7 @@ class GrandmasterApp {
                 top: 1,
                 left: 1,
                 width: 52,
-                height: 6,
+                height: 7,
                 keys: true,
                 vi: true,
                 mouse: true,

@@ -39,13 +39,29 @@ const RENDER_INTERVAL = 50;
 /** How often the loop wakes. */
 const TICK_INTERVAL = 16;
 class PanelsScreen {
+    /**
+     * The board being played.
+     *
+     * A getter, not a field, because undo rebuilds the puzzle's stack from its
+     * input history - a captured reference would keep drawing the board the
+     * player just took back.
+     */
+    get stack() {
+        return this.puzzle ? this.puzzle.stack : this.soloStack;
+    }
     constructor(options) {
         this.lastTick = 0;
         this.frameAccumulator = 0;
         this.lastRender = 0;
         this.quitting = false;
+        /** Set by the caller's undo key; acted on at the top of the next frame. */
+        this.undoRequested = false;
         this.screen = options.screen;
-        this.stack = options.stack;
+        this.puzzle = options.puzzle;
+        this.soloStack = options.stack;
+        if (!this.puzzle && !this.soloStack) {
+            throw new Error('PanelsScreen needs either a stack or a puzzle');
+        }
         this.sheet = options.sheet;
         this.sounds = options.sounds;
         this.readInput = options.readInput;
@@ -97,6 +113,8 @@ class PanelsScreen {
             timeText,
             chain: stack.chainCounter,
             stopped: stack.stopTime > 0,
+            movesLeft: this.puzzle ? this.puzzle.movesLeft() : undefined,
+            canUndo: this.puzzle ? this.puzzle.canUndo() : undefined,
         }).join('\n'));
     }
     renderBoard(tick) {
@@ -124,6 +142,7 @@ class PanelsScreen {
                     score: this.stack.score,
                     frames: this.stack.stopWatch,
                     toppedOut: this.stack.gameEnded(),
+                    puzzleOutcome: this.puzzle?.result(),
                 });
             };
             this.loop = setInterval(() => {
@@ -132,12 +151,29 @@ class PanelsScreen {
                 this.lastTick = now;
                 // Catch up, but only so far - see MAX_CATCHUP_FRAMES.
                 this.frameAccumulator = Math.min(this.frameAccumulator + delta, FRAME_TIME * MAX_CATCHUP_FRAMES);
+                // Undo is taken between frames, never inside the catch-up loop: it
+                // replays the whole attempt, and doing that mid-catch-up would run the
+                // rebuilt board forward by however many frames were still owed.
+                if (this.undoRequested) {
+                    this.undoRequested = false;
+                    this.frameAccumulator = 0;
+                    if (this.puzzle?.undo())
+                        this.repaint();
+                }
                 while (this.frameAccumulator >= FRAME_TIME) {
                     this.frameAccumulator -= FRAME_TIME;
-                    this.stack.receiveConfirmedInput(this.inputCharacter());
-                    this.stack.run();
+                    const input = this.inputCharacter();
+                    if (this.puzzle) {
+                        this.puzzle.receiveInput(input);
+                        this.puzzle.run();
+                    }
+                    else {
+                        this.stack.receiveConfirmedInput(input);
+                        this.stack.run();
+                    }
                 }
-                if (this.stack.gameEnded() || this.quitting) {
+                const puzzleOver = this.puzzle ? this.puzzle.result() !== 'playing' : false;
+                if (puzzleOver || this.stack.gameEnded() || this.quitting) {
                     finish();
                     return;
                 }
@@ -147,6 +183,10 @@ class PanelsScreen {
                 }
             }, TICK_INTERVAL);
         });
+    }
+    /** Take back the last move, on the next frame. The original binds X and Y. */
+    requestUndo() {
+        this.undoRequested = true;
     }
     /** Ask the loop to stop at the end of this frame. */
     quit() {

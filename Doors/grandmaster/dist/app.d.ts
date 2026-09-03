@@ -197,6 +197,17 @@ export declare class GrandmasterApp {
      * menu; this is that choice, and it is where PUZZLE, STAGE CLEAR and VS will
      * be added rather than growing the main menu by one row per mode.
      */
+    /**
+     * Puzzle mode: pick a set, then work through it.
+     *
+     * The set is played in order and a solved puzzle advances; a failed one is
+     * offered again, because a puzzle you cannot yet see the answer to is the
+     * mode working as intended. Leaving is ESC, and X or Y takes back a move -
+     * the keys the original uses.
+     */
+    private runPuzzleSet;
+    /** Which puzzle set to work through. */
+    private choosePuzzleSet;
     private chooseTetrisAttackMode;
     private showTetriNetLobby;
     /**

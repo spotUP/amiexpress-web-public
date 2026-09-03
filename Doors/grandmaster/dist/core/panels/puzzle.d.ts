@@ -103,10 +103,35 @@ export type PuzzleOutcome = 'playing' | 'won' | 'lost';
  * of them.
  */
 export declare class PuzzleGame {
-    readonly stack: Stack;
+    stack: Stack;
     readonly puzzle: Puzzle;
     private outcome;
+    /** Every input this attempt has been given, in order. Undo replays it. */
+    private history;
+    /** Index into history of each frame on which a swap was accepted. */
+    private swapFrames;
     constructor(puzzle: Puzzle);
+    /**
+     * Feed one frame of input, remembering it.
+     *
+     * The remembering is what makes undo possible - see undo() for why a
+     * recording beats a snapshot here.
+     */
+    receiveInput(char: string): void;
+    canUndo(): boolean;
+    /**
+     * Take back the last move, which the original binds to X and Y.
+     *
+     * By REPLAY, not by snapshot: the engine is deterministic - the same board
+     * and the same inputs produce the same board, which the netplay tests pin -
+     * so rebuilding from the start and stopping one frame before the swap gives
+     * exactly the board that was there, with no state left over. A snapshot would
+     * have to copy every panel, every timer, the queue, the source and the RNG,
+     * and would go quietly stale the first time a field was added.
+     *
+     * A puzzle is at most a few thousand frames, so the replay is instant.
+     */
+    undo(): boolean;
     /** Moves left, or null when the puzzle does not limit them. */
     movesLeft(): number | null;
     /**
@@ -126,6 +151,8 @@ export declare class PuzzleGame {
     hasLost(): boolean;
     /** One frame, and then the verdict. */
     run(): PuzzleOutcome;
+    /** One engine frame, recording whether a move was spent on it. */
+    private step;
     result(): PuzzleOutcome;
 }
 //# sourceMappingURL=puzzle.d.ts.map

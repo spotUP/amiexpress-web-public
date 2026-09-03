@@ -21,6 +21,7 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { Stack } from '../core/panels/stack';
 import { BoardVariant } from './panels/board-view';
+import type { PuzzleGame, PuzzleOutcome } from '../core/panels/puzzle';
 import { INPUT_CHARS } from '../core/panels/input-codec';
 import type { SoundEngine } from '../audio/sounds';
 /** What the screen needs to know about which keys are down right now. */
@@ -34,7 +35,17 @@ export interface HeldInput {
 }
 export interface PanelsScreenOptions {
     screen: Screen;
-    stack: Stack;
+    /** The board to play. Omit when a puzzle is given - it owns its own. */
+    stack?: Stack;
+    /**
+     * A puzzle instead of a free game.
+     *
+     * The same loop drives both: a puzzle is an ordinary board with different
+     * end conditions and an undo, and duplicating three hundred lines of
+     * fixed-timestep loop to say so would be the wrong kind of faithful. The
+     * board is read through the puzzle because undo REPLACES it.
+     */
+    puzzle?: PuzzleGame;
     sheet: Record<string, Sprite>;
     sounds?: SoundEngine;
     /** Read the currently held keys. Called once per engine frame. */
@@ -49,10 +60,13 @@ export interface PanelsResult {
     /** Frames of actual play. */
     frames: number;
     toppedOut: boolean;
+    /** How a puzzle ended, when one was being played. */
+    puzzleOutcome?: PuzzleOutcome;
 }
 export declare class PanelsScreen {
     private readonly screen;
-    private readonly stack;
+    private readonly puzzle?;
+    private readonly soloStack?;
     private readonly sheet;
     private readonly sounds?;
     private readonly readInput;
@@ -65,6 +79,16 @@ export declare class PanelsScreen {
     private lastRender;
     private quitting;
     private layout?;
+    /** Set by the caller's undo key; acted on at the top of the next frame. */
+    private undoRequested;
+    /**
+     * The board being played.
+     *
+     * A getter, not a field, because undo rebuilds the puzzle's stack from its
+     * input history - a captured reference would keep drawing the board the
+     * player just took back.
+     */
+    private get stack();
     constructor(options: PanelsScreenOptions);
     /** Lay the board and HUD out, centred in whatever room there is. */
     private setupUI;
@@ -75,6 +99,8 @@ export declare class PanelsScreen {
     private repaint;
     /** Play until the stack tops out or the player leaves. */
     run(): Promise<PanelsResult>;
+    /** Take back the last move, on the next frame. The original binds X and Y. */
+    requestUndo(): void;
     /** Ask the loop to stop at the end of this frame. */
     quit(): void;
     cleanup(): void;

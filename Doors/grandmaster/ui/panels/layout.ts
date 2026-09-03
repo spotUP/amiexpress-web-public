@@ -95,10 +95,20 @@ export function panelsLayout(
  */
 export function hudLines(
   layout: PanelsLayout,
-  values: { score: number; speed: number; timeText: string; chain: number; stopped: boolean },
+  values: {
+    score: number; speed: number; timeText: string; chain: number; stopped: boolean;
+    /** Swaps left in a move puzzle; absent in every other mode. */
+    movesLeft?: number | null;
+    /** Is there a move to take back? */
+    canUndo?: boolean;
+  },
 ): string[] {
   const width = layout.hud.width;
+  // Clip the VISIBLE text and colour it afterwards. Clipping a tagged string
+  // cuts through the tag itself, which paints nothing and leaves the tag open
+  // for the rest of the screen.
   const clip = (text: string) => (text.length > width ? text.slice(0, width) : text);
+  const tag = (colour: string, text: string) => `{${colour}-fg}${clip(text)}{/${colour}-fg}`;
 
   if (layout.compact) {
     return [
@@ -107,21 +117,25 @@ export function hudLines(
       clip(values.timeText),
       values.chain > 1 ? clip(`x${values.chain}`) : '',
       values.stopped ? clip('STOP') : '',
+      values.movesLeft != null ? clip(`M${values.movesLeft}`) : '',
+      values.canUndo ? clip('X UNDO') : '',
     ];
   }
 
   return [
-    clip('{yellow-fg}POINT{/yellow-fg}'),
+    tag('yellow', 'POINT'),
     clip(`  ${String(values.score).padStart(5, ' ')}`),
     '',
-    clip('{yellow-fg}LEVEL{/yellow-fg}'),
+    tag('yellow', 'LEVEL'),
     clip(`  ${String(values.speed).padStart(5, ' ')}`),
     '',
-    clip('{yellow-fg}TIME{/yellow-fg}'),
+    tag('yellow', 'TIME'),
     clip(`  ${values.timeText.padStart(5, ' ')}`),
     '',
     // The chain counter starts at 2; there is no chain 1.
-    values.chain > 1 ? `{lightmagenta-fg}x${values.chain} CHAIN{/lightmagenta-fg}` : '',
-    values.stopped ? '{lightcyan-fg}STOP{/lightcyan-fg}' : '',
+    values.chain > 1 ? tag('lightmagenta', `x${values.chain} CHAIN`) : '',
+    values.stopped ? tag('lightcyan', 'STOP') : '',
+    values.movesLeft != null ? tag('white', `MOVES ${values.movesLeft}`) : '',
+    values.canUndo ? tag('lightblue', 'X UNDO') : '',
   ];
 }

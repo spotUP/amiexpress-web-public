@@ -274,3 +274,110 @@ export async function anAuthoredBoardMixesPanelsAndGarbage(): Promise<void> {
   assert.deepStrictEqual(bottom.map((panel) => panel.color), [1, 2, 3, 4, 5, 6]);
   assert.ok(bottom.every((panel) => !panel.isGarbage));
 }
+
+/**
+ * Undo, which the original binds to X and Y and which neither open-source
+ * implementation has.
+ *
+ * It works by REPLAY rather than by snapshot: the engine is deterministic, so
+ * rebuilding from the start and stopping one frame short of the swap gives back
+ * exactly the board that was there. A snapshot would have to copy every panel,
+ * every timer, the queue, the source and the RNG, and would go stale the first
+ * time a field was added.
+ */
+function boardString(game: PuzzleGame): string {
+  const rows: string[] = [];
+  for (let row = 12; row >= 1; row--) {
+    let line = '';
+    for (let col = 1; col <= 6; col++) line += String(game.stack.panels[row][col].color);
+    rows.push(line);
+  }
+  return rows.join('');
+}
+
+/** A one-row board with a swap that matches nothing, so undo can be seen. */
+function undoFixture(): PuzzleGame {
+  const puzzle: Puzzle = {
+    type: 'moves',
+    stack: '123456',
+    moves: 5,
+    startTiming: 'immediately',
+    stopTime: 0, shakeTime: 0, panelBuffer: '', garbageBuffer: '',
+    cursorStartLeft: { row: 1, column: 2 },
+  };
+  const game = new PuzzleGame(puzzle);
+  // Swapping is refused on the opening frames.
+  for (let i = 0; i < 3; i++) { game.receiveInput('A'); game.run(); }
+  return game;
+}
+
+export async function undoTakesBackTheLastMove(): Promise<void> {
+  const game = undoFixture();
+  const before = boardString(game);
+  assert.strictEqual(game.canUndo(), false, 'nothing to take back yet');
+
+  game.receiveInput('Q');
+  game.run();
+  // Let the swap animation finish.
+  for (let i = 0; i < 10; i++) { game.receiveInput('A'); game.run(); }
+
+  assert.strictEqual(game.stack.swapCount, 1);
+  assert.notStrictEqual(boardString(game), before, 'the swap changed the board');
+  assert.strictEqual(game.canUndo(), true);
+
+  assert.strictEqual(game.undo(), true);
+  assert.strictEqual(game.stack.swapCount, 0, 'the move is given back');
+  assert.strictEqual(boardString(game), before, 'and so is the board, exactly');
+  assert.strictEqual(game.canUndo(), false);
+}
+
+export async function undoDoesNothingBeforeTheFirstMove(): Promise<void> {
+  const game = undoFixture();
+  assert.strictEqual(game.undo(), false);
+  assert.strictEqual(game.stack.swapCount, 0);
+}
+
+/** Two moves back, one at a time, each landing on the right board. */
+export async function undoUnwindsMoveByMove(): Promise<void> {
+  const game = undoFixture();
+  const boards: string[] = [boardString(game)];
+
+  for (let move = 0; move < 2; move++) {
+    game.receiveInput('Q');
+    game.run();
+    for (let i = 0; i < 10; i++) { game.receiveInput('A'); game.run(); }
+    boards.push(boardString(game));
+  }
+  assert.strictEqual(game.stack.swapCount, 2);
+
+  game.undo();
+  assert.strictEqual(game.stack.swapCount, 1);
+  assert.strictEqual(boardString(game), boards[1]);
+
+  game.undo();
+  assert.strictEqual(game.stack.swapCount, 0);
+  assert.strictEqual(boardString(game), boards[0]);
+}
+
+/** An undone move is spendable again - that is the whole point in a move puzzle. */
+export async function undoGivesTheMoveBackToSpend(): Promise<void> {
+  const puzzle: Puzzle = {
+    type: 'moves', stack: '123456', moves: 1, startTiming: 'immediately',
+    stopTime: 0, shakeTime: 0, panelBuffer: '', garbageBuffer: '',
+    cursorStartLeft: { row: 1, column: 2 },
+  };
+  const game = new PuzzleGame(puzzle);
+  for (let i = 0; i < 3; i++) { game.receiveInput('A'); game.run(); }
+
+  game.receiveInput('Q');
+  game.run();
+  for (let i = 0; i < 10; i++) { game.receiveInput('A'); game.run(); }
+  assert.strictEqual(game.movesLeft(), 0, 'the only move is spent');
+
+  game.undo();
+  assert.strictEqual(game.movesLeft(), 1, 'and handed back');
+
+  game.receiveInput('Q');
+  game.run();
+  assert.strictEqual(game.stack.swapCount, 1, 'the board accepts a swap again');
+}

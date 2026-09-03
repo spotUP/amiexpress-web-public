@@ -39,8 +39,8 @@ function buildPanelsResult(stack, mode, gameMode = 'tetris_attack', completed) {
         tSpinCount: 0,
         perfectClears: 0,
         // Endless and Vs are survived, never completed. Time Attack is completed by
-        // surviving the clock; a Challenge stage by beating the opponent, which the
-        // caller knows and passes in.
+        // surviving the clock; a Challenge stage by beating the opponent and a
+        // puzzle by solving it, which the caller knows and passes in.
         completed: mode === 'timeattack' ? stack.ranOutOfTime : (completed ?? false),
     };
 }

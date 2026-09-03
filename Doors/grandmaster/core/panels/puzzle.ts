@@ -231,14 +231,64 @@ export type PuzzleOutcome = 'playing' | 'won' | 'lost';
  * of them.
  */
 export class PuzzleGame {
-  readonly stack: Stack;
+  stack: Stack;
   readonly puzzle: Puzzle;
   private outcome: PuzzleOutcome = 'playing';
+  /** Every input this attempt has been given, in order. Undo replays it. */
+  private history: string[] = [];
+  /** Index into history of each frame on which a swap was accepted. */
+  private swapFrames: number[] = [];
 
   constructor(puzzle: Puzzle) {
     this.puzzle = puzzle;
     this.stack = new Stack(puzzleStackOptions(puzzle));
     this.stack.startingState();
+  }
+
+  /**
+   * Feed one frame of input, remembering it.
+   *
+   * The remembering is what makes undo possible - see undo() for why a
+   * recording beats a snapshot here.
+   */
+  receiveInput(char: string): void {
+    this.history.push(char);
+    this.stack.receiveConfirmedInput(char);
+  }
+
+  canUndo(): boolean {
+    return this.swapFrames.length > 0;
+  }
+
+  /**
+   * Take back the last move, which the original binds to X and Y.
+   *
+   * By REPLAY, not by snapshot: the engine is deterministic - the same board
+   * and the same inputs produce the same board, which the netplay tests pin -
+   * so rebuilding from the start and stopping one frame before the swap gives
+   * exactly the board that was there, with no state left over. A snapshot would
+   * have to copy every panel, every timer, the queue, the source and the RNG,
+   * and would go quietly stale the first time a field was added.
+   *
+   * A puzzle is at most a few thousand frames, so the replay is instant.
+   */
+  undo(): boolean {
+    const frame = this.swapFrames.pop();
+    if (frame === undefined) return false;
+
+    // Everything up to, but not including, the frame the swap was made on.
+    const replay = this.history.slice(0, frame);
+    this.stack = new Stack(puzzleStackOptions(this.puzzle));
+    this.stack.startingState();
+    this.history = [];
+    this.swapFrames = [];
+    this.outcome = 'playing';
+
+    for (const char of replay) {
+      this.receiveInput(char);
+      this.step();
+    }
+    return true;
   }
 
   /** Moves left, or null when the puzzle does not limit them. */
@@ -288,13 +338,24 @@ export class PuzzleGame {
   /** One frame, and then the verdict. */
   run(): PuzzleOutcome {
     if (this.outcome !== 'playing') return this.outcome;
-    this.stack.run();
+    this.step();
 
     // Winning is checked first: a puzzle solved on the last move has been
     // solved, not failed for running out of moves.
     if (this.hasWon()) this.outcome = 'won';
     else if (this.hasLost()) this.outcome = 'lost';
     return this.outcome;
+  }
+
+  /** One engine frame, recording whether a move was spent on it. */
+  private step(): void {
+    const before = this.stack.swapCount;
+    this.stack.run();
+    if (this.stack.swapCount > before) {
+      // The input that caused it is the one fed for this frame, which is the
+      // last thing pushed onto the history.
+      this.swapFrames.push(this.history.length - 1);
+    }
   }
 
   result(): PuzzleOutcome {

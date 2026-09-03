@@ -16,7 +16,7 @@ import type { GameResult, GameMode } from '../types';
 import type { Stack } from './stack';
 
 /** Which panel mode produced this result. */
-export type PanelsMode = 'endless' | 'timeattack' | 'vscpu' | 'challenge';
+export type PanelsMode = 'endless' | 'timeattack' | 'vscpu' | 'challenge' | 'puzzle';
 
 /**
  * The score a panel game reports.
@@ -48,8 +48,8 @@ export function buildPanelsResult(
     tSpinCount: 0,
     perfectClears: 0,
     // Endless and Vs are survived, never completed. Time Attack is completed by
-    // surviving the clock; a Challenge stage by beating the opponent, which the
-    // caller knows and passes in.
+    // surviving the clock; a Challenge stage by beating the opponent and a
+    // puzzle by solving it, which the caller knows and passes in.
     completed: mode === 'timeattack' ? stack.ranOutOfTime : (completed ?? false),
   };
 }

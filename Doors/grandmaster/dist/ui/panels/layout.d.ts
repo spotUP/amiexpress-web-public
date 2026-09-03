@@ -60,5 +60,9 @@ export declare function hudLines(layout: PanelsLayout, values: {
     timeText: string;
     chain: number;
     stopped: boolean;
+    /** Swaps left in a move puzzle; absent in every other mode. */
+    movesLeft?: number | null;
+    /** Is there a move to take back? */
+    canUndo?: boolean;
 }): string[];
 //# sourceMappingURL=layout.d.ts.map
