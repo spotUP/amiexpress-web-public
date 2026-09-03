@@ -98,20 +98,36 @@ describe('a hybrid door over telnet', () => {
   });
 
   it('leaves the telnet path free to reach the door input handler', () => {
-    // The order in index.ts's telnet handler: a 'command' listener wins over
-    // doorInputHandler. With no client half there is no such listener, so the
-    // door gets its keys.
-    const { readFileSync } = require('fs');
-    const { join } = require('path');
-    const source = readFileSync(join(__dirname, '..', 'src', 'index.ts'), 'utf8');
-    const doorBlock = source.slice(
-      source.indexOf('// Check if door is active and needs input'),
-      source.indexOf('// No door active - route to BBS command handler'),
-    );
+    // This used to read index.ts and assert that a 'command' listener was
+    // consulted BEFORE session.doorInputHandler - pinning the source, and
+    // pinning the wrong thing: that order was itself the third telnet input
+    // bug. A door whose prompt listener was still registered never reached
+    // its own handler.
+    //
+    // The rule is one function now, and both transports ask it
+    // (services/door-input-routing.ts, driven in door-input-routing.test.ts).
+    // What belongs here is the case this file was opened for: a hybrid door
+    // over telnet, whose client half is not started, still reaching the door.
+    const { routeDoorInput } = require('../src/services/door-input-routing');
 
-    expect(doorBlock).toContain("emitter.listenerCount('command') > 0");
-    expect(doorBlock).toContain('session.doorInputHandler(input)');
-    expect(doorBlock.indexOf("listenerCount('command')"))
-      .toBeLessThan(doorBlock.indexOf('session.doorInputHandler(input)'));
+    const route = routeDoorInput('x', {
+      doorActive: true,
+      hasDoorInputHandler: true,
+      hasCommandListener: false,     // no client half on telnet
+      bbsPauseActive: false,
+    });
+
+    expect(route.toDoorHandler).toBe(true);
+
+    // And with a listener there anyway, the door STILL gets the key - which
+    // is what web has always done, because socket.io delivers to both.
+    const withPrompt = routeDoorInput('x', {
+      doorActive: true,
+      hasDoorInputHandler: true,
+      hasCommandListener: true,
+      bbsPauseActive: false,
+    });
+    expect(withPrompt.toDoorHandler).toBe(true);
+    expect(withPrompt.toCommandListeners).toBe(true);
   });
 });

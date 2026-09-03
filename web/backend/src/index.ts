@@ -9,6 +9,7 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import multer from "multer";
 import { buildConnectionEmitter, flushPendingPetscii } from "./server/connection-emitter";
+import { routeDoorInput } from "./services/door-input-routing";
 import { sessionWantsPetscii } from "./utils/petscii-session-model";
 import { handleC64Detected } from "./server/c64-detected-handler";
 import { resolveTelnetPetsciiPort } from "./utils/telnet-petscii-port.util";
@@ -1223,30 +1224,35 @@ console.log(
         try { session.scriptAbortHandler(); } catch { /* never throw out of telnet handler */ }
       }
 
-      // Check if door is active and needs input (socket-handlers.ts:641-656)
-      if (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) {
-        // TypeScript doors (DoorManager) listen on emitter 'command' events
-        // the way the web frontend emits via socket.io. Web's socket.io
-        // Socket fires 'command' natively on socket.emit('command', input);
-        // telnet/SSH have no equivalent transport event, so bridge input
-        // here. This is what makes socket.once('command', …) in DoorManager
-        // resolve on telnet/SSH the same way it does on web.
-        if (emitter.listenerCount('command') > 0) {
-          emitter.emitInternal('command', input);
-          return;
-        }
-        if (session.doorInputHandler) {
-          // Route input to active door's input handler
-console.log('[TELNET] Routing input to doorInputHandler');
-          session.doorInputHandler(input);
-          return;
-        } else {
-          // Door active but no handler - emit door:input event for fallback
-console.log('[TELNET] Door active but no handler - emitting door:input');
-          emitter.emit('door:input', input);
-          return;
-        }
+      // Where a keystroke goes while a door runs is one decision, and both
+      // transports ask for it (services/door-input-routing.ts). It used to be
+      // written twice, and the two copies disagreed: this path returned as
+      // soon as any 'command' listener existed, so a door with a prompt
+      // listener still registered never saw a key - it drew perfectly and
+      // took no input. Web never had that, because socket.io delivers a
+      // 'command' to every listener AND socket-handlers then calls the door's
+      // handler. Telnet does both now too.
+      const route = routeDoorInput(input, {
+        doorActive: Boolean(session.inDoorManager)
+          || session.subState === LoggedOnSubState.DOOR_RUNNING,
+        hasDoorInputHandler: Boolean(session.doorInputHandler),
+        hasCommandListener: emitter.listenerCount('command') > 0,
+        bbsPauseActive: session.paginatedScreen?.kind === 'bbs',
+      });
+
+      if (route.toCommandListeners) {
+        // DoorManager's socket.once('command', ...) prompt, bridged: telnet
+        // has no transport event of its own.
+        emitter.emitInternal('command', input);
       }
+      if (route.toDoorHandler && session.doorInputHandler) {
+        session.doorInputHandler(input);
+      }
+      if (route.toDoorInputEvent) {
+console.log('[TELNET] Door active but nothing listening - emitting door:input');
+        emitter.emit('door:input', input);
+      }
+      if (!route.toBbs) return;
 
       // No door active - route to BBS command handler
       const { handleCommand } = await import("./handlers/command.handler");
