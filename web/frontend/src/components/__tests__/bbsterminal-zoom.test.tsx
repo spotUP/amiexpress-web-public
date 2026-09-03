@@ -381,6 +381,34 @@ describe('the override is remembered, and only when the viewer made one', () => 
   });
 });
 
+describe('nothing can make the screen bigger than the window', () => {
+  it('the screen can never be zoomed larger than the window', async () => {
+    // "i managed to accidentally resize the term so it's bigger than the
+    // browser window and can't get it back" (sysop, 2026-09-03): once the box
+    // overflows, the bezel ring and the corners - the only ways back - are
+    // off-screen with it.
+    const { box, reported } = mountBox();
+    for (let i = 0; i < 10; i++) wheel(box, { deltaY: -400, metaKey: true });
+    await flushFrames();
+    box.dispatchEvent(pointer('pointerdown', CORNER));
+    window.dispatchEvent(pointer('pointermove', from(CORNER, 8)));
+    await flushFrames();
+    window.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    box.dispatchEvent(new MouseEvent('dblclick', {
+      bubbles: true, cancelable: true, clientX: BEZEL_POINT.x, clientY: BEZEL_POINT.y,
+    }));
+    await flushFrames();
+    for (const fraction of reported) expect(fraction).toBeLessThanOrEqual(FIT_TO_WINDOW);
+  });
+
+  it('a stored zoom above fit is ignored and reset on load', () => {
+    window.localStorage.setItem(ZOOM_STORAGE_KEY, '1.25');
+    const { reported } = mountBox();
+    expect(reported[0]).toBe(FIT_TO_WINDOW);
+    expect(window.localStorage.getItem(ZOOM_STORAGE_KEY)).toBe('1');
+  });
+});
+
 describe('a handheld session has no override at all', () => {
   it('ignores every gesture and never touches the fraction the desk chose', async () => {
     window.localStorage.setItem(ZOOM_STORAGE_KEY, '0.75');

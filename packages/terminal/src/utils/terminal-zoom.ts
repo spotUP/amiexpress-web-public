@@ -20,12 +20,23 @@
  * resize: the viewer who chose "three quarters" keeps three quarters of
  * whatever the window can now hold, instead of being pinned to the pixel
  * count that meant three quarters an hour ago. It is also why there is no
- * separate viewport clamp any more - the fit IS the clamp, and nothing
- * automatic can ever exceed it. Only a deliberate gesture goes above 1.0,
- * and only as far as MAX_ZOOM_FRACTION.
+ * separate viewport clamp any more - the fit IS the clamp.
  *
- * `FIT_TO_WINDOW` (1.0) is both the default and the way home: it means
- * "follow the window", and the double-click ladder always returns to it.
+ * NOTHING GOES ABOVE THE FIT. An earlier version let a deliberate gesture
+ * push a quarter past it, on the reasoning that a viewer who asks for a
+ * bigger screen than the window should get one. That was wrong, and the
+ * sysop found out how: "i managed to accidentally resize the term so it's
+ * bigger than the browser window and can't get it back" (2026-09-03). Once
+ * the box overflows, the bezel ring you double-click to go home is off the
+ * screen, the corner you would drag is off the screen, and the fraction is
+ * persisted - so the next load comes back just as stuck. A gesture that can
+ * put the only way out beyond reach is not a feature. `clampFraction` is the
+ * single gate every input path already went through, so the cap is one
+ * constant and there is no path around it.
+ *
+ * `FIT_TO_WINDOW` (1.0) is the default, the way home, AND the ceiling: it
+ * means "follow the window", and the double-click ladder always returns to
+ * it.
  *
  * Everything here is pure: no React, no DOM lookups, only numbers and plain
  * rectangles. The wiring - which element the listeners hang off, the rAF
@@ -43,16 +54,16 @@ export const ZOOM_STORAGE_KEY = 'bbs_terminal_zoom';
 export const FIT_TO_WINDOW = 1;
 
 /**
- * How far the override may travel.
+ * How far the override may travel: down to a quarter of the fit - a
+ * deliberately small screen on a big display - and never up past the fit
+ * itself.
  *
- * Down to a quarter of the fit - a deliberately small screen on a big
- * display. Up only a little: above the fit the grid is by definition larger
- * than the window can hold and the page clips it, so anything past a quarter
- * over would cost whole rows of the BBS. A viewer who asks for it gets it;
- * nothing automatic ever does.
+ * The ceiling IS `FIT_TO_WINDOW`. Above it the grid is by definition larger
+ * than the window can hold, the page clips it, and the gestures that would
+ * undo it are clipped with it. See the module header for the day that cost.
  */
 export const MIN_ZOOM_FRACTION = 0.25;
-export const MAX_ZOOM_FRACTION = 1.25;
+export const MAX_ZOOM_FRACTION = FIT_TO_WINDOW;
 
 /**
  * The ladder a double-click on the bezel walks: fit, three quarters, half,
@@ -117,7 +128,15 @@ export interface ZoomWheelLike {
   deltaY: number;
 }
 
-/** Hold a fraction inside the range a viewer may reach. */
+/**
+ * Hold a fraction inside the range a viewer may reach.
+ *
+ * The one gate. Every input path runs through it - `wheelZoom` (Cmd/Ctrl
+ * wheel and trackpad pinch), `dragZoom` (a bezel-corner drag), `nextPreset`
+ * (the double-click ladder), `readStoredZoom` (the remembered value) and
+ * `zoomedFontSize` (the size actually rendered) - so "never larger than the
+ * window" is enforced in exactly one place.
+ */
 export function clampFraction(fraction: number): number {
   if (!Number.isFinite(fraction)) return FIT_TO_WINDOW;
   return Math.min(MAX_ZOOM_FRACTION, Math.max(MIN_ZOOM_FRACTION, fraction));
@@ -157,8 +176,8 @@ export function isZoomWheel(event: ZoomWheelLike): boolean {
 
 /**
  * The fraction a wheel gesture of `deltaY` leads to. Scrolling up (negative
- * deltaY, or pinching apart) grows the screen towards - and a little past -
- * the fit.
+ * deltaY, or pinching apart) grows the screen back towards the fit, and stops
+ * there.
  */
 export function wheelZoom(fraction: number, deltaY: number): number {
   if (!Number.isFinite(deltaY)) return clampFraction(fraction);
@@ -170,7 +189,7 @@ export function wheelZoom(fraction: number, deltaY: number): number {
  *
  * "Next" is the first preset strictly below the current fraction, so a viewer
  * who has wheel-zoomed to 0.9 lands on 0.75 rather than jumping home, and one
- * who has pushed past the fit lands on the fit itself.
+ * who is already on the fit steps down to three quarters.
  */
 export function nextPreset(fraction: number): number {
   const current = clampFraction(fraction);
@@ -236,8 +255,12 @@ export function isBezelPoint(point: ZoomPoint, rect: ZoomRect, bezelPx: number):
  * grow about its centre: the gesture describes a radius, and the box - which
  * the page centres - keeps its middle wherever it already was. Dragging a
  * corner inward scales the screen down below the fit, outward brings it back
- * towards (and a little past) the fit. Which corner was grabbed changes only
+ * back towards the fit, and no further. Which corner was grabbed changes only
  * the cursor, never the arithmetic.
+ *
+ * Dragging outward once the screen is already on the fit does NOTHING: the
+ * clamp holds the result at 1.0, the caller sees no change, and the box
+ * cannot be pulled past the window edge.
  */
 export function dragZoom(
   startFraction: number,
@@ -261,6 +284,13 @@ export function dragZoom(
  * localStorage may be unavailable (private mode, storage disabled) and the
  * value may have been hand-edited; neither is an error, and both mean the
  * session follows the window.
+ *
+ * A value ABOVE the fit is repaired rather than merely ignored: it is written
+ * back as `FIT_TO_WINDOW`. Ignoring it would be enough for this load, but the
+ * stale number would sit in storage waiting for a build that trusted it -
+ * and it only got there because a version of this module once allowed it. The
+ * board it stranded ("can't get it back", sysop, 2026-09-03) is the reason
+ * the repair is worth a write on read.
  */
 export function readStoredZoom(): number | null {
   try {
@@ -268,7 +298,11 @@ export function readStoredZoom(): number | null {
     if (raw === null) return null;
     const value = Number.parseFloat(raw);
     if (!Number.isFinite(value)) return null;
-    if (value < MIN_ZOOM_FRACTION || value > MAX_ZOOM_FRACTION) return null;
+    if (value > MAX_ZOOM_FRACTION) {
+      writeStoredZoom(FIT_TO_WINDOW);
+      return FIT_TO_WINDOW;
+    }
+    if (value < MIN_ZOOM_FRACTION) return null;
     return value;
   } catch {
     return null;

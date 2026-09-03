@@ -143,19 +143,30 @@ describe('the override is a fraction of the fit, so it survives a resize', () =>
     expect(clampFraction(0.5)).toBe(0.5);
   });
 
-  it('holds the range at both ends - a sane amount above the fit, a quarter below', () => {
+  it('holds the range at both ends - the fit above, a quarter of it below', () => {
     expect(clampFraction(99)).toBe(MAX_ZOOM_FRACTION);
     expect(clampFraction(0.001)).toBe(MIN_ZOOM_FRACTION);
     expect(clampFraction(Number.NaN)).toBe(FIT_TO_WINDOW);
-    expect(MAX_ZOOM_FRACTION).toBeGreaterThan(FIT_TO_WINDOW);
+    expect(MAX_ZOOM_FRACTION).toBe(FIT_TO_WINDOW);
     expect(MIN_ZOOM_FRACTION).toBeLessThan(FIT_TO_WINDOW);
   });
 
-  it('never lets anything automatic exceed the fit - only a gesture goes above it', () => {
-    // There is no viewport clamp any more: the fit IS the clamp, and the
-    // default fraction is exactly 1.
-    expect(FIT_TO_WINDOW).toBe(1);
-    expect(zoomedFontSize(25.4, FIT_TO_WINDOW)).toBe(25.4);
+  it('the screen can never be zoomed larger than the window', () => {
+    // "i managed to accidentally resize the term so it's bigger than the
+    // browser window and can't get it back" (sysop, 2026-09-03). Every input
+    // path runs through clampFraction, so the ceiling is one constant and
+    // there is no way round it: not the wheel, not a pinch, not a corner
+    // drag, not the preset ladder, not a remembered value, and not the size
+    // that finally reaches xterm.
+    const fit = 25.4;
+    expect(clampFraction(4)).toBe(FIT_TO_WINDOW);
+    expect(wheelZoom(1, -100000)).toBe(FIT_TO_WINDOW);
+    expect(wheelZoom(0.9, -100000)).toBe(FIT_TO_WINDOW);
+    expect(dragZoom(1, BOX, { x: BOX.right, y: BOX.bottom }, { x: 5000, y: 5000 })).toBe(FIT_TO_WINDOW);
+    expect(nextPreset(2)).toBeLessThanOrEqual(FIT_TO_WINDOW);
+    expect(zoomedFontSize(fit, 4)).toBe(fit);
+    // And the ceiling is the fit itself, not a little over it.
+    expect(zoomedFontSize(fit, MAX_ZOOM_FRACTION)).toBe(fit);
   });
 });
 
@@ -234,6 +245,18 @@ describe('a corner drag resizes about the centre', () => {
     expect(cursorForCorner('sw')).toBe('nesw-resize');
   });
 
+  it('dragging a corner outward past fit is a no-op', () => {
+    // The screen is already on the fit - the largest the window can hold - so
+    // pulling the corner further out has nothing to give. It must not creep
+    // past the window edge and take the bezel ring (the way home) with it.
+    const corner = { x: BOX.right, y: BOX.bottom };
+    expect(dragZoom(1, BOX, corner, from(corner, 1.5))).toBe(FIT_TO_WINDOW);
+    expect(dragZoom(1, BOX, corner, from(corner, 10))).toBe(FIT_TO_WINDOW);
+    // From below the fit it still travels - up to the fit and no further.
+    expect(dragZoom(0.5, BOX, corner, from(corner, 1.5))).toBeCloseTo(0.75, 6);
+    expect(dragZoom(0.5, BOX, corner, from(corner, 10))).toBe(FIT_TO_WINDOW);
+  });
+
   it('leaves the fraction alone when the grab carries no radius to scale', () => {
     expect(dragZoom(0.75, BOX, centre, { x: centre.x + 40, y: centre.y })).toBe(0.75);
   });
@@ -252,9 +275,11 @@ describe('double-clicking the bezel cycles the presets and comes home to the win
     expect(nextPreset(0.6)).toBe(0.5);
   });
 
-  it('brings a screen pushed past the fit straight back to following the window', () => {
-    expect(nextPreset(1.25)).toBe(FIT_TO_WINDOW);
-    expect(isFollowingWindow(nextPreset(1.25))).toBe(true);
+  it('cannot be walked upward past the fit - a stale over-fit value steps down, never up', () => {
+    // 1.25 is no longer reachable, but a value from an older build might
+    // still be handed in. The ladder must not treat it as a rung.
+    expect(nextPreset(1.25)).toBeLessThanOrEqual(FIT_TO_WINDOW);
+    expect(isFollowingWindow(FIT_TO_WINDOW)).toBe(true);
   });
 
   it('counts the padding ring as bezel and the screen inside it as not', () => {
@@ -276,13 +301,26 @@ describe('a P session keeps its override', () => {
     expect(readStoredZoom()).toBeNull();
   });
 
-  it('ignores a hand-edited or out-of-range stored value rather than rendering the board in it', () => {
+  it('ignores a hand-edited or too-small stored value rather than rendering the board in it', () => {
     window.localStorage.setItem(ZOOM_STORAGE_KEY, 'enormous');
-    expect(readStoredZoom()).toBeNull();
-    window.localStorage.setItem(ZOOM_STORAGE_KEY, '400');
     expect(readStoredZoom()).toBeNull();
     window.localStorage.setItem(ZOOM_STORAGE_KEY, '0');
     expect(readStoredZoom()).toBeNull();
+  });
+
+  it('a stored zoom above fit is ignored and reset on load', () => {
+    // The board that stranded the sysop reloaded straight back into it,
+    // because the over-fit fraction was still in storage. Reading it hands
+    // back the fit AND repairs the stored value, so the next load - and any
+    // other tab - starts clean too.
+    window.localStorage.setItem(ZOOM_STORAGE_KEY, '1.25');
+    expect(readStoredZoom()).toBe(FIT_TO_WINDOW);
+    expect(window.localStorage.getItem(ZOOM_STORAGE_KEY)).toBe('1');
+    expect(readStoredZoom()).toBe(FIT_TO_WINDOW);
+
+    window.localStorage.setItem(ZOOM_STORAGE_KEY, '400');
+    expect(readStoredZoom()).toBe(FIT_TO_WINDOW);
+    expect(window.localStorage.getItem(ZOOM_STORAGE_KEY)).toBe('1');
   });
 
   it('survives storage being unavailable, in both directions', () => {
