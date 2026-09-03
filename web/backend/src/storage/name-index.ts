@@ -515,6 +515,24 @@ export class NameIndex {
       found = this.collect(matches);
     }
 
+    // A standing failure has to be given a chance to CLEAR here, and nothing
+    // else will do it for this call. resolve() re-lists on a stale miss and so
+    // heals itself; match() answers from a hit, which never re-lists, and a
+    // failure does not advance lastSuccessAt - so without this, one failed
+    // listing against a primed index makes every later `D *.LHA` report the
+    // drive as unavailable for the life of the process, long after the bucket
+    // came back. The gate's own window is what keeps this from costing a
+    // request per call during a real outage.
+    if (this.gate.hasFailure() && !this.gate.blocked()) {
+      try {
+        await this.refresh();
+        found = this.collect(matches);
+      } catch {
+        // refresh() has already recorded this attempt on the shared gate; the
+        // throw below raises it with this call's own stack.
+      }
+    }
+
     // A SET is under-reported differently from a single name, and more
     // quietly. resolve() may answer null only when the last attempt succeeded;
     // the equivalent here is not "empty and the gate failed" - it is ANY answer

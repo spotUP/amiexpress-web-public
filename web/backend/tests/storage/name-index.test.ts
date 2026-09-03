@@ -765,6 +765,57 @@ describe('NameIndex.match', () => {
     await expect(index.match(wild('*.LHA'))).rejects.toBeInstanceOf(StorageUnavailableError);
   });
 
+  it('answers again once the volume comes back', async () => {
+    // A hit never re-lists, and a failed attempt does not advance the
+    // last-success clock, so nothing else would ever clear the failure: one
+    // failed listing against a primed index would report the drive as
+    // unavailable for the life of the process, long after it recovered.
+    const backend = new FakeBackend({ driveNumber: 2 });
+    await backend.put('Files/A.LHA', Buffer.from('x'));
+    const index = new NameIndex(backend, 'Files/', { errorRetryAfterMs: 0 });
+    expect((await index.match(wild('*.LHA'))).map(o => o.key)).toEqual(['Files/A.LHA']);
+
+    backend.down = true;
+    await expect(index.refresh()).rejects.toThrow(); // some other caller's re-list fails
+    await expect(index.match(wild('*.LHA'))).rejects.toBeInstanceOf(StorageUnavailableError);
+
+    backend.down = false;
+
+    expect((await index.match(wild('*.LHA'))).map(o => o.key)).toEqual(['Files/A.LHA']);
+  });
+
+  it('picks up what was written during the outage when it recovers', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    await backend.put('Files/A.LHA', Buffer.from('x'));
+    const index = new NameIndex(backend, 'Files/', { errorRetryAfterMs: 0 });
+    await index.match(wild('*.LHA'));
+
+    backend.down = true;
+    await expect(index.refresh()).rejects.toThrow();
+    backend.down = false;
+    await backend.put('Files/B.LHA', Buffer.from('y'));
+
+    expect((await index.match(wild('*.LHA'))).map(o => o.key)).toEqual([
+      'Files/A.LHA',
+      'Files/B.LHA',
+    ]);
+  });
+
+  it('spends nothing re-checking inside the retry window', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    await backend.put('Files/A.LHA', Buffer.from('x'));
+    const index = new NameIndex(backend, 'Files/', { errorRetryAfterMs: 60_000 });
+    await index.match(wild('*.LHA'));
+
+    backend.down = true;
+    await expect(index.refresh()).rejects.toThrow();
+    const listsAfterFailure = backend.lists;
+    backend.down = false;
+
+    await expect(index.match(wild('*.LHA'))).rejects.toBeInstanceOf(StorageUnavailableError);
+    expect(backend.lists).toBe(listsAfterFailure);
+  });
+
   it('sees an object noted after the listing', async () => {
     const backend = new FakeBackend({ driveNumber: 2 });
     const index = new NameIndex(backend, 'Files/');
