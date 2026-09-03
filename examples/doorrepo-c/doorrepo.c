@@ -1780,7 +1780,7 @@ static void ui_notice(ansi_buf *b, char *frame, long framecap,
 
     ansi_color(b, ANSI_CYAN, ANSI_BLACK, 1);
     ansi_text(b, top + height - 2, left + 2, "Press any key.", inner);
-    ansi_flush(b);
+    ansi_flush_to_bbs(b);
 
     (void) ae_key();
 }
@@ -2463,16 +2463,10 @@ static int ui_draw_info(ansi_buf *b, const dr_config *cfg, const ui_geometry *g,
 #define AE_ARROW_UP    4
 #define AE_ARROW_DOWN  5
 
-/* The values live in flow.h now, where flow_decode_escape() produces them;
- * these names are what every screen loop in this file has always used. */
-#define UI_KEY_UP    FLOW_KEY_UP
-#define UI_KEY_DOWN  FLOW_KEY_DOWN
-#define UI_KEY_PGUP  FLOW_KEY_PGUP
-#define UI_KEY_PGDN  FLOW_KEY_PGDN
-#define UI_KEY_HOME  FLOW_KEY_HOME
-#define UI_KEY_END   FLOW_KEY_END
-#define UI_KEY_ENTER FLOW_KEY_ENTER
-#define UI_KEY_ESC   FLOW_KEY_ESC
+/* UI_KEY_* are the SDK's own names now (sdk/c/include/ui_key.h, reached
+ * through flow.h). This file used to alias them onto FLOW_KEY_*; with the
+ * decoder living in the SDK the two spellings are the same constants, and
+ * defining them here again would shadow the real ones. */
 
 /* The door layer, in the shape flow_decode_escape() wants it. The ctx is
  * unused here; it is counted rather than cast to void for the reason the
@@ -2604,20 +2598,20 @@ static int ui_filter_prompt(ansi_buf *b, char *frame, long framecap,
         /* Park the cursor after the text so a terminal showing it looks right. */
         ansi_goto(b, g->pane_top + 1, g->list_left + 1 + len);
         ansi_cursor(b, 1);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
 
         key = ui_read_key();
 
         if (key == UI_KEY_ENTER) {
             ansi_begin(b, frame, framecap);
             ansi_cursor(b, 0);
-            ansi_flush(b);
+            ansi_flush_to_bbs(b);
             return 1;
         }
         if (key == UI_KEY_ESC) {
             ansi_begin(b, frame, framecap);
             ansi_cursor(b, 0);
-            ansi_flush(b);
+            ansi_flush_to_bbs(b);
             return 0;
         }
         if (key == 8 || key == 127) {          /* backspace / delete */
@@ -2655,7 +2649,7 @@ static int ui_confirm(ansi_buf *b, char *frame, long framecap,
     ansi_fill(b, g->rows - UI_FOOTER_ROWS + 2, 1, g->cols, ANSI_WHITE, ANSI_BLUE);
     ansi_color(b, ANSI_YELLOW, ANSI_BLUE, 1);
     ansi_center(b, g->rows - UI_FOOTER_ROWS + 2, 1, g->cols, question);
-    ansi_flush(b);
+    ansi_flush_to_bbs(b);
 
     key = ui_read_key();
 
@@ -2665,7 +2659,7 @@ static int ui_confirm(ansi_buf *b, char *frame, long framecap,
      * whole screen blue - reported from the live BBS after answering N. */
     ansi_begin(b, frame, framecap);
     ansi_reset(b);
-    ansi_flush(b);
+    ansi_flush_to_bbs(b);
 
     return (key == 'y' || key == 'Y' || key == UI_KEY_ENTER);
 }
@@ -3144,7 +3138,7 @@ static void strip_installed_door(const dr_config *cfg, const char *archive,
     ansi_cursor(b, 1);
     ansi_reset(b);
     ansi_clear(b);
-    ansi_flush(b);
+    ansi_flush_to_bbs(b);
 
     strip_installed_door_apply(cfg, archive, cmdname, install_dir);
 
@@ -3174,7 +3168,7 @@ static void strip_repo_archive(const dr_config *cfg, const char *archive,
     ansi_cursor(b, 1);
     ansi_reset(b);
     ansi_clear(b);
-    ansi_flush(b);
+    ansi_flush_to_bbs(b);
 
     files_load(cfg, archive);
     if (!g_files_ok) {
@@ -3471,7 +3465,7 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
         ansi_cursor(b, 1);
         ansi_reset(b);
         ansi_clear(b);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
         ae_put("That is not a usable BBS command name: use A-Z and 0-9 only, up to 12", 1);
         ae_put("characters. Nothing was installed.", 1);
         ae_put("", 1);
@@ -3512,7 +3506,7 @@ static void install_door(const dr_config *cfg, const dr_entry *entry,
     ansi_cursor(b, 1);
     ansi_reset(b);
     ansi_clear(b);
-    ansi_flush(b);
+    ansi_flush_to_bbs(b);
 
     if (getenv("DOORREPO_TRACE") != (char *) 0) {
         sprintf(msg, "TRACE local_path=%s exists=%d", local_path, file_exists(local_path));
@@ -4069,7 +4063,7 @@ static void uninstall_door(const dr_config *cfg, const char *archive,
         ansi_cursor(b, 1);
         ansi_reset(b);
         ansi_clear(b);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
         sprintf(msg, "No such BBS command: %s", info_path);
         ae_put(msg, 1);
         ae_put("", 1);
@@ -4087,7 +4081,7 @@ static void uninstall_door(const dr_config *cfg, const char *archive,
     ansi_cursor(b, 1);
     ansi_reset(b);
     ansi_clear(b);
-    ansi_flush(b);
+    ansi_flush_to_bbs(b);
 
     uninstall_door_apply(cfg, archive, cmdname, install_dir, info_path);
 
@@ -4174,7 +4168,7 @@ static int ui_text_prompt(ansi_buf *b, char *frame, long framecap,
         ansi_text(b, row, 2, line, g->cols - 2);
         ansi_goto(b, row, 2 + (int) strlen(line));
         ansi_cursor(b, 1);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
 
         key = ui_read_key();
 
@@ -4182,7 +4176,7 @@ static int ui_text_prompt(ansi_buf *b, char *frame, long framecap,
             ansi_begin(b, frame, framecap);
             ansi_cursor(b, 0);
             ansi_reset(b);   /* same reason as ui_confirm: put the colours back */
-            ansi_flush(b);
+            ansi_flush_to_bbs(b);
             return (buf[0] != '\0') ? 1 : 0;
         }
         if (key == 27 || key >= 1000) {
@@ -4323,7 +4317,7 @@ static void do_edit_tooltype_cmd(const dr_config *cfg, const char *cmdname,
         ansi_cursor(b, 1);
         ansi_reset(b);
         ansi_clear(b);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
         ae_put("The path to this command's config is too long to build.", 1);
         ae_put("", 1);
         ae_put("Press any key to return to the list.", 1);
@@ -4356,7 +4350,7 @@ static void do_edit_tooltype_cmd(const dr_config *cfg, const char *cmdname,
         ansi_cursor(b, 1);
         ansi_reset(b);
         ansi_clear(b);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
         ae_put("Not a field this editor knows. Nothing was changed.", 1);
         ae_put("", 1);
         ae_put("Press any key to return to the list.", 1);
@@ -4374,7 +4368,7 @@ static void do_edit_tooltype_cmd(const dr_config *cfg, const char *cmdname,
     ansi_cursor(b, 1);
     ansi_reset(b);
     ansi_clear(b);
-    ansi_flush(b);
+    ansi_flush_to_bbs(b);
 
     if (strcmp(key, "STACK") == 0) {
         if (flow_validate_stack_size(value, &parsed) != 0) {
@@ -4458,7 +4452,7 @@ static void do_edit_access_cmd(const dr_config *cfg, const char *cmdname,
         ansi_cursor(b, 1);
         ansi_reset(b);
         ansi_clear(b);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
         ae_put("This archive is not installed - there is no access level to edit.", 1);
         ae_put("", 1);
         ae_put("Press any key to return to the list.", 1);
@@ -4471,7 +4465,7 @@ static void do_edit_access_cmd(const dr_config *cfg, const char *cmdname,
         ansi_cursor(b, 1);
         ansi_reset(b);
         ansi_clear(b);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
         ae_put("Access edit refused: BBSCmdDir plus this command name is too long.", 1);
         ae_put("", 1);
         ae_put("Press any key to return to the list.", 1);
@@ -4484,7 +4478,7 @@ static void do_edit_access_cmd(const dr_config *cfg, const char *cmdname,
         ansi_cursor(b, 1);
         ansi_reset(b);
         ansi_clear(b);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
         sprintf(msg, "Could not read %s.", info_path);
         ae_put(msg, 1);
         ae_put("", 1);
@@ -4519,7 +4513,7 @@ static void do_edit_access_cmd(const dr_config *cfg, const char *cmdname,
         ansi_cursor(b, 1);
         ansi_reset(b);
         ansi_clear(b);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
         ae_put("This command's ACCESS value is outside 0-255 - the .info may be corrupted", 1);
         ae_put("or hand-edited. Nothing was changed.", 1);
         ae_put("", 1);
@@ -4532,7 +4526,7 @@ static void do_edit_access_cmd(const dr_config *cfg, const char *cmdname,
         ansi_cursor(b, 1);
         ansi_reset(b);
         ansi_clear(b);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
         ae_put("This command's DRACCESS value is outside 0-255 - the .info may be", 1);
         ae_put("corrupted or hand-edited. Nothing was changed.", 1);
         ae_put("", 1);
@@ -4550,7 +4544,7 @@ static void do_edit_access_cmd(const dr_config *cfg, const char *cmdname,
         ansi_cursor(b, 1);
         ansi_reset(b);
         ansi_clear(b);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
         ae_put("This command's .info has no ACCESS line - defaulting to 0.", 1);
         ae_put("", 1);
         ae_put("Press any key to continue.", 1);
@@ -4566,7 +4560,7 @@ static void do_edit_access_cmd(const dr_config *cfg, const char *cmdname,
         ansi_cursor(b, 1);
         ansi_reset(b);
         ansi_clear(b);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
         sprintf(msg, "Normal level for this door was %ld - type it back in to restore.",
                 fields.prior_access);
         ae_put(msg, 1);
@@ -4588,7 +4582,7 @@ static void do_edit_access_cmd(const dr_config *cfg, const char *cmdname,
         ansi_cursor(b, 1);
         ansi_reset(b);
         ansi_clear(b);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
         ae_put("That is not a usable access level: digits only, 0-255. Nothing was changed.", 1);
         ae_put("", 1);
         ae_put("Press any key to return to the list.", 1);
@@ -4621,7 +4615,7 @@ static void do_edit_access_cmd(const dr_config *cfg, const char *cmdname,
         ansi_cursor(b, 1);
         ansi_reset(b);
         ansi_clear(b);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
         sprintf(msg, "Access edit failed: could not re-read %s.", info_path);
         ae_put(msg, 1);
         ae_put("", 1);
@@ -4636,7 +4630,7 @@ static void do_edit_access_cmd(const dr_config *cfg, const char *cmdname,
         ansi_cursor(b, 1);
         ansi_reset(b);
         ansi_clear(b);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
         ae_put("Access edit failed: the command config would not fit its buffer.", 1);
         ae_put("", 1);
         ae_put("Press any key to return to the list.", 1);
@@ -4648,7 +4642,7 @@ static void do_edit_access_cmd(const dr_config *cfg, const char *cmdname,
     ansi_cursor(b, 1);
     ansi_reset(b);
     ansi_clear(b);
-    ansi_flush(b);
+    ansi_flush_to_bbs(b);
 
     if (!write_info_file_atomic(cfg, info_path, g_info_content, "ACCESS")) {
         ae_put("", 1);
@@ -4771,7 +4765,7 @@ static void ui_help_screen(ansi_buf *b, char *frame, long framecap,
                 ui_draw_bar(b, g->rows - UI_FOOTER_ROWS + 1, g->cols, bar);
             }
 
-            ansi_flush(b);
+            ansi_flush_to_bbs(b);
             need_redraw = 0;
         }
 
@@ -4913,7 +4907,7 @@ static int ui_command_bar(ansi_buf *b, char *frame, long framecap,
         }
         ansi_goto(b, row, 3 + len);
         ansi_cursor(b, 1);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
 
         key = ui_read_key();
 
@@ -4930,7 +4924,7 @@ static int ui_command_bar(ansi_buf *b, char *frame, long framecap,
             ansi_begin(b, frame, framecap);
             ansi_cursor(b, 0);
             ansi_reset(b);
-            ansi_flush(b);
+            ansi_flush_to_bbs(b);
             return (out[0] != '\0') ? 1 : 0;
         }
         if (key == 9) {                      /* TAB completes, and stays */
@@ -5020,7 +5014,7 @@ static int ui_dispatch_row_command(const dr_config *cfg, dr_catalog *cat,
         ansi_cursor(b, 1);
         ansi_reset(b);
         ansi_clear(b);
-        ansi_flush(b);
+        ansi_flush_to_bbs(b);
         download_and_verify(cfg, sel);
         ae_put("", 1);
         ae_put("Press any key to return to the list.", 1);
@@ -5119,7 +5113,7 @@ static void ui_repaint_browser(ansi_buf *b, char *frame, long framecap,
     ansi_cursor(b, 0);
     ui_draw_chrome(b, cfg, g, cat, v, filter_desc, sel_entry);
     ui_draw_list(b, cfg, g, cat, v, top_index, selected, -1, -1);
-    ansi_flush(b);
+    ansi_flush_to_bbs(b);
 }
 
 static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const char *filter_desc)
@@ -5164,7 +5158,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             ansi_begin(&buf, frame, (long) sizeof(frame));
             ansi_cursor(&buf, 1);
             ansi_reset(&buf);
-            ansi_flush(&buf);
+            ansi_flush_to_bbs(&buf);
             stop_for_carrier_loss();
         }
 
@@ -5276,7 +5270,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
         /* Park the cursor out of the way, bottom-right, so a terminal that
          * ignores the hide request does not leave it blinking mid-listing. */
         ansi_goto(&buf, g.rows, g.cols);
-        ansi_flush(&buf);
+        ansi_flush_to_bbs(&buf);
         prev_selected = selected;
         prev_top = top_index;
         need_full_redraw = 0;
@@ -5320,7 +5314,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                     ansi_color(&buf, ANSI_YELLOW, ANSI_BLACK, 1);
                     ansi_text(&buf, g.pane_top + 1, g.info_left + 2,
                               "Fetching...", g.info_width - 4);
-                    ansi_flush(&buf);
+                    ansi_flush_to_bbs(&buf);
                 }
 
                 if (info_mode == UI_INFO_FILES) {
@@ -5335,7 +5329,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                 info_rows_used = ui_draw_info(&buf, cfg, &g, cat, &view, selected,
                                               info_rows_used, info_mode, info_scroll);
                 ansi_goto(&buf, g.rows, g.cols);
-                ansi_flush(&buf);
+                ansi_flush_to_bbs(&buf);
                 pane_selected = selected;
             }
         }
@@ -5346,7 +5340,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             ansi_begin(&buf, frame, (long) sizeof(frame));
             ansi_cursor(&buf, 1);
             ansi_reset(&buf);
-            ansi_flush(&buf);
+            ansi_flush_to_bbs(&buf);
             stop_for_carrier_loss();
         }
 
@@ -5412,7 +5406,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                     ansi_cursor(&buf, 1);
                     ansi_reset(&buf);
                     ansi_clear(&buf);
-                    ansi_flush(&buf);
+                    ansi_flush_to_bbs(&buf);
 
                     download_and_verify(cfg, sel);
 
@@ -5421,7 +5415,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                     (void) ae_key();
                     ansi_begin(&buf, frame, (long) sizeof(frame));
                     ansi_cursor(&buf, 0);
-                    ansi_flush(&buf);
+                    ansi_flush_to_bbs(&buf);
                 }
                 need_full_redraw = 1;
             }
@@ -5496,7 +5490,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                 ansi_cursor(&buf, 1);
                 ansi_reset(&buf);
                 ansi_clear(&buf);
-                ansi_flush(&buf);
+                ansi_flush_to_bbs(&buf);
                 return BROWSE_QUIT;
             default:
                 /* Everything else acts on the selected row, and the keys
@@ -5556,7 +5550,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                              (long) sizeof(frame), &g);
                 ansi_begin(&buf, frame, (long) sizeof(frame));
                 ansi_cursor(&buf, 0);
-                ansi_flush(&buf);
+                ansi_flush_to_bbs(&buf);
                 need_full_redraw = 1;
             }
             break;
@@ -5567,7 +5561,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                                      (long) sizeof(frame), &g);
                 ansi_begin(&buf, frame, (long) sizeof(frame));
                 ansi_cursor(&buf, 0);
-                ansi_flush(&buf);
+                ansi_flush_to_bbs(&buf);
                 need_full_redraw = 1;
             }
             break;
@@ -5577,7 +5571,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                                (long) sizeof(frame), &g);
                 ansi_begin(&buf, frame, (long) sizeof(frame));
                 ansi_cursor(&buf, 0);
-                ansi_flush(&buf);
+                ansi_flush_to_bbs(&buf);
                 need_full_redraw = 1;
             }
             break;
@@ -5587,7 +5581,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                                (long) sizeof(frame), &g);
                 ansi_begin(&buf, frame, (long) sizeof(frame));
                 ansi_cursor(&buf, 0);
-                ansi_flush(&buf);
+                ansi_flush_to_bbs(&buf);
                 need_full_redraw = 1;
             }
             break;
@@ -5600,7 +5594,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                                  (long) sizeof(frame), &g);
                 ansi_begin(&buf, frame, (long) sizeof(frame));
                 ansi_cursor(&buf, 0);
-                ansi_flush(&buf);
+                ansi_flush_to_bbs(&buf);
                 need_full_redraw = 1;
             }
             break;
@@ -5611,7 +5605,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             history_loop_ansi(cfg, frame, (long) sizeof(frame), &g);
             ansi_begin(&buf, frame, (long) sizeof(frame));
             ansi_cursor(&buf, 0);
-            ansi_flush(&buf);
+            ansi_flush_to_bbs(&buf);
             need_full_redraw = 1;
             break;
         case 'l': case 'L':
@@ -5682,7 +5676,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
                 if (ui_confirm(&buf, frame, (long) sizeof(frame), &g, question)) {
                     ansi_begin(&buf, frame, (long) sizeof(frame));
                     ansi_cursor(&buf, 0);
-                    ansi_flush(&buf);
+                    ansi_flush_to_bbs(&buf);
                     owner_delete_door(cfg, sel->archive);
                     ae_put("", 1);
                     ae_put("Press any key to return to the list.", 1);
@@ -5697,7 +5691,7 @@ static browse_exit browse_loop_ansi(const dr_config *cfg, dr_catalog *cat, const
             ansi_cursor(&buf, 1);
             ansi_reset(&buf);
             ansi_clear(&buf);
-            ansi_flush(&buf);
+            ansi_flush_to_bbs(&buf);
             return BROWSE_QUIT;
         default:
             break;
@@ -6126,7 +6120,7 @@ static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
                 }
                 ui_draw_bar(&buf, g->rows - UI_FOOTER_ROWS + 1, g->cols, bar);
             }
-            ansi_flush(&buf);
+            ansi_flush_to_bbs(&buf);
             need_redraw = 0;
         }
 
@@ -6223,7 +6217,7 @@ static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
                 ansi_cursor(&buf, 1);
                 ansi_reset(&buf);
                 ansi_clear(&buf);
-                ansi_flush(&buf);
+                ansi_flush_to_bbs(&buf);
                 sprintf(msg, "Starting %.20s...", cmd);
                 ae_put(msg, 1);
                 ae_return_command(cmd);
@@ -6239,7 +6233,7 @@ static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
                             : "Nothing selected.");
             ansi_color(&buf, ANSI_YELLOW, ANSI_BLACK, 1);
             ansi_text(&buf, g->rows - 1, 3, msg, g->cols - 6);
-            ansi_flush(&buf);
+            ansi_flush_to_bbs(&buf);
             break;
         }
         case UI_KEY_ESC:
@@ -6248,7 +6242,7 @@ static void board_loop_ansi(const dr_config *cfg, char *frame, long framecap,
             ansi_cursor(&buf, 1);
             ansi_reset(&buf);
             ansi_clear(&buf);
-            ansi_flush(&buf);
+            ansi_flush_to_bbs(&buf);
             return;
         default:
             break;
@@ -6516,7 +6510,7 @@ static void history_loop_ansi(const dr_config *cfg, char *frame, long framecap,
                 ui_draw_bar(&buf, g->rows - UI_FOOTER_ROWS + 1, g->cols, bar);
             }
 
-            ansi_flush(&buf);
+            ansi_flush_to_bbs(&buf);
             need_redraw = 0;
         }
 
@@ -6528,7 +6522,7 @@ static void history_loop_ansi(const dr_config *cfg, char *frame, long framecap,
             ansi_cursor(&buf, 1);
             ansi_reset(&buf);
             ansi_clear(&buf);
-            ansi_flush(&buf);
+            ansi_flush_to_bbs(&buf);
             return;
         default:
             break;
@@ -6620,7 +6614,7 @@ static void files_loop_ansi(const dr_config *cfg, const char *cmdname,
                 /* Not a screenful of nothing with one line in it: this is a
                  * message, so it is a dialog over the list the sysop came
                  * from. */
-                ansi_flush(&buf);
+                ansi_flush_to_bbs(&buf);
                 ui_notice(&buf, frame, framecap, g, "No files",
                           "This door has no directory on disk.",
                           (const char *) 0);
@@ -6657,7 +6651,7 @@ static void files_loop_ansi(const dr_config *cfg, const char *cmdname,
                 ui_draw_bar(&buf, g->rows - UI_FOOTER_ROWS + 1, g->cols, bar);
             }
             ansi_reset(&buf);
-            ansi_flush(&buf);
+            ansi_flush_to_bbs(&buf);
             need_redraw = 0;
         }
 
@@ -6733,7 +6727,7 @@ static void files_loop_ansi(const dr_config *cfg, const char *cmdname,
             ansi_cursor(&buf, 1);
             ansi_reset(&buf);
             ansi_clear(&buf);
-            ansi_flush(&buf);
+            ansi_flush_to_bbs(&buf);
             return;
         default:
             break;
@@ -6784,7 +6778,7 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
             ansi_begin(&buf, frame, (long) sizeof(frame));
             ansi_cursor(&buf, 1);
             ansi_reset(&buf);
-            ansi_flush(&buf);
+            ansi_flush_to_bbs(&buf);
             stop_for_carrier_loss();
         }
 
@@ -6837,7 +6831,7 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
             ansi_reset(&buf);
         }
         ansi_goto(&buf, g.rows, g.cols);
-        ansi_flush(&buf);
+        ansi_flush_to_bbs(&buf);
         prev_selected = selected;
         prev_top = top_index;
         need_full_redraw = 0;
@@ -6865,7 +6859,7 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
                     ansi_color(&buf, ANSI_YELLOW, ANSI_BLACK, 1);
                     ansi_text(&buf, g.pane_top + 1, g.info_left + 2,
                               "Fetching...", g.info_width - 4);
-                    ansi_flush(&buf);
+                    ansi_flush_to_bbs(&buf);
                 }
 
                 if (info_mode == UI_INFO_FILES) {
@@ -6880,7 +6874,7 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
                 info_rows_used = ui_draw_info(&buf, cfg, &g, cat, &view, selected,
                                               info_rows_used, info_mode, info_scroll);
                 ansi_goto(&buf, g.rows, g.cols);
-                ansi_flush(&buf);
+                ansi_flush_to_bbs(&buf);
                 pane_selected = selected;
             }
         }
@@ -6891,7 +6885,7 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
             ansi_begin(&buf, frame, (long) sizeof(frame));
             ansi_cursor(&buf, 1);
             ansi_reset(&buf);
-            ansi_flush(&buf);
+            ansi_flush_to_bbs(&buf);
             stop_for_carrier_loss();
         }
 
@@ -6941,7 +6935,7 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
                     ansi_cursor(&buf, 1);
                     ansi_reset(&buf);
                     ansi_clear(&buf);
-                    ansi_flush(&buf);
+                    ansi_flush_to_bbs(&buf);
 
                     download_and_verify(cfg, sel);
 
@@ -6950,7 +6944,7 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
                     (void) ae_key();
                     ansi_begin(&buf, frame, (long) sizeof(frame));
                     ansi_cursor(&buf, 0);
-                    ansi_flush(&buf);
+                    ansi_flush_to_bbs(&buf);
                 }
                 need_full_redraw = 1;
             }
@@ -6966,7 +6960,7 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
                                      (long) sizeof(frame), &g);
                 ansi_begin(&buf, frame, (long) sizeof(frame));
                 ansi_cursor(&buf, 0);
-                ansi_flush(&buf);
+                ansi_flush_to_bbs(&buf);
                 need_full_redraw = 1;
             }
             break;
@@ -6984,7 +6978,7 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
                                 (unsigned long) g.visible_rows);
                 ansi_begin(&buf, frame, (long) sizeof(frame));
                 ansi_cursor(&buf, 0);
-                ansi_flush(&buf);
+                ansi_flush_to_bbs(&buf);
                 need_full_redraw = 1;
             }
             break;
@@ -7000,7 +6994,7 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
                 files_loop_ansi(cfg, cmdname, frame, (long) sizeof(frame), &g);
                 ansi_begin(&buf, frame, (long) sizeof(frame));
                 ansi_cursor(&buf, 0);
-                ansi_flush(&buf);
+                ansi_flush_to_bbs(&buf);
                 need_full_redraw = 1;
             }
             break;
@@ -7018,7 +7012,7 @@ static void installed_loop_ansi(const dr_config *cfg, dr_catalog *cat)
             ansi_cursor(&buf, 1);
             ansi_reset(&buf);
             ansi_clear(&buf);
-            ansi_flush(&buf);
+            ansi_flush_to_bbs(&buf);
             return;
         default:
             break;

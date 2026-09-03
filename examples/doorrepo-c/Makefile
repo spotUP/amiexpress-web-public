@@ -36,7 +36,7 @@ CC ?= cc
 # compile on Linux with "unknown type name 'fd_set'". macOS's libc exposes them
 # regardless, which is why this went unnoticed until the suite ran on a Linux
 # CI runner. The macro is glibc's; other libcs ignore it harmlessly.
-NATIVE_CFLAGS = -std=c89 -D_DEFAULT_SOURCE -Wall -Wextra -pedantic -O2
+NATIVE_CFLAGS = -std=c89 -D_DEFAULT_SOURCE -Wall -Wextra -pedantic -O2 -I../../sdk/c/include
 
 # vbcc cross-compiler for the real m68k/AmigaOS target. Both paths are the
 # ones verified working for this project (see progress.md); override on the
@@ -100,8 +100,12 @@ endif
 
 LIVE_HOST = http://bbs.uprough.net
 
-CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c sha256.c guide.c ansi.c infocache.c json_lite.c owner_auth.c
-HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h aedoor.h netio.h ansi.h infocache.h shell.h json_lite.h owner_auth.h dirlist.h
+# ../../sdk/c/src/ui_ansi.c is the ANSI layer this door used to own. It was
+# lifted into the SDK; ansi.c is now just this door's "send it to the BBS"
+# sink. One renderer, not two.
+SDK_C = ../../sdk/c
+CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c sha256.c guide.c ansi.c $(SDK_C)/src/ui_ansi.c $(SDK_C)/src/ui_key.c infocache.c json_lite.c owner_auth.c
+HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h aedoor.h netio.h ansi.h $(SDK_C)/include/ui_ansi.h infocache.h shell.h json_lite.h owner_auth.h dirlist.h
 
 NATIVE_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_native.c shell_native.c dirlist_native.c
 AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_amiga.c shell_amiga.c dirlist_amiga.c
@@ -138,6 +142,7 @@ doorrepo.amiga: $(AMIGA_SOURCES) $(HEADERS)
 	@ln -sfn "$(VENDOR_NDK_ROOT)/SANA+RoadshowTCP-IP/netinclude" $(AMIGA_NETINCLUDE_VENDOR_LINK)
 	$(VC) $(AMIGA_CFLAGS) -DAMIGA \
 	  -I$(AMIGA_NDK_SHIM) -I"$(AMIGA_NETINCLUDE_DIR)" -I"$(NDK)" \
+	  -I$(SDK_C)/include \
 	  $(AMIGA_SOURCES) -lauto -o $@
 
 # ---------------------------------------------------------------------
@@ -148,7 +153,7 @@ doorrepo.amiga: $(AMIGA_SOURCES) $(HEADERS)
 amiga-stub: doorrepo.amiga-stub
 
 doorrepo.amiga-stub: $(AMIGA_SOURCES) $(HEADERS)
-	$(VC) $(AMIGA_CFLAGS) -I"$(NDK)" -DNETIO_STUB $(AMIGA_SOURCES) -lauto -o $@
+	$(VC) $(AMIGA_CFLAGS) -I"$(NDK)" -I$(SDK_C)/include -DNETIO_STUB $(AMIGA_SOURCES) -lauto -o $@
 
 # ---------------------------------------------------------------------
 # syntax (checks native C source files for compilation errors without
@@ -183,14 +188,16 @@ probe-amiga: $(PROBE_SOURCES) $(HEADERS)
 # -D_DEFAULT_SOURCE for the same reason as NATIVE_CFLAGS above: test-http
 # links netio.c's POSIX branch and tests/stub_server.c, both of which need the
 # POSIX socket declarations that glibc hides under -std=c89.
-TEST_CFLAGS = -std=c89 -D_DEFAULT_SOURCE -Wall -Wextra -pedantic -O0 -g
+TEST_CFLAGS = -std=c89 -D_DEFAULT_SOURCE -Wall -Wextra -pedantic -O0 -g -I../../sdk/c/include
 
 .PHONY: test-flow test-md5 test-sha256 test-guide test-listtxt test-config test-http test-aedoor-native test-ansi test-infocache test-json-lite test-owner-auth
 
 test: syntax test-flow test-md5 test-sha256 test-guide test-ansi test-listtxt test-config test-http test-aedoor-native test-infocache test-json-lite test-owner-auth test-dirlist
 
-test-flow: flow.c tests/test_flow.c flow.h
-	$(CC) $(TEST_CFLAGS) flow.c tests/test_flow.c -o build-test-flow
+# The key decoder these tests drive lives in the SDK now (see flow.h), so
+# the suite links it rather than a second copy.
+test-flow: flow.c tests/test_flow.c flow.h $(SDK_C)/src/ui_key.c
+	$(CC) $(TEST_CFLAGS) flow.c $(SDK_C)/src/ui_key.c tests/test_flow.c -o build-test-flow
 	./build-test-flow
 
 test-dirlist: dirlist_native.c tests/test_dirlist.c dirlist.h
@@ -213,8 +220,9 @@ test-guide: guide.c tests/test_guide.c guide.h
 	$(CC) $(TEST_CFLAGS) guide.c tests/test_guide.c -o build-test-guide
 	./build-test-guide
 
-test-ansi: ansi.c aedoor_native.c tests/test_ansi.c ansi.h
-	$(CC) $(TEST_CFLAGS) ansi.c aedoor_native.c tests/test_ansi.c -o build-test-ansi
+# The primitives are the SDK's now; ansi.c is only this door's BBS sink.
+test-ansi: ansi.c $(SDK_C)/src/ui_ansi.c aedoor_native.c tests/test_ansi.c ansi.h
+	$(CC) $(TEST_CFLAGS) ansi.c $(SDK_C)/src/ui_ansi.c aedoor_native.c tests/test_ansi.c -o build-test-ansi
 	./build-test-ansi
 
 test-listtxt: listtxt.c tests/test_listtxt.c listtxt.h

@@ -15,6 +15,8 @@
 #ifndef DOORREPO_FLOW_H
 #define DOORREPO_FLOW_H
 
+#include "ui_key.h"
+
 /* ---- Pagination maths ---- */
 
 typedef struct {
@@ -949,29 +951,22 @@ int flow_key_ends_session(int key);
  * that turns out not to belong to a sequence is handed BACK, never eaten.
  *
  * The values are what doorrepo.c's UI_KEY_* aliases have always been. */
-#define FLOW_KEY_UP    1000
-#define FLOW_KEY_DOWN  1001
-#define FLOW_KEY_PGUP  1002
-#define FLOW_KEY_PGDN  1003
-#define FLOW_KEY_HOME  1004
-#define FLOW_KEY_END   1005
-#define FLOW_KEY_ENTER 1006
-#define FLOW_KEY_ESC   1007
+/* The decoder itself lives in sdk/c (include/ui_key.h): one copy, which
+ * this door and every future C door read arrows with. What stays here are
+ * the names doorrepo has always used, so its own call sites did not have to
+ * move when the code did. */
+#define FLOW_KEY_UP    UI_KEY_UP
+#define FLOW_KEY_DOWN  UI_KEY_DOWN
+#define FLOW_KEY_PGUP  UI_KEY_PGUP
+#define FLOW_KEY_PGDN  UI_KEY_PGDN
+#define FLOW_KEY_HOME  UI_KEY_HOME
+#define FLOW_KEY_END   UI_KEY_END
+#define FLOW_KEY_ENTER UI_KEY_ENTER
+#define FLOW_KEY_ESC   UI_KEY_ESC
 
-typedef struct flow_key_source {
-    int  (*next)(void *ctx);     /* blocking read of one byte; < 0 = user gone */
-    int  (*pending)(void *ctx);  /* non-zero if a byte is queued; must NOT consume */
-    void (*settle)(void *ctx);   /* wait long enough for a sequence's tail to land; may be NULL */
-    void *ctx;
-} flow_key_source;
+typedef ui_key_source flow_key_source;
 
-/* Decodes what follows an ESC that the caller has already read. Returns
- * FLOW_KEY_ESC for a lone ESC, a FLOW_KEY_* for a recognised CSI/SS3
- * sequence, 0 for one it does not know, or the negative value next()
- * reported for a lost user. *pushback receives a byte that was read but
- * belongs to the NEXT key (ESC then Q, typed fast), else -1; the caller
- * must deliver it before reading again. */
-int flow_decode_escape(const flow_key_source *src, int *pushback);
+#define flow_decode_escape(src, pushback) ui_decode_escape((src), (pushback))
 
 /* ---- Install index -----------------------------------------------------
  *
