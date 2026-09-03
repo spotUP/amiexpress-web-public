@@ -62,12 +62,23 @@ export class FileRepository extends BaseRepository<any> {
   /**
    * Record that a file now lives on a pooled volume, under the given object
    * key. Later tasks call this after a successful upload to object storage.
+   *
+   * Throws if no catalog row matched (filename, areaId) - a caller that has
+   * just finished uploading to a bucket must not be able to believe the
+   * location was recorded when it was not. A repeat call for the same
+   * (filename, areaid) is an idempotent update (that pair is UNIQUE), which
+   * is intended and does not throw.
    */
   recordLocation(filename: string, areaId: number, driveNumber: number, objectKey: string): void {
-    this.run(
+    const result = this.run(
       'UPDATE file_entries SET storage_volume = ?, object_key = ? WHERE filename = ? AND areaid = ?',
       [driveNumber, objectKey, filename, areaId]
     );
+    if (result.changes === 0) {
+      throw new Error(
+        `recordLocation: no file_entries row for filename "${filename}" in area ${areaId}`
+      );
+    }
   }
 
   /**
@@ -85,15 +96,17 @@ export class FileRepository extends BaseRepository<any> {
     const stmt = this.prepare(`
       INSERT INTO file_entries (
         filename, description, size, uploader, uploaddate, downloads,
-        areaid, fileiddiz, rating, votes, status, checked, comment
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        areaid, fileiddiz, rating, votes, status, checked, comment,
+        storage_volume, object_key
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = stmt.run(
       file.filename, file.description, file.size, file.uploader,
       Math.floor(file.uploadDate.getTime() / 1000),
       file.downloads, file.areaId, file.fileIdDiz, file.rating, file.votes,
-      file.status, file.checked, file.comment
+      file.status, file.checked, file.comment,
+      file.storageVolume ?? null, file.objectKey ?? null
     );
 
     const fileId = result.lastInsertRowid as number;
