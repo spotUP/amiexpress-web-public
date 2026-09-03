@@ -35,7 +35,11 @@ interface FoundFile {
  * prompt go through, so they are what a storage branch has to be tested on.
  */
 interface DownloadInternals {
-  findFilesInConference(dataDir: string, confNum: number, pattern: string): Promise<FoundFile[]>;
+  findFilesInConference(
+    dataDir: string,
+    confNum: number,
+    pattern: string
+  ): Promise<{ files: FoundFile[]; storageError?: unknown }>;
   findFilesReporting(
     socket: { emit: (event: string, payload: string) => void },
     dataDir: string,
@@ -45,6 +49,11 @@ interface DownloadInternals {
 }
 
 const internals = DownloadHandler as unknown as DownloadInternals;
+
+/** The files half of the resolve layer's answer. */
+async function find(dataDir: string, confNum: number, pattern: string): Promise<FoundFile[]> {
+  return (await internals.findFilesInConference(dataDir, confNum, pattern)).files;
+}
 
 interface Fixture {
   ctx: StorageContext;
@@ -97,43 +106,51 @@ function socketSpy(): { socket: { emit: (event: string, payload: string) => void
 afterEach(() => setStorageContext(null));
 
 describe('D resolving a pooled file', () => {
-  it('finds it by exact name and hands back a real local path', async () => {
-    const { backend, dataDir } = fixture();
+  it('finds it by exact name, with its size, and fetches nothing yet', async () => {
+    // The listing is answered before the caller has agreed to pay for it; the
+    // bytes arrive at send, through rematerialise.
+    const { ctx, backend, dataDir } = fixture();
     await backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
 
-    const found = await internals.findFilesInConference(dataDir, 1, 'DEMO.LHA');
+    const found = await find(dataDir, 1, 'DEMO.LHA');
 
     expect(found).toHaveLength(1);
-    expect(fs.readFileSync(found[0].fullPath, 'utf8')).toBe('payload');
     expect(found[0].size).toBe(7);
+    expect(backend.gets).toBe(0);
+    expect(fs.existsSync(found[0].fullPath)).toBe(false);
+    expect(fs.readFileSync(await rematerialise(found[0], ctx), 'utf8')).toBe('payload');
   });
 
   it('matches the caller spelling case-insensitively, as the disk walk does', async () => {
     const { backend, dataDir } = fixture();
     await backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
 
-    const found = await internals.findFilesInConference(dataDir, 1, 'demo.lha');
+    const found = await find(dataDir, 1, 'demo.lha');
 
     expect(found[0].name).toBe('DEMO.LHA');
   });
 
   it('expands a wildcard filespec, which a pooled area has no directory for', async () => {
-    const { backend, dataDir } = fixture();
+    const { ctx, backend, dataDir } = fixture();
     await backend.put('Conf1/Files/DEMO1.LHA', Buffer.from('one'));
     await backend.put('Conf1/Files/DEMO2.LHA', Buffer.from('two'));
     await backend.put('Conf1/Files/OTHER.LHA', Buffer.from('no'));
 
-    const found = await internals.findFilesInConference(dataDir, 1, 'DEMO*.LHA');
+    const found = await find(dataDir, 1, 'DEMO*.LHA');
 
     expect(found.map(f => f.name).sort()).toEqual(['DEMO1.LHA', 'DEMO2.LHA']);
-    expect(found.map(f => fs.readFileSync(f.fullPath, 'utf8')).sort()).toEqual(['one', 'two']);
+    expect(backend.gets).toBe(0); // a filespec is listed, not downloaded
+    const bytes = await Promise.all(
+      found.map(async f => fs.readFileSync(await rematerialise(f, ctx), 'utf8'))
+    );
+    expect(bytes.sort()).toEqual(['one', 'two']);
   });
 
   it('carries the drive and key, so the transfer can fetch it again', async () => {
     const { backend, dataDir } = fixture();
     await backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
 
-    const [found] = await internals.findFilesInConference(dataDir, 1, 'DEMO.LHA');
+    const [found] = await find(dataDir, 1, 'DEMO.LHA');
 
     expect(found.driveNumber).toBe(2);
     expect(found.objectKey).toBe('Conf1/Files/DEMO.LHA');
@@ -146,51 +163,51 @@ describe('D resolving a pooled file', () => {
     await backend.put('Conf1/Files/POOLED.LHA', Buffer.from('in-bucket'));
     fs.writeFileSync(path.join(dataDir, 'Conf1', 'Files', 'ONDISK.LHA'), 'on-disk');
 
-    const found = await internals.findFilesInConference(dataDir, 1, '*.LHA');
+    const found = await find(dataDir, 1, '*.LHA');
 
     expect(found.map(f => f.name).sort()).toEqual(['ONDISK.LHA', 'POOLED.LHA']);
   });
 
   it('does not list a file twice when a stale local copy shares the name', async () => {
-    const { backend, dataDir } = fixture();
+    const { ctx, backend, dataDir } = fixture();
     await backend.put('Conf1/Files/DEMO.LHA', Buffer.from('current'));
     fs.writeFileSync(path.join(dataDir, 'Conf1', 'Files', 'DEMO.LHA'), 'stale-local');
 
-    const found = await internals.findFilesInConference(dataDir, 1, '*.LHA');
+    const found = await find(dataDir, 1, '*.LHA');
 
     expect(found).toHaveLength(1);
-    expect(fs.readFileSync(found[0].fullPath, 'utf8')).toBe('current');
+    expect(fs.readFileSync(await rematerialise(found[0], ctx), 'utf8')).toBe('current');
   });
 
   it('serves the pool, not a stale local copy, on an exact name', async () => {
-    const { backend, dataDir } = fixture();
+    const { ctx, backend, dataDir } = fixture();
     await backend.put('Conf1/Files/DEMO.LHA', Buffer.from('current'));
     fs.writeFileSync(path.join(dataDir, 'Conf1', 'Files', 'DEMO.LHA'), 'stale-local');
 
-    const found = await internals.findFilesInConference(dataDir, 1, 'DEMO.LHA');
+    const found = await find(dataDir, 1, 'DEMO.LHA');
 
     expect(found).toHaveLength(1);
-    expect(fs.readFileSync(found[0].fullPath, 'utf8')).toBe('current');
+    expect(fs.readFileSync(await rematerialise(found[0], ctx), 'utf8')).toBe('current');
   });
 
   it('falls through to a local file the pool does not hold', async () => {
     const { dataDir } = fixture();
     fs.writeFileSync(path.join(dataDir, 'Conf1', 'Files', 'ONDISK.LHA'), 'on-disk');
 
-    const found = await internals.findFilesInConference(dataDir, 1, 'ONDISK.LHA');
+    const found = await find(dataDir, 1, 'ONDISK.LHA');
 
     expect(found[0].fullPath).toBe(path.join(dataDir, 'Conf1', 'Files', 'ONDISK.LHA'));
   });
 
   it('is empty for a name the pool does not hold', async () => {
     const { dataDir } = fixture();
-    expect(await internals.findFilesInConference(dataDir, 1, 'NOPE.LHA')).toEqual([]);
+    expect(await find(dataDir, 1, 'NOPE.LHA')).toEqual([]);
   });
 
   it('leaves a local conference alone', async () => {
     const { backend, dataDir } = fixture();
 
-    const found = await internals.findFilesInConference(dataDir, 2, 'LOCAL.TXT');
+    const found = await find(dataDir, 2, 'LOCAL.TXT');
 
     expect(found[0].fullPath).toBe(path.join(dataDir, 'Conf2', 'Files', 'LOCAL.TXT'));
     expect(backend.requests).toBe(0);
@@ -250,8 +267,9 @@ describe('the file still being there at send time', () => {
     // told "files not found" about a file the bucket still holds.
     const { ctx, backend, dataDir } = fixture();
     await backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
-    const [found] = await internals.findFilesInConference(dataDir, 1, 'DEMO.LHA');
+    const [found] = await find(dataDir, 1, 'DEMO.LHA');
 
+    await rematerialise(found, ctx); // the send that fetched it
     ctx.cache.evictTo(0);
     expect(fs.existsSync(found.fullPath)).toBe(false);
 
@@ -263,7 +281,7 @@ describe('the file still being there at send time', () => {
 
   it('leaves a local file exactly as it is', async () => {
     const { ctx, dataDir } = fixture();
-    const [found] = await internals.findFilesInConference(dataDir, 2, 'LOCAL.TXT');
+    const [found] = await find(dataDir, 2, 'LOCAL.TXT');
 
     expect(await rematerialise(found, ctx)).toBe(found.fullPath);
   });

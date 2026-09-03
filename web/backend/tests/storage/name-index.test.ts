@@ -671,7 +671,10 @@ describe('NameIndex.match', () => {
     await backend.put('Files/OTHER.LHA', Buffer.from('x'));
     const index = new NameIndex(backend, 'Files/');
 
-    expect(await index.match(wild('DEMO*.LHA'))).toEqual(['Files/DEMO1.LHA', 'Files/DEMO2.LHA']);
+    expect((await index.match(wild('DEMO*.LHA'))).map(o => o.key)).toEqual([
+      'Files/DEMO1.LHA',
+      'Files/DEMO2.LHA',
+    ]);
   });
 
   it('costs one listing, like resolve', async () => {
@@ -683,6 +686,48 @@ describe('NameIndex.match', () => {
     await index.match(wild('A*'));
 
     expect(backend.lists).toBe(1);
+  });
+
+  it('carries each object size, so a filespec can be printed without fetching', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    await backend.put('Files/A.LHA', Buffer.from('1234567'));
+    const index = new NameIndex(backend, 'Files/');
+
+    const [found] = await index.match(wild('*.LHA'));
+
+    expect(found.size).toBe(7);
+    expect(backend.gets).toBe(0); // metadata only - no body was read
+  });
+
+  it('answers sizeOf for a resolved key, also without fetching', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    await backend.put('Files/A.LHA', Buffer.from('1234567'));
+    const index = new NameIndex(backend, 'Files/');
+
+    const key = await index.resolve('a.lha');
+
+    expect(index.sizeOf(key!)).toBe(7);
+    expect(backend.gets).toBe(0);
+  });
+
+  it('takes the size given to note(), so a fresh upload prints its real size', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    const index = new NameIndex(backend, 'Files/');
+    await index.match(wild('*.LHA'));
+    index.note('Files/NEW.LHA', 42);
+
+    expect((await index.match(wild('*.LHA')))[0].size).toBe(42);
+  });
+
+  it('forgets a size along with its key', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    await backend.put('Files/A.LHA', Buffer.from('1234567'));
+    const index = new NameIndex(backend, 'Files/');
+    await index.match(wild('*.LHA'));
+
+    index.forget('Files/A.LHA');
+
+    expect(index.sizeOf('Files/A.LHA')).toBeUndefined();
   });
 
   it('is empty when the area holds nothing matching', async () => {
@@ -704,12 +749,28 @@ describe('NameIndex.match', () => {
     await expect(index.match(wild('*.LHA'))).rejects.toBeInstanceOf(StorageUnavailableError);
   });
 
+  it('throws on a NON-empty result too, because a stale list may be short', async () => {
+    // The quiet case: the listing succeeded once, the backend then failed, and
+    // every match happens to be known. A plausible shorter set comes back with
+    // nothing to say it is short - a set-shaped under-report, which is the
+    // failure mode this whole subsystem exists to prevent.
+    const backend = new FakeBackend({ driveNumber: 2 });
+    await backend.put('Files/A.LHA', Buffer.from('x'));
+    const index = new NameIndex(backend, 'Files/', { staleAfterMs: 0 });
+    expect((await index.match(wild('*.LHA'))).map(o => o.key)).toEqual(['Files/A.LHA']);
+
+    backend.down = true;
+    await expect(index.resolve('nope.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+
+    await expect(index.match(wild('*.LHA'))).rejects.toBeInstanceOf(StorageUnavailableError);
+  });
+
   it('sees an object noted after the listing', async () => {
     const backend = new FakeBackend({ driveNumber: 2 });
     const index = new NameIndex(backend, 'Files/');
     await index.match(wild('*.LHA'));
     index.note('Files/NEW.LHA');
 
-    expect(await index.match(wild('*.LHA'))).toEqual(['Files/NEW.LHA']);
+    expect((await index.match(wild('*.LHA'))).map(o => o.key)).toEqual(['Files/NEW.LHA']);
   });
 });

@@ -65,29 +65,104 @@ export async function materialiseRemoteFile(
 }
 
 /**
- * Every pooled file of this conference whose name the caller accepts - the
- * wildcard form of the lookup above. `D DEMO*.LHA` is ordinary BBS usage, and
- * a pooled area has no directory for `readdirSync` to walk.
+ * A pooled file the caller has ASKED about but not yet paid for: name, size,
+ * drive and key, and the local path its bytes would land on.
+ *
+ * `localPath` may not exist yet. That is the point - see `listRemoteMatches`.
+ */
+export interface RemoteListing {
+  name: string;
+  size: number;
+  localPath: string;
+  driveNumber: number;
+  key: string;
+}
+
+/**
+ * Every pooled file of this conference whose name the caller accepts, as
+ * METADATA - no object body is fetched.
+ *
+ * `D *.LHA` prints a set and then asks the caller to confirm it. Fetching each
+ * body to build that list spends the whole egress bill before anyone has
+ * agreed to anything: a 500-file area is 500 downloads during "Checking...",
+ * with the session blocked throughout, all of it wasted if the caller answers
+ * no at the LAST CHANCE prompt - and if the set is larger than the cache
+ * budget the fetches evict earlier members of their own set, so the ones that
+ * survive are paid for twice. The local walk only stats; this only lists. The
+ * bytes are fetched at send, by `rematerialise`.
+ *
+ * ONE NAME, ONE FILE. Two pooled areas of a conference can both hold DEMO.LHA,
+ * and both used to enter the set: two cache paths on telnet, so the dedupe in
+ * startZmodemDownload could not collapse them and the caller got the file
+ * twice; one URL on web, so the browser fetched the FIRST area's object twice
+ * and the second file was never delivered at all. The first area that holds a
+ * name wins, in the board's own declaration order (dir 1 before dir 2) - the
+ * same precedence `usableRemoteAreasFor` gives a prefix collision and the
+ * local walk gives its search directories.
  *
  * The matcher comes from the caller so the storage layer does not become a
  * third wildcard dialect; see `NameIndex.match`.
  */
-export async function materialiseRemoteMatches(
+export async function listRemoteMatches(
   matches: (name: string) => boolean,
   conferenceId: number,
   storage: StorageContext
-): Promise<RemoteFile[]> {
-  const found: RemoteFile[] = [];
+): Promise<RemoteListing[]> {
+  const found: RemoteListing[] = [];
+  const claimed = new Set<string>();
+
   for (const area of usableAreas(conferenceId, storage)) {
     const driveNumber = area.storageVolume;
     if (driveNumber === undefined) continue;
 
     const index = storage.names.forArea(driveNumber, objectPrefixFor(area));
-    for (const key of await index.match(matches)) {
-      found.push(await materialise(driveNumber, key, storage));
+    for (const object of await index.match(matches)) {
+      const name = path.basename(object.key);
+      const lower = name.toLowerCase();
+      if (claimed.has(lower)) continue;
+      claimed.add(lower);
+      found.push({
+        name,
+        size: object.size ?? 0,
+        localPath: storage.cache.localPathFor(driveNumber, object.key),
+        driveNumber,
+        key: object.key,
+      });
     }
   }
   return found;
+}
+
+/**
+ * The same metadata answer for one exact name - what the download command
+ * needs to PRINT a file before the caller has agreed to take it.
+ *
+ * `materialiseRemoteFile` is still the right call for a caller that needs the
+ * bytes now (the HTTP routes, the flagged-file batch): this one is for the
+ * listing half, where fetching would be paying ahead of the answer.
+ */
+export async function locateRemoteFile(
+  filename: string,
+  conferenceId: number,
+  storage: StorageContext
+): Promise<RemoteListing | null> {
+  for (const area of usableAreas(conferenceId, storage)) {
+    const driveNumber = area.storageVolume;
+    if (driveNumber === undefined) continue;
+
+    const index = storage.names.forArea(driveNumber, objectPrefixFor(area));
+    const key = await index.resolve(filename);
+    if (key === null) continue;
+
+    return {
+      name: path.basename(key),
+      size: index.sizeOf(key) ?? 0,
+      localPath: storage.cache.localPathFor(driveNumber, key),
+      driveNumber,
+      key,
+    };
+  }
+  return null;
 }
 
 /**
@@ -115,8 +190,18 @@ export async function rematerialise(
   return await storage.cache.ensureLocal(file.driveNumber, file.objectKey);
 }
 
-/** Drives already reported as unconfigured - one line per drive, not per download. */
-const warnedDrives = new Set<string>();
+/**
+ * When each unusable-area complaint was last logged.
+ *
+ * Throttled rather than latched: one line per download would drown the log,
+ * but a Set that never forgets means a sysop who fixes Drives.info and then
+ * breaks it again is told nothing the second time - the board would carry a
+ * silent misconfiguration for as long as the process lives.
+ */
+const warnedAt = new Map<string, number>();
+
+/** Long enough not to repeat inside one caller's session, short enough to re-notice. */
+const WARN_AGAIN_AFTER_MS = 5 * 60 * 1000;
 
 function usableAreas(conferenceId: number, storage: StorageContext): RemoteArea[] {
   return usableRemoteAreasFor(
@@ -124,9 +209,11 @@ function usableAreas(conferenceId: number, storage: StorageContext): RemoteArea[
     storage.areas,
     driveNumber => storage.volumes.byNumber(driveNumber) !== undefined,
     message => {
-      if (warnedDrives.has(message)) return;
-      warnedDrives.add(message);
-      process.stdout.write(`${message}\n`);
+      const last = warnedAt.get(message);
+      const now = Date.now();
+      if (last !== undefined && now - last < WARN_AGAIN_AFTER_MS) return;
+      warnedAt.set(message, now);
+      console.warn(message);
     }
   );
 }

@@ -33,10 +33,11 @@ import { userFileManager } from '../../services/UserFileManager';
 import { doorDropFileManager } from '../../services/DoorDropFileManager';
 import { emitDownload } from '../../services/bbs-event-emitter';
 import {
-  materialiseRemoteFile,
-  materialiseRemoteMatches,
+  listRemoteMatches,
+  locateRemoteFile,
   rematerialise,
   storageFailureText,
+  type RemoteListing,
 } from '../../storage/remote-download';
 import { getStorageContext } from '../../storage/storage-context';
 
@@ -811,10 +812,16 @@ console.error('[Download] re-fetch before transfer failed:', error);
    * `findFilesInConference`, plus the line the caller sees when the pool
    * cannot answer.
    *
-   * Returns null - never an empty array - when a volume is unreachable, so the
-   * three call sites can tell that apart from a real miss. They print "File
-   * not found" on an empty result, and printing that for a file that is
-   * perfectly fine is the one thing this whole subsystem is built to prevent.
+   * Returns null - never an empty array - only when the pool failed AND
+   * nothing was found locally, so the four call sites can tell that apart from
+   * a real miss. They print "File not found" on an empty result, and printing
+   * that for a file that is perfectly fine is the one thing this whole
+   * subsystem is built to prevent.
+   *
+   * When the pool failed but the disk had matches, the caller gets the local
+   * matches AND the storage line: the local half of a part-migrated conference
+   * is not hostage to the pooled half, and the caller is still told the list
+   * may be short.
    */
   private static async findFilesReporting(
     socket: Socket,
@@ -822,54 +829,73 @@ console.error('[Download] re-fetch before transfer failed:', error);
     confNum: number,
     pattern: string
   ): Promise<any[] | null> {
-    try {
-      return await this.findFilesInConference(dataDir, confNum, pattern);
-    } catch (error) {
-console.error(`[Download] ${pattern} in conf ${confNum}:`, error);
-      socket.emit('ansi-output', `\r\n[X] ${pattern}: ${storageFailureText(error)}\r\n`);
-      return null;
+    const { files, storageError } = await this.findFilesInConference(dataDir, confNum, pattern);
+
+    if (storageError !== undefined) {
+console.error(`[Download] ${pattern} in conf ${confNum}:`, storageError);
+      socket.emit('ansi-output', `\r\n[X] ${pattern}: ${storageFailureText(storageError)}\r\n`);
+      if (files.length === 0) return null;
     }
+    return files;
   }
 
+  /**
+   * The files this conference has under a name or a filespec, from the pool
+   * and from disk.
+   *
+   * A pooled area answers first. The disk walk still runs, because a
+   * conference can be part-migrated: on an exact name a pooled HIT wins
+   * outright (a leftover local copy is the older version), and on a wildcard
+   * the two sets are MERGED - returning only the pooled subset would hide the
+   * files still on disk from `D *.LHA`, which is the same silent drop this
+   * branch exists to fix.
+   *
+   * The pooled half is METADATA ONLY. Nothing is fetched here; `rematerialise`
+   * gets the bytes at send, once the caller has said yes.
+   *
+   * A pooled failure is REPORTED, not thrown: it comes back beside whatever
+   * the disk held, so a purely local file in a mixed conference is still
+   * downloadable while a bucket is down. It is never turned into "no such
+   * file" - that distinction is the whole point of the subsystem.
+   */
   private static async findFilesInConference(
     dataDir: string,
     confNum: number,
     pattern: string
-  ): Promise<any[]> {
+  ): Promise<{ files: any[]; storageError?: unknown }> {
     const confPath       = getConferenceDir(confNum, dataDir);
     const matchingFiles: any[] = [];
     const hasWildcard    = this.hasWildcards(pattern);
 
-    // A pooled area answers first. A conference can be part-migrated, so the
-    // disk walk below still runs: on an exact name a pooled HIT wins outright
-    // (a leftover local copy is the older version), and on a wildcard the two
-    // sets are MERGED - returning only the pooled subset would hide the files
-    // still on disk from `D *.LHA`, which is the same silent drop this branch
-    // exists to fix. Throws rather than answering empty when the volume cannot
-    // be reached; findFilesReporting is what turns that into a line.
     const storage = getStorageContext();
     const pooledNames = new Set<string>();
+    let storageError: unknown;
     if (storage) {
-      const remote = hasWildcard
-        ? await materialiseRemoteMatches(name => this.matchesWildcard(name, pattern), confNum, storage)
-        : await materialiseRemoteFile(pattern, confNum, storage).then(one => (one ? [one] : []));
+      try {
+        const remote: RemoteListing[] = hasWildcard
+          ? await listRemoteMatches((name: string) => this.matchesWildcard(name, pattern), confNum, storage)
+          : await locateRemoteFile(pattern, confNum, storage).then(one => (one ? [one] : []));
 
-      for (const file of remote) {
-        pooledNames.add(file.name.toLowerCase());
-        matchingFiles.push({
-          name: file.name,
-          size: file.size,
-          confNum,
-          dirNum: 1,
-          fullPath: file.fullPath,
-          // Kept so the transfer can fetch the object again if the cache
-          // evicted it while the caller sat at the download prompt.
-          driveNumber: file.driveNumber,
-          objectKey: file.key,
-        });
+        for (const file of remote) {
+          pooledNames.add(file.name.toLowerCase());
+          matchingFiles.push({
+            name: file.name,
+            size: file.size,
+            confNum,
+            dirNum: 1,
+            // Not fetched yet: this is where the bytes WILL be. The transfer
+            // calls rematerialise, which fetches them (and fetches them again
+            // if the cache evicted them while the caller sat at the prompt).
+            fullPath: file.localPath,
+            driveNumber: file.driveNumber,
+            objectKey: file.key,
+          });
+        }
+
+        if (!hasWildcard && matchingFiles.length > 0) return { files: matchingFiles };
+      } catch (error) {
+        storageError = error;
       }
-
-      if (!hasWildcard && matchingFiles.length > 0) return matchingFiles;
     }
     const searchDirs     = [
       path.join(confPath, 'Upload'),
@@ -895,7 +921,7 @@ console.error(`[Download] ${pattern} in conf ${confNum}:`, error);
         }
       }
     }
-    return matchingFiles;
+    return { files: matchingFiles, storageError };
   }
 
   private static matchesWildcard(filename: string, pattern: string): boolean {

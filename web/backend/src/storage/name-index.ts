@@ -143,6 +143,7 @@ const DEFAULT_ERROR_RETRY_AFTER_MS = 15 * 1000;
 interface PendingOp {
   readonly type: 'note' | 'forget';
   readonly key: string;
+  readonly size?: number;
 }
 
 /** Error.cause exists on the runtime; the ES2020 lib this project targets does not type it. */
@@ -260,11 +261,31 @@ export interface NameIndexOptions {
   now?: () => number;
 }
 
+/** One object as the index knows it, without its bytes. */
+export interface IndexedObject {
+  key: string;
+  /**
+   * Bytes, from the listing. Undefined only for an object `note()`d without
+   * one - a caller that put an object and did not say how big it was.
+   */
+  size?: number;
+}
+
 export class NameIndex {
   /** Real key, keyed by its path relative to the prefix, exactly as spelled. */
   private exactByRelKey = new Map<string, string>();
   /** Real keys sharing a lowercased relative path - the case-insensitive fallback pool. */
   private byLowerName = new Map<string, Set<string>>();
+  /**
+   * Size per real key, from the listing that produced it.
+   *
+   * Kept because a filespec has to be ANSWERED before it is paid for: `D
+   * *.LHA` prints a set with sizes, and the caller then says yes or no. Without
+   * the size here the only way to fill that column is to fetch every object
+   * body first, which is the whole egress bill spent before the caller has
+   * agreed to anything - and, past the cache budget, spent twice.
+   */
+  private sizeByKey = new Map<string, number>();
   private primed = false;
   /**
    * When THIS area's listing was last confirmed against the backend - what
@@ -338,8 +359,9 @@ export class NameIndex {
 
         const exact = new Map<string, string>();
         const byLower = new Map<string, Set<string>>();
+        const sizes = new Map<string, number>();
         for (const head of heads) {
-          this.index(head, exact, byLower);
+          this.index(head, exact, byLower, sizes);
         }
 
         // Only committed once list() has actually succeeded - a throw above
@@ -347,6 +369,7 @@ export class NameIndex {
         // exactly as it was (invariant 1).
         this.exactByRelKey = exact;
         this.byLowerName = byLower;
+        this.sizeByKey = sizes;
         this.primed = true;
         // This listing confirmed THIS area's data, and confirmed the backend
         // is answering - the second fact belongs to every area on it, so it
@@ -381,7 +404,7 @@ export class NameIndex {
         // already falsy - so this is always still the owner's own flight.
         this.inFlight = null;
         for (const op of opsDuringThisRefresh) {
-          if (op.type === 'note') this.applyNote(op.key);
+          if (op.type === 'note') this.applyNote(op.key, op.size);
           else this.applyForget(op.key);
         }
       }
@@ -398,9 +421,15 @@ export class NameIndex {
     }
   }
 
-  private index(head: ObjectHead, exact: Map<string, string>, byLower: Map<string, Set<string>>): void {
+  private index(
+    head: ObjectHead,
+    exact: Map<string, string>,
+    byLower: Map<string, Set<string>>,
+    sizes: Map<string, number>
+  ): void {
     const rel = this.relKey(head.key);
     exact.set(rel, head.key);
+    sizes.set(head.key, head.size);
     const lower = rel.toLowerCase();
     let candidates = byLower.get(lower);
     if (!candidates) {
@@ -465,13 +494,14 @@ export class NameIndex {
    * command already uses, and this class stays about names and outages.
    *
    * The predicate sees the path relative to the area prefix, which is the
-   * plain filename for a flat area, and the returned keys are the real full
-   * keys. Same outage rules as `resolve`: an EMPTY result while the last
-   * listing attempt failed throws rather than reading as "the area holds
-   * nothing", because a caller shown an empty list during an outage concludes
-   * the files are gone.
+   * plain filename for a flat area, and the entries carry the real full key
+   * and the size from the listing - NO object body is fetched, because a
+   * filespec is answered before the caller has agreed to pay for it.
+   *
+   * Stricter about outages than `resolve`: see the note on the gate check
+   * below.
    */
-  async match(matches: (name: string) => boolean): Promise<string[]> {
+  async match(matches: (name: string) => boolean): Promise<IndexedObject[]> {
     if (!this.primed) {
       if (this.gate.blocked()) {
         throw this.gate.raise(this.backend.driveNumber);
@@ -480,34 +510,57 @@ export class NameIndex {
     }
 
     let found = this.collect(matches);
-    if (found.length === 0) {
-      if (this.missIsStale() && !this.gate.blocked()) {
-        await this.refresh();
-        found = this.collect(matches);
-      }
-      if (found.length === 0 && this.gate.hasFailure()) {
-        throw this.gate.raise(this.backend.driveNumber);
-      }
+    if (found.length === 0 && this.missIsStale() && !this.gate.blocked()) {
+      await this.refresh();
+      found = this.collect(matches);
+    }
+
+    // A SET is under-reported differently from a single name, and more
+    // quietly. resolve() may answer null only when the last attempt succeeded;
+    // the equivalent here is not "empty and the gate failed" - it is ANY answer
+    // while the gate has a failure, because a list built from a listing that
+    // could not be refreshed is a list that may be missing rows, and the caller
+    // sees a plausible shorter set with nothing to say it is short. `D *.LHA`
+    // whose every match happens to be cached would otherwise print a truncated
+    // area and no warning at all.
+    if (this.gate.hasFailure()) {
+      throw this.gate.raise(this.backend.driveNumber);
     }
     return found;
   }
 
-  /** Stable order, so two identical filespecs queue the files the same way. */
-  private collect(matches: (name: string) => boolean): string[] {
-    const hits: string[] = [];
-    for (const [rel, key] of this.exactByRelKey) {
-      if (matches(rel)) hits.push(key);
-    }
-    return hits.sort();
+  /**
+   * The size the last listing gave this key, without fetching anything.
+   *
+   * `resolve` answers a name; a caller that then has to PRINT that file - a
+   * filespec listing, a ratio check - needs its size, and the only other way
+   * to get one is a head() or a full get(). Undefined for a key noted without
+   * a size, or one this index has never seen.
+   */
+  sizeOf(key: string): number | undefined {
+    return this.sizeByKey.get(key);
   }
 
-  /** Called after a put. */
-  note(key: string): void {
+  /** Stable order, so two identical filespecs queue the files the same way. */
+  private collect(matches: (name: string) => boolean): IndexedObject[] {
+    const hits: IndexedObject[] = [];
+    for (const [rel, key] of this.exactByRelKey) {
+      if (matches(rel)) hits.push({ key, size: this.sizeByKey.get(key) });
+    }
+    return hits.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  }
+
+  /**
+   * Called after a put. `size` is optional but wanted: it is what a filespec
+   * listing prints for an object written since the last listing, and without
+   * it that row shows nothing until the area is listed again.
+   */
+  note(key: string, size?: number): void {
     if (this.inFlight) {
-      this.pendingOps.push({ type: 'note', key });
+      this.pendingOps.push({ type: 'note', key, size });
       return;
     }
-    this.applyNote(key);
+    this.applyNote(key, size);
   }
 
   /** Called after a delete. */
@@ -541,9 +594,10 @@ export class NameIndex {
     return winner;
   }
 
-  private applyNote(key: string): void {
+  private applyNote(key: string, size?: number): void {
     const rel = this.relKey(key);
     this.exactByRelKey.set(rel, key);
+    if (size !== undefined) this.sizeByKey.set(key, size);
     const lower = rel.toLowerCase();
     let candidates = this.byLowerName.get(lower);
     if (!candidates) {
@@ -559,6 +613,8 @@ export class NameIndex {
     // holds - guards against a same-named case sibling's forget() call
     // clobbering a different real key's exact entry.
     if (this.exactByRelKey.get(rel) === key) this.exactByRelKey.delete(rel);
+
+    this.sizeByKey.delete(key);
 
     const lower = rel.toLowerCase();
     const candidates = this.byLowerName.get(lower);
