@@ -38,7 +38,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.metadata = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
-const settings_1 = require("@amiexpress/bbs-door-sdk/settings");
 const fs_1 = require("fs");
 const path_1 = __importDefault(require("path"));
 const http = __importStar(require("http"));
@@ -50,21 +49,9 @@ exports.metadata = {
     author: 'REBEL/QTX',
     command: 'GWALL',
 };
-// This door's own directory, from the SDK's walk - not from cwd, which on the
-// board is web/backend, and not from an env var spelled by hand.
-//
-// Three paths were meant to be one file: the door looked in
-// `<data>/doors/gwall`, the admin's Global Wall page WROTE
-// `<data>/doors/gwall/GWall.cfg`, and the board's actual config sits at
-// `Doors/GWall/gwall.cfg`. The container is case-sensitive, so no two of them
-// ever met and the page never configured the door. The page is gone; this is
-// the surviving reader, pointed at the real directory.
-//
-// GWALL is uninstalled - its registration named a 68K binary that is not on
-// the board - so this is corrected for whoever revives it rather than left as
-// a trap.
+const PROJECT_ROOT = process.env.BBS_ROOT || path_1.default.resolve(process.cwd(), '../..');
 function resolveGlobalWallDir() {
-    return (0, settings_1.resolveDoorRoot)(__dirname);
+    return path_1.default.join(PROJECT_ROOT, 'doors', 'gwall');
 }
 function resolveGlobalWallFile(filename) {
     return path_1.default.join(resolveGlobalWallDir(), filename);
