@@ -31,6 +31,8 @@ ${getMedalsSection()}
 
 ${getAdvancedSection()}
 
+${getTetrisAttackSection()}
+
 ${getSettingsSection()}
 
 ${getTipsSection()}
@@ -435,6 +437,117 @@ function getTipsSection(): string {
 {yellow-fg}============================================================{/yellow-fg}{/bold}
 
 Press {cyan-fg}ESC{/cyan-fg} or {cyan-fg}Q{/cyan-fg} to close this manual.`;
+}
+
+
+/**
+ * TETRIS ATTACK.
+ *
+ * Written from what tests/panels/skill-chains.test.ts proves rather than from
+ * recollection: every number quoted here - the four-frame switch window above
+ * all - is asserted there against the real engine, so the manual cannot drift
+ * away from the game. The techniques themselves are common knowledge among
+ * players and are described in our own words and diagrams; the FAQs that
+ * taught them are credited without being reproduced.
+ */
+function getTetrisAttackSection(): string {
+  return `
+{bold}{yellow-fg}============================================================{/yellow-fg}
+                       TETRIS ATTACK
+{yellow-fg}============================================================{/yellow-fg}{/bold}
+
+A different game inside the same door. Six columns of coloured panels rise
+from below; a two-panel cursor swaps side by side; three of a colour in a
+row or a column clears. You lose when a panel reaches the top.
+
+{bold}CONTROLS{/bold}
+
+  {cyan-fg}Arrows{/cyan-fg}      move the cursor
+  {cyan-fg}Space{/cyan-fg} / {cyan-fg}Z{/cyan-fg}   swap the two panels under it
+  {cyan-fg}R{/cyan-fg}           push the stack up one row, now
+  {cyan-fg}X{/cyan-fg} / {cyan-fg}Y{/cyan-fg}       take back a move (PUZZLE only)
+  {cyan-fg}ESC{/cyan-fg}         leave
+
+{bold}COMBOS AND CHAINS ARE NOT THE SAME THING{/bold}
+
+A {yellow-fg}COMBO{/yellow-fg} is four or more panels clearing at once.
+A {lightmagenta-fg}CHAIN{/lightmagenta-fg} is a clear that happens BECAUSE of the
+one before it. Chains are worth far more, and against an opponent they are
+what buries them.
+
+There is no chain of one. The counter starts at x2, on the second link.
+
+{bold}THE FIRST CHAIN EVERY PLAYER LEARNS{/bold}
+
+Clear underneath something, and let what falls land in a match:
+
+     {cyan-fg}. . 1 . . .{/cyan-fg}          the three 2s clear; the 1 above them
+     {cyan-fg}2 2 2 1 1 .{/cyan-fg}          drops into the row it left behind and
+                          lands beside the other two - {lightmagenta-fg}x2{/lightmagenta-fg}
+
+Nothing was swapped for the second clear. That is the whole idea: set the
+board up so the fall does the work.
+
+{bold}CHAINING WITH A SWAP, AND THE FOUR FRAMES YOU HAVE{/bold}
+
+     {cyan-fg}1 1 . . . .{/cyan-fg}          the 2s clear, the 1s drop, and the row
+     {cyan-fg}2 2 2 1 . .{/cyan-fg}          reads 1 1 _ 1 - one swap from a match
+
+Swap the last 1 across and the chain continues. But the panels only count as
+chaining for {yellow-fg}four frames{/yellow-fg} after they land - a fifteenth of a
+second. Miss it and the swap still clears all three panels: same clear, none
+of the garbage. A worse success, which is what makes it a skill.
+
+{bold}CLEAR SIDEWAYS, NOT DOWNWARDS{/bold}
+
+Vertical clears eat a column and leave a canyon. Horizontal clears take one
+row out from under everything and drop the whole board a step, which is what
+sets up the fall above. Keep ONE deliberate gap, though - a single empty
+column lets you carry a panel from the top of the stack to the bottom.
+
+{bold}LOOK ABOVE THE CLEAR{/bold}
+
+Most players hunt for the next link right next to the panels that just
+cleared. The stack is twelve rows tall and all of it moves when a row goes.
+The chain that saves you is often four rows up.
+
+{bold}STOP TIME{/bold}
+
+Every clear freezes the rise for a while, and a chain freezes it for much
+longer. A board one row from death with a chain running is not in trouble
+yet. This is why panicking loses games that chaining wins.
+
+{bold}GARBAGE{/bold}
+
+Against an opponent, combos send blocks and chains send slabs. Clearing a
+panel next to garbage turns the touching row of it into panels, which then
+fall - and garbage cleared during a chain keeps the chain alive.
+
+Chains stop paying at {yellow-fg}x13{/yellow-fg}: the slab is the same size from
+there on. The card still counts, but nothing bigger arrives.
+
+{bold}MODES{/bold}
+
+  {cyan-fg}ENDLESS{/cyan-fg}      until the stack tops out
+  {cyan-fg}TIME ATTACK{/cyan-fg}  two minutes, score as high as you can
+  {cyan-fg}VS CPU{/cyan-fg}       a real opponent on a real board
+  {cyan-fg}CHALLENGE{/cyan-fg}    the stage ladder, eight difficulties
+  {cyan-fg}PUZZLE{/cyan-fg}       235 arrangements, one right answer each
+  {cyan-fg}STAGE CLEAR{/cyan-fg}  thirty stages, and Bowser twice
+
+{bold}ONE DIFFERENCE FROM THE CARTRIDGE{/bold}
+
+On the Super Nintendo, a match made above panels that are still popping is
+credited as a chain even though nothing fell into it - a quirk of that
+machine's physics. This engine does not do that, deliberately: it follows
+panel-attack, and every test that proves this port faithful comes from
+panel-attack's own replays and puzzle solutions. Reproducing the quirk would
+have broken all of them to gain one trick.
+
+{gray-fg}Mechanics ported from panel-attack (panel-game); CPU opponent after
+a544jh/panel-pop. Techniques described here were documented for the SNES
+original by the GameFAQs writers EIHoppe, HarkenSlash and Joe.{/gray-fg}
+`;
 }
 
 /**

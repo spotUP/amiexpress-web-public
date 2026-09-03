@@ -44,6 +44,30 @@ import { VersusScreen } from './ui/versus-screen';
 import { SpectatorScreen } from './ui/spectator-screen';
 import { SoloBroadcast } from './network/solo-broadcast';
 import { LeaderboardScreen } from './ui/leaderboard-screen';
+import { PanelsScreen, type HeldInput, type PanelsResult } from './ui/panels-screen';
+import { loadShippedPuzzles, PuzzleGame } from './core/panels/puzzle';
+import { PanelReplayRecorder, loadReplayV3 } from './core/panels/replay-recorder';
+import { stackForReplay } from './core/panels/replay';
+import { PanelReplayStore, type StoredReplay } from './server/panel-replay-store';
+import { chooserLayout, chooserLabels, type ChooserRow } from './ui/panels/chooser';
+import { PanelBrokerTransport } from './network/panel-broker-transport';
+import { PanelNetplaySession } from './network/panel-netplay-session';
+import { panelMatchSetupFor } from './network/panel-transport';
+import { ENGINE_VERSION as PANEL_ENGINE_VERSION } from './core/panels/consts';
+import {
+  buildStages, StageClearGame, stageStackOptions, bossHealth, type Stage,
+} from './core/panels/stage-clear';
+import type { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
+import { Stack as PanelStack } from './core/panels/stack';
+import { GeneratorSource } from './core/panels/generator-source';
+import { getClassicEndless, getModern, GARBAGE_MODE_LEVEL } from './core/panels/level-data';
+import { buildPanelsResult, type PanelsMode } from './core/panels/score-report';
+import { PanelsVersusScreen } from './ui/panels-versus-screen';
+import { SimulatedStack } from './core/panels/simulated-stack';
+import { PanelAi, MAX_AI_LEVEL } from './ai/panel-ai';
+import { createStages } from './core/panels/challenge-mode';
+import { loadChallengeAttack, hasChallengeFile } from './core/panels/attack-patterns';
+import { TIME_ATTACK_FRAMES } from './core/panels/consts';
 import { AttractScreen } from './ui/attract-screen';
 import { InputHandler } from './input/handler';
 import { DEFAULT_KEYS, TIMING } from './input/config';
@@ -270,6 +294,8 @@ export class GrandmasterApp {
   private inputManager: DoorInputManager;
   private sounds: SoundEngine;
   private highScores: HighScoreManager;
+  /** TETRIS ATTACK replays, in panel-attack's own format. */
+  private panelReplays: PanelReplayStore;
   private network: GrandmasterNetworkManager | null = null;
   private attackManager: AttackManager | null = null;
   private multiplayerServer: MultiplayerServer;
@@ -321,6 +347,7 @@ export class GrandmasterApp {
     this.loadSettings();  // Load per-user settings from disk
     this.sounds = new SoundEngine(session);
     this.highScores = new HighScoreManager();
+    this.panelReplays = new PanelReplayStore();
     this.multiplayerServer = new MultiplayerServer();
 
     this.screen = this.createScreen();
@@ -755,6 +782,9 @@ export class GrandmasterApp {
         break;
       case 'tetrinet':
         await this.showTetriNetLobby();
+        break;
+      case 'tetris_attack':
+        await this.startTetrisAttack();
         break;
       case 'ultra':
         await this.startGame('ultra');
@@ -1256,6 +1286,706 @@ export class GrandmasterApp {
    */
   /** TetriNET's own win-points table (core/tetrinet/winlist.ts). */
   private tetrinetWinList = new WinList();
+
+  /**
+   * TETRIS ATTACK / Panel de Pon.
+   *
+   * The engine is fed one input CHARACTER per frame, the same way a replay or a
+   * networked opponent feeds it, so cursor auto-repeat, the every-other-frame
+   * swap rule and raise gating all come from the engine rather than a second
+   * implementation here that could drift from it.
+   *
+   * Held keys are read two ways, because the two screens differ. A browser
+   * delivers real key-down and key-up edges, so DoorInputManager knows exactly
+   * what is down. Telnet has no key-up at all, so a keypress marks a key held
+   * for a short window and the player gets discrete steps rather than a hold -
+   * the same compromise input/handler.ts already makes for the Tetris modes.
+   */
+  private async startTetrisAttack(): Promise<void> {
+    this.currentScreen = 'game';
+    this.state.currentMode = 'tetris_attack';
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { loadSpriteSheet } = require('@amiexpress/bbs-door-sdk/engines/graphics/cell-art');
+    const sheet = loadSpriteSheet(path.join(__dirname, 'sprites'));
+
+    const mode = await this.chooseTetrisAttackMode();
+    if (!mode) {
+      this.currentScreen = 'menu';
+      return;
+    }
+
+    // Challenge starts at difficulty 1 stage 1; the ladder is walked by the
+    // mode's own screen once it exists.
+    const challengeStage = createStages(1, hasChallengeFile)[0];
+
+    const seed = Math.floor(Math.random() * 2147483000) + 1;
+    // A mode with garbage in it MUST be on a modern level: the classic presets
+    // have no GARBAGE_HOVER, so the first garbage a player clears throws.
+    const hasGarbage = mode === 'vscpu' || mode === 'challenge';
+    const stack = new PanelStack({
+      levelData: hasGarbage ? getModern(GARBAGE_MODE_LEVEL) : getClassicEndless('normal'),
+      panelSource: new GeneratorSource(seed, true),
+      doCountdown: true,
+      // Time Attack is two minutes; Endless runs until the stack tops out.
+      timeLimit: mode === 'timeattack' ? TIME_ATTACK_FRAMES : undefined,
+    });
+    stack.startingState();
+
+    /** Telnet fallback: a keypress counts as held for this long. */
+    const HOLD_MS = 100;
+    const pressedUntil = new Map<string, number>();
+    const onKeypress = (_ch: unknown, key: { name?: string } | undefined) => {
+      if (!key || !key.name) return;
+      pressedUntil.set(key.name, Date.now() + HOLD_MS);
+    };
+    this.screen.on('keypress', onKeypress);
+
+    const keyStateAvailable = typeof (this.inputManager as unknown as {
+      isKeyStateActive?: () => boolean;
+    }).isKeyStateActive === 'function';
+
+    const isDown = (names: string[]): boolean => {
+      const manager = this.inputManager as unknown as {
+        isKeyStateActive?: () => boolean;
+        isHeld?: (key: string) => boolean;
+      };
+      if (keyStateAvailable && manager.isKeyStateActive?.() && manager.isHeld) {
+        return names.some((name) => manager.isHeld!(name));
+      }
+      const now = Date.now();
+      return names.some((name) => (pressedUntil.get(name) ?? 0) > now);
+    };
+
+    const readInput = (): HeldInput => ({
+      up: isDown(['up']),
+      down: isDown(['down']),
+      left: isDown(['left']),
+      right: isDown(['right']),
+      swap: isDown(['space', 'z']),
+      raise: isDown(['r', 'x']),
+    });
+
+    if (mode === 'vsplayer') {
+      await this.runPanelNetplay(sheet, readInput);
+      this.screen.removeListener('keypress', onKeypress);
+      this.currentScreen = 'menu';
+      return;
+    }
+
+    if (mode === 'replays') {
+      await this.runReplayBrowser(sheet, readInput);
+      this.screen.removeListener('keypress', onKeypress);
+      this.currentScreen = 'menu';
+      return;
+    }
+
+    if (mode === 'stageclear') {
+      await this.runStageClear(sheet, readInput);
+      this.screen.removeListener('keypress', onKeypress);
+      this.currentScreen = 'menu';
+      return;
+    }
+
+    if (mode === 'puzzle') {
+      await this.runPuzzleSet(sheet, readInput, onKeypress);
+      this.screen.removeListener('keypress', onKeypress);
+      this.currentScreen = 'menu';
+      return;
+    }
+
+    // Vs CPU and Challenge share one screen: the two opponents differ in what
+    // they ARE, not in how they are driven. Vs CPU faces a real board played by
+    // the bot; Challenge faces a boardless health model driven by an attack
+    // script, and its slot draws a danger bar instead of panels.
+    const versusOpponent = mode === 'vscpu'
+      ? new PanelStack({
+        levelData: getModern(GARBAGE_MODE_LEVEL),
+        panelSource: new GeneratorSource(seed + 1, true),
+        doCountdown: true,
+      })
+      : mode === 'challenge'
+        ? new SimulatedStack({
+          attackSettings: loadChallengeAttack(1, challengeStage.attackStage),
+          healthSettings: challengeStage.healthSettings,
+        })
+        : null;
+
+    if (versusOpponent && versusOpponent instanceof PanelStack) versusOpponent.startingState();
+
+    // Solo games are recorded in panel-attack's own format, so a caller can
+    // watch their game back here and open the same file in Panel Attack.
+    const recorder = versusOpponent ? undefined : new PanelReplayRecorder({
+      engineVersion: stack.engineVersion,
+      seed,
+      levelData: stack.levelData,
+      behaviours: stack.behaviours,
+      mode: mode === 'timeattack' ? 'timeattack' : 'endless',
+      playerName: this.state.playerName,
+      doCountdown: true,
+      shockEnabled: true,
+    });
+
+    const panels = versusOpponent
+      ? new PanelsVersusScreen({
+        screen: this.screen,
+        player: stack,
+        opponent: versusOpponent,
+        cpu: versusOpponent instanceof PanelStack
+          ? new PanelAi(versusOpponent, Math.min(5, MAX_AI_LEVEL))
+          : undefined,
+        sheet,
+        sounds: this.sounds,
+        readInput,
+      })
+      : new PanelsScreen({
+        screen: this.screen,
+        stack,
+        sheet,
+        sounds: this.sounds,
+        readInput,
+        recorder,
+      });
+
+    const onEscape = () => panels.quit();
+    this.screen.key(['escape', 'q', 'Q'], onEscape);
+
+    try {
+      const outcome = await panels.run();
+
+      // Only a game that actually finished counts. Leaving early with ESC is
+      // not a score, and recording it would put junk on the leaderboard.
+      const finished = stack.gameEnded()
+        || (versusOpponent ? versusOpponent.gameEnded() : false);
+      if (finished) {
+        const beatTheOpponent = 'playerWon' in outcome ? outcome.playerWon : undefined;
+        const result = buildPanelsResult(stack, mode, 'tetris_attack', beatTheOpponent);
+        this.highScores.addScore(this.state.playerName, result);
+      }
+      // A replay is worth nothing beside the game it came from, so this is
+      // best-effort: the store swallows a write it cannot make.
+      if (recorder && recorder.frames > 0) {
+        this.panelReplays.save(recorder.fileName(finished), recorder.toReplayV3(finished));
+      }
+    } finally {
+      this.screen.removeListener('keypress', onKeypress);
+      this.screen.unkey(['escape', 'q', 'Q'], onEscape);
+      this.currentScreen = 'menu';
+    }
+  }
+
+  /**
+   * Which panel mode to play.
+   *
+   * The original puts ENDLESS and TIME TRIAL side by side under its 1PLAYER
+   * menu; this is that choice, and it is where PUZZLE, STAGE CLEAR and VS will
+   * be added rather than growing the main menu by one row per mode.
+   */
+  /**
+   * Puzzle mode: pick a set, then work through it.
+   *
+   * The set is played in order and a solved puzzle advances; a failed one is
+   * offered again, because a puzzle you cannot yet see the answer to is the
+   * mode working as intended. Leaving is ESC, and X or Y takes back a move -
+   * the keys the original uses.
+   */
+  private async runPuzzleSet(
+    sheet: Record<string, Sprite>,
+    readInput: () => HeldInput,
+    onKeypress: (ch: unknown, key: { name?: string } | undefined) => void,
+  ): Promise<void> {
+    const sets = loadShippedPuzzles();
+    const chosen = await this.choosePuzzleSet(sets);
+    if (chosen === null) return;
+
+    const set = sets[chosen];
+    let index = 0;
+    let solved = 0;
+
+    while (index < set.puzzles.length) {
+      const game = new PuzzleGame(set.puzzles[index]);
+      const panels = new PanelsScreen({
+        screen: this.screen,
+        puzzle: game,
+        sheet,
+        sounds: this.sounds,
+        readInput,
+      });
+
+      const onEscape = () => panels.quit();
+      const onUndo = () => panels.requestUndo();
+      this.screen.key(['escape', 'q', 'Q'], onEscape);
+      this.screen.key(['x', 'X', 'y', 'Y'], onUndo);
+
+      let outcome: PanelsResult;
+      try {
+        outcome = await panels.run();
+      } finally {
+        this.screen.unkey(['escape', 'q', 'Q'], onEscape);
+        this.screen.unkey(['x', 'X', 'y', 'Y'], onUndo);
+      }
+
+      if (outcome.puzzleOutcome === 'won') {
+        solved += 1;
+        index += 1;
+        continue;
+      }
+      if (outcome.puzzleOutcome === 'lost') continue;
+      // Neither: the player left.
+      break;
+    }
+
+    if (solved > 0) {
+      const result = buildPanelsResult(
+        // The last board played carries the score; what a puzzle run is
+        // actually worth is how many of them came out.
+        new PuzzleGame(set.puzzles[0]).stack,
+        'puzzle',
+        'tetris_attack',
+        solved === set.puzzles.length,
+      );
+      result.lines = solved;
+      result.linesCleared = solved;
+      result.score = solved;
+      this.highScores.addScore(this.state.playerName, result);
+    }
+    void onKeypress;
+  }
+
+  /**
+   * STAGE CLEAR: walk the ladder until a stage is failed or the player leaves.
+   *
+   * A board stage is the solo screen with a clear-line win; a Bowser fight is
+   * the versus screen against a health model, because "lower his HP with combos
+   * and chains" is what that model already does. One loop covers both, since
+   * the only thing that differs is which screen the stage is played on.
+   */
+  private async runStageClear(
+    sheet: Record<string, Sprite>,
+    readInput: () => HeldInput,
+  ): Promise<void> {
+    const stages = buildStages();
+    let cleared = 0;
+
+    for (const stage of stages) {
+      const won = stage.boss
+        ? await this.playBowser(stage, sheet, readInput)
+        : await this.playStage(stage, sheet, readInput);
+      if (won === null) break;  // the player left
+      if (!won) break;          // the ladder ends where you fall off it
+      cleared += 1;
+    }
+
+    if (cleared > 0) {
+      const result = buildPanelsResult(
+        new StageClearGame(stages[0]).stack,
+        'stageclear',
+        'tetris_attack',
+        cleared === stages.length,
+      );
+      result.score = cleared;
+      result.lines = cleared;
+      result.linesCleared = cleared;
+      result.level = cleared;
+      this.highScores.addScore(this.state.playerName, result);
+    }
+  }
+
+  /** One board stage. Returns null if the player left. */
+  private async playStage(
+    stage: Stage,
+    sheet: Record<string, Sprite>,
+    readInput: () => HeldInput,
+  ): Promise<boolean | null> {
+    const game = new StageClearGame(stage);
+    const panels = new PanelsScreen({
+      screen: this.screen,
+      stack: game.stack,
+      sheet,
+      sounds: this.sounds,
+      readInput,
+      onStep: () => game.run(),
+      isOver: () => game.result() !== 'playing',
+    });
+
+    const onEscape = () => panels.quit();
+    this.screen.key(['escape', 'q', 'Q'], onEscape);
+    try {
+      await panels.run();
+    } finally {
+      this.screen.unkey(['escape', 'q', 'Q'], onEscape);
+    }
+
+    if (game.result() === 'playing') return null;
+    return game.result() === 'cleared';
+  }
+
+  /** A fight with Bowser: the versus screen against a health model. */
+  private async playBowser(
+    stage: Stage,
+    sheet: Record<string, Sprite>,
+    readInput: () => HeldInput,
+  ): Promise<boolean | null> {
+    const player = new PanelStack(stageStackOptions(stage));
+    player.startingState();
+
+    const bowser = new SimulatedStack({
+      attackSettings: loadChallengeAttack(1, Math.min(8, stage.round + 2)),
+      healthSettings: bossHealth(stage),
+    });
+
+    const panels = new PanelsVersusScreen({
+      screen: this.screen,
+      player,
+      opponent: bowser,
+      sheet,
+      sounds: this.sounds,
+      readInput,
+    });
+
+    const onEscape = () => panels.quit();
+    this.screen.key(['escape', 'q', 'Q'], onEscape);
+    let outcome;
+    try {
+      outcome = await panels.run();
+    } finally {
+      this.screen.unkey(['escape', 'q', 'Q'], onEscape);
+    }
+
+    if (!player.gameEnded() && !bowser.gameEnded()) return null;
+    return outcome.playerWon;
+  }
+
+  /**
+   * VS PLAYER: another caller, on this board.
+   *
+   * Matchmaking under its own mode name, so a panel player and a Tetris player
+   * are never put in the same lobby waiting for a game the other cannot play.
+   *
+   * NOTHING IS NEGOTIATED once the lobby starts. Both machines derive the seed
+   * from the match id and the board order from the sorted player ids, so there
+   * is no setup packet to lose and no window in which one side has started and
+   * the other has not.
+   */
+  private async runPanelNetplay(
+    sheet: Record<string, Sprite>,
+    readInput: () => HeldInput,
+  ): Promise<void> {
+    if (!this.network) {
+      await this.showPanelNotice('No connection to the board. Try again later.');
+      return;
+    }
+
+    const localPlayerId = this.network.getLocalPlayerId()
+      ?? this.session.user?.id ?? this.state.playerName;
+    const lobbyScreen = new LobbyScreen(
+      this.screen, this.state, this.sounds, this.network, localPlayerId,
+    );
+
+    const result = await lobbyScreen.show('matchmaking', 'panels_1v1');
+    if (result.action !== 'start') return;
+
+    const matchState = this.network.getMatchState();
+    const humans = (matchState?.players ?? []).filter((player) => !player.isBot);
+    if (!matchState || humans.length < 2) {
+      await this.showPanelNotice('Nobody else joined. Try VS CPU instead.');
+      return;
+    }
+
+    const setup = panelMatchSetupFor(
+      matchState.matchId,
+      humans.map((player) => player.id),
+      getModern(GARBAGE_MODE_LEVEL),
+      PANEL_ENGINE_VERSION,
+    );
+
+    const transport = new PanelBrokerTransport(this.network);
+    const session = new PanelNetplaySession({ transport, setup });
+
+    const panels = new PanelsVersusScreen({
+      screen: this.screen,
+      player: session.localStack(),
+      opponent: session.remoteStack(),
+      sheet,
+      sounds: this.sounds,
+      readInput,
+      stepper: (input: string) => session.step(input) === 'ran',
+      isOver: () => session.hasEnded(),
+    });
+
+    const onEscape = () => panels.quit();
+    this.screen.key(['escape', 'q', 'Q'], onEscape);
+    try {
+      await panels.run();
+      if (session.desynced()) {
+        await this.showPanelNotice('The other player stopped responding.');
+      } else if (session.localWon() !== undefined) {
+        const result2 = buildPanelsResult(
+          session.localStack(), 'vsplayer', 'tetris_attack', session.localWon(),
+        );
+        this.highScores.addScore(this.state.playerName, result2);
+      }
+    } finally {
+      this.screen.unkey(['escape', 'q', 'Q'], onEscape);
+      session.dispose();
+      transport.dispose();
+    }
+  }
+
+  /**
+   * Watch a game back.
+   *
+   * Playback is the ordinary screen with the inputs already in the stack's
+   * buffer: the engine is deterministic, so running it forward IS the replay.
+   * Nothing renders differently, because nothing about it is different.
+   */
+  private async runReplayBrowser(
+    sheet: Record<string, Sprite>,
+    readInput: () => HeldInput,
+  ): Promise<void> {
+    const replays = this.panelReplays.list();
+    if (replays.length === 0) {
+      await this.showPanelNotice('No replays yet. Play a game and it will be here.');
+      return;
+    }
+
+    const chosen = await this.chooseReplay(replays);
+    if (chosen === null) return;
+
+    const json = this.panelReplays.load(replays[chosen].id);
+    if (!json) {
+      await this.showPanelNotice('That replay could not be read.');
+      return;
+    }
+
+    const stack = stackForReplay(loadReplayV3(json));
+    const panels = new PanelsScreen({
+      screen: this.screen,
+      stack,
+      sheet,
+      sounds: this.sounds,
+      readInput,
+      playback: true,
+    });
+
+    const onEscape = () => panels.quit();
+    this.screen.key(['escape', 'q', 'Q'], onEscape);
+    try {
+      await panels.run();
+    } finally {
+      this.screen.unkey(['escape', 'q', 'Q'], onEscape);
+    }
+  }
+
+  /** Pick a replay to watch. */
+  private async chooseReplay(replays: StoredReplay[]): Promise<number | null> {
+    const rows: ChooserRow[] = replays.map((replay) => {
+      const seconds = Math.round(replay.duration / 60);
+      const stamp = new Date(replay.timestamp * 1000).toISOString();
+      const when = stamp.slice(0, 16).replace('T', ' ');
+      const state = replay.completed ? '' : '  (unfinished)';
+      return {
+        wide: `${when}  ${replay.playerName.padEnd(10, ' ')} ${replay.mode.padEnd(10, ' ')}`
+          + ` ${String(seconds).padStart(4, ' ')}s${state}`,
+        // A C64 has no room for the year or the mode; the day and the time
+        // are what tell two of your own games apart.
+        compact: `${stamp.slice(5, 16).replace('T', ' ')} ${String(seconds).padStart(4, ' ')}s`
+          + `${replay.completed ? '' : ' *'}`,
+      };
+    });
+    rows.push({ wide: 'Back', compact: 'Back' });
+    const layout = chooserLayout(this.screen.width, this.screen.height, rows.length);
+    const labels = chooserLabels(rows, layout);
+
+    return new Promise<number | null>((resolve) => {
+      const box = createBox({
+        parent: this.screen,
+        top: 'center',
+        left: 'center',
+        width: layout.width,
+        height: layout.height,
+        label: ' REPLAYS ',
+        tags: true,
+        style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+      });
+
+      const list = createList({
+        parent: box,
+        top: 1,
+        left: 1,
+        width: layout.innerWidth,
+        height: layout.innerHeight,
+        keys: true,
+        vi: true,
+        mouse: true,
+        tags: true,
+        items: labels,
+        style: { fg: 'white', bg: 'black', selected: { fg: 'black', bg: 'magenta' } },
+      });
+
+      const done = (choice: number | null) => {
+        box.destroy();
+        this.screen.render();
+        resolve(choice);
+      };
+
+      list.on('select', (_item: unknown, index: number) => {
+        done(index < replays.length ? index : null);
+      });
+      list.key(['escape', 'q', 'Q'], () => done(null));
+
+      list.focus();
+      this.screen.render();
+    });
+  }
+
+  /** A one-line message with a key to dismiss it. */
+  private async showPanelNotice(message: string): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const box = createBox({
+        parent: this.screen,
+        top: 'center',
+        left: 'center',
+        width: Math.min(this.screen.width - 4, message.length + 6),
+        height: 5,
+        label: ' TETRIS ATTACK ',
+        tags: true,
+        content: `\n {white-fg}${message}{/white-fg}`,
+        style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+      });
+      this.screen.render();
+
+      const dismiss = () => {
+        this.screen.unkey(['escape', 'q', 'Q', 'enter', 'space'], dismiss);
+        box.destroy();
+        this.screen.render();
+        resolve();
+      };
+      this.screen.key(['escape', 'q', 'Q', 'enter', 'space'], dismiss);
+    });
+  }
+
+  /** Which puzzle set to work through. */
+  private async choosePuzzleSet(
+    sets: Array<{ name: string; puzzles: unknown[] }>,
+  ): Promise<number | null> {
+    // The shipped set names are translation keys; the readable part is the tail.
+    const rows: ChooserRow[] = sets.map((set, i) => {
+      const name = set.name.replace(/^puzzle_set_name_/, '').replace(/_/g, ' ').toUpperCase();
+      const number = String(i + 1).padStart(2, ' ');
+      return {
+        wide: `${number}  ${name}  (${set.puzzles.length})`,
+        compact: `${number} ${name} ${set.puzzles.length}`,
+      };
+    });
+    rows.push({ wide: 'Back', compact: 'Back' });
+    const layout = chooserLayout(this.screen.width, this.screen.height, rows.length);
+    const labels = chooserLabels(rows, layout);
+
+    return new Promise<number | null>((resolve) => {
+      const box = createBox({
+        parent: this.screen,
+        top: 'center',
+        left: 'center',
+        width: layout.width,
+        height: layout.height,
+        label: ' PUZZLE ',
+        tags: true,
+        style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+      });
+
+      const list = createList({
+        parent: box,
+        top: 1,
+        left: 1,
+        width: layout.innerWidth,
+        height: layout.innerHeight,
+        keys: true,
+        vi: true,
+        mouse: true,
+        tags: true,
+        items: labels,
+        style: { fg: 'white', bg: 'black', selected: { fg: 'black', bg: 'magenta' } },
+      });
+
+      const done = (choice: number | null) => {
+        box.destroy();
+        this.screen.render();
+        resolve(choice);
+      };
+
+      list.on('select', (_item: unknown, index: number) => {
+        done(index < sets.length ? index : null);
+      });
+      list.key(['escape', 'q', 'Q'], () => done(null));
+
+      list.focus();
+      this.screen.render();
+    });
+  }
+
+  private async chooseTetrisAttackMode(): Promise<PanelsMode | null> {
+    const rows: ChooserRow[] = [
+      { wide: 'ENDLESS      play until the stack tops out', compact: 'ENDLESS' },
+      { wide: 'TIME ATTACK  two minutes, score as high as you can', compact: 'TIME ATTACK' },
+      { wide: 'VS CPU       a real opponent on a real board', compact: 'VS CPU' },
+      { wide: 'CHALLENGE    the stage ladder, eight difficulties', compact: 'CHALLENGE' },
+      { wide: 'PUZZLE       235 arrangements, one right answer each', compact: 'PUZZLE' },
+      { wide: 'STAGE CLEAR  thirty stages and two fights with Bowser', compact: 'STAGE CLEAR' },
+      { wide: 'VS PLAYER    another caller, on this board', compact: 'VS PLAYER' },
+      { wide: 'REPLAYS      watch a game back', compact: 'REPLAYS' },
+      { wide: 'Back', compact: 'Back' },
+    ];
+    const layout = chooserLayout(this.screen.width, this.screen.height, rows.length);
+    const labels = chooserLabels(rows, layout);
+    const modes: (PanelsMode | null)[] = [
+      'endless', 'timeattack', 'vscpu', 'challenge', 'puzzle', 'stageclear',
+      'vsplayer', 'replays', null,
+    ];
+
+    return new Promise<PanelsMode | null>((resolve) => {
+      const box = createBox({
+        parent: this.screen,
+        top: 'center',
+        left: 'center',
+        width: layout.width,
+        height: layout.height,
+        label: ' TETRIS ATTACK ',
+        tags: true,
+        style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+      });
+
+      const list = createList({
+        parent: box,
+        top: 1,
+        left: 1,
+        width: layout.innerWidth,
+        height: layout.innerHeight,
+        keys: true,
+        vi: true,
+        mouse: true,
+        tags: true,
+        items: labels,
+        style: {
+          fg: 'white',
+          bg: 'black',
+          selected: { fg: 'black', bg: 'magenta' },
+        },
+      });
+
+      const done = (choice: PanelsMode | null) => {
+        box.destroy();
+        this.screen.render();
+        resolve(choice);
+      };
+
+      list.on('select', (_item: unknown, index: number) => done(modes[index] ?? null));
+      list.key(['escape', 'q', 'Q'], () => done(null));
+
+      list.focus();
+      this.screen.render();
+    });
+  }
 
   private async showTetriNetLobby(): Promise<void> {
     this.currentScreen = 'lobby';

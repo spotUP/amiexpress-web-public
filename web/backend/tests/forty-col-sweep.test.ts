@@ -324,7 +324,19 @@ describe('40-column sweep: the door gate', () => {
   });
 });
 
-describe('40-column sweep: the six adapted doors', () => {
+describe('40-column sweep: the adapted doors', () => {
+  it('tetris-attack: HUD lines and menu rows', () => {
+    const { panelsLayout, hudLines } = require('../../../Doors/grandmaster/ui/panels/layout');
+    const { menuRowsFor } = require('../../../Doors/grandmaster/ui/menu');
+    // The widest the HUD ever gets: capped score, top speed, longest clock,
+    // the highest chain that still scores, and the STOP marker showing.
+    const layout = panelsLayout(40, 25, 12, 13);
+    fits(hudLines(layout, {
+      score: 99999, speed: 99, timeText: "9'59", chain: 13, stopped: true,
+    }));
+    fits(menuRowsFor(40).items);
+  });
+
   it('ami-stripper: banner, rule, listing row', () => {
     const {
       stripperHeader,

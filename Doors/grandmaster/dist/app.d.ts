@@ -59,6 +59,8 @@ export declare class GrandmasterApp {
     private inputManager;
     private sounds;
     private highScores;
+    /** TETRIS ATTACK replays, in panel-attack's own format. */
+    private panelReplays;
     private network;
     private attackManager;
     private multiplayerServer;
@@ -183,6 +185,77 @@ export declare class GrandmasterApp {
      */
     /** TetriNET's own win-points table (core/tetrinet/winlist.ts). */
     private tetrinetWinList;
+    /**
+     * TETRIS ATTACK / Panel de Pon.
+     *
+     * The engine is fed one input CHARACTER per frame, the same way a replay or a
+     * networked opponent feeds it, so cursor auto-repeat, the every-other-frame
+     * swap rule and raise gating all come from the engine rather than a second
+     * implementation here that could drift from it.
+     *
+     * Held keys are read two ways, because the two screens differ. A browser
+     * delivers real key-down and key-up edges, so DoorInputManager knows exactly
+     * what is down. Telnet has no key-up at all, so a keypress marks a key held
+     * for a short window and the player gets discrete steps rather than a hold -
+     * the same compromise input/handler.ts already makes for the Tetris modes.
+     */
+    private startTetrisAttack;
+    /**
+     * Which panel mode to play.
+     *
+     * The original puts ENDLESS and TIME TRIAL side by side under its 1PLAYER
+     * menu; this is that choice, and it is where PUZZLE, STAGE CLEAR and VS will
+     * be added rather than growing the main menu by one row per mode.
+     */
+    /**
+     * Puzzle mode: pick a set, then work through it.
+     *
+     * The set is played in order and a solved puzzle advances; a failed one is
+     * offered again, because a puzzle you cannot yet see the answer to is the
+     * mode working as intended. Leaving is ESC, and X or Y takes back a move -
+     * the keys the original uses.
+     */
+    private runPuzzleSet;
+    /**
+     * STAGE CLEAR: walk the ladder until a stage is failed or the player leaves.
+     *
+     * A board stage is the solo screen with a clear-line win; a Bowser fight is
+     * the versus screen against a health model, because "lower his HP with combos
+     * and chains" is what that model already does. One loop covers both, since
+     * the only thing that differs is which screen the stage is played on.
+     */
+    private runStageClear;
+    /** One board stage. Returns null if the player left. */
+    private playStage;
+    /** A fight with Bowser: the versus screen against a health model. */
+    private playBowser;
+    /**
+     * VS PLAYER: another caller, on this board.
+     *
+     * Matchmaking under its own mode name, so a panel player and a Tetris player
+     * are never put in the same lobby waiting for a game the other cannot play.
+     *
+     * NOTHING IS NEGOTIATED once the lobby starts. Both machines derive the seed
+     * from the match id and the board order from the sorted player ids, so there
+     * is no setup packet to lose and no window in which one side has started and
+     * the other has not.
+     */
+    private runPanelNetplay;
+    /**
+     * Watch a game back.
+     *
+     * Playback is the ordinary screen with the inputs already in the stack's
+     * buffer: the engine is deterministic, so running it forward IS the replay.
+     * Nothing renders differently, because nothing about it is different.
+     */
+    private runReplayBrowser;
+    /** Pick a replay to watch. */
+    private chooseReplay;
+    /** A one-line message with a key to dismiss it. */
+    private showPanelNotice;
+    /** Which puzzle set to work through. */
+    private choosePuzzleSet;
+    private chooseTetrisAttackMode;
     private showTetriNetLobby;
     /**
      * Start a BBS-internal networked TetriNET match.

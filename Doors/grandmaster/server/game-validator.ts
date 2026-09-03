@@ -117,6 +117,9 @@ export class GameValidator {
       training: 1000000,
       mission: 1000000,
       tetrinet: 2000000,  // TetriNET multiplayer
+      // The panel engine caps its own score at 99999 (upstream's cap, and its
+      // comment on it is "lol owned"), so anything above it is impossible.
+      tetris_attack: 99999,
     };
 
     const maxScore = MAX_SCORES[result.mode] || 1000000;
@@ -176,6 +179,9 @@ export class GameValidator {
       training: 30000,
       mission: 30000,
       tetrinet: 30000,    // TetriNET multiplayer
+      // A real game can end very fast: the smallest committed replay dies at
+      // frame 402, under seven seconds, from being buried early.
+      tetris_attack: 3000,
     };
 
     const minTime = MIN_TIMES[result.mode];
@@ -202,6 +208,9 @@ export class GameValidator {
       training: 3600000,
       mission: 3600000,
       tetrinet: 1800000,  // TetriNET multiplayer
+      // Endless has no time limit, but the score caps at 99999 long before an
+      // hour is up, so a longer run than this is worth flagging.
+      tetris_attack: 3600000,
     };
 
     const maxTime = MAX_TIMES[result.mode];

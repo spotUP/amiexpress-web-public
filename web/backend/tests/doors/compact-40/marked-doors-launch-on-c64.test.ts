@@ -32,8 +32,17 @@ setHelpers({
 
 const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
 
-/** Commands whose doors Task 6 adapted to 40 columns, in plan order. */
-const ADAPTED = ['THEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS'];
+/**
+ * Commands whose doors Task 6 adapted to 40 columns, in plan order.
+ *
+ * GMASTER is the odd one out and the newest: every other entry is a menu or a
+ * text screen, while GMASTER is a GAME that runs a 60Hz engine and repaints a
+ * board. It is marked because its TETRIS ATTACK mode is a 12x13 board that fits
+ * a C64 screen without folding anything, and at 40 columns the door offers only
+ * that mode - its 80-column TGM and TETRINET screens are hidden rather than
+ * squeezed. See tests/doors/compact-40/tetris-attack.test.ts.
+ */
+const ADAPTED = ['THEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER'];
 
 const UNROUTED = 'unrouted-gate-test-type' as unknown as Door['type'];
 

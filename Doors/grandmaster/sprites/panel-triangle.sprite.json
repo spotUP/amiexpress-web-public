@@ -1,0 +1,269 @@
+{
+ "name": "panel-triangle",
+ "cellW": 2,
+ "cellH": 1,
+ "animations": {
+  "normal": {
+   "ticksPerFrame": 1,
+   "loop": false,
+   "frames": [
+    [
+     [
+      [
+       "▲",
+       0,
+       6
+      ],
+      [
+       " ",
+       0,
+       6
+      ]
+     ]
+    ]
+   ]
+  },
+  "swapping": {
+   "ticksPerFrame": 1,
+   "loop": false,
+   "frames": [
+    [
+     [
+      [
+       "▲",
+       0,
+       6
+      ],
+      [
+       " ",
+       0,
+       6
+      ]
+     ]
+    ]
+   ]
+  },
+  "falling": {
+   "ticksPerFrame": 1,
+   "loop": false,
+   "frames": [
+    [
+     [
+      [
+       "▲",
+       0,
+       6
+      ],
+      [
+       " ",
+       0,
+       6
+      ]
+     ]
+    ]
+   ]
+  },
+  "hovering": {
+   "ticksPerFrame": 1,
+   "loop": false,
+   "frames": [
+    [
+     [
+      [
+       "▲",
+       0,
+       6
+      ],
+      [
+       " ",
+       0,
+       6
+      ]
+     ]
+    ]
+   ]
+  },
+  "flash": {
+   "ticksPerFrame": 2,
+   "loop": true,
+   "frames": [
+    [
+     [
+      [
+       "▲",
+       0,
+       6
+      ],
+      [
+       " ",
+       0,
+       6
+      ]
+     ]
+    ],
+    [
+     [
+      [
+       "▲",
+       6,
+       0
+      ],
+      [
+       " ",
+       6,
+       0
+      ]
+     ]
+    ]
+   ]
+  },
+  "face": {
+   "ticksPerFrame": 1,
+   "loop": false,
+   "frames": [
+    [
+     [
+      [
+       "·",
+       0,
+       6
+      ],
+      [
+       " ",
+       0,
+       6
+      ]
+     ]
+    ]
+   ]
+  },
+  "popping": {
+   "ticksPerFrame": 1,
+   "loop": false,
+   "frames": [
+    [
+     [
+      [
+       "·",
+       0,
+       6
+      ],
+      [
+       " ",
+       0,
+       6
+      ]
+     ]
+    ],
+    [
+     [
+      [
+       "▲",
+       6,
+       0
+      ],
+      [
+       " ",
+       6,
+       0
+      ]
+     ]
+    ],
+    [
+     [
+      null,
+      null
+     ]
+    ]
+   ]
+  },
+  "dimmed": {
+   "ticksPerFrame": 1,
+   "loop": false,
+   "frames": [
+    [
+     [
+      [
+       "▲",
+       8,
+       0
+      ],
+      [
+       " ",
+       8,
+       0
+      ]
+     ]
+    ]
+   ]
+  },
+  "landing": {
+   "ticksPerFrame": 1,
+   "loop": false,
+   "frames": [
+    [
+     [
+      [
+       "▲",
+       6,
+       0
+      ],
+      [
+       " ",
+       6,
+       0
+      ]
+     ]
+    ],
+    [
+     [
+      [
+       "▲",
+       0,
+       6
+      ],
+      [
+       " ",
+       0,
+       6
+      ]
+     ]
+    ]
+   ]
+  },
+  "danger": {
+   "ticksPerFrame": 2,
+   "loop": true,
+   "frames": [
+    [
+     [
+      [
+       "▲",
+       0,
+       6
+      ],
+      [
+       " ",
+       0,
+       6
+      ]
+     ]
+    ],
+    [
+     [
+      [
+       "·",
+       0,
+       6
+      ],
+      [
+       " ",
+       0,
+       6
+      ]
+     ]
+    ]
+   ]
+  }
+ }
+}

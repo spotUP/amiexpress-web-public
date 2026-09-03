@@ -12,7 +12,7 @@ import type { GameEngine } from '../core/game';
 /**
  * Multiplayer game mode
  */
-export type MultiplayerMode = 'versus_1v1' | 'team_2v2' | 'battle_royale';
+export type MultiplayerMode = 'versus_1v1' | 'team_2v2' | 'battle_royale' | 'panels_1v1';
 /**
  * Match state
  */

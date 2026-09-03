@@ -120,7 +120,11 @@ export type GameMode =
   | 'mission'      // MISSION mode: one objective from a pack (core/mission-run.ts)
   | 'versus'
   | 'cpu_battle'
-  | 'tetrinet';  // TetriNET mode with special blocks
+  | 'tetrinet'  // TetriNET mode with special blocks
+  // TETRIS ATTACK / Panel de Pon: a 6x12 grid of panels swapped in place
+  // over a rising stack. Engine in core/panels/, ported 1:1 from
+  // panel-attack/panel-game; see .claude/skills/port-game-engine.
+  | 'tetris_attack';
 
 // ============================================================================
 // Game State

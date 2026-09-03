@@ -49,7 +49,7 @@ export interface Board {
     height: number;
     grid: Cell[][];
 }
-export type GameMode = 'marathon' | 'sprint' | 'dig' | 'ultra' | 'blitz' | 'combo' | 'survival' | 'classic' | 'master' | 'death' | 'zen' | 'zone' | 'training' | 'mission' | 'versus' | 'cpu_battle' | 'tetrinet';
+export type GameMode = 'marathon' | 'sprint' | 'dig' | 'ultra' | 'blitz' | 'combo' | 'survival' | 'classic' | 'master' | 'death' | 'zen' | 'zone' | 'training' | 'mission' | 'versus' | 'cpu_battle' | 'tetrinet' | 'tetris_attack';
 export interface GameState {
     mode: GameMode;
     board: Board;
