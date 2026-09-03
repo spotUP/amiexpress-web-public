@@ -1,0 +1,86 @@
+# ---------------------------------------------------------------------
+# sdk/c - the AmiExpress C door SDK (phase 0)
+#
+# Two builds, on purpose:
+#
+#   host   cc, for the tests. getenv() stands in for GetVar(); the parsing
+#          and the defaults are the same code that runs on the 68K.
+#   amiga  vbcc, producing a real 68K binary, which is the only thing that
+#          can answer "what does a small door actually cost?"
+#
+# THE LAYERING RULE, as measured rather than as planned. The plan called for
+# gcc's -ffunction-sections plus --gc-sections; vbcc has neither, and the
+# host's ar (and llvm's emar) cannot write an archive vlink will read - both
+# produce "File format not recognized".
+#
+# What does work, measured on this machine: an Amiga hunk library is the
+# CONCATENATION of hunk object files, and vlink pulls a unit out of one only
+# when something references a symbol in it. Numbers, from `make measure`:
+#
+#   hello linked against only the two modules it calls    5048 bytes
+#   hello linked against libae.lib, which holds three     5048 bytes
+#   hello with the third object listed on the link line   5476 bytes
+#
+# So: one module per .c file, and doors link the LIBRARY, never a list of
+# objects - naming an object costs its full size whether it is called or not.
+# ---------------------------------------------------------------------
+
+CC ?= cc
+HOST_CFLAGS = -std=c99 -Wall -Wextra -Werror -Iinclude
+
+VBCC ?= /opt/homebrew/Cellar/vbcc/0.9hp3
+NDK  ?= /opt/homebrew/Cellar/m68k-amiga-elf-gcc/13.1.0/m68k-amiga-elf/sys-include
+VC    = VBCC=$(VBCC) vc
+AMIGA_CFLAGS = +aos68k -c99 -DAMIGA -Iinclude -I"$(VBCC)/targets/m68k-amigaos/include" -I"$(NDK)"
+
+MODULES = ae_host ae_out ae_box
+AMIGA_OBJS = $(patsubst %,build/amiga/%.o,$(MODULES))
+
+.PHONY: all test amiga lib measure clean
+
+all: test
+
+# ---------------------------------------------------------------------
+# Tests (host)
+# ---------------------------------------------------------------------
+
+test: build/test_ae_host
+	./build/test_ae_host
+
+build/test_ae_host: src/ae_host.c tests/test_ae_host.c include/ae_host.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) src/ae_host.c tests/test_ae_host.c -o $@
+
+# ---------------------------------------------------------------------
+# The 68K library and the two yardstick doors
+# ---------------------------------------------------------------------
+
+amiga: lib build/amiga/hello build/amiga/hello_box
+
+lib: build/amiga/libae.lib
+
+build/amiga/%.o: src/%.c
+	@mkdir -p build/amiga
+	$(VC) $(AMIGA_CFLAGS) -c $< -o $@
+
+# cat, not ar: see the note at the top. The order is the link order, and
+# ae_host goes first because it is what everything else may ask.
+build/amiga/libae.lib: $(AMIGA_OBJS)
+	@rm -f $@
+	cat $(AMIGA_OBJS) > $@
+
+# Linked against the WHOLE library, both of them. hello never calls ae_box,
+# so its binary must not contain it.
+build/amiga/hello: examples/hello/hello.c build/amiga/libae.lib
+	@mkdir -p build/amiga
+	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
+
+build/amiga/hello_box: examples/hello/hello_box.c build/amiga/libae.lib
+	@mkdir -p build/amiga
+	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
+
+measure: amiga
+	@sh tools/measure-link.sh
+
+clean:
+	rm -rf build
