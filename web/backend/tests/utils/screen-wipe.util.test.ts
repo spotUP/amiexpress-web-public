@@ -118,12 +118,21 @@ describe('screen-wipe.util', () => {
         expect(frames[0]).toHaveProperty('delay');
       });
 
-      it('should have clear screen code in frames', () => {
+      it('should have clear screen code in every animation frame', () => {
         const frames = getWipeFrames('matrix', testContent);
 
-        frames.forEach(frame => {
+        frames.slice(0, -1).forEach(frame => {
           expect(frame.content).toContain('\x1b[2J\x1b[H'); // Clear screen + home
         });
+      });
+
+      it('should end on the screen itself, homed over the last animation frame', () => {
+        const frames = getWipeFrames('matrix', testContent);
+
+        // The animation is a model of the screen; the frame the caller is
+        // left looking at is the screen. Homed, not cleared, so the identical
+        // repaint cannot flash.
+        expect(frames[frames.length - 1].content).toBe('\x1b[H' + testContent);
       });
 
       it('should have consistent delay between frames', () => {
@@ -180,9 +189,10 @@ describe('screen-wipe.util', () => {
         });
       });
 
-      it('should have exactly 2 phases (white then black squares)', () => {
+      it('should have exactly 2 phases (white then black squares) plus the final paint', () => {
         const frames = getWipeFrames('checker', testContent);
-        expect(frames.length).toBe(2);
+        expect(frames.length).toBe(3);
+        expect(frames[frames.length - 1].content).toBe('\x1b[H' + testContent);
       });
     });
 
@@ -409,11 +419,15 @@ describe('screen-wipe.util', () => {
       // The frame body (after the leading \x1b[2J\x1b[H that wipe adds itself)
       // must not re-emit \x1b[H inside the rendered rows — that would offset chars.
       // Strip the expected leading clear+home prefix, then check the remainder.
-      for (const frame of frames) {
+      // The final frame is the caller's own content, homed - it carries
+      // whatever cursor codes the screen itself carries (here, ~f's own
+      // clear+home) and is checked separately below.
+      for (const frame of frames.slice(0, -1)) {
         const body = frame.content.replace(/^\x1b\[2J\x1b\[H/, '');
         // \x1b[H (cursor home, no row/col) must not appear in the rendered grid
         expect(body).not.toContain('\x1b[H');
       }
+      expect(frames[frames.length - 1].content).toBe('\x1b[H' + content);
     });
 
     it('color sequences are preserved across lines in wipe frames', () => {

@@ -39,55 +39,298 @@ export interface WipeFrame {
 const MATRIX_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()';
 const NOISE_CHARS = '░▒▓█▄▌▐▀■□▪▫';
 
+/** Every animation frame repaints the whole screen from the top-left. */
+const CLEAR_HOME = '\x1b[2J\x1b[H';
+
+/** The final frame paints over the last animation frame instead of clearing it. */
+const HOME = '\x1b[H';
+
+/** SGR with no attributes set. */
+const RESET = '\x1b[0m';
+
+/** A cell nothing has painted: a space in the terminal's default attributes. */
+const BLANK: Cell = Object.freeze({ char: ' ', ansi: RESET });
+
+/** The screens this board serves are 80 columns; a longer row wraps, as it does on the wire. */
+const GRID_COLUMNS = 80;
+
 /**
- * Parse ANSI content into a 2D grid of characters with their colors
+ * Upper bound on grid rows. A screen is normally <= 25 rows; the cap only
+ * stops a bogus `\x1b[999B` from allocating an unbounded grid.
  */
-function parseAnsiToGrid(content: string): Array<Array<{ char: string; ansi: string }>> {
-  const lines = content.split(/\r\n|\n/);
-  const grid: Array<Array<{ char: string; ansi: string }>> = [];
-  let currentAnsi = '\x1b[0m'; // Default: reset
+const MAX_GRID_ROWS = 200;
 
-  for (const line of lines) {
-    const row: Array<{ char: string; ansi: string }> = [];
-    let i = 0;
+interface Cell {
+  char: string;
+  ansi: string;
+}
 
-    while (i < line.length) {
-      // Check for ANSI escape sequence
-      if (line[i] === '\x1b' && line[i + 1] === '[') {
+/**
+ * The full SGR state of a cell.
+ *
+ * A cell has to carry the COMPLETE state, not the last escape sequence that
+ * happened to precede it: the wipes paint cells out of order and in
+ * isolation, so `\x1b[1m` … `\x1b[33m` has to reach the wire as "bold
+ * yellow" even when the `\x1b[1m` cell itself is still hidden. Colours are
+ * kept as the raw SGR parameter text (`31`, `91`, `38;5;196`,
+ * `38;2;255;0;0`) so 256-colour and truecolor screens survive untouched.
+ */
+interface Attributes {
+  intensity: '' | '1' | '2';
+  italic: boolean;
+  underline: boolean;
+  blink: boolean;
+  reverse: boolean;
+  conceal: boolean;
+  strike: boolean;
+  fg: string;
+  bg: string;
+}
+
+function defaultAttributes(): Attributes {
+  return {
+    intensity: '',
+    italic: false,
+    underline: false,
+    blink: false,
+    reverse: false,
+    conceal: false,
+    strike: false,
+    fg: '',
+    bg: '',
+  };
+}
+
+/**
+ * One self-contained escape sequence for a complete attribute state.
+ * Always starts from `0` so a cell never inherits the previous cell's state.
+ */
+function attributesToAnsi(attrs: Attributes): string {
+  const params: string[] = [];
+  if (attrs.intensity) params.push(attrs.intensity);
+  if (attrs.italic) params.push('3');
+  if (attrs.underline) params.push('4');
+  if (attrs.blink) params.push('5');
+  if (attrs.reverse) params.push('7');
+  if (attrs.conceal) params.push('8');
+  if (attrs.strike) params.push('9');
+  if (attrs.fg) params.push(attrs.fg);
+  if (attrs.bg) params.push(attrs.bg);
+  return params.length === 0 ? RESET : `\x1b[0;${params.join(';')}m`;
+}
+
+/** Apply one SGR sequence's parameters to the running attribute state. */
+function applySgr(params: string, attrs: Attributes): void {
+  const parts = params === '' ? ['0'] : params.split(';');
+
+  for (let i = 0; i < parts.length; i++) {
+    const raw = parts[i] === '' ? '0' : parts[i];
+    const code = parseInt(raw, 10);
+    if (Number.isNaN(code)) continue;
+
+    if (code === 0) {
+      Object.assign(attrs, defaultAttributes());
+    } else if (code === 1 || code === 2) {
+      attrs.intensity = String(code) as '1' | '2';
+    } else if (code === 22) {
+      attrs.intensity = '';
+    } else if (code === 3) { attrs.italic = true; }
+    else if (code === 23) { attrs.italic = false; }
+    else if (code === 4) { attrs.underline = true; }
+    else if (code === 24) { attrs.underline = false; }
+    else if (code === 5 || code === 6) { attrs.blink = true; }
+    else if (code === 25) { attrs.blink = false; }
+    else if (code === 7) { attrs.reverse = true; }
+    else if (code === 27) { attrs.reverse = false; }
+    else if (code === 8) { attrs.conceal = true; }
+    else if (code === 28) { attrs.conceal = false; }
+    else if (code === 9) { attrs.strike = true; }
+    else if (code === 29) { attrs.strike = false; }
+    else if ((code >= 30 && code <= 37) || (code >= 90 && code <= 97)) { attrs.fg = String(code); }
+    else if (code === 39) { attrs.fg = ''; }
+    else if ((code >= 40 && code <= 47) || (code >= 100 && code <= 107)) { attrs.bg = String(code); }
+    else if (code === 49) { attrs.bg = ''; }
+    else if (code === 38 || code === 48) {
+      // Extended colour: `38;5;n` (256) or `38;2;r;g;b` (truecolor). The
+      // whole run is one colour - consuming it here is what keeps the
+      // following glyph from being eaten by a stray parameter.
+      const mode = parseInt(parts[i + 1] ?? '', 10);
+      const consumed = mode === 5 ? 2 : mode === 2 ? 4 : 0;
+      if (consumed === 0) continue;
+      const value = parts.slice(i, i + consumed + 1).join(';');
+      if (code === 38) attrs.fg = value; else attrs.bg = value;
+      i += consumed;
+    }
+  }
+}
+
+/**
+ * Parse ANSI content into a 2D grid of characters with their colors.
+ *
+ * This is a small SCREEN model, not a line splitter: it runs the content
+ * against a cursor. Positional escapes have to be materialised - a screen
+ * that indents with `\x1b[23C` (Conf1/Menu.txt does, 14 times) or breaks a
+ * line with `\x1b[E` puts its glyphs in columns and rows that simply do not
+ * exist in a "split on \n, drop what is not an SGR" model, and every wipe
+ * built on that model paints the screen shifted. The grid is where that has
+ * to be right: fix it once and all ten wipes are fixed.
+ *
+ * What is deliberately NOT reproduced: scrolling (a screen taller than the
+ * terminal is emitted row by row exactly as the direct-display path emits
+ * it) and the pending-wrap subtlety at column 80. `getWipeFrames` ends the
+ * animation on the caller's own bytes, so the screen the user is left
+ * looking at never depends on this model being bit-exact.
+ */
+function parseAnsiToGrid(content: string): Cell[][] {
+  const rows: Cell[][] = [[]];
+  const attrs = defaultAttributes();
+  let ansi = RESET;
+  let row = 0;
+  let col = 0;
+  let saved = { row: 0, col: 0 };
+
+  const ensureRow = (y: number): void => {
+    while (rows.length <= y) rows.push([]);
+  };
+  const padTo = (r: Cell[], x: number): void => {
+    while (r.length <= x) r.push(BLANK);
+  };
+  const moveTo = (y: number, x: number): void => {
+    row = Math.max(0, Math.min(y, MAX_GRID_ROWS));
+    col = Math.max(0, Math.min(x, GRID_COLUMNS - 1));
+    ensureRow(row);
+  };
+
+  let i = 0;
+  while (i < content.length) {
+    const ch = content[i];
+
+    if (ch === '\x1b') {
+      if (content[i + 1] === '[') {
         let j = i + 2;
-        while (j < line.length && !/[A-Za-z]/.test(line[j])) {
-          j++;
-        }
-        if (j < line.length) {
-          const finalChar = line[j];
-          // Only track color/attribute sequences (ending in 'm').
-          // Cursor-movement (H, A, B, C, D, f, J, K) and other control
-          // sequences are positional — meaningless in the grid model and
-          // harmful if re-emitted by gridToAnsi (e.g. \x1b[H from ~f
-          // would move the cursor to home mid-render, offsetting the row).
-          if (finalChar === 'm') {
-            currentAnsi = line.substring(i, j + 1);
-          }
-          i = j + 1;
+        while (j < content.length && !isCsiFinalByte(content[j])) j++;
+        if (j >= content.length) break; // truncated sequence: nothing left to paint
+        const params = content.substring(i + 2, j);
+        const final = content[j];
+        i = j + 1;
+
+        if (final === 'm') {
+          applySgr(params, attrs);
+          ansi = attributesToAnsi(attrs);
           continue;
         }
+
+        // Positional and erase controls. Anything else (mode set/reset,
+        // device queries, scroll regions) is not part of the grid model.
+        const numeric = params.replace(/[^0-9;]/g, '');
+        const args = numeric.split(';').map(p => (p === '' ? NaN : parseInt(p, 10)));
+        const arg = (idx: number, dflt: number): number =>
+          (args[idx] === undefined || Number.isNaN(args[idx]) ? dflt : args[idx]);
+        const positional = !/[?<>=]/.test(params);
+
+        if (!positional) continue;
+
+        switch (final) {
+          case 'A': moveTo(row - arg(0, 1), col); break;
+          case 'B': moveTo(row + arg(0, 1), col); break;
+          case 'C': moveTo(row, col + arg(0, 1)); break;
+          case 'D': moveTo(row, col - arg(0, 1)); break;
+          case 'E': moveTo(row + arg(0, 1), 0); break;
+          case 'F': moveTo(row - arg(0, 1), 0); break;
+          case 'G': moveTo(row, arg(0, 1) - 1); break;
+          case 'H':
+          case 'f': moveTo(arg(0, 1) - 1, arg(1, 1) - 1); break;
+          case 'J': {
+            const mode = arg(0, 0);
+            if (mode === 0) {
+              ensureRow(row);
+              rows[row] = rows[row].slice(0, col);
+              rows.length = row + 1;
+            } else if (mode === 1) {
+              ensureRow(row);
+              padTo(rows[row], col);
+              for (let x = 0; x <= col; x++) rows[row][x] = BLANK;
+              for (let y = 0; y < row; y++) rows[y] = [];
+            } else {
+              for (let y = 0; y < rows.length; y++) rows[y] = [];
+            }
+            break;
+          }
+          case 'K': {
+            const mode = arg(0, 0);
+            ensureRow(row);
+            if (mode === 0) {
+              rows[row] = rows[row].slice(0, col);
+            } else if (mode === 1) {
+              padTo(rows[row], col);
+              for (let x = 0; x <= col; x++) rows[row][x] = BLANK;
+            } else {
+              rows[row] = [];
+            }
+            break;
+          }
+          case 's': saved = { row, col }; break;
+          case 'u': moveTo(saved.row, saved.col); break;
+          default: break;
+        }
+        continue;
       }
 
-      // Regular character
-      row.push({ char: line[i], ansi: currentAnsi });
-      i++;
+      // Non-CSI escape (ESC 7, ESC (B, ...). Consume it so the ESC byte
+      // never lands in the grid as a printable glyph.
+      const next = content[i + 1];
+      i += next !== undefined && '()#%'.includes(next) ? 3 : 2;
+      continue;
     }
 
-    grid.push(row);
+    if (ch === '\r') { col = 0; i++; continue; }
+    if (ch === '\n') { moveTo(row + 1, 0); i++; continue; }
+    if (ch === '\t') { moveTo(row, Math.min(GRID_COLUMNS - 1, (Math.floor(col / 8) + 1) * 8)); i++; continue; }
+    if (ch === '\b') { col = Math.max(0, col - 1); i++; continue; }
+    if (ch === '\x07' || ch === '\x00') { i++; continue; }
+
+    if (col >= GRID_COLUMNS) {
+      // Wrap exactly where the terminal wraps.
+      if (row >= MAX_GRID_ROWS) { i++; continue; }
+      row++;
+      col = 0;
+      ensureRow(row);
+    }
+    ensureRow(row);
+    padTo(rows[row], col);
+    rows[row][col] = { char: ch, ansi };
+    col++;
+    i++;
   }
 
-  return grid;
+  // Trailing untouched cells carry no information; dropping them keeps the
+  // frames the size they were before this model existed.
+  return rows.map(trimRow);
+}
+
+function trimRow(row: Cell[]): Cell[] {
+  let end = row.length;
+  while (end > 0 && row[end - 1].char === ' ' && row[end - 1].ansi === RESET) end--;
+  return end === row.length ? row : row.slice(0, end);
+}
+
+/** CSI sequences end at the first byte in the range `@`..`~`. */
+function isCsiFinalByte(ch: string): boolean {
+  const code = ch.charCodeAt(0);
+  return code >= 0x40 && code <= 0x7e;
+}
+
+/** Widest row in the grid (0 for an empty grid). */
+function gridWidth(grid: Cell[][]): number {
+  let width = 0;
+  for (const row of grid) if (row.length > width) width = row.length;
+  return width;
 }
 
 /**
  * Render grid back to ANSI string
  */
-function gridToAnsi(grid: Array<Array<{ char: string; ansi: string }>>): string {
+function gridToAnsi(grid: Cell[][]): string {
   const lines: string[] = [];
 
   for (const row of grid) {
@@ -102,10 +345,21 @@ function gridToAnsi(grid: Array<Array<{ char: string; ansi: string }>>): string 
       line += cell.char;
     }
 
-    lines.push(line + '\x1b[0m');
+    lines.push(line + RESET);
   }
 
   return lines.join('\r\n');
+}
+
+/**
+ * The screen as the wipes model it: parse to the grid and paint it back.
+ *
+ * Exported so the grid model can be held to the screens it actually has to
+ * survive (`tests/utils/screen-wipe-fidelity.test.ts` renders this and the
+ * original side by side). Not part of the animation path.
+ */
+export function renderScreenGrid(content: string): string {
+  return gridToAnsi(parseAnsiToGrid(content));
 }
 
 /**
@@ -116,14 +370,13 @@ function matrixRainWipe(content: string): WipeFrame[] {
   const grid = parseAnsiToGrid(content);
   const frames: WipeFrame[] = [];
   const height = grid.length;
-  const maxWidth = Math.max(...grid.map(row => row.length));
 
   // Green Matrix style colors
   const matrixColors = ['\x1b[32m', '\x1b[92m', '\x1b[32m']; // Green shades
 
   // Create scrambled version
   const scrambled = grid.map(row =>
-    row.map(cell => ({
+    row.map(() => ({
       char: MATRIX_CHARS[Math.floor(Math.random() * MATRIX_CHARS.length)],
       ansi: matrixColors[Math.floor(Math.random() * matrixColors.length)]
     }))
@@ -134,11 +387,11 @@ function matrixRainWipe(content: string): WipeFrame[] {
     const frame = scrambled.map((row, y) =>
       row.map((cell, x) => {
         const progress = wave / 10;
-        const rowProgress = y / height;
+        const rowProgress = height === 0 ? 0 : y / height;
 
         if (progress >= rowProgress) {
           // Reveal actual content
-          return grid[y][x] || { char: ' ', ansi: '\x1b[0m' };
+          return grid[y][x] || BLANK;
         } else {
           // Still scrambled
           return {
@@ -150,8 +403,52 @@ function matrixRainWipe(content: string): WipeFrame[] {
     );
 
     frames.push({
-      content: '\x1b[2J\x1b[H' + gridToAnsi(frame),
+      content: CLEAR_HOME + gridToAnsi(frame),
       delay: 50
+    });
+  }
+
+  return frames;
+}
+
+/**
+ * Blinds reveal order: every even strip first, then every odd one.
+ *
+ * The order is explicit (and the phase count is derived from it) because the
+ * arithmetic version of this could not finish: `~WH`'s reveal test asked for
+ * `phase >= height/stripHeight + stripIndex` while the loop only ran to
+ * `stripHeight * 2`, so on a 20-row screen NO odd strip was ever revealed -
+ * the animation ended with 45% of the screen (62% for `~WV`) still blank.
+ */
+function blindsWipe(
+  content: string,
+  axis: 'row' | 'col',
+  stripSize: number,
+  delay: number
+): WipeFrame[] {
+  const grid = parseAnsiToGrid(content);
+  const frames: WipeFrame[] = [];
+  const extent = axis === 'row' ? grid.length : gridWidth(grid);
+  const stripCount = Math.max(1, Math.ceil(extent / stripSize));
+
+  const order: number[] = [];
+  for (let strip = 0; strip < stripCount; strip += 2) order.push(strip);
+  for (let strip = 1; strip < stripCount; strip += 2) order.push(strip);
+
+  // One strip per phase, capped so a wide screen does not turn into a
+  // 33-frame (1.6 s) animation.
+  const phases = Math.max(1, Math.min(stripCount, 16));
+
+  for (let phase = 0; phase <= phases; phase++) {
+    const revealed = new Set(order.slice(0, Math.round((order.length * phase) / phases)));
+
+    const frame = grid.map((row, y) =>
+      row.map((cell, x) => (revealed.has(Math.floor((axis === 'row' ? y : x) / stripSize)) ? cell : BLANK))
+    );
+
+    frames.push({
+      content: CLEAR_HOME + gridToAnsi(frame),
+      delay
     });
   }
 
@@ -163,34 +460,7 @@ function matrixRainWipe(content: string): WipeFrame[] {
  * Reveals screen in horizontal strips
  */
 function horizontalBlindsWipe(content: string): WipeFrame[] {
-  const grid = parseAnsiToGrid(content);
-  const frames: WipeFrame[] = [];
-  const height = grid.length;
-  const stripHeight = 3; // Reveal 3 lines at a time
-
-  // Create blank grid
-  const blank = grid.map(row =>
-    row.map(() => ({ char: ' ', ansi: '\x1b[0m' }))
-  );
-
-  // Reveal strips alternately
-  for (let phase = 0; phase <= stripHeight * 2; phase++) {
-    const frame = blank.map((row, y) => {
-      const stripIndex = Math.floor(y / stripHeight);
-      const shouldReveal = (stripIndex % 2 === 0) ?
-        (phase >= stripIndex) :
-        (phase >= (height / stripHeight) + stripIndex);
-
-      return shouldReveal ? (grid[y] || row) : row;
-    });
-
-    frames.push({
-      content: '\x1b[2J\x1b[H' + gridToAnsi(frame),
-      delay: 40
-    });
-  }
-
-  return frames;
+  return blindsWipe(content, 'row', 3, 40);
 }
 
 /**
@@ -198,94 +468,50 @@ function horizontalBlindsWipe(content: string): WipeFrame[] {
  * Reveals screen in vertical strips
  */
 function verticalBlindsWipe(content: string): WipeFrame[] {
-  const grid = parseAnsiToGrid(content);
-  const frames: WipeFrame[] = [];
-  const maxWidth = Math.max(...grid.map(row => row.length));
-  const stripWidth = 5; // Reveal 5 columns at a time
-
-  // Create blank grid
-  const blank = grid.map(row =>
-    row.map(() => ({ char: ' ', ansi: '\x1b[0m' }))
-  );
-
-  // Reveal strips alternately
-  for (let phase = 0; phase <= stripWidth * 2; phase++) {
-    const frame = grid.map((row, y) =>
-      row.map((cell, x) => {
-        const stripIndex = Math.floor(x / stripWidth);
-        const shouldReveal = (stripIndex % 2 === 0) ?
-          (phase >= stripIndex) :
-          (phase >= (maxWidth / stripWidth) + stripIndex);
-
-        return shouldReveal ? cell : { char: ' ', ansi: '\x1b[0m' };
-      })
-    );
-
-    frames.push({
-      content: '\x1b[2J\x1b[H' + gridToAnsi(frame),
-      delay: 40
-    });
-  }
-
-  return frames;
+  return blindsWipe(content, 'col', 5, 40);
 }
 
 /**
  * ~WS - Spiral Wipe
  * Spirals from outside edges to center
+ *
+ * A ring walk, one pass, O(cells). The previous version pushed the whole
+ * rectangle in its "top row" pass (a nested y-loop), then re-scanned the
+ * accumulated list with `Array.some` on every later cell: 0.5-1.4 s of
+ * blocking CPU per screen, a reveal that ran left-to-right rather than in a
+ * spiral, and a list so full of duplicates that the last 16 of 21 frames
+ * were identical.
  */
 function spiralWipe(content: string): WipeFrame[] {
   const grid = parseAnsiToGrid(content);
   const frames: WipeFrame[] = [];
   const height = grid.length;
-  const maxWidth = Math.max(...grid.map(row => row.length));
+  const maxWidth = gridWidth(grid);
 
-  // Build spiral coordinate list
   const spiral: Array<[number, number]> = [];
-  let top = 0, bottom = height - 1, left = 0, right = maxWidth - 1;
+  const push = (y: number, x: number): void => {
+    if (grid[y] && grid[y][x]) spiral.push([y, x]);
+  };
+
+  let top = 0;
+  let bottom = height - 1;
+  let left = 0;
+  let right = maxWidth - 1;
 
   while (top <= bottom && left <= right) {
-    // Top row
-    for (let x = left; x <= right; x++) {
-      for (let y = top; y <= bottom; y++) {
-        if (grid[y] && grid[y][x]) {
-          spiral.push([y, x]);
-        }
-      }
-    }
+    for (let x = left; x <= right; x++) push(top, x);
     top++;
 
-    // Right column
-    for (let y = top; y <= bottom; y++) {
-      for (let x = right; x >= left; x--) {
-        if (grid[y] && grid[y][x] && !spiral.some(([sy, sx]) => sy === y && sx === x)) {
-          spiral.push([y, x]);
-        }
-      }
-    }
+    for (let y = top; y <= bottom; y++) push(y, right);
     right--;
 
-    // Bottom row
     if (top <= bottom) {
-      for (let x = right; x >= left; x--) {
-        for (let y = bottom; y >= top; y--) {
-          if (grid[y] && grid[y][x] && !spiral.some(([sy, sx]) => sy === y && sx === x)) {
-            spiral.push([y, x]);
-          }
-        }
-      }
+      for (let x = right; x >= left; x--) push(bottom, x);
       bottom--;
     }
 
-    // Left column
     if (left <= right) {
-      for (let y = bottom; y >= top; y--) {
-        for (let x = left; x <= right; x++) {
-          if (grid[y] && grid[y][x] && !spiral.some(([sy, sx]) => sy === y && sx === x)) {
-            spiral.push([y, x]);
-          }
-        }
-      }
+      for (let y = bottom; y >= top; y--) push(y, left);
       left++;
     }
   }
@@ -296,13 +522,11 @@ function spiralWipe(content: string): WipeFrame[] {
     const revealed = new Set(spiral.slice(0, i * chunkSize).map(([y, x]) => `${y},${x}`));
 
     const frame = grid.map((row, y) =>
-      row.map((cell, x) =>
-        revealed.has(`${y},${x}`) ? cell : { char: ' ', ansi: '\x1b[0m' }
-      )
+      row.map((cell, x) => (revealed.has(`${y},${x}`) ? cell : BLANK))
     );
 
     frames.push({
-      content: '\x1b[2J\x1b[H' + gridToAnsi(frame),
+      content: CLEAR_HOME + gridToAnsi(frame),
       delay: 30
     });
   }
@@ -334,7 +558,7 @@ function checkerboardWipe(content: string): WipeFrame[] {
     );
 
     frames.push({
-      content: '\x1b[2J\x1b[H' + gridToAnsi(frame),
+      content: CLEAR_HOME + gridToAnsi(frame),
       delay: 100
     });
   }
@@ -345,18 +569,22 @@ function checkerboardWipe(content: string): WipeFrame[] {
 /**
  * ~WR - Radial/Radar Wipe
  * Sweeps around like a radar from top center
+ *
+ * The pivot is the TOP centre, so `atan2` can only ever produce normalised
+ * angles between 90 and 270 degrees - sweeping 0..360 (as this did) spent 11
+ * of its 25 frames showing exactly what the previous frame showed. The sweep
+ * now covers the half plane the geometry actually reaches.
  */
 function radialWipe(content: string): WipeFrame[] {
   const grid = parseAnsiToGrid(content);
   const frames: WipeFrame[] = [];
-  const height = grid.length;
-  const maxWidth = Math.max(...grid.map(row => row.length));
+  const maxWidth = gridWidth(grid);
   const centerX = maxWidth / 2;
   const centerY = 0; // Top center
+  const steps = 24;
 
-  // Sweep 360 degrees in 24 frames
-  for (let angle = 0; angle <= 360; angle += 15) {
-    const radians = (angle * Math.PI) / 180;
+  for (let step = 0; step <= steps; step++) {
+    const angle = 90 + (180 * step) / steps;
 
     const frame = grid.map((row, y) =>
       row.map((cell, x) => {
@@ -367,12 +595,12 @@ function radialWipe(content: string): WipeFrame[] {
         const normalizedAngle = (pointAngle + 90 + 360) % 360; // 0 = top, clockwise
 
         const shouldReveal = normalizedAngle <= angle;
-        return shouldReveal ? cell : { char: ' ', ansi: '\x1b[0m' };
+        return shouldReveal ? cell : BLANK;
       })
     );
 
     frames.push({
-      content: '\x1b[2J\x1b[H' + gridToAnsi(frame),
+      content: CLEAR_HOME + gridToAnsi(frame),
       delay: 25
     });
   }
@@ -388,7 +616,7 @@ function blockWipe(content: string): WipeFrame[] {
   const grid = parseAnsiToGrid(content);
   const frames: WipeFrame[] = [];
   const height = grid.length;
-  const maxWidth = Math.max(...grid.map(row => row.length));
+  const maxWidth = gridWidth(grid);
   const blockSize = 3;
 
   // Create list of all block positions
@@ -415,12 +643,12 @@ function blockWipe(content: string): WipeFrame[] {
     const frameGrid = grid.map((row, y) =>
       row.map((cell, x) => {
         const blockKey = `${Math.floor(y / blockSize)},${Math.floor(x / blockSize)}`;
-        return revealedBlocks.has(blockKey) ? cell : { char: ' ', ansi: '\x1b[0m' };
+        return revealedBlocks.has(blockKey) ? cell : BLANK;
       })
     );
 
     frames.push({
-      content: '\x1b[2J\x1b[H' + gridToAnsi(frameGrid),
+      content: CLEAR_HOME + gridToAnsi(frameGrid),
       delay: 40
     });
   }
@@ -435,14 +663,13 @@ function blockWipe(content: string): WipeFrame[] {
 function noiseFadeWipe(content: string): WipeFrame[] {
   const grid = parseAnsiToGrid(content);
   const frames: WipeFrame[] = [];
-  const height = grid.length;
 
   // 12 frames of noise fading to content
   for (let phase = 0; phase <= 12; phase++) {
     const noiseLevel = 1 - (phase / 12); // 100% noise -> 0% noise
 
-    const frame = grid.map((row, y) =>
-      row.map((cell, x) => {
+    const frame = grid.map(row =>
+      row.map(cell => {
         if (Math.random() < noiseLevel) {
           // Show noise
           return {
@@ -457,7 +684,7 @@ function noiseFadeWipe(content: string): WipeFrame[] {
     );
 
     frames.push({
-      content: '\x1b[2J\x1b[H' + gridToAnsi(frame),
+      content: CLEAR_HOME + gridToAnsi(frame),
       delay: 50
     });
   }
@@ -468,18 +695,28 @@ function noiseFadeWipe(content: string): WipeFrame[] {
 /**
  * ~WT - Typewriter Wipe
  * Types out line by line with slight delay
+ *
+ * The full grid is always the last frame: stepping two rows at a time never
+ * lands on an odd row count, and a screen with an odd number of rows used to
+ * end with its last row missing (a one-row screen ended blank).
  */
 function typewriterWipe(content: string): WipeFrame[] {
   const grid = parseAnsiToGrid(content);
   const frames: WipeFrame[] = [];
   const height = grid.length;
 
-  // Reveal 2 lines per frame
   for (let line = 0; line <= height; line += 2) {
-    const frame = grid.slice(0, line);
-
     frames.push({
-      content: '\x1b[2J\x1b[H' + gridToAnsi(frame),
+      content: CLEAR_HOME + gridToAnsi(grid.slice(0, Math.min(line, height))),
+      delay: 30
+    });
+  }
+
+  if (height % 2 === 1) {
+    // Stepping two rows at a time never lands on an odd row count, and the
+    // animation used to END one row short (a one-row screen ended blank).
+    frames.push({
+      content: CLEAR_HOME + gridToAnsi(grid),
       delay: 30
     });
   }
@@ -495,10 +732,17 @@ function explodeWipe(content: string): WipeFrame[] {
   const grid = parseAnsiToGrid(content);
   const frames: WipeFrame[] = [];
   const height = grid.length;
-  const maxWidth = Math.max(...grid.map(row => row.length));
+  const maxWidth = gridWidth(grid);
   const centerX = maxWidth / 2;
   const centerY = height / 2;
-  const maxDistance = Math.sqrt(centerX * centerX + centerY * centerY);
+  // The distance to the furthest CORNER, so the last frame reaches every cell
+  // instead of relying on a float comparison landing exactly on equality.
+  const maxDistance = Math.max(
+    Math.hypot(centerX, centerY),
+    Math.hypot(maxWidth - centerX, centerY),
+    Math.hypot(centerX, height - centerY),
+    Math.hypot(maxWidth - centerX, height - centerY)
+  );
 
   // Reveal from center outward in 15 frames
   for (let radius = 0; radius <= 15; radius++) {
@@ -511,12 +755,12 @@ function explodeWipe(content: string): WipeFrame[] {
         const distance = Math.sqrt(dx * dx + dy * dy);
 
         const shouldReveal = distance <= currentRadius;
-        return shouldReveal ? cell : { char: ' ', ansi: '\x1b[0m' };
+        return shouldReveal ? cell : BLANK;
       })
     );
 
     frames.push({
-      content: '\x1b[2J\x1b[H' + gridToAnsi(frame),
+      content: CLEAR_HOME + gridToAnsi(frame),
       delay: 40
     });
   }
@@ -526,6 +770,14 @@ function explodeWipe(content: string): WipeFrame[] {
 
 /**
  * Get wipe animation frames
+ *
+ * Every wipe reveals the whole screen on its own last animation frame, and
+ * ONE more frame is appended: the caller's own content, homed. The grid is a
+ * model of a terminal - good enough to animate a reveal, never a guarantee
+ * of byte fidelity for arbitrary ANSI - so the screen the caller is left
+ * looking at is the screen itself, not a model of it, and the cursor ends
+ * exactly where the direct-display path leaves it (which is what the pause
+ * prompt, screen.handler.ts:2559, prints from).
  */
 export function getWipeFrames(wipeType: WipeType, content: string): WipeFrame[] {
   // Handle random selection
@@ -537,30 +789,56 @@ export function getWipeFrames(wipeType: WipeType, content: string): WipeFrame[] 
     wipeType = types[Math.floor(Math.random() * types.length)];
   }
 
+  let frames: WipeFrame[];
+
   switch (wipeType) {
     case 'matrix':
-      return matrixRainWipe(content);
+      frames = matrixRainWipe(content);
+      break;
     case 'hblinds':
-      return horizontalBlindsWipe(content);
+      frames = horizontalBlindsWipe(content);
+      break;
     case 'vblinds':
-      return verticalBlindsWipe(content);
+      frames = verticalBlindsWipe(content);
+      break;
     case 'spiral':
-      return spiralWipe(content);
+      frames = spiralWipe(content);
+      break;
     case 'checker':
-      return checkerboardWipe(content);
+      frames = checkerboardWipe(content);
+      break;
     case 'radial':
-      return radialWipe(content);
+      frames = radialWipe(content);
+      break;
     case 'blocks':
-      return blockWipe(content);
+      frames = blockWipe(content);
+      break;
     case 'noise':
-      return noiseFadeWipe(content);
+      frames = noiseFadeWipe(content);
+      break;
     case 'typewriter':
-      return typewriterWipe(content);
+      frames = typewriterWipe(content);
+      break;
     case 'explode':
-      return explodeWipe(content);
+      frames = explodeWipe(content);
+      break;
     default:
       return [];
   }
+
+  if (frames.length > 0) {
+    // The animation ends on the caller's own bytes, homed over the fully
+    // revealed frame that precedes it (no clear, so there is nothing to
+    // flash). Byte-identical to what the direct-display path emits, which
+    // also leaves the cursor where the pause prompt
+    // (screen.handler.ts:2559) expects to print from.
+    frames.push({
+      content: HOME + content,
+      delay: frames[frames.length - 1].delay
+    });
+  }
+
+  return frames;
 }
 
 /**
