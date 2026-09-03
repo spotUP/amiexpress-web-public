@@ -55,6 +55,7 @@ function stripTags(text) {
     return text.replace(/{[^}]+}/g, '');
 }
 const DoorLoader_1 = require("@amiexpress/bbs-door-sdk/utils/DoorLoader");
+const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 // Core state and services
 const state_1 = require("./core/state");
 const formatter_1 = require("./core/formatter");
@@ -66,7 +67,7 @@ const services_1 = require("./services");
 const typing_preview_1 = require("./ui/typing-preview");
 const screen_1 = require("./ui/screen");
 const menu_bar_1 = require("./ui/menu-bar");
-const theme_1 = require("./ui/theme");
+const theme_2 = require("./ui/theme");
 const chat_row_map_1 = require("./ui/chat-row-map");
 const layout_solver_1 = require("./ui/layout-solver");
 const status_bar_1 = require("./ui/status-bar");
@@ -232,6 +233,49 @@ async function createApp(session) {
     const inputBox = (0, input_box_1.createInputBox)(screen);
     // ========== EMOJI BUTTON (next to input box) ==========
     const emojiButton = (0, input_box_1.createEmojiButton)(screen);
+    // ========== THEME CHROME ==========
+    /**
+     * The theme's moving parts, from the ONE SDK call.
+     *
+     * This door had the theme's COLOURS (door-theme.ts) and none of its
+     * chrome, which is the complaint attachDoorChrome exists to answer - a
+     * palette is not a theme. What LIVECHAT can take is the GLITCHES, and
+     * that is deliberate on both counts:
+     *
+     *   - No masthead. Row 0 is the menu bar this door is driven from, and
+     *     the rows below it are the chat panel; a masthead would either be
+     *     drawn over the menus or cost the chat log a line, and neither is
+     *     worth a moving rail.
+     *   - No footer. The bar along the bottom is a live STATUS line - who
+     *     you are, which node, which channel, whether events are muted -
+     *     which the chrome's hint line would overwrite on every repaint.
+     *
+     * The damage goes on the chat log, the only panel here with rows to
+     * spare: glitching the menu bar, the input box or the status line reads
+     * as the door being broken rather than as atmosphere.
+     *
+     * The width handed over is the LIVE one, so the SDK's own
+     * effectsAllowed() gate is what turns this off at 40 columns - the door
+     * adds no gate of its own and cannot forget one.
+     */
+    const chrome = (0, theme_1.attachDoorChrome)(door_theme_1.CURRENT, {
+        width: screen.width || 80,
+        // Unused while there is no masthead, and still the honest answer to
+        // "what is this screen" if one ever gains a row to live on.
+        title: 'LIVE CHAT',
+        glitch: chatLog,
+        glitchOptions: {
+            // A glitch fired mid-keystroke is a lost keystroke: every keypress,
+            // local or from another node, rebuilds the whole log content, and the
+            // repair that follows would put the pre-keystroke text back. The
+            // typing buffers know when anyone in the room is mid-word.
+            isBusy: () => (0, typing_preview_1.isAnyoneTyping)(state.typingBuffers),
+        },
+        styles: door_theme_1.S,
+        render: () => screen.render(),
+        // So two callers on the same board are not watching identical damage.
+        seed: nodeId * 7 + 3,
+    });
     // ========== EMOJI PICKER ==========
     const emojiPicker = new emoji_picker_1.EmojiPicker(screen);
     // ========== FORMAT PICKER ==========
@@ -310,7 +354,7 @@ async function createApp(session) {
             // identically (or where the selection bar inherited the fg from
             // the base style and produced cyan-on-cyan).
             selected: { fg: door_theme_1.T.ink, bg: door_theme_1.T.accent },
-            border: { fg: theme_1.PANEL_BORDER },
+            border: { fg: theme_2.PANEL_BORDER },
         },
         scrollbar: {
             ch: ' ',
@@ -526,8 +570,8 @@ async function createApp(session) {
             // looked right in the source and drew grey, which is why the sidebar
             // and the chat panel stayed grey while the input box (which sets
             // style.border) was the only blue one.
-            border: { fg: theme_1.PANEL_BORDER },
-            ...theme_1.PANEL_FOCUS_STYLE,
+            border: { fg: theme_2.PANEL_BORDER },
+            ...theme_2.PANEL_FOCUS_STYLE,
         },
     });
     // ========== CHANNEL LIST (Inside Sidebar) ==========
@@ -1228,7 +1272,7 @@ async function createApp(session) {
         style: {
             fg: door_theme_1.T.ink,
             bg: door_theme_1.T.ground,
-            border: { fg: theme_1.PANEL_BORDER },
+            border: { fg: theme_2.PANEL_BORDER },
         },
         trapFocus: true,
     });
@@ -1243,7 +1287,7 @@ async function createApp(session) {
         mouse: true,
         style: {
             fg: door_theme_1.T.ink,
-            border: { fg: theme_1.PANEL_BORDER },
+            border: { fg: theme_2.PANEL_BORDER },
         },
     });
     const passwordSubmitBtn = (0, blessed_helpers_1.createButton)({
@@ -1298,7 +1342,7 @@ async function createApp(session) {
         style: {
             fg: door_theme_1.T.ok,
             bg: door_theme_1.T.ground,
-            border: { fg: theme_1.PANEL_BORDER },
+            border: { fg: theme_2.PANEL_BORDER },
         },
         hidden: true,
     });
@@ -1412,7 +1456,7 @@ async function createApp(session) {
             const style = chatPanel.style;
             if (!style)
                 return;
-            style.border = { ...(style.border ?? {}), fg: visible ? 'black' : theme_1.PANEL_BORDER };
+            style.border = { ...(style.border ?? {}), fg: visible ? 'black' : theme_2.PANEL_BORDER };
             screen.render();
         },
     });
@@ -2439,6 +2483,13 @@ async function createApp(session) {
         state.running = false;
         // Stop cursor blink interval
         stopCursorBlink();
+        // Stop the theme chrome BEFORE the screen goes: a glitch timer writing
+        // to a destroyed screen takes the session with it, and stop() also puts
+        // back any row a glitch was in the middle of damaging.
+        try {
+            chrome.stop();
+        }
+        catch { /* leaving anyway */ }
         // Send leave room only if we are in a room
         if (state.currentChannel) {
             socket.emit('room:leave');

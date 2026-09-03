@@ -42,6 +42,7 @@ function stripTags(text: string): string {
   return text.replace(/{[^}]+}/g, '');
 }
 import { DoorLoader } from '@amiexpress/bbs-door-sdk/utils/DoorLoader';
+import { attachDoorChrome } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 
 // Core state and services
 import { addMessage, setChannel, setDmContext, clearDmContext, AppState } from './core/state';
@@ -59,7 +60,7 @@ import { KeystrokeHandler } from './handlers/keystroke';
 import { CommandHandler } from './handlers/command';
 
 // UI components
-import { processKeystroke, renderTypingPreview } from './ui/typing-preview';
+import { processKeystroke, renderTypingPreview, isAnyoneTyping } from './ui/typing-preview';
 import { createScreen } from './ui/screen';
 import { createMenuBar, MENU_HEIGHT, type MenuBar } from './ui/menu-bar';
 import { PANEL_BORDER, PANEL_FOCUS_STYLE } from './ui/theme';
@@ -133,7 +134,7 @@ import { createEventsCommand } from './commands/events';
 import { PRESENCE_INDICATORS } from './types';
 import type { PresenceStatus, BBSEvent, Message as ChatMessage } from './types';
 import type { SlashCommand } from './commands/types';
-import { T, applyTheme } from './door-theme';
+import { T, S, CURRENT, applyTheme } from './door-theme';
 
 // Import widget types (Log already imported above)
 
@@ -274,6 +275,50 @@ export async function createApp(session: DoorSession) {
 
   // ========== EMOJI BUTTON (next to input box) ==========
   const emojiButton = createEmojiButton(screen);
+
+  // ========== THEME CHROME ==========
+  /**
+   * The theme's moving parts, from the ONE SDK call.
+   *
+   * This door had the theme's COLOURS (door-theme.ts) and none of its
+   * chrome, which is the complaint attachDoorChrome exists to answer - a
+   * palette is not a theme. What LIVECHAT can take is the GLITCHES, and
+   * that is deliberate on both counts:
+   *
+   *   - No masthead. Row 0 is the menu bar this door is driven from, and
+   *     the rows below it are the chat panel; a masthead would either be
+   *     drawn over the menus or cost the chat log a line, and neither is
+   *     worth a moving rail.
+   *   - No footer. The bar along the bottom is a live STATUS line - who
+   *     you are, which node, which channel, whether events are muted -
+   *     which the chrome's hint line would overwrite on every repaint.
+   *
+   * The damage goes on the chat log, the only panel here with rows to
+   * spare: glitching the menu bar, the input box or the status line reads
+   * as the door being broken rather than as atmosphere.
+   *
+   * The width handed over is the LIVE one, so the SDK's own
+   * effectsAllowed() gate is what turns this off at 40 columns - the door
+   * adds no gate of its own and cannot forget one.
+   */
+  const chrome = attachDoorChrome(CURRENT, {
+    width: ((screen as any).width as number) || 80,
+    // Unused while there is no masthead, and still the honest answer to
+    // "what is this screen" if one ever gains a row to live on.
+    title: 'LIVE CHAT',
+    glitch: chatLog as any,
+    glitchOptions: {
+      // A glitch fired mid-keystroke is a lost keystroke: every keypress,
+      // local or from another node, rebuilds the whole log content, and the
+      // repair that follows would put the pre-keystroke text back. The
+      // typing buffers know when anyone in the room is mid-word.
+      isBusy: () => isAnyoneTyping(state.typingBuffers),
+    },
+    styles: S,
+    render: () => screen.render(),
+    // So two callers on the same board are not watching identical damage.
+    seed: nodeId * 7 + 3,
+  });
 
   // ========== EMOJI PICKER ==========
   const emojiPicker = new EmojiPicker(screen);
@@ -2829,6 +2874,11 @@ export async function createApp(session: DoorSession) {
 
     // Stop cursor blink interval
     stopCursorBlink();
+
+    // Stop the theme chrome BEFORE the screen goes: a glitch timer writing
+    // to a destroyed screen takes the session with it, and stop() also puts
+    // back any row a glitch was in the middle of damaging.
+    try { chrome.stop(); } catch { /* leaving anyway */ }
 
     // Send leave room only if we are in a room
     if (state.currentChannel) {

@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TYPING_HEIGHT = void 0;
+exports.TYPING_STALE_MS = exports.TYPING_HEIGHT = void 0;
 exports.createTypingPreview = createTypingPreview;
+exports.isAnyoneTyping = isAnyoneTyping;
 exports.renderTypingPreview = renderTypingPreview;
 exports.processKeystroke = processKeystroke;
 const theme_1 = require("./theme");
@@ -28,13 +29,36 @@ function createTypingPreview(screen) {
         clickable: false
     });
 }
+/**
+ * How long a typing buffer stands after its owner's last keystroke.
+ *
+ * A buffer is only removed when its owner sends the line or clears it, so
+ * somebody who types two characters and walks away would otherwise count as
+ * typing for the rest of the session.
+ */
+exports.TYPING_STALE_MS = 5000;
+/**
+ * True while anyone - the caller or another node - is mid-keystroke.
+ *
+ * The preview reads this per buffer to decide what to draw; the theme
+ * chrome reads it for the whole room, because a glitch is a lie written
+ * over the chat log and every keystroke rebuilds that log's content. Both
+ * answer the question from the same buffers and the same staleness.
+ */
+function isAnyoneTyping(buffers, now = Date.now()) {
+    for (const buf of buffers.values()) {
+        if (now - buf.lastUpdate <= exports.TYPING_STALE_MS)
+            return true;
+    }
+    return false;
+}
 /** Render typing preview content - shows other users typing in real-time */
 function renderTypingPreview(buffers) {
     const parts = [];
     const now = Date.now();
     for (const [userId, buf] of buffers) {
-        // Skip stale buffers (no keystroke in 5 seconds)
-        if (now - buf.lastUpdate > 5000)
+        // Skip stale buffers (no keystroke since TYPING_STALE_MS ago)
+        if (now - buf.lastUpdate > exports.TYPING_STALE_MS)
             continue;
         // Show user's buffer with cursor indicator
         if (buf.buffer.length > 0) {
