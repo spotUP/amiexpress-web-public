@@ -87,6 +87,15 @@ export declare function getClassic(difficulty: ClassicDifficulty): LevelData;
 export declare function getClassicEndless(difficulty: ClassicDifficulty): LevelData;
 export declare const MODERN_PRESET_COUNT: number;
 export declare const CLASSIC_PRESET_COUNT: number;
+/**
+ * The level any mode with GARBAGE in it must be played at.
+ *
+ * Not a taste decision. A classic preset has no GARBAGE_HOVER - it has no
+ * frame count for garbage turning into panels - so the first time a player
+ * CLEARS garbage on a classic board the engine throws. That is unreachable in
+ * Endless, where no garbage ever arrives, and certain in any versus mode.
+ */
+export declare const GARBAGE_MODE_LEVEL = 10;
 /** Garbage needs a GARBAGE_HOVER; classic presets do not have one. */
 export declare function isGarbageCompatible(data: LevelData): boolean;
 //# sourceMappingURL=level-data.d.ts.map

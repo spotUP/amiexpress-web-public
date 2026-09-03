@@ -56,7 +56,7 @@ import {
 import type { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { Stack as PanelStack } from './core/panels/stack';
 import { GeneratorSource } from './core/panels/generator-source';
-import { getClassicEndless } from './core/panels/level-data';
+import { getClassicEndless, getModern, GARBAGE_MODE_LEVEL } from './core/panels/level-data';
 import { buildPanelsResult, type PanelsMode } from './core/panels/score-report';
 import { PanelsVersusScreen } from './ui/panels-versus-screen';
 import { SimulatedStack } from './core/panels/simulated-stack';
@@ -1284,8 +1284,11 @@ export class GrandmasterApp {
     const challengeStage = createStages(1, hasChallengeFile)[0];
 
     const seed = Math.floor(Math.random() * 2147483000) + 1;
+    // A mode with garbage in it MUST be on a modern level: the classic presets
+    // have no GARBAGE_HOVER, so the first garbage a player clears throws.
+    const hasGarbage = mode === 'vscpu' || mode === 'challenge';
     const stack = new PanelStack({
-      levelData: getClassicEndless('normal'),
+      levelData: hasGarbage ? getModern(GARBAGE_MODE_LEVEL) : getClassicEndless('normal'),
       panelSource: new GeneratorSource(seed, true),
       doCountdown: true,
       // Time Attack is two minutes; Endless runs until the stack tops out.
@@ -1354,7 +1357,7 @@ export class GrandmasterApp {
     // script, and its slot draws a danger bar instead of panels.
     const versusOpponent = mode === 'vscpu'
       ? new PanelStack({
-        levelData: getClassicEndless('normal'),
+        levelData: getModern(GARBAGE_MODE_LEVEL),
         panelSource: new GeneratorSource(seed + 1, true),
         doCountdown: true,
       })

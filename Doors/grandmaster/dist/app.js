@@ -1134,8 +1134,11 @@ class GrandmasterApp {
         // mode's own screen once it exists.
         const challengeStage = (0, challenge_mode_1.createStages)(1, attack_patterns_1.hasChallengeFile)[0];
         const seed = Math.floor(Math.random() * 2147483000) + 1;
+        // A mode with garbage in it MUST be on a modern level: the classic presets
+        // have no GARBAGE_HOVER, so the first garbage a player clears throws.
+        const hasGarbage = mode === 'vscpu' || mode === 'challenge';
         const stack = new stack_1.Stack({
-            levelData: (0, level_data_1.getClassicEndless)('normal'),
+            levelData: hasGarbage ? (0, level_data_1.getModern)(level_data_1.GARBAGE_MODE_LEVEL) : (0, level_data_1.getClassicEndless)('normal'),
             panelSource: new generator_source_1.GeneratorSource(seed, true),
             doCountdown: true,
             // Time Attack is two minutes; Endless runs until the stack tops out.
@@ -1192,7 +1195,7 @@ class GrandmasterApp {
         // script, and its slot draws a danger bar instead of panels.
         const versusOpponent = mode === 'vscpu'
             ? new stack_1.Stack({
-                levelData: (0, level_data_1.getClassicEndless)('normal'),
+                levelData: (0, level_data_1.getModern)(level_data_1.GARBAGE_MODE_LEVEL),
                 panelSource: new generator_source_1.GeneratorSource(seed + 1, true),
                 doCountdown: true,
             })

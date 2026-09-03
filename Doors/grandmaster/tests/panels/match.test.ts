@@ -175,3 +175,66 @@ export async function identicalSeedsAndInputsProduceIdenticalBoards(): Promise<v
     }
   }
 }
+
+/**
+ * A mode with garbage in it must be played on a level that HAS a
+ * GARBAGE_HOVER, and the classic presets do not.
+ *
+ * This is not a preference. Garbage becoming panels is a state transition with
+ * a frame count, and a classic level has no number for it - so the engine
+ * throws the moment a player CLEARS garbage. Endless never notices, because no
+ * garbage ever arrives there; every versus mode notices the first time the
+ * player does the thing versus is about.
+ *
+ * Found by the netplay test, which was the first thing to play two boards
+ * against each other long enough for somebody to clear a slab. Vs CPU,
+ * Challenge and the Bowser fights were all set to a classic level at the time.
+ */
+export async function clearingGarbageOnAVersusLevelDoesNotThrow(): Promise<void> {
+  const { PuzzleSource } = require('../../core/panels/puzzle-source');
+  const { getModern, getClassicEndless: classic, isGarbageCompatible, GARBAGE_MODE_LEVEL } =
+    require('../../core/panels/level-data');
+
+  assert.strictEqual(
+    isGarbageCompatible(classic('normal')), false,
+    'a classic level cannot turn garbage into panels',
+  );
+  assert.strictEqual(isGarbageCompatible(getModern(GARBAGE_MODE_LEVEL)), true);
+
+  // A six-wide slab resting on three panels that are about to clear.
+  const stack = new Stack({
+    levelData: getModern(GARBAGE_MODE_LEVEL),
+    panelSource: new PuzzleSource('[====]' + '111000'),
+    behaviours: { passiveRaise: false, allowManualRaise: false, delaySimulationUntil: null },
+  });
+  stack.startingState();
+
+  const before = garbagePanelsOnBoard(stack);
+  assert.ok(before > 0, 'there is garbage to clear');
+
+  // The match under it clears; the slab is next to it and must turn to panels.
+  for (let i = 0; i < 300; i++) stack.run();
+
+  assert.ok(
+    garbagePanelsOnBoard(stack) < before,
+    'the garbage was cleared rather than the engine throwing',
+  );
+}
+
+/** The same board on a classic level is exactly what used to crash. */
+export async function theSameBoardOnAClassicLevelIsWhatUsedToCrash(): Promise<void> {
+  const { PuzzleSource } = require('../../core/panels/puzzle-source');
+
+  const stack = new Stack({
+    levelData: getClassicEndless('normal'),
+    panelSource: new PuzzleSource('[====]' + '111000'),
+    behaviours: { passiveRaise: false, allowManualRaise: false, delaySimulationUntil: null },
+  });
+  stack.startingState();
+
+  assert.throws(
+    () => { for (let i = 0; i < 300; i++) stack.run(); },
+    /garbage hover/,
+    'which is why no mode with garbage in it may use a classic level',
+  );
+}

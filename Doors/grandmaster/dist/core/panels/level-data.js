@@ -27,7 +27,7 @@
  * eventually accept a panel the original denies and desync the board.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CLASSIC_PRESET_COUNT = exports.MODERN_PRESET_COUNT = exports.StopFormula = exports.SpeedIncreaseMode = void 0;
+exports.GARBAGE_MODE_LEVEL = exports.CLASSIC_PRESET_COUNT = exports.MODERN_PRESET_COUNT = exports.StopFormula = exports.SpeedIncreaseMode = void 0;
 exports.toSafePrecision = toSafePrecision;
 exports.fractionToSafePrecision = fractionToSafePrecision;
 exports.getModern = getModern;
@@ -176,6 +176,15 @@ function getClassicEndless(difficulty) {
 }
 exports.MODERN_PRESET_COUNT = MODERN.length;
 exports.CLASSIC_PRESET_COUNT = CLASSIC.length;
+/**
+ * The level any mode with GARBAGE in it must be played at.
+ *
+ * Not a taste decision. A classic preset has no GARBAGE_HOVER - it has no
+ * frame count for garbage turning into panels - so the first time a player
+ * CLEARS garbage on a classic board the engine throws. That is unreachable in
+ * Endless, where no garbage ever arrives, and certain in any versus mode.
+ */
+exports.GARBAGE_MODE_LEVEL = 10;
 /** Garbage needs a GARBAGE_HOVER; classic presets do not have one. */
 function isGarbageCompatible(data) {
     return data.frameConstants.GARBAGE_HOVER !== undefined;
