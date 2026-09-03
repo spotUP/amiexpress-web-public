@@ -7,6 +7,24 @@ import { reconnectPolicy, shouldReconnectNow } from '../utils/reconnect-policy';
 import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
 import {
+  DEFAULT_ZOOM,
+  ZOOM_CORNERS,
+  clampZoom,
+  cornerAt,
+  cursorForCorner,
+  dragZoom,
+  fitZoomToViewport,
+  isBezelPoint,
+  isZoomWheel,
+  nextPreset,
+  readStoredZoom,
+  wheelZoom,
+  writeStoredZoom,
+  zoomedBoxMaxWidth,
+  zoomedFontSize,
+  type ZoomCorner,
+} from '../utils/terminal-zoom';
+import {
   DEFAULT_BBS_FONT,
   applyFont,
   fontFamilyFor,
@@ -181,10 +199,46 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // Id of the browser-side door currently running (null when none). Kept in a
   // ref so the socket handlers, which are registered once, always see it.
   const activeClientDoorId = useRef<string | null>(null);
+  // Terminal mode: 'fixed' = 80 cols (centered, max-width), 'wide' = fullscreen responsive
+  const [terminalMode, setTerminalMode] = useState<'fixed' | 'wide'>('fixed');
+
+  /**
+   * The viewer's zoom FACTOR on the fixed 80x25 screen (and on the 40x25
+   * PETSCII canvas). Not a second font size: the page owns the base size -
+   * the desktop default, or the handheld calibration refit() measures - and
+   * this scales it exactly once, in `effectiveFontSize` below. See
+   * utils/terminal-zoom.ts for why zoom is a factor and not a size.
+   *
+   * Seeded from this browser's last session; an absent or unusable stored
+   * value is 1x, which is the picker's own size and today's board exactly.
+   */
+  const [zoom, setZoom] = useState<number>(() => readStoredZoom() ?? DEFAULT_ZOOM);
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  /** Which corner the pointer is on (or dragging), for the cursor and the marks. */
+  const [activeCorner, setActiveCorner] = useState<ZoomCorner | null>(null);
+  /** The bezelled box: what the zoom gestures are measured against. */
+  const zoomBoxRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * The ONE cell size that reaches xterm: the page's base size scaled by the
+   * viewer's zoom. At 1x this is the base size unchanged.
+   */
+  const effectiveFontSize = zoomedFontSize(
+    fontSize,
+    // A door in wide/fullscreen mode owns its own geometry - FitAddon picks
+    // the column count from the cell size there - so zoom stays out of it
+    // entirely and that mode renders exactly as it always has.
+    terminalMode === 'fixed' ? zoom : DEFAULT_ZOOM,
+  );
+
   // Tracks the current calibrated font size so set-font / font-preference events
   // don't override the mobile-calibrated size with the hardcoded desktop 16px value.
-  const fontSizeRef = useRef(fontSize);
-  fontSizeRef.current = fontSize;
+  // It carries the ZOOMED size, so every existing consumer of the ref - the
+  // xterm constructor, the post-open settle, applyFont's size argument - picks
+  // the zoom up without a second size path being invented for it.
+  const fontSizeRef = useRef(effectiveFontSize);
+  fontSizeRef.current = effectiveFontSize;
 
   // Login state tracking
   const loginState = useRef<
@@ -283,9 +337,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // RIP Graphics state
   const [ripMode, setRipMode] = useState<boolean>(false);
   const ripModeRef = useRef<boolean>(false);
-
-  // Terminal mode: 'fixed' = 80 cols (centered, max-width), 'wide' = fullscreen responsive
-  const [terminalMode, setTerminalMode] = useState<'fixed' | 'wide'>('fixed');
 
   // Web transparency overlays (CSS-based, for web connections only)
   // Position info (x, y, width, height) is in terminal cells, converted to pixels during render
@@ -740,7 +791,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const initialFont = readCachedFont() ?? DEFAULT_BBS_FONT;
     const term = new Terminal({
       fontFamily: fontFamilyFor(initialFont),
-      fontSize: fontSize,
+      // The ref, not the prop: it carries the base size already scaled by the
+      // viewer's remembered zoom, so a zoomed session opens zoomed.
+      fontSize: fontSizeRef.current,
       lineHeight: lineHeightFor(initialFont),
       theme: XTERM_CONFIG.theme,
       ...XTERM_CONFIG.options,
@@ -1139,7 +1192,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       term.options.cursorBlink = true;
       term.options.cursorStyle = 'block';
       term.options.cursorInactiveStyle = 'block';
-      term.options.fontSize = fontSize;
+      term.options.fontSize = fontSizeRef.current;
 
       const termElement = terminalRef.current?.querySelector('.xterm');
       if (termElement) {
@@ -2802,12 +2855,208 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backendUrl, showConnectionError, onConnectionError, onConnect, onDisconnect]);
 
-  // Handle fontSize changes
+  // Handle cell-size changes - the page's base size, the viewer's zoom, or both.
   useEffect(() => {
     if (terminalInstance.current) {
-      terminalInstance.current.options.fontSize = fontSize;
+      terminalInstance.current.options.fontSize = effectiveFontSize;
     }
-  }, [fontSize]);
+  }, [effectiveFontSize]);
+
+  /**
+   * Remember the zoom, without writing localStorage sixty times a second.
+   *
+   * A pinch or a corner drag commits a new zoom every animation frame; the
+   * value worth keeping is the one the gesture settles on, so the write
+   * trails the last change by a moment.
+   */
+  useEffect(() => {
+    const timer = window.setTimeout(() => writeStoredZoom(zoom), 200);
+    return () => window.clearTimeout(timer);
+  }, [zoom]);
+
+  /**
+   * The three zoom inputs, all of them on the bezelled box and nowhere else.
+   *
+   * 1. Cmd+wheel (macOS) / Ctrl+wheel, and a trackpad pinch - which every
+   *    browser delivers as a wheel event with `ctrlKey` synthesised true.
+   *    `preventDefault` happens HERE and only here, so the rest of the site
+   *    keeps ordinary browser page zoom. The listener is in the CAPTURE
+   *    phase and stops the event, because the door's own wheel forwarder
+   *    (`mouse-wheel`, attached to `.xterm-screen` inside this box) would
+   *    otherwise report every pinch to the running door as a scroll.
+   *    Deltas accumulate and are applied once per animation frame, so a
+   *    fast pinch costs one re-measure per frame rather than one per event.
+   * 2. A drag from within CORNER_HIT_PX of any corner. The pointer picks up
+   *    the diagonal resize cursor, a bracket mark fades in at that corner,
+   *    and the zoom follows the pointer's distance from the box centre - so
+   *    the box grows about its middle. Escape puts the zoom back where the
+   *    drag found it.
+   * 3. A double-click on the BEZEL - the padding ring, never the screen,
+   *    which belongs to the BBS - cycles the preset ladder.
+   *
+   * Fixed mode only: a wide/fullscreen door owns its own geometry.
+   */
+  useEffect(() => {
+    const box = zoomBoxRef.current;
+    if (!box || terminalMode !== 'fixed') return;
+
+    /** The one place a new zoom is accepted. */
+    const commit = (next: number) => {
+      const clamped = clampZoom(next);
+      if (clamped === zoomRef.current) return;
+      zoomRef.current = clamped;
+      setZoom(clamped);
+    };
+
+    // --- 1. wheel / pinch -------------------------------------------------
+    let wheelFrame: number | null = null;
+    let pendingDelta = 0;
+    const onWheel = (ev: WheelEvent) => {
+      if (!isZoomWheel(ev)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      pendingDelta += ev.deltaY;
+      if (wheelFrame !== null) return;
+      wheelFrame = requestAnimationFrame(() => {
+        wheelFrame = null;
+        const delta = pendingDelta;
+        pendingDelta = 0;
+        commit(wheelZoom(zoomRef.current, delta));
+      });
+    };
+    box.addEventListener('wheel', onWheel, { capture: true, passive: false });
+
+    // --- 2. corner drag ---------------------------------------------------
+    let dragging = false;
+    let dragFrame: number | null = null;
+    const endDrag = (restoreTo: number | null) => {
+      if (!dragging) return;
+      dragging = false;
+      if (dragFrame !== null) {
+        cancelAnimationFrame(dragFrame);
+        dragFrame = null;
+      }
+      window.removeEventListener('pointermove', onDragMove);
+      window.removeEventListener('pointerup', onDragUp);
+      window.removeEventListener('pointercancel', onDragUp);
+      window.removeEventListener('keydown', onDragKey, true);
+      setActiveCorner(null);
+      if (restoreTo !== null) commit(restoreTo);
+    };
+    let dragRect = { left: 0, top: 0, right: 0, bottom: 0 };
+    let dragStart = { x: 0, y: 0 };
+    let dragStartZoom = DEFAULT_ZOOM;
+    let dragLatest = { x: 0, y: 0 };
+    function onDragMove(ev: PointerEvent): void {
+      dragLatest = { x: ev.clientX, y: ev.clientY };
+      if (dragFrame !== null) return;
+      dragFrame = requestAnimationFrame(() => {
+        dragFrame = null;
+        commit(dragZoom(dragStartZoom, dragRect, dragStart, dragLatest));
+      });
+    }
+    function onDragUp(): void {
+      endDrag(null);
+    }
+    function onDragKey(ev: KeyboardEvent): void {
+      if (ev.key !== 'Escape') return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      endDrag(dragStartZoom);
+    }
+    const onPointerDown = (ev: PointerEvent) => {
+      const rect = box.getBoundingClientRect();
+      const corner = cornerAt({ x: ev.clientX, y: ev.clientY }, rect);
+      if (!corner) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      dragging = true;
+      // The rect is read ONCE: the box grows under the pointer during the
+      // drag, and re-reading it every move would feed the gesture its own
+      // output and make the zoom run away.
+      dragRect = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+      dragStart = { x: ev.clientX, y: ev.clientY };
+      dragLatest = dragStart;
+      dragStartZoom = zoomRef.current;
+      setActiveCorner(corner);
+      window.addEventListener('pointermove', onDragMove);
+      window.addEventListener('pointerup', onDragUp);
+      window.addEventListener('pointercancel', onDragUp);
+      window.addEventListener('keydown', onDragKey, true);
+    };
+    box.addEventListener('pointerdown', onPointerDown, true);
+
+    // Hover: the corner marks and the diagonal cursor appear only when the
+    // pointer is actually on a corner - the box carries no visible chrome
+    // otherwise.
+    const onHoverMove = (ev: PointerEvent) => {
+      if (dragging) return;
+      const corner = cornerAt({ x: ev.clientX, y: ev.clientY }, box.getBoundingClientRect());
+      setActiveCorner((previous) => (previous === corner ? previous : corner));
+    };
+    const onHoverLeave = () => {
+      if (!dragging) setActiveCorner(null);
+    };
+    box.addEventListener('pointermove', onHoverMove);
+    box.addEventListener('pointerleave', onHoverLeave);
+
+    // --- 3. double-click the bezel ---------------------------------------
+    const onDoubleClick = (ev: MouseEvent) => {
+      const rect = box.getBoundingClientRect();
+      const bezelPx = Number.parseFloat(window.getComputedStyle(box).paddingLeft) || 0;
+      if (!isBezelPoint({ x: ev.clientX, y: ev.clientY }, rect, bezelPx)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      commit(nextPreset(zoomRef.current));
+    };
+    box.addEventListener('dblclick', onDoubleClick, true);
+
+    return () => {
+      if (wheelFrame !== null) cancelAnimationFrame(wheelFrame);
+      endDrag(null);
+      box.removeEventListener('wheel', onWheel, { capture: true } as EventListenerOptions);
+      box.removeEventListener('pointerdown', onPointerDown, true);
+      box.removeEventListener('pointermove', onHoverMove);
+      box.removeEventListener('pointerleave', onHoverLeave);
+      box.removeEventListener('dblclick', onDoubleClick, true);
+    };
+  }, [terminalMode]);
+
+  /**
+   * Clamp the zoom to what the viewport can actually hold.
+   *
+   * A remembered 3x arriving on a laptop, or a window dragged smaller with
+   * a zoom already in, must shrink rather than push the screen off the
+   * edge. `fitZoomToViewport` never crosses 1x - a viewport too small for
+   * the DEFAULT look is today's behaviour, not something zoom may change -
+   * and it is monotone, so this settles in one or two frames.
+   */
+  useEffect(() => {
+    if (terminalMode !== 'fixed') return;
+    let frame: number | null = null;
+    const clampToViewport = () => {
+      if (frame !== null) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        const box = zoomBoxRef.current;
+        if (!box) return;
+        const fitted = fitZoomToViewport(
+          zoomRef.current,
+          { width: box.offsetWidth, height: box.offsetHeight },
+          { width: window.innerWidth, height: window.innerHeight },
+        );
+        if (fitted === zoomRef.current) return;
+        zoomRef.current = fitted;
+        setZoom(fitted);
+      });
+    };
+    clampToViewport();
+    window.addEventListener('resize', clampToViewport);
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      window.removeEventListener('resize', clampToViewport);
+    };
+  }, [terminalMode, effectiveFontSize, surface]);
 
   // Focus the terminal when clicking anywhere in the window. This ensures
   // keyboard input always goes to the live surface - xterm's textarea for
@@ -3169,6 +3418,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           terminal ("the images fill the entire browser"). The fixed-mode
           max-width moves up here so the overlay is bounded by it too. */}
       <div
+        ref={zoomBoxRef}
         style={{
           position: 'relative',
           width: '100%',
@@ -3177,7 +3427,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           // ground shows only around it.
           ...(terminalMode === 'fixed'
             ? {
-                maxWidth: '960px',
+                // The zoom scales the cap instead of removing it, so the
+                // black box still cannot stretch across an ultrawide
+                // viewport. At 1x this is the string '960px' the box has
+                // always carried.
+                maxWidth: zoomedBoxMaxWidth(zoom),
                 backgroundColor: '#000000',
                 // The bezel: a black border around the screen with rounded
                 // corners, so the terminal reads as a screen sitting on the
@@ -3190,6 +3444,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
                 boxSizing: 'border-box',
                 borderRadius: 'var(--bbs-terminal-radius, 12px)',
                 overflow: 'hidden',
+                // Only while the pointer is actually on a corner; the box
+                // carries no other visible chrome.
+                ...(activeCorner ? { cursor: cursorForCorner(activeCorner) } : {}),
               }
             : { height: '100%' }),
         }}
@@ -3296,6 +3553,36 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           />
         </div>
       )}
+      {terminalMode === 'fixed' && ZOOM_CORNERS.map((corner) => {
+        // A faint bracket, drawn from two borders, that fades in when the
+        // pointer reaches that corner and says "this corner resizes the
+        // screen". Nothing shows at rest. Colour and size are page tokens,
+        // with the package's own fallbacks so it stays self-contained.
+        const north = corner === 'nw' || corner === 'ne';
+        const west = corner === 'nw' || corner === 'sw';
+        const edge = '1px solid var(--bbs-terminal-zoom-mark, rgba(255, 255, 255, 0.45))';
+        return (
+          <div
+            key={corner}
+            aria-hidden="true"
+            data-zoom-corner={corner}
+            style={{
+              position: 'absolute',
+              width: 'var(--bbs-terminal-zoom-mark-size, 12px)',
+              height: 'var(--bbs-terminal-zoom-mark-size, 12px)',
+              [north ? 'top' : 'bottom']: '4px',
+              [west ? 'left' : 'right']: '4px',
+              [north ? 'borderTop' : 'borderBottom']: edge,
+              [west ? 'borderLeft' : 'borderRight']: edge,
+              borderRadius: '2px',
+              opacity: activeCorner === corner ? 1 : 0,
+              transition: 'opacity 120ms ease-out',
+              pointerEvents: 'none',
+              zIndex: 20,
+            }}
+          />
+        );
+      })}
       </div>
       {/* Web Transparency Overlays - CSS-based overlays for web connections */}
       {Array.from(overlays.entries()).map(([id, overlay]) => {

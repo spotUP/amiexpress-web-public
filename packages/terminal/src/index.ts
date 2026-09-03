@@ -50,6 +50,37 @@ export {
   type BbsFont,
   type FontTarget,
 } from './utils/session-font';
+// The single owner of the terminal ZOOM: the factor, its range, the preset
+// ladder, the gesture arithmetic and the per-viewer memory. Zoom is a factor
+// over the page's base cell size, never a second size - see the module header.
+export {
+  ZOOM_STORAGE_KEY,
+  MIN_ZOOM,
+  MAX_ZOOM,
+  DEFAULT_ZOOM,
+  ZOOM_PRESETS,
+  ZOOM_CORNERS,
+  CORNER_HIT_PX,
+  BOX_MAX_WIDTH_PX,
+  clampZoom,
+  zoomedFontSize,
+  zoomedBoxMaxWidth,
+  isZoomWheel,
+  wheelZoom,
+  nextPreset,
+  cornerAt,
+  cursorForCorner,
+  isBezelPoint,
+  dragZoom,
+  fitZoomToViewport,
+  readStoredZoom,
+  writeStoredZoom,
+  type ZoomCorner,
+  type ZoomPoint,
+  type ZoomRect,
+  type ZoomSize,
+  type ZoomWheelLike,
+} from './utils/terminal-zoom';
 
 // Export true-PETSCII (C64 screen-editor emulation) components and utilities
 export { PetsciiMachine, type PetsciiMachineState } from '@amiexpress/bbs-door-sdk/petscii';
