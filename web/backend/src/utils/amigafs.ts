@@ -421,6 +421,47 @@ export function createsOnOpen(flags: fs.OpenMode): boolean {
 }
 
 /**
+ * Case-resolve as much of `targetPath` as exists on disk, leaving the
+ * components that do not exist yet verbatim.
+ *
+ * resolvePath() is all-or-nothing: it returns null the moment one component
+ * is missing, which is the case for every file or directory a door is about
+ * to CREATE. Callers that fall back to the raw path in that situation mint a
+ * lowercase twin next to the real, differently-cased parent
+ * ("bulletins/bull1.txt" beside "Bulletins/"). Walking up to the deepest
+ * ancestor that does exist gives the create a correctly-cased parent to land
+ * in, while still naming the new leaf exactly as asked.
+ *
+ * Uses only resolvePath() - there is deliberately no second case matcher.
+ */
+export function resolveExistingAncestors(targetPath: string): string {
+  const direct = resolvePath(targetPath);
+  if (direct) {
+    return direct;
+  }
+
+  const tail: string[] = [];
+  let current = targetPath;
+
+  for (;;) {
+    const parent = path.dirname(current);
+    if (parent === current) {
+      // Reached the filesystem root without resolving anything.
+      return targetPath;
+    }
+
+    tail.unshift(path.basename(current));
+
+    const resolvedParent = resolvePath(parent);
+    if (resolvedParent) {
+      return path.join(resolvedParent, ...tail);
+    }
+
+    current = parent;
+  }
+}
+
+/**
  * Case-insensitive openSync
  * Opens a file and returns a file descriptor
  *

@@ -30,7 +30,6 @@ import * as amigafs from '../../src/utils/amigafs';
 import { MoiraEmulator } from '../../src/amiga-emulation/cpu/MoiraEmulator';
 import { RexxSupportLibrary } from '../../src/amiga-emulation/api/RexxSupportLibrary';
 import { RexxArpLibrary } from '../../src/amiga-emulation/api/RexxArpLibrary';
-import { resolveExistingAncestors } from '../../src/amiga-emulation/api/rexx-path';
 
 // The module's exports are non-configurable, so jest.spyOn() cannot wrap them.
 // Wrap them at module load instead, delegating to the real implementations, so
@@ -75,11 +74,11 @@ describe("an AREXX door's lowercase bbs: path reaches the real Bulletins directo
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  describe('resolveExistingAncestors', () => {
+  describe('amigafs.resolveExistingAncestors', () => {
     test('resolves a path whose every component already exists', () => {
       const asked = path.join(root, 'bulletins', 'bull1.txt');
 
-      const resolved = resolveExistingAncestors(asked);
+      const resolved = amigafs.resolveExistingAncestors(asked);
 
       expect(fs.readFileSync(resolved, 'latin1')).toBe(BULLETIN);
     });
@@ -91,7 +90,7 @@ describe("an AREXX door's lowercase bbs: path reaches the real Bulletins directo
       // the raw lowercase path and mints a twin directory beside the real one.
       const asked = path.join(root, 'bulletins', 'brand-new.txt');
 
-      const resolved = resolveExistingAncestors(asked);
+      const resolved = amigafs.resolveExistingAncestors(asked);
 
       expect(path.basename(resolved)).toBe('brand-new.txt');
       expect(fs.existsSync(path.dirname(resolved))).toBe(true);
@@ -101,7 +100,7 @@ describe("an AREXX door's lowercase bbs: path reaches the real Bulletins directo
     test('hands back the path untouched when nothing above it exists', () => {
       const asked = path.join(root, 'nowhere', 'deeper', 'x.txt');
 
-      expect(resolveExistingAncestors(asked)).toBe(
+      expect(amigafs.resolveExistingAncestors(asked)).toBe(
         path.join(root, 'nowhere', 'deeper', 'x.txt')
       );
     });

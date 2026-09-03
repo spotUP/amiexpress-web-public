@@ -22,6 +22,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as amigafs from '../utils/amigafs';
 
 /**
  * A line terminator: CRLF, LF, or a bare CR. Matched against the RAW
@@ -114,7 +115,43 @@ export class AREXXFileIO {
    * volume / assign name) is the same pattern we apply when
    * normalising the LOCATION tooltype in amiga-command-parser.util.
    */
+  /**
+   * Assign substitution followed by case resolution.
+   *
+   * AmigaDOS filesystems are case-insensitive and case-preserving; ext4 under
+   * the Linux container is neither. Substituting the assign is not enough:
+   * STNG.Rexx does
+   *
+   *     STNGDir = "Doors:STNG/" ; pragma('directory',STNGDir)
+   *     open(hi,'hiscores','R')
+   *
+   * while the file on disk is "Doors/STNG/HISCORES". Before the case walk the
+   * read ENOENTed (the high-score table never loaded) and the 'W' open minted
+   * a lowercase twin beside the real file. amigafs.resolveExistingAncestors()
+   * is the ONE case matcher - it resolves down to the deepest ancestor that
+   * exists, so a file the door is about to CREATE still lands in the
+   * correctly-cased parent.
+   */
   resolveAmigaPath(input: string): string {
+    const mapped = this.substituteAssign(input);
+    return mapped ? amigafs.resolveExistingAncestors(mapped) : mapped;
+  }
+
+  /**
+   * The assign table only: "BBS:" / "DOORS:" / "RAM:" / "T:" -> host
+   * directories, and bare paths against the current directory.
+   *
+   * A bare relative path deliberately resolves against `currentDir`, which
+   * starts at the BBS root and is moved only by pragma('directory'). That is
+   * 1:1 with express.e: an AIM door is launched as `REXXDOOR <node> <cmd>` /
+   * `<bbsLoc>Utils/REXXDOOR <node> <cmd>` via Execute() (express.e:4272-4277),
+   * from AmiExpress's own current directory - express.e never CurrentDir()s
+   * into a door's directory (its one CurrentDir pair, :26282/:26316, is the
+   * PlayPen zoom path). Doors that want their own directory say so, exactly as
+   * STNG.Rexx does with pragma('directory',"Doors:STNG/"). Defaulting to the
+   * door directory here would be a silent divergence.
+   */
+  private substituteAssign(input: string): string {
     if (!input) return '';
     const colon = input.indexOf(':');
     if (colon < 0) {
@@ -182,7 +219,7 @@ export class AREXXFileIO {
     if (!filename) return '';
     const resolved = this.resolveAmigaPath(String(filename));
     try {
-      return fs.existsSync(resolved) ? resolved : '';
+      return amigafs.existsSync(resolved) ? resolved : '';
     } catch {
       return '';
     }
@@ -199,7 +236,7 @@ export class AREXXFileIO {
     if (!filename) return '';
     const resolved = this.resolveAmigaPath(String(filename));
     try {
-      const st = fs.statSync(resolved);
+      const st = amigafs.statSync(resolved);
       const type = st.isDirectory() ? 'DIR' : 'FILE';
       const blocks = Math.ceil(st.size / 512);
       const bits = 0;
@@ -235,7 +272,7 @@ export class AREXXFileIO {
 
     if (finalMode === 'R') {
       try {
-        const buf = fs.readFileSync(resolved, 'latin1');
+        const buf = amigafs.readFileSync(resolved, 'latin1') as string;
         this.handles.set(h, {
           name: filename, resolvedPath: resolved, mode: finalMode,
           content: buf, pos: 0, atEof: false,
@@ -251,10 +288,10 @@ export class AREXXFileIO {
     // with mkdirSync first; we keep an empty buffer and write on
     // close so multi-clause writeln calls flush atomically.
     try {
-      fs.mkdirSync(path.dirname(resolved), { recursive: true });
+      amigafs.mkdirSync(path.dirname(resolved), { recursive: true });
       // For W: pre-truncate so partial writes don't leave stale
       // bytes if close() is never called (door crashed).
-      if (finalMode === 'W') fs.writeFileSync(resolved, '', 'latin1');
+      if (finalMode === 'W') amigafs.writeFileSync(resolved, '', 'latin1');
     } catch {
       return 0;
     }
@@ -276,9 +313,9 @@ export class AREXXFileIO {
     if (!fh) return 1;
     try {
       if (fh.mode === 'W') {
-        fs.writeFileSync(fh.resolvedPath, fh.writeBuffer.join(''), 'latin1');
+        amigafs.writeFileSync(fh.resolvedPath, fh.writeBuffer.join(''), 'latin1');
       } else if (fh.mode === 'A') {
-        fs.appendFileSync(fh.resolvedPath, fh.writeBuffer.join(''), 'latin1');
+        amigafs.appendFileSync(fh.resolvedPath, fh.writeBuffer.join(''), 'latin1');
       }
     } catch {
       this.handles.delete(h);
