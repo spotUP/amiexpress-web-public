@@ -65,6 +65,20 @@ interface AppState {
   currentRecommendation?: QualityRecommendation;
 }
 
+/**
+ * The running chrome, at module scope because two teardown paths need it:
+ * the screen's own `destroy` event and the door's `onClose`, and only one
+ * of those fires when a caller drops the line.
+ */
+let activeChrome: DoorChrome | null = null;
+
+/** Stop the rail. Safe to call twice; the second call does nothing. */
+function stopChrome(): void {
+  if (!activeChrome) return;
+  try { activeChrome.stop(); } catch { /* leaving anyway */ }
+  activeChrome = null;
+}
+
 const door = new Door({
   name: 'Voice Chat',
   version: '1.0.0',
@@ -297,7 +311,7 @@ door.onStart(async (ctx: DoorContext) => {
    * audio state - a glitch on a speaker list or a level meter would read as
    * the call breaking up, which is the one lie a voice door must not tell.
    */
-  const chrome: DoorChrome = attachDoorChrome(CURRENT, {
+  activeChrome = attachDoorChrome(CURRENT, {
     width: ((screen as any).width as number) || 80,
     title: 'VOICE CHAT',
     masthead: titleBar as any,
@@ -452,20 +466,32 @@ door.onStart(async (ctx: DoorContext) => {
   });
 
   screen.key(['q', 'Q', 'escape'], () => {
-    // Stop the rail first: a timer writing to a destroyed screen is how a
-    // door takes the session with it.
-    try { chrome.stop(); } catch { /* leaving anyway */ }
+    // Just destroy: the listener below is the ONE place the chrome stops,
+    // so every way out of this door goes through the same teardown.
     screen.destroy();
   });
 
   // Focus management
   screen.focusPush(mainBox as any);
 
-  // Keep the door running until closed
-  await new Promise<void>((resolve) => screen.on('destroy', resolve));
+  // Keep the door running until closed.
+  //
+  // The chrome stops HERE rather than in the quit key, because quitting is
+  // not the only way out. A caller who drops the line never presses Q, and
+  // the rail's 20fps interval was left writing into a destroyed screen -
+  // which is how a door takes the session with it. `destroy` fires for
+  // every path; onClose below catches a teardown that never got this far.
+  await new Promise<void>((resolve) => screen.on('destroy', () => {
+    stopChrome();
+    resolve();
+  }));
 });
 
 door.onClose(async (ctx: DoorContext) => {
+  // A disconnect can tear the door down without the screen ever emitting
+  // `destroy`, so this is the second of the two doors out.
+  stopChrome();
+
   // Cleanup: Stop audio streaming by emitting to client
   if (ctx.socket) {
     try {

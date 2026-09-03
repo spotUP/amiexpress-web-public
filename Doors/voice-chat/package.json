@@ -13,6 +13,7 @@
     "entry": "./src/index.ts"
   },
   "scripts": {
+    "test": "tsx tests/run-tests.ts",
     "build": "tsc && npm run bundle:client",
     "bundle:client": "esbuild src/client.ts --bundle --outfile=dist/client.bundle.js --format=esm --target=es2020 --platform=browser --external:fs --external:path --external:child_process --external:net --external:crypto --define:process.env.NODE_ENV='\"production\"' --minify-whitespace",
     "build:watch": "tsc --watch",
