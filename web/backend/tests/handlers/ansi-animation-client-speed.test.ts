@@ -51,7 +51,12 @@ afterAll(() => {
 interface Emitted { event: string; data: unknown }
 
 let seq = 0;
-async function show(file: string, bps: number): Promise<Emitted[]> {
+/**
+ * `enabled` is passed separately from `bps` because they are separate
+ * facts: MAX is modem emulation ON at bps 0 (the client's own
+ * `enable(0)` -> 230400 soft cap), not modem emulation off.
+ */
+async function show(file: string, bps: number, enabled = bps > 0): Promise<Emitted[]> {
   const events: Emitted[] = [];
   const socket = {
     id: `anim-speed-${seq++}`,
@@ -65,7 +70,7 @@ async function show(file: string, bps: number): Promise<Emitted[]> {
     screenWidth: 80,
     screenHeight: 25,
     nodeId: 0,
-    modemEmulationEnabled: bps > 0,
+    modemEmulationEnabled: enabled,
     modemBps: bps,
   };
   expect(await displayScreen(socket as any, session, file)).toBe(true);
@@ -93,6 +98,17 @@ describe('a forced-speed ANSI animation', () => {
 
     const speeds = events.filter((e) => e.event === 'modem-speed').map((e) => e.data);
     expect(`speed changes: ${JSON.stringify(speeds)}`).toBe('speed changes: [14400,2400]');
+  });
+
+  it("puts a MAX caller back to MAX, not to a speed they never chose", async () => {
+    // MAX is modem emulation ON at bps 0: the client maps 0 to its
+    // MAX_SOFT_CAP_BPS (230400). Restoring "0" is therefore restoring MAX,
+    // and the caller must not be left at the animation's forced 14400 -
+    // the whole rest of the call would paint at 1.4 KB/s.
+    const events = await show(logoPath, 0, true);
+
+    const speeds = events.filter((e) => e.event === 'modem-speed').map((e) => e.data);
+    expect(`speed changes: ${JSON.stringify(speeds)}`).toBe('speed changes: [14400,0]');
   });
 
   it('says nothing about speed for an ordinary screen', async () => {
