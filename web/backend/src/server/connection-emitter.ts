@@ -24,6 +24,7 @@ import {
   transducePetsciiAtChoke,
   flushPetsciiModel,
 } from "../utils/petscii-session-model";
+import { applyTransportEvent } from "./transport-adapter";
 
 /**
  * Flush the session's PETSCII transducer's held bytes straight to the wire
@@ -87,7 +88,13 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
       return emitter;
     },
     emitInternal: (event: string, ...args: any[]) => eventBus.emit(event, ...args),
-    emit: (event: string, data: any) => {
+    emit: (event: string, ...args: any[]) => {
+      // Widened from `(event: string, data: any)` by TP-3. The three branches
+      // below read `args[0]` as `data`, which is what every current caller
+      // passes; the third argument the wipe path already sends (PRE_PACED,
+      // utils/output-pacing.ts) rides through untouched, as it does today, and
+      // TP-5 reads it for the payload's source charset.
+      const data: any = args[0];
       const session = connection.session;
       if (event === "ansi-output") {
         if (sessionWantsPetscii(session)) {
@@ -136,6 +143,15 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
         } else {
           connection.write(convertPetsciiToPetMe64(Buffer.from(data as string, "base64")));
         }
+      } else {
+        // TP-3: the `else` this chain never had. Every other name. The adapter
+        // either performs the event's translation (connection state, a
+        // transport action, a rendered notice) or records a RULED drop on the
+        // connection - `connection.transportDrops`, one record per name, logged
+        // once. An unruled name is a defect and says so loudly: the backend
+        // must never emit an event to a session that cannot receive it without
+        // this file knowing about it. See server/transport-adapter.ts.
+        applyTransportEvent(connection, session, event, args);
       }
     },
     /** Live view of the connection's session (emitText's wrap choke, Task 10, reads it). A getter: connection.session is assigned after this emitter is built. */

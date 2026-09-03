@@ -32,24 +32,20 @@ import {
   applyTerminalTypeReport,
   applyWindowSizeReport,
 } from "../amiga-emulation/xim/screen-width.util";
-import type { LoginEmitter } from "../types/login-emitter";
+import type { TransportEmitter } from "./transport-adapter";
 import type { TelnetConnection } from "./telnet-server";
 import type { SSHConnection } from "./ssh-server";
 import type { BBSSession } from "../index";
 
 /**
- * The socket-shaped object a session is reached through. `LoginEmitter`
- * (`types/login-emitter.ts`) already describes the surface socket.io's `Socket`
- * and the telnet/SSH emitter share; this adds the two members this entry point
- * itself uses. TP-3 re-homes this interface in `server/transport-adapter.ts`
- * and widens it; it lives here until that module exists so that TP-2 stays a
- * pure move with no forward dependency.
+ * RE-HOMED. `TransportEmitter` was DECLARED here by TP-2 (its recorded
+ * deviation D1) only because `server/transport-adapter.ts` did not exist yet.
+ * TP-3 created that module and the declaration moved there, unchanged; this
+ * file re-exports it so its importers - including
+ * `tests/transport/transport-session.test.ts` - keep working and so there is
+ * exactly ONE declaration of the shape.
  */
-export interface TransportEmitter extends LoginEmitter {
-  emitInternal(event: string, ...args: unknown[]): boolean;
-  listenerCount(event: string): number;
-  readonly session?: BBSSession | null;
-}
+export type { TransportEmitter } from "./transport-adapter";
 
 /**
  * Everything the entry point used to close over inside index.ts.
