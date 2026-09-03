@@ -1,4 +1,4 @@
-import { NameIndex } from '../../src/storage/name-index';
+import { BackendRetryGate, NameIndex } from '../../src/storage/name-index';
 import type { ObjectHead } from '../../src/storage/storage-backend';
 import { StorageUnavailableError } from '../../src/storage/storage-backend';
 import { FakeBackend } from './fake-backend';
@@ -536,6 +536,99 @@ describe('NameIndex', () => {
     clock += 150; // past the retry window
     await expect(index.resolve('anything')).rejects.toBeInstanceOf(TypeError);
     expect(backend.listAttempts).toBe(2);
+  });
+
+  // --- An outage is per BACKEND: every area on one bucket shares one failure
+  // gate, so N areas cost ONE attempt per window between them. ---
+
+  it('(j) two areas on one down backend cost one listing attempt between them, not one each', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    let clock = 0;
+    const gate = new BackendRetryGate({ errorRetryAfterMs: 100, now: () => clock });
+    const files = new NameIndex(backend, 'Files/', { staleAfterMs: 1000, retryGate: gate, now: () => clock });
+    const uploads = new NameIndex(backend, 'Uploads/', { staleAfterMs: 1000, retryGate: gate, now: () => clock });
+
+    expect(await files.resolve('ghost.lha')).toBeNull(); // each primes its own prefix
+    expect(await uploads.resolve('ghost.lha')).toBeNull();
+    expect(backend.lists).toBe(2);
+
+    clock += 1500; // both areas' listings have gone stale
+    backend.down = true;
+
+    // The first area to notice pays for the attempt and surfaces the real error.
+    await expect(files.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+    const requestsAfterFirstAttempt = backend.requests;
+
+    // The second area must NOT re-learn the same fact at its own cost. One
+    // bucket is down, not one prefix - with a gate per index this is where a
+    // dozen conference areas each start their own 15-second retry cadence
+    // against a 50,000-a-month ceiling.
+    await expect(uploads.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+    expect(backend.requests).toBe(requestsAfterFirstAttempt);
+
+    // And the cap is per window between them, not per area: one more attempt
+    // once it rolls, whichever area happens to ask first.
+    clock += 150;
+    await expect(uploads.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+    expect(backend.requests).toBe(requestsAfterFirstAttempt + 1);
+    await expect(files.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+    expect(backend.requests).toBe(requestsAfterFirstAttempt + 1);
+  });
+
+  it('(k) a success through one area releases every other area sharing the backend', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    let clock = 0;
+    const gate = new BackendRetryGate({ errorRetryAfterMs: 100, now: () => clock });
+    // Files/ re-checks its misses often; Uploads/ has a long miss-trust window,
+    // so nothing it does below is its own listing - every answer it gives comes
+    // from the gate it shares with Files/.
+    const files = new NameIndex(backend, 'Files/', { staleAfterMs: 1000, retryGate: gate, now: () => clock });
+    const uploads = new NameIndex(backend, 'Uploads/', { staleAfterMs: 1000000, retryGate: gate, now: () => clock });
+
+    expect(await files.resolve('ghost.lha')).toBeNull();
+    expect(await uploads.resolve('ghost.lha')).toBeNull();
+
+    clock += 1500;
+    backend.down = true;
+    await expect(files.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+
+    // Uploads/ own data is still well inside its trust window, so it makes no
+    // attempt - but the backend is known down, and a miss must not answer
+    // "no such file" on the strength of data it would not have re-checked.
+    await expect(uploads.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+    const requestsWhileDown = backend.requests;
+
+    backend.down = false;
+    clock += 150; // the retry window rolls
+
+    // Files/ is the area that happens to look next, and its success is what
+    // tells the whole backend it is healthy again.
+    expect(await files.resolve('ghost.lha')).toBeNull();
+
+    // Uploads/ answers immediately off the released gate - it neither waits
+    // out a window of its own nor spends a request to find out.
+    expect(await uploads.resolve('ghost.lha')).toBeNull();
+    expect(backend.requests).toBe(requestsWhileDown + 1); // only Files/ re-listed
+  });
+
+  it('(l) an index built without a shared gate keeps its own - two of them cost two attempts', async () => {
+    // The direct-construction path must not be forced through the registry,
+    // and must not accidentally share state with anything else either.
+    const backend = new FakeBackend({ driveNumber: 2 });
+    backend.down = true;
+    let clock = 0;
+    const options = { staleAfterMs: 1000, errorRetryAfterMs: 100, now: () => clock };
+    const files = new NameIndex(backend, 'Files/', options);
+    const uploads = new NameIndex(backend, 'Uploads/', options);
+
+    await expect(files.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+    await expect(uploads.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+    expect(backend.requests).toBe(2); // its own gate each, as a lone index always had
+
+    // And each throttles itself exactly as before.
+    await expect(files.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+    await expect(uploads.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+    expect(backend.requests).toBe(2);
   });
 
   // --- Important: the gap between the drain and the in-flight flag clearing ---

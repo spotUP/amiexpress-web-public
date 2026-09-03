@@ -96,6 +96,21 @@
  *    invariant above still rules: a miss THROWS the cached failure, it never
  *    answers null - the short window buys faster recovery, never a cheaper
  *    lie.
+ *
+ * 6. An outage is per BACKEND, so the failure gate is too. One bucket going
+ *    down takes every area and prefix on it at once; N indexes each keeping
+ *    their own copy of "the backend is down, try again in 15s" means N
+ *    attempts per window against a 50,000-a-month ceiling that does not care
+ *    which area spent them. Nine areas down for a day would exceed the whole
+ *    monthly budget on retries alone, and a board with a couple of dozen
+ *    conference file areas on one bucket is ordinary. So the failure and the
+ *    attempt clock live in a BackendRetryGate shared by every index over one
+ *    backend: N areas cost ONE attempt per window between them, and the
+ *    first area to find the volume healthy releases all the others. Only
+ *    that state is shared - the name maps, and the miss-trust window that
+ *    measures how old THIS area's listing is, stay per index, because a
+ *    successful listing of one area says nothing about another area's
+ *    contents.
  */
 import type { ObjectHead, StorageBackend } from './storage-backend';
 import { StorageUnavailableError } from './storage-backend';
@@ -133,14 +148,114 @@ interface PendingOp {
 /** Error.cause exists on the runtime; the ES2020 lib this project targets does not type it. */
 type ErrorWithCause = Error & { cause?: unknown };
 
+export interface BackendRetryGateOptions {
+  /** How long a failed attempt against this backend is trusted before another is allowed. */
+  errorRetryAfterMs?: number;
+  /** Injectable clock so tests can move time without waiting on it. Defaults to Date.now. */
+  now?: () => number;
+}
+
+/**
+ * "Is this backend believed to be down, and is it time to try again?" - one
+ * answer, shared by every area on that backend (invariant 6).
+ *
+ * A bucket is down or it is not; the question is not per prefix. Sharing the
+ * answer is what keeps a whole-bucket outage costing one listing attempt per
+ * retry window instead of one per area, and what lets the first area to find
+ * the volume healthy release every other area immediately rather than each
+ * waiting out its own window.
+ *
+ * Deliberately NOT the place for anything per-area: the name maps and the
+ * miss-trust window belong to the index that listed that prefix.
+ */
+export class BackendRetryGate {
+  /** When a listing against this backend was last attempted, success or failure. */
+  private lastAttemptAt = 0;
+  /**
+   * The last attempt's failure, or null if it succeeded (or none has been
+   * made). Object-wrapped rather than a bare value so that an adapter
+   * throwing a falsy value (`throw null` is legal JavaScript) cannot read
+   * back as "the last attempt succeeded". `unknown`, because EVERY failure
+   * is remembered, not only the type we expect - remembering only
+   * StorageUnavailableError leaves an adapter bug looking exactly like a
+   * clean attempt, and a later miss answers "not found" for a file that is
+   * fine.
+   */
+  private failure: { readonly error: unknown } | null = null;
+  private readonly errorRetryAfterMs: number;
+  private readonly now: () => number;
+
+  constructor(options: BackendRetryGateOptions = {}) {
+    this.errorRetryAfterMs = options.errorRetryAfterMs ?? DEFAULT_ERROR_RETRY_AFTER_MS;
+    this.now = options.now ?? Date.now;
+  }
+
+  /** A listing attempt against this backend failed, whatever the error's type. */
+  noteFailure(error: unknown): void {
+    this.failure = { error };
+    this.lastAttemptAt = this.now();
+  }
+
+  /** A listing actually reached this backend - clears the failure for every index sharing it. */
+  noteSuccess(): void {
+    this.failure = null;
+    this.lastAttemptAt = this.now();
+  }
+
+  /** Whether the last attempt failed - what stops a miss from degrading to "not found". */
+  hasFailure(): boolean {
+    return this.failure !== null;
+  }
+
+  /** A failure stands and its retry window has not rolled over: spend no request to re-learn it. */
+  blocked(): boolean {
+    return this.failure !== null && this.now() - this.lastAttemptAt < this.errorRetryAfterMs;
+  }
+
+  /**
+   * The cached failure, re-raised for a caller a throttle stopped from
+   * making its own attempt.
+   *
+   * A fresh error, not the cached object itself: one shared mutable Error
+   * handed to every caller in the window - now every caller on every area of
+   * the backend - is an object any logger or wrapper can annotate on the way
+   * out, poisoning it for everyone after, and its stack points at an attempt
+   * up to a window ago rather than at this call. The original travels along
+   * as `cause`, so nothing is lost. The type is always
+   * StorageUnavailableError - "the volume cannot answer right now" is
+   * exactly what this is, whatever shape the underlying throw had, and a
+   * caller must not have to know two error types to avoid deleting a good
+   * catalog row.
+   */
+  raise(driveNumber: number): StorageUnavailableError {
+    const cause = this.failure?.error;
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    const error = new StorageUnavailableError(
+      driveNumber,
+      `volume is unavailable - the last listing attempt failed: ${detail}`
+    );
+    (error as ErrorWithCause).cause = cause;
+    return error;
+  }
+}
+
 export interface NameIndexOptions {
   /** How long a MISS is trusted before it forces a re-list. A HIT never re-lists. */
   staleAfterMs?: number;
   /**
    * How long a FAILED attempt is trusted before another one is allowed.
-   * Deliberately far shorter than staleAfterMs - see invariant 5.
+   * Deliberately far shorter than staleAfterMs - see invariant 5. Ignored
+   * when `retryGate` is supplied: a shared gate carries its own window,
+   * because the window describes the backend, not this one area.
    */
   errorRetryAfterMs?: number;
+  /**
+   * The failure gate for this index's BACKEND, shared with every other area
+   * on it (invariant 6). NameIndexRegistry passes one per drive. Omitted -
+   * the direct-construction path - the index keeps a private gate and
+   * behaves exactly as a lone index always did.
+   */
+  retryGate?: BackendRetryGate;
   /** Injectable clock so tests can move time without waiting on it. Defaults to Date.now. */
   now?: () => number;
 }
@@ -151,25 +266,19 @@ export class NameIndex {
   /** Real keys sharing a lowercased relative path - the case-insensitive fallback pool. */
   private byLowerName = new Map<string, Set<string>>();
   private primed = false;
-  /** When a listing was last ATTEMPTED, success or failure - what both windows measure from. */
-  private lastAttemptAt = 0;
   /**
-   * The last attempt's failure, or null if the last attempt succeeded (or
-   * none has been made yet). This is what stops a throttled MISS from
-   * answering "not found" while the backend is known to be down - see
-   * invariant 4 above.
-   *
-   * Wrapped in an object rather than held as a bare value, so that an
-   * adapter throwing a falsy value (`throw null` is legal JavaScript) cannot
-   * read back as "the last attempt succeeded" and reopen the hole. The error
-   * inside is `unknown` on purpose: EVERY failure is remembered, not only
-   * the type we expect.
+   * When THIS area's listing was last confirmed against the backend - what
+   * the miss-trust window measures from, and per index because it describes
+   * this prefix's data, not the backend's health. A failed attempt does not
+   * advance it: nothing was confirmed. The failure that attempt produced is
+   * the shared gate's business.
    */
-  private lastAttemptFailure: { readonly error: unknown } | null = null;
+  private lastSuccessAt = 0;
   private inFlight: Promise<void> | null = null;
   private pendingOps: PendingOp[] = [];
   private readonly staleAfterMs: number;
-  private readonly errorRetryAfterMs: number;
+  /** Shared with every other area on this backend, unless this index was built without one. */
+  private readonly gate: BackendRetryGate;
   private readonly now: () => number;
 
   constructor(
@@ -178,8 +287,14 @@ export class NameIndex {
     options: NameIndexOptions = {}
   ) {
     this.staleAfterMs = options.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
-    this.errorRetryAfterMs = options.errorRetryAfterMs ?? DEFAULT_ERROR_RETRY_AFTER_MS;
     this.now = options.now ?? Date.now;
+    // No shared gate supplied means this index is the only one over its
+    // backend as far as anyone here knows, so a private gate is exactly
+    // right - and every existing direct-construction caller keeps the
+    // behaviour it had before the gate was shared at all.
+    this.gate =
+      options.retryGate ??
+      new BackendRetryGate({ errorRetryAfterMs: options.errorRetryAfterMs, now: this.now });
   }
 
   /** A path's location relative to this area's prefix - what gets lowercased and compared. */
@@ -188,43 +303,18 @@ export class NameIndex {
   }
 
   /**
-   * Is another listing attempt still off-limits?
+   * Has this area's listing aged past the point where a MISS is still worth
+   * trusting without re-checking?
    *
-   * The window depends on what the last attempt actually did (invariant 5):
-   * after a FAILURE it is the short outage-retry cadence, because the only
-   * question open is "is the backend back yet"; after a SUCCESS it is the
-   * long miss-trust window, because the only question open is "has someone
-   * outside this process written the bucket since", and asking that costs
-   * budget for no operational urgency.
+   * The two questions this class asks about time are different and now live
+   * apart (invariants 5 and 6). This one is a budget question about THIS
+   * area's data - "has someone outside this process written this prefix
+   * since we listed it" - so it is measured per index, from the last
+   * listing that actually succeeded, over the long window. "Is the backend
+   * back yet" is the gate's question, over the short one.
    */
-  private throttled(): boolean {
-    const windowMs = this.lastAttemptFailure !== null ? this.errorRetryAfterMs : this.staleAfterMs;
-    return this.now() - this.lastAttemptAt < windowMs;
-  }
-
-  /**
-   * The cached failure, re-raised for a caller that a throttle stopped from
-   * making its own attempt.
-   *
-   * A fresh error, not the cached object itself: one shared mutable Error
-   * handed to every caller in the window is an object any logger or wrapper
-   * can annotate on the way out, poisoning it for everyone after, and its
-   * stack points at an attempt up to a window ago rather than at this call.
-   * The original travels along as `cause`, so nothing is lost. The type is
-   * always StorageUnavailableError - "the volume cannot answer right now" is
-   * exactly what this is, whatever shape the underlying throw had, and a
-   * caller must not have to know two error types to avoid deleting a good
-   * catalog row.
-   */
-  private cachedFailure(): StorageUnavailableError {
-    const cause = this.lastAttemptFailure?.error;
-    const detail = cause instanceof Error ? cause.message : String(cause);
-    const error = new StorageUnavailableError(
-      this.backend.driveNumber,
-      `volume is unavailable - the last listing attempt failed: ${detail}`
-    );
-    (error as ErrorWithCause).cause = cause;
-    return error;
+  private missIsStale(): boolean {
+    return this.now() - this.lastSuccessAt >= this.staleAfterMs;
   }
 
   /**
@@ -258,9 +348,11 @@ export class NameIndex {
         this.exactByRelKey = exact;
         this.byLowerName = byLower;
         this.primed = true;
-        // This attempt confirmed the data - any previously cached failure
-        // no longer describes the backend's current state.
-        this.lastAttemptFailure = null;
+        // This listing confirmed THIS area's data, and confirmed the backend
+        // is answering - the second fact belongs to every area on it, so it
+        // clears the shared gate for all of them (invariant 6).
+        this.lastSuccessAt = this.now();
+        this.gate.noteSuccess();
       } catch (err) {
         // EVERY failure is remembered, whatever its type. Remembering only
         // StorageUnavailableError would leave an adapter bug, a malformed
@@ -270,14 +362,13 @@ export class NameIndex {
         // every single resolve() call. Same two holes as invariant 4's,
         // reached through a type check. The original error still propagates
         // untouched to this attempt's own caller.
-        this.lastAttemptFailure = { error: err };
+        //
+        // Recorded on the SHARED gate: the volume is down for every area on
+        // it, and each of them re-learning that at its own cost is the
+        // request amplification invariant 6 exists to stop.
+        this.gate.noteFailure(err);
         throw err;
       } finally {
-        // Runs on success AND failure - a down backend still advances the
-        // "last attempt" stamp, or every stale miss would keep re-trying
-        // for the length of the outage (invariant 4).
-        this.lastAttemptAt = this.now();
-
         // Cleared and drained HERE, inside this same synchronous stretch -
         // not in the outer refresh() caller's own finally below, which only
         // runs a microtask later once `await run` resumes. A note()/
@@ -321,35 +412,41 @@ export class NameIndex {
 
   async resolve(name: string): Promise<string | null> {
     if (!this.primed) {
-      // The last attempt failed and the retry window has not rolled over
-      // yet: re-raise what we already know rather than spending a request
-      // to learn it again. A cold-start outage would otherwise cost one
-      // list() per resolve() call, hit or miss - the throttle this class
-      // exists to provide, skipped entirely on this path. The window here
-      // is the SHORT one (invariant 5): an index that has never listed is
-      // wholly unusable while this stands, so it has to be seconds, not the
-      // hour that governs how long a successful listing's misses are
-      // trusted.
-      if (this.lastAttemptFailure !== null && this.throttled()) {
-        throw this.cachedFailure();
+      // The backend's last attempt failed and its retry window has not
+      // rolled over yet: re-raise what is already known rather than
+      // spending a request to learn it again. A cold-start outage would
+      // otherwise cost one list() per resolve() call, hit or miss - the
+      // throttle this class exists to provide, skipped entirely on this
+      // path. The gate's window is the SHORT one (invariant 5): an index
+      // that has never listed is wholly unusable while this stands, so it
+      // has to be seconds, not the hour that governs how long a successful
+      // listing's misses are trusted. And it is the BACKEND's gate
+      // (invariant 6), so an area cold-starting during an outage another
+      // area already discovered spends nothing to discover it again.
+      if (this.gate.blocked()) {
+        throw this.gate.raise(this.backend.driveNumber);
       }
       await this.refresh();
     }
 
     let found = this.lookup(name);
     if (found === null) {
-      if (!this.throttled()) {
+      // Two independent reasons not to list: the answer is young enough to
+      // trust, or the backend is believed down and its retry window has not
+      // rolled. Either way no request is spent - but a blocked gate still
+      // owes the caller the truth below, never a null.
+      if (this.missIsStale() && !this.gate.blocked()) {
         await this.refresh();
         found = this.lookup(name);
       }
-      if (found === null && this.lastAttemptFailure !== null) {
+      if (found === null && this.gate.hasFailure()) {
         // No candidates AND the last attempt failed: answering null here
         // would be indistinguishable from "no such object" to a caller
         // sweeping a catalog, and is exactly the wrong answer invariant 1
         // exists to prevent. Re-raise the cached failure instead - the short
         // retry window shortens how long this lasts, it never licenses the
         // cheaper answer.
-        throw this.cachedFailure();
+        throw this.gate.raise(this.backend.driveNumber);
       }
     }
     return found;

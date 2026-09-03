@@ -12,8 +12,27 @@
  * (`VolumeSet.byNumber`), built once at boot from Drives.info. Accepting a
  * VolumeSet keeps that mapping in one place instead of asking every caller
  * of this registry to also know how to find a backend by drive number.
+ *
+ * It also owns one BackendRetryGate per DRIVE, and hands it to every index
+ * it builds for that drive. An outage is a property of the bucket, not of a
+ * prefix: one bucket going down takes every area on it, and if each area
+ * kept its own "the backend is down, retry in 15s" it would cost one listing
+ * attempt per area per window instead of one between them - roughly nine
+ * simultaneously-down areas for a day would spend the entire 50,000-a-month
+ * ceiling on retries, and a board with a couple of dozen conference file
+ * areas on one bucket is ordinary. Sharing the gate also means the first
+ * area to find the volume healthy releases all the others at once.
+ *
+ * This registry is the natural owner rather than VolumeSet's VolumeState:
+ * it is already what constructs every index for a drive, so the gate reaches
+ * the indexes without any other code having to know it exists, whereas
+ * VolumeState is a plain inventory record - built by VolumeSet.fromBoard,
+ * read by placement and the admin screens - and putting live retry policy in
+ * it would oblige every present and future constructor of one to supply a
+ * gate that only the name index uses.
  */
-import { NameIndex } from './name-index';
+import { BackendRetryGate, NameIndex } from './name-index';
+import type { BackendRetryGateOptions } from './name-index';
 import type { VolumeSet } from './volume-set';
 
 function cacheKey(driveNumber: number, prefix: string): string {
@@ -22,8 +41,33 @@ function cacheKey(driveNumber: number, prefix: string): string {
 
 export class NameIndexRegistry {
   private readonly indexes = new Map<string, NameIndex>();
+  /**
+   * One per drive, never evicted: a gate is a few bytes, there are as many
+   * as there are drives, and `forget()` drops one AREA - the other areas on
+   * that drive are still sharing this gate and must keep sharing it.
+   */
+  private readonly gates = new Map<number, BackendRetryGate>();
 
-  constructor(private readonly volumes: VolumeSet) {}
+  /**
+   * `gateOptions` configures the per-drive retry gates - the outage cadence,
+   * and the clock they measure it on. Board-wide on purpose: the question
+   * they answer ("is this bucket back yet") is not per area. How long a MISS
+   * is trusted IS per area, and is a separate gap this registry still does
+   * not plumb.
+   */
+  constructor(
+    private readonly volumes: VolumeSet,
+    private readonly gateOptions: BackendRetryGateOptions = {}
+  ) {}
+
+  private gateFor(driveNumber: number): BackendRetryGate {
+    const existing = this.gates.get(driveNumber);
+    if (existing) return existing;
+
+    const gate = new BackendRetryGate(this.gateOptions);
+    this.gates.set(driveNumber, gate);
+    return gate;
+  }
 
   /** Memoised per `${driveNumber}:${prefix}` - same area, same instance. */
   forArea(driveNumber: number, prefix: string): NameIndex {
@@ -36,7 +80,7 @@ export class NameIndexRegistry {
       throw new Error(`NameIndexRegistry: no volume configured for drive ${driveNumber}`);
     }
 
-    const index = new NameIndex(state.backend, prefix);
+    const index = new NameIndex(state.backend, prefix, { retryGate: this.gateFor(driveNumber) });
     this.indexes.set(key, index);
     return index;
   }
