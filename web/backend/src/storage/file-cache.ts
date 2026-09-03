@@ -172,6 +172,13 @@ const TEMP_SUFFIX_PATTERN = /\.tmp-(\d+)-\d+$/;
 
 let tempCounter = 0;
 
+interface EvictionCandidate {
+  full: string;
+  size: number;
+  used: number;
+  evictable: boolean;
+}
+
 export class FileCache {
   private readonly cacheDir: string;
   private readonly volumes: VolumeSet;
@@ -207,6 +214,15 @@ export class FileCache {
 
   private shortfallBytes = 0;
   private warnedShortfall = false;
+  /**
+   * Re-arming, NOT sticky. The deleted eviction-disable latch was set for the
+   * life of the process; this one is per-episode and clears the moment
+   * `.pending/` reads cleanly again. The ENOSPC argument for never switching
+   * eviction off is about WRITE failures - it does not apply to failing to
+   * READ one directory, and a pin record that cannot be listed is precisely
+   * the case where deleting nothing is the only safe answer.
+   */
+  private warnedPinRecordUnreadable = false;
 
   constructor(opts: FileCacheOptions) {
     this.cacheDir = opts.cacheDir;
@@ -437,9 +453,22 @@ export class FileCache {
       }
 
       const marker = this.readMarker(full);
-      const localPath = marker?.localPath ?? this.localPathFor(located.driveNumber, located.key);
+      const localPath = this.stagingPathUnderCache(marker?.localPath, located.driveNumber, located.key);
 
       if (!fs.existsSync(localPath)) {
+        if (!marker) {
+          // The marker did not parse, so `localPath` above is a GUESS - the
+          // canonical path - and the real staged file may be somewhere else
+          // entirely and perfectly intact. Unlinking here would say "the file
+          // it protected is gone" when what is actually gone is the retry.
+          // Leave it: an over-pinned canonical path costs disk, a forgotten
+          // pending upload costs the write.
+          console.warn(
+            `[storage] pending marker ${full} could not be read and nothing is staged at ${localPath}; ` +
+              `leaving the marker in place - its upload cannot be replayed and a sysop should look`
+          );
+          return;
+        }
         try {
           fs.unlinkSync(full);
         } catch {
@@ -458,6 +487,11 @@ export class FileCache {
         mtimeMs: marker?.mtimeMs,
       });
       recovered.push(id);
+    }, (dir, err) => {
+      console.warn(
+        `[storage] cannot read the pending record at ${dir}: ${String(err)}; ` +
+          `unfinished uploads recorded there will not be replayed and eviction will refuse to run`
+      );
     });
 
     if (recovered.length > 0) {
@@ -474,18 +508,35 @@ export class FileCache {
     }
   }
 
-  private walkFiles(dir: string, visit: (full: string, name: string) => void): void {
+  /**
+   * `onError` is called for a directory that exists but CANNOT BE READ, and
+   * never for one that is merely absent.
+   *
+   * The distinction is load-bearing for the pin record. Swallowing every
+   * readdir failure alike makes "there are no markers" and "the markers cannot
+   * be listed" the same answer, and the second answer must never let `evictTo`
+   * conclude that a staged, un-uploaded payload is a clean cached copy. ENOENT
+   * is the ordinary empty case - a cache that has never had a pending upload
+   * has no `.pending/` at all. EACCES, ENOTDIR, EIO and friends are not.
+   */
+  private walkFiles(
+    dir: string,
+    visit: (full: string, name: string) => void,
+    onError?: (dir: string, err: NodeJS.ErrnoException) => void
+  ): void {
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
+    } catch (err) {
+      const errno = err as NodeJS.ErrnoException;
+      if (errno.code !== 'ENOENT' && onError) onError(dir, errno);
       return;
     }
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         if (this.nonPayloadDirs.has(path.resolve(full))) continue;
-        this.walkFiles(full, visit);
+        this.walkFiles(full, visit, onError);
       } else if (entry.isFile()) {
         visit(full, entry.name);
       }
@@ -506,10 +557,12 @@ export class FileCache {
    */
   private park(entry: PendingEntry, why: string): void {
     const id = this.id(entry.driveNumber, entry.key);
-    const destination = this.parkedPathFor(entry.driveNumber, entry.key);
+    const base = this.parkedPathFor(entry.driveNumber, entry.key);
+    let destination = base;
     try {
-      fs.mkdirSync(path.dirname(destination), { recursive: true });
-      fs.renameSync(entry.localPath, destination);
+      fs.mkdirSync(path.dirname(base), { recursive: true });
+      destination = this.linkIntoParked(entry.localPath, base);
+      fs.unlinkSync(entry.localPath);
       this.dirty.delete(id);
       this.removeMarker(entry.driveNumber, entry.key);
       console.warn(
@@ -527,6 +580,59 @@ export class FileCache {
           `uploaded and stays pinned where it is, pending a sysop.`
       );
     }
+  }
+
+  /**
+   * Hard-links a staged file into `.parked/` under a name nothing else holds,
+   * and answers where it landed.
+   *
+   * `rename` would be the obvious call and is WRONG here: POSIX rename replaces
+   * an existing regular file silently, so a second crash-truncation episode on
+   * one key would park over the first park - destroying bytes that by
+   * construction exist nowhere else and whose whole purpose is to wait for a
+   * person. `link` fails with EEXIST instead of overwriting, so the collision
+   * is detected rather than papered over, and it is atomic, so two nodes
+   * parking at once cannot both win the same name. The source is unlinked only
+   * after the link succeeds; a crash in between leaves both names for one
+   * inode, which is the safe direction.
+   */
+  private linkIntoParked(localPath: string, base: string): string {
+    for (let attempt = 0; attempt < 1000; attempt++) {
+      const candidate = attempt === 0 ? base : `${base}.${attempt + 1}`;
+      try {
+        fs.linkSync(localPath, candidate);
+        return candidate;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+      }
+    }
+    throw new Error(`no free parked name for ${base} after 1000 attempts`);
+  }
+
+  /**
+   * A staging path this cache is willing to act on, or the canonical one.
+   *
+   * A recovered marker's `localPath` drives three dangerous things: `writeBack`
+   * uploads whatever is there to the pool, `ensureLocal` hands it to a door as
+   * this object's bytes, and `park` renames it into `.parked/`. A marker is a
+   * file in a directory a sysop can write to, so its `localPath` is input, not
+   * fact. Anything that does not resolve under the cache directory is refused
+   * and the canonical path used instead - which every legitimate staging path,
+   * here and in Task 10, already is.
+   */
+  private stagingPathUnderCache(candidate: string | undefined, driveNumber: number, key: string): string {
+    const canonical = this.localPathFor(driveNumber, key);
+    if (candidate === undefined) return canonical;
+    const resolved = path.resolve(candidate);
+    const rel = path.relative(path.resolve(this.cacheDir), resolved);
+    if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
+      console.warn(
+        `[storage] marker for ${this.id(driveNumber, key)} names ${candidate}, which is outside the cache ` +
+          `directory; ignoring it and using ${canonical}`
+      );
+      return canonical;
+    }
+    return resolved;
   }
 
   /**
@@ -893,8 +999,24 @@ export class FileCache {
    * own rename.
    */
   evictTo(maxBytes: number = this.maxBytes): void {
-    const files = this.scanForEviction();
+    const { files, pinKnown } = this.scanForEviction();
     let total = files.reduce((sum, f) => sum + f.size, 0);
+
+    if (!pinKnown) {
+      // The payload tree scanned fine, so the number an admin plots stays live
+      // exactly when it matters; what is unknown is which of these files are
+      // staged and un-uploaded. Deleting on a guess here breaks the one rule.
+      this.shortfallBytes = Math.max(0, total - maxBytes);
+      if (!this.warnedPinRecordUnreadable) {
+        this.warnedPinRecordUnreadable = true;
+        console.warn(
+          `[storage] the pending record under ${this.pendingRoot} cannot be listed, so no file can be proven ` +
+            `safe to delete; evicting nothing until it reads again`
+        );
+      }
+      return;
+    }
+    this.warnedPinRecordUnreadable = false;
 
     for (const file of files.filter((f) => f.evictable).sort((a, b) => a.used - b.used)) {
       if (total <= maxBytes) break;
@@ -921,18 +1043,19 @@ export class FileCache {
     );
   }
 
-  private scanForEviction(): Array<{ full: string; size: number; used: number; evictable: boolean }> {
+  private scanForEviction(): { files: EvictionCandidate[]; pinKnown: boolean } {
     // The pending set as it stands ON DISK, not merely as this process knows
     // it: another node staging a file into the shared cache directory pins it
     // here too. One bounded walk of `.pending/` answers the pin test for every
     // payload, with no per-file existsSync and no sibling reasoning.
-    const pinnedIds = this.pendingIdsOnDisk();
+    const onDisk = this.pendingIdsOnDisk();
+    const pinnedIds = onDisk ?? new Set<string>();
     for (const id of this.dirty.keys()) pinnedIds.add(id);
     // Staged files that are NOT at `<drive>/<key>` have no id, so they are
     // already un-evictable; this covers them by path as well, cheaply.
     const pinnedPaths = new Set([...this.dirty.values()].map((e) => path.resolve(e.localPath)));
 
-    const files: Array<{ full: string; size: number; used: number; evictable: boolean }> = [];
+    const files: EvictionCandidate[] = [];
 
     this.walkFiles(this.cacheDir, (full, name) => {
       const temp = TEMP_SUFFIX_PATTERN.exec(name);
@@ -959,18 +1082,35 @@ export class FileCache {
       files.push({ full, size, used: Math.max(atime, this.lastUsed.get(resolved) ?? 0), evictable });
     });
 
-    return files;
+    return { files, pinKnown: onDisk !== null };
   }
 
-  /** Every object with a marker on disk, by id taken from the marker's path. */
-  private pendingIdsOnDisk(): Set<string> {
+  /**
+   * Every object with a marker on disk, by id taken from the marker's path -
+   * or NULL when the record could not be read.
+   *
+   * Null is not "nothing is pinned". An absent `.pending/` is an empty set: a
+   * cache that has never had a pending upload has no such directory. A
+   * `.pending/` that exists and cannot be listed is unknown, and the two must
+   * not collapse into the same answer, because the second one silently turns
+   * every staged, un-uploaded payload from a previous boot or another node
+   * into a clean, re-fetchable copy.
+   */
+  private pendingIdsOnDisk(): Set<string> | null {
     const ids = new Set<string>();
-    this.walkFiles(this.pendingRoot, (full, name) => {
-      if (TEMP_SUFFIX_PATTERN.test(name)) return;
-      const located = this.idFromMarkerPath(full);
-      if (located) ids.add(this.id(located.driveNumber, located.key));
-    });
-    return ids;
+    let readable = true;
+    this.walkFiles(
+      this.pendingRoot,
+      (full, name) => {
+        if (TEMP_SUFFIX_PATTERN.test(name)) return;
+        const located = this.idFromMarkerPath(full);
+        if (located) ids.add(this.id(located.driveNumber, located.key));
+      },
+      () => {
+        readable = false;
+      }
+    );
+    return readable ? ids : null;
   }
 }
 

@@ -337,6 +337,61 @@ describe('FileCache keeps its record out of the payload namespace', () => {
     expect(fs.existsSync(fresh)).toBe(false);
   });
 
+  it('ignores a marker localPath that points outside the cache directory', async () => {
+    const { backend, dir, volumes } = setup();
+    // A marker is a file in a directory a sysop can write to, so its
+    // `localPath` is input, not fact - and that field drives writeBack (upload
+    // these bytes), ensureLocal (serve this path to a door) and park (rename
+    // this file into .parked/).
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'filecache-outside-'));
+    const victim = path.join(outside, 'not-ours.bin');
+    fs.writeFileSync(victim, 'someone elses file');
+    const st = fs.statSync(victim);
+
+    const marker = markerPath(dir, 2, 'Files/DOOR.DAT');
+    fs.mkdirSync(path.dirname(marker), { recursive: true });
+    fs.writeFileSync(
+      marker,
+      JSON.stringify({
+        driveNumber: 2,
+        key: 'Files/DOOR.DAT',
+        localPath: victim,
+        size: st.size,
+        mtimeMs: st.mtimeMs,
+      })
+    );
+
+    const reborn = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+    await reborn.flushPending();
+
+    // Nothing outside the cache directory was uploaded, moved or served.
+    expect(backend.puts).toBe(0);
+    expect(fs.readFileSync(victim, 'utf8')).toBe('someone elses file');
+    expect(reborn.parkedFiles()).toEqual([]);
+  });
+
+  it('keeps an unreadable marker whose staged file is not at the canonical path', async () => {
+    const { cache, backend, dir, volumes } = setup();
+    // Staged somewhere else under the cache directory, which writeBack allows.
+    const staged = path.join(dir, 'staged-elsewhere.bin');
+    fs.writeFileSync(staged, 'the only copy');
+    backend.down = true;
+    await expect(cache.writeBack(2, 'Files/DOOR.DAT', staged)).rejects.toThrow();
+
+    // A torn marker that no longer parses. The canonical path holds nothing,
+    // but that is a GUESS about where the bytes are, not knowledge.
+    const marker = markerPath(dir, 2, 'Files/DOOR.DAT');
+    fs.writeFileSync(marker, '{ "driveNumber": 2, "key"');
+
+    const reborn = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+
+    // Unlinking here would log "the staged file it protected is gone", which is
+    // false: the bytes are fine and it is the RETRY that would be forgotten.
+    expect(fs.existsSync(marker)).toBe(true);
+    reborn.evictTo(0);
+    expect(fs.readFileSync(staged, 'utf8')).toBe('the only copy');
+  });
+
   it('refuses to parse a marker far too large to be one', async () => {
     const { cache, backend, dir, volumes } = setup();
     await backend.put('Files/BIG.DAT', Buffer.alloc(400, 1)); // the good object in the pool
@@ -373,6 +428,54 @@ describe('FileCache keeps its record out of the payload namespace', () => {
     await reborn.flushPending();
     expect((await backend.get('Files/BIG.DAT'))[0]).toBe(1);
     expect(fs.existsSync(parkedPath(dir, 2, 'Files/BIG.DAT'))).toBe(true);
+  });
+});
+
+describe('FileCache when the pin record cannot be read', () => {
+  it('deletes nothing at all, and does not mistake unreadable for empty', async () => {
+    const { cache, backend, dir, volumes } = setup();
+    // The shape Task 10 produces: staged at the cache path, upload failed.
+    const local = cache.localPathFor(2, 'Files/DOOR.DAT');
+    fs.mkdirSync(path.dirname(local), { recursive: true });
+    fs.writeFileSync(local, Buffer.alloc(400, 9));
+    backend.down = true;
+    await expect(cache.writeBack(2, 'Files/DOOR.DAT', local)).rejects.toThrow();
+
+    // A stray file where the pending directory belongs. `.pending/` now EXISTS
+    // and cannot be listed - which is a different answer from a cache that has
+    // never had a pending upload and has no `.pending/` at all. Collapsing the
+    // two makes evictTo conclude nothing is pinned and delete a staged,
+    // un-uploaded payload: the cardinal invariant.
+    fs.rmSync(path.join(dir, '.pending'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.pending'), '');
+
+    const reborn = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+    // It recovered nothing, so its own map protects nothing here.
+    expect(reborn.isDirty(2, 'Files/DOOR.DAT')).toBe(false);
+
+    reborn.evictTo(0);
+
+    expect(fs.existsSync(local)).toBe(true);
+    // And the one number an admin surface plots stays live while it matters.
+    expect(reborn.overBudgetBytes()).toBe(400);
+  });
+
+  it('starts evicting again once the record reads', async () => {
+    const { cache, backend, dir, volumes } = setup();
+    await backend.put('Files/CLEAN.LHA', Buffer.alloc(400, 1));
+    const clean = await cache.ensureLocal(2, 'Files/CLEAN.LHA');
+
+    // Unreadable: nothing is deleted...
+    fs.writeFileSync(path.join(dir, '.pending'), '');
+    cache.evictTo(0);
+    expect(fs.existsSync(clean)).toBe(true);
+
+    // ...and this is NOT the sticky latch that was deleted. The moment the
+    // record reads again - here, by removing the stray file - eviction resumes
+    // in the same process. A read failure must not be able to fill the disk.
+    fs.unlinkSync(path.join(dir, '.pending'));
+    cache.evictTo(0);
+    expect(fs.existsSync(clean)).toBe(false);
   });
 });
 
@@ -450,6 +553,33 @@ describe('FileCache parking is a move, not a flag', () => {
     expect(cache.isDirty(2, 'Files/EARLY.DAT')).toBe(false);
     expect(fs.existsSync(local)).toBe(false);
     expect(fs.readFileSync(parkedPath(dir, 2, 'Files/EARLY.DAT')).length).toBe(400);
+  });
+
+  it('never parks over an earlier park of the same key', async () => {
+    const { cache, backend, dir, volumes } = setup();
+    const local = cache.localPathFor(2, 'Files/DOOR.DAT');
+    fs.mkdirSync(path.dirname(local), { recursive: true });
+
+    // First crash-truncation episode on this key.
+    fs.writeFileSync(local, Buffer.alloc(400, 1));
+    backend.down = true;
+    await expect(cache.writeBack(2, 'Files/DOOR.DAT', local)).rejects.toThrow();
+    fs.writeFileSync(local, Buffer.alloc(111, 1));
+    const first = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+    await first.flushPending();
+
+    // A second, later. POSIX rename would replace the first park's bytes
+    // silently - bytes that by construction exist nowhere else and whose whole
+    // purpose is to wait for a person to look at them.
+    fs.writeFileSync(local, Buffer.alloc(400, 2));
+    await expect(first.writeBack(2, 'Files/DOOR.DAT', local)).rejects.toThrow();
+    fs.writeFileSync(local, Buffer.alloc(222, 2));
+    const second = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+    await second.flushPending();
+
+    const parked = second.parkedFiles();
+    expect(parked).toHaveLength(2);
+    expect(parked.map((f) => fs.readFileSync(f.localPath).length).sort((a, b) => a - b)).toEqual([111, 222]);
   });
 
   it('still replays a staged file that matches its marker', async () => {
@@ -578,6 +708,15 @@ describe('blockOn is actually wired to blockOutcome', () => {
     return body.slice(afterLoop);
   }
 
+  function fulfilArmOfBlockOn(): string {
+    const body = bodyOfBlockOn();
+    const start = body.indexOf('work.then(');
+    expect(start).toBeGreaterThan(-1);
+    const rejectArm = body.indexOf('(error: unknown) =>', start);
+    expect(rejectArm).toBeGreaterThan(-1);
+    return body.slice(start, rejectArm);
+  }
+
   function timerCallbackOfBlockOn(): string {
     const body = bodyOfBlockOn();
     const armed = body.indexOf('setTimeout(');
@@ -604,6 +743,13 @@ describe('blockOn is actually wired to blockOutcome', () => {
     // method, so a second assignment anywhere fails.
     const occurrences = bodyOfBlockOn().split('succeeded = true').length - 1;
     expect(occurrences).toBe(1);
+  });
+
+  it('sets succeeded inside the fulfil handler, not before the loop', () => {
+    // "Exactly one, and not in the timer" still passes if the single
+    // assignment is HOISTED to just before loopWhile - which would report
+    // every timeout as a value and hand a door `undefined` as a file path.
+    expect(fulfilArmOfBlockOn()).toContain('succeeded = true');
   });
 
   it('never sets succeeded from the bounding timer', () => {
