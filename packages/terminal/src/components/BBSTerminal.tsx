@@ -7,22 +7,20 @@ import { reconnectPolicy, shouldReconnectNow } from '../utils/reconnect-policy';
 import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
 import {
-  DEFAULT_ZOOM,
+  FIT_TO_WINDOW,
   ZOOM_CORNERS,
-  clampZoom,
+  clampFraction,
   cornerAt,
   cursorForCorner,
   dragZoom,
-  fitZoomToViewport,
   isBezelPoint,
   isZoomWheel,
   nextPreset,
   readStoredZoom,
   wheelZoom,
   writeStoredZoom,
-  zoomedBoxMaxWidth,
-  zoomedFontSize,
   type ZoomCorner,
+  type ZoomRect,
 } from '../utils/terminal-zoom';
 import {
   DEFAULT_BBS_FONT,
@@ -94,6 +92,33 @@ interface BBSTerminalProps {
    * strip covers the bottom rows.
    */
   fillParent?: boolean;
+  /**
+   * Whether the viewer may override the fit with the zoom gestures
+   * (Cmd/Ctrl+wheel and pinch, a bezel-corner drag, a double-click on the
+   * bezel). Default true.
+   *
+   * The BBS page turns it OFF for a handheld session: refit() already fits
+   * the grid to the phone, there is no pointer to put on a corner, and a
+   * handheld that wrote the override would erase the fraction the same
+   * viewer chose at their desk.
+   */
+  zoomEnabled?: boolean;
+  /**
+   * Fires with the viewer's zoom fraction - their override as a fraction of
+   * the fit, 1 meaning "follow the window" - whenever it changes, and once on
+   * mount with whatever this browser remembered. The host page owns the fit
+   * and does the one multiply; this component never scales the size it is
+   * given.
+   */
+  onZoomChange?: (fraction: number) => void;
+  /**
+   * Fires when the terminal switches between the fixed 80x25 screen and a
+   * door's wide/fullscreen mode. The host page needs it because the two are
+   * sized by different rules: the fixed screen follows the window, while a
+   * wide door's column count comes from its cell size and must not inherit
+   * the fit.
+   */
+  onTerminalModeChange?: (mode: 'fixed' | 'wide') => void;
   /**
    * Fixed 80x25 mode only: centre the terminal box in the host's box.
    *
@@ -194,6 +219,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   forcedMode,
   keepFocused,
   fillParent,
+  zoomEnabled = true,
+  onZoomChange,
+  onTerminalModeChange,
   centerInHost = true,
   onDoorChange,
   onSurfaceChange,
@@ -215,42 +243,37 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const [terminalMode, setTerminalMode] = useState<'fixed' | 'wide'>('fixed');
 
   /**
-   * The viewer's zoom FACTOR on the fixed 80x25 screen (and on the 40x25
-   * PETSCII canvas). Not a second font size: the page owns the base size -
-   * the desktop default, or the handheld calibration refit() measures - and
-   * this scales it exactly once, in `effectiveFontSize` below. See
-   * utils/terminal-zoom.ts for why zoom is a factor and not a size.
+   * The viewer's OVERRIDE, as a fraction of the fit (1 = follow the window).
+   *
+   * Not a size and not a multiplier on a constant: the page computes the FIT
+   * - the largest cell size at which the whole 80x25 grid plus its bezel
+   * fits the viewport - and multiplies it by this fraction, once. Keeping the
+   * override relative is what makes it survive a window resize. See
+   * utils/terminal-zoom.ts.
    *
    * Seeded from this browser's last session; an absent or unusable stored
-   * value is 1x, which is the picker's own size and today's board exactly.
+   * value means "follow the window".
    */
-  const [zoom, setZoom] = useState<number>(() => readStoredZoom() ?? DEFAULT_ZOOM);
-  const zoomRef = useRef(zoom);
-  zoomRef.current = zoom;
+  const [zoomFraction, setZoomFraction] = useState<number>(
+    () => (zoomEnabled ? readStoredZoom() ?? FIT_TO_WINDOW : FIT_TO_WINDOW),
+  );
+  const zoomFractionRef = useRef(zoomFraction);
+  zoomFractionRef.current = zoomFraction;
+  const onZoomChangeRef = useRef(onZoomChange);
+  onZoomChangeRef.current = onZoomChange;
+  const onTerminalModeChangeRef = useRef(onTerminalModeChange);
+  onTerminalModeChangeRef.current = onTerminalModeChange;
   /** Which corner the pointer is on (or dragging), for the cursor and the marks. */
   const [activeCorner, setActiveCorner] = useState<ZoomCorner | null>(null);
   /** The bezelled box: what the zoom gestures are measured against. */
   const zoomBoxRef = useRef<HTMLDivElement>(null);
 
-  /**
-   * The ONE cell size that reaches xterm: the page's base size scaled by the
-   * viewer's zoom. At 1x this is the base size unchanged.
-   */
-  const effectiveFontSize = zoomedFontSize(
-    fontSize,
-    // A door in wide/fullscreen mode owns its own geometry - FitAddon picks
-    // the column count from the cell size there - so zoom stays out of it
-    // entirely and that mode renders exactly as it always has.
-    terminalMode === 'fixed' ? zoom : DEFAULT_ZOOM,
-  );
-
   // Tracks the current calibrated font size so set-font / font-preference events
-  // don't override the mobile-calibrated size with the hardcoded desktop 16px value.
-  // It carries the ZOOMED size, so every existing consumer of the ref - the
-  // xterm constructor, the post-open settle, applyFont's size argument - picks
-  // the zoom up without a second size path being invented for it.
-  const fontSizeRef = useRef(effectiveFontSize);
-  fontSizeRef.current = effectiveFontSize;
+  // don't override the calibrated size with a hardcoded default. The prop is
+  // already the EFFECTIVE size - the page's fit times the viewer's fraction -
+  // so there is exactly one multiply and it does not happen here.
+  const fontSizeRef = useRef(fontSize);
+  fontSizeRef.current = fontSize;
 
   // Login state tracking
   const loginState = useRef<
@@ -803,8 +826,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const initialFont = readCachedFont() ?? DEFAULT_BBS_FONT;
     const term = new Terminal({
       fontFamily: fontFamilyFor(initialFont),
-      // The ref, not the prop: it carries the base size already scaled by the
-      // viewer's remembered zoom, so a zoomed session opens zoomed.
       fontSize: fontSizeRef.current,
       lineHeight: lineHeightFor(initialFont),
       theme: XTERM_CONFIG.theme,
@@ -2273,6 +2294,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // Update both local variable and state (state triggers re-render to update container CSS)
       terminalMode = effectiveMode;
       setTerminalMode(effectiveMode);
+      onTerminalModeChangeRef.current?.(effectiveMode);
 
       if (effectiveMode === 'fixed') {
         // Switching to fixed mode - resize to 80x25 immediately
@@ -2867,27 +2889,50 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backendUrl, showConnectionError, onConnectionError, onConnect, onDisconnect]);
 
-  // Handle cell-size changes - the page's base size, the viewer's zoom, or both.
+  // Handle cell-size changes - the fit, the viewer's override, or both. The
+  // page hands the effective size down; nothing here multiplies it.
   useEffect(() => {
     if (terminalInstance.current) {
-      terminalInstance.current.options.fontSize = effectiveFontSize;
+      terminalInstance.current.options.fontSize = fontSize;
     }
-  }, [effectiveFontSize]);
+  }, [fontSize]);
+
+  // Tell the page which fraction of the fit the viewer is on, so it can size
+  // the terminal. Fires once on mount with whatever this browser remembered.
+  useEffect(() => {
+    onZoomChangeRef.current?.(zoomEnabled ? zoomFraction : FIT_TO_WINDOW);
+  }, [zoomFraction, zoomEnabled]);
 
   /**
-   * Remember the zoom, without writing localStorage sixty times a second.
+   * The bezelled box's rectangle, cached.
    *
-   * A pinch or a corner drag commits a new zoom every animation frame; the
-   * value worth keeping is the one the gesture settles on, so the write
-   * trails the last change by a moment.
+   * `onHoverMove` used to call getBoundingClientRect() on every pointermove
+   * over the whole box - a forced synchronous layout per pointer sample,
+   * which is the class of bug behind the DOORMAN freeze (see the mouse
+   * throttle further down). The box only moves when the window resizes or
+   * the cell size changes, so the rect is read then and on entry, and the
+   * hover test is pure arithmetic.
    */
+  const boxRectRef = useRef<ZoomRect | null>(null);
+  const readBoxRect = useCallback((): ZoomRect | null => {
+    const box = zoomBoxRef.current;
+    if (!box) return null;
+    const rect = box.getBoundingClientRect();
+    const cached = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+    boxRectRef.current = cached;
+    return cached;
+  }, []);
   useEffect(() => {
-    const timer = window.setTimeout(() => writeStoredZoom(zoom), 200);
-    return () => window.clearTimeout(timer);
-  }, [zoom]);
+    boxRectRef.current = null; // the box just changed size; re-read on demand
+  }, [fontSize, surface, terminalMode]);
 
   /**
    * The three zoom inputs, all of them on the bezelled box and nowhere else.
+   *
+   * They set an OVERRIDE, expressed as a fraction of the fit - see
+   * utils/terminal-zoom.ts for why a fraction and not a size. The default,
+   * and the home step of the ladder, is FIT_TO_WINDOW: follow the browser
+   * window.
    *
    * 1. Cmd+wheel (macOS) / Ctrl+wheel, and a trackpad pinch - which every
    *    browser delivers as a wheel event with `ctrlKey` synthesised true.
@@ -2895,29 +2940,35 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
    *    keeps ordinary browser page zoom. The listener is in the CAPTURE
    *    phase and stops the event, because the door's own wheel forwarder
    *    (`mouse-wheel`, attached to `.xterm-screen` inside this box) would
-   *    otherwise report every pinch to the running door as a scroll.
-   *    Deltas accumulate and are applied once per animation frame, so a
-   *    fast pinch costs one re-measure per frame rather than one per event.
-   * 2. A drag from within CORNER_HIT_PX of any corner. The pointer picks up
-   *    the diagonal resize cursor, a bracket mark fades in at that corner,
-   *    and the zoom follows the pointer's distance from the box centre - so
-   *    the box grows about its middle. Escape puts the zoom back where the
-   *    drag found it.
+   *    otherwise report every pinch to the running door as a scroll. Deltas
+   *    accumulate and are applied once per animation frame.
+   * 2. A drag from within CORNER_HIT_PX of any corner: the diagonal resize
+   *    cursor, a bracket mark that fades in at that corner, and the fraction
+   *    following the pointer's distance from the box centre, so the box
+   *    scales about its middle. Escape puts it back.
    * 3. A double-click on the BEZEL - the padding ring, never the screen,
-   *    which belongs to the BBS - cycles the preset ladder.
+   *    which belongs to the BBS - walks the preset ladder and home to fit.
    *
-   * Fixed mode only: a wide/fullscreen door owns its own geometry.
+   * Off entirely when the host disables it (a handheld already fits itself,
+   * and letting it write the override would erase the desktop's), and in
+   * wide/fullscreen mode, where a door owns its own geometry.
    */
   useEffect(() => {
     const box = zoomBoxRef.current;
-    if (!box || terminalMode !== 'fixed') return;
+    if (!box || !zoomEnabled || terminalMode !== 'fixed') return;
 
-    /** The one place a new zoom is accepted. */
+    /**
+     * The one place a new fraction is accepted. Persisting happens HERE
+     * rather than in an effect on the value: only a change the viewer made
+     * is worth remembering, and a mount that changed nothing must not stamp
+     * the default over the value they chose on another day.
+     */
     const commit = (next: number) => {
-      const clamped = clampZoom(next);
-      if (clamped === zoomRef.current) return;
-      zoomRef.current = clamped;
-      setZoom(clamped);
+      const clamped = clampFraction(next);
+      if (clamped === zoomFractionRef.current) return;
+      zoomFractionRef.current = clamped;
+      setZoomFraction(clamped);
+      writeStoredZoom(clamped);
     };
 
     // --- 1. wheel / pinch -------------------------------------------------
@@ -2933,7 +2984,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         wheelFrame = null;
         const delta = pendingDelta;
         pendingDelta = 0;
-        commit(wheelZoom(zoomRef.current, delta));
+        commit(wheelZoom(zoomFractionRef.current, delta));
       });
     };
     box.addEventListener('wheel', onWheel, { capture: true, passive: false });
@@ -2941,6 +2992,27 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // --- 2. corner drag ---------------------------------------------------
     let dragging = false;
     let dragFrame: number | null = null;
+    let dragRect: ZoomRect = { left: 0, top: 0, right: 0, bottom: 0 };
+    let dragStart = { x: 0, y: 0 };
+    let dragStartFraction = FIT_TO_WINDOW;
+    let dragLatest = { x: 0, y: 0 };
+    function onDragMove(ev: PointerEvent): void {
+      dragLatest = { x: ev.clientX, y: ev.clientY };
+      if (dragFrame !== null) return;
+      dragFrame = requestAnimationFrame(() => {
+        dragFrame = null;
+        commit(dragZoom(dragStartFraction, dragRect, dragStart, dragLatest));
+      });
+    }
+    function onDragUp(): void {
+      endDrag(null);
+    }
+    function onDragKey(ev: KeyboardEvent): void {
+      if (ev.key !== 'Escape') return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      endDrag(dragStartFraction);
+    }
     const endDrag = (restoreTo: number | null) => {
       if (!dragging) return;
       dragging = false;
@@ -2955,41 +3027,21 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       setActiveCorner(null);
       if (restoreTo !== null) commit(restoreTo);
     };
-    let dragRect = { left: 0, top: 0, right: 0, bottom: 0 };
-    let dragStart = { x: 0, y: 0 };
-    let dragStartZoom = DEFAULT_ZOOM;
-    let dragLatest = { x: 0, y: 0 };
-    function onDragMove(ev: PointerEvent): void {
-      dragLatest = { x: ev.clientX, y: ev.clientY };
-      if (dragFrame !== null) return;
-      dragFrame = requestAnimationFrame(() => {
-        dragFrame = null;
-        commit(dragZoom(dragStartZoom, dragRect, dragStart, dragLatest));
-      });
-    }
-    function onDragUp(): void {
-      endDrag(null);
-    }
-    function onDragKey(ev: KeyboardEvent): void {
-      if (ev.key !== 'Escape') return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      endDrag(dragStartZoom);
-    }
     const onPointerDown = (ev: PointerEvent) => {
-      const rect = box.getBoundingClientRect();
+      const rect = readBoxRect();
+      if (!rect) return;
       const corner = cornerAt({ x: ev.clientX, y: ev.clientY }, rect);
       if (!corner) return;
       ev.preventDefault();
       ev.stopPropagation();
       dragging = true;
-      // The rect is read ONCE: the box grows under the pointer during the
-      // drag, and re-reading it every move would feed the gesture its own
-      // output and make the zoom run away.
-      dragRect = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+      // The rect is read ONCE: the box changes size under the pointer during
+      // the drag, and re-reading it every move would feed the gesture its own
+      // output and make the scaling run away.
+      dragRect = rect;
       dragStart = { x: ev.clientX, y: ev.clientY };
       dragLatest = dragStart;
-      dragStartZoom = zoomRef.current;
+      dragStartFraction = zoomFractionRef.current;
       setActiveCorner(corner);
       window.addEventListener('pointermove', onDragMove);
       window.addEventListener('pointerup', onDragUp);
@@ -3000,26 +3052,38 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Hover: the corner marks and the diagonal cursor appear only when the
     // pointer is actually on a corner - the box carries no visible chrome
-    // otherwise.
+    // otherwise. The rect comes from the cache, never from a measurement per
+    // pointer sample.
+    const onHoverEnter = () => { readBoxRect(); };
     const onHoverMove = (ev: PointerEvent) => {
       if (dragging) return;
-      const corner = cornerAt({ x: ev.clientX, y: ev.clientY }, box.getBoundingClientRect());
+      const rect = boxRectRef.current ?? readBoxRect();
+      if (!rect) return;
+      const corner = cornerAt({ x: ev.clientX, y: ev.clientY }, rect);
       setActiveCorner((previous) => (previous === corner ? previous : corner));
     };
     const onHoverLeave = () => {
       if (!dragging) setActiveCorner(null);
     };
+    box.addEventListener('pointerenter', onHoverEnter);
     box.addEventListener('pointermove', onHoverMove);
     box.addEventListener('pointerleave', onHoverLeave);
 
+    // The box moves with the window; drop the cached rect rather than
+    // measuring on a schedule.
+    const onWindowResize = () => { boxRectRef.current = null; };
+    window.addEventListener('resize', onWindowResize);
+    window.addEventListener('scroll', onWindowResize, true);
+
     // --- 3. double-click the bezel ---------------------------------------
     const onDoubleClick = (ev: MouseEvent) => {
-      const rect = box.getBoundingClientRect();
+      const rect = boxRectRef.current ?? readBoxRect();
+      if (!rect) return;
       const bezelPx = Number.parseFloat(window.getComputedStyle(box).paddingLeft) || 0;
       if (!isBezelPoint({ x: ev.clientX, y: ev.clientY }, rect, bezelPx)) return;
       ev.preventDefault();
       ev.stopPropagation();
-      commit(nextPreset(zoomRef.current));
+      commit(nextPreset(zoomFractionRef.current));
     };
     box.addEventListener('dblclick', onDoubleClick, true);
 
@@ -3028,47 +3092,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       endDrag(null);
       box.removeEventListener('wheel', onWheel, { capture: true } as EventListenerOptions);
       box.removeEventListener('pointerdown', onPointerDown, true);
+      box.removeEventListener('pointerenter', onHoverEnter);
       box.removeEventListener('pointermove', onHoverMove);
       box.removeEventListener('pointerleave', onHoverLeave);
       box.removeEventListener('dblclick', onDoubleClick, true);
+      window.removeEventListener('resize', onWindowResize);
+      window.removeEventListener('scroll', onWindowResize, true);
     };
-  }, [terminalMode]);
-
-  /**
-   * Clamp the zoom to what the viewport can actually hold.
-   *
-   * A remembered 3x arriving on a laptop, or a window dragged smaller with
-   * a zoom already in, must shrink rather than push the screen off the
-   * edge. `fitZoomToViewport` never crosses 1x - a viewport too small for
-   * the DEFAULT look is today's behaviour, not something zoom may change -
-   * and it is monotone, so this settles in one or two frames.
-   */
-  useEffect(() => {
-    if (terminalMode !== 'fixed') return;
-    let frame: number | null = null;
-    const clampToViewport = () => {
-      if (frame !== null) return;
-      frame = requestAnimationFrame(() => {
-        frame = null;
-        const box = zoomBoxRef.current;
-        if (!box) return;
-        const fitted = fitZoomToViewport(
-          zoomRef.current,
-          { width: box.offsetWidth, height: box.offsetHeight },
-          { width: window.innerWidth, height: window.innerHeight },
-        );
-        if (fitted === zoomRef.current) return;
-        zoomRef.current = fitted;
-        setZoom(fitted);
-      });
-    };
-    clampToViewport();
-    window.addEventListener('resize', clampToViewport);
-    return () => {
-      if (frame !== null) cancelAnimationFrame(frame);
-      window.removeEventListener('resize', clampToViewport);
-    };
-  }, [terminalMode, effectiveFontSize, surface]);
+  }, [terminalMode, zoomEnabled, readBoxRect]);
 
   // Focus the terminal when clicking anywhere in the window. This ensures
   // keyboard input always goes to the live surface - xterm's textarea for
@@ -3387,9 +3418,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       className={className}
       style={{
         // Fixed 80x25 mode: the PAGE owns the ground (the host paints its
-        // near-black --bbs-page-bg around the terminal box); the black belongs
-        // to the terminal box below. Wide/fullscreen still paints black edge
-        // to edge - there is no page around a fullscreen door.
+        // --bbs-page-bg, black since 5841a1171, around the terminal box); the
+        // black belongs to the terminal box below. Wide/fullscreen still
+        // paints black edge to edge - there is no page around a fullscreen
+        // door. With fit-to-window the ground is barely visible anyway: the
+        // box ends flush against the window on the constraining axis.
         backgroundColor: terminalMode === 'fixed' ? 'transparent' : '#000000',
         overflow: 'hidden', // Prevent scrollbars
         // Explicit height for flex centering. fillParent hosts (the mobile BBS
@@ -3441,12 +3474,21 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           // ground shows only around it.
           ...(terminalMode === 'fixed'
             ? {
-                // The zoom scales the cap instead of removing it, so the
-                // black box still cannot stretch across an ultrawide
-                // viewport. At 1x this is the string '960px' the box has
-                // always carried.
-                maxWidth: zoomedBoxMaxWidth(zoom),
+                // NO width cap. There used to be a 960px one, to stop the
+                // black box stretching across an ultrawide viewport while the
+                // cell size was a constant. The cell size is now the FIT - the
+                // largest at which the grid plus its bezel fits the window -
+                // so the box is exactly as wide as the screen it holds, and a
+                // cap could only clip it ("it needs to scale flush - it has
+                // padding now", sysop, 2026-09-03).
                 backgroundColor: '#000000',
+                // A canvas session is space-filling: it has no intrinsic
+                // width to shrink-wrap, so the viewer's fraction scales the
+                // BOX and PetsciiCanvas fits its 40x25 screen inside. At
+                // fit-to-window that is the whole host box, edge to edge.
+                ...(surface === 'canvas'
+                  ? { width: `${zoomFraction * 100}%`, height: `${zoomFraction * 100}%` }
+                  : {}),
                 // The bezel: a black border around the screen with rounded
                 // corners, so the terminal reads as a screen sitting on the
                 // page ground (sysop, 2026-09-02). Tokens owned by the host
@@ -3493,7 +3535,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           style={{
             width: '100%',
             // 352x232 = one bordered C64 screen (PetsciiCanvas UNIT_W/UNIT_H).
-            ...(terminalMode === 'fixed' ? { aspectRatio: '352 / 232' } : { height: '100%' }),
+            // The canvas fits ITSELF to this box on both axes (PetsciiCanvas
+            // measures its container and keeps the 352x232 aspect with
+            // max-width/max-height), so the box just hands it the space the
+            // fraction allows. A fixed aspect-ratio here would have fought
+            // that and re-introduced a gap on the other axis.
+            height: '100%',
             backgroundColor: '#000',
           }}
         >

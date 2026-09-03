@@ -1,46 +1,166 @@
 /**
- * Unit tests for the one owner of the terminal's cell size
- * (packages/terminal/src/utils/terminal-zoom.ts).
+ * Unit tests for the viewer's zoom override
+ * (packages/terminal/src/utils/terminal-zoom.ts) and for the fit it sits on
+ * top of (components/mobile/terminal-fit.ts, the ONE fit function).
  *
- * The sysop asked for a real zoom on the fixed 80x25 screen: the cell size
- * itself, never a CSS transform, with the grid staying 80x25 (40x25 on the
- * PETSCII canvas) and the bezelled box growing about its centre. The one
- * rule these tests exist to hold is that zoom is a FACTOR over the page's
- * base size, so the font picker and the zoom can never become two sources
- * of a cell size.
+ * "The zoom is great but it makes more sense if it follows the browser window
+ * and i can override and scale it down" (sysop, 2026-09-03). So the DEFAULT
+ * cell size is the fit - the largest at which the 80x25 grid plus its bezel
+ * fits the viewport on both axes - and the gestures set a FRACTION of that
+ * fit. A fraction, not a size, is what makes the choice survive a resize.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
-  DEFAULT_ZOOM,
-  MAX_ZOOM,
-  MIN_ZOOM,
+  FIT_TO_WINDOW,
+  MAX_ZOOM_FRACTION,
+  MIN_ZOOM_FRACTION,
+  TERMINAL_BEZEL_PX,
   ZOOM_PRESETS,
   ZOOM_STORAGE_KEY,
-  BOX_MAX_WIDTH_PX,
-  clampZoom,
+  clampFraction,
   cornerAt,
   cursorForCorner,
   dragZoom,
-  fitZoomToViewport,
   isBezelPoint,
+  isFollowingWindow,
   isZoomWheel,
   nextPreset,
   readStoredZoom,
   wheelZoom,
   writeStoredZoom,
-  zoomedBoxMaxWidth,
   zoomedFontSize,
 } from '../../../../../packages/terminal/src/utils/terminal-zoom';
+import { BBS_COLS, BBS_ROWS, fitFontSize } from '../../components/mobile/terminal-fit';
 
 beforeEach(() => window.localStorage.clear());
 afterEach(() => vi.restoreAllMocks());
 
-/** The box the desktop board actually renders: 960 wide, centred at 0,0-ish. */
+/** The desktop board's box on a 1280x800 window, once fitted. */
 const BOX = { left: 100, top: 50, right: 1060, bottom: 682 };
+
+/**
+ * xterm's real measurement, modelled: each cell is rounded DOWN to a whole
+ * device pixel, which is why the rendered grid is a staircase in font size
+ * and why the fit is a search. Same model as
+ * components/mobile/__tests__/terminal-fit.test.ts.
+ */
+const CHAR_ASPECT = 0.5;
+const CHAR_HEIGHT_RATIO = 1.2;
+function xtermMeasure(dpr: number) {
+  return (fontSize: number) => {
+    const cellWidth = Math.floor(fontSize * CHAR_ASPECT * dpr) / dpr;
+    const cellHeight = Math.ceil(fontSize * CHAR_HEIGHT_RATIO * dpr) / dpr;
+    return { width: cellWidth * BBS_COLS, height: cellHeight * BBS_ROWS };
+  };
+}
+
+describe('fit-to-window is the default cell size', () => {
+  it('a 1280x800 window fits the 80x25 screen at 25.4px, with height the constraining axis', () => {
+    // The page minus exactly the bezel is what the fit gets.
+    const available = {
+      width: 1280 - 2 * TERMINAL_BEZEL_PX,
+      height: 800 - 2 * TERMINAL_BEZEL_PX,
+    };
+    const measure = xtermMeasure(2);
+    const fitted = fitFontSize(16, available, measure);
+    const grid = measure(fitted);
+    // The concrete number this window yields, pinned.
+    expect(fitted).toBeCloseTo(25.4, 5);
+    expect(grid.width).toBeLessThanOrEqual(available.width);
+    expect(grid.height).toBeLessThanOrEqual(available.height);
+    // One step more overflows - it really is the largest that fits.
+    const bigger = measure(fitted + 0.05);
+    expect(bigger.width > available.width || bigger.height > available.height).toBe(true);
+  });
+
+  it('at fit the box touches the viewport on the constraining axis', () => {
+    const page = { width: 1280, height: 800 };
+    const available = {
+      width: page.width - 2 * TERMINAL_BEZEL_PX,
+      height: page.height - 2 * TERMINAL_BEZEL_PX,
+    };
+    const measure = xtermMeasure(2);
+    const grid = measure(fitFontSize(16, available, measure));
+    // The leftover is split between the two sides of the bezel, so the box -
+    // screen plus bezel - is exactly the page on the tighter axis.
+    const slack = Math.min(available.width - grid.width, available.height - grid.height);
+    const bezel = TERMINAL_BEZEL_PX + slack / 2;
+    const boxWidth = grid.width + 2 * bezel;
+    const boxHeight = grid.height + 2 * bezel;
+    expect(Math.min(page.width - boxWidth, page.height - boxHeight)).toBeCloseTo(0, 6);
+  });
+
+  it('at fit the box touches the viewport on a portrait-ish window too, where WIDTH constrains', () => {
+    // The 80x25 grid is landscape (about 4:3 in rendered pixels), so a tall
+    // narrow window runs out of width first - the mirror image of the
+    // 1280x800 case above, and the reason the flush rule is stated per axis.
+    const page = { width: 900, height: 1200 };
+    const available = {
+      width: page.width - 2 * TERMINAL_BEZEL_PX,
+      height: page.height - 2 * TERMINAL_BEZEL_PX,
+    };
+    const measure = xtermMeasure(2);
+    const grid = measure(fitFontSize(16, available, measure));
+    const slack = Math.min(available.width - grid.width, available.height - grid.height);
+    const bezel = TERMINAL_BEZEL_PX + slack / 2;
+    expect(page.width - (grid.width + 2 * bezel)).toBeCloseTo(0, 6);
+    expect(page.height - (grid.height + 2 * bezel)).toBeGreaterThan(0);
+  });
+
+  it('follows the window: a smaller window fits a smaller cell, a larger one a larger cell', () => {
+    const measure = xtermMeasure(2);
+    const fitFor = (w: number, h: number) => fitFontSize(
+      16,
+      { width: w - 2 * TERMINAL_BEZEL_PX, height: h - 2 * TERMINAL_BEZEL_PX },
+      measure,
+    );
+    expect(fitFor(800, 600)).toBeLessThan(fitFor(1280, 800));
+    expect(fitFor(1920, 1080)).toBeGreaterThan(fitFor(1280, 800));
+  });
+});
+
+describe('the override is a fraction of the fit, so it survives a resize', () => {
+  it('is the fit itself, exactly, when the viewer is following the window', () => {
+    expect(zoomedFontSize(25.4, FIT_TO_WINDOW)).toBe(25.4);
+    expect(isFollowingWindow(FIT_TO_WINDOW)).toBe(true);
+  });
+
+  it('does not round to a whole pixel - rounding is what put the gap back', () => {
+    expect(zoomedFontSize(19.35, 1)).toBe(19.35);
+    expect(zoomedFontSize(20, 0.75)).toBe(15);
+    expect(zoomedFontSize(19.4, 0.75)).toBeCloseTo(14.55, 6);
+  });
+
+  it('keeps the same fraction of a window that changed size', () => {
+    const before = zoomedFontSize(20, 0.75);
+    const after = zoomedFontSize(30, 0.75);
+    expect(before / 20).toBeCloseTo(after / 30, 12);
+    expect(after / before).toBeCloseTo(1.5, 12);
+  });
+
+  it('scales DOWN below the fit, which is what the sysop asked for', () => {
+    expect(zoomedFontSize(20, 0.5)).toBeLessThan(20);
+    expect(clampFraction(0.5)).toBe(0.5);
+  });
+
+  it('holds the range at both ends - a sane amount above the fit, a quarter below', () => {
+    expect(clampFraction(99)).toBe(MAX_ZOOM_FRACTION);
+    expect(clampFraction(0.001)).toBe(MIN_ZOOM_FRACTION);
+    expect(clampFraction(Number.NaN)).toBe(FIT_TO_WINDOW);
+    expect(MAX_ZOOM_FRACTION).toBeGreaterThan(FIT_TO_WINDOW);
+    expect(MIN_ZOOM_FRACTION).toBeLessThan(FIT_TO_WINDOW);
+  });
+
+  it('never lets anything automatic exceed the fit - only a gesture goes above it', () => {
+    // There is no viewport clamp any more: the fit IS the clamp, and the
+    // default fraction is exactly 1.
+    expect(FIT_TO_WINDOW).toBe(1);
+    expect(zoomedFontSize(25.4, FIT_TO_WINDOW)).toBe(25.4);
+  });
+});
 
 describe('pinch is a ctrl-wheel', () => {
   it('treats a bare ctrlKey wheel as a zoom gesture - that is how a trackpad pinch arrives', () => {
-    // No key is held during a pinch; the browser synthesises ctrlKey.
     expect(isZoomWheel({ ctrlKey: true, metaKey: false, deltaY: -12 })).toBe(true);
   });
 
@@ -52,51 +172,41 @@ describe('pinch is a ctrl-wheel', () => {
     expect(isZoomWheel({ ctrlKey: false, metaKey: false, deltaY: -12 })).toBe(false);
   });
 
-  it('pinching apart zooms in and pinching together zooms out', () => {
-    expect(wheelZoom(1, -100)).toBeGreaterThan(1);
+  it('pinching together scales the screen down, pinching apart back up', () => {
     expect(wheelZoom(1, 100)).toBeLessThan(1);
+    expect(wheelZoom(0.5, -100)).toBeGreaterThan(0.5);
   });
 
   it('moves in a smooth curve, not in jumps - a small pinch delta is a small change', () => {
-    const small = wheelZoom(1, -4);
-    expect(small).toBeGreaterThan(1);
-    expect(small).toBeLessThan(1.02);
+    const small = wheelZoom(1, 4);
+    expect(small).toBeLessThan(1);
+    expect(small).toBeGreaterThan(0.98);
   });
 
-  it('never leaves the sane range however hard the wheel is spun', () => {
-    expect(wheelZoom(1, -100000)).toBe(MAX_ZOOM);
-    expect(wheelZoom(1, 100000)).toBe(MIN_ZOOM);
+  it('never leaves the range however hard the wheel is spun', () => {
+    expect(wheelZoom(1, -100000)).toBe(MAX_ZOOM_FRACTION);
+    expect(wheelZoom(1, 100000)).toBe(MIN_ZOOM_FRACTION);
   });
 });
 
 describe('a corner drag resizes about the centre', () => {
-  it('dragging a corner outward enlarges by the ratio of the distance from the centre', () => {
-    const centre = { x: (BOX.left + BOX.right) / 2, y: (BOX.top + BOX.bottom) / 2 };
-    // Start on the SE corner, then move to twice that distance from the centre.
+  const centre = { x: (BOX.left + BOX.right) / 2, y: (BOX.top + BOX.bottom) / 2 };
+  const from = (p: { x: number; y: number }, factor: number) => ({
+    x: centre.x + (p.x - centre.x) * factor,
+    y: centre.y + (p.y - centre.y) * factor,
+  });
+
+  it('dragging a corner inward scales the screen down by the ratio of the distance from the centre', () => {
     const start = { x: BOX.right, y: BOX.bottom };
-    const twiceOut = {
-      x: centre.x + (start.x - centre.x) * 2,
-      y: centre.y + (start.y - centre.y) * 2,
-    };
-    expect(dragZoom(1, BOX, start, twiceOut)).toBeCloseTo(2, 6);
+    expect(dragZoom(1, BOX, start, from(start, 0.5))).toBeCloseTo(0.5, 6);
   });
 
-  it('dragging inward shrinks by the same ratio', () => {
-    const centre = { x: (BOX.left + BOX.right) / 2, y: (BOX.top + BOX.bottom) / 2 };
+  it('dragging outward brings it back towards the fit', () => {
     const start = { x: BOX.left, y: BOX.top };
-    const halfIn = {
-      x: centre.x + (start.x - centre.x) / 2,
-      y: centre.y + (start.y - centre.y) / 2,
-    };
-    expect(dragZoom(2, BOX, start, halfIn)).toBeCloseTo(1, 6);
+    expect(dragZoom(0.5, BOX, start, from(start, 2))).toBeCloseTo(1, 6);
   });
 
-  it('is the same arithmetic whichever corner was grabbed - the box grows about its middle', () => {
-    const centre = { x: (BOX.left + BOX.right) / 2, y: (BOX.top + BOX.bottom) / 2 };
-    const outward = (p: { x: number; y: number }) => ({
-      x: centre.x + (p.x - centre.x) * 1.5,
-      y: centre.y + (p.y - centre.y) * 1.5,
-    });
+  it('is the same arithmetic whichever corner was grabbed - the box scales about its middle', () => {
     const corners = [
       { x: BOX.left, y: BOX.top },
       { x: BOX.right, y: BOX.top },
@@ -104,7 +214,7 @@ describe('a corner drag resizes about the centre', () => {
       { x: BOX.right, y: BOX.bottom },
     ];
     for (const corner of corners) {
-      expect(dragZoom(1, BOX, corner, outward(corner))).toBeCloseTo(1.5, 6);
+      expect(dragZoom(1, BOX, corner, from(corner, 0.75))).toBeCloseTo(0.75, 6);
     }
   });
 
@@ -114,7 +224,6 @@ describe('a corner drag resizes about the centre', () => {
     expect(cornerAt({ x: BOX.left + 4, y: BOX.bottom - 4 }, BOX)).toBe('sw');
     expect(cornerAt({ x: BOX.right - 4, y: BOX.bottom - 4 }, BOX)).toBe('se');
     expect(cornerAt({ x: 500, y: 300 }, BOX)).toBeNull();
-    // An edge is not a corner.
     expect(cornerAt({ x: 500, y: BOX.top }, BOX)).toBeNull();
   });
 
@@ -125,28 +234,30 @@ describe('a corner drag resizes about the centre', () => {
     expect(cursorForCorner('sw')).toBe('nesw-resize');
   });
 
-  it('leaves the zoom alone when the grab carries no radius to scale', () => {
-    const centre = { x: (BOX.left + BOX.right) / 2, y: (BOX.top + BOX.bottom) / 2 };
-    expect(dragZoom(1.25, BOX, centre, { x: centre.x + 40, y: centre.y })).toBe(1.25);
+  it('leaves the fraction alone when the grab carries no radius to scale', () => {
+    expect(dragZoom(0.75, BOX, centre, { x: centre.x + 40, y: centre.y })).toBe(0.75);
   });
 });
 
-describe('double-clicking the bezel cycles the presets', () => {
-  it('walks 1x -> 1.5x -> 2x and back to the picker size', () => {
-    expect(nextPreset(1)).toBe(1.5);
-    expect(nextPreset(1.5)).toBe(2);
-    expect(nextPreset(2)).toBe(1);
-    expect(ZOOM_PRESETS[0]).toBe(DEFAULT_ZOOM);
+describe('double-clicking the bezel cycles the presets and comes home to the window', () => {
+  it('walks fit -> three quarters -> half -> home to fit', () => {
+    expect(nextPreset(1)).toBe(0.75);
+    expect(nextPreset(0.75)).toBe(0.5);
+    expect(nextPreset(0.5)).toBe(FIT_TO_WINDOW);
+    expect(ZOOM_PRESETS[0]).toBe(FIT_TO_WINDOW);
   });
 
-  it('advances from a wheel-zoomed value to the next preset above it, not home', () => {
-    expect(nextPreset(1.2)).toBe(1.5);
-    expect(nextPreset(1.9)).toBe(2);
-    expect(nextPreset(3)).toBe(1);
+  it('steps from a wheel-zoomed value to the next preset below it, not home', () => {
+    expect(nextPreset(0.9)).toBe(0.75);
+    expect(nextPreset(0.6)).toBe(0.5);
+  });
+
+  it('brings a screen pushed past the fit straight back to following the window', () => {
+    expect(nextPreset(1.25)).toBe(FIT_TO_WINDOW);
+    expect(isFollowingWindow(nextPreset(1.25))).toBe(true);
   });
 
   it('counts the padding ring as bezel and the screen inside it as not', () => {
-    // 16px bezel: 8px in from the edge is the ring, the middle is the screen.
     expect(isBezelPoint({ x: BOX.left + 8, y: 300 }, BOX, 16)).toBe(true);
     expect(isBezelPoint({ x: 500, y: BOX.top + 8 }, BOX, 16)).toBe(true);
     expect(isBezelPoint({ x: 500, y: 300 }, BOX, 16)).toBe(false);
@@ -154,77 +265,14 @@ describe('double-clicking the bezel cycles the presets', () => {
   });
 });
 
-describe('zoom is clamped to the viewport', () => {
-  it('shrinks a zoom whose box no longer fits, by the measured overflow ratio', () => {
-    // 2x asked for a 1920-wide box; the window is 1280.
-    const fitted = fitZoomToViewport(
-      2,
-      { width: 1920, height: 1264 },
-      { width: 1280, height: 2000 },
-    );
-    expect(fitted).toBeCloseTo(2 * (1280 / 1920), 6);
+describe('a P session keeps its override', () => {
+  it('remembers a fraction for this viewer and reads it back', () => {
+    writeStoredZoom(0.75);
+    expect(window.localStorage.getItem(ZOOM_STORAGE_KEY)).toBe('0.75');
+    expect(readStoredZoom()).toBe(0.75);
   });
 
-  it('clamps on height as well as width', () => {
-    const fitted = fitZoomToViewport(2, { width: 800, height: 1200 }, { width: 4000, height: 600 });
-    expect(fitted).toBeCloseTo(1, 6);
-  });
-
-  it('leaves a zoom that fits exactly where it is', () => {
-    expect(fitZoomToViewport(1.5, { width: 900, height: 600 }, { width: 1600, height: 900 })).toBe(1.5);
-  });
-
-  it('never clamps below the picker size - a viewport too small for the default look is not zoom to fix', () => {
-    expect(fitZoomToViewport(1, { width: 900, height: 600 }, { width: 320, height: 200 })).toBe(1);
-    expect(fitZoomToViewport(2, { width: 1920, height: 1264 }, { width: 100, height: 100 })).toBe(1);
-  });
-
-  it('leaves the zoom alone when nothing can be measured (jsdom, an unlaid-out box)', () => {
-    expect(fitZoomToViewport(2, { width: 0, height: 0 }, { width: 1280, height: 800 })).toBe(2);
-    expect(fitZoomToViewport(2, { width: 900, height: 600 }, { width: 0, height: 0 })).toBe(2);
-  });
-
-  it('holds the hard range at both ends', () => {
-    expect(clampZoom(99)).toBe(MAX_ZOOM);
-    expect(clampZoom(0.01)).toBe(MIN_ZOOM);
-    expect(clampZoom(Number.NaN)).toBe(DEFAULT_ZOOM);
-  });
-});
-
-describe('the picker and the zoom share one size', () => {
-  it('is the picker size exactly at 1x - the default board is untouched', () => {
-    expect(zoomedFontSize(16, 1)).toBe(16);
-    expect(zoomedBoxMaxWidth(1)).toBe(`${BOX_MAX_WIDTH_PX}px`);
-    expect(zoomedBoxMaxWidth(1)).toBe('960px');
-  });
-
-  it('scales whatever base size the page hands it, so a calibrated handheld size zooms too', () => {
-    expect(zoomedFontSize(11, 2)).toBe(22);
-    expect(zoomedFontSize(9, 1.5)).toBe(14); // round(13.5)
-  });
-
-  it('moves in whole-pixel steps, because the board fonts are TTF and 1px is a real step', () => {
-    const sizes = new Set<number>();
-    for (let zoom = 1; zoom <= 1.5; zoom += 0.01) sizes.add(zoomedFontSize(16, zoom));
-    for (const size of sizes) expect(Number.isInteger(size)).toBe(true);
-    // 16px through 24px is 9 distinct sizes - a smooth ramp, not three jumps.
-    expect(sizes.size).toBeGreaterThan(5);
-  });
-
-  it('scales the box cap with the same factor rather than removing it', () => {
-    expect(zoomedBoxMaxWidth(1.5)).toBe('1440px');
-    expect(zoomedBoxMaxWidth(2)).toBe('1920px');
-  });
-});
-
-describe('a P session keeps its zoom', () => {
-  it('remembers a zoom for this viewer and reads it back', () => {
-    writeStoredZoom(1.75);
-    expect(window.localStorage.getItem(ZOOM_STORAGE_KEY)).toBe('1.75');
-    expect(readStoredZoom()).toBe(1.75);
-  });
-
-  it('has no zoom to report when this browser has never set one - that is the picker size', () => {
+  it('has nothing to report when this browser has never overridden - that is following the window', () => {
     expect(readStoredZoom()).toBeNull();
   });
 
@@ -245,7 +293,7 @@ describe('a P session keeps its zoom', () => {
       throw new Error('storage disabled');
     });
     expect(readStoredZoom()).toBeNull();
-    expect(() => writeStoredZoom(1.5)).not.toThrow();
+    expect(() => writeStoredZoom(0.5)).not.toThrow();
     getItem.mockRestore();
     setItem.mockRestore();
   });

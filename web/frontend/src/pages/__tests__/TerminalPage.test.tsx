@@ -25,7 +25,10 @@ const harness = vi.hoisted(() => ({
   mounts: 0,
 }));
 
-vi.mock('@amiexpress/terminal', () => ({
+vi.mock('@amiexpress/terminal', async () => ({
+  // The zoom module is pure arithmetic with no side effects, and TerminalPage
+  // does the one multiply with it - stubbing it would only test the stub.
+  ...(await import('../../../../../packages/terminal/src/utils/terminal-zoom')),
   BBSTerminal: React.forwardRef((props: Record<string, any>, ref: React.Ref<unknown>) => {
     harness.props = props;
     React.useEffect(() => { harness.mounts += 1; }, []);

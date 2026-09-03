@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, type CSSProperties } from 'react';
 import { BBSTerminal, type BBSTerminalRef, type TerminalMouseEventType } from '@amiexpress/terminal';
 import { MobileBBSKeyboard } from '../components/mobile/MobileBBSKeyboard';
 import { visibleHeight } from '../components/mobile/terminal-fit';
@@ -12,6 +12,12 @@ import {
 import { MobileArkanoidControls, type TrackpadPhase } from '../components/mobile/MobileArkanoidControls';
 import { findGameControlLayout, trackpadColumn, trackpadStep } from '../components/mobile/game-controls';
 import { fitFontSize } from '../components/mobile/terminal-fit';
+import {
+  FIT_TO_WINDOW,
+  TERMINAL_BEZEL_PX,
+  isFollowingWindow,
+  zoomedFontSize,
+} from '@amiexpress/terminal';
 import './TerminalPage.css';
 
 // Seed only — the real size comes from measuring the rendered grid. mOsOul and
@@ -74,13 +80,55 @@ export function TerminalPage(): JSX.Element {
    * filling the viewport, so this flag stays false for them.
    */
   const [isHandheldMode, setIsHandheldMode] = useState<boolean>(isHandheld);
-  const [fontSize, setFontSize] = useState<number>(() =>
+  /**
+   * The FIT: the largest cell size at which the whole 80x25 grid plus its
+   * bezel still fits the space the page can give it. This is the default the
+   * board runs at - "it makes more sense if it follows the browser window"
+   * (sysop, 2026-09-03) - and it is recomputed by refit() on every viewport
+   * change, on both a desktop and a handheld, through the ONE fit function.
+   * The initial value is only a seed for the first search.
+   */
+  const [fitSize, setFitSize] = useState<number>(() =>
     isHandheld() ? seedFontSize(window.innerWidth) : DESKTOP_FONT_SIZE
   );
+  const fitSizeRef = useRef(fitSize);
+  fitSizeRef.current = fitSize;
+  /**
+   * The viewer's override, as a fraction of the fit (1 = follow the window).
+   * BBSTerminal owns the gestures and reports the fraction here; the page
+   * does the one multiply, so there is a single producer of a cell size.
+   */
+  const [zoomFraction, setZoomFraction] = useState<number>(FIT_TO_WINDOW);
+  const zoomFractionRef = useRef(zoomFraction);
+  zoomFractionRef.current = zoomFraction;
+  /**
+   * Which mode the terminal is in. A wide/fullscreen door owns its own
+   * geometry and its column count comes from the cell size, so it keeps the
+   * size it always had rather than inheriting the fit.
+   */
+  const [terminalMode, setTerminalMode] = useState<'fixed' | 'wide'>('fixed');
+  /**
+   * The bezel, in px, with the fit's leftover absorbed into it.
+   *
+   * xterm rounds each cell down to a whole DEVICE pixel, so even the largest
+   * fitting size leaves a few px of slack against the window - which read as
+   * "it has padding now" (sysop, 2026-09-03). Splitting that slack between
+   * the two sides of the bezel makes the BOX exactly the size of the space it
+   * was fitted into on the constraining axis: flush, with a slightly thicker
+   * black frame instead of a grey gap. Only while the viewer is following the
+   * window; a deliberately scaled-down screen is meant to have room around it.
+   */
+  const [bezelPx, setBezelPx] = useState<number>(TERMINAL_BEZEL_PX);
   const [activeDoorId, setActiveDoorId] = useState<string | null>(null);
 
+  /** The one produced cell size: the fit, scaled by the viewer's fraction. */
+  const fontSize = !isHandheldMode && terminalMode === 'wide'
+    ? DESKTOP_FONT_SIZE
+    : zoomedFontSize(fitSize, zoomFraction);
   const fontSizeRef = useRef(fontSize);
   fontSizeRef.current = fontSize;
+  /** The page's own box - the honest content area the fit measures against. */
+  const pageRef = useRef<HTMLDivElement>(null);
   const isMobileRef = useRef(isMobile);
   isMobileRef.current = isMobile;
   const gridObserver = useRef<ResizeObserver | null>(null);
@@ -109,36 +157,67 @@ export function TerminalPage(): JSX.Element {
     const element = term?.element;
     if (!term || !element) return;
 
-    if (!isHandheld()) {
-      if (fontSizeRef.current !== DESKTOP_FONT_SIZE) setFontSize(DESKTOP_FONT_SIZE);
-      return;
-    }
-
     // A door that took the terminal out of the standard 80-column grid (wide
     // mode, or a server-driven resize) owns its own sizing — leave it alone.
     if (term.cols !== BBS_COLS) return;
 
     const screen = element.querySelector('.xterm-screen') as HTMLElement | null;
-    const host = element.parentElement;
-    if (!screen || !host) return;
+    if (!screen) return;
 
-    // Host width already excludes the safe-area padding the page applies.
-    const availableWidth = host.clientWidth || window.innerWidth;
-    // The VISIBLE viewport, not the layout one: on iOS the layout viewport
-    // runs underneath Safari's floating address bar, so sizing against it
-    // hid the top rows behind the bar.
-    const availableHeight = visibleHeight(window) - (isMobileRef.current ? ONSCREEN_INPUT_HEIGHT : 0);
+    const measure = (candidate: number) => {
+      term.options.fontSize = candidate;
+      return { width: screen.offsetWidth, height: screen.offsetHeight };
+    };
 
-    const fitted = fitFontSize(
-      fontSizeRef.current,
-      { width: availableWidth, height: availableHeight },
-      (candidate) => {
-        term.options.fontSize = candidate;
-        return { width: screen.offsetWidth, height: screen.offsetHeight };
-      },
-    );
+    let available: { width: number; height: number };
+    if (isHandheld()) {
+      // UNCHANGED handheld path. The host width already excludes the
+      // safe-area padding the page applies, and the height is the VISIBLE
+      // viewport, not the layout one: on iOS the layout viewport runs
+      // underneath Safari's floating address bar, so sizing against it hid
+      // the top rows behind the bar.
+      const host = element.parentElement;
+      if (!host) return;
+      available = {
+        width: host.clientWidth || window.innerWidth,
+        height: visibleHeight(window) - (isMobileRef.current ? ONSCREEN_INPUT_HEIGHT : 0),
+      };
+    } else {
+      // Desktop fit-to-window. The PAGE's content box, not the terminal's
+      // own host: `.terminal-page__frame` is `width: fit-content`, so
+      // measuring it would hand the fit its own previous output and the
+      // screen could never grow. Minus exactly the bezel, which is the only
+      // thing between the grid and the window edge - the page carries no
+      // padding of its own on a desktop (env() safe-area insets are 0) and
+      // the box has no width cap any more.
+      const page = pageRef.current;
+      if (!page) return;
+      available = {
+        width: page.clientWidth - 2 * TERMINAL_BEZEL_PX,
+        height: page.clientHeight - 2 * TERMINAL_BEZEL_PX,
+      };
+    }
 
-    if (fitted !== fontSizeRef.current) setFontSize(fitted);
+    const fitted = fitFontSize(fitSizeRef.current, available, measure);
+    if (fitted !== fitSizeRef.current) {
+      fitSizeRef.current = fitted;
+      setFitSize(fitted);
+    }
+
+    // Leave the terminal at the size it will KEEP, not at the fit the search
+    // ended on. Two reasons: the viewer's override may scale it down, and a
+    // net size change here would wake the grid observer that called us and
+    // start the search over.
+    const effective = zoomedFontSize(fitted, zoomFractionRef.current);
+    const grid = measure(effective);
+
+    // Absorb the leftover into the bezel so the box reads flush (see bezelPx).
+    const following = isFollowingWindow(zoomFractionRef.current) && !isHandheld();
+    const slack = Math.min(available.width - grid.width, available.height - grid.height);
+    const bezel = following && slack > 0
+      ? TERMINAL_BEZEL_PX + slack / 2
+      : TERMINAL_BEZEL_PX;
+    setBezelPx((previous) => (Math.abs(previous - bezel) < 0.5 ? previous : bezel));
   }, []);
 
   useEffect(() => {
@@ -171,6 +250,10 @@ export function TerminalPage(): JSX.Element {
 
   // Showing or hiding the on-screen input changes how much height the grid has.
   useEffect(() => { refit(); }, [isMobile, refit]);
+
+  // A new override changes the effective size and the leftover the bezel has
+  // to absorb; the FIT itself is unchanged, so this settles in one pass.
+  useEffect(() => { refit(); }, [zoomFraction, refit]);
 
   // Suppress iOS native keyboard on portrait mobile; restore on landscape.
   useEffect(() => {
@@ -415,6 +498,15 @@ export function TerminalPage(): JSX.Element {
       onConnect={handleConnect}
       onDoorChange={setActiveDoorId}
       onSurfaceChange={setSurface}
+      onTerminalModeChange={setTerminalMode}
+      /*
+       * The zoom gestures are a DESKTOP override on top of the fit. A
+       * handheld is already fitted to its screen, has no pointer to put on a
+       * bezel corner, and - if it were allowed to write the override - would
+       * erase the fraction the same viewer chose at their desk.
+       */
+      zoomEnabled={!isHandheldMode}
+      onZoomChange={setZoomFraction}
       /*
        * Desktop centres the terminal box inside the terminal's own wrapper -
        * that is what puts a canvas session on the page ground instead of in
@@ -430,7 +522,16 @@ export function TerminalPage(): JSX.Element {
 
   return (
     <div
+      ref={pageRef}
       className={`terminal-page${showOnscreenInput ? ' terminal-page--with-input' : ''}${showFrame ? ' terminal-page--framed' : ''}`}
+      /*
+       * The bezel token, with the fit's leftover absorbed into it, so the
+       * terminal box ends flush against the window on the constraining axis.
+       * Written here rather than inside the terminal because the fit - which
+       * is what knows the leftover - lives here; BBSTerminal keeps reading the
+       * same `var(--bbs-terminal-bezel)` it always did.
+       */
+      style={{ ['--bbs-terminal-bezel' as string]: `${bezelPx}px` } as CSSProperties}
     >
       {/* ONE host element for the life of the page. The frame is a class,
           never a structural wrapper: moving BBSTerminal between parents

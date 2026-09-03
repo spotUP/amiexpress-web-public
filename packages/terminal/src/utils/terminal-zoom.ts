@@ -1,76 +1,92 @@
 /**
- * Terminal zoom - the one owner of "how big is a cell".
+ * Terminal zoom - the viewer's override on top of fit-to-window.
  *
- * The sysop asked for a real zoom on the fixed 80x25 screen: not a CSS
- * transform (which blurs a bitmap face and leaves xterm measuring the
- * unscaled cell), but the CELL SIZE itself, so the grid stays 80x25 - or
- * 40x25 on the PETSCII canvas - and the bezelled box grows or shrinks
- * around its centre.
+ * "The zoom is great but it makes more sense if it follows the browser window
+ * and i can override and scale it down" (sysop, 2026-09-03). So the DEFAULT
+ * cell size is no longer a constant: it is the FIT - the largest cell size at
+ * which the whole 80x25 grid (40x25 on the PETSCII canvas) plus its bezel
+ * still fits the viewport on both axes, recomputed whenever the window
+ * changes. That fit is computed by the ONE fit function the board already
+ * had, `fitFontSize` (web/frontend/src/components/mobile/terminal-fit.ts),
+ * which the handheld calibration has always used; the desktop now calls the
+ * same function against the page's own content box.
  *
- * The invariant this module exists to protect: there is exactly ONE
- * producer of a cell size. The page already owns the BASE size - the
- * desktop 16px, or the handheld calibration `refit()` measures
- * (web/frontend/src/pages/TerminalPage.tsx). So zoom is a FACTOR, never a
- * second size:
+ * This module owns the other half: the viewer's OVERRIDE, expressed as a
+ * FRACTION OF THE FIT rather than an absolute size.
  *
- *     effective cell size = zoomedFontSize(base, zoom)
+ *     effective cell size = zoomedFontSize(fit, fraction)
  *
- * Multiply once, in one place, and the picker and the zoom can never
- * become two sources of truth. A stored zoom of 1 (or no stored zoom at
- * all) reproduces today's board exactly - `zoomedFontSize(16, 1)` is 16
- * and `zoomedBoxMaxWidth(1)` is the string `'960px'`.
+ * A fraction rather than a size is what makes the override survive a window
+ * resize: the viewer who chose "three quarters" keeps three quarters of
+ * whatever the window can now hold, instead of being pinned to the pixel
+ * count that meant three quarters an hour ago. It is also why there is no
+ * separate viewport clamp any more - the fit IS the clamp, and nothing
+ * automatic can ever exceed it. Only a deliberate gesture goes above 1.0,
+ * and only as far as MAX_ZOOM_FRACTION.
  *
- * Everything here is pure: no React, no DOM lookups, only numbers and
- * plain rectangles. The wiring - which element the listeners hang off, the
- * rAF coalescing, the corner marks - lives in BBSTerminal, which owns the
- * box these rules describe.
+ * `FIT_TO_WINDOW` (1.0) is both the default and the way home: it means
+ * "follow the window", and the double-click ladder always returns to it.
+ *
+ * Everything here is pure: no React, no DOM lookups, only numbers and plain
+ * rectangles. The wiring - which element the listeners hang off, the rAF
+ * coalescing, the corner marks - lives in BBSTerminal, which owns the box
+ * these rules describe.
  */
 
-/** Where a viewer's zoom is remembered. Per browser, never sent to the board. */
+/** Where a viewer's override is remembered. Per browser, never sent to the board. */
 export const ZOOM_STORAGE_KEY = 'bbs_terminal_zoom';
 
 /**
- * The sane range. Below half the picker size the 80-column grid stops being
- * readable on any display the board is used on; above 4x a single cell is
- * bigger than a phone. Both ends are hard stops, not hints.
+ * The fraction that means "follow the browser window": the cell size the fit
+ * computed, unmodified. The default, and the home step of the preset ladder.
  */
-export const MIN_ZOOM = 0.5;
-export const MAX_ZOOM = 4;
-
-/** The one unzoomed factor: the picker's own size, and the default. */
-export const DEFAULT_ZOOM = 1;
+export const FIT_TO_WINDOW = 1;
 
 /**
- * The preset ladder a double-click on the bezel walks. 1x is the picker's
- * size, so the cycle always comes home to the board's default look.
+ * How far the override may travel.
+ *
+ * Down to a quarter of the fit - a deliberately small screen on a big
+ * display. Up only a little: above the fit the grid is by definition larger
+ * than the window can hold and the page clips it, so anything past a quarter
+ * over would cost whole rows of the BBS. A viewer who asks for it gets it;
+ * nothing automatic ever does.
  */
-export const ZOOM_PRESETS: readonly number[] = [1, 1.5, 2];
+export const MIN_ZOOM_FRACTION = 0.25;
+export const MAX_ZOOM_FRACTION = 1.25;
+
+/**
+ * The ladder a double-click on the bezel walks: fit, three quarters, half,
+ * home to fit.
+ *
+ * DESCENDING, and this is the point: the fit is already the largest size the
+ * window can hold, so every useful preset is a smaller one - an ascending
+ * ladder would only offer sizes that overflow. It walks down and wraps to
+ * `FIT_TO_WINDOW`, which makes the last step of the cycle the one obvious way
+ * back to "follow the window" without a menu, a key or a reset button.
+ */
+export const ZOOM_PRESETS: readonly number[] = [1, 0.75, 0.5];
 
 /** How close to a corner the pointer counts as "on the corner", in CSS px. */
 export const CORNER_HIT_PX = 16;
 
 /**
- * The fixed-mode box's unzoomed width cap (BBSTerminal's `maxWidth`).
- *
- * It exists because the box is `width: 100%`: without a cap the BLACK
- * terminal box - and everything bounded by it, the RIP overlay and the
- * PETSCII canvas - would stretch across an ultrawide viewport and the page
- * ground would never show. Zoom scales the cap rather than removing it, so
- * the default look is bit-for-bit what it was.
+ * The bezel width the fit has to leave room for, when the page cannot read
+ * the `--bbs-terminal-bezel` token (no stylesheet, as under a test runner).
+ * The token in web/frontend/src/index.css is the real source.
  */
-export const BOX_MAX_WIDTH_PX = 960;
+export const TERMINAL_BEZEL_PX = 16;
 
 /**
- * Smallest cell size worth rendering. Guards a pathological base size; the
- * MIN_ZOOM stop is what a viewer actually reaches.
+ * Smallest cell size worth rendering. Guards a pathological fit; the
+ * MIN_ZOOM_FRACTION stop is what a viewer actually reaches.
  */
 const MIN_FONT_PX = 4;
 
 /**
- * Wheel sensitivity, in factor-exponent per pixel of `deltaY`.
+ * Wheel sensitivity, in fraction-exponent per pixel of `deltaY`.
  *
- * Exponential rather than additive so a step feels the same at 0.6x as at
- * 3x. A mouse notch (about 100px of deltaY in Chrome) is roughly a 28%
+ * Exponential rather than additive so a step feels the same at 0.4 of the fit
+ * as at 1.0. A mouse notch (about 100px of deltaY in Chrome) is roughly a 28%
  * step; a trackpad pinch, which arrives as a stream of small ctrl-wheel
  * deltas, moves smoothly through the same curve.
  */
@@ -94,12 +110,6 @@ export interface ZoomRect {
   bottom: number;
 }
 
-/** A rendered or available footprint, in CSS px. */
-export interface ZoomSize {
-  width: number;
-  height: number;
-}
-
 /** Everything a wheel event has to say about whether it is a zoom gesture. */
 export interface ZoomWheelLike {
   ctrlKey: boolean;
@@ -107,32 +117,30 @@ export interface ZoomWheelLike {
   deltaY: number;
 }
 
-/** Hold `zoom` inside the sane range. */
-export function clampZoom(zoom: number): number {
-  if (!Number.isFinite(zoom)) return DEFAULT_ZOOM;
-  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+/** Hold a fraction inside the range a viewer may reach. */
+export function clampFraction(fraction: number): number {
+  if (!Number.isFinite(fraction)) return FIT_TO_WINDOW;
+  return Math.min(MAX_ZOOM_FRACTION, Math.max(MIN_ZOOM_FRACTION, fraction));
+}
+
+/** True when the viewer has not overridden anything - the window decides. */
+export function isFollowingWindow(fraction: number): boolean {
+  return clampFraction(fraction) === FIT_TO_WINDOW;
 }
 
 /**
- * The effective cell size: the page's base size scaled by the factor.
+ * The effective cell size: the fit, scaled by the viewer's fraction.
  *
- * Rounded to a whole pixel because that is the step the board zooms in -
- * every BBS font is a TTF, so a 1px change is a real, smooth change of
- * cell size rather than the multi-pixel jumps a bitmap face would force.
+ * NOT rounded to a whole pixel. Every BBS font is a TTF and xterm takes a
+ * fractional `fontSize`, and rounding is what put a gap back around the
+ * screen: the fit search works on a 0.05px grid, so `Math.round` threw away
+ * up to half a pixel of cell - eighty cells' worth across the grid - and the
+ * box stopped touching the window edge ("it needs to scale flush - it has
+ * padding now", sysop, 2026-09-03). At FIT_TO_WINDOW this returns the fit
+ * itself, unchanged, which is what makes flush mean flush.
  */
-export function zoomedFontSize(baseFontSize: number, zoom: number): number {
-  const size = Math.round(baseFontSize * clampZoom(zoom));
-  return Math.max(MIN_FONT_PX, size);
-}
-
-/**
- * The fixed box's width cap at this zoom, as a CSS length.
- *
- * `zoomedBoxMaxWidth(1)` is exactly `'960px'` - the string the box has
- * always carried - so an unzoomed session is byte-identical to today.
- */
-export function zoomedBoxMaxWidth(zoom: number): string {
-  return `${Math.round(BOX_MAX_WIDTH_PX * clampZoom(zoom))}px`;
+export function zoomedFontSize(fitFontSize: number, fraction: number): number {
+  return Math.max(MIN_FONT_PX, fitFontSize * clampFraction(fraction));
 }
 
 /**
@@ -148,28 +156,30 @@ export function isZoomWheel(event: ZoomWheelLike): boolean {
 }
 
 /**
- * The zoom a wheel gesture of `deltaY` leads to. Scrolling up (negative
- * deltaY, or pinching apart) zooms in.
+ * The fraction a wheel gesture of `deltaY` leads to. Scrolling up (negative
+ * deltaY, or pinching apart) grows the screen towards - and a little past -
+ * the fit.
  */
-export function wheelZoom(zoom: number, deltaY: number): number {
-  if (!Number.isFinite(deltaY)) return clampZoom(zoom);
-  return clampZoom(zoom * Math.exp(-deltaY * WHEEL_EXPONENT_PER_PX));
+export function wheelZoom(fraction: number, deltaY: number): number {
+  if (!Number.isFinite(deltaY)) return clampFraction(fraction);
+  return clampFraction(fraction * Math.exp(-deltaY * WHEEL_EXPONENT_PER_PX));
 }
 
 /**
- * The next preset up the ladder, wrapping back to 1x.
+ * The next step down the preset ladder, wrapping home to fit-to-window.
  *
- * "Next" is the first preset strictly above the current zoom, so a viewer
- * who has wheel-zoomed to 1.2x lands on 1.5x rather than jumping home.
+ * "Next" is the first preset strictly below the current fraction, so a viewer
+ * who has wheel-zoomed to 0.9 lands on 0.75 rather than jumping home, and one
+ * who has pushed past the fit lands on the fit itself.
  */
-export function nextPreset(zoom: number): number {
-  const current = clampZoom(zoom);
+export function nextPreset(fraction: number): number {
+  const current = clampFraction(fraction);
   for (const preset of ZOOM_PRESETS) {
-    // A hair of tolerance: 1.5 reached by wheel is not bit-identical to the
-    // literal, and must still advance to 2x rather than re-selecting itself.
-    if (preset > current + 1e-6) return preset;
+    // A hair of tolerance: 0.75 reached by wheel is not bit-identical to the
+    // literal, and must still step to 0.5 rather than re-selecting itself.
+    if (preset < current - 1e-6) return preset;
   }
-  return ZOOM_PRESETS[0];
+  return FIT_TO_WINDOW;
 }
 
 /** Which corner of `rect` the point is on, or null for anywhere else. */
@@ -203,9 +213,9 @@ export function cursorForCorner(corner: ZoomCorner): string {
 /**
  * Is the point on the BEZEL - the padding ring - rather than on the screen?
  *
- * The double-click preset cycle is a bezel gesture on purpose: a
- * double-click on the screen itself belongs to the BBS (word select, a
- * door's mouse handling), and must not be stolen.
+ * The double-click preset cycle is a bezel gesture on purpose: a double-click
+ * on the screen itself belongs to the BBS (word select, a door's mouse
+ * handling), and must not be stolen.
  */
 export function isBezelPoint(point: ZoomPoint, rect: ZoomRect, bezelPx: number): boolean {
   const insideBox =
@@ -219,17 +229,18 @@ export function isBezelPoint(point: ZoomPoint, rect: ZoomRect, bezelPx: number):
 }
 
 /**
- * The zoom a corner drag has reached.
+ * The fraction a corner drag has reached.
  *
- * Measured as the ratio of the pointer's distance from the box CENTRE now
- * to its distance when the drag began. That is what makes the box grow
- * about its centre: the gesture describes a radius, and the box - which the
- * page centres - keeps its middle wherever it already was. Dragging a
- * corner outward enlarges, inward shrinks, and which corner was grabbed
- * changes only the cursor, never the arithmetic.
+ * Measured as the ratio of the pointer's distance from the box CENTRE now to
+ * its distance when the drag began. That is what makes the box shrink and
+ * grow about its centre: the gesture describes a radius, and the box - which
+ * the page centres - keeps its middle wherever it already was. Dragging a
+ * corner inward scales the screen down below the fit, outward brings it back
+ * towards (and a little past) the fit. Which corner was grabbed changes only
+ * the cursor, never the arithmetic.
  */
 export function dragZoom(
-  startZoom: number,
+  startFraction: number,
   rect: ZoomRect,
   start: ZoomPoint,
   current: ZoomPoint,
@@ -237,52 +248,19 @@ export function dragZoom(
   const centreX = (rect.left + rect.right) / 2;
   const centreY = (rect.top + rect.bottom) / 2;
   const startRadius = Math.hypot(start.x - centreX, start.y - centreY);
-  // A grab exactly on the centre carries no radius to scale; leave the zoom
-  // where it was rather than dividing by zero.
-  if (!(startRadius > 0)) return clampZoom(startZoom);
+  // A grab exactly on the centre carries no radius to scale; leave the
+  // fraction where it was rather than dividing by zero.
+  if (!(startRadius > 0)) return clampFraction(startFraction);
   const currentRadius = Math.hypot(current.x - centreX, current.y - centreY);
-  return clampZoom(startZoom * (currentRadius / startRadius));
+  return clampFraction(startFraction * (currentRadius / startRadius));
 }
 
 /**
- * Pull the zoom back down until the rendered box fits the viewport.
- *
- * This is a CAP, not a fit search. The handheld calibration
- * (web/frontend/src/components/mobile/terminal-fit.ts) has to MAXIMISE a
- * size across xterm's per-device-pixel staircase, which needs a bisect to
- * stop it oscillating; here the only requirement is never to exceed what
- * fits, and a single proportional shrink from the measured overflow ratio
- * is monotone and correct by construction - it can leave under a cell of
- * slack, it can never overflow.
- *
- * `floor` (1x, the picker's own size) is never crossed by the clamp: a
- * viewport too small for the DEFAULT look is today's behaviour, not
- * something zoom is allowed to change. A session already below the floor
- * keeps its own size as the lower bound.
- *
- * Returns `zoom` untouched when nothing can be measured (jsdom, a detached
- * tree, a box that has not been laid out yet).
- */
-export function fitZoomToViewport(
-  zoom: number,
-  rendered: ZoomSize,
-  available: ZoomSize,
-  floor: number = DEFAULT_ZOOM,
-): number {
-  if (!(rendered.width > 0) || !(rendered.height > 0)) return zoom;
-  if (!(available.width > 0) || !(available.height > 0)) return zoom;
-  const ratio = Math.min(available.width / rendered.width, available.height / rendered.height);
-  if (ratio >= 1) return zoom;
-  const lowerBound = Math.min(zoom, floor);
-  return Math.max(lowerBound, clampZoom(zoom * ratio));
-}
-
-/**
- * The zoom this browser last used, or null when there is none to use.
+ * The override this browser last used, or null when there is none to use.
  *
  * localStorage may be unavailable (private mode, storage disabled) and the
  * value may have been hand-edited; neither is an error, and both mean the
- * session runs at the picker's size.
+ * session follows the window.
  */
 export function readStoredZoom(): number | null {
   try {
@@ -290,17 +268,23 @@ export function readStoredZoom(): number | null {
     if (raw === null) return null;
     const value = Number.parseFloat(raw);
     if (!Number.isFinite(value)) return null;
-    if (value < MIN_ZOOM || value > MAX_ZOOM) return null;
+    if (value < MIN_ZOOM_FRACTION || value > MAX_ZOOM_FRACTION) return null;
     return value;
   } catch {
     return null;
   }
 }
 
-/** Remember the zoom for this viewer's next session. */
-export function writeStoredZoom(zoom: number): void {
+/**
+ * Remember the viewer's override for their next session.
+ *
+ * Only ever called for a change the viewer actually made: a mount that
+ * changed nothing must not write, or every visit would stamp the default over
+ * a value the viewer chose on another day.
+ */
+export function writeStoredZoom(fraction: number): void {
   try {
-    window.localStorage.setItem(ZOOM_STORAGE_KEY, String(clampZoom(zoom)));
+    window.localStorage.setItem(ZOOM_STORAGE_KEY, String(clampFraction(fraction)));
   } catch {
     /* storage unavailable - the session still zooms, it just forgets */
   }

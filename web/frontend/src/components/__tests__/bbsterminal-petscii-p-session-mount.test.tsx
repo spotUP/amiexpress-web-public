@@ -194,7 +194,14 @@ describe('fixed 80x25 mode leaves the page ground to the page', () => {
     const box = outer.firstElementChild as HTMLElement;
     expect(outer.style.backgroundColor).toBe('transparent');
     expect(box.style.backgroundColor).toBe('rgb(0, 0, 0)');
-    expect(box.style.maxWidth).toBe('960px');
+    // No width cap any more. The 960px one made sense while the cell size was
+    // a constant and the box could otherwise stretch across an ultrawide
+    // viewport; now the cell size IS the fit - the largest at which the grid
+    // plus its bezel fits the window - so the box is exactly as wide as the
+    // screen it holds and a cap could only clip it. The concrete fit for a
+    // 1280x800 window is pinned in terminal-zoom.test.ts, where a real
+    // measurement is possible (jsdom lays nothing out).
+    expect(box.style.maxWidth).toBe('');
     // the bezel: a 16px black border with rounded corners around the screen
     expect(box.style.padding).toBe('var(--bbs-terminal-bezel, 16px)');
     expect(box.style.borderRadius).toBe('var(--bbs-terminal-radius, 12px)');
