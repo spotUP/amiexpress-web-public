@@ -4,7 +4,7 @@
  */
 
 import type { Colors } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/types';
-import type { Theme } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import { themeById, type Theme } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import type { GameDefinition, AchievementDefinition, BulletinEntry } from './types';
 
 export type ActionButtonKey = 'fold' | 'check' | 'call' | 'raise' | 'quit';
@@ -110,8 +110,25 @@ export const UI_THEME = {
   rail: '',
 };
 
+/**
+ * The resolved theme itself, not just the tokens copied out of it.
+ *
+ * The chrome - the animated rail and the theme's glitches - is driven from
+ * the Theme object, and the widgets that carry it are built in UIManager.
+ * This module already owns "what the board asked this door to look like",
+ * so the theme is cached HERE rather than threaded through one more
+ * constructor.
+ */
+let activeThemeValue: Theme | null = null;
+
+/** The theme applyTheme() was last given; Classic until it has been called. */
+export function activeTheme(): Theme {
+  return activeThemeValue ?? themeById('classic');
+}
+
 /** Fill UI_THEME from a resolved SDK theme. Call before building the UI. */
 export function applyTheme(theme: Theme): void {
+  activeThemeValue = theme;
   const t = theme.tokens;
 
   UI_THEME.topBar = { fg: t.barInk, bg: t.bar, item: { fg: t.dim }, selected: { fg: t.barInk } };

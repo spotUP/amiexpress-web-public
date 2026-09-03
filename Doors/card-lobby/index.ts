@@ -110,7 +110,6 @@ import {
   getPlayerBet,
   buildWeeklyBulletin,
   renderCardLines,
-  padColumn,
   mergeColumns,
   visibleWidth,
 } from './lib';
@@ -452,7 +451,7 @@ export class CardLobbyApp {
     });
 
     // Initialize managers
-    this.uiManager = new UIManager(this.screen, this.desktop);
+    this.uiManager = new UIManager(this.screen, this.desktop, this.session.bbsSession?.nodeId ?? 1);
     this.gameStateManager = new GameStateManager();
     this.tableFlow = new TableFlow(this);
     this.unoEvents = new UnoEventBus(this, REFRESH_INTERVAL_MS);
@@ -638,6 +637,10 @@ export class CardLobbyApp {
     if (this.session.bbsSession) {
       delete this.session.bbsSession.doorReconnectHandler;
     }
+
+    // Before the screen goes: a chrome timer writing to a destroyed screen
+    // takes the session with it, and stop() puts back any glitched row.
+    this.uiManager?.stopChrome();
 
     // Put the caller's terminal back to 80x25 whatever the door was showing
     this.terminalMode?.dispose();
@@ -1040,49 +1043,29 @@ export class CardLobbyApp {
     this.screen.render();
   }
 
+  /**
+   * What the table strip says. PAINTING it belongs to UIManager, which owns
+   * the widget and its width - this works out the two numbers the bar needs
+   * from the engine and hands them over.
+   */
   public updateTopInfoBar(): void {
     if (!this.currentProfile || !this.lobby) return;
     const tableId = this.currentProfile.currentTableId ?? this.selectedTableId;
-    if (!tableId) {
-      this.topInfoBar.setContent(' Card Lobby ');
-      return;
-    }
-
-    const table = this.findTableById(tableId);
+    const table = tableId ? this.findTableById(tableId) : null;
     if (!table) {
-      this.topInfoBar.setContent(' Card Lobby ');
+      this.uiManager.renderTableInfoBar(null, 0, '');
       return;
     }
 
-    let pot = 0;
-    const handState = this.loadTableHand(table);
-    if (handState) {
-      pot = handState.engine.state.pots.reduce((sum, potItem) => sum + potItem.amount, 0);
-    }
+    const state = this.loadTableHand(table)?.engine.state;
+    const seat = state?.actionTo;
+    const actor = seat === null || seat === undefined ? undefined : state?.players[seat];
+    const turnLabel = !actor?.name
+      ? ''
+      : actor.id === this.currentProfile.userId ? 'Your turn' : `Turn: ${actor.name}`;
 
-    let turnLabel = '';
-    if (handState) {
-      const actionSeat = handState.engine.state.actionTo;
-      if (actionSeat !== null && actionSeat !== undefined) {
-        const actor = handState.engine.state.players[actionSeat];
-        if (actor?.name) {
-          turnLabel = actor.id === this.currentProfile.userId ? 'Your turn' : `Turn: ${actor.name}`;
-        }
-      }
-    }
-
-    const infoSegments = [
-      `{${UI_THEME.accent}-fg}${table.gameName}{/}`,
-      `{${UI_THEME.accentAlt}-fg}Pot: ${pot}{/}`,
-      `{${UI_THEME.accent}-fg}Stakes: ${table.stakesLabel}{/}`,
-      `{green-fg}Buy-in: ${table.buyIn}{/}`,
-    ];
-    if (turnLabel) {
-      infoSegments.push(`{white-fg}${turnLabel}{/}`);
-    }
-    const width = Number(this.topInfoBar.width) || 80;
-    const line = ` ${infoSegments.join('   ')} `;
-    this.topInfoBar.setContent(padColumn(line, width));
+    const pot = state ? state.pots.reduce((sum, potItem) => sum + potItem.amount, 0) : 0;
+    this.uiManager.renderTableInfoBar(table, pot, turnLabel);
   }
 
   public updateActivityPanel(tableOverride?: LobbyTable | null, engineOverride?: PokerEngine | null): void {

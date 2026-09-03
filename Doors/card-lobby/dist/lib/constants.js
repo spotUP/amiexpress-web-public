@@ -5,7 +5,9 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PROFILES_KEY = exports.LOBBY_KEY = exports.LOBBY_BULLETINS = exports.ACHIEVEMENTS = exports.GAME_CATALOG = exports.UNO_ACTION_BUTTON_ORDER = exports.UNO_ACTION_BUTTON_STYLES = exports.ACTION_BUTTON_ORDER = exports.ACTION_BUTTON_STYLES = exports.UI_THEME = exports.ANSI_TAGS = exports.PokerAction = exports.BOT_NAMES = exports.MAX_ACTIVITY_EVENTS = exports.REFRESH_INTERVAL_MS = exports.WEEKLY_BULLETIN_NUMBER = exports.WIN_REWARD = exports.ACTIVITY_REWARD = exports.ENTRY_FEE_RATE = exports.WEEK_MS = exports.DAILY_COOLDOWN_MS = exports.DAILY_BONUS = exports.STARTING_CHIPS = exports.CHIP_NAME = void 0;
+exports.activeTheme = activeTheme;
 exports.applyTheme = applyTheme;
+const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 exports.CHIP_NAME = 'BBS Chips';
 exports.STARTING_CHIPS = 1000;
 exports.DAILY_BONUS = 200;
@@ -101,8 +103,23 @@ exports.UI_THEME = {
      */
     rail: '',
 };
+/**
+ * The resolved theme itself, not just the tokens copied out of it.
+ *
+ * The chrome - the animated rail and the theme's glitches - is driven from
+ * the Theme object, and the widgets that carry it are built in UIManager.
+ * This module already owns "what the board asked this door to look like",
+ * so the theme is cached HERE rather than threaded through one more
+ * constructor.
+ */
+let activeThemeValue = null;
+/** The theme applyTheme() was last given; Classic until it has been called. */
+function activeTheme() {
+    return activeThemeValue ?? (0, theme_1.themeById)('classic');
+}
 /** Fill UI_THEME from a resolved SDK theme. Call before building the UI. */
 function applyTheme(theme) {
+    activeThemeValue = theme;
     const t = theme.tokens;
     exports.UI_THEME.topBar = { fg: t.barInk, bg: t.bar, item: { fg: t.dim }, selected: { fg: t.barInk } };
     exports.UI_THEME.statusBar = { fg: t.barInk, bg: t.bar };
