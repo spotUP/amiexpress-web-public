@@ -35,6 +35,7 @@
 import { Panel, PanelGrid } from './panel';
 import type { LevelData } from './level-data';
 import { MatchableStack, Coordinate } from './check-matches';
+import { GarbageQueue } from './garbage-queue';
 import type { PanelSource } from './generator-source';
 export declare const BOARD_WIDTH = 6;
 export declare const BOARD_HEIGHT = 12;
@@ -264,8 +265,47 @@ export declare class Stack implements MatchableStack {
      */
     checkGameOver(): boolean;
     setGameOver(): void;
+    /** What this stack is sending. */
+    outgoingGarbage: GarbageQueue;
+    /** What is waiting to land on it. */
+    incomingGarbage: GarbageQueue;
+    /** The highest garbage id ever cleared; keeps off-screen blocks matchable. */
+    highestGarbageIdMatched: number;
+    private garbageCreatedCount;
+    /**
+     * Where each width of garbage spawns, cycled so repeated attacks of the same
+     * size do not stack in one column. Indexed by width.
+     */
+    private readonly garbageSizeDropColumnMaps;
+    private readonly currentGarbageDropColumnIndexes;
     /** Did the game end because the clock ran out rather than a top-out? */
     ranOutOfTime: boolean;
+    getConnectedGarbagePanels(matchingPanels: Panel[]): Panel[] | null;
+    matchGarbagePanels(garbagePanels: Panel[], garbageMatchTime: number, isChain: boolean, onScreenCount: number): void;
+    pushGarbage(origin: Coordinate, isChain: boolean, comboSize: number, metalCount: number): void;
+    /**
+     * May a piece of garbage drop onto this board right now?
+     *
+     * Never into a full stack, and never while a piece is already falling - they
+     * arrive one at a time. Otherwise the board has to be calm, EXCEPT that chain
+     * garbage taller than one row drops straight through the commotion, which is
+     * what makes a big chain feel like a wall arriving.
+     */
+    shouldDropGarbage(): boolean;
+    /** Take the next piece off the incoming queue and drop it. */
+    tryDropGarbage(): boolean;
+    /** The column this width of garbage spawns in, then advance the cycle. */
+    private getGarbageSpawnColumn;
+    /**
+     * Spawn a block above the playfield, falling.
+     *
+     * Every row it occupies is created in full across the board's width, not just
+     * the columns the block covers - the grid has no holes in it, and a partially
+     * created row would break every neighbour lookup above.
+     */
+    dropGarbage(width: number, height: number, isMetal: boolean): void;
+    /** Garbage landing shakes the stack, which also holds the rise. */
+    private onGarbageLand;
     /** The origin of the last attack graphic, for the renderer. */
     lastMatchOrigin: Coordinate | null;
 }

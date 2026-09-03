@@ -44,8 +44,13 @@ import {
   SCORE_PER_PANEL,
   SCORE_PER_MANUAL_RAISE,
   MAX_SCORE,
+  shakeFramesForGarbageSize,
 } from './consts';
 import { checkMatches, MatchableStack, Coordinate } from './check-matches';
+import { GarbageQueue, Garbage } from './garbage-queue';
+import {
+  getConnectedGarbagePanels, matchGarbagePanels, pushGarbage, GarbageStack,
+} from './garbage-match';
 import type { PanelSource } from './generator-source';
 import {
   COUNTDOWN_START, COUNTDOWN_LENGTH, COUNTDOWN_CURSOR_SPEED,
@@ -429,7 +434,10 @@ export class Stack implements MatchableStack {
 
     this.handleManualRaise();
 
-    if (this.stopWatchIsRunning) this.stopWatch += 1;
+    if (this.stopWatchIsRunning) {
+      if (this.shouldDropGarbage()) this.tryDropGarbage();
+      this.stopWatch += 1;
+    }
     this.clock += 1;
 
     // Time Attack ends on the clock rather than on the stack topping out, and
@@ -479,10 +487,14 @@ export class Stack implements MatchableStack {
     this.updatePanels();
     this.updateActivePanelCount();
 
-    // No chaining panels left anywhere means the chain is over.
+    // No chaining panels left anywhere means the chain is over - and only then
+    // may the garbage it built start its staging clock.
     if (this.chainCounter !== 0 && !this.hasChainingPanels()) {
       this.chainCounter = 0;
+      this.outgoingGarbage.finalizeCurrentChain(this.stopWatch);
     }
+
+    this.outgoingGarbage.processStagedGarbageForClock(this.stopWatch);
 
     this.removeExtraRows();
 
@@ -833,6 +845,7 @@ export class Stack implements MatchableStack {
 
   private handleLand(panel: Panel): void {
     this.onPanelLand?.(panel);
+    if (panel.isGarbage) this.onGarbageLand(panel);
   }
 
   /**
@@ -865,8 +878,141 @@ export class Stack implements MatchableStack {
     this.onGameOver?.();
   }
 
+  // --- garbage ---
+  /** What this stack is sending. */
+  outgoingGarbage = new GarbageQueue();
+  /** What is waiting to land on it. */
+  incomingGarbage = new GarbageQueue();
+  /** The highest garbage id ever cleared; keeps off-screen blocks matchable. */
+  highestGarbageIdMatched = 0;
+  private garbageCreatedCount = 0;
+
+  /**
+   * Where each width of garbage spawns, cycled so repeated attacks of the same
+   * size do not stack in one column. Indexed by width.
+   */
+  private readonly garbageSizeDropColumnMaps: number[][] = [
+    [1, 2, 3, 4, 5, 6],
+    [1, 3, 5],
+    [1, 4],
+    [1, 2, 3],
+    [1, 2],
+    [1],
+  ];
+  private readonly currentGarbageDropColumnIndexes = [0, 0, 0, 0, 0, 0];
+
   /** Did the game end because the clock ran out rather than a top-out? */
   ranOutOfTime = false;
+
+  // --- the hooks checkMatches calls when garbage is involved ---
+
+  getConnectedGarbagePanels(matchingPanels: Panel[]): Panel[] | null {
+    return getConnectedGarbagePanels(this as unknown as GarbageStack, matchingPanels);
+  }
+
+  matchGarbagePanels(
+    garbagePanels: Panel[], garbageMatchTime: number, isChain: boolean, onScreenCount: number,
+  ): void {
+    matchGarbagePanels(
+      this as unknown as GarbageStack, garbagePanels, garbageMatchTime, isChain, onScreenCount,
+    );
+  }
+
+  pushGarbage(origin: Coordinate, isChain: boolean, comboSize: number, metalCount: number): void {
+    pushGarbage(this as unknown as GarbageStack, origin, isChain, comboSize, metalCount);
+  }
+
+  /**
+   * May a piece of garbage drop onto this board right now?
+   *
+   * Never into a full stack, and never while a piece is already falling - they
+   * arrive one at a time. Otherwise the board has to be calm, EXCEPT that chain
+   * garbage taller than one row drops straight through the commotion, which is
+   * what makes a big chain feel like a wall arriving.
+   */
+  shouldDropGarbage(): boolean {
+    const garbage = this.incomingGarbage.peek();
+    if (!garbage) return false;
+    if (this.isToppedOut()) return false;
+    if (this.hasFallingGarbage()) return false;
+
+    // Nothing may be sitting above the playfield.
+    for (let row = this.height + 1; row < this.panels.length; row++) {
+      const rowPanels = this.panels[row];
+      if (!rowPanels) continue;
+      for (let col = 1; col <= this.width; col++) {
+        if (rowPanels[col] && rowPanels[col].color !== 0) return false;
+      }
+    }
+
+    if (!this.hasActivePanels()) return true;
+    if (garbage.isChain) return garbage.height > 1;
+    // Attack-engine garbage taller than a row is chain garbage wearing a combo
+    // label; upstream calls reaching here "the cursed path" and allows it.
+    return garbage.height > 1;
+  }
+
+  /** Take the next piece off the incoming queue and drop it. */
+  tryDropGarbage(): boolean {
+    const garbage = this.incomingGarbage.pop();
+    if (!garbage) return false;
+    this.dropGarbage(garbage.width, garbage.height, garbage.isMetal);
+    return true;
+  }
+
+  /** The column this width of garbage spawns in, then advance the cycle. */
+  private getGarbageSpawnColumn(garbageWidth: number): number {
+    const columns = this.garbageSizeDropColumnMaps[garbageWidth - 1];
+    const index = this.currentGarbageDropColumnIndexes[garbageWidth - 1];
+    const spawnColumn = columns[index];
+    this.currentGarbageDropColumnIndexes[garbageWidth - 1] = (index + 1) % columns.length;
+    return spawnColumn;
+  }
+
+  /**
+   * Spawn a block above the playfield, falling.
+   *
+   * Every row it occupies is created in full across the board's width, not just
+   * the columns the block covers - the grid has no holes in it, and a partially
+   * created row would break every neighbour lookup above.
+   */
+  dropGarbage(width: number, height: number, isMetal: boolean): void {
+    const originRow = this.height + 1;
+    const originCol = this.getGarbageSpawnColumn(width);
+    const isPartOfGarbage = (column: number) =>
+      column >= originCol && column < originCol + width;
+
+    this.garbageCreatedCount += 1;
+    const shakeTime = shakeFramesForGarbageSize(width, height);
+
+    for (let row = originRow; row <= originRow + height - 1; row++) {
+      if (this.panels[row]) continue;
+      this.panels[row] = [];
+      for (let col = 1; col <= this.width; col++) {
+        const panel = this.createPanelAt(row, col);
+        if (!isPartOfGarbage(col)) continue;
+        panel.garbageId = this.garbageCreatedCount;
+        panel.isGarbage = true;
+        panel.color = 9;
+        panel.width = width;
+        panel.height = height;
+        panel.yOffset = row - originRow;
+        panel.xOffset = col - originCol;
+        panel.shakeTime = shakeTime;
+        panel.state = 'falling';
+        if (isMetal) panel.metal = true;
+      }
+    }
+  }
+
+  /** Garbage landing shakes the stack, which also holds the rise. */
+  private onGarbageLand(panel: Panel): void {
+    if (panel.row > this.height) return;
+    const shake = panel.shakeTime ?? 0;
+    this.shakeTimeOnFrame = Math.max(this.shakeTimeOnFrame, shake, this.peakShakeTime);
+    if (this.shakeTimeOnFrame > this.peakShakeTime) this.peakShakeTime = this.shakeTimeOnFrame;
+    this.shakeTime = Math.max(this.shakeTime, this.shakeTimeOnFrame);
+  }
 
   /** The origin of the last attack graphic, for the renderer. */
   lastMatchOrigin: Coordinate | null = null;
