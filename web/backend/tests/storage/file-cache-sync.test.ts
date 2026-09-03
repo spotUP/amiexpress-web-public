@@ -13,7 +13,7 @@ import * as path from 'path';
  * process under plain node, from a macrotask, and report what happened.
  */
 describe('FileCache emulator-thread forms (out of process)', () => {
-  it('ensureLocalSync and writeBackSync complete, and carry unavailability through', () => {
+  it('ensureLocalSync and writeBackSync complete, carry unavailability through, and are bounded', () => {
     const backendRoot = path.resolve(__dirname, '../..');
     const tsx = path.join(backendRoot, 'node_modules', '.bin', 'tsx');
     const probe = path.join(__dirname, 'fixtures', 'sync-cache-probe.ts');
@@ -39,6 +39,14 @@ describe('FileCache emulator-thread forms (out of process)', () => {
       dirtyAfterFailure: true,
       stagedFileSurvivedFailure: true,
       ensureLocalSyncFailureIsUnavailable: true,
+      // The bounding timer did not become the thing that ends a healthy call.
+      macrotaskWorkIsPrompt: true,
+      // And the deadlock shape - a sync call from inside a promise
+      // continuation - now RAISES at its deadline instead of parking the board
+      // for ever. Every other deasync loop in this backend is bounded this
+      // way; these were the only unbounded ones.
+      microtaskShapeRaisesUnavailable: true,
+      microtaskShapeBounded: true,
     });
   }, 120_000);
 });

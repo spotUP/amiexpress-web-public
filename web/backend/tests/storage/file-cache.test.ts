@@ -269,3 +269,133 @@ describe('FileCache.evictTo', () => {
     expect(cache.overBudgetBytes()).toBe(0);
   });
 });
+
+describe('FileCache pins that outlive the journal', () => {
+  it('deletes nothing at all when the journal is corrupt, even a staged file with no marker', async () => {
+    const { cache, backend, dir, volumes } = setup();
+    // The shape Task 10 produces: staged at the cache path, upload failed.
+    const local = cache.localPathFor(2, 'Files/DOOR.DAT');
+    fs.mkdirSync(path.dirname(local), { recursive: true });
+    fs.writeFileSync(local, Buffer.alloc(400, 9));
+    backend.down = true;
+    await expect(cache.writeBack(2, 'Files/DOOR.DAT', local)).rejects.toThrow();
+
+    // A torn write leaves the journal unparseable, and the marker is gone too,
+    // so NOTHING records that these bytes are not in the pool. The file still
+    // sits at <drive>/<key>, which is exactly the shape evictTo would
+    // otherwise call a clean, re-fetchable copy.
+    fs.writeFileSync(path.join(dir, '.pending.json'), '{ this is not json');
+    fs.unlinkSync(`${local}.dirty`);
+
+    const reborn = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+    expect(reborn.isEvictionDisabled()).toBe(true);
+
+    reborn.evictTo(0);
+
+    expect(fs.existsSync(local)).toBe(true);
+  });
+
+  it('recovers a pending upload from its sidecar marker when the journal is gone', async () => {
+    const { cache, backend, dir, volumes } = setup();
+    const local = cache.localPathFor(2, 'Files/DOOR.DAT');
+    fs.mkdirSync(path.dirname(local), { recursive: true });
+    fs.writeFileSync(local, Buffer.alloc(400, 9));
+    backend.down = true;
+    await expect(cache.writeBack(2, 'Files/DOOR.DAT', local)).rejects.toThrow();
+
+    // Another node clobbered the journal. Only the per-file marker is left.
+    fs.unlinkSync(path.join(dir, '.pending.json'));
+
+    const reborn = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+    // An absent journal is not a corrupt one - eviction still runs.
+    expect(reborn.isEvictionDisabled()).toBe(false);
+    // And the marker did more than protect the bytes: it restored the retry.
+    expect(reborn.isDirty(2, 'Files/DOOR.DAT')).toBe(true);
+
+    reborn.evictTo(0);
+    expect(fs.existsSync(local)).toBe(true);
+
+    backend.down = false;
+    await reborn.flushPending();
+    expect((await backend.get('Files/DOOR.DAT')).length).toBe(400);
+    expect(fs.existsSync(`${local}.dirty`)).toBe(false);
+  });
+
+  it('will not evict a file carrying a sidecar marker', async () => {
+    const { cache, backend } = setup();
+    await backend.put('Files/CLEAN.LHA', Buffer.alloc(400, 1));
+    const clean = await cache.ensureLocal(2, 'Files/CLEAN.LHA');
+    // A marker left by some other writer - this instance knows nothing of it.
+    fs.writeFileSync(
+      `${clean}.dirty`,
+      JSON.stringify({ driveNumber: 2, key: 'Files/CLEAN.LHA', localPath: clean })
+    );
+
+    cache.evictTo(0);
+
+    expect(fs.existsSync(clean)).toBe(true);
+  });
+
+  it('removes the marker once the upload lands', async () => {
+    const { cache, dir } = setup();
+    const local = path.join(dir, 'staged-then-sent.bin');
+    fs.writeFileSync(local, 'sent');
+
+    await cache.writeBack(2, 'Files/SENT.DAT', local);
+
+    expect(fs.existsSync(`${local}.dirty`)).toBe(false);
+  });
+});
+
+describe('FileCache journal merge does not suppress a later re-dirty', () => {
+  it('keeps a second node re-staging of a key this node already uploaded', async () => {
+    const { cache, backend, dir, volumes } = setup();
+    const first = path.join(dir, 'first.bin');
+    fs.writeFileSync(first, 'one');
+    await cache.writeBack(2, 'Files/K.DAT', first); // this node resolves 2:Files/K.DAT
+
+    // A second node stages the SAME key again later and journals it.
+    const other = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+    const second = path.join(dir, 'second.bin');
+    fs.writeFileSync(second, 'two');
+    backend.down = true;
+    await expect(other.writeBack(2, 'Files/K.DAT', second)).rejects.toThrow();
+
+    // The first node saves its journal again, for an unrelated key. A durable
+    // "already resolved" set would silently delete the second node only copy
+    // record here.
+    const third = path.join(dir, 'third.bin');
+    fs.writeFileSync(third, 'three');
+    await expect(cache.writeBack(2, 'Files/OTHER.DAT', third)).rejects.toThrow();
+
+    const onDisk = JSON.parse(fs.readFileSync(path.join(dir, '.pending.json'), 'utf8')) as Array<{ key: string }>;
+    expect(onDisk.map((e) => e.key).sort()).toEqual(['Files/K.DAT', 'Files/OTHER.DAT']);
+  });
+});
+
+describe('FileCache download temp files', () => {
+  it('does not evict a download temp this process is still writing', () => {
+    const { cache, dir } = setup();
+    const tmp = path.join(dir, '2', 'Files', `DEMO.LHA.tmp-${process.pid}-0`);
+    fs.mkdirSync(path.dirname(tmp), { recursive: true });
+    fs.writeFileSync(tmp, Buffer.alloc(400, 5));
+
+    cache.evictTo(0);
+
+    expect(fs.existsSync(tmp)).toBe(true);
+  });
+
+  it('sweeps a download temp left by a process that is gone, and spares a live one', () => {
+    const { dir, volumes } = setup();
+    const orphan = path.join(dir, '2', 'Files', 'DEMO.LHA.tmp-999999-0');
+    const live = path.join(dir, '2', 'Files', `OTHER.LHA.tmp-${process.pid}-0`);
+    fs.mkdirSync(path.dirname(orphan), { recursive: true });
+    fs.writeFileSync(orphan, 'orphaned by a crash');
+    fs.writeFileSync(live, 'another node is renaming this');
+
+    new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+
+    expect(fs.existsSync(orphan)).toBe(false);
+    expect(fs.existsSync(live)).toBe(true);
+  });
+});

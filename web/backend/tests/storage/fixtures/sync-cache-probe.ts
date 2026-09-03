@@ -36,7 +36,20 @@ interface ProbeResult {
   dirtyAfterFailure: boolean;
   stagedFileSurvivedFailure: boolean;
   ensureLocalSyncFailureIsUnavailable: boolean;
+  /** The macrotask (legal) shape settles promptly, nowhere near its timeout. */
+  macrotaskWorkIsPrompt: boolean;
+  /** The microtask (illegal) shape RAISES instead of hanging the board for ever. */
+  microtaskShapeRaisesUnavailable: boolean;
+  /** ...and does so at its deadline, not after an unbounded wait. */
+  microtaskShapeBounded: boolean;
 }
+
+const SHORT_TIMEOUT_MS = 400;
+
+type MacrotaskResult = Omit<
+  ProbeResult,
+  'writeBackSyncBytes' | 'microtaskShapeRaisesUnavailable' | 'microtaskShapeBounded'
+>;
 
 async function build(): Promise<Fixture> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'filecache-sync-'));
@@ -56,7 +69,8 @@ async function build(): Promise<Fixture> {
 }
 
 /** Everything here runs on one synchronous stretch, the way a trap handler does. */
-function runOnTheEmulatorThread({ cache, backend, dir }: Fixture): Omit<ProbeResult, 'writeBackSyncBytes'> {
+function runOnTheEmulatorThread({ cache, backend, dir }: Fixture): MacrotaskResult {
+  const startedAt = Date.now();
   const fetched = cache.ensureLocalSync(2, 'Files/DEMO.LHA');
 
   const closed = path.join(dir, 'closed-by-a-door.bin');
@@ -83,6 +97,9 @@ function runOnTheEmulatorThread({ cache, backend, dir }: Fixture): Omit<ProbeRes
   backend.down = false;
 
   return {
+    // Well under the 30 s default: the bounding timer did not become the
+    // thing that ends a healthy call.
+    macrotaskWorkIsPrompt: Date.now() - startedAt < 5_000,
     ensureLocalSyncBytes: fs.readFileSync(fetched, 'utf8'),
     dirtyAfterSuccess: cache.isDirty(2, 'Files/DOOR.DAT'),
     writeBackSyncFailureIsUnavailable: writeFailure instanceof StorageUnavailableError,
@@ -92,31 +109,77 @@ function runOnTheEmulatorThread({ cache, backend, dir }: Fixture): Omit<ProbeRes
   };
 }
 
-build().then(
-  (fixture) => {
-    setImmediate(() => {
-      let partial: Omit<ProbeResult, 'writeBackSyncBytes'>;
-      try {
-        partial = runOnTheEmulatorThread(fixture);
-      } catch (err) {
-        process.stderr.write(`${String(err)}\n`);
-        process.exit(1);
-        return;
-      }
-      fixture.backend.get('Files/DOOR.DAT').then(
-        (body) => {
-          process.stdout.write(`${JSON.stringify({ ...partial, writeBackSyncBytes: body.toString() })}\n`);
-          process.exit(0);
-        },
-        (err: unknown) => {
-          process.stderr.write(`${String(err)}\n`);
-          process.exit(1);
-        }
-      );
-    });
-  },
-  (err: unknown) => {
-    process.stderr.write(`${String(err)}\n`);
-    process.exit(1);
+/** A second cache whose sync deadline is short enough to observe. */
+async function buildShortTimeout(): Promise<FileCache> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'filecache-short-'));
+  const backend = new FakeBackend({ driveNumber: 2 });
+  const state: VolumeState = {
+    volume: { driveNumber: 2, kind: 's3', path: 'b', egress: 'FREE', volumeClass: 'FREE', quotaBytes: 4096 },
+    backend,
+    usedBytes: 0,
+    requestsThisMonth: 0,
+    egressBytesThisMonth: 0,
+    degraded: false,
+  };
+  await backend.put('Files/DEMO.LHA', Buffer.from('payload'));
+  return new FileCache({
+    cacheDir: dir,
+    volumes: new VolumeSet([state]),
+    maxBytes: 4096,
+    syncTimeoutMs: SHORT_TIMEOUT_MS,
+  });
+}
+
+/**
+ * The ILLEGAL shape, on purpose: a sync call reached from inside a promise
+ * continuation. `process._tickCallback()` refuses to re-enter itself there, so
+ * nothing drains and the loop falls through to `uv_run`. Unbounded, this hangs
+ * the whole board for ever. Bounded - an armed timer to wake `uv_run` plus a
+ * deadline in the predicate, the shape every other deasync loop in this
+ * backend uses - it must give up and RAISE.
+ */
+function runFromAPromiseContinuation(cache: FileCache): { raised: boolean; bounded: boolean } {
+  const startedAt = Date.now();
+  let raised = false;
+  try {
+    cache.ensureLocalSync(2, 'Files/DEMO.LHA');
+  } catch (err) {
+    raised = err instanceof StorageUnavailableError;
   }
-);
+  const elapsed = Date.now() - startedAt;
+  return { raised, bounded: elapsed < SHORT_TIMEOUT_MS * 10 };
+}
+
+function emit(result: ProbeResult): void {
+  process.stdout.write(`${JSON.stringify(result)}\n`, () => process.exit(0));
+}
+
+function die(err: unknown): void {
+  process.stderr.write(`${String(err)}\n`);
+  process.exit(1);
+}
+
+build().then((fixture) => {
+  // Phase 1: the legal shape - a macrotask, the way a trap handler reaches it.
+  setImmediate(() => {
+    let macrotask: MacrotaskResult;
+    try {
+      macrotask = runOnTheEmulatorThread(fixture);
+    } catch (err) {
+      die(err);
+      return;
+    }
+    fixture.backend.get('Files/DOOR.DAT').then((body) => {
+      // Phase 2, strictly after phase 1 so nothing nests inside a parked loop.
+      buildShortTimeout().then((short) => {
+        const microtask = runFromAPromiseContinuation(short);
+        emit({
+          ...macrotask,
+          writeBackSyncBytes: body.toString(),
+          microtaskShapeRaisesUnavailable: microtask.raised,
+          microtaskShapeBounded: microtask.bounded,
+        });
+      }, die);
+    }, die);
+  });
+}, die);
