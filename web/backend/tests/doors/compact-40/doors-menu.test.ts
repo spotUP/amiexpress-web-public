@@ -88,12 +88,20 @@ describe('doors-menu compact (40-column) rows', () => {
   // no glitch timer is started at all.
   it('40 columns: attachGlitches is never called; 80 columns: it is', async () => {
     const glitchSpy = jest.spyOn(glitchRunner, 'attachGlitches').mockReturnValue(() => undefined);
-    // The masthead animation is gated on the same call; stub it so the test
-    // leaves no 20fps interval behind at 80.
-    const mastheadSpy = jest.spyOn(chrome, 'railStream');
+    // ...and the door reaches them through the ONE SDK entry point, which is
+    // also what stops the 20fps masthead interval leaking out of the test.
+    const realChrome = chrome.attachDoorChrome;
+    const started: Array<{ stop(): void }> = [];
+    const chromeSpy = jest.spyOn(chrome, 'attachDoorChrome')
+      .mockImplementation(((...args: unknown[]) => {
+        const handle = (realChrome as any)(...args);
+        started.push(handle);
+        return handle;
+      }) as any);
     try {
       for (const [width, expected] of [[40, 0], [80, 1]] as Array<[number, number]>) {
         glitchSpy.mockClear();
+        chromeSpy.mockClear();
         const bbs: any = {
           write: () => undefined,
           connectionType: 'web',
@@ -108,11 +116,16 @@ describe('doors-menu compact (40-column) rows', () => {
         const run = doorsMenu.createApp({ bbs, socket, user: { username: 'C64USER', secLevel: 255 }, params: [] });
         await new Promise((r) => setTimeout(r, 30));
         expect(glitchSpy).toHaveBeenCalledTimes(expected);
+        // The wiring pin: the door asks the SDK for its chrome, at every
+        // width. What that chrome DOES at each width is proven in
+        // sdk/tests/unit/door-chrome.test.ts.
+        expect(chromeSpy).toHaveBeenCalledTimes(1);
         void run;
       }
     } finally {
+      for (const handle of started) { try { handle.stop(); } catch { /* leaving anyway */ } }
       glitchSpy.mockRestore();
-      mastheadSpy.mockRestore();
+      chromeSpy.mockRestore();
     }
   });
 

@@ -6,6 +6,7 @@
  * Uses SDK blessed helpers (no duplicate code).
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.FOOTER_HINTS_COMPACT = exports.FOOTER_HINTS = void 0;
 exports.buildCategoryRow = buildCategoryRow;
 exports.buildDoorRow = buildDoorRow;
 exports.buildFooterContent = buildFooterContent;
@@ -173,29 +174,34 @@ function buildDoorRow(door, s, width) {
     const room = Math.max(1, width - 1 - 5 - 1 - CMD - 1);
     return `${s.accent(`[${typeLabel.padEnd(3)}]`)} ${s.ok(cmd)} ${s.ink(clip(door.name, room))}`;
 }
-/** The footer hint line. XXS keeps the navigation keys and drops the rest. */
+/** The hints this door offers, at the width tier it is drawn at. */
+exports.FOOTER_HINTS = [
+    { key: 'Up/Down', does: 'Navigate' },
+    { key: 'Enter', does: 'Select' },
+    { key: 'T', does: 'Filter Type' },
+    { key: 'Backspace', does: 'Back' },
+    { key: 'Q', does: 'Quit' },
+];
+/** The same hints, shortened for the 40-column tier. */
+exports.FOOTER_HINTS_COMPACT = [
+    { key: 'Up/Dn', does: 'Move' },
+    { key: 'Ent', does: 'Go' },
+    { key: 'BS', does: 'Back' },
+    { key: 'Q', does: 'Quit' },
+];
+/**
+ * The footer hint line.
+ *
+ * Was a door-local join of `${s.key(...)} ${s.dim(...)}` strings - a second
+ * copy of the SDK's footerHints, which is the drift this whole pass exists
+ * to end. Byte-identical output; one implementation.
+ *
+ * Kept exported because the 40-column test drives it directly.
+ */
 function buildFooterContent(s, width) {
     const compact = (0, blessed_1.getCompactProfile)(width);
-    // The key CAP is the part worth reading - which letter to press. The
-    // word after it is a reminder, so it sits dim and the caps carry the
-    // accent. Bright text throughout made the hint line compete with the
-    // content above it.
-    const hints = compact.collapseChrome
-        ? [
-            `${s.key('Up/Dn:')} ${s.dim('Move')}`,
-            `${s.key('Ent:')} ${s.dim('Go')}`,
-            `${s.key('BS:')} ${s.dim('Back')}`,
-            `${s.key('Q:')} ${s.dim('Quit')}`,
-        ]
-        : [
-            `${s.key('Up/Down:')} ${s.dim('Navigate')}`,
-            `${s.key('Enter:')} ${s.dim('Select')}`,
-            `${s.key('T:')} ${s.dim('Filter Type')}`,
-            `${s.key('Backspace:')} ${s.dim('Back')}`,
-            `${s.key('Q:')} ${s.dim('Quit')}`,
-        ];
     // The rail tail is decoration and the XXS row has no spare cells for it.
-    return hints.join('  ') + (s.rail && !compact.collapseChrome ? `  ${s.dim(s.rail)}` : '');
+    return (0, theme_1.footerHints)(compact.collapseChrome ? exports.FOOTER_HINTS_COMPACT : exports.FOOTER_HINTS, { key: s.key, dim: s.dim }, compact.collapseChrome ? '' : s.rail);
 }
 async function createApp(session) {
     const { bbs, user } = session;
@@ -275,48 +281,10 @@ async function createApp(session) {
     const compact = (0, blessed_1.getCompactProfile)(screenWidth);
     const TITLE = 'DOOR GAMES & UTILITIES';
     /**
-     * The masthead: a run of slashes with the headline right-aligned at the
-     * end, and one short segment of the run lit in the accent colour.
-     *
-     * The bar itself never moves - a run of identical slashes shifted by a
-     * column is the same run. What travels is the BRIGHTNESS, which is the
-     * effect the mockups wanted and the reason the run is drawn in two
-     * colours rather than one.
-     *
-     * `barWidth` is how much of the run has been drawn; the entry animation
-     * grows it from nothing. `scanTick` is null before the animation ends,
-     * when nothing is lit yet.
-     */
-    let barWidth = null;
-    let tick = null;
-    /**
-     * The bar is an irregular stream - `///////////// //// /////////// /` -
-     * scrolled rather than regenerated, so it travels instead of flickering.
-     * The seed only has to be stable for a session; the node number keeps two
-     * people's boards from marching in step.
+     * Varies the irregular rail between nodes, so two people on the same
+     * board are not watching an identical bar.
      */
     const BAR_SEED = (session?.bbsSession?.nodeId ?? 1) * 7 + 3;
-    function buildMasthead() {
-        if (!s.rail)
-            return ` ${TITLE} `;
-        // One column short of the width, always. Writing the final cell of a
-        // row is the oldest trap in terminal drawing: it leaves the cursor in a
-        // pending-wrap state and the last character ends up clipped or pushed
-        // onto the next line, which is exactly what the headline was doing.
-        // Leaving the column empty costs nothing and cannot go wrong.
-        const width = Math.max(1, (screen.width || 80) - 1);
-        const runWidth = Math.max(0, width - TITLE.length - 1);
-        const shown = barWidth === null ? runWidth : Math.min(barWidth, runWidth);
-        // Two things move at once, and they have to: the spaced pattern slides
-        // (which a solid run could not do at all), and a short segment lights
-        // up as it passes. Either alone reads as a static bar with a quirk.
-        const run = (0, theme_1.railStream)(s.rail, shown, tick ?? 0, BAR_SEED).padEnd(runWidth);
-        // One colour, all the way along. A bright segment travelling through it
-        // was tried and read as glare rather than as motion - the irregular
-        // stream already moves visibly on its own, and a second thing moving
-        // through it was one idea too many.
-        return `${s.accent(run)} ${s.ink(TITLE)}`;
-    }
     // Create header
     const header = (0, blessed_helpers_1.createBox)({
         parent: screen,
@@ -329,10 +297,10 @@ async function createApp(session) {
         clickable: false,
         mouse: false,
         border: undefined,
-        // The masthead: branding slashes, then the title. The mockup for
-        // Uprough Neon leads with `/////` and this is where it belongs - a
-        // theme with no rail (classic) gets exactly the title it always had.
-        content: buildMasthead(),
+        // The masthead is painted by attachDoorChrome below - branding
+        // slashes then the title, or just the title on a theme with no rail
+        // and at the 40-column tier. Empty here so there is one painter.
+        content: '',
         style: s.bar.style
     });
     // Create breadcrumb bar
@@ -791,83 +759,58 @@ async function createApp(session) {
     renderCategoryView();
     refreshMarkers();
     updateScrollLeader();
-    // The masthead arrives, then keeps moving.
-    //
-    // The entry draws the bar in from nothing over a few frames; after that a
-    // slow timer slides the pattern and walks the lit segment along it. One
-    // row redrawn per tick, which is the budget a moving row is allowed - see
-    // the cost table in the SDK's chrome.ts.
-    let mastheadTimer = null;
-    // A 40-column screen has no spare cells for decoration, and a 20fps row
-    // repaint is a lot of PETSCII bytes for a C64 to swallow. The masthead
-    // still draws - it just stops moving. (SDK: effectsAllowed().)
-    if (s.rail && (0, blessed_1.effectsAllowed)(screenWidth)) {
-        const width = Math.max(1, (screen.width || 80) - 1);
-        const runWidth = Math.max(0, width - TITLE.length - 1);
-        const frames = (0, theme_1.barGrowFrames)(s.rail, runWidth, 6);
-        let frame = 0;
-        const entry = setInterval(() => {
-            barWidth = frames[frame] ? frames[frame].trimEnd().length : runWidth;
-            header.setContent(buildMasthead());
-            screen.render();
-            if (++frame >= frames.length) {
-                clearInterval(entry);
-                barWidth = null; // full run from here on
-                tick = 0;
-                mastheadTimer = setInterval(() => {
-                    tick = (tick ?? 0) + 1;
-                    header.setContent(buildMasthead());
-                    screen.render();
-                    // 20 frames a second. A terminal cannot move anything less than
-                    // a whole cell, so smoothness is entirely a matter of frame RATE
-                    // and of keeping the interval even.
-                    //
-                    // Affordable because this is a TypeScript door on the web: the
-                    // cost is a socket write and an xterm parse, not the ~45ms of
-                    // 68K emulation a real door would pay per message. One row is
-                    // roughly 200 bytes, so this is about 4KB a second - fine here,
-                    // and NOT something to copy into a 68K door.
-                }, 50);
-            }
-        }, 25);
-    }
-    // The theme's glitches, if it asked for any. Does nothing at all on a
-    // theme that did not - no timer is even started - so a board on classic
-    // pays nothing for this line existing.
-    //
-    // Attached to the LIST because it is the only thing on screen with rows
-    // to spare: damaging the header or the key hints would read as the door
-    // being broken rather than as atmosphere.
-    // Glitches damage rows on purpose. On a 40-column canvas that damage is
-    // the "stray glyphs mid-row" the sysop reported, so at XXS no timer runs.
-    const stopGlitches = (0, blessed_1.effectsAllowed)(screenWidth) ? (0, theme_1.attachGlitches)(mainList, theme, () => screen.render(), 
-    // The list owns the keyboard here, so "busy" is about the filter
-    // prompt: a scrambled row while somebody is typing a filter reads as
-    // the door having eaten the input.
-    {
-        // Considered several times a second. The dice and the minimum gap in
-        // glitch.ts decide how often one actually fires; this only sets how
-        // finely that decision is sampled, and too coarse a tick puts a floor
-        // under the gap no matter what the constants say.
-        tickMs: 400,
-        isBusy: () => Boolean(screen._filterPromptOpen),
-    }) : () => undefined;
+    /**
+     * The whole chrome, from the ONE SDK call.
+     *
+     * This door used to run its own copy: a masthead builder, an entry timer
+     * and a slide timer that between them re-implemented attachMasthead, plus
+     * a hand-joined footer line. That copy was the reason the other doors had
+     * nothing to inherit - "it doesnt look even close to how cool DOORS
+     * looks" was said of a door that had the theme's COLOURS and none of its
+     * chrome. One implementation now, in sdk/engines/ui/theme/chrome.ts.
+     *
+     * At the 40-column tier attachDoorChrome starts no timer at all: the
+     * masthead is the static title and the glitches never fire, because a
+     * moving effect on a C64 canvas leaves stray glyphs mid-row.
+     */
+    const chrome = (0, theme_1.attachDoorChrome)(theme, {
+        width: screenWidth,
+        title: TITLE,
+        masthead: header,
+        footer: footer,
+        hints: exports.FOOTER_HINTS,
+        compactHints: exports.FOOTER_HINTS_COMPACT,
+        // Attached to the LIST because it is the only thing on screen with rows
+        // to spare: damaging the header or the key hints would read as the door
+        // being broken rather than as atmosphere.
+        glitch: mainList,
+        glitchOptions: {
+            // Considered several times a second. The dice and the minimum gap in
+            // glitch.ts decide how often one actually fires; this only sets how
+            // finely that decision is sampled.
+            tickMs: 400,
+            // The list owns the keyboard here, so "busy" is about the filter
+            // prompt: a scrambled row while somebody is typing a filter reads as
+            // the door having eaten the input.
+            isBusy: () => Boolean(screen._filterPromptOpen),
+        },
+        styles: s,
+        render: () => screen.render(),
+        seed: BAR_SEED,
+    });
     // Return promise that resolves when screen is destroyed
     return new Promise((resolve) => {
         let resolved = false;
         const cleanup = () => {
             if (!resolved) {
                 resolved = true;
-                // Stops the timer AND puts the true row back, so a door that exits
-                // mid-glitch never leaves the damage as the last thing on screen.
+                // Stops every timer AND puts a glitched row back, so a door that
+                // exits mid-glitch never leaves the damage as the last thing on
+                // screen.
                 try {
-                    stopGlitches();
+                    chrome.stop();
                 }
                 catch { /* leaving anyway */ }
-                if (mastheadTimer) {
-                    clearInterval(mastheadTimer);
-                    mastheadTimer = null;
-                }
                 try {
                     if (mainList)
                         mainList.removeAllListeners('select');
