@@ -230,19 +230,15 @@ export class AnsiToPetsciiTransducer {
       if (ch === '\n') { this.newline(out); i++; continue; }
       if (code === 0x08 || code === 0x7F) {
         // xterm clears the pending wrap and steps ONE cell left from column 39.
-        // In 'wrapped' the KERNAL already crossed the boundary, so getting to
-        // the cell ANSI would land on takes two steps, not one.
-        const steps = this.pendingWrap === 'wrapped' ? 2 : 1;
-        this.pendingWrap = 'none';
-        for (let k = 0; k < steps; k++) this.emit(out, 0x9D);
+        this.settleWrap(out);
+        this.emit(out, 0x9D);
         i++;
         continue;
       }
       if (ch === '\t') {
         // A tab settles the latch without crossing the boundary: xterm stops at
-        // column 39. In 'wrapped' the KERNAL is already past it, so it walks back.
-        if (this.pendingWrap === 'wrapped') this.emit(out, 0x9D);
-        this.pendingWrap = 'none';
+        // column 39, so from 'wrapped' the walk back is all the move there is.
+        this.settleWrap(out);
         const x = this.machine.state.cursorX;
         const next = Math.min(COLS - 1, (Math.floor(x / 8) + 1) * 8);
         for (let k = x; k < next; k++) this.printByte(out, 0x20);
@@ -339,12 +335,39 @@ export class AnsiToPetsciiTransducer {
    * screenshot: one menu row painted twice, and each shorter replacement string
    * leaving the tail of the longer text that had scrolled up under it.
    *
-   * The KERNAL idiom that fills the cell without scrolling: print the glyph one
-   * cell left, step back onto it, INSERT ($94) - which shifts the rest of the
-   * logical line right, dropping nothing, because (39,24) IS the line's last
-   * cell - and re-print what (38,24) held. INSERT carries the reverse bit and
-   * the colour with the glyph, so the cell that arrives at (39,24) is the one
-   * the stream asked for, and the cursor never leaves (39,24).
+   * The idiom, entered with the cursor ALREADY on (39,24) and every step read
+   * off the KERNAL ROM (skoolkid sk6502 c64rom; see the SDD ledger for the
+   * quoted listings):
+   *
+   *   $14   DELETE (E75C-E77A): (38,24) takes what (39,24) held, (39,24) goes
+   *         BLANK, the cursor lands on (38,24). It never scrolls.
+   *   G     the wanted glyph, printed at (38,24) in the pen and reverse the
+   *         stream is already in; the cursor advances to (39,24) without a wrap
+   *         (E6B6 exits at `CMP $D5 / BCS $E700`).
+   *   $9D   back onto (38,24).
+   *   attrs the DISPLACED cell's pen and reverse - emitted HERE, ahead of the
+   *         INSERT, because after `$94` they would not be executed at all.
+   *   $94   INSERT (E7F2-E824). (39,24) is blank NOW and the cursor is not
+   *         standing on it, so the ROM takes the plain-shift branch at E805:
+   *         no `JSR $E965`, no line-open, no `JSR $E8EA`. G slides into
+   *         (39,24) carrying its colour RAM byte and its reverse bit.
+   *   H     the displaced glyph, re-printed at (38,24). It is the ONE printable
+   *         after the INSERT, and E699-E69D pays the insert count back to zero
+   *         with it. The cursor ends on (39,24), where ANSI's is.
+   *   attrs the stream's own pen and reverse, restored now that the count is 0.
+   *
+   * WHY NOTHING MAY SIT BETWEEN `$94` AND THAT ONE PRINTABLE: while the insert
+   * count $D8 is non-zero the KERNAL does not EXECUTE control codes, it paints
+   * them as reversed glyphs (E745/E829 -> E697). A colour byte or a `$12`/`$92`
+   * there would land as a glyph at (38,24) and eat the insert. The first
+   * version of this idiom did exactly that; `PetsciiMachine` now models $D8, so
+   * the oracle catches it.
+   *
+   * WHY THE DELETE COMES FIRST: `$94` on a logical line whose last cell is NOT
+   * blank opens a new line (E7FE -> E965) and scrolls at the bottom (E975 ->
+   * E8EA) - which would re-create the very scroll this routine exists to avoid,
+   * every time a non-blank corner glyph is replaced by a different one. The
+   * DELETE guarantees the precondition the plain-shift branch needs.
    *
    * `screenCodeToPetscii` round-trips exactly (`printablePetsciiToScreenCode`
    * is its inverse over 0x00-0x7F and neither depends on the charset bank), so
@@ -362,13 +385,13 @@ export class AnsiToPetsciiTransducer {
       const heldPen = st.colorRam[left];
       const wantReverse = st.reverse;
       const wantPen = st.pen;
-      this.emit(out, 0x9D);            // onto (38,24)
-      this.emit(out, byte);            // the glyph lands there; cursor back on (39,24)
+      this.emit(out, 0x14);            // DELETE: (39,24) blanked, cursor onto (38,24)
+      this.emit(out, byte);            // the wanted glyph lands there; cursor back on (39,24)
       this.emit(out, 0x9D);            // onto (38,24) again
-      this.emit(out, 0x94);            // INSERT slides the glyph into (39,24)
       this.setReverse((heldCode & 0x80) !== 0, out);
       this.setPen(heldPen, out);
-      this.emit(out, screenCodeToPetscii(heldCode & 0x7F));   // (38,24) restored; cursor on (39,24)
+      this.emit(out, 0x94);            // INSERT slides the glyph into the now-blank (39,24)
+      this.emit(out, screenCodeToPetscii(heldCode & 0x7F));   // the ONE printable after $94
       this.setReverse(wantReverse, out);
       this.setPen(wantPen, out);
     }
@@ -416,10 +439,28 @@ export class AnsiToPetsciiTransducer {
     this.emit(out, 0x0D);
   }
 
+  /**
+   * Put the KERNAL cursor where the ANSI terminal's cursor actually IS, and
+   * settle the latch.
+   *
+   * In 'wrapped' the KERNAL has already crossed to (0, r+1) while ANSI still
+   * holds column 39 of row r, so EVERY operation that reads the cursor or moves
+   * relative to it - save, index, erase, the relative and semi-absolute CSI
+   * moves, backspace, tab - has to step back onto that column first or it acts
+   * a row too low. 'held' needs no walk: there the two cursors agree, which is
+   * the point of holding.
+   */
+  private settleWrap(out: number[]): void {
+    if (this.pendingWrap === 'wrapped') this.emit(out, 0x9D);
+    this.pendingWrap = 'none';
+  }
+
   /** Lone CR: column 0 of the same row. $9D never crosses a row boundary here because x lefts from column x stop at 0. */
   private carriageOnly(out: number[]): void {
     // 'wrapped': the KERNAL is on (0, r+1) while ANSI still holds column 39 of
-    // row r, so column 0 of "the same row" is one row UP, not where it stands.
+    // row r, so column 0 of "the same row" is one row UP, not where it stands -
+    // and $91 is that whole move in one byte, where settleWrap plus a walk back
+    // along the row would cost forty.
     if (this.pendingWrap === 'wrapped') {
       this.pendingWrap = 'none';
       this.emit(out, 0x91);
@@ -487,13 +528,16 @@ export class AnsiToPetsciiTransducer {
       return s.length - i > STRING_SEQUENCE_MAX ? s.length - i : 0;
     }
     if (next === '(' || next === ')' || next === '*' || next === '+') return s[i + 2] === undefined ? 0 : 3; // charset designation
-    if (next === '7') { const st = this.machine.state; this.savedCursor = { x: st.cursorX, y: st.cursorY }; return 2; }
+    if (next === '7') { this.settleWrap(out); const st = this.machine.state; this.savedCursor = { x: st.cursorX, y: st.cursorY }; return 2; }
     if (next === '8') { if (this.savedCursor) this.moveTo(this.savedCursor.x, this.savedCursor.y, out); return 2; }
-    if (next === 'M') { const st = this.machine.state; this.moveTo(st.cursorX, Math.max(0, st.cursorY - 1), out); return 2; }
+    // RI: up one row, column kept. On row 0 an ANSI terminal scrolls the screen
+    // DOWN; the KERNAL screen editor has no reverse scroll and no byte that asks
+    // for one, so there it stays put - a documented, unavoidable divergence.
+    if (next === 'M') { this.settleWrap(out); const st = this.machine.state; this.moveTo(st.cursorX, Math.max(0, st.cursorY - 1), out); return 2; }
     // IND: down one row, column kept, SCROLLING at the bottom - which is $11
     // exactly (PetsciiMachine.cursorDown scrolls on row 24). moveTo() would
     // clamp instead and silently swallow the scroll. NEL is CR+LF.
-    if (next === 'D') { this.pendingWrap = 'none'; this.emit(out, 0x11); return 2; }
+    if (next === 'D') { this.settleWrap(out); this.emit(out, 0x11); return 2; }
     if (next === 'E') { this.newline(out); return 2; }
     if (next === 'c') {
       // RIS: full reset. The screen background goes back to the terminal
@@ -522,6 +566,8 @@ export class AnsiToPetsciiTransducer {
     const isPrivate = prefix !== '';
     const nums = (isPrivate ? params.slice(1) : params).split(';').map((p) => (p === '' ? NaN : parseInt(p, 10)));
     const n = (idx: number, dflt: number) => (Number.isNaN(nums[idx]) || nums[idx] === undefined ? dflt : nums[idx]);
+    // Live reference: the machine mutates its state object in place, so this
+    // reads the cursor AFTER settleWrap has walked it back.
     const st = this.machine.state;
     if (isPrivate) {
       if (prefix !== '?') return; // '<' '=' '>': terminal queries and key-modifier modes, nothing to model
@@ -530,6 +576,10 @@ export class AnsiToPetsciiTransducer {
       if ((n(0, 0) === 47 || n(0, 0) === 1049) && (final === 'h' || final === 'l')) this.clearKeepingCursor(out, 0, 0);
       return;
     }
+    // Everything below except CUP/HVP reads the cursor - a relative move, a
+    // semi-absolute one that keeps the other axis, an erase anchored on it, or
+    // a save. They all have to act from the column ANSI is holding.
+    if (final !== 'H' && final !== 'f') this.settleWrap(out);
     switch (final) {
       case 'm': return this.sgr(nums.map((v) => (Number.isNaN(v) ? 0 : v)), out);
       case 'A': return this.moveTo(st.cursorX, Math.max(0, st.cursorY - n(0, 1)), out);

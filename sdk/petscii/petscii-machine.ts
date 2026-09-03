@@ -63,6 +63,21 @@ export class PetsciiMachine {
   private rowLinked: boolean[] = new Array(ROWS).fill(false);
   /** A `$02` has been seen and the NEXT byte is a candidate background colour. Survives chunk boundaries. */
   private bgPrefix = false;
+  /**
+   * The KERNAL's insert count, $D8 (ROM E824 `INC $D8`, E69D `DEC $D8`).
+   *
+   * `$94` raises it; every printed character lowers it (E699-E69F, which is on
+   * the ordinary print path as well as on E697's "insert reversed character"
+   * path). While it is non-zero the character-output routine does NOT EXECUTE
+   * control codes - it prints them as REVERSED GLYPHS:
+   *
+   *   E745  LDX $D8 / BEQ $E74C / JMP $E697   (unshifted, $00-$1F)
+   *   E829  LDX $D8 / BEQ $E832 / ORA #$40 / JMP $E697   (shifted, $80-$9F)
+   *
+   * Two escape it because they are tested first: `$0D`/`$8D` (E72A, E7E3) and
+   * `$94` itself (E7EE, ahead of E829). `$14` does not - E74C is after E745.
+   */
+  private insertCount = 0;
   onUpdate?: (fullRepaint: boolean) => void;
 
   feed(bytes: Uint8Array | Buffer | number[]): void {
@@ -83,7 +98,13 @@ export class PetsciiMachine {
     s.background = 0;
     s.border = 0;
     this.bgPrefix = false;
+    this.insertCount = 0;
     this.rowLinked.fill(false);
+  }
+
+  /** A byte the KERNAL screen editor treats as a control code rather than a glyph. */
+  private static isControlCode(b: number): boolean {
+    return b < 0x20 || (b >= 0x80 && b <= 0x9F);
   }
 
   private apply(b: number): boolean {
@@ -94,6 +115,15 @@ export class PetsciiMachine {
       // a `$02` is not a background command - fall through and process the
       // byte normally (this project's choice, see the header comment).
       if (b in PETSCII_COLOR_TO_VIC) return this.setScreenColor(PETSCII_COLOR_TO_VIC[b]);
+    }
+    // E745 / E829: with an insert pending, a control code is not executed - it
+    // is painted as a reversed glyph and pays one off the count. This is ahead
+    // of the colour table because every colour byte IS a control code.
+    if (this.insertCount > 0 && PetsciiMachine.isControlCode(b) && b !== 0x0D && b !== 0x8D && b !== 0x94) {
+      // E697 `ORA #$80` over what the two paths hand it: the raw byte when it
+      // came from E749, and `(b & $7F) | $40` when it came from E82D.
+      const base = b < 0x20 ? b : (b & 0x7f) | 0x40;
+      return this.putScreenCode(base | 0x80);
     }
     if (b in PETSCII_COLOR_TO_VIC) { s.pen = PETSCII_COLOR_TO_VIC[b]; return false; }
     switch (b) {
@@ -118,9 +148,18 @@ export class PetsciiMachine {
       case 0x14: this.deleteChar(); return false;
       case 0x94: this.insertChar(); return false;
     }
-    if (b < 0x20 || (b >= 0x80 && b <= 0x9F)) return false; // all other controls: no-op
-    // printable
-    const sc = printablePetsciiToScreenCode(b) | (s.reverse ? 0x80 : 0);
+    if (PetsciiMachine.isControlCode(b)) return false; // all other controls: no-op
+    return this.putScreenCode(printablePetsciiToScreenCode(b) | (s.reverse ? 0x80 : 0));
+  }
+
+  /**
+   * E699-E6A5: pay the insert count down, store the screen code in the current
+   * pen colour, advance the cursor. The one place a glyph reaches the screen,
+   * so the count can never be paid twice or missed.
+   */
+  private putScreenCode(sc: number): boolean {
+    const s = this.state;
+    if (this.insertCount > 0) this.insertCount--;
     const idx = s.cursorY * COLS + s.cursorX;
     s.screen[idx] = sc;
     s.colorRam[idx] = s.pen;
@@ -159,6 +198,12 @@ export class PetsciiMachine {
     s.cursorX++;
     if (s.cursorX < COLS) return false;
     s.cursorX = 0;
+    // E6C1 `CMP #$4F` / E6C3 `BEQ $E6F7`: a logical line stops at 80
+    // characters. Printing off the end of a row that is ALREADY a continuation
+    // does not link a third row - it does a newline (E6F7 -> E87C), which puts
+    // the cursor on the row after the line as a FRESH logical line.
+    const leavingRow = s.cursorY;
+    const lineCanGrow = fromPrint && this.logicalLineStartRow(leavingRow) === leavingRow;
     let scrolled = false;
     if (s.cursorY >= ROWS - 1) {
       this.scroll();
@@ -166,7 +211,7 @@ export class PetsciiMachine {
     } else {
       s.cursorY++;
     }
-    if (fromPrint) this.rowLinked[s.cursorY] = true;
+    if (fromPrint) this.rowLinked[s.cursorY] = lineCanGrow;
     return scrolled;
   }
 
@@ -233,6 +278,18 @@ export class PetsciiMachine {
     return end;
   }
 
+  /** First physical row of the logical line containing row y (ROM E6ED's walk back). */
+  logicalLineStartRow(y: number): number {
+    let start = y;
+    while (start > 0 && this.rowLinked[start]) start--;
+    return start;
+  }
+
+  /** The KERNAL's insert count, $D8. Exposed so the transducer's tests can pin that it is balanced. */
+  get pendingInserts(): number {
+    return this.insertCount;
+  }
+
   /**
    * DELETE ($14): destructive backspace. Moves the cursor left one position
    * (respecting row-wrap via cursorLeft), then shifts every cell from the
@@ -259,20 +316,81 @@ export class PetsciiMachine {
   }
 
   /**
-   * INSERT ($94): shifts every cell from the cursor through the end of the
-   * logical line right by one (dropping whatever was in the logical line's
-   * final cell), then writes a space at the cursor position.
+   * INSERT ($94), ROM E7F2-E826.
+   *
+   * The KERNAL does NOT shift unconditionally. It first asks whether the
+   * logical line has room:
+   *
+   *   E7F2  LDY $D5 / LDA ($D1),Y / CMP #" " / BNE $E7FE
+   *   E7FA  CPY $D3 / BNE $E805
+   *   E7FE  CPY #$4F / BEQ $E826
+   *   E802  JSR $E965   ("open up a space on the screen")
+   *
+   * i.e. a plain shift happens only when the line's LAST cell is a space and
+   * the cursor is not standing on it. Otherwise the line has to grow: an
+   * 80-character line cannot, so INSERT does nothing at all; a 40-character one
+   * swallows the row below, which pushes the rows under it down and SCROLLS
+   * when there is no row left (E965 -> E975 `JSR $E8EA`).
+   *
+   * That scroll is the whole reason this is modelled: it is the difference
+   * between an idiom that can place the bottom-right glyph and one that
+   * re-creates the scroll it was written to avoid.
    */
   private insertChar(): void {
     const s = this.state;
+    const lastIdx = this.logicalLineEndRow(s.cursorY) * COLS + (COLS - 1);
+    const onLastCell = s.cursorY * COLS + s.cursorX === lastIdx;
+    if (s.screen[lastIdx] !== 0x20 || onLastCell) {
+      const startRow = this.logicalLineStartRow(s.cursorY);
+      if (this.logicalLineEndRow(s.cursorY) - startRow >= 1) return; // CPY #$4F: an 80-char line cannot grow
+      this.openSpaceOnScreen();
+    }
     const startIdx = s.cursorY * COLS + s.cursorX;
-    const endRow = this.logicalLineEndRow(s.cursorY);
-    const endIdx = endRow * COLS + (COLS - 1);
+    const endIdx = this.logicalLineEndRow(s.cursorY) * COLS + (COLS - 1);
     for (let i = endIdx; i > startIdx; i--) {
       s.screen[i] = s.screen[i - 1];
       s.colorRam[i] = s.colorRam[i - 1];
     }
     s.screen[startIdx] = 0x20;
     s.colorRam[startIdx] = s.pen;
+    this.insertCount++;   // E824 INC $D8
+  }
+
+  /**
+   * E965 "open up a space on the screen": find the next row that STARTS a
+   * logical line (E967-E96A), push every row from there down one - scrolling
+   * the whole screen first when that row is past the bottom (E96F-E975) - and
+   * join the freed row onto the cursor's logical line (E6DA).
+   *
+   * The ROM's multi-line scroll bookkeeping inside E8EA/E9C8 is reproduced at
+   * the level this machine models (whole rows plus the link table); what it is
+   * here to get right is WHICH rows move and WHETHER the screen scrolls.
+   */
+  private openSpaceOnScreen(): void {
+    const s = this.state;
+    let marker = s.cursorY + 1;
+    while (marker < ROWS && this.rowLinked[marker]) marker++;
+    if (marker > ROWS - 1) {
+      // E975: no row left below, so the screen scrolls and the freed bottom row
+      // is the one that joins the line. `scroll()` moves the cursor's row up
+      // with everything else (E8EA `DEC $D6`).
+      this.scroll();
+      marker = ROWS - 1;
+      if (s.cursorY > 0) s.cursorY--;
+    } else {
+      // E981-E9A6: rows marker..23 move down to marker+1..24, row `marker` is
+      // cleared, and the link flags travel with their rows.
+      for (let y = ROWS - 1; y > marker; y--) {
+        s.screen.copyWithin(y * COLS, (y - 1) * COLS, y * COLS);
+        s.colorRam.copyWithin(y * COLS, (y - 1) * COLS, y * COLS);
+        this.rowLinked[y] = this.rowLinked[y - 1];
+      }
+      s.screen.fill(0x20, marker * COLS, (marker + 1) * COLS);
+      s.colorRam.fill(s.pen, marker * COLS, (marker + 1) * COLS);
+    }
+    // E6DA: the marker row becomes a continuation of the cursor's line, and the
+    // row after it starts a new one.
+    this.rowLinked[marker] = true;
+    if (marker + 1 < ROWS) this.rowLinked[marker + 1] = false;
   }
 }

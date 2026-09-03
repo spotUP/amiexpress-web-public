@@ -84,12 +84,16 @@ function both(chunks: string[]) {
   const t = new AnsiToPetsciiTransducer();
   const display = new PetsciiMachine();
   const ref = new FrameReconstructor({ cols: COLS, rows: ROWS });
+  const bytes: number[] = [];
   for (const c of chunks) {
-    display.feed(t.transduce(c));
+    const out = t.transduce(c);
+    bytes.push(...out);
+    display.feed(out);
     ref.write(c);
   }
   return {
     display,
+    bytes,
     c64: asText(c64Grid(display)),
     ansi: asText(ansiGrid(ref)),
     c64Cells: c64Grid(display),
@@ -171,6 +175,55 @@ describe('a row painted to column 40 does not scroll the C64 screen', () => {
   });
 });
 
+describe('the bottom-right idiom is safe on the KERNAL, not just on the grid', () => {
+  // The oracle models $D8 and the fullness test now (see
+  // `kernal-insert-delete.test.ts`), so these run against a machine that would
+  // scroll, or paint a control byte as a glyph, if the idiom were wrong.
+
+  it('a non-blank bottom-right cell can be replaced without a scroll', () => {
+    const frames = [
+      '\x1b[1;1HTOP\x1b[25;39H\x1b[32mHC',   // seed (38,24)='H' green, (39,24)='C' green
+      '\x1b[25;40H\x1b[31mX',                 // replace the corner with a red 'X'
+    ];
+    const { c64, display } = both(frames);
+    expect(c64[0]).toBe('TOP');                                  // nothing scrolled
+    expect(display.state.screen[24 * COLS + 39]).toBe(scUpper('X'));
+    expect(display.state.colorRam[24 * COLS + 39]).toBe(2);      // red
+    expect(display.state.screen[24 * COLS + 38]).toBe(scUpper('H'));
+    expect(display.state.colorRam[24 * COLS + 38]).toBe(5);      // still green
+    expectTerminalParity(frames);
+  });
+
+  it('the row above the last row is untouched by the corner idiom', () => {
+    const frames = [
+      '\x1b[24;1H' + 'R'.repeat(40) + '\x1b[25;39H\x1b[32mHC',
+      '\x1b[25;40H\x1b[31mX',
+    ];
+    const { c64 } = both(frames);
+    expect(c64[23]).toBe('R'.repeat(40));
+    expectTerminalParity(frames);
+  });
+
+  it('the idiom leaves no insert pending, so the next control byte is executed and not painted', () => {
+    const { display } = both(['\x1b[25;39H\x1b[32mHC', '\x1b[25;40H\x1b[31mX']);
+    expect(display.pendingInserts).toBe(0);
+  });
+
+  it('exactly one printable follows the INSERT it emits - nothing the insert count could eat', () => {
+    const { bytes } = both(['\x1b[1;1HTOP\x1b[25;39H\x1b[32mHC', '\x1b[25;40H\x1b[31mX']);
+    const inserts = bytes.reduce((n, b) => (b === 0x94 ? n + 1 : n), 0);
+    expect(inserts).toBeGreaterThan(0);
+    bytes.forEach((b, i) => {
+      if (b !== 0x94) return;
+      const next = bytes[i + 1];
+      expect(next).toBeDefined();
+      // A control code here would be painted as a reversed glyph (ROM E745 /
+      // E829 -> E697) and would eat the insert.
+      expect(next < 0x20 || (next >= 0x80 && next <= 0x9f)).toBe(false);
+    });
+  });
+});
+
 describe('erase reaches the bottom-right cell', () => {
   it('erasing the bottom row clears its last cell', () => {
     const frames = [FULL_BOTTOM_ROW, '\x1b[25;1H\x1b[K'];
@@ -203,6 +256,32 @@ describe('the deferred wrap is honoured by every operation, not only by newline'
 
   it('a tab after a row painted to column 40 does not step onto the row below', () => {
     expectTerminalParity(['a'.repeat(40) + '\tZ']);
+  });
+
+  it('a relative cursor move after a row painted to column 40 runs from the column ANSI holds', () => {
+    for (const move of ['\x1b[A', '\x1b[B', '\x1b[2C', '\x1b[3D', '\x1b[E', '\x1b[F']) {
+      expectTerminalParity(['\x1b[3;1H' + 'a'.repeat(40) + move + 'Z']);
+    }
+  });
+
+  it('a semi-absolute move keeps the axis ANSI holds, not the one the KERNAL crossed to', () => {
+    expectTerminalParity(['\x1b[3;1H' + 'a'.repeat(40) + '\x1b[10G' + 'Z']);  // CHA keeps the row
+    expectTerminalParity(['\x1b[3;1H' + 'a'.repeat(40) + '\x1b[12d' + 'Z']);  // VPA keeps the column
+  });
+
+  it('erase to end of line after a row painted to column 40 clears the tail of THAT row', () => {
+    expectTerminalParity(['\x1b[3;1H' + 'b'.repeat(40) + '\x1b[4;1H' + 'c'.repeat(20) + '\x1b[3;20H' + 'a'.repeat(21) + '\x1b[K']);
+    expectTerminalParity(['\x1b[3;1H' + 'a'.repeat(40) + '\x1b[X']);
+    expectTerminalParity(['\x1b[3;1H' + 'a'.repeat(40) + '\x1b[J']);
+  });
+
+  it('ESC M steps up from the row ANSI holds, and ESC 7 saves the column it holds', () => {
+    expectTerminalParity(['\x1b[3;1H' + 'a'.repeat(40) + '\x1bMZ']);
+    expectTerminalParity(['\x1b[3;1H' + 'a'.repeat(40) + '\x1b7\x1b[10;10HX\x1b8Z']);
+  });
+
+  it('ESC D indexes from the row ANSI holds, not the one the KERNAL crossed to', () => {
+    expectTerminalParity(['\x1b[3;1H' + 'a'.repeat(40) + '\x1bDZ']);
   });
 });
 

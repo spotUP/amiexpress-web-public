@@ -386,10 +386,17 @@ describe('AnsiToPetsciiTransducer deferred wrap (xterm pending-wrap parity)', ()
     expect(display.state.cursorY).toBe(1);
   });
 
-  it('a cursor move after the 40th column clears the pending wrap and the CRLF behaves as the oracle does', () => {
+  it('a RELATIVE cursor move after the 40th column runs from the column ANSI holds, not the row the KERNAL crossed to', () => {
+    // CUF from a pending wrap: an ANSI terminal is on (39,0) and clamps to
+    // (39,0); the CRLF then puts the next line on row 1. This used to assert
+    // row 2, which was the KERNAL's already-crossed (0,1) leaking into a
+    // RELATIVE move - the same deferred-wrap defect class as the bottom-right
+    // scroll, and a divergence from `petscii/frame/ansi-screen.ts`, which
+    // `blessed-repaint.test.ts` now pins cell-for-cell.
     const { display } = run('a'.repeat(40) + '\x1b[5C\r\nN');
-    expect(cell(display, 0, 2)).toBe(scUpper('N'));
-    expect([display.state.cursorX, display.state.cursorY]).toEqual([1, 2]);
+    expect(cell(display, 0, 1)).toBe(scUpper('N'));
+    expect(cell(display, 0, 2)).toBe(0x20);
+    expect([display.state.cursorX, display.state.cursorY]).toEqual([1, 1]);
   });
 });
 
