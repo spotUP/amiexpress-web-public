@@ -74,40 +74,29 @@ jobs:
           SKIP_SDK_PREPARE: '1'
         run: npm install --ignore-scripts --no-audit --no-fund
 
-      # Several backend tests import Doors/door-manager/app.ts, which resolves
-      # '@amiexpress/bbs-door-sdk' through the symlink npm creates from that
-      # package's own "file:../../sdk" dependency. Without this install the
-      # symlink does not exist and four suites fail to even load.
-      - name: Install door-manager deps (creates the SDK symlink)
-        working-directory: Doors/door-manager
-        run: npm install --ignore-scripts --no-audit --no-fund
-
-      # The tests typecheck reaches further than the tests import at runtime:
-      # tsconfig.tests.json pulls in the door sources those suites reference,
-      # and grandmaster and livechat resolve the SDK through their OWN
-      # file:../../sdk symlink, exactly as door-manager does. grandmaster also
-      # has a real dependency of its own, tone.
+      # Every door the backend type-checks or tests, installed by DERIVING
+      # the list rather than writing it down.
       #
-      # Without these two, "Type-check tests" fails with a page of TS2307 -
-      # Cannot find module '@amiexpress/bbs-door-sdk/...' and 'tone' - which
-      # is a missing install in CI, not a fault in the doors. It reads as a
-      # broken SDK export, and cost a while to see otherwise.
-      - name: Install grandmaster deps (SDK symlink and tone)
-        working-directory: Doors/grandmaster
-        run: npm install --ignore-scripts --no-audit --no-fund
-
-      - name: Install livechat deps (SDK symlink)
-        working-directory: Doors/livechat
-        run: npm install --ignore-scripts --no-audit --no-fund
-
-      # The 40-column suites load four more doors the same way. Until the
-      # type-check step above stopped failing first, jest never ran far enough
-      # to say so; the moment it did, six suites failed on "Cannot find module
-      # '@amiexpress/bbs-door-sdk/utils/terminal-mode' from
-      # Doors/doors-menu/app.ts". Same missing install, four more doors.
-      - name: Install 40-column door deps (SDK symlinks)
+      # It used to be three hardcoded steps, and the history of this file is
+      # the cost of that: grandmaster, then livechat, then "same missing
+      # install, four more doors" for the 40-column suites, and then main
+      # went red again the day ncurses-pong and phreakwars arrived -
+      # "Cannot find module '@amiexpress/bbs-door-sdk'" from a door nobody
+      # had added here. A list that has to be edited every time a door is
+      # written is a list that will be out of date again.
+      #
+      # The rule: a door referenced from web/backend's sources or tests, that
+      # has a package.json depending on the SDK, gets installed. That covers
+      # every door the two type-check steps below can reach, and it is a
+      # superset of the six names that used to be here.
+      - name: Install door deps (SDK symlinks, derived from what the backend uses)
         run: |
-          for door in ami-stripper doors-menu theme-picker bug-tracker; do
+          doors=$(grep -rhoE "Doors/[a-zA-Z0-9._-]+/" web/backend/src web/backend/tests \
+            --include='*.ts' | cut -d/ -f2 | sort -u)
+          for door in $doors; do
+            [ -f "Doors/$door/package.json" ] || continue
+            grep -q "bbs-door-sdk" "Doors/$door/package.json" || continue
+            echo "  installing Doors/$door"
             npm install --prefix "Doors/$door" --ignore-scripts --no-audit --no-fund
           done
 
