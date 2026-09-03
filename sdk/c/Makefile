@@ -33,7 +33,7 @@ NDK  ?= /opt/homebrew/Cellar/m68k-amiga-elf-gcc/13.1.0/m68k-amiga-elf/sys-includ
 VC    = VBCC=$(VBCC) vc
 AMIGA_CFLAGS = +aos68k -c99 -DAMIGA -Iinclude -I"$(VBCC)/targets/m68k-amigaos/include" -I"$(NDK)"
 
-MODULES = ae_host ae_out ae_box
+MODULES = ae_host ae_out ae_box ae_session ui_profile
 AMIGA_OBJS = $(patsubst %,build/amiga/%.o,$(MODULES))
 
 .PHONY: all test amiga lib measure clean
@@ -44,12 +44,22 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: build/test_ae_host
+test: build/test_ae_host build/test_ae_session build/test_ui_profile
 	./build/test_ae_host
+	./build/test_ae_session
+	./build/test_ui_profile
 
 build/test_ae_host: src/ae_host.c tests/test_ae_host.c include/ae_host.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ae_host.c tests/test_ae_host.c -o $@
+
+build/test_ae_session: src/ae_session.c tests/test_ae_session.c include/ae_session.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) src/ae_session.c tests/test_ae_session.c -o $@
+
+build/test_ui_profile: src/ui_profile.c tests/test_ui_profile.c include/ui_profile.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) src/ui_profile.c tests/test_ui_profile.c -o $@
 
 # ---------------------------------------------------------------------
 # The 68K library and the two yardstick doors

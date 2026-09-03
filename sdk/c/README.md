@@ -65,9 +65,38 @@ make measure   # the size proof above, and it fails if the rule stops holding
 need vbcc, vlink and an NDK; the paths are at the top of the `Makefile` and
 are overridable (`make amiga VBCC=... NDK=...`).
 
+## 3. Phase 1: who is calling, and on what screen
+
+`ae_session.h` answers the other half of the question `ae_host.h` started:
+the user's name, location, level and time left, whether their terminal takes
+ANSI, the screen's width and height, and the conference they are in.
+
+Two decisions worth knowing:
+
+- **The caller owns the storage.** The existing C door keeps its BBS message
+  buffer in a `static` (`examples/doorrepo-c/aedoor_amiga.c:199-204`), so two
+  subsystems in one door cannot both talk to the board. `ae_open` takes the
+  buffer, the library keeps no globals, and the 264-byte floor is enforced.
+- **The transport is a seam.** On the Amiga a field is one AEDoor round trip;
+  in the tests it is a table. Same accessors either way, which is why phase 1
+  is tested without an emulator.
+
+Everything answers something usable when the board says nothing: 80x25, not
+ANSI, and a name a door can print without checking. A dropped carrier stops
+every later round trip rather than returning an answer shaped like a real one.
+
+`ui_profile.h` is the layout tier - borders, columns, gap, padding and
+whether decoration may run - matching
+`sdk/engines/ui/blessed/core/responsive-constants.ts` value for value, pinned
+from the TypeScript side by `sdk/test/c-sdk-agrees-with-typescript.test.ts`
+so the two cannot drift in silence.
+
+The linking rule still holds with both modules in the library: `hello` is
+5,048 bytes, byte for byte what it was before they existed.
+
 ## What is deliberately not here yet
 
-Everything else. Phase 0 is the host query and the linking proof; widgets,
-theme, layout, settings and the AEDoor transport are phases 1 and up, and
-`examples/doorrepo-c/` remains the working reference for how a real C door
-talks to this board today.
+Widgets (a bordered list, a masthead, a footer), input decoding, dialogs, the
+theme tokens and settings - phases 2 to 4 - and the real AEDoor transport,
+which `examples/doorrepo-c/aedoor_amiga.c` still owns and which phase 2 lifts
+into `sdk/c/` behind the `ae_transport_fn` seam this phase introduced.
