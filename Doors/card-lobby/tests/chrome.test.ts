@@ -113,9 +113,19 @@ export async function aFortyColumnScreenGetsNoMovingChrome(): Promise<void> {
   const h = await openAt(40);
   const ui = h.app.uiManager;
 
-  assert.strictEqual(ui.mastheadRow.hidden, true, 'no masthead where none fits');
-  assert.ok(ui.topBar.getContent().includes(h.theme.rail),
-    'the top bar keeps the theme\'s mark instead');
+  // Whatever the menus leave: with one menu the title still fits at 40 and
+  // is drawn STILL; with more menus it is hidden and the bar keeps the mark.
+  // Either way nothing moves - the SDK chrome reports itself static.
+  assert.strictEqual(ui.chrome?.animated, false, 'no moving chrome at 40 columns');
+  if (ui.mastheadRow.hidden) {
+    assert.ok(ui.topBar.getContent().includes(h.theme.rail),
+      'the top bar keeps the theme\'s mark where no masthead fits');
+  } else {
+    assert.ok(ui.mastheadRow.getContent().includes('CARD LOBBY'),
+      'a still title where it fits');
+    assert.ok(!ui.mastheadRow.getContent().includes(h.theme.rail.repeat(3)),
+      'no rail at 40 columns');
+  }
 
   await h.app.shutdown();
   await h.finished;

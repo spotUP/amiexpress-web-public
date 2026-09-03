@@ -110,10 +110,11 @@ const EXEMPTIONS: Exemption[] = [
     reason: 'conference bulletin data - written by a door, not served by name',
   },
   {
-    // Screens/BBSTITLE.txt opens `~SMO1|`. screen.handler.ts:2419 runs the
-    // slow-motion frame emitter only `if (slowmoSpeed !== 0 && !hasWipeAnimation)`,
+    // Screens/BBSTITLE.txt and its per-node copies (Node<n>/BBSTITLE.txt, the
+    // file express.e reads first) open `~SMO1|`. screen.handler.ts:2419 runs
+    // the slow-motion frame emitter only `if (slowmoSpeed !== 0 && !hasWipeAnimation)`,
     // so adding a wipe would silently switch off the reveal the screen already has.
-    match: /^Screens\/BBSTITLE\.txt$/,
+    match: /^(Screens|Node\d+)\/BBSTITLE\.txt$/,
     reason: 'already carries ~SMO1| - a wipe would switch its slow-motion reveal off',
   },
   {
