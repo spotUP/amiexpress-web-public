@@ -47,7 +47,7 @@ import {
   COLOR_BLUE,
   COLOR_BLACK,
   ACS_VLINE,
-} from "@amiexpress/bbs-door-sdk/ncurses";
+} from "@amiexpress/bbs-door-sdk/engines/ui/ncurses";
 
 // Original C: typedef struct{short int x, y, c; bool movhor, movver;} object;
 interface GameObject {
