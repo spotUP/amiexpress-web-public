@@ -102,10 +102,21 @@ function missionBriefingLines(mission, clear) {
  * that is the part a player notices when it is wrong.
  */
 async function pickMission(pack, clearFor, dialogs) {
+    let showing = pack;
     for (;;) {
-        const picked = await dialogs.select(pack);
+        const picked = await dialogs.select(showing);
         if (!picked)
             return null;
+        if (picked === 'edit') {
+            // No editor wired means nobody should have been able to ask - a
+            // player's call has no `edit`. Leaving is the only answer that ends:
+            // continuing would show the same screen, which would answer 'edit'
+            // again, for ever.
+            if (!dialogs.edit)
+                return null;
+            showing = await dialogs.edit(showing);
+            continue;
+        }
         if (await dialogs.brief(picked, clearFor(picked.id)))
             return picked;
     }

@@ -112,13 +112,33 @@ export async function pickMission(
   pack: MissionPack,
   clearFor: (missionId: string) => MissionClear | null,
   dialogs: {
-    select: (pack: MissionPack) => Promise<Mission | null>;
+    select: (pack: MissionPack) => Promise<Mission | 'edit' | null>;
     brief: (mission: Mission, clear: MissionClear | null) => Promise<boolean>;
+    /**
+     * Open the editor, for a sysop who asked for it, and answer with the
+     * pack to go on showing - the edited one when they saved, the same one
+     * when they did not. The loop then returns to the list, which is where
+     * they were.
+     */
+    edit?: (pack: MissionPack) => Promise<MissionPack>;
   }
 ): Promise<Mission | null> {
+  let showing = pack;
+
   for (;;) {
-    const picked = await dialogs.select(pack);
+    const picked = await dialogs.select(showing);
     if (!picked) return null;
+
+    if (picked === 'edit') {
+      // No editor wired means nobody should have been able to ask - a
+      // player's call has no `edit`. Leaving is the only answer that ends:
+      // continuing would show the same screen, which would answer 'edit'
+      // again, for ever.
+      if (!dialogs.edit) return null;
+      showing = await dialogs.edit(showing);
+      continue;
+    }
+
     if (await dialogs.brief(picked, clearFor(picked.id))) return picked;
   }
 }

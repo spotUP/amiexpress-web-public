@@ -30,10 +30,9 @@ function missionRows(pack, clears) {
         return `${number}  ${mission.name.padEnd(16).slice(0, 16)}  ${mark}`;
     });
 }
-/**
- * Show the pack and return the chosen mission, or null if the player quit.
- */
-async function showMissionSelect(screen, pack, progress, playerName) {
+async function showMissionSelect(screen, pack, progress, playerName, 
+/** Sysops get one extra key. Everyone else is not told about it. */
+canEdit = false) {
     const clears = progress.getClears(playerName, pack.name);
     const rows = missionRows(pack, clears);
     const done = Object.keys(clears).length;
@@ -62,6 +61,19 @@ async function showMissionSelect(screen, pack, progress, playerName) {
             style: { fg: 'gray' },
             content: pack.missions[0]?.hint ?? '',
         });
+        const keys = (0, blessed_helpers_1.createBox)({
+            border: undefined,
+            parent: box,
+            bottom: 0,
+            left: 1,
+            width: 42,
+            height: 1,
+            tags: true,
+            style: { fg: 'gray' },
+            content: canEdit
+                ? '{yellow-fg}ENTER{/yellow-fg} play  {yellow-fg}E{/yellow-fg} edit pack  {yellow-fg}ESC{/yellow-fg} back'
+                : '{yellow-fg}ENTER{/yellow-fg} play  {yellow-fg}ESC{/yellow-fg} back',
+        });
         const list = (0, blessed_helpers_1.createList)({
             parent: box,
             top: 1,
@@ -83,6 +95,7 @@ async function showMissionSelect(screen, pack, progress, playerName) {
         const close = (mission) => {
             list.destroy();
             hint.destroy();
+            keys.destroy();
             box.destroy();
             screen.render();
             resolve(mission);
@@ -96,6 +109,11 @@ async function showMissionSelect(screen, pack, progress, playerName) {
             close(pack.missions[index] ?? null);
         });
         list.key(['escape', 'q'], () => close(null));
+        // E opens the editor, for a sysop. The hint row says so only when it is
+        // true: an offer a player cannot take is worse than no offer.
+        if (canEdit) {
+            list.key(['e'], () => close('edit'));
+        }
         list.focus();
         screen.render();
     });

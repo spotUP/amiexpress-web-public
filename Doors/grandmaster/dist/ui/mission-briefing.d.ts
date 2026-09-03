@@ -31,8 +31,15 @@ export declare function missionBriefingLines(mission: Mission, clear: MissionCle
  * that is the part a player notices when it is wrong.
  */
 export declare function pickMission(pack: MissionPack, clearFor: (missionId: string) => MissionClear | null, dialogs: {
-    select: (pack: MissionPack) => Promise<Mission | null>;
+    select: (pack: MissionPack) => Promise<Mission | 'edit' | null>;
     brief: (mission: Mission, clear: MissionClear | null) => Promise<boolean>;
+    /**
+     * Open the editor, for a sysop who asked for it, and answer with the
+     * pack to go on showing - the edited one when they saved, the same one
+     * when they did not. The loop then returns to the list, which is where
+     * they were.
+     */
+    edit?: (pack: MissionPack) => Promise<MissionPack>;
 }): Promise<Mission | null>;
 /**
  * Show the briefing. Resolves true to start the mission, false to go back to

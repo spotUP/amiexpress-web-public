@@ -13,7 +13,8 @@
 
 /* eslint-disable no-console */
 
-const TEST_MODULES = ['./versus-layout.test',
+const TEST_MODULES = ['./mission-editor.test',
+  './versus-layout.test',
   './versus-render.test',
   './versus-repaint.test',
   './fullscreen.test',

@@ -71,12 +71,13 @@ import { showManual } from './ui/manual';
 import { showTrainingConfig } from './ui/training-config';
 import * as path from 'path';
 import { resolveDoorRoot } from '@amiexpress/bbs-door-sdk/settings';
-import { loadMissionPack } from './core/mission-pack';
+import { listPacks } from './core/mission-store';
 import { MissionRun } from './core/mission-run';
 import { MissionProgress } from './core/mission-progress';
 import type { Mission, MissionPack } from './core/mission-types';
 import { showMissionSelect, formatClearTime } from './ui/mission-select';
 import { showMissionBriefing, pickMission } from './ui/mission-briefing';
+import { showMissionEditor } from './ui/mission-editor';
 
 // Default gamepad button mapping for GrandMaster.
 // Parse a trigger string (e.g. "button:a", "dpad:left", "axis:left-x:negative")
@@ -811,6 +812,18 @@ export class GrandmasterApp {
    * objectives this engine cannot judge rather than handing the player a
    * mission that can never end (core/mission-pack.ts).
    */
+  /**
+   * Is the caller a sysop?
+   *
+   * 255 is the board's own top level. The editor writes a file every player
+   * on this board then plays from, so it is the one thing in this door that
+   * asks who is holding the keyboard.
+   */
+  private isSysop(): boolean {
+    const user = this.session.user as { accessLevel?: number; secLevel?: number } | undefined;
+    return (user?.accessLevel ?? user?.secLevel ?? 0) >= 255;
+  }
+
   private async startMission(): Promise<void> {
     let pack: MissionPack;
     try {
@@ -818,7 +831,16 @@ export class GrandmasterApp {
       // data/ is gitignored runtime state (the database, high scores, the
       // mission progress record). A pack put there would never have reached
       // the board at all.
-      pack = loadMissionPack(path.join(resolveDoorRoot(__dirname), 'assets', 'missions', 'starter.json'));
+      // The shipped pack, plus any a sysop wrote on this board. A sysop
+      // pack lives under data/ because assets/ is the door's checkout and
+      // the Doors volume sync only ever adds - an edit there would be
+      // overwritten by the next deploy (core/mission-store.ts).
+      const doorRoot = resolveDoorRoot(__dirname);
+      const stored = listPacks(doorRoot, path.join(doorRoot, 'data'));
+      if (stored.packs.length === 0) {
+        throw new Error(stored.problems.join('\n') || 'no mission packs found');
+      }
+      pack = stored.packs[0].pack;
     } catch (error) {
       await this.showMessage('MISSIONS', `Could not load the mission pack:\n${(error as Error).message}`);
       return;
@@ -833,8 +855,18 @@ export class GrandmasterApp {
       pack,
       (missionId) => this.missionProgress.getClear(this.state.playerName, pack.name, missionId),
       {
-        select: (p) => showMissionSelect(this.screen, p, this.missionProgress, this.state.playerName),
+        select: (p) => showMissionSelect(
+          this.screen, p, this.missionProgress, this.state.playerName, this.isSysop()),
         brief: (m, clear) => showMissionBriefing(this.screen, m, clear),
+        // Only a sysop is offered this, and only a sysop's key reaches it.
+        edit: async (p) => {
+          if (!this.isSysop()) return p;
+          const doorRoot = resolveDoorRoot(__dirname);
+          await showMissionEditor(this.screen, p, path.join(doorRoot, 'data'));
+          const reloaded = listPacks(doorRoot, path.join(doorRoot, 'data'));
+          return reloaded.packs.find((entry) => entry.pack.name === p.name)?.pack
+            ?? reloaded.packs[0]?.pack ?? p;
+        },
       }
     );
     this.inputManager.resume();

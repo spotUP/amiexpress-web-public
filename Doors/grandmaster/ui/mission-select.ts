@@ -38,12 +38,20 @@ export function missionRows(
 /**
  * Show the pack and return the chosen mission, or null if the player quit.
  */
+/**
+ * What the select screen came back with: a mission, nothing, or - for a
+ * sysop, who is the only one offered it - the editor.
+ */
+export type MissionChoice = Mission | 'edit' | null;
+
 export async function showMissionSelect(
   screen: Screen,
   pack: MissionPack,
   progress: MissionProgress,
-  playerName: string
-): Promise<Mission | null> {
+  playerName: string,
+  /** Sysops get one extra key. Everyone else is not told about it. */
+  canEdit = false
+): Promise<MissionChoice> {
   const clears = progress.getClears(playerName, pack.name);
   const rows = missionRows(pack, clears);
   const done = Object.keys(clears).length;
@@ -75,6 +83,20 @@ export async function showMissionSelect(
       content: pack.missions[0]?.hint ?? '',
     } as any);
 
+    const keys = createBox({
+      border: undefined,
+      parent: box,
+      bottom: 0,
+      left: 1,
+      width: 42,
+      height: 1,
+      tags: true,
+      style: { fg: 'gray' },
+      content: canEdit
+        ? '{yellow-fg}ENTER{/yellow-fg} play  {yellow-fg}E{/yellow-fg} edit pack  {yellow-fg}ESC{/yellow-fg} back'
+        : '{yellow-fg}ENTER{/yellow-fg} play  {yellow-fg}ESC{/yellow-fg} back',
+    } as any);
+
     const list = createList({
       parent: box,
       top: 1,
@@ -94,9 +116,10 @@ export async function showMissionSelect(
       items: rows,
     } as any);
 
-    const close = (mission: Mission | null) => {
+    const close = (mission: MissionChoice) => {
       list.destroy();
       hint.destroy();
+      keys.destroy();
       box.destroy();
       screen.render();
       resolve(mission);
@@ -111,6 +134,12 @@ export async function showMissionSelect(
       close(pack.missions[index] ?? null);
     });
     (list as any).key(['escape', 'q'], () => close(null));
+
+    // E opens the editor, for a sysop. The hint row says so only when it is
+    // true: an offer a player cannot take is worse than no offer.
+    if (canEdit) {
+      (list as any).key(['e'], () => close('edit'));
+    }
 
     list.focus();
     screen.render();

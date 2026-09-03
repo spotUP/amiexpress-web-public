@@ -22,5 +22,12 @@ export declare function missionRows(pack: MissionPack, clears: Record<string, {
 /**
  * Show the pack and return the chosen mission, or null if the player quit.
  */
-export declare function showMissionSelect(screen: Screen, pack: MissionPack, progress: MissionProgress, playerName: string): Promise<Mission | null>;
+/**
+ * What the select screen came back with: a mission, nothing, or - for a
+ * sysop, who is the only one offered it - the editor.
+ */
+export type MissionChoice = Mission | 'edit' | null;
+export declare function showMissionSelect(screen: Screen, pack: MissionPack, progress: MissionProgress, playerName: string, 
+/** Sysops get one extra key. Everyone else is not told about it. */
+canEdit?: boolean): Promise<MissionChoice>;
 //# sourceMappingURL=mission-select.d.ts.map
