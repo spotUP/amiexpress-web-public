@@ -57,6 +57,93 @@ function remoteAreaFixture(): Fixture {
   return { ctx: { volumes, cache, names: new NameIndexRegistry(volumes), areas }, backend, dataDir };
 }
 
+interface TwoAreaFixture {
+  ctx: StorageContext;
+  first: FakeBackend;
+  second: FakeBackend;
+}
+
+/**
+ * Conference 1 with TWO pooled areas, on two different drives.
+ *
+ * The single-area fixture above cannot see the case that matters here: an
+ * area's drive being down says nothing about the next area's, and the function
+ * that serves actual bytes - both HTTP routes and the flagged-file batch go
+ * through it - must not lose a file that is sitting in a healthy second area.
+ */
+function twoAreaFixture(): TwoAreaFixture {
+  const first = new FakeBackend({ driveNumber: 2 });
+  const second = new FakeBackend({ driveNumber: 3 });
+  const states: VolumeState[] = [first, second].map(backend => ({
+    volume: {
+      driveNumber: backend.driveNumber,
+      kind: 's3' as const,
+      path: 'bucket',
+      egress: 'FREE' as const,
+      volumeClass: 'FREE' as const,
+    },
+    backend,
+    usedBytes: 0,
+    requestsThisMonth: 0,
+    egressBytesThisMonth: 0,
+    degraded: false,
+  }));
+  const volumes = new VolumeSet(states);
+  const cache = new FileCache({
+    cacheDir: fs.mkdtempSync(path.join(os.tmpdir(), 'cache-two-')),
+    volumes,
+    maxBytes: 1024 * 1024,
+  });
+  const areas: RemoteArea[] = [
+    { id: 1, conferenceId: 1, dirNumber: 1, path: 'BBS:Conf1/Files/', storageVolume: 2 },
+    { id: 2, conferenceId: 1, dirNumber: 2, path: 'BBS:Conf1/Extra/', storageVolume: 3 },
+  ];
+
+  return { ctx: { volumes, cache, names: new NameIndexRegistry(volumes), areas }, first, second };
+}
+
+describe('materialiseRemoteFile across two pooled areas', () => {
+  it('serves the file from the second area when the first area is down', async () => {
+    const { ctx, first, second } = twoAreaFixture();
+    await second.put('Conf1/Extra/DEMO.LHA', Buffer.from('from-extra'));
+    first.down = true;
+
+    const found = await materialiseRemoteFile('DEMO.LHA', 1, ctx);
+
+    expect(found).not.toBeNull();
+    expect(found!.driveNumber).toBe(3);
+    expect(fs.readFileSync(found!.fullPath, 'utf8')).toBe('from-extra');
+  });
+
+  it('still reports the outage when NO area could answer', async () => {
+    const { ctx, first, second } = twoAreaFixture();
+    await second.put('Conf1/Extra/DEMO.LHA', Buffer.from('from-extra'));
+    first.down = true;
+    second.down = true;
+
+    await expect(materialiseRemoteFile('DEMO.LHA', 1, ctx)).rejects.toBeInstanceOf(
+      StorageUnavailableError
+    );
+  });
+
+  it('is null - not an outage - when every area answered and none held it', async () => {
+    const { ctx } = twoAreaFixture();
+
+    expect(await materialiseRemoteFile('NOPE.LHA', 1, ctx)).toBeNull();
+  });
+
+  it('prefers the first declared area when both hold the name', async () => {
+    const { ctx, first, second } = twoAreaFixture();
+    await first.put('Conf1/Files/DEMO.LHA', Buffer.from('from-files'));
+    await second.put('Conf1/Extra/DEMO.LHA', Buffer.from('from-extra'));
+
+    const found = await materialiseRemoteFile('DEMO.LHA', 1, ctx);
+
+    expect(found!.driveNumber).toBe(2);
+    expect(fs.readFileSync(found!.fullPath, 'utf8')).toBe('from-files');
+  });
+});
+
 describe('materialiseRemoteFile', () => {
   it('materialises the object and hands back a real local path', async () => {
     const { ctx, backend } = remoteAreaFixture();
