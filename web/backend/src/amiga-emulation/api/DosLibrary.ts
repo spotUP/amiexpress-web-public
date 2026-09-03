@@ -3375,7 +3375,7 @@ console.error(
       if (canWrite) unixMode |= 0o200;  // Write for owner only
       if (canExec) unixMode |= 0o111;   // Execute for all
 
-      fs.chmodSync(realPath, unixMode);
+      amigafs.chmodSync(realPath, unixMode);
 debugLog(
         `[dos.library] SetProtection: Set ${realPath} to mode ${unixMode.toString(8)}`
       );
@@ -3684,8 +3684,8 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       if (targetFile) {
         try {
           const sysPath = this.pathManager?.amiToSysPath(targetFile, process.cwd()) || '';
-          if (sysPath && fs.existsSync(sysPath)) {
-            const content = fs.readFileSync(sysPath);
+          if (sysPath && amigafs.existsSync(sysPath)) {
+            const content = amigafs.readFileSync(sysPath) as Buffer;
             const verMatch = content.toString('latin1').match(/\$VER:\s*([^\r\n\x00]+)/);
             if (verMatch) {
               verString = verMatch[1].trim();

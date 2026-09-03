@@ -17,6 +17,7 @@ import { userDatabaseManager } from '../../services/UserDatabaseManager';
 import { getSystemTime } from '../../utils/date-time.util';
 import { ximLogger } from '../../utils/XIMLogger';
 import { debugLog } from '../../utils/debug-log';
+import * as amigafs from '../../utils/amigafs';
 import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 
@@ -779,12 +780,13 @@ debugLog(`  [WRITE] ${this.messageParser.getCommandName(msg.command)}: ${newVal}
           const filename = this.messageParser.readString(stringAddr, 200);
           if (filename && filename.trim().length > 0) {
             try {
-              const fs = require('fs');
               const path = require('path');
               const bbsRoot = (this.bbsSession as any)?.bbsRoot || process.cwd();
               const fullPath = path.resolve(bbsRoot, filename);
               const userData = JSON.stringify(user || {}, null, 2);
-              fs.writeFileSync(fullPath, userData, 'utf8');
+              // The door names this file; amigafs finds the real, possibly
+              // differently-cased, directory to drop it in.
+              amigafs.writeFileSync(fullPath, userData, 'utf8');
 debugLog(`  [WRITE] DT_DUMP: Saved user data to ${fullPath}`);
             } catch (err) {
 console.error(`  [WRITE] DT_DUMP: Failed to save to ${filename}:`, err);
