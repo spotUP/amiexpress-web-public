@@ -25,7 +25,7 @@
  * which is why `onApply` runs before the tree is re-tinted.
  */
 
-import type { Theme, ThemeTokens } from './tokens.js';
+import { themeById, DEFAULT_THEME_ID, type Theme, type ThemeTokens } from './tokens.js';
 
 /**
  * The token roles, in the order a value is claimed when two roles share one.
@@ -194,4 +194,30 @@ export function resolveTheme(source: unknown): Theme | null {
   }
 
   return null;
+}
+
+/**
+ * The theme this door is running under, for widgets that have to pick a
+ * colour before anyone hands them one.
+ *
+ * The SDK's own widgets used to default to literals - MenuBar was
+ * `bg: 'gray', fg: 'black'` - so a door's menu bar looked the same under
+ * every theme, which is what the sysop saw: "the menu bg color should be the
+ * primary theme color" (2026-09-03). A widget cannot ask the door what its
+ * theme is, so the door says it once and every widget built afterwards
+ * follows.
+ *
+ * Classic until told otherwise, which is what a door that never sets it
+ * always drew.
+ */
+let current: Theme | null = null;
+
+/** Tell the SDK which theme this door is running. */
+export function setActiveTheme(theme: Theme | null | undefined): void {
+  if (theme?.tokens) current = theme;
+}
+
+/** The active theme, or classic. Never null, so a widget can just read it. */
+export function activeTheme(): Theme {
+  return current ?? themeById(DEFAULT_THEME_ID);
 }

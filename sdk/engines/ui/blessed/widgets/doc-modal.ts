@@ -18,6 +18,7 @@
  */
 
 import { Box } from './box';
+import { activeTheme } from '../../theme/live.js';
 import { BigText } from './bigtext';
 import { ScrollableText } from './scrollabletext';
 import type { ElementOptions } from '../core/types';
@@ -93,9 +94,12 @@ export class DocModal extends Box {
       ch: ' ',
       zIndex: options.zIndex || 9999,
       style: {
-        fg: 'white',
-        bg: options.contentStyle?.bg || 'blue',
-        border: { fg: 'cyan' },
+        // The theme's, not literals: a modal frame is a border like any
+        // other, and this one is the door's help screen - the thing a
+        // caller opens first and judges the board by.
+        fg: activeTheme().tokens.ink,
+        bg: options.contentStyle?.bg || activeTheme().tokens.ground,
+        border: { fg: activeTheme().tokens.accent },
         ...options.style,
       },
     });

@@ -3,6 +3,7 @@
  */
 import { Screen, ConfirmModal } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { PANEL_BORDER } from './theme';
+import { T } from '../door-theme';
 
 export interface DisconnectionModalOptions {
   screen: Screen;
@@ -20,8 +21,11 @@ export class DisconnectionModal {
       borderColor: PANEL_BORDER,
       confirmText: '[ Retry ]',
       cancelText: '[ Cancel ]',
-      confirmColor: 'green',
-      cancelColor: 'red',
+      // Semantic, and therefore tokens rather than the primary colour: a
+      // Cancel button that matched every border would stop reading as the
+      // way out. The theme still owns the two shades.
+      confirmColor: T.ok,
+      cancelColor: T.alert,
       overlay: true,
       overlayOpacity: 0.5,
       zIndex: 9990,

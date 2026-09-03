@@ -10,8 +10,8 @@ export declare function sidebarConfig(): {
     scrollable: boolean;
     style: {
         focus: {
-            readonly border: {
-                readonly fg: "white";
+            border: {
+                fg: string;
             };
         };
         fg: string;

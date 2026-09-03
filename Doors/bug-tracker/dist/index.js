@@ -16,7 +16,8 @@ import {
 import {
   themeStyles,
   themeById,
-  resolveTheme
+  resolveTheme,
+  setActiveTheme
 } from "@amiexpress/bbs-door-sdk/engines/ui/theme";
 var T = themeById("classic").tokens;
 var S = themeStyles(themeById("classic"));
@@ -24,6 +25,7 @@ var THEME = themeById("classic");
 function applyTheme(source) {
   const theme = resolveTheme(source);
   if (!theme) return;
+  setActiveTheme(theme);
   CURRENT = theme;
   T = theme.tokens;
   S = themeStyles(theme);

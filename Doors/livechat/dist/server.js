@@ -155,6 +155,9 @@ async function createApp(session) {
     // anyone ASKING the terminal to grow (see the switch below).
     // The board's theme, before any widget reads a colour from it.
     (0, door_theme_1.applyTheme)(bbs);
+    // The panel colours are read from the theme once it is known, before
+    // any widget is built (ui/theme.ts).
+    (0, theme_2.refreshPanelChrome)();
     const screen = (0, screen_1.createScreen)(bbs);
     // Note: Optimized rendering is now enabled by default in the SDK
     const ctx = (0, initialization_1.initializeLiveChat)(session, screen);
@@ -1252,7 +1255,11 @@ async function createApp(session) {
     // ========== POPUP DIALOGS ==========
     // Note: Dialog widgets (Message, Prompt, Question) have built-in fixed heights.
     // Don't pass height: 'shrink' as it breaks nested element rendering.
-    const { modalOverlay, showModal, hideModal: originalHideModal, messageDialog, promptDialog, questionDialog, showMessageDialog, showPromptDialog, showConfirmDialog } = (0, blessed_helpers_1.createDialogs)(screen, inputBox);
+    const { modalOverlay, showModal, hideModal: originalHideModal, messageDialog, promptDialog, questionDialog, showMessageDialog, showPromptDialog, showConfirmDialog } = (0, blessed_helpers_1.createDialogs)(screen, inputBox, 
+    // Without this the SDK falls back to its own cyan/green/yellow rules
+    // and the dialogs are the one part of the door a theme never
+    // reached (sysop: "livechat doesnt look themed at all").
+    { frame: door_theme_1.S.frame });
     // Wrap hideModal to restore commandSuggestions z-order after hiding modals
     const hideModal = (widget) => {
         originalHideModal(widget);
@@ -1357,7 +1364,9 @@ async function createApp(session) {
         overlay: true,
         overlayOpacity: 0.5,
         spinner: true,
-        barColor: 'cyan',
+        // The theme decides; the loader defaults to it too, but this door used
+        // to name cyan and would have kept it.
+        barColor: door_theme_1.T.accent,
     });
     // ========== SETTINGS OVERLAY ==========
     const settingsOverlay = (0, settings_overlay_1.createSettingsOverlay)(screen, state, presenceService, socketEmitter, userId, updateStatusBar, hideModal);
@@ -2363,7 +2372,7 @@ async function createApp(session) {
             void (0, blessed_1.openThemeMenu)({
                 screen,
                 bbs,
-                onApply: (theme) => (0, door_theme_1.applyTheme)(theme),
+                onApply: (theme) => { (0, door_theme_1.applyTheme)(theme); (0, theme_2.refreshPanelChrome)(); },
             }).then(() => screen.render());
         },
         onJoinChannel: () => {

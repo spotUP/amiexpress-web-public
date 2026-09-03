@@ -35,6 +35,9 @@ function applyTheme(source) {
     const theme = (0, theme_1.resolveTheme)(source);
     if (!theme)
         return;
+    // Tell the SDK too: its widgets pick their own defaults from it
+    // (a menu bar's background, engines/ui/theme/live.ts).
+    (0, theme_1.setActiveTheme)(theme);
     exports.T = theme.tokens;
     exports.S = (0, theme_1.themeStyles)(theme);
     exports.THEME = theme;
