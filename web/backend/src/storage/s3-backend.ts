@@ -107,17 +107,41 @@ function isTransient(error: unknown): boolean {
 /**
  * Errors that mean "it is genuinely not there", not "ask again later" and not
  * "the volume could not honestly answer". Checked by NAME for the modeled S3
- * exceptions (`HeadObjectCommand` throws `NotFound`, `GetObjectCommand`
- * throws `NoSuchKey`), and additionally by status code: a non-AWS gateway is
- * not obliged to carry the modeled name on its 404, so a bare `$metadata.
- * httpStatusCode === 404` is absence too, regardless of what name (if any)
- * rode along with it.
+ * exceptions - `HeadObjectCommand` throws `NotFound`, `GetObjectCommand`
+ * throws `NoSuchKey`.
  */
 const MISSING_NAMES = new Set(['NotFound', 'NoSuchKey']);
 
-function isMissing(error: unknown): boolean {
+/**
+ * Names that also ride on a 404 but mean the whole bucket or route is
+ * unreachable, not that one key is missing: a renamed/deleted bucket, a bad
+ * bucket name, or a redirect a caller didn't follow. These must NEVER be
+ * read as per-key absence - `isMissingForHead`'s status-only fallback below
+ * exists for gateways that skip the modeled name on a real per-key 404, and
+ * would otherwise turn a whole-drive outage into "every key on this drive is
+ * absent", which is the catalog-deleting outcome at drive scale instead of
+ * file scale.
+ */
+const BUCKET_LEVEL_NAMES = new Set(['NoSuchBucket', 'InvalidBucketName', 'PermanentRedirect']);
+
+/** get() and delete(): absence only by the modeled name - no status fallback. */
+function isMissingByName(error: unknown): boolean {
   const err = error as ErrorShape;
-  if (MISSING_NAMES.has(err?.name ?? '')) return true;
+  return MISSING_NAMES.has(err?.name ?? '');
+}
+
+/**
+ * head() only: a non-AWS gateway need not carry the modeled `NotFound` name
+ * on a genuine per-key 404, so a bare `$metadata.httpStatusCode === 404` is
+ * absence there too - UNLESS the name identifies a bucket-level failure
+ * (see BUCKET_LEVEL_NAMES), in which case it is never absence regardless of
+ * status code.
+ */
+function isMissingForHead(error: unknown): boolean {
+  const err = error as ErrorShape;
+  const name = err?.name ?? '';
+  if (MISSING_NAMES.has(name)) return true;
+  if (BUCKET_LEVEL_NAMES.has(name)) return false;
   return err?.$metadata?.httpStatusCode === 404;
 }
 
@@ -128,6 +152,29 @@ function isMissing(error: unknown): boolean {
  * than letting a doomed request start.
  */
 const MAX_SINGLE_PUT_BYTES = 5 * 1024 ** 3;
+
+/**
+ * Names that mean a human needs to look at this drive's credentials or
+ * configuration, not that the volume is briefly down. These still come out
+ * of `unavailable()` as StorageUnavailableError - see that method's doc for
+ * why a separate return class is not the fix - but a StorageUnavailableError
+ * with no other signal is silent forever if the underlying cause never
+ * self-heals, and `SignatureDoesNotMatch` does not self-heal by retrying.
+ * Logged once, at error level, purely for an operator reading the container
+ * log; nothing about the return type changes.
+ */
+const CREDENTIAL_OR_CONFIG_NAMES = new Set([
+  'SignatureDoesNotMatch',
+  'InvalidAccessKeyId',
+  'AccessDenied',
+  'NoSuchBucket',
+  'PermanentRedirect',
+]);
+
+/** Attaches the original failure as `.cause` without widening the error's public shape. */
+function withCause<E extends Error>(error: E, cause: unknown): E {
+  return Object.assign(error, { cause });
+}
 
 export class S3Backend implements StorageBackend {
   constructor(
@@ -147,21 +194,35 @@ export class S3Backend implements StorageBackend {
    * code - used to slip through as an uncaught exception instead of a safe
    * "try again" signal.
    *
-   * Deliberately NOT split into a separate "fatal" bucket for credential or
-   * configuration errors (SignatureDoesNotMatch, InvalidAccessKeyId, a bad
-   * bucket policy, ...): those are exactly the errors a human needs to see
-   * and fix, but nothing about receiving one tells a storage caller it is
-   * safe to treat this volume as permanently gone rather than transiently
-   * unavailable, and misclassifying that boundary is worse than treating a
-   * misconfigured volume as unavailable until an operator notices the
-   * StorageUnavailableError and looks at the drive's credentials.
+   * Deliberately NOT split into a separate "fatal" return class for
+   * credential or configuration errors (SignatureDoesNotMatch,
+   * InvalidAccessKeyId, a bad bucket policy, ...): a caller cannot do
+   * anything safe with "fatal" that it cannot already do with "unavailable" -
+   * both mean "do not read this as absence, and do not treat this volume as
+   * healthy right now." These errors do not self-heal by retrying - a wrong
+   * secret stays wrong - but that is an operator problem, not a caller
+   * branching problem, so it is surfaced by logging (see
+   * CREDENTIAL_OR_CONFIG_NAMES) and by keeping the underlying message and
+   * `.cause` on the thrown error, not by adding a class every caller would
+   * have to learn to check for.
    */
   private unavailable(error: unknown): never {
-    const err = error as ErrorShape;
+    const err = error as ErrorShape & { message?: string };
     const status = err?.$metadata?.httpStatusCode;
     const name = err?.name ?? 'unknown error';
-    const detail = status !== undefined ? `${name} (${status})` : name;
-    throw new StorageUnavailableError(this.driveNumber, `drive ${this.driveNumber}: ${detail}`);
+    const label = status !== undefined ? `${name} (${status})` : name;
+    const detail = err?.message ? `${label}: ${err.message}` : label;
+    if (CREDENTIAL_OR_CONFIG_NAMES.has(name)) {
+      // eslint-disable-next-line no-console -- operator-facing container log, not BBS session output.
+      console.error(
+        `[S3Backend] drive ${this.driveNumber} storage failure looks like a credential or ` +
+          `configuration problem, not a transient one, and will not self-heal by retrying: ${detail}`
+      );
+    }
+    throw withCause(
+      new StorageUnavailableError(this.driveNumber, `drive ${this.driveNumber}: ${detail}`),
+      error
+    );
   }
 
   async head(key: string): Promise<ObjectHead | null> {
@@ -176,27 +237,34 @@ export class S3Backend implements StorageBackend {
       // code) - the status/transient signal always outranks the name, or a
       // sysop deletes the catalog row for a file that is fine.
       if (isTransient(error)) this.unavailable(error);
-      if (isMissing(error)) return null;
+      if (isMissingForHead(error)) return null;
       this.unavailable(error);
     }
   }
 
   async get(key: string): Promise<Buffer> {
+    // Only the network call is wrapped - this adapter's OWN post-response
+    // errors (no Body on the response, transformToByteArray failing) must
+    // not be reclassified as StorageUnavailableError and retried forever;
+    // list() already gets this right by mapping outside its try.
+    let out: { Body?: { transformToByteArray(): Promise<Uint8Array> } };
     try {
-      const out = (await this.client.send(
+      out = (await this.client.send(
         new GetObjectCommand({ Bucket: this.bucket, Key: key })
-      )) as { Body?: { transformToByteArray(): Promise<Uint8Array> } };
-      if (!out.Body) throw new Error(`empty body for ${key}`);
-      return Buffer.from(await out.Body.transformToByteArray());
+      )) as typeof out;
     } catch (error) {
       if (isTransient(error)) this.unavailable(error);
       // Absence has no null to return from a method typed Promise<Buffer> -
       // rethrown raw, matching LocalBackend (raw ENOENT) and FakeBackend (a
       // plain Error), so a caller catches "not found" the same way against
-      // every backend.
-      if (isMissing(error)) throw error;
+      // every backend. Checked by name only - no status-only 404 fallback
+      // here, so a bucket-level 404 (NoSuchBucket, a bad route) falls through
+      // to unavailable() instead of being misread as "this key is missing".
+      if (isMissingByName(error)) throw error;
       this.unavailable(error);
     }
+    if (!out.Body) throw new Error(`empty body for ${key}`);
+    return Buffer.from(await out.Body.transformToByteArray());
   }
 
   async put(key: string, body: Buffer): Promise<void> {
@@ -220,8 +288,10 @@ export class S3Backend implements StorageBackend {
     } catch (error) {
       if (isTransient(error)) this.unavailable(error);
       // Deleting an object that is already gone is not an error - it is the
-      // caller's desired end state, matching LocalBackend.
-      if (isMissing(error)) return;
+      // caller's desired end state, matching LocalBackend. Checked by name
+      // only, same reasoning as get(): a bucket-level 404 must not read as
+      // "this key was already deleted".
+      if (isMissingByName(error)) return;
       this.unavailable(error);
     }
   }
@@ -236,12 +306,14 @@ export class S3Backend implements StorageBackend {
    * fetch - returning what was collected so far would be a short listing
    * with no signal, and under one-copy-per-file a short listing feeding a
    * reconciler deletes rows for files that exist. Refuses that, and refuses
-   * a provider that echoes the same token twice (which would otherwise loop
-   * forever), by surfacing StorageUnavailableError instead of guessing.
+   * a provider that reuses ANY token already seen this call (not just the
+   * immediately preceding one - a two-step cycle A -> B -> A is still a
+   * cycle), by surfacing StorageUnavailableError instead of looping forever.
    */
   async list(prefix: string): Promise<ObjectHead[]> {
     const out: ObjectHead[] = [];
     let token: string | undefined;
+    const seenTokens = new Set<string>();
     for (;;) {
       let page: {
         Contents?: Array<{ Key?: string; Size?: number; LastModified?: Date }>;
@@ -268,13 +340,14 @@ export class S3Backend implements StorageBackend {
             'token - refusing to return a short listing'
         );
       }
-      if (next === token) {
+      if (seenTokens.has(next)) {
         throw new StorageUnavailableError(
           this.driveNumber,
-          `drive ${this.driveNumber}: listing "${prefix}" returned the same continuation token ` +
-            'twice - refusing to loop forever'
+          `drive ${this.driveNumber}: listing "${prefix}" reused a continuation token ("${next}") ` +
+            'it had already seen - refusing to loop forever'
         );
       }
+      seenTokens.add(next);
       token = next;
     }
     return out;

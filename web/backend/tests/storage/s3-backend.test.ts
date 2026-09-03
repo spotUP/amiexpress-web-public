@@ -89,6 +89,22 @@ describe('S3Backend', () => {
       await expect(new S3Backend(2, 'b', client).get('k')).rejects.not.toBeInstanceOf(StorageUnavailableError);
       await expect(new S3Backend(2, 'b', client).get('k')).rejects.toMatchObject({ name: 'NoSuchKey' });
     });
+
+    it('treats a 404 NoSuchBucket as unavailable, not as a missing key (whole-drive outage, not per-key absence)', async () => {
+      const { client } = clientReturning(() => {
+        throw namedError('NoSuchBucket', { $metadata: { httpStatusCode: 404 } });
+      });
+      await expect(new S3Backend(2, 'b', client).get('k')).rejects.toBeInstanceOf(StorageUnavailableError);
+    });
+
+    it('does not reclassify its own post-response failure (no Body) as StorageUnavailableError', async () => {
+      // Only the SDK call is wrapped - the empty-body check happens after
+      // the try/catch, so it must surface as the plain Error it is, not get
+      // treated as transient and retried forever.
+      const { client } = clientReturning(() => ({}));
+      await expect(new S3Backend(2, 'b', client).get('k')).rejects.not.toBeInstanceOf(StorageUnavailableError);
+      await expect(new S3Backend(2, 'b', client).get('k')).rejects.toThrow(/empty body/);
+    });
   });
 
   describe('head', () => {
@@ -155,6 +171,65 @@ describe('S3Backend', () => {
       });
       await expect(new S3Backend(2, 'b', client).head('k')).rejects.toBeInstanceOf(StorageUnavailableError);
     });
+
+    it('treats a 404 NoSuchBucket as unavailable, never as absence - a missing bucket is a whole-drive outage', async () => {
+      const { client } = clientReturning(() => {
+        throw namedError('NoSuchBucket', { $metadata: { httpStatusCode: 404 } });
+      });
+      await expect(new S3Backend(2, 'b', client).head('k')).rejects.toBeInstanceOf(StorageUnavailableError);
+    });
+
+    it('treats a 404 NoSuchKey as absence still, unlike a 404 NoSuchBucket', async () => {
+      const { client } = clientReturning(() => {
+        throw namedError('NoSuchKey', { $metadata: { httpStatusCode: 404 } });
+      });
+      expect(await new S3Backend(2, 'b', client).head('k')).toBeNull();
+    });
+  });
+
+  describe('error detail on unavailable', () => {
+    it('keeps the underlying error message and attaches it as .cause, rather than reducing to just a name', async () => {
+      const original = namedError('TypeError', { message: 'oh no' });
+      const { client } = clientReturning(() => {
+        throw original;
+      });
+      let caught: unknown;
+      try {
+        await new S3Backend(2, 'b', client).put('k', Buffer.from('x'));
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(StorageUnavailableError);
+      expect((caught as Error).message).toContain('oh no');
+      expect((caught as Error & { cause?: unknown }).cause).toBe(original);
+    });
+
+    it('logs once at error level when the failure looks like a credential or configuration problem', async () => {
+      const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      try {
+        const { client } = clientReturning(() => {
+          throw namedError('SignatureDoesNotMatch');
+        });
+        await expect(new S3Backend(2, 'b', client).get('k')).rejects.toBeInstanceOf(StorageUnavailableError);
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy.mock.calls[0][0]).toContain('SignatureDoesNotMatch');
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('does not log for an ordinary transient failure', async () => {
+      const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      try {
+        const { client } = clientReturning(() => {
+          throw namedError('SlowDown');
+        });
+        await expect(new S3Backend(2, 'b', client).get('k')).rejects.toBeInstanceOf(StorageUnavailableError);
+        expect(spy).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
+    });
   });
 
   describe('delete', () => {
@@ -175,6 +250,13 @@ describe('S3Backend', () => {
     it('reports a transient failure on delete as unavailable, never as a silent no-op', async () => {
       const { client } = clientReturning(() => {
         throw namedError('SlowDown');
+      });
+      await expect(new S3Backend(2, 'b', client).delete('k')).rejects.toBeInstanceOf(StorageUnavailableError);
+    });
+
+    it('reports a 404 NoSuchBucket as unavailable, never as "already deleted"', async () => {
+      const { client } = clientReturning(() => {
+        throw namedError('NoSuchBucket', { $metadata: { httpStatusCode: 404 } });
       });
       await expect(new S3Backend(2, 'b', client).delete('k')).rejects.toBeInstanceOf(StorageUnavailableError);
     });
@@ -217,6 +299,33 @@ describe('S3Backend', () => {
         NextContinuationToken: 'same-token',
       }));
       await expect(new S3Backend(2, 'b', client).list('')).rejects.toBeInstanceOf(StorageUnavailableError);
+    });
+
+    it('refuses a two-step continuation-token cycle (A -> B -> A), not just an immediate repeat', async () => {
+      let call = 0;
+      const { client } = clientReturning(() => {
+        call++;
+        // Page 1 (no token in) -> next 'A'; page 2 (token 'A') -> next 'B';
+        // page 3 (token 'B') -> next 'A' again: a two-step cycle that never
+        // repeats the immediately preceding token.
+        if (call === 1) return { Contents: [], IsTruncated: true, NextContinuationToken: 'A' };
+        if (call === 2) return { Contents: [], IsTruncated: true, NextContinuationToken: 'B' };
+        return { Contents: [], IsTruncated: true, NextContinuationToken: 'A' };
+      });
+      await expect(new S3Backend(2, 'b', client).list('')).rejects.toBeInstanceOf(StorageUnavailableError);
+      expect(call).toBe(3);
+    });
+
+    it('keeps paging past a truncated page whose Contents is empty', async () => {
+      let call = 0;
+      const { client } = clientReturning(() => {
+        call++;
+        return call === 1
+          ? { Contents: [], IsTruncated: true, NextContinuationToken: 't' }
+          : { Contents: [{ Key: 'a', Size: 1, LastModified: new Date(0) }], IsTruncated: false };
+      });
+      const heads = await new S3Backend(2, 'b', client).list('');
+      expect(heads.map((h) => h.key)).toEqual(['a']);
     });
   });
 });
