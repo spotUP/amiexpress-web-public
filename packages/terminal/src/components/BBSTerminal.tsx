@@ -2044,8 +2044,17 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.onAny(handleDoorMessageEvent);
 
-    // ANSI output handler
-    socket.on('ansi-output', (data: string) => {
+    // ANSI output handler.
+    //
+    // `meta.prePaced` is the wire attribute the server sets on output it
+    // has ALREADY paced (web/backend/src/utils/output-pacing.ts) - today
+    // the screen-wipe frames, an animation paced by frame delays and
+    // emitted one write per frame. Such a payload keeps its place in the
+    // ModemEmulator's FIFO but is not metered a second time; without it a
+    // 625 ms wipe took 2.9 s at 14400 and 17.4 s at 2400, each frame
+    // drip-fed a fraction at a time.
+    socket.on('ansi-output', (data: string, meta?: { prePaced?: boolean }) => {
+      const prePaced = meta?.prePaced === true;
       // DEBUG: Log first 20 chars of any incoming data to help identify why RIP mode isn't triggering
       if (data.includes('[1!') || data.includes('!|')) {
         console.log(`[Terminal] Incoming possible RIP data (len ${data.length}): ${JSON.stringify(data.slice(0, 50))}`);
@@ -2115,7 +2124,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         if (textBefore) {
           // The modem emulator writes straight into xterm, so it is only the
           // right pipe while xterm is the surface (writeTerm covers both).
-          if (surfaceRef.current !== 'canvas' && modemEmulatorRef.current) modemEmulatorRef.current.write(textBefore);
+          if (surfaceRef.current !== 'canvas' && modemEmulatorRef.current) modemEmulatorRef.current.write(textBefore, { prePaced });
           else writeTerm(textBefore);
         }
 
@@ -2195,7 +2204,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
       // Use modem emulator for client-side speed throttling
       if (modemEmulatorRef.current) {
-        modemEmulatorRef.current.write(output);
+        modemEmulatorRef.current.write(output, { prePaced });
       } else {
         term.write(output);
       }

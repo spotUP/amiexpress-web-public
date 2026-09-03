@@ -18,6 +18,14 @@
  *    (utils/ansi-buffer.util.ts), the animation's timing would be someone
  *    else's. The play loop emits through `socket._directEmit`
  *    (screen.handler.ts:2484) for exactly that reason - this pins it.
+ * 3. `_directEmit` gets the frame past every SERVER pacer, but not past the
+ *    client's (packages/terminal/src/utils/modem-emulator.ts), which
+ *    metered the same bytes again at the caller's baud: a 625 ms radial
+ *    wipe took 2,910 ms at 14400 and 17,400 ms at 2400, drip-feeding every
+ *    frame (ledger
+ *    .superpowers/sdd/2026-09-03-wipe-client-pacing/progress.md). Each
+ *    frame now carries `PRE_PACED` (src/utils/output-pacing.ts) as the
+ *    second `ansi-output` argument, and this pins that it does.
  *
  * Harness (socket stub, absolute-path seam, real loadScreenFile) follows
  * tests/handlers/petscii-wipe-off.test.ts.
@@ -75,12 +83,18 @@ beforeEach(() => {
 });
 
 let seq = 0;
-async function playMenu(file?: string): Promise<{ payloads: string[]; frames: WipeFrame[]; elapsed: number }> {
+async function playMenu(
+  file?: string,
+): Promise<{ payloads: string[]; metas: unknown[]; frames: WipeFrame[]; elapsed: number }> {
   const payloads: string[] = [];
+  const metas: unknown[] = [];
   const socket = {
     id: `wipe-delivery-${seq++}`,
-    emit: (event: string, data: any) => {
-      if (event === 'ansi-output') payloads.push(String(data));
+    emit: (event: string, data: any, meta?: unknown) => {
+      if (event === 'ansi-output') {
+        payloads.push(String(data));
+        metas.push(meta);
+      }
       return true;
     },
     on: () => {},
@@ -92,7 +106,7 @@ async function playMenu(file?: string): Promise<{ payloads: string[]; frames: Wi
   const elapsed = Date.now() - started;
   expect(getWipeFrames).toHaveBeenCalledTimes(1);
   const frames = (getWipeFrames as jest.Mock).mock.results[0].value as WipeFrame[];
-  return { payloads, frames, elapsed };
+  return { payloads, metas, frames, elapsed };
 }
 
 describe('wipe frame delivery', () => {
@@ -125,6 +139,52 @@ describe('wipe frame delivery', () => {
     expect(animationWrites[0]).toContain('\x1b[2J\x1b[H');
     const clearsLater = animationWrites.slice(1).filter(p => /\x1b\[[23]J/.test(p));
     expect(`frames clearing after the first: ${clearsLater.length}`).toBe('frames clearing after the first: 0');
+  });
+
+  it('every wipe frame goes out marked pre-paced', async () => {
+    const { payloads, metas, frames } = await playMenu(radarPath);
+
+    // The marker rides with the frame, not near it: pair each payload with
+    // the meta emitted alongside it.
+    const animation = payloads
+      .map((payload, i) => ({ payload, meta: metas[i] }))
+      .filter((w) => w.payload.startsWith(HIDE_CURSOR));
+
+    expect(animation).toHaveLength(frames.length);
+    const marked = animation.filter((w) => (w.meta as { prePaced?: boolean } | undefined)?.prePaced === true);
+    expect(`frames marked pre-paced: ${marked.length} of ${frames.length}`)
+      .toBe(`frames marked pre-paced: ${frames.length} of ${frames.length}`);
+  });
+
+  it('an ordinary screen is not marked pre-paced - the client still paces it', async () => {
+    // The discriminator: the marker means "the server already paced this",
+    // and a plain screen paint is precisely what the caller's baud is for.
+    // Marking everything would delete modem emulation from the board.
+    const plainPath = path.join(tmpDir, 'PLAIN.TXT');
+    const bytes = fs.readFileSync(menuPath);
+    fs.writeFileSync(plainPath, bytes.subarray(4)); // drop the `~WX` directive line
+
+    const payloads: string[] = [];
+    const metas: unknown[] = [];
+    const socket = {
+      id: `wipe-delivery-${seq++}`,
+      emit: (event: string, data: any, meta?: unknown) => {
+        if (event === 'ansi-output') {
+          payloads.push(String(data));
+          metas.push(meta);
+        }
+        return true;
+      },
+      on: () => {},
+    };
+    const session: any = { screenWidth: 80, screenHeight: 25, nodeId: 0 };
+    expect(await displayScreen(socket as any, session, plainPath)).toBe(true);
+
+    expect(getWipeFrames).not.toHaveBeenCalled();
+    expect(payloads.length).toBeGreaterThan(0);
+    const marked = metas.filter((m) => (m as { prePaced?: boolean } | undefined)?.prePaced === true);
+    expect(`plain-screen payloads marked pre-paced: ${marked.length}`)
+      .toBe('plain-screen payloads marked pre-paced: 0');
   });
 
   it('the animation is not paced by the 50 ms floor the builders never asked for', async () => {

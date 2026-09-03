@@ -43,6 +43,7 @@ import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { formatBytes as formatBytesUtil } from '../utils/byte-format.util';
 import { parseWipeMCI, getWipeFrames, wipeEffectsEnabled, type WipeType } from '../utils/screen-wipe.util';
+import { PRE_PACED } from '../utils/output-pacing';
 import { emitText, emitPrompt, flushOutput } from '../utils/output.util';
 import { fileCache } from '../utils/file-cache.util';
 import { processMci as processMciTokenizer } from '../utils/mci-tokenizer.util';
@@ -1874,6 +1875,21 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
       const ansiBuffer = getAnsiBuffer(socket);
       ansiBuffer.setFlushDelay(0);
 
+      // The forced speed has to reach the pacer that actually paces. The
+      // client's ModemEmulator meters the same printable characters this
+      // server-side throttle does, at the CALLER's baud, so without this
+      // event an animation forced to 14400 still played at the caller's
+      // rate: measured 826 ms intended, 5,774 ms at 2400 (7x) for
+      // `Screens/flt.txt` - paced twice, slowest pacer winning.
+      //
+      // NOT the PRE_PACED attribute the wipes use: this sequence is
+      // BYTE-paced, and byte pacing is exactly what Socket.IO's transport
+      // batching destroys - the reason the client pacer exists. Telling it
+      // the speed keeps one smooth pacer at the intended rate. Same shape
+      // as the door path, which emits `modem-speed` 0 on entry and the
+      // saved speed on exit (door.handler.ts:2034, 2405).
+      socket.emit('modem-speed', 14400);
+
       console.log(`[ANSI-ANIM] Enabled 14.4kbps modem emulation for ${screenName} (was: ${session.savedModemState.bps} bps)`);
       DebugLogger.screen(socket.id, `ANSI animation detected - forced 14.4kbps playback`, {
         screen: screenName,
@@ -2436,7 +2452,17 @@ console.log(`[WIPE] Generated ${wipeFrames.length} frames`);
         // it must not be re-cut by the server-side modem throttle or merged
         // by the 16 ms AnsiBuffer (utils/ansi-buffer.util.ts) - neither is on
         // this path, and `_directEmit` is the seam that keeps it that way.
-        directSocketEmit(eventName, frameContent);
+        //
+        // PRE_PACED (utils/output-pacing.ts) says the same thing to the
+        // CLIENT pacer, which `_directEmit` cannot reach: this animation is
+        // already paced, in frame delays, so do not meter its bytes at the
+        // caller's baud. Without the marker the client re-cut every frame at
+        // 1440 B/s (14400) or 240 B/s (2400) and this 625 ms sweep took
+        // 2.9 s / 17.4 s, drip-feeding each frame. The attribute rides as a
+        // second `ansi-output` argument, which every emit wrapper on this
+        // board forwards untouched and the telnet/SSH emitter ignores (no
+        // client-side pacer there).
+        directSocketEmit(eventName, frameContent, PRE_PACED);
 
         // Yield to event loop to flush socket buffer before waiting
         await new Promise(resolve => setImmediate(resolve));
@@ -2509,12 +2535,25 @@ console.log(`[WIPE] Animation complete: ${wipeFrames.length} frames`);
       }
       emitPrompt(socket, '\r\n\x1b[32m(\x1b[33mPause\x1b[32m)\x1b[34m...\x1b[32mSpace To Resume\x1b[33m: \x1b[0m');
       await emitWithModem(''); // ensure promise chain consistent
+      restoreModemState(socket, session);
       return true;
     }
 
     executeScreenCommands();
     session.slowmo = 0;
     session.slowmoCount = 0;
+
+    // Every OTHER way out of displayScreen restores the animation's forced
+    // 14.4k (the two pause branches above, the pagination branch, the
+    // segment branches in startPagination) - these two did not, so a screen
+    // that painted in one page with no pause left the session pinned at
+    // 14400 until some later screen happened to pause. Harmless while only
+    // the server throttle was forced; not harmless now that the forced
+    // speed is announced to the CLIENT pacer, which would otherwise stay at
+    // 14400 for the rest of the call. restoreModemState clears
+    // savedModemState first, so calling it on every path cannot
+    // double-restore.
+    restoreModemState(socket, session);
 
     return true;
   } else {
@@ -2622,6 +2661,11 @@ function restoreModemState(socket: any, session: BBSSession): void {
     }
 
     function doRestore(emulator: any, state: any) {
+      // Mirror of the `modem-speed` the animation path forced on the client
+      // pacer. 0 restores the client's MAX soft-cap, which is what a session
+      // with modem emulation off had before the animation.
+      socket.emit('modem-speed', state.enabled && state.bps > 0 ? state.bps : 0);
+
       if (state.enabled && state.bps > 0) {
         emulator.enable(state.bps);
         session.modemEmulationEnabled = true;

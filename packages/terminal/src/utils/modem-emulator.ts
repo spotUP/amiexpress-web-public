@@ -28,11 +28,38 @@ export interface ModemEmulatorOptions {
   bps: number; // Bits per second (1200, 2400, 9600, etc.)
 }
 
+/**
+ * Per-payload write options.
+ *
+ * `prePaced` is the client side of the wire attribute declared in
+ * `web/backend/src/utils/output-pacing.ts` (`PRE_PACED`, carried as the
+ * second argument of `ansi-output`). It marks a payload whose timing the
+ * SERVER already decided - today the screen-wipe frames, which are an
+ * animation paced by sleeping between whole frames and emitted one write
+ * each. Metering those bytes a second time here does not slow the
+ * animation down, it drip-feeds every frame: measured 2,910 ms at 14400
+ * and 17,400 ms at 2400 for a 625 ms radial wipe of `Conf1/Menu.txt`.
+ *
+ * A pre-paced payload keeps its PLACE in the queue - it must never
+ * overtake text queued before it, the queue is strict FIFO - but is
+ * written whole when its turn comes, and its bytes are not charged to the
+ * baud budget, because they were already paid for in frame delays.
+ */
+export interface ModemWriteOptions {
+  prePaced?: boolean;
+}
+
+/** A payload waiting its turn, with the pacing decision made at write time. */
+interface QueuedPayload {
+  data: string;
+  prePaced: boolean;
+}
+
 export class ModemEmulator {
   private terminal: Terminal;
   private bps: number = 0;
   private bytesPerSecond: number = 0;
-  private queue: string[] = [];
+  private queue: QueuedPayload[] = [];
   private processing: boolean = false;
   private enabled: boolean = false;
   private startTime: number = 0;
@@ -113,9 +140,14 @@ export class ModemEmulator {
   }
 
   /**
-   * Queue data for throttled output
+   * Queue data for throttled output.
+   *
+   * `options.prePaced` (see ModemWriteOptions) writes the payload through
+   * unmetered while keeping its place in the queue.
    */
-  write(data: string): void {
+  write(data: string, options?: ModemWriteOptions): void {
+    const prePaced = options?.prePaced === true;
+
     if (!this.enabled || this.doorActive) {
       // No throttling — either the emulator is disabled or a 68K door
       // is running and its output should feel instant. Soft-cap exists
@@ -124,14 +156,24 @@ export class ModemEmulator {
       return;
     }
 
+    const idle = !this.processing && this.queue.length === 0;
+
+    if (prePaced && idle) {
+      // Nothing is queued ahead of it, so writing now IS its place in the
+      // queue. The budget is left alone: these bytes are not charged, and
+      // the next ordinary payload resets the burst window itself.
+      this.terminal.write(data);
+      return;
+    }
+
     // Reset token budget for a new burst after idle
-    if (!this.processing && this.queue.length === 0) {
+    if (idle) {
       this.startTime = performance.now();
       this.bytesSent = 0;
     }
 
     // Queue the data
-    this.queue.push(data);
+    this.queue.push({ data, prePaced });
 
     // Start processing if not already
     if (!this.processing) {
@@ -144,8 +186,8 @@ export class ModemEmulator {
    */
   private flushImmediate(): void {
     while (this.queue.length > 0) {
-      const data = this.queue.shift()!;
-      this.terminal.write(data);
+      const item = this.queue.shift()!;
+      this.terminal.write(item.data);
     }
   }
 
@@ -157,8 +199,14 @@ export class ModemEmulator {
     this.processing = true;
 
     while (this.queue.length > 0 && this.enabled) {
-      const data = this.queue.shift()!;
-      await this.sendThrottled(data);
+      const item = this.queue.shift()!;
+      if (item.prePaced) {
+        // The server already paced it. Its turn in the queue has come, so
+        // order is kept; it is written whole and charged nothing.
+        this.terminal.write(item.data);
+        continue;
+      }
+      await this.sendThrottled(item.data);
     }
 
     this.processing = false;
