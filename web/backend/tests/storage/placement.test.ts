@@ -5,7 +5,7 @@ import type { StorageVolume, VolumeClass } from '../../src/storage/volume-config
 
 function state(
   driveNumber: number,
-  opts: { quota: number; used?: number; cls?: VolumeClass; egress?: StorageVolume['egress']; degraded?: boolean; requests?: number }
+  opts: { quota?: number; used?: number; cls?: VolumeClass; egress?: StorageVolume['egress']; degraded?: boolean; requests?: number }
 ): VolumeState {
   return {
     volume: {
@@ -62,6 +62,29 @@ describe('VolumeSet.freeBytes', () => {
     const set = new VolumeSet([localState(1), state(2, { quota: 50, used: 10 })]);
     expect(set.freeBytes()).toBe(40);
   });
+
+  it('reports Infinity, not 0, for a bucket with no declared QUOTA - it has real room, just unmeasured', () => {
+    const set = new VolumeSet([state(1, { quota: undefined })]);
+    expect(set.freeBytes()).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it('still sums a bounded bucket exactly, unaffected by the Infinity case', () => {
+    const set = new VolumeSet([state(1, { quota: 100, used: 40 }), state(2, { quota: 50, used: 0 })]);
+    expect(set.freeBytes()).toBe(110);
+  });
+});
+
+describe('VolumeSet.hasPool', () => {
+  it('is false for a pool of only local drives - the case that matters: no bucket configured at all', () => {
+    const set = new VolumeSet([localState(1), localState(2)]);
+    expect(set.hasPool()).toBe(false);
+  });
+
+  it('is true once any s3 volume is in the pool, even one with no declared QUOTA', () => {
+    const set = new VolumeSet([localState(1), state(2, { quota: undefined })]);
+    expect(set.hasPool()).toBe(true);
+    expect(set.freeBytes()).toBe(Number.POSITIVE_INFINITY);
+  });
 });
 
 describe('VolumeSet.place', () => {
@@ -115,5 +138,10 @@ describe('VolumeSet.place', () => {
   it('skips a local drive and places on the pool s3 volume behind it', () => {
     const set = new VolumeSet([localState(1), state(2, { quota: 100, cls: 'FREE' })]);
     expect(set.place(10).volume.driveNumber).toBe(2);
+  });
+
+  it('refuses a zero-byte placement against a degraded volume rather than handing it back on 0 >= 0', () => {
+    const set = new VolumeSet([state(1, { quota: 100, cls: 'FREE', degraded: true })]);
+    expect(() => set.place(0)).toThrow(StorageQuotaError);
   });
 });

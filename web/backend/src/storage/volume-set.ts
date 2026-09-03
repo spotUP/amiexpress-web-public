@@ -11,7 +11,8 @@
  * the small local disk this feature exists to get files off of. Local drives
  * still appear in `states` - the admin page lists them, and a board with no
  * bucket configured falls back to a plain disk stat - they are just never
- * candidates for `place()` and never contribute to `freeBytes()`.
+ * candidates for `place()` and never contribute to `freeBytes()`. Use
+ * `hasPool()` to tell "no bucket configured" apart from "the bucket is full."
  */
 import type { StorageVolume, VolumeClass } from './volume-config';
 import { parseVolumes, readVolumeSecret } from './volume-config';
@@ -34,22 +35,40 @@ export interface VolumeState {
 export class VolumeSet {
   constructor(public readonly states: readonly VolumeState[]) {}
 
+  /**
+   * `parseVolumes` itself is left to throw uncaught: a malformed line (a bad
+   * QUOTA or RETENTION unit) is a list-wide problem with Drives.info, not one
+   * drive's problem, and Task 1 chose deliberately to stop the board on a
+   * Drives.info it cannot parse rather than boot with an ambiguous pool.
+   *
+   * Constructing any ONE volume's backend is different: a missing KEYID, a
+   * missing ENDPOINT, or an `s3://bucket/prefix` target are all the same
+   * class of sysop typo as a missing secret, and none of them should be able
+   * to take the rest of the pool - or the boot, per Task 12 - down with them.
+   * So each volume's construction is wrapped individually; a failure here
+   * warns naming the drive and skips just that volume.
+   */
   static fromBoard(bbsRoot: string): VolumeSet {
     const states: VolumeState[] = [];
     for (const volume of parseVolumes(bbsRoot)) {
-      if (volume.kind === 'local') {
-        states.push(VolumeSet.blank(volume, new LocalBackend(volume.driveNumber, volume.path)));
-        continue;
+      try {
+        if (volume.kind === 'local') {
+          states.push(VolumeSet.blank(volume, new LocalBackend(volume.driveNumber, volume.path)));
+          continue;
+        }
+        const secret = readVolumeSecret(bbsRoot, volume.driveNumber);
+        if (!secret) {
+          // A bucket with no key is a configuration mistake, not a reason to
+          // refuse to boot: the board runs, the volume is simply left out of
+          // the pool.
+          console.warn(`[storage] DRIVE.${volume.driveNumber} has no secret; volume disabled`);
+          continue;
+        }
+        states.push(VolumeSet.blank(volume, createS3Backend(volume, secret)));
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        console.warn(`[storage] DRIVE.${volume.driveNumber} is misconfigured (${detail}); volume disabled`);
       }
-      const secret = readVolumeSecret(bbsRoot, volume.driveNumber);
-      if (!secret) {
-        // A bucket with no key is a configuration mistake, not a reason to
-        // refuse to boot: the board runs, the volume is simply left out of
-        // the pool.
-        console.warn(`[storage] DRIVE.${volume.driveNumber} has no secret; volume disabled`);
-        continue;
-      }
-      states.push(VolumeSet.blank(volume, createS3Backend(volume, secret)));
     }
     return new VolumeSet(states);
   }
@@ -81,34 +100,54 @@ export class VolumeSet {
   }
 
   /**
-   * Room on this volume, in bytes - or `Number.MAX_SAFE_INTEGER` for an s3
-   * volume with no declared QUOTA, which is a real but unmeasured amount of
-   * room, not a bug. A local drive, a degraded volume, or one that has spent
-   * its monthly request budget offers 0: none of the three are candidates.
+   * Whether this volume is eligible to be a `place()` destination at all -
+   * kind, degraded state, and request budget. This is deliberately separate
+   * from `roomOn`'s capacity answer: `roomOn` uses 0 as its "not a
+   * candidate" value, and a caller asking for a zero-byte placement must
+   * still be refused a degraded or local volume, not handed one because
+   * `0 >= 0`. Candidacy and capacity are different questions and must not
+   * share a sentinel.
    */
-  private roomOn(state: VolumeState): number {
-    if (state.volume.kind !== 's3') return 0;
-    if (state.degraded || this.outOfRequests(state)) return 0;
-    if (state.volume.quotaBytes === undefined) return Number.MAX_SAFE_INTEGER;
-    return Math.max(0, state.volume.quotaBytes - state.usedBytes);
+  private isCandidate(state: VolumeState): boolean {
+    return state.volume.kind === 's3' && !state.degraded && !this.outOfRequests(state);
   }
 
   /**
-   * The pool total shown on the upload screen. An unbounded s3 volume
-   * (`roomOn` === MAX_SAFE_INTEGER) contributes 0 here, not its sentinel: a
-   * sysop reading "free space" wants a real number to compare against a
-   * file's size, and "9007199254740991 bytes free" is not that - it is still
-   * a valid `place()` target, just not summable into a finite total.
+   * Room on this volume, in bytes - or `Number.POSITIVE_INFINITY` for an s3
+   * candidate with no declared QUOTA, which is a real but unmeasured amount
+   * of room, not a bug. A non-candidate (local, degraded, out of requests)
+   * answers 0, but that 0 must never be read as "this volume is a candidate
+   * with zero room" - see `isCandidate`.
+   */
+  private roomOn(state: VolumeState): number {
+    if (!this.isCandidate(state)) return 0;
+    if (state.volume.quotaBytes === undefined) return Number.POSITIVE_INFINITY;
+    return Math.max(0, state.volume.quotaBytes - state.usedBytes);
+  }
+
+  /** Whether the pool holds any bucket at all - as opposed to only local drives. */
+  hasPool(): boolean {
+    return this.states.some((s) => s.volume.kind === 's3');
+  }
+
+  /**
+   * The pool total shown on the upload screen and fed to the upload gate.
+   *
+   * Returns `Number.POSITIVE_INFINITY` when any non-degraded s3 volume has no
+   * declared QUOTA: that volume's room is real, just unmeasured, and a gate
+   * comparing `freeBytes() >= fileSize` must accept against it rather than
+   * seeing a sentinel and refusing every upload against an empty, willing
+   * bucket. A formatter is free to render Infinity as "unlimited". Returns 0
+   * when the pool holds no bucket at all (`!hasPool()`) or every bucket is
+   * genuinely full - callers that need to tell those two 0s apart use
+   * `hasPool()`.
    */
   freeBytes(): number {
-    return this.states.reduce((total, state) => {
-      const room = this.roomOn(state);
-      return total + (room === Number.MAX_SAFE_INTEGER ? 0 : room);
-    }, 0);
+    return this.states.reduce((total, state) => total + this.roomOn(state), 0);
   }
 
   place(sizeBytes: number, prefer?: VolumeClass): VolumeState {
-    const candidates = this.states.filter((s) => this.roomOn(s) >= sizeBytes);
+    const candidates = this.states.filter((s) => this.isCandidate(s) && this.roomOn(s) >= sizeBytes);
     if (candidates.length === 0) {
       throw new StorageQuotaError(undefined, 'no volume in the pool has room for this file');
     }
