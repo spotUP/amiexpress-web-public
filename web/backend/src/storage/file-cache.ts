@@ -1,32 +1,45 @@
 /**
  * Local disk as a cache in front of the pool.
  *
- * The rule the whole design rests on: THE CACHE MAY NEVER DELETE THE ONLY COPY
- * OF ANYTHING. A file whose upload has not succeeded is DIRTY, is pinned
- * against eviction, and is recorded so a crash mid-upload resumes instead of
- * losing the write.
+ * THE RULE THE WHOLE DESIGN RESTS ON: the cache may never delete the only copy
+ * of anything. A file whose upload has not succeeded is PENDING, is pinned
+ * against eviction, and is recorded on disk so a crash mid-upload resumes the
+ * upload instead of losing the write.
  *
- * The pin is recorded TWICE, on purpose, because a pin that lives in one
- * shared file is a pin that a corrupt parse, a failed write or a cross-process
- * lost update can silently drop - and the file it was protecting is then
- * indistinguishable from a clean cached copy that the pool already has:
+ * ONE RECORD, AND IT LIVES OUTSIDE THE PAYLOAD NAMESPACE.
  *
- *   - a SIDECAR MARKER, `<localPath>.dirty`, written beside the staged file
- *     before the upload is attempted and removed only once the upload lands.
- *     It is per-file, so nothing another process does can erase it, and
- *     `evictTo` treats any file carrying one as pinned. It also carries enough
- *     to rebuild the journal entry, so a cache whose journal is gone still
- *     RETRIES the upload rather than merely declining to delete it.
+ *   <cacheDir>/<drive>/<key>                  the payload: cached or staged
+ *   <cacheDir>/.pending/<drive>/<key>.json    the marker: THE pending set
+ *   <cacheDir>/.parked/<drive>/<key>          quarantined bytes, awaiting a sysop
  *
- *   - the JOURNAL, one JSON file listing every pending upload, which is what
- *     `flushPending` walks at boot. When it cannot be trusted - it parsed as
- *     corrupt, or a marker could not be written - `evictTo` stops deleting
- *     anything at all until the next restart. A cache over its budget costs
- *     disk; a cache that deleted the only copy of a file costs the file.
+ * There used to be two records - a JSON journal at a fixed path and a sidecar
+ * marker at `<localPath>.dirty` - and keeping both cost three rounds of bugs.
+ * Every policy check had to be written on the journal's path AND on the
+ * marker's, and one of them was duly written on one path only; and because a
+ * sidecar sat in the payload namespace, an object whose key ended `.dirty` was
+ * over-pinned, nearly swept, and JSON-parsed at boot. Both classes of defect
+ * are structural, so both are removed structurally:
  *
- * `evictTo` also only ever deletes a file it could FETCH AGAIN - one that
- * lives at the `<cacheDir>/<driveNumber>/<key>` path `localPathFor` produces.
- * Anything else under the cache directory is somebody else's file.
+ *   - THE MARKER IS THE PENDING SET. There is nothing to reconcile it against,
+ *     nothing to merge across processes, and no second place a policy check can
+ *     be forgotten.
+ *   - A MARKER IS NEVER BESIDE ITS PAYLOAD. Boot recovery walks `.pending/`
+ *     only, so no payload can be read, parsed, mistaken for a marker or
+ *     deleted as one, whatever its key spells.
+ *   - THE MARKER'S PATH CARRIES ITS IDENTITY. `.pending/<drive>/<key>.json`
+ *     names the object, so a marker too corrupt to parse still pins exactly
+ *     the right file.
+ *
+ * PARKING IS A MOVE, NOT A FLAG. When the staged bytes no longer match the
+ * stamp the marker was written for, the payload is renamed into `.parked/` and
+ * its marker dropped. It leaves the eviction namespace entirely, so it cannot
+ * be silently reclaimed and cannot be un-safed by a sysop deleting a marker; it
+ * stops counting against the cache budget; and it is countable -
+ * `parkedFiles()` lists it.
+ *
+ * `evictTo` only ever deletes a file it could FETCH AGAIN - one that lives at
+ * the `<cacheDir>/<drive>/<key>` path `localPathFor` produces and has no
+ * marker. Anything else under the cache directory is somebody else's file.
  *
  * And "the volume cannot answer" and "the object is not there" are different
  * answers and stay different all the way out of this module.
@@ -48,23 +61,24 @@ export interface CachedFile {
   key: string;
 }
 
-/** One unfinished upload, as it is written to and read back from the journal. */
+/**
+ * One unfinished upload - the whole record, as the marker holds it.
+ *
+ * `size` and `mtimeMs` are the staged file as it stood when the marker went
+ * down. They exist for one case: nothing is fsynced before rename, so a power
+ * loss can leave a staged file PRESENT-BUT-TRUNCATED with its marker intact.
+ * Replaying that blindly puts short bytes over a perfectly good object and then
+ * removes the marker, so the good bytes are gone with nothing recording it. On
+ * disagreement the replay parks the file instead - see `parkedFiles`.
+ *
+ * They are optional because a marker written before its file existed cannot
+ * carry them. That marker cannot vouch for anything, so it parks too; see the
+ * ordering rule on `markDirty`.
+ */
 export interface PendingEntry {
   driveNumber: number;
   key: string;
   localPath: string;
-}
-
-/**
- * What a sidecar marker holds. The size and mtime are the staged file as it
- * stood when the marker went down, and they exist for one case: nothing is
- * fsynced before rename, so a power loss can leave a staged file
- * PRESENT-BUT-TRUNCATED with its marker intact. Adopting that blindly uploads
- * the short file over a perfectly good object and then removes the marker, so
- * the good bytes are gone with nothing recording it. On disagreement recovery
- * parks the file instead - loudly, still pinned, never uploaded.
- */
-export interface DirtyMarker extends PendingEntry {
   size?: number;
   mtimeMs?: number;
 }
@@ -96,8 +110,8 @@ export type BlockOutcome = 'value' | 'failure' | 'timeout';
  * on `!done || Date.now() > deadline` then returns the never-assigned result -
  * `undefined` handed back as a file path - on a call that timed out, and, in
  * the mirror case, reports an upload that SUCCEEDED as unavailable after its
- * marker was removed, its journal entry dropped and its bytes charged to the
- * volume. The door is told the write failed when it landed.
+ * marker was removed and its bytes charged to the volume. The door is told the
+ * write failed when it landed.
  *
  * So the decision reads only what the handlers set. That sliver of a
  * millisecond is a race by nature and cannot be reproduced in wall-clock time;
@@ -133,17 +147,28 @@ export function isStorageUnavailable(err: unknown): err is StorageUnavailableErr
 const DRIVE_DIR_PATTERN = /^\d+$/;
 
 /**
- * Scratch names this module writes and must never mistake for payload: the
- * `.tmp-<pid>-<n>` files a download and a journal save rename from, and the
- * `.dirty` marker that pins a staged file.
- *
- * Skipping them in the eviction walk costs a real object whose key genuinely
- * ends `.dirty` or `.tmp-1-2` its eligibility for eviction. That is
- * over-pinning - wasted disk, never a lost file - and is the same trade
- * `LocalBackend`'s TEMP_SUFFIX_PATTERN makes for the same reason.
+ * The two namespaces that are NOT payload. Both are skipped by every walk of
+ * the cache tree, so a marker can never be evicted and a parked file never
+ * counts against the budget or gets reclaimed.
+ */
+const PENDING_DIR = '.pending';
+const PARKED_DIR = '.parked';
+
+/** Marker file names. Only meaningful inside `.pending/`. */
+const MARKER_SUFFIX = '.json';
+
+/**
+ * A marker is a handful of fields. Anything larger is not one, and must not be
+ * handed to `JSON.parse` - a cache directory a sysop has dropped something into
+ * should not be able to make the board allocate a gigabyte at boot.
+ */
+const MAX_MARKER_BYTES = 64 * 1024;
+
+/**
+ * Scratch this module writes and must never mistake for anything else: the
+ * `.tmp-<pid>-<n>` files a download and a marker write rename from.
  */
 const TEMP_SUFFIX_PATTERN = /\.tmp-(\d+)-\d+$/;
-const MARKER_SUFFIX = '.dirty';
 
 let tempCounter = 0;
 
@@ -153,7 +178,10 @@ export class FileCache {
   private readonly maxBytes: number;
   private readonly syncTimeoutMs: number;
 
-  /** Unfinished uploads, keyed by `${driveNumber}:${key}`. Pinned, journalled. */
+  /** Directories the payload walk must not descend into. */
+  private readonly nonPayloadDirs: ReadonlySet<string>;
+
+  /** Unfinished uploads, keyed by `${driveNumber}:${key}`. Pinned, marked. */
   private readonly dirty = new Map<string, PendingEntry>();
 
   /** One fetch per cold key, shared by every caller racing for it. */
@@ -177,18 +205,7 @@ export class FileCache {
    */
   private readonly uploadedSizes = new Map<string, number>();
 
-  /**
-   * Set when the record of what is pinned is known to be incomplete - a
-   * journal that parsed as corrupt, or a marker that could not be written.
-   * While it is set `evictTo` deletes nothing. Deliberately never cleared
-   * within a process: the entries a corrupt journal held are gone, and this
-   * process cannot know which files they named. A restart with a readable
-   * journal starts trusting again.
-   */
-  private journalUntrusted = false;
-
   private shortfallBytes = 0;
-  private warnedEvictionDisabled = false;
   private warnedShortfall = false;
 
   constructor(opts: FileCacheOptions) {
@@ -196,328 +213,23 @@ export class FileCache {
     this.volumes = opts.volumes;
     this.maxBytes = opts.maxBytes;
     this.syncTimeoutMs = opts.syncTimeoutMs ?? DEFAULT_SYNC_TIMEOUT_MS;
+    this.nonPayloadDirs = new Set([
+      path.resolve(this.cacheDir, PENDING_DIR),
+      path.resolve(this.cacheDir, PARKED_DIR),
+    ]);
     fs.mkdirSync(this.cacheDir, { recursive: true });
-    this.loadJournal();
     this.recoverFromDisk();
   }
 
-  // ---------------------------------------------------------------- journal
+  // ------------------------------------------------------------------- paths
 
-  private get journalPath(): string {
-    return path.join(this.cacheDir, '.pending.json');
+  private get pendingRoot(): string {
+    return path.join(this.cacheDir, PENDING_DIR);
   }
 
-  private readJournalFromDisk(): PendingEntry[] {
-    let raw: string;
-    try {
-      raw = fs.readFileSync(this.journalPath, 'utf8');
-    } catch {
-      return []; // no journal yet, or it cannot be read - neither stops the board
-    }
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      if (!Array.isArray(parsed)) throw new Error('journal is not an array');
-      return parsed.filter((e): e is PendingEntry => isPendingEntry(e));
-    } catch {
-      // A corrupt journal must not stop the board - but it must stop eviction.
-      // Entries it held are unrecoverable from here, and a staged file one of
-      // them named sits at exactly the <drive>/<key> path `evictTo` would
-      // otherwise consider a clean, re-fetchable copy.
-      this.journalUntrusted = true;
-      console.warn(
-        `[storage] cache journal at ${this.journalPath} is unreadable; eviction is disabled until restart ` +
-          `and pending uploads must be re-run by hand`
-      );
-      return [];
-    }
+  private get parkedRoot(): string {
+    return path.join(this.cacheDir, PARKED_DIR);
   }
-
-  /**
-   * Loads EVERY entry, including ones another node wrote.
-   *
-   * That is deliberate. An entry only reaches the journal once its file is
-   * complete - `writeBack` is called after the writer is done - so replaying
-   * a foreign entry uploads finished bytes, never a half-written file. And
-   * holding it in `dirty` pins the other node's staged copy against this
-   * node's eviction, which is the whole point.
-   */
-  private loadJournal(): void {
-    for (const entry of this.readJournalFromDisk()) {
-      this.dirty.set(this.id(entry.driveNumber, entry.key), entry);
-    }
-  }
-
-  /**
-   * Read-merge-write, never blind-write.
-   *
-   * The journal sits at a fixed path inside the cache directory, and two nodes
-   * of one board share that directory. A process that serialised only its own
-   * in-memory map would erase the other node's pending entries; the other node
-   * would then be holding the only copy of a file that nothing on disk records
-   * as dirty. On-disk entries are therefore carried through every save, and
-   * the write is a temp-file rename so a crash mid-save cannot leave a
-   * truncated journal.
-   *
-   * `justResolved` is the ONE id this save is removing - the upload that just
-   * landed, or the entry whose staged file has gone. Nothing else is dropped.
-   * A durable "already resolved" set would be wrong: it would go on
-   * suppressing that id for the life of the process, so a second node staging
-   * the same key again later would have its fresh entry deleted by this
-   * process's next save - the very loss the merge exists to prevent.
-   */
-  private saveJournal(justResolved?: string): void {
-    const merged = new Map<string, PendingEntry>();
-    for (const entry of this.readJournalFromDisk()) {
-      const id = this.id(entry.driveNumber, entry.key);
-      if (id === justResolved) continue;
-      merged.set(id, entry);
-    }
-    for (const [id, entry] of this.dirty) merged.set(id, entry);
-
-    const tmp = `${this.journalPath}.tmp-${process.pid}-${tempCounter++}`;
-    try {
-      fs.writeFileSync(tmp, JSON.stringify([...merged.values()], null, 2));
-      fs.renameSync(tmp, this.journalPath);
-    } catch (err) {
-      try {
-        fs.unlinkSync(tmp);
-      } catch {
-        // nothing to clean up
-      }
-      // Throwing here would turn a successful upload into a failure and a
-      // failed upload into a lost pin. And eviction must NOT be disabled: this
-      // process's `dirty` map is intact and the sidecar marker already pins
-      // the file durably, so nothing is unsafe to delete. Disabling would
-      // deadlock the board in exactly the case eviction is the remedy for -
-      // under ENOSPC this write and the marker write fail TOGETHER, so the
-      // journal branch would switch eviction off for good and the disk would
-      // never recover. Only a journal that PARSES as corrupt disables it,
-      // because only then is it unknown which files were pinned.
-      console.warn(
-        `[storage] cannot write cache journal ${this.journalPath}: ${String(err)}; ` +
-          `pending uploads are held in memory and by their sidecar markers`
-      );
-    }
-  }
-
-  // ------------------------------------------------------- sidecar markers
-
-  private markerPathFor(localPath: string): string {
-    return `${localPath}${MARKER_SUFFIX}`;
-  }
-
-  /**
-   * Writes the per-file pin. It goes down BEFORE the upload is attempted and
-   * comes up only once the bytes are in the pool, so at no instant is a staged
-   * file both unrecorded and un-uploaded.
-   */
-  private writeMarker(entry: PendingEntry): void {
-    try {
-      fs.mkdirSync(path.dirname(entry.localPath), { recursive: true });
-      const marker: DirtyMarker = { ...entry, ...this.stampOf(entry.localPath) };
-      fs.writeFileSync(this.markerPathFor(entry.localPath), JSON.stringify(marker));
-    } catch (err) {
-      // Warn, but do NOT disable eviction. This process's own record is
-      // intact - `dirty` holds the entry and `markDirty` journals it
-      // immediately - so nothing here is unsafe to evict. Disabling would
-      // deadlock the board in exactly the case eviction is the remedy for:
-      // ENOSPC fails the marker write, eviction switches off permanently, and
-      // the disk never recovers. What is lost is the pin's ability to outlive
-      // a lost journal, which is a degraded guarantee, not an unsafe one.
-      console.warn(
-        `[storage] cannot write dirty marker for ${entry.localPath}: ${String(err)}; ` +
-          `this upload is recorded only in the journal until it lands`
-      );
-    }
-  }
-
-  /** Size and mtime of the staged file, or nothing if it cannot be stat'd. */
-  private stampOf(localPath: string): { size?: number; mtimeMs?: number } {
-    try {
-      const st = fs.statSync(localPath);
-      return { size: st.size, mtimeMs: st.mtimeMs };
-    } catch {
-      // The writer has not created it yet. Recovery will park rather than
-      // replay a file it cannot vouch for.
-      return {};
-    }
-  }
-
-  /**
-   * Whether the staged file is still byte-for-byte what the marker was written
-   * for. A marker with no stamp - written before the file existed, or by an
-   * older build - cannot vouch for anything and answers no.
-   */
-  private markerMatchesFile(marker: DirtyMarker, stagedPath: string): boolean {
-    if (marker.size === undefined || marker.mtimeMs === undefined) return false;
-    try {
-      const st = fs.statSync(stagedPath);
-      return st.size === marker.size && st.mtimeMs === marker.mtimeMs;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Whether the marker beside a staged file disagrees with the file now.
-   *
-   * This is the guard on the REPLAY path, and it has to be here rather than
-   * only on adoption. In the power-loss case the journal SURVIVES - it is
-   * written temp-then-rename, and `markDirty` journals the entry before the
-   * upload is attempted - so `loadJournal` puts the id straight into `dirty`
-   * and `recoverFromDisk` never looks at the stamp. Without this check
-   * `flushPending` would then hand the truncated file to `writeBack`, which
-   * re-stamps the marker from the file it is about to upload and puts short
-   * bytes over a good object.
-   *
-   * No marker, or one that cannot be read, means there is nothing to check
-   * against - the journal is the record and the replay goes ahead.
-   */
-  private markerDisagreesWithFile(localPath: string): boolean {
-    const markerPath = this.markerPathFor(localPath);
-    if (!fs.existsSync(markerPath)) return false;
-    const marker = this.readMarker(markerPath);
-    if (!marker) return false;
-    return !this.markerMatchesFile(marker, localPath);
-  }
-
-  private removeMarker(localPath: string): void {
-    try {
-      fs.unlinkSync(this.markerPathFor(localPath));
-    } catch {
-      // Already gone, which is the desired end state.
-    }
-  }
-
-  /**
-   * One boot-time walk that does two jobs the journal cannot.
-   *
-   * It ADOPTS any sidecar marker whose entry the journal does not have - a
-   * journal that was corrupt, unwritable, or clobbered by another node leaves
-   * exactly that, and adopting turns "do not delete these bytes" into "upload
-   * these bytes", which is what was wanted all along - but only when the
-   * staged file still matches the marker's stamp. It PARKS the file when it
-   * does not, and REMOVES a marker whose file is gone.
-   *
-   * And it sweeps `.tmp-<pid>-<n>` scratch left by a process that died between
-   * writing a download and renaming it. Only temps whose pid is no longer
-   * running are removed, so a second node's in-flight download is never pulled
-   * out from under its own rename.
-   */
-  private recoverFromDisk(): void {
-    const adopted: PendingEntry[] = [];
-    const parked: string[] = [];
-
-    this.walkFiles(this.cacheDir, (full, name) => {
-      const temp = TEMP_SUFFIX_PATTERN.exec(name);
-      if (temp) {
-        if (!isProcessAlive(Number(temp[1]))) {
-          try {
-            fs.unlinkSync(full);
-          } catch {
-            // Someone else got there first.
-          }
-        }
-        return;
-      }
-      if (!name.endsWith(MARKER_SUFFIX)) return;
-
-      const stagedPath = full.slice(0, -MARKER_SUFFIX.length);
-      const marker = this.readMarker(full);
-
-      if (!fs.existsSync(stagedPath)) {
-        // Leaving a marker whose file is gone is not harmless: `evictTo` skips
-        // markers, so the next cold fetch of that key lands a perfectly clean
-        // copy at exactly this path and it is un-evictable for the life of the
-        // cache directory. Nothing else ever removes one.
-        //
-        // But a `.dirty` name is NOT proof of a marker. An object whose key
-        // genuinely ends `.dirty` caches to a file with this exact name, and
-        // deleting one because it has no sibling would delete a payload - the
-        // ONLY copy of it, if it were itself staged and un-uploaded. The
-        // module header books such a key as over-pinned; it must never book it
-        // as deleted. So a sweep requires the file to parse as a marker AND to
-        // name the very path it sits beside.
-        if (marker && path.resolve(marker.localPath) === path.resolve(stagedPath)) {
-          try {
-            fs.unlinkSync(full);
-          } catch {
-            // Someone else got there first.
-          }
-          console.warn(`[storage] removed dirty marker ${full}: the staged file it protected is gone`);
-        } else {
-          console.warn(
-            `[storage] ${full} ends in ${MARKER_SUFFIX} but does not describe the file beside it; leaving it alone. ` +
-              `If it is a real marker its pending upload cannot be replayed and a sysop should look.`
-          );
-        }
-        return;
-      }
-
-      if (!marker) return; // unreadable: still pinned by existing, not replayable
-      const id = this.id(marker.driveNumber, marker.key);
-      if (this.dirty.has(id)) return;
-
-      if (!this.markerMatchesFile(marker, stagedPath)) {
-        // Present but not what was staged - the truncated-by-a-power-loss
-        // case. Uploading it would destroy a good object in the pool. Park it:
-        // the marker stays, so the file stays pinned, and nothing replays it
-        // until a person looks.
-        parked.push(stagedPath);
-        return;
-      }
-
-      this.dirty.set(id, { driveNumber: marker.driveNumber, key: marker.key, localPath: stagedPath });
-      adopted.push({ driveNumber: marker.driveNumber, key: marker.key, localPath: stagedPath });
-    });
-
-    if (parked.length > 0) {
-      console.warn(
-        `[storage] ${parked.length} staged file(s) do not match the marker that was written for them and will NOT be ` +
-          `uploaded - they are kept and pinned pending a sysop: ${parked.join(', ')}`
-      );
-    }
-
-    if (adopted.length > 0) {
-      console.warn(
-        `[storage] recovered ${adopted.length} pending upload(s) from sidecar markers that the journal did not list: ` +
-          adopted.map((e) => this.id(e.driveNumber, e.key)).join(', ')
-      );
-      this.saveJournal();
-    }
-  }
-
-  private readMarker(markerPath: string): DirtyMarker | null {
-    try {
-      const parsed: unknown = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
-      return isPendingEntry(parsed) ? (parsed as DirtyMarker) : null;
-    } catch {
-      // A marker we cannot read still pins its file by existing - `evictTo`
-      // checks for the file, not for its contents - it just cannot be
-      // replayed. Say so rather than dropping it silently.
-      console.warn(`[storage] dirty marker ${markerPath} is unreadable; its file stays pinned but cannot be replayed`);
-      return null;
-    }
-  }
-
-  private walkFiles(dir: string, visit: (full: string, name: string) => void): void {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        this.walkFiles(full, visit);
-      } else if (entry.isFile()) {
-        visit(full, entry.name);
-      }
-    }
-  }
-
-  // -------------------------------------------------------------- key paths
 
   private id(driveNumber: number, key: string): string {
     return `${driveNumber}:${key}`;
@@ -545,8 +257,8 @@ export class FileCache {
    * Where this object lives on local disk. This is also where a writer should
    * STAGE bytes it means to upload: Task 10 opens this path for a door and
    * hands the same path back to `writeBackSync` on Close(), which puts the
-   * staged file inside the `<drive>/<key>` layout where the pin, the marker
-   * and the re-fetchability rule all apply to it.
+   * staged file inside the `<drive>/<key>` layout where the pin and the
+   * re-fetchability rule apply to it.
    */
   localPathFor(driveNumber: number, key: string): string {
     this.assertSafeKey(key);
@@ -554,18 +266,286 @@ export class FileCache {
   }
 
   /**
-   * The id of the object a path holds, or null when this is not a file the
-   * cache materialised and could therefore fetch again. Null is the answer
+   * The marker for an object. It is NEVER beside the payload: a marker in the
+   * payload namespace is a file that some key spells, and a key that spells a
+   * marker gets over-pinned at best and parsed or deleted at worst.
+   */
+  private markerPathFor(driveNumber: number, key: string): string {
+    this.assertSafeKey(key);
+    return path.join(this.pendingRoot, String(driveNumber), `${key}${MARKER_SUFFIX}`);
+  }
+
+  /** Where quarantined bytes go. Out of the eviction namespace by construction. */
+  private parkedPathFor(driveNumber: number, key: string): string {
+    this.assertSafeKey(key);
+    return path.join(this.parkedRoot, String(driveNumber), key);
+  }
+
+  /**
+   * The id of the object a payload path holds, or null when this is not a file
+   * the cache materialised and could therefore fetch again. Null is the answer
    * that keeps a file alive through `evictTo`.
    */
   private materialisedIdFor(full: string): string | null {
-    const rel = path.relative(this.cacheDir, full);
+    const located = this.splitUnder(this.cacheDir, full);
+    return located ? this.id(located.driveNumber, located.key) : null;
+  }
+
+  /**
+   * Splits `<root>/<drive>/<rest>` into a drive number and a key. Used for both
+   * the payload tree and the parked tree, which share that shape on purpose -
+   * a parked file keeps its identity, so `parkedFiles()` can name what it is.
+   */
+  private splitUnder(root: string, full: string): { driveNumber: number; key: string } | null {
+    const rel = path.relative(root, full);
     if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return null;
     const parts = rel.split(path.sep);
     if (parts.length < 2) return null;
     if (!DRIVE_DIR_PATTERN.test(parts[0])) return null;
-    return this.id(Number(parts[0]), parts.slice(1).join('/'));
+    return { driveNumber: Number(parts[0]), key: parts.slice(1).join('/') };
   }
+
+  /**
+   * Who a marker is for, taken from WHERE IT SITS rather than what it says. A
+   * marker too corrupt to parse still pins exactly the right object this way,
+   * which is the property the old sidecar layout could not have.
+   */
+  private idFromMarkerPath(full: string): { driveNumber: number; key: string } | null {
+    const located = this.splitUnder(this.pendingRoot, full);
+    if (!located || !located.key.endsWith(MARKER_SUFFIX)) return null;
+    const key = located.key.slice(0, -MARKER_SUFFIX.length);
+    if (key === '') return null;
+    return { driveNumber: located.driveNumber, key };
+  }
+
+  // ----------------------------------------------------------------- markers
+
+  /**
+   * Writes the pin. It goes down BEFORE the upload is attempted and comes up
+   * only once the bytes are in the pool, so at no instant is a staged file both
+   * unrecorded and un-uploaded. Temp-then-rename, so a crash mid-write cannot
+   * leave a half-marker that would park a perfectly good upload.
+   */
+  private writeMarker(entry: PendingEntry): void {
+    const markerPath = this.markerPathFor(entry.driveNumber, entry.key);
+    const tmp = `${markerPath}.tmp-${process.pid}-${tempCounter++}`;
+    try {
+      fs.mkdirSync(path.dirname(markerPath), { recursive: true });
+      fs.writeFileSync(tmp, JSON.stringify(entry));
+      fs.renameSync(tmp, markerPath);
+    } catch (err) {
+      try {
+        fs.unlinkSync(tmp);
+      } catch {
+        // nothing to clean up
+      }
+      // Warn, but do NOT stop evicting. This process's own record is intact -
+      // `dirty` holds the entry and pins the file for as long as the process
+      // lives - so nothing here is unsafe to delete. Refusing to evict would
+      // deadlock the board in exactly the case eviction is the remedy for:
+      // under ENOSPC this write fails, eviction switches off, and the disk
+      // never recovers. What is lost is the pin's ability to outlive a
+      // restart, which is a degraded guarantee, not an unsafe one.
+      console.warn(
+        `[storage] cannot write pending marker ${markerPath}: ${String(err)}; ` +
+          `this upload is pinned in memory only and will not survive a restart`
+      );
+    }
+  }
+
+  /** Size and mtime of the staged file, or nothing if it cannot be stat'd. */
+  private stampOf(localPath: string): { size?: number; mtimeMs?: number } {
+    try {
+      const st = fs.statSync(localPath);
+      return { size: st.size, mtimeMs: st.mtimeMs };
+    } catch {
+      return {};
+    }
+  }
+
+  /**
+   * Whether the staged file is still what the marker was written for. An entry
+   * with no stamp - written before its file existed, or recovered from a marker
+   * that could not be read - cannot vouch for anything and answers no.
+   */
+  private stampStillMatches(entry: PendingEntry): boolean {
+    if (entry.size === undefined || entry.mtimeMs === undefined) return false;
+    try {
+      const st = fs.statSync(entry.localPath);
+      return st.size === entry.size && st.mtimeMs === entry.mtimeMs;
+    } catch {
+      return false;
+    }
+  }
+
+  private removeMarker(driveNumber: number, key: string): void {
+    try {
+      fs.unlinkSync(this.markerPathFor(driveNumber, key));
+    } catch {
+      // Already gone, which is the desired end state.
+    }
+  }
+
+  private readMarker(markerPath: string): PendingEntry | null {
+    try {
+      const st = fs.statSync(markerPath);
+      if (st.size > MAX_MARKER_BYTES) {
+        console.warn(
+          `[storage] pending marker ${markerPath} is ${st.size} bytes, far larger than a marker can be; ` +
+            `it will not be parsed and its object is treated as unvouched-for`
+        );
+        return null;
+      }
+      const parsed: unknown = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+      return isPendingEntry(parsed) ? parsed : null;
+    } catch {
+      console.warn(`[storage] pending marker ${markerPath} is unreadable; its object is treated as unvouched-for`);
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------- recovery
+
+  /**
+   * ONE BOUNDED WALK OF `.pending/`, and nothing else.
+   *
+   * Every marker on disk is a pending upload, so the walk simply reads them
+   * back into `dirty`. Because a marker's identity comes from its path, a
+   * marker that cannot be parsed still lands as a pending entry with no
+   * stamp - pinned, and unvouched-for, which is exactly what it is.
+   *
+   * A marker whose file is gone is removed: `evictTo` never deletes a marked
+   * object, so leaving one would make the next cold fetch of that key
+   * permanently un-evictable. Nothing else ever removes one - and, unlike the
+   * old sidecar layout, there is no way for this unlink to reach a payload,
+   * because payloads do not live here.
+   */
+  private recoverFromDisk(): void {
+    const recovered: string[] = [];
+
+    this.walkFiles(this.pendingRoot, (full, name) => {
+      const temp = TEMP_SUFFIX_PATTERN.exec(name);
+      if (temp) {
+        this.sweepIfOrphaned(full, Number(temp[1]));
+        return;
+      }
+
+      const located = this.idFromMarkerPath(full);
+      if (!located) {
+        console.warn(`[storage] ${full} is not a marker name; leaving it alone`);
+        return;
+      }
+
+      const marker = this.readMarker(full);
+      const localPath = marker?.localPath ?? this.localPathFor(located.driveNumber, located.key);
+
+      if (!fs.existsSync(localPath)) {
+        try {
+          fs.unlinkSync(full);
+        } catch {
+          // Someone else got there first.
+        }
+        console.warn(`[storage] removed pending marker ${full}: the staged file it protected is gone`);
+        return;
+      }
+
+      const id = this.id(located.driveNumber, located.key);
+      this.dirty.set(id, {
+        driveNumber: located.driveNumber,
+        key: located.key,
+        localPath,
+        size: marker?.size,
+        mtimeMs: marker?.mtimeMs,
+      });
+      recovered.push(id);
+    });
+
+    if (recovered.length > 0) {
+      console.warn(`[storage] recovered ${recovered.length} pending upload(s) from disk: ${recovered.join(', ')}`);
+    }
+  }
+
+  private sweepIfOrphaned(full: string, pid: number): void {
+    if (isProcessAlive(pid)) return;
+    try {
+      fs.unlinkSync(full);
+    } catch {
+      // Someone else got there first.
+    }
+  }
+
+  private walkFiles(dir: string, visit: (full: string, name: string) => void): void {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (this.nonPayloadDirs.has(path.resolve(full))) continue;
+        this.walkFiles(full, visit);
+      } else if (entry.isFile()) {
+        visit(full, entry.name);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------ parked
+
+  /**
+   * Quarantines a staged file whose bytes nobody can vouch for: renames it into
+   * `.parked/<drive>/<key>` and drops its marker and its pending entry.
+   *
+   * A MOVE, not a flag. Parked bytes leave the eviction namespace, so no future
+   * walk can reclaim them and no sysop deleting a marker can un-safe them; they
+   * stop counting against the cache budget; and `parkedFiles()` can enumerate
+   * them. The file is still on disk and still complete - the decision about it
+   * is deferred to a person, not taken by guessing.
+   */
+  private park(entry: PendingEntry, why: string): void {
+    const id = this.id(entry.driveNumber, entry.key);
+    const destination = this.parkedPathFor(entry.driveNumber, entry.key);
+    try {
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.renameSync(entry.localPath, destination);
+      this.dirty.delete(id);
+      this.removeMarker(entry.driveNumber, entry.key);
+      console.warn(
+        `[storage] parked ${id}: ${why}. The bytes are kept at ${destination} and will NOT be uploaded; ` +
+          `a sysop must decide. parkedFiles() lists them.`
+      );
+    } catch (err) {
+      // The move failed - a cross-device staging path, or a permission
+      // problem. Fall back to the weaker form of the same decision: drop the
+      // pending entry so nothing replays it, and LEAVE the marker, which keeps
+      // the file pinned where it lies.
+      this.dirty.delete(id);
+      console.warn(
+        `[storage] could not park ${id} at ${destination}: ${String(err)}. ${entry.localPath} will NOT be ` +
+          `uploaded and stays pinned where it is, pending a sysop.`
+      );
+    }
+  }
+
+  /**
+   * Every file quarantined by a failed vouch, with the object it was staged
+   * for. This is the operator surface for parking: a parked file is safe but
+   * unresolved, and only a person can say whether its bytes should go to the
+   * pool or be thrown away.
+   */
+  parkedFiles(): CachedFile[] {
+    const found: CachedFile[] = [];
+    this.walkFiles(this.parkedRoot, (full) => {
+      const located = this.splitUnder(this.parkedRoot, full);
+      if (!located) return;
+      found.push({ localPath: full, driveNumber: located.driveNumber, key: located.key });
+    });
+    return found;
+  }
+
+  // ------------------------------------------------------------------ status
 
   isDirty(driveNumber: number, key: string): boolean {
     return this.dirty.has(this.id(driveNumber, key));
@@ -576,11 +556,6 @@ export class FileCache {
     return this.shortfallBytes;
   }
 
-  /** Whether the pin record is incomplete, which disables eviction. */
-  isEvictionDisabled(): boolean {
-    return this.journalUntrusted;
-  }
-
   // ------------------------------------------------------------- read paths
 
   /**
@@ -588,7 +563,7 @@ export class FileCache {
    * cache does not have it.
    *
    * Resolution order, and why:
-   *   1. A DIRTY entry wins. Its staged file is newer than anything the pool
+   *   1. A PENDING entry wins. Its staged file is newer than anything the pool
    *      holds - that is what "not uploaded yet" means - and it is the only
    *      copy of that version. Serving the pool's older bytes here would make
    *      a door's own write disappear from under it.
@@ -598,6 +573,11 @@ export class FileCache {
    *      because a bucket is having a bad minute helps nobody.
    *   3. A fetch already running for this key is shared rather than doubled.
    *   4. Otherwise, fetch.
+   *
+   * A PARKED file is deliberately not in that list. Parking says nobody can
+   * vouch for those bytes, so the pool's object becomes the served version
+   * again - which is also why parking moves the file out of `<drive>/<key>`
+   * rather than leaving it there to be served.
    *
    * Throws `StorageUnavailableError` when the volume cannot answer. A
    * genuinely absent object throws whatever the backend throws for absence
@@ -651,7 +631,7 @@ export class FileCache {
     // Temp file then rename, the way LocalBackend.put does: a crash or a full
     // disk mid-download must never leave a short file that the next
     // ensureLocal serves as a complete one. The name carries this process's
-    // pid so the eviction walk skips it and a later boot can tell an orphan
+    // pid so the eviction walk skips it and a later sweep can tell an orphan
     // from a live download.
     fs.mkdirSync(path.dirname(local), { recursive: true });
     const tmp = `${local}.tmp-${process.pid}-${tempCounter++}`;
@@ -706,7 +686,7 @@ export class FileCache {
    *
    * Expiry raises `StorageUnavailableError`: a volume that did not answer in
    * time is exactly "ask again later", and for a write-back the entry is
-   * already journalled and marked, so raising loses nothing.
+   * already marked, so raising loses nothing.
    */
   private blockOn<T>(driveNumber: number, operation: string, work: Promise<T>): T {
     let result: T | undefined;
@@ -779,19 +759,32 @@ export class FileCache {
   // ------------------------------------------------------------ write paths
 
   /**
-   * Records that a local file holds bytes the pool does not have yet. From
-   * this moment the file is pinned against eviction - by its own sidecar
-   * marker, not only by the shared journal - and will be retried at every boot
-   * until it lands.
+   * Records that a local file holds bytes the pool does not have yet. From this
+   * moment the file is pinned against eviction and will be retried at every
+   * boot until it lands.
+   *
+   * THE ORDERING RULE: WRITE THE BYTES FIRST, THEN CALL THIS. The marker stamps
+   * the file's size and mtime as it stands right now, and that stamp is what
+   * lets a later boot vouch for the bytes it finds. Pinning at open time -
+   * markDirty, then write - produces a marker with no stamp, which can vouch
+   * for nothing and PARKS the file instead of uploading it. A door that has
+   * finished writing and is closing is the shape this expects, which is why
+   * Task 10 calls `writeBackSync` from `Close()`.
    */
   markDirty(driveNumber: number, key: string, localPath: string): void {
     this.assertSafeKey(key);
-    const entry: PendingEntry = { driveNumber, key, localPath };
-    // Marker first. It is the record that survives everything the journal
-    // cannot, so it must exist before the upload is attempted.
+    const stamp = this.stampOf(localPath);
+    if (stamp.size === undefined) {
+      console.warn(
+        `[storage] ${localPath} does not exist yet at markDirty for ${this.id(driveNumber, key)}; ` +
+          `the marker cannot vouch for it and a later boot will park it. Write the bytes before marking them.`
+      );
+    }
+    const entry: PendingEntry = { driveNumber, key, localPath, ...stamp };
+    // Marker first. It is the record, so it must exist before the upload is
+    // attempted; a crash between the two resumes.
     this.writeMarker(entry);
     this.dirty.set(this.id(driveNumber, key), entry);
-    this.saveJournal();
   }
 
   /**
@@ -813,11 +806,7 @@ export class FileCache {
       await state.backend.put(key, body);
     } catch (error) {
       if (isStorageUnavailable(error)) this.volumes.markDegraded(driveNumber, true);
-      // Re-assert the entry on disk before giving up: another node may have
-      // rewritten the journal between markDirty and here, and this file is
-      // now the only copy of these bytes.
-      this.saveJournal();
-      throw error; // the entry stays dirty, marked, and on disk
+      throw error; // the entry stays pending, marked, and on disk
     }
     this.volumes.markDegraded(driveNumber, false);
 
@@ -826,13 +815,9 @@ export class FileCache {
     this.uploadedSizes.set(id, body.length);
     state.requestsThisMonth++;
 
-    // Marker down before the journal entry: the bytes are in the pool now, so
-    // unpinning is safe, and a crash in between leaves the journal entry to
-    // drive one harmless idempotent retry rather than a marker nothing ever
-    // clears.
-    this.removeMarker(localPath);
+    // The bytes are in the pool now, so unpinning is safe.
     this.dirty.delete(id);
-    this.saveJournal(id);
+    this.removeMarker(driveNumber, key);
   }
 
   /**
@@ -843,14 +828,24 @@ export class FileCache {
    * Task 10 calls it from `DosLibrary.Close()`, where a door that has just
    * written a file and reopens it expects to read back what it wrote - which
    * means the upload has to have been attempted before Close() returns. On
-   * timeout it raises rather than hanging; the entry is already journalled and
-   * marked, so the bytes are safe and the next boot finishes the job.
+   * timeout it raises rather than hanging; the entry is already marked, so the
+   * bytes are safe and the next boot finishes the job.
    */
   writeBackSync(driveNumber: number, key: string, localPath: string): void {
     this.blockOn(driveNumber, `uploading ${key}`, this.writeBack(driveNumber, key, localPath));
   }
 
-  /** Retries every unfinished upload. Called at boot. */
+  /**
+   * Retries every unfinished upload. Called at boot.
+   *
+   * This is the ONE place a pending entry can become an upload, so it is the
+   * one place the stamp is checked - the check cannot be written on one replay
+   * path and forgotten on another, because there is only one. An entry whose
+   * file no longer matches the stamp its marker carries is PARKED rather than
+   * uploaded: size and mtime cannot tell a power-loss truncation from a
+   * legitimate rewrite, and guessing wrong destroys a good object in the pool
+   * with no way back, whereas parking keeps both copies and asks a person.
+   */
   async flushPending(): Promise<void> {
     for (const entry of [...this.dirty.values()]) {
       const id = this.id(entry.driveNumber, entry.key);
@@ -858,21 +853,12 @@ export class FileCache {
         // Nothing left to upload. Keeping the entry would pin a path that no
         // longer exists and retry it for ever.
         this.dirty.delete(id);
-        this.removeMarker(entry.localPath);
-        this.saveJournal(id);
+        this.removeMarker(entry.driveNumber, entry.key);
         console.warn(`[storage] pending upload ${id} has no staged file at ${entry.localPath}; dropping it`);
         continue;
       }
-      if (this.markerDisagreesWithFile(entry.localPath)) {
-        // Present but not what was staged. Uploading it would destroy a good
-        // object in the pool. Park it: drop the journal entry so nothing
-        // retries it, and leave the marker, which keeps the file pinned.
-        this.dirty.delete(id);
-        this.saveJournal(id);
-        console.warn(
-          `[storage] pending upload ${id} does not match the marker written for it; it will NOT be uploaded. ` +
-            `${entry.localPath} is kept and pinned pending a sysop.`
-        );
+      if (!this.stampStillMatches(entry)) {
+        this.park(entry, 'the staged file does not match the marker written for it');
         continue;
       }
       try {
@@ -882,7 +868,6 @@ export class FileCache {
         // again.
       }
     }
-    this.saveJournal();
   }
 
   // --------------------------------------------------------------- eviction
@@ -891,34 +876,25 @@ export class FileCache {
    * Brings the cache down to `maxBytes` by deleting files it could fetch
    * again, least recently used first.
    *
-   * What it will NOT do: run at all while the pin record is incomplete; delete
-   * a file carrying a sidecar marker; delete a dirty file; or delete anything
-   * that is not laid out as `<cacheDir>/<driveNumber>/<key>`. If everything
-   * left is pinned, the cache stays over budget and says so -
-   * `overBudgetBytes()` reports the excess and a warning names it. That is the
-   * correct outcome: a cache over its budget costs disk, and a cache that
-   * deleted the only copy of a file costs the file. An operator seeing a
-   * persistent shortfall is being told the pool has stopped accepting writes,
-   * which is the thing to fix.
+   * What it will NOT do: delete a file with a marker; delete a pending file;
+   * or delete anything that is not laid out as `<cacheDir>/<drive>/<key>`.
+   * Markers and parked files are not in the payload namespace at all, so
+   * neither is reachable from here. If everything left is pinned, the cache
+   * stays over budget and says so - `overBudgetBytes()` reports the excess and
+   * a warning names it. That is the correct outcome: a cache over its budget
+   * costs disk, and a cache that deleted the only copy of a file costs the
+   * file. An operator seeing a persistent shortfall is being told the pool has
+   * stopped accepting writes, which is the thing to fix.
+   *
+   * It also sweeps `.tmp-<pid>-<n>` download scratch left by a process that is
+   * gone. That sweep lives here because this is the walk that already visits
+   * every payload path; only temps whose pid is no longer running are removed,
+   * so a second node's in-flight download is never pulled out from under its
+   * own rename.
    */
   evictTo(maxBytes: number = this.maxBytes): void {
     const files = this.scanForEviction();
     let total = files.reduce((sum, f) => sum + f.size, 0);
-
-    if (this.journalUntrusted) {
-      // The number still has to be right. `overBudgetBytes()` is the one value
-      // an admin surface would plot, and freezing it at its last reading -
-      // usually 0 - exactly while the disk fills is worse than not having it.
-      this.shortfallBytes = Math.max(0, total - maxBytes);
-      if (!this.warnedEvictionDisabled) {
-        this.warnedEvictionDisabled = true;
-        console.warn(
-          '[storage] eviction is disabled: the record of which files are not yet uploaded is incomplete, ' +
-            'so no file can be proven safe to delete'
-        );
-      }
-      return;
-    }
 
     for (const file of files.filter((f) => f.evictable).sort((a, b) => a.used - b.used)) {
       if (total <= maxBytes) break;
@@ -946,20 +922,28 @@ export class FileCache {
   }
 
   private scanForEviction(): Array<{ full: string; size: number; used: number; evictable: boolean }> {
+    // The pending set as it stands ON DISK, not merely as this process knows
+    // it: another node staging a file into the shared cache directory pins it
+    // here too. One bounded walk of `.pending/` answers the pin test for every
+    // payload, with no per-file existsSync and no sibling reasoning.
+    const pinnedIds = this.pendingIdsOnDisk();
+    for (const id of this.dirty.keys()) pinnedIds.add(id);
+    // Staged files that are NOT at `<drive>/<key>` have no id, so they are
+    // already un-evictable; this covers them by path as well, cheaply.
     const pinnedPaths = new Set([...this.dirty.values()].map((e) => path.resolve(e.localPath)));
-    const journal = path.resolve(this.journalPath);
 
     const files: Array<{ full: string; size: number; used: number; evictable: boolean }> = [];
 
     this.walkFiles(this.cacheDir, (full, name) => {
-      const resolved = path.resolve(full);
-      if (resolved === journal) return;
-      // Scratch and pins, not payload. A download's temp file must survive the
-      // walk or a concurrent eviction unlinks it out from under its own
-      // rename; a marker must survive it or the pin deletes itself.
-      if (TEMP_SUFFIX_PATTERN.test(name)) return;
-      if (name.endsWith(MARKER_SUFFIX)) return;
+      const temp = TEMP_SUFFIX_PATTERN.exec(name);
+      if (temp) {
+        // Scratch, not payload. A live download's temp must survive the walk
+        // or a concurrent eviction unlinks it out from under its own rename.
+        this.sweepIfOrphaned(full, Number(temp[1]));
+        return;
+      }
 
+      const resolved = path.resolve(full);
       let size: number;
       let atime: number;
       try {
@@ -971,15 +955,22 @@ export class FileCache {
       }
 
       const id = this.materialisedIdFor(full);
-      const evictable =
-        id !== null &&
-        !this.dirty.has(id) &&
-        !pinnedPaths.has(resolved) &&
-        !fs.existsSync(this.markerPathFor(full));
+      const evictable = id !== null && !pinnedIds.has(id) && !pinnedPaths.has(resolved);
       files.push({ full, size, used: Math.max(atime, this.lastUsed.get(resolved) ?? 0), evictable });
     });
 
     return files;
+  }
+
+  /** Every object with a marker on disk, by id taken from the marker's path. */
+  private pendingIdsOnDisk(): Set<string> {
+    const ids = new Set<string>();
+    this.walkFiles(this.pendingRoot, (full, name) => {
+      if (TEMP_SUFFIX_PATTERN.test(name)) return;
+      const located = this.idFromMarkerPath(full);
+      if (located) ids.add(this.id(located.driveNumber, located.key));
+    });
+    return ids;
   }
 }
 
@@ -996,8 +987,8 @@ function isPendingEntry(value: unknown): value is PendingEntry {
 /**
  * Signal 0 tests for existence without delivering anything. EPERM means the
  * process is there but owned by someone else, which is still alive - only
- * ESRCH means gone. Used so a boot never sweeps another live node's in-flight
- * download temp.
+ * ESRCH means gone. Used so a sweep never removes another live node's
+ * in-flight download temp.
  */
 function isProcessAlive(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
