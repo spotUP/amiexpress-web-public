@@ -11,10 +11,14 @@
  *
  * The second report was "the anims dont look buggy now but they flicker a
  * lot". Every frame opened with `\x1b[2J` and repainted the whole screen -
- * 2.5-10 KB a frame, which the terminal then paces (its own modem emulator
- * caps even "MAX" at 230400 bps = 23 KB/s), so the clear and the repaint
- * landed in different paints and the screen blanked between frames. Frames
- * are now one full paint followed by deltas.
+ * 2.5-10 KB a frame, which the terminal then pace-drains (its own modem
+ * emulator caps even "MAX" at 230400 bps = 23 KB/s). The mechanism is
+ * LATENCY, not reordering: that emulator's queue is strict FIFO and it
+ * finishes a text token before the next escape, so nothing overtakes
+ * anything - but a repaint that needs 110-430 ms to arrive for a frame that
+ * wants 40 pushes the NEXT frame's clear into a later paint, and between
+ * that clear and the repaint behind it the terminal has a blank screen to
+ * show. Frames are now one full paint followed by deltas.
  *
  * These tests drive the public entry point (`getWipeFrames`) with the real
  * screen bytes, replay every frame into a 25-row terminal model exactly as
@@ -334,8 +338,9 @@ describe('wipe frames do not flicker', () => {
     // A full repaint per frame is 2.5-10 KB; at the terminal's own pacing
     // (230400 bps even on MAX, packages/terminal/src/utils/modem-emulator.ts)
     // that is 110-430 ms of wire for a frame the animation wants to show for
-    // 40, so frames pile up and the screen blanks under them. A delta is a
-    // few hundred bytes.
+    // 40, so every frame arrives late and its clear lands in a paint of its
+    // own with the repaint still queued behind it. A delta is a few hundred
+    // bytes.
     const painted = (content: string): number => content.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').length;
     const changed = (before: TestTerminal, after: TestTerminal): number => {
       let n = 0;
@@ -360,6 +365,69 @@ describe('wipe frames do not flicker', () => {
         expect(`${file}/${wipe} cells painted beyond changed: ${worstExcess <= 8}`)
           .toBe(`${file}/${wipe} cells painted beyond changed: true`);
       }
+    }
+  });
+
+  it('a wipe leaves no residue from whatever was on the terminal before it', () => {
+    // The first frame is the only clear in the animation, so it is the only
+    // thing standing between the previous screen and this one.
+    for (const file of REAL_SCREENS) {
+      const parsed = parsedScreens.get(file)!;
+      const junk = Array.from({ length: 25 }, () => '\x1b[41;1m' + 'Z'.repeat(80)).join('\r\n');
+
+      for (const wipe of WIPES) {
+        const term = new TestTerminal();
+        term.write('\x1b[2J\x1b[H' + junk);          // the screen before the wipe
+        for (const frame of getWipeFrames(wipe, parsed)) term.write(frame.content);
+        expect(`${file}/${wipe}: ${cellDiff(screenOf('\x1b[2J\x1b[H', parsed), term).length}`)
+          .toBe(`${file}/${wipe}: 0`);
+      }
+    }
+  });
+
+  it('the final frame drops a clear the screen opens with, whatever precedes it', () => {
+    // `~f` expands to `\x1b[2J\x1b[H`; screens reach it with an SGR in front
+    // (`\x1b[0m\x1b[2J`, and DOS art's fill-with-background `\x1b[44m\x1b[2J`).
+    // The clear goes, the colour state stays - it is content.
+    const body = '\r\nHELLO\r\nWORLD';
+    for (const prefix of ['\x1b[2J\x1b[H', '\x1b[0m\x1b[2J\x1b[H', '\x1b[44m\x1b[2J']) {
+      const frames = getWipeFrames('blocks', prefix + body);
+      const last = frames[frames.length - 1].content;
+      expect(`${JSON.stringify(prefix)} erases: ${/\x1b\[[23]J/.test(last)}`)
+        .toBe(`${JSON.stringify(prefix)} erases: false`);
+      const sgr = prefix.replace(/\x1b\[[23]J|\x1b\[(?:1;1)?H/g, '');
+      expect(`${JSON.stringify(prefix)} keeps ${JSON.stringify(sgr)}: ${last.startsWith('\x1b[H' + sgr)}`)
+        .toBe(`${JSON.stringify(prefix)} keeps ${JSON.stringify(sgr)}: true`);
+    }
+  });
+
+  it('the filler cells of a wipe do not inherit the screen\'s own colours', () => {
+    // Matrix rain, noise and the checkerboard's blocks carry their own
+    // colour. Written bare (`\x1b[92m`) they only SET a foreground, and since
+    // a frame resets once at its end the rain came out bold on the screen's
+    // background. Every cell state must be complete.
+    const content = '\x1b[44;1mBOLD ON BLUE ROW\r\n'
+      + Array.from({ length: 12 }, (_, i) => `\x1b[44;1mrow ${i} on blue`).join('\r\n');
+    const plain = screenOf('\x1b[2J\x1b[H', content);
+
+    for (const wipe of WIPES) {
+      const frames = getWipeFrames(wipe, content);
+      let inherited = 0;
+      for (let i = 1; i < frames.length; i++) {
+        const term = play(frames, i);
+        for (let y = 0; y < term.viewportRows; y++) {
+          for (let x = 0; x < 80; x++) {
+            const cell = term.cell(y, x);
+            const isScreensOwn = term.strictKey(y, x) === plain.strictKey(y, x);
+            if (isScreensOwn || cell.ch === ' ') continue;
+            // A cell the animation invented: its colour is the effect's, not
+            // the screen's.
+            if (cell.bg !== '' || cell.bold) inherited++;
+          }
+        }
+      }
+      expect(`${wipe} filler cells wearing the screen's attributes: ${inherited}`)
+        .toBe(`${wipe} filler cells wearing the screen's attributes: 0`);
     }
   });
 

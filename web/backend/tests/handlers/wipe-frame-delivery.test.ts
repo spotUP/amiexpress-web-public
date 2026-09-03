@@ -5,13 +5,14 @@
  * lot". Two mechanisms were measured (ledger:
  * .superpowers/sdd/2026-09-03-screen-wipes/progress.md):
  *
- * 1. Every frame opened with `\x1b[2J` and repainted the whole screen. On
- *    xterm.js the clear and the repaint do not have to land in the same
- *    render frame, and the board's terminal paces what it receives
+ * 1. Every frame opened with `\x1b[2J` and repainted the whole screen. The
+ *    board's terminal queues what it receives and drains it at up to 23 KB/s
  *    (packages/terminal/src/utils/modem-emulator.ts caps even "MAX" at
- *    230400 bps = 23 KB/s, and writes escape sequences AHEAD of the text
- *    still draining), so the clear of frame N+1 fired while frame N was
- *    still painting: a blank screen between every pair of frames.
+ *    230400 bps). Nothing is reordered - that queue is strict FIFO and a
+ *    text token finishes before the next escape - but a 2.5-10 KB repaint
+ *    needs 110-430 ms to arrive for a frame that wants 40, so frame N+1's
+ *    clear lands late, in a paint of its own, with its repaint still queued
+ *    behind it: a blank screen between every pair of frames.
  * 2. A frame must be ONE write. If the wipe's own chunking were re-cut by
  *    the server-side modem throttle, or merged by the 16 ms AnsiBuffer
  *    (utils/ansi-buffer.util.ts), the animation's timing would be someone
@@ -41,6 +42,10 @@ import { displayScreen } from '../../src/handlers/screen.handler';
 import { getWipeFrames, WipeFrame } from '../../src/utils/screen-wipe.util';
 
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
+
+/** What the play loop wraps every frame in (screen.handler.ts:2489-2493). */
+const HIDE_CURSOR = '\x1b[?25l';
+const SHOW_CURSOR = '\x1b[?25h';
 
 let tmpDir: string;
 let menuPath: string;
@@ -92,24 +97,31 @@ async function playMenu(file?: string): Promise<{ payloads: string[]; frames: Wi
 
 describe('wipe frame delivery', () => {
   it('a frame is delivered as one write', async () => {
-    const { payloads, frames } = await playMenu();
+    // The named-wipe fixture, not the board's `~WX`: a random wipe would
+    // sometimes be the 3-frame checkerboard and this pin wants an animation.
+    const { payloads, frames } = await playMenu(radarPath);
 
     expect(frames.length).toBeGreaterThan(5);
-    // Every frame arrives whole, in exactly one payload: not split by a
-    // throttle, not merged with its neighbour by an output buffer.
-    for (let i = 0; i < frames.length; i++) {
-      const carrying = payloads.filter(p => p.includes(frames[i].content));
-      expect(`frame ${i} written ${carrying.length} time(s)`).toBe(`frame ${i} written 1 time(s)`);
-    }
-    // ...and the animation is exactly that many writes, no more.
-    const animationWrites = payloads.filter(p => p.startsWith('\x1b[?25l'));
+
+    // The animation is exactly one write per frame, in order, each carrying
+    // that frame whole: not split by a throttle, not merged with its
+    // neighbour by an output buffer. Compared as WHOLE payloads - a
+    // containment check would be ambiguous, since two frames can end on the
+    // same painted run.
+    const animationWrites = payloads.filter(p => p.startsWith(HIDE_CURSOR));
     expect(animationWrites).toHaveLength(frames.length);
+
+    for (let i = 0; i < frames.length; i++) {
+      const tail = i === frames.length - 1 ? '\x1b[0m' + SHOW_CURSOR : '';
+      expect(`frame ${i}: ${animationWrites[i] === HIDE_CURSOR + frames[i].content + tail}`)
+        .toBe(`frame ${i}: true`);
+    }
   });
 
   it('no wipe frame clears the screen after the first', async () => {
     const { payloads } = await playMenu();
 
-    const animationWrites = payloads.filter(p => p.startsWith('\x1b[?25l'));
+    const animationWrites = payloads.filter(p => p.startsWith(HIDE_CURSOR));
     expect(animationWrites[0]).toContain('\x1b[2J\x1b[H');
     const clearsLater = animationWrites.slice(1).filter(p => /\x1b\[[23]J/.test(p));
     expect(`frames clearing after the first: ${clearsLater.length}`).toBe('frames clearing after the first: 0');

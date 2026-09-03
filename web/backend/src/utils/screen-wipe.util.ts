@@ -411,6 +411,15 @@ function renderGridFull(grid: Cell[][]): string {
  * with CUP, re-state the attributes at the head of the run so the run is
  * self-contained, print the glyphs, move on.
  *
+ * DEBT, not a closed decision: this is `renderDiff` line for line, on a
+ * different cell model. The attribute-agnostic run differ belongs in a
+ * SHARED module - neither `sdk/petscii` (whose cells are VIC indices) nor
+ * `web/backend/src/utils` (which the SDK cannot import) - parameterised by
+ * "how does a cell state reach the wire" and "which cells may not be
+ * painted". Both callers should move onto it; until they do, a fix to the
+ * run walk has to be made twice. Recorded in
+ * `.superpowers/sdd/2026-09-03-screen-wipes/progress.md`.
+ *
  * Neither of those two could be reused as-is. `renderDiff`'s cell colour is a
  * VIC-II index rendered as truecolor from the C64 palette and it deliberately
  * never emits a background at all (a C64 has none) - pointing it at an
@@ -465,12 +474,19 @@ function renderGridDelta(previous: Cell[][], next: Cell[][]): string {
  *
  * Only the first frame clears. Every later frame overwrites the cells it
  * changes and touches nothing else, so there is no moment where the screen
- * is blank - which is what a `\x1b[2J` per frame produced on xterm.js, where
- * the clear and the repaint land in different render frames (and where the
- * client-side modem pacing writes escapes AHEAD of the text still draining
- * from the previous frame).
+ * is blank.
+ *
+ * A `\x1b[2J` per frame produced exactly that moment. The mechanism is
+ * LATENCY, not reordering: the board's terminal queues what it receives and
+ * drains it at up to 23 KB/s (packages/terminal/src/utils/modem-emulator.ts;
+ * `processQueue` is a strict FIFO and `sendThrottled` finishes a text token
+ * before the next escape, so a cursor sequence can never overtake queued
+ * text). A 2.5-10 KB repaint therefore takes 110-430 ms to arrive while the
+ * frame wants 40, the clear that opens the NEXT frame lands late and in its
+ * own paint - and between that clear and the repaint behind it the terminal
+ * has a blank screen to show.
  */
-function framesFromGrids(animation: WipeGrids, content: string): WipeFrame[] {
+function framesFromGrids(animation: WipeGrids): WipeFrame[] {
   const frames: WipeFrame[] = [];
   let previous: Cell[][] | null = null;
 
@@ -515,7 +531,11 @@ function matrixRainWipe(content: string): WipeGrids {
   const height = grid.length;
 
   // Green Matrix style colors
-  const matrixColors = ['\x1b[32m', '\x1b[92m', '\x1b[32m']; // Green shades
+  // Complete states, not bare colours: `gridToAnsi`/`renderGridDelta` emit a
+  // cell's `ansi` only when it CHANGES, and a frame resets once at its end,
+  // so a bare `\x1b[92m` after a bold-on-blue cell paints bright green rain
+  // on the screen's own background. Same shape `attributesToAnsi` produces.
+  const matrixColors = ['\x1b[0;32m', '\x1b[0;92m', '\x1b[0;32m']; // Green shades
 
   // Create scrambled version
   const scrambled = grid.map(row =>
@@ -694,7 +714,7 @@ function checkerboardWipe(content: string): WipeGrids {
         const isWhiteSquare = (rowSquare % 2 === colSquare % 2);
 
         const shouldReveal = (phase === 0 && isWhiteSquare) || (phase === 1);
-        return shouldReveal ? cell : { char: '░', ansi: '\x1b[90m' }; // Gray block
+        return shouldReveal ? cell : { char: '░', ansi: '\x1b[0;90m' }; // Gray block (complete state)
       })
     );
 
@@ -808,7 +828,7 @@ function noiseFadeWipe(content: string): WipeGrids {
       threshold: Math.random(),
       cell: {
         char: NOISE_CHARS[Math.floor(Math.random() * NOISE_CHARS.length)],
-        ansi: Math.random() < 0.5 ? '\x1b[37m' : '\x1b[90m', // White or gray
+        ansi: Math.random() < 0.5 ? '\x1b[0;37m' : '\x1b[0;90m', // White or gray (complete state)
       } as Cell,
     }))
   );
@@ -958,17 +978,27 @@ export function getWipeFrames(wipeType: WipeType, content: string): WipeFrame[] 
       return [];
   }
 
-  const frames = framesFromGrids(animation, content);
+  const frames = framesFromGrids(animation);
 
   if (frames.length > 0) {
     // The animation ends on the caller's own bytes, homed over the fully
-    // revealed frame that precedes it (no clear, so there is nothing to
-    // flash). Byte-identical to what the direct-display path emits, which
-    // also leaves the cursor where the pause prompt
-    // (screen.handler.ts:2559) expects to print from.
+    // revealed frame that precedes it - so the screen the caller is left
+    // looking at is the screen itself, and the cursor lands where the pause
+    // prompt (screen.handler.ts:2559) expects to print from.
+    //
+    // NOT byte-identical to the direct-display path: a clear the screen
+    // OPENS with is dropped (`withoutLeadingClear`), because re-clearing a
+    // screen the animation has just painted is the last flicker of the wipe.
+    // That is only safe while every cell the animation painted is a cell
+    // this content repaints - `animationStaysInsideFinalGrid` - otherwise
+    // the clear stays and a screen whose animation reached further than its
+    // own content cannot leave residue behind.
     //
     // delay 0: the play loop does not wait after the last frame.
-    frames.push({ content: HOME + withoutLeadingClear(content), delay: 0 });
+    const finalPaint = animationStaysInsideFinalGrid(animation.grids)
+      ? withoutLeadingClear(content)
+      : content;
+    frames.push({ content: HOME + finalPaint, delay: 0 });
   }
 
   return frames;
@@ -990,7 +1020,38 @@ export function getWipeFrames(wipeType: WipeType, content: string): WipeFrame[] 
  * clear anywhere else in the screen is content and is emitted as-is.
  */
 function withoutLeadingClear(content: string): string {
-  return content.replace(/^(?:\x1b\[[23]J|\x1b\[(?:1;1)?H)+/, '');
+  // The leading run may mix SGR with the clear (`\x1b[0m\x1b[2J`, and DOS
+  // art's `\x1b[44m\x1b[2J` fill-with-background idiom). Match the whole
+  // run, drop only the erase/home from it, and KEEP the SGR: the colour
+  // state the screen sets before painting is content, the clear is not.
+  const leading = /^(?:\x1b\[[0-9;]*m|\x1b\[[23]J|\x1b\[(?:1;1)?H)+/.exec(content);
+  if (!leading) return content;
+  const kept = leading[0].replace(/\x1b\[[23]J|\x1b\[(?:1;1)?H/g, '');
+  return kept + content.slice(leading[0].length);
+}
+
+/**
+ * Did the animation paint only cells the final content repaints?
+ *
+ * Every frame is built from the same parse of `content`, so its last grid is
+ * what the content itself paints; if no earlier grid is taller or wider than
+ * that, dropping the content's own leading clear can leave nothing behind.
+ * A builder that ever painted outside the finished screen would fail this
+ * and keep the clear - it is the invariant that makes the strip safe, not a
+ * property of today's ten builders.
+ */
+function animationStaysInsideFinalGrid(grids: Cell[][][]): boolean {
+  const last = grids[grids.length - 1];
+  if (!last) return false;
+
+  for (const grid of grids) {
+    if (grid.length > last.length) return false;
+    for (let y = 0; y < grid.length; y++) {
+      if (grid[y].length > (last[y]?.length ?? 0)) return false;
+    }
+  }
+
+  return true;
 }
 
 /**
