@@ -24,6 +24,7 @@ exports.noInput = noInput;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
 const board_view_1 = require("./panels/board-view");
+const layout_1 = require("./panels/layout");
 const input_codec_1 = require("../core/panels/input-codec");
 Object.defineProperty(exports, "INPUT_CHARS", { enumerable: true, get: function () { return input_codec_1.INPUT_CHARS; } });
 /** The engine's frame rate. Not negotiable: every constant is in these frames. */
@@ -55,24 +56,25 @@ class PanelsScreen {
     /** Lay the board and HUD out, centred in whatever room there is. */
     setupUI() {
         const { cols, rows } = (0, board_view_1.boardSize)(this.stack);
-        const left = Math.max(0, Math.floor((this.screen.width - cols) / 2) - 8);
-        const top = Math.max(0, Math.floor((this.screen.height - rows) / 2));
+        // Geometry comes from the live screen width, never from a constant.
+        const layout = (0, layout_1.panelsLayout)(this.screen.width, this.screen.height, cols, rows);
+        this.layout = layout;
         this.boardBox = (0, bbs_door_sdk_1.createBox)({
             parent: this.screen,
-            top,
-            left,
-            width: cols,
-            height: rows,
+            top: layout.board.top,
+            left: layout.board.left,
+            width: layout.board.width,
+            height: layout.board.height,
             border: undefined,
             tags: true,
             style: { bg: 'black' },
         });
         this.hudBox = (0, bbs_door_sdk_1.createBox)({
             parent: this.screen,
-            top,
-            left: left + cols + 2,
-            width: 16,
-            height: rows,
+            top: layout.hud.top,
+            left: layout.hud.left,
+            width: layout.hud.width,
+            height: layout.hud.height,
             border: undefined,
             tags: true,
             style: { fg: 'white', bg: 'black' },
@@ -84,27 +86,18 @@ class PanelsScreen {
         return (0, input_codec_1.encodeInput)((0, input_codec_1.inputStateToMask)(held));
     }
     renderHud() {
-        if (!this.hudBox)
+        if (!this.hudBox || !this.layout)
             return;
         const stack = this.stack;
         const seconds = Math.floor(stack.stopWatch / 60);
-        const time = `${Math.floor(seconds / 60)}'${String(seconds % 60).padStart(2, '0')}`;
-        const lines = [
-            '{yellow-fg}POINT{/yellow-fg}',
-            `  ${String(stack.score).padStart(5, ' ')}`,
-            '',
-            '{yellow-fg}LEVEL{/yellow-fg}',
-            `  ${String(stack.speed).padStart(5, ' ')}`,
-            '',
-            '{yellow-fg}TIME{/yellow-fg}',
-            `  ${time.padStart(5, ' ')}`,
-            '',
-            // The chain counter starts at 2; there is no chain 1.
-            stack.chainCounter > 1 ? `{lightmagenta-fg}x${stack.chainCounter} CHAIN{/lightmagenta-fg}` : '',
-            // Stop time is the reward for a match, and the original shows it.
-            stack.stopTime > 0 ? '{lightcyan-fg}STOP{/lightcyan-fg}' : '',
-        ];
-        this.hudBox.setContent(lines.join('\n'));
+        const timeText = `${Math.floor(seconds / 60)}'${String(seconds % 60).padStart(2, '0')}`;
+        this.hudBox.setContent((0, layout_1.hudLines)(this.layout, {
+            score: stack.score,
+            speed: stack.speed,
+            timeText,
+            chain: stack.chainCounter,
+            stopped: stack.stopTime > 0,
+        }).join('\n'));
     }
     renderBoard(tick) {
         if (!this.boardBox)

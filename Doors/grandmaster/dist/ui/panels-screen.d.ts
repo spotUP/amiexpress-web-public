@@ -64,6 +64,7 @@ export declare class PanelsScreen {
     private frameAccumulator;
     private lastRender;
     private quitting;
+    private layout?;
     constructor(options: PanelsScreenOptions);
     /** Lay the board and HUD out, centred in whatever room there is. */
     private setupUI;

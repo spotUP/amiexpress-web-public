@@ -25,6 +25,7 @@ import {
 } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { Stack } from '../core/panels/stack';
 import { buildBoard, boardSize, BoardVariant } from './panels/board-view';
+import { panelsLayout, hudLines, PanelsLayout } from './panels/layout';
 import { encodeInput, inputStateToMask, INPUT_CHARS } from '../core/panels/input-codec';
 import type { SoundEngine } from '../audio/sounds';
 
@@ -85,6 +86,7 @@ export class PanelsScreen {
   private frameAccumulator = 0;
   private lastRender = 0;
   private quitting = false;
+  private layout?: PanelsLayout;
 
   constructor(options: PanelsScreenOptions) {
     this.screen = options.screen;
@@ -100,15 +102,16 @@ export class PanelsScreen {
   /** Lay the board and HUD out, centred in whatever room there is. */
   private setupUI(): void {
     const { cols, rows } = boardSize(this.stack);
-    const left = Math.max(0, Math.floor((this.screen.width - cols) / 2) - 8);
-    const top = Math.max(0, Math.floor((this.screen.height - rows) / 2));
+    // Geometry comes from the live screen width, never from a constant.
+    const layout = panelsLayout(this.screen.width, this.screen.height, cols, rows);
+    this.layout = layout;
 
     this.boardBox = createBox({
       parent: this.screen,
-      top,
-      left,
-      width: cols,
-      height: rows,
+      top: layout.board.top,
+      left: layout.board.left,
+      width: layout.board.width,
+      height: layout.board.height,
       border: undefined,
       tags: true,
       style: { bg: 'black' },
@@ -116,10 +119,10 @@ export class PanelsScreen {
 
     this.hudBox = createBox({
       parent: this.screen,
-      top,
-      left: left + cols + 2,
-      width: 16,
-      height: rows,
+      top: layout.hud.top,
+      left: layout.hud.left,
+      width: layout.hud.width,
+      height: layout.hud.height,
       border: undefined,
       tags: true,
       style: { fg: 'white', bg: 'black' },
@@ -133,27 +136,18 @@ export class PanelsScreen {
   }
 
   private renderHud(): void {
-    if (!this.hudBox) return;
+    if (!this.hudBox || !this.layout) return;
     const stack = this.stack;
     const seconds = Math.floor(stack.stopWatch / 60);
-    const time = `${Math.floor(seconds / 60)}'${String(seconds % 60).padStart(2, '0')}`;
+    const timeText = `${Math.floor(seconds / 60)}'${String(seconds % 60).padStart(2, '0')}`;
 
-    const lines = [
-      '{yellow-fg}POINT{/yellow-fg}',
-      `  ${String(stack.score).padStart(5, ' ')}`,
-      '',
-      '{yellow-fg}LEVEL{/yellow-fg}',
-      `  ${String(stack.speed).padStart(5, ' ')}`,
-      '',
-      '{yellow-fg}TIME{/yellow-fg}',
-      `  ${time.padStart(5, ' ')}`,
-      '',
-      // The chain counter starts at 2; there is no chain 1.
-      stack.chainCounter > 1 ? `{lightmagenta-fg}x${stack.chainCounter} CHAIN{/lightmagenta-fg}` : '',
-      // Stop time is the reward for a match, and the original shows it.
-      stack.stopTime > 0 ? '{lightcyan-fg}STOP{/lightcyan-fg}' : '',
-    ];
-    this.hudBox.setContent(lines.join('\n'));
+    this.hudBox.setContent(hudLines(this.layout, {
+      score: stack.score,
+      speed: stack.speed,
+      timeText,
+      chain: stack.chainCounter,
+      stopped: stack.stopTime > 0,
+    }).join('\n'));
   }
 
   private renderBoard(tick: number): void {

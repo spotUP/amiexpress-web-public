@@ -6,7 +6,9 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MenuScreen = exports.MENU_SELECTIONS = exports.MENU_ITEMS = void 0;
+exports.menuRowsFor = menuRowsFor;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 /**
  * The menu's selections, index-aligned with the `items` array that renders them
  * and with the descriptions beside it. Three parallel arrays, so a row added to
@@ -42,6 +44,34 @@ exports.MENU_ITEMS = [
     '{cyan-fg}Manual (F1){/cyan-fg}',
     '{red-fg}Quit{/red-fg}',
 ];
+/**
+ * The rows a screen of this width may offer.
+ *
+ * At forty columns the door offers ONLY TETRIS ATTACK, plus the manual and the
+ * way out. That is what makes the MIN_COLUMNS=40 mark on GMASTER.info honest:
+ * the door genuinely fits a C64 screen, it just has less on it there. The TGM
+ * and TETRINET screens are 80-column compositions and are HIDDEN rather than
+ * folded - folding an 80-column layout onto 40 is what produced the stray
+ * glyphs and unreadable rows this board has seen before.
+ *
+ * Returns index-aligned arrays, as the caller expects.
+ */
+function menuRowsFor(width) {
+    if (!(0, blessed_1.isCompactWidth)(width)) {
+        return { items: exports.MENU_ITEMS, selections: exports.MENU_SELECTIONS };
+    }
+    const wanted = ['tetris_attack', 'manual', 'quit'];
+    const items = [];
+    const selections = [];
+    for (const selection of wanted) {
+        const index = exports.MENU_SELECTIONS.indexOf(selection);
+        if (index < 0)
+            continue;
+        items.push(exports.MENU_ITEMS[index]);
+        selections.push(selection);
+    }
+    return { items, selections };
+}
 exports.MENU_SELECTIONS = [
     'master',
     'death',
@@ -93,7 +123,9 @@ class MenuScreen {
             // in the top-left corner with the rest of the window black - "the
             // menus in gmaster isnt responise" (2026-09-02) - so the whole block
             // is centred in whatever room there is, and follows a resize.
-            const MENU_COLS = 80;
+            // Which rows this screen may offer, and how wide the composition is.
+            const menuRows = menuRowsFor(this.screen.width);
+            const MENU_COLS = (0, blessed_1.isCompactWidth)(this.screen.width) ? this.screen.width : 80;
             const MENU_ROWS = 24;
             const offsetX = () => Math.max(0, Math.floor((this.screen.width - MENU_COLS) / 2));
             const offsetY = () => Math.max(0, Math.floor((this.screen.height - MENU_ROWS) / 2));
@@ -174,7 +206,7 @@ class MenuScreen {
                 keys: true,
                 vi: true,
                 mouse: true,
-                items: exports.MENU_ITEMS,
+                items: menuRows.items,
             });
             // Mode description box - middle panel
             const descBox = (0, blessed_helpers_1.createBox)({
@@ -246,7 +278,7 @@ class MenuScreen {
             this.screen.render();
             // Handle selection
             menu.on('select', (_item, index) => {
-                const selections = exports.MENU_SELECTIONS;
+                const selections = menuRows.selections;
                 const selection = selections[index];
                 this.sounds.playSfx('menu_ok');
                 // Clean up
@@ -266,7 +298,7 @@ class MenuScreen {
             // High Scores and F1 was opening Settings. Look the index up instead, so
             // the next row added to the menu cannot break them again.
             const indexOfSelection = (wanted) => {
-                const index = exports.MENU_SELECTIONS.indexOf(wanted);
+                const index = menuRows.selections.indexOf(wanted);
                 if (index < 0)
                     throw new Error(`menu has no '${wanted}' entry`);
                 return index;

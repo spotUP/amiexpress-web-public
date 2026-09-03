@@ -22,6 +22,22 @@ export type MenuSelection = 'master' | 'death' | 'sprint' | 'marathon' | 'cpu_ba
  * tests/panels/menu-wiring.test.ts checks the first two agree.
  */
 export declare const MENU_ITEMS: string[];
+/**
+ * The rows a screen of this width may offer.
+ *
+ * At forty columns the door offers ONLY TETRIS ATTACK, plus the manual and the
+ * way out. That is what makes the MIN_COLUMNS=40 mark on GMASTER.info honest:
+ * the door genuinely fits a C64 screen, it just has less on it there. The TGM
+ * and TETRINET screens are 80-column compositions and are HIDDEN rather than
+ * folded - folding an 80-column layout onto 40 is what produced the stray
+ * glyphs and unreadable rows this board has seen before.
+ *
+ * Returns index-aligned arrays, as the caller expects.
+ */
+export declare function menuRowsFor(width: number): {
+    items: string[];
+    selections: MenuSelection[];
+};
 export declare const MENU_SELECTIONS: MenuSelection[];
 /**
  * Main menu screen
