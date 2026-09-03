@@ -1190,13 +1190,20 @@ class GrandmasterApp {
         // drops a tap that begins and ends between two polls, and tapping is how
         // this game is played; an edge cannot be missed, and each one is worth
         // exactly one frame of that key.
-        const pendingEdges = new Set();
+        // Presses are COUNTED, not collected in a set.
+        //
+        // A set loses the second of two taps: both land in the same gap between
+        // frames and the set holds one. That is not a rare case - a blessed
+        // repaint pushed over a socket does not fit in a frame, so under load the
+        // gap is several frames wide and a player tapping quickly loses presses.
+        // Reported as "sometimes when I click to swap tiles it doesn't work".
+        const pendingEdges = new Map();
         const stopWatchingEdges = this.inputHandler.onKeyEdge((name) => {
-            pendingEdges.add(name);
+            pendingEdges.set(name, (pendingEdges.get(name) ?? 0) + 1);
         });
         const isDown = (names) => {
             // A press that has not been spent yet always counts.
-            const tapped = names.some((name) => pendingEdges.has(name));
+            const tapped = names.some((name) => (pendingEdges.get(name) ?? 0) > 0);
             // Real key-up only exists in a browser. On telnet the edge IS the whole
             // input, and the player gets discrete steps rather than a hold.
             const held = this.inputHandler.isKeyStateMode()
@@ -1212,10 +1219,16 @@ class GrandmasterApp {
                 swap: isDown(['space', 'z']),
                 raise: isDown(['r', 'x']),
             };
-            // Spent: each edge is worth one frame. Clearing here rather than per key
-            // keeps a press of two keys on the same frame together, which is how a
-            // swap-while-moving reaches the engine as one input character.
-            pendingEdges.clear();
+            // Spend ONE press of every key that had one. Spending per key rather
+            // than clearing the lot keeps a second tap for the next frame instead of
+            // throwing it away, and still lets two different keys pressed together
+            // reach the engine as one input character.
+            for (const [name, count] of pendingEdges) {
+                if (count <= 1)
+                    pendingEdges.delete(name);
+                else
+                    pendingEdges.set(name, count - 1);
+            }
             return input;
         };
         if (mode === 'vsplayer') {
