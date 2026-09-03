@@ -298,3 +298,43 @@ export function headingIndent(
   const room = sessionColumns(session ?? {}) - printableLength(heading);
   return ' '.repeat(Math.max(0, Math.floor(room / 2)));
 }
+
+/**
+ * THE MESSAGE-MOVE PROMPTS - a prompt too long to answer on a C64.
+ *
+ * `Conference Number to move to (L to List): ` is 42 columns and
+ * `Messagebase Number to move to (L to List): ` is 43, so at 40 columns the
+ * prose choke wrapped each into two rows and the cursor came to rest on a
+ * continuation row - the caller typed their answer under the prompt instead
+ * of after it. Nothing here can be computed from a width: a prompt does not
+ * shrink by arithmetic, it is rewritten. So the narrow wording is a decision
+ * (the sysop's, 2026-09-03) recorded beside the express.e one, and the
+ * NARROW_PROMPT_WIDTH assertion in the tests is what keeps it honest.
+ *
+ * At >= 80 columns these are express.e's own strings, byte for byte.
+ */
+export type MovePromptKind =
+  /** express.e:27035 - the M command's destination conference. */
+  | 'conference'
+  /** express.e:27057 - the M command's destination message base. */
+  | 'messagebase';
+
+const MOVE_PROMPTS: Record<MovePromptKind, { wide: string; narrow: string }> = {
+  conference: {
+    wide: 'Conference Number to move to (L to List): ',
+    narrow: 'Conf # to move to (L=List): ',
+  },
+  messagebase: {
+    wide: 'Messagebase Number to move to (L to List): ',
+    narrow: 'Base # to move to (L=List): ',
+  },
+};
+
+/** The move prompt this caller can actually answer on one row. */
+export function movePrompt(
+  session: { screenWidth?: number; petsciiMode?: boolean } | null | undefined,
+  kind: MovePromptKind
+): string {
+  const prompt = MOVE_PROMPTS[kind];
+  return isNarrow(session) ? prompt.narrow : prompt.wide;
+}

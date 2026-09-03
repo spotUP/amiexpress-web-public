@@ -57,6 +57,7 @@ import { printableLength, wrapForSession, wrapDoorTextForSession } from '../src/
 import {
   headingIndent,
   messageIndent,
+  movePrompt,
   messageRule,
   narrowClip,
   narrowField,
@@ -173,6 +174,11 @@ describe('40-column sweep: tables', () => {
     // negative-padded - so the choke can still wrap it inside forty.
     expect(headingIndent(C64, 'conferenceList', LONG)).toBe('');
     fits(wrapForSession(`${headingIndent(C64, 'conferenceList', LONG)}${LONG}`, C64).split('\r\n'));
+  });
+
+  it('the message-move prompts (the M command)', () => {
+    // Trailing prompts: 39, not 40 - the cursor rests on this row.
+    fits([movePrompt(C64, 'conference'), movePrompt(C64, 'messagebase')], NARROW_PROMPT_WIDTH);
   });
 
   it('file search results', () => {

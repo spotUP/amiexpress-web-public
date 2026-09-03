@@ -1,6 +1,8 @@
 // @ts-nocheck
 /**
- * Centred headings at both screens (follow-up to the message-header rules).
+ * The M/TS/W chrome at both screens (follow-up to the message-header rules):
+ * centred headings, and the two message-move prompts that share the same
+ * handlers and the same fixed-80-column problem.
  *
  * THE BUG. express.e centres a heading by writing a fixed run of leading
  * spaces in front of it. At 40 columns those runs put the heading past the
@@ -41,7 +43,7 @@ jest.mock('../../src/index', () => {
 
 import { flushOutput } from '../../src/utils/output.util';
 import { printableLength } from '../../src/utils/wrap-for-session.util';
-import { headingIndent, NARROW_WIDTH } from '../../src/utils/table-format.util';
+import { headingIndent, movePrompt, NARROW_WIDTH, NARROW_PROMPT_WIDTH } from '../../src/utils/table-format.util';
 
 const ANSI = { screenWidth: 80, petsciiMode: false };
 const C64 = { screenWidth: 40, petsciiMode: true };
@@ -257,5 +259,87 @@ describe('40-column layout: headings land on the screen', () => {
       const indent = headingIndent(C64, kind, heading);
       expect(indent.length + printableLength(heading)).toBeLessThanOrEqual(NARROW_WIDTH);
     }
+  });
+});
+
+// ===========================================================================
+// 3. THE MOVE PROMPTS - 42/43 columns wrapped at 40, so the cursor came to
+//    rest on a continuation row. The narrow wording is a decision (sysop,
+//    2026-09-03); NARROW_PROMPT_WIDTH is what keeps it honest.
+// ===========================================================================
+
+describe('the message-move prompts', () => {
+  /** Every branch of the M command that re-asks for a destination. */
+  const CONF_BRANCHES: Array<[string, string]> = [
+    ['after the L listing', 'L'],
+    ['after a non-numeric answer', 'zz'],
+    ['after a conference the caller cannot reach', '99'],
+  ];
+  const BASE_BRANCHES: Array<[string, string]> = [
+    ['after the L listing', 'L'],
+    ['after a non-numeric answer', 'zz'],
+    ['after an out-of-range base', '99'],
+  ];
+
+  describe('80-column identity', () => {
+    it.each(CONF_BRANCHES)('the conference prompt, %s', async (_label, input) => {
+      const d = drive(false);
+      withConferences();
+      await sysop().handleMsgMoveConfInput(d.socket, d.session, input);
+      expect(d.out().endsWith('Conference Number to move to (L to List): ')).toBe(true);
+    });
+
+    it.each(BASE_BRANCHES)('the message base prompt, %s', async (_label, input) => {
+      const d = drive(false);
+      withConferences();
+      await sysop().handleMsgMoveMsgBaseInput(d.socket, d.session, input);
+      expect(d.out().endsWith('Messagebase Number to move to (L to List): ')).toBe(true);
+    });
+
+    it('the helper reproduces both express.e strings', () => {
+      expect(movePrompt(ANSI, 'conference')).toBe('Conference Number to move to (L to List): ');
+      expect(movePrompt(ANSI, 'messagebase')).toBe('Messagebase Number to move to (L to List): ');
+      // A wide terminal, and a narrow non-C64 one, keep them.
+      expect(movePrompt({ screenWidth: 132, petsciiMode: false }, 'conference')).toBe(
+        'Conference Number to move to (L to List): '
+      );
+      expect(movePrompt({ screenWidth: 40, petsciiMode: false }, 'messagebase')).toBe(
+        'Messagebase Number to move to (L to List): '
+      );
+    });
+  });
+
+  describe('40 columns', () => {
+    it.each(CONF_BRANCHES)('the conference prompt fits, %s', async (_label, input) => {
+      const d = drive(true);
+      withConferences();
+      await sysop().handleMsgMoveConfInput(d.socket, d.session, input);
+      const rows = d.rows();
+      const prompt = rows[rows.length - 1];
+      expect(prompt).toBe('Conf # to move to (L=List): ');
+      expect(columns(prompt)).toBeLessThanOrEqual(NARROW_PROMPT_WIDTH);
+      for (const r of rows) expect(columns(r)).toBeLessThanOrEqual(NARROW_WIDTH);
+    });
+
+    it.each(BASE_BRANCHES)('the message base prompt fits, %s', async (_label, input) => {
+      const d = drive(true);
+      withConferences();
+      await sysop().handleMsgMoveMsgBaseInput(d.socket, d.session, input);
+      const rows = d.rows();
+      const prompt = rows[rows.length - 1];
+      expect(prompt).toBe('Base # to move to (L=List): ');
+      expect(columns(prompt)).toBeLessThanOrEqual(NARROW_PROMPT_WIDTH);
+      for (const r of rows) expect(columns(r)).toBeLessThanOrEqual(NARROW_WIDTH);
+    });
+
+    it('both leave room for the answer', () => {
+      for (const kind of ['conference', 'messagebase'] as const) {
+        const prompt = movePrompt(C64, kind);
+        // A conference or message base number is up to three digits; the
+        // caller must be able to type one WITHOUT the row wrapping.
+        expect(NARROW_PROMPT_WIDTH - columns(prompt)).toBeGreaterThanOrEqual(3);
+        expect(prompt.split('\r\n')).toHaveLength(1);
+      }
+    });
   });
 });

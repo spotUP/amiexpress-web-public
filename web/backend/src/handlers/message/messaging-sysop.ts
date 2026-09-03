@@ -9,7 +9,7 @@ import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { emitText, emitPrompt } from '../../utils/output.util';
-import { headingIndent, messageIndent } from '../../utils/table-format.util';
+import { headingIndent, messageIndent, movePrompt } from '../../utils/table-format.util';
 
 // Dependencies for move/edit operations (injected via setMoveEditDependencies)
 let _conferences: any[] = [];
@@ -55,7 +55,7 @@ export async function handleMsgMoveConfInput(socket: any, session: BBSSession, i
     }
 
     emitText(socket, '\r\n');
-    emitPrompt(socket, 'Conference Number to move to (L to List): ');
+    emitPrompt(socket, movePrompt(session, 'conference'));
     return;
   }
 
@@ -64,7 +64,7 @@ export async function handleMsgMoveConfInput(socket: any, session: BBSSession, i
   if (isNaN(destConf) || destConf < 1) {
     emitText(socket, '\r\n');
     emitText(socket, AnsiUtil.errorLine('Invalid conference number'));
-    emitPrompt(socket, 'Conference Number to move to (L to List): ');
+    emitPrompt(socket, movePrompt(session, 'conference'));
     return;
   }
 
@@ -74,7 +74,7 @@ export async function handleMsgMoveConfInput(socket: any, session: BBSSession, i
     emitText(socket, '\r\n');
     emitText(socket, AnsiUtil.errorLine('You do not have access to the requested conference'));
     emitText(socket, '\r\n');
-    emitPrompt(socket, 'Conference Number to move to (L to List): ');
+    emitPrompt(socket, movePrompt(session, 'conference'));
     return;
   }
 
@@ -102,7 +102,7 @@ export async function handleMsgMoveConfInput(socket: any, session: BBSSession, i
   const destMsgBases = _messageBases.filter(mb => mb.conferenceId === destConf);
   if (destMsgBases.length > 1) {
     emitText(socket, '\r\n');
-    emitPrompt(socket, 'Messagebase Number to move to (L to List): ');
+    emitPrompt(socket, movePrompt(session, 'messagebase'));
     session.subState = LoggedOnSubState.MSG_MOVE_MSGBASE_INPUT;
   } else {
     // Single msgbase, use it and go to confirmation
@@ -145,7 +145,7 @@ export async function handleMsgMoveMsgBaseInput(socket: any, session: BBSSession
     });
 
     emitText(socket, '\r\n');
-    emitPrompt(socket, 'Messagebase Number to move to (L to List): ');
+    emitPrompt(socket, movePrompt(session, 'messagebase'));
     return;
   }
 
@@ -156,7 +156,7 @@ export async function handleMsgMoveMsgBaseInput(socket: any, session: BBSSession
   if (isNaN(destMsgBaseNum) || destMsgBaseNum < 1 || destMsgBaseNum > destMsgBases.length) {
     emitText(socket, '\r\n');
     emitText(socket, AnsiUtil.errorLine('Invalid message base number'));
-    emitPrompt(socket, 'Messagebase Number to move to (L to List): ');
+    emitPrompt(socket, movePrompt(session, 'messagebase'));
     return;
   }
 
