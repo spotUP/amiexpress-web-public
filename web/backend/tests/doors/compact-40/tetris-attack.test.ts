@@ -34,6 +34,18 @@ const {
 } = require('../../../../../Doors/grandmaster/ui/panels/layout');
 const { menuRowsFor } = require('../../../../../Doors/grandmaster/ui/menu');
 const {
+  versusLayout,
+  versusCentreLines,
+  dangerBarRows,
+} = require('../../../../../Doors/grandmaster/ui/panels/versus-layout');
+const {
+  AnsiToPetsciiTransducer,
+} = require('../../../../../sdk/petscii/ansi-to-petscii');
+const {
+  UNICODE_TO_PETSCII,
+  printablePetsciiToScreenCode,
+} = require('../../../../../sdk/petscii');
+const {
   buildBoard,
   boardSize,
 } = require('../../../../../Doors/grandmaster/ui/panels/board-view');
@@ -199,5 +211,136 @@ describe('TETRIS ATTACK at 80 and wider', () => {
     const anyBackground = board.some((row: any[]) =>
       row.some((cell: any) => cell && cell.bg !== 0));
     expect(anyBackground).toBe(true);
+  });
+});
+
+/**
+ * The PETSCII oracle.
+ *
+ * Every other assertion in this file measures WIDTHS. None of them would
+ * notice a board painted entirely out of glyphs a C64 cannot draw: the rows
+ * would still be twelve columns wide and the door would still be marked, and
+ * the caller would see forty columns of "?".
+ *
+ * So this drives the door's real board through the real transducer into the
+ * KERNAL oracle and asks what is actually on the glass.
+ */
+describe('TETRIS ATTACK on a real C64 screen', () => {
+  /**
+   * The screen BYTE a C64 shows for this glyph, reverse bit included, or null
+   * if it cannot show it at all.
+   *
+   * The table has two forms of entry. A plain number is a PETSCII code; a
+   * `{ rvs }` is a code printed in REVERSE VIDEO, which is how PETSCII draws
+   * the solid blocks it has no upright glyph for - a full block is a reversed
+   * space. Reading only the plain form reports the whole block-element family
+   * as undrawable, which is the opposite of true.
+   */
+  const screenCodeFor = (ch: string): number | null => {
+    const code = ch.charCodeAt(0);
+    if (code >= 0x20 && code <= 0x7e) return printablePetsciiToScreenCode(code);
+    const mapped = UNICODE_TO_PETSCII.get(ch);
+    if (typeof mapped === 'number') return printablePetsciiToScreenCode(mapped);
+    if (mapped && typeof mapped.rvs === 'number') {
+      return printablePetsciiToScreenCode(mapped.rvs) | 0x80;
+    }
+    return null;
+  };
+
+  /** Every distinct glyph the board paints, over enough frames to cycle animations. */
+  const boardGlyphs = (variant: string): Set<string> => {
+    const stack = makeStack();
+    const glyphs = new Set<string>();
+    for (let frame = 0; frame < 240; frame++) {
+      stack.run();
+      for (const row of buildBoard(stack, SHEET, frame, { variant })) {
+        for (const cell of row) if (cell && cell.char) glyphs.add(cell.char);
+      }
+    }
+    return glyphs;
+  };
+
+  it('every glyph the C64 board paints is one a C64 can draw', () => {
+    const unmappable = [...boardGlyphs('c64')].filter((ch) => screenCodeFor(ch) === null);
+    expect(unmappable).toEqual([]);
+  });
+
+  it('the danger bar Challenge Mode draws is a PETSCII glyph', () => {
+    const layout = versusLayout(40, 25, 12, 13);
+    const rows = dangerBarRows(layout, 0.5);
+    const bar = rows.find((row: string) => row.includes('█'));
+    expect(bar).toBeDefined();
+    expect(screenCodeFor('█')).not.toBeNull();
+  });
+
+  /**
+   * Not "the glyphs are mappable" but "they are ON THE SCREEN": the board is
+   * painted at a cursor position through the transducer, and the oracle is
+   * asked what it holds afterwards.
+   */
+  it('the painted board reaches the glass unchanged', () => {
+    const stack = makeStack();
+    const board = buildBoard(stack, SHEET, 0, { variant: 'c64' });
+    const layout = panelsLayout(40, 25, 12, 13);
+
+    const transducer = new AnsiToPetsciiTransducer();
+    let ansi = '\x1b[2J';
+    board.forEach((row: Array<{ char: string }>, y: number) => {
+      const text = row.map((cell) => (cell && cell.char ? cell.char : ' ')).join('');
+      ansi += `\x1b[${layout.board.top + y + 1};${layout.board.left + 1}H${text}`;
+    });
+    transducer.transduce(ansi);
+
+    const { screen } = transducer.machine.state;
+    board.forEach((row: Array<{ char: string }>, y: number) => {
+      row.forEach((cell, x) => {
+        const want = screenCodeFor(cell && cell.char ? cell.char : ' ');
+        if (want === null) return;
+        const at = (layout.board.top + y) * 40 + layout.board.left + x;
+        // The bottom-right cell scrolls the KERNAL screen and is never painted.
+        if (at === 40 * 25 - 1) return;
+        expect(screen[at]).toBe(want);
+      });
+    });
+  });
+});
+
+/**
+ * Versus play at forty columns.
+ *
+ * Two live playfields on a C64 is the surprising claim this mode makes, so it
+ * is asserted against the real boards rather than against the layout numbers
+ * alone.
+ */
+describe('TETRIS ATTACK versus at 40 columns', () => {
+  it('two boards and the centre column fit, with nothing folded', () => {
+    const layout = versusLayout(40, 25, 12, 13);
+    expect(layout.cramped).toBe(false);
+    expect(layout.opponent.left + layout.opponent.width).toBeLessThanOrEqual(40);
+    expect(layout.player.left + layout.player.width).toBeLessThanOrEqual(layout.centre.left);
+    expect(layout.centre.left + layout.centre.width).toBeLessThanOrEqual(layout.opponent.left);
+  });
+
+  it('every row of a versus frame fits its slot', () => {
+    const layout = versusLayout(40, 25, 12, 13);
+    const player = buildBoard(makeStack(), SHEET, 0, { variant: 'c64' });
+    const opponent = buildBoard(makeStack(), SHEET, 0, { variant: 'c64', showCursor: false });
+    const centre = versusCentreLines(layout, {
+      score: 99999, speed: 99, timeText: "9'59", chain: 13, stopped: true, incoming: 99,
+    });
+
+    for (const row of player) expect(row.length).toBeLessThanOrEqual(layout.player.width);
+    for (const row of opponent) expect(row.length).toBeLessThanOrEqual(layout.opponent.width);
+    for (const line of centre) expect(printable(line)).toBeLessThanOrEqual(layout.centre.width);
+
+    const widest = layout.player.width + layout.centre.width + layout.opponent.width;
+    expect(widest).toBeLessThanOrEqual(40);
+  });
+
+  it('the opponent board never draws a cursor - it is not yours to move', () => {
+    const stack = makeStack();
+    const withCursor = buildBoard(stack, SHEET, 0, { variant: 'c64' });
+    const without = buildBoard(stack, SHEET, 0, { variant: 'c64', showCursor: false });
+    expect(JSON.stringify(without)).not.toBe(JSON.stringify(withCursor));
   });
 });
