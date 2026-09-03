@@ -63,6 +63,8 @@ const panels_screen_1 = require("./ui/panels-screen");
 const stack_1 = require("./core/panels/stack");
 const generator_source_1 = require("./core/panels/generator-source");
 const level_data_1 = require("./core/panels/level-data");
+const score_report_1 = require("./core/panels/score-report");
+const consts_1 = require("./core/panels/consts");
 const attract_screen_1 = require("./ui/attract-screen");
 const handler_1 = require("./input/handler");
 const config_1 = require("./input/config");
@@ -78,7 +80,7 @@ const tetrinet_external_adapter_1 = require("./network/tetrinet-external-adapter
 const tetrinet_engine_1 = require("./core/tetrinet/tetrinet-engine");
 const tetrinet_screen_1 = require("./ui/tetrinet-screen");
 const game_rules_1 = require("./core/tetrinet/game-rules");
-const score_report_1 = require("./core/tetrinet/score-report");
+const score_report_2 = require("./core/tetrinet/score-report");
 const tetrinet_ai_1 = require("./ai/tetrinet-ai");
 const winlist_1 = require("./core/tetrinet/winlist");
 const tetrinet_board_1 = require("./core/tetrinet/tetrinet-board");
@@ -1111,11 +1113,18 @@ class GrandmasterApp {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { loadSpriteSheet } = require('@amiexpress/bbs-door-sdk/engines/graphics/cell-art');
         const sheet = loadSpriteSheet(path.join(__dirname, 'sprites'));
+        const mode = await this.chooseTetrisAttackMode();
+        if (!mode) {
+            this.currentScreen = 'menu';
+            return;
+        }
         const seed = Math.floor(Math.random() * 2147483000) + 1;
         const stack = new stack_1.Stack({
             levelData: (0, level_data_1.getClassicEndless)('normal'),
             panelSource: new generator_source_1.GeneratorSource(seed, true),
             doCountdown: true,
+            // Time Attack is two minutes; Endless runs until the stack tops out.
+            timeLimit: mode === 'timeattack' ? consts_1.TIME_ATTACK_FRAMES : undefined,
         });
         stack.startingState();
         /** Telnet fallback: a keypress counts as held for this long. */
@@ -1155,12 +1164,72 @@ class GrandmasterApp {
         this.screen.key(['escape', 'q', 'Q'], onEscape);
         try {
             await panels.run();
+            // Only a game that actually finished counts. Leaving early with ESC is
+            // not a score, and recording it would put junk on the leaderboard.
+            const finished = stack.gameEnded();
+            if (finished) {
+                const result = (0, score_report_1.buildPanelsResult)(stack, mode);
+                this.highScores.addScore(this.state.playerName, result);
+            }
         }
         finally {
             this.screen.removeListener('keypress', onKeypress);
             this.screen.unkey(['escape', 'q', 'Q'], onEscape);
             this.currentScreen = 'menu';
         }
+    }
+    /**
+     * Which panel mode to play.
+     *
+     * The original puts ENDLESS and TIME TRIAL side by side under its 1PLAYER
+     * menu; this is that choice, and it is where PUZZLE, STAGE CLEAR and VS will
+     * be added rather than growing the main menu by one row per mode.
+     */
+    async chooseTetrisAttackMode() {
+        const labels = [
+            'ENDLESS      play until the stack tops out',
+            'TIME ATTACK  two minutes, score as high as you can',
+            'Back',
+        ];
+        const modes = ['endless', 'timeattack', null];
+        return new Promise((resolve) => {
+            const box = (0, blessed_helpers_1.createBox)({
+                parent: this.screen,
+                top: 'center',
+                left: 'center',
+                width: 56,
+                height: 9,
+                label: ' TETRIS ATTACK ',
+                tags: true,
+                style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+            });
+            const list = (0, blessed_helpers_1.createList)({
+                parent: box,
+                top: 1,
+                left: 1,
+                width: 52,
+                height: 4,
+                keys: true,
+                vi: true,
+                mouse: true,
+                tags: true,
+                items: labels,
+                style: {
+                    fg: 'white',
+                    bg: 'black',
+                    selected: { fg: 'black', bg: 'magenta' },
+                },
+            });
+            const done = (choice) => {
+                box.destroy();
+                this.screen.render();
+                resolve(choice);
+            };
+            list.on('select', (_item, index) => done(modes[index] ?? null));
+            list.key(['escape', 'q', 'Q'], () => done(null));
+            list.focus();
+            this.screen.render();
+        });
     }
     async showTetriNetLobby() {
         this.currentScreen = 'lobby';
@@ -1603,7 +1672,7 @@ class GrandmasterApp {
         if (opts?.finishOrder && opts.finishOrder.length > 0) {
             this.tetrinetWinList.recordGame(opts.finishOrder);
         }
-        const result = (0, score_report_1.buildTetriNetResult)(engine.getState());
+        const result = (0, score_report_2.buildTetriNetResult)(engine.getState());
         this.highScores.addScore(this.state.playerName, result);
         const userId = this.session.user?.id || 'guest';
         const username = this.session.user?.username || this.state.playerName;

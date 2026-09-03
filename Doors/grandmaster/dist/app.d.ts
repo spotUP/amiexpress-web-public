@@ -190,6 +190,14 @@ export declare class GrandmasterApp {
      * the same compromise input/handler.ts already makes for the Tetris modes.
      */
     private startTetrisAttack;
+    /**
+     * Which panel mode to play.
+     *
+     * The original puts ENDLESS and TIME TRIAL side by side under its 1PLAYER
+     * menu; this is that choice, and it is where PUZZLE, STAGE CLEAR and VS will
+     * be added rather than growing the main menu by one row per mode.
+     */
+    private chooseTetrisAttackMode;
     private showTetriNetLobby;
     /**
      * Start a BBS-internal networked TetriNET match.

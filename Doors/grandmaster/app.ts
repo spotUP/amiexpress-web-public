@@ -48,6 +48,8 @@ import { PanelsScreen, type HeldInput } from './ui/panels-screen';
 import { Stack as PanelStack } from './core/panels/stack';
 import { GeneratorSource } from './core/panels/generator-source';
 import { getClassicEndless } from './core/panels/level-data';
+import { buildPanelsResult, type PanelsMode } from './core/panels/score-report';
+import { TIME_ATTACK_FRAMES } from './core/panels/consts';
 import { AttractScreen } from './ui/attract-screen';
 import { InputHandler } from './input/handler';
 import { DEFAULT_KEYS, TIMING } from './input/config';
@@ -1254,11 +1256,19 @@ export class GrandmasterApp {
     const { loadSpriteSheet } = require('@amiexpress/bbs-door-sdk/engines/graphics/cell-art');
     const sheet = loadSpriteSheet(path.join(__dirname, 'sprites'));
 
+    const mode = await this.chooseTetrisAttackMode();
+    if (!mode) {
+      this.currentScreen = 'menu';
+      return;
+    }
+
     const seed = Math.floor(Math.random() * 2147483000) + 1;
     const stack = new PanelStack({
       levelData: getClassicEndless('normal'),
       panelSource: new GeneratorSource(seed, true),
       doCountdown: true,
+      // Time Attack is two minutes; Endless runs until the stack tops out.
+      timeLimit: mode === 'timeattack' ? TIME_ATTACK_FRAMES : undefined,
     });
     stack.startingState();
 
@@ -1309,11 +1319,78 @@ export class GrandmasterApp {
 
     try {
       await panels.run();
+
+      // Only a game that actually finished counts. Leaving early with ESC is
+      // not a score, and recording it would put junk on the leaderboard.
+      const finished = stack.gameEnded();
+      if (finished) {
+        const result = buildPanelsResult(stack, mode);
+        this.highScores.addScore(this.state.playerName, result);
+      }
     } finally {
       this.screen.removeListener('keypress', onKeypress);
       this.screen.unkey(['escape', 'q', 'Q'], onEscape);
       this.currentScreen = 'menu';
     }
+  }
+
+  /**
+   * Which panel mode to play.
+   *
+   * The original puts ENDLESS and TIME TRIAL side by side under its 1PLAYER
+   * menu; this is that choice, and it is where PUZZLE, STAGE CLEAR and VS will
+   * be added rather than growing the main menu by one row per mode.
+   */
+  private async chooseTetrisAttackMode(): Promise<PanelsMode | null> {
+    const labels = [
+      'ENDLESS      play until the stack tops out',
+      'TIME ATTACK  two minutes, score as high as you can',
+      'Back',
+    ];
+    const modes: (PanelsMode | null)[] = ['endless', 'timeattack', null];
+
+    return new Promise<PanelsMode | null>((resolve) => {
+      const box = createBox({
+        parent: this.screen,
+        top: 'center',
+        left: 'center',
+        width: 56,
+        height: 9,
+        label: ' TETRIS ATTACK ',
+        tags: true,
+        style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+      });
+
+      const list = createList({
+        parent: box,
+        top: 1,
+        left: 1,
+        width: 52,
+        height: 4,
+        keys: true,
+        vi: true,
+        mouse: true,
+        tags: true,
+        items: labels,
+        style: {
+          fg: 'white',
+          bg: 'black',
+          selected: { fg: 'black', bg: 'magenta' },
+        },
+      });
+
+      const done = (choice: PanelsMode | null) => {
+        box.destroy();
+        this.screen.render();
+        resolve(choice);
+      };
+
+      list.on('select', (_item: unknown, index: number) => done(modes[index] ?? null));
+      list.key(['escape', 'q', 'Q'], () => done(null));
+
+      list.focus();
+      this.screen.render();
+    });
   }
 
   private async showTetriNetLobby(): Promise<void> {

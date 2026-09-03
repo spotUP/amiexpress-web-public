@@ -96,6 +96,14 @@ export interface StackOptions {
   engineVersion?: string;
   /** Cursor DAS, in ticks. Replays record the value they were played at. */
   cursorWaitTime?: number;
+  /**
+   * Frames of play after which the game ends, for Time Attack.
+   *
+   * Upstream puts the time limit on the Match rather than the Stack, because it
+   * has to end two stacks at once. For a solo mode that indirection buys
+   * nothing, so it lives here; the versus work will lift it out.
+   */
+  timeLimit?: number;
 }
 
 export class Stack implements MatchableStack {
@@ -148,6 +156,8 @@ export class Stack implements MatchableStack {
   swapCount = 0;
   /** 0 means the game is still running, matching upstream's sentinel. */
   gameOverClock = 0;
+  /** Frames of play before the game ends, or null for no limit. */
+  timeLimit: number | null;
 
   nActivePanels = 0;
   nPrevActivePanels = 0;
@@ -207,6 +217,7 @@ export class Stack implements MatchableStack {
     this.topCurRow = this.behaviours.passiveRaise ? this.height - 1 : this.height;
     this.engineVersion = options.engineVersion ?? ENGINE_VERSION;
     this.curWaitTime = options.cursorWaitTime ?? DEFAULT_INPUT_REPEAT_DELAY;
+    this.timeLimit = options.timeLimit ?? null;
 
     if (options.doCountdown) {
       // Physics is held off until the countdown ends.
@@ -420,6 +431,13 @@ export class Stack implements MatchableStack {
 
     if (this.stopWatchIsRunning) this.stopWatch += 1;
     this.clock += 1;
+
+    // Time Attack ends on the clock rather than on the stack topping out, and
+    // running out of time is not a loss - the score stands.
+    if (this.timeLimit !== null && this.stopWatch >= this.timeLimit && !this.gameEnded()) {
+      this.ranOutOfTime = true;
+      this.setGameOver();
+    }
 
     if (!this.drivenByInput) {
       // Manual mode: the caller sets the intents again for the next frame.
@@ -846,6 +864,9 @@ export class Stack implements MatchableStack {
     this.gameOverClock = this.clock;
     this.onGameOver?.();
   }
+
+  /** Did the game end because the clock ran out rather than a top-out? */
+  ranOutOfTime = false;
 
   /** The origin of the last attack graphic, for the renderer. */
   lastMatchOrigin: Coordinate | null = null;

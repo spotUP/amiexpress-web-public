@@ -114,6 +114,8 @@ class Stack {
         this.inputState = input_codec_1.INPUT_CHARS.idle;
         this.queuedSwapRow = 0;
         this.queuedSwapColumn = 0;
+        /** Did the game end because the clock ran out rather than a top-out? */
+        this.ranOutOfTime = false;
         /** The origin of the last attack graphic, for the renderer. */
         this.lastMatchOrigin = null;
         this.levelData = options.levelData;
@@ -132,6 +134,7 @@ class Stack {
         this.topCurRow = this.behaviours.passiveRaise ? this.height - 1 : this.height;
         this.engineVersion = options.engineVersion ?? consts_2.ENGINE_VERSION;
         this.curWaitTime = options.cursorWaitTime ?? consts_2.DEFAULT_INPUT_REPEAT_DELAY;
+        this.timeLimit = options.timeLimit ?? null;
         if (options.doCountdown) {
             // Physics is held off until the countdown ends.
             this.stopWatchIsRunning = false;
@@ -336,6 +339,12 @@ class Stack {
         if (this.stopWatchIsRunning)
             this.stopWatch += 1;
         this.clock += 1;
+        // Time Attack ends on the clock rather than on the stack topping out, and
+        // running out of time is not a loss - the score stands.
+        if (this.timeLimit !== null && this.stopWatch >= this.timeLimit && !this.gameEnded()) {
+            this.ranOutOfTime = true;
+            this.setGameOver();
+        }
         if (!this.drivenByInput) {
             // Manual mode: the caller sets the intents again for the next frame.
             this.cursorDirection = null;

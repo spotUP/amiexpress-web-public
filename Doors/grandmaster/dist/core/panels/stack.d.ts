@@ -65,6 +65,14 @@ export interface StackOptions {
     engineVersion?: string;
     /** Cursor DAS, in ticks. Replays record the value they were played at. */
     cursorWaitTime?: number;
+    /**
+     * Frames of play after which the game ends, for Time Attack.
+     *
+     * Upstream puts the time limit on the Match rather than the Stack, because it
+     * has to end two stacks at once. For a solo mode that indirection buys
+     * nothing, so it lives here; the versus work will lift it out.
+     */
+    timeLimit?: number;
 }
 export declare class Stack implements MatchableStack {
     readonly width = 6;
@@ -105,6 +113,8 @@ export declare class Stack implements MatchableStack {
     swapCount: number;
     /** 0 means the game is still running, matching upstream's sentinel. */
     gameOverClock: number;
+    /** Frames of play before the game ends, or null for no limit. */
+    timeLimit: number | null;
     nActivePanels: number;
     nPrevActivePanels: number;
     swappingPanelCount: number;
@@ -254,6 +264,8 @@ export declare class Stack implements MatchableStack {
      */
     checkGameOver(): boolean;
     setGameOver(): void;
+    /** Did the game end because the clock ran out rather than a top-out? */
+    ranOutOfTime: boolean;
     /** The origin of the last attack graphic, for the renderer. */
     lastMatchOrigin: Coordinate | null;
 }
