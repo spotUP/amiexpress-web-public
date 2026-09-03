@@ -5,7 +5,7 @@
  */
 
 import { BBSSession } from '../../index';
-import { isNarrow, narrowClip, narrowField, narrowMailRow, narrowRule } from '../../utils/table-format.util';
+import { isNarrow, messageIndent, messageRule, narrowClip, narrowField, narrowMailRow, narrowRule } from '../../utils/table-format.util';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
@@ -761,7 +761,7 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
     // inline REALNAME / INTERNETNAME prompt completes.
     const continueReply = () => {
       // express.e:9881-9884: header box + "To: fromName\r\n" (informational, no To: input)
-      emitText(socket, '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n');
+      emitText(socket, `\r\n${messageRule(session, 'headerBox')}\r\n`);
 
       // express.e:9882: AstrCopy(mailHeader.toName, mailHeader.fromName, 31)
       // — toName seeded from the original sender. checkToForward (express.e:9885)
@@ -780,7 +780,7 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
         toUser = fwdUser;
       }
 
-      emitText(socket, `     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ${toUser}\r\n`);
+      emitText(socket, `${messageIndent(session, 'to')}\x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ${toUser}\r\n`);
       if (forwardingNotice) emitText(socket, forwardingNotice);
 
       // express.e:9886-9890: Subject prompt pre-filled with original subject
@@ -907,8 +907,8 @@ export async function handleMessageReaderNav(socket: any, session: BBSSession, i
       };
 
       // Prompt for recipient (express.e:9816: msgToHeader())
-      emitText(socket, '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n');
-      emitPrompt(socket, '     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ');
+      emitText(socket, `\r\n${messageRule(session, 'headerBox')}\r\n`);
+      emitPrompt(socket, `${messageIndent(session, 'to')}\x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m `);
 
       session.subState = LoggedOnSubState.FORWARD_MESSAGE_TO;
     };
@@ -1355,7 +1355,7 @@ export function handleEnterMessageFullCommand(
   }
 
   // express.e msgToHeader():9998-10001
-  emitText(socket, '\r\n                       \x1b[32m(\x1b[33m------------------------------\x1b[32m)\x1b[0m\r\n');
+  emitText(socket, `\r\n${messageRule(session, 'headerBox')}\r\n`);
 
   session.inputBuffer = '';
   session.tempData = { isPrivate: true, messageEntry: {} };
@@ -1375,12 +1375,12 @@ export function handleEnterMessageFullCommand(
     // checkConfAccess, checkToForward). Previously this branch only handled
     // EALL and skipped the rest, allowing pre-filled recipients to bypass
     // sysop comment routing, conference-access checks, and FORWARDMAIL.
-    emitText(socket, `     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ${firstParam}\r\n`);
+    emitText(socket, `${messageIndent(session, 'to')}\x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ${firstParam}\r\n`);
     const { processToRecipient } = require('./message-entry.handler');
     void processToRecipient(socket, session, firstParam);
   } else {
     // No params — show To: prompt (express.e:10778-10780)
-    emitText(socket, '     \x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m ');
+    emitText(socket, `${messageIndent(session, 'to')}\x1b[36mTo\x1b[33m: \x1b[32m(\x1b[33mEnter\x1b[32m)\x1b[0m=\x1b[32m\'\x1b[33mALL\x1b[32m\'\x1b[32m?\x1b[0m `);
     session.subState = LoggedOnSubState.POST_MESSAGE_TO;
   }
 }

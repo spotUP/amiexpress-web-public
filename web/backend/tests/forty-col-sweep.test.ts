@@ -55,6 +55,8 @@ jest.mock('../src/index', () => {
 
 import { printableLength, wrapForSession, wrapDoorTextForSession } from '../src/utils/wrap-for-session.util';
 import {
+  messageIndent,
+  messageRule,
   narrowClip,
   narrowField,
   narrowFileLines,
@@ -140,6 +142,18 @@ describe('40-column sweep: tables', () => {
 
   it('fields, rules and clips', () => {
     fits([narrowField(LONG, LONG), narrowField(EMPTY, EMPTY), narrowRule(), narrowRule('='), narrowClip(LONG)]);
+  });
+
+  it('the message-header rules and indents (E / R / F / edit line)', () => {
+    // Every shape express.e draws above a message prompt, at the C64 width.
+    // The pre-fix bug was the headerBox: 55 columns, folded by the prose
+    // choke into a `(` row and a `------)` row.
+    for (const kind of ['headerBox', 'editLine', 'bodyRuler'] as const) {
+      fits([messageRule(C64, kind)]);
+    }
+    for (const kind of ['to', 'private', 'editLine'] as const) {
+      fits([messageIndent(C64, kind)], NARROW_PROMPT_WIDTH);
+    }
   });
 
   it('file search results', () => {

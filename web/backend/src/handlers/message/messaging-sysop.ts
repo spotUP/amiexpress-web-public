@@ -9,6 +9,7 @@ import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { emitText, emitPrompt } from '../../utils/output.util';
+import { messageIndent } from '../../utils/table-format.util';
 
 // Dependencies for move/edit operations (injected via setMoveEditDependencies)
 let _conferences: any[] = [];
@@ -255,7 +256,7 @@ export async function handleMsgEditHeaderFrom(socket: any, session: BBSSession, 
 
   // Prompt for To - express.e:11623-11627
   const currentTo = session.tempData.editHeader.to;
-  emitText(socket, `     ${AnsiUtil.colorize('  To', 'cyan')}${AnsiUtil.colorize(':', 'yellow')} `);
+  emitText(socket, `${messageIndent(session, 'to')}${AnsiUtil.colorize('  To', 'cyan')}${AnsiUtil.colorize(':', 'yellow')} `);
   emitText(socket, `${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('Enter', 'yellow')}${AnsiUtil.colorize(')', 'green')}`);
   emitText(socket, `=${AnsiUtil.colorize("'", 'green')}${AnsiUtil.colorize(currentTo, 'yellow')}${AnsiUtil.colorize("'", 'green')}${AnsiUtil.colorize('?', 'green')} `);
   session.subState = LoggedOnSubState.MSG_EDIT_HEADER_TO;
@@ -296,7 +297,7 @@ export async function handleMsgEditHeaderSubject(socket: any, session: BBSSessio
   // express.e:11636-11640: Private prompt — only shown if aFlag=FALSE (not ALL recipient)
   const editTo = (session.tempData.editHeader.to || '').toUpperCase();
   if (editTo !== 'ALL' && editTo !== 'EALL') {
-    emitText(socket, '         \x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
+    emitText(socket, `${messageIndent(session, 'private')}\x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m `);
     session.subState = LoggedOnSubState.MSG_EDIT_HEADER_PRIVATE;
   } else {
     // ALL/EALL recipients can't be private — skip to save
