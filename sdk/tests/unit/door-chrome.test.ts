@@ -117,6 +117,42 @@ describe('attachDoorChrome at 80 columns', () => {
     expect(list.items.join('\n')).toBe(before);
   });
 
+  it('resolves a glitch TARGET given as a function, at every tick', () => {
+    // A tracker or a file manager detaches its list on every view change.
+    // An element captured once would be damaging a widget that is no longer
+    // on screen, so the door hands over a getter instead.
+    const viewA = listTarget(['aaaaaaaa', 'bbbbbbbb', 'cccccccc', 'dddddddd']);
+    const viewB = listTarget(['eeeeeeee', 'ffffffff', 'gggggggg', 'hhhhhhhh']);
+    let current: any = viewA;
+    const aBefore = viewA.items.join('\n');
+    const bBefore = viewB.items.join('\n');
+    // The minimum gap between glitches is measured in wall time, so the
+    // clock has to move for a SECOND one to be planned at all.
+    let clock = 1_000_000;
+
+    const chrome = attachDoorChrome(NEON, {
+      width: 80,
+      title: 'T',
+      masthead: target(),
+      glitch: () => current,
+      styles: themeStyles(NEON),
+      render: () => undefined,
+      glitchOptions: { tickMs: 10, random: () => 0.01, now: () => (clock += 500) },
+    });
+
+    jest.advanceTimersByTime(50);
+    expect(viewA.items.join('\n')).not.toBe(aBefore);
+    expect(viewB.items.join('\n')).toBe(bBefore);
+
+    // The door swaps views; the NEXT damage lands on the new one.
+    jest.advanceTimersByTime(2_000);
+    current = viewB;
+    jest.advanceTimersByTime(5_000);
+    expect(viewB.items.join('\n')).not.toBe(bBefore);
+
+    chrome.stop();
+  });
+
   it('starts no glitch timer for a theme that did not ask for one', () => {
     const list = listTarget(['aaaa', 'bbbb', 'cccc', 'dddd']);
     const before = list.items.join('\n');

@@ -21,7 +21,9 @@
  */
 import type { Theme } from './tokens.js';
 import { themeStyles, type ThemeStyles } from './styles.js';
-import { attachGlitches, type GlitchOptions, type GlitchTarget } from './glitch-runner.js';
+import {
+  attachGlitches, glitchTargetFor, type GlitchOptions, type GlitchTarget,
+} from './glitch-runner.js';
 // The width tier, from the ONE ladder. Imported from the module rather than
 // the blessed barrel: responsive-constants has no imports of its own, so the
 // theme engine stays free of the widget tree.
@@ -503,8 +505,14 @@ export interface DoorChromeOptions {
    * The element the theme's glitches damage. Usually the LIST: damaging the
    * masthead or the hint line reads as the door being broken rather than as
    * atmosphere.
+   *
+   * Pass a FUNCTION when the door rebuilds that element - a tracker or a
+   * file manager detaches its list on every view change, and an element
+   * captured once would be glitching a widget that is no longer on screen.
+   * The function is asked at each tick and may return nothing, which simply
+   * skips that tick.
    */
-  glitch?: unknown;
+  glitch?: unknown | (() => unknown);
   /** Passed straight through to `attachGlitches`. */
   glitchOptions?: GlitchOptions;
   /** The theme's paints. Defaults to `themeStyles(theme)`. */
@@ -624,9 +632,30 @@ export function attachDoorChrome(
 
   // The glitches, on whatever the door nominated. Does nothing at all for a
   // theme that did not ask for them, and nothing at all at XXS.
+  //
+  // A function is resolved at every access rather than once, so a door whose
+  // content pane is rebuilt per view still glitches the pane that is
+  // actually on screen. glitchTargetFor is applied to whatever comes back,
+  // because a LIST has to be damaged through its items - writing to its
+  // content is discarded on the next repaint.
+  const glitchTarget: GlitchTarget | null = !glitch
+    ? null
+    : typeof glitch === 'function'
+      ? {
+          getContent: () => {
+            const now = (glitch as () => unknown)();
+            return now ? glitchTargetFor(now).getContent() : '';
+          },
+          setContent: (text: string) => {
+            const now = (glitch as () => unknown)();
+            if (now) glitchTargetFor(now).setContent(text);
+          },
+        }
+      : (glitch as GlitchTarget);
+
   const stopGlitches =
-    animated && glitch
-      ? attachGlitches(glitch as GlitchTarget, theme, render, glitchOptions ?? {})
+    animated && glitchTarget
+      ? attachGlitches(glitchTarget, theme, render, glitchOptions ?? {})
       : () => { /* nothing was started */ };
 
   let stopped = false;
