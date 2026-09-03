@@ -26,6 +26,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { loadConfConfig } from '../services/conf-config.service';
+import * as amigafs from '../utils/amigafs';
 import { BBSPaths } from '../utils/bbs-paths.util';
 
 /**
@@ -78,10 +79,10 @@ export function conferenceDir(bbsRoot: string, conferenceNumber: number): string
     const config = loadConfConfig(bbsRoot);
     location = config?.entries[conferenceNumber - 1]?.location?.trim() ?? '';
   } catch {
-    return fallback;
+    return caseResolved(fallback);
   }
 
-  if (!location) return fallback;
+  if (!location) return caseResolved(fallback);
 
   // LOCATION is an Amiga path - `BBS:Conf2/` - with a trailing slash that
   // path.join would otherwise carry into the directory name.
@@ -90,7 +91,21 @@ export function conferenceDir(bbsRoot: string, conferenceNumber: number): string
     ? new BBSPaths(bbsRoot).resolveAmigaPath(cleaned)
     : path.resolve(bbsRoot, cleaned);
 
-  return resolved || fallback;
+  return caseResolved(resolved || fallback);
+}
+
+/**
+ * The last step every exit of conferenceDir() takes.
+ *
+ * AmigaDOS is case-insensitive; ext4 under the Linux container is not. A sysop
+ * who writes `LOCATION.2=BBS:elitearea/` for a directory that sits on disk as
+ * `EliteArea/` gets a path that exists on the macOS dev machine and ENOENTs on
+ * the board. amigafs.resolveExistingAncestors() walks the deepest EXISTING
+ * ancestor, so a directory that is not there yet still lands inside its
+ * correctly-cased parent instead of minting a lowercase twin beside it.
+ */
+function caseResolved(hostPath: string): string {
+  return amigafs.resolveExistingAncestors(hostPath);
 }
 
 /** A path inside the conference's directory - `Files`, `MsgBase`, `DIR3`. */

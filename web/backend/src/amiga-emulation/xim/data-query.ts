@@ -111,13 +111,14 @@ debugLog(`  String address: 0x${stringAddr.toString(16)} (embedded in message)`)
             // Return file count from current conference's NumULs file
             const confNum = (this.bbsSession as any).conferenceNumber || 1;
             const bbsRoot = (this.bbsSession as any).bbsRoot || process.cwd();
+            // A conference lives wherever ConfConfig.info's LOCATION.n says,
+            // not necessarily in Conf<n> - resolve it, never build the name.
             const numULsPath = conferenceSubdir(bbsRoot, confNum, 'NumULs');
 
             let fileCount = '0';
             try {
-              const fs = require('fs');
-              if (fs.existsSync(numULsPath)) {
-                fileCount = fs.readFileSync(numULsPath, 'utf8').trim();
+              if (amigafs.existsSync(numULsPath)) {
+                fileCount = (amigafs.readFileSync(numULsPath, 'utf8') as string).trim();
               }
             } catch (err) {
 console.error(`  [READ] DT_NAME: Failed to read NumULs from ${numULsPath}:`, err);
