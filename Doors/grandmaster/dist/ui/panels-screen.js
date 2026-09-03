@@ -59,6 +59,8 @@ class PanelsScreen {
         this.screen = options.screen;
         this.puzzle = options.puzzle;
         this.soloStack = options.stack;
+        this.onStep = options.onStep;
+        this.isOver = options.isOver;
         if (!this.puzzle && !this.soloStack) {
             throw new Error('PanelsScreen needs either a stack or a puzzle');
         }
@@ -169,11 +171,16 @@ class PanelsScreen {
                     }
                     else {
                         this.stack.receiveConfirmedInput(input);
-                        this.stack.run();
+                        // A mode that owns the frame steps the board itself.
+                        if (this.onStep)
+                            this.onStep();
+                        else
+                            this.stack.run();
                     }
                 }
                 const puzzleOver = this.puzzle ? this.puzzle.result() !== 'playing' : false;
-                if (puzzleOver || this.stack.gameEnded() || this.quitting) {
+                const modeOver = this.isOver ? this.isOver() : false;
+                if (puzzleOver || modeOver || this.stack.gameEnded() || this.quitting) {
                     finish();
                     return;
                 }

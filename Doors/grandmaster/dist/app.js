@@ -61,6 +61,7 @@ const solo_broadcast_1 = require("./network/solo-broadcast");
 const leaderboard_screen_1 = require("./ui/leaderboard-screen");
 const panels_screen_1 = require("./ui/panels-screen");
 const puzzle_1 = require("./core/panels/puzzle");
+const stage_clear_1 = require("./core/panels/stage-clear");
 const stack_1 = require("./core/panels/stack");
 const generator_source_1 = require("./core/panels/generator-source");
 const level_data_1 = require("./core/panels/level-data");
@@ -1162,6 +1163,12 @@ class GrandmasterApp {
             swap: isDown(['space', 'z']),
             raise: isDown(['r', 'x']),
         });
+        if (mode === 'stageclear') {
+            await this.runStageClear(sheet, readInput);
+            this.screen.removeListener('keypress', onKeypress);
+            this.currentScreen = 'menu';
+            return;
+        }
         if (mode === 'puzzle') {
             await this.runPuzzleSet(sheet, readInput, onKeypress);
             this.screen.removeListener('keypress', onKeypress);
@@ -1291,6 +1298,89 @@ class GrandmasterApp {
         }
         void onKeypress;
     }
+    /**
+     * STAGE CLEAR: walk the ladder until a stage is failed or the player leaves.
+     *
+     * A board stage is the solo screen with a clear-line win; a Bowser fight is
+     * the versus screen against a health model, because "lower his HP with combos
+     * and chains" is what that model already does. One loop covers both, since
+     * the only thing that differs is which screen the stage is played on.
+     */
+    async runStageClear(sheet, readInput) {
+        const stages = (0, stage_clear_1.buildStages)();
+        let cleared = 0;
+        for (const stage of stages) {
+            const won = stage.boss
+                ? await this.playBowser(stage, sheet, readInput)
+                : await this.playStage(stage, sheet, readInput);
+            if (won === null)
+                break; // the player left
+            if (!won)
+                break; // the ladder ends where you fall off it
+            cleared += 1;
+        }
+        if (cleared > 0) {
+            const result = (0, score_report_1.buildPanelsResult)(new stage_clear_1.StageClearGame(stages[0]).stack, 'stageclear', 'tetris_attack', cleared === stages.length);
+            result.score = cleared;
+            result.lines = cleared;
+            result.linesCleared = cleared;
+            result.level = cleared;
+            this.highScores.addScore(this.state.playerName, result);
+        }
+    }
+    /** One board stage. Returns null if the player left. */
+    async playStage(stage, sheet, readInput) {
+        const game = new stage_clear_1.StageClearGame(stage);
+        const panels = new panels_screen_1.PanelsScreen({
+            screen: this.screen,
+            stack: game.stack,
+            sheet,
+            sounds: this.sounds,
+            readInput,
+            onStep: () => game.run(),
+            isOver: () => game.result() !== 'playing',
+        });
+        const onEscape = () => panels.quit();
+        this.screen.key(['escape', 'q', 'Q'], onEscape);
+        try {
+            await panels.run();
+        }
+        finally {
+            this.screen.unkey(['escape', 'q', 'Q'], onEscape);
+        }
+        if (game.result() === 'playing')
+            return null;
+        return game.result() === 'cleared';
+    }
+    /** A fight with Bowser: the versus screen against a health model. */
+    async playBowser(stage, sheet, readInput) {
+        const player = new stack_1.Stack((0, stage_clear_1.stageStackOptions)(stage));
+        player.startingState();
+        const bowser = new simulated_stack_1.SimulatedStack({
+            attackSettings: (0, attack_patterns_1.loadChallengeAttack)(1, Math.min(8, stage.round + 2)),
+            healthSettings: (0, stage_clear_1.bossHealth)(stage),
+        });
+        const panels = new panels_versus_screen_1.PanelsVersusScreen({
+            screen: this.screen,
+            player,
+            opponent: bowser,
+            sheet,
+            sounds: this.sounds,
+            readInput,
+        });
+        const onEscape = () => panels.quit();
+        this.screen.key(['escape', 'q', 'Q'], onEscape);
+        let outcome;
+        try {
+            outcome = await panels.run();
+        }
+        finally {
+            this.screen.unkey(['escape', 'q', 'Q'], onEscape);
+        }
+        if (!player.gameEnded() && !bowser.gameEnded())
+            return null;
+        return outcome.playerWon;
+    }
     /** Which puzzle set to work through. */
     async choosePuzzleSet(sets) {
         // The shipped set names are translation keys; the readable part is the tail.
@@ -1343,10 +1433,11 @@ class GrandmasterApp {
             'VS CPU       a real opponent on a real board',
             'CHALLENGE    the stage ladder, eight difficulties',
             'PUZZLE       235 arrangements, one right answer each',
+            'STAGE CLEAR  thirty stages and two fights with Bowser',
             'Back',
         ];
         const modes = [
-            'endless', 'timeattack', 'vscpu', 'challenge', 'puzzle', null,
+            'endless', 'timeattack', 'vscpu', 'challenge', 'puzzle', 'stageclear', null,
         ];
         return new Promise((resolve) => {
             const box = (0, blessed_helpers_1.createBox)({
@@ -1354,7 +1445,7 @@ class GrandmasterApp {
                 top: 'center',
                 left: 'center',
                 width: 56,
-                height: 12,
+                height: 13,
                 label: ' TETRIS ATTACK ',
                 tags: true,
                 style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
@@ -1364,7 +1455,7 @@ class GrandmasterApp {
                 top: 1,
                 left: 1,
                 width: 52,
-                height: 7,
+                height: 8,
                 keys: true,
                 vi: true,
                 mouse: true,

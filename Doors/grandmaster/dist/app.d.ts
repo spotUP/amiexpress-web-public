@@ -206,6 +206,19 @@ export declare class GrandmasterApp {
      * the keys the original uses.
      */
     private runPuzzleSet;
+    /**
+     * STAGE CLEAR: walk the ladder until a stage is failed or the player leaves.
+     *
+     * A board stage is the solo screen with a clear-line win; a Bowser fight is
+     * the versus screen against a health model, because "lower his HP with combos
+     * and chains" is what that model already does. One loop covers both, since
+     * the only thing that differs is which screen the stage is played on.
+     */
+    private runStageClear;
+    /** One board stage. Returns null if the player left. */
+    private playStage;
+    /** A fight with Bowser: the versus screen against a health model. */
+    private playBowser;
     /** Which puzzle set to work through. */
     private choosePuzzleSet;
     private chooseTetrisAttackMode;

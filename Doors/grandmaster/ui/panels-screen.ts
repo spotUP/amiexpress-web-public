@@ -65,6 +65,16 @@ export interface PanelsScreenOptions {
    * board is read through the puzzle because undo REPLACES it.
    */
   puzzle?: PuzzleGame;
+  /**
+   * Run one engine frame, when the mode owns the frame rather than the board.
+   *
+   * STAGE CLEAR uses this: the board is an ordinary stack, but the frame has
+   * to go through the stage so it can test its clear line. The screen still
+   * feeds the input; only the stepping is handed over.
+   */
+  onStep?: () => void;
+  /** Is the mode finished? Asked alongside the board's own end conditions. */
+  isOver?: () => boolean;
   sheet: Record<string, Sprite>;
   sounds?: SoundEngine;
   /** Read the currently held keys. Called once per engine frame. */
@@ -88,6 +98,8 @@ export class PanelsScreen {
   private readonly screen: Screen;
   private readonly puzzle?: PuzzleGame;
   private readonly soloStack?: Stack;
+  private readonly onStep?: () => void;
+  private readonly isOver?: () => boolean;
   private readonly sheet: Record<string, Sprite>;
   private readonly sounds?: SoundEngine;
   private readonly readInput: () => HeldInput;
@@ -119,6 +131,8 @@ export class PanelsScreen {
     this.screen = options.screen;
     this.puzzle = options.puzzle;
     this.soloStack = options.stack;
+    this.onStep = options.onStep;
+    this.isOver = options.isOver;
     if (!this.puzzle && !this.soloStack) {
       throw new Error('PanelsScreen needs either a stack or a puzzle');
     }
@@ -242,12 +256,15 @@ export class PanelsScreen {
             this.puzzle.run();
           } else {
             this.stack.receiveConfirmedInput(input);
-            this.stack.run();
+            // A mode that owns the frame steps the board itself.
+            if (this.onStep) this.onStep();
+            else this.stack.run();
           }
         }
 
         const puzzleOver = this.puzzle ? this.puzzle.result() !== 'playing' : false;
-        if (puzzleOver || this.stack.gameEnded() || this.quitting) {
+        const modeOver = this.isOver ? this.isOver() : false;
+        if (puzzleOver || modeOver || this.stack.gameEnded() || this.quitting) {
           finish();
           return;
         }

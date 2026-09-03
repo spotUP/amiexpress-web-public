@@ -46,6 +46,16 @@ export interface PanelsScreenOptions {
      * board is read through the puzzle because undo REPLACES it.
      */
     puzzle?: PuzzleGame;
+    /**
+     * Run one engine frame, when the mode owns the frame rather than the board.
+     *
+     * STAGE CLEAR uses this: the board is an ordinary stack, but the frame has
+     * to go through the stage so it can test its clear line. The screen still
+     * feeds the input; only the stepping is handed over.
+     */
+    onStep?: () => void;
+    /** Is the mode finished? Asked alongside the board's own end conditions. */
+    isOver?: () => boolean;
     sheet: Record<string, Sprite>;
     sounds?: SoundEngine;
     /** Read the currently held keys. Called once per engine frame. */
@@ -67,6 +77,8 @@ export declare class PanelsScreen {
     private readonly screen;
     private readonly puzzle?;
     private readonly soloStack?;
+    private readonly onStep?;
+    private readonly isOver?;
     private readonly sheet;
     private readonly sounds?;
     private readonly readInput;
