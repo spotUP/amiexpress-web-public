@@ -62,7 +62,9 @@ import { CommandHandler } from './handlers/command';
 // UI components
 import { processKeystroke, renderTypingPreview, isAnyoneTyping } from './ui/typing-preview';
 import { createScreen } from './ui/screen';
-import { createMenuBar, MENU_HEIGHT, type MenuBar } from './ui/menu-bar';
+import {
+  createMenuBar, MENU_HEIGHT, MASTHEAD_TITLE, type MenuBar,
+} from './ui/menu-bar';
 import { PANEL_BORDER, PANEL_FOCUS_STYLE } from './ui/theme';
 import { messageIndexAtRow } from './ui/chat-row-map';
 import { solveLayout } from './ui/layout-solver';
@@ -285,10 +287,12 @@ export async function createApp(session: DoorSession) {
    * palette is not a theme. What LIVECHAT can take is the GLITCHES, and
    * that is deliberate on both counts:
    *
-   *   - No masthead. Row 0 is the menu bar this door is driven from, and
-   *     the rows below it are the chat panel; a masthead would either be
-   *     drawn over the menus or cost the chat log a line, and neither is
-   *     worth a moving rail.
+   *   - The masthead rides the run the MENU LABELS leave, from the column
+   *     after the last one to the right edge. Row 0 is the menu bar and
+   *     every row under it is a panel, so there is no spare row - the same
+   *     constraint CARD LOBBY has and the same answer. Below the fit
+   *     threshold (a C64 leaves a handful of columns) the row is hidden and
+   *     the bar keeps the theme's mark, still, at its right end.
    *   - No footer. The bar along the bottom is a live STATUS line - who
    *     you are, which node, which channel, whether events are muted -
    *     which the chrome's hint line would overwrite on every repaint.
@@ -301,11 +305,15 @@ export async function createApp(session: DoorSession) {
    * effectsAllowed() gate is what turns this off at 40 columns - the door
    * adds no gate of its own and cannot forget one.
    */
+  const mastheadFits = menuBar.layoutMasthead();
   const chrome = attachDoorChrome(CURRENT, {
     width: ((screen as any).width as number) || 80,
-    // Unused while there is no masthead, and still the honest answer to
-    // "what is this screen" if one ever gains a row to live on.
-    title: 'LIVE CHAT',
+    title: MASTHEAD_TITLE,
+    // Hidden below the fit threshold, and then there is nothing to drive:
+    // the bar's still mark is the branding a 40-column caller gets.
+    masthead: mastheadFits ? menuBar.mastheadRow : undefined,
+    // The run inside the bar, not the screen - the menus own the left end.
+    mastheadWidth: menuBar.mastheadWidth(),
     glitch: chatLog,
     glitchOptions: {
       // A glitch fired mid-keystroke is a lost keystroke: every keypress,
@@ -2923,6 +2931,10 @@ export async function createApp(session: DoorSession) {
     // DRIVEN by a test - toggled wide, resized, toggled back - rather than
     // only started. Nothing in the door reads them from here.
     screen,
+    // Same reason: the masthead's run is decided by the menu labels, and
+    // nothing else on the screen knows where they end.
+    mastheadRow: menuBar.mastheadRow,
+    menuBar: menuBar.element,
     get terminalMode() { return terminalMode; },
     async run() {
       try {
