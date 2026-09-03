@@ -13,7 +13,8 @@ import {
   DoorInputManager,
   createBox
 } from '@amiexpress/bbs-door-sdk';
-import { T, applyTheme } from './door-theme';
+import { T, S, CURRENT, applyTheme } from './door-theme';
+import { attachDoorChrome, footerStyle, type DoorChrome } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 
 const door = new Door({
   name: 'Header Dropdown Demo',
@@ -85,12 +86,56 @@ door.onStart(async (ctx: DoorContext) => {
     top: 1, // Below header
     left: 0,
     width: '100%',
-    height: '100%-1', // Fill rest of screen
+    height: '100%-2', // Fill the rest, less the hint row at the bottom
     label: ` {${T.accent}-fg}Status{/} `,
     style: {
       border: { fg: T.accent },
     },
     content: `{${T.dim}-fg}Use Tab/Shift+Tab to switch menus, Enter/Space to open, Esc to close.{/${T.dim}-fg}`,
+  });
+
+  /**
+   * The hint row, and the theme's branding tail on the end of it.
+   *
+   * This demo took the theme's colours and had no chrome at all. It gets
+   * the footer rather than a masthead for one reason: row 0 IS the demo -
+   * the inline menu labels this door exists to show - and a rail drawn
+   * across them would be a masthead demonstrating that the widget under
+   * test does not fit.
+   */
+  const footer = createBox({
+    parent: screen,
+    bottom: 0,
+    left: 0,
+    width: '100%',
+    height: 1,
+    border: undefined,
+    focusable: false,
+    clickable: false,
+    mouse: false,
+    tags: true,
+    content: '',
+    style: footerStyle(CURRENT),
+  });
+
+  const chrome: DoorChrome = attachDoorChrome(CURRENT, {
+    width: ((screen as any).width as number) || 80,
+    title: 'HEADER DROPDOWN',
+    footer: footer as any,
+    hints: [
+      { key: 'Tab/Shift+Tab', does: 'Switch Menus' },
+      { key: 'Enter', does: 'Open' },
+      { key: 'Escape', does: 'Close' },
+      { key: 'Q', does: 'Quit' },
+    ],
+    compactHints: [
+      { key: 'Tab', does: 'Switch' },
+      { key: 'Ent', does: 'Open' },
+      { key: 'Q', does: 'Quit' },
+    ],
+    footerPad: ' ',
+    styles: S,
+    render: () => screen.render(),
   });
 
   const menuSpecs: MenuSpec[] = [
@@ -280,6 +325,7 @@ door.onStart(async (ctx: DoorContext) => {
   });
 
   screen.key(['q', 'Q'], () => {
+    try { chrome.stop(); } catch { /* leaving anyway */ }
     screen.destroy();
   });
 

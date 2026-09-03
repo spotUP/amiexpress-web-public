@@ -6,6 +6,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const door_theme_1 = require("./door-theme");
+const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 const door = new bbs_door_sdk_1.ServerDoor({
     name: 'Header Dropdown Demo',
     version: '1.0.0',
@@ -61,12 +62,54 @@ door.onStart(async (ctx) => {
         top: 1, // Below header
         left: 0,
         width: '100%',
-        height: '100%-1', // Fill rest of screen
+        height: '100%-2', // Fill the rest, less the hint row at the bottom
         label: ` {${door_theme_1.T.accent}-fg}Status{/} `,
         style: {
             border: { fg: door_theme_1.T.accent },
         },
         content: `{${door_theme_1.T.dim}-fg}Use Tab/Shift+Tab to switch menus, Enter/Space to open, Esc to close.{/${door_theme_1.T.dim}-fg}`,
+    });
+    /**
+     * The hint row, and the theme's branding tail on the end of it.
+     *
+     * This demo took the theme's colours and had no chrome at all. It gets
+     * the footer rather than a masthead for one reason: row 0 IS the demo -
+     * the inline menu labels this door exists to show - and a rail drawn
+     * across them would be a masthead demonstrating that the widget under
+     * test does not fit.
+     */
+    const footer = (0, bbs_door_sdk_1.createBox)({
+        parent: screen,
+        bottom: 0,
+        left: 0,
+        width: '100%',
+        height: 1,
+        border: undefined,
+        focusable: false,
+        clickable: false,
+        mouse: false,
+        tags: true,
+        content: '',
+        style: (0, theme_1.footerStyle)(door_theme_1.CURRENT),
+    });
+    const chrome = (0, theme_1.attachDoorChrome)(door_theme_1.CURRENT, {
+        width: screen.width || 80,
+        title: 'HEADER DROPDOWN',
+        footer: footer,
+        hints: [
+            { key: 'Tab/Shift+Tab', does: 'Switch Menus' },
+            { key: 'Enter', does: 'Open' },
+            { key: 'Escape', does: 'Close' },
+            { key: 'Q', does: 'Quit' },
+        ],
+        compactHints: [
+            { key: 'Tab', does: 'Switch' },
+            { key: 'Ent', does: 'Open' },
+            { key: 'Q', does: 'Quit' },
+        ],
+        footerPad: ' ',
+        styles: door_theme_1.S,
+        render: () => screen.render(),
     });
     const menuSpecs = [
         {
@@ -236,6 +279,10 @@ door.onStart(async (ctx) => {
         closeActiveMenu();
     });
     screen.key(['q', 'Q'], () => {
+        try {
+            chrome.stop();
+        }
+        catch { /* leaving anyway */ }
         screen.destroy();
     });
     updateLabelStyles();
