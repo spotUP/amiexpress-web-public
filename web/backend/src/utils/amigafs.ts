@@ -415,19 +415,24 @@ export function createsOnOpen(flags: fs.OpenMode): boolean {
   if (typeof flags === 'number') {
     return (flags & fs.constants.O_CREAT) !== 0;
   }
-  return /^[wa]/.test(flags) || flags.includes('+');
+  // 'w'/'w+'/'a'/'a+' create; 'r'/'r+'/'rs+' do not - r+ opens for update and
+  // still requires the file to exist, so it must not take the create branch.
+  return /^[wa]/.test(flags);
 }
 
 /**
  * Case-insensitive openSync
  * Opens a file and returns a file descriptor
  *
- * Resolution order matters. The case-insensitive lookup of the FILE has to
- * run before the "create it in its parent" fallback: AmigaDOS MODE_OLDFILE
- * and MODE_READWRITE both carry O_CREAT, so creating first would drop a
- * 0-byte twin ("bulletins/bull1.txt") next to the real, differently-cased
- * file ("Bulletins/bull1.txt") on a case-sensitive filesystem, and the door
- * would then read and write the empty twin.
+ * Resolution order is load-bearing and was already correct here: the
+ * case-insensitive lookup of the FILE runs before the "create it in its
+ * parent" fallback. Keep it that way. AmigaDOS MODE_OLDFILE and
+ * MODE_READWRITE both carry O_CREAT, so creating first would drop a 0-byte
+ * twin ("bulletins/bull1.txt") next to the real, differently-cased file
+ * ("Bulletins/bull1.txt") on a case-sensitive filesystem, and the door would
+ * then read and write the empty twin. That twin was never reachable through
+ * this function - it was FileHandle.open()'s raw fs.openSync that could mint
+ * one.
  */
 export function openSync(filePath: string, flags: fs.OpenMode, mode?: fs.Mode): number {
   // Fast path: the exact path exists, no directory walk needed.

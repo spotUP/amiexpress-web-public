@@ -3294,8 +3294,12 @@ console.error(
         absoluteSize = 0;
       }
 
-      // Truncate or extend the file
-      const fd = fs.openSync(handle.realPath, 'r+');
+      // Truncate or extend the file. Same case-insensitivity contract as the
+      // statSync above: AmigaDOS paths reach us in the door's casing, so this
+      // has to go through amigafs or SetFileSize ENOENTs on the Linux container
+      // for a path statSync just resolved. 'r+' does not create, so a
+      // case-mismatch here is a hard failure rather than an empty twin.
+      const fd = amigafs.openSync(handle.realPath, 'r+');
       fs.ftruncateSync(fd, absoluteSize);
       fs.closeSync(fd);
 

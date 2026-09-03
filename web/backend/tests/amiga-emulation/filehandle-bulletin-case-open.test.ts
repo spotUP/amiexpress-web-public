@@ -28,6 +28,8 @@ import * as os from 'os';
 import * as path from 'path';
 import * as amigafs from '../../src/utils/amigafs';
 import { FileHandle } from '../../src/amiga-emulation/api/FileHandle';
+import { DosLibrary } from '../../src/amiga-emulation/api/DosLibrary';
+import { CPURegister } from '../../src/amiga-emulation/cpu/MoiraEmulator';
 
 // The module's exports are non-configurable, so jest.spyOn() cannot wrap them.
 // Wrap openSync at module load instead, delegating to the real implementation,
@@ -68,6 +70,11 @@ describe("a door's bulletin write reaches the real Bulletins directory", () => {
     test('leaves a plain read open alone', () => {
       expect(amigafs.createsOnOpen(fs.constants.O_RDONLY)).toBe(false);
       expect(amigafs.createsOnOpen('r')).toBe(false);
+      // 'r+' and 'rs+' open for update but still require the file to exist -
+      // a bare "has a plus sign" test would wrongly send them down the
+      // create-in-parent branch and invent files AmigaDOS would have refused.
+      expect(amigafs.createsOnOpen('r+')).toBe(false);
+      expect(amigafs.createsOnOpen('rs+')).toBe(false);
     });
 
     test('still recognises the string forms', () => {
@@ -163,6 +170,54 @@ describe("a door's bulletin write reaches the real Bulletins directory", () => {
       fh.close();
 
       expect(fs.readFileSync(path.join(realDir, 'bull1.txt'), 'latin1')).toBe('new');
+    });
+  });
+
+  describe('SetFileSize', () => {
+    class StubEmulator {
+      private regs = new Map<number, number>();
+      getRegister(reg: number): number {
+        return this.regs.get(reg) ?? 0;
+      }
+      setRegister(reg: number, value: number): void {
+        this.regs.set(reg, value | 0);
+      }
+      writeMemory(): void {}
+      readLong(): number {
+        return 0;
+      }
+    }
+
+    test('truncates through amigafs, like the statSync beside it', () => {
+      // SetFileSize() stats handle.realPath through amigafs and then reopened
+      // it with raw fs - so on the container it ENOENTs on a path it had just
+      // resolved. Same defect class as FileHandle.open(), same pin.
+      fs.writeFileSync(path.join(realDir, 'bull1.txt'), 'X'.repeat(2124), 'latin1');
+      const asked = path.join(root, 'bulletins', 'bull1.txt');
+
+      const stub = new StubEmulator();
+      const dos = new DosLibrary(stub as any, root);
+      const bptr = 0x99;
+      (dos as any).openFiles.set(bptr, {
+        id: bptr,
+        name: 'bull1.txt',
+        mode: 1004,
+        position: 0,
+        isConsole: false,
+        buffer: undefined,
+        realPath: asked,
+      });
+
+      stub.setRegister(CPURegister.D1, bptr);
+      stub.setRegister(CPURegister.D2, 512);
+      stub.setRegister(CPURegister.D3, 1); // OFFSET_BEGINNING
+
+      openSyncCalls.mockClear();
+      expect(dos.handleCall(-456)).toBe(true);
+
+      expect(openSyncCalls).toHaveBeenCalledWith(asked, 'r+');
+      expect(stub.getRegister(CPURegister.D0)).toBe(512);
+      expect(fs.statSync(path.join(realDir, 'bull1.txt')).size).toBe(512);
     });
   });
 });
