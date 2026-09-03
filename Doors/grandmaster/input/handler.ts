@@ -87,6 +87,22 @@ export class InputHandler {
    */
   private keyStateMode: boolean = false;
 
+  /**
+   * Is this session delivering real key-down/key-up edges?
+   *
+   * Asked by the panel modes, which read heldKeys directly rather than
+   * driving a piece: they need to know whether that set is being maintained,
+   * because on telnet it never fills and they must fall back to characters.
+   */
+  isKeyStateMode(): boolean {
+    return this.keyStateMode;
+  }
+
+  /** What is down right now. Only meaningful while isKeyStateMode(). */
+  heldKeys(): ReadonlySet<string> {
+    return this.state.heldKeys;
+  }
+
   /** The player's own DAS/ARR, falling back to the TGM3-derived defaults. */
   private dasDelay: number = TIMING.DAS_DELAY;
   private arrRate: number = TIMING.ARR_RATE;

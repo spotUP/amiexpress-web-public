@@ -1161,10 +1161,8 @@ class GrandmasterApp {
         const { loadSpriteSheet } = require('@amiexpress/bbs-door-sdk/engines/graphics/cell-art');
         const sheet = loadSpriteSheet(path.join(__dirname, 'sprites'));
         const mode = await this.chooseTetrisAttackMode();
-        if (!mode) {
-            this.currentScreen = 'menu';
+        if (!mode)
             return;
-        }
         // Challenge starts at difficulty 1 stage 1; the ladder is walked by the
         // mode's own screen once it exists.
         const challengeStage = (0, challenge_mode_1.createStages)(1, attack_patterns_1.hasChallengeFile)[0];
@@ -1189,12 +1187,21 @@ class GrandmasterApp {
             pressedUntil.set(key.name, Date.now() + HOLD_MS);
         };
         this.screen.on('keypress', onKeypress);
-        const keyStateAvailable = typeof this.inputManager.isKeyStateActive === 'function';
+        // Held keys come from the DOOR'S OWN handler, which is where the real
+        // key-down/key-up edges already are (input/handler.ts). This asked the SDK
+        // input manager instead, whose held-key tracking is off unless a door opts
+        // in - so on the web it never answered, every mode fell through to the
+        // character path below, and the game inherited the client's auto-repeat:
+        // one move, a pause of nearly half a second, then a burst. That is exactly
+        // the stutter the TGM modes avoid, and it is why this felt slower than the
+        // rest of the door.
         const isDown = (names) => {
-            const manager = this.inputManager;
-            if (keyStateAvailable && manager.isKeyStateActive?.() && manager.isHeld) {
-                return names.some((name) => manager.isHeld(name));
+            if (this.inputHandler.isKeyStateMode()) {
+                const held = this.inputHandler.heldKeys();
+                return names.some((name) => held.has(name));
             }
+            // Telnet has no key-up at all, so a keypress marks a key held for a
+            // short window and the player gets discrete steps rather than a hold.
             const now = Date.now();
             return names.some((name) => (pressedUntil.get(name) ?? 0) > now);
         };
@@ -1209,25 +1216,21 @@ class GrandmasterApp {
         if (mode === 'vsplayer') {
             await this.runPanelNetplay(sheet, readInput);
             this.screen.removeListener('keypress', onKeypress);
-            this.currentScreen = 'menu';
             return;
         }
         if (mode === 'replays') {
             await this.runReplayBrowser(sheet, readInput);
             this.screen.removeListener('keypress', onKeypress);
-            this.currentScreen = 'menu';
             return;
         }
         if (mode === 'stageclear') {
             await this.runStageClear(sheet, readInput);
             this.screen.removeListener('keypress', onKeypress);
-            this.currentScreen = 'menu';
             return;
         }
         if (mode === 'puzzle') {
             await this.runPuzzleSet(sheet, readInput, onKeypress);
             this.screen.removeListener('keypress', onKeypress);
-            this.currentScreen = 'menu';
             return;
         }
         // Vs CPU and Challenge share one screen: the two opponents differ in what
@@ -1298,11 +1301,23 @@ class GrandmasterApp {
             if (recorder && recorder.frames > 0) {
                 this.panelReplays.save(recorder.fileName(finished), recorder.toReplayV3(finished));
             }
+            // Say how it ended. Without this the board simply vanishes back to the
+            // menu the instant the stack tops out, which reads as the door falling
+            // over rather than as a game finishing.
+            if (finished) {
+                const seconds = Math.floor(stack.stopWatch / 60);
+                const clock = `${Math.floor(seconds / 60)}'${String(seconds % 60).padStart(2, '0')}`;
+                const verdict = mode === 'timeattack'
+                    ? "TIME UP"
+                    : (versusOpponent
+                        ? (('playerWon' in outcome && outcome.playerWon) ? 'YOU WIN' : 'YOU LOSE')
+                        : 'GAME OVER');
+                await this.showPanelNotice(`${verdict}   ${stack.score} points, speed ${stack.speed}, ${clock}`);
+            }
         }
         finally {
             this.screen.removeListener('keypress', onKeypress);
             this.screen.unkey(['escape', 'q', 'Q'], onEscape);
-            this.currentScreen = 'menu';
         }
     }
     /**

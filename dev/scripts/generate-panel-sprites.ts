@@ -67,8 +67,16 @@ const C = {
 interface PanelDef {
   /** Sprite name; the colour index the engine uses is the array position + 1. */
   name: string;
-  /** The SNES shape, for the 80-column sheet. */
+  /** The block the 80-column sheet draws this panel with. */
   shape: string;
+  /**
+   * A different block for the right-hand cell, where the pair is the shape.
+   *
+   * Only the white panel uses it: a left half block beside a right half block
+   * reads as one solid tile with a seam, which is how it stays distinct from
+   * the full block in another colour.
+   */
+  shapeRight?: string;
   /** Ground colour at 80 columns. */
   bg: number;
   /** Ink for the shape at 80 columns. */
@@ -83,17 +91,29 @@ interface PanelDef {
 /**
  * The seven colours plus shock, in the engine's own order: colour 1 is hearts,
  * 2 circles, 3 triangles, 4 stars, 5 diamonds, 6 inverse triangles, 7 squares,
- * 8 shock. The shapes are the SNES set; the C64 glyphs are chosen so that no
- * two read alike in a single colour, since colour alone is not enough.
+ * 8 shock.
+ *
+ * THE SHAPES ARE BLOCKS, NOT SYMBOLS, and that is not a style choice.
+ *
+ * The first version of this table used the SNES set - a heart, a circle, a
+ * star - and they are simply not in the character set an Amiga terminal
+ * draws: the caller saw substitution glyphs where the board should be
+ * (reported live, 2026-09-03). Every other arcade door on this board draws
+ * with the CP437 block elements for exactly this reason; pengo and frogger
+ * use nothing but the full block and the two half blocks.
+ *
+ * So each panel is a block, chosen so that no two read alike in a single
+ * colour - colour alone is not enough on a screen with sixteen of them, and
+ * is no help at all to a colour-blind player.
  */
 const PANELS: PanelDef[] = [
-  { name: 'heart',    shape: '♥', bg: C.red,       fg: C.lightwhite, c64Left: '█', c64Right: '█', c64Fg: C.lightred },
-  { name: 'circle',   shape: '●', bg: C.green,     fg: C.lightwhite, c64Left: '▒', c64Right: '▒', c64Fg: C.lightgreen },
-  { name: 'triangle', shape: '▲', bg: C.cyan,      fg: C.black,      c64Left: '▄', c64Right: '▄', c64Fg: C.lightcyan },
-  { name: 'star',     shape: '★', bg: C.yellow,    fg: C.black,      c64Left: '▀', c64Right: '▀', c64Fg: C.lightyellow },
-  { name: 'diamond',  shape: '◆', bg: C.magenta,   fg: C.lightwhite, c64Left: '▚', c64Right: '▚', c64Fg: C.lightmagenta },
-  { name: 'inverse',  shape: '▼', bg: C.lightblue, fg: C.black,      c64Left: '▞', c64Right: '▞', c64Fg: C.lightblue },
-  { name: 'square',   shape: '■', bg: C.white,     fg: C.black,      c64Left: '▌', c64Right: '▐', c64Fg: C.lightwhite },
+  { name: 'heart',    shape: '█', bg: C.red,       fg: C.lightwhite, c64Left: '█', c64Right: '█', c64Fg: C.lightred },
+  { name: 'circle',   shape: '▒', bg: C.green,     fg: C.lightwhite, c64Left: '▒', c64Right: '▒', c64Fg: C.lightgreen },
+  { name: 'triangle', shape: '▄', bg: C.cyan,      fg: C.black,      c64Left: '▄', c64Right: '▄', c64Fg: C.lightcyan },
+  { name: 'star',     shape: '▀', bg: C.yellow,    fg: C.black,      c64Left: '▀', c64Right: '▀', c64Fg: C.lightyellow },
+  { name: 'diamond',  shape: '▓', bg: C.magenta,   fg: C.lightwhite, c64Left: '▚', c64Right: '▚', c64Fg: C.lightmagenta },
+  { name: 'inverse',  shape: '░', bg: C.lightblue, fg: C.black,      c64Left: '▞', c64Right: '▞', c64Fg: C.lightblue },
+  { name: 'square',   shape: '▌', shapeRight: '▐', bg: C.white, fg: C.black,      c64Left: '▌', c64Right: '▐', c64Fg: C.lightwhite },
   { name: 'shock',    shape: '!',      bg: C.gray,      fg: C.lightwhite, c64Left: '!',      c64Right: '!',      c64Fg: C.white },
 ];
 
@@ -150,16 +170,20 @@ function animationsFor(
 
 /** The 80-column variant: a shape on a coloured ground. */
 function wideSprite(def: PanelDef): RawSprite {
+  // BOTH cells carry the block. A block on the left and a blank on the right
+  // reads as half a panel with a gap; the pair reads as one tile, which is
+  // what a panel is.
+  const right = def.shapeRight ?? def.shape;
   const body: RawCell = [def.shape, def.fg, def.bg];
-  const filler: RawCell = [' ', def.fg, def.bg];
+  const filler: RawCell = [right, def.fg, def.bg];
   // Flash inverts the ink and the ground, which reads at any size.
   const flash: RawCell = [def.shape, def.bg, def.fg];
-  const flashFill: RawCell = [' ', def.bg, def.fg];
+  const flashFill: RawCell = [right, def.bg, def.fg];
   // The matched face, before the pop.
   const face: RawCell = ['·', def.fg, def.bg];
-  const faceFill: RawCell = [' ', def.fg, def.bg];
+  const faceFill: RawCell = ['·', def.fg, def.bg];
   const dim: RawCell = [def.shape, C.gray, C.black];
-  const dimFill: RawCell = [' ', C.gray, C.black];
+  const dimFill: RawCell = [right, C.gray, C.black];
 
   return {
     name: `panel-${def.name}`,

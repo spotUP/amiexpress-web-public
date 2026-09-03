@@ -71,6 +71,16 @@ export declare class InputHandler {
      * press/release edges, DAS/ARR runs exactly as configured.
      */
     private keyStateMode;
+    /**
+     * Is this session delivering real key-down/key-up edges?
+     *
+     * Asked by the panel modes, which read heldKeys directly rather than
+     * driving a piece: they need to know whether that set is being maintained,
+     * because on telnet it never fills and they must fall back to characters.
+     */
+    isKeyStateMode(): boolean;
+    /** What is down right now. Only meaningful while isKeyStateMode(). */
+    heldKeys(): ReadonlySet<string>;
     /** The player's own DAS/ARR, falling back to the TGM3-derived defaults. */
     private dasDelay;
     private arrRate;

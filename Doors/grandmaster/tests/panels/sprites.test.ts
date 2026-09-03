@@ -130,3 +130,91 @@ export async function theWideSheetDoesUseBackgrounds(): Promise<void> {
   const coloured = row.some((cell) => cell && cell.bg !== 0);
   assert.ok(coloured, 'the 80-column sheet should paint a coloured ground');
 }
+
+/**
+ * Every glyph the board paints exists on an AMIGA.
+ *
+ * The first sheet drew the SNES shapes - a heart, a circle, a star, a diamond -
+ * and they are simply not in the character set an Amiga terminal has. A caller
+ * playing on 2026-09-03 saw substitution glyphs where the board should be.
+ *
+ * The safe set is CP437's block elements and shades, which is what every other
+ * arcade door here draws with (pengo and frogger use nothing but the full
+ * block and the two half blocks) and what Amiga ANSI art has always been made
+ * of. Latin-1 punctuation is fine too; anything above that is not.
+ */
+const AMIGA_SAFE = new Set([
+  // CP437 blocks and shades.
+  '█', '▓', '▒', '░', '▀', '▄', '▌', '▐',
+  // Quadrants, which the PETSCII table also maps.
+  '▚', '▞',
+  // Latin-1 and ASCII.
+  '·', '!', ' ',
+]);
+
+/** Every glyph in one sprite file. */
+function glyphsOf(sprite: unknown): string[] {
+  const found: string[] = [];
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      if (node.length === 3 && typeof node[0] === 'string' && typeof node[1] === 'number') {
+        found.push(node[0] as string);
+        return;
+      }
+      for (const child of node) walk(child);
+    } else if (node && typeof node === 'object') {
+      for (const child of Object.values(node as Record<string, unknown>)) walk(child);
+    }
+  };
+  walk(sprite);
+  return found;
+}
+
+export async function everySpriteGlyphExistsOnAnAmiga(): Promise<void> {
+  const fs = require('fs');
+  const path = require('path');
+  const directory = path.join(__dirname, '..', '..', 'sprites');
+
+  const offenders: string[] = [];
+  for (const file of fs.readdirSync(directory).filter((n: string) => n.endsWith('.sprite.json'))) {
+    const sprite = JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'));
+    for (const glyph of glyphsOf(sprite)) {
+      if (!AMIGA_SAFE.has(glyph)) {
+        offenders.push(`${file}: ${glyph} (U+${glyph.codePointAt(0)?.toString(16).toUpperCase()})`);
+      }
+    }
+  }
+
+  assert.deepStrictEqual(
+    [...new Set(offenders)], [],
+    'these glyphs are not in the character set an Amiga terminal draws',
+  );
+}
+
+/** Colour alone is not enough: no two panels may read alike in one colour. */
+export async function noTwoPanelsShareTheSameShape(): Promise<void> {
+  const fs = require('fs');
+  const path = require('path');
+  const directory = path.join(__dirname, '..', '..', 'sprites');
+
+  for (const variant of ['wide', 'c64']) {
+    const shapes = new Map<string, string>();
+    const files = fs.readdirSync(directory)
+      .filter((n: string) => n.endsWith('.sprite.json'))
+      .filter((n: string) => (variant === 'c64' ? n.includes('-c64') : !n.includes('-c64')));
+
+    for (const file of files) {
+      const sprite = JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'));
+      // The normal state's two cells are what a player reads.
+      const normal = sprite.animations?.normal?.frames?.[0]?.[0] ?? [];
+      const signature = normal.map((cell: unknown[]) => cell[0]).join('');
+      const seen = shapes.get(signature);
+      assert.strictEqual(
+        seen, undefined,
+        `${variant}: ${file} and ${seen} both read as "${signature}"`,
+      );
+      shapes.set(signature, file);
+    }
+    assert.strictEqual(shapes.size, 8, `${variant}: eight distinct panels`);
+  }
+}
