@@ -565,11 +565,17 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // The class counts the module's own header quotes, so the header cannot rot.
     const counts: Record<string, number> = {};
     for (const n of ruled) counts[EVENT_RULINGS[n].kind] = (counts[EVENT_RULINGS[n].kind] ?? 0) + 1;
+    // TP-4 moved ONE name between classes and nothing else: `cursor-style`
+    // went from `render` to `web-only` after both ends were read. The payload
+    // is a CSS mouse-pointer name (doors/BBSApi.ts:532-538, set on
+    // terminalRef.current.style.cursor by BBSTerminal.tsx:2289-2292), not a
+    // DECSCUSR text-cursor shape, and a byte terminal has no pointer to shape.
+    // render 6 -> 5, web-only 113 -> 114; the total is still 242.
     expect(counts).toEqual({
-      render: 6,
+      render: 5,
       translate: 11,
       dead: 10,
-      'web-only': 113,
+      'web-only': 114,
       'not-transport': 102,
     });
   });
@@ -740,12 +746,18 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     expect(connection.written.length).toBe(0);
   });
 
-  it('a translate ruling is counted with its own kind until TP-4 gives it a body', () => {
-    // The hole this closes: `applyTranslation` is a stub in TP-3, so a
-    // `translate` name is still undelivered. If the adapter returned early
-    // without recording, the tally would say a byte caller received something
-    // it did not. It records with the ruling's OWN kind, and TP-4 flips it by
-    // making applyTranslation return true.
+  it('a translate ruling is honoured, not counted, now that TP-4 has given it a body', () => {
+    // THE TP-4 SUCCESSOR FORM of TP-3's stub case. While `applyTranslation`
+    // returned false for everything, a `translate` name was still undelivered
+    // and the adapter recorded it with its own ruling kind so the tally could
+    // not claim a byte caller had received it (TP-3's deviation D18). TP-4 gave
+    // every one of those rulings a body, so the count flips by itself: nothing
+    // is recorded, nothing is logged, and the events DO something.
+    //
+    // The bodies themselves are proved in tests/transport/transport-translations.test.ts,
+    // one case per symptom, driven through the real telnet entry point. This
+    // case exists here to pin the ADAPTER's half of the contract: a body that
+    // returns true must leave no drop behind.
     const { connection, emitter } = telnetCaller(34);
     const spies = silenceLogs();
 
@@ -753,13 +765,13 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     emitter.emit('modem-speed', 0);
     emitter.emit('hangup');
 
-    expect(connection.transportDrops?.get('modem-speed')?.ruling).toBe('translate');
-    expect(connection.transportDrops?.get('modem-speed')?.count).toBe(2);
-    expect(connection.transportDrops?.get('hangup')?.ruling).toBe('translate');
-    expect(spies.debug).toHaveBeenCalledTimes(2);
-    expect(String(spies.debug.mock.calls[0][0])).toContain('TP-4');
+    expect(connection.transportDrops?.get('modem-speed')).toBeUndefined();
+    expect(connection.transportDrops?.get('hangup')).toBeUndefined();
+    expect(spies.debug).toHaveBeenCalledTimes(0);
     expect(connection.written.length).toBe(0);
-    expect(connection.closed).toBe(0);
+    // `hangup` is BB_DROPDTR: on a byte transport, dropping the carrier is
+    // closing the connection.
+    expect(connection.closed).toBe(1);
   });
 
   it('the three rendered events are untouched by the widened signature', () => {

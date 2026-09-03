@@ -768,12 +768,22 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "server/ws-terminal-server.ts:131). Never a session socket.",
   },
   "cursor-style": {
-    kind: "render",
+    kind: "web-only",
     note:
-    "DECSCUSR. Emitted at doors/BBSApi.ts:510 (doors/BBSApi.ts); the browser " +
-    "consumer is packages/terminal/src/components/BBSTerminal.tsx. A byte " +
-    "terminal gets the real escape `\\x1b[<n> q`, which every VT-class terminal " +
-    "understands, so this is rendered rather than translated - TP-4 writes it.",
+    "THE MOUSE POINTER, NOT THE TEXT CURSOR - re-ruled by TP-4 after reading " +
+    "both ends. TP-3 ruled this `render` and said a byte terminal would get the " +
+    "DECSCUSR escape; the plan says the same. Measured 2026-09-03: " +
+    "doors/BBSApi.ts:532-538 documents the argument as the CSS cursor property " +
+    "('default', 'pointer', 'grab', 'crosshair', 'not-allowed', ...), the SDK " +
+    "raises it for mouse HOVER feedback " +
+    "(sdk/engines/ui/blessed/core/screen.ts:2392, " +
+    "sdk/utils/blessed-helpers.ts:1050-1052) and the browser consumer sets " +
+    "terminalRef.current.style.cursor " +
+    "(packages/terminal/src/components/BBSTerminal.tsx:2289-2292). DECSCUSR is " +
+    "the TEXT cursor's shape and has no mapping from a CSS pointer name; a byte " +
+    "terminal has no pointer to shape at all. So this is browser chrome, the " +
+    "same class as set-font and theme-preference, and writing an escape for it " +
+    "would have been a guess dressed as a translation.",
   },
   "data": {
     kind: "not-transport",
@@ -799,10 +809,12 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "handlers/door.handler.ts:936, handlers/door.handler.ts:2255; the browser " +
     "consumer bypasses client pacing " +
     "(packages/terminal/src/components/BBSTerminal.tsx, " +
-    "web/frontend/src/chat/ChatTerminal.tsx). TP-4 sets " +
-    "session.doorOwnsTerminal and disables the SERVER ModemEmulator while it is " +
-    "true, which is what the browser's bypass achieves for web. STUB: this task " +
-    "only rules it; TP-4 fills the body.",
+    "web/frontend/src/chat/ChatTerminal.tsx). TP-4 records it on the " +
+    "connection (transportState.doorActive) and deliberately does NOT touch " +
+    "the server ModemEmulator: what the browser bypasses is its own CLIENT " +
+    "pacer, and a byte transport's only pacer is the SERVER one that web keeps " +
+    "running during a door for 68K fidelity. See translateDoorActive in " +
+    "server/transport-adapter.ts for the measurement.",
   },
   "door-message": {
     kind: "web-only",
@@ -864,8 +876,9 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     kind: "translate",
     note:
     "A door's input mode. Emitted at doors/BBSApi.ts:524; browser consumer " +
-    "packages/terminal/src/components/BBSTerminal.tsx. TP-4 folds it into " +
-    "session.doorInputMode. STUB: ruled here, filled by TP-4.",
+    "packages/terminal/src/components/BBSTerminal.tsx. TP-4 records it on the " +
+    "connection (transportState.inputMode), the same field set-input-mode " +
+    "writes - one question, one answer. TP-8's input pipeline reads it.",
   },
   "door:load-client": {
     kind: "web-only",
@@ -968,9 +981,10 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     kind: "translate",
     note:
     "Emitted at handlers/commands/system-commands.handler.ts:216; browser " +
-    "consumer packages/terminal/src/components/BBSTerminal.tsx. TP-4 calls " +
-    "connection.close() after the emitter's buffers flush. STUB: ruled here, " +
-    "filled by TP-4.",
+    "consumer packages/terminal/src/components/BBSTerminal.tsx. TP-4 flushes " +
+    "the output buffer (utils/output.util.ts flushOutput - emitText batches for " +
+    "16ms, so the sign-off line would still be in it) and then calls " +
+    "connection.close().",
   },
   "forced-pwd-change-complete": {
     kind: "web-only",
@@ -984,10 +998,11 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "Emitted at doors/client-door-bridge.ts:513, handlers/door.handler.ts:4475, " +
     "services/game-mode.service.ts:28; browser consumer " +
     "packages/terminal/src/components/BBSTerminal.tsx. TP-4 makes it a " +
-    "documented no-op: services/game-mode.service.ts already sets " +
-    "session.gameModeEnabled before the emit, and a byte transport has no key " +
-    "edges to turn on (TP-7 makes that the door's answer through " +
-    "transportCapabilities().keyEvents). STUB: ruled here, filled by TP-4.",
+    "documented no-op, which IS the translation: services/game-mode.service.ts " +
+    "already sets session.gameModeEnabled before the emit, and a byte transport " +
+    "has no key edges to turn on (TP-7 makes that the door's answer through " +
+    "transportCapabilities().keyEvents). A second copy of the flag on the " +
+    "connection would be a second answer to a settled question.",
   },
   "get-active-users": {
     kind: "dead",
@@ -1004,9 +1019,10 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     kind: "translate",
     note:
     "BB_DROPDTR. Emitted at amiga-emulation/session/DoorMessageHandler.ts:1676; " +
-    "no consumer on any transport today, which is the defect: a 68K door cannot " +
-    "drop a telnet carrier. TP-4 calls connection.close(). STUB: ruled here, " +
-    "filled by TP-4.",
+    "no consumer on any transport before TP-4, which was the defect (divergence " +
+    "12): a 68K door could not drop a telnet carrier. TP-4 calls " +
+    "connection.close() - on a byte transport, dropping the carrier IS closing " +
+    "the connection.",
   },
   "import:progress": {
     kind: "not-transport",
@@ -1037,10 +1053,14 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "Emitted at server/auth-socket-handlers.ts:814, " +
     "server/auth-socket-handlers.ts:848, server/auth-socket-handlers.ts:887 (17 " +
     "sites); browser consumer packages/terminal/src/components/BBSTerminal.tsx. " +
-    "TP-4 sets session.maskEcho, which the server-side line editors read " +
-    "instead of each deciding for themselves - the fix for the system-password " +
-    "prompt showing a telnet caller no asterisks. STUB: ruled here, filled by " +
-    "TP-4.",
+    "TP-4 sets session.maskInput - the field index.ts already declares and " +
+    "handlers/command.handler.ts:2299, :2333 and :2422 already read " +
+    "(the server-side echo, emitText(socket, session.maskInput ? asterisk : " +
+    "data)). NOT the plan's new session.maskEcho: that would be a second body " +
+    "of a fact three live readers already consult. The system-password gate " +
+    "(command.handler.ts:1667-1671) keeps its own local masking and is " +
+    "TP-8/TP-9a's to fold in; this ruling gives the seventeen emit-only sites " +
+    "their effect.",
   },
   "modem-speed": {
     kind: "translate",
@@ -1048,9 +1068,11 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "Emitted at server/auth-socket-handlers.ts:217, doors/BBSApi.ts:554, " +
     "doors/client-door-bridge.ts:526 (11 sites); browser consumer " +
     "packages/terminal/src/components/BBSTerminal.tsx. TP-4 calls " +
-    "getModemEmulator(emitter).enable(bps) / .disable() - the server emulator, " +
-    "the only one a byte caller has. Today a door that zeroes the speed stays " +
-    "throttled on telnet. STUB: ruled here, filled by TP-4.",
+    "getModemEmulator(emitter).install() + .enable(bps) / .disable() - the server " +
+    "emulator, the only pacer a byte caller has (telnet has no client pacer). " +
+    "install() is what makes enable() reach the wire at all; without it the " +
+    "call lands on a throwaway object and the caller keeps running at full " +
+    "speed. Before TP-4 a door that zeroed the speed stayed throttled on telnet.",
   },
   "network-pong": {
     kind: "not-transport",
@@ -1186,7 +1208,8 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "Emitted at handlers/user/gdpr.handler.ts:62, " +
     "handlers/user/new-user.handler.ts:663; browser consumer " +
     "packages/terminal/src/components/BBSTerminal.tsx. TP-4 folds it into " +
-    "session.maskEcho. STUB: ruled here, filled by TP-4.",
+    "session.maskInput, the same field mask-input writes and the same one both " +
+    "of those emit sites already set beside their emit.",
   },
   "petscii-bytes": {
     kind: "render",
@@ -1511,8 +1534,8 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "packages/terminal/src, web/frontend/src, web/config-app/src, Doors/ or " +
     "sdk/ - so unlike the rest of this group it has no live web consumer " +
     "either. It is still `translate` and not `dead`, because TP-4 gives it a " +
-    "server-side meaning (session.doorInputMode) that it has never had on any " +
-    "transport. STUB: ruled here, filled by TP-4.",
+    "server-side meaning (transportState.inputMode on the connection, shared " +
+    "with door:input-mode) that it has never had on any transport.",
   },
   "show-file-upload": {
     kind: "web-only",
@@ -1538,7 +1561,9 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "packages/terminal/src, web/frontend/src or web/config-app/src listens for " +
     "it - measured 2026-09-03 - so on WEB it is as unconsumed as it is on " +
     "telnet, which is exactly why TP-4 renders its `text` as an ansi-output " +
-    "line for every transport rather than treating it as browser chrome.",
+    "line for every transport rather than treating it as browser chrome. The " +
+    "payload's text is already wire-ready (node-control-routes.ts writes its " +
+    "own CRLFs) and goes out through utils/output.util.ts's emitText.",
   },
   "system:notice": {
     kind: "render",
@@ -1547,27 +1572,32 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "services/restart-notice.service.ts:82. Its one listener is a door " +
     "(Doors/livechat/handlers/system-notice.handler.ts), reached through " +
     "createDoorSocketWrapper's outgoing dispatch on every transport. TP-4 " +
-    "renders the payload's text.",
+    "renders the payload's `message` (services/restart-notice.service.ts:35-39 " +
+    "- there is no `text` field on this one) as a line of its own, for the " +
+    "caller whose door has no such handler: every 68K door, which would " +
+    "otherwise be told nothing before the server restarts.",
   },
   "terminal-mode": {
     kind: "translate",
     note:
     "Emitted at doors/BBSApi.ts:483 (doors/BBSApi.ts); browser consumers " +
     "packages/terminal/src/components/BBSTerminal.tsx, " +
-    "web/frontend/src/chat/ChatTerminal.tsx. TP-4 records it on " +
-    "session.terminalMode; nothing server-side reads it yet, so the note is the " +
-    "state-only record. STUB: ruled here, filled by TP-4.",
+    "web/frontend/src/chat/ChatTerminal.tsx. TP-4 records it on the connection " +
+    "(transportState.terminalMode); nothing server-side reads it yet, and a byte " +
+    "terminal's width is settled by TTYPE/NAWS through " +
+    "applyClientReportedGeometry, so this is a state-only record by design.",
   },
   "terminal-resize": {
     kind: "translate",
     note:
     "Emitted at handlers/command-handler/pre-login.ts:162; browser consumers " +
     "packages/terminal/src/components/BBSTerminal.tsx, " +
-    "web/frontend/src/chat/ChatTerminal.tsx. TP-4 makes it a documented no-op: " +
-    "on a byte transport the caller's terminal is the authority and " +
-    "applyClientReportedGeometry " +
+    "web/frontend/src/chat/ChatTerminal.tsx. TP-4 makes it a documented no-op, " +
+    "which IS the translation: on a byte transport the caller's terminal is the " +
+    "authority and applyClientReportedGeometry " +
     "(amiga-emulation/xim/screen-width.util.ts:60-70) already refuses to be " +
-    "told otherwise for a PETSCII session. STUB: ruled here, filled by TP-4.",
+    "told otherwise for a PETSCII session. Recording the reported geometry here " +
+    "would be a second copy of a number that gate already owns.",
   },
   "terminal-type": {
     kind: "not-transport",
