@@ -41,6 +41,17 @@ describe('the ESM build declares its own module format', () => {
     expect(JSON.parse(fs.readFileSync(marker, 'utf-8')).type).toBe('module');
   });
 
+  // The marker is the NEAREST package.json for every built ESM file, so it
+  // shadows the root's `sideEffects: false`. Without repeating that flag,
+  // esbuild treats the whole widget set as side-effectful and a door that
+  // imports one name ships 793 KB of it (NEO-BLESSED-SHOWCASE went 13 -> 792 KB).
+  it('the marker repeats the root sideEffects declaration, so bundlers keep tree-shaking', () => {
+    const root = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../package.json'), 'utf-8'));
+    const marker = JSON.parse(fs.readFileSync(path.join(DIST_ESM, 'package.json'), 'utf-8'));
+    expect(root.sideEffects).toBe(false);
+    expect(marker.sideEffects).toBe(root.sideEffects);
+  });
+
   it('a loader with syntax detection off still gets themeById from the theme barrel', () => {
     expect(fs.existsSync(BARREL)).toBe(true);
     const r = importAsEsmWithoutDetection(pathToFileURL(BARREL).href, 'themeById');

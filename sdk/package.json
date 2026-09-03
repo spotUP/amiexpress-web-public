@@ -4,6 +4,106 @@
   "description": "Revolutionary BBS Door Development SDK - Dual Runtime (Server & Client)",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "server": [
+        "dist/server/index.d.ts"
+      ],
+      "client": [
+        "dist/client/index.d.ts"
+      ],
+      "common": [
+        "dist/common/index.d.ts"
+      ],
+      "core": [
+        "dist/core/index.d.ts"
+      ],
+      "core/types": [
+        "dist/core/types.d.ts"
+      ],
+      "engines/graphics/braille-graphics": [
+        "dist/engines/graphics/braille-graphics.d.ts"
+      ],
+      "engines/graphics/subcell": [
+        "dist/engines/graphics/subcell.d.ts"
+      ],
+      "engines/graphics/motion-trail": [
+        "dist/engines/graphics/motion-trail.d.ts"
+      ],
+      "engines/graphics/cell-art": [
+        "dist/engines/graphics/cell-art/index.d.ts"
+      ],
+      "engines/ui/blessed": [
+        "dist/engines/ui/blessed/index.d.ts"
+      ],
+      "engines/ui/theme": [
+        "dist/engines/ui/theme/index.d.ts"
+      ],
+      "petscii": [
+        "dist/petscii/index.d.ts"
+      ],
+      "petscii/frame": [
+        "dist/petscii/frame/index.d.ts"
+      ],
+      "engines/ui/arcade": [
+        "dist/engines/ui/arcade/index.d.ts"
+      ],
+      "engines/ui/blessed/contrib": [
+        "dist/engines/ui/blessed/contrib/index.d.ts"
+      ],
+      "engines/ui/blessed/utils/animations": [
+        "dist/engines/ui/blessed/utils/animations/index.d.ts"
+      ],
+      "engines/ui/ansi-editor": [
+        "dist/engines/ui/ansi-editor/index.d.ts"
+      ],
+      "engines/ui/ansi-editor/core/file-ops": [
+        "dist/engines/ui/ansi-editor/core/file-ops.d.ts"
+      ],
+      "utils/wasm-loader": [
+        "dist/utils/wasm-loader.d.ts"
+      ],
+      "utils/terminal-mode": [
+        "dist/utils/terminal-mode.d.ts"
+      ],
+      "utils/blessed-helpers": [
+        "dist/utils/blessed-helpers.d.ts"
+      ],
+      "utils/door-input-manager": [
+        "dist/utils/door-input-manager.d.ts"
+      ],
+      "utils/gamepad-input-manager": [
+        "dist/utils/gamepad-input-manager.d.ts"
+      ],
+      "utils/DoorLoader": [
+        "dist/utils/DoorLoader.d.ts"
+      ],
+      "utils/door-preloader": [
+        "dist/utils/door-preloader.d.ts"
+      ],
+      "types/gamepad": [
+        "dist/types/gamepad.d.ts"
+      ],
+      "tools/runDoorSession": [
+        "dist/tools/runDoorSession.d.ts"
+      ],
+      "engines/tactical/tactical-combat-engine": [
+        "dist/engines/tactical/tactical-combat-engine.d.ts"
+      ],
+      "engines/audio/tracker": [
+        "dist/engines/audio/tracker-engine.d.ts"
+      ],
+      "engines/audio/audio-engine": [
+        "dist/engines/audio/audio-engine.d.ts"
+      ],
+      "engines/network/network-engine": [
+        "dist/engines/network/network-engine.d.ts"
+      ],
+      "ncurses": [
+        "dist/engines/ui/ncurses/index.d.ts"
+      ]
+    }
+  },
   "bin": {
     "amiexpress-sdk": "./dist/tools/cli/index.js"
   },
@@ -190,7 +290,7 @@
     "build": "npm run build:cjs && npm run build:esm && npm run copy-assets",
     "build:dev": "npm run build:cjs && npm run build:esm && npm run copy-assets",
     "build:cjs": "tsc",
-    "build:esm": "tsc -p tsconfig.client.json && node -e \"require('fs').writeFileSync('dist-esm/package.json', JSON.stringify({ type: 'module' }, null, 2) + '\\n')\"",
+    "build:esm": "tsc -p tsconfig.client.json && node -e \"const fs=require('fs');const root=JSON.parse(fs.readFileSync('package.json','utf8'));fs.writeFileSync('dist-esm/package.json', JSON.stringify({ type: 'module', sideEffects: root.sideEffects }, null, 2) + '\\\\n')\"",
     "copy-assets": "cp -r templates dist/ && cp package.json dist/ && cp -r examples/*/assets dist/examples/ 2>/dev/null || true && cp engines/ui/neo-blessed.d.ts dist/engines/ui/ 2>/dev/null || true",
     "minify": "node scripts/minify.mjs",
     "dev": "tsc --watch",
