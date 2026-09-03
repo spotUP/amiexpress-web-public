@@ -55,6 +55,7 @@ jest.mock('../src/index', () => {
 
 import { printableLength, wrapForSession, wrapDoorTextForSession } from '../src/utils/wrap-for-session.util';
 import {
+  headingIndent,
   messageIndent,
   messageRule,
   narrowClip,
@@ -154,6 +155,24 @@ describe('40-column sweep: tables', () => {
     for (const kind of ['to', 'private', 'editLine'] as const) {
       fits([messageIndent(C64, kind)], NARROW_PROMPT_WIDTH);
     }
+  });
+
+  it('the centred headings (M conference/msgbase lists, TS, W)', () => {
+    // The indent plus the heading, which is the row that reaches the glass -
+    // the pre-fix bug emitted those two as separate payloads, so a 48-column
+    // row went out that the choke had never seen whole.
+    for (const [kind, heading] of [
+      ['conferenceList', 'Conference List'],
+      ['messagebaseList', 'Messagebase List'],
+      ['languageList', 'Available Languages'],
+      ['userConfiguration', '\x1b[34m*\x1b[0m--USER CONFIGURATION--*'],
+    ] as const) {
+      fits([`${headingIndent(C64, kind, heading)}${heading}`]);
+    }
+    // A heading wider than the screen gets NO indent - left-aligned, never
+    // negative-padded - so the choke can still wrap it inside forty.
+    expect(headingIndent(C64, 'conferenceList', LONG)).toBe('');
+    fits(wrapForSession(`${headingIndent(C64, 'conferenceList', LONG)}${LONG}`, C64).split('\r\n'));
   });
 
   it('file search results', () => {

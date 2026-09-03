@@ -34,7 +34,7 @@
  * task removes, not a safety net it may lean on.
  */
 import { sessionColumns } from './door-min-columns.util';
-import { wrapLineToWidth } from './wrap-for-session.util';
+import { printableLength, wrapLineToWidth } from './wrap-for-session.util';
 
 /** Columns a C64 screen has, and the width of a full CRLF-terminated row. */
 export const NARROW_WIDTH = 40;
@@ -242,4 +242,59 @@ export function messageIndent(
 ): string {
   const spec = MESSAGE_INDENTS[kind];
   return ' '.repeat(isNarrow(session) ? spec.narrow : spec.wide);
+}
+
+/**
+ * CENTRED HEADINGS - the second half of the message-header chrome problem.
+ *
+ * express.e centres a heading by writing a fixed run of leading spaces in
+ * front of it (`aePuts('                                 Conference List')`).
+ * At 40 columns that run is most of the screen: the Conference List heading
+ * went out as a 48-column row and the Messagebase List as 49, both of them
+ * PAST THE RIGHT EDGE and unrecoverable - worse than the folded rule above,
+ * because the prose choke could not even see them. The two handlers emitted
+ * the indent and the heading as SEPARATE `emitText` calls, so the choke was
+ * offered 33 spaces (fits) and then `Conference List` (fits) and never the
+ * 48-column row they concatenate into. Those sites now build one string and
+ * write it once, which is the same bytes on the wire and the only shape the
+ * choke can protect (the same fix messaging.handler.ts:1035 already carries).
+ *
+ * At >= 80 columns this returns express.e's own leading run, byte for byte.
+ * Below 80 the heading is centred on `sessionColumns(session)` - and a
+ * heading WIDER than the screen gets no indent at all rather than a negative
+ * one, so it starts at column 1 and the choke wraps it as prose.
+ */
+export type CentredHeadingKind =
+  /** express.e:27030-27034 - the M command's conference list. */
+  | 'conferenceList'
+  /** express.e:27064-27071 - the M command's message base list. */
+  | 'messagebaseList'
+  /** express.e:11395-11397 - chooseTranslator()'s language list. */
+  | 'languageList'
+  /** express.e:25730-25732 - the W command's user configuration menu. */
+  | 'userConfiguration';
+
+/** express.e's own 80-column leading run for each heading. */
+const CENTRED_HEADING_WIDE_INDENT: Record<CentredHeadingKind, number> = {
+  conferenceList: 33,
+  messagebaseList: 33,
+  languageList: 25,
+  userConfiguration: 23,
+};
+
+/**
+ * The blank run that puts `heading` where this caller's screen wants it.
+ *
+ * `heading` may carry SGR - only printable columns are counted - and is
+ * needed at every width below 80, which is why it is a parameter and not
+ * another number in the table.
+ */
+export function headingIndent(
+  session: { screenWidth?: number; petsciiMode?: boolean } | null | undefined,
+  kind: CentredHeadingKind,
+  heading: string
+): string {
+  if (!isNarrow(session)) return ' '.repeat(CENTRED_HEADING_WIDE_INDENT[kind]);
+  const room = sessionColumns(session ?? {}) - printableLength(heading);
+  return ' '.repeat(Math.max(0, Math.floor(room / 2)));
 }

@@ -9,7 +9,7 @@ import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { emitText, emitPrompt } from '../../utils/output.util';
-import { messageIndent } from '../../utils/table-format.util';
+import { headingIndent, messageIndent } from '../../utils/table-format.util';
 
 // Dependencies for move/edit operations (injected via setMoveEditDependencies)
 let _conferences: any[] = [];
@@ -40,8 +40,13 @@ export async function handleMsgMoveConfInput(socket: any, session: BBSSession, i
   // L = list conferences - express.e:27030-27034
   if (command === 'L') {
     emitText(socket, '\r\n');
-    emitText(socket, '                                 ');
-    emitText(socket, AnsiUtil.colorize('Conference List', 'green'));
+    // ONE string, ONE emit: split in two the choke saw 33 spaces and a
+    // short heading, never the 48-column row they concatenate into.
+    const confHeading = 'Conference List';
+    emitText(
+      socket,
+      `${headingIndent(session, 'conferenceList', confHeading)}${AnsiUtil.colorize(confHeading, 'green')}`
+    );
     emitText(socket, '\r\n\r\n');
 
     // Display accessible conferences
@@ -127,8 +132,11 @@ export async function handleMsgMoveMsgBaseInput(socket: any, session: BBSSession
   // L = list message bases - express.e:27064-27071
   if (command === 'L') {
     emitText(socket, '\r\n');
-    emitText(socket, '                                 ');
-    emitText(socket, AnsiUtil.colorize('Messagebase List', 'green'));
+    const mbHeading = 'Messagebase List';
+    emitText(
+      socket,
+      `${headingIndent(session, 'messagebaseList', mbHeading)}${AnsiUtil.colorize(mbHeading, 'green')}`
+    );
     emitText(socket, '\r\n\r\n');
 
     const destMsgBases = _messageBases.filter(mb => mb.conferenceId === destConf);
