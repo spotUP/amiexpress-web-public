@@ -10,7 +10,7 @@
 import assert from 'assert';
 
 /** What empty board is drawn with; see paintWell in board-view. */
-const WELL_CHAR = '\u00B7';
+const WELL_CHAR = ' ';
 const WELL_INK = 8;
 import { join } from 'path';
 import { loadSpriteSheet, Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
@@ -75,12 +75,12 @@ export async function theStackIsDrawnSittingOnTheFloor(): Promise<void> {
 }
 
 /**
- * Empty board is DRAWN, and that is the whole point of it.
+ * Empty board is PAINTED blank, which is not the same as left unpainted.
  *
- * It used to paint nothing, so the terminal's black showed through and the
- * gaps in a ragged stack read as holes punched in space rather than as the
- * board they are - reported by a caller on 2026-09-03 as "black holes in the
- * playfield". Every cell of the well now carries something.
+ * An unpainted cell is a hole in the buffer, and a hole shows whatever was
+ * there last time - so a stack that falls leaves its own ghost behind. Every
+ * cell of the well carries a blank, and the frame around the board is what
+ * says where the playfield is.
  */
 export async function theEmptyWellIsDrawnRatherThanLeftBlack(): Promise<void> {
   const stack = makeStack();

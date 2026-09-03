@@ -29,10 +29,18 @@ export const PANEL_COLS = 2;
 export type BoardVariant = 'wide' | 'c64';
 
 /**
- * The empty well: a middle dot, dark grey at 80 columns and the C64's own dark
- * grey on a C64. Both are in the character set every terminal here draws.
+ * The empty well: blank.
+ *
+ * It is PAINTED blank rather than left unpainted, which is not the same thing.
+ * An unpainted cell is a hole in the buffer, and a hole leaves whatever was
+ * there last time - so a stack that falls leaves its own ghost behind. A blank
+ * cell erases.
+ *
+ * A dot grid was tried here and rejected on sight: the board is meant to be
+ * empty space, and a texture in it competes with the panels rather than
+ * containing them. What contains them is the frame the screen draws.
  */
-const WELL_CHAR = '·';
+const WELL_CHAR = ' ';
 /** The cursor is always the brightest thing on the board. */
 const CURSOR_INK = 15;
 const WIDE_WELL_INK = 8;
