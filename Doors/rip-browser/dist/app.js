@@ -130,15 +130,6 @@ async function execute(session) {
         content: '',
         style: S.bar.style,
     });
-    const stopMasthead = (0, theme_1.attachMasthead)(mastheadRow, THEME, {
-        title: 'RIP GRAPHICS BROWSER',
-        // One column short: writing a row's last cell leaves the terminal in a
-        // pending-wrap state and clips the final character.
-        width: Math.max(1, (screen.width || 80) - 3),
-        rail: S.accent,
-        ink: S.ink,
-        render: () => screen.render(),
-    });
     const list = bbs_door_sdk_1.blessed.list({
         parent: mainBox,
         top: 3,
@@ -172,15 +163,44 @@ async function execute(session) {
         left: 0,
         width: '100%',
         height: 1,
-        content: ' ' + (0, theme_1.footerHints)([
+        content: '',
+        tags: true,
+        border: undefined,
+        style: (0, theme_1.footerStyle)(THEME),
+    });
+    /**
+     * The whole chrome, from the ONE SDK call.
+     *
+     * This door had the rail and the hints and neither the width gate nor the
+     * glitches - and its hint line was being OVERWRITTEN by the selected
+     * filename, so the keys vanished the moment anyone moved the cursor. The
+     * selection is a suffix after the hints now, which is what setFooterSuffix
+     * is for.
+     */
+    const chrome = (0, theme_1.attachDoorChrome)(THEME, {
+        width: screen.width || 80,
+        title: 'RIP GRAPHICS BROWSER',
+        masthead: mastheadRow,
+        // Two columns less again: this masthead sits inside a framed header.
+        mastheadWidth: Math.max(1, (screen.width || 80) - 3),
+        footer: footer,
+        hints: [
             { key: 'Arrows', does: 'Navigate' },
             { key: 'Enter', does: 'View' },
             { key: 'F5', does: 'Force View' },
             { key: 'Q', does: 'Quit' },
-        ], { key: S.key, dim: S.dim }, S.rail),
-        tags: true,
-        border: undefined,
-        style: (0, theme_1.footerStyle)(THEME),
+        ],
+        compactHints: [
+            { key: 'Arrows', does: 'Move' },
+            { key: 'Ent', does: 'View' },
+            { key: 'Q', does: 'Quit' },
+        ],
+        footerPad: ' ',
+        // The LIST is the only thing here with rows to spare.
+        glitch: list,
+        glitchOptions: { tickMs: 400 },
+        styles: S,
+        render: () => screen.render(),
     });
     // ========== FILE LOADING ========== 
     const loadFiles = async () => {
@@ -249,7 +269,7 @@ async function execute(session) {
             screen.render();
         }
         catch (err) {
-            footer.setContent(`{${T.alert}-fg}Error: ${err.message}{/${T.alert}-fg}`);
+            chrome.setFooterSuffix(`  {${T.alert}-fg}Error: ${err.message}{/${T.alert}-fg}`);
             screen.render();
         }
     };
@@ -257,7 +277,8 @@ async function execute(session) {
     list.on('select item', (item) => {
         // Handle both string items and objects with content
         const filename = (typeof item === 'string' ? item : item.content || '').trim();
-        footer.setContent(` Selected: {${T.warn}-fg}${filename}{/${T.warn}-fg} `);
+        // A suffix, not a replacement - the key hints stay on the row.
+        chrome.setFooterSuffix(`  Selected: {${T.warn}-fg}${filename}{/${T.warn}-fg}`);
         screen.render();
     });
     list.on('select', (item) => {
@@ -282,10 +303,11 @@ async function execute(session) {
         }
     });
     screen.key(['q', 'C-c', 'escape'], () => {
-        // Stop the masthead first: a timer writing to a destroyed screen is how
-        // a door takes the session with it.
+        // Stop the chrome first: a timer writing to a destroyed screen is how
+        // a door takes the session with it, and stop() also puts back any row a
+        // glitch was in the middle of damaging.
         try {
-            stopMasthead();
+            chrome.stop();
         }
         catch { /* leaving anyway */ }
         screen.destroy();

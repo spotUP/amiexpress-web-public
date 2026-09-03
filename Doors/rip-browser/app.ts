@@ -7,7 +7,7 @@ import {
 } from '@amiexpress/bbs-door-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
-import { themeStyles, themeById, attachMasthead, footerHints, footerStyle, type Theme, type ThemeTokens, type ThemeStyles } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import { themeStyles, themeById, attachDoorChrome, footerStyle, type Theme, type ThemeTokens, type ThemeStyles, type DoorChrome } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { ripGraphicsDir } from './paths';
 
 /** The caller's colours; every literal here was one of these tokens. */
@@ -114,15 +114,6 @@ export async function execute(session: any) {
     content: '',
     style: S.bar.style,
   });
-  const stopMasthead = attachMasthead(mastheadRow as any, THEME, {
-    title: 'RIP GRAPHICS BROWSER',
-    // One column short: writing a row's last cell leaves the terminal in a
-    // pending-wrap state and clips the final character.
-    width: Math.max(1, ((screen as any).width || 80) - 3),
-    rail: S.accent,
-    ink: S.ink,
-    render: () => screen.render(),
-  });
 
   const list = blessed.list({
     parent: mainBox,
@@ -158,19 +149,45 @@ export async function execute(session: any) {
     left: 0,
     width: '100%',
     height: 1,
-    content: ' ' + footerHints(
-      [
-        { key: 'Arrows', does: 'Navigate' },
-        { key: 'Enter', does: 'View' },
-        { key: 'F5', does: 'Force View' },
-        { key: 'Q', does: 'Quit' },
-      ],
-      { key: S.key, dim: S.dim },
-      S.rail
-    ),
+    content: '',
     tags: true,
     border: undefined,
     style: footerStyle(THEME),
+  });
+
+  /**
+   * The whole chrome, from the ONE SDK call.
+   *
+   * This door had the rail and the hints and neither the width gate nor the
+   * glitches - and its hint line was being OVERWRITTEN by the selected
+   * filename, so the keys vanished the moment anyone moved the cursor. The
+   * selection is a suffix after the hints now, which is what setFooterSuffix
+   * is for.
+   */
+  const chrome: DoorChrome = attachDoorChrome(THEME, {
+    width: ((screen as any).width as number) || 80,
+    title: 'RIP GRAPHICS BROWSER',
+    masthead: mastheadRow as any,
+    // Two columns less again: this masthead sits inside a framed header.
+    mastheadWidth: Math.max(1, (((screen as any).width as number) || 80) - 3),
+    footer: footer as any,
+    hints: [
+      { key: 'Arrows', does: 'Navigate' },
+      { key: 'Enter', does: 'View' },
+      { key: 'F5', does: 'Force View' },
+      { key: 'Q', does: 'Quit' },
+    ],
+    compactHints: [
+      { key: 'Arrows', does: 'Move' },
+      { key: 'Ent', does: 'View' },
+      { key: 'Q', does: 'Quit' },
+    ],
+    footerPad: ' ',
+    // The LIST is the only thing here with rows to spare.
+    glitch: list as any,
+    glitchOptions: { tickMs: 400 },
+    styles: S,
+    render: () => screen.render(),
   });
 
   // ========== FILE LOADING ========== 
@@ -249,7 +266,7 @@ export async function execute(session: any) {
       // 4. Force a full redraw of the browser UI now that we are back in text mode
       screen.render();
     } catch (err: any) {
-      footer.setContent(`{${T.alert}-fg}Error: ${err.message}{/${T.alert}-fg}`);
+      chrome.setFooterSuffix(`  {${T.alert}-fg}Error: ${err.message}{/${T.alert}-fg}`);
       screen.render();
     }
   };
@@ -259,7 +276,8 @@ export async function execute(session: any) {
   list.on('select item', (item: any) => {
     // Handle both string items and objects with content
     const filename = (typeof item === 'string' ? item : item.content || '').trim();
-    footer.setContent(` Selected: {${T.warn}-fg}${filename}{/${T.warn}-fg} `);
+    // A suffix, not a replacement - the key hints stay on the row.
+    chrome.setFooterSuffix(`  Selected: {${T.warn}-fg}${filename}{/${T.warn}-fg}`);
     screen.render();
   });
 
@@ -286,9 +304,10 @@ export async function execute(session: any) {
   });
 
   screen.key(['q', 'C-c', 'escape'], () => {
-    // Stop the masthead first: a timer writing to a destroyed screen is how
-    // a door takes the session with it.
-    try { stopMasthead(); } catch { /* leaving anyway */ }
+    // Stop the chrome first: a timer writing to a destroyed screen is how
+    // a door takes the session with it, and stop() also puts back any row a
+    // glitch was in the middle of damaging.
+    try { chrome.stop(); } catch { /* leaving anyway */ }
     screen.destroy();
     if (session.close) {
       session.close();
