@@ -187,11 +187,26 @@ What does not survive: `double` borders (`ansi_box` draws `+ - |`) and the
 exact shades. What does: the identity - phosphor stays green, neon stays
 magenta, classic stays cyan and yellow.
 
+`ui_settings.h` reads the files a TypeScript door reads:
+`door.settings.json` marks the root and `settings.json` holds the sysop's
+answers (`sdk/core/settings.ts`). A sysop configures a door once and it does
+not matter which language it happens to be written in.
+
+Reading only - writing is the admin UI's job, and a door that rewrote its own
+settings file would race the thing editing it. `ui_door_dir` walks up from
+where the binary started, so a compiled door in `dist/` finds the settings
+beside its source, exactly as `resolveDoorRoot()` does.
+
+Falling back is explicit everywhere: a missing key takes the door's own
+default, a garbled number falls back rather than reading as 0 (which is a
+real setting), and a value too long for the caller is an error rather than a
+silent truncation - truncating a path or a URL is how a door ends up asking
+for something that does not exist.
+
 ## What is deliberately not here yet
 
-Settings over the door's JSON (the rest of phase 4); a real door ported end
-to end, and the AEDoor transport lifted in behind `ae_transport_fn`
-(phase 5).
+A real door ported end to end, and the AEDoor transport lifted in behind
+`ae_transport_fn` (phase 5).
 
 And the real AEDoor transport: `examples/doorrepo-c/aedoor_amiga.c` still
 owns it, and `ui_screen`'s sink is deliberately the one place that changes
