@@ -229,3 +229,56 @@ describe('EnvironmentManager', () => {
     });
   });
 });
+
+/**
+ * A door asks GetVar where it is running.
+ *
+ * Through the same populateStandardVars the door startup path calls
+ * (LibraryManager.ts -> DosLibrary.initializeEnvironmentVariables), and read
+ * back through getVar, which is what dos.library's GetVar serves from. A
+ * test on hostVars() alone would pass while the variables never reached a
+ * door at all.
+ */
+describe('AE_HOST reaches a door through GetVar', () => {
+  let emulator: MockEmulator;
+  let envManager: EnvironmentManager;
+
+  beforeEach(() => {
+    emulator = new MockEmulator();
+    envManager = new EnvironmentManager(emulator as any, 0x130000);
+    envManager.initializeLocalVarsList(0x120000);
+  });
+
+  it('tells a C64 caller PETSCII is available', () => {
+    const { factsFromSession, capsInclude, AE_CAPABILITIES } =
+      require('../../src/amiga-emulation/utils/host-vars');
+
+    envManager.populateStandardVars('/bbs', 3, 1, 'sysop', 255,
+      factsFromSession({ connectionType: 'telnet', terminalType: 'c64' }, '1.0.0'));
+
+    expect(envManager.getVar('AE_HOST')).toBe('amiexpress-web');
+    expect(envManager.getVar('AE_CLIENT')).toBe('petscii');
+    expect(capsInclude(envManager.getVar('AE_CAPS'), AE_CAPABILITIES.petscii)).toBe(true);
+  });
+
+  it('tells a browser caller it can be sent a wide screen and a mouse', () => {
+    const { factsFromSession, capsInclude, AE_CAPABILITIES } =
+      require('../../src/amiga-emulation/utils/host-vars');
+
+    envManager.populateStandardVars('/bbs', 1, 1, 'sysop', 255,
+      factsFromSession({ connectionType: 'web' }, '1.0.0'));
+
+    expect(envManager.getVar('AE_CLIENT')).toBe('ansi');
+    expect(capsInclude(envManager.getVar('AE_CAPS'), AE_CAPABILITIES.wide)).toBe(true);
+    expect(capsInclude(envManager.getVar('AE_CAPS'), AE_CAPABILITIES.petscii)).toBe(false);
+  });
+
+  it('still answers when the door path passes no facts at all', () => {
+    envManager.populateStandardVars('/bbs', 1, 1, 'sysop', 255);
+
+    // The board is still this board; what it must not do is claim PETSCII
+    // for a caller nobody described.
+    expect(envManager.getVar('AE_HOST')).toBe('amiexpress-web');
+    expect(envManager.getVar('AE_CLIENT')).toBe('ansi');
+  });
+});

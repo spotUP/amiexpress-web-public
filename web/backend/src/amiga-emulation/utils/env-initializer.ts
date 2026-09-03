@@ -11,12 +11,27 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import {
+  hostVars,
+  AE_HOST_VAR,
+  AE_HOST_VERSION_VAR,
+  AE_CONNECTION_VAR,
+  AE_CLIENT_VAR,
+  AE_CAPS_VAR,
+  type HostFacts,
+} from './host-vars';
 
 export interface ENVConfig {
   nodeId: number;
   totalNodes?: number;
   bbsName?: string;
   sysop?: string;
+  /**
+   * Where the door is running and what this caller reads (utils/host-vars.ts).
+   * Omitted, no AE_* files are written - and a door that finds none is
+   * looking at what classic AmiExpress looks like, which is the safe answer.
+   */
+  host?: HostFacts;
 }
 
 /**
@@ -63,6 +78,19 @@ export function initializeENVFiles(envPath: string, config: ENVConfig): void {
   // Connection info
   createENVFile(envPath, 'BAUD', '115200');
   createENVFile(envPath, 'SERIALRATE', '115200');
+
+  // Where the door is running. AE_HOST and its version are the same for
+  // every caller; what a CALLER can be sent is not, and this directory is
+  // shared by every node - so those carry the node number, the way
+  // JC_PWFAIL.<node> below already does.
+  if (config.host) {
+    const vars = hostVars(config.host);
+    createENVFile(envPath, AE_HOST_VAR, vars[AE_HOST_VAR]);
+    createENVFile(envPath, AE_HOST_VERSION_VAR, vars[AE_HOST_VERSION_VAR]);
+    for (const name of [AE_CONNECTION_VAR, AE_CLIENT_VAR, AE_CAPS_VAR]) {
+      createENVFile(envPath, `${name}.${nodeId}`, vars[name]);
+    }
+  }
 
   // JoinCnf password failure tracking files (one per node)
   // Doors like JoinCnf use these to track failed password attempts

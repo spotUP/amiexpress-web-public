@@ -16,6 +16,7 @@ import { debugLog } from "../../utils/debug-log";
 const FGETS_DEBUG_LOG = path.join(process.env.BBS_DATA_DIR || process.cwd(), 'logs', 'fgets-debug.log');
 
 // Import modular DOS components
+import type { HostFacts } from '../utils/host-vars';
 import {
   // Constants
   MODE_OLDFILE,
@@ -271,7 +272,7 @@ export class DosLibrary {
    * Initialize environment variables for door execution.
    * Must be called after door config is available.
    */
-  public initializeEnvironmentVariables(nodeId: number, confId: number = 1, username: string = 'Guest', secLevel: number = 1): void {
+  public initializeEnvironmentVariables(nodeId: number, confId: number = 1, username: string = 'Guest', secLevel: number = 1, facts?: HostFacts): void {
     if (!this.envManager) {
 console.error('[DosLibrary] EnvironmentManager not initialized');
       return;
@@ -286,7 +287,8 @@ console.error('[DosLibrary] EnvironmentManager not initialized');
       nodeId,
       confId,
       username,
-      secLevel
+      secLevel,
+      facts
     );
 
     // Initialize ENV: device files (Lock/Open/Read access)
@@ -296,7 +298,9 @@ console.error('[DosLibrary] EnvironmentManager not initialized');
       nodeId,
       totalNodes: 8,
       bbsName: 'AmiExpress Web BBS',
-      sysop: 'Sysop'
+      sysop: 'Sysop',
+      // The same answer GetVar gives, for a door that reads ENV: as files.
+      host: facts,
     });
 
 debugLog(`[DosLibrary] Environment variables initialized for node ${nodeId}`);

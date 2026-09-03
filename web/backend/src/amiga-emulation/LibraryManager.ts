@@ -36,6 +36,7 @@ import { DoorLogger } from "./DoorLogger.js";
 import { KickstartRom } from "./KickstartRom.js";
 import { spawnSync } from "child_process";
 import { debugLog } from '../utils/debug-log';
+import { factsFromSession, BOARD_VERSION } from './utils/host-vars';
 
 const DEFAULT_ROM =
   "Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom";
@@ -537,7 +538,11 @@ debugLog("[LibraryManager] Creating DOS.library...");
     const doorUsername = this.config.bbsSession?.user?.username || 'Guest';
     const doorSecLevel = this.config.bbsSession?.user?.securityLevel || 1;
     const doorConfId = this.config.bbsSession?.currentConference || 1;
-    this.dosLibrary.initializeEnvironmentVariables(doorNodeId, doorConfId, doorUsername, doorSecLevel);
+    // What this caller can be sent, read off the live session: a C64 on
+    // telnet is told 'petscii', a browser is told 'wide,mouse'. A door that
+    // finds no AE_HOST at all is on classic AmiExpress (utils/host-vars.ts).
+    const hostFacts = factsFromSession(this.config.bbsSession, BOARD_VERSION);
+    this.dosLibrary.initializeEnvironmentVariables(doorNodeId, doorConfId, doorUsername, doorSecLevel, hostFacts);
 
 debugLog(
       `[LibraryManager] Enabling FileManager with base directory: ${projectRoot}`
