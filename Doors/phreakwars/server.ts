@@ -91,20 +91,21 @@ door.onStart(async (ctx: DoorContext) => {
     displayMainMenu(socket, gameState);
   }
 
-  // Wait for quit mode
-  await new Promise<void>((resolve) => {
-    const checkInterval = setInterval(() => {
-      if (gameState!.currentMode === 'quit' || !socket.connected) {
-        clearInterval(checkInterval);
-        resolve();
-      }
-    }, 100);
-    
-    socket.once('disconnect', () => {
-      clearInterval(checkInterval);
-      resolve();
-    });
-  });
+  // onStart RETURNS here, and that is the whole point.
+  //
+  // `bbsSession.doorInputHandler` - the property the backend calls for every
+  // keystroke (web: server/socket-handlers.ts:779; telnet: index.ts:1241) - is
+  // installed by the SDK's input loop, and `Door.execute()` only reaches that
+  // loop once every start handler has resolved (sdk/src/core/Door.ts:118-131).
+  // This handler used to sit on a stay-alive promise polling `currentMode`
+  // until the player quit, so the loop was never reached, the handler was
+  // never installed, and every key the player pressed fell through to the
+  // `door:input` dead-drop at socket-handlers.ts:783. The door painted and
+  // could not be typed into, on every surface.
+  //
+  // The input loop is this door's stay-alive: it holds `execute()` open until
+  // the socket disconnects, the BBS sends `door:close`, or the door itself
+  // says it is finished (see the quit path in onInput below).
 });
 
 door.onInput(async (ctx: DoorContext, key: KeyPress) => {
@@ -175,6 +176,14 @@ door.onInput(async (ctx: DoorContext, key: KeyPress) => {
     console.error('[PhreakWars] Error handling input:', error);
     say(socket, gameState, '\r\n\x1b[31mAn error occurred. Returning to menu...\x1b[0m\r\n');
     displayMainMenu(socket, gameState);
+  }
+
+  // Quitting has to say so now that the SDK's input loop is the door's
+  // lifetime. `ctx.close()` drops this node's running-session entry; the loop
+  // then resolves on the next keystroke (sdk/src/core/Door.ts:212-217), which
+  // is exactly the "Press any key to exit..." the quit handler prints.
+  if (gameState.currentMode === 'quit') {
+    ctx.close();
   }
 });
 
