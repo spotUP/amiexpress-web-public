@@ -464,7 +464,6 @@ import {
   type ArchiveFileRow,
 } from './repo-view-helpers';
 import { T, S, CURRENT, applyTheme } from './door-theme';
-import { attachMasthead } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 
 class RepoView extends BaseView {
   private layout: DoormanLayout;

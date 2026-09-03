@@ -17,6 +17,7 @@ exports.formatSize = formatSize;
  * repeated name column and size cells on the wrong rows.
  */
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const blessed_2 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 const door_theme_1 = require("./door-theme");
 const type_badge_1 = require("./type-badge");
@@ -38,11 +39,17 @@ function formatSize(bytes) {
  */
 class DoormanLayout {
     constructor(screen, nodeId) {
-        /** Stops the masthead animation; called when the door tears down. */
+        /** The masthead, its rail and the theme's glitches; stopped at teardown. */
+        this.chrome = null;
+        /**
+         * Kept as a field name the door already calls: teardown says
+         * `stopMasthead()`, and there is no reason to make every call site learn
+         * a new one for the same act.
+         */
         this.stopMasthead = null;
         this.screen = screen;
         const screenWidth = screen.width || 80;
-        this.compact = (0, blessed_1.getCompactProfile)(screenWidth);
+        this.compact = (0, blessed_2.getCompactProfile)(screenWidth);
         this.narrow = this.compact.singleColumn;
         // The list's inner text width. Side by side it is 35% of the screen
         // less the frames; stacked it is the whole row less the gutter.
@@ -76,19 +83,33 @@ class DoormanLayout {
             width: this.compact.borders ? '100%-2' : '100%',
             height: 1, tags: true, content: '', focusable: false,
             style: door_theme_1.S.bar.style });
-        // The rail is drawn to the SCREEN's width - it was the 80-wide run the
-        // sysop watched fold on a C64 - and at XXS it stops moving entirely: a
-        // 40-column canvas has no spare cells for decoration, and 20fps of row
-        // repaint is a lot of PETSCII bytes. (SDK: effectsAllowed().)
-        this.stopMasthead = (0, blessed_1.effectsAllowed)(screenWidth) ? (0, theme_1.attachMasthead)(mastheadRow, door_theme_1.CURRENT, {
+        /**
+         * The chrome, from the ONE SDK call.
+         *
+         * The rail is drawn to the SCREEN's width - it was the 80-wide run the
+         * sysop watched fold on a C64 - and at XXS the whole thing stops: a
+         * 40-column canvas has no spare cells for decoration, and 20fps of row
+         * repaint is a lot of PETSCII bytes.
+         *
+         * No `footer` is handed over on purpose. DOORMAN's bottom row is a
+         * STATUS line, not a hint bar: every view writes its own key strip into
+         * it and the long operations write progress there. Routing it through
+         * footerHints would delete information the door is using the row for.
+         * The glitches go on the door LIST, which is the only thing here with
+         * rows to spare.
+         */
+        this.chrome = (0, theme_1.attachDoorChrome)(door_theme_1.CURRENT, {
+            width: screenWidth,
             title: 'DOORMAN',
-            // One column short: writing a row's last cell leaves the terminal in
-            // a pending-wrap state and clips the final character.
-            width: Math.max(1, (screen.width || 80) - 3),
-            rail: door_theme_1.S.accent,
-            ink: door_theme_1.S.ink,
+            masthead: mastheadRow,
+            // Two columns less again: the masthead sits inside a framed header.
+            mastheadWidth: Math.max(1, (screen.width || 80) - 3),
+            glitch: () => this.doorList ?? null,
+            glitchOptions: { tickMs: 400 },
+            styles: door_theme_1.S,
             render: () => screen.render(),
-        }) : (mastheadRow.setContent(' DOORMAN '), () => undefined);
+        });
+        this.stopMasthead = () => this.chrome?.stop();
         this.footer = new blessed_1.Panel({ parent: screen, bottom: 0, left: 0, width: '100%', height: chromeH,
             ...frame,
             tags: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, border: { fg: door_theme_1.T.accentAlt } }, focusable: false });

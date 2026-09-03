@@ -1,18 +1,5 @@
-/**
- * DOORMAN's shared layout: one set of panels that every view updates in
- * place, and the width rules that decide their shape.
- *
- * Split out of app.ts when it reached the 2000-line ceiling, the same way
- * install-core.ts was. Nothing here imports app.ts, so the views can import
- * the layout without a cycle.
- *
- * Every width decision here comes from the LIVE screen through the SDK's
- * single compact profile. There is no 40 and no 80 in this file: the door
- * used to build its Screen with no geometry at all and paint an 80-column
- * layout onto whatever canvas the caller had, which is what a C64 saw as a
- * repeated name column and size cells on the wrong rows.
- */
 import { getCompactProfile } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { type DoorChrome } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 /** Byte count as a door list shows it. Lives here with the row that uses it. */
 export declare function formatSize(bytes: number): string;
 /** The shape an installed-door row needs. */
@@ -38,7 +25,13 @@ export declare class DoormanLayout {
     infoBox: any;
     filterPanel: any;
     filterBox: any;
-    /** Stops the masthead animation; called when the door tears down. */
+    /** The masthead, its rail and the theme's glitches; stopped at teardown. */
+    chrome: DoorChrome | null;
+    /**
+     * Kept as a field name the door already calls: teardown says
+     * `stopMasthead()`, and there is no reason to make every call site learn
+     * a new one for the same act.
+     */
     stopMasthead: (() => void) | null;
     readonly width: number;
     /** The SDK's compact profile for THIS screen - the only width authority. */

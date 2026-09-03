@@ -12,11 +12,9 @@
  * layout onto whatever canvas the caller had, which is what a C64 saw as a
  * repeated name column and size cells on the wrong rows.
  */
-import {
-  Panel, Box, List, ScrollableBox, Textbox,
-  getCompactProfile, effectsAllowed,
-} from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { attachMasthead } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import { Panel, Box, List, ScrollableBox, Textbox } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { getCompactProfile } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { attachDoorChrome, type DoorChrome } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { T, S, CURRENT } from './door-theme';
 import { typeBadge } from './type-badge';
 
@@ -48,7 +46,13 @@ export class DoormanLayout {
   listPanel: any; doorList: any;
   infoPanel: any; infoBox: any;
   filterPanel: any; filterBox: any;
-  /** Stops the masthead animation; called when the door tears down. */
+  /** The masthead, its rail and the theme's glitches; stopped at teardown. */
+  chrome: DoorChrome | null = null;
+  /**
+   * Kept as a field name the door already calls: teardown says
+   * `stopMasthead()`, and there is no reason to make every call site learn
+   * a new one for the same act.
+   */
   stopMasthead: (() => void) | null = null;
   readonly width: number;
   /** The SDK's compact profile for THIS screen - the only width authority. */
@@ -97,19 +101,33 @@ export class DoormanLayout {
       width: this.compact.borders ? '100%-2' : '100%',
       height: 1, tags: true, content: '', focusable: false,
       style: S.bar.style } as any);
-    // The rail is drawn to the SCREEN's width - it was the 80-wide run the
-    // sysop watched fold on a C64 - and at XXS it stops moving entirely: a
-    // 40-column canvas has no spare cells for decoration, and 20fps of row
-    // repaint is a lot of PETSCII bytes. (SDK: effectsAllowed().)
-    this.stopMasthead = effectsAllowed(screenWidth) ? attachMasthead(mastheadRow as any, CURRENT, {
+    /**
+     * The chrome, from the ONE SDK call.
+     *
+     * The rail is drawn to the SCREEN's width - it was the 80-wide run the
+     * sysop watched fold on a C64 - and at XXS the whole thing stops: a
+     * 40-column canvas has no spare cells for decoration, and 20fps of row
+     * repaint is a lot of PETSCII bytes.
+     *
+     * No `footer` is handed over on purpose. DOORMAN's bottom row is a
+     * STATUS line, not a hint bar: every view writes its own key strip into
+     * it and the long operations write progress there. Routing it through
+     * footerHints would delete information the door is using the row for.
+     * The glitches go on the door LIST, which is the only thing here with
+     * rows to spare.
+     */
+    this.chrome = attachDoorChrome(CURRENT, {
+      width: screenWidth,
       title: 'DOORMAN',
-      // One column short: writing a row's last cell leaves the terminal in
-      // a pending-wrap state and clips the final character.
-      width: Math.max(1, ((screen as any).width || 80) - 3),
-      rail: S.accent,
-      ink: S.ink,
+      masthead: mastheadRow as any,
+      // Two columns less again: the masthead sits inside a framed header.
+      mastheadWidth: Math.max(1, ((screen as any).width || 80) - 3),
+      glitch: () => this.doorList ?? null,
+      glitchOptions: { tickMs: 400 },
+      styles: S,
       render: () => screen.render(),
-    }) : ((mastheadRow as any).setContent(' DOORMAN '), () => undefined);
+    });
+    this.stopMasthead = () => this.chrome?.stop();
 
     this.footer = new Panel({ parent: screen, bottom: 0, left: 0, width: '100%', height: chromeH,
       ...frame,

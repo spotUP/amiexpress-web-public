@@ -133,14 +133,15 @@ describe('DOORMAN layout on a 40x25 screen', () => {
   });
 
   // The gate, at the call itself. Content alone cannot tell the two apart on
-  // a rail-less theme (attachMasthead writes ' DOORMAN ' too), so this spies
-  // on the SDK function the door would have to call to start a timer.
-  it('40 columns: the SDK masthead is never attached; 80 columns: it is', () => {
-    const spy = jest.spyOn(chrome, 'attachMasthead');
+  // a rail-less theme (the chrome writes ' DOORMAN ' too), so this reads
+  // back what the SDK entry point was asked for, and what it decided.
+  it('the door asks the SDK for its chrome, and the chrome does not animate at 40', () => {
+    const spy = jest.spyOn(chrome, 'attachDoorChrome');
     try {
       screen = new Screen({ width: 40, height: 25, responsive: true } as any);
       layout = new DoormanLayout(screen, 1);
-      expect(spy).not.toHaveBeenCalled();
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(layout.chrome!.animated).toBe(false);
       layout.stopMasthead?.();
       screen.destroy();
 
@@ -148,8 +149,15 @@ describe('DOORMAN layout on a 40x25 screen', () => {
       screen = new Screen({ width: 80, height: 24, responsive: false } as any);
       layout = new DoormanLayout(screen, 1);
       expect(spy).toHaveBeenCalledTimes(1);
-      // ...and drawn to the SCREEN's width, not to a constant.
-      expect((spy.mock.calls[0][2] as { width: number }).width).toBe(77);
+      expect(layout.chrome!.animated).toBe(true);
+      // ...and the rail is drawn to the SCREEN's width, not to a constant.
+      // jest's SpyInstance infers `unknown` for this call's args here (the
+      // spied module comes through a plain `require`, so @types/jest cannot
+      // recover attachDoorChrome's real parameter types); narrow back to
+      // the fields these assertions actually read.
+      const opts = spy.mock.calls[0][1] as { width: number; mastheadWidth: number };
+      expect(opts.width).toBe(80);
+      expect(opts.mastheadWidth).toBe(77);
     } finally {
       spy.mockRestore();
     }
