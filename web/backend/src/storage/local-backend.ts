@@ -31,10 +31,17 @@ function isMissing(err: unknown): boolean {
   return isErrnoException(err) && (err.code === 'ENOENT' || err.code === 'ENOTDIR');
 }
 
-// A temp file's name always ends in this suffix (see tempName below). Used
-// to keep an orphaned temp - left behind by a crash between writeFile and
-// rename - out of list() results: it is scratch space, never a real object.
-const TEMP_SUFFIX_PATTERN = /\.tmp-\d+-[0-9a-f]+$/;
+// Matches the full shape tempName() produces below - a leading dot, the
+// original basename, then `.tmp-<pid>-<hex>` - not merely the trailing
+// suffix. Matching on suffix alone (no required leading dot) would also
+// catch a caller-uploaded object whose key legitimately ends the same way,
+// e.g. `REPORT.tmp-20240101-abc123` with no leading dot: that object would
+// still be fetchable and deletable by exact key, but would silently vanish
+// from every list() result - an object the catalog reconciler eventually
+// calls an orphan. Used to keep an orphaned temp - left behind by a crash
+// between writeFile and rename - out of list() results: it is scratch
+// space, never a real object.
+const TEMP_SUFFIX_PATTERN = /^\..+\.tmp-\d+-[0-9a-f]+$/;
 
 function tempName(basename: string): string {
   return `.${basename}.tmp-${process.pid}-${crypto.randomBytes(6).toString('hex')}`;

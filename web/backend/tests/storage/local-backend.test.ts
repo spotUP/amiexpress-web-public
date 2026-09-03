@@ -114,6 +114,20 @@ describe('LocalBackend', () => {
     expect((await backend.list('Files/')).map((o) => o.key)).toEqual(['Files/DEMO.LHA']);
   });
 
+  it('lists a real object whose key merely ends in the temp-file shape, with no leading dot', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'localback-lookalike-'));
+    const backend = new LocalBackend(1, root);
+
+    // Shaped exactly like a temp-file suffix ('.tmp-<digits>-<hex>'), but the
+    // key itself carries no leading dot - a caller-uploaded object, not
+    // scratch space from a crashed put().
+    await backend.put('Files/REPORT.tmp-20240101-abc123', Buffer.from('payload'));
+
+    expect((await backend.list('Files/')).map((o) => o.key)).toEqual([
+      'Files/REPORT.tmp-20240101-abc123',
+    ]);
+  });
+
   it('refuses an empty key or "." as a key, since both resolve to the drive root', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'localback-empty-key-'));
     const backend = new LocalBackend(1, root);
