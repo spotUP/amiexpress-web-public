@@ -63,6 +63,31 @@ function newObject(): GameObject {
 }
 
 /**
+ * Browser `KeyboardEvent.key` -> the short name doors think in.
+ *
+ * Same mapping as the SDK's `DoorInputManager.normaliseKeyName`
+ * (`sdk/utils/door-input-manager.ts:233-245`), which is `private static` and
+ * so cannot be imported. Kept in step with it deliberately: the two must
+ * agree on names or a door and the manager would disagree about "up".
+ */
+function normaliseKeyName(key: string): string {
+  switch (key) {
+    case "ArrowLeft": return "left";
+    case "ArrowRight": return "right";
+    case "ArrowUp": return "up";
+    case "ArrowDown": return "down";
+    case " ":
+    case "Spacebar": return "space";
+    case "Enter": return "enter";
+    case "Escape": return "escape";
+    default: return key.toLowerCase();
+  }
+}
+
+/** The keys that move a paddle - the ones the held-key loop owns. */
+const MOVEMENT_KEYS = new Set(["up", "down", "q", "a"]);
+
+/**
  * Phases of a game.
  *
  * `title` is the original's `await getch()` before `nodelay(stdscr,1)`:
@@ -92,6 +117,24 @@ export class PongDoor {
   private scrX = 0;
   private scrY = 0;
   private cont = 0;
+
+  /**
+   * Keys held right now, from real key-down/key-up edges.
+   *
+   * The client's game-mode auto-repeat waits 400 ms before it starts
+   * (`packages/terminal/src/components/BBSTerminal.tsx:1342`), so a door that
+   * moves once per delivered key stutters on a held key however fast the game
+   * loop runs. Every arcade door in this repo avoids that the same way - hold
+   * the key state, step once per frame - and this is that state.
+   */
+  private held: Set<string> = new Set();
+
+  /**
+   * True once a real key-down edge has arrived, i.e. this caller's transport
+   * sends key events at all. Telnet does not, and there the character path
+   * below stays in charge.
+   */
+  private keyEdges = false;
 
   private b1: GameObject = newObject(); // player 1 paddle (right)
   private b2: GameObject = newObject(); // player 2 paddle (left)
@@ -175,6 +218,12 @@ export class PongDoor {
     const scrX = this.scrX;
     const scrY = this.scrY;
 
+    // Movement comes from the held keys, once per frame - Arkanoid's cadence,
+    // and what `DoorInputManager.consumeRepeat` gives with its defaults
+    // (`sdk/utils/door-input-manager.ts:322-340`). No client auto-repeat is
+    // involved, so there is no 400 ms hesitation before the paddle moves.
+    this.stepHeldPaddles();
+
     // Original C: if (++cont%16==0)
     // Adjust game logic to match new tick rate (was 16 ticks @ 4ms = 64ms).
     // With 33ms ticks, we update every 2 ticks (~66ms).
@@ -210,14 +259,42 @@ export class PongDoor {
       b.x = b.movhor ? b.x + 1 : b.x - 1;
       b.y = b.movver ? b.y + 1 : b.y - 1;
 
-      // Paddle wrap-around
-      if (b1.y <= 1) b1.y = scrY - 2;
-      if (b1.y >= scrY - 1) b1.y = 2;
-      if (b2.y <= 1) b2.y = scrY - 2;
-      if (b2.y >= scrY - 1) b2.y = 2;
     }
 
+    // Original C wrapped the paddles inside the physics tick; they can now
+    // move on any frame, so the wrap runs on any frame too - otherwise a held
+    // key can walk a paddle off the board for a frame before it is caught.
+    if (b1.y <= 1) b1.y = scrY - 2;
+    if (b1.y >= scrY - 1) b1.y = 2;
+    if (b2.y <= 1) b2.y = scrY - 2;
+    if (b2.y >= scrY - 1) b2.y = 2;
+
     this.draw();
+  }
+
+  /**
+   * A real key-down edge, from `bbs.onKeyDown`.
+   *
+   * The client re-sends key-down while a key auto-repeats; only the first
+   * edge matters, and `Set.add` makes that free.
+   */
+  holdKey(key: string): void {
+    this.keyEdges = true;
+    this.held.add(normaliseKeyName(key));
+  }
+
+  /** A real key-up edge, from `bbs.onKeyUp`. */
+  releaseKey(key: string): void {
+    this.held.delete(normaliseKeyName(key));
+  }
+
+  /** Original C: the KEY_UP / KEY_DOWN / Q / A arms of `switch (getch())`. */
+  private stepHeldPaddles(): void {
+    if (!this.keyEdges) return;
+    if (this.held.has("up")) this.b1.y--;
+    if (this.held.has("down")) this.b1.y++;
+    if (this.held.has("q")) this.b2.y--;
+    if (this.held.has("a")) this.b2.y++;
   }
 
   /**
@@ -236,6 +313,13 @@ export class PongDoor {
       this.phase = "playing";
       return;
     }
+
+    // In game mode a key-down reaches the door on BOTH paths - the key-state
+    // handler at `socket-handlers.ts:527` and the input handler at :536 - so
+    // once real edges are arriving, movement belongs to the held-key loop
+    // alone. Acting here as well would step the paddle twice per press
+    // (`sdk/utils/door-input-manager.ts:287-292` says the same).
+    if (this.keyEdges && MOVEMENT_KEYS.has(name)) return;
 
     switch (name) {
       case "down":
@@ -278,6 +362,8 @@ export class PongDoor {
       this.loop = null;
     }
     this.phase = "finished";
+    this.held.clear();
+    this.keyEdges = false;
     endwin();
   }
 

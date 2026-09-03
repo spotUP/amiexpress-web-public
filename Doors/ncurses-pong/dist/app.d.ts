@@ -34,6 +34,22 @@ export declare class PongDoor {
     private scrX;
     private scrY;
     private cont;
+    /**
+     * Keys held right now, from real key-down/key-up edges.
+     *
+     * The client's game-mode auto-repeat waits 400 ms before it starts
+     * (`packages/terminal/src/components/BBSTerminal.tsx:1342`), so a door that
+     * moves once per delivered key stutters on a held key however fast the game
+     * loop runs. Every arcade door in this repo avoids that the same way - hold
+     * the key state, step once per frame - and this is that state.
+     */
+    private held;
+    /**
+     * True once a real key-down edge has arrived, i.e. this caller's transport
+     * sends key events at all. Telnet does not, and there the character path
+     * below stays in charge.
+     */
+    private keyEdges;
     private b1;
     private b2;
     private ball;
@@ -53,6 +69,17 @@ export declare class PongDoor {
      * body, minus the `getch()` (keys arrive through handleKey now).
      */
     tick(): void;
+    /**
+     * A real key-down edge, from `bbs.onKeyDown`.
+     *
+     * The client re-sends key-down while a key auto-repeats; only the first
+     * edge matters, and `Set.add` makes that free.
+     */
+    holdKey(key: string): void;
+    /** A real key-up edge, from `bbs.onKeyUp`. */
+    releaseKey(key: string): void;
+    /** Original C: the KEY_UP / KEY_DOWN / Q / A arms of `switch (getch())`. */
+    private stepHeldPaddles;
     /**
      * The original `switch (getch())`, driven by the caller's keystroke.
      *

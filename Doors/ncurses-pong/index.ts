@@ -86,6 +86,18 @@ function parseKeyData(data: string): { key: { name?: string; sequence: string } 
   return { key: { name: data, sequence } };
 }
 
+/**
+ * The two BBSApi key-edge methods the SDK's own held-key tracking uses
+ * (`sdk/utils/door-input-manager.ts:257-279`). They exist on the backend's
+ * BBSApi (`web/backend/src/doors/BBSApi.ts:591-616`, where they install
+ * `session.doorKeyStateHandler`) but are not on the SDK's `BBSApi` type yet,
+ * so the door names the shape it needs rather than casting to `any`.
+ */
+interface KeyEdgeApi {
+  onKeyDown?(callback: (key: string, keyState: Record<string, boolean>) => void): void;
+  onKeyUp?(callback: (key: string, keyState: Record<string, boolean>) => void): void;
+}
+
 /** ncurses `initscr()` takes any object that can put bytes on the wire. */
 function ncursesContext(socket: { emit: (event: string, data: string) => void }): {
   emit: (event: string, data: string) => void;
@@ -106,11 +118,32 @@ door.onStart(async (ctx: DoorContext) => {
   const pong = new PongDoor();
   games.set(ctx.nodeId, pong);
 
-  // Enable game mode for real-time input. Both the `command` path and the
-  // game-mode `key-down` path converge on `session.doorInputHandler`
-  // (socket-handlers.ts:536-546, :779), so this changes the wire format the
-  // browser uses, not who receives the key.
+  // Game mode is what makes the client send key events at all, so it comes
+  // first: `session.gameModeEnabled` is set and `game-mode true` goes to the
+  // browser (BBSApi.ts:444-447 -> services/game-mode.service.ts:20-30).
   bbs?.enableGameMode?.();
+
+  // ...and then the real key EDGES, which is the half that was missing. A
+  // key-down alone reaches the door through `doorInputHandler`, but holding a
+  // key only re-sends key-down after the client's 400 ms repeat delay
+  // (packages/terminal/src/components/BBSTerminal.tsx:1342), so the paddle
+  // hesitated and then stuttered. key-up never reaches `doorInputHandler` at
+  // all - `socket-handlers.ts:551-570` gives releases only to
+  // `doorKeyStateHandler`, which is exactly what these two install.
+  //
+  // This is the mechanism the twelve arcade doors use; they reach it through
+  // `DoorInputManager({ enableGameMode: true, trackHeldKeys: true })`, which
+  // calls these same two methods (door-input-manager.ts:257-279). PONG cannot
+  // use that wrapper: it requires a blessed `Screen` and its `enable()` would
+  // call `setupInputHandler` (door-input-manager.ts:209), replacing the
+  // `doorInputHandler` this door's SDK input loop owns. Same mechanism,
+  // without the blessed layer an ncurses door does not have.
+  //
+  // Registration order matters: onKeyUp WRAPS the handler onKeyDown installed
+  // (BBSApi.ts:604-615), so down must be registered first.
+  const keys = bbs as (typeof bbs & KeyEdgeApi) | undefined;
+  keys?.onKeyDown?.((key: string) => pong.holdKey(key));
+  keys?.onKeyUp?.((key: string) => pong.releaseKey(key));
 
   pong.start(ncursesContext(socket), () => {
     // ESC. `ctx.close()` (sdk/src/core/Door.ts:227) only drops this node's
@@ -142,6 +175,15 @@ door.onClose(async (ctx: DoorContext) => {
     games.delete(ctx.nodeId);
   }
   ctx.bbs?.disableGameMode?.();
+
+  // The key-edge callbacks close over the PongDoor above, and neither the TS
+  // door teardown (handlers/door.handler.ts:2374, which deletes
+  // doorInputHandler only) nor DoorInputManager.disable() clears this one.
+  // Leaving it pointed at a stopped game is a leak this door introduced, so
+  // this door drops it.
+  if (ctx.bbsSession) {
+    delete ctx.bbsSession.doorKeyStateHandler;
+  }
 });
 
 export default door;

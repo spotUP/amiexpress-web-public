@@ -20,6 +20,8 @@
  */
 import type { Socket } from 'socket.io';
 
+import { createBBSApi } from '../../src/doors/BBSApi';
+
 // The door imports the SDK barrel, whose audio engine pulls in `tone` - an
 // ESM-only package jest's CJS transform cannot load. The door never touches
 // audio; stub it so the suite exercises the door, not the tracker.
@@ -35,6 +37,23 @@ const PLAYER_ONE_COLUMN = SCREEN_COLS - 2;
 /** One game tick is 33 ms (`Doors/ncurses-pong/app.ts`, PONG_TICK_MS). */
 const TICK_MS = 33;
 
+/** What the backend calls a key-state event (`socket-handlers.ts:527`). */
+interface KeyStateEvent {
+  key: string;
+  pressed: boolean;
+  keyState: Record<string, boolean>;
+}
+
+/** The session fields these tests reach for, as the backend owns them. */
+interface DoorSession {
+  nodeId: number;
+  gameModeEnabled?: boolean;
+  currentDoorType?: string;
+  keyState?: Record<string, boolean>;
+  doorInputHandler?: ((input: string) => void) | null;
+  doorKeyStateHandler?: ((event: KeyStateEvent) => void) | null;
+}
+
 interface RunningDoor {
   /** Everything the door has painted, in order. */
   output: () => string;
@@ -42,8 +61,14 @@ interface RunningDoor {
   screen: () => string[];
   /** Deliver one keystroke the way socket-handlers.ts:779 does. */
   press: (key: string) => Promise<void>;
-  /** The session object the backend owns; the handler hangs off it. */
-  session: { nodeId: number; doorInputHandler?: ((input: string) => void) | null };
+  /** Deliver a key-down edge the way socket-handlers.ts:527 does. */
+  keyDown: (key: string) => void;
+  /** Deliver a key-up edge the way socket-handlers.ts:565 does. */
+  keyUp: (key: string) => void;
+  /** Every event the door's socket saw, for the game-mode assertions. */
+  emitted: () => Array<{ event: string; data: unknown }>;
+  /** The session object the backend owns; the handlers hang off it. */
+  session: DoorSession;
   /** Resolves when `Door.execute()` returns, i.e. the door has left. */
   finished: Promise<void>;
   disconnect: () => void;
@@ -83,11 +108,13 @@ function playerOnePaddleCentre(screen: string[]): number {
 
 function launch(nodeId: number): RunningDoor {
   const chunks: string[] = [];
+  const events: Array<{ event: string; data: unknown }> = [];
   const disconnectHandlers: Array<() => void> = [];
   const socket = {
     id: `ncurses-pong-${nodeId}`,
     connected: true,
     emit: (event: string, data: unknown): boolean => {
+      events.push({ event, data });
       if (event === 'ansi-output' && typeof data === 'string') chunks.push(data);
       return true;
     },
@@ -99,7 +126,16 @@ function launch(nodeId: number): RunningDoor {
     off: () => socket,
     removeListener: () => socket,
   };
-  const session: RunningDoor['session'] = { nodeId };
+  const session: DoorSession = { nodeId, keyState: {} };
+
+  // The REAL BBSApi, so `enableGameMode` and the key-edge registration go
+  // through the shipped code rather than a stub that cannot be wrong -
+  // the same choice `tests/doors/bbsapi-game-mode.test.ts` makes.
+  const bbs = createBBSApi(
+    socket as unknown as Socket,
+    session as unknown as Parameters<typeof createBBSApi>[1],
+  );
+
   const finished = door.execute({
     socket: socket as unknown as Socket,
     bbsSession: session,
@@ -112,11 +148,7 @@ function launch(nodeId: number): RunningDoor {
       downloads: 0,
     },
     params: [],
-    bbs: {
-      enableGameMode: () => undefined,
-      disableGameMode: () => undefined,
-      getTerminalSize: () => ({ width: 80, height: 25 }),
-    },
+    bbs,
   });
 
   return {
@@ -128,6 +160,18 @@ function launch(nodeId: number): RunningDoor {
       await (handler(key) as unknown as Promise<void> | void);
       await new Promise<void>((resolve) => setImmediate(resolve));
     },
+    keyDown: (key: string) => {
+      const keyState = session.keyState ?? {};
+      keyState[key] = true;
+      session.keyState = keyState;
+      session.doorKeyStateHandler?.({ key, pressed: true, keyState });
+    },
+    keyUp: (key: string) => {
+      const keyState = session.keyState ?? {};
+      delete keyState[key];
+      session.doorKeyStateHandler?.({ key, pressed: false, keyState });
+    },
+    emitted: () => events,
     session,
     finished,
     disconnect: () => disconnectHandlers.forEach((h) => h()),
@@ -250,5 +294,54 @@ describe("a caller's keystroke reaches ncurses-pong while it is running", () => 
     // the door's guard, and the ledger says so.
     const leaveAlternateScreen = run.output().split('\x1b[?1049l').length - 1;
     expect(leaveAlternateScreen).toBe(1);
+  });
+
+  /**
+   * Sysop, on the live walk: "controls work in pong but game mode is not
+   * active so there is a key delay."
+   *
+   * Game mode WAS requested. The half that was missing is the key EDGES.
+   * In game mode the client sends one `key-down` on the press and does not
+   * repeat it for 400 ms (`packages/terminal/src/components/BBSTerminal.tsx:
+   * 1342`, KEY_REPEAT_DELAY), and it never sends a release to
+   * `doorInputHandler` at all - `socket-handlers.ts:551-570` gives key-up
+   * only to `doorKeyStateHandler`. A door that moves once per delivered key
+   * therefore hesitates for 400 ms and then stutters, which is what the paddle
+   * did. The arcade doors all hold the key state and step once per frame
+   * instead (`DoorInputManager({ trackHeldKeys: true })`).
+   */
+  it('PONG enters game mode on start so held keys repeat without the OS delay', async () => {
+    const run = start(6);
+    await settle();
+
+    // 1. Game mode, through the real BBSApi: the session flag the `command`
+    //    path reads (socket-handlers.ts:748) and the signal the browser needs
+    //    before it sends any key event at all.
+    expect(run.session.gameModeEnabled).toBe(true);
+    expect(run.session.currentDoorType).toBe('TS');
+    expect(run.emitted()).toContainEqual({ event: 'game-mode', data: true });
+
+    // 2. The key-edge handler - the property socket-handlers.ts:527 and :565
+    //    call, and the ONLY one a key-up ever reaches.
+    expect(typeof run.session.doorKeyStateHandler).toBe('function');
+
+    // 3. Holding UP moves every frame, from ONE key-down and no repeats.
+    await run.press(' '); // leave the title screen
+    await frames(2);
+    const before = playerOnePaddleCentre(run.screen());
+    expect(before).toBeGreaterThan(0);
+
+    run.keyDown('ArrowUp');
+    await frames(5);
+    const held = playerOnePaddleCentre(run.screen());
+
+    // One delivered key moves one cell; the client would not repeat for
+    // another 400 ms, far longer than the frames waited above.
+    expect(before - held).toBeGreaterThan(1);
+
+    // 4. Releasing stops it. key-up reaches the door on this path only.
+    run.keyUp('ArrowUp');
+    await frames(4);
+    expect(playerOnePaddleCentre(run.screen())).toBe(held);
   });
 });
