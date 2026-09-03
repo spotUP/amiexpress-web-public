@@ -23,6 +23,8 @@
  * own content homed over the finished animation.
  */
 
+import { renderRunDiff } from '@amiexpress/bbs-door-sdk/common/run-diff';
+
 export type WipeType =
   | 'matrix'     // ~WM
   | 'hblinds'    // ~WH
@@ -404,32 +406,27 @@ function renderGridFull(grid: Cell[][]): string {
 /**
  * Every LATER frame: only the cells that changed, as cursor-addressed runs.
  *
- * Same walk as the C64 door adapter's frame differ
- * (`sdk/petscii/frame/frame-render.ts:41` `renderDiff`) and as blessed's own
- * screen diff (`sdk/node_modules/blessed/lib/widgets/screen.js:1053`
+ * The walk itself is the SDK's shared run differ
+ * (`sdk/common/run-diff.ts` `renderRunDiff`, the same one
+ * `sdk/petscii/frame/frame-render.ts` `renderDiff` drives for the C64 door
+ * adapter, and the same walk as blessed's own screen diff
  * `Screen.prototype.draw`): find a run of changed cells, address its start
  * with CUP, re-state the attributes at the head of the run so the run is
  * self-contained, print the glyphs, move on.
  *
- * DEBT, not a closed decision: this is `renderDiff` line for line, on a
- * different cell model. The attribute-agnostic run differ belongs in a
- * SHARED module - neither `sdk/petscii` (whose cells are VIC indices) nor
- * `web/backend/src/utils` (which the SDK cannot import) - parameterised by
- * "how does a cell state reach the wire" and "which cells may not be
- * painted". Both callers should move onto it; until they do, a fix to the
- * run walk has to be made twice. Recorded in
- * `.superpowers/sdd/2026-09-03-screen-wipes/progress.md`.
+ * This function is the part that is NOT shared: this cell model. A cell here
+ * carries its complete SGR state as a parameter string, so `sgr` is just
+ * `cell.ansi` and two cells are the same when their string and character
+ * are; the C64 renderer's cells carry VIC-II palette indices, never emit a
+ * background, and skip the bottom-right cell for the KERNAL's scroll. The
+ * grid is ragged and unbounded in width, so the walk's extent comes from
+ * both grids and `cellAt` supplies a blank past a row's end. The leading
+ * clear (there is none here) and the trailing reset stay with the caller:
+ * a step that changed nothing sends nothing at all.
  *
- * Neither of those two could be reused as-is. `renderDiff`'s cell colour is a
- * VIC-II index rendered as truecolor from the C64 palette and it deliberately
- * never emits a background at all (a C64 has none) - pointing it at an
- * 80-column ANSI menu would repaint the board's screens in C64 colours and
- * drop their backgrounds - and it skips the bottom-right cell for the
- * KERNAL's scroll. Blessed's differ is bound to its own `lines`/`olines`
- * buffers and terminfo program object. What is shared is the algorithm, and
- * that is what this mirrors; generalising `renderDiff` to an
- * attribute-string cell model belongs in `sdk/petscii/frame`, with the
- * PETSCII pipeline's own tests, not here.
+ * (This was `renderDiff` copied line for line onto a second cell model. The
+ * duplication is recorded as paid off in
+ * `.superpowers/sdd/2026-09-03-screen-wipes/progress.md` Round 3 item 1.)
  *
  * Why it matters: a full repaint per frame is 2.5-10 KB, and the terminal
  * paces what it receives (packages/terminal/src/utils/modem-emulator.ts caps
@@ -437,34 +434,14 @@ function renderGridFull(grid: Cell[][]): string {
  * to play a 650 ms animation. A delta is a few hundred bytes.
  */
 function renderGridDelta(previous: Cell[][], next: Cell[][]): string {
-  const rows = Math.max(previous.length, next.length);
-  const width = Math.max(gridWidth(previous), gridWidth(next));
-  let out = '';
-
-  for (let y = 0; y < rows; y++) {
-    let x = 0;
-    while (x < width) {
-      if (sameCell(cellAt(previous, y, x), cellAt(next, y, x))) {
-        x++;
-        continue;
-      }
-
-      const start = x;
-      let run = '';
-      let lastAnsi = '';
-      while (x < width && !sameCell(cellAt(previous, y, x), cellAt(next, y, x))) {
-        const cell = cellAt(next, y, x);
-        if (cell.ansi !== lastAnsi) {
-          run += cell.ansi;
-          lastAnsi = cell.ansi;
-        }
-        run += cell.char;
-        x++;
-      }
-
-      out += `\x1b[${y + 1};${start + 1}H` + run;
-    }
-  }
+  const out = renderRunDiff<Cell>({
+    cols: Math.max(gridWidth(previous), gridWidth(next)),
+    rows: Math.max(previous.length, next.length),
+    cell: (x, y) => cellAt(next, y, x),
+    changed: (x, y) => !sameCell(cellAt(previous, y, x), cellAt(next, y, x)),
+    sgr: (cell) => cell.ansi,
+    glyph: (cell) => cell.char,
+  });
 
   return out === '' ? '' : out + RESET;
 }

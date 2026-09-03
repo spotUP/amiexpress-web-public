@@ -1,10 +1,13 @@
 /**
  * FrameDiffRenderer: a 40x25 target frame -> the minimal ANSI that makes
- * AnsiToPetsciiTransducer paint it. Cursor-address each run of changed
- * cells, set colour/reverse only when they change inside the run, print
- * the characters. The transducer dedups every colour/reverse byte against
- * its KERNAL oracle, so repeating an SGR at the start of a run costs
- * nothing on the wire while keeping every run self-contained.
+ * AnsiToPetsciiTransducer paint it. The run walk itself is the SDK's shared
+ * differ (`sdk/common/run-diff.ts`): cursor-address each run of changed
+ * cells, set colour/reverse only when they change inside the run, print the
+ * characters. This module is the C64 half of it - what a cell's attribute
+ * state is, which cells may not be painted, and what frames the render.
+ * The transducer dedups every colour/reverse byte against its KERNAL oracle,
+ * so repeating an SGR at the start of a run costs nothing on the wire while
+ * keeping every run self-contained.
  *
  * First frame (no previous, or a size change): clear + home + every
  * non-blank cell. Bold and background are never emitted - the C64 has
@@ -20,6 +23,7 @@
  *
  * Pure TypeScript: no DOM, no Node imports.
  */
+import { renderRunDiff } from '../../common/run-diff';
 import { C64_PALETTE_COLODORE, vicToSgrForeground } from '../c64-palette';
 import { Cell, Cursor, Frame, isBlank, sameCell } from './types';
 
@@ -49,29 +53,19 @@ export function renderDiff(
     throw new RangeError(`renderDiff: frame is ${next.cols}x${next.rows}, target is ${cols}x${rows}`);
   }
   const full = prev === null || prev.cols !== cols || prev.rows !== rows;
-  const needsPaint = (x: number, y: number): boolean => {
-    const c = next.cells[y][x];
-    return full ? !isBlank(c) : !sameCell((prev as Frame).cells[y][x], c);
-  };
-  let out = full ? '\x1b[2J\x1b[H' : '';
-  for (let y = 0; y < rows; y++) {
-    let x = 0;
-    while (x < cols) {
-      if (x === cols - 1 && y === rows - 1) break;   // the cell that scrolls the C64
-      if (!needsPaint(x, y)) { x++; continue; }
-      const start = x;
-      let run = '';
-      let state: { fg: number; rvs: boolean } | null = null;
-      while (x < cols && needsPaint(x, y) && !(x === cols - 1 && y === rows - 1)) {
-        const c = next.cells[y][x];
-        if (!state || state.fg !== c.fg || state.rvs !== c.rvs) { run += sgrFor(c, palette); state = { fg: c.fg, rvs: c.rvs }; }
-        run += c.ch;
-        x++;
-      }
-      out += `\x1b[${y + 1};${start + 1}H` + run;
-    }
-  }
-  return out + '\x1b[0m' + cupTo(next.cursor, cols, rows);
+  const runs = renderRunDiff<Readonly<Cell>>({
+    cols,
+    rows,
+    cell: (x, y) => next.cells[y][x],
+    // A first paint is "every non-blank cell", which is not a comparison
+    // against a blank frame: a space carrying a colour is blank here.
+    changed: (x, y) => (full ? !isBlank(next.cells[y][x]) : !sameCell((prev as Frame).cells[y][x], next.cells[y][x])),
+    sgr: (c) => sgrFor(c, palette),
+    glyph: (c) => c.ch,
+    // The cell that scrolls the C64.
+    skipCell: (x, y) => x === cols - 1 && y === rows - 1,
+  });
+  return (full ? '\x1b[2J\x1b[H' : '') + runs + '\x1b[0m' + cupTo(next.cursor, cols, rows);
 }
 
 /** Full paint of `frame` (no previous frame): clear, home, every non-blank cell. */
