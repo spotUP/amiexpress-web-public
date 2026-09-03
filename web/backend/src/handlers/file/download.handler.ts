@@ -32,6 +32,13 @@ import { resolveFileDescription, isRestrictedComment } from '../../utils/file-re
 import { userFileManager } from '../../services/UserFileManager';
 import { doorDropFileManager } from '../../services/DoorDropFileManager';
 import { emitDownload } from '../../services/bbs-event-emitter';
+import {
+  materialiseRemoteFile,
+  materialiseRemoteMatches,
+  rematerialise,
+  storageFailureText,
+} from '../../storage/remote-download';
+import { getStorageContext } from '../../storage/storage-context';
 
 export class DownloadHandler {
   /**
@@ -179,7 +186,8 @@ export class DownloadHandler {
         const dataDir = config.get('dataDir');
         if (session.flagManager instanceof FileFlagManager) {
           for (const f of session.flagManager.getAll()) {
-            const found = await this.findFilesInConference(dataDir, f.confNum, f.filename);
+            const found = await this.findFilesReporting(socket, dataDir, f.confNum, f.filename);
+            if (found === null) continue; // the volume could not answer; already reported
             for (const file of found) {
               // express.e:12736 — checkFIBForFileSize prints one line per file
               // it accepts into the download set. Without this our pre-load
@@ -194,8 +202,9 @@ export class DownloadHandler {
           // Accept both {filename} (F command, JH_FLAGFILE) and legacy {fileName}.
           const name = f?.filename || f?.fileName || (typeof f === 'string' ? f : '');
           if (name) {
-            const found = await this.findFilesInConference(
-              dataDir, f?.confNum || session.currentConf || 1, name);
+            const found = await this.findFilesReporting(
+              socket, dataDir, f?.confNum || session.currentConf || 1, name);
+            if (found === null) continue; // the volume could not answer; already reported
             for (const file of found) {
               this.printFileFound(socket, session, file);
               fileList.push(file);
@@ -209,7 +218,9 @@ export class DownloadHandler {
         for (const name of params.trim().split(/\s+/).filter(n => n.length > 0)) {
           const err = this.validateFilenameStr(name, hasExpansion);
           if (err) { socket.emit('ansi-output', `\r\n${err}\r\n`); continue; }
-          const found = await this.findFilesInConference(config.get('dataDir'), session.currentConf || 1, name);
+          const found = await this.findFilesReporting(
+            socket, config.get('dataDir'), session.currentConf || 1, name);
+          if (found === null) continue; // the volume could not answer; already reported
           if (found.length === 0) {
             socket.emit('ansi-output', `\r\nFile not found: ${name}\r\n`);
             continue;
@@ -321,8 +332,15 @@ export class DownloadHandler {
     }
 
     // express.e:20167 checkForFileSize(...)
-    const found = await this.findFilesInConference(
-      config.get('dataDir'), session.currentConf || 1, trimmed);
+    const found = await this.findFilesReporting(
+      socket, config.get('dataDir'), session.currentConf || 1, trimmed);
+
+    if (found === null) {
+      // The volume could not answer. It is NOT a missing file, and the
+      // caller has been told which drive and to try again later.
+      this.showFilespecPrompt(socket, session);
+      return;
+    }
 
     if (found.length === 0) {
       socket.emit('ansi-output', `File not found: ${trimmed}\r\n`);
@@ -522,7 +540,27 @@ export class DownloadHandler {
     const transport = (session as any).connectionType;
     if (transport === 'telnet' || transport === 'ssh') {
       const { startZmodemDownload } = require('../commands/user-commands.handler');
-      const paths = fileList.map((f) => f.fullPath).filter((p: string) => !!p);
+
+      // Fetch every pooled file again at SEND time. The caller has been
+      // sitting at the download prompt since these paths were resolved, and
+      // another node's fetch can evict a clean cached copy in that window -
+      // startZmodemDownload existsSync-checks each path and would tell the
+      // caller "files not found" about a file the bucket still holds.
+      const storage = getStorageContext();
+      const paths: string[] = [];
+      for (const file of fileList) {
+        if (!file?.fullPath) continue;
+        try {
+          paths.push(await rematerialise(file, storage));
+        } catch (error) {
+console.error('[Download] re-fetch before transfer failed:', error);
+          socket.emit('ansi-output', `\r\n[X] ${file.name}: ${storageFailureText(error)}\r\n\r\n`);
+          session.subState = LoggedOnSubState.DISPLAY_MENU;
+          session.tempData = undefined;
+          return;
+        }
+      }
+
       if (paths.length === 0) {
         socket.emit('ansi-output', '\r\nNo file paths to send.\r\n\r\n');
         session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -769,6 +807,30 @@ export class DownloadHandler {
 
   // ─── file search ────────────────────────────────────────────────────────
 
+  /**
+   * `findFilesInConference`, plus the line the caller sees when the pool
+   * cannot answer.
+   *
+   * Returns null - never an empty array - when a volume is unreachable, so the
+   * three call sites can tell that apart from a real miss. They print "File
+   * not found" on an empty result, and printing that for a file that is
+   * perfectly fine is the one thing this whole subsystem is built to prevent.
+   */
+  private static async findFilesReporting(
+    socket: Socket,
+    dataDir: string,
+    confNum: number,
+    pattern: string
+  ): Promise<any[] | null> {
+    try {
+      return await this.findFilesInConference(dataDir, confNum, pattern);
+    } catch (error) {
+console.error(`[Download] ${pattern} in conf ${confNum}:`, error);
+      socket.emit('ansi-output', `\r\n[X] ${pattern}: ${storageFailureText(error)}\r\n`);
+      return null;
+    }
+  }
+
   private static async findFilesInConference(
     dataDir: string,
     confNum: number,
@@ -777,6 +839,38 @@ export class DownloadHandler {
     const confPath       = getConferenceDir(confNum, dataDir);
     const matchingFiles: any[] = [];
     const hasWildcard    = this.hasWildcards(pattern);
+
+    // A pooled area answers first. A conference can be part-migrated, so the
+    // disk walk below still runs: on an exact name a pooled HIT wins outright
+    // (a leftover local copy is the older version), and on a wildcard the two
+    // sets are MERGED - returning only the pooled subset would hide the files
+    // still on disk from `D *.LHA`, which is the same silent drop this branch
+    // exists to fix. Throws rather than answering empty when the volume cannot
+    // be reached; findFilesReporting is what turns that into a line.
+    const storage = getStorageContext();
+    const pooledNames = new Set<string>();
+    if (storage) {
+      const remote = hasWildcard
+        ? await materialiseRemoteMatches(name => this.matchesWildcard(name, pattern), confNum, storage)
+        : await materialiseRemoteFile(pattern, confNum, storage).then(one => (one ? [one] : []));
+
+      for (const file of remote) {
+        pooledNames.add(file.name.toLowerCase());
+        matchingFiles.push({
+          name: file.name,
+          size: file.size,
+          confNum,
+          dirNum: 1,
+          fullPath: file.fullPath,
+          // Kept so the transfer can fetch the object again if the cache
+          // evicted it while the caller sat at the download prompt.
+          driveNumber: file.driveNumber,
+          objectKey: file.key,
+        });
+      }
+
+      if (!hasWildcard && matchingFiles.length > 0) return matchingFiles;
+    }
     const searchDirs     = [
       path.join(confPath, 'Upload'),
       path.join(confPath, 'Files'),
@@ -787,6 +881,7 @@ export class DownloadHandler {
       if (hasWildcard) {
         for (const file of fs.readdirSync(dir)) {
           if (!this.matchesWildcard(file, pattern)) continue;
+          if (pooledNames.has(file.toLowerCase())) continue; // the pool holds the current version
           const fp = path.join(dir, file);
           const st = fs.statSync(fp);
           if (st.isFile()) matchingFiles.push({ name: file, size: st.size, confNum, dirNum: 1, fullPath: fp });
@@ -794,7 +889,7 @@ export class DownloadHandler {
       } else {
         const fp = path.join(dir, pattern);
         const resolved = amigafs.resolvePath(fp); // case-insensitive on Linux
-        if (resolved) {
+        if (resolved && !pooledNames.has(path.basename(resolved).toLowerCase())) {
           const st = fs.statSync(resolved);
           if (st.isFile()) matchingFiles.push({ name: path.basename(resolved), size: st.size, confNum, dirNum: 1, fullPath: resolved });
         }

@@ -452,6 +452,55 @@ export class NameIndex {
     return found;
   }
 
+  /**
+   * Every key in this area whose name the caller accepts - the enumeration a
+   * wildcard filespec needs, since `D DEMO*.LHA` is ordinary BBS usage and a
+   * pooled area has no directory to read.
+   *
+   * It takes a PREDICATE, not a pattern, on purpose: the board already has two
+   * divergent wildcard dialects (`file.handler.ts:989` and the copy in
+   * `download.handler.ts`), and a third one written here - in the layer
+   * furthest from the caller who typed the filespec - would be the wrong place
+   * to settle which of them is right. The caller passes the matcher its own
+   * command already uses, and this class stays about names and outages.
+   *
+   * The predicate sees the path relative to the area prefix, which is the
+   * plain filename for a flat area, and the returned keys are the real full
+   * keys. Same outage rules as `resolve`: an EMPTY result while the last
+   * listing attempt failed throws rather than reading as "the area holds
+   * nothing", because a caller shown an empty list during an outage concludes
+   * the files are gone.
+   */
+  async match(matches: (name: string) => boolean): Promise<string[]> {
+    if (!this.primed) {
+      if (this.gate.blocked()) {
+        throw this.gate.raise(this.backend.driveNumber);
+      }
+      await this.refresh();
+    }
+
+    let found = this.collect(matches);
+    if (found.length === 0) {
+      if (this.missIsStale() && !this.gate.blocked()) {
+        await this.refresh();
+        found = this.collect(matches);
+      }
+      if (found.length === 0 && this.gate.hasFailure()) {
+        throw this.gate.raise(this.backend.driveNumber);
+      }
+    }
+    return found;
+  }
+
+  /** Stable order, so two identical filespecs queue the files the same way. */
+  private collect(matches: (name: string) => boolean): string[] {
+    const hits: string[] = [];
+    for (const [rel, key] of this.exactByRelKey) {
+      if (matches(rel)) hits.push(key);
+    }
+    return hits.sort();
+  }
+
   /** Called after a put. */
   note(key: string): void {
     if (this.inFlight) {

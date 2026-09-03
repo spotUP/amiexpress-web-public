@@ -658,3 +658,58 @@ describe('NameIndex', () => {
     expect(await index.resolve('Conf1/Files/FILE.LHA')).toBe('Conf1/Files/FILE.LHA');
   });
 });
+
+describe('NameIndex.match', () => {
+  /** The dialect download.handler uses for a filespec. */
+  const wild = (pattern: string) => (name: string) =>
+    new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 'i').test(name);
+
+  it('enumerates every key whose name the caller accepts', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    await backend.put('Files/DEMO1.LHA', Buffer.from('x'));
+    await backend.put('Files/DEMO2.LHA', Buffer.from('x'));
+    await backend.put('Files/OTHER.LHA', Buffer.from('x'));
+    const index = new NameIndex(backend, 'Files/');
+
+    expect(await index.match(wild('DEMO*.LHA'))).toEqual(['Files/DEMO1.LHA', 'Files/DEMO2.LHA']);
+  });
+
+  it('costs one listing, like resolve', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    await backend.put('Files/A.LHA', Buffer.from('x'));
+    const index = new NameIndex(backend, 'Files/');
+
+    await index.match(wild('*.LHA'));
+    await index.match(wild('A*'));
+
+    expect(backend.lists).toBe(1);
+  });
+
+  it('is empty when the area holds nothing matching', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    await backend.put('Files/A.LHA', Buffer.from('x'));
+    const index = new NameIndex(backend, 'Files/');
+
+    expect(await index.match(wild('Z*.LHA'))).toEqual([]);
+  });
+
+  it('throws rather than answering empty when the volume is down', async () => {
+    // An empty list during an outage reads to a caller as "the area holds
+    // nothing" - the same lie a null resolve would be.
+    const backend = new FakeBackend({ driveNumber: 2 });
+    await backend.put('Files/A.LHA', Buffer.from('x'));
+    const index = new NameIndex(backend, 'Files/');
+    backend.down = true;
+
+    await expect(index.match(wild('*.LHA'))).rejects.toBeInstanceOf(StorageUnavailableError);
+  });
+
+  it('sees an object noted after the listing', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    const index = new NameIndex(backend, 'Files/');
+    await index.match(wild('*.LHA'));
+    index.note('Files/NEW.LHA');
+
+    expect(await index.match(wild('*.LHA'))).toEqual(['Files/NEW.LHA']);
+  });
+});
