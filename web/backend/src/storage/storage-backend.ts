@@ -31,8 +31,15 @@ export class StorageUnavailableError extends Error {
   }
 }
 
+/**
+ * driveNumber is undefined for a pool-level refusal - "nothing in the pool has
+ * room" is not any one drive's fault, and DRIVE numbering starts at 1, so a
+ * sentinel 0 would read as a real (if wrong) drive to a caller that maps it
+ * straight to `byNumber()`. A single-volume quota failure (LocalBackend.put,
+ * FakeBackend.put) still names its drive.
+ */
 export class StorageQuotaError extends Error {
-  constructor(public readonly driveNumber: number, message: string) {
+  constructor(public readonly driveNumber: number | undefined, message: string) {
     super(message);
     this.name = 'StorageQuotaError';
   }
