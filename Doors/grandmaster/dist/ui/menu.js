@@ -5,11 +5,38 @@
  * Displays game mode selection and options
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MenuScreen = void 0;
+exports.MenuScreen = exports.MENU_SELECTIONS = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 /**
  * Main menu screen
  */
+/**
+ * What each menu row does, in the order the rows are drawn.
+ *
+ * At module scope so a key handler can ask for a row by name. The two lists
+ * - this one and the `items` array below - have to stay the same length and
+ * the same order; tests/panels/menu-wiring.test.ts is what says so.
+ */
+exports.MENU_SELECTIONS = [
+    'master',
+    'death',
+    'sprint',
+    'marathon',
+    'cpu_battle',
+    'versus',
+    'tetrinet',
+    'training',
+    'mission',
+    'ultra',
+    'dig',
+    'zone',
+    'spectate',
+    'master', // the separator row, which behaves as the first entry
+    'settings',
+    'stats',
+    'manual',
+    'quit',
+];
 class MenuScreen {
     constructor(screen, state, sounds) {
         this.screen = screen;
@@ -209,27 +236,7 @@ class MenuScreen {
             this.screen.render();
             // Handle selection
             menu.on('select', (_item, index) => {
-                const selections = [
-                    'master',
-                    'death',
-                    'sprint',
-                    'marathon',
-                    'cpu_battle',
-                    'versus',
-                    'tetrinet',
-                    'training',
-                    'mission',
-                    'ultra',
-                    'dig',
-                    'zone',
-                    'spectate',
-                    'master', // Separator line, default to master
-                    'settings',
-                    'stats',
-                    'manual',
-                    'quit',
-                ];
-                const selection = selections[index];
+                const selection = exports.MENU_SELECTIONS[index];
                 this.sounds.playSfx('menu_ok');
                 // Clean up
                 cleanupResize?.();
@@ -243,17 +250,23 @@ class MenuScreen {
                 this.screen.render();
                 resolve(selection);
             });
-            // Handle quit key
+            // q, ESC and F1 pick their row BY NAME.
+            //
+            // They used to emit a hardcoded index - 15 for quit, 14 for the
+            // manual - which was right when the menu had sixteen rows. It has
+            // eighteen now, so q and ESC opened HIGH SCORES and F1 opened
+            // SETTINGS: nothing errored, the keys just did the wrong thing
+            // (reported on main, 2026-09-03).
+            const rowFor = (selection) => exports.MENU_SELECTIONS.indexOf(selection);
             menu.key(['q', 'Q'], () => {
-                menu.emit('select', null, 15); // Trigger quit selection (index 15)
+                menu.emit('select', null, rowFor('quit'));
             });
-            // Handle ESC key - same as quit
+            // ESC leaves, the same as q.
             menu.key(['escape'], () => {
-                menu.emit('select', null, 15); // Trigger quit selection (index 15)
+                menu.emit('select', null, rowFor('quit'));
             });
-            // Handle F1 key for manual
             menu.key(['f1'], () => {
-                menu.emit('select', null, 14); // Trigger manual selection (index 14)
+                menu.emit('select', null, rowFor('manual'));
             });
             // Focus and render
             menu.focus();
