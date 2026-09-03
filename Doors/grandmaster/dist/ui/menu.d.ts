@@ -10,6 +10,14 @@ export type MenuSelection = 'master' | 'death' | 'sprint' | 'marathon' | 'cpu_ba
 /**
  * Main menu screen
  */
+/**
+ * What each menu row does, in the order the rows are drawn.
+ *
+ * At module scope so a key handler can ask for a row by name. The two lists
+ * - this one and the `items` array below - have to stay the same length and
+ * the same order; tests/panels/menu-wiring.test.ts is what says so.
+ */
+export declare const MENU_SELECTIONS: readonly MenuSelection[];
 export declare class MenuScreen {
     private screen;
     private state;
