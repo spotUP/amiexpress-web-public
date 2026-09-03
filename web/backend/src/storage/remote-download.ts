@@ -25,6 +25,7 @@ import {
 } from './remote-areas';
 import type { StorageContext } from './storage-context';
 import { isStorageUnavailable } from './file-cache';
+import type { IndexedObject } from './name-index';
 
 /** A pooled object, materialised. `fullPath` is a real file on local disk. */
 export interface RemoteFile {
@@ -51,16 +52,28 @@ export async function materialiseRemoteFile(
   conferenceId: number,
   storage: StorageContext
 ): Promise<RemoteFile | null> {
+  let failure: unknown;
+
   for (const area of usableAreas(conferenceId, storage)) {
     const driveNumber = area.storageVolume;
     if (driveNumber === undefined) continue;
 
-    const index = storage.names.forArea(driveNumber, objectPrefixFor(area));
-    const key = await index.resolve(filename);
-    if (key === null) continue;
+    try {
+      const index = storage.names.forArea(driveNumber, objectPrefixFor(area));
+      const key = await index.resolve(filename);
+      if (key === null) continue;
 
-    return await materialise(driveNumber, key, storage);
+      return await materialise(driveNumber, key, storage);
+    } catch (error) {
+      // One area's drive being down says nothing about the next area's. Keep
+      // looking, and only report the outage if no area could answer - a file
+      // sitting in a healthy second area must not be lost to the first one's
+      // bad minute.
+      failure = error;
+    }
   }
+
+  if (failure !== undefined) throw failure;
   return null;
 }
 
@@ -76,6 +89,19 @@ export interface RemoteListing {
   localPath: string;
   driveNumber: number;
   key: string;
+}
+
+/**
+ * What a pooled lookup found, and what could not be asked.
+ *
+ * Both halves travel together because they are independent: one area's drive
+ * being down does not stop another area of the same conference from answering,
+ * and the caller is owed the files that WERE found as well as the warning that
+ * the list may be short.
+ */
+export interface RemoteListingResult {
+  files: RemoteListing[];
+  storageError?: unknown;
 }
 
 /**
@@ -107,21 +133,33 @@ export async function listRemoteMatches(
   matches: (name: string) => boolean,
   conferenceId: number,
   storage: StorageContext
-): Promise<RemoteListing[]> {
-  const found: RemoteListing[] = [];
+): Promise<RemoteListingResult> {
+  const files: RemoteListing[] = [];
   const claimed = new Set<string>();
+  let storageError: unknown;
 
   for (const area of usableAreas(conferenceId, storage)) {
     const driveNumber = area.storageVolume;
     if (driveNumber === undefined) continue;
 
-    const index = storage.names.forArea(driveNumber, objectPrefixFor(area));
-    for (const object of await index.match(matches)) {
+    let objects: IndexedObject[];
+    try {
+      objects = await storage.names.forArea(driveNumber, objectPrefixFor(area)).match(matches);
+    } catch (error) {
+      // Reported, not thrown: throwing out of the loop discards the matches a
+      // HEALTHY co-conference area already produced, which were sitting right
+      // there. Same shape the pooled-versus-local split uses - keep what
+      // answered, and say what did not.
+      storageError = error;
+      continue;
+    }
+
+    for (const object of objects) {
       const name = path.basename(object.key);
       const lower = name.toLowerCase();
       if (claimed.has(lower)) continue;
       claimed.add(lower);
-      found.push({
+      files.push({
         name,
         size: object.size ?? 0,
         localPath: storage.cache.localPathFor(driveNumber, object.key),
@@ -130,7 +168,7 @@ export async function listRemoteMatches(
       });
     }
   }
-  return found;
+  return { files, storageError };
 }
 
 /**
@@ -145,24 +183,35 @@ export async function locateRemoteFile(
   filename: string,
   conferenceId: number,
   storage: StorageContext
-): Promise<RemoteListing | null> {
+): Promise<RemoteListingResult> {
+  let storageError: unknown;
+
   for (const area of usableAreas(conferenceId, storage)) {
     const driveNumber = area.storageVolume;
     if (driveNumber === undefined) continue;
 
-    const index = storage.names.forArea(driveNumber, objectPrefixFor(area));
-    const key = await index.resolve(filename);
-    if (key === null) continue;
+    try {
+      const index = storage.names.forArea(driveNumber, objectPrefixFor(area));
+      const key = await index.resolve(filename);
+      if (key === null) continue;
 
-    return {
-      name: path.basename(key),
-      size: index.sizeOf(key) ?? 0,
-      localPath: storage.cache.localPathFor(driveNumber, key),
-      driveNumber,
-      key,
-    };
+      return {
+        files: [
+          {
+            name: path.basename(key),
+            size: index.sizeOf(key) ?? 0,
+            localPath: storage.cache.localPathFor(driveNumber, key),
+            driveNumber,
+            key,
+          },
+        ],
+        storageError,
+      };
+    } catch (error) {
+      storageError = error;
+    }
   }
-  return null;
+  return { files: [], storageError };
 }
 
 /**

@@ -37,7 +37,7 @@ import {
   locateRemoteFile,
   rematerialise,
   storageFailureText,
-  type RemoteListing,
+  type RemoteListingResult,
 } from '../../storage/remote-download';
 import { getStorageContext } from '../../storage/storage-context';
 
@@ -871,31 +871,31 @@ console.error(`[Download] ${pattern} in conf ${confNum}:`, storageError);
     const pooledNames = new Set<string>();
     let storageError: unknown;
     if (storage) {
-      try {
-        const remote: RemoteListing[] = hasWildcard
-          ? await listRemoteMatches((name: string) => this.matchesWildcard(name, pattern), confNum, storage)
-          : await locateRemoteFile(pattern, confNum, storage).then(one => (one ? [one] : []));
+      // The pooled half reports its own failures rather than throwing: one
+      // area's drive being down must not discard a healthy co-conference
+      // area's matches, nor the local files below.
+      const remote: RemoteListingResult = hasWildcard
+        ? await listRemoteMatches((name: string) => this.matchesWildcard(name, pattern), confNum, storage)
+        : await locateRemoteFile(pattern, confNum, storage);
+      storageError = remote.storageError;
 
-        for (const file of remote) {
-          pooledNames.add(file.name.toLowerCase());
-          matchingFiles.push({
-            name: file.name,
-            size: file.size,
-            confNum,
-            dirNum: 1,
-            // Not fetched yet: this is where the bytes WILL be. The transfer
-            // calls rematerialise, which fetches them (and fetches them again
-            // if the cache evicted them while the caller sat at the prompt).
-            fullPath: file.localPath,
-            driveNumber: file.driveNumber,
-            objectKey: file.key,
-          });
-        }
-
-        if (!hasWildcard && matchingFiles.length > 0) return { files: matchingFiles };
-      } catch (error) {
-        storageError = error;
+      for (const file of remote.files) {
+        pooledNames.add(file.name.toLowerCase());
+        matchingFiles.push({
+          name: file.name,
+          size: file.size,
+          confNum,
+          dirNum: 1,
+          // Not fetched yet: this is where the bytes WILL be. The transfer
+          // calls rematerialise, which fetches them (and fetches them again
+          // if the cache evicted them while the caller sat at the prompt).
+          fullPath: file.localPath,
+          driveNumber: file.driveNumber,
+          objectKey: file.key,
+        });
       }
+
+      if (!hasWildcard && matchingFiles.length > 0) return { files: matchingFiles, storageError };
     }
     const searchDirs     = [
       path.join(confPath, 'Upload'),

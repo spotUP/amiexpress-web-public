@@ -7,7 +7,8 @@ import * as path from 'path';
 import { FileCache } from '../../src/storage/file-cache';
 import { NameIndexRegistry } from '../../src/storage/name-index-registry';
 import { VolumeSet, type VolumeState } from '../../src/storage/volume-set';
-import { listRemoteMatches, rematerialise } from '../../src/storage/remote-download';
+import { listRemoteMatches, locateRemoteFile, rematerialise } from '../../src/storage/remote-download';
+import { StorageUnavailableError } from '../../src/storage/storage-backend';
 import type { StorageContext } from '../../src/storage/storage-context';
 import type { RemoteArea } from '../../src/storage/remote-areas';
 import { FakeBackend } from './fake-backend';
@@ -53,7 +54,7 @@ describe('listRemoteMatches', () => {
     ]);
     await backends[0].put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
 
-    const [found] = await listRemoteMatches(anyName, 1, ctx);
+    const [found] = (await listRemoteMatches(anyName, 1, ctx)).files;
 
     expect(found.name).toBe('DEMO.LHA');
     expect(found.size).toBe(7);
@@ -78,7 +79,7 @@ describe('listRemoteMatches', () => {
     await backends[0].put('Conf1/Files/DEMO.LHA', Buffer.from('from-files'));
     await backends[0].put('Conf1/Extra/DEMO.LHA', Buffer.from('from-extra'));
 
-    const found = await listRemoteMatches(anyName, 1, ctx);
+    const { files: found } = await listRemoteMatches(anyName, 1, ctx);
 
     expect(found).toHaveLength(1);
     // Declaration order decides: dir 1 before dir 2, the same precedence a
@@ -94,9 +95,71 @@ describe('listRemoteMatches', () => {
     await backends[0].put('Conf1/Files/A.LHA', Buffer.from('a'));
     await backends[0].put('Conf1/Extra/B.LHA', Buffer.from('b'));
 
-    const found = await listRemoteMatches(anyName, 1, ctx);
+    const { files: found } = await listRemoteMatches(anyName, 1, ctx);
 
     expect(found.map(f => f.name).sort()).toEqual(['A.LHA', 'B.LHA']);
+  });
+});
+
+describe('one area down, another healthy', () => {
+  it('keeps the healthy area\'s matches and reports the failed drive', async () => {
+    // Throwing out of the area loop discarded results that were sitting right
+    // there, recoverable, in an area whose bucket was perfectly fine.
+    const { ctx, backends } = contextWith(
+      [
+        { id: 1, conferenceId: 1, dirNumber: 1, path: 'BBS:Conf1/Files/', storageVolume: 2 },
+        { id: 2, conferenceId: 1, dirNumber: 2, path: 'BBS:Conf1/Extra/', storageVolume: 3 },
+      ],
+      [2, 3]
+    );
+    await backends[0].put('Conf1/Files/DOWN.LHA', Buffer.from('a'));
+    await backends[1].put('Conf1/Extra/UP.LHA', Buffer.from('b'));
+    backends[0].down = true;
+
+    const { files, storageError } = await listRemoteMatches(anyName, 1, ctx);
+
+    expect(files.map(f => f.name)).toEqual(['UP.LHA']);
+    expect(storageError).toBeInstanceOf(StorageUnavailableError);
+  });
+
+  it('finds an exact name in the second area when the first area is down', async () => {
+    const { ctx, backends } = contextWith(
+      [
+        { id: 1, conferenceId: 1, dirNumber: 1, path: 'BBS:Conf1/Files/', storageVolume: 2 },
+        { id: 2, conferenceId: 1, dirNumber: 2, path: 'BBS:Conf1/Extra/', storageVolume: 3 },
+      ],
+      [2, 3]
+    );
+    await backends[1].put('Conf1/Extra/DEMO.LHA', Buffer.from('b'));
+    backends[0].down = true;
+
+    const { files } = await locateRemoteFile('DEMO.LHA', 1, ctx);
+
+    expect(files.map(f => f.key)).toEqual(['Conf1/Extra/DEMO.LHA']);
+  });
+
+  it('reports the outage when NO area could answer', async () => {
+    const { ctx, backends } = contextWith([
+      { id: 1, conferenceId: 1, dirNumber: 1, path: 'BBS:Conf1/Files/', storageVolume: 2 },
+    ]);
+    await backends[0].put('Conf1/Files/DEMO.LHA', Buffer.from('a'));
+    backends[0].down = true;
+
+    const { files, storageError } = await locateRemoteFile('DEMO.LHA', 1, ctx);
+
+    expect(files).toEqual([]);
+    expect(storageError).toBeInstanceOf(StorageUnavailableError);
+  });
+
+  it('says nothing when every area answered and simply held nothing', async () => {
+    const { ctx } = contextWith([
+      { id: 1, conferenceId: 1, dirNumber: 1, path: 'BBS:Conf1/Files/', storageVolume: 2 },
+    ]);
+
+    const { files, storageError } = await locateRemoteFile('NOPE.LHA', 1, ctx);
+
+    expect(files).toEqual([]);
+    expect(storageError).toBeUndefined();
   });
 });
 
