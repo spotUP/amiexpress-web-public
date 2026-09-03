@@ -24,7 +24,7 @@
  * they were always independent of the screen that used to wrap them.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SpriteStudioDoor = exports.WHEEL_NOTCHES_PER_STEP = exports.ZOOM_STEPS = exports.CELL_ASPECT = exports.DEFAULT_ZOOM = exports.SIDEBAR_COLS = void 0;
+exports.SpriteStudioDoor = exports.WHEEL_NOTCHES_PER_STEP = exports.ZOOM_STEPS = exports.CELL_ASPECT = exports.DEFAULT_ZOOM = exports.REQUESTER_COLS = exports.SIDEBAR_COLS = void 0;
 exports.zoomScales = zoomScales;
 exports.stepZoom = stepZoom;
 exports.canvasRoom = canvasRoom;
@@ -39,9 +39,18 @@ const edit_doc_1 = require("./edit-doc");
 const assets_1 = require("./assets");
 const preview_1 = require("./preview");
 const dialogs_1 = require("./dialogs");
+const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 const door_theme_1 = require("./door-theme");
 /** The editor's own sidebar width, subtracted before working out the zoom. */
 exports.SIDEBAR_COLS = 6;
+/**
+ * How wide a requester is.
+ *
+ * Named because the chrome has to know it too: a masthead is drawn to the
+ * row it is given, and this requester's row is the top of a 44-column box
+ * rather than the width of the screen.
+ */
+exports.REQUESTER_COLS = 44;
 /**
  * Magnification, in characters per sprite cell.
  *
@@ -179,6 +188,14 @@ class SpriteStudioDoor {
         this.file = '';
         this.exitResolve = null;
         this.keyHandlers = [];
+        /**
+         * The SDK chrome on whichever requester is up.
+         *
+         * Kept on the door as well as in the requester's own closure so that
+         * leaving the door while a requester is open still stops the timers -
+         * see destroy().
+         */
+        this.requesterChrome = null;
     }
     setContext(ctx) {
         this.ctx = ctx;
@@ -278,7 +295,7 @@ class SpriteStudioDoor {
                 parent: this.screen,
                 top: 'center',
                 left: 'center',
-                width: 44,
+                width: exports.REQUESTER_COLS,
                 height: Math.min(items.length + 2, 18),
                 fixed: true,
                 border: { type: 'line' },
@@ -293,7 +310,50 @@ class SpriteStudioDoor {
                     selected: { bg: door_theme_1.T.accent, fg: door_theme_1.T.bar },
                 },
             });
+            /**
+             * The chrome, from the ONE SDK call - on the requester, because the
+             * requester is the only screen this door owns a row of.
+             *
+             * The editor behind it has none to give. Inside its frame the widget
+             * owns row 0 with the menu bar and row 1 with the F-key toolbar
+             * (sdk/engines/ui/blessed/widgets/ansi-editor.ts:665-674), and the
+             * bottom row with a live status line (:768-778) that also carries
+             * this door's transport strip (:1042-1056 there, buildToolbar here).
+             * Its title row is a live readout too - the frame number, the dirty
+             * mark, the PLAYING banner (loadFrame, flash, playInPlace) - so a
+             * rail sliding along it would erase what the studio is telling you
+             * twenty times a second. Everything between those rows is the
+             * sprite, and a glitch on the sprite is not atmosphere: it is an
+             * artist watching their own cells change under their hand.
+             *
+             * So the masthead goes on the requester's title row, which is a row
+             * the door draws and nothing else reads, and the glitches go on the
+             * list of names beneath it. Nothing moves a cell: same box, same
+             * width, same place.
+             */
+            const chrome = (0, theme_1.attachDoorChrome)(door_theme_1.THEME, {
+                // The LIVE screen width - the SDK turns every moving part off at
+                // 40 columns on the strength of it, so it must never be a constant.
+                width: this.screen.width,
+                title,
+                masthead: { setContent: (text) => list.setLabel(text) },
+                // A border label prints between the corners with a space either
+                // side of it (sdk/engines/ui/blessed/core/screen.ts:1512-1533), so
+                // five of the requester's columns are spoken for before the first
+                // slash - and the row it is drawn to is the REQUESTER's, not the
+                // screen's.
+                mastheadWidth: Math.max(1, exports.REQUESTER_COLS - 5),
+                glitch: list,
+                glitchOptions: { tickMs: 400 },
+                styles: door_theme_1.S,
+                render: () => this.screen.render(),
+            });
+            this.requesterChrome = chrome;
             const done = (value) => {
+                // Before the list goes: stop() puts back any row a glitch was in
+                // the middle of damaging and leaves the bar at rest.
+                chrome.stop();
+                this.requesterChrome = null;
                 this.screen.dialogOpen = false;
                 this.screen.releaseFocusTrap?.(list);
                 list.destroy();
@@ -1197,6 +1257,11 @@ class SpriteStudioDoor {
         }
     }
     destroy() {
+        // A chrome timer writing to a destroyed screen is how a door takes the
+        // session with it, so it goes before anything else - and a requester
+        // that was still open when the door closed gets its rows put back.
+        this.requesterChrome?.stop();
+        this.requesterChrome = null;
         // Restores the board's 80 columns and drops the resize listener.
         this.terminalMode?.dispose();
         this.terminalMode = null;
