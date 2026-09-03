@@ -83,7 +83,8 @@ async function createApp(session) {
     // green in all seven themes. A host without getTheme (an older board, a
     // test) leaves `classic`, whose tokens ARE the names that were hardcoded
     // here, so nothing moves for anyone who has not chosen a theme.
-    const S = (0, theme_1.themeStyles)((bbs?.getTheme?.()) ?? (0, theme_1.themeById)('classic'));
+    const theme = (bbs?.getTheme?.()) ?? (0, theme_1.themeById)('classic');
+    const S = (0, theme_1.themeStyles)(theme);
     const testResults = [];
     let currentDemo = null;
     const intervals = [];
@@ -137,7 +138,10 @@ async function createApp(session) {
         // GRANDMASTER's backgrounds and Scrollwars' footer.
         border: undefined,
         style: S.bar.style,
-        content: ` Neo-Blessed Showcase ${BUILD_VERSION} | Q:Quit Tab:Nav Enter:Select `,
+        // The masthead is painted by attachDoorChrome below - the theme's rail
+        // and the title. The keys this bar used to list have moved to the
+        // status row, which is where a hint line belongs.
+        content: '',
     });
     const menuBox = blessed_1.default.box({
         parent: screen,
@@ -228,9 +232,45 @@ async function createApp(session) {
         height: 1,
         tags: true,
         border: undefined, // as above: a one-row bar cannot carry a frame
-        style: S.bar.style,
-        content: ` User: ${username} | Select a category | F12: Toggle Mouse `,
+        style: (0, theme_1.footerStyle)(theme),
+        content: '',
     });
+    /**
+     * The whole chrome, from the ONE SDK call.
+     *
+     * The showcase took the theme's COLOURS and none of its chrome - the
+     * sysop's complaint exactly. The header bar becomes the animated rail,
+     * the status row becomes a real hint line, and the CATEGORY list carries
+     * the theme's glitches. The demos themselves are untouched: a widget
+     * showcase demonstrating `fg: 'red'` should still show red.
+     */
+    const chrome = (0, theme_1.attachDoorChrome)(theme, {
+        width: screen.width || 80,
+        title: `NEO-BLESSED SHOWCASE ${BUILD_VERSION}`,
+        masthead: headerBar,
+        footer: statusBar,
+        hints: [
+            { key: 'Tab', does: 'Navigate' },
+            { key: 'Enter', does: 'Select' },
+            { key: 'F12', does: 'Toggle Mouse' },
+            { key: 'Q', does: 'Quit' },
+        ],
+        compactHints: [
+            { key: 'Tab', does: 'Nav' },
+            { key: 'Ent', does: 'Go' },
+            { key: 'Q', does: 'Quit' },
+        ],
+        footerPad: ' ',
+        // The CATEGORY list, which is on screen for the whole session. Never the
+        // demo area: a glitch there would read as the widget under test being
+        // broken, which is the one thing this door must never fake.
+        glitch: menuList,
+        glitchOptions: { tickMs: 400 },
+        styles: S,
+        render: () => screen.render(),
+    });
+    // Who is looking at it, until the first thing happens.
+    chrome.setFooterSuffix(`  ${S.dim('User: ' + username)}`);
     // ========== HELPERS ==========
     function clearDemo() {
         // Show cursor if it was hidden
@@ -261,8 +301,13 @@ async function createApp(session) {
             testResults.push({ widget, status, notes });
         }
     }
+    /**
+     * The message after the hints, not instead of them. Writing straight over
+     * the status row took the key hints with it the first time anything
+     * happened, which is how a door ends up with a footer nobody ever sees.
+     */
     function setStatus(msg) {
-        statusBar.setContent(` ${msg} `);
+        chrome.setFooterSuffix(`  ${S.dim(msg)}`);
         screen.render();
     }
     function addInterval(fn, ms) {
@@ -3386,6 +3431,13 @@ End of sample markdown.`;
         intervals.length = 0;
         timeouts.forEach(t => clearTimeout(t));
         timeouts.length = 0;
+        // Stops the rail and the glitches, and puts back any row a glitch was
+        // in the middle of damaging - a timer writing to a destroyed screen is
+        // how a door takes the session with it.
+        try {
+            chrome.stop();
+        }
+        catch { /* leaving anyway */ }
         inputManager.disable(); // Handles all input cleanup (game mode, mouse, handlers, flags)
         screen.destroy();
         if (bbs) {
