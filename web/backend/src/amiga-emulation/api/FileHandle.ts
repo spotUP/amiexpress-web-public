@@ -7,6 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as amigafs from '../../utils/amigafs';
 import { getSystemTime } from '../../utils/date-time.util';
 
 // Debug log path - uses BBS_DATA_DIR env var or falls back to cwd
@@ -143,7 +144,19 @@ console.error(`[FileHandle] Cannot open memory-backed handle "${this.amiPath}" f
         flags = fs.constants.O_RDWR | fs.constants.O_CREAT;
       }
 
-      this.fd = fs.openSync(this.sysPath, flags, 0o666);
+      // AmigaDOS volumes are case-insensitive, so a door's path ("bbs:bulletins/
+      // bull1.txt") reaches us in whatever case the door's config used, while the
+      // real directory is "Bulletins/". Every other DOS entry point goes through
+      // amigafs for exactly this reason - FileManager.open() even checks
+      // amigafs.existsSync(sysPath) and logs "(EXISTS)" - but this open used raw
+      // fs, so on a case-sensitive filesystem (the Linux container) the fd landed
+      // somewhere else than the file the caller was told existed:
+      //   MODE_NEWFILE -> ENOENT on the missing lowercase parent, Open() returns 0,
+      //                   and the bulletin is never regenerated;
+      //   MODE_OLDFILE/MODE_READWRITE carry O_CREAT, so they minted an empty
+      //                   lowercase twin beside the real file and the door then
+      //                   read and rewrote 0 bytes.
+      this.fd = amigafs.openSync(this.sysPath, flags, 0o666);
       this.position = 0;
 
       // DEBUG: Check file size after opening

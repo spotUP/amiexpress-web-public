@@ -392,32 +392,68 @@ export async function unlink(filePath: string): Promise<void> {
   await fs.promises.unlink(resolved);
 }
 
+/** Build an Error that FileManager.mapNodeErrorToAmigaDOS() can turn into IoErr=205. */
+function enoent(operation: string, filePath: string): NodeJS.ErrnoException {
+  const err: NodeJS.ErrnoException = new Error(
+    `ENOENT: no such file or directory, ${operation} '${filePath}'`
+  );
+  err.code = 'ENOENT';
+  err.syscall = operation;
+  err.path = filePath;
+  return err;
+}
+
+/**
+ * Does this open() flag set create the file when it is missing?
+ *
+ * Callers pass either the string form ('w', 'a+', ...) or the numeric mask
+ * (fs.constants.O_WRONLY | O_CREAT | O_TRUNC). FileHandle uses the numeric
+ * form, so a string-only check silently treats every emulated MODE_NEWFILE
+ * open as read-only and refuses to create the file.
+ */
+export function createsOnOpen(flags: fs.OpenMode): boolean {
+  if (typeof flags === 'number') {
+    return (flags & fs.constants.O_CREAT) !== 0;
+  }
+  return /^[wa]/.test(flags) || flags.includes('+');
+}
+
 /**
  * Case-insensitive openSync
  * Opens a file and returns a file descriptor
+ *
+ * Resolution order matters. The case-insensitive lookup of the FILE has to
+ * run before the "create it in its parent" fallback: AmigaDOS MODE_OLDFILE
+ * and MODE_READWRITE both carry O_CREAT, so creating first would drop a
+ * 0-byte twin ("bulletins/bull1.txt") next to the real, differently-cased
+ * file ("Bulletins/bull1.txt") on a case-sensitive filesystem, and the door
+ * would then read and write the empty twin.
  */
 export function openSync(filePath: string, flags: fs.OpenMode, mode?: fs.Mode): number {
-  const resolved = resolvePath(filePath);
-
-  if (!resolved) {
-    // For write modes, ensure parent directory exists
-    if (flags === 'w' || flags === 'w+' || flags === 'a' || flags === 'a+') {
-      const dir = path.dirname(filePath);
-      const resolvedDir = resolvePath(dir);
-
-      if (!resolvedDir) {
-        throw new Error(`ENOENT: no such file or directory, open '${filePath}'`);
-      }
-
-      // Create file with exact casing in resolved directory
-      const targetPath = path.join(resolvedDir, path.basename(filePath));
-      return fs.openSync(targetPath, flags, mode);
-    }
-
-    throw new Error(`ENOENT: no such file or directory, open '${filePath}'`);
+  // Fast path: the exact path exists, no directory walk needed.
+  if (fs.existsSync(filePath)) {
+    return fs.openSync(filePath, flags, mode);
   }
 
-  return fs.openSync(resolved, flags, mode);
+  // The file may exist under different casing - open the real one.
+  const resolved = resolvePath(filePath);
+  if (resolved) {
+    return fs.openSync(resolved, flags, mode);
+  }
+
+  // Genuinely new file: create it inside the correctly-cased parent.
+  if (createsOnOpen(flags)) {
+    const dir = path.dirname(filePath);
+    const resolvedDir = resolvePath(dir);
+
+    if (!resolvedDir) {
+      throw enoent('open', filePath);
+    }
+
+    return fs.openSync(path.join(resolvedDir, path.basename(filePath)), flags, mode);
+  }
+
+  throw enoent('open', filePath);
 }
 
 /**
