@@ -309,7 +309,7 @@ export async function createApp(session: DoorSession) {
     // The CATEGORY list, which is on screen for the whole session. Never the
     // demo area: a glitch there would read as the widget under test being
     // broken, which is the one thing this door must never fake.
-    glitch: menuList as any,
+    glitch: menuList,
     glitchOptions: { tickMs: 400 },
     styles: S,
     render: () => screen.render(),
