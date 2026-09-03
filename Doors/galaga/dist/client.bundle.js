@@ -4,9 +4,6 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __esm = (fn, res) => function __init() {
-  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
-};
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
@@ -30,8855 +27,36 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// ../../sdk/dist-esm/engines/ui/blessed/core/events.js
-var EventEmitter2;
-var init_events = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/core/events.js"() {
-    "use strict";
-    EventEmitter2 = class {
-      constructor() {
-        this.events = /* @__PURE__ */ new Map();
-      }
-      on(event, handler2) {
-        if (!this.events.has(event)) {
-          this.events.set(event, []);
-        }
-        this.events.get(event).push(handler2);
-        return this;
-      }
-      once(event, handler2) {
-        const wrapper = (...args) => {
-          this.removeListener(event, wrapper);
-          return handler2(...args);
-        };
-        return this.on(event, wrapper);
-      }
-      removeListener(event, handler2) {
-        const handlers = this.events.get(event);
-        if (handlers) {
-          const index = handlers.indexOf(handler2);
-          if (index !== -1) {
-            handlers.splice(index, 1);
-          }
-        }
-        return this;
-      }
-      // Alias for removeListener (Node.js EventEmitter compatibility)
-      off(event, handler2) {
-        return this.removeListener(event, handler2);
-      }
-      removeAllListeners(event) {
-        if (event) {
-          this.events.delete(event);
-        } else {
-          this.events.clear();
-        }
-        return this;
-      }
-      emit(event, ...args) {
-        const handlers = this.events.get(event);
-        if (!handlers || handlers.length === 0) {
-          return false;
-        }
-        let handled = false;
-        for (const handler2 of handlers.slice()) {
-          try {
-            if (handler2(...args) === true) {
-              handled = true;
-            }
-          } catch (err) {
-          }
-        }
-        return handled;
-      }
-      listeners(event) {
-        return this.events.get(event) || [];
-      }
-      listenerCount(event) {
-        return this.listeners(event).length;
-      }
-      eventNames() {
-        return Array.from(this.events.keys());
-      }
-    };
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/core/colors.js
-function match(r1, g1, b1) {
-  if (typeof r1 === "string") {
-    const hex = r1;
-    if (hex[0] !== "#") {
-      return -1;
-    }
-    const rgb = hexToRGB(hex);
-    r1 = rgb[0];
-    g1 = rgb[1];
-    b1 = rgb[2];
-  } else if (Array.isArray(r1)) {
-    b1 = r1[2];
-    g1 = r1[1];
-    r1 = r1[0];
-  }
-  const hash = r1 << 16 | g1 << 8 | b1;
-  if (_cache[hash] !== null && _cache[hash] !== void 0) {
-    return _cache[hash];
-  }
-  let ldiff = Infinity;
-  let li = -1;
-  let i = 0;
-  let c;
-  let r2;
-  let g2;
-  let b2;
-  let diff;
-  for (; i < vcolors.length; i++) {
-    c = vcolors[i];
-    r2 = c[0];
-    g2 = c[1];
-    b2 = c[2];
-    diff = colorDistance(r1, g1, b1, r2, g2, b2);
-    if (diff === 0) {
-      li = i;
-      break;
-    }
-    if (diff < ldiff) {
-      ldiff = diff;
-      li = i;
-    }
-  }
-  _cache[hash] = li;
-  return _cache[hash];
-}
-function hexToRGB(hex) {
-  if (hex.length === 4) {
-    hex = hex[0] + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
-  }
-  const col = parseInt(hex.substring(1), 16);
-  const r = col >> 16 & 255;
-  const g = col >> 8 & 255;
-  const b = col & 255;
-  return [r, g, b];
-}
-function colorDistance(r1, g1, b1, r2, g2, b2) {
-  return Math.pow(30 * (r1 - r2), 2) + Math.pow(59 * (g1 - g2), 2) + Math.pow(11 * (b1 - b2), 2);
-}
-function convert(color) {
-  if (typeof color === "number") {
-  } else if (typeof color === "string") {
-    color = color.replace(/[\- ]/g, "");
-    if (colorNames[color] !== null && colorNames[color] !== void 0) {
-      color = colorNames[color];
-    } else {
-      color = match(color);
-    }
-  } else if (Array.isArray(color)) {
-    color = match(color);
-  } else {
-    color = -1;
-  }
-  return color !== -1 ? color : 511;
-}
-function parseColor(color) {
-  if (color === void 0 || color === null) {
-    return -1;
-  }
-  if (typeof color === "number") {
-    return color;
-  }
-  return convert(color);
-}
-function fg(color) {
-  const code = parseColor(color);
-  if (code === -1)
-    return "";
-  if (code < 8) {
-    return `${CSI}3${code}m`;
-  } else if (code < 16) {
-    return `${CSI}9${code - 8}m`;
-  } else {
-    return `${CSI}38;5;${code}m`;
-  }
-}
-function bg(color) {
-  const code = parseColor(color);
-  if (code === -1)
-    return "";
-  if (code < 8) {
-    return `${CSI}4${code}m`;
-  } else if (code < 16) {
-    return `${CSI}10${code - 8}m`;
-  } else {
-    return `${CSI}48;5;${code}m`;
-  }
-}
-function parseTags(text) {
-  const cached = _parseTagsCache.get(text);
-  if (cached !== void 0) {
-    return cached;
-  }
-  const result = text.replace(tagRegex, (match2, close, name, value) => {
-    if (close) {
-      if (!name) {
-        return attrs.reset;
-      }
-      switch (name) {
-        case "bold":
-          return attrs.noBold;
-        case "underline":
-          return attrs.noUnderline;
-        case "blink":
-          return attrs.noBlink;
-        case "inverse":
-          return attrs.noInverse;
-        case "invisible":
-          return attrs.noInvisible;
-        case "black-fg":
-        case "red-fg":
-        case "green-fg":
-        case "yellow-fg":
-        case "blue-fg":
-        case "magenta-fg":
-        case "cyan-fg":
-        case "white-fg":
-        case "gray-fg":
-        case "grey-fg":
-        case "lightblack-fg":
-        case "lightred-fg":
-        case "lightgreen-fg":
-        case "lightyellow-fg":
-        case "lightblue-fg":
-        case "lightmagenta-fg":
-        case "lightcyan-fg":
-        case "lightwhite-fg":
-        case "brightblack-fg":
-        case "brightred-fg":
-        case "brightgreen-fg":
-        case "brightyellow-fg":
-        case "brightblue-fg":
-        case "brightmagenta-fg":
-        case "brightcyan-fg":
-        case "brightwhite-fg":
-        case "black":
-        case "red":
-        case "green":
-        case "yellow":
-        case "blue":
-        case "magenta":
-        case "cyan":
-        case "white":
-        case "gray":
-        case "grey":
-        case "fg":
-          return defaultFg;
-        case "black-bg":
-        case "red-bg":
-        case "green-bg":
-        case "yellow-bg":
-        case "blue-bg":
-        case "magenta-bg":
-        case "cyan-bg":
-        case "white-bg":
-        case "gray-bg":
-        case "grey-bg":
-        case "lightblack-bg":
-        case "lightred-bg":
-        case "lightgreen-bg":
-        case "lightyellow-bg":
-        case "lightblue-bg":
-        case "lightmagenta-bg":
-        case "lightcyan-bg":
-        case "lightwhite-bg":
-        case "brightblack-bg":
-        case "brightred-bg":
-        case "brightgreen-bg":
-        case "brightyellow-bg":
-        case "brightblue-bg":
-        case "brightmagenta-bg":
-        case "brightcyan-bg":
-        case "brightwhite-bg":
-        case "bg":
-          return defaultBg;
-        default:
-          return attrs.reset;
-      }
-    }
-    if (!name) {
-      return match2;
-    }
-    switch (name) {
-      case "bold":
-        return attrs.bold;
-      case "underline":
-        return attrs.underline;
-      case "blink":
-        return attrs.blink;
-      case "inverse":
-        return attrs.inverse;
-      case "invisible":
-        return attrs.invisible;
-      case "black":
-      case "red":
-      case "green":
-      case "yellow":
-      case "blue":
-      case "magenta":
-      case "cyan":
-      case "white":
-      case "gray":
-      case "grey":
-        return fg(name === "grey" ? "gray" : name);
-      case "black-fg":
-        return fg("black");
-      case "red-fg":
-        return fg("red");
-      case "green-fg":
-        return fg("green");
-      case "yellow-fg":
-        return fg("yellow");
-      case "blue-fg":
-        return fg("blue");
-      case "magenta-fg":
-        return fg("magenta");
-      case "cyan-fg":
-        return fg("cyan");
-      case "white-fg":
-        return fg("white");
-      case "gray-fg":
-      case "grey-fg":
-        return fg("gray");
-      case "lightblack-fg":
-      case "brightblack-fg":
-        return fg("lightblack");
-      case "lightred-fg":
-      case "brightred-fg":
-        return fg("lightred");
-      case "lightgreen-fg":
-      case "brightgreen-fg":
-        return fg("lightgreen");
-      case "lightyellow-fg":
-      case "brightyellow-fg":
-        return fg("lightyellow");
-      case "lightblue-fg":
-      case "brightblue-fg":
-        return fg("lightblue");
-      case "lightmagenta-fg":
-      case "brightmagenta-fg":
-        return fg("lightmagenta");
-      case "lightcyan-fg":
-      case "brightcyan-fg":
-        return fg("lightcyan");
-      case "lightwhite-fg":
-      case "brightwhite-fg":
-        return fg("lightwhite");
-      case "black-bg":
-        return bg("black");
-      case "red-bg":
-        return bg("red");
-      case "green-bg":
-        return bg("green");
-      case "yellow-bg":
-        return bg("yellow");
-      case "blue-bg":
-        return bg("blue");
-      case "magenta-bg":
-        return bg("magenta");
-      case "cyan-bg":
-        return bg("cyan");
-      case "white-bg":
-        return bg("white");
-      case "gray-bg":
-      case "grey-bg":
-        return bg("gray");
-      case "lightblack-bg":
-      case "brightblack-bg":
-        return bg("lightblack");
-      case "lightred-bg":
-      case "brightred-bg":
-        return bg("lightred");
-      case "lightgreen-bg":
-      case "brightgreen-bg":
-        return bg("lightgreen");
-      case "lightyellow-bg":
-      case "brightyellow-bg":
-        return bg("lightyellow");
-      case "lightblue-bg":
-      case "brightblue-bg":
-        return bg("lightblue");
-      case "lightmagenta-bg":
-      case "brightmagenta-bg":
-        return bg("lightmagenta");
-      case "lightcyan-bg":
-      case "brightcyan-bg":
-        return bg("lightcyan");
-      case "lightwhite-bg":
-      case "brightwhite-bg":
-        return bg("lightwhite");
-      case "fg":
-        return value ? fg(value) : "";
-      case "bg":
-        return value ? bg(value) : "";
-      case "open":
-        return "{";
-      case "close":
-        return "}";
-      default:
-        return match2;
-    }
-  });
-  if (_parseTagsCache.size >= _parseTagsCacheLimit) {
-    const firstKey = _parseTagsCache.keys().next().value;
-    if (firstKey !== void 0) {
-      _parseTagsCache.delete(firstKey);
-    }
-  }
-  _parseTagsCache.set(text, result);
-  return result;
-}
-function stripAnsi(text) {
-  const cached = _stripAnsiCache.get(text);
-  if (cached !== void 0) {
-    return cached;
-  }
-  const result = text.replace(ansiRegex, "");
-  if (_stripAnsiCache.size >= _stripAnsiCacheLimit) {
-    const firstKey = _stripAnsiCache.keys().next().value;
-    if (firstKey !== void 0) {
-      _stripAnsiCache.delete(firstKey);
-    }
-  }
-  _stripAnsiCache.set(text, result);
-  return result;
-}
-function textWidth(text) {
-  return stripAnsi(text).length;
-}
-var _cache, xterm, colors, vcolors, ccolors, colorNames, ccolorsMap, ncolors, ESC, CSI, attrs, cursor, screen, tagRegex, defaultFg, defaultBg, _parseTagsCache, _parseTagsCacheLimit, ansiRegex, _stripAnsiCache, _stripAnsiCacheLimit;
-var init_colors = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/core/colors.js"() {
-    "use strict";
-    _cache = {};
-    xterm = [
-      "#000000",
-      // black
-      "#cd0000",
-      // red3
-      "#00cd00",
-      // green3
-      "#cdcd00",
-      // yellow3
-      "#0000ee",
-      // blue2
-      "#cd00cd",
-      // magenta3
-      "#00cdcd",
-      // cyan3
-      "#e5e5e5",
-      // gray90
-      "#7f7f7f",
-      // gray50
-      "#ff0000",
-      // red
-      "#00ff00",
-      // green
-      "#ffff00",
-      // yellow
-      "#5c5cff",
-      // rgb:5c/5c/ff
-      "#ff00ff",
-      // magenta
-      "#00ffff",
-      // cyan
-      "#ffffff"
-      // white
-    ];
-    colors = [];
-    vcolors = [];
-    (function initColors() {
-      function hex(n) {
-        const s = n.toString(16);
-        if (s.length < 2)
-          return "0" + s;
-        return s;
-      }
-      function push(i, r, g, b) {
-        colors[i] = "#" + hex(r) + hex(g) + hex(b);
-        vcolors[i] = [r, g, b];
-      }
-      xterm.forEach(function(c, i) {
-        const val = parseInt(c.substring(1), 16);
-        push(i, val >> 16 & 255, val >> 8 & 255, val & 255);
-      });
-      for (let r = 0; r < 6; r++) {
-        for (let g = 0; g < 6; g++) {
-          for (let b = 0; b < 6; b++) {
-            const i = 16 + r * 36 + g * 6 + b;
-            push(i, r ? r * 40 + 55 : 0, g ? g * 40 + 55 : 0, b ? b * 40 + 55 : 0);
-          }
-        }
-      }
-      for (let g = 0; g < 24; g++) {
-        const l = g * 10 + 8;
-        const i = 232 + g;
-        push(i, l, l, l);
-      }
-    })();
-    ccolors = function() {
-      const _cols = vcolors.slice();
-      const cols = colors.slice();
-      vcolors.length = 8;
-      colors.length = 8;
-      const out = cols.map((c) => match(c));
-      for (let i = 0; i < _cols.length; i++) {
-        vcolors[i] = _cols[i];
-      }
-      for (let i = 0; i < cols.length; i++) {
-        colors[i] = cols[i];
-      }
-      return out;
-    }();
-    colorNames = {
-      // special
-      default: -1,
-      normal: -1,
-      bg: -1,
-      fg: -1,
-      // normal
-      black: 0,
-      red: 1,
-      green: 2,
-      yellow: 3,
-      blue: 4,
-      magenta: 5,
-      cyan: 6,
-      white: 7,
-      // light
-      lightblack: 8,
-      lightred: 9,
-      lightgreen: 10,
-      lightyellow: 11,
-      lightblue: 12,
-      lightmagenta: 13,
-      lightcyan: 14,
-      lightwhite: 15,
-      // bright
-      brightblack: 8,
-      brightred: 9,
-      brightgreen: 10,
-      brightyellow: 11,
-      brightblue: 12,
-      brightmagenta: 13,
-      brightcyan: 14,
-      brightwhite: 15,
-      // alternate spellings
-      grey: 8,
-      gray: 8,
-      lightgrey: 7,
-      lightgray: 7,
-      brightgrey: 7,
-      brightgray: 7
-    };
-    ccolorsMap = {
-      blue: [
-        4,
-        12,
-        [17, 21],
-        [24, 27],
-        [31, 33],
-        [38, 39],
-        45,
-        [54, 57],
-        [60, 63],
-        [67, 69],
-        [74, 75],
-        81,
-        [91, 93],
-        [97, 99],
-        [103, 105],
-        [110, 111],
-        117,
-        [128, 129],
-        [134, 135],
-        [140, 141],
-        [146, 147],
-        153,
-        165,
-        171,
-        177,
-        183,
-        189
-      ],
-      green: [
-        2,
-        10,
-        22,
-        [28, 29],
-        [34, 36],
-        [40, 43],
-        [46, 50],
-        [64, 65],
-        [70, 72],
-        [76, 79],
-        [82, 86],
-        [106, 108],
-        [112, 115],
-        [118, 122],
-        [148, 151],
-        [154, 158],
-        [190, 194]
-      ],
-      cyan: [
-        6,
-        14,
-        23,
-        30,
-        37,
-        44,
-        51,
-        66,
-        73,
-        80,
-        87,
-        109,
-        116,
-        123,
-        152,
-        159,
-        195
-      ],
-      red: [
-        1,
-        9,
-        52,
-        [88, 89],
-        [94, 95],
-        [124, 126],
-        [130, 132],
-        [136, 138],
-        [160, 163],
-        [166, 169],
-        [172, 175],
-        [178, 181],
-        [196, 200],
-        [202, 206],
-        [208, 212],
-        [214, 218],
-        [220, 224]
-      ],
-      magenta: [
-        5,
-        13,
-        53,
-        90,
-        96,
-        127,
-        133,
-        139,
-        164,
-        170,
-        176,
-        182,
-        201,
-        207,
-        213,
-        219,
-        225
-      ],
-      yellow: [
-        3,
-        11,
-        58,
-        [100, 101],
-        [142, 144],
-        [184, 187],
-        [226, 230]
-      ],
-      black: [
-        0,
-        8,
-        16,
-        59,
-        102,
-        [232, 243]
-      ],
-      white: [
-        7,
-        15,
-        145,
-        188,
-        231,
-        [244, 255]
-      ]
-    };
-    ncolors = [];
-    Object.keys(ccolorsMap).forEach(function(name) {
-      ccolorsMap[name].forEach(function(offset) {
-        if (typeof offset === "number") {
-          ncolors[offset] = name;
-          ccolors[offset] = colorNames[name];
-          return;
-        }
-        for (let i = offset[0], l = offset[1]; i <= l; i++) {
-          ncolors[i] = name;
-          ccolors[i] = colorNames[name];
-        }
-      });
-      delete ccolorsMap[name];
-    });
-    ESC = String.fromCharCode(27);
-    CSI = ESC + "[";
-    attrs = {
-      reset: `${CSI}0m`,
-      bold: `${CSI}1m`,
-      dim: `${CSI}2m`,
-      italic: `${CSI}3m`,
-      underline: `${CSI}4m`,
-      blink: `${CSI}5m`,
-      inverse: `${CSI}7m`,
-      invisible: `${CSI}8m`,
-      strike: `${CSI}9m`,
-      noBold: `${CSI}22m`,
-      noItalic: `${CSI}23m`,
-      noUnderline: `${CSI}24m`,
-      noBlink: `${CSI}25m`,
-      noInverse: `${CSI}27m`,
-      noInvisible: `${CSI}28m`,
-      noStrike: `${CSI}29m`
-    };
-    cursor = {
-      hide: `${CSI}?25l`,
-      show: `${CSI}?25h`,
-      save: `${ESC}7`,
-      restore: `${ESC}8`,
-      pos: (x, y) => `${CSI}${y + 1};${x + 1}H`,
-      up: (n = 1) => `${CSI}${n}A`,
-      down: (n = 1) => `${CSI}${n}B`,
-      forward: (n = 1) => `${CSI}${n}C`,
-      backward: (n = 1) => `${CSI}${n}D`,
-      nextLine: (n = 1) => `${CSI}${n}E`,
-      prevLine: (n = 1) => `${CSI}${n}F`,
-      col: (n) => `${CSI}${n + 1}G`,
-      home: `${CSI}H`
-    };
-    screen = {
-      clear: `${CSI}2J`,
-      clearToBottom: `${CSI}0J`,
-      clearToTop: `${CSI}1J`,
-      clearLine: `${CSI}2K`,
-      clearLineRight: `${CSI}0K`,
-      clearLineLeft: `${CSI}1K`,
-      scrollUp: (n = 1) => `${CSI}${n}S`,
-      scrollDown: (n = 1) => `${CSI}${n}T`,
-      saveCursor: `${ESC}7`,
-      restoreCursor: `${ESC}8`,
-      setScrollRegion: (top, bottom) => `${CSI}${top + 1};${bottom + 1}r`,
-      resetScrollRegion: `${CSI}r`
-    };
-    tagRegex = /\{(\/?)([\w-]*)(?::([\w-]+))?\}/g;
-    defaultFg = `${CSI}39m`;
-    defaultBg = `${CSI}49m`;
-    _parseTagsCache = /* @__PURE__ */ new Map();
-    _parseTagsCacheLimit = 1e3;
-    ansiRegex = new RegExp(ESC + "\\[[0-9;]*m", "g");
-    _stripAnsiCache = /* @__PURE__ */ new Map();
-    _stripAnsiCacheLimit = 1e3;
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/core/responsive-constants.js
-function getBreakpointName(width) {
-  if (width < BREAKPOINT_XS)
-    return "xs";
-  if (width < BREAKPOINT_SM)
-    return "small";
-  if (width < BREAKPOINT_MD)
-    return "medium";
-  return "large";
-}
-function isMobileWidth(width) {
-  return width < BREAKPOINT_XS;
-}
-function enforceMinTouchHeight(height, touchFriendly) {
-  if (!touchFriendly)
-    return height;
-  if (typeof height === "number" && height < MIN_TOUCH_HEIGHT) {
-    return MIN_TOUCH_HEIGHT;
-  }
-  return height;
-}
-var MIN_TOUCH_HEIGHT, BREAKPOINT_XS, BREAKPOINT_SM, BREAKPOINT_MD, SWIPE_THRESHOLD, SWIPE_THRESHOLD_VERTICAL, SWIPE_MAX_TIME, LONG_PRESS_TIME, DOUBLE_TAP_INTERVAL, DEFAULT_PADDING, MOBILE_PADDING;
-var init_responsive_constants = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/core/responsive-constants.js"() {
-    "use strict";
-    MIN_TOUCH_HEIGHT = 3;
-    BREAKPOINT_XS = 50;
-    BREAKPOINT_SM = 80;
-    BREAKPOINT_MD = 120;
-    SWIPE_THRESHOLD = 5;
-    SWIPE_THRESHOLD_VERTICAL = 3;
-    SWIPE_MAX_TIME = 500;
-    LONG_PRESS_TIME = 500;
-    DOUBLE_TAP_INTERVAL = 300;
-    DEFAULT_PADDING = 1;
-    MOBILE_PADDING = 0;
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/core/touch-gestures.js
-var TouchGestureHandler;
-var init_touch_gestures = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/core/touch-gestures.js"() {
-    "use strict";
-    init_responsive_constants();
-    TouchGestureHandler = class {
-      constructor(element) {
-        this.state = {
-          startX: 0,
-          startY: 0,
-          startTime: 0,
-          isActive: false
-        };
-        this.lastTapTime = 0;
-        this.lastTapX = 0;
-        this.lastTapY = 0;
-        this.boundHandlers = {};
-        this.element = element;
-        this.screen = element.screen;
-      }
-      /**
-       * Enable swipe gesture detection
-       */
-      enableSwipe(options) {
-        this.swipeOptions = {
-          threshold: SWIPE_THRESHOLD,
-          verticalThreshold: SWIPE_THRESHOLD_VERTICAL,
-          maxTime: SWIPE_MAX_TIME,
-          direction: "both",
-          ...options
-        };
-        this.attachMouseListeners();
-        return () => {
-          this.swipeOptions = void 0;
-          this.detachMouseListenersIfUnused();
-        };
-      }
-      /**
-       * Enable long press detection
-       */
-      enableLongPress(options) {
-        this.longPressOptions = {
-          duration: LONG_PRESS_TIME,
-          ...options
-        };
-        this.attachMouseListeners();
-        return () => {
-          this.longPressOptions = void 0;
-          this.clearLongPressTimer();
-          this.detachMouseListenersIfUnused();
-        };
-      }
-      /**
-       * Enable double tap detection
-       */
-      enableDoubleTap(options) {
-        this.doubleTapOptions = {
-          interval: DOUBLE_TAP_INTERVAL,
-          ...options
-        };
-        this.attachMouseListeners();
-        return () => {
-          this.doubleTapOptions = void 0;
-          this.detachMouseListenersIfUnused();
-        };
-      }
-      /**
-       * Disable all gestures and cleanup
-       */
-      destroy() {
-        this.swipeOptions = void 0;
-        this.longPressOptions = void 0;
-        this.doubleTapOptions = void 0;
-        this.clearLongPressTimer();
-        this.detachAllListeners();
-      }
-      // ============================================================================
-      // Private Methods
-      // ============================================================================
-      attachMouseListeners() {
-        if (this.boundHandlers.mousedown)
-          return;
-        this.boundHandlers.mousedown = this.handleMouseDown.bind(this);
-        this.boundHandlers.mouseup = this.handleMouseUp.bind(this);
-        this.boundHandlers.mousemove = this.handleMouseMove.bind(this);
-        this.element.on("mousedown", this.boundHandlers.mousedown);
-        if (this.element.screen) {
-          this.screen = this.element.screen;
-          this.screen.on("mouseup", this.boundHandlers.mouseup);
-          this.screen.on("mousemove", this.boundHandlers.mousemove);
-        } else {
-          this.element.once("attach", () => {
-            this.screen = this.element.screen;
-            if (this.screen) {
-              this.screen.on("mouseup", this.boundHandlers.mouseup);
-              this.screen.on("mousemove", this.boundHandlers.mousemove);
-            }
-          });
-        }
-      }
-      detachMouseListenersIfUnused() {
-        if (!this.swipeOptions && !this.longPressOptions && !this.doubleTapOptions) {
-          this.detachAllListeners();
-        }
-      }
-      detachAllListeners() {
-        if (this.boundHandlers.mousedown) {
-          this.element.removeListener("mousedown", this.boundHandlers.mousedown);
-        }
-        if (this.screen) {
-          if (this.boundHandlers.mouseup) {
-            this.screen.removeListener("mouseup", this.boundHandlers.mouseup);
-          }
-          if (this.boundHandlers.mousemove) {
-            this.screen.removeListener("mousemove", this.boundHandlers.mousemove);
-          }
-        }
-        this.boundHandlers = {};
-      }
-      handleMouseDown(data) {
-        this.state = {
-          startX: data.x,
-          startY: data.y,
-          startTime: Date.now(),
-          isActive: true
-        };
-        if (this.longPressOptions) {
-          this.startLongPressTimer(data.x, data.y);
-        }
-        if (this.doubleTapOptions) {
-          const now2 = Date.now();
-          const interval = this.doubleTapOptions.interval || DOUBLE_TAP_INTERVAL;
-          const dx = Math.abs(data.x - this.lastTapX);
-          const dy = Math.abs(data.y - this.lastTapY);
-          if (now2 - this.lastTapTime < interval && dx < 2 && dy < 2) {
-            this.doubleTapOptions.onDoubleTap(data.x, data.y);
-            this.lastTapTime = 0;
-            return;
-          }
-          this.lastTapTime = now2;
-          this.lastTapX = data.x;
-          this.lastTapY = data.y;
-        }
-      }
-      handleMouseUp(data) {
-        if (!this.state.isActive)
-          return;
-        this.clearLongPressTimer();
-        const deltaX = data.x - this.state.startX;
-        const deltaY = data.y - this.state.startY;
-        const duration = Date.now() - this.state.startTime;
-        if (this.swipeOptions) {
-          this.detectSwipe(deltaX, deltaY, duration);
-        }
-        this.state.isActive = false;
-      }
-      handleMouseMove(data) {
-        if (!this.state.isActive)
-          return;
-        const deltaX = Math.abs(data.x - this.state.startX);
-        const deltaY = Math.abs(data.y - this.state.startY);
-        if (this.longPressOptions && (deltaX > 2 || deltaY > 2)) {
-          this.clearLongPressTimer();
-          if (this.longPressOptions.onCancel) {
-            this.longPressOptions.onCancel();
-          }
-        }
-      }
-      detectSwipe(deltaX, deltaY, duration) {
-        if (!this.swipeOptions)
-          return;
-        const { threshold = SWIPE_THRESHOLD, verticalThreshold = SWIPE_THRESHOLD_VERTICAL, maxTime = SWIPE_MAX_TIME, direction = "both" } = this.swipeOptions;
-        if (duration > maxTime)
-          return;
-        const absDeltaX = Math.abs(deltaX);
-        const absDeltaY = Math.abs(deltaY);
-        const velocity = Math.sqrt(deltaX * deltaX + deltaY * deltaY) / duration;
-        let swipeDirection = null;
-        if (direction === "horizontal" || direction === "both") {
-          if (absDeltaX >= threshold && absDeltaX > absDeltaY) {
-            swipeDirection = deltaX < 0 ? "left" : "right";
-          }
-        }
-        if (direction === "vertical" || direction === "both") {
-          if (absDeltaY >= verticalThreshold && absDeltaY > absDeltaX) {
-            swipeDirection = deltaY < 0 ? "up" : "down";
-          }
-        }
-        if (swipeDirection) {
-          const distance = swipeDirection === "left" || swipeDirection === "right" ? absDeltaX : absDeltaY;
-          const event = {
-            direction: swipeDirection,
-            deltaX,
-            deltaY,
-            distance,
-            duration,
-            velocity
-          };
-          switch (swipeDirection) {
-            case "left":
-              this.swipeOptions.onSwipeLeft?.(event);
-              break;
-            case "right":
-              this.swipeOptions.onSwipeRight?.(event);
-              break;
-            case "up":
-              this.swipeOptions.onSwipeUp?.(event);
-              break;
-            case "down":
-              this.swipeOptions.onSwipeDown?.(event);
-              break;
-          }
-          this.swipeOptions.onSwipe?.(event);
-        }
-      }
-      startLongPressTimer(x, y) {
-        this.clearLongPressTimer();
-        const duration = this.longPressOptions?.duration || LONG_PRESS_TIME;
-        this.longPressTimer = setTimeout(() => {
-          if (this.state.isActive && this.longPressOptions) {
-            this.longPressOptions.onLongPress(x, y);
-          }
-        }, duration);
-      }
-      clearLongPressTimer() {
-        if (this.longPressTimer) {
-          clearTimeout(this.longPressTimer);
-          this.longPressTimer = void 0;
-        }
-      }
-    };
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/core/responsive-mixin.js
-function applyResponsiveMixin(element, options = {}) {
-  const behavior = new ResponsiveBehavior(element, options);
-  element._responsiveBehavior = behavior;
-  element.getResponsiveState = () => behavior.getState();
-  element.getBreakpoint = () => behavior.getBreakpoint();
-  element.isMobile = () => behavior.isMobile();
-  element.onBreakpointChange = (handler2) => behavior.onBreakpointChange(handler2);
-  element.enableSwipe = (swipeOptions) => behavior.enableSwipe(swipeOptions);
-  element.enableLongPress = (lpOptions) => behavior.enableLongPress(lpOptions);
-  if (element.screen) {
-    behavior.initialize();
-  } else {
-    element.once("attach", () => {
-      behavior.initialize();
-    });
-  }
-  const originalDestroy = element.destroy?.bind(element);
-  element.destroy = () => {
-    behavior.destroy();
-    if (originalDestroy) {
-      originalDestroy();
-    }
-  };
-  return behavior;
-}
-var ResponsiveBehavior;
-var init_responsive_mixin = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/core/responsive-mixin.js"() {
-    "use strict";
-    init_responsive_constants();
-    init_touch_gestures();
-    ResponsiveBehavior = class {
-      constructor(element, options = {}) {
-        this.breakpointHandlers = /* @__PURE__ */ new Set();
-        this.resizeHandlers = /* @__PURE__ */ new Set();
-        this.initialized = false;
-        this.element = element;
-        this.options = {
-          responsive: true,
-          touchFriendly: false,
-          swipeEnabled: false,
-          ...options
-        };
-        this.state = {
-          breakpoint: "large",
-          previousBreakpoint: "large",
-          isMobile: false,
-          screenWidth: 80,
-          screenHeight: 24
-        };
-      }
-      /**
-       * Initialize responsive behavior (call after element is attached to screen)
-       */
-      initialize() {
-        if (this.initialized)
-          return;
-        if (!this.element.screen)
-          return;
-        const screen2 = this.element.screen;
-        this.state.screenWidth = screen2.width || 80;
-        this.state.screenHeight = screen2.height || 24;
-        this.state.breakpoint = getBreakpointName(this.state.screenWidth);
-        this.state.previousBreakpoint = this.state.breakpoint;
-        this.state.isMobile = isMobileWidth(this.state.screenWidth);
-        if (screen2.responsiveLayout && this.options.responsive) {
-          this.unsubscribeResize = screen2.responsiveLayout.onResize(this.handleScreenResize.bind(this));
-        }
-        if (this.options.touchFriendly) {
-          this.applyTouchFriendlySizing();
-        }
-        if (this.options.swipeEnabled) {
-          this.gestureHandler = new TouchGestureHandler(this.element);
-        }
-        this.initialized = true;
-      }
-      /**
-       * Clean up responsive behavior
-       */
-      destroy() {
-        if (this.unsubscribeResize) {
-          this.unsubscribeResize();
-          this.unsubscribeResize = void 0;
-        }
-        if (this.gestureHandler) {
-          this.gestureHandler.destroy();
-          this.gestureHandler = void 0;
-        }
-        this.breakpointHandlers.clear();
-        this.resizeHandlers.clear();
-        this.initialized = false;
-      }
-      // ============================================================================
-      // Public API
-      // ============================================================================
-      /**
-       * Get current responsive state
-       */
-      getState() {
-        return { ...this.state };
-      }
-      /**
-       * Get current breakpoint
-       */
-      getBreakpoint() {
-        return this.state.breakpoint;
-      }
-      /**
-       * Check if currently mobile
-       */
-      isMobile() {
-        return this.state.isMobile;
-      }
-      /**
-       * Register a breakpoint change handler
-       * Returns unsubscribe function
-       */
-      onBreakpointChange(handler2) {
-        this.breakpointHandlers.add(handler2);
-        return () => this.breakpointHandlers.delete(handler2);
-      }
-      /**
-       * Register a resize handler
-       * Returns unsubscribe function
-       */
-      onResize(handler2) {
-        this.resizeHandlers.add(handler2);
-        return () => this.resizeHandlers.delete(handler2);
-      }
-      /**
-       * Enable swipe gestures
-       */
-      enableSwipe(options) {
-        if (!this.gestureHandler) {
-          this.gestureHandler = new TouchGestureHandler(this.element);
-        }
-        return this.gestureHandler.enableSwipe(options);
-      }
-      /**
-       * Enable long press gesture
-       */
-      enableLongPress(options) {
-        if (!this.gestureHandler) {
-          this.gestureHandler = new TouchGestureHandler(this.element);
-        }
-        return this.gestureHandler.enableLongPress(options);
-      }
-      /**
-       * Force recalculation of responsive state
-       */
-      recalculate() {
-        if (!this.element.screen)
-          return;
-        const screen2 = this.element.screen;
-        this.handleScreenResize(screen2.width || 80, screen2.height || 24);
-      }
-      // ============================================================================
-      // Protected Methods (for widget overrides)
-      // ============================================================================
-      /**
-       * Called when screen resizes
-       * Override in widgets for custom resize behavior
-       */
-      handleResize(width, height) {
-        for (const handler2 of this.resizeHandlers) {
-          handler2(width, height, this.state);
-        }
-        if (typeof this.element._handleResize === "function") {
-          this.element._handleResize(width, height, this.state);
-        }
-      }
-      /**
-       * Called when breakpoint changes
-       * Override in widgets for custom breakpoint behavior
-       */
-      handleBreakpointChange(breakpoint, previousBreakpoint) {
-        for (const handler2 of this.breakpointHandlers) {
-          handler2(breakpoint, previousBreakpoint, this.state);
-        }
-        if (typeof this.element._handleBreakpointChange === "function") {
-          this.element._handleBreakpointChange(breakpoint, previousBreakpoint, this.state);
-        }
-        if (this.state.isMobile && !isMobileWidth(this.state.screenWidth)) {
-          if (typeof this.element._exitMobileMode === "function") {
-            this.element._exitMobileMode();
-          }
-        } else if (!this.state.isMobile && isMobileWidth(this.state.screenWidth)) {
-          if (typeof this.element._enterMobileMode === "function") {
-            this.element._enterMobileMode();
-          }
-        }
-      }
-      // ============================================================================
-      // Private Methods
-      // ============================================================================
-      handleScreenResize(width, height) {
-        const newBreakpoint = getBreakpointName(width);
-        const breakpointChanged = newBreakpoint !== this.state.breakpoint;
-        this.state.previousBreakpoint = this.state.breakpoint;
-        this.state.breakpoint = newBreakpoint;
-        this.state.screenWidth = width;
-        this.state.screenHeight = height;
-        this.state.isMobile = isMobileWidth(width);
-        this.handleResize(width, height);
-        if (breakpointChanged) {
-          this.handleBreakpointChange(newBreakpoint, this.state.previousBreakpoint);
-        }
-      }
-      applyTouchFriendlySizing() {
-        const currentHeight = this.element.height;
-        if (typeof currentHeight === "number" && currentHeight < MIN_TOUCH_HEIGHT) {
-          this.element.position.height = MIN_TOUCH_HEIGHT;
-        }
-        if (this.element.options) {
-          this.element.options.height = enforceMinTouchHeight(this.element.options.height, true);
-        }
-      }
-    };
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/box.js
-var box_exports = {};
-__export(box_exports, {
-  Box: () => Box
-});
-var Box;
-var init_box = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/box.js"() {
-    "use strict";
-    init_element();
-    init_responsive_constants();
-    Box = class extends Element {
-      /** blessed-style widget kind; see Element.type. */
-      get type() {
-        return "box";
-      }
-      constructor(options = {}) {
-        super(options);
-        if (options.responsivePadding) {
-          this._responsivePadding = options.responsivePadding;
-          this._originalPadding = options.padding;
-        }
-      }
-      /**
-       * Handle resize - update padding based on breakpoint
-       */
-      _handleResize(width, height, state) {
-        if (this._responsivePadding) {
-          this._applyResponsivePadding(state.breakpoint);
-        }
-        this._notifyChildrenResize(width, height);
-      }
-      /**
-       * Handle breakpoint change
-       */
-      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
-        if (this._responsivePadding) {
-          this._applyResponsivePadding(breakpoint);
-        }
-        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
-      }
-      /**
-       * Apply padding based on breakpoint
-       */
-      _applyResponsivePadding(breakpoint) {
-        if (!this._responsivePadding)
-          return;
-        let newPadding;
-        switch (breakpoint) {
-          case "large":
-            newPadding = this._responsivePadding.large ?? this._responsivePadding.medium ?? this._responsivePadding.small ?? this._responsivePadding.xs ?? this._originalPadding;
-            break;
-          case "medium":
-            newPadding = this._responsivePadding.medium ?? this._responsivePadding.small ?? this._responsivePadding.xs ?? this._originalPadding;
-            break;
-          case "small":
-            newPadding = this._responsivePadding.small ?? this._responsivePadding.xs ?? this._originalPadding;
-            break;
-          case "xs":
-            newPadding = this._responsivePadding.xs ?? this._originalPadding;
-            break;
-        }
-        if (newPadding !== void 0) {
-          this.options.padding = newPadding;
-          if (this.screen) {
-            this.screen.render();
-          }
-        }
-      }
-      /**
-       * Notify all children of resize event
-       */
-      _notifyChildrenResize(width, height) {
-        for (const child of this.children) {
-          if (typeof child._handleResize === "function") {
-            const state = this.getResponsiveState();
-            if (state) {
-              child._handleResize(width, height, state);
-            }
-          }
-        }
-      }
-      /**
-       * Set responsive padding configuration
-       */
-      setResponsivePadding(config) {
-        this._responsivePadding = config;
-        const state = this.getResponsiveState();
-        if (state) {
-          this._applyResponsivePadding(state.breakpoint);
-        }
-      }
-      /**
-       * Get current effective padding
-       */
-      getEffectivePadding() {
-        return this.options.padding ?? 0;
-      }
-      /**
-       * Helper to get default responsive padding (mobile-aware)
-       */
-      static getDefaultResponsivePadding() {
-        return {
-          xs: MOBILE_PADDING,
-          small: MOBILE_PADDING,
-          medium: DEFAULT_PADDING,
-          large: DEFAULT_PADDING
-        };
-      }
-    };
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/core/element.js
-var ESC2, Element;
-var init_element = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/core/element.js"() {
-    "use strict";
-    init_events();
-    init_colors();
-    init_responsive_mixin();
-    ESC2 = String.fromCharCode(27);
-    Element = class extends EventEmitter2 {
-      /**
-       * Widget kind, blessed-style ('list', 'textbox', 'button', ...).
-       *
-       * Subclasses set this in their constructor. Callers use it to ask "is a
-       * text-entry widget focused right now" without importing every widget
-       * class - MultiplayerLobby.widgetHasFocus() has always read
-       * `focused.type`, but nothing ever DEFINED it, so it was permanently
-       * undefined and that guard always returned false. Every single-letter
-       * lobby shortcut therefore fired while the user was typing in the chat
-       * box: 'o' jumped to the Game tab, 's' started the match, and 'q'/ESC
-       * left the lobby outright (reported live 2026-08-25).
-       */
-      get type() {
-        return "element";
-      }
-      /**
-       * Whether this element is hidden.
-       *
-       * Routed through show()/hide() rather than being a plain field because
-       * `visible` is a SEPARATE flag that renderElement() also tests
-       * (`if (!this.visible || this.hidden) return`). hide() clears both, so
-       * any code that later did the obvious `el.hidden = false` un-hid the
-       * element while leaving `visible === false` - the element then reported
-       * `hidden: false`, had correct coords, and still never painted. That
-       * silently ate the Grandmaster lobby's Bots button, which is built with
-       * `hidden: true` and revealed by `setAsHost()` (2026-08-25). Assigning
-       * this property now performs the real show/hide so the two flags cannot
-       * drift apart.
-       */
-      get hidden() {
-        return this._hidden;
-      }
-      set hidden(value) {
-        if (value === this._hidden)
-          return;
-        if (value) {
-          this.hide();
-        } else {
-          this.show();
-        }
-      }
-      /**
-       * Check if this element or any of its descendants has focus
-       */
-      hasFocusedChild() {
-        if (!this.screen || !this.screen._focused)
-          return false;
-        let current = this.screen._focused;
-        while (current) {
-          if (current === this)
-            return true;
-          current = current.parent;
-        }
-        return false;
-      }
-      /**
-       * Draggable property with setter that enables/disables dragging
-       * EXACT from neo-blessed element.js: __defineSetter__('draggable', ...)
-       */
-      get draggable() {
-        return !!this._draggable;
-      }
-      set draggable(value) {
-        if (value) {
-          this.enableDrag();
-        } else {
-          this.disableDrag();
-        }
-      }
-      constructor(options = {}) {
-        super();
-        this.parent = null;
-        this.screen = null;
-        this.children = [];
-        this.border = null;
-        this.position = { xi: 0, xl: 0, yi: 0, yl: 0 };
-        this.content = "";
-        this._lines = [];
-        this._contentDirty = false;
-        this._lastParsedWidth = 0;
-        this.visible = true;
-        this._hidden = false;
-        this.focused = false;
-        this.destroyed = false;
-        this.disabled = false;
-        this.childBase = 0;
-        this.childOffset = 0;
-        this.clickable = false;
-        this.keyable = false;
-        this.input = false;
-        this._hovered = false;
-        this._overBorder = false;
-        this._scrollbarHovered = false;
-        this._resizing = false;
-        this._lastClickTime = 0;
-        this._scrollbarDragging = false;
-        this._scrollbarDragStartY = 0;
-        this._scrollbarDragStartBase = 0;
-        this._slisteners = [];
-        this.options = {
-          hidden: false,
-          focusable: false,
-          clickable: false,
-          keyable: false,
-          scrollable: false,
-          tags: true,
-          // Default to true - blessed tags like {red-fg} are parsed automatically
-          tabbable: true,
-          // Default to true (if focusable)
-          tabIndex: 0,
-          // Default to natural tree order
-          padding: 0,
-          ...options
-        };
-        this.style = this.options.style || {};
-        this.border = typeof this.options.border === "string" ? { type: this.options.border } : this.options.border || null;
-        if (this.options.left !== void 0)
-          this.position.left = this.options.left;
-        if (this.options.right !== void 0)
-          this.position.right = this.options.right;
-        if (this.options.top !== void 0)
-          this.position.top = this.options.top;
-        if (this.options.bottom !== void 0)
-          this.position.bottom = this.options.bottom;
-        if (this.options.width !== void 0)
-          this.position.width = this.options.width;
-        if (this.options.height !== void 0)
-          this.position.height = this.options.height;
-        if (this.options.content) {
-          this.setContent(this.options.content);
-        }
-        if (this.options.hidden) {
-          this.hide();
-        }
-        if (this.options.disabled) {
-          this.disabled = true;
-        }
-        if (this.options.clickable && !this.disabled) {
-          this.clickable = true;
-        }
-        if (this.options.mouse) {
-          this.clickable = true;
-        }
-        if (this.options.parent) {
-          this.options.parent.append(this);
-        }
-        if (this.options.screen) {
-          this.screen = this.options.screen;
-        }
-        if (this.options.draggable) {
-          this.draggable = true;
-        }
-        if (this.options.style?.hover) {
-          this.on("mouseenter", () => {
-            this.applyHoverStyle();
-            if (this.screen)
-              this.screen.render();
-          });
-          this.on("mouseleave", () => {
-            this.removeHoverStyle();
-            if (this.screen)
-              this.screen.render();
-          });
-        }
-        if (this.options.closable) {
-          this.setupClosable();
-        }
-        const enableResponsive = this.options.responsive === void 0 || this.options.responsive === true;
-        if (enableResponsive) {
-          this._responsiveBehavior = applyResponsiveMixin(this, {
-            responsive: true,
-            touchFriendly: this.options.touchFriendly,
-            swipeEnabled: this.options.swipeEnabled,
-            mobileBreakpoint: this.options.mobileBreakpoint
-          });
-        }
-      }
-      setupClosable() {
-        this.on("attach", () => {
-          this.createClosableXButton();
-        });
-        if (this.parent) {
-          this.createClosableXButton();
-        }
-        if (this.options.closeOnEscape !== false) {
-          this.key(["escape"], () => {
-            this.close();
-          });
-        }
-      }
-      createClosableXButton() {
-        if (this._closableXButton)
-          return;
-        const Box2 = (init_box(), __toCommonJS(box_exports)).Box;
-        this._closableXButton = new Box2({
-          parent: this,
-          top: 0,
-          right: 1,
-          width: 3,
-          height: 1,
-          content: "[X]",
-          mouse: true,
-          clickable: true,
-          style: {
-            fg: "red",
-            bg: "black",
-            hover: {
-              fg: "white",
-              bg: "red"
-            }
-          }
-        });
-        if (this._closableXButton) {
-          this._closableXButton.on("click", () => {
-            this.close();
-          });
-        }
-      }
-      /**
-       * Close this element - hides it and emits 'close' event
-       */
-      close() {
-        this.hide();
-        this.emit("close");
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      // ============================================================================
-      // Position Calculation
-      // ============================================================================
-      calcPos(value, max2, parentSize) {
-        if (value === void 0 || value === null) {
-          return 0;
-        }
-        if (typeof value === "number") {
-          return value < 0 ? max2 + value : value;
-        }
-        const str = value.toString();
-        const percentOffsetMatch = str.match(/^(\d+)%([+-])(\d+)$/);
-        if (percentOffsetMatch) {
-          const percent = parseInt(percentOffsetMatch[1], 10) / 100;
-          const operator = percentOffsetMatch[2];
-          const offset = parseInt(percentOffsetMatch[3], 10);
-          const baseValue = Math.floor(parentSize * percent);
-          return operator === "-" ? baseValue - offset : baseValue + offset;
-        }
-        if (str.endsWith("%")) {
-          const percent = parseInt(str, 10) / 100;
-          return Math.floor(parentSize * percent);
-        }
-        const centerOffsetMatch = str.match(/^center([+-])(\d+)$/);
-        if (centerOffsetMatch) {
-          const operator = centerOffsetMatch[1];
-          const offset = parseInt(centerOffsetMatch[2], 10);
-          const baseValue = Math.floor((parentSize - max2) / 2);
-          return operator === "-" ? baseValue - offset : baseValue + offset;
-        }
-        if (str === "center") {
-          return Math.floor((parentSize - max2) / 2);
-        }
-        return parseInt(str, 10) || 0;
-      }
-      getPadding() {
-        const p = this.options.padding;
-        if (typeof p === "number") {
-          return { left: p, right: p, top: p, bottom: p };
-        }
-        if (typeof p === "object" && p !== null) {
-          return {
-            left: p.left || 0,
-            right: p.right || 0,
-            top: p.top || 0,
-            bottom: p.bottom || 0
-          };
-        }
-        return { left: 0, right: 0, top: 0, bottom: 0 };
-      }
-      /**
-       * Whether this element actually draws a border.
-       *
-       * Public because Screen's own render path needs the SAME predicate -
-       * `border` accepts both a string (`'line'` / `'none'`) and an object
-       * (`{type:'line'}`), and screen.ts used to test only the object form
-       * (`options.border?.type !== 'none'`). For the string `'none'`, `.type`
-       * is undefined, so that test read as "has a border" while this method
-       * said otherwise, and Screen then inset content by 1 row. On a 1-row
-       * element that made startY exceed maxY and the element painted NOTHING
-       * (Grandmaster lobby's whole button row vanished, 2026-08-25); on a
-       * 3-row one it pushed the text a row down into its neighbour.
-       */
-      hasBorder() {
-        const border = this.options.border;
-        if (!border)
-          return false;
-        if (border === "none")
-          return false;
-        if (typeof border === "object" && border.type === "none")
-          return false;
-        return true;
-      }
-      /**
-       * Invalidate coordinates - NO-OP since caching was removed
-       * Kept for API compatibility with existing code that calls it
-       */
-      _invalidateCoords() {
-      }
-      _getCoords(get, noscroll) {
-        if (this.destroyed)
-          return void 0;
-        const parent = this.parent;
-        const parentPos = parent?._getCoords(get, noscroll) || {
-          xi: 0,
-          xl: this.screen?.width || 80,
-          yi: 0,
-          yl: this.screen?.height || 24
-        };
-        const padding = this.getPadding();
-        const border = this.hasBorder() ? 1 : 0;
-        const parentBorder = parent?.hasBorder?.() ? 1 : 0;
-        const parentPadding = parent?.getPadding?.() || { left: 0, right: 0, top: 0, bottom: 0 };
-        const parentContentXi = parentPos.xi + parentBorder + parentPadding.left;
-        const parentContentXl = parentPos.xl - parentBorder - parentPadding.right;
-        const parentContentYi = parentPos.yi + parentBorder + parentPadding.top;
-        const parentContentYl = parentPos.yl - parentBorder - parentPadding.bottom;
-        const parentWidth = parentContentXl - parentContentXi;
-        const parentHeight = parentContentYl - parentContentYi;
-        let xi;
-        let xl;
-        const hasLeft = this.position.left !== void 0 && this.position.left !== null;
-        const hasRight = this.position.right !== void 0 && this.position.right !== null;
-        const hasWidth = this.position.width !== void 0 && this.position.width !== null;
-        if (hasLeft && hasRight && !hasWidth) {
-          xi = this.calcPos(this.position.left, 0, parentWidth);
-          xl = parentWidth - this.calcPos(this.position.right, 0, parentWidth);
-        } else if (hasLeft && hasWidth) {
-          const elemWidth = this.calcPos(this.position.width, 0, parentWidth);
-          if (typeof this.position.left === "string" && this.position.left.startsWith("center")) {
-            xi = this.calcPos(this.position.left, elemWidth, parentWidth);
-          } else {
-            xi = this.calcPos(this.position.left, 0, parentWidth);
-          }
-          xl = xi + elemWidth;
-        } else if (hasRight && hasWidth) {
-          xl = parentWidth - this.calcPos(this.position.right, 0, parentWidth);
-          xi = xl - this.calcPos(this.position.width, 0, parentWidth);
-        } else if (hasLeft) {
-          xi = this.calcPos(this.position.left, 0, parentWidth);
-          xl = parentWidth;
-        } else if (hasRight) {
-          xi = 0;
-          xl = parentWidth - this.calcPos(this.position.right, 0, parentWidth);
-        } else if (hasWidth) {
-          xi = 0;
-          xl = this.calcPos(this.position.width, 0, parentWidth);
-        } else {
-          xi = 0;
-          xl = parentWidth;
-        }
-        let yi;
-        let yl;
-        const hasTop = this.position.top !== void 0 && this.position.top !== null;
-        const hasBottom = this.position.bottom !== void 0 && this.position.bottom !== null;
-        const hasHeight = this.position.height !== void 0 && this.position.height !== null;
-        if (hasTop && hasBottom && !hasHeight) {
-          yi = this.calcPos(this.position.top, 0, parentHeight);
-          yl = parentHeight - this.calcPos(this.position.bottom, 0, parentHeight);
-        } else if (hasTop && hasHeight) {
-          const elemHeight = this.calcPos(this.position.height, 0, parentHeight);
-          if (typeof this.position.top === "string" && this.position.top.startsWith("center")) {
-            yi = this.calcPos(this.position.top, elemHeight, parentHeight);
-          } else {
-            yi = this.calcPos(this.position.top, 0, parentHeight);
-          }
-          yl = yi + elemHeight;
-        } else if (hasBottom && hasHeight) {
-          yl = parentHeight - this.calcPos(this.position.bottom, 0, parentHeight);
-          yi = yl - this.calcPos(this.position.height, 0, parentHeight);
-        } else if (hasTop) {
-          yi = this.calcPos(this.position.top, 0, parentHeight);
-          yl = parentHeight;
-        } else if (hasBottom) {
-          yi = 0;
-          yl = parentHeight - this.calcPos(this.position.bottom, 0, parentHeight);
-        } else if (hasHeight) {
-          yi = 0;
-          yl = this.calcPos(this.position.height, 0, parentHeight);
-        } else {
-          yi = 0;
-          yl = parentHeight;
-        }
-        xi += parentContentXi;
-        xl += parentContentXi;
-        yi += parentContentYi;
-        yl += parentContentYi;
-        this.position.xi = xi;
-        this.position.xl = xl;
-        this.position.yi = yi;
-        this.position.yl = yl;
-        return this.position;
-      }
-      // ============================================================================
-      // Position Property Getters
-      // ============================================================================
-      /**
-       * Get calculated width (in columns)
-       */
-      get width() {
-        const pos = this._getCoords();
-        return pos ? pos.xl - pos.xi : 0;
-      }
-      set width(val) {
-        if (this.position.width === val)
-          return;
-        this.position.width = val;
-        this._invalidateCoords();
-        this.emit("resize");
-      }
-      /**
-       * Get calculated height (in rows)
-       */
-      get height() {
-        const pos = this._getCoords();
-        return pos ? pos.yl - pos.yi : 0;
-      }
-      set height(val) {
-        if (this.position.height === val)
-          return;
-        this.position.height = val;
-        this._invalidateCoords();
-        this.emit("resize");
-      }
-      /**
-       * Get left position (relative to parent)
-       */
-      get left() {
-        const pos = this._getCoords();
-        if (!pos || !this.parent)
-          return 0;
-        const parentPos = this.parent._getCoords();
-        return parentPos ? pos.xi - parentPos.xi : pos.xi;
-      }
-      set left(val) {
-        this.rleft = val;
-      }
-      /**
-       * Get right position (relative to parent)
-       */
-      get right() {
-        const pos = this._getCoords();
-        if (!pos || !this.parent)
-          return 0;
-        const parentPos = this.parent._getCoords();
-        return parentPos ? parentPos.xl - pos.xl : 0;
-      }
-      set right(val) {
-        this.rright = val;
-      }
-      /**
-       * Get top position (relative to parent)
-       */
-      get top() {
-        const pos = this._getCoords();
-        if (!pos || !this.parent)
-          return 0;
-        const parentPos = this.parent._getCoords();
-        return parentPos ? pos.yi - parentPos.yi : pos.yi;
-      }
-      set top(val) {
-        this.rtop = val;
-      }
-      /**
-       * Get bottom position (relative to parent)
-       */
-      get bottom() {
-        const pos = this._getCoords();
-        if (!pos || !this.parent)
-          return 0;
-        const parentPos = this.parent._getCoords();
-        return parentPos ? parentPos.yl - pos.yl : 0;
-      }
-      set bottom(val) {
-        this.rbottom = val;
-      }
-      /**
-       * Get absolute left position (screen coordinates)
-       */
-      get aleft() {
-        const pos = this._getCoords();
-        return pos ? pos.xi : 0;
-      }
-      /**
-       * Get absolute right position (screen coordinates)
-       */
-      get aright() {
-        const pos = this._getCoords();
-        return pos && this.screen ? this.screen.width - pos.xl : 0;
-      }
-      /**
-       * Get absolute top position (screen coordinates)
-       */
-      get atop() {
-        const pos = this._getCoords();
-        return pos ? pos.yi : 0;
-      }
-      /**
-       * Get absolute bottom position (screen coordinates)
-       */
-      get abottom() {
-        const pos = this._getCoords();
-        return pos && this.screen ? this.screen.height - pos.yl : 0;
-      }
-      /**
-       * Get absolute width (same as width)
-       */
-      get awidth() {
-        return this.width;
-      }
-      /**
-       * Get absolute height (same as height)
-       */
-      get aheight() {
-        return this.height;
-      }
-      /**
-       * Get relative left (0-1 range)
-       */
-      get rleft() {
-        if (!this.parent)
-          return 0;
-        const parentPos = this.parent._getCoords();
-        const pos = this._getCoords();
-        if (!parentPos || !pos)
-          return 0;
-        const parentWidth = parentPos.xl - parentPos.xi;
-        return parentWidth > 0 ? (pos.xi - parentPos.xi) / parentWidth : 0;
-      }
-      /**
-       * Get relative top (0-1 range)
-       */
-      get rtop() {
-        if (!this.parent)
-          return 0;
-        const parentPos = this.parent._getCoords();
-        const pos = this._getCoords();
-        if (!parentPos || !pos)
-          return 0;
-        const parentHeight = parentPos.yl - parentPos.yi;
-        return parentHeight > 0 ? (pos.yi - parentPos.yi) / parentHeight : 0;
-      }
-      /**
-       * Get relative width (0-1 range)
-       */
-      get rwidth() {
-        if (!this.parent)
-          return 1;
-        const parentPos = this.parent._getCoords();
-        const pos = this._getCoords();
-        if (!parentPos || !pos)
-          return 0;
-        const parentWidth = parentPos.xl - parentPos.xi;
-        return parentWidth > 0 ? (pos.xl - pos.xi) / parentWidth : 0;
-      }
-      /**
-       * Get relative height (0-1 range)
-       */
-      get rheight() {
-        if (!this.parent)
-          return 1;
-        const parentPos = this.parent._getCoords();
-        const pos = this._getCoords();
-        if (!parentPos || !pos)
-          return 0;
-        const parentHeight = parentPos.yl - parentPos.yi;
-        return parentHeight > 0 ? (pos.yl - pos.yi) / parentHeight : 0;
-      }
-      /**
-       * Get inner left (excluding border and padding)
-       */
-      get ileft() {
-        const border = this.hasBorder() ? 1 : 0;
-        const padding = this.getPadding();
-        return this.aleft + border + padding.left;
-      }
-      /**
-       * Get inner top (excluding border and padding)
-       */
-      get itop() {
-        const border = this.hasBorder() ? 1 : 0;
-        const padding = this.getPadding();
-        return this.atop + border + padding.top;
-      }
-      /**
-       * Get inner width (excluding border, padding, and scrollbar)
-       */
-      get iwidth() {
-        const border = this.hasBorder() ? 2 : 0;
-        const padding = this.getPadding();
-        const scrollbar = this.hasScrollbar() ? 1 : 0;
-        return Math.max(0, this.width - border - padding.left - padding.right - scrollbar);
-      }
-      /**
-       * Get inner height (excluding border and padding)
-       */
-      get iheight() {
-        const border = this.hasBorder() ? 2 : 0;
-        const padding = this.getPadding();
-        return Math.max(0, this.height - border - padding.top - padding.bottom);
-      }
-      // ============================================================================
-      // Position Setters (EXACT 1:1 PORT from neo-blessed element.js lines 1312-1398)
-      // ============================================================================
-      /**
-       * Set absolute left position
-       * EXACT from neo-blessed element.js lines 1312-1331
-       */
-      set aleft(val) {
-        let expr;
-        if (typeof val === "string") {
-          if (val === "center") {
-            val = this.screen.width / 2 | 0;
-            val -= this.width / 2 | 0;
-          } else {
-            expr = val.split(/(?=\+|-)/);
-            val = expr[0];
-            val = +val.slice(0, -1) / 100;
-            val = this.screen.width * val | 0;
-            val += +(expr[1] || 0);
-          }
-        }
-        if (!this.parent)
-          return;
-        val = val - this.parent.aleft;
-        if (this.position.left === val)
-          return;
-        this._invalidateCoords();
-        this.screen?.invalidateMouseIndex?.();
-        this.emit("move");
-        this.position.left = val;
-      }
-      /**
-       * Set absolute right position
-       * EXACT from neo-blessed element.js lines 1333-1339
-       */
-      set aright(val) {
-        if (!this.parent)
-          return;
-        val -= this.parent.aright;
-        if (this.position.right === val)
-          return;
-        this._invalidateCoords();
-        this.screen?.invalidateMouseIndex?.();
-        this.emit("move");
-        this.position.right = val;
-      }
-      /**
-       * Set absolute top position
-       * EXACT from neo-blessed element.js lines 1341-1360
-       */
-      set atop(val) {
-        let expr;
-        if (typeof val === "string") {
-          if (val === "center") {
-            val = this.screen.height / 2 | 0;
-            val -= this.height / 2 | 0;
-          } else {
-            expr = val.split(/(?=\+|-)/);
-            val = expr[0];
-            val = +val.slice(0, -1) / 100;
-            val = this.screen.height * val | 0;
-            val += +(expr[1] || 0);
-          }
-        }
-        if (!this.parent)
-          return;
-        val = val - this.parent.atop;
-        if (this.position.top === val)
-          return;
-        this._invalidateCoords();
-        this.screen?.invalidateMouseIndex?.();
-        this.emit("move");
-        this.position.top = val;
-      }
-      /**
-       * Set absolute bottom position
-       * EXACT from neo-blessed element.js lines 1362-1368
-       */
-      set abottom(val) {
-        if (!this.parent)
-          return;
-        val -= this.parent.abottom;
-        if (this.position.bottom === val)
-          return;
-        this._invalidateCoords();
-        this.screen?.invalidateMouseIndex?.();
-        this.emit("move");
-        this.position.bottom = val;
-      }
-      /**
-       * Set relative left position (relative to parent)
-       * EXACT from neo-blessed element.js lines 1370-1376
-       */
-      set rleft(val) {
-        if (this.position.left === val)
-          return;
-        this._invalidateCoords();
-        this.screen?.invalidateMouseIndex?.();
-        if (/^\d+$/.test(val))
-          val = +val;
-        this.emit("move");
-        this.position.left = val;
-      }
-      /**
-       * Set relative right position (relative to parent)
-       * EXACT from neo-blessed element.js lines 1378-1383
-       */
-      set rright(val) {
-        if (this.position.right === val)
-          return;
-        this._invalidateCoords();
-        this.screen?.invalidateMouseIndex?.();
-        this.emit("move");
-        this.position.right = val;
-      }
-      /**
-       * Set relative top position (relative to parent)
-       * EXACT from neo-blessed element.js lines 1385-1391
-       */
-      set rtop(val) {
-        if (this.position.top === val)
-          return;
-        this._invalidateCoords();
-        this.screen?.invalidateMouseIndex?.();
-        if (/^\d+$/.test(val))
-          val = +val;
-        this.emit("move");
-        this.position.top = val;
-      }
-      /**
-       * Set relative bottom position (relative to parent)
-       * EXACT from neo-blessed element.js lines 1393-1398
-       */
-      set rbottom(val) {
-        if (this.position.bottom === val)
-          return;
-        this._invalidateCoords();
-        this.screen?.invalidateMouseIndex?.();
-        this.emit("move");
-        this.position.bottom = val;
-      }
-      /**
-       * Clear the element's rendered position on screen
-       * EXACT from neo-blessed element.js lines 901-909
-       */
-      clearPos(get, override) {
-        if (this.detached)
-          return;
-        const lpos = this._getCoords(get);
-        if (!lpos)
-          return;
-        this.screen.clearRegion(lpos.xi, lpos.xl, lpos.yi, lpos.yl, override);
-      }
-      // ============================================================================
-      // Content Management
-      // ============================================================================
-      setContent(content) {
-        if (this.destroyed)
-          return;
-        content = this.processCenterTags(content);
-        this.content = content;
-        this._contentDirty = true;
-        if (this.screen && this.screen.markDirtyElement) {
-          this.screen.markDirtyElement(this);
-        }
-        const width = this.iwidth;
-        if (width > 0) {
-          this._lines = this.parseContent(content);
-          this._contentDirty = false;
-        } else {
-          let parsed = content;
-          if (this.options.tags !== false) {
-            parsed = parseTags(content);
-          }
-          this._lines = parsed.split(/\r?\n/);
-        }
-        this.emit("set content");
-      }
-      /**
-       * Process {center} tags and convert to centered text
-       * CUSTOM EXTENSION: Blessed doesn't natively support {center} tags
-       */
-      processCenterTags(content) {
-        const centerRegex = /\{center\}([\s\S]*?)\{\/center\}/g;
-        return content.replace(centerRegex, (match2, innerContent) => {
-          const lines = innerContent.split("\n");
-          const width = this.iwidth || this.width || 80;
-          const centeredLines = lines.map((line3) => {
-            const stripped = line3.replace(/\{[^}]+\}/g, "");
-            const textLength = stripped.length;
-            const padding = Math.max(0, Math.floor((width - textLength) / 2));
-            return " ".repeat(padding) + line3;
-          });
-          return centeredLines.join("\n");
-        });
-      }
-      getContent() {
-        return this.content;
-      }
-      setText(text) {
-        this.setContent(text);
-      }
-      getText() {
-        return stripAnsi(this.content);
-      }
-      insertLine(i, line3) {
-        if (this.destroyed)
-          return;
-        let parsedLine = line3;
-        if (this.options.tags !== false) {
-          parsedLine = parseTags(line3);
-        }
-        this._lines.splice(i, 0, parsedLine);
-        this.content = this._lines.join("\n");
-        this.emit("insert line", i, line3);
-      }
-      deleteLine(i) {
-        if (this.destroyed)
-          return;
-        this._lines.splice(i, 1);
-        this.content = this._lines.join("\n");
-        this.emit("delete line", i);
-      }
-      getLine(i) {
-        return this._lines[i] || "";
-      }
-      getLines() {
-        return this._lines.slice();
-      }
-      setLine(i, line3) {
-        if (this.destroyed)
-          return;
-        let parsedLine = line3;
-        if (this.options.tags !== false) {
-          parsedLine = parseTags(line3);
-        }
-        this._lines[i] = parsedLine;
-        this.content = this._lines.join("\n");
-        this.emit("set line", i, line3);
-      }
-      clearLine(i) {
-        this.setLine(i, "");
-      }
-      unshiftLine(line3) {
-        this.insertLine(0, line3);
-      }
-      pushLine(line3) {
-        this.insertLine(this._lines.length, line3);
-      }
-      insertTop(line3) {
-        this.unshiftLine(line3);
-      }
-      insertBottom(line3) {
-        this.pushLine(line3);
-      }
-      // ============================================================================
-      // Advanced Content Parsing
-      // ============================================================================
-      /**
-       * Wrap text to fit within width, preserving ANSI codes
-       */
-      _wrapContent(text, width) {
-        const lines = [];
-        const textLines = text.split(/\r?\n/);
-        for (const line3 of textLines) {
-          if (this._textWidth(line3) <= width) {
-            lines.push(line3);
-            continue;
-          }
-          let currentLine = "";
-          let currentWidth = 0;
-          let inAnsi = false;
-          let ansiBuffer = "";
-          let activeAnsi = "";
-          for (let i = 0; i < line3.length; i++) {
-            const ch = line3[i];
-            if (ch === ESC2) {
-              inAnsi = true;
-              ansiBuffer = ch;
-              continue;
-            }
-            if (inAnsi) {
-              ansiBuffer += ch;
-              if (ch === "m") {
-                inAnsi = false;
-                currentLine += ansiBuffer;
-                activeAnsi += ansiBuffer;
-                ansiBuffer = "";
-              }
-              continue;
-            }
-            if (currentWidth >= width) {
-              lines.push(currentLine);
-              currentLine = activeAnsi + ch;
-              currentWidth = 1;
-            } else {
-              currentLine += ch;
-              currentWidth++;
-            }
-          }
-          if (currentLine) {
-            lines.push(currentLine);
-          }
-        }
-        return lines;
-      }
-      /**
-       * Get text width without ANSI codes
-       */
-      _textWidth(text) {
-        return stripAnsi(text).length;
-      }
-      /**
-       * Align text within width
-       */
-      _alignLine(line3, width, align = "left") {
-        const textLen = this._textWidth(line3);
-        if (textLen >= width) {
-          return line3;
-        }
-        const padding = width - textLen;
-        if (align === "center") {
-          const leftPad = Math.floor(padding / 2);
-          return " ".repeat(leftPad) + line3;
-        } else if (align === "right") {
-          return " ".repeat(padding) + line3;
-        }
-        return line3;
-      }
-      /**
-       * Parse content with word wrapping and alignment
-       */
-      parseContent(content) {
-        const text = content !== void 0 ? content : this.content;
-        let parsed = text;
-        if (this.options.tags !== false) {
-          parsed = parseTags(text);
-        }
-        const width = this.iwidth;
-        if (width <= 0) {
-          return [];
-        }
-        let lines;
-        if (this.options.wrap !== false) {
-          lines = this._wrapContent(parsed, width);
-        } else {
-          lines = parsed.split(/\r?\n/);
-        }
-        const align = this.options.align;
-        if (align && align !== "left") {
-          lines = lines.map((line3) => this._alignLine(line3, width, align));
-        }
-        return lines;
-      }
-      /**
-       * Get parsed lines (with wrapping and alignment)
-       */
-      getContentLines() {
-        return this.parseContent();
-      }
-      /**
-       * Measure content height (number of lines after wrapping)
-       */
-      getContentHeight(content) {
-        return this.parseContent(content).length;
-      }
-      /**
-       * Measure content width (widest line after ANSI strip)
-       */
-      getContentWidth(content) {
-        const lines = this.parseContent(content);
-        let maxWidth = 0;
-        for (const line3 of lines) {
-          const width = this._textWidth(line3);
-          if (width > maxWidth) {
-            maxWidth = width;
-          }
-        }
-        return maxWidth;
-      }
-      // ============================================================================
-      // Styling Methods
-      // ============================================================================
-      /**
-       * Convert style object to attribute code
-       * This is the main method widgets use to convert style → packed attributes
-       */
-      sattr(style) {
-        if (!style)
-          return 511 << 9 | 511;
-        let flags = 0;
-        let fgCode = 511;
-        let bgCode = 511;
-        if (style.bold)
-          flags |= 1;
-        if (style.underline)
-          flags |= 2;
-        if (style.blink)
-          flags |= 4;
-        if (style.inverse)
-          flags |= 8;
-        if (style.invisible)
-          flags |= 16;
-        if (style.fg !== void 0 && style.fg !== null) {
-          fgCode = this._colorToNumber(style.fg);
-        }
-        if (style.bg !== void 0 && style.bg !== null) {
-          bgCode = this._colorToNumber(style.bg);
-        }
-        return flags << 18 | fgCode << 9 | bgCode;
-      }
-      /**
-       * Convert color name/value to number (0-255)
-       */
-      _colorToNumber(color) {
-        if (typeof color === "number") {
-          return Math.max(0, Math.min(255, color));
-        }
-        if (typeof color === "string") {
-          const colorMap = {
-            // Special: transparent means preserve existing background
-            transparent: 511,
-            none: 511,
-            default: 511,
-            // Standard colors
-            black: 0,
-            red: 1,
-            green: 2,
-            yellow: 3,
-            blue: 4,
-            magenta: 5,
-            cyan: 6,
-            white: 7,
-            // Bright variants
-            "light-black": 8,
-            "light-red": 9,
-            "light-green": 10,
-            "light-yellow": 11,
-            "light-blue": 12,
-            "light-magenta": 13,
-            "light-cyan": 14,
-            "light-white": 15,
-            gray: 8,
-            grey: 8,
-            // Non-hyphenated aliases - Screen._colorToCode() spells these
-            // 'lightwhite' etc. Both maps must accept both spellings or a name
-            // valid in one renderer silently resolves differently in the other.
-            lightblack: 8,
-            lightred: 9,
-            lightgreen: 10,
-            lightyellow: 11,
-            lightblue: 12,
-            lightmagenta: 13,
-            lightcyan: 14,
-            lightwhite: 15
-          };
-          const lower = color.toLowerCase();
-          if (lower in colorMap) {
-            return colorMap[lower];
-          }
-          if (color.startsWith("#")) {
-            return this._hexToColor256(color);
-          }
-          return 7;
-        }
-        return 511;
-      }
-      /**
-       * Convert hex color to 256-color palette (simplified)
-       */
-      _hexToColor256(hex) {
-        hex = hex.replace("#", "");
-        const r = parseInt(hex.substr(0, 2), 16);
-        const g = parseInt(hex.substr(2, 2), 16);
-        const b = parseInt(hex.substr(4, 2), 16);
-        const rIndex = Math.round(r / 255 * 5);
-        const gIndex = Math.round(g / 255 * 5);
-        const bIndex = Math.round(b / 255 * 5);
-        return 16 + rIndex * 36 + gIndex * 6 + bIndex;
-      }
-      /**
-       * Get style object from element options
-       */
-      getStyle() {
-        return this.options.style || {};
-      }
-      /**
-       * Set style property
-       */
-      setStyle(style) {
-        this.options.style = { ...this.options.style, ...style };
-        this.emit("style change");
-      }
-      /**
-       * Get attribute code for current style
-       */
-      getAttr() {
-        return this.sattr(this.getStyle());
-      }
-      // ============================================================================
-      // Element Tree Management
-      // ============================================================================
-      append(element) {
-        if (this.destroyed)
-          return;
-        element.detach();
-        element.parent = this;
-        element.screen = this.screen;
-        this.children.push(element);
-        this._invalidateCoords();
-        element._invalidateCoords();
-        element._propagateScreen(this.screen);
-        this.emit("append", element);
-        element.emit("attach");
-      }
-      prepend(element) {
-        if (this.destroyed)
-          return;
-        element.detach();
-        element.parent = this;
-        element.screen = this.screen;
-        this.children.unshift(element);
-        this._invalidateCoords();
-        element._invalidateCoords();
-        element._propagateScreen(this.screen);
-        this.emit("prepend", element);
-        element.emit("attach");
-      }
-      remove(element) {
-        if (this.destroyed)
-          return;
-        const index = this.children.indexOf(element);
-        if (index !== -1) {
-          this.children.splice(index, 1);
-          element.parent = null;
-          this._invalidateCoords();
-          element._invalidateCoords();
-          element.emit("detach");
-          this.emit("remove", element);
-        }
-      }
-      insert(element, i) {
-        if (this.destroyed)
-          return;
-        element.detach();
-        element.parent = this;
-        element.screen = this.screen;
-        this.children.splice(i, 0, element);
-        this._invalidateCoords();
-        element._invalidateCoords();
-        element._propagateScreen(this.screen);
-        this.emit("insert", element, i);
-        element.emit("attach");
-      }
-      insertBefore(element, other) {
-        const index = this.children.indexOf(other);
-        if (index !== -1) {
-          this.insert(element, index);
-        }
-      }
-      insertAfter(element, other) {
-        const index = this.children.indexOf(other);
-        if (index !== -1) {
-          this.insert(element, index + 1);
-        }
-      }
-      detach() {
-        if (this.parent) {
-          this.parent.remove(this);
-        }
-      }
-      _propagateScreen(screen2) {
-        this.screen = screen2;
-        if (this.visible && !this.hidden && this.options.style?.opacity !== void 0) {
-          setTimeout(() => this._emitOverlayEvent(true), 0);
-        }
-        for (const child of this.children) {
-          child._propagateScreen(screen2);
-        }
-      }
-      // ============================================================================
-      // Focus Management
-      // ============================================================================
-      focus() {
-        if (this.destroyed || !this.screen)
-          return;
-        if (this.disabled)
-          return;
-        if (this.options.focusable !== false) {
-          this.screen.setFocused(this);
-        }
-      }
-      blur() {
-        if (this.destroyed)
-          return;
-        if (this.focused && this.screen) {
-          if (this.screen.getFocused() === this) {
-            this.screen.setFocused(null);
-          }
-        }
-      }
-      /**
-       * Disable element (prevents interaction, applies disabled style)
-       */
-      disable() {
-        if (this.disabled)
-          return;
-        this.disabled = true;
-        this.options.disabled = true;
-        if (this.focused) {
-          this.blur();
-        }
-        this.clickable = false;
-        this.emit("disable");
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Enable element (restores interaction, removes disabled style)
-       */
-      enable() {
-        if (!this.disabled)
-          return;
-        this.disabled = false;
-        this.options.disabled = false;
-        if (this.options.clickable || this.options.mouse) {
-          this.clickable = true;
-        }
-        this.emit("enable");
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Get unique overlay ID for this element (lazily generated)
-       */
-      _getOverlayId() {
-        if (!this._overlayId) {
-          this._overlayId = `element-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        }
-        return this._overlayId;
-      }
-      /**
-       * Emit overlay event for web clients to render CSS opacity
-       */
-      _emitOverlayEvent(show) {
-        const opacity = this.options.style?.opacity;
-        if (opacity === void 0 || !this.screen)
-          return;
-        const coords = this._getCoords();
-        const pos = coords ? {
-          x: coords.xi,
-          y: coords.yi,
-          width: coords.xl - coords.xi,
-          height: coords.yl - coords.yi
-        } : null;
-        if (!pos)
-          return;
-        const data = JSON.stringify({
-          id: this._getOverlayId(),
-          show,
-          opacity,
-          x: pos.x,
-          y: pos.y,
-          width: pos.width,
-          height: pos.height
-        });
-        const osc = ESC2 + `]9999;overlay;${data}` + String.fromCharCode(7);
-        this.screen.program?.write(osc);
-      }
-      show() {
-        if (this.destroyed)
-          return;
-        if (this._hidden) {
-          this._hidden = false;
-          this.visible = true;
-          this._invalidateCoords();
-          if (this.screen && this.screen.markDirtyElement) {
-            this.screen.markDirtyElement(this);
-          }
-          this.emit("show");
-          this._emitOverlayEvent(true);
-          if (this.options.trapFocus && this.screen) {
-            this.screen.trapFocus(this);
-          }
-        }
-      }
-      hide() {
-        if (this.destroyed)
-          return;
-        if (!this._hidden) {
-          if (this.screen && this.screen.markDirtyElement) {
-            this.screen.markDirtyElement(this);
-          }
-          const pos = this._getCoords();
-          if (this.screen && pos) {
-            this.screen.clearRegion(pos.xi, pos.xl, pos.yi, pos.yl);
-          }
-          this._hidden = true;
-          this.visible = false;
-          this.blur();
-          this.emit("hide");
-          this._emitOverlayEvent(false);
-          if (this.options.trapFocus && this.screen?.getFocusTrap?.() === this) {
-            this.screen.releaseFocusTrap();
-          }
-        }
-      }
-      toggle() {
-        if (this.hidden) {
-          this.show();
-        } else {
-          this.hide();
-        }
-      }
-      // ============================================================================
-      // Transparency
-      // ============================================================================
-      /**
-       * Enable transparency (50% color blending with underlying content)
-       * Similar to CSS opacity but for terminal - blends colors at 50% alpha
-       */
-      setTransparent(enabled = true) {
-        if (!this.options.style) {
-          this.options.style = {};
-        }
-        this.options.style.transparent = enabled;
-        if (this.style) {
-          this.style.transparent = enabled;
-        }
-        if (this._emitOverlayEvent) {
-          this._emitOverlayEvent(enabled);
-        }
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Check if element has transparency enabled
-       */
-      isTransparent() {
-        return !!this.options.style?.transparent;
-      }
-      /**
-       * Toggle transparency on/off
-       */
-      toggleTransparent() {
-        this.setTransparent(!this.isTransparent());
-      }
-      // ============================================================================
-      // Z-Order
-      // ============================================================================
-      setFront() {
-        if (this.destroyed || !this.parent)
-          return;
-        const index = this.parent.children.indexOf(this);
-        if (index !== -1) {
-          this.parent.children.splice(index, 1);
-          this.parent.children.push(this);
-          this.emit("set front");
-        }
-      }
-      setBack() {
-        if (this.destroyed || !this.parent)
-          return;
-        const index = this.parent.children.indexOf(this);
-        if (index !== -1) {
-          this.parent.children.splice(index, 1);
-          this.parent.children.unshift(this);
-          this.emit("set back");
-        }
-      }
-      // ============================================================================
-      // Scrolling
-      // ============================================================================
-      scroll(offset) {
-        if (this.destroyed)
-          return;
-        this.setScroll(this.childBase + offset);
-        this.screen?.render();
-      }
-      scrollTo(index) {
-        this.setScroll(index);
-        this.screen?.render();
-      }
-      getScroll() {
-        return this.childBase;
-      }
-      setScroll(index) {
-        if (this.destroyed)
-          return;
-        const maxScroll = this.getScrollHeight();
-        this.childBase = Math.max(0, Math.min(index, maxScroll));
-        this.emit("scroll");
-      }
-      getScrollHeight() {
-        return Math.max(0, this._getScrollHeight());
-      }
-      _getScrollHeight() {
-        const pos = this._getCoords();
-        if (!pos)
-          return 0;
-        const padding = this.getPadding();
-        const border = this.hasBorder() ? 1 : 0;
-        const height = pos.yl - pos.yi - border * 2 - padding.top - padding.bottom;
-        return Math.max(0, this._lines.length - height);
-      }
-      getScrollPerc() {
-        const max2 = this.getScrollHeight();
-        if (max2 === 0)
-          return 100;
-        return Math.floor(this.childBase / max2 * 100);
-      }
-      setScrollPerc(perc) {
-        const max2 = this.getScrollHeight();
-        this.setScroll(Math.floor(perc / 100 * max2));
-        this.screen?.render();
-      }
-      resetScroll() {
-        this.setScroll(0);
-        this.screen?.render();
-      }
-      /**
-       * Register event listener on screen and track it for cleanup
-       * EXACT from neo-blessed element.js lines 267-271
-       */
-      onScreenEvent(type, handler2) {
-        this._slisteners.push({ type, handler: handler2 });
-        if (this.screen) {
-          this.screen.on(type, handler2);
-        }
-      }
-      /**
-       * Register one-time event listener on screen and track it
-       * EXACT from neo-blessed element.js lines 273-282
-       */
-      onceScreenEvent(type, handler2) {
-        const wrapper = (...args) => {
-          this.removeScreenEvent(type, wrapper);
-          return handler2.apply(this, args);
-        };
-        this.onScreenEvent(type, wrapper);
-      }
-      /**
-       * Remove event listener from screen
-       * EXACT from neo-blessed element.js lines 284-297
-       */
-      removeScreenEvent(type, handler2) {
-        for (let i = this._slisteners.length - 1; i >= 0; i--) {
-          const listener = this._slisteners[i];
-          if (listener.type === type && listener.handler === handler2) {
-            this._slisteners.splice(i, 1);
-            if (this.screen) {
-              this.screen.removeListener(type, handler2);
-            }
-          }
-        }
-      }
-      /**
-       * Unbind all screen events for this element
-       */
-      _unbindScreenEvents() {
-        if (!this.screen)
-          return;
-        for (const listener of this._slisteners) {
-          this.screen.removeListener(listener.type, listener.handler);
-        }
-        this._slisteners = [];
-      }
-      /**
-       * Enable mouse events for this element
-       */
-      enableMouse() {
-        this.clickable = true;
-        this.options.clickable = true;
-        if (this.screen && this.screen.program) {
-          this.screen.program.enableMouse();
-        }
-      }
-      /**
-       * Disable mouse events
-       */
-      disableMouse() {
-        this.clickable = false;
-        this.options.clickable = false;
-      }
-      /**
-       * Enable keyboard events for this element
-       */
-      enableKeys() {
-        this.keyable = true;
-        this.options.keyable = true;
-      }
-      /**
-       * Disable keyboard events
-       */
-      disableKeys() {
-        this.keyable = false;
-        this.options.keyable = false;
-      }
-      /**
-       * Enable input mode (for text input widgets)
-       */
-      enableInput() {
-        this.input = true;
-        this.options.input = true;
-        this.enableKeys();
-      }
-      /**
-       * Disable input mode
-       */
-      disableInput() {
-        this.input = false;
-        this.options.input = false;
-      }
-      /**
-       * Enable dragging for this element
-       * EXACT from neo-blessed element.js lines 789-851
-       */
-      enableDrag(verify) {
-        const self2 = this;
-        if (this._draggable)
-          return true;
-        if (typeof verify !== "function") {
-          verify = function() {
-            return true;
-          };
-        }
-        this.enableMouse();
-        this.on("mousedown", this._dragMD = function(data) {
-          if (self2.screen._dragging)
-            return;
-          if (!verify(data))
-            return;
-          self2.screen._dragging = self2;
-          self2._drag = {
-            x: data.x - self2.aleft,
-            y: data.y - self2.atop
-          };
-          self2.setFront();
-        });
-        this.onScreenEvent("mouse", this._dragM = function(data) {
-          if (self2.screen._dragging !== self2)
-            return;
-          if (data.action !== "mousedown" && data.action !== "mousemove") {
-            delete self2.screen._dragging;
-            delete self2._drag;
-            return;
-          }
-          if (!self2.parent)
-            return;
-          const ox = self2._drag.x;
-          const oy = self2._drag.y;
-          const px = self2.parent.aleft;
-          const py = self2.parent.atop;
-          let x = data.x - px - ox;
-          let y = data.y - py - oy;
-          if (self2.position.right != null) {
-            if (self2.position.left != null) {
-              self2.width = "100%-" + (self2.parent.width - self2.width);
-            }
-            self2.position.right = null;
-          }
-          if (self2.position.bottom != null) {
-            if (self2.position.top != null) {
-              self2.height = "100%-" + (self2.parent.height - self2.height);
-            }
-            self2.position.bottom = null;
-          }
-          self2.rleft = x;
-          self2.rtop = y;
-          self2.screen.render();
-        });
-        return this._draggable = true;
-      }
-      /**
-       * Disable dragging
-       * EXACT from neo-blessed element.js lines 853-861
-       */
-      disableDrag() {
-        if (!this._draggable)
-          return false;
-        delete this.screen._dragging;
-        delete this._drag;
-        this.removeListener("mousedown", this._dragMD);
-        this.removeScreenEvent("mouse", this._dragM);
-        return this._draggable = false;
-      }
-      /**
-       * Enable resizing for this element
-       * Allows resizing from all edges and corners
-       */
-      enableResize(callback) {
-        this.enableMouse();
-        let resizeState = null;
-        this.on("mousedown", (data) => {
-          const edge = this.getResizeEdge(data.x, data.y);
-          if (!edge)
-            return;
-          const pos = this._getCoords();
-          if (!pos)
-            return;
-          this._resizing = true;
-          resizeState = {
-            edge,
-            startX: data.x,
-            startY: data.y,
-            startLeft: this.aleft,
-            startTop: this.atop,
-            startWidth: this.width,
-            startHeight: this.height
-          };
-          this.setFront();
-          this.emit("resize start", data);
-        });
-        this.onScreenEvent("mouse", (data) => {
-          if (!resizeState || !this._resizing)
-            return;
-          if (data.action !== "mousemove") {
-            if (data.action === "mouseup") {
-              this._resizing = false;
-              resizeState = null;
-              this.emit("resize end", data);
-            }
-            return;
-          }
-          const deltaX = data.x - resizeState.startX;
-          const deltaY = data.y - resizeState.startY;
-          let newWidth = resizeState.startWidth;
-          let newHeight = resizeState.startHeight;
-          let newLeft = resizeState.startLeft;
-          let newTop = resizeState.startTop;
-          const MIN_WIDTH = 5;
-          const MIN_HEIGHT = 3;
-          if (resizeState.edge.includes("top")) {
-            const potentialHeight = resizeState.startHeight - deltaY;
-            if (potentialHeight >= MIN_HEIGHT) {
-              newHeight = potentialHeight;
-              newTop = resizeState.startTop + deltaY;
-            }
-          } else if (resizeState.edge.includes("bottom")) {
-            newHeight = Math.max(MIN_HEIGHT, resizeState.startHeight + deltaY);
-          }
-          if (resizeState.edge.includes("left")) {
-            const potentialWidth = resizeState.startWidth - deltaX;
-            if (potentialWidth >= MIN_WIDTH) {
-              newWidth = potentialWidth;
-              newLeft = resizeState.startLeft + deltaX;
-            }
-          } else if (resizeState.edge.includes("right")) {
-            newWidth = Math.max(MIN_WIDTH, resizeState.startWidth + deltaX);
-          }
-          if (newTop !== this.atop)
-            this.atop = newTop;
-          if (newLeft !== this.aleft)
-            this.aleft = newLeft;
-          this.width = newWidth;
-          this.height = newHeight;
-          const resizeData = { width: newWidth, height: newHeight };
-          if (callback)
-            callback(resizeData);
-          this.emit("resize", resizeData);
-          if (this.screen)
-            this.screen.render();
-        });
-      }
-      /**
-       * Disable resizing
-       */
-      disableResize() {
-      }
-      /**
-       * Check if mouse position is over this element
-       */
-      hasMouseOver(x, y) {
-        const pos = this._getCoords();
-        if (!pos)
-          return false;
-        return x >= pos.xi && x < pos.xl && y >= pos.yi && y < pos.yl;
-      }
-      /**
-       * Set element as clickable
-       */
-      setClickable(clickable) {
-        this.clickable = clickable;
-        this.options.clickable = clickable;
-        if (clickable) {
-          this.enableMouse();
-        }
-      }
-      /**
-       * Set element as keyable
-       */
-      setKeyable(keyable) {
-        this.keyable = keyable;
-        this.options.keyable = keyable;
-      }
-      /**
-       * Key handler - register a key binding
-       */
-      key(keys, listener) {
-        if (!Array.isArray(keys)) {
-          keys = [keys];
-        }
-        for (const key of keys) {
-          this.on(`keypress ${key}`, listener);
-        }
-      }
-      /**
-       * Remove key handler
-       */
-      unkey(keys, listener) {
-        if (!Array.isArray(keys)) {
-          keys = [keys];
-        }
-        for (const key of keys) {
-          this.removeListener(`keypress ${key}`, listener);
-        }
-      }
-      /**
-       * Handle keypress event
-       */
-      onKeypress(ch, key) {
-        if (!this.keyable)
-          return;
-        this.emit(`keypress ${key.full}`, ch, key);
-        this.emit("keypress", ch, key);
-        if (key.name === "tab") {
-          if (this.screen) {
-            if (key.shift) {
-              this.screen.focusPrevious();
-            } else {
-              this.screen.focusNext();
-            }
-          }
-        }
-      }
-      /**
-       * Handle mouse event
-       * Returns true if the event was handled by this element
-       */
-      onMouse(event) {
-        if (this.hidden || !this.visible)
-          return false;
-        if (!this.options.mouse && !this.options.clickable && !this.options.scrollable) {
-          return false;
-        }
-        const coords = this._getCoords();
-        if (!coords)
-          return false;
-        const isOver = event.x >= coords.xi && event.x < coords.xl && event.y >= coords.yi && event.y < coords.yl;
-        if (!isOver) {
-          if (this._hovered) {
-            this.onMouseLeave();
-          }
-          return false;
-        }
-        if (this.hasScrollbar()) {
-          const wasHovered = this._scrollbarHovered;
-          this._scrollbarHovered = this.isOnScrollbarThumb(event.x, event.y);
-          if (wasHovered !== this._scrollbarHovered) {
-            this.screen?.render();
-          }
-        }
-        const overBorder = this.hasBorder() && (event.x === coords.xi || event.x === coords.xl - 1 || event.y === coords.yi || event.y === coords.yl - 1);
-        if (overBorder !== this._overBorder) {
-          this._overBorder = overBorder;
-          this.screen?.render();
-        }
-        if (!this._hovered) {
-          this._hovered = true;
-          this.emit("mouseenter", event);
-          this.screen?.render();
-        }
-        this.emit("mouse", event);
-        this.emit(event.action, event);
-        if (event.action === "mousedown") {
-          if (this.hasScrollbar() && this.isOnScrollbar(event.x, event.y)) {
-            this._startScrollbarDrag(event);
-            return true;
-          }
-          const btn = event.button;
-          if (btn === "right") {
-            this.emit("rightclick", event);
-          } else if (btn === "middle") {
-            this.emit("middleclick", event);
-          } else {
-            this.emit("click", event);
-          }
-          if (btn !== "right" && btn !== "middle" && this.clickable) {
-            this.focus();
-            return true;
-          }
-        }
-        return this.clickable;
-      }
-      /**
-       * Check if coordinates are on the scrollbar thumb specifically
-       */
-      isOnScrollbarThumb(x, y) {
-        if (!this.isOnScrollbar(x, y))
-          return false;
-        const pos = this._getCoords();
-        if (!pos)
-          return false;
-        const border = this.hasBorder() ? 1 : 0;
-        const contentHeight = this._lines.length;
-        const viewHeight = this.iheight;
-        if (contentHeight <= viewHeight)
-          return false;
-        const scrollbarHeight = Math.max(1, Math.floor(viewHeight / contentHeight * viewHeight));
-        const maxScroll = contentHeight - viewHeight;
-        const scrollRatio = maxScroll > 0 ? this.childBase / maxScroll : 0;
-        const thumbYStart = pos.yi + border + Math.floor(scrollRatio * (viewHeight - scrollbarHeight));
-        const thumbYEnd = thumbYStart + scrollbarHeight;
-        return y >= thumbYStart && y < thumbYEnd;
-      }
-      onMouseLeave() {
-        if (!this._hovered)
-          return;
-        this._hovered = false;
-        this._overBorder = false;
-        this._scrollbarHovered = false;
-        this.emit("mouseleave");
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      // ============================================================================
-      // Rendering (implemented by subclasses)
-      // ============================================================================
-      render() {
-        this.emit("render");
-      }
-      // ============================================================================
-      // Border Rendering
-      // ============================================================================
-      /**
-       * Get border characters based on border type
-       */
-      getBorderChars() {
-        if (!this.options.border)
-          return null;
-        const type = typeof this.options.border === "string" ? this.options.border : this.options.border.type || "line";
-        const borders = {
-          line: {
-            topLeft: ".",
-            topRight: ".",
-            bottomLeft: "`",
-            bottomRight: "'",
-            horizontal: "-",
-            vertical: "|"
-          },
-          heavy: {
-            topLeft: "+",
-            topRight: "+",
-            bottomLeft: "+",
-            bottomRight: "+",
-            horizontal: "=",
-            vertical: "|"
-          },
-          double: {
-            topLeft: "+",
-            topRight: "+",
-            bottomLeft: "+",
-            bottomRight: "+",
-            horizontal: "=",
-            vertical: "|"
-          },
-          round: {
-            topLeft: ".",
-            topRight: ".",
-            bottomLeft: "`",
-            bottomRight: "'",
-            horizontal: "-",
-            vertical: "|"
-          },
-          bg: {
-            topLeft: " ",
-            topRight: " ",
-            bottomLeft: " ",
-            bottomRight: " ",
-            horizontal: " ",
-            vertical: " "
-          },
-          ascii: {
-            topLeft: ".",
-            topRight: ".",
-            bottomLeft: "`",
-            bottomRight: "'",
-            horizontal: "-",
-            vertical: "|"
-          }
-        };
-        return borders[type] || borders.line;
-      }
-      /**
-       * Render border around element
-       * Supports per-edge colors via fgTop, fgBottom, fgLeft, fgRight properties
-       */
-      renderBorder() {
-        if (!this.hasBorder() || !this.screen)
-          return;
-        const pos = this._getCoords();
-        if (!pos)
-          return;
-        const chars = this.getBorderChars();
-        if (!chars)
-          return;
-        let borderStyle = {};
-        if (this.options.style?.fg) {
-          borderStyle.fg = this.options.style.fg;
-        }
-        if (typeof this.options.border === "object" && this.options.border.style) {
-          borderStyle = { ...borderStyle, ...this.options.border.style };
-        }
-        if (this.options.style?.border) {
-          borderStyle = { ...borderStyle, ...this.options.style.border };
-        }
-        if (this.disabled) {
-          const disabledStyle = this.options.style?.disabled;
-          if (disabledStyle?.border) {
-            borderStyle = { ...borderStyle, ...disabledStyle.border };
-          } else {
-            borderStyle = { ...borderStyle, fg: "gray" };
-          }
-        } else if (this._overBorder) {
-          const hoverStyle = this.options.style?.hover;
-          if (hoverStyle?.border) {
-            borderStyle = { ...borderStyle, ...hoverStyle.border };
-          } else {
-            borderStyle = { ...borderStyle, fg: "white", bold: true };
-          }
-        } else if (this.hasFocusedChild()) {
-          const focusStyle = this.options.style?.focus;
-          if (focusStyle?.border) {
-            borderStyle = { ...borderStyle, ...focusStyle.border };
-          } else {
-            borderStyle = { ...borderStyle, fg: "cyan", bold: true };
-          }
-        }
-        const defaultAttr = this.sattr(borderStyle);
-        const styleBorder = this.options.style?.border || {};
-        const optionsBorder = typeof this.options.border === "object" ? this.options.border : {};
-        const fgTop = styleBorder.fgTop || optionsBorder.fgTop;
-        const fgBottom = styleBorder.fgBottom || optionsBorder.fgBottom;
-        const fgLeft = styleBorder.fgLeft || optionsBorder.fgLeft;
-        const fgRight = styleBorder.fgRight || optionsBorder.fgRight;
-        const attrTop = fgTop ? this.sattr({ ...borderStyle, fg: fgTop }) : defaultAttr;
-        const attrBottom = fgBottom ? this.sattr({ ...borderStyle, fg: fgBottom }) : defaultAttr;
-        const attrLeft = fgLeft ? this.sattr({ ...borderStyle, fg: fgLeft }) : defaultAttr;
-        const attrRight = fgRight ? this.sattr({ ...borderStyle, fg: fgRight }) : defaultAttr;
-        this.screen.fillRegion(attrTop, chars.horizontal, pos.xi + 1, pos.xl - 1, pos.yi, pos.yi + 1);
-        this.screen.fillRegion(attrTop, chars.topLeft, pos.xi, pos.xi + 1, pos.yi, pos.yi + 1);
-        this.screen.fillRegion(attrTop, chars.topRight, pos.xl - 1, pos.xl, pos.yi, pos.yi + 1);
-        this.screen.fillRegion(attrBottom, chars.horizontal, pos.xi + 1, pos.xl - 1, pos.yl - 1, pos.yl);
-        this.screen.fillRegion(attrBottom, chars.bottomLeft, pos.xi, pos.xi + 1, pos.yl - 1, pos.yl);
-        this.screen.fillRegion(attrBottom, chars.bottomRight, pos.xl - 1, pos.xl, pos.yl - 1, pos.yl);
-        for (let y = pos.yi + 1; y < pos.yl - 1; y++) {
-          this.screen.fillRegion(attrLeft, chars.vertical, pos.xi, pos.xi + 1, y, y + 1);
-        }
-        for (let y = pos.yi + 1; y < pos.yl - 1; y++) {
-          this.screen.fillRegion(attrRight, chars.vertical, pos.xl - 1, pos.xl, y, y + 1);
-        }
-      }
-      /**
-       * Render border with title/label
-       */
-      renderBorderWithLabel() {
-        this.renderBorder();
-        const border = typeof this.options.border === "object" ? this.options.border : null;
-        if (!this.options.label && !border?.label)
-          return;
-        const label = this.options.label || border?.label || "";
-        if (!label)
-          return;
-        const pos = this._getCoords();
-        if (!pos)
-          return;
-        const labelText = ` ${label} `;
-        const strippedLabel = stripAnsi(labelText.replace(/\{[^}]+\}/g, ""));
-        const labelWidth = textWidth(strippedLabel);
-        let labelX = pos.xi + 2;
-        if (border?.labelPosition === "center") {
-          labelX = pos.xi + Math.floor((pos.xl - pos.xi - labelWidth) / 2);
-        } else if (border?.labelPosition === "right") {
-          labelX = pos.xl - labelWidth - 2;
-        }
-      }
-      // ============================================================================
-      // Scrollbar Rendering
-      // ============================================================================
-      /**
-       * Check if element has scrollbar
-       */
-      hasScrollbar() {
-        return !!(this.options.scrollbar && this.options.scrollable);
-      }
-      /**
-       * Check if a point is on the element's border
-       */
-      isOnBorder(x, y) {
-        if (!this.hasBorder())
-          return false;
-        const pos = this._getCoords();
-        if (!pos)
-          return false;
-        return x === pos.xi || x === pos.xl - 1 || y === pos.yi || y === pos.yl - 1;
-      }
-      /**
-       * Identify which edge or corner is at the given point for resizing
-       */
-      getResizeEdge(x, y) {
-        if (!this.hasBorder())
-          return null;
-        const pos = this._getCoords();
-        if (!pos)
-          return null;
-        const onLeft = x === pos.xi;
-        const onRight = x === pos.xl - 1;
-        const onTop = y === pos.yi;
-        const onBottom = y === pos.yl - 1;
-        if (onTop && onLeft)
-          return "top-left";
-        if (onTop && onRight)
-          return "top-right";
-        if (onBottom && onLeft)
-          return "bottom-left";
-        if (onBottom && onRight)
-          return "bottom-right";
-        if (onTop)
-          return "top";
-        if (onBottom)
-          return "bottom";
-        if (onLeft)
-          return "left";
-        if (onRight)
-          return "right";
-        return null;
-      }
-      /**
-       * Check if a point is on the scrollbar track
-       * Returns true if the click is on the scrollbar column
-       */
-      isOnScrollbar(x, y) {
-        if (!this.hasScrollbar() || !this.screen)
-          return false;
-        const pos = this._getCoords();
-        if (!pos)
-          return false;
-        const border = this.hasBorder() ? 1 : 0;
-        const scrollbarX = pos.xl - border - 1;
-        return x === scrollbarX && y >= pos.yi + border && y < pos.yl - border;
-      }
-      /**
-       * Get the scrollbar geometry for drag calculations
-       */
-      _getScrollbarGeometry() {
-        if (!this.hasScrollbar() || !this.screen)
-          return null;
-        const pos = this._getCoords();
-        if (!pos)
-          return null;
-        const border = this.hasBorder() ? 1 : 0;
-        const contentHeight = this._lines.length;
-        const viewHeight = this.iheight;
-        if (contentHeight <= viewHeight)
-          return null;
-        const trackTop = pos.yi + border;
-        const trackHeight = viewHeight;
-        const thumbHeight = Math.max(1, Math.floor(viewHeight / contentHeight * viewHeight));
-        const maxScroll = contentHeight - viewHeight;
-        const scrollRatio = maxScroll > 0 ? this.childBase / maxScroll : 0;
-        const thumbTop = trackTop + Math.floor(scrollRatio * (trackHeight - thumbHeight));
-        return { trackTop, trackHeight, thumbHeight, thumbTop, maxScroll };
-      }
-      /**
-       * Start scrollbar drag operation
-       */
-      _startScrollbarDrag(event) {
-        if (!this.screen)
-          return;
-        this._scrollbarDragging = true;
-        this._scrollbarDragStartY = event.y;
-        this._scrollbarDragStartBase = this.childBase;
-        this._scrollbarMouseMoveHandler = (data) => {
-          if (!this._scrollbarDragging)
-            return;
-          if (data.action !== "mousemove")
-            return;
-          const geom = this._getScrollbarGeometry();
-          if (!geom)
-            return;
-          const deltaY = data.y - this._scrollbarDragStartY;
-          const scrollableTrackHeight = geom.trackHeight - geom.thumbHeight;
-          if (scrollableTrackHeight <= 0)
-            return;
-          const scrollDelta = Math.round(deltaY / scrollableTrackHeight * geom.maxScroll);
-          const newScroll = Math.max(0, Math.min(geom.maxScroll, this._scrollbarDragStartBase + scrollDelta));
-          if (newScroll !== this.childBase) {
-            this.setScroll(newScroll);
-            this.screen?.render();
-          }
-        };
-        this._scrollbarMouseUpHandler = (data) => {
-          if (data.action === "mouseup") {
-            this._endScrollbarDrag();
-          }
-        };
-        this.screen.on("mouse", this._scrollbarMouseMoveHandler);
-        this.screen.on("mouse", this._scrollbarMouseUpHandler);
-      }
-      /**
-       * End scrollbar drag operation
-       */
-      _endScrollbarDrag() {
-        this._scrollbarDragging = false;
-        if (this.screen && this._scrollbarMouseMoveHandler) {
-          this.screen.removeListener("mouse", this._scrollbarMouseMoveHandler);
-          this._scrollbarMouseMoveHandler = void 0;
-        }
-        if (this.screen && this._scrollbarMouseUpHandler) {
-          this.screen.removeListener("mouse", this._scrollbarMouseUpHandler);
-          this._scrollbarMouseUpHandler = void 0;
-        }
-      }
-      /**
-       * Render scrollbar
-       */
-      renderScrollbar() {
-        if (!this.hasScrollbar() || !this.screen)
-          return;
-        const pos = this._getCoords();
-        if (!pos)
-          return;
-        const scrollbarOptions = this.options.scrollbar;
-        const trackStyleObj = scrollbarOptions?.track?.style || { fg: "black", bg: "black" };
-        const trackAttr = this.sattr(trackStyleObj);
-        let thumbStyleObj = scrollbarOptions?.style || { fg: "cyan", bg: "cyan" };
-        if (this._scrollbarHovered) {
-          thumbStyleObj = { ...thumbStyleObj, fg: "yellow", bg: "yellow", bold: true };
-        }
-        const thumbAttr = this.sattr(thumbStyleObj);
-        const border = this.hasBorder() ? 1 : 0;
-        const scrollbarX = pos.xl - border - 1;
-        if (scrollbarX < pos.xi || scrollbarX >= pos.xl)
-          return;
-        const contentHeight = this._lines.length;
-        const viewHeight = this.iheight;
-        if (contentHeight <= 0 || viewHeight <= 0)
-          return;
-        const trackChar = typeof scrollbarOptions?.track === "string" ? scrollbarOptions.track : scrollbarOptions?.track?.ch || " ";
-        const thumbChar = typeof scrollbarOptions?.thumb === "string" ? scrollbarOptions.thumb : scrollbarOptions?.thumb?.ch || scrollbarOptions?.ch || " ";
-        if (contentHeight > viewHeight) {
-          for (let y = pos.yi + border; y < pos.yl - border; y++) {
-            this.screen.fillRegion(trackAttr, trackChar, scrollbarX, scrollbarX + 1, y, y + 1);
-          }
-          const scrollbarHeight = Math.max(1, Math.floor(viewHeight / contentHeight * viewHeight));
-          const maxScroll = contentHeight - viewHeight;
-          const scrollRatio = maxScroll > 0 ? this.childBase / maxScroll : 0;
-          const scrollbarY = Math.floor(scrollRatio * (viewHeight - scrollbarHeight));
-          for (let i = 0; i < scrollbarHeight; i++) {
-            const y = pos.yi + border + scrollbarY + i;
-            if (y >= pos.yi + border && y < pos.yl - border) {
-              this.screen.fillRegion(thumbAttr, thumbChar, scrollbarX, scrollbarX + 1, y, y + 1);
-            }
-          }
-        }
-      }
-      // ============================================================================
-      // Shadow Rendering
-      // ============================================================================
-      /**
-       * Check if element has shadow
-       */
-      hasShadow() {
-        return !!this.options.shadow;
-      }
-      /**
-       * Render shadow effect
-       */
-      renderShadow() {
-        if (!this.hasShadow() || !this.screen)
-          return;
-        const pos = this._getCoords();
-        if (!pos)
-          return;
-        const shadowAttr = this.sattr({ bg: "black", fg: "black" });
-        for (let y = pos.yi + 1; y <= pos.yl; y++) {
-          if (pos.xl < this.screen.width) {
-            this.screen.fillRegion(shadowAttr, " ", pos.xl, pos.xl + 1, y, y + 1);
-          }
-        }
-        for (let x = pos.xi + 1; x <= pos.xl; x++) {
-          if (pos.yl < this.screen.height) {
-            this.screen.fillRegion(shadowAttr, " ", x, x + 1, pos.yl, pos.yl + 1);
-          }
-        }
-      }
-      // ============================================================================
-      // Clipping and Dirty Regions
-      // ============================================================================
-      /**
-       * Check if point is within element bounds
-       */
-      isInBounds(x, y) {
-        const pos = this._getCoords();
-        if (!pos)
-          return false;
-        return x >= pos.xi && x < pos.xl && y >= pos.yi && y < pos.yl;
-      }
-      /**
-       * Clip coordinates to element bounds
-       */
-      clipRegion(x1, x2, y1, y2) {
-        const pos = this._getCoords();
-        if (!pos)
-          return null;
-        const border = this.hasBorder() ? 1 : 0;
-        const padding = this.getPadding();
-        const clipX1 = pos.xi + border + padding.left;
-        const clipX2 = pos.xl - border - padding.right;
-        const clipY1 = pos.yi + border + padding.top;
-        const clipY2 = pos.yl - border - padding.bottom;
-        const clippedX1 = Math.max(x1, clipX1);
-        const clippedX2 = Math.min(x2, clipX2);
-        const clippedY1 = Math.max(y1, clipY1);
-        const clippedY2 = Math.min(y2, clipY2);
-        if (clippedX1 >= clippedX2 || clippedY1 >= clippedY2) {
-          return null;
-        }
-        return {
-          x1: clippedX1,
-          x2: clippedX2,
-          y1: clippedY1,
-          y2: clippedY2
-        };
-      }
-      /**
-       * Mark element as needing re-render
-       */
-      markDirty() {
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Clear element content area (fill with background)
-       */
-      clearContent() {
-        if (!this.screen)
-          return;
-        const pos = this._getCoords();
-        if (!pos)
-          return;
-        const style = this.getEffectiveContentStyle();
-        const attr = this.sattr(style);
-        const border = this.hasBorder() ? 1 : 0;
-        const padding = this.getPadding();
-        const x1 = pos.xi + border + padding.left;
-        const x2 = pos.xl - border - padding.right;
-        const y1 = pos.yi + border + padding.top;
-        const y2 = pos.yl - border - padding.bottom;
-        this.screen.fillRegion(attr, " ", x1, x2, y1, y2);
-      }
-      // ============================================================================
-      // Rendering Helpers
-      // ============================================================================
-      /**
-       * Get visible content lines (with scrolling applied)
-       */
-      getVisibleLines() {
-        const currentWidth = this.iwidth;
-        const widthChanged = currentWidth > 0 && currentWidth !== this._lastParsedWidth;
-        if ((this._contentDirty || widthChanged) && currentWidth > 0) {
-          this._lines = this.parseContent(this.content);
-          this._contentDirty = false;
-          this._lastParsedWidth = currentWidth;
-        }
-        const start2 = this.childBase;
-        const end = start2 + this.iheight;
-        return this._lines.slice(start2, end);
-      }
-      /**
-       * Render content text (called by subclasses)
-       */
-      /**
-       * Resolve the content style for the element's current state (disabled >
-       * focused > hovered > idle). Focus forces `bold` by default so a focus
-       * change reads as a text-weight change, not just a color swap - a
-       * color-only swap is easy to miss when the element's own idle bg is
-       * already bright/saturated (e.g. a yellow button), or when the same
-       * focus color is reused elsewhere on screen for something unrelated (a
-       * selected list row, a highlighted setting). Bold is a hue-independent
-       * cue that survives both cases, and mirrors the border-focus default a
-       * few hundred lines up. Exposed (not inlined in renderContent) so this
-       * resolution is directly testable.
-       */
-      getEffectiveContentStyle() {
-        const style = this.options.style || {};
-        if (this.disabled && style.disabled) {
-          return { ...style, ...style.disabled };
-        }
-        if (this.disabled) {
-          return { ...style, fg: "gray" };
-        }
-        if (this.focused && style.focus) {
-          return { ...style, bold: true, ...style.focus };
-        }
-        if (this._hovered && style.hover) {
-          return { ...style, ...style.hover };
-        }
-        return style;
-      }
-      renderContent() {
-        if (!this.screen)
-          return;
-        const pos = this._getCoords();
-        if (!pos)
-          return;
-        const lines = this.getVisibleLines();
-        const style = this.getEffectiveContentStyle();
-        const attr = this.sattr(style);
-        let y = this.itop;
-        for (const line3 of lines) {
-          if (y >= this.itop + this.iheight)
-            break;
-          let x = this.ileft;
-          let currentAttr = attr;
-          let inAnsi = false;
-          let ansiBuffer = "";
-          for (let i = 0; i < line3.length && x < this.ileft + this.iwidth; i++) {
-            const ch = line3[i];
-            if (ch === ESC2) {
-              inAnsi = true;
-              ansiBuffer = ch;
-              continue;
-            }
-            if (inAnsi) {
-              ansiBuffer += ch;
-              if (ch === "m") {
-                inAnsi = false;
-                currentAttr = attr;
-                ansiBuffer = "";
-              }
-              continue;
-            }
-            this.screen.fillRegion(currentAttr, ch, x, x + 1, y, y + 1);
-            x++;
-          }
-          y++;
-        }
-      }
-      /**
-       * Render element and all children (full render)
-       */
-      renderElement() {
-        if (!this.visible || this.hidden)
-          return;
-        this.clearContent();
-        if (this.hasShadow()) {
-          this.renderShadow();
-        }
-        if (this.hasBorder()) {
-          this.renderBorderWithLabel();
-        }
-        this.renderContent();
-        if (this.hasScrollbar()) {
-          this.renderScrollbar();
-        }
-        for (const child of this.children) {
-          if (child.visible && !child.hidden) {
-            child.renderElement();
-          }
-        }
-        this.lpos = { ...this._getCoords() };
-      }
-      // ============================================================================
-      // Node Tree Methods
-      // ============================================================================
-      /**
-       * Get child element by name or index
-       */
-      get(name, recursive = false) {
-        if (typeof name === "number") {
-          return this.children[name] || null;
-        }
-        for (const child of this.children) {
-          if (child.options.name === name) {
-            return child;
-          }
-        }
-        if (recursive) {
-          for (const child of this.children) {
-            const found = child.get(name, true);
-            if (found)
-              return found;
-          }
-        }
-        return null;
-      }
-      /**
-       * Get all descendant elements
-       */
-      getDescendants() {
-        const descendants = [];
-        this._collectDescendantsHelper(descendants);
-        return descendants;
-      }
-      /**
-       * Collect all descendants recursively (helper)
-       */
-      _collectDescendantsHelper(out) {
-        for (const child of this.children) {
-          out.push(child);
-          child._collectDescendantsHelper(out);
-        }
-      }
-      /**
-       * Check if this element has a specific ancestor
-       */
-      hasAncestor(element) {
-        let current = this.parent;
-        while (current) {
-          if (current === element)
-            return true;
-          current = current.parent;
-        }
-        return false;
-      }
-      /**
-       * Get element's index in parent's children array
-       */
-      getIndex() {
-        if (!this.parent)
-          return -1;
-        return this.parent.children.indexOf(this);
-      }
-      /**
-       * Set element's z-index (position in children array)
-       */
-      setIndex(index) {
-        if (!this.parent)
-          return;
-        const currentIndex = this.getIndex();
-        if (currentIndex === -1)
-          return;
-        this.parent.children.splice(currentIndex, 1);
-        const newIndex = Math.max(0, Math.min(index, this.parent.children.length));
-        this.parent.children.splice(newIndex, 0, this);
-        this.parent._invalidateCoords();
-        this.emit("set index", index);
-      }
-      /**
-       * Get all ancestors up to root
-       */
-      getAncestors() {
-        const ancestors = [];
-        let current = this.parent;
-        while (current) {
-          ancestors.push(current);
-          current = current.parent;
-        }
-        return ancestors;
-      }
-      /**
-       * Iterate over descendants with callback
-       * EXACT from neo-blessed node.js lines 185-191
-       */
-      forDescendants(iter, includeSelf) {
-        if (includeSelf)
-          iter(this);
-        const emit = (el) => {
-          iter(el);
-          el.children.forEach(emit);
-        };
-        this.children.forEach(emit);
-      }
-      /**
-       * Iterate over ancestors with callback
-       * EXACT from neo-blessed node.js lines 193-199
-       */
-      forAncestors(iter, includeSelf) {
-        let el = this;
-        if (includeSelf)
-          iter(this);
-        while (el = el.parent) {
-          iter(el);
-        }
-      }
-      /**
-       * Collect descendants into array (alias for getDescendants for neo-blessed compat)
-       * EXACT from neo-blessed node.js lines 201-207
-       */
-      collectDescendants(includeSelf) {
-        const out = [];
-        this.forDescendants((el) => {
-          out.push(el);
-        }, includeSelf);
-        return out;
-      }
-      /**
-       * Collect ancestors into array (alias for getAncestors for neo-blessed compat)
-       * EXACT from neo-blessed node.js lines 209-215
-       */
-      collectAncestors(includeSelf) {
-        const out = [];
-        this.forAncestors((el) => {
-          out.push(el);
-        }, includeSelf);
-        return out;
-      }
-      /**
-       * Emit event to all descendants
-       * EXACT from neo-blessed node.js lines 217-229
-       */
-      emitDescendants(...args) {
-        let iter;
-        if (typeof args[args.length - 1] === "function") {
-          iter = args.pop();
-        }
-        this.forDescendants((el) => {
-          if (iter)
-            iter(el);
-          if (args.length > 0) {
-            el.emit(...args);
-          }
-        }, true);
-      }
-      /**
-       * Emit event to all ancestors
-       * EXACT from neo-blessed node.js lines 231-243
-       */
-      emitAncestors(...args) {
-        let iter;
-        if (typeof args[args.length - 1] === "function") {
-          iter = args.pop();
-        }
-        this.forAncestors((el) => {
-          if (iter)
-            iter(el);
-          if (args.length > 0) {
-            el.emit(...args);
-          }
-        }, true);
-      }
-      /**
-       * Check if element has a specific descendant
-       * EXACT from neo-blessed node.js lines 245-257
-       */
-      hasDescendant(target) {
-        const find = (el) => {
-          for (let i = 0; i < el.children.length; i++) {
-            if (el.children[i] === target) {
-              return true;
-            }
-            if (find(el.children[i])) {
-              return true;
-            }
-          }
-          return false;
-        };
-        return find(this);
-      }
-      // ============================================================================
-      // Label Management
-      // ============================================================================
-      /**
-       * Set element label
-       */
-      setLabel(text) {
-        this.options.label = text;
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Get element label
-       */
-      getLabel() {
-        return this.options.label;
-      }
-      /**
-       * Remove element label
-       */
-      removeLabel() {
-        delete this.options.label;
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      // ============================================================================
-      // Hover Effects
-      // ============================================================================
-      /**
-       * Apply hover style to element
-       */
-      applyHoverStyle() {
-        if (!this.options.style?.hover)
-          return;
-        this._originalStyle = { ...this.options.style };
-        this.options.style = {
-          ...this.options.style,
-          ...this.options.style.hover
-        };
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Remove hover style from element
-       */
-      removeHoverStyle() {
-        if (!this._originalStyle)
-          return;
-        this.options.style = this._originalStyle;
-        delete this._originalStyle;
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Set hover style
-       */
-      setHover(style) {
-        if (!this.options.style) {
-          this.options.style = {};
-        }
-        this.options.style.hover = style;
-      }
-      // ============================================================================
-      // Text Measurement and Utilities
-      // ============================================================================
-      /**
-       * Get visual width of text (excluding ANSI codes)
-       */
-      strWidth(text) {
-        return textWidth(text);
-      }
-      /**
-       * Shrink box to fit content
-       */
-      shrinkBox() {
-        const lines = this.getContentLines();
-        let maxWidth = 0;
-        for (const line3 of lines) {
-          const width = this.strWidth(line3);
-          if (width > maxWidth)
-            maxWidth = width;
-        }
-        const border = this.hasBorder() ? 2 : 0;
-        const padding = this.getPadding();
-        this.options.width = maxWidth + border + padding.left + padding.right;
-        this.options.height = lines.length + border + padding.top + padding.bottom;
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Get content without ANSI codes
-       */
-      getPlainContent() {
-        return stripAnsi(this.content);
-      }
-      /**
-       * Measure text dimensions
-       */
-      measureText(text) {
-        const lines = text.split(/\r?\n/);
-        let maxWidth = 0;
-        for (const line3 of lines) {
-          const width = this.strWidth(line3);
-          if (width > maxWidth)
-            maxWidth = width;
-        }
-        return {
-          width: maxWidth,
-          height: lines.length
-        };
-      }
-      // ============================================================================
-      // Unicode and Character Width Support
-      // ============================================================================
-      /**
-       * Get width of a single character (handles double-width characters)
-       */
-      charWidth(ch) {
-        const code = ch.charCodeAt(0);
-        if (code < 4352)
-          return 1;
-        if (code >= 4352 && code <= 4447 || // Hangul Jamo
-        code >= 11904 && code <= 42191 && code !== 12351 || // CJK
-        code >= 44032 && code <= 55203 || // Hangul Syllables
-        code >= 63744 && code <= 64255 || // CJK Compatibility
-        code >= 65040 && code <= 65049 || // Vertical forms
-        code >= 65072 && code <= 65135 || // CJK Compatibility Forms
-        code >= 65280 && code <= 65376 || // Fullwidth Forms
-        code >= 65504 && code <= 65510 || // Fullwidth Forms
-        code >= 131072 && code <= 196605 || // CJK Unified Ideographs Extension B-D
-        code >= 196608 && code <= 262141) {
-          return 2;
-        }
-        if (code >= 768 && code <= 879 || // Combining marks
-        code >= 6832 && code <= 6911 || // Combining marks
-        code >= 7616 && code <= 7679 || // Combining marks
-        code >= 8400 && code <= 8447 || // Combining marks
-        code >= 65056 && code <= 65071) {
-          return 0;
-        }
-        return 1;
-      }
-      /**
-       * Get total width of string considering multi-width characters
-       */
-      textWidth(text) {
-        const plain = stripAnsi(text);
-        let width = 0;
-        for (const ch of plain) {
-          width += this.charWidth(ch);
-        }
-        return width;
-      }
-      /**
-       * Truncate text to fit width (considering multi-width chars)
-       */
-      truncateText(text, maxWidth, ellipsis = "...") {
-        const plain = stripAnsi(text);
-        let width = 0;
-        let result = "";
-        for (const ch of plain) {
-          const chWidth = this.charWidth(ch);
-          if (width + chWidth > maxWidth - ellipsis.length) {
-            return result + ellipsis;
-          }
-          width += chWidth;
-          result += ch;
-        }
-        return result;
-      }
-      // ============================================================================
-      // Advanced Content Operations
-      // ============================================================================
-      /**
-       * Insert text at cursor position
-       */
-      insertText(text, position) {
-        if (position === void 0) {
-          this.content += text;
-        } else {
-          this.content = this.content.slice(0, position) + text + this.content.slice(position);
-        }
-        this.parseContent();
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Delete text in range
-       */
-      deleteText(start2, end) {
-        this.content = this.content.slice(0, start2) + this.content.slice(end);
-        this.parseContent();
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Get cursor position from pixel coordinates
-       */
-      screenToContentPos(x, y) {
-        const lines = this._lines;
-        const relY = y - this.itop;
-        const relX = x - this.ileft;
-        if (relY < 0 || relY >= lines.length) {
-          return { line: -1, col: -1 };
-        }
-        const line3 = lines[relY];
-        const plain = stripAnsi(line3);
-        let col = 0;
-        let width = 0;
-        for (let i = 0; i < plain.length; i++) {
-          if (width >= relX)
-            break;
-          width += this.charWidth(plain[i]);
-          col++;
-        }
-        return { line: relY, col };
-      }
-      // ============================================================================
-      // Responsive Lifecycle Hooks
-      // ============================================================================
-      /**
-       * Called when screen resizes. Override in widgets for custom resize behavior.
-       */
-      _handleResize(width, height, state) {
-      }
-      /**
-       * Called when breakpoint changes. Override in widgets for breakpoint-specific behavior.
-       */
-      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
-      }
-      /**
-       * Called when entering mobile mode (xs breakpoint). Override in widgets.
-       */
-      _enterMobileMode() {
-      }
-      /**
-       * Called when exiting mobile mode (leaving xs breakpoint). Override in widgets.
-       */
-      _exitMobileMode() {
-      }
-      /**
-       * Get the current responsive state
-       */
-      getResponsiveState() {
-        return this._responsiveBehavior?.getState();
-      }
-      /**
-       * Get the current breakpoint name
-       */
-      getBreakpoint() {
-        return this._responsiveBehavior?.getBreakpoint();
-      }
-      /**
-       * Check if currently in mobile mode (xs breakpoint)
-       */
-      isMobile() {
-        return this._responsiveBehavior?.isMobile() ?? false;
-      }
-      /**
-       * Enable swipe gestures on this element
-       */
-      enableSwipe(options) {
-        if (!this._responsiveBehavior) {
-          this._responsiveBehavior = applyResponsiveMixin(this, { swipeEnabled: true });
-        }
-        return this._responsiveBehavior.enableSwipe(options);
-      }
-      /**
-       * Enable long press gesture on this element
-       */
-      enableLongPress(options) {
-        if (!this._responsiveBehavior) {
-          this._responsiveBehavior = applyResponsiveMixin(this, {});
-        }
-        return this._responsiveBehavior.enableLongPress(options);
-      }
-      // ============================================================================
-      // Destruction
-      // ============================================================================
-      destroy() {
-        if (this.destroyed)
-          return;
-        if (this._responsiveBehavior) {
-          this._responsiveBehavior.destroy();
-          this._responsiveBehavior = void 0;
-        }
-        const pos = this._getCoords();
-        if (this.screen && pos) {
-          this.screen.clearRegion(pos.xi, pos.xl, pos.yi, pos.yl);
-        }
-        this._endScrollbarDrag();
-        this._unbindScreenEvents();
-        if (this.options.style?.opacity !== void 0) {
-          this._emitOverlayEvent(false);
-        }
-        this.destroyed = true;
-        this.emit("destroy");
-        for (const child of this.children.slice()) {
-          child.destroy();
-        }
-        if (this.screen && typeof this.screen.forceFullRedraw === "function") {
-          this.screen.forceFullRedraw();
-        }
-        this.detach();
-        this.removeAllListeners();
-      }
-      free() {
-        this.destroy();
-      }
-    };
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/core/program.js
-var ESC3;
-var init_program = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/core/program.js"() {
-    "use strict";
-    init_events();
-    init_colors();
-    ESC3 = String.fromCharCode(27);
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/core/keybindings.js
-var init_keybindings = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/core/keybindings.js"() {
-    "use strict";
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/core/responsive-layout.js
-var init_responsive_layout = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/core/responsive-layout.js"() {
-    "use strict";
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/core/screen.js
-var ESC4;
-var init_screen = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/core/screen.js"() {
-    "use strict";
-    init_element();
-    init_program();
-    init_colors();
-    init_keybindings();
-    init_responsive_layout();
-    ESC4 = String.fromCharCode(27);
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/text.js
-var init_text = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/text.js"() {
-    "use strict";
-    init_element();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/list.js
-var ESC5;
-var init_list = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/list.js"() {
-    "use strict";
-    init_element();
-    init_colors();
-    ESC5 = String.fromCharCode(27);
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/form.js
-var init_form = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/form.js"() {
-    "use strict";
-    init_element();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/textbox.js
-var init_textbox = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/textbox.js"() {
-    "use strict";
-    init_element();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/button.js
-var Button;
-var init_button = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/button.js"() {
-    "use strict";
-    init_element();
-    init_responsive_constants();
-    Button = class extends Element {
-      /** blessed-style widget kind; see Element.type. */
-      get type() {
-        return "button";
-      }
-      constructor(options = {}) {
-        const baseStyle = options.style ?? {};
-        const focusStyle = {
-          fg: "white",
-          bg: "lightblue",
-          bold: true,
-          ...baseStyle.focus ?? {}
-        };
-        const hoverStyle = {
-          fg: "white",
-          bg: "lightblue",
-          ...baseStyle.hover ?? {}
-        };
-        const isInline = options.inline === true;
-        const isGhosted = options.ghostWhenIdle === true;
-        super({
-          focusable: true,
-          clickable: true,
-          keys: true,
-          // NO frame by default. A box drawn around every button made dialogs
-          // look like a stack of nested windows - "the LiveChat quit dialog
-          // looks really strange" - and the button is already legible from its
-          // label and its focus colours. A caller that genuinely wants a frame
-          // can still pass `border` through the options spread below.
-          border: void 0,
-          align: "center",
-          valign: "middle",
-          padding: isInline ? { left: 0, right: 0, top: 0, bottom: 0 } : { left: 1, right: 1, top: 0, bottom: 0 },
-          touchFriendly: !isInline,
-          // Inline buttons are compact, not touch-friendly
-          ...options,
-          style: {
-            fg: baseStyle.fg ?? "white",
-            bg: baseStyle.bg ?? "blue",
-            ...baseStyle,
-            // Override AFTER the baseStyle spread so ghosting wins over
-            // whatever fg/bg the caller asked for as this button's idle look.
-            // Plain white, not 'gray' (#808080 read as invisible against black
-            // in practice - a lobby's whole button row disappeared until
-            // focused, reported live 2026-08-24). White still reads as
-            // quieter than the focused state, which is bold *and* the
-            // button's real saturated color.
-            ...isGhosted ? { fg: "white", bg: "black" } : {},
-            focus: focusStyle,
-            hover: hoverStyle
-          }
-        });
-        this._tapFeedback = options.tapFeedback !== false;
-        this._tapFeedbackDuration = options.tapFeedbackDuration ?? 100;
-        this._desktopHeight = options.height;
-        this._mobileHeight = options.mobileHeight ?? MIN_TOUCH_HEIGHT;
-        this._originalStyle = { ...this.style };
-        if (options.keys !== false) {
-          this.on("keypress", this._onKeypress.bind(this));
-        }
-        if (options.mouse !== false) {
-          this.on("click", this._onClick.bind(this));
-          if (isInline) {
-            this.enableMouse();
-          }
-        }
-        this.on("focus", () => {
-          if (this.screen) {
-            this.screen.render();
-          }
-        });
-        this.on("blur", () => {
-          if (this.screen) {
-            this.screen.render();
-          }
-        });
-      }
-      _onKeypress(ch, key) {
-        if (!this.focused) {
-          return false;
-        }
-        if (key.name === "enter" || key.name === "space") {
-          this.press();
-          return true;
-        }
-        return false;
-      }
-      _onClick() {
-        this.press();
-      }
-      press() {
-        if (this._tapFeedback) {
-          this._showTapFeedback();
-        }
-        this.emit("press");
-        this.emit("action");
-      }
-      /**
-       * Show visual tap feedback (flash effect)
-       */
-      _showTapFeedback() {
-        const currentBg = this.style.bg;
-        const currentFg = this.style.fg;
-        this.style.bg = "white";
-        this.style.fg = "black";
-        if (this.screen) {
-          this.screen.render();
-        }
-        setTimeout(() => {
-          this.style.bg = currentBg;
-          this.style.fg = currentFg;
-          if (this.screen) {
-            this.screen.render();
-          }
-        }, this._tapFeedbackDuration);
-      }
-      // ============================================================================
-      // Responsive Lifecycle Hooks
-      // ============================================================================
-      /**
-       * Handle breakpoint change - adjust height
-       */
-      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
-        if (state.isMobile) {
-          this._setMobileHeight();
-        } else {
-          this._setDesktopHeight();
-        }
-        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
-      }
-      /**
-       * Called when entering mobile mode - increase height for touch targets
-       */
-      _enterMobileMode() {
-        this._setMobileHeight();
-        this.emit("enter-mobile");
-      }
-      /**
-       * Called when exiting mobile mode - restore desktop height
-       */
-      _exitMobileMode() {
-        this._setDesktopHeight();
-        this.emit("exit-mobile");
-      }
-      /**
-       * Set mobile-friendly height
-       */
-      _setMobileHeight() {
-        const currentHeight = typeof this.height === "number" ? this.height : 1;
-        if (currentHeight < this._mobileHeight) {
-          this.height = this._mobileHeight;
-          if (this.screen) {
-            this.screen.render();
-          }
-        }
-      }
-      /**
-       * Restore desktop height
-       */
-      _setDesktopHeight() {
-        if (this._desktopHeight !== void 0) {
-          this.height = this._desktopHeight;
-          if (this.screen) {
-            this.screen.render();
-          }
-        }
-      }
-      /**
-       * Enable/disable tap feedback
-       */
-      setTapFeedback(enabled) {
-        this._tapFeedback = enabled;
-      }
-      /**
-       * Set tap feedback duration
-       */
-      setTapFeedbackDuration(duration) {
-        this._tapFeedbackDuration = duration;
-      }
-    };
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/progressbar.js
-var init_progressbar = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/progressbar.js"() {
-    "use strict";
-    init_element();
-    init_responsive_constants();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/table.js
-var init_table = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/table.js"() {
-    "use strict";
-    init_element();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/log.js
-var init_log = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/log.js"() {
-    "use strict";
-    init_element();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/scrollablebox.js
-var init_scrollablebox = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/scrollablebox.js"() {
-    "use strict";
-    init_box();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/scrollabletext.js
-var init_scrollabletext = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/scrollabletext.js"() {
-    "use strict";
-    init_text();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/checkbox.js
-var init_checkbox = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/checkbox.js"() {
-    "use strict";
-    init_box();
-    init_responsive_constants();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/radiobutton.js
-var init_radiobutton = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/radiobutton.js"() {
-    "use strict";
-    init_box();
-    init_responsive_constants();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/radioset.js
-var init_radioset = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/radioset.js"() {
-    "use strict";
-    init_box();
-    init_radiobutton();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/overlay.js
-var ESC6;
-var init_overlay = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/overlay.js"() {
-    "use strict";
-    init_box();
-    ESC6 = String.fromCharCode(27);
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/utils/modal-helpers.js
-var init_modal_helpers = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/utils/modal-helpers.js"() {
-    "use strict";
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/message.js
-var init_message = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/message.js"() {
-    "use strict";
-    init_box();
-    init_button();
-    init_overlay();
-    init_modal_helpers();
-    init_responsive_constants();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/question.js
-var init_question = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/question.js"() {
-    "use strict";
-    init_box();
-    init_button();
-    init_overlay();
-    init_modal_helpers();
-    init_responsive_constants();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/prompt.js
-var init_prompt = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/prompt.js"() {
-    "use strict";
-    init_box();
-    init_textbox();
-    init_button();
-    init_overlay();
-    init_modal_helpers();
-    init_responsive_constants();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/loading.js
-var init_loading = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/loading.js"() {
-    "use strict";
-    init_box();
-    init_overlay();
-    init_modal_helpers();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/line.js
-var init_line = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/line.js"() {
-    "use strict";
-    init_box();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/drawille.js
-var init_drawille = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/drawille.js"() {
-    "use strict";
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/bresenham.js
-var init_bresenham = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/bresenham.js"() {
-    "use strict";
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/gl-matrix.js
-var init_gl_matrix = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/gl-matrix.js"() {
-    "use strict";
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/utils.js
-var init_utils = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/utils.js"() {
-    "use strict";
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/drawille-canvas.js
-var init_drawille_canvas = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/drawille-canvas.js"() {
-    "use strict";
-    init_drawille();
-    init_bresenham();
-    init_gl_matrix();
-    init_utils();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/contrib-canvas.js
-var init_contrib_canvas = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/contrib-canvas.js"() {
-    "use strict";
-    init_box();
-    init_drawille_canvas();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/lodash.js
-var init_lodash = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/lodash.js"() {
-    "use strict";
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/line-chart.js
-var init_line_chart = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/line-chart.js"() {
-    "use strict";
-    init_contrib_canvas();
-    init_box();
-    init_utils();
-    init_lodash();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/listbar.js
-var init_listbar = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/listbar.js"() {
-    "use strict";
-    init_box();
-    init_button();
-    init_responsive_constants();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/bigtext.js
-var init_bigtext = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/bigtext.js"() {
-    "use strict";
-    init_box();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/filemanager.js
-var init_filemanager = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/filemanager.js"() {
-    "use strict";
-    init_list();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/listtable.js
-var init_listtable = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/listtable.js"() {
-    "use strict";
-    init_box();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/ansiimage.js
-var init_ansiimage = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/ansiimage.js"() {
-    "use strict";
-    init_box();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/terminal.js
-var init_terminal = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/terminal.js"() {
-    "use strict";
-    init_box();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/layout.js
-var init_layout = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/layout.js"() {
-    "use strict";
-    init_box();
-    init_responsive_constants();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/passbox.js
-var init_passbox = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/passbox.js"() {
-    "use strict";
-    init_textbox();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/filebox.js
-var init_filebox = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/filebox.js"() {
-    "use strict";
-    init_list();
-    init_box();
-    init_responsive_constants();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/image.js
-var init_image = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/image.js"() {
-    "use strict";
-    init_box();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/viewport.js
-var init_viewport = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/viewport.js"() {
-    "use strict";
-    init_box();
-    init_responsive_constants();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/canvas.js
-var init_canvas = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/canvas.js"() {
-    "use strict";
-    init_box();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/iframe.js
-var init_iframe = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/iframe.js"() {
-    "use strict";
-    init_box();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/video.js
-var init_video = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/video.js"() {
-    "use strict";
-    init_box();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/contextmenu.js
-var init_contextmenu = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/contextmenu.js"() {
-    "use strict";
-    init_element();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/panel.js
-var Panel;
-var init_panel = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/panel.js"() {
-    "use strict";
-    init_box();
-    init_responsive_constants();
-    Panel = class extends Box {
-      constructor(options = {}) {
-        super({
-          ...options,
-          border: "border" in options ? options.border || void 0 : { type: "line", fg: "blue" },
-          focusable: options.focusable ?? false,
-          keys: options.keys ?? false,
-          mouse: options.mouse ?? false,
-          clickable: options.clickable ?? false,
-          style: {
-            fg: "white",
-            bg: "black",
-            focus: {
-              fg: "white",
-              bg: "black"
-            },
-            ...options.style
-          }
-        });
-        this._isActive = false;
-        this.lastFocusedChild = null;
-        this._focusing = false;
-        this._isCollapsed = false;
-        this._expandedHeight = null;
-        this.panelIndex = options.panelIndex;
-        this._title = options.title || "";
-        this._collapsibleOnMobile = options.collapsibleOnMobile ?? false;
-        this._collapsedHeight = options.collapsedHeight ?? MIN_TOUCH_HEIGHT;
-        this._swipeNavigation = options.swipeNavigation ?? true;
-        if (options.title) {
-          this.options.label = ` ${options.title} `;
-        }
-        this.on("click", () => {
-          this.focus();
-        });
-        this.on("click", (data) => {
-          if (this._collapsibleOnMobile && this.isMobile()) {
-            const relativeY = data?.y !== void 0 ? data.y - (this.position?.yi || 0) : 0;
-            if (relativeY < MIN_TOUCH_HEIGHT) {
-              this.toggleCollapse();
-            }
-          }
-        });
-        this.on("focus", () => {
-          if (this._focusing)
-            return;
-          if (this._isCollapsed)
-            return;
-          if (this.lastFocusedChild && !this.lastFocusedChild.destroyed && this.lastFocusedChild.visible) {
-            this._focusing = true;
-            setTimeout(() => {
-              if (this.lastFocusedChild && !this.lastFocusedChild.destroyed) {
-                this.lastFocusedChild.focus();
-              }
-              this._focusing = false;
-            }, 0);
-          }
-        });
-        if (this.screen) {
-          this.screen.on("element focus", (el) => {
-            const isDescendant = this._isDescendantOf(el, this);
-            if (isDescendant) {
-              if (el !== this) {
-                this.lastFocusedChild = el;
-              }
-              if (!this._isActive) {
-                this._activate();
-              }
-            } else if (this._isActive) {
-              this._deactivate();
-            }
-          });
-        }
-        if (this.panelIndex && this.panelIndex >= 1 && this.panelIndex <= 9) {
-          const altKey = `M-${this.panelIndex}`;
-          if (this.screen) {
-            this.screen.key([altKey], () => {
-              this.activate();
-            });
-          }
-        }
-        if (options.startCollapsed && this._collapsibleOnMobile) {
-          this.once("attach", () => {
-            if (this.isMobile()) {
-              this._collapse();
-            }
-          });
-        }
-      }
-      /**
-       * Check if element is a descendant of parent
-       */
-      _isDescendantOf(element, parent) {
-        let current = element;
-        while (current) {
-          if (current === parent)
-            return true;
-          current = current.parent;
-        }
-        return false;
-      }
-      /**
-       * Activate panel (focus first focusable child)
-       */
-      activate() {
-        const focusable = this._getFirstFocusable(this);
-        if (focusable) {
-          focusable.focus();
-        } else {
-          this.focus();
-        }
-      }
-      /**
-       * Get first focusable descendant
-       */
-      _getFirstFocusable(element) {
-        if (element.options.focusable && element !== this) {
-          return element;
-        }
-        for (const child of element.children || []) {
-          const focusable = this._getFirstFocusable(child);
-          if (focusable)
-            return focusable;
-        }
-        return null;
-      }
-      /**
-       * Mark panel as active (internal)
-       */
-      _activate() {
-        if (this._isActive)
-          return;
-        this._isActive = true;
-        if (this.style) {
-          this.style.fg = "white";
-          if (this.style.border)
-            this.style.border.fg = "cyan";
-        }
-        this.emit("activate");
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Mark panel as inactive (internal)
-       */
-      _deactivate() {
-        if (!this._isActive)
-          return;
-        this._isActive = false;
-        if (this.style) {
-          this.style.fg = "gray";
-          if (this.style.border)
-            this.style.border.fg = "blue";
-        }
-        this.emit("deactivate");
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Check if panel is currently active
-       */
-      isActive() {
-        return this._isActive;
-      }
-      // ============================================================================
-      // Responsive Methods
-      // ============================================================================
-      /**
-       * Handle resize - update layout based on screen size
-       */
-      _handleResize(width, height, state) {
-        super._handleResize(width, height, state);
-        if (state.isMobile && this._collapsibleOnMobile) {
-          this._updateCollapseIndicator();
-        }
-      }
-      /**
-       * Handle breakpoint change
-       */
-      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
-        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
-        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
-      }
-      /**
-       * Called when entering mobile mode
-       */
-      _enterMobileMode() {
-        if (this._swipeNavigation && !this._unsubscribeSwipe) {
-          this._unsubscribeSwipe = this.enableSwipe({
-            direction: "horizontal",
-            onSwipe: (event) => {
-              this.emit("swipe", event.direction);
-              if (event.direction === "left") {
-                this.emit("swipe-next");
-              } else if (event.direction === "right") {
-                this.emit("swipe-prev");
-              }
-            }
-          });
-        }
-        if (this._collapsibleOnMobile) {
-          this._updateCollapseIndicator();
-        }
-        this.emit("enter-mobile");
-      }
-      /**
-       * Called when exiting mobile mode
-       */
-      _exitMobileMode() {
-        if (this._unsubscribeSwipe) {
-          this._unsubscribeSwipe();
-          this._unsubscribeSwipe = void 0;
-        }
-        if (this._isCollapsed) {
-          this._expand();
-        }
-        if (this._title) {
-          this.options.label = ` ${this._title} `;
-        }
-        this.emit("exit-mobile");
-      }
-      // ============================================================================
-      // Collapse/Expand Methods
-      // ============================================================================
-      /**
-       * Toggle collapsed state
-       */
-      toggleCollapse() {
-        if (this._isCollapsed) {
-          this._expand();
-        } else {
-          this._collapse();
-        }
-      }
-      /**
-       * Collapse the panel to title bar only
-       */
-      _collapse() {
-        if (this._isCollapsed)
-          return;
-        this._expandedHeight = this.options.height ?? null;
-        this.options.height = this._collapsedHeight;
-        this.position.height = this._collapsedHeight;
-        for (const child of this.children) {
-          if (child !== this) {
-            child._wasVisible = child.visible;
-            child.hide();
-          }
-        }
-        this._isCollapsed = true;
-        this._updateCollapseIndicator();
-        this.emit("collapse");
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Expand the panel to full size
-       */
-      _expand() {
-        if (!this._isCollapsed)
-          return;
-        if (this._expandedHeight !== null) {
-          this.options.height = this._expandedHeight;
-          if (typeof this._expandedHeight === "number") {
-            this.position.height = this._expandedHeight;
-          }
-        }
-        for (const child of this.children) {
-          if (child !== this && child._wasVisible !== false) {
-            child.show();
-          }
-        }
-        this._isCollapsed = false;
-        this._updateCollapseIndicator();
-        this.emit("expand");
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Update the collapse/expand indicator in the title
-       */
-      _updateCollapseIndicator() {
-        if (!this._collapsibleOnMobile)
-          return;
-        const indicator = this._isCollapsed ? "[+]" : "[-]";
-        const title = this._title || "";
-        this.options.label = ` ${indicator} ${title} `;
-      }
-      /**
-       * Check if panel is collapsed
-       */
-      isCollapsed() {
-        return this._isCollapsed;
-      }
-      /**
-       * Set collapsible on mobile
-       */
-      setCollapsibleOnMobile(enabled) {
-        this._collapsibleOnMobile = enabled;
-        if (this.isMobile()) {
-          this._updateCollapseIndicator();
-        }
-      }
-      /**
-       * Get panel title
-       */
-      getTitle() {
-        return this._title;
-      }
-      /**
-       * Set panel title
-       */
-      setTitle(title) {
-        this._title = title;
-        if (this._collapsibleOnMobile && this.isMobile()) {
-          this._updateCollapseIndicator();
-        } else {
-          this.options.label = ` ${title} `;
-        }
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Override destroy to clean up swipe handler
-       */
-      destroy() {
-        if (this._unsubscribeSwipe) {
-          this._unsubscribeSwipe();
-          this._unsubscribeSwipe = void 0;
-        }
-        super.destroy();
-      }
-    };
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/dockable-panel.js
-var DockablePanel;
-var init_dockable_panel = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/dockable-panel.js"() {
-    "use strict";
-    init_panel();
-    init_box();
-    init_button();
-    init_responsive_constants();
-    DockablePanel = class _DockablePanel extends Panel {
-      constructor(options = {}) {
-        const fixed = options.fixed === true;
-        const isStatic = fixed || options.draggable === false && options.resizable === false;
-        const normalizedOptions = {
-          ...options,
-          draggable: fixed ? false : options.draggable,
-          resizable: fixed ? false : options.resizable,
-          allowAutoDock: isStatic ? false : options.allowAutoDock,
-          allowFloat: isStatic ? false : options.allowFloat,
-          allowResize: isStatic ? false : options.allowResize,
-          allowMinimize: isStatic ? false : options.allowMinimize,
-          showMinimizeButton: isStatic ? false : options.showMinimizeButton,
-          showCloseButton: isStatic ? false : options.showCloseButton
-        };
-        const mergedStyle = isStatic ? normalizedOptions.style : {
-          ...normalizedOptions.style,
-          hover: {
-            border: { fg: "white" },
-            // White border on hover
-            ...normalizedOptions.style?.hover
-          }
-        };
-        super({
-          ...normalizedOptions,
-          style: mergedStyle,
-          draggable: normalizedOptions.draggable !== false,
-          mouse: normalizedOptions.mouse ?? true,
-          keys: normalizedOptions.keys ?? true,
-          focusable: normalizedOptions.focusable ?? true,
-          clickable: normalizedOptions.clickable ?? true
-        });
-        this.isDragging = false;
-        this.isResizing = false;
-        this.dragStartX = 0;
-        this.dragStartY = 0;
-        this.dragStartLeft = 0;
-        this.dragStartTop = 0;
-        this.dragStartWidth = 0;
-        this.dragStartHeight = 0;
-        this.resizeNeighbors = [];
-        this.currentResizeEdge = null;
-        this.currentHoverEdge = null;
-        this.isPanelHovered = false;
-        this.topConstraint = 0;
-        this.bottomConstraint = 0;
-        this.tabs = [];
-        this.activeTab = 0;
-        this.tabButtons = [];
-        this.preMaximizeState = null;
-        this.mobileMode = false;
-        this.screenListenersBound = false;
-        this.dockPosition = normalizedOptions.dockPosition || "float";
-        this.useTitleBar = normalizedOptions.useTitleBar !== false;
-        this.fixed = fixed;
-        this.isStatic = isStatic;
-        this.panelState = {
-          position: this.dockPosition,
-          minimized: normalizedOptions.minimized || false,
-          x: typeof this.left === "number" ? this.left : 0,
-          y: typeof this.top === "number" ? this.top : 0,
-          width: typeof this.width === "number" ? this.width : 40,
-          height: typeof this.height === "number" ? this.height : 20,
-          zIndex: normalizedOptions.zIndex || 100
-        };
-        this.minWidth = normalizedOptions.minWidth;
-        this.maxWidth = normalizedOptions.maxWidth;
-        this.minHeight = normalizedOptions.minHeight;
-        this.maxHeight = normalizedOptions.maxHeight;
-        this.resizable = normalizedOptions.resizable !== false;
-        this.allowAutoDock = normalizedOptions.allowAutoDock !== false;
-        this.persistenceKey = normalizedOptions.persistenceKey;
-        this.topConstraint = normalizedOptions.topConstraint || 0;
-        this.bottomConstraint = normalizedOptions.bottomConstraint || 0;
-        this._swipeUndock = normalizedOptions.swipeUndock !== false;
-        if (normalizedOptions.fitContent === false) {
-          this.fitContentSettings = { width: false, height: false };
-        } else if (typeof normalizedOptions.fitContent === "object") {
-          this.fitContentSettings = {
-            width: normalizedOptions.fitContent.width !== false,
-            // default true
-            height: normalizedOptions.fitContent.height !== false
-            // default true
-          };
-        } else {
-          this.fitContentSettings = { width: true, height: true };
-        }
-        if (this.useTitleBar && !this.isStatic) {
-          this.options.label = void 0;
-        }
-        if (this._originalBorderColor === void 0) {
-          const borderFg = this.options.border?.fg || this.options.style?.border?.fg || this.style?.border?.fg || "blue";
-          this._originalBorderColor = borderFg;
-        }
-        if (this.useTitleBar && !this.isStatic) {
-          this.setupTitleBar(normalizedOptions);
-        }
-        this.setupDocking();
-        this.setupDragging();
-        this.setupResizing();
-        this.setupKeyboardShortcuts();
-        if (this.persistenceKey) {
-          this.on("drag-end", () => {
-            void this.saveState();
-          });
-          this.on("resize-end", () => {
-            void this.saveState();
-          });
-          this.on("dock", () => {
-            void this.saveState();
-          });
-          this.on("minimize", () => {
-            void this.saveState();
-          });
-          this.on("maximize", () => {
-            void this.saveState();
-          });
-        }
-        this.on("click", () => {
-          this.focus();
-          this.emit("activate");
-        });
-        this.on("mouseenter", () => {
-          this.isPanelHovered = true;
-          if (!this.currentHoverEdge) {
-            this.applyBorderHoverStyle();
-          }
-        });
-        this.on("mouseleave", () => {
-          this.isPanelHovered = false;
-          this.currentHoverEdge = null;
-          this.applyBorderHoverStyle();
-        });
-        if (this.panelState.minimized) {
-          this.minimize();
-        }
-        this.on("attach", () => {
-          this.bindScreenEvents();
-          if (this.persistenceKey) {
-            this.loadState().then(() => {
-              if (this.screen)
-                this.screen.render();
-            });
-          }
-        });
-        if (this.screen) {
-          this.bindScreenEvents();
-        }
-        this.bringUIToFront();
-      }
-      /**
-       * Override append to ensure UI elements (title bar, resize handles) stay on top
-       * When user content is added as children, we need to reorder so our UI is rendered last
-       * Also triggers fitToContent if enabled
-       */
-      append(element) {
-        super.append(element);
-        this.bringUIToFront();
-        if (this.fitContentSettings?.width || this.fitContentSettings?.height) {
-          element.on?.("set content", () => {
-            this.scheduleFitToContent();
-          });
-          element.on?.("set items", () => {
-            this.scheduleFitToContent();
-          });
-          this.scheduleFitToContent();
-        }
-      }
-      scheduleFitToContent() {
-        if (this._fitContentTimer) {
-          clearTimeout(this._fitContentTimer);
-        }
-        this._fitContentTimer = setTimeout(() => {
-          this.fitToContent();
-          this._fitContentTimer = void 0;
-        }, 10);
-      }
-      /**
-       * Bring title bar to front (rendered last = on top)
-       */
-      bringUIToFront() {
-        if (this.titleBar) {
-          const idx = this.children.indexOf(this.titleBar);
-          if (idx !== -1 && idx !== this.children.length - 1) {
-            this.children.splice(idx, 1);
-            this.children.push(this.titleBar);
-          }
-        }
-      }
-      /**
-       * Bind mouse event handlers to the screen for dragging and resizing
-       * This is called when the element is attached to a screen
-       */
-      bindScreenEvents() {
-        if (this.screenListenersBound || !this.screen)
-          return;
-        this.screenListenersBound = true;
-        this.screen.on("mousemove", (data) => {
-          if (this.isResizing && this.currentResizeEdge) {
-            this.handleResizeFromEdge(this.currentResizeEdge, data.x, data.y);
-          } else if (this.isDragging) {
-            this.handleDrag(data.x, data.y);
-          }
-        });
-        this.screen.on("mouseup", () => {
-          if (this.isDragging) {
-            this.stopDrag();
-          }
-          if (this.isResizing) {
-            this.stopResize();
-          }
-        });
-        this.screen.on("resize", () => {
-          const breakpoint = this.screen.responsiveLayout.getBreakpoint();
-          const isMobile = breakpoint === "xs";
-          if (isMobile) {
-            this.mobileMode = true;
-            this.setState({
-              x: 0,
-              y: this.topConstraint,
-              width: this.screen.width,
-              height: this.screen.height - this.topConstraint - 1,
-              // Leave space for status bar
-              position: "float"
-            });
-          } else if (this.mobileMode) {
-            this.mobileMode = false;
-            this.applyDockPosition(this.dockPosition);
-          }
-          if (!isMobile) {
-            if (this.dockPosition !== "float") {
-              this.applyDockPosition(this.dockPosition);
-            } else {
-              this.constrainToScreen();
-            }
-          }
-        });
-      }
-      /**
-       * Constrain floating panel to stay within screen bounds
-       */
-      constrainToScreen() {
-        if (!this.screen)
-          return;
-        const currentLeft = typeof this.position.left === "number" ? this.position.left : 0;
-        const currentTop = typeof this.position.top === "number" ? this.position.top : 0;
-        const currentWidth = typeof this.position.width === "number" ? this.position.width : this.width;
-        const currentHeight = typeof this.position.height === "number" ? this.position.height : this.height;
-        const maxScreenHeight = this.screen.height - this.topConstraint - this.bottomConstraint;
-        let newLeft = Math.max(0, Math.min(currentLeft, this.screen.width - currentWidth));
-        let newTop = Math.max(this.topConstraint, Math.min(currentTop, this.screen.height - currentHeight - this.bottomConstraint));
-        let newWidth = Math.min(currentWidth, this.screen.width);
-        let newHeight = Math.min(currentHeight, maxScreenHeight);
-        if (this.minWidth)
-          newWidth = Math.max(newWidth, this.minWidth);
-        if (this.minHeight)
-          newHeight = Math.max(newHeight, this.minHeight);
-        this.position.left = newLeft;
-        this.position.top = newTop;
-        this.position.width = newWidth;
-        this.position.height = newHeight;
-        this._invalidateCoords();
-      }
-      setupTitleBar(options) {
-        if (!options.label && !options.title && !options.showMinimizeButton && !options.showCloseButton) {
-          return;
-        }
-        this.options.label = void 0;
-        this.titleBar = new Box({
-          parent: this,
-          top: 0,
-          left: 0,
-          width: "100%",
-          // Fill the entire content area width
-          height: 1,
-          tags: true,
-          mouse: true,
-          // Required for drag events
-          style: {
-            fg: "white",
-            bg: "blue",
-            hover: {
-              fg: "white",
-              bg: "lightblue"
-              // Light blue on hover to indicate draggable
-            }
-          },
-          content: options.label || options.title || "Panel"
-        });
-        if (this.titleBar) {
-          this.titleBar.on("mouseenter", () => {
-            if (this.titleBar && this.titleBar.style && !this.isDragging) {
-              this.titleBar.style.bg = "lightblue";
-              this.isPanelHovered = true;
-              this.applyBorderHoverStyle();
-              if (this.screen)
-                this.screen.render();
-            }
-          });
-          this.titleBar.on("mouseleave", () => {
-            if (this.titleBar && this.titleBar.style && !this.isDragging) {
-              this.titleBar.style.bg = "blue";
-              this.isPanelHovered = false;
-              this.applyBorderHoverStyle();
-              if (this.screen)
-                this.screen.render();
-            }
-          });
-          let lastClickTime = 0;
-          this.titleBar.on("click", () => {
-            const now2 = Date.now();
-            const isDoubleClick = now2 - lastClickTime < 300;
-            lastClickTime = now2;
-            if (isDoubleClick) {
-              if (this.panelState.minimized) {
-                this.maximize();
-              } else if (this.isMaximized) {
-                this.restoreFromMaximized();
-              } else {
-                this.maximizeToScreen();
-              }
-            } else if (this.panelState.minimized) {
-              this.maximize();
-            }
-          });
-          if (options.draggable !== false) {
-            this.titleBar.on("mousedown", (data) => {
-              if (data?.button && data.button !== "left")
-                return;
-              if (!this.panelState.minimized && !this.isMaximized) {
-                this.startDrag(data.x, data.y);
-              }
-            });
-          }
-        }
-        if (options.showMinimizeButton !== false) {
-          this.minimizeButton = new Button({
-            parent: this.titleBar,
-            right: options.showCloseButton === true ? 3 : 0,
-            // Position at far right, or offset by close button width (3)
-            top: 0,
-            width: 3,
-            height: 1,
-            content: "[_]",
-            // Minimize icon
-            border: { type: "none" },
-            // No border for inline title bar button
-            padding: 0,
-            // No padding - content fills the space
-            style: {
-              fg: "yellow",
-              bg: "blue",
-              focus: {
-                fg: "white",
-                bg: "lightblue"
-              },
-              hover: {
-                fg: "white",
-                bg: "lightblue"
-              }
-            }
-          });
-          this.minimizeButton.on("press", () => {
-            this.toggleMinimize();
-          });
-        }
-        if (options.showCloseButton) {
-          this.closeButton = new Button({
-            parent: this.titleBar,
-            right: 0,
-            // Far right position
-            top: 0,
-            width: 3,
-            height: 1,
-            content: "[X]",
-            border: { type: "none" },
-            // No border for inline title bar button
-            padding: 0,
-            // No padding - content fills the space
-            style: {
-              fg: "white",
-              bg: "red",
-              focus: {
-                fg: "white",
-                bg: "darkred"
-              },
-              hover: {
-                fg: "white",
-                bg: "darkred"
-              }
-            }
-          });
-          this.closeButton.on("press", () => {
-            this.emit("close");
-            this.destroy();
-          });
-        }
-      }
-      /**
-       * Setup docking behavior
-       */
-      setupDocking() {
-        this.applyDockPosition(this.dockPosition);
-      }
-      /**
-       * Setup dragging behavior
-       * Note: Screen-level mousemove/mouseup handlers are set up in bindScreenEvents()
-       */
-      setupDragging() {
-        if (this.fixed || this.isStatic)
-          return;
-        this.on("mousedown", (data) => {
-          if (data?.button && data.button !== "left")
-            return;
-          if (this.resizable) {
-            const edge = this.detectResizeEdge(data.x, data.y);
-            if (edge) {
-              return;
-            }
-          }
-          if (!this.titleBar) {
-            if (!this.isOnTopBorder(data.x, data.y)) {
-              return;
-            }
-          }
-          if (!this.titleBar || data.y === 0) {
-            this.startDrag(data.x, data.y);
-          }
-        });
-      }
-      /**
-       * Setup resizing behavior on panel borders
-       * No separate gadgets - uses the panel's own border for resize detection
-       * Top row is reserved for title bar (drag to move)
-       */
-      setupResizing() {
-        if (this.fixed || !this.resizable)
-          return;
-        this.on("mousedown", (data) => {
-          if (data?.button && data.button !== "left")
-            return;
-          const edge = this.detectResizeEdge(data.x, data.y);
-          if (edge) {
-            this.startResizeFromEdge(edge, data.x, data.y);
-          }
-        });
-        this.on("mousemove", (data) => {
-          const edge = this.detectResizeEdge(data.x, data.y);
-          this.updateBorderHover(edge);
-        });
-      }
-      /**
-       * Setup keyboard shortcuts for panel management
-       * - Ctrl+Arrow: Dock to edge (left/right/top/bottom)
-       * - Ctrl+M: Minimize/restore
-       * - Ctrl+Shift+M: Maximize to screen/restore
-       * - Escape: Cancel drag or restore from maximized
-       */
-      setupKeyboardShortcuts() {
-        this.on("keypress", (_ch, key) => {
-          if (!key)
-            return;
-          if (this.fixed || this.isStatic)
-            return;
-          const ctrl = key.ctrl;
-          const shift = key.shift;
-          const name = key.name;
-          if (ctrl && !shift) {
-            switch (name) {
-              case "left":
-                this.setDockPosition("left");
-                return;
-              case "right":
-                this.setDockPosition("right");
-                return;
-              case "up":
-                this.setDockPosition("top");
-                return;
-              case "down":
-                this.setDockPosition("bottom");
-                return;
-            }
-          }
-          if (ctrl && !shift && name === "m") {
-            this.toggleMinimize();
-            return;
-          }
-          if (ctrl && shift && name === "m") {
-            this.toggleMaximize();
-            return;
-          }
-          if (name === "escape") {
-            if (this.isDragging) {
-              this.isDragging = false;
-              this.position.left = this.dragStartLeft;
-              this.position.top = this.dragStartTop;
-              this.hideDropZoneIndicators();
-              this.removeSnapPreview();
-              if (this.screen)
-                this.screen.render();
-            } else if (this.isMaximized) {
-              this.restoreFromMaximized();
-            }
-            return;
-          }
-          if (ctrl && !shift && name === "f") {
-            this.setDockPosition("float");
-            return;
-          }
-        });
-      }
-      /**
-       * Detect which resize edge/corner the mouse is over
-       * Returns edge name or null if not on a resize area
-       */
-      detectResizeEdge(mouseX, mouseY) {
-        const coords = this._getCoords();
-        if (!coords)
-          return null;
-        const panelLeft = coords.xi;
-        const panelTop = coords.yi;
-        const panelRight = coords.xl - 1;
-        const panelBottom = coords.yl - 1;
-        const panelWidth = coords.xl - coords.xi;
-        const panelHeight = coords.yl - coords.yi;
-        console.log(`[EDGE-DEBUG] mouse=(${mouseX},${mouseY}) panel=(${panelLeft},${panelTop})-(${panelRight},${panelBottom}) size=${panelWidth}x${panelHeight} rel=(${mouseX - panelLeft},${mouseY - panelTop}) pos.width=${this.position.width} pos.left=${this.position.left}`);
-        if (mouseX < panelLeft || mouseX > panelRight || mouseY < panelTop || mouseY > panelBottom) {
-          return null;
-        }
-        const relX = mouseX - panelLeft;
-        const relY = mouseY - panelTop;
-        const onLeft = relX === 0;
-        const onRight = relX === panelWidth - 1;
-        const onTop = relY === 0;
-        const onBottom = relY === panelHeight - 1;
-        if (!this.useTitleBar && onTop) {
-          return null;
-        }
-        if (onTop && onLeft)
-          return "nw";
-        if (onTop && onRight)
-          return "ne";
-        if (onBottom && onLeft)
-          return "sw";
-        if (onBottom && onRight)
-          return "se";
-        if (onTop)
-          return "n";
-        if (onBottom)
-          return "s";
-        if (onLeft)
-          return "w";
-        if (onRight)
-          return "e";
-        return null;
-      }
-      isOnTopBorder(mouseX, mouseY) {
-        const coords = this._getCoords();
-        if (!coords)
-          return false;
-        const panelLeft = coords.xi;
-        const panelTop = coords.yi;
-        const panelRight = coords.xl - 1;
-        const panelBottom = coords.yl - 1;
-        if (mouseX < panelLeft || mouseX > panelRight || mouseY < panelTop || mouseY > panelBottom) {
-          return false;
-        }
-        const relY = mouseY - panelTop;
-        return relY === 0;
-      }
-      /**
-       * Find sibling panels that share an edge with the edge we are dragging
-       */
-      findResizeNeighbors(edge) {
-        if (!this.parent)
-          return [];
-        const neighbors = [];
-        const myPos = this._getCoords();
-        if (!myPos)
-          return [];
-        const TOLERANCE = 2;
-        const myDockPos = this.getDockPosition();
-        for (const sibling of this.parent.children) {
-          if (!(sibling instanceof _DockablePanel) || sibling === this)
-            continue;
-          if (sibling.isMinimized())
-            continue;
-          const sPos = sibling._getCoords();
-          if (!sPos)
-            continue;
-          const siblingDockPos = sibling.getDockPosition();
-          let touches = false;
-          let touchingEdge = "";
-          if (myDockPos === "left" && siblingDockPos === "right" && (edge === "e" || edge === "ne" || edge === "se")) {
-            touches = true;
-            touchingEdge = "w";
-          } else if (myDockPos === "right" && siblingDockPos === "left" && (edge === "w" || edge === "nw" || edge === "sw")) {
-            touches = true;
-            touchingEdge = "e";
-          } else if (myDockPos === "top" && siblingDockPos === "bottom" && (edge === "s" || edge === "se" || edge === "sw")) {
-            touches = true;
-            touchingEdge = "n";
-          } else if (myDockPos === "bottom" && siblingDockPos === "top" && (edge === "n" || edge === "ne" || edge === "nw")) {
-            touches = true;
-            touchingEdge = "s";
-          }
-          if (!touches) {
-            if (edge === "e" || edge === "ne" || edge === "se") {
-              if (Math.abs(sPos.xi - (myPos.xl - 1)) <= TOLERANCE || Math.abs(sPos.xi - myPos.xl) <= TOLERANCE) {
-                touches = true;
-                touchingEdge = "w";
-              }
-            }
-            if ((edge === "w" || edge === "nw" || edge === "sw") && !touches) {
-              if (Math.abs(sPos.xl - 1 - myPos.xi) <= TOLERANCE || Math.abs(sPos.xl - myPos.xi) <= TOLERANCE) {
-                touches = true;
-                touchingEdge = "e";
-              }
-            }
-            if ((edge === "s" || edge === "se" || edge === "sw") && !touches) {
-              if (Math.abs(sPos.yi - (myPos.yl - 1)) <= TOLERANCE || Math.abs(sPos.yi - myPos.yl) <= TOLERANCE) {
-                touches = true;
-                touchingEdge = "n";
-              }
-            }
-            if ((edge === "n" || edge === "ne" || edge === "nw") && !touches) {
-              if (Math.abs(sPos.yl - 1 - myPos.yi) <= TOLERANCE || Math.abs(sPos.yl - myPos.yi) <= TOLERANCE) {
-                touches = true;
-                touchingEdge = "s";
-              }
-            }
-          }
-          if (touches) {
-            neighbors.push({
-              panel: sibling,
-              edge: touchingEdge,
-              startLeft: sibling.aleft,
-              startTop: sibling.atop,
-              startWidth: sibling.width,
-              startHeight: sibling.height
-            });
-          }
-        }
-        return neighbors;
-      }
-      /**
-       * Update border color based on hover state
-       * Uses per-edge colors to highlight only the hovered resize edge
-       */
-      updateBorderHover(edge) {
-        const prevEdge = this.currentHoverEdge;
-        this.currentHoverEdge = edge;
-        if (prevEdge !== edge) {
-          this.applyBorderHoverStyle();
-        }
-      }
-      /**
-       * Apply border hover style based on current hover state
-       * Uses per-edge colors (fgTop, fgBottom, fgLeft, fgRight) for edge-specific highlighting:
-       * - Hovering specific edge: that edge turns yellow/orange
-       * - Hovering panel content: all borders turn white
-       * - Not hovering: restore original border color
-       */
-      applyBorderHoverStyle() {
-        if (!this.style?.border)
-          return;
-        const originalColor = this._originalBorderColor || "blue";
-        const highlightColor = "yellow";
-        const hoverColor = "white";
-        if (!this.options.style?.border) {
-          this.options.style = this.options.style || {};
-          this.options.style.border = {};
-        }
-        const styleBorder = this.options.style.border;
-        delete styleBorder.fgTop;
-        delete styleBorder.fgBottom;
-        delete styleBorder.fgLeft;
-        delete styleBorder.fgRight;
-        const activeEdge = this.isResizing ? this.currentResizeEdge : this.currentHoverEdge;
-        if (activeEdge) {
-          this._overBorder = false;
-          this.style.border.fg = originalColor;
-          styleBorder.fg = originalColor;
-          if (activeEdge.includes("n")) {
-            styleBorder.fgTop = highlightColor;
-          }
-          if (activeEdge.includes("s")) {
-            styleBorder.fgBottom = highlightColor;
-          }
-          if (activeEdge.includes("w")) {
-            styleBorder.fgLeft = highlightColor;
-          }
-          if (activeEdge.includes("e")) {
-            styleBorder.fgRight = highlightColor;
-          }
-        } else if (this.isPanelHovered) {
-          this._overBorder = true;
-          this.style.border.fg = hoverColor;
-          styleBorder.fg = hoverColor;
-        } else {
-          this._overBorder = false;
-          this.style.border.fg = originalColor;
-          styleBorder.fg = originalColor;
-        }
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Show visual resize cursor (no-op - handles are invisible)
-       */
-      showResizeCursor(_edge) {
-      }
-      /**
-       * Hide visual resize cursor (no-op - handles are invisible)
-       */
-      hideResizeCursor() {
-      }
-      /**
-       * Start dragging
-       */
-      startDrag(x, y) {
-        if (this.panelState.minimized)
-          return;
-        this.isDragging = true;
-        this.dragStartX = x;
-        this.dragStartY = y;
-        this.dragStartLeft = typeof this.left === "number" ? this.left : 0;
-        this.dragStartTop = typeof this.top === "number" ? this.top : 0;
-        if (this.style) {
-          if (this.style.border) {
-            this.style.border.fg = "yellow";
-          }
-        }
-        if (this.options.style?.border) {
-          this.options.style.border.fg = "yellow";
-        }
-        if (!this.options.style) {
-          this.options.style = {};
-        }
-        this.options.style.transparent = true;
-        if (this.style) {
-          this.style.transparent = true;
-        }
-        this.setChildrenTransparent(true);
-        if (this.titleBar && this.titleBar.style) {
-          this.titleBar.style.bg = "cyan";
-        }
-        this.bringToFront();
-        this.showDropZoneIndicators();
-        if (this.dockPosition !== "float") {
-          this.panelState.originalDockPosition = this.dockPosition;
-          this.setDockPosition("float");
-        } else {
-          this.panelState.originalDockPosition = void 0;
-        }
-        this.emit("drag-start");
-      }
-      /**
-       * Handle dragging
-       */
-      handleDrag(x, y) {
-        const deltaX = x - this.dragStartX;
-        const deltaY = y - this.dragStartY;
-        let newLeft = this.dragStartLeft + deltaX;
-        let newTop = this.dragStartTop + deltaY;
-        if (isNaN(newLeft))
-          newLeft = this.dragStartLeft;
-        if (isNaN(newTop))
-          newTop = this.dragStartTop;
-        if (this.screen) {
-          const VISIBLE_HANDLE = 3;
-          const sw = this.screen.width;
-          const sh = this.screen.height;
-          const pw = this.width || 40;
-          const ph = this.height || 20;
-          newLeft = Math.max(VISIBLE_HANDLE - pw, Math.min(newLeft, sw - VISIBLE_HANDLE));
-          newTop = Math.max(this.topConstraint, Math.min(newTop, sh - VISIBLE_HANDLE));
-        }
-        this.position.left = newLeft;
-        this.position.top = newTop;
-        this.panelState.x = newLeft;
-        this.panelState.y = newTop;
-        this._invalidateCoords();
-        if (this.screen) {
-          this.screen.lock();
-          this.updateSnapPreview(x, y);
-          this.updateDropZoneHighlight(x, y);
-          this.screen.forceFullRedraw();
-          this.screen.unlock();
-        }
-        this.emit("drag", { x: this.left, y: this.top });
-      }
-      /**
-       * Stop dragging
-       */
-      stopDrag() {
-        this.isDragging = false;
-        if (this.style) {
-          if (this.style.border) {
-            const borderOptions = this.options.border;
-            this.style.border.fg = borderOptions?.fg || "green";
-          }
-        }
-        if (this.options.style?.border) {
-          const borderOptions = this.options.border;
-          this.options.style.border.fg = borderOptions?.fg || "green";
-        }
-        if (this.options.style) {
-          this.options.style.transparent = false;
-        }
-        if (this.style) {
-          this.style.transparent = false;
-        }
-        this.setChildrenTransparent(false);
-        if (this.titleBar && this.titleBar.style) {
-          this.titleBar.style.bg = "blue";
-        }
-        if (this.allowAutoDock) {
-          this.checkEdgeDocking();
-        }
-        this.hideDropZoneIndicators();
-        this.removeSnapPreview();
-        this.screen?.invalidateMouseIndex?.();
-        if (this.screen) {
-          this.screen.forceFullRedraw();
-          this.screen.render();
-        }
-        this.emit("drag-end");
-      }
-      /**
-       * Set transparent mode on all children recursively
-       * Used during drag so child widgets don't obscure the transparency effect
-       */
-      setChildrenTransparent(transparent) {
-        const setTransparent = (element) => {
-          if (element === this.titleBar)
-            return;
-          if (element.style) {
-            element.style.transparent = transparent;
-          }
-          if (element.options?.style) {
-            element.options.style.transparent = transparent;
-          }
-          if (element.children) {
-            for (const child of element.children) {
-              setTransparent(child);
-            }
-          }
-        };
-        if (this.children) {
-          for (const child of this.children) {
-            setTransparent(child);
-          }
-        }
-      }
-      /**
-       * Start resizing from a specific edge
-       */
-      startResizeFromEdge(edge, x, y) {
-        this.isDragging = false;
-        this.isResizing = true;
-        this.currentResizeEdge = edge;
-        this.dragStartX = x;
-        this.dragStartY = y;
-        this.dragStartLeft = typeof this.position.left === "number" ? this.position.left : 0;
-        this.dragStartTop = typeof this.position.top === "number" ? this.position.top : 0;
-        this.dragStartWidth = typeof this.position.width === "number" ? this.position.width : 40;
-        this.dragStartHeight = typeof this.position.height === "number" ? this.position.height : 20;
-        this.resizeNeighbors = this.findResizeNeighbors(edge);
-        this.applyBorderHoverStyle();
-        if (this.titleBar && this.titleBar.style) {
-          this.titleBar.style.bg = "cyan";
-        }
-        this.emit("resize-start");
-      }
-      /**
-       * Handle resizing from a specific edge
-       */
-      handleResizeFromEdge(edge, x, y) {
-        const isHorizontalOnly = edge === "e" || edge === "w";
-        const isVerticalOnly = edge === "n" || edge === "s";
-        const deltaX = isVerticalOnly ? 0 : x - this.dragStartX;
-        const deltaY = isHorizontalOnly ? 0 : y - this.dragStartY;
-        let newWidth = this.dragStartWidth;
-        let newHeight = this.dragStartHeight;
-        let newLeft = this.dragStartLeft;
-        let newTop = this.dragStartTop;
-        switch (edge) {
-          case "nw":
-            newWidth = this.dragStartWidth - deltaX;
-            newHeight = this.dragStartHeight - deltaY;
-            newLeft = this.dragStartLeft + deltaX;
-            newTop = this.dragStartTop + deltaY;
-            break;
-          case "ne":
-            newWidth = this.dragStartWidth + deltaX;
-            newHeight = this.dragStartHeight - deltaY;
-            newTop = this.dragStartTop + deltaY;
-            break;
-          case "sw":
-            newWidth = this.dragStartWidth - deltaX;
-            newHeight = this.dragStartHeight + deltaY;
-            newLeft = this.dragStartLeft + deltaX;
-            break;
-          case "se":
-            newWidth = this.dragStartWidth + deltaX;
-            newHeight = this.dragStartHeight + deltaY;
-            break;
-          case "n":
-            newHeight = this.dragStartHeight - deltaY;
-            newTop = this.dragStartTop + deltaY;
-            break;
-          case "s":
-            newHeight = this.dragStartHeight + deltaY;
-            break;
-          case "w":
-            newWidth = this.dragStartWidth - deltaX;
-            newLeft = this.dragStartLeft + deltaX;
-            break;
-          case "e":
-            newWidth = this.dragStartWidth + deltaX;
-            break;
-        }
-        const ABS_MIN_WIDTH = 5;
-        const ABS_MIN_HEIGHT = 3;
-        const effectiveMinWidth = Math.max(ABS_MIN_WIDTH, this.minWidth || 0);
-        const effectiveMinHeight = Math.max(ABS_MIN_HEIGHT, this.minHeight || 0);
-        if (isNaN(newWidth))
-          newWidth = this.dragStartWidth;
-        if (isNaN(newHeight))
-          newHeight = this.dragStartHeight;
-        if (isNaN(newLeft))
-          newLeft = this.dragStartLeft;
-        if (isNaN(newTop))
-          newTop = this.dragStartTop;
-        if (newWidth < effectiveMinWidth) {
-          if (edge.includes("w")) {
-            newLeft = this.dragStartLeft + (this.dragStartWidth - effectiveMinWidth);
-          }
-          newWidth = effectiveMinWidth;
-        }
-        if (this.maxWidth && newWidth > this.maxWidth) {
-          if (edge.includes("w")) {
-            newLeft = this.dragStartLeft + (this.dragStartWidth - this.maxWidth);
-          }
-          newWidth = this.maxWidth;
-        }
-        if (newHeight < effectiveMinHeight) {
-          if (edge.includes("n")) {
-            newTop = this.dragStartTop + (this.dragStartHeight - effectiveMinHeight);
-          }
-          newHeight = effectiveMinHeight;
-        }
-        if (this.maxHeight && newHeight > this.maxHeight) {
-          if (edge.includes("n")) {
-            newTop = this.dragStartTop + (this.dragStartHeight - this.maxHeight);
-          }
-          newHeight = this.maxHeight;
-        }
-        if (this.screen) {
-          newLeft = Math.max(0, Math.min(newLeft, this.screen.width - 1));
-          newTop = Math.max(this.topConstraint, Math.min(newTop, this.screen.height - 1));
-        }
-        newWidth = Math.max(1, newWidth);
-        newHeight = Math.max(1, newHeight);
-        this.position.width = newWidth;
-        this.position.height = newHeight;
-        this.position.left = newLeft;
-        this.position.top = newTop;
-        if (this.screen) {
-          this.screen.lock();
-        }
-        for (const neighbor of this.resizeNeighbors) {
-          let nWidth = neighbor.startWidth;
-          let nHeight = neighbor.startHeight;
-          let nLeft = neighbor.startLeft;
-          let nTop = neighbor.startTop;
-          const nMinWidth = neighbor.panel.minWidth || 5;
-          const nMinHeight = neighbor.panel.minHeight || 3;
-          if (edge === "e") {
-            const pWidth = neighbor.startWidth - deltaX;
-            if (pWidth >= nMinWidth) {
-              nWidth = pWidth;
-              nLeft = neighbor.startLeft + deltaX;
-            } else {
-              const maxDelta = neighbor.startWidth - nMinWidth;
-              this.position.width = this.dragStartWidth + maxDelta;
-              newWidth = this.position.width;
-              nWidth = nMinWidth;
-              nLeft = neighbor.startLeft + maxDelta;
-            }
-          } else if (edge === "w") {
-            const pWidth = neighbor.startWidth + deltaX;
-            if (pWidth >= nMinWidth) {
-              nWidth = pWidth;
-            } else {
-              const maxDelta = nMinWidth - neighbor.startWidth;
-              this.aleft = this.dragStartLeft + maxDelta;
-              this.position.width = this.dragStartWidth - maxDelta;
-              newWidth = this.position.width;
-              newLeft = this.aleft;
-              nWidth = nMinWidth;
-            }
-          } else if (edge === "s") {
-            const pHeight = neighbor.startHeight - deltaY;
-            if (pHeight >= nMinHeight) {
-              nHeight = pHeight;
-              nTop = neighbor.startTop + deltaY;
-            } else {
-              const maxDelta = neighbor.startHeight - nMinHeight;
-              this.position.height = this.dragStartHeight + maxDelta;
-              newHeight = this.position.height;
-              nHeight = nMinHeight;
-              nTop = neighbor.startTop + maxDelta;
-            }
-          } else if (edge === "n") {
-            const pHeight = neighbor.startHeight + deltaY;
-            if (pHeight >= nMinHeight) {
-              nHeight = pHeight;
-            } else {
-              const maxDelta = nMinHeight - neighbor.startHeight;
-              this.atop = this.dragStartTop + maxDelta;
-              this.position.height = this.dragStartHeight - maxDelta;
-              newHeight = this.position.height;
-              newTop = this.atop;
-              nHeight = nMinHeight;
-            }
-          }
-          neighbor.panel.width = nWidth;
-          neighbor.panel.height = nHeight;
-          neighbor.panel.aleft = nLeft;
-          neighbor.panel.atop = nTop;
-          neighbor.panel._invalidateCoords();
-        }
-        this.panelState.width = this.position.width;
-        this.panelState.height = this.position.height;
-        this.panelState.x = this.position.left;
-        this.panelState.y = this.position.top;
-        this._invalidateCoords();
-        if (this.screen) {
-          this.screen.forceFullRedraw();
-          this.screen.unlock();
-        }
-        this.emit("resize", { width: newWidth, height: newHeight, x: newLeft, y: newTop });
-      }
-      /**
-       * Stop resizing
-       */
-      stopResize() {
-        this.isResizing = false;
-        this.currentResizeEdge = null;
-        this.resizeNeighbors = [];
-        this.applyBorderHoverStyle();
-        if (this.titleBar && this.titleBar.style) {
-          this.titleBar.style.bg = "blue";
-        }
-        this.hideResizeCursor();
-        this.fitContentSettings = { width: false, height: false };
-        this._invalidateCoords();
-        this.screen?.invalidateMouseIndex?.();
-        if (this.screen) {
-          this.screen.forceFullRedraw();
-          this.screen.render();
-        }
-        this.emit("resize-end");
-        this.relayoutDockedPanels();
-      }
-      /**
-       * Relayout all docked panels to fill available screen space
-       * Called after resize to ensure panels tile properly without gaps
-       */
-      relayoutDockedPanels() {
-        if (!this.screen)
-          return;
-        const dockedPanels = [];
-        for (const child of this.screen.children) {
-          if (child instanceof _DockablePanel && child !== this) {
-            const pos = child.getDockPosition();
-            if (pos !== "float" && pos !== "center") {
-              dockedPanels.push({ panel: child, position: pos });
-            }
-          }
-        }
-        const myPos = this.getDockPosition();
-        if (myPos !== "float" && myPos !== "center") {
-          dockedPanels.push({ panel: this, position: myPos });
-        }
-        let topSpace = this.topConstraint;
-        let bottomSpace = this.bottomConstraint;
-        for (const { panel, position } of dockedPanels) {
-          if (position === "top") {
-            const h = typeof panel.position.height === "number" ? panel.position.height : 0;
-            topSpace = Math.max(topSpace, h);
-          } else if (position === "bottom") {
-            const h = typeof panel.position.height === "number" ? panel.position.height : 0;
-            bottomSpace = Math.max(bottomSpace, h);
-          }
-        }
-        let leftSpace = 0;
-        let rightSpace = 0;
-        for (const { panel, position } of dockedPanels) {
-          if (position === "left") {
-            const w = typeof panel.position.width === "number" ? panel.position.width : 0;
-            leftSpace = Math.max(leftSpace, w);
-          } else if (position === "right") {
-            const w = typeof panel.position.width === "number" ? panel.position.width : 0;
-            rightSpace = Math.max(rightSpace, w);
-          }
-        }
-        const availableHeight = this.screen.height - topSpace - bottomSpace;
-        for (const { panel, position } of dockedPanels) {
-          switch (position) {
-            case "left":
-              panel.position.left = 0;
-              panel.position.top = topSpace;
-              panel.position.height = availableHeight;
-              break;
-            case "right":
-              const rightWidth = typeof panel.position.width === "number" ? panel.position.width : 0;
-              panel.position.left = this.screen.width - rightWidth;
-              panel.position.top = topSpace;
-              panel.position.height = availableHeight;
-              break;
-            case "top":
-              panel.position.left = 0;
-              panel.position.top = 0;
-              panel.position.width = this.screen.width;
-              break;
-            case "bottom":
-              panel.position.left = 0;
-              const bottomHeight = typeof panel.position.height === "number" ? panel.position.height : 0;
-              panel.position.top = this.screen.height - bottomHeight;
-              panel.position.width = this.screen.width;
-              break;
-          }
-          panel._invalidateCoords();
-        }
-        this.screen.invalidateMouseIndex?.();
-      }
-      /**
-       * Check if panel should dock to an edge or swap with another panel
-       */
-      checkEdgeDocking() {
-        if (!this.screen)
-          return;
-        const threshold = 5;
-        const x = this.aleft;
-        const y = this.atop;
-        const w = this.width;
-        const h = this.height;
-        const sw = this.screen.width;
-        const sh = this.screen.height;
-        const swapped = this.checkPanelSwap();
-        if (swapped) {
-          this.panelState.originalDockPosition = void 0;
-          return;
-        }
-        for (const child of this.screen.children) {
-          if (!(child instanceof _DockablePanel) || child === this)
-            continue;
-          const other = child;
-          if (other.isMinimized())
-            continue;
-          const oPos = other._getCoords();
-          if (!oPos)
-            continue;
-          const myCenterX = x + w / 2;
-          const myCenterY = y + h / 2;
-          if (myCenterX > oPos.xi + 5 && myCenterX < oPos.xl - 5 && myCenterY > oPos.yi + 2 && myCenterY < oPos.yl - 2) {
-            other.mergeWith(this);
-            this.panelState.originalDockPosition = void 0;
-            return;
-          }
-        }
-        const nearLeft = x <= threshold;
-        const nearRight = x + w >= sw - threshold;
-        const nearTop = y <= threshold;
-        const nearBottom = y + h >= sh - threshold;
-        const dists = [
-          { pos: "left", dist: x },
-          { pos: "right", dist: sw - (x + w) },
-          { pos: "top", dist: y },
-          { pos: "bottom", dist: sh - (y + h) }
-        ].filter((d) => d.dist <= threshold).sort((a, b) => a.dist - b.dist);
-        if (dists.length > 0) {
-          const bestEdge = dists[0].pos;
-          if (bestEdge === this.panelState.originalDockPosition) {
-            this.panelState.originalDockPosition = void 0;
-            return;
-          }
-          const existingPanel = this.findPanelDockedAt(bestEdge);
-          if (existingPanel && existingPanel !== this) {
-            const oppositeEdge = this.getOppositeEdge(bestEdge);
-            existingPanel.setDockPosition(oppositeEdge);
-          }
-          this.setDockPosition(bestEdge);
-        }
-        this.panelState.originalDockPosition = void 0;
-      }
-      /**
-       * Get the opposite edge for a dock position (for intuitive swapping)
-       */
-      getOppositeEdge(position) {
-        switch (position) {
-          case "left":
-            return "right";
-          case "right":
-            return "left";
-          case "top":
-            return "bottom";
-          case "bottom":
-            return "top";
-          default:
-            return "float";
-        }
-      }
-      /**
-       * Find a panel that is currently docked at the specified position
-       */
-      findPanelDockedAt(position) {
-        if (!this.screen)
-          return null;
-        for (const child of this.screen.children) {
-          if (!(child instanceof _DockablePanel) || child === this)
-            continue;
-          const otherPanel = child;
-          if (otherPanel.getDockPosition() === position && !otherPanel.isMinimized()) {
-            return otherPanel;
-          }
-        }
-        return null;
-      }
-      /**
-       * Show drop zone indicators at screen edges
-       */
-      showDropZoneIndicators() {
-        if (!this.screen)
-          return;
-        let zones = _DockablePanel.dropZones.get(this.screen);
-        if (!zones) {
-          zones = {};
-          _DockablePanel.dropZones.set(this.screen, zones);
-        }
-        const sw = this.screen.width;
-        const sh = this.screen.height;
-        const stripWidth = 3;
-        const stripHeight = 1;
-        if (!zones.left) {
-          zones.left = new Box({
-            parent: this.screen,
-            left: 0,
-            top: this.topConstraint,
-            width: stripWidth,
-            height: sh - this.topConstraint - this.bottomConstraint,
-            style: { bg: "blue", transparent: true },
-            tags: true,
-            content: ""
-          });
-          zones.left._isDropZone = true;
-        }
-        if (!zones.right) {
-          zones.right = new Box({
-            parent: this.screen,
-            right: 0,
-            top: this.topConstraint,
-            width: stripWidth,
-            height: sh - this.topConstraint - this.bottomConstraint,
-            style: { bg: "blue", transparent: true },
-            tags: true,
-            content: ""
-          });
-          zones.right._isDropZone = true;
-        }
-        if (!zones.top) {
-          zones.top = new Box({
-            parent: this.screen,
-            left: 0,
-            top: this.topConstraint,
-            width: sw,
-            height: stripHeight,
-            style: { bg: "blue", transparent: true },
-            tags: true,
-            content: ""
-          });
-          zones.top._isDropZone = true;
-        }
-        if (!zones.bottom) {
-          zones.bottom = new Box({
-            parent: this.screen,
-            left: 0,
-            bottom: this.bottomConstraint,
-            width: sw,
-            height: stripHeight,
-            style: { bg: "blue", transparent: true },
-            tags: true,
-            content: ""
-          });
-          zones.bottom._isDropZone = true;
-        }
-        for (const zone of Object.values(zones)) {
-          if (zone) {
-            zone.show();
-            zone.style.bg = "blue";
-          }
-        }
-        _DockablePanel.activeDropZone = null;
-      }
-      /**
-       * Hide drop zone indicators
-       */
-      hideDropZoneIndicators() {
-        if (!this.screen)
-          return;
-        const zones = _DockablePanel.dropZones.get(this.screen);
-        if (zones) {
-          for (const zone of Object.values(zones)) {
-            if (zone)
-              zone.hide();
-          }
-        }
-        _DockablePanel.activeDropZone = null;
-      }
-      /**
-       * Update drop zone highlighting based on mouse position
-       */
-      updateDropZoneHighlight(mouseX, mouseY) {
-        if (!this.screen)
-          return;
-        const zones = _DockablePanel.dropZones.get(this.screen);
-        if (!zones)
-          return;
-        const sw = this.screen.width;
-        const sh = this.screen.height;
-        const edgeThreshold = 5;
-        const vertThreshold = 3;
-        let activeZone = null;
-        if (mouseX < edgeThreshold) {
-          activeZone = "left";
-        } else if (mouseX >= sw - edgeThreshold) {
-          activeZone = "right";
-        } else if (mouseY < this.topConstraint + vertThreshold) {
-          activeZone = "top";
-        } else if (mouseY >= sh - this.bottomConstraint - vertThreshold) {
-          activeZone = "bottom";
-        }
-        if (activeZone !== _DockablePanel.activeDropZone) {
-          for (const [pos, zone] of Object.entries(zones)) {
-            if (zone) {
-              zone.style.bg = "blue";
-            }
-          }
-          if (activeZone && zones[activeZone]) {
-            zones[activeZone].style.bg = "cyan";
-          }
-          _DockablePanel.activeDropZone = activeZone;
-          this.screen.render();
-        }
-      }
-      /**
-       * Update the visual snap preview ghost area
-       */
-      updateSnapPreview(mouseX, mouseY) {
-        if (!this.screen || !this.allowAutoDock)
-          return;
-        const threshold = 5;
-        const sw = this.screen.width;
-        const sh = this.screen.height;
-        const dists = [
-          { pos: "left", dist: mouseX },
-          { pos: "right", dist: sw - mouseX },
-          { pos: "top", dist: mouseY },
-          { pos: "bottom", dist: sh - mouseY }
-        ].filter((d) => d.dist <= threshold).sort((a, b) => a.dist - b.dist);
-        if (dists.length === 0 || dists[0].pos === this.panelState.originalDockPosition) {
-          this.removeSnapPreview();
-          return;
-        }
-        const edge = dists[0].pos;
-        if (!this.ghostBox) {
-          this.ghostBox = new Box({
-            parent: this.screen,
-            border: { type: "line", fg: "cyan" },
-            style: {
-              fg: "cyan",
-              bg: "cyan",
-              transparent: true
-              // Transparent background like blessed shadow demo
-            },
-            zIndex: 9999,
-            ch: " ",
-            // Use simple space for fill
-            tags: true
-          });
-        }
-        let targetX = 0, targetY = 0, targetW = 0, targetH = 0;
-        const dockSize = 0.15;
-        switch (edge) {
-          case "left":
-            targetW = Math.floor(sw * dockSize);
-            targetH = sh;
-            break;
-          case "right":
-            targetX = sw - Math.floor(sw * dockSize);
-            targetW = Math.floor(sw * dockSize);
-            targetH = sh;
-            break;
-          case "top":
-            targetW = sw;
-            targetH = Math.floor(sh * dockSize);
-            break;
-          case "bottom":
-            targetY = sh - Math.floor(sh * dockSize);
-            targetW = sw;
-            targetH = Math.floor(sh * dockSize);
-            break;
-        }
-        this.ghostBox.aleft = targetX;
-        this.ghostBox.atop = targetY;
-        this.ghostBox.width = targetW;
-        this.ghostBox.height = targetH;
-        if (this.ghostBox._emitOverlayEvent) {
-          this.ghostBox._emitOverlayEvent(true);
-        }
-        this.ghostBox.show();
-        this.ghostBox.setFront();
-      }
-      /**
-       * Remove snap preview ghost
-       */
-      removeSnapPreview() {
-        if (this.ghostBox) {
-          if (this.ghostBox._emitOverlayEvent) {
-            this.ghostBox._emitOverlayEvent(false);
-          }
-          this.ghostBox.hide();
-          if (this.screen)
-            this.screen.render();
-        }
-      }
-      /**
-       * Check if this panel should swap positions with another docked panel
-       * Returns true if a swap occurred
-       */
-      checkPanelSwap() {
-        if (!this.screen)
-          return false;
-        const myX = this.aleft;
-        const myY = this.atop;
-        const myW = this.width;
-        const myH = this.height;
-        const myCenterX = myX + myW / 2;
-        const myCenterY = myY + myH / 2;
-        for (const child of this.screen.children) {
-          if (!(child instanceof _DockablePanel) || child === this)
-            continue;
-          const otherPanel = child;
-          const otherPos = otherPanel.getDockPosition();
-          if (otherPos === "float")
-            continue;
-          const otherX = otherPanel.aleft;
-          const otherY = otherPanel.atop;
-          const otherW = otherPanel.width;
-          const otherH = otherPanel.height;
-          if (myCenterX >= otherX && myCenterX <= otherX + otherW && myCenterY >= otherY && myCenterY <= otherY + otherH) {
-            const myOriginalPosition = this.panelState.originalDockPosition || "float";
-            if (myOriginalPosition !== "float") {
-              otherPanel.setDockPosition(myOriginalPosition);
-            } else {
-              otherPanel.setDockPosition("float");
-            }
-            this.setDockPosition(otherPos);
-            return true;
-          }
-        }
-        return false;
-      }
-      /**
-       * Merge another panel into this one as a tab
-       */
-      mergeWith(other) {
-        if (other === this || this.tabs.includes(other))
-          return;
-        if (this.tabs.length === 0) {
-          this.tabs.push(this);
-        }
-        this.tabs.push(other);
-        other.detach();
-        other.parent = this;
-        other.border = null;
-        if (other.options)
-          other.options.border = void 0;
-        other.position = { left: 0, top: 1, width: "100%", height: "100%-1" };
-        other.hide();
-        other._invalidateCoords();
-        this.updateTabs();
-        this.emit("merge", other);
-      }
-      /**
-       * Update the tab bar display
-       */
-      updateTabs() {
-        if (this.tabs.length <= 1)
-          return;
-        for (const btn of this.tabButtons) {
-          btn.destroy();
-        }
-        this.tabButtons = [];
-        let currentX = 1;
-        this.tabs.forEach((panel, index) => {
-          const label = panel.options.label || panel.options.title || `Tab ${index + 1}`;
-          const isActive = index === this.activeTab;
-          const btn = new Button({
-            parent: this,
-            top: 0,
-            left: currentX,
-            width: String(label).length + 2,
-            height: 1,
-            content: isActive ? `{white-bg}{black-fg}${label}{/}` : label,
-            tags: true,
-            style: {
-              bg: isActive ? "white" : "blue",
-              fg: isActive ? "black" : "white"
-            }
-          });
-          btn.on("press", () => {
-            this.switchTab(index);
-          });
-          let dragStart = null;
-          let detached = false;
-          btn.on("mousedown", (data) => {
-            if (data?.button && data.button !== "left")
-              return;
-            dragStart = { x: data?.x ?? 0, y: data?.y ?? 0 };
-            detached = false;
-          });
-          if (this.screen) {
-            const onMove = (data) => {
-              if (!dragStart || detached)
-                return;
-              if (data.action !== "mousemove" && data.action !== "mousedown")
-                return;
-              const dx = (data.x ?? 0) - dragStart.x;
-              const dy = (data.y ?? 0) - dragStart.y;
-              if (Math.abs(dx) + Math.abs(dy) < 3)
-                return;
-              detached = true;
-              const panelToDetach = this.tabs[index];
-              if (panelToDetach && panelToDetach !== this) {
-                this.detachTab(index);
-                panelToDetach.startDrag?.(data.x, data.y);
-              }
-            };
-            const onUp = () => {
-              dragStart = null;
-              detached = false;
-            };
-            this.screen.on("mousemove", onMove);
-            this.screen.on("mouseup", onUp);
-          }
-          this.tabButtons.push(btn);
-          currentX += String(label).length + 3;
-        });
-        this.tabs.forEach((panel, index) => {
-          if (index === this.activeTab) {
-            if (panel !== this)
-              panel.show();
-          } else {
-            if (panel !== this)
-              panel.hide();
-          }
-        });
-        if (this.screen)
-          this.screen.render();
-      }
-      /**
-       * Switch to a specific tab
-       */
-      switchTab(index) {
-        if (index < 0 || index >= this.tabs.length)
-          return;
-        this.activeTab = index;
-        this.updateTabs();
-        this.emit("tab-switch", index);
-      }
-      /**
-       * Detach a tab back into its own floating DockablePanel. The inverse of
-       * `mergeWith`. Right-click on the tab button triggers this so a user
-       * who accidentally merged two panels can separate them again.
-       *
-       * Behaviour:
-       *  - The extracted panel re-parents to the screen, restores its label
-       *    and border, floats at an offset position, and is shown.
-       *  - If only one tab is left in the container after removal, the tab
-       *    bar is cleared and the remaining panel goes back to behaving as
-       *    a normal single-panel container.
-       */
-      detachTab(index) {
-        if (index < 0 || index >= this.tabs.length)
-          return;
-        const detached = this.tabs[index];
-        if (!detached || detached === this) {
-          const other = this.tabs.find((t, i) => i !== index && t !== this);
-          if (other)
-            this.detachTab(this.tabs.indexOf(other));
-          return;
-        }
-        this.tabs.splice(index, 1);
-        if (this.activeTab >= this.tabs.length)
-          this.activeTab = Math.max(0, this.tabs.length - 1);
-        detached.detach?.();
-        const root = this.screen;
-        if (root) {
-          root.append?.(detached);
-          detached.parent = root;
-        }
-        const hostCoords = this._getCoords();
-        const offsetLeft = (hostCoords?.xi ?? 0) + 4;
-        const offsetTop = (hostCoords?.yi ?? 0) + 2;
-        detached.position = {
-          left: offsetLeft,
-          top: offsetTop,
-          width: detached.options?.width ?? 40,
-          height: detached.options?.height ?? 15
-        };
-        detached.border = detached.options?.border ?? { type: "line" };
-        detached.show?.();
-        detached._invalidateCoords?.();
-        if (this.tabs.length <= 1) {
-          for (const btn of this.tabButtons)
-            btn.destroy();
-          this.tabButtons = [];
-          this.tabs = [];
-        } else {
-          this.updateTabs();
-        }
-        detached.emit("undock-tab");
-        this.emit("detach", detached);
-        this.screen?.render();
-      }
-      /**
-       * Set dock position with visual feedback
-       */
-      setDockPosition(position) {
-        const previousPosition = this.dockPosition;
-        this.dockPosition = position;
-        this.panelState.position = position;
-        this.applyDockPosition(position);
-        if (position !== "float" && previousPosition !== position) {
-          this.flashBorder("cyan", 150);
-        }
-        this.emit("dock", position);
-      }
-      /**
-       * Flash the border color briefly for visual feedback
-       */
-      flashBorder(color, duration) {
-        if (!this.style?.border)
-          return;
-        const originalColor = this._originalBorderColor || this.style.border.fg || "green";
-        this.style.border.fg = color;
-        if (this.options.style?.border) {
-          this.options.style.border.fg = color;
-        }
-        if (this.screen)
-          this.screen.render();
-        setTimeout(() => {
-          if (this.style?.border) {
-            this.style.border.fg = originalColor;
-          }
-          if (this.options.style?.border) {
-            this.options.style.border.fg = originalColor;
-          }
-          if (this.screen)
-            this.screen.render();
-        }, duration);
-      }
-      /**
-       * Set dock position while preserving the panel's current width/height
-       * Used by auto-docking to avoid dramatic layout changes
-       */
-      setDockPositionPreservingSize(position, preserveWidth, preserveHeight) {
-        this.dockPosition = position;
-        this.panelState.position = position;
-        this.applyDockPositionPreservingSize(position, preserveWidth, preserveHeight);
-        this.emit("dock", position);
-      }
-      /**
-       * Apply dock position
-       * Uses position.* for runtime updates (not options.* which is only read at construction)
-       */
-      applyDockPosition(position) {
-        if (!this.screen)
-          return;
-        const top = this.topConstraint;
-        const height = Math.max(5, this.screen.height - this.topConstraint - this.bottomConstraint);
-        switch (position) {
-          case "top":
-            this.position.left = 0;
-            this.position.top = 0;
-            this.position.width = this.screen.width;
-            this.position.height = Math.floor(this.screen.height * 0.3);
-            break;
-          case "bottom":
-            this.position.left = 0;
-            this.position.top = Math.floor(this.screen.height * 0.7);
-            this.position.width = this.screen.width;
-            this.position.height = Math.floor(this.screen.height * 0.3);
-            break;
-          case "left":
-            this.position.left = 0;
-            this.position.top = top;
-            this.position.width = this.panelState.width || Math.floor(this.screen.width * 0.3);
-            this.position.height = height;
-            break;
-          case "right":
-            const w = this.panelState.width || Math.floor(this.screen.width * 0.3);
-            this.position.left = this.screen.width - w;
-            this.position.width = w;
-            this.position.top = top;
-            this.position.height = height;
-            break;
-          case "center":
-            this.position.left = Math.floor(this.screen.width * 0.25);
-            this.position.top = Math.floor(this.screen.height * 0.25);
-            this.position.width = Math.floor(this.screen.width * 0.5);
-            this.position.height = Math.floor(this.screen.height * 0.5);
-            break;
-          case "float":
-            this.position.left = this.panelState.savedX || this.panelState.x;
-            this.position.top = this.panelState.savedY || this.panelState.y;
-            this.position.width = this.panelState.savedWidth || this.panelState.width;
-            this.position.height = this.panelState.savedHeight || this.panelState.height;
-            break;
-        }
-        if (typeof this.position.width === "number")
-          this.position.width = Math.max(1, this.position.width);
-        if (typeof this.position.height === "number")
-          this.position.height = Math.max(1, this.position.height);
-        if (typeof this.position.left === "number" && isNaN(this.position.left))
-          this.position.left = 0;
-        if (typeof this.position.top === "number" && isNaN(this.position.top))
-          this.position.top = 0;
-        this._invalidateCoords();
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Apply dock position while preserving panel dimensions
-       * Used by auto-docking to snap to edge without changing size dramatically
-       */
-      applyDockPositionPreservingSize(position, preserveWidth, preserveHeight) {
-        if (!this.screen)
-          return;
-        const width = Math.min(preserveWidth, this.screen.width);
-        const height = Math.min(preserveHeight, this.screen.height);
-        switch (position) {
-          case "top":
-            this.position.left = 0;
-            this.position.top = 0;
-            this.position.width = width;
-            this.position.height = height;
-            break;
-          case "bottom":
-            this.position.left = 0;
-            this.position.top = this.screen.height - height;
-            this.position.width = width;
-            this.position.height = height;
-            break;
-          case "left":
-            this.position.left = 0;
-            this.position.top = 0;
-            this.position.width = width;
-            this.position.height = height;
-            break;
-          case "right":
-            this.position.left = this.screen.width - width;
-            this.position.top = 0;
-            this.position.width = width;
-            this.position.height = height;
-            break;
-          case "center":
-            this.position.left = Math.floor((this.screen.width - width) / 2);
-            this.position.top = Math.floor((this.screen.height - height) / 2);
-            this.position.width = width;
-            this.position.height = height;
-            break;
-          case "float":
-            this.position.left = this.panelState.savedX || this.panelState.x;
-            this.position.top = this.panelState.savedY || this.panelState.y;
-            this.position.width = this.panelState.savedWidth || this.panelState.width;
-            this.position.height = this.panelState.savedHeight || this.panelState.height;
-            break;
-        }
-        this.panelState.width = this.position.width;
-        this.panelState.height = this.position.height;
-        this.panelState.x = this.position.left;
-        this.panelState.y = this.position.top;
-        this._invalidateCoords();
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Minimize panel
-       * Uses position.* for runtime updates (not options.* which is only read at construction)
-       */
-      minimize() {
-        if (this.panelState.minimized)
-          return;
-        this.panelState.savedWidth = this.width;
-        this.panelState.savedHeight = this.height;
-        this.panelState.savedX = this.left;
-        this.panelState.savedY = this.top;
-        for (const child of this.children) {
-          if (child !== this.titleBar && child !== this.minimizeButton && child !== this.closeButton) {
-            child.hide();
-          }
-        }
-        this.position.height = 1;
-        this.panelState.minimized = true;
-        if (this.dockPosition === "float" && this.screen) {
-          this.position.top = this.screen.height - 1;
-          this.position.width = Math.min(this.panelState.savedWidth, 30);
-        }
-        this._invalidateCoords();
-        if (this.screen) {
-          this.screen.render();
-        }
-        this.emit("minimize");
-      }
-      /**
-       * Maximize/restore panel
-       * Uses position.* for runtime updates (not options.* which is only read at construction)
-       */
-      maximize() {
-        if (!this.panelState.minimized)
-          return;
-        for (const child of this.children) {
-          child.show();
-        }
-        this.position.width = this.panelState.savedWidth || this.panelState.width;
-        this.position.height = this.panelState.savedHeight || this.panelState.height;
-        this.position.left = this.panelState.savedX || this.panelState.x;
-        this.position.top = this.panelState.savedY || this.panelState.y;
-        this.panelState.minimized = false;
-        this._invalidateCoords();
-        if (this.screen) {
-          this.screen.render();
-        }
-        this.emit("maximize");
-      }
-      /**
-       * Toggle minimize/maximize
-       */
-      toggleMinimize() {
-        if (this.panelState.minimized) {
-          this.maximize();
-        } else {
-          this.minimize();
-        }
-      }
-      /**
-       * Toggle fullscreen maximization
-       */
-      toggleMaximize() {
-        if (this.isMaximized) {
-          this.restoreFromMaximized();
-        } else {
-          this.maximizeToScreen();
-        }
-      }
-      /**
-       * Check if panel is currently maximized to fullscreen
-       */
-      get isMaximized() {
-        return this.preMaximizeState !== null;
-      }
-      /**
-       * Maximize panel to fill screen
-       */
-      maximizeToScreen() {
-        if (this.preMaximizeState)
-          return;
-        this.preMaximizeState = this.getState();
-        if (this.screen) {
-          this.setState({
-            x: 0,
-            y: this.topConstraint,
-            width: this.screen.width,
-            height: this.screen.height - this.topConstraint - this.bottomConstraint,
-            position: "float"
-          });
-          this.bringToFront();
-          this.flashBorder("yellow", 100);
-        }
-      }
-      /**
-       * Restore panel from maximized state
-       */
-      restoreFromMaximized() {
-        if (!this.preMaximizeState)
-          return;
-        this.setState(this.preMaximizeState);
-        this.preMaximizeState = null;
-        this.flashBorder("green", 100);
-      }
-      /**
-       * Bring panel to front
-       */
-      bringToFront() {
-        if (!this.screen)
-          return;
-        let maxZ = 100;
-        for (const child of this.screen.children) {
-          if (child instanceof _DockablePanel && child !== this) {
-            maxZ = Math.max(maxZ, child.panelState.zIndex);
-          }
-        }
-        this.panelState.zIndex = maxZ + 1;
-        this.detach();
-        this.screen.append(this);
-      }
-      /**
-       * Get panel state
-       */
-      getState() {
-        return { ...this.panelState };
-      }
-      /**
-       * Restore panel state
-       * Uses position.* for runtime updates (not options.* which is only read at construction)
-       */
-      async setState(state) {
-        if (state.position) {
-          this.setDockPosition(state.position);
-        }
-        if (this.screen) {
-          const sw = this.screen.width;
-          const sh = this.screen.height;
-          const left = state.x !== void 0 ? Math.max(0, Math.min(state.x, Math.max(0, sw - 5))) : this.position.left || 0;
-          const top = state.y !== void 0 ? Math.max(this.topConstraint, state.y) : this.position.top || 0;
-          if (state.width !== void 0) {
-            const newWidth = Math.max(5, Math.min(state.width, sw - left));
-            this.position.width = newWidth;
-            this.panelState.width = newWidth;
-          }
-          if (state.height !== void 0) {
-            const newHeight = Math.max(3, Math.min(state.height, sh - top));
-            this.position.height = newHeight;
-            this.panelState.height = newHeight;
-          }
-          if (state.x !== void 0) {
-            const pw = this.position.width || 40;
-            const newLeft = Math.max(0, Math.min(left, sw - pw));
-            this.position.left = newLeft;
-            this.panelState.x = newLeft;
-          }
-          if (state.y !== void 0) {
-            const ph = this.position.height || 20;
-            const newTop = Math.max(this.topConstraint, Math.min(top, sh - ph));
-            this.position.top = newTop;
-            this.panelState.y = newTop;
-          }
-        } else {
-          if (state.x !== void 0) {
-            this.position.left = state.x;
-            this.panelState.x = state.x;
-          }
-          if (state.y !== void 0) {
-            this.position.top = state.y;
-            this.panelState.y = state.y;
-          }
-          if (state.width !== void 0) {
-            this.position.width = state.width;
-            this.panelState.width = state.width;
-          }
-          if (state.height !== void 0) {
-            this.position.height = state.height;
-            this.panelState.height = state.height;
-          }
-        }
-        if (state.minimized !== void 0) {
-          if (state.minimized) {
-            this.minimize();
-          } else {
-            this.maximize();
-          }
-        }
-        this._invalidateCoords();
-        if (this.screen) {
-          this.screen.render();
-        }
-      }
-      /**
-       * Check if panel is minimized
-       */
-      isMinimized() {
-        return this.panelState.minimized;
-      }
-      /**
-       * Get dock position
-       */
-      getDockPosition() {
-        return this.dockPosition;
-      }
-      /**
-       * Save panel state to persistent storage
-       */
-      async saveState() {
-        if (!this.persistenceKey || !this.screen?.storage)
-          return;
-        const state = this.getState();
-        await this.screen.storage.set(`layout:${this.persistenceKey}`, state);
-      }
-      /**
-       * Load panel state from persistent storage
-       */
-      async loadState() {
-        if (!this.persistenceKey || !this.screen?.storage)
-          return;
-        const saved = await this.screen.storage.get(`layout:${this.persistenceKey}`);
-        if (saved) {
-          await this.setState(saved);
-        }
-      }
-      /**
-       * Calculate the content width/height needed to fit all children
-       * Returns { width, height } representing the minimum dimensions needed
-       */
-      calculateContentSize() {
-        let maxContentWidth = 0;
-        let totalContentHeight = 0;
-        const stripFormatting = (str) => {
-          let clean = str.replace(/\x1b\[[0-9;]*m/g, "");
-          clean = clean.replace(/\{[^}]+\}/g, "");
-          return clean;
-        };
-        for (const child of this.children) {
-          if (child === this.titleBar || child === this.minimizeButton || child === this.closeButton) {
-            continue;
-          }
-          const listItems = child.items;
-          if (listItems && Array.isArray(listItems) && listItems.length > 0) {
-            for (const item of listItems) {
-              const cleanItem = stripFormatting(String(item));
-              const itemWidth = cleanItem.length;
-              if (itemWidth > maxContentWidth) {
-                maxContentWidth = itemWidth;
-                if (this.options.label?.includes("Sidebar")) {
-                  const debugMsg = `[CalcSize] Longest item so far: "${cleanItem}" (${itemWidth} chars), maxWidth now: ${maxContentWidth}`;
-                  if (this.screen?.log) {
-                    this.screen.log(debugMsg);
-                  }
-                  console.log(debugMsg);
-                }
-              }
-            }
-            totalContentHeight = Math.max(totalContentHeight, listItems.length);
-          }
-          const childContent = child.content || "";
-          if (childContent) {
-            const lines = childContent.split("\n");
-            for (const line3 of lines) {
-              const cleanLine = stripFormatting(line3);
-              maxContentWidth = Math.max(maxContentWidth, cleanLine.length);
-            }
-            totalContentHeight += lines.length;
-          }
-          if (child._lines && Array.isArray(child._lines)) {
-            for (const line3 of child._lines) {
-              const cleanLine = stripFormatting(String(line3));
-              maxContentWidth = Math.max(maxContentWidth, cleanLine.length);
-            }
-            totalContentHeight = Math.max(totalContentHeight, child._lines.length);
-          }
-        }
-        const borderWidth = this.border ? 2 : 0;
-        const borderHeight = this.border ? 2 : 0;
-        const titleBarHeight = this.titleBar ? 1 : 0;
-        const childPaddingBuffer = 3;
-        const widthBuffer = 1;
-        return {
-          width: maxContentWidth + borderWidth + childPaddingBuffer + widthBuffer,
-          height: totalContentHeight + borderHeight + titleBarHeight
-        };
-      }
-      /**
-       * Resize panel to fit its content (grow only, never shrink)
-       * Only expands when content doesn't fit, never shrinks below current size
-       * Respects minWidth/minHeight/maxWidth/maxHeight constraints
-       */
-      fitToContent() {
-        if (!this.fitContentSettings.width && !this.fitContentSettings.height) {
-          return;
-        }
-        const { width: contentWidth, height: contentHeight } = this.calculateContentSize();
-        if (this.options.label?.includes("Sidebar")) {
-          const debugMsg = `[FitContent] Sidebar: currentWidth=${this.width}, contentWidth=${contentWidth}, fitWidth=${this.fitContentSettings.width}, willGrow=${contentWidth > this.width}`;
-          if (this.screen?.log) {
-            this.screen.log(debugMsg);
-          }
-          console.log(debugMsg);
-        }
-        let newWidth = this.width;
-        let newHeight = this.height;
-        if (this.fitContentSettings.width) {
-          if (contentWidth > newWidth) {
-            newWidth = contentWidth;
-          }
-          if (this.maxWidth)
-            newWidth = Math.min(newWidth, this.maxWidth);
-          if (this.screen) {
-            const left = typeof this.position.left === "number" ? this.position.left : 0;
-            newWidth = Math.min(newWidth, Math.max(5, this.screen.width - left));
-          }
-        }
-        if (this.fitContentSettings.height) {
-          if (contentHeight > newHeight) {
-            newHeight = contentHeight;
-          }
-          if (this.maxHeight)
-            newHeight = Math.min(newHeight, this.maxHeight);
-          if (this.screen) {
-            const top = typeof this.position.top === "number" ? this.position.top : this.topConstraint;
-            const maxScreenHeight = Math.max(3, this.screen.height - top - this.bottomConstraint);
-            newHeight = Math.min(newHeight, maxScreenHeight);
-          }
-        }
-        if (newWidth !== this.width || newHeight !== this.height) {
-          this.position.width = newWidth;
-          this.position.height = newHeight;
-          this.panelState.width = newWidth;
-          this.panelState.height = newHeight;
-          if (this.dockPosition === "right" && this.screen) {
-            this.position.left = this.screen.width - newWidth;
-            this.panelState.x = this.position.left;
-          }
-          this._invalidateCoords();
-          if (this.screen) {
-            this.screen.render();
-          }
-          this.emit("fit-content", { width: newWidth, height: newHeight });
-        }
-      }
-      /**
-       * Enable or disable fitContent mode
-       */
-      setFitContent(enabled) {
-        if (enabled === false) {
-          this.fitContentSettings = { width: false, height: false };
-        } else if (typeof enabled === "object") {
-          this.fitContentSettings = {
-            width: enabled.width !== false,
-            height: enabled.height !== false
-          };
-        } else {
-          this.fitContentSettings = { width: true, height: true };
-        }
-      }
-      /**
-       * Get current fitContent settings
-       */
-      getFitContent() {
-        return { ...this.fitContentSettings };
-      }
-      // ============================================================================
-      // Responsive Lifecycle Hooks
-      // ============================================================================
-      /**
-       * Handle resize - update layout based on screen size
-       */
-      _handleResize(width, height, state) {
-        super._handleResize(width, height, state);
-        if (this.dockPosition === "float" && !this.mobileMode) {
-          this.constrainToScreen();
-        }
-      }
-      /**
-       * Handle breakpoint change
-       */
-      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
-        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
-        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
-      }
-      /**
-       * Called when entering mobile mode - enable swipe undocking
-       */
-      _enterMobileMode() {
-        super._enterMobileMode();
-        if (this._swipeUndock && !this._unsubscribeSwipeUndock && this.dockPosition !== "float") {
-          this._unsubscribeSwipeUndock = this.enableSwipe({
-            direction: "both",
-            threshold: SWIPE_THRESHOLD,
-            onSwipe: (event) => {
-              if (this._shouldUndockFromSwipe(event.direction)) {
-                this._undockWithSwipe(event.direction);
-              }
-            }
-          });
-        }
-        this.emit("enter-mobile");
-      }
-      /**
-       * Called when exiting mobile mode - disable swipe undocking
-       */
-      _exitMobileMode() {
-        if (this._unsubscribeSwipeUndock) {
-          this._unsubscribeSwipeUndock();
-          this._unsubscribeSwipeUndock = void 0;
-        }
-        super._exitMobileMode();
-        this.emit("exit-mobile");
-      }
-      /**
-       * Check if a swipe direction should undock this panel
-       */
-      _shouldUndockFromSwipe(direction) {
-        switch (this.dockPosition) {
-          case "left":
-            return direction === "right";
-          case "right":
-            return direction === "left";
-          case "top":
-            return direction === "down";
-          case "bottom":
-            return direction === "up";
-          default:
-            return false;
-        }
-      }
-      /**
-       * Undock the panel with a swipe animation
-       */
-      _undockWithSwipe(direction) {
-        const previousPosition = this.dockPosition;
-        const currentWidth = this.width;
-        const currentHeight = this.height;
-        this.setDockPosition("float");
-        const offset = 10;
-        switch (direction) {
-          case "right":
-            this.position.left = (this.position.left || 0) + offset;
-            break;
-          case "left":
-            this.position.left = Math.max(0, (this.position.left || 0) - offset);
-            break;
-          case "down":
-            this.position.top = (this.position.top || 0) + offset;
-            break;
-          case "up":
-            this.position.top = Math.max(this.topConstraint, (this.position.top || 0) - offset);
-            break;
-        }
-        this.position.width = Math.min(currentWidth, this.screen?.width || 80);
-        this.position.height = Math.min(currentHeight, (this.screen?.height || 24) - this.topConstraint - this.bottomConstraint);
-        this._invalidateCoords();
-        this.flashBorder("yellow", 200);
-        if (this.screen) {
-          this.screen.render();
-        }
-        this.emit("swipe-undock", { direction, previousPosition });
-      }
-      /**
-       * Enable swipe undocking
-       */
-      setSwipeUndock(enabled) {
-        this._swipeUndock = enabled;
-        if (this.isMobile()) {
-          if (enabled && !this._unsubscribeSwipeUndock) {
-            this._enterMobileMode();
-          } else if (!enabled && this._unsubscribeSwipeUndock) {
-            this._unsubscribeSwipeUndock();
-            this._unsubscribeSwipeUndock = void 0;
-          }
-        }
-      }
-      /**
-       * Override destroy to clean up swipe handler
-       */
-      destroy() {
-        if (this._unsubscribeSwipeUndock) {
-          this._unsubscribeSwipeUndock();
-          this._unsubscribeSwipeUndock = void 0;
-        }
-        super.destroy();
-      }
-    };
-    DockablePanel.dropZones = /* @__PURE__ */ new Map();
-    DockablePanel.activeDropZone = null;
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/kanban-board.js
-var init_kanban_board = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/kanban-board.js"() {
-    "use strict";
-    init_box();
-    init_list();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/dropdown-menu.js
-var DropdownMenu;
-var init_dropdown_menu = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/dropdown-menu.js"() {
-    "use strict";
-    init_element();
-    DropdownMenu = class _DropdownMenu extends Element {
-      /**
-       * Close all currently open dropdown menus
-       */
-      static closeAll() {
-        for (const menu of _DropdownMenu.openMenus) {
-          menu.close();
-        }
-      }
-      /**
-       * Check if any dropdown menu is currently open
-       */
-      static isAnyOpen() {
-        return _DropdownMenu.openMenus.size > 0;
-      }
-      /**
-       * Check if a menu was just closed (blocks canvas clicks for one tick)
-       */
-      static wasJustClosed() {
-        return _DropdownMenu.justClosed;
-      }
-      /**
-       * Check if click should be blocked (menu open OR just closed)
-       */
-      static shouldBlockClick() {
-        return _DropdownMenu.openMenus.size > 0 || _DropdownMenu.justClosed;
-      }
-      constructor(options) {
-        const width = options.width || 20;
-        const height = Math.min((options.items?.length || 1) + 2, options.maxHeight || 12);
-        super({
-          parent: options.parent || options.screen,
-          top: 0,
-          left: 0,
-          width,
-          height,
-          border: { type: "line", fg: "cyan" },
-          label: options.label,
-          style: options.style || {
-            fg: "white",
-            bg: "black",
-            focus: { fg: "white", bg: "black" }
-          },
-          tags: true,
-          keys: true,
-          mouse: true,
-          clickable: true,
-          focusable: true,
-          hidden: true,
-          shadow: true,
-          zIndex: 9999
-          // Render on top of everything (panels are typically 1-10)
-        });
-        this.selectedIndex = 0;
-        this.anchorLeft = 0;
-        this.anchorTop = 0;
-        this.items = options.items || [];
-        this.updateContent();
-        this.on("keypress", (_ch, key) => {
-          if (key.name === "up") {
-            this.move(-1);
-          } else if (key.name === "down") {
-            this.move(1);
-          } else if (key.name === "enter" || key.name === "space") {
-            this.selectItem();
-          } else if (key.name === "escape") {
-            this.close();
-            this.emit("closed-by-escape");
-          } else if (key.name === "tab") {
-            this.emit(key.shift ? "tab-prev" : "tab-next");
-            this.close();
-          } else if (key.name === "left" || key.name === "right") {
-            this.emit(key.name === "left" ? "menu-prev" : "menu-next");
-          }
-          return true;
-        });
-        this.on("click", (event) => {
-          const pos = this._getCoords();
-          if (!pos)
-            return;
-          const border = 1;
-          const relY = event.y - pos.yi - border;
-          if (relY >= 0 && relY < this.items.length) {
-            this.selectedIndex = relY;
-            this.selectItem();
-          }
-        });
-        this.on("mousemove", (event) => {
-          const pos = this._getCoords();
-          if (!pos)
-            return;
-          const border = 1;
-          const relY = event.y - pos.yi - border;
-          if (relY >= 0 && relY < this.items.length) {
-            this.selectedIndex = relY;
-            this.updateContent();
-            this.screen?.render();
-          }
-        });
-      }
-      openAt(left, top) {
-        console.log("[DropdownMenu] openAt called:", { left, top });
-        if (!this.screen) {
-          console.log("[DropdownMenu] ERROR: No screen in openAt!");
-          return;
-        }
-        for (const menu of _DropdownMenu.openMenus) {
-          if (menu !== this) {
-            menu.close();
-          }
-        }
-        const cols = this.screen.cols;
-        const rows = this.screen.rows;
-        console.log("[DropdownMenu] Screen size:", { cols, rows });
-        const width = typeof this.width === "number" ? this.width : 20;
-        const height = typeof this.height === "number" ? this.height : 10;
-        const clampedLeft = Math.max(0, Math.min(left, cols - width));
-        const clampedTop = Math.max(0, Math.min(top, rows - height));
-        console.log("[DropdownMenu] Clamped position:", { clampedLeft, clampedTop, width, height });
-        this.left = clampedLeft;
-        this.top = clampedTop;
-        this._invalidateCoords();
-        console.log("[DropdownMenu] Calling show()");
-        this.show();
-        console.log("[DropdownMenu] Calling focus()");
-        this.focus();
-        console.log("[DropdownMenu] hidden:", this.hidden, "visible:", this.visible);
-        _DropdownMenu.openMenus.add(this);
-        this.screen.trapFocus(this);
-        this.attachOutsideClick();
-        this.screen.forceFullRedraw?.();
-        this.screen.render();
-      }
-      openFor(anchor, align = "left") {
-        console.log("[DropdownMenu] openFor called");
-        if (!this.screen) {
-          console.log("[DropdownMenu] ERROR: No screen!");
-          return;
-        }
-        const coords = anchor._getCoords();
-        console.log("[DropdownMenu] anchor coords:", coords);
-        if (!coords) {
-          console.log("[DropdownMenu] ERROR: No coords from anchor!");
-          return;
-        }
-        const left = align === "right" ? coords.xl - (typeof this.width === "number" ? this.width : 20) : coords.xi;
-        const top = coords.yl;
-        console.log("[DropdownMenu] Calculated position:", { left, top });
-        this.openAt(left, top);
-      }
-      close(fromOutsideClick = false) {
-        if (!this.screen)
-          return;
-        _DropdownMenu.openMenus.delete(this);
-        if (fromOutsideClick) {
-          _DropdownMenu.justClosed = true;
-          setImmediate(() => {
-            _DropdownMenu.justClosed = false;
-          });
-        }
-        this.hide();
-        this.detachOutsideClick();
-        this.screen.releaseFocusTrap(this);
-        const stillOurs = this.screen.getFocused?.() === this || this.screen.getFocused?.() == null;
-        if (!fromOutsideClick && stillOurs && this.anchor && !this.anchor.destroyed) {
-          this.anchor.focus();
-        }
-        this.screen.render();
-      }
-      setItems(items) {
-        this.items = items;
-        this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.items.length - 1));
-        this.updateContent();
-      }
-      /**
-       * Register an anchor element for hover-to-open behavior
-       * When any menu is open, hovering over this anchor opens this menu
-       * @param anchor The element that triggers this menu
-       * @param leftOffset Additional left offset (optional, default 0)
-       * @param topOffset Additional top offset (optional, default 0 to open directly below anchor)
-       */
-      registerAnchor(anchor, leftOffset = 0, topOffset = 0) {
-        this.anchor = anchor;
-        const getPosition = () => {
-          const coords = anchor._getCoords();
-          if (coords) {
-            return {
-              left: coords.xi + leftOffset,
-              top: coords.yl + topOffset
-              // Open directly below the anchor
-            };
-          }
-          return { left: leftOffset, top: topOffset };
-        };
-        anchor.on("click", () => {
-          const pos = getPosition();
-          this.openAt(pos.left, pos.top);
-        });
-        anchor.on("mouseenter", () => {
-          if (_DropdownMenu.isAnyOpen() && this.hidden) {
-            const pos = getPosition();
-            this.openAt(pos.left, pos.top);
-          }
-        });
-      }
-      /**
-       * Check if this menu is currently open
-       */
-      isOpen() {
-        return !this.hidden && _DropdownMenu.openMenus.has(this);
-      }
-      move(delta) {
-        if (!this.items.length)
-          return;
-        let next = this.selectedIndex;
-        for (let i = 0; i < this.items.length; i++) {
-          next = (next + delta + this.items.length) % this.items.length;
-          if (!this.items[next].disabled && !this.items[next].separator) {
-            this.selectedIndex = next;
-            this.updateContent();
-            this.screen?.render();
-            return;
-          }
-        }
-      }
-      selectItem() {
-        const item = this.items[this.selectedIndex];
-        if (!item || item.disabled || item.separator)
-          return;
-        item.action?.();
-        this.emit("select", item);
-        this.close();
-      }
-      updateContent() {
-        const lines = [];
-        let maxWidth = 10;
-        this.items.forEach((item, index) => {
-          if (item.separator) {
-            lines.push("\u2500".repeat(18));
-            maxWidth = Math.max(maxWidth, 18);
-            return;
-          }
-          const selected = index === this.selectedIndex;
-          const prefix = selected ? "> " : "  ";
-          const label = item.disabled ? `{gray-fg}${item.label}{/gray-fg}` : item.label;
-          const line3 = `${prefix}${label}`;
-          lines.push(line3);
-          maxWidth = Math.max(maxWidth, line3.replace(/\{[^}]+\}/g, "").length);
-        });
-        this.setContent(lines.join("\n"));
-        if (typeof this.width === "number" && this.width < maxWidth + 2) {
-          this.width = Math.min(maxWidth + 2, this.screen?.cols || maxWidth + 2);
-        }
-      }
-      attachOutsideClick() {
-        if (!this.screen || this.outsideClickHandler)
-          return;
-        this.outsideClickHandler = (event) => {
-          if (this.hidden)
-            return;
-          const pos = this._getCoords();
-          if (!pos)
-            return;
-          const outside = event.x < pos.xi || event.x > pos.xl || event.y < pos.yi || event.y > pos.yl;
-          if (outside) {
-            this.close(true);
-          }
-        };
-        this.screen.on("mousedown", this.outsideClickHandler);
-        this.screen.on("click", this.outsideClickHandler);
-      }
-      detachOutsideClick() {
-        if (!this.screen || !this.outsideClickHandler)
-          return;
-        this.screen.off("mousedown", this.outsideClickHandler);
-        this.screen.off("click", this.outsideClickHandler);
-        this.outsideClickHandler = void 0;
-      }
-    };
-    DropdownMenu.openMenus = /* @__PURE__ */ new Set();
-    DropdownMenu.justClosed = false;
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/menu-bar.js
-var init_menu_bar = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/menu-bar.js"() {
-    "use strict";
-    init_element();
-    init_box();
-    init_dropdown_menu();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/mobile-carousel.js
-var init_mobile_carousel = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/mobile-carousel.js"() {
-    "use strict";
-    init_box();
-    init_listbar();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/utils/AutocompleteManager.js
-var init_AutocompleteManager = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/utils/AutocompleteManager.js"() {
-    "use strict";
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/autocomplete.js
-var init_autocomplete = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/autocomplete.js"() {
-    "use strict";
-    init_box();
-    init_list();
-    init_AutocompleteManager();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/autocomplete-textbox.js
-var init_autocomplete_textbox = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/autocomplete-textbox.js"() {
-    "use strict";
-    init_element();
-    init_list();
-    init_box();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/tabpanel.js
-var init_tabpanel = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/tabpanel.js"() {
-    "use strict";
-    init_box();
-    init_button();
-    init_responsive_constants();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/accordion.js
-var init_accordion = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/accordion.js"() {
-    "use strict";
-    init_box();
-    init_button();
-    init_responsive_constants();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/collapsible.js
-var init_collapsible = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/collapsible.js"() {
-    "use strict";
-    init_box();
-    init_button();
-    init_responsive_constants();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/stacked-gauge.js
-var init_stacked_gauge = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/stacked-gauge.js"() {
-    "use strict";
-    init_box();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/colorpicker.js
-var ColorPicker;
-var init_colorpicker = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/colorpicker.js"() {
-    "use strict";
-    init_box();
-    init_button();
-    ColorPicker = class _ColorPicker extends Box {
-      constructor(options = {}) {
-        super({
-          width: 20,
-          height: 6,
-          border: "line",
-          label: " Color ",
-          ...options
-        });
-        this.selectedColor = "white";
-        this.colorButtons = [];
-        this.selectedColor = options.color || "white";
-        this.setupGrid();
-      }
-      setupGrid() {
-        const cols = 8;
-        const itemWidth = 2;
-        const itemHeight = 1;
-        _ColorPicker.ANSI_COLORS.forEach((color, index) => {
-          const row = Math.floor(index / cols);
-          const col = index % cols;
-          const btn = new Button({
-            parent: this,
-            top: row * itemHeight,
-            left: col * itemWidth,
-            width: itemWidth,
-            height: itemHeight,
-            content: "  ",
-            style: {
-              bg: color,
-              focus: {
-                bg: "white",
-                fg: "black"
-              }
-            },
-            border: void 0
-          });
-          btn.on("press", () => {
-            this.selectColor(color);
-          });
-          this.colorButtons.push(btn);
-        });
-      }
-      /**
-       * Select a color programmatically
-       */
-      selectColor(color) {
-        this.selectedColor = color;
-        this.emit("select", color);
-        this.screen?.render();
-      }
-      /**
-       * Get the currently selected color
-       */
-      getSelectedColor() {
-        return this.selectedColor;
-      }
-      get type() {
-        return "colorpicker";
-      }
-      // ============================================================================
-      // Responsive Lifecycle Hooks
-      // ============================================================================
-      _handleBreakpointChange(breakpoint, previousBreakpoint, state) {
-        super._handleBreakpointChange(breakpoint, previousBreakpoint, state);
-        this.emit("breakpoint-change", breakpoint, previousBreakpoint);
-      }
-    };
-    ColorPicker.ANSI_COLORS = [
-      "black",
-      "red",
-      "green",
-      "yellow",
-      "blue",
-      "magenta",
-      "cyan",
-      "white",
-      "light-black",
-      "light-red",
-      "light-green",
-      "light-yellow",
-      "light-blue",
-      "light-magenta",
-      "light-cyan",
-      "light-white"
-    ];
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/tree.js
-var init_tree = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/tree.js"() {
-    "use strict";
-    init_box();
-    init_list();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/fileexplorer.js
-var init_fileexplorer = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/fileexplorer.js"() {
-    "use strict";
-    init_box();
-    init_tree();
-    init_listtable();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/doc-modal.js
-var init_doc_modal = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/doc-modal.js"() {
-    "use strict";
-    init_box();
-    init_bigtext();
-    init_scrollabletext();
-    init_responsive_constants();
-    init_modal_helpers();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/confirm-modal.js
-var init_confirm_modal = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/confirm-modal.js"() {
-    "use strict";
-    init_box();
-    init_button();
-    init_overlay();
-    init_modal_helpers();
-    init_responsive_constants();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/ansi-editor/core/canvas.js
-var init_canvas2 = __esm({
-  "../../sdk/dist-esm/engines/ui/ansi-editor/core/canvas.js"() {
-    "use strict";
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/ansi-editor/core/ansi-utils.js
-var ANSI_REGEX, ANSIUtils;
-var init_ansi_utils = __esm({
-  "../../sdk/dist-esm/engines/ui/ansi-editor/core/ansi-utils.js"() {
-    "use strict";
-    ANSI_REGEX = /\x1b\[[0-9;]*[a-zA-Z]/g;
-    ANSIUtils = class {
-      /**
-       * Strip all ANSI codes from text
-       */
-      static stripANSI(text) {
-        return text.replace(ANSI_REGEX, "");
-      }
-      /**
-       * Calculate visual length (excluding ANSI codes)
-       */
-      static visualLength(text) {
-        return this.stripANSI(text).length;
-      }
-      /**
-       * Get actual string position from visual column position
-       * Accounts for ANSI codes that don't contribute to visual length
-       */
-      static getActualPosition(text, visualCol) {
-        let actualPos = 0;
-        let visualPos = 0;
-        while (actualPos < text.length && visualPos < visualCol) {
-          if (text[actualPos] === "\x1B" && text[actualPos + 1] === "[") {
-            let end = actualPos + 2;
-            while (end < text.length && !/[a-zA-Z]/.test(text[end])) {
-              end++;
-            }
-            end++;
-            actualPos = end;
-          } else {
-            actualPos++;
-            visualPos++;
-          }
-        }
-        return actualPos;
-      }
-      /**
-       * Get visual column from actual string position
-       */
-      static getVisualPosition(text, actualCol) {
-        let actualPos = 0;
-        let visualPos = 0;
-        while (actualPos < actualCol && actualPos < text.length) {
-          if (text[actualPos] === "\x1B" && text[actualPos + 1] === "[") {
-            let end = actualPos + 2;
-            while (end < text.length && !/[a-zA-Z]/.test(text[end])) {
-              end++;
-            }
-            end++;
-            actualPos = end;
-          } else {
-            actualPos++;
-            visualPos++;
-          }
-        }
-        return visualPos;
-      }
-      /**
-       * Parse ANSI codes into structured tokens
-       */
-      static parseANSI(text) {
-        const tokens = [];
-        let lastIndex = 0;
-        const matches = text.matchAll(ANSI_REGEX);
-        for (const match2 of matches) {
-          const start2 = match2.index;
-          if (start2 > lastIndex) {
-            tokens.push({
-              type: "text",
-              content: text.substring(lastIndex, start2),
-              start: lastIndex,
-              end: start2
-            });
-          }
-          const ansiCode = match2[0];
-          tokens.push({
-            type: this.classifyANSI(ansiCode),
-            content: ansiCode,
-            start: start2,
-            end: start2 + ansiCode.length
-          });
-          lastIndex = start2 + ansiCode.length;
-        }
-        if (lastIndex < text.length) {
-          tokens.push({
-            type: "text",
-            content: text.substring(lastIndex),
-            start: lastIndex,
-            end: text.length
-          });
-        }
-        return tokens;
-      }
-      /**
-       * Classify ANSI code type
-       */
-      static classifyANSI(code) {
-        if (code === "\x1B[0m" || code === "\x1B[m") {
-          return "reset";
-        }
-        const match2 = code.match(/\x1b\[([0-9;]+)m/);
-        if (match2) {
-          const params = match2[1].split(";").map(Number);
-          for (const param of params) {
-            if (param >= 30 && param <= 37 || param >= 40 && param <= 47 || param >= 90 && param <= 97 || param >= 100 && param <= 107) {
-              return "color";
-            }
-          }
-        }
-        if (code.match(/\x1b\[[1245 7]m/)) {
-          return "style";
-        }
-        return "ansi";
-      }
-      /**
-       * Insert ANSI code at visual position
-       */
-      static insertANSI(text, visualPosition, ansiCode) {
-        const actualPos = this.getActualPosition(text, visualPosition);
-        return text.substring(0, actualPos) + ansiCode + text.substring(actualPos);
-      }
-      /**
-       * Remove ANSI codes at visual position
-       */
-      static removeANSIAt(text, visualPosition) {
-        const actualPos = this.getActualPosition(text, visualPosition);
-        if (text[actualPos] === "\x1B" && text[actualPos + 1] === "[") {
-          let end = actualPos + 2;
-          while (end < text.length && !/[a-zA-Z]/.test(text[end])) {
-            end++;
-          }
-          end++;
-          return text.substring(0, actualPos) + text.substring(end);
-        }
-        return text;
-      }
-      /**
-       * Get color name from ANSI code
-       */
-      static getColorName(ansiCode) {
-        for (const [name, color] of Object.entries(this.colors)) {
-          if (color.fg === ansiCode || color.bg === ansiCode) {
-            return name;
-          }
-        }
-        return null;
-      }
-      /**
-       * Convert blessed color tags to ANSI codes
-       * Example: "{red-fg}text{/}" -> "\x1b[31mtext\x1b[0m"
-       */
-      static blessedToANSI(text) {
-        let result = text;
-        for (const [name, color] of Object.entries(this.colors)) {
-          const tag = `{${name}-fg}`;
-          result = result.replace(new RegExp(tag, "g"), color.fg);
-        }
-        for (const [name, color] of Object.entries(this.colors)) {
-          const tag = `{${name}-bg}`;
-          result = result.replace(new RegExp(tag, "g"), color.bg);
-        }
-        result = result.replace(/{\/}/g, this.styles.reset);
-        return result;
-      }
-      /**
-       * Convert ANSI codes to blessed color tags
-       */
-      static ansiToBlessed(text) {
-        let result = text;
-        for (const [name, color] of Object.entries(this.colors)) {
-          result = result.replace(new RegExp(color.fg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), `{${name}-fg}`);
-        }
-        for (const [name, color] of Object.entries(this.colors)) {
-          result = result.replace(new RegExp(color.bg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), `{${name}-bg}`);
-        }
-        result = result.replace(/\x1b\[0m/g, "{/}");
-        return result;
-      }
-      /**
-       * Validate ANSI code
-       */
-      static isValidANSI(code) {
-        return ANSI_REGEX.test(code);
-      }
-      /**
-       * Extract all ANSI codes from text
-       */
-      static extractANSI(text) {
-        return Array.from(text.matchAll(ANSI_REGEX), (match2) => match2[0]);
-      }
-      /**
-       * Count ANSI codes in text
-       */
-      static countANSI(text) {
-        return (text.match(ANSI_REGEX) || []).length;
-      }
-      /**
-       * Get line without ANSI codes for editing
-       */
-      static getEditableLine(text) {
-        return this.stripANSI(text);
-      }
-      /**
-       * Preserve ANSI codes when editing text
-       * Returns new text with ANSI codes preserved from original
-       */
-      static preserveANSI(originalText, newText) {
-        const tokens = this.parseANSI(originalText);
-        const ansiCodes = tokens.filter((t) => t.type !== "text");
-        if (ansiCodes.length === 0) {
-          return newText;
-        }
-        let result = "";
-        let newTextPos = 0;
-        const originalVisualLength = this.visualLength(originalText);
-        const newTextLength = newText.length;
-        for (const ansiCode of ansiCodes) {
-          const visualPos = this.getVisualPosition(originalText, ansiCode.start);
-          const newPos = Math.floor(visualPos / originalVisualLength * newTextLength);
-          if (newPos > newTextPos) {
-            result += newText.substring(newTextPos, newPos);
-            newTextPos = newPos;
-          }
-          result += ansiCode.content;
-        }
-        if (newTextPos < newText.length) {
-          result += newText.substring(newTextPos);
-        }
-        return result;
-      }
-    };
-    ANSIUtils.colors = {
-      // Foreground colors
-      black: { name: "Black", fg: "\x1B[30m", bg: "\x1B[40m", sample: "\x1B[30m\u2588\u2588\u2588\x1B[0m" },
-      red: { name: "Red", fg: "\x1B[31m", bg: "\x1B[41m", sample: "\x1B[31m\u2588\u2588\u2588\x1B[0m" },
-      green: { name: "Green", fg: "\x1B[32m", bg: "\x1B[42m", sample: "\x1B[32m\u2588\u2588\u2588\x1B[0m" },
-      yellow: { name: "Yellow", fg: "\x1B[33m", bg: "\x1B[43m", sample: "\x1B[33m\u2588\u2588\u2588\x1B[0m" },
-      blue: { name: "Blue", fg: "\x1B[34m", bg: "\x1B[44m", sample: "\x1B[34m\u2588\u2588\u2588\x1B[0m" },
-      magenta: { name: "Magenta", fg: "\x1B[35m", bg: "\x1B[45m", sample: "\x1B[35m\u2588\u2588\u2588\x1B[0m" },
-      cyan: { name: "Cyan", fg: "\x1B[36m", bg: "\x1B[46m", sample: "\x1B[36m\u2588\u2588\u2588\x1B[0m" },
-      white: { name: "White", fg: "\x1B[37m", bg: "\x1B[47m", sample: "\x1B[37m\u2588\u2588\u2588\x1B[0m" },
-      // Bright colors
-      gray: { name: "Gray", fg: "\x1B[90m", bg: "\x1B[100m", sample: "\x1B[90m\u2588\u2588\u2588\x1B[0m" },
-      brightRed: { name: "Bright Red", fg: "\x1B[91m", bg: "\x1B[101m", sample: "\x1B[91m\u2588\u2588\u2588\x1B[0m" },
-      brightGreen: { name: "Bright Green", fg: "\x1B[92m", bg: "\x1B[102m", sample: "\x1B[92m\u2588\u2588\u2588\x1B[0m" },
-      brightYellow: { name: "Bright Yellow", fg: "\x1B[93m", bg: "\x1B[103m", sample: "\x1B[93m\u2588\u2588\u2588\x1B[0m" },
-      brightBlue: { name: "Bright Blue", fg: "\x1B[94m", bg: "\x1B[104m", sample: "\x1B[94m\u2588\u2588\u2588\x1B[0m" },
-      brightMagenta: { name: "Bright Magenta", fg: "\x1B[95m", bg: "\x1B[105m", sample: "\x1B[95m\u2588\u2588\u2588\x1B[0m" },
-      brightCyan: { name: "Bright Cyan", fg: "\x1B[96m", bg: "\x1B[106m", sample: "\x1B[96m\u2588\u2588\u2588\x1B[0m" },
-      brightWhite: { name: "Bright White", fg: "\x1B[97m", bg: "\x1B[107m", sample: "\x1B[97m\u2588\u2588\u2588\x1B[0m" }
-    };
-    ANSIUtils.styles = {
-      reset: "\x1B[0m",
-      bold: "\x1B[1m",
-      dim: "\x1B[2m",
-      underline: "\x1B[4m",
-      blink: "\x1B[5m",
-      reverse: "\x1B[7m",
-      hidden: "\x1B[8m"
-    };
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/ansi-editor/core/editor-state.js
-var init_editor_state = __esm({
-  "../../sdk/dist-esm/engines/ui/ansi-editor/core/editor-state.js"() {
-    "use strict";
-    init_ansi_utils();
-    init_canvas2();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/ansi-editor.js
-var init_ansi_editor = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/ansi-editor.js"() {
-    "use strict";
-    init_box();
-    init_canvas();
-    init_text();
-    init_list();
-    init_overlay();
-    init_doc_modal();
-    init_confirm_modal();
-    init_dropdown_menu();
-    init_modal_helpers();
-    init_canvas2();
-    init_editor_state();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/login-modal.js
-var init_login_modal = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/login-modal.js"() {
-    "use strict";
-    init_box();
-    init_textbox();
-    init_button();
-    init_overlay();
-    init_modal_helpers();
-    init_responsive_constants();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/category-picker.js
-var init_category_picker = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/category-picker.js"() {
-    "use strict";
-    init_box();
-    init_list();
-    init_button();
-    init_modal_helpers();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/fkey-bar.js
-var init_fkey_bar = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/fkey-bar.js"() {
-    "use strict";
-    init_box();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/status-bar.js
-var init_status_bar = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/status-bar.js"() {
-    "use strict";
-    init_box();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/search-modal.js
-var init_search_modal = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/search-modal.js"() {
-    "use strict";
-    init_box();
-    init_list();
-    init_textbox();
-    init_text();
-    init_modal_helpers();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/audio-level-bar.js
-var init_audio_level_bar = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/audio-level-bar.js"() {
-    "use strict";
-    init_box();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/multiplayer-lobby.js
-var init_multiplayer_lobby = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/multiplayer-lobby.js"() {
-    "use strict";
-    init_box();
-    init_list();
-    init_button();
-    init_textbox();
-    init_dockable_panel();
-    init_listtable();
-    init_events();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/bar.js
-var init_bar = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/bar.js"() {
-    "use strict";
-    init_contrib_canvas();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/donut.js
-var init_donut = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/donut.js"() {
-    "use strict";
-    init_contrib_canvas();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/gauge.js
-var init_gauge = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/gauge.js"() {
-    "use strict";
-    init_contrib_canvas();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/gauge-list.js
-var init_gauge_list = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/gauge-list.js"() {
-    "use strict";
-    init_contrib_canvas();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/lcd.js
-var CharacterMasks;
-var init_lcd = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/lcd.js"() {
-    "use strict";
-    init_contrib_canvas();
-    CharacterMasks = function() {
-      const a1 = 1 << 0, a2 = 1 << 1, b = 1 << 2, c = 1 << 3, d1 = 1 << 4, d2 = 1 << 5, e = 1 << 6, f = 1 << 7, g1 = 1 << 8, g2 = 1 << 9, h = 1 << 10, i = 1 << 11, j = 1 << 12, k = 1 << 13, l = 1 << 14, m = 1 << 15;
-      return {
-        " ": 0,
-        "": 0,
-        "0": a1 | a2 | b | c | d1 | d2 | e | f | j | m,
-        "1": b | c | j,
-        "2": a1 | a2 | b | d1 | d2 | e | g1 | g2,
-        "3": a1 | a2 | b | c | d1 | d2 | g2,
-        "4": b | c | f | g1 | g2,
-        "5": a1 | a2 | c | d1 | d2 | f | g1 | g2,
-        "6": a1 | a2 | c | d1 | d2 | e | f | g1 | g2,
-        "7": a1 | a2 | b | c,
-        "8": a1 | a2 | b | c | d1 | d2 | e | f | g1 | g2,
-        "9": a1 | a2 | b | c | f | g1 | g2,
-        A: e | f | a1 | a2 | b | c | g1 | g2,
-        B: a1 | a2 | b | c | d1 | d2 | g2 | i | l,
-        C: a1 | a2 | f | e | d1 | d2,
-        D: a1 | a2 | b | c | d1 | d2 | i | l,
-        E: a1 | a2 | f | e | d1 | d2 | g1 | g2,
-        F: a1 | a2 | e | f | g1,
-        G: a1 | a2 | c | d1 | d2 | e | f | g2,
-        H: b | c | e | f | g1 | g2,
-        I: a1 | a2 | d1 | d2 | i | l,
-        J: b | c | d1 | d2 | e,
-        K: e | f | g1 | j | k,
-        L: d1 | d2 | e | f,
-        M: b | c | e | f | h | j,
-        N: b | c | e | f | h | k,
-        O: a1 | a2 | b | c | d1 | d2 | e | f,
-        P: a1 | a2 | b | e | f | g1 | g2,
-        Q: a1 | a2 | b | c | d1 | d2 | e | f | k,
-        R: a1 | a2 | b | e | f | g1 | g2 | k,
-        S: a1 | a2 | c | d1 | d2 | f | g1 | g2,
-        T: a1 | a2 | i | l,
-        U: b | c | d1 | d2 | e | f,
-        V: e | f | j | m,
-        W: b | c | e | f | k | m,
-        X: h | j | k | m,
-        Y: b | f | g1 | g2 | l,
-        Z: a1 | a2 | d1 | d2 | j | m,
-        "-": g1 | g2,
-        "?": a1 | a2 | b | g2 | l,
-        "+": g1 | g2 | i | l,
-        "*": g1 | g2 | h | i | j | k | l | m
-      };
-    }();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/map-data.js
-var init_map_data = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/map-data.js"() {
-    "use strict";
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/map.js
-var init_map = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/map.js"() {
-    "use strict";
-    init_contrib_canvas();
-    init_map_data();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/markdown.js
-var init_markdown = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/markdown.js"() {
-    "use strict";
-    init_box();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/picture.js
-var init_picture = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/picture.js"() {
-    "use strict";
-    init_box();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/sparkline.js
-var init_sparkline = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/utils/contrib-utils/sparkline.js"() {
-    "use strict";
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/sparkline.js
-var init_sparkline2 = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/sparkline.js"() {
-    "use strict";
-    init_box();
-    init_sparkline();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/stacked-bar.js
-var init_stacked_bar = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/stacked-bar.js"() {
-    "use strict";
-    init_contrib_canvas();
-    init_box();
-    init_utils();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/contrib-log.js
-var init_contrib_log = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/contrib-log.js"() {
-    "use strict";
-    init_element();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/widgets/contrib-table.js
-var init_contrib_table = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/widgets/contrib-table.js"() {
-    "use strict";
-    init_box();
-    init_list();
-    init_colors();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/layouts/grid.js
-var init_grid = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/layouts/grid.js"() {
-    "use strict";
-    init_utils();
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/layouts/carousel.js
-var init_carousel = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/layouts/carousel.js"() {
-    "use strict";
-  }
-});
-
-// ../../sdk/dist-esm/engines/ui/blessed/index.js
-var init_blessed = __esm({
-  "../../sdk/dist-esm/engines/ui/blessed/index.js"() {
-    "use strict";
-    init_screen();
-    init_element();
-    init_program();
-    init_events();
-    init_keybindings();
-    init_responsive_layout();
-    init_colors();
-    init_responsive_constants();
-    init_touch_gestures();
-    init_responsive_mixin();
-    init_box();
-    init_text();
-    init_list();
-    init_form();
-    init_textbox();
-    init_button();
-    init_progressbar();
-    init_table();
-    init_log();
-    init_scrollablebox();
-    init_scrollabletext();
-    init_checkbox();
-    init_radiobutton();
-    init_radioset();
-    init_message();
-    init_question();
-    init_prompt();
-    init_loading();
-    init_line();
-    init_line_chart();
-    init_listbar();
-    init_bigtext();
-    init_filemanager();
-    init_overlay();
-    init_listtable();
-    init_ansiimage();
-    init_terminal();
-    init_layout();
-    init_passbox();
-    init_filebox();
-    init_image();
-    init_viewport();
-    init_canvas();
-    init_iframe();
-    init_video();
-    init_contextmenu();
-    init_panel();
-    init_dockable_panel();
-    init_kanban_board();
-    init_dropdown_menu();
-    init_menu_bar();
-    init_mobile_carousel();
-    init_autocomplete();
-    init_autocomplete_textbox();
-    init_AutocompleteManager();
-    init_tabpanel();
-    init_accordion();
-    init_collapsible();
-    init_stacked_gauge();
-    init_colorpicker();
-    init_fileexplorer();
-    init_ansi_editor();
-    init_doc_modal();
-    init_login_modal();
-    init_category_picker();
-    init_confirm_modal();
-    init_fkey_bar();
-    init_status_bar();
-    init_search_modal();
-    init_audio_level_bar();
-    init_multiplayer_lobby();
-    init_bar();
-    init_donut();
-    init_gauge();
-    init_gauge_list();
-    init_lcd();
-    init_map();
-    init_markdown();
-    init_picture();
-    init_sparkline2();
-    init_stacked_bar();
-    init_tree();
-    init_contrib_canvas();
-    init_contrib_log();
-    init_contrib_table();
-    init_grid();
-    init_carousel();
-    init_utils();
-    init_screen();
-    init_panel();
-    init_text();
-    init_list();
-    init_form();
-    init_textbox();
-    init_button();
-    init_progressbar();
-    init_table();
-    init_log();
-    init_scrollablebox();
-    init_scrollabletext();
-    init_checkbox();
-    init_radiobutton();
-    init_radioset();
-    init_message();
-    init_question();
-    init_prompt();
-    init_loading();
-    init_line();
-    init_line_chart();
-    init_listbar();
-    init_bigtext();
-    init_filemanager();
-    init_overlay();
-    init_listtable();
-    init_ansiimage();
-    init_terminal();
-    init_layout();
-    init_passbox();
-    init_filebox();
-    init_image();
-    init_viewport();
-    init_canvas();
-    init_iframe();
-    init_video();
-    init_autocomplete();
-    init_autocomplete_textbox();
-    init_AutocompleteManager();
-    init_tabpanel();
-    init_accordion();
-    init_collapsible();
-    init_stacked_gauge();
-    init_colorpicker();
-    init_fileexplorer();
-    init_doc_modal();
-    init_screen();
-    init_element();
-    init_program();
-    init_colors();
-    init_events();
-    init_keybindings();
-    init_box();
-    init_text();
-    init_list();
-    init_form();
-    init_textbox();
-    init_button();
-    init_progressbar();
-    init_table();
-    init_log();
-    init_scrollablebox();
-    init_scrollabletext();
-    init_checkbox();
-    init_radiobutton();
-    init_radioset();
-    init_message();
-    init_question();
-    init_prompt();
-    init_loading();
-    init_listbar();
-    init_bigtext();
-    init_filemanager();
-    init_overlay();
-    init_listtable();
-    init_ansiimage();
-    init_terminal();
-    init_layout();
-    init_passbox();
-    init_filebox();
-    init_image();
-    init_viewport();
-    init_canvas();
-    init_iframe();
-    init_video();
-    init_autocomplete();
-    init_tabpanel();
-    init_accordion();
-    init_collapsible();
-    init_stacked_gauge();
-    init_colorpicker();
-    init_fileexplorer();
-    init_doc_modal();
-    init_login_modal();
-    init_category_picker();
-    init_confirm_modal();
-    init_fkey_bar();
-    init_status_bar();
-    init_search_modal();
-    init_audio_level_bar();
-    init_multiplayer_lobby();
-    init_contextmenu();
-    init_panel();
-    init_dockable_panel();
-    init_dropdown_menu();
-    init_mobile_carousel();
-    init_responsive_layout();
-    init_bar();
-    init_donut();
-    init_gauge();
-    init_gauge_list();
-    init_lcd();
-    init_map();
-    init_markdown();
-    init_picture();
-    init_sparkline2();
-    init_stacked_bar();
-    init_tree();
-    init_contrib_canvas();
-    init_contrib_log();
-    init_contrib_table();
-    init_grid();
-    init_carousel();
-    init_modal_helpers();
-    init_modal_helpers();
-  }
-});
-
-// ../../sdk/node_modules/@babel/runtime/helpers/arrayWithHoles.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/arrayWithHoles.js
 var require_arrayWithHoles = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/arrayWithHoles.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/arrayWithHoles.js"(exports, module) {
     function _arrayWithHoles(r) {
-      if (Array.isArray(r))
-        return r;
+      if (Array.isArray(r)) return r;
     }
     module.exports = _arrayWithHoles, module.exports.__esModule = true, module.exports["default"] = module.exports;
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/iterableToArrayLimit.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/iterableToArrayLimit.js
 var require_iterableToArrayLimit = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/iterableToArrayLimit.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/iterableToArrayLimit.js"(exports, module) {
     function _iterableToArrayLimit(r, l) {
       var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"];
       if (null != t) {
         var e, n, i, u, a = [], f = true, o = false;
         try {
           if (i = (t = t.call(r)).next, 0 === l) {
-            if (Object(t) !== t)
-              return;
+            if (Object(t) !== t) return;
             f = false;
-          } else
-            for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = true)
-              ;
+          } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = true) ;
         } catch (r2) {
           o = true, n = r2;
         } finally {
           try {
-            if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u))
-              return;
+            if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return;
           } finally {
-            if (o)
-              throw n;
+            if (o) throw n;
           }
         }
         return a;
@@ -8888,27 +66,25 @@ var require_iterableToArrayLimit = __commonJS({
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/arrayLikeToArray.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/arrayLikeToArray.js
 var require_arrayLikeToArray = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/arrayLikeToArray.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/arrayLikeToArray.js"(exports, module) {
     function _arrayLikeToArray(r, a) {
       (null == a || a > r.length) && (a = r.length);
-      for (var e = 0, n = Array(a); e < a; e++)
-        n[e] = r[e];
+      for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e];
       return n;
     }
     module.exports = _arrayLikeToArray, module.exports.__esModule = true, module.exports["default"] = module.exports;
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/unsupportedIterableToArray.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/unsupportedIterableToArray.js
 var require_unsupportedIterableToArray = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/unsupportedIterableToArray.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/unsupportedIterableToArray.js"(exports, module) {
     var arrayLikeToArray = require_arrayLikeToArray();
     function _unsupportedIterableToArray(r, a) {
       if (r) {
-        if ("string" == typeof r)
-          return arrayLikeToArray(r, a);
+        if ("string" == typeof r) return arrayLikeToArray(r, a);
         var t = {}.toString.call(r).slice(8, -1);
         return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? arrayLikeToArray(r, a) : void 0;
       }
@@ -8917,9 +93,9 @@ var require_unsupportedIterableToArray = __commonJS({
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/nonIterableRest.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/nonIterableRest.js
 var require_nonIterableRest = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/nonIterableRest.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/nonIterableRest.js"(exports, module) {
     function _nonIterableRest() {
       throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
     }
@@ -8927,9 +103,9 @@ var require_nonIterableRest = __commonJS({
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/slicedToArray.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/slicedToArray.js
 var require_slicedToArray = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/slicedToArray.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/slicedToArray.js"(exports, module) {
     var arrayWithHoles = require_arrayWithHoles();
     var iterableToArrayLimit = require_iterableToArrayLimit();
     var unsupportedIterableToArray = require_unsupportedIterableToArray();
@@ -8941,20 +117,19 @@ var require_slicedToArray = __commonJS({
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/classCallCheck.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/classCallCheck.js
 var require_classCallCheck = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/classCallCheck.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/classCallCheck.js"(exports, module) {
     function _classCallCheck(a, n) {
-      if (!(a instanceof n))
-        throw new TypeError("Cannot call a class as a function");
+      if (!(a instanceof n)) throw new TypeError("Cannot call a class as a function");
     }
     module.exports = _classCallCheck, module.exports.__esModule = true, module.exports["default"] = module.exports;
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/typeof.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/typeof.js
 var require_typeof = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/typeof.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/typeof.js"(exports, module) {
     function _typeof(o) {
       "@babel/helpers - typeof";
       return module.exports = _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o2) {
@@ -8967,18 +142,16 @@ var require_typeof = __commonJS({
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/toPrimitive.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/toPrimitive.js
 var require_toPrimitive = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/toPrimitive.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/toPrimitive.js"(exports, module) {
     var _typeof = require_typeof()["default"];
     function toPrimitive(t, r) {
-      if ("object" != _typeof(t) || !t)
-        return t;
+      if ("object" != _typeof(t) || !t) return t;
       var e = t[Symbol.toPrimitive];
       if (void 0 !== e) {
         var i = e.call(t, r || "default");
-        if ("object" != _typeof(i))
-          return i;
+        if ("object" != _typeof(i)) return i;
         throw new TypeError("@@toPrimitive must return a primitive value.");
       }
       return ("string" === r ? String : Number)(t);
@@ -8987,9 +160,9 @@ var require_toPrimitive = __commonJS({
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/toPropertyKey.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/toPropertyKey.js
 var require_toPropertyKey = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/toPropertyKey.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/toPropertyKey.js"(exports, module) {
     var _typeof = require_typeof()["default"];
     var toPrimitive = require_toPrimitive();
     function toPropertyKey(t) {
@@ -9000,9 +173,9 @@ var require_toPropertyKey = __commonJS({
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/createClass.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/createClass.js
 var require_createClass = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/createClass.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/createClass.js"(exports, module) {
     var toPropertyKey = require_toPropertyKey();
     function _defineProperties(e, r) {
       for (var t = 0; t < r.length; t++) {
@@ -9019,12 +192,12 @@ var require_createClass = __commonJS({
   }
 });
 
-// ../../sdk/node_modules/automation-events/build/es5/bundle.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/automation-events/build/es5/bundle.js
 var require_bundle = __commonJS({
-  "../../sdk/node_modules/automation-events/build/es5/bundle.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/automation-events/build/es5/bundle.js"(exports, module) {
     (function(global, factory) {
       typeof exports === "object" && typeof module !== "undefined" ? factory(exports, require_slicedToArray(), require_classCallCheck(), require_createClass()) : typeof define === "function" && define.amd ? define(["exports", "@babel/runtime/helpers/slicedToArray", "@babel/runtime/helpers/classCallCheck", "@babel/runtime/helpers/createClass"], factory) : (global = typeof globalThis !== "undefined" ? globalThis : global || self, factory(global.automationEvents = {}, global._slicedToArray, global._classCallCheck, global._createClass));
-    })(exports, function(exports2, _slicedToArray, _classCallCheck, _createClass) {
+    })(exports, (function(exports2, _slicedToArray, _classCallCheck, _createClass) {
       "use strict";
       var createExtendedExponentialRampToValueAutomationEvent = function createExtendedExponentialRampToValueAutomationEvent2(value, endTime, insertTime) {
         return {
@@ -9128,7 +301,7 @@ var require_bundle = __commonJS({
       var isSetTargetAutomationEvent = function isSetTargetAutomationEvent2(automationEvent) {
         return automationEvent.type === "setTarget";
       };
-      var AutomationEventList2 = /* @__PURE__ */ function() {
+      var AutomationEventList2 = /* @__PURE__ */ (function() {
         function AutomationEventList3(defaultValue) {
           _classCallCheck(this, AutomationEventList3);
           this._automationEvents = [];
@@ -9258,7 +431,7 @@ var require_bundle = __commonJS({
             return this._defaultValue;
           }
         }]);
-      }();
+      })();
       var createCancelAndHoldAutomationEvent2 = function createCancelAndHoldAutomationEvent3(cancelTime) {
         return {
           cancelTime,
@@ -9301,379 +474,7 @@ var require_bundle = __commonJS({
       exports2.createSetTargetAutomationEvent = createSetTargetAutomationEvent2;
       exports2.createSetValueAutomationEvent = createSetValueAutomationEvent2;
       exports2.createSetValueCurveAutomationEvent = createSetValueCurveAutomationEvent2;
-    });
-  }
-});
-
-// ../../sdk/node_modules/events/events.js
-var require_events = __commonJS({
-  "../../sdk/node_modules/events/events.js"(exports, module) {
-    "use strict";
-    var R = typeof Reflect === "object" ? Reflect : null;
-    var ReflectApply = R && typeof R.apply === "function" ? R.apply : function ReflectApply2(target, receiver, args) {
-      return Function.prototype.apply.call(target, receiver, args);
-    };
-    var ReflectOwnKeys;
-    if (R && typeof R.ownKeys === "function") {
-      ReflectOwnKeys = R.ownKeys;
-    } else if (Object.getOwnPropertySymbols) {
-      ReflectOwnKeys = function ReflectOwnKeys2(target) {
-        return Object.getOwnPropertyNames(target).concat(Object.getOwnPropertySymbols(target));
-      };
-    } else {
-      ReflectOwnKeys = function ReflectOwnKeys2(target) {
-        return Object.getOwnPropertyNames(target);
-      };
-    }
-    function ProcessEmitWarning(warning) {
-      if (console && console.warn)
-        console.warn(warning);
-    }
-    var NumberIsNaN = Number.isNaN || function NumberIsNaN2(value) {
-      return value !== value;
-    };
-    function EventEmitter24() {
-      EventEmitter24.init.call(this);
-    }
-    module.exports = EventEmitter24;
-    module.exports.once = once;
-    EventEmitter24.EventEmitter = EventEmitter24;
-    EventEmitter24.prototype._events = void 0;
-    EventEmitter24.prototype._eventsCount = 0;
-    EventEmitter24.prototype._maxListeners = void 0;
-    var defaultMaxListeners = 10;
-    function checkListener(listener) {
-      if (typeof listener !== "function") {
-        throw new TypeError('The "listener" argument must be of type Function. Received type ' + typeof listener);
-      }
-    }
-    Object.defineProperty(EventEmitter24, "defaultMaxListeners", {
-      enumerable: true,
-      get: function() {
-        return defaultMaxListeners;
-      },
-      set: function(arg) {
-        if (typeof arg !== "number" || arg < 0 || NumberIsNaN(arg)) {
-          throw new RangeError('The value of "defaultMaxListeners" is out of range. It must be a non-negative number. Received ' + arg + ".");
-        }
-        defaultMaxListeners = arg;
-      }
-    });
-    EventEmitter24.init = function() {
-      if (this._events === void 0 || this._events === Object.getPrototypeOf(this)._events) {
-        this._events = /* @__PURE__ */ Object.create(null);
-        this._eventsCount = 0;
-      }
-      this._maxListeners = this._maxListeners || void 0;
-    };
-    EventEmitter24.prototype.setMaxListeners = function setMaxListeners(n) {
-      if (typeof n !== "number" || n < 0 || NumberIsNaN(n)) {
-        throw new RangeError('The value of "n" is out of range. It must be a non-negative number. Received ' + n + ".");
-      }
-      this._maxListeners = n;
-      return this;
-    };
-    function _getMaxListeners(that) {
-      if (that._maxListeners === void 0)
-        return EventEmitter24.defaultMaxListeners;
-      return that._maxListeners;
-    }
-    EventEmitter24.prototype.getMaxListeners = function getMaxListeners() {
-      return _getMaxListeners(this);
-    };
-    EventEmitter24.prototype.emit = function emit(type) {
-      var args = [];
-      for (var i = 1; i < arguments.length; i++)
-        args.push(arguments[i]);
-      var doError = type === "error";
-      var events = this._events;
-      if (events !== void 0)
-        doError = doError && events.error === void 0;
-      else if (!doError)
-        return false;
-      if (doError) {
-        var er;
-        if (args.length > 0)
-          er = args[0];
-        if (er instanceof Error) {
-          throw er;
-        }
-        var err = new Error("Unhandled error." + (er ? " (" + er.message + ")" : ""));
-        err.context = er;
-        throw err;
-      }
-      var handler2 = events[type];
-      if (handler2 === void 0)
-        return false;
-      if (typeof handler2 === "function") {
-        ReflectApply(handler2, this, args);
-      } else {
-        var len = handler2.length;
-        var listeners = arrayClone(handler2, len);
-        for (var i = 0; i < len; ++i)
-          ReflectApply(listeners[i], this, args);
-      }
-      return true;
-    };
-    function _addListener(target, type, listener, prepend) {
-      var m;
-      var events;
-      var existing;
-      checkListener(listener);
-      events = target._events;
-      if (events === void 0) {
-        events = target._events = /* @__PURE__ */ Object.create(null);
-        target._eventsCount = 0;
-      } else {
-        if (events.newListener !== void 0) {
-          target.emit(
-            "newListener",
-            type,
-            listener.listener ? listener.listener : listener
-          );
-          events = target._events;
-        }
-        existing = events[type];
-      }
-      if (existing === void 0) {
-        existing = events[type] = listener;
-        ++target._eventsCount;
-      } else {
-        if (typeof existing === "function") {
-          existing = events[type] = prepend ? [listener, existing] : [existing, listener];
-        } else if (prepend) {
-          existing.unshift(listener);
-        } else {
-          existing.push(listener);
-        }
-        m = _getMaxListeners(target);
-        if (m > 0 && existing.length > m && !existing.warned) {
-          existing.warned = true;
-          var w = new Error("Possible EventEmitter memory leak detected. " + existing.length + " " + String(type) + " listeners added. Use emitter.setMaxListeners() to increase limit");
-          w.name = "MaxListenersExceededWarning";
-          w.emitter = target;
-          w.type = type;
-          w.count = existing.length;
-          ProcessEmitWarning(w);
-        }
-      }
-      return target;
-    }
-    EventEmitter24.prototype.addListener = function addListener(type, listener) {
-      return _addListener(this, type, listener, false);
-    };
-    EventEmitter24.prototype.on = EventEmitter24.prototype.addListener;
-    EventEmitter24.prototype.prependListener = function prependListener(type, listener) {
-      return _addListener(this, type, listener, true);
-    };
-    function onceWrapper() {
-      if (!this.fired) {
-        this.target.removeListener(this.type, this.wrapFn);
-        this.fired = true;
-        if (arguments.length === 0)
-          return this.listener.call(this.target);
-        return this.listener.apply(this.target, arguments);
-      }
-    }
-    function _onceWrap(target, type, listener) {
-      var state = { fired: false, wrapFn: void 0, target, type, listener };
-      var wrapped = onceWrapper.bind(state);
-      wrapped.listener = listener;
-      state.wrapFn = wrapped;
-      return wrapped;
-    }
-    EventEmitter24.prototype.once = function once2(type, listener) {
-      checkListener(listener);
-      this.on(type, _onceWrap(this, type, listener));
-      return this;
-    };
-    EventEmitter24.prototype.prependOnceListener = function prependOnceListener(type, listener) {
-      checkListener(listener);
-      this.prependListener(type, _onceWrap(this, type, listener));
-      return this;
-    };
-    EventEmitter24.prototype.removeListener = function removeListener(type, listener) {
-      var list, events, position, i, originalListener;
-      checkListener(listener);
-      events = this._events;
-      if (events === void 0)
-        return this;
-      list = events[type];
-      if (list === void 0)
-        return this;
-      if (list === listener || list.listener === listener) {
-        if (--this._eventsCount === 0)
-          this._events = /* @__PURE__ */ Object.create(null);
-        else {
-          delete events[type];
-          if (events.removeListener)
-            this.emit("removeListener", type, list.listener || listener);
-        }
-      } else if (typeof list !== "function") {
-        position = -1;
-        for (i = list.length - 1; i >= 0; i--) {
-          if (list[i] === listener || list[i].listener === listener) {
-            originalListener = list[i].listener;
-            position = i;
-            break;
-          }
-        }
-        if (position < 0)
-          return this;
-        if (position === 0)
-          list.shift();
-        else {
-          spliceOne(list, position);
-        }
-        if (list.length === 1)
-          events[type] = list[0];
-        if (events.removeListener !== void 0)
-          this.emit("removeListener", type, originalListener || listener);
-      }
-      return this;
-    };
-    EventEmitter24.prototype.off = EventEmitter24.prototype.removeListener;
-    EventEmitter24.prototype.removeAllListeners = function removeAllListeners(type) {
-      var listeners, events, i;
-      events = this._events;
-      if (events === void 0)
-        return this;
-      if (events.removeListener === void 0) {
-        if (arguments.length === 0) {
-          this._events = /* @__PURE__ */ Object.create(null);
-          this._eventsCount = 0;
-        } else if (events[type] !== void 0) {
-          if (--this._eventsCount === 0)
-            this._events = /* @__PURE__ */ Object.create(null);
-          else
-            delete events[type];
-        }
-        return this;
-      }
-      if (arguments.length === 0) {
-        var keys = Object.keys(events);
-        var key;
-        for (i = 0; i < keys.length; ++i) {
-          key = keys[i];
-          if (key === "removeListener")
-            continue;
-          this.removeAllListeners(key);
-        }
-        this.removeAllListeners("removeListener");
-        this._events = /* @__PURE__ */ Object.create(null);
-        this._eventsCount = 0;
-        return this;
-      }
-      listeners = events[type];
-      if (typeof listeners === "function") {
-        this.removeListener(type, listeners);
-      } else if (listeners !== void 0) {
-        for (i = listeners.length - 1; i >= 0; i--) {
-          this.removeListener(type, listeners[i]);
-        }
-      }
-      return this;
-    };
-    function _listeners(target, type, unwrap) {
-      var events = target._events;
-      if (events === void 0)
-        return [];
-      var evlistener = events[type];
-      if (evlistener === void 0)
-        return [];
-      if (typeof evlistener === "function")
-        return unwrap ? [evlistener.listener || evlistener] : [evlistener];
-      return unwrap ? unwrapListeners(evlistener) : arrayClone(evlistener, evlistener.length);
-    }
-    EventEmitter24.prototype.listeners = function listeners(type) {
-      return _listeners(this, type, true);
-    };
-    EventEmitter24.prototype.rawListeners = function rawListeners(type) {
-      return _listeners(this, type, false);
-    };
-    EventEmitter24.listenerCount = function(emitter, type) {
-      if (typeof emitter.listenerCount === "function") {
-        return emitter.listenerCount(type);
-      } else {
-        return listenerCount.call(emitter, type);
-      }
-    };
-    EventEmitter24.prototype.listenerCount = listenerCount;
-    function listenerCount(type) {
-      var events = this._events;
-      if (events !== void 0) {
-        var evlistener = events[type];
-        if (typeof evlistener === "function") {
-          return 1;
-        } else if (evlistener !== void 0) {
-          return evlistener.length;
-        }
-      }
-      return 0;
-    }
-    EventEmitter24.prototype.eventNames = function eventNames() {
-      return this._eventsCount > 0 ? ReflectOwnKeys(this._events) : [];
-    };
-    function arrayClone(arr, n) {
-      var copy = new Array(n);
-      for (var i = 0; i < n; ++i)
-        copy[i] = arr[i];
-      return copy;
-    }
-    function spliceOne(list, index) {
-      for (; index + 1 < list.length; index++)
-        list[index] = list[index + 1];
-      list.pop();
-    }
-    function unwrapListeners(arr) {
-      var ret = new Array(arr.length);
-      for (var i = 0; i < ret.length; ++i) {
-        ret[i] = arr[i].listener || arr[i];
-      }
-      return ret;
-    }
-    function once(emitter, name) {
-      return new Promise(function(resolve, reject) {
-        function errorListener(err) {
-          emitter.removeListener(name, resolver);
-          reject(err);
-        }
-        function resolver() {
-          if (typeof emitter.removeListener === "function") {
-            emitter.removeListener("error", errorListener);
-          }
-          resolve([].slice.call(arguments));
-        }
-        ;
-        eventTargetAgnosticAddListener(emitter, name, resolver, { once: true });
-        if (name !== "error") {
-          addErrorHandlerIfEventEmitter(emitter, errorListener, { once: true });
-        }
-      });
-    }
-    function addErrorHandlerIfEventEmitter(emitter, handler2, flags) {
-      if (typeof emitter.on === "function") {
-        eventTargetAgnosticAddListener(emitter, "error", handler2, flags);
-      }
-    }
-    function eventTargetAgnosticAddListener(emitter, name, listener, flags) {
-      if (typeof emitter.on === "function") {
-        if (flags.once) {
-          emitter.once(name, listener);
-        } else {
-          emitter.on(name, listener);
-        }
-      } else if (typeof emitter.addEventListener === "function") {
-        emitter.addEventListener(name, function wrapListener(arg) {
-          if (flags.once) {
-            emitter.removeEventListener(name, wrapListener);
-          }
-          listener(arg);
-        });
-      } else {
-        throw new TypeError('The "emitter" argument must be of type EventEmitter. Received type ' + typeof emitter);
-      }
-    }
+    }));
   }
 });
 
@@ -9809,60 +610,7 @@ var ProtocolHelper = class {
   }
 };
 
-// ../../sdk/dist-esm/engines/ui/ui-engine.js
-init_blessed();
-init_dockable_panel();
-
-// ../../sdk/dist-esm/core/types.js
-var AnsiColor;
-(function(AnsiColor2) {
-  AnsiColor2[AnsiColor2["Black"] = 0] = "Black";
-  AnsiColor2[AnsiColor2["Red"] = 1] = "Red";
-  AnsiColor2[AnsiColor2["Green"] = 2] = "Green";
-  AnsiColor2[AnsiColor2["Yellow"] = 3] = "Yellow";
-  AnsiColor2[AnsiColor2["Blue"] = 4] = "Blue";
-  AnsiColor2[AnsiColor2["Magenta"] = 5] = "Magenta";
-  AnsiColor2[AnsiColor2["Cyan"] = 6] = "Cyan";
-  AnsiColor2[AnsiColor2["White"] = 7] = "White";
-  AnsiColor2[AnsiColor2["BrightBlack"] = 8] = "BrightBlack";
-  AnsiColor2[AnsiColor2["Gray"] = 8] = "Gray";
-  AnsiColor2[AnsiColor2["BrightRed"] = 9] = "BrightRed";
-  AnsiColor2[AnsiColor2["BrightGreen"] = 10] = "BrightGreen";
-  AnsiColor2[AnsiColor2["BrightYellow"] = 11] = "BrightYellow";
-  AnsiColor2[AnsiColor2["BrightBlue"] = 12] = "BrightBlue";
-  AnsiColor2[AnsiColor2["BrightMagenta"] = 13] = "BrightMagenta";
-  AnsiColor2[AnsiColor2["BrightCyan"] = 14] = "BrightCyan";
-  AnsiColor2[AnsiColor2["BrightWhite"] = 15] = "BrightWhite";
-})(AnsiColor || (AnsiColor = {}));
-var AnsiStyle;
-(function(AnsiStyle2) {
-  AnsiStyle2[AnsiStyle2["Normal"] = 0] = "Normal";
-  AnsiStyle2[AnsiStyle2["Bold"] = 1] = "Bold";
-  AnsiStyle2[AnsiStyle2["Dim"] = 2] = "Dim";
-  AnsiStyle2[AnsiStyle2["Italic"] = 3] = "Italic";
-  AnsiStyle2[AnsiStyle2["Underline"] = 4] = "Underline";
-  AnsiStyle2[AnsiStyle2["Blink"] = 5] = "Blink";
-  AnsiStyle2[AnsiStyle2["Reverse"] = 7] = "Reverse";
-})(AnsiStyle || (AnsiStyle = {}));
-var SpecialKey;
-(function(SpecialKey2) {
-  SpecialKey2["Enter"] = "\r";
-  SpecialKey2["Escape"] = "\x1B";
-  SpecialKey2["Backspace"] = "\x7F";
-  SpecialKey2["Tab"] = "	";
-  SpecialKey2["Space"] = " ";
-  SpecialKey2["ArrowUp"] = "\x1B[A";
-  SpecialKey2["ArrowDown"] = "\x1B[B";
-  SpecialKey2["ArrowRight"] = "\x1B[C";
-  SpecialKey2["ArrowLeft"] = "\x1B[D";
-  SpecialKey2["Delete"] = "\x1B[3~";
-  SpecialKey2["Home"] = "\x1B[H";
-  SpecialKey2["End"] = "\x1B[F";
-  SpecialKey2["PageUp"] = "\x1B[5~";
-  SpecialKey2["PageDown"] = "\x1B[6~";
-})(SpecialKey || (SpecialKey = {}));
-
-// ../../sdk/node_modules/tone/build/esm/index.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/index.js
 var esm_exports = {};
 __export(esm_exports, {
   AMOscillator: () => AMOscillator,
@@ -10037,7 +785,7 @@ __export(esm_exports, {
   version: () => version
 });
 
-// ../../sdk/node_modules/tone/build/esm/core/type/Conversions.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/type/Conversions.js
 function dbToGain(db) {
   return Math.pow(10, db / 20);
 }
@@ -10064,20 +812,20 @@ function mtof(midi) {
   return A4 * Math.pow(2, (midi - 69) / 12);
 }
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/module.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/module.js
 var import_automation_events2 = __toESM(require_bundle());
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/abort-error.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/abort-error.js
 var createAbortError = () => new DOMException("", "AbortError");
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/add-active-input-connection-to-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/add-active-input-connection-to-audio-node.js
 var createAddActiveInputConnectionToAudioNode = (insertElementInSet2) => {
   return (activeInputs, source, [output, input, eventListener], ignoreDuplicates) => {
     insertElementInSet2(activeInputs[input], [source, output, eventListener], (activeInputConnection) => activeInputConnection[0] === source && activeInputConnection[1] === output, ignoreDuplicates);
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/add-audio-node-connections.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/add-audio-node-connections.js
 var createAddAudioNodeConnections = (audioNodeConnectionsStore) => {
   return (audioNode, audioNodeRenderer, nativeAudioNode) => {
     const activeInputs = [];
@@ -10093,14 +841,14 @@ var createAddAudioNodeConnections = (audioNodeConnectionsStore) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/add-audio-param-connections.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/add-audio-param-connections.js
 var createAddAudioParamConnections = (audioParamConnectionsStore) => {
   return (audioParam, audioParamRenderer) => {
     audioParamConnectionsStore.set(audioParam, { activeInputs: /* @__PURE__ */ new Set(), passiveInputs: /* @__PURE__ */ new WeakMap(), renderer: audioParamRenderer });
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/globals.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/globals.js
 var ACTIVE_AUDIO_NODE_STORE = /* @__PURE__ */ new WeakSet();
 var AUDIO_NODE_CONNECTIONS_STORE = /* @__PURE__ */ new WeakMap();
 var AUDIO_NODE_STORE = /* @__PURE__ */ new WeakMap();
@@ -10112,7 +860,7 @@ var CYCLE_COUNTERS = /* @__PURE__ */ new WeakMap();
 var NODE_NAME_TO_PROCESSOR_CONSTRUCTOR_MAPS = /* @__PURE__ */ new WeakMap();
 var NODE_TO_PROCESSOR_MAPS = /* @__PURE__ */ new WeakMap();
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-constructible.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-constructible.js
 var handler = {
   construct() {
     return handler;
@@ -10128,7 +876,7 @@ var isConstructible = (constructible) => {
   return true;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/split-import-statements.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/split-import-statements.js
 var IMPORT_STATEMENT_REGEX = /^import(?:(?:[\s]+[\w]+|(?:[\s]+[\w]+[\s]*,)?[\s]*\{[\s]*[\w]+(?:[\s]+as[\s]+[\w]+)?(?:[\s]*,[\s]*[\w]+(?:[\s]+as[\s]+[\w]+)?)*[\s]*}|(?:[\s]+[\w]+[\s]*,)?[\s]*\*[\s]+as[\s]+[\w]+)[\s]+from)?(?:[\s]*)("([^"\\]|\\.)+"|'([^'\\]|\\.)+')(?:[\s]*);?/;
 var splitImportStatements = (source, url) => {
   const importStatements = [];
@@ -10144,7 +892,7 @@ var splitImportStatements = (source, url) => {
   return [importStatements.join(";"), sourceWithoutImportStatements];
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/add-audio-worklet-module.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/add-audio-worklet-module.js
 var verifyParameterDescriptors = (parameterDescriptors) => {
   if (parameterDescriptors !== void 0 && !Array.isArray(parameterDescriptors)) {
     throw new TypeError("The parameterDescriptors property of given value for processorCtor is not an array.");
@@ -10255,16 +1003,16 @@ var createAddAudioWorkletModule = (cacheTestResult2, createNotSupportedError2, e
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-value-for-key.js
-var getValueForKey = (map2, key) => {
-  const value = map2.get(key);
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-value-for-key.js
+var getValueForKey = (map, key) => {
+  const value = map.get(key);
   if (value === void 0) {
     throw new Error("A value with the given key could not be found.");
   }
   return value;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/pick-element-from-set.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/pick-element-from-set.js
 var pickElementFromSet = (set, predicate) => {
   const matchingElements = Array.from(set).filter(predicate);
   if (matchingElements.length > 1) {
@@ -10278,7 +1026,7 @@ var pickElementFromSet = (set, predicate) => {
   return matchingElement;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-passive-input-connection-to-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-passive-input-connection-to-audio-node.js
 var deletePassiveInputConnectionToAudioNode = (passiveInputs, source, output, input) => {
   const passiveInputConnections = getValueForKey(passiveInputs, source);
   const matchingConnection = pickElementFromSet(passiveInputConnections, (passiveInputConnection) => passiveInputConnection[0] === output && passiveInputConnection[1] === input);
@@ -10288,12 +1036,12 @@ var deletePassiveInputConnectionToAudioNode = (passiveInputs, source, output, in
   return matchingConnection;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-event-listeners-of-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-event-listeners-of-audio-node.js
 var getEventListenersOfAudioNode = (audioNode) => {
   return getValueForKey(EVENT_LISTENERS, audioNode);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/set-internal-state-to-active.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/set-internal-state-to-active.js
 var setInternalStateToActive = (audioNode) => {
   if (ACTIVE_AUDIO_NODE_STORE.has(audioNode)) {
     throw new Error("The AudioNode is already stored.");
@@ -10302,12 +1050,12 @@ var setInternalStateToActive = (audioNode) => {
   getEventListenersOfAudioNode(audioNode).forEach((eventListener) => eventListener(true));
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/audio-worklet-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/audio-worklet-node.js
 var isAudioWorkletNode = (audioNode) => {
   return "port" in audioNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/set-internal-state-to-passive.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/set-internal-state-to-passive.js
 var setInternalStateToPassive = (audioNode) => {
   if (!ACTIVE_AUDIO_NODE_STORE.has(audioNode)) {
     throw new Error("The AudioNode is not stored.");
@@ -10316,14 +1064,14 @@ var setInternalStateToPassive = (audioNode) => {
   getEventListenersOfAudioNode(audioNode).forEach((eventListener) => eventListener(false));
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/set-internal-state-to-passive-when-necessary.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/set-internal-state-to-passive-when-necessary.js
 var setInternalStateToPassiveWhenNecessary = (audioNode, activeInputs) => {
   if (!isAudioWorkletNode(audioNode) && activeInputs.every((connections) => connections.size === 0)) {
     setInternalStateToPassive(audioNode);
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/add-connection-to-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/add-connection-to-audio-node.js
 var createAddConnectionToAudioNode = (addActiveInputConnectionToAudioNode2, addPassiveInputConnectionToAudioNode2, connectNativeAudioNodeToNativeAudioNode2, deleteActiveInputConnectionToAudioNode2, disconnectNativeAudioNodeFromNativeAudioNode2, getAudioNodeConnections2, getAudioNodeTailTime2, getEventListenersOfAudioNode2, getNativeAudioNode2, insertElementInSet2, isActiveAudioNode2, isPartOfACycle2, isPassiveAudioNode2) => {
   const tailTimeTimeoutIds = /* @__PURE__ */ new WeakMap();
   return (source, destination, output, input, isOffline) => {
@@ -10379,7 +1127,7 @@ var createAddConnectionToAudioNode = (addActiveInputConnectionToAudioNode2, addP
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/add-passive-input-connection-to-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/add-passive-input-connection-to-audio-node.js
 var createAddPassiveInputConnectionToAudioNode = (insertElementInSet2) => {
   return (passiveInputs, input, [source, output, eventListener], ignoreDuplicates) => {
     const passiveInputConnections = passiveInputs.get(source);
@@ -10391,7 +1139,7 @@ var createAddPassiveInputConnectionToAudioNode = (insertElementInSet2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/add-silent-connection.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/add-silent-connection.js
 var createAddSilentConnection = (createNativeGainNode2) => {
   return (nativeContext, nativeAudioScheduledSourceNode) => {
     const nativeGainNode = createNativeGainNode2(nativeContext, {
@@ -10410,14 +1158,14 @@ var createAddSilentConnection = (createNativeGainNode2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/add-unrendered-audio-worklet-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/add-unrendered-audio-worklet-node.js
 var createAddUnrenderedAudioWorkletNode = (getUnrenderedAudioWorkletNodes2) => {
   return (nativeContext, audioWorkletNode) => {
     getUnrenderedAudioWorkletNodes2(nativeContext).add(audioWorkletNode);
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/analyser-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/analyser-node-constructor.js
 var DEFAULT_OPTIONS = {
   channelCount: 2,
   channelCountMode: "max",
@@ -10489,12 +1237,12 @@ var createAnalyserNodeConstructor = (audionNodeConstructor, createAnalyserNodeRe
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-owned-by-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-owned-by-context.js
 var isOwnedByContext = (nativeAudioNode, nativeContext) => {
   return nativeAudioNode.context === nativeContext;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/analyser-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/analyser-node-renderer-factory.js
 var createAnalyserNodeRendererFactory = (createNativeAnalyserNode2, getNativeAudioNode2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeAnalyserNodes = /* @__PURE__ */ new WeakMap();
@@ -10529,7 +1277,7 @@ var createAnalyserNodeRendererFactory = (createNativeAnalyserNode2, getNativeAud
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-buffer-copy-channel-methods-out-of-bounds-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-buffer-copy-channel-methods-out-of-bounds-support.js
 var testAudioBufferCopyChannelMethodsOutOfBoundsSupport = (nativeAudioBuffer) => {
   try {
     nativeAudioBuffer.copyToChannel(new Float32Array(1), 0, -1);
@@ -10539,10 +1287,10 @@ var testAudioBufferCopyChannelMethodsOutOfBoundsSupport = (nativeAudioBuffer) =>
   return true;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/index-size-error.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/index-size-error.js
 var createIndexSizeError = () => new DOMException("", "IndexSizeError");
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-buffer-get-channel-data-method.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-buffer-get-channel-data-method.js
 var wrapAudioBufferGetChannelDataMethod = (audioBuffer) => {
   audioBuffer.getChannelData = /* @__PURE__ */ ((getChannelData) => {
     return (channel) => {
@@ -10558,7 +1306,7 @@ var wrapAudioBufferGetChannelDataMethod = (audioBuffer) => {
   })(audioBuffer.getChannelData);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-buffer-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-buffer-constructor.js
 var DEFAULT_OPTIONS2 = {
   numberOfChannels: 1
 };
@@ -10592,14 +1340,14 @@ var createAudioBufferConstructor = (audioBufferStore2, cacheTestResult2, createN
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/constants.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/constants.js
 var MOST_NEGATIVE_SINGLE_FLOAT = -34028234663852886e22;
 var MOST_POSITIVE_SINGLE_FLOAT = -MOST_NEGATIVE_SINGLE_FLOAT;
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-active-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-active-audio-node.js
 var isActiveAudioNode = (audioNode) => ACTIVE_AUDIO_NODE_STORE.has(audioNode);
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-buffer-source-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-buffer-source-node-constructor.js
 var DEFAULT_OPTIONS3 = {
   buffer: null,
   channelCount: 2,
@@ -10697,7 +1445,7 @@ var createAudioBufferSourceNodeConstructor = (audioNodeConstructor2, createAudio
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-buffer-source-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-buffer-source-node-renderer-factory.js
 var createAudioBufferSourceNodeRendererFactory = (connectAudioParam2, createNativeAudioBufferSourceNode2, getNativeAudioNode2, renderAutomation2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeAudioBufferSourceNodes = /* @__PURE__ */ new WeakMap();
@@ -10753,47 +1501,47 @@ var createAudioBufferSourceNodeRendererFactory = (connectAudioParam2, createNati
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/audio-buffer-source-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/audio-buffer-source-node.js
 var isAudioBufferSourceNode = (audioNode) => {
   return "playbackRate" in audioNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/biquad-filter-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/biquad-filter-node.js
 var isBiquadFilterNode = (audioNode) => {
   return "frequency" in audioNode && "gain" in audioNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/constant-source-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/constant-source-node.js
 var isConstantSourceNode = (audioNode) => {
   return "offset" in audioNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/gain-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/gain-node.js
 var isGainNode = (audioNode) => {
   return !("frequency" in audioNode) && "gain" in audioNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/oscillator-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/oscillator-node.js
 var isOscillatorNode = (audioNode) => {
   return "detune" in audioNode && "frequency" in audioNode && !("gain" in audioNode);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/stereo-panner-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/stereo-panner-node.js
 var isStereoPannerNode = (audioNode) => {
   return "pan" in audioNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-audio-node-connections.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-audio-node-connections.js
 var getAudioNodeConnections = (audioNode) => {
   return getValueForKey(AUDIO_NODE_CONNECTIONS_STORE, audioNode);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-audio-param-connections.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-audio-param-connections.js
 var getAudioParamConnections = (audioParam) => {
   return getValueForKey(AUDIO_PARAM_CONNECTIONS_STORE, audioParam);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/deactivate-active-audio-node-input-connections.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/deactivate-active-audio-node-input-connections.js
 var deactivateActiveAudioNodeInputConnections = (audioNode, trace) => {
   const { activeInputs } = getAudioNodeConnections(audioNode);
   activeInputs.forEach((connections) => connections.forEach(([source]) => {
@@ -10816,17 +1564,17 @@ var deactivateActiveAudioNodeInputConnections = (audioNode, trace) => {
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/deactivate-audio-graph.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/deactivate-audio-graph.js
 var deactivateAudioGraph = (context2) => {
   deactivateActiveAudioNodeInputConnections(context2.destination, []);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-valid-latency-hint.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-valid-latency-hint.js
 var isValidLatencyHint = (latencyHint) => {
   return latencyHint === void 0 || typeof latencyHint === "number" || typeof latencyHint === "string" && (latencyHint === "balanced" || latencyHint === "interactive" || latencyHint === "playback");
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-context-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-context-constructor.js
 var createAudioContextConstructor = (baseAudioContextConstructor2, createInvalidStateError2, createNotSupportedError2, createUnknownError2, mediaElementAudioSourceNodeConstructor2, mediaStreamAudioDestinationNodeConstructor2, mediaStreamAudioSourceNodeConstructor2, mediaStreamTrackAudioSourceNodeConstructor2, nativeAudioContextConstructor2) => {
   return class AudioContext extends baseAudioContextConstructor2 {
     constructor(options = {}) {
@@ -10952,7 +1700,7 @@ var createAudioContextConstructor = (baseAudioContextConstructor2, createInvalid
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-destination-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-destination-node-constructor.js
 var createAudioDestinationNodeConstructor = (audioNodeConstructor2, createAudioDestinationNodeRenderer2, createIndexSizeError2, createInvalidStateError2, createNativeAudioDestinationNode, getNativeContext2, isNativeOfflineAudioContext2, renderInputsOfAudioNode2) => {
   return class AudioDestinationNode extends audioNodeConstructor2 {
     constructor(context2, channelCount) {
@@ -10991,7 +1739,7 @@ var createAudioDestinationNodeConstructor = (audioNodeConstructor2, createAudioD
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-destination-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-destination-node-renderer-factory.js
 var createAudioDestinationNodeRenderer = (renderInputsOfAudioNode2) => {
   const renderedNativeAudioDestinationNodes = /* @__PURE__ */ new WeakMap();
   const createAudioDestinationNode = async (proxy, nativeOfflineAudioContext) => {
@@ -11011,7 +1759,7 @@ var createAudioDestinationNodeRenderer = (renderInputsOfAudioNode2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-listener-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-listener-factory.js
 var createAudioListenerFactory = (createAudioParam2, createNativeChannelMergerNode2, createNativeConstantSourceNode2, createNativeScriptProcessorNode2, createNotSupportedError2, getFirstSample2, isNativeOfflineAudioContext2, overwriteAccessors2) => {
   return (context2, nativeContext) => {
     const nativeListener = nativeContext.listener;
@@ -11229,17 +1977,17 @@ var createAudioListenerFactory = (createAudioParam2, createNativeChannelMergerNo
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/audio-node.js
 var isAudioNode = (audioNodeOrAudioParam) => {
   return "context" in audioNodeOrAudioParam;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/audio-node-output-connection.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/audio-node-output-connection.js
 var isAudioNodeOutputConnection = (outputConnection) => {
   return isAudioNode(outputConnection[0]);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/insert-element-in-set.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/insert-element-in-set.js
 var insertElementInSet = (set, element, predicate, ignoreDuplicates) => {
   for (const lmnt of set) {
     if (predicate(lmnt)) {
@@ -11253,12 +2001,12 @@ var insertElementInSet = (set, element, predicate, ignoreDuplicates) => {
   return true;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/add-active-input-connection-to-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/add-active-input-connection-to-audio-param.js
 var addActiveInputConnectionToAudioParam = (activeInputs, source, [output, eventListener], ignoreDuplicates) => {
   insertElementInSet(activeInputs, [source, output, eventListener], (activeInputConnection) => activeInputConnection[0] === source && activeInputConnection[1] === output, ignoreDuplicates);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/add-passive-input-connection-to-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/add-passive-input-connection-to-audio-param.js
 var addPassiveInputConnectionToAudioParam = (passiveInputs, [source, output, eventListener], ignoreDuplicates) => {
   const passiveInputConnections = passiveInputs.get(source);
   if (passiveInputConnections === void 0) {
@@ -11268,12 +2016,12 @@ var addPassiveInputConnectionToAudioParam = (passiveInputs, [source, output, eve
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/native-audio-node-faker.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/native-audio-node-faker.js
 var isNativeAudioNodeFaker = (nativeAudioNodeOrNativeAudioNodeFaker) => {
   return "inputs" in nativeAudioNodeOrNativeAudioNodeFaker;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/connect-native-audio-node-to-native-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/connect-native-audio-node-to-native-audio-node.js
 var connectNativeAudioNodeToNativeAudioNode = (nativeSourceAudioNode, nativeDestinationAudioNode, output, input) => {
   if (isNativeAudioNodeFaker(nativeDestinationAudioNode)) {
     const fakeNativeDestinationAudioNode = nativeDestinationAudioNode.inputs[input];
@@ -11284,7 +2032,7 @@ var connectNativeAudioNodeToNativeAudioNode = (nativeSourceAudioNode, nativeDest
   return [nativeDestinationAudioNode, output, input];
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-active-input-connection.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-active-input-connection.js
 var deleteActiveInputConnection = (activeInputConnections, source, output) => {
   for (const activeInputConnection of activeInputConnections) {
     if (activeInputConnection[0] === source && activeInputConnection[1] === output) {
@@ -11295,12 +2043,12 @@ var deleteActiveInputConnection = (activeInputConnections, source, output) => {
   return null;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-active-input-connection-to-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-active-input-connection-to-audio-param.js
 var deleteActiveInputConnectionToAudioParam = (activeInputs, source, output) => {
   return pickElementFromSet(activeInputs, (activeInputConnection) => activeInputConnection[0] === source && activeInputConnection[1] === output);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-event-listeners-of-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-event-listeners-of-audio-node.js
 var deleteEventListenerOfAudioNode = (audioNode, eventListener) => {
   const eventListeners = getEventListenersOfAudioNode(audioNode);
   if (!eventListeners.delete(eventListener)) {
@@ -11308,7 +2056,7 @@ var deleteEventListenerOfAudioNode = (audioNode, eventListener) => {
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-passive-input-connection-to-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-passive-input-connection-to-audio-param.js
 var deletePassiveInputConnectionToAudioParam = (passiveInputs, source, output) => {
   const passiveInputConnections = getValueForKey(passiveInputs, source);
   const matchingConnection = pickElementFromSet(passiveInputConnections, (passiveInputConnection) => passiveInputConnection[0] === output);
@@ -11318,7 +2066,7 @@ var deletePassiveInputConnectionToAudioParam = (passiveInputs, source, output) =
   return matchingConnection;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/disconnect-native-audio-node-from-native-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/disconnect-native-audio-node-from-native-audio-node.js
 var disconnectNativeAudioNodeFromNativeAudioNode = (nativeSourceAudioNode, nativeDestinationAudioNode, output, input) => {
   if (isNativeAudioNodeFaker(nativeDestinationAudioNode)) {
     nativeSourceAudioNode.disconnect(nativeDestinationAudioNode.inputs[input], output, 0);
@@ -11327,27 +2075,27 @@ var disconnectNativeAudioNodeFromNativeAudioNode = (nativeSourceAudioNode, nativ
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-native-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-native-audio-node.js
 var getNativeAudioNode = (audioNode) => {
   return getValueForKey(AUDIO_NODE_STORE, audioNode);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-native-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-native-audio-param.js
 var getNativeAudioParam = (audioParam) => {
   return getValueForKey(AUDIO_PARAM_STORE, audioParam);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-part-of-a-cycle.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-part-of-a-cycle.js
 var isPartOfACycle = (audioNode) => {
   return CYCLE_COUNTERS.has(audioNode);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-passive-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-passive-audio-node.js
 var isPassiveAudioNode = (audioNode) => {
   return !ACTIVE_AUDIO_NODE_STORE.has(audioNode);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-node-disconnect-method-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-node-disconnect-method-support.js
 var testAudioNodeDisconnectMethodSupport = (nativeAudioContext, nativeAudioWorkletNodeConstructor2) => {
   return new Promise((resolve) => {
     if (nativeAudioWorkletNodeConstructor2 !== null) {
@@ -11382,7 +2130,7 @@ var testAudioNodeDisconnectMethodSupport = (nativeAudioContext, nativeAudioWorkl
   });
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/visit-each-audio-node-once.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/visit-each-audio-node-once.js
 var visitEachAudioNodeOnce = (cycles, visitor) => {
   const counts = /* @__PURE__ */ new Map();
   for (const cycle of cycles) {
@@ -11394,12 +2142,12 @@ var visitEachAudioNodeOnce = (cycles, visitor) => {
   counts.forEach((count, audioNode) => visitor(audioNode, count));
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/native-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/native-audio-node.js
 var isNativeAudioNode = (nativeAudioNodeOrAudioParam) => {
   return "context" in nativeAudioNodeOrAudioParam;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-node-disconnect-method.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-node-disconnect-method.js
 var wrapAudioNodeDisconnectMethod = (nativeAudioNode) => {
   const connections = /* @__PURE__ */ new Map();
   nativeAudioNode.connect = /* @__PURE__ */ ((connect2) => {
@@ -11458,7 +2206,7 @@ var wrapAudioNodeDisconnectMethod = (nativeAudioNode) => {
   })(nativeAudioNode.disconnect);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-node-constructor.js
 var addConnectionToAudioParamOfAudioContext = (source, destination, output, isOffline) => {
   const { activeInputs, passiveInputs } = getAudioParamConnections(destination);
   const { outputs } = getAudioNodeConnections(source);
@@ -11705,7 +2453,7 @@ var createAudioNodeConstructor = (addAudioNodeConnections, addConnectionToAudioN
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-param-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-param-factory.js
 var import_automation_events = __toESM(require_bundle());
 var createAudioParamFactory = (addAudioParamConnections, audioParamAudioNodeStore2, audioParamStore, createAudioParamRenderer2, createCancelAndHoldAutomationEvent2, createCancelScheduledValuesAutomationEvent2, createExponentialRampToValueAutomationEvent2, createLinearRampToValueAutomationEvent2, createSetTargetAutomationEvent2, createSetValueAutomationEvent2, createSetValueCurveAutomationEvent2, nativeAudioContextConstructor2, setValueAtTimeUntilPossible2) => {
   return (audioNode, isAudioParamOfOfflineAudioContext, nativeAudioParam, maxValue = null, minValue = null) => {
@@ -11856,7 +2604,7 @@ var createAudioParamFactory = (addAudioParamConnections, audioParamAudioNodeStor
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-param-renderer.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-param-renderer.js
 var createAudioParamRenderer = (automationEventList) => {
   return {
     replay(audioParam) {
@@ -11884,7 +2632,7 @@ var createAudioParamRenderer = (automationEventList) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/read-only-map.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/read-only-map.js
 var ReadOnlyMap = class {
   constructor(parameters) {
     this._map = new Map(parameters);
@@ -11912,7 +2660,7 @@ var ReadOnlyMap = class {
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-worklet-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-worklet-node-constructor.js
 var DEFAULT_OPTIONS4 = {
   channelCount: 2,
   // Bug #61: The channelCountMode should be 'max' according to the spec but is set to 'explicit' to achieve consistent behavior.
@@ -11972,7 +2720,7 @@ var createAudioWorkletNodeConstructor = (addUnrenderedAudioWorkletNode2, audioNo
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/copy-from-channel.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/copy-from-channel.js
 function copyFromChannel(audioBuffer, parent, key, channelNumber, bufferOffset) {
   if (typeof audioBuffer.copyFromChannel === "function") {
     if (parent[key].byteLength === 0) {
@@ -11990,7 +2738,7 @@ function copyFromChannel(audioBuffer, parent, key, channelNumber, bufferOffset) 
   }
 }
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/copy-to-channel.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/copy-to-channel.js
 var copyToChannel = (audioBuffer, parent, key, channelNumber, bufferOffset) => {
   if (typeof audioBuffer.copyToChannel === "function") {
     if (parent[key].byteLength !== 0) {
@@ -12003,7 +2751,7 @@ var copyToChannel = (audioBuffer, parent, key, channelNumber, bufferOffset) => {
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/create-nested-arrays.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/create-nested-arrays.js
 var createNestedArrays = (x, y) => {
   const arrays = [];
   for (let i = 0; i < x; i += 1) {
@@ -12017,14 +2765,14 @@ var createNestedArrays = (x, y) => {
   return arrays;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-audio-worklet-processor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-audio-worklet-processor.js
 var getAudioWorkletProcessor = (nativeOfflineAudioContext, proxy) => {
   const nodeToProcessorMap = getValueForKey(NODE_TO_PROCESSOR_MAPS, nativeOfflineAudioContext);
   const nativeAudioWorkletNode = getNativeAudioNode(proxy);
   return getValueForKey(nodeToProcessorMap, nativeAudioWorkletNode);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-worklet-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-worklet-node-renderer-factory.js
 var processBuffer = async (proxy, renderedBuffer, nativeOfflineAudioContext, options, outputChannelCount, processorConstructor, exposeCurrentFrameAndCurrentTime2) => {
   const length = renderedBuffer === null ? Math.ceil(proxy.context.length / 128) * 128 : renderedBuffer.length;
   const numberOfInputChannels = options.channelCount * options.numberOfInputs;
@@ -12256,7 +3004,7 @@ var createAudioWorkletNodeRendererFactory = (connectAudioParam2, connectMultiple
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/base-audio-context-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/base-audio-context-constructor.js
 var createBaseAudioContextConstructor = (addAudioWorkletModule2, analyserNodeConstructor2, audioBufferConstructor2, audioBufferSourceNodeConstructor2, biquadFilterNodeConstructor2, channelMergerNodeConstructor2, channelSplitterNodeConstructor2, constantSourceNodeConstructor2, convolverNodeConstructor2, decodeAudioData2, delayNodeConstructor2, dynamicsCompressorNodeConstructor2, gainNodeConstructor2, iIRFilterNodeConstructor2, minimalBaseAudioContextConstructor2, oscillatorNodeConstructor2, pannerNodeConstructor2, periodicWaveConstructor2, stereoPannerNodeConstructor2, waveShaperNodeConstructor2) => {
   return class BaseAudioContext extends minimalBaseAudioContextConstructor2 {
     constructor(_nativeContext, numberOfChannels) {
@@ -12338,7 +3086,7 @@ var createBaseAudioContextConstructor = (addAudioWorkletModule2, analyserNodeCon
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/biquad-filter-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/biquad-filter-node-constructor.js
 var DEFAULT_OPTIONS5 = {
   Q: 1,
   channelCount: 2,
@@ -12399,7 +3147,7 @@ var createBiquadFilterNodeConstructor = (audioNodeConstructor2, createAudioParam
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/biquad-filter-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/biquad-filter-node-renderer-factory.js
 var createBiquadFilterNodeRendererFactory = (connectAudioParam2, createNativeBiquadFilterNode2, getNativeAudioNode2, renderAutomation2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeBiquadFilterNodes = /* @__PURE__ */ new WeakMap();
@@ -12446,7 +3194,7 @@ var createBiquadFilterNodeRendererFactory = (connectAudioParam2, createNativeBiq
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/cache-test-result.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/cache-test-result.js
 var createCacheTestResult = (ongoingTests, testResults) => {
   return (tester, test) => {
     const cachedTestResult = testResults.get(tester);
@@ -12476,7 +3224,7 @@ var createCacheTestResult = (ongoingTests, testResults) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/channel-merger-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/channel-merger-node-constructor.js
 var DEFAULT_OPTIONS6 = {
   channelCount: 1,
   channelCountMode: "explicit",
@@ -12495,7 +3243,7 @@ var createChannelMergerNodeConstructor = (audioNodeConstructor2, createChannelMe
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/channel-merger-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/channel-merger-node-renderer-factory.js
 var createChannelMergerNodeRendererFactory = (createNativeChannelMergerNode2, getNativeAudioNode2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeAudioNodes = /* @__PURE__ */ new WeakMap();
@@ -12527,7 +3275,7 @@ var createChannelMergerNodeRendererFactory = (createNativeChannelMergerNode2, ge
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/channel-splitter-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/channel-splitter-node-constructor.js
 var DEFAULT_OPTIONS7 = {
   channelCount: 6,
   channelCountMode: "explicit",
@@ -12546,7 +3294,7 @@ var createChannelSplitterNodeConstructor = (audioNodeConstructor2, createChannel
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/channel-splitter-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/channel-splitter-node-renderer-factory.js
 var createChannelSplitterNodeRendererFactory = (createNativeChannelSplitterNode2, getNativeAudioNode2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeAudioNodes = /* @__PURE__ */ new WeakMap();
@@ -12578,14 +3326,14 @@ var createChannelSplitterNodeRendererFactory = (createNativeChannelSplitterNode2
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/connect-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/connect-audio-param.js
 var createConnectAudioParam = (renderInputsOfAudioParam2) => {
   return (nativeOfflineAudioContext, audioParam, nativeAudioParam) => {
     return renderInputsOfAudioParam2(audioParam, nativeOfflineAudioContext, nativeAudioParam);
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/connect-multiple-outputs.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/connect-multiple-outputs.js
 var createConnectMultipleOutputs = (createIndexSizeError2) => {
   return (outputAudioNodes, destination, output = 0, input = 0) => {
     const outputAudioNode = outputAudioNodes[output];
@@ -12599,7 +3347,7 @@ var createConnectMultipleOutputs = (createIndexSizeError2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/connected-native-audio-buffer-source-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/connected-native-audio-buffer-source-node-factory.js
 var createConnectedNativeAudioBufferSourceNodeFactory = (createNativeAudioBufferSourceNode2) => {
   return (nativeContext, nativeAudioNode) => {
     const nativeAudioBufferSourceNode = createNativeAudioBufferSourceNode2(nativeContext, {
@@ -12624,7 +3372,7 @@ var createConnectedNativeAudioBufferSourceNodeFactory = (createNativeAudioBuffer
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/constant-source-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/constant-source-node-constructor.js
 var DEFAULT_OPTIONS8 = {
   channelCount: 2,
   channelCountMode: "max",
@@ -12682,7 +3430,7 @@ var createConstantSourceNodeConstructor = (audioNodeConstructor2, createAudioPar
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/constant-source-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/constant-source-node-renderer-factory.js
 var createConstantSourceNodeRendererFactory = (connectAudioParam2, createNativeConstantSourceNode2, getNativeAudioNode2, renderAutomation2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeConstantSourceNodes = /* @__PURE__ */ new WeakMap();
@@ -12733,7 +3481,7 @@ var createConstantSourceNodeRendererFactory = (connectAudioParam2, createNativeC
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/convert-number-to-unsigned-long.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/convert-number-to-unsigned-long.js
 var createConvertNumberToUnsignedLong = (unit32Array) => {
   return (value) => {
     unit32Array[0] = value;
@@ -12741,7 +3489,7 @@ var createConvertNumberToUnsignedLong = (unit32Array) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/convolver-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/convolver-node-constructor.js
 var DEFAULT_OPTIONS9 = {
   buffer: null,
   channelCount: 2,
@@ -12791,7 +3539,7 @@ var createConvolverNodeConstructor = (audioNodeConstructor2, createConvolverNode
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/convolver-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/convolver-node-renderer-factory.js
 var createConvolverNodeRendererFactory = (createNativeConvolverNode2, getNativeAudioNode2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeConvolverNodes = /* @__PURE__ */ new WeakMap();
@@ -12828,7 +3576,7 @@ var createConvolverNodeRendererFactory = (createNativeConvolverNode2, getNativeA
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/create-native-offline-audio-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/create-native-offline-audio-context.js
 var createCreateNativeOfflineAudioContext = (createNotSupportedError2, nativeOfflineAudioContextConstructor2) => {
   return (numberOfChannels, length, sampleRate) => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -12845,10 +3593,10 @@ var createCreateNativeOfflineAudioContext = (createNotSupportedError2, nativeOff
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/data-clone-error.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/data-clone-error.js
 var createDataCloneError = () => new DOMException("", "DataCloneError");
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/detach-array-buffer.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/detach-array-buffer.js
 var detachArrayBuffer = (arrayBuffer) => {
   const { port1, port2 } = new MessageChannel();
   return new Promise((resolve) => {
@@ -12868,7 +3616,7 @@ var detachArrayBuffer = (arrayBuffer) => {
   });
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/decode-audio-data.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/decode-audio-data.js
 var createDecodeAudioData = (audioBufferStore2, cacheTestResult2, createDataCloneError2, createEncodingError2, detachedArrayBuffers, getNativeContext2, isNativeContext2, testAudioBufferCopyChannelMethodsOutOfBoundsSupport2, testPromiseSupport2, wrapAudioBufferCopyChannelMethods2, wrapAudioBufferCopyChannelMethodsOutOfBounds2) => {
   return (anyContext, audioData) => {
     const nativeContext = isNativeContext2(anyContext) ? anyContext : getNativeContext2(anyContext);
@@ -12924,7 +3672,7 @@ var createDecodeAudioData = (audioBufferStore2, cacheTestResult2, createDataClon
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/decrement-cycle-counter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/decrement-cycle-counter.js
 var createDecrementCycleCounter = (connectNativeAudioNodeToNativeAudioNode2, cycleCounters, getAudioNodeConnections2, getNativeAudioNode2, getNativeAudioParam2, getNativeContext2, isActiveAudioNode2, isNativeOfflineAudioContext2) => {
   return (audioNode, count) => {
     const cycleCounter = cycleCounters.get(audioNode);
@@ -12954,7 +3702,7 @@ var createDecrementCycleCounter = (connectNativeAudioNodeToNativeAudioNode2, cyc
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/delay-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/delay-node-constructor.js
 var DEFAULT_OPTIONS10 = {
   channelCount: 2,
   channelCountMode: "max",
@@ -12980,7 +3728,7 @@ var createDelayNodeConstructor = (audioNodeConstructor2, createAudioParam2, crea
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/delay-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/delay-node-renderer-factory.js
 var createDelayNodeRendererFactory = (connectAudioParam2, createNativeDelayNode2, getNativeAudioNode2, renderAutomation2, renderInputsOfAudioNode2) => {
   return (maxDelayTime) => {
     const renderedNativeDelayNodes = /* @__PURE__ */ new WeakMap();
@@ -13018,26 +3766,26 @@ var createDelayNodeRendererFactory = (connectAudioParam2, createNativeDelayNode2
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/delete-active-input-connection-to-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/delete-active-input-connection-to-audio-node.js
 var createDeleteActiveInputConnectionToAudioNode = (pickElementFromSet2) => {
   return (activeInputs, source, output, input) => {
     return pickElementFromSet2(activeInputs[input], (activeInputConnection) => activeInputConnection[0] === source && activeInputConnection[1] === output);
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/delete-unrendered-audio-worklet-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/delete-unrendered-audio-worklet-node.js
 var createDeleteUnrenderedAudioWorkletNode = (getUnrenderedAudioWorkletNodes2) => {
   return (nativeContext, audioWorkletNode) => {
     getUnrenderedAudioWorkletNodes2(nativeContext).delete(audioWorkletNode);
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/delay-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/delay-node.js
 var isDelayNode = (audioNode) => {
   return "delayTime" in audioNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/detect-cycles.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/detect-cycles.js
 var createDetectCycles = (audioParamAudioNodeStore2, getAudioNodeConnections2, getValueForKey2) => {
   return function detectCycles(chain, nextLink) {
     const audioNode = isAudioNode(nextLink) ? nextLink : getValueForKey2(audioParamAudioNodeStore2, nextLink);
@@ -13055,7 +3803,7 @@ var createDetectCycles = (audioParamAudioNodeStore2, getAudioNodeConnections2, g
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/disconnect-multiple-outputs.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/disconnect-multiple-outputs.js
 var getOutputAudioNodeAtIndex = (createIndexSizeError2, outputAudioNodes, output) => {
   const outputAudioNode = outputAudioNodes[output];
   if (outputAudioNode === void 0) {
@@ -13087,7 +3835,7 @@ var createDisconnectMultipleOutputs = (createIndexSizeError2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/dynamics-compressor-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/dynamics-compressor-node-constructor.js
 var DEFAULT_OPTIONS11 = {
   attack: 3e-3,
   channelCount: 2,
@@ -13166,7 +3914,7 @@ var createDynamicsCompressorNodeConstructor = (audioNodeConstructor2, createAudi
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/dynamics-compressor-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/dynamics-compressor-node-renderer-factory.js
 var createDynamicsCompressorNodeRendererFactory = (connectAudioParam2, createNativeDynamicsCompressorNode2, getNativeAudioNode2, renderAutomation2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeDynamicsCompressorNodes = /* @__PURE__ */ new WeakMap();
@@ -13215,10 +3963,10 @@ var createDynamicsCompressorNodeRendererFactory = (connectAudioParam2, createNat
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/encoding-error.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/encoding-error.js
 var createEncodingError = () => new DOMException("", "EncodingError");
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/evaluate-source.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/evaluate-source.js
 var createEvaluateSource = (window3) => {
   return (source) => new Promise((resolve, reject) => {
     if (window3 === null) {
@@ -13262,7 +4010,7 @@ var createEvaluateSource = (window3) => {
   });
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/event-target-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/event-target-constructor.js
 var createEventTargetConstructor = (wrapEventListener2) => {
   return class EventTarget {
     constructor(_nativeEventTarget) {
@@ -13291,7 +4039,7 @@ var createEventTargetConstructor = (wrapEventListener2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/expose-current-frame-and-current-time.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/expose-current-frame-and-current-time.js
 var createExposeCurrentFrameAndCurrentTime = (window3) => {
   return (currentTime, sampleRate, fn) => {
     Object.defineProperties(window3, {
@@ -13319,7 +4067,7 @@ var createExposeCurrentFrameAndCurrentTime = (window3) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/fetch-source.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/fetch-source.js
 var createFetchSource = (createAbortError2) => {
   return async (url) => {
     try {
@@ -13333,7 +4081,7 @@ var createFetchSource = (createAbortError2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/gain-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/gain-node-constructor.js
 var DEFAULT_OPTIONS12 = {
   channelCount: 2,
   channelCountMode: "max",
@@ -13357,7 +4105,7 @@ var createGainNodeConstructor = (audioNodeConstructor2, createAudioParam2, creat
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/gain-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/gain-node-renderer-factory.js
 var createGainNodeRendererFactory = (connectAudioParam2, createNativeGainNode2, getNativeAudioNode2, renderAutomation2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeGainNodes = /* @__PURE__ */ new WeakMap();
@@ -13394,12 +4142,12 @@ var createGainNodeRendererFactory = (connectAudioParam2, createNativeGainNode2, 
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/get-active-audio-worklet-node-inputs.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/get-active-audio-worklet-node-inputs.js
 var createGetActiveAudioWorkletNodeInputs = (activeAudioWorkletNodeInputsStore2, getValueForKey2) => {
   return (nativeAudioWorkletNode) => getValueForKey2(activeAudioWorkletNodeInputsStore2, nativeAudioWorkletNode);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/get-audio-node-renderer.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/get-audio-node-renderer.js
 var createGetAudioNodeRenderer = (getAudioNodeConnections2) => {
   return (audioNode) => {
     const audioNodeConnections = getAudioNodeConnections2(audioNode);
@@ -13410,7 +4158,7 @@ var createGetAudioNodeRenderer = (getAudioNodeConnections2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/get-audio-node-tail-time.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/get-audio-node-tail-time.js
 var createGetAudioNodeTailTime = (audioNodeTailTimeStore2) => {
   return (audioNode) => {
     var _a;
@@ -13418,7 +4166,7 @@ var createGetAudioNodeTailTime = (audioNodeTailTimeStore2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/get-audio-param-renderer.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/get-audio-param-renderer.js
 var createGetAudioParamRenderer = (getAudioParamConnections2) => {
   return (audioParam) => {
     const audioParamConnections = getAudioParamConnections2(audioParam);
@@ -13429,17 +4177,17 @@ var createGetAudioParamRenderer = (getAudioParamConnections2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/get-backup-offline-audio-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/get-backup-offline-audio-context.js
 var createGetBackupOfflineAudioContext = (backupOfflineAudioContextStore2) => {
   return (nativeContext) => {
     return backupOfflineAudioContextStore2.get(nativeContext);
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/invalid-state-error.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/invalid-state-error.js
 var createInvalidStateError = () => new DOMException("", "InvalidStateError");
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/get-native-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/get-native-context.js
 var createGetNativeContext = (contextStore) => {
   return (context2) => {
     const nativeContext = contextStore.get(context2);
@@ -13450,7 +4198,7 @@ var createGetNativeContext = (contextStore) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/get-or-create-backup-offline-audio-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/get-or-create-backup-offline-audio-context.js
 var createGetOrCreateBackupOfflineAudioContext = (backupOfflineAudioContextStore2, nativeOfflineAudioContextConstructor2) => {
   return (nativeContext) => {
     let backupOfflineAudioContext = backupOfflineAudioContextStore2.get(nativeContext);
@@ -13466,7 +4214,7 @@ var createGetOrCreateBackupOfflineAudioContext = (backupOfflineAudioContextStore
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/get-unrendered-audio-worklet-nodes.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/get-unrendered-audio-worklet-nodes.js
 var createGetUnrenderedAudioWorkletNodes = (unrenderedAudioWorkletNodeStore2) => {
   return (nativeContext) => {
     const unrenderedAudioWorkletNodes = unrenderedAudioWorkletNodeStore2.get(nativeContext);
@@ -13477,10 +4225,10 @@ var createGetUnrenderedAudioWorkletNodes = (unrenderedAudioWorkletNodeStore2) =>
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/invalid-access-error.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/invalid-access-error.js
 var createInvalidAccessError = () => new DOMException("", "InvalidAccessError");
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-iir-filter-node-get-frequency-response-method.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-iir-filter-node-get-frequency-response-method.js
 var wrapIIRFilterNodeGetFrequencyResponseMethod = (nativeIIRFilterNode) => {
   nativeIIRFilterNode.getFrequencyResponse = /* @__PURE__ */ ((getFrequencyResponse) => {
     return (frequencyHz, magResponse, phaseResponse) => {
@@ -13492,7 +4240,7 @@ var wrapIIRFilterNodeGetFrequencyResponseMethod = (nativeIIRFilterNode) => {
   })(nativeIIRFilterNode.getFrequencyResponse);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/iir-filter-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/iir-filter-node-constructor.js
 var DEFAULT_OPTIONS13 = {
   channelCount: 2,
   channelCountMode: "max",
@@ -13517,7 +4265,7 @@ var createIIRFilterNodeConstructor = (audioNodeConstructor2, createNativeIIRFilt
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/filter-buffer.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/filter-buffer.js
 var filterBuffer = (feedback, feedbackLength, feedforward, feedforwardLength, minLength, xBuffer, yBuffer, bufferIndex, bufferLength, input, output) => {
   const inputLength = input.length;
   let i = bufferIndex;
@@ -13542,7 +4290,7 @@ var filterBuffer = (feedback, feedbackLength, feedforward, feedforwardLength, mi
   return i;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/iir-filter-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/iir-filter-node-renderer-factory.js
 var filterFullBuffer = (renderedBuffer, nativeOfflineAudioContext, feedback, feedforward) => {
   const convertedFeedback = feedback instanceof Float64Array ? feedback : new Float64Array(feedback);
   const convertedFeedforward = feedforward instanceof Float64Array ? feedforward : new Float64Array(feedforward);
@@ -13632,7 +4380,7 @@ var createIIRFilterNodeRendererFactory = (createNativeAudioBufferSourceNode2, ge
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/increment-cycle-counter-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/increment-cycle-counter-factory.js
 var createIncrementCycleCounterFactory = (cycleCounters, disconnectNativeAudioNodeFromNativeAudioNode2, getAudioNodeConnections2, getNativeAudioNode2, getNativeAudioParam2, isActiveAudioNode2) => {
   return (isOffline) => {
     return (audioNode, count) => {
@@ -13659,7 +4407,7 @@ var createIncrementCycleCounterFactory = (cycleCounters, disconnectNativeAudioNo
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-any-audio-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-any-audio-context.js
 var createIsAnyAudioContext = (contextStore, isNativeAudioContext2) => {
   return (anything) => {
     const nativeContext = contextStore.get(anything);
@@ -13667,17 +4415,17 @@ var createIsAnyAudioContext = (contextStore, isNativeAudioContext2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-any-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-any-audio-node.js
 var createIsAnyAudioNode = (audioNodeStore, isNativeAudioNode3) => {
   return (anything) => audioNodeStore.has(anything) || isNativeAudioNode3(anything);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-any-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-any-audio-param.js
 var createIsAnyAudioParam = (audioParamStore, isNativeAudioParam2) => {
   return (anything) => audioParamStore.has(anything) || isNativeAudioParam2(anything);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-any-offline-audio-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-any-offline-audio-context.js
 var createIsAnyOfflineAudioContext = (contextStore, isNativeOfflineAudioContext2) => {
   return (anything) => {
     const nativeContext = contextStore.get(anything);
@@ -13685,45 +4433,45 @@ var createIsAnyOfflineAudioContext = (contextStore, isNativeOfflineAudioContext2
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-audio-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-audio-context.js
 var createIsNativeAudioContext = (nativeAudioContextConstructor2) => {
   return (anything) => {
     return nativeAudioContextConstructor2 !== null && anything instanceof nativeAudioContextConstructor2;
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-audio-node.js
 var createIsNativeAudioNode = (window3) => {
   return (anything) => {
     return window3 !== null && typeof window3.AudioNode === "function" && anything instanceof window3.AudioNode;
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-audio-param.js
 var createIsNativeAudioParam = (window3) => {
   return (anything) => {
     return window3 !== null && typeof window3.AudioParam === "function" && anything instanceof window3.AudioParam;
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-context.js
 var createIsNativeContext = (isNativeAudioContext2, isNativeOfflineAudioContext2) => {
   return (anything) => {
     return isNativeAudioContext2(anything) || isNativeOfflineAudioContext2(anything);
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-offline-audio-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-offline-audio-context.js
 var createIsNativeOfflineAudioContext = (nativeOfflineAudioContextConstructor2) => {
   return (anything) => {
     return nativeOfflineAudioContextConstructor2 !== null && anything instanceof nativeOfflineAudioContextConstructor2;
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-secure-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-secure-context.js
 var createIsSecureContext = (window3) => window3 !== null && window3.isSecureContext;
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-supported-promise.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-supported-promise.js
 var createIsSupportedPromise = async (cacheTestResult2, testAudioBufferCopyChannelMethodsSubarraySupport, testAudioContextCloseMethodSupport, testAudioContextDecodeAudioDataMethodTypeErrorSupport, testAudioContextOptionsSupport, testAudioNodeConnectMethodSupport, testAudioWorkletProcessorNoOutputsSupport, testChannelMergerNodeChannelCountSupport, testConstantSourceNodeAccurateSchedulingSupport, testConvolverNodeBufferReassignabilitySupport, testConvolverNodeChannelCountSupport, testDomExceptionContrucorSupport, testIsSecureContextSupport, testMediaStreamAudioSourceNodeMediaStreamWithoutAudioTrackSupport, testStereoPannerNodeDefaultValueSupport, testTransferablesSupport2) => {
   if (cacheTestResult2(testAudioBufferCopyChannelMethodsSubarraySupport, testAudioBufferCopyChannelMethodsSubarraySupport) && cacheTestResult2(testAudioContextCloseMethodSupport, testAudioContextCloseMethodSupport) && cacheTestResult2(testAudioContextOptionsSupport, testAudioContextOptionsSupport) && cacheTestResult2(testAudioNodeConnectMethodSupport, testAudioNodeConnectMethodSupport) && cacheTestResult2(testChannelMergerNodeChannelCountSupport, testChannelMergerNodeChannelCountSupport) && cacheTestResult2(testConstantSourceNodeAccurateSchedulingSupport, testConstantSourceNodeAccurateSchedulingSupport) && cacheTestResult2(testConvolverNodeBufferReassignabilitySupport, testConvolverNodeBufferReassignabilitySupport) && cacheTestResult2(testConvolverNodeChannelCountSupport, testConvolverNodeChannelCountSupport) && cacheTestResult2(testDomExceptionContrucorSupport, testDomExceptionContrucorSupport) && cacheTestResult2(testIsSecureContextSupport, testIsSecureContextSupport) && cacheTestResult2(testMediaStreamAudioSourceNodeMediaStreamWithoutAudioTrackSupport, testMediaStreamAudioSourceNodeMediaStreamWithoutAudioTrackSupport)) {
     const results = await Promise.all([
@@ -13737,7 +4485,7 @@ var createIsSupportedPromise = async (cacheTestResult2, testAudioBufferCopyChann
   return false;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/media-element-audio-source-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/media-element-audio-source-node-constructor.js
 var createMediaElementAudioSourceNodeConstructor = (audioNodeConstructor2, createNativeMediaElementAudioSourceNode2, getNativeContext2, isNativeOfflineAudioContext2) => {
   return class MediaElementAudioSourceNode extends audioNodeConstructor2 {
     constructor(context2, options) {
@@ -13755,7 +4503,7 @@ var createMediaElementAudioSourceNodeConstructor = (audioNodeConstructor2, creat
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/media-stream-audio-destination-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/media-stream-audio-destination-node-constructor.js
 var DEFAULT_OPTIONS14 = {
   channelCount: 2,
   channelCountMode: "explicit",
@@ -13779,7 +4527,7 @@ var createMediaStreamAudioDestinationNodeConstructor = (audioNodeConstructor2, c
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/media-stream-audio-source-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/media-stream-audio-source-node-constructor.js
 var createMediaStreamAudioSourceNodeConstructor = (audioNodeConstructor2, createNativeMediaStreamAudioSourceNode2, getNativeContext2, isNativeOfflineAudioContext2) => {
   return class MediaStreamAudioSourceNode extends audioNodeConstructor2 {
     constructor(context2, options) {
@@ -13797,7 +4545,7 @@ var createMediaStreamAudioSourceNodeConstructor = (audioNodeConstructor2, create
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/media-stream-track-audio-source-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/media-stream-track-audio-source-node-constructor.js
 var createMediaStreamTrackAudioSourceNodeConstructor = (audioNodeConstructor2, createNativeMediaStreamTrackAudioSourceNode2, getNativeContext2) => {
   return class MediaStreamTrackAudioSourceNode extends audioNodeConstructor2 {
     constructor(context2, options) {
@@ -13808,7 +4556,7 @@ var createMediaStreamTrackAudioSourceNodeConstructor = (audioNodeConstructor2, c
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/minimal-audio-context-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/minimal-audio-context-constructor.js
 var createMinimalAudioContextConstructor = (createInvalidStateError2, createNotSupportedError2, createUnknownError2, minimalBaseAudioContextConstructor2, nativeAudioContextConstructor2) => {
   return class MinimalAudioContext extends minimalBaseAudioContextConstructor2 {
     constructor(options = {}) {
@@ -13922,7 +4670,7 @@ var createMinimalAudioContextConstructor = (createInvalidStateError2, createNotS
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/minimal-base-audio-context-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/minimal-base-audio-context-constructor.js
 var createMinimalBaseAudioContextConstructor = (audioDestinationNodeConstructor2, createAudioListener2, eventTargetConstructor2, isNativeOfflineAudioContext2, unrenderedAudioWorkletNodeStore2, wrapEventListener2) => {
   return class MinimalBaseAudioContext extends eventTargetConstructor2 {
     constructor(_nativeContext, numberOfChannels) {
@@ -13963,7 +4711,7 @@ var createMinimalBaseAudioContextConstructor = (audioDestinationNodeConstructor2
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-promise-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-promise-support.js
 var testPromiseSupport = (nativeContext) => {
   const uint32Array = new Uint32Array([1179011410, 40, 1163280727, 544501094, 16, 131073, 44100, 176400, 1048580, 1635017060, 4, 0]);
   try {
@@ -13980,7 +4728,7 @@ var testPromiseSupport = (nativeContext) => {
   return false;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/minimal-offline-audio-context-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/minimal-offline-audio-context-constructor.js
 var DEFAULT_OPTIONS15 = {
   numberOfChannels: 1
 };
@@ -14040,7 +4788,7 @@ var createMinimalOfflineAudioContextConstructor = (cacheTestResult2, createInval
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/monitor-connections.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/monitor-connections.js
 var createMonitorConnections = (insertElementInSet2, isNativeAudioNode3) => {
   return (nativeAudioNode, whenConnected, whenDisconnected) => {
     const connections = /* @__PURE__ */ new Set();
@@ -14098,7 +4846,7 @@ var createMonitorConnections = (insertElementInSet2, isNativeAudioNode3) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/assign-native-audio-node-option.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/assign-native-audio-node-option.js
 var assignNativeAudioNodeOption = (nativeAudioNode, options, option) => {
   const value = options[option];
   if (value !== void 0 && value !== nativeAudioNode[option]) {
@@ -14106,19 +4854,19 @@ var assignNativeAudioNodeOption = (nativeAudioNode, options, option) => {
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/assign-native-audio-node-options.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/assign-native-audio-node-options.js
 var assignNativeAudioNodeOptions = (nativeAudioNode, options) => {
   assignNativeAudioNodeOption(nativeAudioNode, options, "channelCount");
   assignNativeAudioNodeOption(nativeAudioNode, options, "channelCountMode");
   assignNativeAudioNodeOption(nativeAudioNode, options, "channelInterpretation");
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-analyser-node-get-float-time-domain-data-method-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-analyser-node-get-float-time-domain-data-method-support.js
 var testAnalyserNodeGetFloatTimeDomainDataMethodSupport = (nativeAnalyserNode) => {
   return typeof nativeAnalyserNode.getFloatTimeDomainData === "function";
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-analyser-node-get-float-time-domain-data-method.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-analyser-node-get-float-time-domain-data-method.js
 var wrapAnalyserNodeGetFloatTimeDomainDataMethod = (nativeAnalyserNode) => {
   nativeAnalyserNode.getFloatTimeDomainData = (array) => {
     const byteTimeDomainData = new Uint8Array(array.length);
@@ -14131,7 +4879,7 @@ var wrapAnalyserNodeGetFloatTimeDomainDataMethod = (nativeAnalyserNode) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-analyser-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-analyser-node-factory.js
 var createNativeAnalyserNodeFactory = (cacheTestResult2, createIndexSizeError2) => {
   return (nativeContext, options) => {
     const nativeAnalyserNode = nativeContext.createAnalyser();
@@ -14150,7 +4898,7 @@ var createNativeAnalyserNodeFactory = (cacheTestResult2, createIndexSizeError2) 
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-buffer-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-buffer-constructor.js
 var createNativeAudioBufferConstructor = (window3) => {
   if (window3 === null) {
     return null;
@@ -14161,7 +4909,7 @@ var createNativeAudioBufferConstructor = (window3) => {
   return null;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/assign-native-audio-node-audio-param-value.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/assign-native-audio-node-audio-param-value.js
 var assignNativeAudioNodeAudioParamValue = (nativeAudioNode, options, audioParam) => {
   const value = options[audioParam];
   if (value !== void 0 && value !== nativeAudioNode[audioParam].value) {
@@ -14169,7 +4917,7 @@ var assignNativeAudioNodeAudioParamValue = (nativeAudioNode, options, audioParam
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-buffer-source-node-start-method-consecutive-calls.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-buffer-source-node-start-method-consecutive-calls.js
 var wrapAudioBufferSourceNodeStartMethodConsecutiveCalls = (nativeAudioBufferSourceNode) => {
   nativeAudioBufferSourceNode.start = /* @__PURE__ */ ((start2) => {
     let isScheduled = false;
@@ -14183,7 +4931,7 @@ var wrapAudioBufferSourceNodeStartMethodConsecutiveCalls = (nativeAudioBufferSou
   })(nativeAudioBufferSourceNode.start);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-scheduled-source-node-start-method-negative-parameters.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-scheduled-source-node-start-method-negative-parameters.js
 var wrapAudioScheduledSourceNodeStartMethodNegativeParameters = (nativeAudioScheduledSourceNode) => {
   nativeAudioScheduledSourceNode.start = /* @__PURE__ */ ((start2) => {
     return (when = 0, offset = 0, duration) => {
@@ -14195,7 +4943,7 @@ var wrapAudioScheduledSourceNodeStartMethodNegativeParameters = (nativeAudioSche
   })(nativeAudioScheduledSourceNode.start);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-scheduled-source-node-stop-method-negative-parameters.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-scheduled-source-node-stop-method-negative-parameters.js
 var wrapAudioScheduledSourceNodeStopMethodNegativeParameters = (nativeAudioScheduledSourceNode) => {
   nativeAudioScheduledSourceNode.stop = /* @__PURE__ */ ((stop) => {
     return (when = 0) => {
@@ -14207,7 +4955,7 @@ var wrapAudioScheduledSourceNodeStopMethodNegativeParameters = (nativeAudioSched
   })(nativeAudioScheduledSourceNode.stop);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-buffer-source-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-buffer-source-node-factory.js
 var createNativeAudioBufferSourceNodeFactory = (addSilentConnection2, cacheTestResult2, testAudioBufferSourceNodeStartMethodConsecutiveCallsSupport2, testAudioBufferSourceNodeStartMethodOffsetClampingSupport2, testAudioBufferSourceNodeStopMethodNullifiedBufferSupport2, testAudioScheduledSourceNodeStartMethodNegativeParametersSupport2, testAudioScheduledSourceNodeStopMethodConsecutiveCallsSupport2, testAudioScheduledSourceNodeStopMethodNegativeParametersSupport2, wrapAudioBufferSourceNodeStartMethodOffsetClampling, wrapAudioBufferSourceNodeStopMethodNullifiedBuffer, wrapAudioScheduledSourceNodeStopMethodConsecutiveCalls2) => {
   return (nativeContext, options) => {
     const nativeAudioBufferSourceNode = nativeContext.createBufferSource();
@@ -14240,7 +4988,7 @@ var createNativeAudioBufferSourceNodeFactory = (addSilentConnection2, cacheTestR
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-context-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-context-constructor.js
 var createNativeAudioContextConstructor = (window3) => {
   if (window3 === null) {
     return null;
@@ -14251,7 +4999,7 @@ var createNativeAudioContextConstructor = (window3) => {
   return window3.hasOwnProperty("webkitAudioContext") ? window3.webkitAudioContext : null;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-destination-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-destination-node.js
 var createNativeAudioDestinationNodeFactory = (createNativeGainNode2, overwriteAccessors2) => {
   return (nativeContext, channelCount, isNodeOfNativeOfflineAudioContext) => {
     const nativeAudioDestinationNode = nativeContext.destination;
@@ -14301,7 +5049,7 @@ var createNativeAudioDestinationNodeFactory = (createNativeGainNode2, overwriteA
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-worklet-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-worklet-node-constructor.js
 var createNativeAudioWorkletNodeConstructor = (window3) => {
   if (window3 === null) {
     return null;
@@ -14309,7 +5057,7 @@ var createNativeAudioWorkletNodeConstructor = (window3) => {
   return window3.hasOwnProperty("AudioWorkletNode") ? window3.AudioWorkletNode : null;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-clonability-of-audio-worklet-node-options.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-clonability-of-audio-worklet-node-options.js
 var testClonabilityOfAudioWorkletNodeOptions = (audioWorkletNodeOptions) => {
   const { port1 } = new MessageChannel();
   try {
@@ -14319,7 +5067,7 @@ var testClonabilityOfAudioWorkletNodeOptions = (audioWorkletNodeOptions) => {
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-worklet-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-worklet-node-factory.js
 var createNativeAudioWorkletNodeFactory = (createInvalidStateError2, createNativeAudioWorkletNodeFaker2, createNativeGainNode2, createNotSupportedError2, monitorConnections2) => {
   return (nativeContext, baseLatency, nativeAudioWorkletNodeConstructor2, name, processorConstructor, options) => {
     if (nativeAudioWorkletNodeConstructor2 !== null) {
@@ -14426,7 +5174,7 @@ var createNativeAudioWorkletNodeFactory = (createInvalidStateError2, createNativ
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/compute-buffer-size.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/compute-buffer-size.js
 var computeBufferSize = (baseLatency, sampleRate) => {
   if (baseLatency === null) {
     return 512;
@@ -14434,7 +5182,7 @@ var computeBufferSize = (baseLatency, sampleRate) => {
   return Math.max(512, Math.min(16384, Math.pow(2, Math.round(Math.log2(baseLatency * sampleRate)))));
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/clone-audio-worklet-node-options.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/clone-audio-worklet-node-options.js
 var cloneAudioWorkletNodeOptions = (audioWorkletNodeOptions) => {
   return new Promise((resolve, reject) => {
     const { port1, port2 } = new MessageChannel();
@@ -14452,13 +5200,13 @@ var cloneAudioWorkletNodeOptions = (audioWorkletNodeOptions) => {
   });
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/create-audio-worklet-processor-promise.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/create-audio-worklet-processor-promise.js
 var createAudioWorkletProcessorPromise = async (processorConstructor, audioWorkletNodeOptions) => {
   const clonedAudioWorkletNodeOptions = await cloneAudioWorkletNodeOptions(audioWorkletNodeOptions);
   return new processorConstructor(clonedAudioWorkletNodeOptions);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/create-audio-worklet-processor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/create-audio-worklet-processor.js
 var createAudioWorkletProcessor = (nativeContext, nativeAudioWorkletNode, processorConstructor, audioWorkletNodeOptions) => {
   let nodeToProcessorMap = NODE_TO_PROCESSOR_MAPS.get(nativeContext);
   if (nodeToProcessorMap === void 0) {
@@ -14470,7 +5218,7 @@ var createAudioWorkletProcessor = (nativeContext, nativeAudioWorkletNode, proces
   return audioWorkletProcessorPromise;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-worklet-node-faker-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-worklet-node-faker-factory.js
 var createNativeAudioWorkletNodeFakerFactory = (connectMultipleOutputs2, createIndexSizeError2, createInvalidStateError2, createNativeChannelMergerNode2, createNativeChannelSplitterNode2, createNativeConstantSourceNode2, createNativeGainNode2, createNativeScriptProcessorNode2, createNotSupportedError2, disconnectMultipleOutputs2, exposeCurrentFrameAndCurrentTime2, getActiveAudioWorkletNodeInputs2, monitorConnections2) => {
   return (nativeContext, baseLatency, processorConstructor, options) => {
     if (options.numberOfInputs === 0 && options.numberOfOutputs === 0) {
@@ -14836,7 +5584,7 @@ var createNativeAudioWorkletNodeFakerFactory = (connectMultipleOutputs2, createI
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-biquad-filter-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-biquad-filter-node.js
 var createNativeBiquadFilterNode = (nativeContext, options) => {
   const nativeBiquadFilterNode = nativeContext.createBiquadFilter();
   assignNativeAudioNodeOptions(nativeBiquadFilterNode, options);
@@ -14848,7 +5596,7 @@ var createNativeBiquadFilterNode = (nativeContext, options) => {
   return nativeBiquadFilterNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-channel-merger-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-channel-merger-node-factory.js
 var createNativeChannelMergerNodeFactory = (nativeAudioContextConstructor2, wrapChannelMergerNode2) => {
   return (nativeContext, options) => {
     const nativeChannelMergerNode = nativeContext.createChannelMerger(options.numberOfInputs);
@@ -14860,7 +5608,7 @@ var createNativeChannelMergerNodeFactory = (nativeAudioContextConstructor2, wrap
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-channel-splitter-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-channel-splitter-node.js
 var wrapChannelSplitterNode = (channelSplitterNode) => {
   const channelCount = channelSplitterNode.numberOfOutputs;
   Object.defineProperty(channelSplitterNode, "channelCount", {
@@ -14889,7 +5637,7 @@ var wrapChannelSplitterNode = (channelSplitterNode) => {
   });
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-channel-splitter-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-channel-splitter-node.js
 var createNativeChannelSplitterNode = (nativeContext, options) => {
   const nativeChannelSplitterNode = nativeContext.createChannelSplitter(options.numberOfOutputs);
   assignNativeAudioNodeOptions(nativeChannelSplitterNode, options);
@@ -14897,7 +5645,7 @@ var createNativeChannelSplitterNode = (nativeContext, options) => {
   return nativeChannelSplitterNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-constant-source-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-constant-source-node-factory.js
 var createNativeConstantSourceNodeFactory = (addSilentConnection2, cacheTestResult2, createNativeConstantSourceNodeFaker2, testAudioScheduledSourceNodeStartMethodNegativeParametersSupport2, testAudioScheduledSourceNodeStopMethodNegativeParametersSupport2) => {
   return (nativeContext, options) => {
     if (nativeContext.createConstantSource === void 0) {
@@ -14917,14 +5665,14 @@ var createNativeConstantSourceNodeFactory = (addSilentConnection2, cacheTestResu
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/intercept-connections.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/intercept-connections.js
 var interceptConnections = (original, interceptor) => {
   original.connect = interceptor.connect.bind(interceptor);
   original.disconnect = interceptor.disconnect.bind(interceptor);
   return original;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-constant-source-node-faker-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-constant-source-node-faker-factory.js
 var createNativeConstantSourceNodeFakerFactory = (addSilentConnection2, createNativeAudioBufferSourceNode2, createNativeGainNode2, monitorConnections2) => {
   return (nativeContext, { offset, ...audioNodeOptions }) => {
     const audioBuffer = nativeContext.createBuffer(1, 2, 44100);
@@ -15010,7 +5758,7 @@ var createNativeConstantSourceNodeFakerFactory = (addSilentConnection2, createNa
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-convolver-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-convolver-node-factory.js
 var createNativeConvolverNodeFactory = (createNotSupportedError2, overwriteAccessors2) => {
   return (nativeContext, options) => {
     const nativeConvolverNode = nativeContext.createConvolver();
@@ -15041,7 +5789,7 @@ var createNativeConvolverNodeFactory = (createNotSupportedError2, overwriteAcces
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-delay-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-delay-node.js
 var createNativeDelayNode = (nativeContext, options) => {
   const nativeDelayNode = nativeContext.createDelay(options.maxDelayTime);
   assignNativeAudioNodeOptions(nativeDelayNode, options);
@@ -15049,7 +5797,7 @@ var createNativeDelayNode = (nativeContext, options) => {
   return nativeDelayNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-dynamics-compressor-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-dynamics-compressor-node-factory.js
 var createNativeDynamicsCompressorNodeFactory = (createNotSupportedError2) => {
   return (nativeContext, options) => {
     const nativeDynamicsCompressorNode = nativeContext.createDynamicsCompressor();
@@ -15069,7 +5817,7 @@ var createNativeDynamicsCompressorNodeFactory = (createNotSupportedError2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-gain-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-gain-node.js
 var createNativeGainNode = (nativeContext, options) => {
   const nativeGainNode = nativeContext.createGain();
   assignNativeAudioNodeOptions(nativeGainNode, options);
@@ -15077,7 +5825,7 @@ var createNativeGainNode = (nativeContext, options) => {
   return nativeGainNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-iir-filter-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-iir-filter-node-factory.js
 var createNativeIIRFilterNodeFactory = (createNativeIIRFilterNodeFaker2) => {
   return (nativeContext, baseLatency, options) => {
     if (nativeContext.createIIRFilter === void 0) {
@@ -15089,7 +5837,7 @@ var createNativeIIRFilterNodeFactory = (createNativeIIRFilterNodeFaker2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-iir-filter-node-faker-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-iir-filter-node-faker-factory.js
 function divide(a, b) {
   const denominator = b[0] * b[0] + b[1] * b[1];
   return [(a[0] * b[0] + a[1] * b[1]) / denominator, (a[1] * b[0] - a[0] * b[1]) / denominator];
@@ -15224,12 +5972,12 @@ var createNativeIIRFilterNodeFakerFactory = (createInvalidAccessError2, createIn
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-media-element-audio-source-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-media-element-audio-source-node.js
 var createNativeMediaElementAudioSourceNode = (nativeAudioContext, options) => {
   return nativeAudioContext.createMediaElementSource(options.mediaElement);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-media-stream-audio-destination-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-media-stream-audio-destination-node.js
 var createNativeMediaStreamAudioDestinationNode = (nativeAudioContext, options) => {
   const nativeMediaStreamAudioDestinationNode = nativeAudioContext.createMediaStreamDestination();
   assignNativeAudioNodeOptions(nativeMediaStreamAudioDestinationNode, options);
@@ -15239,7 +5987,7 @@ var createNativeMediaStreamAudioDestinationNode = (nativeAudioContext, options) 
   return nativeMediaStreamAudioDestinationNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-media-stream-audio-source-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-media-stream-audio-source-node.js
 var createNativeMediaStreamAudioSourceNode = (nativeAudioContext, { mediaStream }) => {
   const audioStreamTracks = mediaStream.getAudioTracks();
   audioStreamTracks.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -15249,7 +5997,7 @@ var createNativeMediaStreamAudioSourceNode = (nativeAudioContext, { mediaStream 
   return nativeMediaStreamAudioSourceNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-media-stream-track-audio-source-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-media-stream-track-audio-source-node-factory.js
 var createNativeMediaStreamTrackAudioSourceNodeFactory = (createInvalidStateError2, isNativeOfflineAudioContext2) => {
   return (nativeAudioContext, { mediaStreamTrack }) => {
     if (typeof nativeAudioContext.createMediaStreamTrackSource === "function") {
@@ -15267,7 +6015,7 @@ var createNativeMediaStreamTrackAudioSourceNodeFactory = (createInvalidStateErro
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-offline-audio-context-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-offline-audio-context-constructor.js
 var createNativeOfflineAudioContextConstructor = (window3) => {
   if (window3 === null) {
     return null;
@@ -15278,7 +6026,7 @@ var createNativeOfflineAudioContextConstructor = (window3) => {
   return window3.hasOwnProperty("webkitOfflineAudioContext") ? window3.webkitOfflineAudioContext : null;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-oscillator-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-oscillator-node-factory.js
 var createNativeOscillatorNodeFactory = (addSilentConnection2, cacheTestResult2, testAudioScheduledSourceNodeStartMethodNegativeParametersSupport2, testAudioScheduledSourceNodeStopMethodConsecutiveCallsSupport2, testAudioScheduledSourceNodeStopMethodNegativeParametersSupport2, wrapAudioScheduledSourceNodeStopMethodConsecutiveCalls2) => {
   return (nativeContext, options) => {
     const nativeOscillatorNode = nativeContext.createOscillator();
@@ -15304,7 +6052,7 @@ var createNativeOscillatorNodeFactory = (addSilentConnection2, cacheTestResult2,
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-panner-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-panner-node-factory.js
 var createNativePannerNodeFactory = (createNativePannerNodeFaker2) => {
   return (nativeContext, options) => {
     const nativePannerNode = nativeContext.createPanner();
@@ -15330,7 +6078,7 @@ var createNativePannerNodeFactory = (createNativePannerNodeFaker2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-panner-node-faker-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-panner-node-faker-factory.js
 var createNativePannerNodeFakerFactory = (connectNativeAudioNodeToNativeAudioNode2, createInvalidStateError2, createNativeChannelMergerNode2, createNativeGainNode2, createNativeScriptProcessorNode2, createNativeWaveShaperNode2, createNotSupportedError2, disconnectNativeAudioNodeFromNativeAudioNode2, getFirstSample2, monitorConnections2) => {
   return (nativeContext, { coneInnerAngle, coneOuterAngle, coneOuterGain, distanceModel, maxDistance, orientationX, orientationY, orientationZ, panningModel, positionX, positionY, positionZ, refDistance, rolloffFactor, ...audioNodeOptions }) => {
     const pannerNode = nativeContext.createPanner();
@@ -15604,7 +6352,7 @@ var createNativePannerNodeFakerFactory = (connectNativeAudioNodeToNativeAudioNod
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-periodic-wave-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-periodic-wave-factory.js
 var createNativePeriodicWaveFactory = (createIndexSizeError2) => {
   return (nativeContext, { disableNormalization, imag, real }) => {
     const convertedImag = imag instanceof Float32Array ? imag : new Float32Array(imag);
@@ -15617,12 +6365,12 @@ var createNativePeriodicWaveFactory = (createIndexSizeError2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-script-processor-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-script-processor-node.js
 var createNativeScriptProcessorNode = (nativeContext, bufferSize, numberOfInputChannels, numberOfOutputChannels) => {
   return nativeContext.createScriptProcessor(bufferSize, numberOfInputChannels, numberOfOutputChannels);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-stereo-panner-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-stereo-panner-node-factory.js
 var createNativeStereoPannerNodeFactory = (createNativeStereoPannerNodeFaker, createNotSupportedError2) => {
   return (nativeContext, options) => {
     const channelCountMode = options.channelCountMode;
@@ -15647,7 +6395,7 @@ var createNativeStereoPannerNodeFactory = (createNativeStereoPannerNodeFaker, cr
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-stereo-panner-node-faker-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-stereo-panner-node-faker-factory.js
 var createNativeStereoPannerNodeFakerFactory = (createNativeChannelMergerNode2, createNativeChannelSplitterNode2, createNativeGainNode2, createNativeWaveShaperNode2, createNotSupportedError2, monitorConnections2) => {
   const CURVE_SIZE = 16385;
   const DC_CURVE = new Float32Array([1, 1]);
@@ -15889,7 +6637,7 @@ var createNativeStereoPannerNodeFakerFactory = (createNativeChannelMergerNode2, 
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-wave-shaper-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-wave-shaper-node-factory.js
 var createNativeWaveShaperNodeFactory = (createConnectedNativeAudioBufferSourceNode2, createInvalidStateError2, createNativeWaveShaperNodeFaker2, isDCCurve2, monitorConnections2, nativeAudioContextConstructor2, overwriteAccessors2) => {
   return (nativeContext, options) => {
     const nativeWaveShaperNode = nativeContext.createWaveShaper();
@@ -15934,7 +6682,7 @@ var createNativeWaveShaperNodeFactory = (createConnectedNativeAudioBufferSourceN
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-wave-shaper-node-faker-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-wave-shaper-node-faker-factory.js
 var createNativeWaveShaperNodeFakerFactory = (createConnectedNativeAudioBufferSourceNode2, createInvalidStateError2, createNativeGainNode2, isDCCurve2, monitorConnections2) => {
   return (nativeContext, { curve, oversample, ...audioNodeOptions }) => {
     const negativeWaveShaperNode = nativeContext.createWaveShaper();
@@ -16084,10 +6832,10 @@ var createNativeWaveShaperNodeFakerFactory = (createConnectedNativeAudioBufferSo
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/not-supported-error.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/not-supported-error.js
 var createNotSupportedError = () => new DOMException("", "NotSupportedError");
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/offline-audio-context-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/offline-audio-context-constructor.js
 var DEFAULT_OPTIONS16 = {
   numberOfChannels: 1
 };
@@ -16155,7 +6903,7 @@ var createOfflineAudioContextConstructor = (baseAudioContextConstructor2, cacheT
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/oscillator-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/oscillator-node-constructor.js
 var DEFAULT_OPTIONS17 = {
   channelCount: 2,
   channelCountMode: "max",
@@ -16241,7 +6989,7 @@ var createOscillatorNodeConstructor = (audioNodeConstructor2, createAudioParam2,
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/oscillator-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/oscillator-node-renderer-factory.js
 var createOscillatorNodeRendererFactory = (connectAudioParam2, createNativeOscillatorNode2, getNativeAudioNode2, renderAutomation2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeOscillatorNodes = /* @__PURE__ */ new WeakMap();
@@ -16301,7 +7049,7 @@ var createOscillatorNodeRendererFactory = (connectAudioParam2, createNativeOscil
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/panner-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/panner-node-constructor.js
 var DEFAULT_OPTIONS18 = {
   channelCount: 2,
   channelCountMode: "clamped-max",
@@ -16408,7 +7156,7 @@ var createPannerNodeConstructor = (audioNodeConstructor2, createAudioParam2, cre
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/panner-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/panner-node-renderer-factory.js
 var createPannerNodeRendererFactory = (connectAudioParam2, createNativeChannelMergerNode2, createNativeConstantSourceNode2, createNativeGainNode2, createNativePannerNode2, getNativeAudioNode2, nativeOfflineAudioContextConstructor2, renderAutomation2, renderInputsOfAudioNode2, renderNativeOfflineAudioContext2) => {
   return () => {
     const renderedNativeAudioNodes = /* @__PURE__ */ new WeakMap();
@@ -16571,7 +7319,7 @@ var createPannerNodeRendererFactory = (connectAudioParam2, createNativeChannelMe
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/periodic-wave-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/periodic-wave-constructor.js
 var DEFAULT_OPTIONS19 = {
   disableNormalization: false
 };
@@ -16590,7 +7338,7 @@ var createPeriodicWaveConstructor = (createNativePeriodicWave2, getNativeContext
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/render-automation.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/render-automation.js
 var createRenderAutomation = (getAudioParamRenderer, renderInputsOfAudioParam2) => {
   return (nativeOfflineAudioContext, audioParam, nativeAudioParam) => {
     const audioParamRenderer = getAudioParamRenderer(audioParam);
@@ -16599,7 +7347,7 @@ var createRenderAutomation = (getAudioParamRenderer, renderInputsOfAudioParam2) 
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/render-inputs-of-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/render-inputs-of-audio-node.js
 var createRenderInputsOfAudioNode = (getAudioNodeConnections2, getAudioNodeRenderer2, isPartOfACycle2) => {
   return async (audioNode, nativeOfflineAudioContext, nativeAudioNode) => {
     const audioNodeConnections = getAudioNodeConnections2(audioNode);
@@ -16614,7 +7362,7 @@ var createRenderInputsOfAudioNode = (getAudioNodeConnections2, getAudioNodeRende
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/render-inputs-of-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/render-inputs-of-audio-param.js
 var createRenderInputsOfAudioParam = (getAudioNodeRenderer2, getAudioParamConnections2, isPartOfACycle2) => {
   return async (audioParam, nativeOfflineAudioContext, nativeAudioParam) => {
     const audioParamConnections = getAudioParamConnections2(audioParam);
@@ -16628,7 +7376,7 @@ var createRenderInputsOfAudioParam = (getAudioNodeRenderer2, getAudioParamConnec
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/render-native-offline-audio-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/render-native-offline-audio-context.js
 var createRenderNativeOfflineAudioContext = (cacheTestResult2, createNativeGainNode2, createNativeScriptProcessorNode2, testOfflineAudioContextCurrentTimeSupport) => {
   return (nativeOfflineAudioContext) => {
     if (cacheTestResult2(testPromiseSupport, () => testPromiseSupport(nativeOfflineAudioContext))) {
@@ -16662,19 +7410,19 @@ var createRenderNativeOfflineAudioContext = (cacheTestResult2, createNativeGainN
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/set-active-audio-worklet-node-inputs.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/set-active-audio-worklet-node-inputs.js
 var createSetActiveAudioWorkletNodeInputs = (activeAudioWorkletNodeInputsStore2) => {
   return (nativeAudioWorkletNode, activeInputs) => {
     activeAudioWorkletNodeInputsStore2.set(nativeAudioWorkletNode, activeInputs);
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/set-audio-node-tail-time.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/set-audio-node-tail-time.js
 var createSetAudioNodeTailTime = (audioNodeTailTimeStore2) => {
   return (audioNode, tailTime) => audioNodeTailTimeStore2.set(audioNode, tailTime);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/start-rendering.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/start-rendering.js
 var createStartRendering = (audioBufferStore2, cacheTestResult2, getAudioNodeRenderer2, getUnrenderedAudioWorkletNodes2, renderNativeOfflineAudioContext2, testAudioBufferCopyChannelMethodsOutOfBoundsSupport2, wrapAudioBufferCopyChannelMethods2, wrapAudioBufferCopyChannelMethodsOutOfBounds2) => {
   return (destination, nativeOfflineAudioContext) => getAudioNodeRenderer2(destination).render(destination, nativeOfflineAudioContext).then(() => Promise.all(Array.from(getUnrenderedAudioWorkletNodes2(nativeOfflineAudioContext)).map((audioWorkletNode) => getAudioNodeRenderer2(audioWorkletNode).render(audioWorkletNode, nativeOfflineAudioContext)))).then(() => renderNativeOfflineAudioContext2(nativeOfflineAudioContext)).then((audioBuffer) => {
     if (typeof audioBuffer.copyFromChannel !== "function") {
@@ -16688,7 +7436,7 @@ var createStartRendering = (audioBufferStore2, cacheTestResult2, getAudioNodeRen
   });
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/stereo-panner-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/stereo-panner-node-constructor.js
 var DEFAULT_OPTIONS20 = {
   channelCount: 2,
   /*
@@ -16716,7 +7464,7 @@ var createStereoPannerNodeConstructor = (audioNodeConstructor2, createAudioParam
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/stereo-panner-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/stereo-panner-node-renderer-factory.js
 var createStereoPannerNodeRendererFactory = (connectAudioParam2, createNativeStereoPannerNode2, getNativeAudioNode2, renderAutomation2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeStereoPannerNodes = /* @__PURE__ */ new WeakMap();
@@ -16757,7 +7505,7 @@ var createStereoPannerNodeRendererFactory = (connectAudioParam2, createNativeSte
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-buffer-constructor-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-buffer-constructor-support.js
 var createTestAudioBufferConstructorSupport = (nativeAudioBufferConstructor2) => {
   return () => {
     if (nativeAudioBufferConstructor2 === null) {
@@ -16772,7 +7520,7 @@ var createTestAudioBufferConstructorSupport = (nativeAudioBufferConstructor2) =>
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-buffer-copy-channel-methods-subarray-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-buffer-copy-channel-methods-subarray-support.js
 var createTestAudioBufferCopyChannelMethodsSubarraySupport = (nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -16793,7 +7541,7 @@ var createTestAudioBufferCopyChannelMethodsSubarraySupport = (nativeOfflineAudio
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-context-close-method-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-context-close-method-support.js
 var createTestAudioContextCloseMethodSupport = (nativeAudioContextConstructor2) => {
   return () => {
     if (nativeAudioContextConstructor2 === null) {
@@ -16812,7 +7560,7 @@ var createTestAudioContextCloseMethodSupport = (nativeAudioContextConstructor2) 
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-context-decode-audio-data-method-type-error-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-context-decode-audio-data-method-type-error-support.js
 var createTestAudioContextDecodeAudioDataMethodTypeErrorSupport = (nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -16842,7 +7590,7 @@ var createTestAudioContextDecodeAudioDataMethodTypeErrorSupport = (nativeOffline
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-context-options-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-context-options-support.js
 var createTestAudioContextOptionsSupport = (nativeAudioContextConstructor2) => {
   return () => {
     if (nativeAudioContextConstructor2 === null) {
@@ -16859,7 +7607,7 @@ var createTestAudioContextOptionsSupport = (nativeAudioContextConstructor2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-node-connect-method-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-node-connect-method-support.js
 var createTestAudioNodeConnectMethodSupport = (nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -16873,7 +7621,7 @@ var createTestAudioNodeConnectMethodSupport = (nativeOfflineAudioContextConstruc
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-worklet-processor-no-outputs-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-worklet-processor-no-outputs-support.js
 var createTestAudioWorkletProcessorNoOutputsSupport = (nativeAudioWorkletNodeConstructor2, nativeOfflineAudioContextConstructor2) => {
   return async () => {
     if (nativeAudioWorkletNodeConstructor2 === null) {
@@ -16916,7 +7664,7 @@ var createTestAudioWorkletProcessorNoOutputsSupport = (nativeAudioWorkletNodeCon
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-worklet-processor-post-message-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-worklet-processor-post-message-support.js
 var createTestAudioWorkletProcessorPostMessageSupport = (nativeAudioWorkletNodeConstructor2, nativeOfflineAudioContextConstructor2) => {
   return async () => {
     if (nativeAudioWorkletNodeConstructor2 === null) {
@@ -16950,7 +7698,7 @@ var createTestAudioWorkletProcessorPostMessageSupport = (nativeAudioWorkletNodeC
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-channel-merger-node-channel-count-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-channel-merger-node-channel-count-support.js
 var createTestChannelMergerNodeChannelCountSupport = (nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -16970,7 +7718,7 @@ var createTestChannelMergerNodeChannelCountSupport = (nativeOfflineAudioContextC
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-constant-source-node-accurate-scheduling-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-constant-source-node-accurate-scheduling-support.js
 var createTestConstantSourceNodeAccurateSchedulingSupport = (nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -16985,7 +7733,7 @@ var createTestConstantSourceNodeAccurateSchedulingSupport = (nativeOfflineAudioC
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-convolver-node-buffer-reassignability-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-convolver-node-buffer-reassignability-support.js
 var createTestConvolverNodeBufferReassignabilitySupport = (nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -17003,7 +7751,7 @@ var createTestConvolverNodeBufferReassignabilitySupport = (nativeOfflineAudioCon
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-convolver-node-channel-count-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-convolver-node-channel-count-support.js
 var createTestConvolverNodeChannelCountSupport = (nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -17020,12 +7768,12 @@ var createTestConvolverNodeChannelCountSupport = (nativeOfflineAudioContextConst
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-is-secure-context-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-is-secure-context-support.js
 var createTestIsSecureContextSupport = (window3) => {
   return () => window3 !== null && window3.hasOwnProperty("isSecureContext");
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-media-stream-audio-source-node-media-stream-without-audio-track-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-media-stream-audio-source-node-media-stream-without-audio-track-support.js
 var createTestMediaStreamAudioSourceNodeMediaStreamWithoutAudioTrackSupport = (nativeAudioContextConstructor2) => {
   return () => {
     if (nativeAudioContextConstructor2 === null) {
@@ -17043,7 +7791,7 @@ var createTestMediaStreamAudioSourceNodeMediaStreamWithoutAudioTrackSupport = (n
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-offline-audio-context-current-time-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-offline-audio-context-current-time-support.js
 var createTestOfflineAudioContextCurrentTimeSupport = (createNativeGainNode2, nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -17066,7 +7814,7 @@ var createTestOfflineAudioContextCurrentTimeSupport = (createNativeGainNode2, na
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-stereo-panner-node-default-value-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-stereo-panner-node-default-value-support.js
 var createTestStereoPannerNodeDefaultValueSupport = (nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -17090,10 +7838,10 @@ var createTestStereoPannerNodeDefaultValueSupport = (nativeOfflineAudioContextCo
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/unknown-error.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/unknown-error.js
 var createUnknownError = () => new DOMException("", "UnknownError");
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/wave-shaper-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/wave-shaper-node-constructor.js
 var DEFAULT_OPTIONS21 = {
   channelCount: 2,
   channelCountMode: "max",
@@ -17141,7 +7889,7 @@ var createWaveShaperNodeConstructor = (audioNodeConstructor2, createInvalidState
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/wave-shaper-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/wave-shaper-node-renderer-factory.js
 var createWaveShaperNodeRendererFactory = (createNativeWaveShaperNode2, getNativeAudioNode2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeWaveShaperNodes = /* @__PURE__ */ new WeakMap();
@@ -17178,10 +7926,10 @@ var createWaveShaperNodeRendererFactory = (createNativeWaveShaperNode2, getNativ
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/window.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/window.js
 var createWindow = () => typeof window === "undefined" ? null : window;
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/wrap-audio-buffer-copy-channel-methods.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/wrap-audio-buffer-copy-channel-methods.js
 var createWrapAudioBufferCopyChannelMethods = (convertNumberToUnsignedLong2, createIndexSizeError2) => {
   return (audioBuffer) => {
     audioBuffer.copyFromChannel = (destination, channelNumberAsNumber, bufferOffsetAsNumber = 0) => {
@@ -17213,7 +7961,7 @@ var createWrapAudioBufferCopyChannelMethods = (convertNumberToUnsignedLong2, cre
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/wrap-audio-buffer-copy-channel-methods-out-of-bounds.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/wrap-audio-buffer-copy-channel-methods-out-of-bounds.js
 var createWrapAudioBufferCopyChannelMethodsOutOfBounds = (convertNumberToUnsignedLong2) => {
   return (audioBuffer) => {
     audioBuffer.copyFromChannel = /* @__PURE__ */ ((copyFromChannel2) => {
@@ -17237,7 +7985,7 @@ var createWrapAudioBufferCopyChannelMethodsOutOfBounds = (convertNumberToUnsigne
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/wrap-audio-buffer-source-node-stop-method-nullified-buffer.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/wrap-audio-buffer-source-node-stop-method-nullified-buffer.js
 var createWrapAudioBufferSourceNodeStopMethodNullifiedBuffer = (overwriteAccessors2) => {
   return (nativeAudioBufferSourceNode, nativeContext) => {
     const nullifiedBuffer = nativeContext.createBuffer(1, 1, 44100);
@@ -17253,7 +8001,7 @@ var createWrapAudioBufferSourceNodeStopMethodNullifiedBuffer = (overwriteAccesso
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/wrap-channel-merger-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/wrap-channel-merger-node.js
 var createWrapChannelMergerNode = (createInvalidStateError2, monitorConnections2) => {
   return (nativeContext, channelMergerNode) => {
     channelMergerNode.channelCount = 1;
@@ -17282,7 +8030,7 @@ var createWrapChannelMergerNode = (createInvalidStateError2, monitorConnections2
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-first-sample.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-first-sample.js
 var getFirstSample = (audioBuffer, buffer, channelNumber) => {
   if (audioBuffer.copyFromChannel === void 0) {
     return audioBuffer.getChannelData(channelNumber)[0];
@@ -17291,7 +8039,7 @@ var getFirstSample = (audioBuffer, buffer, channelNumber) => {
   return buffer[0];
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-dc-curve.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-dc-curve.js
 var isDCCurve = (curve) => {
   if (curve === null) {
     return false;
@@ -17303,7 +8051,7 @@ var isDCCurve = (curve) => {
   return curve[length / 2 - 1] + curve[length / 2] !== 0;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/overwrite-accessors.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/overwrite-accessors.js
 var overwriteAccessors = (object, property, createGetter, createSetter) => {
   let prototype = object;
   while (!prototype.hasOwnProperty(property)) {
@@ -17313,7 +8061,7 @@ var overwriteAccessors = (object, property, createGetter, createSetter) => {
   Object.defineProperty(object, property, { get: createGetter(get), set: createSetter(set) });
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/sanitize-audio-worklet-node-options.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/sanitize-audio-worklet-node-options.js
 var sanitizeAudioWorkletNodeOptions = (options) => {
   return {
     ...options,
@@ -17328,12 +8076,12 @@ var sanitizeAudioWorkletNodeOptions = (options) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/sanitize-channel-splitter-options.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/sanitize-channel-splitter-options.js
 var sanitizeChannelSplitterOptions = (options) => {
   return { ...options, channelCount: options.numberOfOutputs };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/sanitize-periodic-wave-options.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/sanitize-periodic-wave-options.js
 var sanitizePeriodicWaveOptions = (options) => {
   const { imag, real } = options;
   if (imag === void 0) {
@@ -17348,7 +8096,7 @@ var sanitizePeriodicWaveOptions = (options) => {
   return { ...options, imag, real };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/set-value-at-time-until-possible.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/set-value-at-time-until-possible.js
 var setValueAtTimeUntilPossible = (audioParam, value, startTime) => {
   try {
     audioParam.setValueAtTime(value, startTime);
@@ -17360,7 +8108,7 @@ var setValueAtTimeUntilPossible = (audioParam, value, startTime) => {
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-buffer-source-node-start-method-consecutive-calls-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-buffer-source-node-start-method-consecutive-calls-support.js
 var testAudioBufferSourceNodeStartMethodConsecutiveCallsSupport = (nativeContext) => {
   const nativeAudioBufferSourceNode = nativeContext.createBufferSource();
   nativeAudioBufferSourceNode.start();
@@ -17372,7 +8120,7 @@ var testAudioBufferSourceNodeStartMethodConsecutiveCallsSupport = (nativeContext
   return false;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-buffer-source-node-start-method-offset-clamping-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-buffer-source-node-start-method-offset-clamping-support.js
 var testAudioBufferSourceNodeStartMethodOffsetClampingSupport = (nativeContext) => {
   const nativeAudioBufferSourceNode = nativeContext.createBufferSource();
   const nativeAudioBuffer = nativeContext.createBuffer(1, 1, 44100);
@@ -17385,7 +8133,7 @@ var testAudioBufferSourceNodeStartMethodOffsetClampingSupport = (nativeContext) 
   return true;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-buffer-source-node-stop-method-nullified-buffer-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-buffer-source-node-stop-method-nullified-buffer-support.js
 var testAudioBufferSourceNodeStopMethodNullifiedBufferSupport = (nativeContext) => {
   const nativeAudioBufferSourceNode = nativeContext.createBufferSource();
   nativeAudioBufferSourceNode.start();
@@ -17397,7 +8145,7 @@ var testAudioBufferSourceNodeStopMethodNullifiedBufferSupport = (nativeContext) 
   return true;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-scheduled-source-node-start-method-negative-parameters-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-scheduled-source-node-start-method-negative-parameters-support.js
 var testAudioScheduledSourceNodeStartMethodNegativeParametersSupport = (nativeContext) => {
   const nativeAudioBufferSourceNode = nativeContext.createOscillator();
   try {
@@ -17408,7 +8156,7 @@ var testAudioScheduledSourceNodeStartMethodNegativeParametersSupport = (nativeCo
   return false;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-scheduled-source-node-stop-method-consecutive-calls-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-scheduled-source-node-stop-method-consecutive-calls-support.js
 var testAudioScheduledSourceNodeStopMethodConsecutiveCallsSupport = (nativeContext) => {
   const nativeAudioBuffer = nativeContext.createBuffer(1, 1, 44100);
   const nativeAudioBufferSourceNode = nativeContext.createBufferSource();
@@ -17423,7 +8171,7 @@ var testAudioScheduledSourceNodeStopMethodConsecutiveCallsSupport = (nativeConte
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-scheduled-source-node-stop-method-negative-parameters-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-scheduled-source-node-stop-method-negative-parameters-support.js
 var testAudioScheduledSourceNodeStopMethodNegativeParametersSupport = (nativeContext) => {
   const nativeAudioBufferSourceNode = nativeContext.createOscillator();
   try {
@@ -17434,7 +8182,7 @@ var testAudioScheduledSourceNodeStopMethodNegativeParametersSupport = (nativeCon
   return false;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-worklet-node-options-clonability.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-worklet-node-options-clonability.js
 var testAudioWorkletNodeOptionsClonability = (audioWorkletNodeOptions) => {
   const { port1, port2 } = new MessageChannel();
   try {
@@ -17445,7 +8193,7 @@ var testAudioWorkletNodeOptionsClonability = (audioWorkletNodeOptions) => {
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-dom-exception-constructor-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-dom-exception-constructor-support.js
 var testDomExceptionConstructorSupport = () => {
   try {
     new DOMException();
@@ -17455,7 +8203,7 @@ var testDomExceptionConstructorSupport = () => {
   return true;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-transferables-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-transferables-support.js
 var testTransferablesSupport = () => new Promise((resolve) => {
   const arrayBuffer = new ArrayBuffer(0);
   const { port1, port2 } = new MessageChannel();
@@ -17463,7 +8211,7 @@ var testTransferablesSupport = () => new Promise((resolve) => {
   port2.postMessage(arrayBuffer, [arrayBuffer]);
 });
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-buffer-source-node-start-method-offset-clamping.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-buffer-source-node-start-method-offset-clamping.js
 var wrapAudioBufferSourceNodeStartMethodOffsetClamping = (nativeAudioBufferSourceNode) => {
   nativeAudioBufferSourceNode.start = /* @__PURE__ */ ((start2) => {
     return (when = 0, offset = 0, duration) => {
@@ -17478,7 +8226,7 @@ var wrapAudioBufferSourceNodeStartMethodOffsetClamping = (nativeAudioBufferSourc
   })(nativeAudioBufferSourceNode.start);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-scheduled-source-node-stop-method-consecutive-calls.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-scheduled-source-node-stop-method-consecutive-calls.js
 var wrapAudioScheduledSourceNodeStopMethodConsecutiveCalls = (nativeAudioScheduledSourceNode, nativeContext) => {
   const nativeGainNode = nativeContext.createGain();
   nativeAudioScheduledSourceNode.connect(nativeGainNode);
@@ -17507,7 +8255,7 @@ var wrapAudioScheduledSourceNodeStopMethodConsecutiveCalls = (nativeAudioSchedul
   })(nativeAudioScheduledSourceNode.stop);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-event-listener.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-event-listener.js
 var wrapEventListener = (target, eventListener) => {
   return (event) => {
     const descriptor = { value: target };
@@ -17522,7 +8270,7 @@ var wrapEventListener = (target, eventListener) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/module.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/module.js
 var addActiveInputConnectionToAudioNode = createAddActiveInputConnectionToAudioNode(insertElementInSet);
 var addPassiveInputConnectionToAudioNode = createAddPassiveInputConnectionToAudioNode(insertElementInSet);
 var deleteActiveInputConnectionToAudioNode = createDeleteActiveInputConnectionToAudioNode(pickElementFromSet);
@@ -17664,7 +8412,7 @@ var isAnyAudioParam = createIsAnyAudioParam(AUDIO_PARAM_STORE, isNativeAudioPara
 var isAnyOfflineAudioContext = createIsAnyOfflineAudioContext(CONTEXT_STORE, isNativeOfflineAudioContext);
 var isSupported = () => createIsSupportedPromise(cacheTestResult, createTestAudioBufferCopyChannelMethodsSubarraySupport(nativeOfflineAudioContextConstructor), createTestAudioContextCloseMethodSupport(nativeAudioContextConstructor), createTestAudioContextDecodeAudioDataMethodTypeErrorSupport(nativeOfflineAudioContextConstructor), createTestAudioContextOptionsSupport(nativeAudioContextConstructor), createTestAudioNodeConnectMethodSupport(nativeOfflineAudioContextConstructor), createTestAudioWorkletProcessorNoOutputsSupport(nativeAudioWorkletNodeConstructor, nativeOfflineAudioContextConstructor), createTestChannelMergerNodeChannelCountSupport(nativeOfflineAudioContextConstructor), createTestConstantSourceNodeAccurateSchedulingSupport(nativeOfflineAudioContextConstructor), createTestConvolverNodeBufferReassignabilitySupport(nativeOfflineAudioContextConstructor), createTestConvolverNodeChannelCountSupport(nativeOfflineAudioContextConstructor), testDomExceptionConstructorSupport, createTestIsSecureContextSupport(window2), createTestMediaStreamAudioSourceNodeMediaStreamWithoutAudioTrackSupport(nativeAudioContextConstructor), createTestStereoPannerNodeDefaultValueSupport(nativeOfflineAudioContextConstructor), testTransferablesSupport);
 
-// ../../sdk/node_modules/tone/build/esm/core/util/AdvancedTypeCheck.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/AdvancedTypeCheck.js
 function isAudioParam(arg) {
   return isAnyAudioParam(arg);
 }
@@ -17681,7 +8429,7 @@ function isAudioBuffer(arg) {
   return arg instanceof audioBufferConstructor;
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Debug.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Debug.js
 var Debug_exports = {};
 __export(Debug_exports, {
   assert: () => assert,
@@ -17694,7 +8442,7 @@ __export(Debug_exports, {
   warn: () => warn
 });
 
-// ../../sdk/node_modules/tone/build/esm/core/util/TypeCheck.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/TypeCheck.js
 function isUndef(arg) {
   return arg === void 0;
 }
@@ -17723,7 +8471,7 @@ function isNote(arg) {
   return isString(arg) && /^([a-g]{1}(?:b|#|x|bb)?)(-?[0-9]+)/i.test(arg);
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Debug.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Debug.js
 function assert(statement, error) {
   if (!statement) {
     throw new Error(error);
@@ -17761,7 +8509,7 @@ function warn(...args) {
   defaultLogger.warn(...args);
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Defaults.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Defaults.js
 function noCopy(key, arg) {
   return key === "value" || isAudioParam(arg) || isAudioNode2(arg) || isAudioBuffer(arg);
 }
@@ -17830,7 +8578,7 @@ function omitFromObject(obj, omit) {
   return obj;
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Math.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Math.js
 var EPSILON = 1e-6;
 function GT(a, b) {
   return a > b + EPSILON;
@@ -17844,14 +8592,14 @@ function LT(a, b) {
 function EQ(a, b) {
   return Math.abs(a - b) < EPSILON;
 }
-function clamp(value, min, max2) {
-  return Math.max(Math.min(value, max2), min);
+function clamp(value, min, max) {
+  return Math.max(Math.min(value, max), min);
 }
 
-// ../../sdk/node_modules/tone/build/esm/version.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/version.js
 var version = "15.3.10";
 
-// ../../sdk/node_modules/tone/build/esm/core/context/AudioContext.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/AudioContext.js
 function createAudioContext(options) {
   return new audioContextConstructor(options);
 }
@@ -17865,7 +8613,7 @@ function createAudioWorkletNode(context2, name, options) {
   return new (context2 instanceof (theWindow === null || theWindow === void 0 ? void 0 : theWindow.BaseAudioContext) ? theWindow === null || theWindow === void 0 ? void 0 : theWindow.AudioWorkletNode : audioWorkletNodeConstructor)(context2, name, options);
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/Tone.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/Tone.js
 var Tone = class {
   constructor() {
     this.debug = false;
@@ -17921,7 +8669,7 @@ var Tone = class {
 };
 Tone.version = version;
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Timeline.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Timeline.js
 var Timeline = class _Timeline extends Tone {
   constructor() {
     super();
@@ -18232,15 +8980,11 @@ var Timeline = class _Timeline extends Tone {
   }
 };
 
-// ../../sdk/node_modules/tslib/tslib.es6.mjs
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tslib/tslib.es6.mjs
 function __decorate(decorators, target, key, desc) {
   var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-  if (typeof Reflect === "object" && typeof Reflect.decorate === "function")
-    r = Reflect.decorate(decorators, target, key, desc);
-  else
-    for (var i = decorators.length - 1; i >= 0; i--)
-      if (d = decorators[i])
-        r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+  if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+  else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
   return c > 3 && r && Object.defineProperty(target, key, r), r;
 }
 function __awaiter(thisArg, _arguments, P, generator) {
@@ -18271,7 +9015,7 @@ function __awaiter(thisArg, _arguments, P, generator) {
   });
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/clock/Ticker.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/clock/Ticker.js
 var Ticker = class {
   constructor(callback, type, updateInterval, contextSampleRate) {
     this._callback = callback;
@@ -18376,7 +9120,7 @@ var Ticker = class {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Emitter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Emitter.js
 var Emitter = class _Emitter extends Tone {
   constructor() {
     super(...arguments);
@@ -18476,7 +9220,7 @@ var Emitter = class _Emitter extends Tone {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/context/BaseContext.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/BaseContext.js
 var BaseContext = class extends Emitter {
   constructor() {
     super(...arguments);
@@ -18492,7 +9236,7 @@ var BaseContext = class extends Emitter {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/context/ContextInitialization.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/ContextInitialization.js
 var notifyNewContext = [];
 function onContextInit(cb) {
   notifyNewContext.push(cb);
@@ -18508,7 +9252,7 @@ function closeContext(ctx) {
   notifyCloseContext.forEach((cb) => cb(ctx));
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/context/Context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/Context.js
 var Context = class _Context extends BaseContext {
   constructor() {
     var _a, _b;
@@ -18945,7 +9689,7 @@ var Context = class _Context extends BaseContext {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/context/DummyContext.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/DummyContext.js
 var DummyContext = class extends BaseContext {
   constructor() {
     super(...arguments);
@@ -19084,7 +9828,7 @@ var DummyContext = class extends BaseContext {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Interface.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Interface.js
 function readOnly(target, property) {
   if (isArray(property)) {
     property.forEach((str) => readOnly(target, str));
@@ -19107,7 +9851,7 @@ function writable(target, property) {
 var noOp = () => {
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/context/ToneAudioBuffer.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/ToneAudioBuffer.js
 var ToneAudioBuffer = class _ToneAudioBuffer extends Tone {
   constructor() {
     super();
@@ -19407,7 +10151,7 @@ var ToneAudioBuffer = class _ToneAudioBuffer extends Tone {
 ToneAudioBuffer.baseUrl = "";
 ToneAudioBuffer.downloads = [];
 
-// ../../sdk/node_modules/tone/build/esm/core/context/OfflineContext.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/OfflineContext.js
 var OfflineContext = class extends Context {
   constructor() {
     super({
@@ -19470,7 +10214,7 @@ var OfflineContext = class extends Context {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/Global.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/Global.js
 var dummyContext = new DummyContext();
 var globalContext = dummyContext;
 function getContext() {
@@ -19503,7 +10247,7 @@ if (theWindow && !theWindow.TONE_SILENCE_LOGGING) {
   console.log(`%c${printString}`, "background: #000; color: #fff");
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/type/TimeBase.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/type/TimeBase.js
 var TimeBaseClass = class _TimeBaseClass extends Tone {
   /**
    * @param context The context associated with the time value. Used to compute
@@ -19743,7 +10487,7 @@ var TimeBaseClass = class _TimeBaseClass extends Tone {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/type/Time.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/type/Time.js
 var TimeClass = class _TimeClass extends TimeBaseClass {
   constructor() {
     super(...arguments);
@@ -19861,7 +10605,7 @@ function Time(value, units) {
   return new TimeClass(getContext(), value, units);
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/type/Frequency.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/type/Frequency.js
 var FrequencyClass = class _FrequencyClass extends TimeClass {
   constructor() {
     super(...arguments);
@@ -20127,7 +10871,7 @@ function Frequency(value, units) {
   return new FrequencyClass(getContext(), value, units);
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/type/TransportTime.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/type/TransportTime.js
 var TransportTimeClass = class extends TimeClass {
   constructor() {
     super(...arguments);
@@ -20144,7 +10888,7 @@ function TransportTime(value, units) {
   return new TransportTimeClass(getContext(), value, units);
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/context/ToneWithContext.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/ToneWithContext.js
 var ToneWithContext = class _ToneWithContext extends Tone {
   constructor() {
     super();
@@ -20294,7 +11038,7 @@ var ToneWithContext = class _ToneWithContext extends Tone {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/context/Param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/Param.js
 var Param = class _Param extends ToneWithContext {
   constructor() {
     const options = optionsFromArguments(_Param.getDefaults(), arguments, [
@@ -20677,7 +11421,7 @@ var Param = class _Param extends ToneWithContext {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/context/ToneAudioNode.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/ToneAudioNode.js
 var ToneAudioNode = class _ToneAudioNode extends ToneWithContext {
   constructor() {
     super(...arguments);
@@ -20955,7 +11699,7 @@ function fanIn(...nodes) {
   }
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/context/Gain.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/Gain.js
 var Gain = class _Gain extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Gain.getDefaults(), arguments, [
@@ -20996,7 +11740,7 @@ var Gain = class _Gain extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Split.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Split.js
 var Split = class _Split extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Split.getDefaults(), arguments, [
@@ -21019,7 +11763,7 @@ var Split = class _Split extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/analysis/Analyser.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/analysis/Analyser.js
 var Analyser = class _Analyser extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Analyser.getDefaults(), arguments, ["type", "size"]);
@@ -21121,7 +11865,7 @@ var Analyser = class _Analyser extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/analysis/MeterBase.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/analysis/MeterBase.js
 var MeterBase = class _MeterBase extends ToneAudioNode {
   constructor() {
     super(optionsFromArguments(_MeterBase.getDefaults(), arguments));
@@ -21139,7 +11883,7 @@ var MeterBase = class _MeterBase extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/analysis/DCMeter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/analysis/DCMeter.js
 var DCMeter = class _DCMeter extends MeterBase {
   constructor() {
     super(optionsFromArguments(_DCMeter.getDefaults(), arguments));
@@ -21156,7 +11900,7 @@ var DCMeter = class _DCMeter extends MeterBase {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/analysis/FFT.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/analysis/FFT.js
 var FFT = class _FFT extends MeterBase {
   constructor() {
     const options = optionsFromArguments(_FFT.getDefaults(), arguments, [
@@ -21215,7 +11959,7 @@ var FFT = class _FFT extends MeterBase {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/OneShotSource.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/OneShotSource.js
 var OneShotSource = class extends ToneAudioNode {
   constructor(options) {
     super(options);
@@ -21350,7 +12094,7 @@ var OneShotSource = class extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/ToneConstantSource.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/ToneConstantSource.js
 var ToneConstantSource = class _ToneConstantSource extends OneShotSource {
   constructor() {
     var _a;
@@ -21428,7 +12172,7 @@ var ToneConstantSource = class _ToneConstantSource extends OneShotSource {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Signal.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Signal.js
 var Signal = class _Signal extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Signal.getDefaults(), arguments, [
@@ -21559,8 +12303,8 @@ var Signal = class _Signal extends ToneAudioNode {
   get convert() {
     return this._param.convert;
   }
-  set convert(convert2) {
-    this._param.convert = convert2;
+  set convert(convert) {
+    this._param.convert = convert;
   }
   /** @inheritdoc */
   get units() {
@@ -21634,7 +12378,7 @@ function disconnectSignal(signal, destination, outputNum, inputNum) {
   disconnect(signal, destination, outputNum, inputNum);
 }
 
-// ../../sdk/node_modules/tone/build/esm/signal/SignalOperator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/SignalOperator.js
 var SignalOperator = class _SignalOperator extends ToneAudioNode {
   constructor() {
     super(optionsFromArguments(_SignalOperator.getDefaults(), arguments, [
@@ -21653,7 +12397,7 @@ var SignalOperator = class _SignalOperator extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/WaveShaper.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/WaveShaper.js
 var WaveShaper = class _WaveShaper extends SignalOperator {
   constructor() {
     const options = optionsFromArguments(_WaveShaper.getDefaults(), arguments, ["mapping", "length"]);
@@ -21727,7 +12471,7 @@ var WaveShaper = class _WaveShaper extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Abs.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Abs.js
 var Abs = class extends SignalOperator {
   constructor() {
     super(...arguments);
@@ -21755,7 +12499,7 @@ var Abs = class extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/OnePoleFilter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/OnePoleFilter.js
 var OnePoleFilter = class _OnePoleFilter extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_OnePoleFilter.getDefaults(), arguments, ["frequency", "type"]);
@@ -21845,7 +12589,7 @@ var OnePoleFilter = class _OnePoleFilter extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/analysis/Follower.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/analysis/Follower.js
 var Follower = class _Follower extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Follower.getDefaults(), arguments, ["smoothing"]);
@@ -21883,7 +12627,7 @@ var Follower = class _Follower extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/analysis/Meter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/analysis/Meter.js
 var Meter = class _Meter extends MeterBase {
   constructor() {
     const options = optionsFromArguments(_Meter.getDefaults(), arguments, [
@@ -21952,7 +12696,7 @@ var Meter = class _Meter extends MeterBase {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/analysis/Waveform.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/analysis/Waveform.js
 var Waveform = class _Waveform extends MeterBase {
   constructor() {
     const options = optionsFromArguments(_Waveform.getDefaults(), arguments, ["size"]);
@@ -21985,7 +12729,7 @@ var Waveform = class _Waveform extends MeterBase {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Panner.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Panner.js
 var Panner = class _Panner extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Panner.getDefaults(), arguments, [
@@ -22021,7 +12765,7 @@ var Panner = class _Panner extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Volume.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Volume.js
 var Volume = class _Volume extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Volume.getDefaults(), arguments, [
@@ -22075,7 +12819,7 @@ var Volume = class _Volume extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/PanVol.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/PanVol.js
 var PanVol = class _PanVol extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_PanVol.getDefaults(), arguments, [
@@ -22126,7 +12870,7 @@ var PanVol = class _PanVol extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Solo.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Solo.js
 var Solo = class _Solo extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Solo.getDefaults(), arguments, [
@@ -22222,7 +12966,7 @@ var Solo = class _Solo extends ToneAudioNode {
 Solo._allSolos = /* @__PURE__ */ new Map();
 Solo._soloed = /* @__PURE__ */ new Map();
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Channel.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Channel.js
 var Channel = class _Channel extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Channel.getDefaults(), arguments, [
@@ -22333,7 +13077,7 @@ var Channel = class _Channel extends ToneAudioNode {
 };
 Channel.buses = /* @__PURE__ */ new Map();
 
-// ../../sdk/node_modules/tone/build/esm/signal/GainToAudio.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/GainToAudio.js
 var GainToAudio = class extends SignalOperator {
   constructor() {
     super(...arguments);
@@ -22355,7 +13099,7 @@ var GainToAudio = class extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/CrossFade.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/CrossFade.js
 var CrossFade = class _CrossFade extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_CrossFade.getDefaults(), arguments, ["fade"]);
@@ -22408,7 +13152,7 @@ var CrossFade = class _CrossFade extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Merge.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Merge.js
 var Merge = class _Merge extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Merge.getDefaults(), arguments, [
@@ -22430,7 +13174,7 @@ var Merge = class _Merge extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Add.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Add.js
 var Add = class _Add extends Signal {
   constructor() {
     super(optionsFromArguments(_Add.getDefaults(), arguments, ["value"]));
@@ -22454,7 +13198,7 @@ var Add = class _Add extends Signal {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Multiply.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Multiply.js
 var Multiply = class _Multiply extends Signal {
   constructor() {
     const options = optionsFromArguments(_Multiply.getDefaults(), arguments, ["value"]);
@@ -22481,7 +13225,7 @@ var Multiply = class _Multiply extends Signal {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Negate.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Negate.js
 var Negate = class extends SignalOperator {
   constructor() {
     super(...arguments);
@@ -22504,7 +13248,7 @@ var Negate = class extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Subtract.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Subtract.js
 var Subtract = class _Subtract extends Signal {
   constructor() {
     super(optionsFromArguments(_Subtract.getDefaults(), arguments, ["value"]));
@@ -22530,7 +13274,7 @@ var Subtract = class _Subtract extends Signal {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/MidSideMerge.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/MidSideMerge.js
 var MidSideMerge = class _MidSideMerge extends ToneAudioNode {
   constructor() {
     super(optionsFromArguments(_MidSideMerge.getDefaults(), arguments));
@@ -22569,7 +13313,7 @@ var MidSideMerge = class _MidSideMerge extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/MidSideSplit.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/MidSideSplit.js
 var MidSideSplit = class _MidSideSplit extends ToneAudioNode {
   constructor() {
     super(optionsFromArguments(_MidSideSplit.getDefaults(), arguments));
@@ -22606,7 +13350,7 @@ var MidSideSplit = class _MidSideSplit extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Mono.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Mono.js
 var Mono = class _Mono extends ToneAudioNode {
   constructor() {
     super(optionsFromArguments(_Mono.getDefaults(), arguments));
@@ -22627,7 +13371,7 @@ var Mono = class _Mono extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/BiquadFilter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/BiquadFilter.js
 var BiquadFilter = class _BiquadFilter extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_BiquadFilter.getDefaults(), arguments, ["frequency", "type"]);
@@ -22726,7 +13470,7 @@ var BiquadFilter = class _BiquadFilter extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/Filter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/Filter.js
 var Filter = class _Filter extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Filter.getDefaults(), arguments, [
@@ -22869,7 +13613,7 @@ var Filter = class _Filter extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/MultibandSplit.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/MultibandSplit.js
 var MultibandSplit = class _MultibandSplit extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_MultibandSplit.getDefaults(), arguments, ["lowFrequency", "highFrequency"]);
@@ -22947,7 +13691,7 @@ var MultibandSplit = class _MultibandSplit extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/context/Listener.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/Listener.js
 var ListenerInstance = class extends ToneAudioNode {
   constructor() {
     super(...arguments);
@@ -23023,7 +13767,7 @@ onContextClose((context2) => {
   context2.listener.dispose();
 });
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Panner3D.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Panner3D.js
 var Panner3D = class _Panner3D extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Panner3D.getDefaults(), arguments, ["positionX", "positionY", "positionZ"]);
@@ -23192,7 +13936,7 @@ var Panner3D = class _Panner3D extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Recorder.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Recorder.js
 var Recorder = class _Recorder extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Recorder.getDefaults(), arguments);
@@ -23293,7 +14037,7 @@ var Recorder = class _Recorder extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/dynamics/Compressor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/dynamics/Compressor.js
 var Compressor = class _Compressor extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Compressor.getDefaults(), arguments, ["threshold", "ratio"]);
@@ -23375,7 +14119,7 @@ var Compressor = class _Compressor extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/GreaterThanZero.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/GreaterThanZero.js
 var GreaterThanZero = class _GreaterThanZero extends SignalOperator {
   constructor() {
     super(optionsFromArguments(_GreaterThanZero.getDefaults(), arguments));
@@ -23405,7 +14149,7 @@ var GreaterThanZero = class _GreaterThanZero extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/GreaterThan.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/GreaterThan.js
 var GreaterThan = class _GreaterThan extends Signal {
   constructor() {
     const options = optionsFromArguments(_GreaterThan.getDefaults(), arguments, ["value"]);
@@ -23437,7 +14181,7 @@ var GreaterThan = class _GreaterThan extends Signal {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/dynamics/Gate.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/dynamics/Gate.js
 var Gate = class _Gate extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Gate.getDefaults(), arguments, [
@@ -23494,7 +14238,7 @@ var Gate = class _Gate extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/dynamics/Limiter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/dynamics/Limiter.js
 var Limiter = class _Limiter extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Limiter.getDefaults(), arguments, [
@@ -23532,7 +14276,7 @@ var Limiter = class _Limiter extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/dynamics/MidSideCompressor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/dynamics/MidSideCompressor.js
 var MidSideCompressor = class _MidSideCompressor extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_MidSideCompressor.getDefaults(), arguments);
@@ -23578,7 +14322,7 @@ var MidSideCompressor = class _MidSideCompressor extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/dynamics/MultibandCompressor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/dynamics/MultibandCompressor.js
 var MultibandCompressor = class _MultibandCompressor extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_MultibandCompressor.getDefaults(), arguments);
@@ -23638,8 +14382,8 @@ var MultibandCompressor = class _MultibandCompressor extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Decorator.js
-function range(min, max2 = Infinity) {
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Decorator.js
+function range(min, max = Infinity) {
   const valueMap = /* @__PURE__ */ new WeakMap();
   return function(target, propertyKey) {
     Reflect.defineProperty(target, propertyKey, {
@@ -23649,13 +14393,13 @@ function range(min, max2 = Infinity) {
         return valueMap.get(this);
       },
       set: function(newValue) {
-        assertRange(newValue, min, max2);
+        assertRange(newValue, min, max);
         valueMap.set(this, newValue);
       }
     });
   };
 }
-function timeRange(min, max2 = Infinity) {
+function timeRange(min, max = Infinity) {
   const valueMap = /* @__PURE__ */ new WeakMap();
   return function(target, propertyKey) {
     Reflect.defineProperty(target, propertyKey, {
@@ -23665,14 +14409,14 @@ function timeRange(min, max2 = Infinity) {
         return valueMap.get(this);
       },
       set: function(newValue) {
-        assertRange(this.toSeconds(newValue), min, max2);
+        assertRange(this.toSeconds(newValue), min, max);
         valueMap.set(this, newValue);
       }
     });
   };
 }
 
-// ../../sdk/node_modules/tone/build/esm/component/envelope/Envelope.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/envelope/Envelope.js
 var Envelope = class _Envelope extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Envelope.getDefaults(), arguments, ["attack", "decay", "sustain", "release"]);
@@ -24061,7 +14805,7 @@ var EnvelopeCurves = (() => {
   };
 })();
 
-// ../../sdk/node_modules/tone/build/esm/component/envelope/AmplitudeEnvelope.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/envelope/AmplitudeEnvelope.js
 var AmplitudeEnvelope = class _AmplitudeEnvelope extends Envelope {
   constructor() {
     super(optionsFromArguments(_AmplitudeEnvelope.getDefaults(), arguments, [
@@ -24091,7 +14835,7 @@ var AmplitudeEnvelope = class _AmplitudeEnvelope extends Envelope {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Pow.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Pow.js
 var Pow = class _Pow extends SignalOperator {
   constructor() {
     const options = optionsFromArguments(_Pow.getDefaults(), arguments, [
@@ -24140,7 +14884,7 @@ var Pow = class _Pow extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Scale.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Scale.js
 var Scale = class _Scale extends SignalOperator {
   constructor() {
     const options = optionsFromArguments(_Scale.getDefaults(), arguments, [
@@ -24183,8 +14927,8 @@ var Scale = class _Scale extends SignalOperator {
   get max() {
     return this._max;
   }
-  set max(max2) {
-    this._max = max2;
+  set max(max) {
+    this._max = max;
     this._setRange();
   }
   /**
@@ -24202,7 +14946,7 @@ var Scale = class _Scale extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/envelope/FrequencyEnvelope.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/envelope/FrequencyEnvelope.js
 var FrequencyEnvelope = class _FrequencyEnvelope extends Envelope {
   constructor() {
     const options = optionsFromArguments(_FrequencyEnvelope.getDefaults(), arguments, ["attack", "decay", "sustain", "release"]);
@@ -24273,7 +15017,7 @@ var FrequencyEnvelope = class _FrequencyEnvelope extends Envelope {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/Convolver.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/Convolver.js
 var Convolver = class _Convolver extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Convolver.getDefaults(), arguments, ["url", "onload"]);
@@ -24351,7 +15095,7 @@ var Convolver = class _Convolver extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/EQ3.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/EQ3.js
 var EQ3 = class _EQ3 extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_EQ3.getDefaults(), arguments, [
@@ -24424,7 +15168,7 @@ var EQ3 = class _EQ3 extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/worklet/WorkletGlobalScope.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/worklet/WorkletGlobalScope.js
 var workletContext = /* @__PURE__ */ new Set();
 function addToWorklet(classOrFunction) {
   workletContext.add(classOrFunction);
@@ -24440,7 +15184,7 @@ function getWorkletGlobalScope() {
   return Array.from(workletContext).join("\n");
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/worklet/ToneAudioWorklet.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/worklet/ToneAudioWorklet.js
 var ToneAudioWorklet = class _ToneAudioWorklet extends ToneAudioNode {
   constructor(options) {
     super(options);
@@ -24476,7 +15220,7 @@ var ToneAudioWorklet = class _ToneAudioWorklet extends ToneAudioNode {
 };
 ToneAudioWorklet._workletPromises = /* @__PURE__ */ new WeakMap();
 
-// ../../sdk/node_modules/tone/build/esm/core/worklet/ToneAudioWorkletProcessor.worklet.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/worklet/ToneAudioWorkletProcessor.worklet.js
 var toneAudioWorkletProcessor = (
   /* javascript */
   `
@@ -24513,7 +15257,7 @@ var toneAudioWorkletProcessor = (
 );
 addToWorklet(toneAudioWorkletProcessor);
 
-// ../../sdk/node_modules/tone/build/esm/core/worklet/SingleIOProcessor.worklet.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/worklet/SingleIOProcessor.worklet.js
 var singleIOProcess = (
   /* javascript */
   `
@@ -24587,7 +15331,7 @@ var singleIOProcess = (
 );
 addToWorklet(singleIOProcess);
 
-// ../../sdk/node_modules/tone/build/esm/core/worklet/DelayLine.worklet.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/worklet/DelayLine.worklet.js
 var delayLine = (
   /* javascript */
   `
@@ -24638,7 +15382,7 @@ var delayLine = (
 );
 addToWorklet(delayLine);
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/FeedbackCombFilter.worklet.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/FeedbackCombFilter.worklet.js
 var workletName = "feedback-comb-filter";
 var feedbackCombFilter = (
   /* javascript */
@@ -24676,7 +15420,7 @@ var feedbackCombFilter = (
 );
 registerProcessor(workletName, feedbackCombFilter);
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/FeedbackCombFilter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/FeedbackCombFilter.js
 var FeedbackCombFilter = class _FeedbackCombFilter extends ToneAudioWorklet {
   constructor() {
     const options = optionsFromArguments(_FeedbackCombFilter.getDefaults(), arguments, ["delayTime", "resonance"]);
@@ -24731,7 +15475,7 @@ var FeedbackCombFilter = class _FeedbackCombFilter extends ToneAudioWorklet {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/LowpassCombFilter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/LowpassCombFilter.js
 var LowpassCombFilter = class _LowpassCombFilter extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_LowpassCombFilter.getDefaults(), arguments, ["delayTime", "resonance", "dampening"]);
@@ -24775,7 +15519,7 @@ var LowpassCombFilter = class _LowpassCombFilter extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/util/StateTimeline.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/StateTimeline.js
 var StateTimeline = class extends Timeline {
   constructor(initial = "stopped") {
     super();
@@ -24845,7 +15589,7 @@ var StateTimeline = class extends Timeline {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/clock/TickParam.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/clock/TickParam.js
 var TickParam = class _TickParam extends Param {
   constructor() {
     const options = optionsFromArguments(_TickParam.getDefaults(), arguments, ["value"]);
@@ -25048,7 +15792,7 @@ var TickParam = class _TickParam extends Param {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/clock/TickSignal.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/clock/TickSignal.js
 var TickSignal = class _TickSignal extends Signal {
   constructor() {
     const options = optionsFromArguments(_TickSignal.getDefaults(), arguments, ["value"]);
@@ -25101,7 +15845,7 @@ var TickSignal = class _TickSignal extends Signal {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/clock/TickSource.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/clock/TickSource.js
 var TickSource = class _TickSource extends ToneWithContext {
   constructor() {
     const options = optionsFromArguments(_TickSource.getDefaults(), arguments, ["frequency"]);
@@ -25391,7 +16135,7 @@ var TickSource = class _TickSource extends ToneWithContext {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/clock/Clock.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/clock/Clock.js
 var Clock = class _Clock extends ToneWithContext {
   constructor() {
     const options = optionsFromArguments(_Clock.getDefaults(), arguments, [
@@ -25610,7 +16354,7 @@ var Clock = class _Clock extends ToneWithContext {
 };
 Emitter.mixin(Clock);
 
-// ../../sdk/node_modules/tone/build/esm/core/context/Delay.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/Delay.js
 var Delay = class _Delay extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Delay.getDefaults(), arguments, [
@@ -25656,7 +16400,7 @@ var Delay = class _Delay extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/context/Destination.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/Destination.js
 var DestinationInstance = class _DestinationInstance extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_DestinationInstance.getDefaults(), arguments);
@@ -25737,7 +16481,7 @@ onContextClose((context2) => {
   context2.destination.dispose();
 });
 
-// ../../sdk/node_modules/tone/build/esm/core/context/Offline.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/Offline.js
 function Offline(callback_1, duration_1) {
   return __awaiter(this, arguments, void 0, function* (callback, duration, channels = 2, sampleRate = getContext().sampleRate) {
     const originalContext = getContext();
@@ -25751,7 +16495,7 @@ function Offline(callback_1, duration_1) {
   });
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/context/ToneAudioBuffers.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/ToneAudioBuffers.js
 var ToneAudioBuffers = class _ToneAudioBuffers extends Tone {
   constructor() {
     super();
@@ -25831,7 +16575,7 @@ var ToneAudioBuffers = class _ToneAudioBuffers extends Tone {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/type/Midi.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/type/Midi.js
 var MidiClass = class _MidiClass extends FrequencyClass {
   constructor() {
     super(...arguments);
@@ -25892,7 +16636,7 @@ function Midi(value, units) {
   return new MidiClass(getContext(), value, units);
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/type/Ticks.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/type/Ticks.js
 var TicksClass = class extends TransportTimeClass {
   constructor() {
     super(...arguments);
@@ -25940,7 +16684,7 @@ function Ticks(value, units) {
   return new TicksClass(getContext(), value, units);
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Draw.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Draw.js
 var DrawInstance = class extends ToneWithContext {
   constructor() {
     super(...arguments);
@@ -26009,7 +16753,7 @@ onContextClose((context2) => {
   context2.draw.dispose();
 });
 
-// ../../sdk/node_modules/tone/build/esm/core/util/IntervalTimeline.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/IntervalTimeline.js
 var IntervalTimeline = class extends Tone {
   constructor() {
     super(...arguments);
@@ -26233,13 +16977,13 @@ var IntervalTimeline = class extends Tone {
       const results = [];
       this._root.search(time, results);
       if (results.length > 0) {
-        let max2 = results[0];
+        let max = results[0];
         for (let i = 1; i < results.length; i++) {
-          if (results[i].low > max2.low) {
-            max2 = results[i];
+          if (results[i].low > max.low) {
+            max = results[i];
           }
         }
-        return max2.event;
+        return max.event;
       }
     }
     return null;
@@ -26474,10 +17218,10 @@ var IntervalNode = class {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/type/Units.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/type/Units.js
 var Units_exports = {};
 
-// ../../sdk/node_modules/tone/build/esm/effect/Effect.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Effect.js
 var Effect = class extends ToneAudioNode {
   constructor(options) {
     super(options);
@@ -26517,7 +17261,7 @@ var Effect = class extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/AudioToGain.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/AudioToGain.js
 var AudioToGain = class extends SignalOperator {
   constructor() {
     super(...arguments);
@@ -26539,7 +17283,7 @@ var AudioToGain = class extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Zero.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Zero.js
 var Zero = class _Zero extends SignalOperator {
   constructor() {
     super(optionsFromArguments(_Zero.getDefaults(), arguments));
@@ -26559,7 +17303,7 @@ var Zero = class _Zero extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/util/TimelineValue.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/TimelineValue.js
 var TimelineValue = class extends Tone {
   /**
    * @param initialValue The value to return if there is no scheduled values
@@ -26595,7 +17339,7 @@ var TimelineValue = class extends Tone {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/clock/TransportEvent.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/clock/TransportEvent.js
 var TransportEvent = class _TransportEvent {
   /**
    * @param transport The transport object which the event belongs to
@@ -26646,7 +17390,7 @@ var TransportEvent = class _TransportEvent {
 };
 TransportEvent._eventId = 0;
 
-// ../../sdk/node_modules/tone/build/esm/core/clock/TransportRepeatEvent.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/clock/TransportRepeatEvent.js
 var TransportRepeatEvent = class _TransportRepeatEvent extends TransportEvent {
   /**
    * @param transport The transport object which the event belongs to
@@ -26731,7 +17475,7 @@ var TransportRepeatEvent = class _TransportRepeatEvent extends TransportEvent {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/clock/Transport.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/clock/Transport.js
 var TransportInstance = class _TransportInstance extends ToneWithContext {
   constructor() {
     const options = optionsFromArguments(_TransportInstance.getDefaults(), arguments);
@@ -27267,7 +18011,7 @@ onContextClose((context2) => {
   context2.transport.dispose();
 });
 
-// ../../sdk/node_modules/tone/build/esm/source/Source.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/Source.js
 var Source = class extends ToneAudioNode {
   constructor(options) {
     super(options);
@@ -27490,7 +18234,7 @@ var Source = class extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/OscillatorInterface.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/OscillatorInterface.js
 function generateWaveform(instance, length) {
   return __awaiter(this, void 0, void 0, function* () {
     const duration = length / instance.context.sampleRate;
@@ -27508,7 +18252,7 @@ function generateWaveform(instance, length) {
   });
 }
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/ToneOscillatorNode.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/ToneOscillatorNode.js
 var ToneOscillatorNode = class _ToneOscillatorNode extends OneShotSource {
   constructor() {
     const options = optionsFromArguments(_ToneOscillatorNode.getDefaults(), arguments, ["frequency", "type"]);
@@ -27585,7 +18329,7 @@ var ToneOscillatorNode = class _ToneOscillatorNode extends OneShotSource {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/Oscillator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/Oscillator.js
 var Oscillator = class _Oscillator extends Source {
   constructor() {
     const options = optionsFromArguments(_Oscillator.getDefaults(), arguments, ["frequency", "type"]);
@@ -27914,7 +18658,7 @@ var Oscillator = class _Oscillator extends Source {
 };
 Oscillator._periodicWaveCache = [];
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/LFO.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/LFO.js
 var LFO = class _LFO extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_LFO.getDefaults(), arguments, [
@@ -28034,9 +18778,9 @@ var LFO = class _LFO extends ToneAudioNode {
   get max() {
     return this._toType(this._scaler.max);
   }
-  set max(max2) {
-    max2 = this._fromType(max2);
-    this._scaler.max = max2;
+  set max(max) {
+    max = this._fromType(max);
+    this._scaler.max = max;
   }
   /**
    * The type of the oscillator.
@@ -28122,7 +18866,7 @@ var LFO = class _LFO extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/LFOEffect.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/LFOEffect.js
 var LFOEffect = class extends Effect {
   constructor(options) {
     super(options);
@@ -28196,7 +18940,7 @@ var LFOEffect = class extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/AutoFilter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/AutoFilter.js
 var AutoFilter = class _AutoFilter extends LFOEffect {
   constructor() {
     const options = optionsFromArguments(_AutoFilter.getDefaults(), arguments, ["frequency", "baseFrequency", "octaves"]);
@@ -28248,7 +18992,7 @@ var AutoFilter = class _AutoFilter extends LFOEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/AutoPanner.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/AutoPanner.js
 var AutoPanner = class _AutoPanner extends LFOEffect {
   constructor() {
     const options = optionsFromArguments(_AutoPanner.getDefaults(), arguments, ["frequency"]);
@@ -28275,7 +19019,7 @@ var AutoPanner = class _AutoPanner extends LFOEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/ScaleExp.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/ScaleExp.js
 var ScaleExp = class _ScaleExp extends Scale {
   constructor() {
     const options = optionsFromArguments(_ScaleExp.getDefaults(), arguments, ["min", "max", "exponent"]);
@@ -28310,7 +19054,7 @@ var ScaleExp = class _ScaleExp extends Scale {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/AutoWah.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/AutoWah.js
 var AutoWah = class _AutoWah extends Effect {
   constructor() {
     const options = optionsFromArguments(_AutoWah.getDefaults(), arguments, [
@@ -28420,7 +19164,7 @@ var AutoWah = class _AutoWah extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/BitCrusher.worklet.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/BitCrusher.worklet.js
 var workletName2 = "bit-crusher";
 var bitCrusherWorklet = (
   /* javascript */
@@ -28447,7 +19191,7 @@ var bitCrusherWorklet = (
 );
 registerProcessor(workletName2, bitCrusherWorklet);
 
-// ../../sdk/node_modules/tone/build/esm/effect/BitCrusher.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/BitCrusher.js
 var BitCrusher = class _BitCrusher extends Effect {
   constructor() {
     const options = optionsFromArguments(_BitCrusher.getDefaults(), arguments, ["bits"]);
@@ -28510,7 +19254,7 @@ var BitCrusherWorklet = class _BitCrusherWorklet extends ToneAudioWorklet {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/Chebyshev.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Chebyshev.js
 var Chebyshev = class _Chebyshev extends Effect {
   constructor() {
     const options = optionsFromArguments(_Chebyshev.getDefaults(), arguments, ["order"]);
@@ -28585,7 +19329,7 @@ var Chebyshev = class _Chebyshev extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/StereoEffect.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/StereoEffect.js
 var StereoEffect = class extends ToneAudioNode {
   constructor(options) {
     super(options);
@@ -28635,7 +19379,7 @@ var StereoEffect = class extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/StereoFeedbackEffect.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/StereoFeedbackEffect.js
 var StereoFeedbackEffect = class extends StereoEffect {
   constructor(options) {
     super(options);
@@ -28673,7 +19417,7 @@ var StereoFeedbackEffect = class extends StereoEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/Chorus.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Chorus.js
 var Chorus = class _Chorus extends StereoFeedbackEffect {
   constructor() {
     const options = optionsFromArguments(_Chorus.getDefaults(), arguments, [
@@ -28814,7 +19558,7 @@ var Chorus = class _Chorus extends StereoFeedbackEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/Distortion.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Distortion.js
 var Distortion = class _Distortion extends Effect {
   constructor() {
     const options = optionsFromArguments(_Distortion.getDefaults(), arguments, ["distortion"]);
@@ -28869,7 +19613,7 @@ var Distortion = class _Distortion extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/FeedbackEffect.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/FeedbackEffect.js
 var FeedbackEffect = class extends Effect {
   constructor(options) {
     super(options);
@@ -28896,7 +19640,7 @@ var FeedbackEffect = class extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/FeedbackDelay.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/FeedbackDelay.js
 var FeedbackDelay = class _FeedbackDelay extends FeedbackEffect {
   constructor() {
     const options = optionsFromArguments(_FeedbackDelay.getDefaults(), arguments, ["delayTime", "feedback"]);
@@ -28925,7 +19669,7 @@ var FeedbackDelay = class _FeedbackDelay extends FeedbackEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/Freeverb.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Freeverb.js
 var combFilterTunings = [
   1557 / 44100,
   1617 / 44100,
@@ -29003,7 +19747,7 @@ var Freeverb = class _Freeverb extends StereoEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/PhaseShiftAllpass.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/PhaseShiftAllpass.js
 var PhaseShiftAllpass = class extends ToneAudioNode {
   constructor(options) {
     super(options);
@@ -29054,7 +19798,7 @@ var PhaseShiftAllpass = class extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/FrequencyShifter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/FrequencyShifter.js
 var FrequencyShifter = class _FrequencyShifter extends Effect {
   constructor() {
     const options = optionsFromArguments(_FrequencyShifter.getDefaults(), arguments, ["frequency"]);
@@ -29114,7 +19858,7 @@ var FrequencyShifter = class _FrequencyShifter extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/JCReverb.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/JCReverb.js
 var combFilterDelayTimes = [
   1687 / 25e3,
   1601 / 25e3,
@@ -29178,7 +19922,7 @@ var JCReverb = class _JCReverb extends StereoEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/Phaser.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Phaser.js
 var Phaser = class _Phaser extends StereoEffect {
   constructor() {
     const options = optionsFromArguments(_Phaser.getDefaults(), arguments, [
@@ -29249,9 +19993,9 @@ var Phaser = class _Phaser extends StereoEffect {
   }
   set octaves(octaves) {
     this._octaves = octaves;
-    const max2 = this._baseFrequency * Math.pow(2, octaves);
-    this._lfoL.max = max2;
-    this._lfoR.max = max2;
+    const max = this._baseFrequency * Math.pow(2, octaves);
+    this._lfoL.max = max;
+    this._lfoR.max = max;
   }
   /**
    * The the base frequency of the filters.
@@ -29277,7 +20021,7 @@ var Phaser = class _Phaser extends StereoEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/StereoXFeedbackEffect.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/StereoXFeedbackEffect.js
 var StereoXFeedbackEffect = class extends StereoFeedbackEffect {
   constructor(options) {
     super(options);
@@ -29289,7 +20033,7 @@ var StereoXFeedbackEffect = class extends StereoFeedbackEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/PingPongDelay.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/PingPongDelay.js
 var PingPongDelay = class _PingPongDelay extends StereoXFeedbackEffect {
   constructor() {
     const options = optionsFromArguments(_PingPongDelay.getDefaults(), arguments, ["delayTime", "feedback"]);
@@ -29335,7 +20079,7 @@ var PingPongDelay = class _PingPongDelay extends StereoXFeedbackEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/PitchShift.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/PitchShift.js
 var PitchShift = class _PitchShift extends FeedbackEffect {
   constructor() {
     const options = optionsFromArguments(_PitchShift.getDefaults(), arguments, ["pitch"]);
@@ -29454,7 +20198,7 @@ var PitchShift = class _PitchShift extends FeedbackEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/buffer/ToneBufferSource.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/buffer/ToneBufferSource.js
 var ToneBufferSource = class _ToneBufferSource extends OneShotSource {
   constructor() {
     const options = optionsFromArguments(_ToneBufferSource.getDefaults(), arguments, ["url", "onload"]);
@@ -29616,7 +20360,7 @@ var ToneBufferSource = class _ToneBufferSource extends OneShotSource {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/Noise.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/Noise.js
 var Noise = class _Noise extends Source {
   constructor() {
     const options = optionsFromArguments(_Noise.getDefaults(), arguments, [
@@ -29802,7 +20546,7 @@ var _noiseBuffers = {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/Reverb.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Reverb.js
 var Reverb = class _Reverb extends Effect {
   constructor() {
     const options = optionsFromArguments(_Reverb.getDefaults(), arguments, [
@@ -29885,7 +20629,7 @@ var Reverb = class _Reverb extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/MidSideEffect.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/MidSideEffect.js
 var MidSideEffect = class extends Effect {
   constructor(options) {
     super(options);
@@ -29923,7 +20667,7 @@ var MidSideEffect = class extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/StereoWidener.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/StereoWidener.js
 var StereoWidener = class _StereoWidener extends MidSideEffect {
   constructor() {
     const options = optionsFromArguments(_StereoWidener.getDefaults(), arguments, ["width"]);
@@ -29972,7 +20716,7 @@ var StereoWidener = class _StereoWidener extends MidSideEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/Tremolo.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Tremolo.js
 var Tremolo = class _Tremolo extends StereoEffect {
   constructor() {
     const options = optionsFromArguments(_Tremolo.getDefaults(), arguments, [
@@ -30089,7 +20833,7 @@ var Tremolo = class _Tremolo extends StereoEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/Vibrato.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Vibrato.js
 var Vibrato = class _Vibrato extends Effect {
   constructor() {
     const options = optionsFromArguments(_Vibrato.getDefaults(), arguments, [
@@ -30145,7 +20889,7 @@ var Vibrato = class _Vibrato extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/event/ToneEvent.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/event/ToneEvent.js
 var ToneEvent = class _ToneEvent extends ToneWithContext {
   constructor() {
     const options = optionsFromArguments(_ToneEvent.getDefaults(), arguments, ["callback", "value"]);
@@ -30409,7 +21153,7 @@ var ToneEvent = class _ToneEvent extends ToneWithContext {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/event/Loop.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/event/Loop.js
 var Loop = class _Loop extends ToneWithContext {
   constructor() {
     const options = optionsFromArguments(_Loop.getDefaults(), arguments, [
@@ -30558,7 +21302,7 @@ var Loop = class _Loop extends ToneWithContext {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/event/Part.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/event/Part.js
 var Part = class _Part extends ToneEvent {
   constructor() {
     const options = optionsFromArguments(_Part.getDefaults(), arguments, [
@@ -30907,7 +21651,7 @@ var Part = class _Part extends ToneEvent {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/event/PatternGenerator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/event/PatternGenerator.js
 function* upPatternGen(numValues) {
   let index = 0;
   while (index < numValues) {
@@ -31023,7 +21767,7 @@ function* PatternGenerator(numValues, pattern = "up") {
   }
 }
 
-// ../../sdk/node_modules/tone/build/esm/event/Pattern.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/event/Pattern.js
 var Pattern = class _Pattern extends Loop {
   constructor() {
     const options = optionsFromArguments(_Pattern.getDefaults(), arguments, [
@@ -31088,7 +21832,7 @@ var Pattern = class _Pattern extends Loop {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/event/Sequence.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/event/Sequence.js
 var Sequence = class _Sequence extends ToneEvent {
   constructor() {
     const options = optionsFromArguments(_Sequence.getDefaults(), arguments, ["callback", "events", "subdivision"]);
@@ -31298,7 +22042,7 @@ var Sequence = class _Sequence extends ToneEvent {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/AMOscillator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/AMOscillator.js
 var AMOscillator = class _AMOscillator extends Source {
   constructor() {
     const options = optionsFromArguments(_AMOscillator.getDefaults(), arguments, ["frequency", "type", "modulationType"]);
@@ -31421,7 +22165,7 @@ var AMOscillator = class _AMOscillator extends Source {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/FatOscillator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/FatOscillator.js
 var FatOscillator = class _FatOscillator extends Source {
   constructor() {
     const options = optionsFromArguments(_FatOscillator.getDefaults(), arguments, ["frequency", "type", "spread"]);
@@ -31597,7 +22341,7 @@ var FatOscillator = class _FatOscillator extends Source {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/FMOscillator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/FMOscillator.js
 var FMOscillator = class _FMOscillator extends Source {
   constructor() {
     const options = optionsFromArguments(_FMOscillator.getDefaults(), arguments, ["frequency", "type", "modulationType"]);
@@ -31736,7 +22480,7 @@ var FMOscillator = class _FMOscillator extends Source {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/PulseOscillator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/PulseOscillator.js
 var PulseOscillator = class _PulseOscillator extends Source {
   constructor() {
     const options = optionsFromArguments(_PulseOscillator.getDefaults(), arguments, ["frequency", "width"]);
@@ -31859,7 +22603,7 @@ var PulseOscillator = class _PulseOscillator extends Source {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/PWMOscillator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/PWMOscillator.js
 var PWMOscillator = class _PWMOscillator extends Source {
   constructor() {
     const options = optionsFromArguments(_PWMOscillator.getDefaults(), arguments, ["frequency", "modulationFrequency"]);
@@ -31971,7 +22715,7 @@ var PWMOscillator = class _PWMOscillator extends Source {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/OmniOscillator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/OmniOscillator.js
 var OmniOscillatorSourceMap = {
   am: AMOscillator,
   fat: FatOscillator,
@@ -32274,7 +23018,7 @@ var OmniOscillator = class _OmniOscillator extends Source {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/Instrument.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/Instrument.js
 var Instrument = class _Instrument extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Instrument.getDefaults(), arguments);
@@ -32395,7 +23139,7 @@ var Instrument = class _Instrument extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/Monophonic.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/Monophonic.js
 var Monophonic = class _Monophonic extends Instrument {
   constructor() {
     const options = optionsFromArguments(_Monophonic.getDefaults(), arguments);
@@ -32469,7 +23213,7 @@ __decorate([
   timeRange(0)
 ], Monophonic.prototype, "portamento", void 0);
 
-// ../../sdk/node_modules/tone/build/esm/instrument/Synth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/Synth.js
 var Synth = class _Synth extends Monophonic {
   constructor() {
     const options = optionsFromArguments(_Synth.getDefaults(), arguments);
@@ -32542,7 +23286,7 @@ var Synth = class _Synth extends Monophonic {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/ModulationSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/ModulationSynth.js
 var ModulationSynth = class _ModulationSynth extends Monophonic {
   constructor() {
     const options = optionsFromArguments(_ModulationSynth.getDefaults(), arguments);
@@ -32655,7 +23399,7 @@ var ModulationSynth = class _ModulationSynth extends Monophonic {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/AMSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/AMSynth.js
 var AMSynth = class _AMSynth extends ModulationSynth {
   constructor() {
     super(optionsFromArguments(_AMSynth.getDefaults(), arguments));
@@ -32676,7 +23420,7 @@ var AMSynth = class _AMSynth extends ModulationSynth {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/MonoSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/MonoSynth.js
 var MonoSynth = class _MonoSynth extends Monophonic {
   constructor() {
     const options = optionsFromArguments(_MonoSynth.getDefaults(), arguments);
@@ -32768,7 +23512,7 @@ var MonoSynth = class _MonoSynth extends Monophonic {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/DuoSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/DuoSynth.js
 var DuoSynth = class _DuoSynth extends Monophonic {
   constructor() {
     const options = optionsFromArguments(_DuoSynth.getDefaults(), arguments);
@@ -32893,7 +23637,7 @@ var DuoSynth = class _DuoSynth extends Monophonic {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/FMSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/FMSynth.js
 var FMSynth = class _FMSynth extends ModulationSynth {
   constructor() {
     const options = optionsFromArguments(_FMSynth.getDefaults(), arguments);
@@ -32923,7 +23667,7 @@ var FMSynth = class _FMSynth extends ModulationSynth {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/MembraneSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/MembraneSynth.js
 var MembraneSynth = class _MembraneSynth extends Synth {
   constructor() {
     const options = optionsFromArguments(_MembraneSynth.getDefaults(), arguments);
@@ -32970,7 +23714,7 @@ __decorate([
   timeRange(0, 0.5)
 ], MembraneSynth.prototype, "pitchDecay", void 0);
 
-// ../../sdk/node_modules/tone/build/esm/instrument/MetalSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/MetalSynth.js
 var inharmRatios = [1, 1.483, 1.932, 2.546, 2.63, 3.897];
 var MetalSynth = class _MetalSynth extends Monophonic {
   constructor() {
@@ -33140,7 +23884,7 @@ var MetalSynth = class _MetalSynth extends Monophonic {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/NoiseSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/NoiseSynth.js
 var NoiseSynth = class _NoiseSynth extends Instrument {
   constructor() {
     const options = optionsFromArguments(_NoiseSynth.getDefaults(), arguments);
@@ -33222,7 +23966,7 @@ var NoiseSynth = class _NoiseSynth extends Instrument {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/PluckSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/PluckSynth.js
 var PluckSynth = class _PluckSynth extends Instrument {
   constructor() {
     const options = optionsFromArguments(_PluckSynth.getDefaults(), arguments);
@@ -33288,7 +24032,7 @@ var PluckSynth = class _PluckSynth extends Instrument {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/PolySynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/PolySynth.js
 var PolySynth = class _PolySynth extends Instrument {
   constructor() {
     const options = optionsFromArguments(_PolySynth.getDefaults(), arguments, ["voice", "options"]);
@@ -33544,7 +24288,7 @@ var PolySynth = class _PolySynth extends Instrument {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/Sampler.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/Sampler.js
 var Sampler = class _Sampler extends Instrument {
   constructor() {
     const options = optionsFromArguments(_Sampler.getDefaults(), arguments, ["urls", "onload", "baseUrl"], "urls");
@@ -33846,7 +24590,7 @@ __decorate([
   timeRange(0)
 ], Sampler.prototype, "release", void 0);
 
-// ../../sdk/node_modules/tone/build/esm/signal/SyncedSignal.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/SyncedSignal.js
 var SyncedSignal = class extends Signal {
   constructor() {
     const options = optionsFromArguments(Signal.getDefaults(), arguments, [
@@ -33961,7 +24705,7 @@ var SyncedSignal = class extends Signal {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/buffer/GrainPlayer.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/buffer/GrainPlayer.js
 var GrainPlayer = class _GrainPlayer extends Source {
   constructor() {
     const options = optionsFromArguments(_GrainPlayer.getDefaults(), arguments, ["url", "onload"]);
@@ -34166,7 +24910,7 @@ var GrainPlayer = class _GrainPlayer extends Source {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/buffer/Player.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/buffer/Player.js
 var Player = class _Player extends Source {
   constructor() {
     const options = optionsFromArguments(_Player.getDefaults(), arguments, [
@@ -34542,7 +25286,7 @@ __decorate([
   timeRange(0)
 ], Player.prototype, "fadeOut", void 0);
 
-// ../../sdk/node_modules/tone/build/esm/source/buffer/Players.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/buffer/Players.js
 var Players = class _Players extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Players.getDefaults(), arguments, ["urls", "onload"], "urls");
@@ -34683,7 +25427,7 @@ var Players = class _Players extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/UserMedia.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/UserMedia.js
 var UserMedia = class _UserMedia extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_UserMedia.getDefaults(), arguments, ["volume"]);
@@ -34859,7 +25603,7 @@ var UserMedia = class _UserMedia extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/index.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/index.js
 function now() {
   return getContext().now();
 }
@@ -36075,153 +26819,6 @@ var AudioEngine = class {
   }
 };
 
-// ../../sdk/dist-esm/engines/audio/tracker-engine.js
-var InterpolationFilter;
-(function(InterpolationFilter2) {
-  InterpolationFilter2[InterpolationFilter2["None"] = 0] = "None";
-  InterpolationFilter2[InterpolationFilter2["Linear"] = 1] = "Linear";
-  InterpolationFilter2[InterpolationFilter2["Cubic"] = 2] = "Cubic";
-  InterpolationFilter2[InterpolationFilter2["Sinc8"] = 3] = "Sinc8";
-})(InterpolationFilter || (InterpolationFilter = {}));
-var PlaybackState;
-(function(PlaybackState2) {
-  PlaybackState2["Stopped"] = "stopped";
-  PlaybackState2["Playing"] = "playing";
-  PlaybackState2["Paused"] = "paused";
-  PlaybackState2["Loading"] = "loading";
-})(PlaybackState || (PlaybackState = {}));
-
-// ../../sdk/dist-esm/media/VoiceCapture.js
-var import_events6 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/network-engine.js
-var import_events19 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/broker/broker-client.js
-var import_events7 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/broker/lobby-broker.js
-var BROKER_KEY = Symbol.for("aex-lobby-broker");
-
-// ../../sdk/dist-esm/engines/network/modules/connection.js
-var import_events8 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/lobby.js
-var import_events9 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/matchmaking.js
-var import_events10 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/sync.js
-var import_events11 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/prediction.js
-var import_events12 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/interpolation.js
-var import_events13 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/presence.js
-var import_events14 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/social.js
-var import_events15 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/leaderboard.js
-var import_events16 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/replay.js
-var import_events17 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/network/modules/security.js
-var import_events18 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/ai/ai-engine.js
-var import_events20 = __toESM(require_events());
-
-// ../../sdk/dist-esm/engines/tactical/tactical-combat-engine.js
-var import_events21 = __toESM(require_events());
-var TerrainType;
-(function(TerrainType2) {
-  TerrainType2["Plains"] = "plains";
-  TerrainType2["Forest"] = "forest";
-  TerrainType2["Mountain"] = "mountain";
-  TerrainType2["Water"] = "water";
-  TerrainType2["Wall"] = "wall";
-  TerrainType2["Floor"] = "floor";
-  TerrainType2["Fort"] = "fort";
-  TerrainType2["Throne"] = "throne";
-  TerrainType2["Village"] = "village";
-  TerrainType2["Peak"] = "peak";
-})(TerrainType || (TerrainType = {}));
-var WeaponType;
-(function(WeaponType2) {
-  WeaponType2["Sword"] = "Sword";
-  WeaponType2["Lance"] = "Lance";
-  WeaponType2["Axe"] = "Axe";
-  WeaponType2["Bow"] = "Bow";
-  WeaponType2["Tome"] = "Tome";
-  WeaponType2["Staff"] = "Staff";
-  WeaponType2["Knife"] = "Knife";
-})(WeaponType || (WeaponType = {}));
-var WeaponRank;
-(function(WeaponRank2) {
-  WeaponRank2["E"] = "E";
-  WeaponRank2["D"] = "D";
-  WeaponRank2["C"] = "C";
-  WeaponRank2["B"] = "B";
-  WeaponRank2["A"] = "A";
-  WeaponRank2["S"] = "S";
-})(WeaponRank || (WeaponRank = {}));
-var UnitClass;
-(function(UnitClass2) {
-  UnitClass2["Lord"] = "Lord";
-  UnitClass2["Cavalier"] = "Cavalier";
-  UnitClass2["Knight"] = "Knight";
-  UnitClass2["Myrmidon"] = "Myrmidon";
-  UnitClass2["Mercenary"] = "Mercenary";
-  UnitClass2["Fighter"] = "Fighter";
-  UnitClass2["Archer"] = "Archer";
-  UnitClass2["Mage"] = "Mage";
-  UnitClass2["Cleric"] = "Cleric";
-  UnitClass2["Pegasus_Knight"] = "Pegasus Knight";
-  UnitClass2["Wyvern_Rider"] = "Wyvern Rider";
-  UnitClass2["Thief"] = "Thief";
-})(UnitClass || (UnitClass = {}));
-
-// ../../sdk/dist-esm/components/level/level-manager.js
-var import_events22 = __toESM(require_events());
-
-// ../../sdk/dist-esm/components/inventory/inventory-system.js
-var import_events23 = __toESM(require_events());
-
-// ../../sdk/dist-esm/components/dialogue/dialogue-system.js
-var import_events24 = __toESM(require_events());
-
-// ../../sdk/dist-esm/components/quest/quest-system.js
-var import_events25 = __toESM(require_events());
-
-// ../../sdk/dist-esm/components/tactical/class-system.js
-var import_events26 = __toESM(require_events());
-var MovementType;
-(function(MovementType2) {
-  MovementType2["Infantry"] = "Infantry";
-  MovementType2["Cavalry"] = "Cavalry";
-  MovementType2["Flying"] = "Flying";
-  MovementType2["Armored"] = "Armored";
-  MovementType2["Dragon"] = "Dragon";
-})(MovementType || (MovementType = {}));
-var SkillTrigger;
-(function(SkillTrigger2) {
-  SkillTrigger2["Always"] = "Always";
-  SkillTrigger2["OnAttack"] = "OnAttack";
-  SkillTrigger2["OnDefend"] = "OnDefend";
-  SkillTrigger2["OnHit"] = "OnHit";
-  SkillTrigger2["OnCrit"] = "OnCrit";
-  SkillTrigger2["PerTurn"] = "PerTurn";
-  SkillTrigger2["Conditional"] = "Conditional";
-})(SkillTrigger || (SkillTrigger = {}));
-
 // ../../sdk/dist-esm/client/index.js
 var DOOR_UNLOAD_EVENT = "bbs:door-unload";
 var ClientDoor = class _ClientDoor extends EventEmitter {
@@ -36871,8 +27468,7 @@ door.on("init", () => {
 });
 door.on("connect", (user) => {
   console.log(`[Galaga] Connected as ${user.name}`);
-  if (!stopSfx)
-    stopSfx = installArcadeSfx(audio);
+  if (!stopSfx) stopSfx = installArcadeSfx(audio);
 });
 function teardown() {
   if (stopSfx) {
