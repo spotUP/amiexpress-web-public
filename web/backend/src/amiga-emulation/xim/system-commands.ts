@@ -6,6 +6,7 @@
 
 import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
+import { conferenceAmigaPath } from '../../conferences/conference-paths';
 import * as path from 'path';
 import { Socket } from 'socket.io';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
@@ -1278,7 +1279,12 @@ debugLog(
 
   private lookupConference(confNum: number): { name: string; path: string } {
     const paths = this.getPaths();
-    const confPath = paths.conference(confNum);
+    // The door is handed this in a message string, so it wants the AMIGA form
+    // ("BBS:Conf1/"), not a host path. The old fallback was
+    // paths.conference(confNum) - a host path built as Conf<n>, wrong on both
+    // counts: a door reading it got "/app/Conf3", and a conference whose
+    // LOCATION.n points elsewhere was never named.
+    const confPath = conferenceAmigaPath(paths.root(), confNum);
 
     // 1) Use ConfConfig.info if available
     try {
@@ -1288,7 +1294,7 @@ debugLog(
         const entry = confConfig.entries[confNum - 1];
         return {
           name: entry.name || `Conference ${confNum}`,
-          path: entry.location || confPath,
+          path: confPath,
         };
       }
     } catch (err) {

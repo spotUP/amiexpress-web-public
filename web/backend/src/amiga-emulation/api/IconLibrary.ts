@@ -1,7 +1,7 @@
 import { MoiraEmulator, CPURegister } from '../cpu/MoiraEmulator';
 import * as fs from 'fs';
 import * as path from 'path';
-import { conferenceDir, conferenceSubdir, conferenceAmigaPath } from '../../conferences/conference-paths';
+import { conferenceDir, conferenceSubdir, conferenceAmigaPath, conferenceNumbers } from '../../conferences/conference-paths';
 import { execSync } from 'child_process';
 import * as amigafs from '../../utils/amigafs';
 
@@ -666,14 +666,12 @@ console.log(`[icon.library]   No match found`);
       // PathManager aliases BBSn: → BBS: so paths like BBS2:Conf1/Upload/ imported
       // from multi-drive installations resolve cleanly; no filtering needed here.
       let maxNdirs = 0;
-      const confDirs = entries
-        .filter(e => e.isDirectory() && /^Conf\d+$/i.test(e.name))
-        .map(e => {
-          const m = e.name.match(/\d+/);
-          return m ? parseInt(m[0], 10) : 0;
-        })
-        .filter(n => n > 0)
-        .sort((a, b) => a - b);
+      // Enumerate from ConfConfig.info's NCONFS, not from directory names: a
+      // conference whose LOCATION.n points outside the BBS root, or at a
+      // directory not called "Conf<n>", has no matching entry here and would
+      // never be listed at all. The directory scan stays as the fallback for a
+      // board with no ConfConfig.info.
+      const confDirs = conferenceNumbers(this.bbsRoot);
       for (const confNum of confDirs) {
         let ulpath = '';
         let dlpath = '';
@@ -706,7 +704,7 @@ console.log(`[icon.library]   No match found`);
         // Use whichever value is higher so AquaScan always sees all real directories.
         try {
           const confDir = conferenceDir(this.bbsRoot, confNum);
-          const confEntries = fs.readdirSync(confDir);
+          const confEntries = amigafs.readdirSync(confDir);
           let highestDir = 0;
           for (const name of confEntries) {
             const m = name.match(/^[Dd][Ii][Rr](\d+)$/);
@@ -724,6 +722,8 @@ console.log(`[icon.library]   No match found`);
         if (!ulpath) {
           const uploadDir = conferenceSubdir(this.bbsRoot, confNum, 'Upload');
           if (amigafs.existsSync(uploadDir)) {
+            // The door reads this, so it is the AMIGA form of the conference's
+            // own LOCATION - not a rebuilt "BBS:Conf<n>/".
             ulpath = conferenceAmigaPath(this.bbsRoot, confNum, 'Upload');
           }
         }

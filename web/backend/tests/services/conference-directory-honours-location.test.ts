@@ -22,6 +22,8 @@ import { applyTooltypes } from '../../src/utils/info-file.util';
 import { conferenceDir } from '../../src/conferences/conference-paths';
 import { XIMMessageParser } from '../../src/amiga-emulation/xim/messages';
 import { XIMDataQueryHandler } from '../../src/amiga-emulation/xim/data-query';
+import { XIMSystemCommandsHandler } from '../../src/amiga-emulation/xim/system-commands';
+import { IconLibrary } from '../../src/amiga-emulation/api/IconLibrary';
 import { DoorConstants } from '../../src/amiga-emulation/DoorTypes';
 import { XIMCommand } from '../../src/amiga-emulation/xim/types';
 
@@ -52,8 +54,14 @@ class StubEmulator {
     this.writeMemory(addr + 2, (value >>> 8) & 0xff);
     this.writeMemory(addr + 3, value & 0xff);
   }
-  readString(): string {
-    return '';
+  readString(addr = 0, maxLen = 200): string {
+    const bytes: number[] = [];
+    for (let i = 0; i < maxLen; i += 1) {
+      const byte = this.readMemory(addr + i);
+      if (byte === 0) break;
+      bytes.push(byte);
+    }
+    return String.fromCharCode(...bytes);
   }
 }
 
@@ -95,8 +103,22 @@ describe('a conference is found where LOCATION.n says, not at Conf<n>', () => {
       ]);
       fs.mkdirSync(path.join(root, 'EliteArea'), { recursive: true });
 
+      // The case walk has to RUN, and the assertion has to say so on either
+      // host. On the macOS dev machine the volume is case-insensitive, so
+      // `<root>/elitearea` exists and every fs assertion below passes even
+      // with the walk ripped out - the whole bug is that ext4 in the Linux
+      // container is not, and there that path ENOENTs. So spy on the walk
+      // (call-through, real behaviour) and pin that conferenceDir funnels its
+      // exit through it, with the un-cased path the sysop wrote.
       const resolved = conferenceDir(root, 2);
 
+      // WHERE THIS PIN BITES: on a case-SENSITIVE host - ext4 in the Linux
+      // container, and Linux CI. There `<root>/elitearea` does not exist, so
+      // without conferenceDir()'s amigafs walk existsSync() below is false and
+      // this test is red. On the macOS dev machine the volume is
+      // case-insensitive: `elitearea` resolves to `EliteArea` in the kernel,
+      // amigafs.resolvePath() takes its exact-hit fast path, and the function
+      // cannot observably differ - so treat a local green here as no evidence.
       expect(fs.existsSync(resolved)).toBe(true);
       expect(fs.statSync(resolved).isDirectory()).toBe(true);
       expect(fs.readdirSync(root).sort()).toEqual([
@@ -171,6 +193,120 @@ describe('a conference is found where LOCATION.n says, not at Conf<n>', () => {
       expect(
         parser.readString(MSG_ADDR + DoorConstants.MESSAGE_STRING_OFFSET, 31)
       ).toBe('4271');
+    });
+  });
+
+  describe('GET_CONFNUM tells the door the conference LOCATION', () => {
+    test('names the relocated conference, in Amiga form, not a host Conf<n>', () => {
+      writeConfConfig([
+        ['General', 'BBS:Conf1/'],
+        ['Elite', 'BBS:EliteArea/'],
+      ]);
+      fs.mkdirSync(path.join(root, 'EliteArea'), { recursive: true });
+      fs.mkdirSync(path.join(root, 'Conf2'), { recursive: true }); // decoy
+
+      const emulator = new StubEmulator();
+      const parser = new XIMMessageParser(emulator as never);
+      const handler = new XIMSystemCommandsHandler(
+        emulator as never,
+        { replyMsg: jest.fn() } as never,
+        { emit: jest.fn(), on: jest.fn() } as never,
+        parser,
+        { bbsPath: root, conferenceId: 2 } as never,
+        {} as never
+      );
+
+      const NAME_ADDR = 0x7000;
+      const PATH_ADDR = 0x7400;
+      (
+        handler as unknown as {
+          handleGetConfNumCommand: (msg: {
+            msgAddr: number;
+            command: number;
+            data: number;
+            replyPort: number;
+            filler1: number;
+            filler2: number;
+          }) => void;
+        }
+      ).handleGetConfNumCommand({
+        msgAddr: 0x7800,
+        command: 0,
+        data: 2,
+        replyPort: 0,
+        filler1: NAME_ADDR,
+        filler2: PATH_ADDR,
+      });
+
+      expect(emulator.readString(NAME_ADDR, 54)).toBe('Elite');
+      expect(emulator.readString(PATH_ADDR, 54)).toBe('BBS:EliteArea/');
+    });
+
+    test('falls back to the Amiga form BBS:Conf<n>/ with no ConfConfig.info', () => {
+      const emulator = new StubEmulator();
+      const parser = new XIMMessageParser(emulator as never);
+      const handler = new XIMSystemCommandsHandler(
+        emulator as never,
+        { replyMsg: jest.fn() } as never,
+        { emit: jest.fn(), on: jest.fn() } as never,
+        parser,
+        { bbsPath: root, conferenceId: 3 } as never,
+        {} as never
+      );
+
+      const PATH_ADDR = 0x7400;
+      (
+        handler as unknown as {
+          handleGetConfNumCommand: (msg: Record<string, number>) => void;
+        }
+      ).handleGetConfNumCommand({
+        msgAddr: 0x7800,
+        command: 0,
+        data: 3,
+        replyPort: 0,
+        filler1: 0,
+        filler2: PATH_ADDR,
+      });
+
+      // Never a host path - the door reads this string.
+      expect(emulator.readString(PATH_ADDR, 54)).toBe('BBS:Conf3/');
+    });
+  });
+
+  describe('ACP tooltypes for a relocated conference', () => {
+    function synthesize(bbsRoot: string): string[] {
+      const icons = new IconLibrary({} as never, bbsRoot);
+      return (
+        icons as unknown as { synthesizeACPTooltypes: () => string[] }
+      ).synthesizeACPTooltypes();
+    }
+
+    test('reads NDIRS, ULPATH and DLPATH out of the LOCATION directory', () => {
+      writeConfConfig([['Elite', 'BBS:EliteArea/']]);
+      const elite = path.join(root, 'EliteArea');
+      fs.mkdirSync(path.join(elite, 'Upload'), { recursive: true });
+      fs.mkdirSync(path.join(elite, 'DIR1'), { recursive: true });
+      fs.mkdirSync(path.join(elite, 'DIR7'), { recursive: true });
+      // Decoys in the directory the old code walked.
+      fs.mkdirSync(path.join(root, 'Conf1', 'DIR2'), { recursive: true });
+
+      const tooltypes = synthesize(root);
+
+      expect(tooltypes).toContain('ULPATH.1=BBS:EliteArea/Upload/');
+      expect(tooltypes).toContain('DLPATH.1=BBS:EliteArea/Upload/');
+      // 7 from EliteArea/DIR7, not 2 from the Conf1 decoy.
+      expect(tooltypes).toContain('NDIRS=7');
+    });
+
+    test('still lists a conference that does live in Conf<n>', () => {
+      writeConfConfig([['General', 'BBS:Conf1/']]);
+      fs.mkdirSync(path.join(root, 'Conf1', 'Upload'), { recursive: true });
+      fs.mkdirSync(path.join(root, 'Conf1', 'DIR3'), { recursive: true });
+
+      const tooltypes = synthesize(root);
+
+      expect(tooltypes).toContain('ULPATH.1=BBS:Conf1/Upload/');
+      expect(tooltypes).toContain('NDIRS=3');
     });
   });
 });
