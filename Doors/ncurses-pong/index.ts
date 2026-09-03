@@ -5,6 +5,19 @@
  * Author: Vicente Adolfo Bolea Sanchez <vicente.bolea@gmail.com>
  *
  * This is a direct port to validate the ncurses compatibility layer.
+ *
+ * The door took no input on any surface until 2026-09-03: `onStart` used to
+ * `await pong.onStart(context)` - the C game loop - while `onInput` sat
+ * registered below. `Door.execute()` only reaches the SDK input loop, the one
+ * thing that installs `bbsSession.doorInputHandler` (sdk/src/core/Door.ts:250),
+ * after every start handler has RESOLVED (sdk/src/core/Door.ts:118-131), and
+ * both live routers read exactly that property (web:
+ * web/backend/src/server/socket-handlers.ts:779; telnet:
+ * web/backend/src/index.ts:1241). The loop was never reached, the handler was
+ * never installed, and every keystroke fell through to the `door:input`
+ * dead-drop at socket-handlers.ts:783.
+ *
+ * Report: .superpowers/sdd/2026-09-03-ncurses-pong-input/progress.md
  */
 
 import { ServerDoor, DoorContext, KeyPress } from '@amiexpress/bbs-door-sdk';
@@ -23,6 +36,15 @@ export const metadata = {
  * Main door class
  */
 const door = new ServerDoor(metadata);
+
+/**
+ * The live game for each node.
+ *
+ * The old code stashed the key handler on the door context behind an `any`
+ * cast; the node id is the key the BBS itself uses, and it is the one
+ * `Door.execute()` hands every handler (`ctx.nodeId`).
+ */
+const games = new Map<number, PongDoor>();
 
 // Parse escape sequences into key names
 function parseKeyData(data: string): { ch: string | undefined; key: { name?: string; sequence: string } } {
@@ -64,48 +86,62 @@ function parseKeyData(data: string): { ch: string | undefined; key: { name?: str
   return { ch: data, key: { name: data, sequence } };
 }
 
-door.onStart(async (ctx: DoorContext) => {
-  const { socket, bbs } = ctx;
-  const pong = new PongDoor();
-
-  // Enable game mode for real-time input
-  if ((bbs as any)?.enableGameMode) {
-    (bbs as any).enableGameMode();
-  }
-
-  // Create a context compatible with ncurses initscr()
-  const context = {
+/** ncurses `initscr()` takes any object that can put bytes on the wire. */
+function ncursesContext(socket: { emit: (event: string, data: string) => void }): {
+  emit: (event: string, data: string) => void;
+  write: (data: string) => void;
+} {
+  return {
     emit: (event: string, data: string) => {
       if (event === 'ansi-output') {
         socket.emit('ansi-output', data);
       }
     },
     write: (data: string) => socket.emit('ansi-output', data),
-    screen: {
-      on: (event: string, handler: (ch: any, key: any) => void) => {
-        if (event === 'keypress') {
-          // Use onInput handler via context-sharing or direct routing
-          (ctx as any)._pongKeyHandler = handler;
-        }
-      }
-    }
   };
+}
 
-  try {
-    await pong.onStart(context as any);
-  } finally {
-    if ((bbs as any)?.disableGameMode) {
-      (bbs as any).disableGameMode();
-    }
-  }
+door.onStart(async (ctx: DoorContext) => {
+  const { socket, bbs } = ctx;
+  const pong = new PongDoor();
+  games.set(ctx.nodeId, pong);
+
+  // Enable game mode for real-time input. Both the `command` path and the
+  // game-mode `key-down` path converge on `session.doorInputHandler`
+  // (socket-handlers.ts:536-546, :779), so this changes the wire format the
+  // browser uses, not who receives the key.
+  bbs?.enableGameMode?.();
+
+  pong.start(ncursesContext(socket), () => {
+    // ESC. `ctx.close()` (sdk/src/core/Door.ts:227) only drops this node's
+    // running-session entry; the SDK input loop then resolves on the NEXT
+    // keystroke (sdk/src/core/Door.ts:212-217), which is what the line below
+    // is asking for.
+    socket.emit('ansi-output', '\r\nThanks for playing PONG. Press any key to exit...\r\n');
+    ctx.close();
+  });
+
+  // onStart RETURNS here, and that is the whole point - see the header.
+  // The SDK's input loop is this door's stay-alive: it holds `execute()` open
+  // until the socket disconnects, the BBS sends `door:close`, or the door
+  // itself says it is finished via the quit path above.
 });
 
 door.onInput(async (ctx: DoorContext, key: KeyPress) => {
-  const handler = (ctx as any)._pongKeyHandler;
-  if (handler) {
-    const { ch, key: keyData } = parseKeyData(key.raw);
-    handler(ch, keyData);
+  const pong = games.get(ctx.nodeId);
+  if (!pong) return;
+
+  const { key: keyData } = parseKeyData(key.raw);
+  pong.handleKey(keyData.name ?? key.raw);
+});
+
+door.onClose(async (ctx: DoorContext) => {
+  const pong = games.get(ctx.nodeId);
+  if (pong) {
+    pong.stop();
+    games.delete(ctx.nodeId);
   }
+  ctx.bbs?.disableGameMode?.();
 });
 
 export default door;
