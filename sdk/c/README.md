@@ -94,9 +94,44 @@ so the two cannot drift in silence.
 The linking rule still holds with both modules in the library: `hello` is
 5,048 bytes, byte for byte what it was before they existed.
 
+## 4. Phase 2 (in progress): a door draws a bordered list
+
+`ui_list.h` is the widget the catalogue actually needs - nearly every door is
+"show these rows, let somebody pick one". It owns the scrolling arithmetic,
+which is the part every hand-rolled copy gets wrong: the window follows the
+selection and is written in exactly one place, it never shows past the last
+row, a list shorter than its box does not scroll, and the selection clamps
+rather than wrapping.
+
+The scroll bar appears only when there is something to scroll - a list that
+fits keeps the column a bar would have taken - and its thumb is proportional
+with a floor of one row, because a thumb that rounds to nothing reads as a
+broken widget rather than a long list.
+
+`ui_ansi.h` is `examples/doorrepo-c/ansi.h` LIFTED, not rewritten: the same
+13 primitives a real C door has been drawing with, with one change. Flushing
+no longer calls `ae_put()` itself - a library cannot own the board
+connection - so the caller says where a finished frame goes.
+`ui_screen_flush()` hands it to the session; a test hands it to a buffer it
+can read back.
+
+### What it costs
+
+| Binary | Size |
+|---|---|
+| `hello` - no widget, whole library linked | 5,048 bytes |
+| `hello_box` - one `ae_box()` call | 5,508 |
+| `hello_list` - a bordered list with a scroll bar | 8,096 |
+
+So the list widget and the ANSI layer under it are **3,048 bytes**, and a
+door that draws no list still costs 5,048 - the same number as before any of
+this existed.
+
 ## What is deliberately not here yet
 
-Widgets (a bordered list, a masthead, a footer), input decoding, dialogs, the
-theme tokens and settings - phases 2 to 4 - and the real AEDoor transport,
-which `examples/doorrepo-c/aedoor_amiga.c` still owns and which phase 2 lifts
-into `sdk/c/` behind the `ae_transport_fn` seam this phase introduced.
+The masthead, the priority footer and the status line (the rest of phase 2);
+input decoding and dialogs (phase 3); theme tokens and settings (phase 4).
+
+And the real AEDoor transport: `examples/doorrepo-c/aedoor_amiga.c` still
+owns it, and `ui_screen`'s sink is deliberately the one place that changes
+when it is lifted in behind `ae_transport_fn` - rather than every door.

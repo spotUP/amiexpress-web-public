@@ -33,7 +33,7 @@ NDK  ?= /opt/homebrew/Cellar/m68k-amiga-elf-gcc/13.1.0/m68k-amiga-elf/sys-includ
 VC    = VBCC=$(VBCC) vc
 AMIGA_CFLAGS = +aos68k -c99 -DAMIGA -Iinclude -I"$(VBCC)/targets/m68k-amigaos/include" -I"$(NDK)"
 
-MODULES = ae_host ae_out ae_box ae_session ui_profile
+MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list
 AMIGA_OBJS = $(patsubst %,build/amiga/%.o,$(MODULES))
 
 .PHONY: all test amiga lib measure clean
@@ -44,10 +44,11 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: build/test_ae_host build/test_ae_session build/test_ui_profile
+test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
+	./build/test_ui_list
 
 build/test_ae_host: src/ae_host.c tests/test_ae_host.c include/ae_host.h
 	@mkdir -p build
@@ -61,11 +62,15 @@ build/test_ui_profile: src/ui_profile.c tests/test_ui_profile.c include/ui_profi
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ui_profile.c tests/test_ui_profile.c -o $@
 
+build/test_ui_list: src/ui_ansi.c src/ui_list.c tests/test_ui_list.c include/ui_list.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) src/ui_ansi.c src/ui_list.c tests/test_ui_list.c -o $@
+
 # ---------------------------------------------------------------------
 # The 68K library and the two yardstick doors
 # ---------------------------------------------------------------------
 
-amiga: lib build/amiga/hello build/amiga/hello_box
+amiga: lib build/amiga/hello build/amiga/hello_box build/amiga/hello_list
 
 lib: build/amiga/libae.lib
 
@@ -86,6 +91,10 @@ build/amiga/hello: examples/hello/hello.c build/amiga/libae.lib
 	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
 
 build/amiga/hello_box: examples/hello/hello_box.c build/amiga/libae.lib
+	@mkdir -p build/amiga
+	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
+
+build/amiga/hello_list: examples/hello/hello_list.c build/amiga/libae.lib
 	@mkdir -p build/amiga
 	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
 
