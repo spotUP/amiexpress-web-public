@@ -79,6 +79,25 @@ class PanelsScreen {
         // Geometry comes from the live screen width, never from a constant.
         const layout = (0, layout_1.panelsLayout)(this.screen.width, this.screen.height, cols, rows);
         this.layout = layout;
+        // The well gets a frame where there is room for one.
+        //
+        // The layout has always said whether to draw it - `border`, from the
+        // compact profile - and nothing ever read the flag, so the board floated
+        // in the middle of an empty screen with no edge to it (reported by a
+        // caller on 2026-09-03: "it looks very empty, no borders"). At 40 columns
+        // the profile turns borders off and this stays as it was.
+        if (layout.border) {
+            this.frameBox = (0, bbs_door_sdk_1.createBox)({
+                parent: this.screen,
+                top: Math.max(0, layout.board.top - 1),
+                left: Math.max(0, layout.board.left - 1),
+                width: layout.board.width + 2,
+                height: layout.board.height + 2,
+                label: ' TETRIS ATTACK ',
+                tags: true,
+                style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+            });
+        }
         this.boardBox = (0, bbs_door_sdk_1.createBox)({
             parent: this.screen,
             top: layout.board.top,
@@ -214,8 +233,10 @@ class PanelsScreen {
         }
         this.boardBox?.destroy();
         this.hudBox?.destroy();
+        this.frameBox?.destroy();
         this.boardBox = undefined;
         this.hudBox = undefined;
+        this.frameBox = undefined;
         this.screen.render();
     }
 }

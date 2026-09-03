@@ -29,6 +29,16 @@ export const PANEL_COLS = 2;
 export type BoardVariant = 'wide' | 'c64';
 
 /**
+ * The empty well: a middle dot, dark grey at 80 columns and the C64's own dark
+ * grey on a C64. Both are in the character set every terminal here draws.
+ */
+const WELL_CHAR = '·';
+/** The cursor is always the brightest thing on the board. */
+const CURSOR_INK = 15;
+const WIDE_WELL_INK = 8;
+const C64_WELL_INK = 11;
+
+/**
  * Sprite name by engine colour index. Colour 0 is empty and 9 is garbage;
  * neither is drawn from this table.
  */
@@ -108,6 +118,26 @@ export function animationFor(panel: Panel, stack: Stack): string | null {
   }
 }
 
+/**
+ * The empty playfield: a faint grid the stack sits in.
+ *
+ * A dot rather than a coloured ground, for two reasons. PETSCII has no
+ * per-cell background at all, so a colour here would be dropped on a C64 and
+ * the two screens would disagree about what the board is; and a dim dot reads
+ * as a container on both without competing with the panels, which are solid
+ * blocks.
+ */
+function paintWell(
+  board: CellBuffer, cols: number, rows: number, variant: BoardVariant,
+): void {
+  const ink = variant === 'c64' ? C64_WELL_INK : WIDE_WELL_INK;
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      board[y][x] = { char: WELL_CHAR, fg: ink, bg: 0 };
+    }
+  }
+}
+
 /** The sprite for a panel, or null if there is nothing to draw. */
 function spriteFor(
   panel: Panel, sheet: Record<string, Sprite>, variant: BoardVariant,
@@ -140,6 +170,18 @@ export function buildBoard(
   const showIncoming = options.showIncomingRow !== false;
   const { cols, rows } = boardSize(stack, options);
   const board = createBuffer(cols, rows);
+
+  // THE WELL IS DRAWN FIRST, and it is drawn even where there is no panel.
+  //
+  // An empty cell used to paint nothing at all, so the terminal's own black
+  // showed through and the gaps in a ragged stack read as holes punched in
+  // space rather than as the empty board they are - which is exactly what a
+  // caller saw: "why do we have black holes in the playfield".
+  //
+  // A panel game is mostly EMPTY board; the stack only fills the bottom third
+  // for most of a game, so the empty cell is the one the player looks at
+  // longest and it has to say "board".
+  paintWell(board, cols, rows, variant);
 
   const lowestRow = showIncoming ? 0 : 1;
   for (let row = lowestRow; row <= stack.height; row++) {
@@ -189,8 +231,9 @@ function markCursorCell(board: CellBuffer, y: number, x: number, char: string): 
   if (!row || x < 0 || x >= row.length) return;
 
   const existing: Cell | null = row[x];
-  row[x] = existing
-    ? { char, fg: existing.fg, bg: existing.bg }
-    // Over an empty cell there is nothing to preserve, so pick a readable pair.
-    : { char, fg: 15, bg: 0 };
+  // The cursor keeps the PANEL's ground, so it reads as a bracket around what
+  // is under it - but never the ground's ink. Over empty board that ink is the
+  // well's dim grey, and a cursor the same grey as the dots behind it is a
+  // cursor the player cannot find.
+  row[x] = { char, fg: CURSOR_INK, bg: existing ? existing.bg : 0 };
 }
