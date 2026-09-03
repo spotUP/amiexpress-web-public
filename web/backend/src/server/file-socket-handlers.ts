@@ -18,6 +18,10 @@ import {
 import { formatFileSize, formatUploadDate } from "../utils/file-upload.util";
 import { testFile, TestResult } from "../utils/file-test.util";
 import { moveUploadedFile, getConferenceDir } from "../utils/file-hold.util";
+import { getStorageContext } from "../storage/storage-context";
+import { pooledUploadArea, putUploadIntoPool } from "../storage/remote-upload";
+import { storageFailureText } from "../storage/remote-download";
+import type { RemoteLocation } from "../storage/remote-areas";
 import { writeUploadToDirFile } from "../utils/dir-file.util";
 import {
   updateSysopUploadStats,
@@ -443,20 +447,65 @@ console.error(`[testFile] Error:`, error);
     // Move file to appropriate directory (express.e:19403-19415)
     // Use file area's dlPath from Conf.info DLPATH.n tooltype
     let finalFilePath = data.path || "";
+    // Where the bytes ended up when this area lives in the pool. Null for a
+    // local area, which is every area on every board without a bucket.
+    let poolLocation: RemoteLocation | null = null;
     if (data.path) {
+      const storage = getStorageContext();
+      // HOLD and LCFILES are sysop-review directories on local disk, not areas
+      // a caller downloads from, so a file bound for one never goes to the
+      // pool - it has no key in the area's prefix and no listing to appear in.
+      const pooledArea =
+        fileArea && fileStatus === "active" ? pooledUploadArea(fileArea, storage) : null;
       try {
-        finalFilePath = await moveUploadedFile(
-          data.path,
-          currentFile.filename,
-          fileStatus,
-          session.currentConf,
-          config.get("dataDir"),
-          fileArea?.dlPath // Pass dlPath from file area config (express.e:15264)
-        );
+        if (pooledArea && storage) {
+          // The playpen copy is the only copy until the put has succeeded, so
+          // it is unlinked AFTER, never before: a failed put must leave the
+          // caller's file where resumeStuff can still offer it back.
+          poolLocation = await putUploadIntoPool(
+            data.path,
+            currentFile.filename,
+            pooledArea,
+            storage
+          );
+          finalFilePath = storage.cache.localPathFor(
+            poolLocation.driveNumber,
+            poolLocation.key
+          );
+          try {
+            await fs.promises.unlink(data.path);
+          } catch (unlinkError: any) {
+            // The bytes are in the pool; a playpen leftover is swept into
+            // PartUpload by cleanPlayPen. Not worth failing the upload.
+console.warn(`[Upload] Could not remove playpen copy ${data.path}: ${unlinkError.message}`);
+          }
+console.log(
+            `[Upload] ${currentFile.filename} stored as DRIVE.${poolLocation.driveNumber}:${poolLocation.key}`
+          );
+        } else {
+          finalFilePath = await moveUploadedFile(
+            data.path,
+            currentFile.filename,
+            fileStatus,
+            session.currentConf,
+            config.get("dataDir"),
+            fileArea?.dlPath // Pass dlPath from file area config (express.e:15264)
+          );
 console.log(`[Upload] File moved to: ${finalFilePath}`);
+        }
       } catch (error: any) {
 console.error(`[Upload] Error moving file: ${error.message}`);
         // Continue with original path on error
+        if (pooledArea) {
+          // A pooled failure is not the same as a rename that lost a race: the
+          // file is still in the playpen and NOT in the area, and the caller
+          // is the only person who can decide to send it again. Name the drive
+          // so a sysop reading a screenshot knows which bucket to look at.
+          socket.emit(
+            "ansi-output",
+            `\r\n\x1b[31mUpload could not be filed: ${storageFailureText(error)}\x1b[0m\r\n`
+          );
+        }
       }
     }
 
@@ -495,12 +544,47 @@ console.error(`[Upload] Error moving file: ${error.message}`);
         status: fileStatus, // active, private, or hold based on test result
         checked: checkedMarker, // P/F/N/D status marker
         comment: undefined, // Optional sysop comment
+        // Written in the SAME insert rather than through a follow-up
+        // recordLocation: the row and its location are one fact, and a second
+        // statement matching on the filename would have to get this codebase's
+        // non-canonical filename case right to find the row it had just made.
+        storageVolume: poolLocation?.driveNumber,
+        objectKey: poolLocation?.key,
       };
 
       await db.createFileEntry(fileEntry as any);
     } else {
       // Duplicate file - skip database insert but still write to DIR file in HOLD
 console.log(`[Upload] Skipping database insert for duplicate file: ${currentFile.filename}`);
+
+      if (poolLocation) {
+        // The put replaced the object this area holds under that name, so the
+        // row that already exists must point at it - otherwise a row written
+        // when the area was still local sends every download at a local path
+        // that no longer has the bytes.
+        try {
+          db.recordLocation(
+            currentFile.filename,
+            fileArea.id,
+            poolLocation.driveNumber,
+            poolLocation.key
+          );
+        } catch (error: any) {
+          // recordLocation throws when no row matched, and filename case is
+          // not canonical here - the duplicate was found with LOWER(filename),
+          // so the stored spelling may differ from the one just uploaded. The
+          // object is NOT lost by this: pooled downloads resolve through the
+          // name index over the bucket's own listing (remote-download.ts) and
+          // the listing a caller sees is the DIR file on disk, so an unmatched
+          // row is a stale mirror, not an unreachable file. Say so and carry
+          // on rather than failing an upload whose bytes are safely stored.
+console.warn(
+            `[Upload] ${currentFile.filename} is in the pool as ` +
+              `DRIVE.${poolLocation.driveNumber}:${poolLocation.key} but its catalog row could ` +
+              `not be updated (${error.message}). The file is reachable; the row is stale.`
+          );
+        }
+      }
     }
 
     // Write to DIR file (express.e:19473-19509)

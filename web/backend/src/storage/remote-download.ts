@@ -19,10 +19,10 @@ import * as fs from 'fs';
 import {
   objectPrefixFor,
   remoteLocationFor,
-  usableRemoteAreasFor,
   type CatalogLocationRow,
   type RemoteArea,
 } from './remote-areas';
+import { usableAreasFor } from './usable-areas';
 import type { StorageContext } from './storage-context';
 import { isStorageUnavailable } from './file-cache';
 import type { IndexedObject } from './name-index';
@@ -240,31 +240,12 @@ export async function rematerialise(
 }
 
 /**
- * When each unusable-area complaint was last logged.
- *
- * Throttled rather than latched: one line per download would drown the log,
- * but a Set that never forgets means a sysop who fixes Drives.info and then
- * breaks it again is told nothing the second time - the board would carry a
- * silent misconfiguration for as long as the process lives.
+ * The areas this conference can be served from - shared verbatim with the
+ * UPLOAD side, which must file objects only in areas this list would answer
+ * for. See `usable-areas.ts`.
  */
-const warnedAt = new Map<string, number>();
-
-/** Long enough not to repeat inside one caller's session, short enough to re-notice. */
-const WARN_AGAIN_AFTER_MS = 5 * 60 * 1000;
-
 function usableAreas(conferenceId: number, storage: StorageContext): RemoteArea[] {
-  return usableRemoteAreasFor(
-    conferenceId,
-    storage.areas,
-    driveNumber => storage.volumes.byNumber(driveNumber) !== undefined,
-    message => {
-      const last = warnedAt.get(message);
-      const now = Date.now();
-      if (last !== undefined && now - last < WARN_AGAIN_AFTER_MS) return;
-      warnedAt.set(message, now);
-      console.warn(message);
-    }
-  );
+  return usableAreasFor(conferenceId, storage);
 }
 
 /**
