@@ -20,17 +20,20 @@
  *   SCREENTOFRONT()                - Bring screen to front
  */
 
-import * as fs from 'fs';
 import * as path from 'path';
+import * as amigafs from '../../utils/amigafs';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
+import { RexxPathResolver } from './rexx-path';
 
 export class RexxArpLibrary {
   private emulator: MoiraEmulator;
   private bbsRoot: string;
+  private readonly paths: RexxPathResolver;
 
   constructor(emulator: MoiraEmulator, bbsRoot: string) {
     this.emulator = emulator;
     this.bbsRoot = bbsRoot;
+    this.paths = new RexxPathResolver(bbsRoot);
   }
 
   /**
@@ -47,11 +50,11 @@ export class RexxArpLibrary {
       const regex = this.amigaPatternToRegex(pattern);
 
       // Read directory and filter by pattern
-      const entries = fs.readdirSync(basePath);
+      const entries = amigafs.readdirSync(basePath);
       const matches = entries.filter((entry: string) => {
         try {
           const fullPath = path.join(basePath, entry);
-          const stats = fs.statSync(fullPath);
+          const stats = amigafs.statSync(fullPath);
           return stats.isFile() && regex.test(entry);
         } catch {
           return false;
@@ -114,7 +117,7 @@ export class RexxArpLibrary {
     console.log(`[RexxArp] READFILE("${filename}") -> "${resolvedPath}"`);
 
     try {
-      return fs.readFileSync(resolvedPath, 'utf-8');
+      return amigafs.readFileSync(resolvedPath, 'utf-8') as string;
     } catch {
       return '';
     }
@@ -132,11 +135,11 @@ export class RexxArpLibrary {
     try {
       // Ensure directory exists
       const dir = path.dirname(resolvedPath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+      if (!amigafs.existsSync(dir)) {
+        amigafs.mkdirSync(dir, { recursive: true });
       }
 
-      fs.writeFileSync(resolvedPath, content);
+      amigafs.writeFileSync(resolvedPath, content);
       return 1;
     } catch {
       return 0;
@@ -241,24 +244,13 @@ export class RexxArpLibrary {
     return new RegExp(`^${regex}$`, 'i'); // Case insensitive
   }
 
+  /**
+   * Map an AREXX path onto the host filesystem - assign substitution followed
+   * by case resolution. See RexxSupportLibrary.resolveAmigaPath() and
+   * ./rexx-path.ts for why the case-sensitive prefix test this replaces broke
+   * every lowercase "bbs:..." path a door supplied.
+   */
   private resolveAmigaPath(amigaPath: string): string {
-    let resolved = amigaPath;
-
-    // Replace Amiga volume/assign names
-    if (resolved.startsWith('DOORS:')) {
-      resolved = path.join(this.bbsRoot, 'Doors', resolved.substring(6));
-    } else if (resolved.startsWith('BBS:')) {
-      resolved = path.join(this.bbsRoot, resolved.substring(4));
-    } else if (resolved.startsWith('RAM:')) {
-      resolved = path.join('/tmp', resolved.substring(4));
-    } else if (resolved.startsWith('T:')) {
-      resolved = path.join('/tmp', resolved.substring(2));
-    } else if (resolved.startsWith('SYS:')) {
-      resolved = path.join(this.bbsRoot, resolved.substring(4));
-    } else if (!path.isAbsolute(resolved)) {
-      resolved = path.join(this.bbsRoot, resolved);
-    }
-
-    return resolved;
+    return this.paths.resolve(amigaPath);
   }
 }

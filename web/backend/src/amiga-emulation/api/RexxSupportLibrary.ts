@@ -20,13 +20,13 @@
  * These are called via AREXX function host mechanism, not direct library calls.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
+import * as amigafs from '../../utils/amigafs';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
+import { RexxPathResolver } from './rexx-path';
 
 export class RexxSupportLibrary {
   private emulator: MoiraEmulator;
-  private bbsRoot: string;
+  private readonly paths: RexxPathResolver;
 
   // Memory allocation tracking
   private allocations: Map<number, number> = new Map();
@@ -34,7 +34,7 @@ export class RexxSupportLibrary {
 
   constructor(emulator: MoiraEmulator, bbsRoot: string) {
     this.emulator = emulator;
-    this.bbsRoot = bbsRoot;
+    this.paths = new RexxPathResolver(bbsRoot);
   }
 
   /**
@@ -46,12 +46,7 @@ export class RexxSupportLibrary {
     const resolvedPath = this.resolveAmigaPath(filename);
     console.log(`[RexxSupport] EXISTS("${filename}") -> "${resolvedPath}"`);
 
-    try {
-      fs.accessSync(resolvedPath, fs.constants.F_OK);
-      return 1;
-    } catch {
-      return 0;
-    }
+    return amigafs.existsSync(resolvedPath) ? 1 : 0;
   }
 
   /**
@@ -66,7 +61,7 @@ export class RexxSupportLibrary {
     console.log(`[RexxSupport] STATEF("${filename}") -> "${resolvedPath}"`);
 
     try {
-      const stats = fs.statSync(resolvedPath);
+      const stats = amigafs.statSync(resolvedPath);
       const type = stats.isDirectory() ? 'DIR' : 'FILE';
       const size = stats.size;
       const blocks = Math.ceil(size / 512);
@@ -96,7 +91,7 @@ export class RexxSupportLibrary {
     console.log(`[RexxSupport] DELETE("${filename}") -> "${resolvedPath}"`);
 
     try {
-      fs.unlinkSync(resolvedPath);
+      amigafs.unlinkSync(resolvedPath);
       return 1;
     } catch {
       return 0;
@@ -113,7 +108,7 @@ export class RexxSupportLibrary {
     console.log(`[RexxSupport] MAKEDIR("${dirname}") -> "${resolvedPath}"`);
 
     try {
-      fs.mkdirSync(resolvedPath, { recursive: true });
+      amigafs.mkdirSync(resolvedPath, { recursive: true });
       return 1;
     } catch {
       return 0;
@@ -131,7 +126,7 @@ export class RexxSupportLibrary {
     console.log(`[RexxSupport] RENAME("${oldname}", "${newname}")`);
 
     try {
-      fs.renameSync(oldPath, newPath);
+      amigafs.renameSync(oldPath, newPath);
       return 1;
     } catch {
       return 0;
@@ -149,11 +144,11 @@ export class RexxSupportLibrary {
     console.log(`[RexxSupport] SHOWDIR("${dirpath}", "${type}")`);
 
     try {
-      const entries = fs.readdirSync(resolvedPath);
+      const entries = amigafs.readdirSync(resolvedPath);
       const filtered = entries.filter(entry => {
-        const fullPath = path.join(resolvedPath, entry);
+        const fullPath = `${resolvedPath}/${entry}`;
         try {
-          const stats = fs.statSync(fullPath);
+          const stats = amigafs.statSync(fullPath);
           if (type === 'F') return stats.isFile();
           if (type === 'D') return stats.isDirectory();
           return true; // 'A' = all
@@ -301,25 +296,21 @@ export class RexxSupportLibrary {
   // Path resolution helpers
   // =========================================================================
 
+  /**
+   * Map an AREXX path onto the host filesystem.
+   *
+   * Previously this matched the assign prefixes case-SENSITIVELY ('DOORS:',
+   * 'BBS:', ...), so the lowercase forms AmigaDOS treats as identical - and
+   * that real doors write, e.g. "bbs:bulletins/bull1.txt" - fell through to
+   * the relative-path branch and produced "<bbsRoot>/bbs:bulletins/...".
+   * It also handed the result to plain fs, with no case resolution of the
+   * remaining components, so "bulletins/" never found "Bulletins/" on the
+   * case-sensitive Linux container.
+   *
+   * Both halves now go through the shared resolver: the AREXX interpreter's
+   * own assign table, then amigafs for the case walk.
+   */
   private resolveAmigaPath(amigaPath: string): string {
-    // Handle Amiga path formats
-    let resolved = amigaPath;
-
-    // Replace Amiga volume/assign names
-    if (resolved.startsWith('DOORS:')) {
-      resolved = path.join(this.bbsRoot, 'Doors', resolved.substring(6));
-    } else if (resolved.startsWith('BBS:')) {
-      resolved = path.join(this.bbsRoot, resolved.substring(4));
-    } else if (resolved.startsWith('RAM:')) {
-      resolved = path.join('/tmp', resolved.substring(4));
-    } else if (resolved.startsWith('T:')) {
-      resolved = path.join('/tmp', resolved.substring(2));
-    } else if (resolved.startsWith('SYS:')) {
-      resolved = path.join(this.bbsRoot, resolved.substring(4));
-    } else if (!path.isAbsolute(resolved)) {
-      resolved = path.join(this.bbsRoot, resolved);
-    }
-
-    return resolved;
+    return this.paths.resolve(amigaPath);
   }
 }
