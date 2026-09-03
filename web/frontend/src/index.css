@@ -83,12 +83,15 @@
   font-weight: 400;
   color: #ffffff;
   /*
-   * Near-black page ground. Deliberately NOT pure black: the terminal's own
-   * xterm theme background stays #000000 (packages/terminal), so this token
-   * has to be a shade lighter or the 80x25 grid has nothing to contrast
-   * against when TerminalPage letterboxes it (see .terminal-page--framed).
+   * The page ground: black, the same black as the terminal's own xterm theme
+   * (packages/terminal), so a framed 80x25 session reads as one unbroken
+   * black field rather than a lit rectangle on a lighter card (sysop,
+   * 2026-09-03). It stayed #141414 until then, deliberately a shade lighter,
+   * so the letterboxing around the grid was visible; the sysop has since
+   * asked for the letterboxing NOT to show. Everything that paints the page
+   * still goes through this token - one place to change it back.
    */
-  --bbs-page-bg: #141414;
+  --bbs-page-bg: #000000;
   /* The terminal's black bezel and its corner radius (fixed 80x25 mode). */
   --bbs-terminal-bezel: 16px;
   --bbs-terminal-radius: 12px;

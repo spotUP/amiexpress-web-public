@@ -279,10 +279,12 @@ describe('TerminalPage ARKANOID trackpad', () => {
 });
 
 /**
- * The sysop asked for the fixed 80x25 terminal to sit centred against a page
- * ground that is a shade lighter than pure black, so the letterboxing is
- * actually visible - currently both the terminal's wrapper and the page
- * behind it are #000000, so "centred" has nothing to contrast against.
+ * The sysop asked for the fixed 80x25 terminal to sit CENTRED, in its own
+ * shrunk box, with the page filling the rest. The ground was a shade lighter
+ * than the terminal at first so the letterboxing showed; on 2026-09-03 the
+ * sysop asked for a black page instead, and the ground token went to #000000.
+ * The centring is the part that was asked for and the part asserted here -
+ * the ground colour is one token away either way.
  *
  * jsdom does no layout (and this project's vitest config runs with
  * `css: false`), so there is no computed style to assert pixel centring
@@ -424,23 +426,25 @@ describe('TerminalPage page ground token', () => {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const read = (rel: string) => readFileSync(path.join(here, rel), 'utf8');
 
-  it('defines one near-black page-ground token, lighter than the pure-black terminal theme', () => {
+  // Black since 2026-09-03, on the sysop's instruction: the page and the
+  // terminal are one black field, so the framed 80x25 box no longer reads as
+  // a lit rectangle on a lighter card. Asserted by CHANNEL VALUE, not by
+  // spelling, so #000 and #000000 both pass and a stray hue does not.
+  it('defines the page-ground token as black, the same black as the terminal theme', () => {
     const indexCss = read('../../index.css');
     const matches = indexCss.match(/--bbs-page-bg:\s*(#[0-9a-fA-F]{3,6})/);
 
     expect(matches).toBeTruthy();
     const [, hex] = matches!;
-    expect(hex.toLowerCase()).not.toBe('#000000');
-    expect(hex.toLowerCase()).not.toBe('#000');
-
-    // "Tiny bit lighter": every channel is low, not swapped for a hue.
     const value = hex.length === 4
       ? hex.slice(1).split('').map(c => parseInt(c + c, 16))
       : [hex.slice(1, 3), hex.slice(3, 5), hex.slice(5, 7)].map(c => parseInt(c, 16));
-    expect(Math.max(...value)).toBeGreaterThan(0);
-    expect(Math.max(...value)).toBeLessThan(40);
+    expect(value).toEqual([0, 0, 0]);
   });
 
+  // Still the point of the token now that its value is black: a hardcoded
+  // #000 in body or .app-shell would look identical today and would have to
+  // be hunted down the day the sysop wants the lighter ground back.
   it('paints the page background (not the terminal) from that token, not a hardcoded hex', () => {
     const indexCss = read('../../index.css');
     const appCss = read('../../App.css');

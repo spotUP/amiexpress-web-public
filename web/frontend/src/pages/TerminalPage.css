@@ -42,8 +42,11 @@
 /*
  * Desktop 80x25 mode: BBSTerminal's own outer wrapper paints its xterm
  * theme's pure-black background across 100% of whatever box hosts it, so
- * that box has to be shrunk to the terminal's own footprint before the
- * lighter page ground (--bbs-page-bg, index.css) can show around it.
+ * that box is shrunk to the terminal's own footprint and the page ground
+ * (--bbs-page-bg, index.css) fills the rest. That ground is black too since
+ * 2026-09-03, so the letterboxing no longer shows as a border - the shrink
+ * still matters: it is what keeps the grid centred and the bezel's rounded
+ * corners on the terminal rather than on the viewport.
  * `.terminal-page--framed` centres that shrunk box in the viewport; a door
  * that switches to wide/fullscreen mode still fills the screen, because
  * BBSTerminal then switches itself to `position: absolute` and escapes this
