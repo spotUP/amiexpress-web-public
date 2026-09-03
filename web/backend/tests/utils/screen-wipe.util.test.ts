@@ -118,16 +118,20 @@ describe('screen-wipe.util', () => {
         expect(frames[0]).toHaveProperty('delay');
       });
 
-      it('should have clear screen code in every animation frame', () => {
+      it('should clear the screen once, on the first frame only', () => {
         const frames = getWipeFrames('matrix', testContent);
 
-        frames.slice(0, -1).forEach(frame => {
-          expect(frame.content).toContain('\x1b[2J\x1b[H'); // Clear screen + home
+        // Frame 0 clears and paints the whole screen; every later frame is a
+        // delta. A clear per frame is what made the animation flicker.
+        expect(frames[0].content).toContain('\x1b[2J\x1b[H');
+        frames.slice(1).forEach(frame => {
+          expect(frame.content).not.toContain('\x1b[2J');
         });
       });
 
       it('should end on the screen itself, homed over the last animation frame', () => {
         const frames = getWipeFrames('matrix', testContent);
+
 
         // The animation is a model of the screen; the frame the caller is
         // left looking at is the screen. Homed, not cleared, so the identical
@@ -135,12 +139,14 @@ describe('screen-wipe.util', () => {
         expect(frames[frames.length - 1].content).toBe('\x1b[H' + testContent);
       });
 
-      it('should have consistent delay between frames', () => {
+      it('should have consistent delay between animation frames', () => {
         const frames = getWipeFrames('matrix', testContent);
 
-        frames.forEach(frame => {
+        frames.slice(0, -1).forEach(frame => {
           expect(frame.delay).toBe(50);
         });
+        // Nothing waits after the final paint.
+        expect(frames[frames.length - 1].delay).toBe(0);
       });
     });
 
@@ -149,11 +155,13 @@ describe('screen-wipe.util', () => {
         const frames = getWipeFrames('hblinds', testContent);
 
         expect(frames.length).toBeGreaterThan(0);
-        frames.forEach(frame => {
+        // The appended final paint carries delay 0 (nothing waits after it).
+        frames.slice(0, -1).forEach(frame => {
           expect(frame).toHaveProperty('content');
           expect(frame).toHaveProperty('delay');
           expect(frame.delay).toBe(40);
         });
+        expect(frames[frames.length - 1].delay).toBe(0);
       });
     });
 
@@ -162,9 +170,10 @@ describe('screen-wipe.util', () => {
         const frames = getWipeFrames('vblinds', testContent);
 
         expect(frames.length).toBeGreaterThan(0);
-        frames.forEach(frame => {
+        frames.slice(0, -1).forEach(frame => {
           expect(frame.delay).toBe(40);
         });
+        expect(frames[frames.length - 1].delay).toBe(0);
       });
     });
 
@@ -173,9 +182,10 @@ describe('screen-wipe.util', () => {
         const frames = getWipeFrames('spiral', testContent);
 
         expect(frames.length).toBeGreaterThan(0);
-        frames.forEach(frame => {
+        frames.slice(0, -1).forEach(frame => {
           expect(frame.delay).toBe(30);
         });
+        expect(frames[frames.length - 1].delay).toBe(0);
       });
     });
 
@@ -184,9 +194,10 @@ describe('screen-wipe.util', () => {
         const frames = getWipeFrames('checker', testContent);
 
         expect(frames.length).toBeGreaterThan(0);
-        frames.forEach(frame => {
+        frames.slice(0, -1).forEach(frame => {
           expect(frame.delay).toBe(100);
         });
+        expect(frames[frames.length - 1].delay).toBe(0);
       });
 
       it('should have exactly 2 phases (white then black squares) plus the final paint', () => {
@@ -201,9 +212,10 @@ describe('screen-wipe.util', () => {
         const frames = getWipeFrames('radial', testContent);
 
         expect(frames.length).toBeGreaterThan(0);
-        frames.forEach(frame => {
+        frames.slice(0, -1).forEach(frame => {
           expect(frame.delay).toBe(25);
         });
+        expect(frames[frames.length - 1].delay).toBe(0);
       });
     });
 
@@ -212,9 +224,10 @@ describe('screen-wipe.util', () => {
         const frames = getWipeFrames('blocks', testContent);
 
         expect(frames.length).toBeGreaterThan(0);
-        frames.forEach(frame => {
+        frames.slice(0, -1).forEach(frame => {
           expect(frame.delay).toBe(40);
         });
+        expect(frames[frames.length - 1].delay).toBe(0);
       });
     });
 
@@ -223,9 +236,10 @@ describe('screen-wipe.util', () => {
         const frames = getWipeFrames('noise', testContent);
 
         expect(frames.length).toBeGreaterThan(0);
-        frames.forEach(frame => {
+        frames.slice(0, -1).forEach(frame => {
           expect(frame.delay).toBe(50);
         });
+        expect(frames[frames.length - 1].delay).toBe(0);
       });
     });
 
@@ -234,9 +248,10 @@ describe('screen-wipe.util', () => {
         const frames = getWipeFrames('typewriter', testContent);
 
         expect(frames.length).toBeGreaterThan(0);
-        frames.forEach(frame => {
+        frames.slice(0, -1).forEach(frame => {
           expect(frame.delay).toBe(30);
         });
+        expect(frames[frames.length - 1].delay).toBe(0);
       });
     });
 
@@ -245,9 +260,10 @@ describe('screen-wipe.util', () => {
         const frames = getWipeFrames('explode', testContent);
 
         expect(frames.length).toBeGreaterThan(0);
-        frames.forEach(frame => {
+        frames.slice(0, -1).forEach(frame => {
           expect(frame.delay).toBe(40);
         });
+        expect(frames[frames.length - 1].delay).toBe(0);
       });
     });
 
@@ -369,10 +385,12 @@ describe('screen-wipe.util', () => {
     it('should create smooth animation progression', () => {
       const frames = getWipeFrames('typewriter', testContent);
 
-      // Frames should all have same delay (smooth playback)
-      const delays = frames.map(f => f.delay);
+      // Animation frames all have the same delay (smooth playback); the
+      // appended final paint has none, because nothing waits after it.
+      const delays = frames.slice(0, -1).map(f => f.delay);
       const uniqueDelays = new Set(delays);
       expect(uniqueDelays.size).toBe(1); // All same delay
+      expect(frames[frames.length - 1].delay).toBe(0);
 
       // Each frame should have content
       frames.forEach(frame => {
@@ -427,7 +445,10 @@ describe('screen-wipe.util', () => {
         // \x1b[H (cursor home, no row/col) must not appear in the rendered grid
         expect(body).not.toContain('\x1b[H');
       }
-      expect(frames[frames.length - 1].content).toBe('\x1b[H' + content);
+      // The final frame is the screen's own bytes, homed - minus the clear
+      // the screen opens with (~f), which would blank the finished animation
+      // and repaint it.
+      expect(frames[frames.length - 1].content).toBe('\x1b[H\r\nABCDE\r\nFGHIJ');
     });
 
     it('color sequences are preserved across lines in wipe frames', () => {

@@ -2432,15 +2432,24 @@ console.log(`[WIPE] Generated ${wipeFrames.length} frames`);
           frame.content +    // Wipe frame content (includes clear/positioning)
           (isLastFrame ? '\x1b[0m' + SHOW_CURSOR : ''); // Reset and show cursor on last frame
 
-        // Emit frame directly (bypass modem emulator)
+        // ONE emit per frame: the wipe's own chunking is the animation, so
+        // it must not be re-cut by the server-side modem throttle or merged
+        // by the 16 ms AnsiBuffer (utils/ansi-buffer.util.ts) - neither is on
+        // this path, and `_directEmit` is the seam that keeps it that way.
         directSocketEmit(eventName, frameContent);
 
         // Yield to event loop to flush socket buffer before waiting
         await new Promise(resolve => setImmediate(resolve));
 
-        // Delay before next frame (minimum 50ms for visibility)
+        // The builder's own pacing, floored at one 60 Hz tick.
+        //
+        // This floor used to be 50 ms, which overrode EVERY builder delay
+        // (25-40 ms) and made a 25-frame sweep a 1.25 s slideshow while the
+        // builders' numbers did nothing. 16 ms is the shortest wait a
+        // terminal can actually show as a separate paint; the builders own
+        // the pacing above it.
         if (!isLastFrame) {
-          const delayMs = Math.max(50, frame.delay);
+          const delayMs = Math.max(16, frame.delay);
           await new Promise(resolve => setTimeout(resolve, delayMs));
         }
       }

@@ -16,6 +16,11 @@
  * ~WT - Typewriter (types out line by line)
  * ~WE - Explode (from center outward)
  * ~WX - Random (picks one of the above)
+ *
+ * A wipe is a sequence of {content, delay} frames. The FIRST frame clears
+ * and paints the whole screen; every frame after it carries only the cells
+ * that changed (cursor-addressed runs), and the last frame is the caller's
+ * own content homed over the finished animation.
  */
 
 export type WipeType =
@@ -351,6 +356,144 @@ function gridToAnsi(grid: Cell[][]): string {
   return lines.join('\r\n');
 }
 
+/** One wipe's animation: the grid at each step, and the step's pacing. */
+interface WipeGrids {
+  grids: Cell[][][];
+  delay: number;
+}
+
+/** The cell at (y, x), or a blank if the grid does not reach that far. */
+function cellAt(grid: Cell[][], y: number, x: number): Cell {
+  const row = grid[y];
+  if (!row) return BLANK;
+  return row[x] ?? BLANK;
+}
+
+/** Two cells paint the same thing (a full attribute state per cell makes this exact). */
+function sameCell(a: Cell, b: Cell): boolean {
+  return a.char === b.char && a.ansi === b.ansi;
+}
+
+/**
+ * The FIRST frame: clear, then paint every cell the grid holds, row by row
+ * (a CUP per row rather than `\r\n`, so a row that fills the last column
+ * cannot scroll the screen). Cells past a row's end were painted by the
+ * clear; every later frame is a delta on top of this one.
+ */
+function renderGridFull(grid: Cell[][]): string {
+  let out = '';
+
+  for (let y = 0; y < grid.length; y++) {
+    const row = grid[y];
+    if (row.length === 0) continue;   // the clear already painted it
+    out += `\x1b[${y + 1};1H`;
+    let lastAnsi = '';
+    for (let x = 0; x < row.length; x++) {
+      const cell = row[x];
+      if (cell.ansi !== lastAnsi) {
+        out += cell.ansi;
+        lastAnsi = cell.ansi;
+      }
+      out += cell.char;
+    }
+  }
+
+  return out + RESET;
+}
+
+/**
+ * Every LATER frame: only the cells that changed, as cursor-addressed runs.
+ *
+ * Same walk as the C64 door adapter's frame differ
+ * (`sdk/petscii/frame/frame-render.ts:41` `renderDiff`) and as blessed's own
+ * screen diff (`sdk/node_modules/blessed/lib/widgets/screen.js:1053`
+ * `Screen.prototype.draw`): find a run of changed cells, address its start
+ * with CUP, re-state the attributes at the head of the run so the run is
+ * self-contained, print the glyphs, move on.
+ *
+ * Neither of those two could be reused as-is. `renderDiff`'s cell colour is a
+ * VIC-II index rendered as truecolor from the C64 palette and it deliberately
+ * never emits a background at all (a C64 has none) - pointing it at an
+ * 80-column ANSI menu would repaint the board's screens in C64 colours and
+ * drop their backgrounds - and it skips the bottom-right cell for the
+ * KERNAL's scroll. Blessed's differ is bound to its own `lines`/`olines`
+ * buffers and terminfo program object. What is shared is the algorithm, and
+ * that is what this mirrors; generalising `renderDiff` to an
+ * attribute-string cell model belongs in `sdk/petscii/frame`, with the
+ * PETSCII pipeline's own tests, not here.
+ *
+ * Why it matters: a full repaint per frame is 2.5-10 KB, and the terminal
+ * paces what it receives (packages/terminal/src/utils/modem-emulator.ts caps
+ * even "MAX" at 230400 bps = 23 KB/s), so a 14-frame `~WN` took 5 s of wire
+ * to play a 650 ms animation. A delta is a few hundred bytes.
+ */
+function renderGridDelta(previous: Cell[][], next: Cell[][]): string {
+  const rows = Math.max(previous.length, next.length);
+  const width = Math.max(gridWidth(previous), gridWidth(next));
+  let out = '';
+
+  for (let y = 0; y < rows; y++) {
+    let x = 0;
+    while (x < width) {
+      if (sameCell(cellAt(previous, y, x), cellAt(next, y, x))) {
+        x++;
+        continue;
+      }
+
+      const start = x;
+      let run = '';
+      let lastAnsi = '';
+      while (x < width && !sameCell(cellAt(previous, y, x), cellAt(next, y, x))) {
+        const cell = cellAt(next, y, x);
+        if (cell.ansi !== lastAnsi) {
+          run += cell.ansi;
+          lastAnsi = cell.ansi;
+        }
+        run += cell.char;
+        x++;
+      }
+
+      out += `\x1b[${y + 1};${start + 1}H` + run;
+    }
+  }
+
+  return out === '' ? '' : out + RESET;
+}
+
+/**
+ * The animation's grids as frames: one full paint, then deltas.
+ *
+ * Only the first frame clears. Every later frame overwrites the cells it
+ * changes and touches nothing else, so there is no moment where the screen
+ * is blank - which is what a `\x1b[2J` per frame produced on xterm.js, where
+ * the clear and the repaint land in different render frames (and where the
+ * client-side modem pacing writes escapes AHEAD of the text still draining
+ * from the previous frame).
+ */
+function framesFromGrids(animation: WipeGrids, content: string): WipeFrame[] {
+  const frames: WipeFrame[] = [];
+  let previous: Cell[][] | null = null;
+
+  for (const grid of animation.grids) {
+    if (previous === null) {
+      frames.push({ content: CLEAR_HOME + renderGridFull(grid), delay: animation.delay });
+      previous = grid;
+      continue;
+    }
+
+    const delta = renderGridDelta(previous, grid);
+    previous = grid;
+    // A step that changes nothing has nothing to send. Keeping it would put
+    // an empty payload on the wire and hold the animation for a tick that
+    // shows exactly what the tick before it showed.
+    if (delta === '') continue;
+
+    frames.push({ content: delta, delay: animation.delay });
+  }
+
+  return frames;
+}
+
 /**
  * The screen as the wipes model it: parse to the grid and paint it back.
  *
@@ -366,9 +509,9 @@ export function renderScreenGrid(content: string): string {
  * ~WM - Matrix Rain Wipe
  * Characters scramble and cascade down like Matrix code
  */
-function matrixRainWipe(content: string): WipeFrame[] {
+function matrixRainWipe(content: string): WipeGrids {
   const grid = parseAnsiToGrid(content);
-  const frames: WipeFrame[] = [];
+  const grids: Cell[][][] = [];
   const height = grid.length;
 
   // Green Matrix style colors
@@ -385,30 +528,34 @@ function matrixRainWipe(content: string): WipeFrame[] {
   // Animate cascade down (10 waves)
   for (let wave = 0; wave <= 10; wave++) {
     const frame = scrambled.map((row, y) =>
-      row.map((cell, x) => {
+      row.map((cell: Cell, x) => {
         const progress = wave / 10;
         const rowProgress = height === 0 ? 0 : y / height;
 
         if (progress >= rowProgress) {
           // Reveal actual content
           return grid[y][x] || BLANK;
-        } else {
-          // Still scrambled
-          return {
+        }
+        // Still scrambled. Only a quarter of the rain re-rolls per wave: the
+        // cascade is the effect, the shimmer is texture, and re-rolling every
+        // cell every frame made each frame a full repaint (2.9 KB) that the
+        // terminal cannot paint inside the frame's own 50 ms.
+        if (Math.random() < 0.25) {
+          const rolled: Cell = {
             char: MATRIX_CHARS[Math.floor(Math.random() * MATRIX_CHARS.length)],
             ansi: matrixColors[Math.floor(Math.random() * matrixColors.length)]
           };
+          scrambled[y][x] = rolled;
+          return rolled;
         }
+        return cell;
       })
     );
 
-    frames.push({
-      content: CLEAR_HOME + gridToAnsi(frame),
-      delay: 50
-    });
+    grids.push(frame);
   }
 
-  return frames;
+  return { grids, delay: 50 };
 }
 
 /**
@@ -425,9 +572,9 @@ function blindsWipe(
   axis: 'row' | 'col',
   stripSize: number,
   delay: number
-): WipeFrame[] {
+): WipeGrids {
   const grid = parseAnsiToGrid(content);
-  const frames: WipeFrame[] = [];
+  const grids: Cell[][][] = [];
   const extent = axis === 'row' ? grid.length : gridWidth(grid);
   const stripCount = Math.max(1, Math.ceil(extent / stripSize));
 
@@ -446,20 +593,17 @@ function blindsWipe(
       row.map((cell, x) => (revealed.has(Math.floor((axis === 'row' ? y : x) / stripSize)) ? cell : BLANK))
     );
 
-    frames.push({
-      content: CLEAR_HOME + gridToAnsi(frame),
-      delay
-    });
+    grids.push(frame);
   }
 
-  return frames;
+  return { grids, delay };
 }
 
 /**
  * ~WH - Horizontal Blinds Wipe
  * Reveals screen in horizontal strips
  */
-function horizontalBlindsWipe(content: string): WipeFrame[] {
+function horizontalBlindsWipe(content: string): WipeGrids {
   return blindsWipe(content, 'row', 3, 40);
 }
 
@@ -467,7 +611,7 @@ function horizontalBlindsWipe(content: string): WipeFrame[] {
  * ~WV - Vertical Blinds Wipe
  * Reveals screen in vertical strips
  */
-function verticalBlindsWipe(content: string): WipeFrame[] {
+function verticalBlindsWipe(content: string): WipeGrids {
   return blindsWipe(content, 'col', 5, 40);
 }
 
@@ -482,9 +626,9 @@ function verticalBlindsWipe(content: string): WipeFrame[] {
  * spiral, and a list so full of duplicates that the last 16 of 21 frames
  * were identical.
  */
-function spiralWipe(content: string): WipeFrame[] {
+function spiralWipe(content: string): WipeGrids {
   const grid = parseAnsiToGrid(content);
-  const frames: WipeFrame[] = [];
+  const grids: Cell[][][] = [];
   const height = grid.length;
   const maxWidth = gridWidth(grid);
 
@@ -525,22 +669,19 @@ function spiralWipe(content: string): WipeFrame[] {
       row.map((cell, x) => (revealed.has(`${y},${x}`) ? cell : BLANK))
     );
 
-    frames.push({
-      content: CLEAR_HOME + gridToAnsi(frame),
-      delay: 30
-    });
+    grids.push(frame);
   }
 
-  return frames;
+  return { grids, delay: 30 };
 }
 
 /**
  * ~WC - Checkerboard Wipe
  * Reveals in alternating squares like a checkerboard
  */
-function checkerboardWipe(content: string): WipeFrame[] {
+function checkerboardWipe(content: string): WipeGrids {
   const grid = parseAnsiToGrid(content);
-  const frames: WipeFrame[] = [];
+  const grids: Cell[][][] = [];
   const squareSize = 4;
 
   // Phase 1: Reveal "white" squares (even rows + even cols, odd rows + odd cols)
@@ -557,13 +698,10 @@ function checkerboardWipe(content: string): WipeFrame[] {
       })
     );
 
-    frames.push({
-      content: CLEAR_HOME + gridToAnsi(frame),
-      delay: 100
-    });
+    grids.push(frame);
   }
 
-  return frames;
+  return { grids, delay: 100 };
 }
 
 /**
@@ -575,9 +713,9 @@ function checkerboardWipe(content: string): WipeFrame[] {
  * of its 25 frames showing exactly what the previous frame showed. The sweep
  * now covers the half plane the geometry actually reaches.
  */
-function radialWipe(content: string): WipeFrame[] {
+function radialWipe(content: string): WipeGrids {
   const grid = parseAnsiToGrid(content);
-  const frames: WipeFrame[] = [];
+  const grids: Cell[][][] = [];
   const maxWidth = gridWidth(grid);
   const centerX = maxWidth / 2;
   const centerY = 0; // Top center
@@ -599,22 +737,19 @@ function radialWipe(content: string): WipeFrame[] {
       })
     );
 
-    frames.push({
-      content: CLEAR_HOME + gridToAnsi(frame),
-      delay: 25
-    });
+    grids.push(frame);
   }
 
-  return frames;
+  return { grids, delay: 25 };
 }
 
 /**
  * ~WB - Block Wipe
  * Random blocks appear until screen is complete
  */
-function blockWipe(content: string): WipeFrame[] {
+function blockWipe(content: string): WipeGrids {
   const grid = parseAnsiToGrid(content);
-  const frames: WipeFrame[] = [];
+  const grids: Cell[][][] = [];
   const height = grid.length;
   const maxWidth = gridWidth(grid);
   const blockSize = 3;
@@ -647,49 +782,49 @@ function blockWipe(content: string): WipeFrame[] {
       })
     );
 
-    frames.push({
-      content: CLEAR_HOME + gridToAnsi(frameGrid),
-      delay: 40
-    });
+    grids.push(frameGrid);
   }
 
-  return frames;
+  return { grids, delay: 40 };
 }
 
 /**
  * ~WN - Noise Fade
  * Static/noise that resolves to actual content
+ *
+ * Each cell draws its noise glyph and its resolve threshold ONCE. Re-rolling
+ * every cell on every frame (what this did) changes every cell every frame,
+ * which is a full 8.7 KB repaint 14 times over - 5.3 s of wire for a 650 ms
+ * animation once the terminal's own pacing is counted, and the one wipe that
+ * a delta could not make cheap. Fixed noise dissolves at the same rate and
+ * costs one cell's worth of bytes per cell, once.
  */
-function noiseFadeWipe(content: string): WipeFrame[] {
+function noiseFadeWipe(content: string): WipeGrids {
   const grid = parseAnsiToGrid(content);
-  const frames: WipeFrame[] = [];
+  const grids: Cell[][][] = [];
+
+  const noise = grid.map(row =>
+    row.map(() => ({
+      threshold: Math.random(),
+      cell: {
+        char: NOISE_CHARS[Math.floor(Math.random() * NOISE_CHARS.length)],
+        ansi: Math.random() < 0.5 ? '\x1b[37m' : '\x1b[90m', // White or gray
+      } as Cell,
+    }))
+  );
 
   // 12 frames of noise fading to content
   for (let phase = 0; phase <= 12; phase++) {
     const noiseLevel = 1 - (phase / 12); // 100% noise -> 0% noise
 
-    const frame = grid.map(row =>
-      row.map(cell => {
-        if (Math.random() < noiseLevel) {
-          // Show noise
-          return {
-            char: NOISE_CHARS[Math.floor(Math.random() * NOISE_CHARS.length)],
-            ansi: Math.random() < 0.5 ? '\x1b[37m' : '\x1b[90m' // White or gray
-          };
-        } else {
-          // Show actual content
-          return cell;
-        }
-      })
+    const frame = grid.map((row, y) =>
+      row.map((cell, x) => (noise[y][x].threshold < noiseLevel ? noise[y][x].cell : cell))
     );
 
-    frames.push({
-      content: CLEAR_HOME + gridToAnsi(frame),
-      delay: 50
-    });
+    grids.push(frame);
   }
 
-  return frames;
+  return { grids, delay: 50 };
 }
 
 /**
@@ -700,37 +835,31 @@ function noiseFadeWipe(content: string): WipeFrame[] {
  * lands on an odd row count, and a screen with an odd number of rows used to
  * end with its last row missing (a one-row screen ended blank).
  */
-function typewriterWipe(content: string): WipeFrame[] {
+function typewriterWipe(content: string): WipeGrids {
   const grid = parseAnsiToGrid(content);
-  const frames: WipeFrame[] = [];
+  const grids: Cell[][][] = [];
   const height = grid.length;
 
   for (let line = 0; line <= height; line += 2) {
-    frames.push({
-      content: CLEAR_HOME + gridToAnsi(grid.slice(0, Math.min(line, height))),
-      delay: 30
-    });
+    grids.push(grid.slice(0, Math.min(line, height)));
   }
 
   if (height % 2 === 1) {
     // Stepping two rows at a time never lands on an odd row count, and the
     // animation used to END one row short (a one-row screen ended blank).
-    frames.push({
-      content: CLEAR_HOME + gridToAnsi(grid),
-      delay: 30
-    });
+    grids.push(grid);
   }
 
-  return frames;
+  return { grids, delay: 30 };
 }
 
 /**
  * ~WE - Explode Wipe
  * Characters explode from center outward
  */
-function explodeWipe(content: string): WipeFrame[] {
+function explodeWipe(content: string): WipeGrids {
   const grid = parseAnsiToGrid(content);
-  const frames: WipeFrame[] = [];
+  const grids: Cell[][][] = [];
   const height = grid.length;
   const maxWidth = gridWidth(grid);
   const centerX = maxWidth / 2;
@@ -759,17 +888,20 @@ function explodeWipe(content: string): WipeFrame[] {
       })
     );
 
-    frames.push({
-      content: CLEAR_HOME + gridToAnsi(frame),
-      delay: 40
-    });
+    grids.push(frame);
   }
 
-  return frames;
+  return { grids, delay: 40 };
 }
 
 /**
  * Get wipe animation frames
+ *
+ * The frame model: frame 0 clears and paints every cell; every later frame
+ * is a DELTA - cursor-addressed runs of the cells that changed since the
+ * frame before it (`renderGridDelta`). Nothing after frame 0 clears the
+ * screen, which is what made the animation flicker: a `\x1b[2J` per frame
+ * blanks the terminal between paints.
  *
  * Every wipe reveals the whole screen on its own last animation frame, and
  * ONE more frame is appended: the caller's own content, homed. The grid is a
@@ -789,42 +921,44 @@ export function getWipeFrames(wipeType: WipeType, content: string): WipeFrame[] 
     wipeType = types[Math.floor(Math.random() * types.length)];
   }
 
-  let frames: WipeFrame[];
+  let animation: WipeGrids;
 
   switch (wipeType) {
     case 'matrix':
-      frames = matrixRainWipe(content);
+      animation = matrixRainWipe(content);
       break;
     case 'hblinds':
-      frames = horizontalBlindsWipe(content);
+      animation = horizontalBlindsWipe(content);
       break;
     case 'vblinds':
-      frames = verticalBlindsWipe(content);
+      animation = verticalBlindsWipe(content);
       break;
     case 'spiral':
-      frames = spiralWipe(content);
+      animation = spiralWipe(content);
       break;
     case 'checker':
-      frames = checkerboardWipe(content);
+      animation = checkerboardWipe(content);
       break;
     case 'radial':
-      frames = radialWipe(content);
+      animation = radialWipe(content);
       break;
     case 'blocks':
-      frames = blockWipe(content);
+      animation = blockWipe(content);
       break;
     case 'noise':
-      frames = noiseFadeWipe(content);
+      animation = noiseFadeWipe(content);
       break;
     case 'typewriter':
-      frames = typewriterWipe(content);
+      animation = typewriterWipe(content);
       break;
     case 'explode':
-      frames = explodeWipe(content);
+      animation = explodeWipe(content);
       break;
     default:
       return [];
   }
+
+  const frames = framesFromGrids(animation, content);
 
   if (frames.length > 0) {
     // The animation ends on the caller's own bytes, homed over the fully
@@ -832,13 +966,31 @@ export function getWipeFrames(wipeType: WipeType, content: string): WipeFrame[] 
     // flash). Byte-identical to what the direct-display path emits, which
     // also leaves the cursor where the pause prompt
     // (screen.handler.ts:2559) expects to print from.
-    frames.push({
-      content: HOME + content,
-      delay: frames[frames.length - 1].delay
-    });
+    //
+    // delay 0: the play loop does not wait after the last frame.
+    frames.push({ content: HOME + withoutLeadingClear(content), delay: 0 });
   }
 
   return frames;
+}
+
+/**
+ * `content` without a clear-screen it opens with.
+ *
+ * A conference menu starts with `~f`, which the MCI parser expands to
+ * `\x1b[2J\x1b[H` - so the final frame, which is the screen's own bytes,
+ * would clear a screen the animation has just finished painting and repaint
+ * it. On a terminal that paces its input (the board's own does: escapes go
+ * out immediately, text at up to 23 KB/s) that is a full-screen blank
+ * followed by a slow repaint - the last flicker of the wipe.
+ *
+ * Dropping it is safe precisely because the frame underneath is already the
+ * same screen: the animation's last frame is the grid render of this
+ * content, cell for cell, blanks included. Only a LEADING run is dropped; a
+ * clear anywhere else in the screen is content and is emitted as-is.
+ */
+function withoutLeadingClear(content: string): string {
+  return content.replace(/^(?:\x1b\[[23]J|\x1b\[(?:1;1)?H)+/, '');
 }
 
 /**
