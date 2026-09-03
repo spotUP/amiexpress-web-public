@@ -47,6 +47,8 @@ const BBS_SCREEN_DIRS = [
  */
 let T = (0, theme_1.themeById)('classic').tokens;
 let S = (0, theme_1.themeStyles)((0, theme_1.themeById)('classic'));
+/** The theme itself, for the chrome - it needs the rail and the glitches. */
+let THEME = (0, theme_1.themeById)('classic');
 class ANSIEditorDoor {
     constructor() {
         this.currentFilename = null;
@@ -64,6 +66,14 @@ class ANSIEditorDoor {
          */
         this.terminalMode = null;
         this.zoom = 1;
+        /**
+         * The SDK chrome on the editor's own title row, and on whichever
+         * requester is up. Two handles because they have different lifetimes:
+         * the editor's goes down when the editor is rebuilt for a zoom step or a
+         * resize, a requester's when the requester closes.
+         */
+        this.chrome = null;
+        this.requesterChrome = null;
     }
     setContext(ctx) {
         this.ctx = ctx;
@@ -218,14 +228,16 @@ class ANSIEditorDoor {
             },
             items: dirItems,
         });
-        new blessed_1.Text({
+        const hintRow = new blessed_1.Text({
             parent: dirList,
             bottom: 0,
             left: 2,
-            content: `{${T.dim}-fg}Enter: Browse | ESC: Cancel{/${T.dim}-fg}`,
+            content: '',
             tags: true,
         });
+        this.attachRequesterChrome('BBS SCREEN DIRECTORIES', dirList, hintRow, [{ key: 'Enter', does: 'Browse' }, { key: 'ESC', does: 'Cancel' }], [{ key: 'Ent', does: 'Browse' }, { key: 'ESC', does: 'Back' }]);
         const closeDialog = () => {
+            this.closeRequesterChrome();
             dirList.destroy();
             this.editor.show();
             this.editor.focus();
@@ -236,6 +248,7 @@ class ANSIEditorDoor {
             const index = dirList.selected;
             if (index >= 0 && index < BBS_SCREEN_DIRS.length) {
                 const dir = BBS_SCREEN_DIRS[index];
+                this.closeRequesterChrome();
                 dirList.destroy();
                 this.showBBSDirectoryBrowser(dir.path, dir.label).catch(console.error);
             }
@@ -289,14 +302,16 @@ class ANSIEditorDoor {
             },
             items: files.map((f, idx) => `${(idx + 1).toString().padStart(3)}. ${f.filename}`),
         });
-        new blessed_1.Text({
+        const hintRow = new blessed_1.Text({
             parent: fileList,
             bottom: 0,
             left: 2,
-            content: `{${T.dim}-fg}Enter: Open | B: Back | ESC: Cancel{/${T.dim}-fg}`,
+            content: '',
             tags: true,
         });
+        this.attachRequesterChrome(label.toUpperCase(), fileList, hintRow, [{ key: 'Enter', does: 'Open' }, { key: 'B', does: 'Back' }, { key: 'ESC', does: 'Cancel' }], [{ key: 'Ent', does: 'Open' }, { key: 'B', does: 'Back' }, { key: 'ESC', does: 'Bye' }]);
         const closeDialog = () => {
+            this.closeRequesterChrome();
             fileList.destroy();
             this.editor.show();
             this.editor.focus();
@@ -304,6 +319,7 @@ class ANSIEditorDoor {
         };
         fileList.key(['escape', 'q'], closeDialog);
         fileList.key(['b', 'B'], () => {
+            this.closeRequesterChrome();
             fileList.destroy();
             this.showBBSFileBrowser();
         });
@@ -311,6 +327,7 @@ class ANSIEditorDoor {
             const index = fileList.selected;
             if (index >= 0 && index < files.length) {
                 const file = files[index];
+                this.closeRequesterChrome();
                 fileList.destroy();
                 // Load and open the BBS file
                 this.loadBBSFile(file.path).then(content => {
@@ -342,6 +359,7 @@ class ANSIEditorDoor {
             const theme = host.getTheme();
             T = theme.tokens;
             S = (0, theme_1.themeStyles)(theme);
+            THEME = theme;
         }
         this.screen = (0, blessed_helpers_1.createScreen)(this.ctx.bbs, {
             dockBorders: false, // Not needed for fixed panels
@@ -377,6 +395,51 @@ class ANSIEditorDoor {
             onRelayout: () => { void this.reopenEditorPreservingContent(); },
         });
         this.screen.render();
+    }
+    /**
+     * attachDoorChrome, with the three things every call in this door shares.
+     *
+     * The width is the LIVE screen width and never the constant 80: the SDK
+     * gates every moving part on it, which is how a 40-column caller gets a
+     * still screen without this door owning a rule about it.
+     */
+    chromeFor(options) {
+        return (0, theme_1.attachDoorChrome)(THEME, {
+            ...options,
+            width: this.screen.width,
+            styles: S,
+            render: () => this.screen.render(),
+        });
+    }
+    /**
+     * The chrome a requester gets: the SDK's hint line on the row the dialog
+     * already had, and the theme's glitches on its list.
+     *
+     * These hint rows were hand-written strings - `Enter: Open | D: Delete`
+     * and friends - which is the thing footerHints exists to stop, and the
+     * LIST is the only text on this screen that may be damaged for effect.
+     * Nothing moves a cell: the same Text, in the same corner of the same
+     * dialog, saying the same three things.
+     *
+     * No masthead on a requester: its title is already its border label, and
+     * a second rail sliding over the editor's would be two bars competing
+     * for one screen.
+     */
+    attachRequesterChrome(title, list, hintRow, hints, compactHints) {
+        this.closeRequesterChrome();
+        this.requesterChrome = this.chromeFor({
+            title,
+            footer: hintRow,
+            hints,
+            compactHints,
+            glitch: list,
+            glitchOptions: { tickMs: 400 },
+        });
+    }
+    /** Stop it before the dialog it draws on is destroyed - stop() restores. */
+    closeRequesterChrome() {
+        this.requesterChrome?.stop();
+        this.requesterChrome = null;
     }
     // ============================================
     // FILE OPERATIONS
@@ -416,15 +479,18 @@ class ANSIEditorDoor {
                 return `${(idx + 1).toString().padStart(3)}. ${f.filename.padEnd(30)} ${sizeStr.padStart(8)} ${dateStr}`;
             }),
         });
-        // Instructions
-        new blessed_1.Text({
+        // Instructions, written by the SDK: the key caps take the accent and
+        // the words stay dim, which is the same hint line every other door has.
+        const hintRow = new blessed_1.Text({
             parent: fileList,
             bottom: 0,
             left: 2,
-            content: `{${T.dim}-fg}Enter: Open | D: Delete | ESC: Cancel{/${T.dim}-fg}`,
+            content: '',
             tags: true,
         });
+        this.attachRequesterChrome('YOUR ANSI FILES', fileList, hintRow, [{ key: 'Enter', does: 'Open' }, { key: 'D', does: 'Delete' }, { key: 'ESC', does: 'Cancel' }], [{ key: 'Ent', does: 'Open' }, { key: 'D', does: 'Del' }, { key: 'ESC', does: 'Bye' }]);
         const closeDialog = () => {
+            this.closeRequesterChrome();
             fileList.destroy();
             this.editor.show();
             this.editor.focus();
@@ -435,6 +501,7 @@ class ANSIEditorDoor {
             const index = fileList.selected;
             if (index >= 0 && index < files.length) {
                 const file = files[index];
+                this.closeRequesterChrome();
                 fileList.destroy();
                 // Reset BBS mode - this is a user file
                 this.isBBSFile = false;
@@ -496,6 +563,12 @@ class ANSIEditorDoor {
     // EDITOR
     // ============================================
     async openEditor(initialContent) {
+        // The masthead is drawn on the editor's title row, so it has to be
+        // stopped while that row still exists - stop() leaves the bar at rest
+        // rather than mid-slide, and a timer outliving its widget is how a
+        // door takes the session with it.
+        this.chrome?.stop();
+        this.chrome = null;
         // Destroy existing editor if any
         if (this.editor) {
             this.editor.destroy();
@@ -597,6 +670,30 @@ class ANSIEditorDoor {
         });
         this.editor.focus();
         this.screen.render();
+        // The whole chrome, from the ONE SDK call.
+        //
+        // The masthead has exactly one row it can have on this screen, and it
+        // is the editor's own title line. Inside the frame the widget owns row
+        // 0 with its menu bar and row 1 with the F-key toolbar (sdk/engines/ui/
+        // blessed/widgets/ansi-editor.ts:665-674) and the bottom row with a
+        // live status line (:768-778); everything between them is the canvas.
+        // A masthead of its own would therefore have to come out of the
+        // artwork, which is the one thing this door exists to show - so it
+        // goes on the frame instead, where the door already owns the text.
+        //
+        // No footer here: that status line is live state - cursor position,
+        // the current colours, the current tool. No glitch either: the only
+        // other thing on this screen is somebody's picture, and damaging that
+        // on purpose is data loss dressed as atmosphere.
+        const editor = this.editor;
+        this.chrome = this.chromeFor({
+            title: editorTitle,
+            masthead: { setContent: (text) => editor.setLabel(text) },
+            // A border label is printed between the corners with a space either
+            // side of it (sdk/engines/ui/blessed/core/screen.ts:1512-1533), so
+            // five of the row's columns are spoken for before the first slash.
+            mastheadWidth: Math.max(1, this.screen.width - 5),
+        });
     }
     async setZoom(zoom) {
         if (zoom === this.zoom)
@@ -647,14 +744,25 @@ class ANSIEditorDoor {
                 keys: true,
                 mouse: true,
             });
-            new blessed_1.Text({
+            // The hint line, from the SDK rather than from a string written here.
+            // A local handle, not the door's: this prompt can open on top of a
+            // requester, and taking that requester's chrome down with this one
+            // would leave the list behind it unglitched for the rest of its life.
+            const hintRow = new blessed_1.Text({
                 parent: dialog,
                 top: 5,
                 left: 2,
-                content: `{${T.dim}-fg}Enter: Save | Escape: Cancel{/${T.dim}-fg}`,
+                content: '',
                 tags: true,
             });
+            const chrome = this.chromeFor({
+                title,
+                footer: hintRow,
+                hints: [{ key: 'Enter', does: 'Save' }, { key: 'Escape', does: 'Cancel' }],
+                compactHints: [{ key: 'Ent', does: 'Save' }, { key: 'ESC', does: 'Cancel' }],
+            });
             const closeDialog = (result) => {
+                chrome.stop();
                 dialog.destroy();
                 this.screen.render();
                 resolve(result);
@@ -694,14 +802,24 @@ class ANSIEditorDoor {
                 content: message,
                 tags: true,
             });
-            new blessed_1.Text({
+            const hintRow = new blessed_1.Text({
                 parent: dialog,
                 top: 6,
                 left: 2,
-                content: `{${T.warn}-fg}Y{/${T.warn}-fg}: Yes  {${T.warn}-fg}N{/${T.warn}-fg}/ESC: No`,
+                content: '',
                 tags: true,
             });
+            const chrome = this.chromeFor({
+                title,
+                footer: hintRow,
+                hints: [
+                    { key: 'Y', does: 'Yes' },
+                    { key: 'N', does: 'No' },
+                    { key: 'ESC', does: 'No' },
+                ],
+            });
             const closeDialog = (result) => {
+                chrome.stop();
                 dialog.destroy();
                 this.screen.render();
                 resolve(result);
@@ -831,6 +949,12 @@ class ANSIEditorDoor {
         if (this.hasExited)
             return;
         this.hasExited = true;
+        // Every chrome timer goes first: one still writing to a destroyed
+        // screen is how a door takes the session with it, and stop() also puts
+        // back any row a glitch was in the middle of damaging.
+        this.chrome?.stop();
+        this.chrome = null;
+        this.closeRequesterChrome();
         // Gives the board its 80 columns back and unhooks resize and Alt+Enter.
         this.terminalMode?.dispose();
         this.terminalMode = null;
