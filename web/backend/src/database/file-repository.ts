@@ -240,6 +240,33 @@ console.error(`[Database] Failed to sync updated file entry to disk:`, error);
     return this.mapFileEntryRow(row);
   }
 
+  /**
+   * The catalog row for a filename inside one conference.
+   *
+   * It exists so the by-NAME lookup goes through `mapFileEntryRow` like every
+   * other one. `server/file-socket-handlers.ts` used to run its own
+   * `SELECT fe.*` here, whose row is snake_case: `row.storageVolume` was
+   * undefined on it, and undefined is precisely how a file on local disk
+   * looks - so every by-name download of a pooled file read as local, took
+   * the local route, and was not there.
+   *
+   * The comparison is case-insensitive because AmigaOS filenames are, and
+   * because the caller normalises what the user typed before asking.
+   */
+  async getFileEntryByName(conferenceId: number, filename: string): Promise<FileEntry | null> {
+    const stmt = this.prepare(`
+      SELECT fe.*, fa.conferenceid as conferenceId
+      FROM file_entries fe
+      JOIN file_areas fa ON fe.areaid = fa.id
+      WHERE fa.conferenceid = ? AND LOWER(fe.filename) = LOWER(?)
+      LIMIT 1
+    `);
+    const row = stmt.get(conferenceId, filename) as any;
+    if (!row) return null;
+
+    return this.mapFileEntryRow(row);
+  }
+
   async deleteFileEntry(id: number): Promise<void> {
 
     // Get file info before deleting for disk cleanup

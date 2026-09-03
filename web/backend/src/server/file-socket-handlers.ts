@@ -1102,20 +1102,19 @@ console.error("[Download] No user session for download");
 
       try {
         // Get file info from database
+        // BOTH lookups go through the repository, so both hand back the same
+        // mapped shape. The by-name branch used to be a raw `SELECT fe.*`,
+        // whose row is snake_case: `fileEntry.storageVolume` read undefined on
+        // it, which is exactly what a file on local disk looks like, and any
+        // remote-vs-local branch here would send every by-name download of a
+        // pooled file down the local route.
         let fileEntry;
         if (data.fileId) {
           fileEntry = await db.getFileEntry(data.fileId);
         } else {
           // Find by filename in current conference
           const conferenceId = session.currentConf || 1;
-          const result = await db.query(
-            `SELECT fe.* FROM file_entries fe
-           JOIN file_areas fa ON fe.areaid = fa.id
-           WHERE fa.conferenceid = $1 AND LOWER(fe.filename) = $2
-           LIMIT 1`,
-            [conferenceId, normalizedRequestedFilename]
-          );
-          fileEntry = result.rows[0];
+          fileEntry = await db.getFileEntryByName(conferenceId, normalizedRequestedFilename);
         }
 
         if (!fileEntry) {
