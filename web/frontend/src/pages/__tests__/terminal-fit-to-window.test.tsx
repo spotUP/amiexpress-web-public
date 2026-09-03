@@ -217,3 +217,26 @@ describe('the override survives a resize because it is a fraction', () => {
     expect(grid.height + 2 * bezelOf(page)).toBeCloseTo(800, 5);
   });
 });
+
+describe('a session whose xterm is hidden does not break the fit', () => {
+  // A web P session hides the xterm host (display: none), so .xterm-screen
+  // measures 0x0. fitFontSize already returns its seed unmeasured; the slack
+  // arithmetic after it must not treat "no grid" as "the whole window free",
+  // which turned the 18.75px bezel into a 400px one with no screen inside.
+  it('a P session that hides the xterm screen does not blow the bezel up', () => {
+    const { page } = mountAt(1280, 800);
+    const before = bezelOf(page);
+    expect(before).toBeGreaterThan(0);
+    // The P answer hides the xterm host: its screen now measures nothing.
+    const element = document.createElement('div');
+    const screen = document.createElement('div');
+    screen.className = 'xterm-screen';
+    element.appendChild(screen);
+    Object.defineProperty(screen, 'offsetWidth', { get: () => 0 });
+    Object.defineProperty(screen, 'offsetHeight', { get: () => 0 });
+    harness.term = { options: { fontSize: 16 }, cols: BBS_COLS, rows: BBS_ROWS, element };
+    act(() => { window.dispatchEvent(new Event('resize')); });
+    expect(bezelOf(page)).toBeLessThan(40);
+    expect(bezelOf(page)).toBe(before);
+  });
+});

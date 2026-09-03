@@ -210,6 +210,12 @@ export function TerminalPage(): JSX.Element {
     // start the search over.
     const effective = zoomedFontSize(fitted, zoomFractionRef.current);
     const grid = measure(effective);
+    // A hidden xterm host (a web P session: display none) measures 0x0.
+    // fitFontSize returned its seed unmeasured; the slack below must not read
+    // "no grid" as "the whole window is free" - that put a 400px bezel around
+    // no screen at all. Nothing to absorb, nothing to change.
+
+    if (!(grid.width > 0) || !(grid.height > 0)) return;
 
     // Absorb the leftover into the bezel so the box reads flush (see bezelPx).
     const following = isFollowingWindow(zoomFractionRef.current) && !isHandheld();
