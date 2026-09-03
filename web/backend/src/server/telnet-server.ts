@@ -22,6 +22,7 @@ import { DEFAULT_CONNECTION_BAUD } from '../constants/modem';
 import { ipBanManager } from '../security/ip-ban-manager';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { resetPetsciiModel } from '../utils/petscii-session-model';
+import type { WireCharset } from '../utils/wire-encoding.util';
 
 // Telnet IAC (Interpret As Command) constants - express.e:2389-2508
 const IAC = 255;  // Interpret As Command
@@ -41,10 +42,35 @@ const TELOPT_TIMING_MARK = 6; // Timing Mark
 const TELOPT_TTYPE = 24;      // Terminal Type (RFC 1091)
 const TELOPT_NAWS = 31;       // Negotiate About Window Size (RFC 1073)
 const TELOPT_LINEMODE = 34;   // Linemode (RFC 1184)
+const TELOPT_CHARSET = 42;    // Charset (RFC 2066)
 
 // TTYPE subnegotiation commands
 const TTYPE_SEND = 1;         // Request terminal type
 const TTYPE_IS = 0;           // Terminal type response
+
+// CHARSET subnegotiation commands (RFC 2066:3)
+const CHARSET_REQUEST = 1;    // Peer offers a separated list of charset names
+const CHARSET_ACCEPTED = 2;   // We take one of them, and name it back
+const CHARSET_REJECTED = 3;   // We recognise none of them
+
+/**
+ * The charset names this board answers ACCEPTED for, and the wire charset each
+ * one resolves to. RFC 2066 names are IANA names, so the same codec arrives
+ * under several spellings; every one of them maps to ONE of the three
+ * `WireCharset` values `utils/wire-encoding.util.ts` defines, and nothing here
+ * is a second terminal list - it is the client stating a fact about itself.
+ */
+const CHARSET_NAMES: ReadonlyMap<string, WireCharset> = new Map<string, WireCharset>([
+  ['UTF-8', 'utf-8'],
+  ['UTF8', 'utf-8'],
+  ['ISO-8859-1', 'iso-8859-1'],
+  ['ISO8859-1', 'iso-8859-1'],
+  ['ISO_8859-1', 'iso-8859-1'],
+  ['LATIN1', 'iso-8859-1'],
+  ['IBM437', 'cp437'],
+  ['CP437', 'cp437'],
+  ['CSPC8CODEPAGE437', 'cp437'],
+]);
 
 /**
  * Result of classifying a reported TTYPE string.
@@ -160,6 +186,21 @@ export class TelnetConnection extends EventEmitter {
   private peerDoState:   Map<number, 'on' | 'off'> = new Map();
   private ttypeRequested: boolean = false;
   private ttypeData: number[] = [];
+  /**
+   * Which option the subnegotiation currently being collected belongs to.
+   * Before CHARSET (RFC 2066) arrived, SB data was routed by side effect -
+   * `nawsMode > 0` meant NAWS and everything else fell into `ttypeData` - and a
+   * third option had nowhere to go. -1 = no subnegotiation in progress.
+   */
+  private sbOption: number = -1;
+  private charsetData: number[] = [];
+  /**
+   * The charset the peer NEGOTIATED (RFC 2066), if it did. It beats the TTYPE
+   * classification - `unicodeCapable` - because it is the client stating a
+   * fact rather than this server inferring one from a terminal name. Copied
+   * onto the session, which is what `resolveWireCharset` reads.
+   */
+  public wireCharset: WireCharset | undefined = undefined;
   public terminalType: string = 'unknown';
   public sessionId: string;
   public nodeId: number;
@@ -219,6 +260,12 @@ export class TelnetConnection extends EventEmitter {
 
     // Request client to send window size (NAWS)
     this.sendCommand([IAC, DO, TELOPT_NAWS]);
+
+    // Ask the client whether it wants to negotiate a charset (RFC 2066). A
+    // client that never answers is unaffected - the TTYPE classification
+    // decides for it, exactly as before - and the 500 ms TTYPE timer below is
+    // the precedent for tolerating silence.
+    this.sendCommand([IAC, DO, TELOPT_CHARSET]);
 
     // We will echo characters
     this.peerDoState.set(TELOPT_ECHO, 'on');
@@ -298,10 +345,13 @@ export class TelnetConnection extends EventEmitter {
 
         case IACState.SB_SEEN:
           // Subnegotiation option
+          this.sbOption = byte;
           if (byte === TELOPT_NAWS) {
             this.nawsMode = 4; // Expecting 4 bytes (width MSB, width LSB, height MSB, height LSB)
           } else if (byte === TELOPT_TTYPE) {
             this.ttypeData = []; // Start collecting TTYPE data
+          } else if (byte === TELOPT_CHARSET) {
+            this.charsetData = []; // Start collecting CHARSET data (RFC 2066)
           }
           this.iacState = IACState.SB_DATA;
           break;
@@ -310,6 +360,8 @@ export class TelnetConnection extends EventEmitter {
           // Process subnegotiation data
           if (byte === IAC) {
             this.iacState = IACState.SB_IAC;
+          } else if (this.sbOption === TELOPT_CHARSET) {
+            this.charsetData.push(byte);
           } else if (this.nawsMode > 0) {
             // NAWS data processing (express.e:2404-2412)
             if (this.nawsMode === 4) this.nawsWidth = byte << 8;
@@ -330,10 +382,17 @@ export class TelnetConnection extends EventEmitter {
         case IACState.SB_IAC:
           if (byte === SE) {
             // IAC SE = end of subnegotiation
-            // Process collected TTYPE data
-            if (this.ttypeData.length > 0) {
+            // Process the collected data for the option this SB belonged to.
+            // The TTYPE arm keeps its exact pre-CHARSET condition, so a NAWS
+            // subnegotiation still behaves the way it always did.
+            if (this.sbOption === TELOPT_CHARSET) {
+              if (this.charsetData.length > 0) {
+                this.handleCharset();
+              }
+            } else if (this.ttypeData.length > 0) {
               this.handleTerminalType();
             }
+            this.sbOption = -1;
             this.iacState = IACState.NORMAL;
           } else if (byte === IAC) {
             // IAC IAC in SB mode = literal 255
@@ -393,6 +452,61 @@ console.log(`[Telnet] Node ${this.nodeId} terminal type: "${terminalTypeString}"
       width: isC64 ? 40 : 80,
       height: isC64 ? 25 : 24
     });
+  }
+
+  /**
+   * Handle a CHARSET subnegotiation (RFC 2066).
+   *
+   * Only the peer's REQUEST is answered. The wire format is
+   * `REQUEST [ "[TTABLE]" <version> ] <sep> <charset> [ <sep> <charset> ... ]`
+   * where <sep> is any character the requester picks (conventionally ";") and
+   * is stated by being the first byte after the command. We take the FIRST
+   * name we recognise, reply ACCEPTED with that exact name, and record the
+   * charset the socket is written in from then on. Nothing recognised is a
+   * REJECTED, never a silent drop: a client that hears nothing back waits.
+   *
+   * Translation tables (TTABLE-IS and friends) are not implemented - a
+   * REQUEST that asks for one still gets an ACCEPTED naming a charset, which
+   * RFC 2066:3.1 permits, because the "[TTABLE]" prefix only says the sender
+   * is WILLING to send a table.
+   */
+  private handleCharset(): void {
+    const command = this.charsetData[0];
+    if (command !== CHARSET_REQUEST) {
+      // ACCEPTED / REJECTED / TTABLE-* are answers to a REQUEST this server
+      // never sends. Nothing to do, and nothing to log every frame.
+      return;
+    }
+
+    let body = String.fromCharCode(...this.charsetData.slice(1));
+    const TTABLE = '[TTABLE]';
+    if (body.toUpperCase().startsWith(TTABLE)) {
+      // Skip the marker and the one-byte version that follows it.
+      body = body.slice(TTABLE.length + 1);
+    }
+
+    const separator = body.charAt(0);
+    if (separator === '') {
+      this.sendCommand([IAC, SB, TELOPT_CHARSET, CHARSET_REJECTED, IAC, SE]);
+      return;
+    }
+
+    const offered = body.slice(1).split(separator).map((name) => name.trim()).filter((name) => name.length > 0);
+    for (const name of offered) {
+      const resolved = CHARSET_NAMES.get(name.toUpperCase());
+      if (!resolved) continue;
+      this.wireCharset = resolved;
+      if (this.session) this.session.wireCharset = resolved;
+console.log(`[Telnet] Node ${this.nodeId} charset negotiated: "${name}" -> ${resolved}`);
+      const reply = [IAC, SB, TELOPT_CHARSET, CHARSET_ACCEPTED];
+      for (let i = 0; i < name.length; i++) reply.push(name.charCodeAt(i) & 0xff);
+      reply.push(IAC, SE);
+      this.sendCommand(reply);
+      return;
+    }
+
+console.log(`[Telnet] Node ${this.nodeId} charset REJECTED - none of [${offered.join(', ')}] is supported`);
+    this.sendCommand([IAC, SB, TELOPT_CHARSET, CHARSET_REJECTED, IAC, SE]);
   }
 
   /**
@@ -490,6 +604,14 @@ console.log(`[Telnet] Node ${this.nodeId} terminal type: "${terminalTypeString}"
   /**
    * Write data to telnet connection
    * Escapes IAC (255) as IAC IAC
+   *
+   * BOTH ARMS ARE LIVE, and TP-5 changed neither of them. A BUFFER arrives for
+   * a Latin-1 or CP437 caller, already encoded by `encodeForWire`
+   * (`utils/wire-encoding.util.ts`) at the ONE place a string becomes bytes.
+   * A STRING arrives for a caller who negotiated UTF-8 - where
+   * `Buffer.from(data)` is the correct encode and this method is unchanged by
+   * design - and for the two pre-emitter fallback prompts (this file's
+   * `showPrompt` fallback and `ssh-server.ts`'s), which are pure ASCII.
    */
   public write(data: string | Buffer): void {
     const buffer = typeof data === 'string' ? Buffer.from(data) : data;

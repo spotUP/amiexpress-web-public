@@ -16,6 +16,23 @@
  *
  *   Before prompts:
  *   emitPrompt(socket, 'Enter name: '); // Auto-flushes
+ *
+ * THE RULE THESE TWO FUNCTIONS CARRY NO ATTRIBUTE BY (TP-5,
+ * thoughts/shared/plans/2026-09-03-ssh-telnet-parity.md).
+ *
+ * `emitText` / `emitPrompt` wrap `utils/ansi-buffer.util.ts`, which
+ * CONCATENATES payloads before flushing them as one `ansi-output`. A
+ * per-payload attribute - the source charset a screen file was decoded from,
+ * `utils/output-pacing.ts` - cannot survive that concatenation: two payloads
+ * from two charsets would leave as one string under one attribute, and
+ * whichever attribute won would mis-encode the other half.
+ *
+ * So: SCREEN-FILE CONTENT DOES NOT GO THROUGH THESE FUNCTIONS, and must not
+ * start. It goes out through `socket.emit(eventName, text, attrs)` in
+ * `handlers/screen.handler.ts`, which is a direct emit for exactly this
+ * reason. Composed text - prompts, notices, menus a handler built - is what
+ * belongs here, has no source charset, and is encoded to the caller's
+ * negotiated wire charset. Pinned by `tests/transport/wire-encoding.test.ts`.
  */
 
 import { Socket } from 'socket.io';

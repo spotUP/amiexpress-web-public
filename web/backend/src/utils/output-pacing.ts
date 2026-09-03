@@ -49,13 +49,76 @@
  * by telling the client its speed (`modem-speed`), not by bypassing it.
  */
 
-export interface OutputPacing {
+/**
+ * THE THIRD ARGUMENT, and everything that rides on it.
+ *
+ * TP-5 (thoughts/shared/plans/2026-09-03-ssh-telnet-parity.md) adds the
+ * SECOND attribute, for the same reason and through the same door: the board
+ * serves TWO source charsets off disk - `readAmigaTextFile`
+ * (`utils/amiga-text-decode.util.ts`) answers `cp437` for a `.ans` file or
+ * anything SAUCE-stamped and `iso-8859-1` for everything else - and that
+ * answer used to die at the loader. A SESSION-level charset cannot be right
+ * for both: Latin-1 round-trips this board's own art byte-for-byte and turns
+ * an imported `.ANS` into line noise, CP437 does the reverse. So the source
+ * charset travels WITH the payload, on the argument the wipe frames already
+ * use, and `utils/wire-encoding.util.ts` reads it at the one place a string
+ * becomes bytes.
+ */
+export interface OutputAttributes {
   /**
    * `true` = the server already paced this payload. The client writes it
-   * through in order without metering it.
+   * through in order without metering it. (Unchanged; see this file's header.)
    */
-  prePaced: true;
+  prePaced?: true;
+  /**
+   * The charset this payload's CHARACTERS were decoded from, when the payload
+   * is screen-file content. `readAmigaTextFile` knows it
+   * (`utils/amiga-text-decode.util.ts`) and it used to die there.
+   *
+   * ABSENT means "no source charset": door output, prompts, MCI-substituted
+   * text and anything a handler composed. Those are UTF-8-in by construction
+   * and are encoded to the caller's negotiated wire charset with the
+   * box-glyph fallback (`substituteUnmappable`).
+   *
+   * `emitText` / `emitPrompt` never carry it, by rule: they wrap the
+   * AnsiBuffer, which CONCATENATES payloads before flushing
+   * (`utils/ansi-buffer.util.ts`), and a per-payload attribute cannot survive
+   * that. Screen-file content does not go through them today and must not
+   * start - pinned by `tests/transport/wire-encoding.test.ts`.
+   */
+  sourceCharset?: "cp437" | "iso-8859-1";
 }
 
+/**
+ * The name this interface had when `prePaced` was its only field. Kept
+ * because importers name it; there is one declaration, not two.
+ */
+export type OutputPacing = OutputAttributes;
+
 /** The single value every pre-paced emit carries. */
-export const PRE_PACED: Readonly<OutputPacing> = Object.freeze({ prePaced: true });
+export const PRE_PACED: Readonly<OutputAttributes> = Object.freeze({ prePaced: true });
+
+/**
+ * The four attribute objects that exist, frozen and memoised, so a per-frame
+ * emit allocates nothing - the property `PRE_PACED` has always had.
+ */
+const FROM_CP437: Readonly<OutputAttributes> = Object.freeze({ sourceCharset: "cp437" as const });
+const FROM_LATIN1: Readonly<OutputAttributes> = Object.freeze({ sourceCharset: "iso-8859-1" as const });
+const PACED_FROM_CP437: Readonly<OutputAttributes> = Object.freeze({
+  prePaced: true as const,
+  sourceCharset: "cp437" as const,
+});
+const PACED_FROM_LATIN1: Readonly<OutputAttributes> = Object.freeze({
+  prePaced: true as const,
+  sourceCharset: "iso-8859-1" as const,
+});
+
+/** The attribute for a payload decoded from `enc`, with no pacing claim. */
+export function fromCharset(enc: "cp437" | "iso-8859-1"): Readonly<OutputAttributes> {
+  return enc === "cp437" ? FROM_CP437 : FROM_LATIN1;
+}
+
+/** The same, for a payload the server has ALSO already paced (wipe frames). */
+export function pacedFromCharset(enc: "cp437" | "iso-8859-1"): Readonly<OutputAttributes> {
+  return enc === "cp437" ? PACED_FROM_CP437 : PACED_FROM_LATIN1;
+}

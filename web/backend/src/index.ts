@@ -96,6 +96,8 @@ import {
 } from "./server/ws-terminal-server";
 import { SSHServerImpl, SSHConnection } from "./server/ssh-server";
 import { SSHKeyUtil } from "./utils/ssh-key.util";
+import type { WireCharset } from "./utils/wire-encoding.util";
+import type { OutputAttributes } from "./utils/output-pacing";
 import { findSecurityScreen } from "./utils/screen-security.util";
 import { DEFAULT_CONNECTION_BAUD } from "./constants/modem";
 
@@ -313,6 +315,14 @@ export interface BBSSession {
   connectionType?: "web" | "telnet" | "ssh";
   /** Whether terminal supports Unicode (detected via TTYPE for telnet/SSH, always true for web) */
   unicodeCapable?: boolean;
+  /**
+   * The charset this caller's socket is written in, when it was NEGOTIATED
+   * rather than classified (telnet CHARSET, RFC 2066) or is known by
+   * construction (`/ws/terminal`, whose text frames are UTF-8 by RFC 6455).
+   * It BEATS the `unicodeCapable` classification above; absent, the one
+   * terminal predicate decides. See `utils/wire-encoding.util.ts`.
+   */
+  wireCharset?: WireCharset;
   remoteAddress?: string;
   connectionHostname?: string;
   connectionPort?: number;
@@ -447,6 +457,13 @@ export interface BBSSession {
     commands?: string[];
     onComplete?: () => void;
     kind?: 'bbs' | 'door' | 'doPause'; // 'bbs' = More prompt, 'doPause' = Pause/Space prompt, 'door' = door-owned
+    /**
+     * TP-5: the wire attribute page 1 went out with. Page 2 is the same
+     * file's bytes, so it must carry the same source charset or a `.ans`
+     * would reach a CP437 caller exactly for one page and transcoded for the
+     * rest. Absent for a composed list (`file.handler.ts`).
+     */
+    sourceAttrs?: Readonly<OutputAttributes>;
   };
   // Screen segment state for ~SP (soft pause) handling
   // express.e:5455-5461 - ~SP pauses IMMEDIATELY at each occurrence
@@ -457,6 +474,8 @@ export interface BBSSession {
     inlineMode: boolean; // Whether inline mode was active
     eventName: "ansi-output" | "petscii-output";
     isFlowScreen: boolean; // Whether this is a display flow screen
+    /** TP-5: the charset the screen this segment came from was decoded from. */
+    sourceAttrs?: Readonly<OutputAttributes>;
     // --- PETSCII `.seq` segments (plan 2026-09-02-mci-in-petscii-seq, Task 8)
     /** Segments are latin-1 `.seq` bytes, already gated/pre-passed/tokenized. */
     petscii?: boolean;
@@ -1517,6 +1536,15 @@ console.log(`[WEB] BBS accessible at http://localhost:${port}/`);
           connectionPort: port,
           connectionBaud: 0,
         });
+        // A WebSocket TEXT frame is UTF-8 by RFC 6455, and
+        // `WSTerminalConnection.write` sends one for every string it is
+        // handed. The session is created with `connectionType: "telnet"`
+        // above (raw bytes both ways) and cannot otherwise be told apart from
+        // a real telnet caller, so the wire charset is stated here - the same
+        // field a telnet CHARSET negotiation sets. `connectionType` is NOT
+        // changed: nine `=== 'telnet'` comparisons in web/backend/src depend
+        // on it.
+        session.wireCharset = "utf-8";
         conn.session = session;
         setSession(conn.sessionId, session);
         // Reuse the same connection handler telnet/SSH use.

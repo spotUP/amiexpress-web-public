@@ -25,6 +25,8 @@ import {
   flushPetsciiModel,
 } from "../utils/petscii-session-model";
 import { applyTransportEvent } from "./transport-adapter";
+import { encodeForWire } from "../utils/wire-encoding.util";
+import type { OutputAttributes } from "../utils/output-pacing";
 
 /**
  * Flush the session's PETSCII transducer's held bytes straight to the wire
@@ -95,6 +97,12 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
       // utils/output-pacing.ts) rides through untouched, as it does today, and
       // TP-5 reads it for the payload's source charset.
       const data: any = args[0];
+      // TP-5: the payload's OWN attributes, on the third argument the wipe
+      // path already sends (utils/output-pacing.ts). `sourceCharset` says
+      // which charset a screen file's characters were decoded FROM; absent
+      // means the text was composed by a handler and has none.
+      const attrs: Readonly<OutputAttributes> | undefined =
+        args[1] !== null && typeof args[1] === "object" ? (args[1] as Readonly<OutputAttributes>) : undefined;
       const session = connection.session;
       if (event === "ansi-output") {
         if (sessionWantsPetscii(session)) {
@@ -116,7 +124,12 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
           // for them. Only normalize strings — binary file transfer
           // buffers (e.g. ZModem) MUST pass through untouched.
           if (typeof data === "string") {
-            connection.write(data.replace(/\r?\n/g, "\r\n"));
+            // TP-5: the ONE place a screen's string becomes bytes for a byte
+            // caller. The CRLF normalisation runs BEFORE the encode, on the
+            // string, exactly where it ran before. `encodeForWire` returns the
+            // string unchanged for a UTF-8 caller (web, /ws/terminal, a telnet
+            // client that negotiated UTF-8), so that path is a no-op diff.
+            connection.write(encodeForWire(session, data.replace(/\r?\n/g, "\r\n"), attrs));
           } else {
             connection.write(data);
           }
@@ -127,7 +140,9 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
           // and keeps bank/reverse state in step with everything else.
           connection.write(Buffer.from(transducePetsciiAtChoke(session, String(data))));
         } else {
-          connection.write(data);
+          // Not a PETSCII caller: this is ordinary text on an ordinary wire and
+          // takes the same encoder the ansi-output branch does.
+          connection.write(encodeForWire(session, String(data), attrs));
         }
       } else if (event === "petscii-bytes") {
         // Raw-byte transport (Task 9): `data` is base64 of the exact .seq
@@ -151,7 +166,14 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
         // once. An unruled name is a defect and says so loudly: the backend
         // must never emit an event to a session that cannot receive it without
         // this file knowing about it. See server/transport-adapter.ts.
-        applyTransportEvent(connection, session, event, args);
+        //
+        // TP-4 passes THIS emitter along, because two of the things a byte
+        // transport has to honour hang off the socket rather than off the
+        // connection: the server ModemEmulator (`modem-speed`) and the output
+        // buffer behind emitText (`system-message`, `system:notice`). Both are
+        // keyed on the socket-shaped object, so handing the adapter anything
+        // else would give this caller a second pacer and a second buffer.
+        applyTransportEvent(connection, session, event, args, emitter);
       }
     },
     /** Live view of the connection's session (emitText's wrap choke, Task 10, reads it). A getter: connection.session is assigned after this emitter is built. */

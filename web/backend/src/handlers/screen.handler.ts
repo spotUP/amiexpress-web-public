@@ -43,7 +43,7 @@ import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { formatBytes as formatBytesUtil } from '../utils/byte-format.util';
 import { parseWipeMCI, getWipeFrames, wipeEffectsEnabled, type WipeType } from '../utils/screen-wipe.util';
-import { PRE_PACED } from '../utils/output-pacing';
+import { PRE_PACED, fromCharset, pacedFromCharset, type OutputAttributes } from '../utils/output-pacing';
 import { emitText, emitPrompt, flushOutput } from '../utils/output.util';
 import { fileCache } from '../utils/file-cache.util';
 import { processMci as processMciTokenizer } from '../utils/mci-tokenizer.util';
@@ -138,6 +138,16 @@ function readScreenText(filePath: string): string {
 
 function readScreenWithTransforms(filePath: string): AmigaTextResult {
   return readAmigaTextFileWithTransforms(filePath);
+}
+
+/**
+ * The charset a screen file's CHARACTERS were decoded from, in the two values
+ * the wire encoder understands (TP-5). `readAmigaTextFile` also answers
+ * `utf-8` for a `.seq`, which never reaches the ANSI transport, so it maps to
+ * "no source charset" rather than to a third codec.
+ */
+function sourceCharsetOf(result: AmigaTextResult): 'cp437' | 'iso-8859-1' | undefined {
+  return result.encoding === 'utf-8' ? undefined : result.encoding;
 }
 
 // Screen/MCI debugging: always log unless explicitly disabled
@@ -977,7 +987,22 @@ export function loadScreenFile(
   conferenceId?: number,
   nodeId: number = 0,
   session?: BBSSession
-): { content: string; isPetscii: boolean; isRip: boolean; filePath: string; petsciiBuffer?: Buffer } | null {
+): {
+  content: string;
+  isPetscii: boolean;
+  isRip: boolean;
+  filePath: string;
+  petsciiBuffer?: Buffer;
+  /**
+   * TP-5: the charset `content` was decoded FROM, when the loader knows it.
+   * It used to die here - `readAmigaTextFile` answered `cp437` for a `.ans`
+   * or a SAUCE-stamped file and `iso-8859-1` for everything else, and this
+   * function threw the answer away, so nothing downstream could tell an
+   * imported `.ANS` from this board's own Amiga art. It rides to the wire on
+   * the payload's attribute object (`utils/output-pacing.ts`).
+   */
+  sourceEncoding?: 'cp437' | 'iso-8859-1';
+} | null {
   // BBS directory structure matches original Amiga AmiExpress
   // Use dataDir from config which points to project root
   const { config } = require('../config');
@@ -1195,7 +1220,8 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
             screenDebug(`[loadScreenFile] RIP .rip file detected, sending raw content`);
             return { content: readScreenText(securityVariant), isPetscii: false, isRip: true, filePath: securityVariant };
           }
-          return { content: readScreenWithTransforms(securityVariant).text, isPetscii: false, isRip: false, filePath: securityVariant };
+          const decodedSecurity = readScreenWithTransforms(securityVariant);
+          return { content: decodedSecurity.text, isPetscii: false, isRip: false, filePath: securityVariant, sourceEncoding: sourceCharsetOf(decodedSecurity) };
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', securityVariant, error as Error, DebugSeverity.WARNING);
 console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
@@ -1229,12 +1255,13 @@ console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
             screenDebug(`[loadScreenFile] RIP .rip file detected, sending raw content`);
             return { content: readScreenText(fileToUse), isPetscii: false, isRip: true, filePath: fileToUse };
           } else {
-            const content = readScreenWithTransforms(fileToUse).text;
+            const decoded = readScreenWithTransforms(fileToUse);
+            const content = decoded.text;
             try {
               const fs = require('fs');
               fs.appendFileSync('debug-screen-loads.log', `[${new Date().toISOString()}] Loaded ${screenName} from ${fileToUse} (content length: ${content.length})\n`);
             } catch (e) { /* ignore */ }
-            return { content, isPetscii: false, isRip: false, filePath: fileToUse };
+            return { content, isPetscii: false, isRip: false, filePath: fileToUse, sourceEncoding: sourceCharsetOf(decoded) };
           }
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', fileToUse, error as Error, DebugSeverity.WARNING);
@@ -1267,7 +1294,8 @@ console.error(`[loadScreenFile]     (error reading file: ${(error as Error).mess
             if (isRipFile(secPath)) {
               return { content: readScreenText(secPath), isPetscii: false, isRip: true, filePath: secPath };
             }
-            return { content: readScreenWithTransforms(secPath).text, isPetscii: false, isRip: false, filePath: secPath };
+            const decodedSecPath = readScreenWithTransforms(secPath);
+            return { content: decodedSecPath.text, isPetscii: false, isRip: false, filePath: secPath, sourceEncoding: sourceCharsetOf(decodedSecPath) };
         } catch (error) {
           SysopDebugUtil.debugFileError(null, session, 'read', secPath, error as Error, DebugSeverity.WARNING);
 console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
@@ -1308,7 +1336,8 @@ console.error(`[loadScreenFile]     (error converting PETSCII):`, error);
             screenDebug(`[loadScreenFile] RIP .rip file detected, sending raw content`);
             return { content: readScreenText(tryPath), isPetscii: false, isRip: true, filePath: tryPath };
           } else {
-            return { content: readScreenWithTransforms(tryPath).text, isPetscii: false, isRip: false, filePath: tryPath };
+            const decodedTryPath = readScreenWithTransforms(tryPath);
+            return { content: decodedTryPath.text, isPetscii: false, isRip: false, filePath: tryPath, sourceEncoding: sourceCharsetOf(decodedTryPath) };
           }
         }
       }
@@ -1745,7 +1774,19 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
   const screenData = loadScreenFile(screenName, session.currentConf, session.nodeId || 0, session);
 
   if (screenData) {
-    const { content, isPetscii, isRip, filePath, petsciiBuffer } = screenData;
+    const { content, isPetscii, isRip, filePath, petsciiBuffer, sourceEncoding } = screenData;
+    /**
+     * TP-5: the charset THIS screen's characters came off disk in, carried on
+     * every emit that puts this screen's content on the wire. A byte-transport
+     * caller whose own charset matches gets the file's exact bytes back; one
+     * whose charset differs gets a transcode with the documented ASCII
+     * fallback. Absent (a `.seq`, or a screen composed rather than read) means
+     * "no source charset" and the caller's negotiated charset decides alone.
+     * ANSI-only payloads below (a bare `\x1b[0m` reset, the More prompt's
+     * cursor-up) carry nothing: they are ASCII in all three charsets.
+     */
+    const sourceAttrs: Readonly<OutputAttributes> | undefined =
+      sourceEncoding ? fromCharset(sourceEncoding) : undefined;
     // Express.e:6567  MENU resets cmdShortcuts/shortcuts before checking for .keys
     session.lastScreenFilePath = filePath;
 
@@ -1990,7 +2031,8 @@ console.log(`[SEGMENT] SETUP: ${segments.length} segments for ${screenName}`);
           screenName,
           inlineMode: true,
           eventName,
-          isFlowScreen: true
+          isFlowScreen: true,
+          sourceAttrs,
         };
 
         // Process only the first segment now
@@ -2039,7 +2081,8 @@ console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes SEGMENT 0: ${parsed.length} byt
             screenName,
             inlineMode: true,
             eventName,
-            isFlowScreen: true
+            isFlowScreen: true,
+            sourceAttrs,
           };
           console.log(`[~SP] Stored pendingInlineContent in single segment branch (${result.pendingInlineContent.length} bytes)`);
         }
@@ -2075,7 +2118,8 @@ console.log(`[NEWLINE-DEBUG] AFTER parseMciCodes SINGLE: ${parsed.length} bytes,
           screenName,
           inlineMode: true,
           eventName,
-          isFlowScreen: true
+          isFlowScreen: true,
+          sourceAttrs
         };
         console.log(`[~SP] Stored pendingInlineContent (${result.pendingInlineContent.length} bytes) for processing after pause`);
       }
@@ -2157,7 +2201,7 @@ console.log(`[NEWLINE-DEBUG] FIRST 5 LINES:`, lines.slice(0, 5).map((line, i) =>
 
     // emitWithModem handles modem speed throttling dynamically by checking session state each call
 
-    const emitWithModem = async (payload: string) => {
+    const emitWithModem = async (payload: string, attrs: Readonly<OutputAttributes> | undefined = sourceAttrs) => {
       // When we do our OWN throttling, use directEmit to bypass ModemEmulator (avoid double-throttling)
       // When we DON'T throttle, use socket.emit so ModemEmulator can intercept if it's enabled
       const directEmit = (socket as any)._directEmit || socket.emit.bind(socket);
@@ -2171,7 +2215,7 @@ console.log(`[NEWLINE-DEBUG] FIRST 5 LINES:`, lines.slice(0, 5).map((line, i) =>
 
       if (!currentModemActive || currentBytesPerSec <= 0) {
         // NOT doing our own throttling - use socket.emit so ModemEmulator can intercept
-        socket.emit(eventName, payload);
+        socket.emit(eventName, payload, attrs);
         return;
       }
       // Tokenize ANSI so we never split escape sequences
@@ -2198,7 +2242,7 @@ console.log(`[NEWLINE-DEBUG] FIRST 5 LINES:`, lines.slice(0, 5).map((line, i) =>
         const buf = Buffer.from(tok, 'utf-8');
         const isEscape = tok.startsWith('\x1b');
         if (isEscape) {
-          directEmit(eventName, tok);
+          directEmit(eventName, tok, attrs);
           continue;
         }
         let offset = 0;
@@ -2214,7 +2258,7 @@ console.log(`[NEWLINE-DEBUG] FIRST 5 LINES:`, lines.slice(0, 5).map((line, i) =>
           // On a character boundary: this budget is in bytes, and a cut inside
           // a multi-byte character sends two halves that both render as U+FFFD.
           const end = utf8ChunkEnd(buf, offset, wanted);
-          directEmit(eventName, buf.subarray(offset, end).toString('utf-8'));
+          directEmit(eventName, buf.subarray(offset, end).toString('utf-8'), attrs);
           sentBytes += end - offset;
           offset = end;
         }
@@ -2356,7 +2400,7 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
         }
         // On a character boundary, for the same reason as the modem path.
         const end = utf8ChunkEnd(buffer, offset, toSend);
-        socket.emit(eventName, buffer.subarray(offset, end).toString('utf-8'));
+        socket.emit(eventName, buffer.subarray(offset, end).toString('utf-8'), sourceAttrs);
         offset = end;
         if (offset < buffer.length) {
           await new Promise(resolve => setTimeout(resolve, 16)); // ~60fps pacing
@@ -2410,6 +2454,7 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
       eventName,
       commands,
       kind: 'bbs',
+      sourceAttrs,
     };
     if (commands.length > 0) {
       session.queuedScreenCommands = commands;
@@ -2462,7 +2507,13 @@ console.log(`[WIPE] Generated ${wipeFrames.length} frames`);
         // second `ansi-output` argument, which every emit wrapper on this
         // board forwards untouched and the telnet/SSH emitter ignores (no
         // client-side pacer there).
-        directSocketEmit(eventName, frameContent, PRE_PACED);
+        directSocketEmit(
+          eventName,
+          frameContent,
+          // TP-5: the same object PRE_PACED always was when the screen's
+          // charset is unknown, and the paced+charset singleton when it is.
+          sourceEncoding ? pacedFromCharset(sourceEncoding) : PRE_PACED,
+        );
 
         // Yield to event loop to flush socket buffer before waiting
         await new Promise(resolve => setImmediate(resolve));
@@ -2692,7 +2743,14 @@ export function startPagination(
   lines: string[],
   eventName: 'ansi-output' | 'petscii-output' = 'ansi-output',
   commands?: string[],
-  onComplete?: () => void
+  onComplete?: () => void,
+  /**
+   * TP-5: the charset these lines were decoded from, when the caller read them
+   * off disk. `file.handler.ts` passes none - its lists are composed - and
+   * gets the caller's negotiated charset, which is the right answer for text
+   * that never came off disk.
+   */
+  sourceAttrs?: Readonly<OutputAttributes>,
 ): void {
   const pageHeight = session?.screenHeight || 25;
   const pageSize = Math.max(1, pageHeight - 1);
@@ -2704,9 +2762,10 @@ export function startPagination(
     commands,
     onComplete,
     kind: 'bbs',
+    sourceAttrs,
   };
   const chunk = lines.slice(0, pageSize).join('\r\n');
-  socket.emit(eventName, chunk + '\r\n(Pause)...More(y/n/ns)? ');
+  socket.emit(eventName, chunk + '\r\n(Pause)...More(y/n/ns)? ', sourceAttrs);
   session.lastScreenHadPause = true;
 }
 
@@ -2741,8 +2800,9 @@ console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.li
     const promptLine = prompt ? '\r\n(Pause)...More(y/n/ns)? ' : '';
     // The page break and the `More` prompt move a PETSCII terminal's cursor
     // like any other text; the transport choke sees them, like every other
-    // emit on this socket.
-    socket.emit(paged.eventName, chunk + promptLine);
+    // emit on this socket. TP-5: page 2 of a screen is the same file's bytes
+    // as page 1, so it carries the same source charset.
+    socket.emit(paged.eventName, chunk + promptLine, paged.sourceAttrs);
   };
 
   // NS: dump the rest without further prompts
@@ -2780,7 +2840,7 @@ console.log(`[handlePaginatedScreenInput] ENTRY: data="${data}" lines=${paged.li
         if (!result.inlineEmitted) {
           let parsed = addAnsiEscapes(result.parsed);
           parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
-          socket.emit(eventName, parsed);
+          socket.emit(eventName, parsed, segStateNS.sourceAttrs);
         }
       }
       session.screenSegments = undefined;
@@ -2898,8 +2958,9 @@ console.log(`[SEGMENT] Processing segment ${segmentNum}/${segState.segments.leng
     // Normalize line endings
     parsed = parsed.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
 
-    // Emit this segment's content
-    socket.emit(segState.eventName, parsed);
+    // Emit this segment's content. TP-5: a segment is a slice of the same
+    // screen file, so it carries the charset that file was decoded from.
+    socket.emit(segState.eventName, parsed, segState.sourceAttrs);
   } else {
     // Just emit color reset to prevent bleed
     socket.emit(segState.eventName, '\x1b[0m');
