@@ -36,6 +36,7 @@
   "description": "",
   "dependencies": {
     "@amiexpress/bbs-door-sdk": "file:../../sdk",
+    "@aws-sdk/client-s3": "^3.1125.0",
     "@types/nodemailer": "^7.0.4",
     "adm-zip": "^0.5.16",
     "axios": "^1.12.2",
