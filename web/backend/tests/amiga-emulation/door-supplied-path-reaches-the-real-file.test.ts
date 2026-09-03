@@ -45,6 +45,7 @@ jest.mock('../../src/utils/amigafs', () => {
     readFileSync: jest.fn(actual.readFileSync),
     chmodSync: jest.fn(actual.chmodSync),
     writeFileSync: jest.fn(actual.writeFileSync),
+    resolveExistingAncestors: jest.fn(actual.resolveExistingAncestors),
   };
 });
 
@@ -94,6 +95,15 @@ class StubEmulator {
   }
   readLong(): number {
     return 0;
+  }
+  readString(addr: number, maxLen = 200): string {
+    const bytes: number[] = [];
+    for (let i = 0; i < maxLen; i += 1) {
+      const byte = this.readMemory(addr + i);
+      if (byte === 0) break;
+      bytes.push(byte);
+    }
+    return String.fromCharCode(...bytes);
   }
   writeString(addr: number, text: string): void {
     for (let i = 0; i < text.length; i += 1) {
@@ -227,7 +237,10 @@ describe('a door-supplied path reaches the real file on a case-sensitive host', 
       });
     });
 
-    test('GET_CMD_TOOLTYPE finds the command icon named in the other case', async () => {
+    test('GET_CMD_TOOLTYPE reads the LOCATION out of a differently-cased icon', async () => {
+      // Outcome, not a spy: an amigafs.existsSync guard in front of a raw-fs
+      // READER passes on ext4 and then returns an empty tooltype map, so
+      // "mtop never reaches MTOP.info" stayed true. Assert the VALUE.
       fs.mkdirSync(path.join(root, 'Commands', 'BBSCmd'), { recursive: true });
       fs.writeFileSync(
         path.join(root, 'Commands', 'BBSCmd', 'TESTDOOR.info'),
@@ -235,13 +248,39 @@ describe('a door-supplied path reaches the real file on a case-sensitive host', 
         'latin1'
       );
       const emitted: Emitted[] = [];
-      const { handler } = buildHandler(emitted, 'testdoor');
+      const { handler, emulator } = buildHandler(emitted, 'testdoor');
 
       await dispatch(handler, XIMCommand.GET_CMD_TOOLTYPE, 'LOCATION');
 
-      expect(shim.existsSync).toHaveBeenCalledWith(
+      expect(emulator.readMemory32(MSG_ADDR + DoorConstants.MESSAGE_DATA_OFFSET)).toBe(1);
+      expect(emulator.readString(MSG_ADDR + DoorConstants.MESSAGE_STRING_OFFSET)).toBe(
+        'Doors:testdoor/testdoor'
+      );
+
+      // The outcome above cannot fail on macOS - its volume is
+      // case-insensitive, so even the raw-fs reader finds the file. The pin
+      // that discriminates on THIS host is that the READER, not just the
+      // guard in front of it, went through amigafs: an amigafs.existsSync
+      // guard followed by fs.readFileSync passes the guard on ext4 and then
+      // returns an empty map.
+      expect(shim.readFileSync).toHaveBeenCalledWith(
         path.join(root, 'Commands', 'BBSCmd', 'testdoor.info')
       );
+    });
+
+    test('GET_CMD_TOOLTYPE still reports a tooltype that is genuinely absent', async () => {
+      fs.mkdirSync(path.join(root, 'Commands', 'BBSCmd'), { recursive: true });
+      fs.writeFileSync(
+        path.join(root, 'Commands', 'BBSCmd', 'TESTDOOR.info'),
+        'LOCATION=Doors:testdoor/testdoor\x00',
+        'latin1'
+      );
+      const emitted: Emitted[] = [];
+      const { handler, emulator } = buildHandler(emitted, 'testdoor');
+
+      await dispatch(handler, XIMCommand.GET_CMD_TOOLTYPE, 'NOSUCHKEY');
+
+      expect(emulator.readMemory32(MSG_ADDR + DoorConstants.MESSAGE_DATA_OFFSET)).toBe(0);
     });
   });
 
@@ -332,6 +371,51 @@ describe('a door-supplied path reaches the real file on a case-sensitive host', 
       );
       expect(fs.readdirSync(screensDir)).toContain('userdump.json');
       expect(fs.readdirSync(root)).toEqual(['Screens']);
+    });
+
+    test('DT_DUMP overwrites an existing upper-cased dump instead of twinning it', () => {
+      // writeFileSync only case-resolves the PARENT, so the file itself has to
+      // be resolved first or "dump.txt" lands beside the real "DUMP.TXT".
+      fs.writeFileSync(path.join(screensDir, 'DUMP.TXT'), 'stale', 'latin1');
+
+      const emulator = new StubEmulator();
+      const parser = new XIMMessageParser(emulator as never);
+      const handler = new XIMDataQueryHandler(
+        emulator as never,
+        { replyMsg: jest.fn() } as never,
+        parser,
+        { bbsRoot: root, user: { username: 'SYSOP' } } as never,
+        {} as never
+      );
+
+      const msgAddr = 0x5100;
+      parser.writeString(
+        msgAddr + DoorConstants.MESSAGE_STRING_OFFSET,
+        'screens/dump.txt',
+        200
+      );
+
+      handler.handleDataQuery({
+        msgAddr,
+        command: XIMCommand.DT_DUMP,
+        data: 0,
+        replyPort: 0,
+      });
+
+      expect(fs.readdirSync(screensDir).sort()).toEqual(['BULL.TXT', 'DUMP.TXT']);
+      expect(
+        fs.readFileSync(path.join(screensDir, 'DUMP.TXT'), 'latin1')
+      ).toContain('SYSOP');
+
+      // macOS cannot show the twin: on a case-insensitive volume amigafs's own
+      // fast path (fs.existsSync of the asked spelling) succeeds, so the whole
+      // shim is a no-op here and every spelling writes the same inode. The pin
+      // that discriminates on THIS host is that the FILE, not only its parent,
+      // was put through the resolver - writeFileSync alone resolves the parent
+      // and then joins the door's spelling of the basename.
+      expect(shim.resolveExistingAncestors).toHaveBeenCalledWith(
+        path.join(root, 'screens', 'dump.txt')
+      );
     });
   });
 });

@@ -783,10 +783,13 @@ debugLog(`  [WRITE] ${this.messageParser.getCommandName(msg.command)}: ${newVal}
             try {
               const path = require('path');
               const bbsRoot = (this.bbsSession as any)?.bbsRoot || process.cwd();
-              const fullPath = path.resolve(bbsRoot, filename);
+              // The door names this file. writeFileSync only case-resolves the
+              // PARENT, so an existing "DUMP.TXT" would get a lowercase twin;
+              // resolve the whole path first and overwrite the real file.
+              const fullPath = amigafs.resolveExistingAncestors(
+                path.resolve(bbsRoot, filename)
+              );
               const userData = JSON.stringify(user || {}, null, 2);
-              // The door names this file; amigafs finds the real, possibly
-              // differently-cased, directory to drop it in.
               amigafs.writeFileSync(fullPath, userData, 'utf8');
 debugLog(`  [WRITE] DT_DUMP: Saved user data to ${fullPath}`);
             } catch (err) {

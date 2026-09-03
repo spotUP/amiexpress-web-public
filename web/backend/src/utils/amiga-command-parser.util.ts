@@ -362,11 +362,20 @@ export function extractTooltypesFromInfoFile(filePath: string, session?: any, so
   const tooltypes = new Map<string, string>();
 
   try {
-    if (!fs.existsSync(filePath)) {
+    // Case-insensitive, because the .info name often comes from a door: a door
+    // asking for tooltypes of "mtop" must reach "MTOP.info". Fixing the READER
+    // rather than each caller is the single-source option - every caller of
+    // this function (XIMProtocol, DoorMessageHandler, loadCommandFromInfo,
+    // scanCommandDirectory, ...) inherits it, and a caller that already passes
+    // an amigafs-resolved path is unaffected: amigafs fast-paths on an exact
+    // hit. Callers used to guard with amigafs.existsSync and then hand the
+    // UNRESOLVED path here, so on the container the guard passed and this
+    // returned an empty map.
+    if (!amigafs.existsSync(filePath)) {
       return tooltypes;
     }
 
-    const buffer = fs.readFileSync(filePath);
+    const buffer = amigafs.readFileSync(filePath) as Buffer;
 
     // For small files or non-standard .info files, use fallback string extraction
     if (buffer.length < DISK_OBJECT_SIZE) {

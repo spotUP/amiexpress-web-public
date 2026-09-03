@@ -20,6 +20,7 @@
  * These are called via AREXX function host mechanism, not direct library calls.
  */
 
+import * as path from 'path';
 import * as amigafs from '../../utils/amigafs';
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { RexxPathResolver } from './rexx-path';
@@ -146,7 +147,7 @@ export class RexxSupportLibrary {
     try {
       const entries = amigafs.readdirSync(resolvedPath);
       const filtered = entries.filter(entry => {
-        const fullPath = `${resolvedPath}/${entry}`;
+        const fullPath = path.join(resolvedPath, entry);
         try {
           const stats = amigafs.statSync(fullPath);
           if (type === 'F') return stats.isFile();
