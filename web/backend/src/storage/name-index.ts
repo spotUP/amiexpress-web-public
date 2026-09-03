@@ -25,10 +25,16 @@
  *    fresh maps on success (so the write is not lost to a stale snapshot),
  *    or onto the maps as they were on failure (so the write is still not
  *    lost even though this attempt could not confirm it against the
- *    backend). Concurrent resolve() calls on an unprimed index share the
- *    one in-flight listing rather than each starting their own - the
- *    registry exists to make one listing serve every caller of an area, and
- *    N concurrent first lookups producing N listings would undo that.
+ *    backend). The in-flight flag is cleared and the buffer drained in the
+ *    SAME synchronous stretch, before this function's own promise settles -
+ *    clearing it a tick later (in the caller's own finally, after `await`
+ *    resumes) leaves a window where a note()/forget() lands after the
+ *    drain has already run but is still buffered into an array nothing
+ *    will read again, discarding it exactly as if this fix did not exist.
+ *    Concurrent resolve() calls on an unprimed index share the one
+ *    in-flight listing rather than each starting their own - the registry
+ *    exists to make one listing serve every caller of an area, and N
+ *    concurrent first lookups producing N listings would undo that.
  *
  * 3. A caller's EXACT spelling wins outright over the case-insensitive
  *    fallback. amigafs.ts's own resolvePath checks the literal path first
@@ -38,7 +44,11 @@
  *    there is no exact hit, and only amongst whichever real keys currently
  *    share that lowered name - recomputed at lookup time, not cached, so a
  *    write can never leave a stale "winner" behind. Deleting one case
- *    variant must not remove a same-named sibling that is still there.
+ *    variant must not remove a same-named sibling that is still there. And
+ *    a caller may resolve() either a bare name or a full key (prefix
+ *    included) - the same relative-path normalisation applied to a stored
+ *    key is applied to the lookup argument, so both spellings hit the same
+ *    entry.
  *
  * 4. A HIT is trusted forever once primed - nothing else in this process
  *    writes the bucket except through note()/forget(). A MISS is not
@@ -48,7 +58,14 @@
  *    index can be permanently wrong for the rest of the process's life. A
  *    miss older than the window forces exactly one re-list before the
  *    answer is trusted; a miss inside the window, and every hit regardless
- *    of age, costs nothing.
+ *    of age, costs nothing. The window is measured from the last ATTEMPT
+ *    (lastAttemptAt), not the last SUCCESS (refreshedAt): gating on success
+ *    alone means a down backend never advances the stamp, so every single
+ *    stale miss re-attempts (and re-fails) for as long as the outage lasts -
+ *    one list call per miss instead of one per window. lastAttemptAt
+ *    advances whether the attempt succeeded or failed, so only the first
+ *    stale miss in a window pays for an attempt; the rest answer from
+ *    whatever the index already holds until the window rolls over again.
  */
 import type { ObjectHead, StorageBackend } from './storage-backend';
 
@@ -77,7 +94,10 @@ export class NameIndex {
   /** Real keys sharing a lowercased relative path - the case-insensitive fallback pool. */
   private byLowerName = new Map<string, Set<string>>();
   private primed = false;
+  /** When the maps were last actually replaced by a successful listing. */
   private refreshedAt = 0;
+  /** When a listing was last ATTEMPTED, success or failure - what gates a stale-miss re-list. */
+  private lastAttemptAt = 0;
   private inFlight: Promise<void> | null = null;
   private pendingOps: PendingOp[] = [];
   private readonly staleAfterMs: number;
@@ -92,7 +112,7 @@ export class NameIndex {
     this.now = options.now ?? Date.now;
   }
 
-  /** A real key's path relative to this area's prefix - what gets lowercased and compared. */
+  /** A path's location relative to this area's prefix - what gets lowercased and compared. */
   private relKey(key: string): string {
     return key.startsWith(this.prefix) ? key.slice(this.prefix.length) : key;
   }
@@ -100,9 +120,11 @@ export class NameIndex {
   /**
    * Lists the area and rebuilds the index from scratch.
    *
-   * Concurrent callers share one in-flight listing (see invariant 2 above):
-   * a second refresh() call while one is already outstanding returns the
-   * same promise rather than starting a second backend.list().
+   * A second refresh() call while one is already outstanding joins that
+   * same listing instead of starting a second backend.list() - its `await`
+   * settles once the original listing (and its buffered-op replay) has
+   * finished, one microtask after that work completes, not synchronously
+   * with it.
    */
   async refresh(): Promise<void> {
     if (this.inFlight) return this.inFlight;
@@ -128,9 +150,22 @@ export class NameIndex {
         this.primed = true;
         this.refreshedAt = this.now();
       } finally {
-        // Replay whatever note()/forget() arrived while list() was in
-        // flight - onto the maps above on success, onto the maps as they
-        // were on failure. Either way the write is not lost (invariant 2).
+        // Runs on success AND failure - a down backend still advances the
+        // "last attempt" stamp, or every stale miss would keep re-trying
+        // for the length of the outage (invariant 4).
+        this.lastAttemptAt = this.now();
+
+        // Cleared and drained HERE, inside this same synchronous stretch -
+        // not in the outer refresh() caller's own finally below, which only
+        // runs a microtask later once `await run` resumes. A note()/
+        // forget() landing in that later tick would otherwise still see
+        // in-flight as true and buffer into an array this function has
+        // already stopped reading (invariant 2). Unconditional, not an
+        // identity-guarded clear: nothing else can set this.inFlight while
+        // this synchronous stretch is running - JS is single-threaded, and
+        // refresh() only ever starts a new listing when this.inFlight is
+        // already falsy - so this is always still the owner's own flight.
+        this.inFlight = null;
         for (const op of opsDuringThisRefresh) {
           if (op.type === 'note') this.applyNote(op.key);
           else this.applyForget(op.key);
@@ -142,6 +177,9 @@ export class NameIndex {
     try {
       await run;
     } finally {
+      // Almost always a no-op by the time this runs, since run's own
+      // finally already cleared it above - kept as a safety net for any
+      // path that reaches here without going through run's finally.
       if (this.inFlight === run) this.inFlight = null;
     }
   }
@@ -162,7 +200,7 @@ export class NameIndex {
     if (!this.primed) await this.refresh();
 
     let found = this.lookup(name);
-    if (found === null && this.now() - this.refreshedAt >= this.staleAfterMs) {
+    if (found === null && this.now() - this.lastAttemptAt >= this.staleAfterMs) {
       await this.refresh();
       found = this.lookup(name);
     }
@@ -187,11 +225,19 @@ export class NameIndex {
     this.applyForget(key);
   }
 
+  /**
+   * `name` may be a bare filename ('FILE.LHA') or a full key including this
+   * area's prefix ('Conf1/Files/FILE.LHA') - both are normalised to the same
+   * relative-to-prefix form the maps are keyed on, so either spelling hits
+   * the same entry (invariant 3).
+   */
   private lookup(name: string): string | null {
-    const exact = this.exactByRelKey.get(name);
-    if (exact) return exact;
+    const rel = this.relKey(name);
 
-    const candidates = this.byLowerName.get(name.toLowerCase());
+    const exact = this.exactByRelKey.get(rel);
+    if (exact !== undefined) return exact;
+
+    const candidates = this.byLowerName.get(rel.toLowerCase());
     if (!candidates || candidates.size === 0) return null;
 
     let winner: string | null = null;

@@ -279,4 +279,61 @@ describe('NameIndex', () => {
     expect(await index.resolve('ghost.lha')).toBeNull();
     expect(backend.lists).toBe(1); // no extra listing
   });
+
+  it('a down backend past the staleness window costs one list attempt, not one per subsequent miss', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    let clock = 0;
+    const index = new NameIndex(backend, 'Files/', { staleAfterMs: 1000, now: () => clock });
+
+    await index.resolve('ghost.lha'); // primes with a real listing
+    expect(backend.lists).toBe(1);
+
+    clock += 1500; // past the window
+    backend.down = true;
+
+    // The first stale miss after the outage begins still attempts, and
+    // still surfaces the real failure.
+    await expect(index.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+    const requestsAfterFirstAttempt = backend.requests;
+
+    // Still down, clock unmoved: without a lastAttemptAt separate from the
+    // last SUCCESS, refreshedAt would never advance while down and every
+    // one of these would attempt (and fail) again on its own.
+    expect(await index.resolve('ghost.lha')).toBeNull();
+    expect(await index.resolve('ghost.lha')).toBeNull();
+    expect(backend.requests).toBe(requestsAfterFirstAttempt); // no further attempts
+
+    // Once another full window has passed since that attempt, one more
+    // attempt is made - the throttle recovers, it does not wedge shut.
+    clock += 1500;
+    await expect(index.resolve('ghost.lha')).rejects.toBeInstanceOf(StorageUnavailableError);
+    expect(backend.requests).toBe(requestsAfterFirstAttempt + 1);
+  });
+
+  // --- Important: the gap between the drain and the in-flight flag clearing ---
+
+  it('does not lose a note() landing between the buffered-op drain and the in-flight flag actually clearing', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    const index = new NameIndex(backend, 'Files/');
+
+    const p = index.refresh(); // suspends at await backend.list()
+    index.note('Files/A.LHA'); // buffered while genuinely in flight, replayed on commit
+    await Promise.resolve(); // one microtask - lands after a same-tick drain, not before
+    index.note('Files/B.LHA'); // must not be silently swallowed by an already-drained buffer
+    await p;
+
+    expect(await index.resolve('a.lha')).toBe('Files/A.LHA');
+    expect(await index.resolve('b.lha')).toBe('Files/B.LHA');
+  });
+
+  // --- Important, latent: resolve() must normalise its argument the same way stored keys are ---
+
+  it('resolves the same object whether the caller passes a bare name or the full key including the prefix', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    await backend.put('Conf1/Files/FILE.LHA', Buffer.from('x'));
+    const index = new NameIndex(backend, 'Conf1/Files/');
+
+    expect(await index.resolve('FILE.LHA')).toBe('Conf1/Files/FILE.LHA');
+    expect(await index.resolve('Conf1/Files/FILE.LHA')).toBe('Conf1/Files/FILE.LHA');
+  });
 });
