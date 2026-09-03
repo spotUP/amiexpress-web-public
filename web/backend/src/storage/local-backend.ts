@@ -19,30 +19,75 @@ function errorMessage(err: unknown): string {
   return util.types.isNativeError(err) ? err.message : String(err);
 }
 
+/**
+ * ENOENT ("no such file") and ENOTDIR ("a path segment is a file, not a
+ * directory") both mean the same thing to a storage caller: this key does
+ * not exist. On S3, asking for `Files/DEMO.LHA/x` when `Files/DEMO.LHA` is
+ * an object simply returns "not found" - there is no directory layer to
+ * collide with. Every other errno (EACCES, EIO, ...) means the volume could
+ * not honestly answer, which is a different thing from "not there."
+ */
+function isMissing(err: unknown): boolean {
+  return isErrnoException(err) && (err.code === 'ENOENT' || err.code === 'ENOTDIR');
+}
+
+// A temp file's name always ends in this suffix (see tempName below). Used
+// to keep an orphaned temp - left behind by a crash between writeFile and
+// rename - out of list() results: it is scratch space, never a real object.
+const TEMP_SUFFIX_PATTERN = /\.tmp-\d+-[0-9a-f]+$/;
+
+function tempName(basename: string): string {
+  return `.${basename}.tmp-${process.pid}-${crypto.randomBytes(6).toString('hex')}`;
+}
+
 /** A drive that is just a directory - what every board has today. */
 export class LocalBackend implements StorageBackend {
   constructor(public readonly driveNumber: number, private readonly root: string) {}
 
   /**
-   * Resolves a storage key to a path inside the drive root, and refuses one
-   * that would escape it.
+   * Refuses a relative path that would escape the drive root, or that isn't
+   * shaped like a path at all: absolute, a `..` segment, or empty/`.` (which
+   * resolve to the root itself).
    *
-   * A key with a `..` segment or an absolute path lets get/put/delete/list
-   * reach outside the drive root - onto another drive, or anywhere on disk
-   * the process can touch. Under one-copy-per-file, an unbounded delete is
-   * not a bug to tolerate: it can destroy the only copy of a file that isn't
-   * even on this volume. Every accessor routes through this, list's
-   * directory resolution included, so there is exactly one place that makes
-   * the call.
+   * Shared by every accessor that reads a directory path, key resolution
+   * included, so there is exactly one place that makes the call.
+   */
+  private assertContained(relPath: string): void {
+    if (path.isAbsolute(relPath)) {
+      throw new Error(`storage key must be relative to the drive root, got an absolute path: ${relPath}`);
+    }
+    if (relPath.split(/[\\/]+/).includes('..')) {
+      throw new Error(`storage key may not contain ".." segments: ${relPath}`);
+    }
+  }
+
+  /**
+   * Resolves a storage key - an object, not a directory - to a path inside
+   * the drive root.
+   *
+   * Beyond the absolute/`..` checks every path goes through, an object key
+   * of `''` or `'.'` resolves to the drive root itself: `put('')` would
+   * derive its temp name from the root's own parent directory and write a
+   * byte outside the drive before the rename failed. There is no legitimate
+   * object at the root, so both are refused here.
    */
   private full(key: string): string {
-    if (path.isAbsolute(key)) {
-      throw new Error(`storage key must be relative to the drive root, got an absolute path: ${key}`);
-    }
-    if (key.split(/[\\/]+/).includes('..')) {
-      throw new Error(`storage key may not contain ".." segments: ${key}`);
+    this.assertContained(key);
+    if (key === '' || key === '.') {
+      throw new Error('storage key must not be empty - an empty key resolves to the drive root itself');
     }
     return path.join(this.root, key);
+  }
+
+  /**
+   * Resolves a directory to read - used only by list(), where the target
+   * legitimately can be the drive root (dirPart derived from a bare,
+   * slash-free prefix collapses to '.'). Still refuses `..` and absolute
+   * paths, the same as full().
+   */
+  private resolveDir(dirPart: string): string {
+    this.assertContained(dirPart);
+    return path.join(this.root, dirPart === '.' ? '' : dirPart);
   }
 
   async head(key: string): Promise<ObjectHead | null> {
@@ -51,7 +96,7 @@ export class LocalBackend implements StorageBackend {
       const st = await fs.promises.stat(full);
       return { key, size: st.size, mtime: st.mtime };
     } catch (err) {
-      if (isErrnoException(err) && err.code === 'ENOENT') return null;
+      if (isMissing(err)) return null;
       throw new StorageUnavailableError(this.driveNumber, `cannot stat ${key}: ${errorMessage(err)}`);
     }
   }
@@ -61,10 +106,10 @@ export class LocalBackend implements StorageBackend {
     try {
       return await fs.promises.readFile(full);
     } catch (err) {
-      // ENOENT is "no such object", a real answer a caller may act on - not
-      // "ask again later". Anything else (EACCES, EIO, ENOTDIR...) means the
+      // Missing is "no such object", a real answer a caller may act on -
+      // not "ask again later". Anything else (EACCES, EIO...) means the
       // volume could not honestly answer, and must not be mistaken for one.
-      if (isErrnoException(err) && err.code === 'ENOENT') throw err;
+      if (isMissing(err)) throw err;
       throw new StorageUnavailableError(this.driveNumber, `cannot read ${key}: ${errorMessage(err)}`);
     }
   }
@@ -73,14 +118,12 @@ export class LocalBackend implements StorageBackend {
    * Writes to a sibling temp file and renames into place, so a crash or a
    * full disk mid-write never leaves a short file where the pool believes a
    * complete copy exists - under one-copy-per-file, that short file would be
-   * the only copy.
+   * the only copy. The temp file's name always carries the TEMP_SUFFIX_PATTERN
+   * suffix so an orphaned one is recognisable and excluded by list() below.
    */
   async put(key: string, body: Buffer): Promise<void> {
     const full = this.full(key);
-    const tmp = path.join(
-      path.dirname(full),
-      `.${path.basename(full)}.tmp-${process.pid}-${crypto.randomBytes(6).toString('hex')}`
-    );
+    const tmp = path.join(path.dirname(full), tempName(path.basename(full)));
     try {
       await fs.promises.mkdir(path.dirname(full), { recursive: true });
       await fs.promises.writeFile(tmp, body);
@@ -98,7 +141,7 @@ export class LocalBackend implements StorageBackend {
     } catch (err) {
       // Deleting an object that is already gone is not an error - it is the
       // caller's desired end state.
-      if (isErrnoException(err) && err.code === 'ENOENT') return;
+      if (isMissing(err)) return;
       throw new StorageUnavailableError(this.driveNumber, `cannot delete ${key}: ${errorMessage(err)}`);
     }
   }
@@ -108,10 +151,11 @@ export class LocalBackend implements StorageBackend {
     try {
       entries = await fs.promises.readdir(dir, { withFileTypes: true });
     } catch (err) {
-      if (isErrnoException(err) && err.code === 'ENOENT') return;
+      if (isMissing(err)) return;
       throw new StorageUnavailableError(this.driveNumber, `cannot list ${dir}: ${errorMessage(err)}`);
     }
     for (const entry of entries) {
+      if (entry.isFile() && TEMP_SUFFIX_PATTERN.test(entry.name)) continue; // scratch space, never a real object
       const entryPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         await this.walk(entryPath, out);
@@ -133,11 +177,16 @@ export class LocalBackend implements StorageBackend {
    *
    * A prefix with no trailing slash is still supported as a filename-prefix
    * match within its parent directory. A prefix that names no directory
-   * returns an empty array rather than throwing.
+   * returns an empty array rather than throwing. A prefix of `''` or `'.'`
+   * is refused for the same reason an object key of `''` or `'.'` is - it
+   * names the drive root, not a real location.
    */
   async list(prefix: string): Promise<ObjectHead[]> {
+    if (prefix === '' || prefix === '.') {
+      throw new Error(`storage prefix must not be empty - an empty prefix resolves to the drive root itself: ${JSON.stringify(prefix)}`);
+    }
     const dirPart = prefix.endsWith('/') ? prefix.slice(0, -1) : path.dirname(prefix);
-    const dir = this.full(dirPart === '.' ? '' : dirPart);
+    const dir = this.resolveDir(dirPart);
     const out: ObjectHead[] = [];
     await this.walk(dir, out);
     return out.filter((o) => o.key.startsWith(prefix));

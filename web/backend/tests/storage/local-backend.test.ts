@@ -97,6 +97,53 @@ describe('LocalBackend', () => {
       'Conf1/Files/sub/NESTED.LHA',
     ]);
   });
+
+  it('excludes an orphaned temp file from list(), so a crash mid-write never surfaces as an object', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'localback-tmp-leak-'));
+    const backend = new LocalBackend(1, root);
+    await backend.put('Files/DEMO.LHA', Buffer.from('payload'));
+
+    // Simulate a temp file orphaned by a crash between writeFile and rename -
+    // same directory, same naming scheme put() actually uses.
+    fs.mkdirSync(path.join(root, 'Files'), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, 'Files', '.DEMO.LHA.tmp-1234-abcdef012345'),
+      Buffer.from('half-written')
+    );
+
+    expect((await backend.list('Files/')).map((o) => o.key)).toEqual(['Files/DEMO.LHA']);
+  });
+
+  it('refuses an empty key or "." as a key, since both resolve to the drive root', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'localback-empty-key-'));
+    const backend = new LocalBackend(1, root);
+
+    for (const badKey of ['', '.']) {
+      await expect(backend.get(badKey)).rejects.toThrow(/empty/);
+      await expect(backend.put(badKey, Buffer.from('x'))).rejects.toThrow(/empty/);
+      await expect(backend.delete(badKey)).rejects.toThrow(/empty/);
+      await expect(backend.list(badKey)).rejects.toThrow(/empty/);
+    }
+
+    // Nothing was written into the drive root or its parent.
+    expect(fs.readdirSync(root)).toEqual([]);
+  });
+
+  it('treats a key nested under a file (ENOTDIR) as missing, not as unavailable', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'localback-enotdir-'));
+    const backend = new LocalBackend(1, root);
+    await backend.put('Files/DEMO.LHA', Buffer.from('payload'));
+
+    // 'Files/DEMO.LHA' is a file, not a directory - nothing can be nested
+    // under it, so a key that tries to reach under it does not exist.
+    const nested = 'Files/DEMO.LHA/nested';
+
+    expect(await backend.head(nested)).toBeNull();
+    await expect(backend.get(nested)).rejects.toMatchObject({ code: 'ENOTDIR' });
+    await expect(backend.get(nested)).rejects.not.toBeInstanceOf(StorageUnavailableError);
+    await expect(backend.delete(nested)).resolves.toBeUndefined();
+    expect(await backend.list(`${nested}/`)).toEqual([]);
+  });
 });
 
 describe('FakeBackend', () => {
