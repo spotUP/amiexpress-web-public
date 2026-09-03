@@ -19,6 +19,8 @@ import type { BBSSession, UploadSessionContext } from '../../index';
 import { formatLongDate } from '../../utils/date-time.util';
 import { isNarrow, narrowFileLines } from '../../utils/table-format.util';
 import { storeUploadContext } from '../../server/upload-session-store';
+import { getStorageContext } from '../../storage/storage-context';
+import { poolFreeBytesFor } from '../../storage/remote-upload';
 
 // Dependencies (injected)
 let fileAreas: any[] = [];
@@ -776,10 +778,21 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   // express.e:19012-19014: formatSpaceValue(tFShi,tFSlo) and formatSpaceValue(fSUploadingHi,fSUploadingLo)
   // tFShi/tFSlo = freeDiskSpace() — total free across configured drives
   // fSUploadingHi/fSUploadingLo = rFreeSpace(nodePlaypen) — space at upload path
-  // Both resolve to the same disk in our single-filesystem web setup: the ulPath
+  //
+  // On a board with no pool the two are the same disk, which is why they were
+  // one statfs here. A POOLED area splits them again, exactly as express.e had
+  // them: the first number is the pool total — freeDiskSpace() by its original
+  // meaning, a real sum across drives rather than a stat of one filesystem —
+  // while the second is still the local playpen, because Zmodem writes there
+  // first and it is the local disk a truncated transfer runs out of.
+  // poolFreeBytesFor returns null for every local area and every board without
+  // a bucket, which keeps that case byte-for-byte as it was.
   const ulPath = uploadArea.ulPath || process.cwd();
-  const spaceStr = formatSpaceValue(ulPath);
-  emitText(socket, `${spaceStr} available for uploading.  ${spaceStr} at one time.\r\n`);
+  const playpenFreeBytes = readFreeBytes(ulPath);
+  const poolFreeBytes = poolFreeBytesFor(uploadArea, getStorageContext());
+  const spaceStr = formatSpaceBytes(poolFreeBytes ?? playpenFreeBytes);
+  const atOnceStr = formatSpaceBytes(playpenFreeBytes);
+  emitText(socket, `${spaceStr} available for uploading.  ${atOnceStr} at one time.\r\n`);
 
   // express.e:18989-19001 — refuse to start if the upload area can't hold
   // the express.e minimum-playpen budget (2 MB). Without this check the
@@ -789,8 +802,15 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   // express.e has a RAMWORK tooltype to override the floor with a ramdisk
   // path; web has no such concept (single filesystem), so we keep the
   // floor unconditional.
+  //
+  // The floor is the SMALLER of the two: express.e:18995 gates on the playpen
+  // (rz still truncates against a full local disk, pool or no pool), and a
+  // pooled area adds a second way to run out — the bucket — which has to be
+  // refused here, at the prompt, rather than at the byte where the last volume
+  // filled. A bucket with no declared QUOTA answers Infinity: real room,
+  // unmeasured, so the comparison falls through to the playpen figure.
   const MIN_PLAYPEN_BYTES = 2 * 1024 * 1024;
-  const freeBytes = readFreeBytes(ulPath);
+  const freeBytes = Math.min(playpenFreeBytes, poolFreeBytes ?? Number.POSITIVE_INFINITY);
   if (freeBytes < MIN_PLAYPEN_BYTES) {
     // express.e:18996 — 'Not enough free space for uploading!\b\n'
     emitText(socket, '\r\n\x1b[31mNot enough free space for uploading!\x1b[0m\r\n');
@@ -824,8 +844,9 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
 
 /**
  * Read actual free bytes at path using fs.statfsSync (Node >= 18.8) or df(1) fallback.
- * Returns 0 if both probes fail. Used both for the human-readable display
- * (formatSpaceValue) and the upload-floor gate.
+ * Returns 0 if both probes fail. This is the LOCAL disk's answer - the playpen
+ * half of the upload display, and the floor rz would truncate against. The
+ * pool's half comes from `poolFreeBytesFor`.
  *
  * Amiga-style assigns (BBS:, NODE0:, DOORS:, etc.) are resolved to real
  * filesystem paths before probing — statfsSync fails on virtual paths.
@@ -862,10 +883,19 @@ function readFreeBytes(dirPath: string): number {
 
 /**
  * 1:1 port of MiscFuncs.e:234-249 formatSpaceValue — formats free bytes
- * at a path as a human-readable "X.X MB" / "X.X GB" / "X.X TB" string.
+ * as a human-readable "X.X MB" / "X.X GB" / "X.X TB" string.
+ *
+ * Takes BYTES rather than a path: the number can now come from the pool as
+ * well as from statfs, and a formatter that probes its own argument could only
+ * ever render one of the two.
+ *
+ * A bucket with no declared QUOTA has real but unmeasured room, and
+ * `VolumeSet.freeBytes()` says so with Infinity. Every arm below shifts and
+ * masks, so Infinity would print "Infinity.NaN MB"; a sysop is told
+ * "unlimited" instead.
  */
-function formatSpaceValue(dirPath: string): string {
-  const freeBytes = readFreeBytes(dirPath);
+function formatSpaceBytes(freeBytes: number): string {
+  if (!Number.isFinite(freeBytes)) return 'unlimited';
 
   // MiscFuncs.e:234-249 formatSpaceValue(spaceInMB, spacelo, outstr)
   // spaceInMB = freeBytes >> 20   (megabytes)

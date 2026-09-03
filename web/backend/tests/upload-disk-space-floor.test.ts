@@ -32,9 +32,18 @@ describe('displayUploadInterface enforces a free-space floor before starting upl
     expect(body).toMatch(/MIN_PLAYPEN_BYTES\s*=\s*2\s*\*\s*1024\s*\*\s*1024/);
   });
 
-  test('reads free bytes via readFreeBytes(ulPath) for the gate', () => {
+  test('reads the local playpen free bytes via readFreeBytes(ulPath)', () => {
     const body = displayUploadInterfaceBody();
-    expect(body).toMatch(/freeBytes\s*=\s*readFreeBytes\s*\(\s*ulPath\s*\)/);
+    expect(body).toMatch(/playpenFreeBytes\s*=\s*readFreeBytes\s*\(\s*ulPath\s*\)/);
+  });
+
+  test('gates on the smaller of the playpen and the pool (pooled areas can also run out)', () => {
+    // express.e:18995 gates on rFreeSpace(playpen); a pooled area adds the
+    // bucket as a second way to run out, and it has to be refused at the
+    // prompt rather than at the byte where the last volume filled.
+    // Runtime coverage: tests/storage/upload-free-space.test.ts.
+    const body = displayUploadInterfaceBody();
+    expect(body).toMatch(/freeBytes\s*=\s*Math\.min\(\s*playpenFreeBytes,\s*poolFreeBytes/);
   });
 
   test('refuses upload with express.e parity text when below the floor', () => {
@@ -59,12 +68,14 @@ describe('displayUploadInterface enforces a free-space floor before starting upl
     expect(src).toMatch(/function readFreeBytes\(dirPath: string\): number/);
   });
 
-  test('formatSpaceValue delegates to readFreeBytes (no duplicate statfs probe)', () => {
-    // Was duplicated inline in formatSpaceValue before the floor gate;
-    // pinning the refactor so they stay one source.
-    const m = src.match(/function formatSpaceValue\([^)]*\)[^{]*\{([\s\S]*?)\n\}/);
+  test('the space formatter takes bytes, so the pool figure can be rendered too', () => {
+    // Was formatSpaceValue(dirPath), which probed its own argument and so
+    // could only ever render the local disk. One statfs probe
+    // (readFreeBytes), one formatter (formatSpaceBytes).
+    const m = src.match(/function formatSpaceBytes\(freeBytes: number\): string \{([\s\S]*?)\n\}/);
     expect(m).not.toBeNull();
-    expect(m![1]).toMatch(/readFreeBytes\s*\(\s*dirPath\s*\)/);
+    expect(m![1]).not.toMatch(/readFreeBytes/);
+    expect(src).not.toMatch(/function formatSpaceValue\(/);
   });
 
   test('readFreeBytes resolves Amiga assigns (BBS:, NODE0:, …) before calling statfs (regression: "0.0 MB available for uploading")', () => {
