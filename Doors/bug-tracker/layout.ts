@@ -12,7 +12,7 @@
  * reads `import.meta.url`, which a CommonJS test runner cannot load.
  */
 import { getCompactProfile } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import type { FooterHint } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import type { FooterHint, GlitchSource } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 
 /** The hints BUGS offers at the normal tiers. */
 export const BUG_TRACKER_HINTS: readonly FooterHint[] = [
@@ -37,12 +37,21 @@ export const BUG_TRACKER_HINTS_COMPACT: readonly FooterHint[] = [
  * the chrome asks for this at each tick rather than capturing an element
  * once at startup.
  */
-export function listOnScreen(container: { children?: unknown[] } | null | undefined): unknown {
-  const found = (container?.children ?? []).find(
-    (child: any) => typeof child?.setItems === 'function' && Array.isArray(child?.items)
-  );
-  return found ?? null;
+export function listOnScreen(
+  container: { children?: unknown[] } | null | undefined
+): GlitchSource | null {
+  // A real type guard rather than a cast: the thing a glitch damages is a
+  // LIST, and "has items and setItems" is what that means here as well as
+  // in the SDK.
+  const isList = (
+    child: unknown
+  ): child is { items: unknown[]; setItems(rows: string[]): void } =>
+    typeof (child as { setItems?: unknown })?.setItems === 'function'
+    && Array.isArray((child as { items?: unknown })?.items);
+
+  return (container?.children ?? []).find(isList) ?? null;
 }
+
 
 export class CompactLayout {
   /** Always a LIVE width - the screen's, read on every access. */

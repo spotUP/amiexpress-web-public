@@ -342,10 +342,8 @@ var BUG_TRACKER_HINTS_COMPACT = [
   { key: "Q", does: "Quit" }
 ];
 function listOnScreen(container) {
-  const found = (container?.children ?? []).find(
-    (child) => typeof child?.setItems === "function" && Array.isArray(child?.items)
-  );
-  return found ?? null;
+  const isList = (child) => typeof child?.setItems === "function" && Array.isArray(child?.items);
+  return (container?.children ?? []).find(isList) ?? null;
 }
 var CompactLayout = class {
   /** Always a LIVE width - the screen's, read on every access. */
