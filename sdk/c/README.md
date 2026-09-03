@@ -163,10 +163,35 @@ returning, or the caller's next screen is painted in the prompt's blue.
 A caller who hangs up mid-edit gets -1, not an empty string: a door must end
 the session rather than act on "".
 
+## 6. Phase 4: the board's themes, at eight colours
+
+The sysop's answer to "must a C door look like its TypeScript twin?" was yes
+- "the identity of our doors is important" - so all seven themes are here,
+not just classic.
+
+**The table is generated, never hand-written.** `tokens.ts` stays the one
+place a theme is defined; `tools/generate-theme-tables.ts` reduces each token
+to one of the eight colours a C door has and writes
+`include/theme_tables.h`. `make check-themes` fails when that header is stale,
+which is the plan's "cannot drift in silence".
+
+The reduction took three attempts, and the two failures are worth keeping:
+
+| Rule | What it got wrong |
+|---|---|
+| Nearest RGB | `gray` became **yellow** - ANSI yellow (170,85,0) is numerically nearer to (85,85,85) than white is. A dim row rendered yellow is not a shade off, it is a different thing on screen. |
+| Nearest hue | neon's `#FF3D9A` became **red**, because red sits 29 degrees away and magenta 31 - a tie decided by rounding, on a colour every viewer calls pink. |
+| Hue sectors | Correct. Achromatic colours are decided on brightness alone, and only what is essentially the ground goes to black - a `dim` that maps onto the background is not dim, it is gone. |
+
+What does not survive: `double` borders (`ansi_box` draws `+ - |`) and the
+exact shades. What does: the identity - phosphor stays green, neon stays
+magenta, classic stays cyan and yellow.
+
 ## What is deliberately not here yet
 
-Theme tokens and settings (phase 4); a real door ported end to end, and the
-AEDoor transport lifted in behind `ae_transport_fn` (phase 5).
+Settings over the door's JSON (the rest of phase 4); a real door ported end
+to end, and the AEDoor transport lifted in behind `ae_transport_fn`
+(phase 5).
 
 And the real AEDoor transport: `examples/doorrepo-c/aedoor_amiga.c` still
 owns it, and `ui_screen`'s sink is deliberately the one place that changes

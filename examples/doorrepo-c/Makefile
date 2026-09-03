@@ -104,8 +104,8 @@ LIVE_HOST = http://bbs.uprough.net
 # lifted into the SDK; ansi.c is now just this door's "send it to the BBS"
 # sink. One renderer, not two.
 SDK_C = ../../sdk/c
-CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c sha256.c guide.c ansi.c $(SDK_C)/src/ui_ansi.c $(SDK_C)/src/ui_key.c infocache.c json_lite.c owner_auth.c
-HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h aedoor.h netio.h ansi.h $(SDK_C)/include/ui_ansi.h infocache.h shell.h json_lite.h owner_auth.h dirlist.h
+CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c sha256.c guide.c ansi.c $(SDK_C)/src/ui_ansi.c $(SDK_C)/src/ui_key.c infocache.c $(SDK_C)/src/json_lite.c owner_auth.c
+HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h aedoor.h netio.h ansi.h $(SDK_C)/include/ui_ansi.h infocache.h shell.h $(SDK_C)/include/json_lite.h owner_auth.h dirlist.h
 
 NATIVE_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_native.c shell_native.c dirlist_native.c
 AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_amiga.c shell_amiga.c dirlist_amiga.c
@@ -204,8 +204,9 @@ test-dirlist: dirlist_native.c tests/test_dirlist.c dirlist.h
 	$(CC) $(TEST_CFLAGS) dirlist_native.c tests/test_dirlist.c -o build-test-dirlist
 	./build-test-dirlist
 
-test-json-lite: json_lite.c tests/test_json_lite.c json_lite.h
-	$(CC) $(TEST_CFLAGS) json_lite.c tests/test_json_lite.c -o build-test-json-lite
+# json_lite lives in sdk/c now; this suite is its owner and keeps driving it.
+test-json-lite: $(SDK_C)/src/json_lite.c tests/test_json_lite.c $(SDK_C)/include/json_lite.h
+	$(CC) $(TEST_CFLAGS) $(SDK_C)/src/json_lite.c tests/test_json_lite.c -o build-test-json-lite
 	./build-test-json-lite
 
 test-md5: md5.c tests/test_md5.c md5.h
@@ -247,9 +248,9 @@ test-infocache: infocache.c tests/test_infocache.c infocache.h
 
 # Same stub-server precedent as test-http (tests/stub_server.c) - see that
 # target's comment above and owner_auth.h's file header.
-test-owner-auth: owner_auth.c http.c netio.c config.c flow.c json_lite.c tests/test_owner_auth.c tests/stub_server.c \
-                  owner_auth.h http.h netio.h config.h flow.h json_lite.h tests/stub_server.h
-	$(CC) $(TEST_CFLAGS) owner_auth.c http.c netio.c config.c flow.c json_lite.c tests/stub_server.c tests/test_owner_auth.c -o build-test-owner-auth
+test-owner-auth: owner_auth.c http.c netio.c config.c flow.c $(SDK_C)/src/json_lite.c tests/test_owner_auth.c tests/stub_server.c \
+                  owner_auth.h http.h netio.h config.h flow.h $(SDK_C)/include/json_lite.h tests/stub_server.h
+	$(CC) $(TEST_CFLAGS) owner_auth.c http.c netio.c config.c flow.c $(SDK_C)/src/json_lite.c tests/stub_server.c tests/test_owner_auth.c -o build-test-owner-auth
 	./build-test-owner-auth
 
 # ---------------------------------------------------------------------

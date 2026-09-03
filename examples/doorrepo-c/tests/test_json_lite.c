@@ -12,7 +12,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "../json_lite.h"
+#include "json_lite.h"   /* sdk/c/include - see the Makefile's SDK_C */
 
 static int tests_run = 0;
 static int tests_passed = 0;

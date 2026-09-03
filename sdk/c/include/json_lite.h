@@ -30,6 +30,12 @@
  *
  * Pure, I/O-free. C89. No stdint.h (not available on the m68k-amiga-elf/
  * vbcc toolchain).
+  *
+ * MOVED HERE from examples/doorrepo-c (2026-09-03). It was always general -
+ * no door state, no BBS, just bytes in and values out - and phase 4's
+ * settings need exactly this. It is compiled once, from sdk/c, and DoorRepo
+ * reads it from here rather than keeping the second copy that a move would
+ * otherwise have left behind.
  */
 
 #ifndef DOORREPO_JSON_LITE_H
