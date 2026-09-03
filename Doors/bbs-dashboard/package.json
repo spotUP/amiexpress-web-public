@@ -10,6 +10,7 @@
   "doorPattern": "runDoor",
   "accessLevel": 0,
   "scripts": {
+    "test": "tsx tests/run-tests.ts",
     "build": "tsc",
     "dev": "tsx --watch index.ts",
     "start": "node compiled/index.js"

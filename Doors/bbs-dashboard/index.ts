@@ -282,7 +282,7 @@ class BBSDashboard {
         { key: 'R/Space', does: 'Refresh' },
       ],
       footerPad: ' ',
-      glitch: this.nodesText as any,
+      glitch: this.nodesText,
       glitchOptions: { tickMs: 400 },
       styles: this.s,
       render: () => this.screen.render(),
