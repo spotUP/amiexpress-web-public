@@ -28,7 +28,8 @@ import {
   type NetworkMetrics,
   type QualityRecommendation,
 } from '@amiexpress/bbs-door-sdk';
-import { T, applyTheme } from './door-theme';
+import { T, S, CURRENT, applyTheme } from './door-theme';
+import { attachDoorChrome, type DoorChrome } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 
 interface AudioLevels {
   input: number;
@@ -113,9 +114,11 @@ door.onStart(async (ctx: DoorContext) => {
     left: 0,
     width: '100%',
     height: 3,
-    content:
-      `{center}{${T.accent}-fg}{bold}Voice Chat with Adaptive Quality{/bold}{/${T.accent}-fg}{/center}\n` +
-      `{center}{${T.ink}-fg}S:Start  M:Mute  A:Auto-Quality  +/-:Quality  Q:Quit{/${T.ink}-fg}{/center}`,
+    // The masthead is painted by attachDoorChrome below. The key line that
+    // used to sit under the title was never on screen: a three-row box with
+    // a line border has ONE interior row, so only the first line ever
+    // reached the glass. The keys are listed in the Controls panel.
+    content: '',
     style: {
       fg: T.ink,
       bg: T.ground,
@@ -285,6 +288,25 @@ door.onStart(async (ctx: DoorContext) => {
       `{center}Client-side audio processing for optimal server performance{/center}`,
   });
 
+  /**
+   * The chrome, from the ONE SDK call: the theme's animated rail across the
+   * title bar. This door took the theme's colours and none of its chrome.
+   *
+   * No footer and no glitches on purpose. The bottom bar carries the codec
+   * facts rather than key hints, and every panel on this screen shows LIVE
+   * audio state - a glitch on a speaker list or a level meter would read as
+   * the call breaking up, which is the one lie a voice door must not tell.
+   */
+  const chrome: DoorChrome = attachDoorChrome(CURRENT, {
+    width: ((screen as any).width as number) || 80,
+    title: 'VOICE CHAT',
+    masthead: titleBar as any,
+    // Two columns less again: the masthead sits inside a framed title bar.
+    mastheadWidth: Math.max(1, (((screen as any).width as number) || 80) - 3),
+    styles: S,
+    render: () => screen.render(),
+  });
+
   screen.render();
 
   // Initialize network monitoring and adaptive quality
@@ -430,6 +452,9 @@ door.onStart(async (ctx: DoorContext) => {
   });
 
   screen.key(['q', 'Q', 'escape'], () => {
+    // Stop the rail first: a timer writing to a destroyed screen is how a
+    // door takes the session with it.
+    try { chrome.stop(); } catch { /* leaving anyway */ }
     screen.destroy();
   });
 
