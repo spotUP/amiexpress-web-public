@@ -7,6 +7,7 @@
   "main": "dist/index.js",
   "author": "AmiExpress Team",
   "scripts": {
+    "test": "tsx tests/run-tests.ts",
     "build": "tsc",
     "dev": "ts-node index.ts",
     "watch": "tsc --watch"

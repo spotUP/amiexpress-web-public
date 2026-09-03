@@ -184,7 +184,7 @@ export async function execute(session: any) {
     ],
     footerPad: ' ',
     // The LIST is the only thing here with rows to spare.
-    glitch: list as any,
+    glitch: list,
     glitchOptions: { tickMs: 400 },
     styles: S,
     render: () => screen.render(),
