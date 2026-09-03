@@ -7,6 +7,7 @@ exports.createDisconnectionModal = createDisconnectionModal;
  */
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const theme_1 = require("./theme");
+const door_theme_1 = require("../door-theme");
 class DisconnectionModal {
     constructor(options) {
         this.modal = new blessed_1.ConfirmModal({
@@ -15,8 +16,11 @@ class DisconnectionModal {
             borderColor: theme_1.PANEL_BORDER,
             confirmText: '[ Retry ]',
             cancelText: '[ Cancel ]',
-            confirmColor: 'green',
-            cancelColor: 'red',
+            // Semantic, and therefore tokens rather than the primary colour: a
+            // Cancel button that matched every border would stop reading as the
+            // way out. The theme still owns the two shades.
+            confirmColor: door_theme_1.T.ok,
+            cancelColor: door_theme_1.T.alert,
             overlay: true,
             overlayOpacity: 0.5,
             zIndex: 9990,

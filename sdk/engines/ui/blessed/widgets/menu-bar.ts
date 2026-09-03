@@ -4,6 +4,7 @@
  */
 
 import { Element } from '../core/element';
+import { activeTheme } from '../../theme/live.js';
 import { Box } from './box';
 import { DropdownMenu, DropdownMenuItem } from './dropdown-menu';
 import type { Screen } from '../core/screen';
@@ -51,6 +52,35 @@ export interface MenuBarOptions {
  * });
  * ```
  */
+/**
+ * The bar's colours, from the door's theme.
+ *
+ * These were literals - gray with black text, blue on hover - so a menu bar
+ * looked identical under all seven themes. "the menu bg color should be the
+ * primary theme color and the texts and slashes black" (sysop, 2026-09-03).
+ *
+ * Read per call rather than captured, so a door that changes theme while it
+ * is running (the in-door theme menu) builds its next bar in the new colour;
+ * the bar already on screen is re-tinted by retintTree.
+ */
+function barBackground(): string {
+  return activeTheme().tokens.accent;
+}
+
+function barInk(): string {
+  // The ground, which is black in every theme the SDK ships.
+  return activeTheme().tokens.ground;
+}
+
+/** The highlighted menu: the two swapped, so the eye goes to it. */
+function hoverBackground(): string {
+  return activeTheme().tokens.ground;
+}
+
+function hoverInk(): string {
+  return activeTheme().tokens.accent;
+}
+
 export class MenuBar extends Element {
   private menuButtons: Box[] = [];
   private dropdowns: DropdownMenu[] = [];
@@ -65,8 +95,8 @@ export class MenuBar extends Element {
       width: '100%',
       height: 1,
       style: {
-        bg: options.style?.bg || 'gray',
-        fg: options.style?.fg || 'black',
+        bg: options.style?.bg || barBackground(),
+        fg: options.style?.fg || barInk(),
       },
       tags: true,
       zIndex: 9998,  // Menu bar should be on top (but below dropdowns)
@@ -106,15 +136,15 @@ export class MenuBar extends Element {
         height: 1,
         content: pos.label,
         style: {
-          bg: style?.bg || 'gray',
-          fg: style?.fg || 'black',
+          bg: style?.bg || barBackground(),
+          fg: style?.fg || barInk(),
           hover: {
-            bg: style?.hover?.bg || 'blue',
-            fg: style?.hover?.fg || 'white',
+            bg: style?.hover?.bg || hoverBackground(),
+            fg: style?.hover?.fg || hoverInk(),
           },
           focus: {
-            bg: style?.hover?.bg || 'blue',
-            fg: style?.hover?.fg || 'white',
+            bg: style?.hover?.bg || hoverBackground(),
+            fg: style?.hover?.fg || hoverInk(),
           },
         },
         tags: true,
@@ -330,7 +360,7 @@ export class MenuBar extends Element {
     this.items = items;
     const screen = this.screen;
     if (screen) {
-      this.createMenus(screen, { bg: 'gray', fg: 'black' });
+      this.createMenus(screen, { bg: barBackground(), fg: barInk() });
     }
   }
 

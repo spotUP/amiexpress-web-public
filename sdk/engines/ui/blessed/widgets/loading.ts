@@ -11,6 +11,7 @@
  */
 
 import { Box } from './box';
+import { activeTheme } from '../../theme/live.js';
 import { Overlay } from './overlay';
 import { makeModalResponsive } from '../utils/modal-helpers';
 import type { ElementOptions } from '../core/types';
@@ -58,6 +59,8 @@ export class Loading extends Box {
       shadow: false,  // Disable shadow - causes rendering issues
       ch: ' ',  // Fill character for solid background
       style: {
+        // Same rule as every other frame: the theme's primary colour.
+        border: { fg: activeTheme().tokens.accent },
         ...options.style,
         bg: dialogBg,
       },
@@ -104,7 +107,9 @@ export class Loading extends Box {
       content: this.spinner[0],
       align: 'center',
       style: {
-        fg: 'cyan',
+        // The theme's primary colour: the spinner is the one moving thing
+        // on the screen and it should read as this board's, not as cyan.
+        fg: activeTheme().tokens.accent,
         bg: dialogBg === 'transparent' ? 'transparent' : dialogBg,
       },
     });

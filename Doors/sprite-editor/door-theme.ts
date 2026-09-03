@@ -12,6 +12,7 @@ import {
   themeStyles,
   themeById,
   resolveTheme,
+  setActiveTheme,
   type Theme,
   type ThemeTokens,
   type ThemeStyles,
@@ -39,6 +40,9 @@ export let THEME: Theme = themeById('classic');
 export function applyTheme(source: unknown): void {
   const theme = resolveTheme(source);
   if (!theme) return;
+  // Tell the SDK too: its widgets pick their own defaults from it
+  // (a menu bar's background, engines/ui/theme/live.ts).
+  setActiveTheme(theme);
   T = theme.tokens;
   S = themeStyles(theme);
   THEME = theme;

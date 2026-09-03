@@ -65,7 +65,7 @@ import { createScreen } from './ui/screen';
 import {
   createMenuBar, MENU_HEIGHT, MASTHEAD_TITLE, type MenuBar,
 } from './ui/menu-bar';
-import { PANEL_BORDER, PANEL_FOCUS_STYLE } from './ui/theme';
+import { PANEL_BORDER, PANEL_FOCUS_STYLE, refreshPanelChrome } from './ui/theme';
 import { messageIndexAtRow } from './ui/chat-row-map';
 import { solveLayout } from './ui/layout-solver';
 import { createStatusBar, updateStatusBar as updateStatusBarFn, STATUS_HEIGHT } from './ui/status-bar';
@@ -182,6 +182,9 @@ export async function createApp(session: DoorSession) {
   // anyone ASKING the terminal to grow (see the switch below).
   // The board's theme, before any widget reads a colour from it.
   applyTheme(bbs);
+  // The panel colours are read from the theme once it is known, before
+  // any widget is built (ui/theme.ts).
+  refreshPanelChrome();
 
   const screen = createScreen(bbs);
   // Note: Optimized rendering is now enabled by default in the SDK
@@ -1405,7 +1408,11 @@ export async function createApp(session: DoorSession) {
   // ========== POPUP DIALOGS ==========
   // Note: Dialog widgets (Message, Prompt, Question) have built-in fixed heights.
   // Don't pass height: 'shrink' as it breaks nested element rendering.
-  const { modalOverlay, showModal, hideModal: originalHideModal, messageDialog, promptDialog, questionDialog, showMessageDialog, showPromptDialog, showConfirmDialog } = createDialogs(screen, inputBox);
+  const { modalOverlay, showModal, hideModal: originalHideModal, messageDialog, promptDialog, questionDialog, showMessageDialog, showPromptDialog, showConfirmDialog } = createDialogs(screen, inputBox,
+    // Without this the SDK falls back to its own cyan/green/yellow rules
+    // and the dialogs are the one part of the door a theme never
+    // reached (sysop: "livechat doesnt look themed at all").
+    { frame: S.frame });
 
   // Wrap hideModal to restore commandSuggestions z-order after hiding modals
   const hideModal = (widget: any) => {
@@ -1522,7 +1529,9 @@ export async function createApp(session: DoorSession) {
     overlay: true,
     overlayOpacity: 0.5,
     spinner: true,
-    barColor: 'cyan',
+    // The theme decides; the loader defaults to it too, but this door used
+    // to name cyan and would have kept it.
+    barColor: T.accent,
   });
 
   // ========== SETTINGS OVERLAY ==========
@@ -2748,7 +2757,7 @@ export async function createApp(session: DoorSession) {
       void openThemeMenu({
         screen,
         bbs,
-        onApply: (theme) => applyTheme(theme),
+        onApply: (theme) => { applyTheme(theme); refreshPanelChrome(); },
       }).then(() => screen.render());
     },
     onJoinChannel: () => {

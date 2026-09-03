@@ -102,7 +102,10 @@ export function attachWhipChrome(options: WhipChromeOptions): DoorChrome {
     // Every footer in this door indented its keys by one column; keeping the
     // pad means the hint row starts exactly where the old line started.
     footerPad: ' ',
-    glitch,
+    // `unknown` at this door's boundary, a GlitchSource at the SDK's: the
+    // door takes any element or getter and the SDK decides what it can
+    // damage. Cast at the seam rather than widening either side.
+    glitch: glitch as never,
     glitchOptions: { tickMs: 400 },
     styles: S,
     render: () => screen.render(),

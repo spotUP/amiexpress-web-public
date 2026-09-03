@@ -31,6 +31,7 @@
 import { Loading } from '../engines/ui/blessed/widgets/loading';
 import { ProgressBar } from '../engines/ui/blessed/widgets/progressbar';
 import type { Screen } from '../engines/ui/blessed/core/screen';
+import { activeTheme } from '../engines/ui/theme/live.js';
 
 export interface DoorLoaderOptions {
   /** Show semi-transparent overlay behind loader (default: true) */
@@ -70,7 +71,8 @@ export class DoorLoader {
       style: {
         bg: 'black',
         fg: 'white',
-        border: { fg: 'cyan' },
+        // The theme's primary colour, like every other frame.
+        border: { fg: activeTheme().tokens.accent },
       },
     });
 
@@ -91,7 +93,10 @@ export class DoorLoader {
       border: undefined,   // one row: a frame would leave it no interior
       // ProgressBar paints `style.fg` as the BACKGROUND of the filled run,
       // over `style.bg` for the rest of the track.
-      style: { fg: options.barColor || 'cyan', bg: 'black' },
+      style: {
+        fg: options.barColor || activeTheme().tokens.accent,
+        bg: activeTheme().tokens.ground,
+      },
     });
 
     // Hidden initially (spinner mode by default)
