@@ -49,6 +49,7 @@ import { loadShippedPuzzles, PuzzleGame } from './core/panels/puzzle';
 import { PanelReplayRecorder, loadReplayV3 } from './core/panels/replay-recorder';
 import { stackForReplay } from './core/panels/replay';
 import { PanelReplayStore, type StoredReplay } from './server/panel-replay-store';
+import { chooserLayout, chooserLabels, type ChooserRow } from './ui/panels/chooser';
 import {
   buildStages, StageClearGame, stageStackOptions, bossHealth, type Stage,
 } from './core/panels/stage-clear';
@@ -1656,22 +1657,31 @@ export class GrandmasterApp {
 
   /** Pick a replay to watch. */
   private async chooseReplay(replays: StoredReplay[]): Promise<number | null> {
-    const labels = replays.map((replay) => {
+    const rows: ChooserRow[] = replays.map((replay) => {
       const seconds = Math.round(replay.duration / 60);
-      const when = new Date(replay.timestamp * 1000).toISOString().slice(0, 16).replace('T', ' ');
+      const stamp = new Date(replay.timestamp * 1000).toISOString();
+      const when = stamp.slice(0, 16).replace('T', ' ');
       const state = replay.completed ? '' : '  (unfinished)';
-      return `${when}  ${replay.playerName.padEnd(10, ' ')} ${replay.mode.padEnd(10, ' ')}`
-        + ` ${String(seconds).padStart(4, ' ')}s${state}`;
+      return {
+        wide: `${when}  ${replay.playerName.padEnd(10, ' ')} ${replay.mode.padEnd(10, ' ')}`
+          + ` ${String(seconds).padStart(4, ' ')}s${state}`,
+        // A C64 has no room for the year or the mode; the day and the time
+        // are what tell two of your own games apart.
+        compact: `${stamp.slice(5, 16).replace('T', ' ')} ${String(seconds).padStart(4, ' ')}s`
+          + `${replay.completed ? '' : ' *'}`,
+      };
     });
-    labels.push('Back');
+    rows.push({ wide: 'Back', compact: 'Back' });
+    const layout = chooserLayout(this.screen.width, this.screen.height, rows.length);
+    const labels = chooserLabels(rows, layout);
 
     return new Promise<number | null>((resolve) => {
       const box = createBox({
         parent: this.screen,
         top: 'center',
         left: 'center',
-        width: 60,
-        height: 18,
+        width: layout.width,
+        height: layout.height,
         label: ' REPLAYS ',
         tags: true,
         style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
@@ -1681,8 +1691,8 @@ export class GrandmasterApp {
         parent: box,
         top: 1,
         left: 1,
-        width: 56,
-        height: 14,
+        width: layout.innerWidth,
+        height: layout.innerHeight,
         keys: true,
         vi: true,
         mouse: true,
@@ -1738,19 +1748,25 @@ export class GrandmasterApp {
     sets: Array<{ name: string; puzzles: unknown[] }>,
   ): Promise<number | null> {
     // The shipped set names are translation keys; the readable part is the tail.
-    const labels = sets.map((set, i) => {
+    const rows: ChooserRow[] = sets.map((set, i) => {
       const name = set.name.replace(/^puzzle_set_name_/, '').replace(/_/g, ' ').toUpperCase();
-      return `${String(i + 1).padStart(2, ' ')}  ${name}  (${set.puzzles.length})`;
+      const number = String(i + 1).padStart(2, ' ');
+      return {
+        wide: `${number}  ${name}  (${set.puzzles.length})`,
+        compact: `${number} ${name} ${set.puzzles.length}`,
+      };
     });
-    labels.push('Back');
+    rows.push({ wide: 'Back', compact: 'Back' });
+    const layout = chooserLayout(this.screen.width, this.screen.height, rows.length);
+    const labels = chooserLabels(rows, layout);
 
     return new Promise<number | null>((resolve) => {
       const box = createBox({
         parent: this.screen,
         top: 'center',
         left: 'center',
-        width: 56,
-        height: 18,
+        width: layout.width,
+        height: layout.height,
         label: ' PUZZLE ',
         tags: true,
         style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
@@ -1760,8 +1776,8 @@ export class GrandmasterApp {
         parent: box,
         top: 1,
         left: 1,
-        width: 52,
-        height: 14,
+        width: layout.innerWidth,
+        height: layout.innerHeight,
         keys: true,
         vi: true,
         mouse: true,
@@ -1787,16 +1803,18 @@ export class GrandmasterApp {
   }
 
   private async chooseTetrisAttackMode(): Promise<PanelsMode | null> {
-    const labels = [
-      'ENDLESS      play until the stack tops out',
-      'TIME ATTACK  two minutes, score as high as you can',
-      'VS CPU       a real opponent on a real board',
-      'CHALLENGE    the stage ladder, eight difficulties',
-      'PUZZLE       235 arrangements, one right answer each',
-      'STAGE CLEAR  thirty stages and two fights with Bowser',
-      'REPLAYS      watch a game back',
-      'Back',
+    const rows: ChooserRow[] = [
+      { wide: 'ENDLESS      play until the stack tops out', compact: 'ENDLESS' },
+      { wide: 'TIME ATTACK  two minutes, score as high as you can', compact: 'TIME ATTACK' },
+      { wide: 'VS CPU       a real opponent on a real board', compact: 'VS CPU' },
+      { wide: 'CHALLENGE    the stage ladder, eight difficulties', compact: 'CHALLENGE' },
+      { wide: 'PUZZLE       235 arrangements, one right answer each', compact: 'PUZZLE' },
+      { wide: 'STAGE CLEAR  thirty stages and two fights with Bowser', compact: 'STAGE CLEAR' },
+      { wide: 'REPLAYS      watch a game back', compact: 'REPLAYS' },
+      { wide: 'Back', compact: 'Back' },
     ];
+    const layout = chooserLayout(this.screen.width, this.screen.height, rows.length);
+    const labels = chooserLabels(rows, layout);
     const modes: (PanelsMode | null)[] = [
       'endless', 'timeattack', 'vscpu', 'challenge', 'puzzle', 'stageclear',
       'replays', null,
@@ -1807,8 +1825,8 @@ export class GrandmasterApp {
         parent: this.screen,
         top: 'center',
         left: 'center',
-        width: 56,
-        height: 14,
+        width: layout.width,
+        height: layout.height,
         label: ' TETRIS ATTACK ',
         tags: true,
         style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
@@ -1818,8 +1836,8 @@ export class GrandmasterApp {
         parent: box,
         top: 1,
         left: 1,
-        width: 52,
-        height: 9,
+        width: layout.innerWidth,
+        height: layout.innerHeight,
         keys: true,
         vi: true,
         mouse: true,

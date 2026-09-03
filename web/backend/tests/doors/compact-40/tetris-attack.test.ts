@@ -34,6 +34,10 @@ const {
 } = require('../../../../../Doors/grandmaster/ui/panels/layout');
 const { menuRowsFor } = require('../../../../../Doors/grandmaster/ui/menu');
 const {
+  chooserLayout,
+  chooserLabels,
+} = require('../../../../../Doors/grandmaster/ui/panels/chooser');
+const {
   versusLayout,
   versusCentreLines,
   dangerBarRows,
@@ -342,5 +346,60 @@ describe('TETRIS ATTACK versus at 40 columns', () => {
     const withCursor = buildBoard(stack, SHEET, 0, { variant: 'c64' });
     const without = buildBoard(stack, SHEET, 0, { variant: 'c64', showCursor: false });
     expect(JSON.stringify(without)).not.toBe(JSON.stringify(withCursor));
+  });
+});
+
+/**
+ * The lists the mode asks its questions with.
+ *
+ * Written while looking at an eighty-column terminal, all four of them started
+ * life as a box fifty-six columns wide on a door that is marked for forty - a
+ * dialog wider than the screen it is drawn on. The width comes from the screen
+ * now, and these say so.
+ */
+describe('TETRIS ATTACK choosers at 40 columns', () => {
+  const MODE_ROWS = [
+    { wide: 'ENDLESS      play until the stack tops out', compact: 'ENDLESS' },
+    { wide: 'TIME ATTACK  two minutes, score as high as you can', compact: 'TIME ATTACK' },
+    { wide: 'VS CPU       a real opponent on a real board', compact: 'VS CPU' },
+    { wide: 'CHALLENGE    the stage ladder, eight difficulties', compact: 'CHALLENGE' },
+    { wide: 'PUZZLE       235 arrangements, one right answer each', compact: 'PUZZLE' },
+    { wide: 'STAGE CLEAR  thirty stages and two fights with Bowser', compact: 'STAGE CLEAR' },
+    { wide: 'REPLAYS      watch a game back', compact: 'REPLAYS' },
+    { wide: 'Back', compact: 'Back' },
+  ];
+
+  it('the box never exceeds the screen it is drawn on', () => {
+    for (const [width, height] of [[40, 25], [80, 24], [132, 40]]) {
+      const layout = chooserLayout(width, height, MODE_ROWS.length);
+      expect(layout.width).toBeLessThanOrEqual(width);
+      expect(layout.height).toBeLessThanOrEqual(height);
+      expect(layout.innerWidth).toBeLessThan(layout.width);
+      expect(layout.innerHeight).toBeLessThan(layout.height);
+    }
+  });
+
+  it('every row fits inside the list at 40 columns', () => {
+    const layout = chooserLayout(40, 25, MODE_ROWS.length);
+    expect(layout.compact).toBe(true);
+    for (const label of chooserLabels(MODE_ROWS, layout)) {
+      expect(label.length).toBeLessThanOrEqual(layout.innerWidth);
+    }
+  });
+
+  it('the explanations survive at 80 columns', () => {
+    const layout = chooserLayout(80, 24, MODE_ROWS.length);
+    const labels = chooserLabels(MODE_ROWS, layout);
+    expect(layout.compact).toBe(false);
+    expect(labels[0]).toContain('play until the stack tops out');
+    for (const label of labels) {
+      expect(label.length).toBeLessThanOrEqual(layout.innerWidth);
+    }
+  });
+
+  it('a list longer than the screen is capped rather than run off the bottom', () => {
+    const layout = chooserLayout(40, 25, 39);  // the 39 shipped puzzle sets
+    expect(layout.height).toBeLessThanOrEqual(23);
+    expect(layout.innerHeight).toBeGreaterThan(0);
   });
 });

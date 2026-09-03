@@ -64,6 +64,7 @@ const puzzle_1 = require("./core/panels/puzzle");
 const replay_recorder_1 = require("./core/panels/replay-recorder");
 const replay_1 = require("./core/panels/replay");
 const panel_replay_store_1 = require("./server/panel-replay-store");
+const chooser_1 = require("./ui/panels/chooser");
 const stage_clear_1 = require("./core/panels/stage-clear");
 const stack_1 = require("./core/panels/stack");
 const generator_source_1 = require("./core/panels/generator-source");
@@ -1450,21 +1451,30 @@ class GrandmasterApp {
     }
     /** Pick a replay to watch. */
     async chooseReplay(replays) {
-        const labels = replays.map((replay) => {
+        const rows = replays.map((replay) => {
             const seconds = Math.round(replay.duration / 60);
-            const when = new Date(replay.timestamp * 1000).toISOString().slice(0, 16).replace('T', ' ');
+            const stamp = new Date(replay.timestamp * 1000).toISOString();
+            const when = stamp.slice(0, 16).replace('T', ' ');
             const state = replay.completed ? '' : '  (unfinished)';
-            return `${when}  ${replay.playerName.padEnd(10, ' ')} ${replay.mode.padEnd(10, ' ')}`
-                + ` ${String(seconds).padStart(4, ' ')}s${state}`;
+            return {
+                wide: `${when}  ${replay.playerName.padEnd(10, ' ')} ${replay.mode.padEnd(10, ' ')}`
+                    + ` ${String(seconds).padStart(4, ' ')}s${state}`,
+                // A C64 has no room for the year or the mode; the day and the time
+                // are what tell two of your own games apart.
+                compact: `${stamp.slice(5, 16).replace('T', ' ')} ${String(seconds).padStart(4, ' ')}s`
+                    + `${replay.completed ? '' : ' *'}`,
+            };
         });
-        labels.push('Back');
+        rows.push({ wide: 'Back', compact: 'Back' });
+        const layout = (0, chooser_1.chooserLayout)(this.screen.width, this.screen.height, rows.length);
+        const labels = (0, chooser_1.chooserLabels)(rows, layout);
         return new Promise((resolve) => {
             const box = (0, blessed_helpers_1.createBox)({
                 parent: this.screen,
                 top: 'center',
                 left: 'center',
-                width: 60,
-                height: 18,
+                width: layout.width,
+                height: layout.height,
                 label: ' REPLAYS ',
                 tags: true,
                 style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
@@ -1473,8 +1483,8 @@ class GrandmasterApp {
                 parent: box,
                 top: 1,
                 left: 1,
-                width: 56,
-                height: 14,
+                width: layout.innerWidth,
+                height: layout.innerHeight,
                 keys: true,
                 vi: true,
                 mouse: true,
@@ -1522,18 +1532,24 @@ class GrandmasterApp {
     /** Which puzzle set to work through. */
     async choosePuzzleSet(sets) {
         // The shipped set names are translation keys; the readable part is the tail.
-        const labels = sets.map((set, i) => {
+        const rows = sets.map((set, i) => {
             const name = set.name.replace(/^puzzle_set_name_/, '').replace(/_/g, ' ').toUpperCase();
-            return `${String(i + 1).padStart(2, ' ')}  ${name}  (${set.puzzles.length})`;
+            const number = String(i + 1).padStart(2, ' ');
+            return {
+                wide: `${number}  ${name}  (${set.puzzles.length})`,
+                compact: `${number} ${name} ${set.puzzles.length}`,
+            };
         });
-        labels.push('Back');
+        rows.push({ wide: 'Back', compact: 'Back' });
+        const layout = (0, chooser_1.chooserLayout)(this.screen.width, this.screen.height, rows.length);
+        const labels = (0, chooser_1.chooserLabels)(rows, layout);
         return new Promise((resolve) => {
             const box = (0, blessed_helpers_1.createBox)({
                 parent: this.screen,
                 top: 'center',
                 left: 'center',
-                width: 56,
-                height: 18,
+                width: layout.width,
+                height: layout.height,
                 label: ' PUZZLE ',
                 tags: true,
                 style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
@@ -1542,8 +1558,8 @@ class GrandmasterApp {
                 parent: box,
                 top: 1,
                 left: 1,
-                width: 52,
-                height: 14,
+                width: layout.innerWidth,
+                height: layout.innerHeight,
                 keys: true,
                 vi: true,
                 mouse: true,
@@ -1565,16 +1581,18 @@ class GrandmasterApp {
         });
     }
     async chooseTetrisAttackMode() {
-        const labels = [
-            'ENDLESS      play until the stack tops out',
-            'TIME ATTACK  two minutes, score as high as you can',
-            'VS CPU       a real opponent on a real board',
-            'CHALLENGE    the stage ladder, eight difficulties',
-            'PUZZLE       235 arrangements, one right answer each',
-            'STAGE CLEAR  thirty stages and two fights with Bowser',
-            'REPLAYS      watch a game back',
-            'Back',
+        const rows = [
+            { wide: 'ENDLESS      play until the stack tops out', compact: 'ENDLESS' },
+            { wide: 'TIME ATTACK  two minutes, score as high as you can', compact: 'TIME ATTACK' },
+            { wide: 'VS CPU       a real opponent on a real board', compact: 'VS CPU' },
+            { wide: 'CHALLENGE    the stage ladder, eight difficulties', compact: 'CHALLENGE' },
+            { wide: 'PUZZLE       235 arrangements, one right answer each', compact: 'PUZZLE' },
+            { wide: 'STAGE CLEAR  thirty stages and two fights with Bowser', compact: 'STAGE CLEAR' },
+            { wide: 'REPLAYS      watch a game back', compact: 'REPLAYS' },
+            { wide: 'Back', compact: 'Back' },
         ];
+        const layout = (0, chooser_1.chooserLayout)(this.screen.width, this.screen.height, rows.length);
+        const labels = (0, chooser_1.chooserLabels)(rows, layout);
         const modes = [
             'endless', 'timeattack', 'vscpu', 'challenge', 'puzzle', 'stageclear',
             'replays', null,
@@ -1584,8 +1602,8 @@ class GrandmasterApp {
                 parent: this.screen,
                 top: 'center',
                 left: 'center',
-                width: 56,
-                height: 14,
+                width: layout.width,
+                height: layout.height,
                 label: ' TETRIS ATTACK ',
                 tags: true,
                 style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
@@ -1594,8 +1612,8 @@ class GrandmasterApp {
                 parent: box,
                 top: 1,
                 left: 1,
-                width: 52,
-                height: 9,
+                width: layout.innerWidth,
+                height: layout.innerHeight,
                 keys: true,
                 vi: true,
                 mouse: true,
