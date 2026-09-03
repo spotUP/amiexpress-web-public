@@ -35,6 +35,8 @@ import { getConferenceDir } from '../utils/file-hold.util';
 import { webTerminalGate, isReservedPath } from './web-terminal-gate';
 import { AdminPermissionsHandler } from '../handlers/admin/admin-permissions.handler';
 import { SpriteManagerHandler } from '../handlers/admin/sprite-manager.handler';
+import { materialiseRemoteFile, storageFailureText } from '../storage/remote-download';
+import { getStorageContext } from '../storage/storage-context';
 
 // Initialize handlers
 const authHandler = new AuthHandler(db);
@@ -96,6 +98,36 @@ const upload = multer({
  * @param app - Express application instance
  * @param io - Socket.IO server instance (for real-time features)
  */
+/**
+ * Send one file as an attachment, from a real path on local disk.
+ *
+ * Shared by the local and the pooled branches so a pooled download is
+ * byte-identical to a local one - same headers, same stream, same guards.
+ * Without an error handler the stream emits 'error' as an unhandled
+ * EventEmitter error, which kills the Node process, so both the readable and
+ * the response are guarded: a client disconnect (EPIPE/ECONNRESET) or a
+ * mid-read disk error must never crash the server.
+ */
+function streamDownload(res: Response, filePath: string, filename: string, size: number): void {
+console.log(`[Download] Serving file: ${filename} from ${filePath} (${size} bytes)`);
+
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Type', 'application/octet-stream');
+  res.setHeader('Content-Length', size.toString());
+
+  const fileStream = fs.createReadStream(filePath);
+  fileStream.on('error', (err) => {
+    console.error('[Download] Stream read error:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'File read error' });
+    else res.destroy();
+  });
+  res.on('error', (err) => {
+    console.error('[Download] Response write error (client disconnect?):', err.message);
+    fileStream.destroy();
+  });
+  fileStream.pipe(res);
+}
+
 export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // Development: Disable caching to prevent stale session issues
   if (process.env.NODE_ENV !== 'production') {
@@ -461,6 +493,25 @@ console.error('[Door Reload] Unexpected error:', error);
       const dataDir = config.get('dataDir');
       const conferencePath = getConferenceDir(confNum, dataDir);
 
+      // A pooled area answers first, and its answer is final. The bytes come
+      // back as a real local file (FileCache materialises them), so the
+      // streaming below is byte for byte what it always was.
+      //
+      // An unreachable volume is 503, never the 404 below: "not found" about a
+      // file that is fine is what gets a good catalog row deleted.
+      const storage = getStorageContext();
+      if (storage) {
+        try {
+          const remote = await materialiseRemoteFile(filename, confNum, storage);
+          if (remote) {
+            return streamDownload(res, remote.fullPath, remote.name, remote.size);
+          }
+        } catch (storageError) {
+console.error(`[Download] ${filename} in conf ${confNum}:`, storageError);
+          return res.status(503).json({ error: storageFailureText(storageError) });
+        }
+      }
+
       // Search for file in conference directories - express.e disk-based approach
       // AmiExpress stores files in Conf{N}/Files/ directory
       // Use amigafs for case-insensitive matching (AmigaOS is case-insensitive)
@@ -495,29 +546,7 @@ console.error(`[Download] File not found: ${filename} in conf ${confNum}`);
       }
 
       const stats = amigafs.statSync(filePath);
-      const actualFilename = path.basename(filePath);
-console.log(`[Download] Serving file: ${actualFilename} from ${filePath} (${stats.size} bytes)`);
-
-      res.setHeader('Content-Disposition', `attachment; filename="${actualFilename}"`);
-      res.setHeader('Content-Type', 'application/octet-stream');
-      res.setHeader('Content-Length', stats.size.toString());
-
-      // Use standard fs for streaming (amigafs doesn't have createReadStream)
-      const fileStream = fs.createReadStream(filePath);
-      // Without an error handler the stream emits 'error' as an unhandled
-      // EventEmitter error, which kills the Node process. Guard both the
-      // readable and the response so a client disconnect (EPIPE/ECONNRESET)
-      // or a mid-read disk error never crashes the server.
-      fileStream.on('error', (err) => {
-        console.error('[Download] Stream read error:', err.message);
-        if (!res.headersSent) res.status(500).json({ error: 'File read error' });
-        else res.destroy();
-      });
-      res.on('error', (err) => {
-        console.error('[Download] Response write error (client disconnect?):', err.message);
-        fileStream.destroy();
-      });
-      fileStream.pipe(res);
+      return streamDownload(res, filePath, path.basename(filePath), stats.size);
     } catch (error) {
 console.error('[Download] Error:', error);
       res.status(500).json({ error: 'Download failed' });

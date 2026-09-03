@@ -19,6 +19,112 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as amigafs from '../../utils/amigafs';
 import { getConferenceDir } from '../../utils/file-hold.util';
+import { materialiseRemoteFile, storageFailureText } from '../../storage/remote-download';
+import { getStorageContext, type StorageContext } from '../../storage/storage-context';
+
+/** A file this handler is prepared to send: always a real path on local disk. */
+export interface ResolvedFile {
+  name: string;
+  size: number;
+  confNum: number;
+  dirNum: number;
+  fullPath: string;
+  comment?: string;
+  description?: string;
+  isFree?: boolean;
+}
+
+/**
+ * The file behind a caller's spelling, materialised if it lives in the pool.
+ *
+ * A pooled area is asked FIRST and its answer is final. A conference whose
+ * files went to a bucket can still have a stale copy of one of them sitting in
+ * its old `Files/` directory, and serving those bytes would hand the caller a
+ * version the board itself no longer considers current.
+ *
+ * Throws `StorageUnavailableError` when the volume cannot answer. It must not
+ * be caught here and turned into null: null means "no such file", and a caller
+ * shown "not found" for a file that is fine is how a sysop deletes its catalog
+ * row. `resolveFlaggedFile` is where that error becomes a line on a screen.
+ */
+export async function resolveFile(
+  dataDir: string,
+  confNum: number,
+  filename: string,
+  storage: StorageContext | null = getStorageContext()
+): Promise<ResolvedFile | null> {
+  if (storage) {
+    const remote = await materialiseRemoteFile(filename, confNum, storage);
+    if (remote) {
+      return {
+        name: remote.name,
+        size: remote.size,
+        confNum,
+        dirNum: 1,
+        fullPath: remote.fullPath,
+      };
+    }
+  }
+
+  const confPath = getConferenceDir(confNum, dataDir);
+
+  // Files live in Files/ or Upload/ — Dir1..DirN are AmiExpress
+  // metadata text files, not directories containing downloadable files.
+  const searchDirs = [
+    path.join(confPath, 'Files'),
+    path.join(confPath, 'Upload'),
+  ];
+
+  for (const dir of searchDirs) {
+    if (!fs.existsSync(dir)) continue;
+
+    const filePath = path.join(dir, filename);
+    const resolved = amigafs.resolvePath(filePath); // case-insensitive
+    if (!resolved) continue;
+
+    const stats = fs.statSync(resolved);
+    if (!stats.isFile()) continue;
+
+    return {
+      name: path.basename(resolved), // actual on-disk case
+      size: stats.size,
+      confNum,
+      dirNum: 1,
+      fullPath: resolved,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * `resolveFile`, plus the line the caller is shown when it does not resolve.
+ *
+ * The three outcomes are three different sentences, and only one of them says
+ * the file is missing. A storage failure reported as "File not found" is the
+ * defect this whole subsystem is written around.
+ */
+export async function resolveFlaggedFile(
+  emit: (line: string) => void,
+  dataDir: string,
+  confNum: number,
+  filename: string,
+  storage: StorageContext | null = getStorageContext()
+): Promise<ResolvedFile | null> {
+  let found: ResolvedFile | null;
+  try {
+    found = await resolveFile(dataDir, confNum, filename, storage);
+  } catch (error) {
+    emit(`\x1b[31m[X] ${filename}: ${storageFailureText(error)}\x1b[0m\r\n`);
+    return null;
+  }
+
+  if (!found) {
+    emit(`\x1b[31m[X] File not found: ${filename}\x1b[0m\r\n`);
+    return null;
+  }
+  return found;
+}
 
 /**
  * Batch Download Handler
@@ -67,14 +173,18 @@ export class BatchDownloadHandler {
 
     // Validate and prepare each file - express.e:15671+
     for (const flagItem of flaggedFiles) {
-      const fileInfo = await this.findFileInConference(
+      // resolveFlaggedFile says which of the three things happened: the file
+      // is here, it is genuinely not here, or the volume holding it could not
+      // answer. It emits the line for the last two - they must never read the
+      // same, and this loop must not decide that they do.
+      const fileInfo = await resolveFlaggedFile(
+        (line: string) => socket.emit('ansi-output', line),
         config.get('dataDir'),
         flagItem.confNum,
         flagItem.fileName
       );
 
       if (!fileInfo) {
-        socket.emit('ansi-output', `\x1b[31m[X] File not found: ${flagItem.fileName}\x1b[0m\r\n`);
         failCount++;
         continue;
       }
@@ -86,7 +196,7 @@ export class BatchDownloadHandler {
       // flag a Restricted file then download it via batch. The
       // restricted-attempt is logged to callersLog per express.e for
       // sysop visibility.
-      // findFileInConference does not populate comments — resolve the DIR
+      // resolveFile does not populate comments — resolve the DIR
       // description (single source of truth in file-restriction.util) so the
       // Restricted gate actually fires (it never did with the empty comment).
       const fileComment = fileInfo.comment || fileInfo.description ||
@@ -257,45 +367,6 @@ export class BatchDownloadHandler {
       }
     }
     return false;
-  }
-
-  /**
-   * Find file in conference directories
-   */
-  private static async findFileInConference(
-    dataDir: string,
-    confNum: number,
-    filename: string
-  ): Promise<any | null> {
-    const confPath = getConferenceDir(confNum, dataDir);
-
-    // Files live in Files/ or Upload/ — Dir1..DirN are AmiExpress
-    // metadata text files, not directories containing downloadable files.
-    const searchDirs = [
-      path.join(confPath, 'Files'),
-      path.join(confPath, 'Upload'),
-    ];
-
-    for (const dir of searchDirs) {
-      if (!fs.existsSync(dir)) continue;
-
-      const filePath = path.join(dir, filename);
-      const resolved = amigafs.resolvePath(filePath); // case-insensitive
-      if (!resolved) continue;
-
-      const stats = fs.statSync(resolved);
-      if (!stats.isFile()) continue;
-
-      return {
-        name: path.basename(resolved), // actual on-disk case
-        size: stats.size,
-        confNum,
-        dirNum: 1,
-        fullPath: resolved,
-      };
-    }
-
-    return null;
   }
 
   /**
