@@ -25,6 +25,10 @@ typedef struct {
     /** Every round trip fails from this one onward. */
     int fail_after;
     int asked;
+    /** What the door last wrote, and what the board resolved it to. */
+    char theme[32];
+    int writes;
+    int can_write;
 } fake_board;
 
 static int fake_transport(void *context, ae_field field, char *out, int cap)
@@ -44,6 +48,7 @@ static int fake_transport(void *context, ae_field field, char *out, int cap)
         case AE_FIELD_SCREEN_COLS:   value = b->cols; break;
         case AE_FIELD_SCREEN_ROWS:   value = b->rows; break;
         case AE_FIELD_CONFERENCE:    value = b->conference; break;
+        case AE_FIELD_THEME:         value = b->can_write ? b->theme : 0; break;
         default: value = 0; break;
     }
 
@@ -51,6 +56,23 @@ static int fake_transport(void *context, ae_field field, char *out, int cap)
     strncpy(out, value, (size_t)cap - 1);
     out[cap - 1] = '\0';
     return (int)strlen(out);
+}
+
+/** The board taking a write, resolving an id it does not have to classic. */
+static int fake_write(void *context, ae_field field, const char *value)
+{
+    fake_board *b = (fake_board *)context;
+
+    if (!b->can_write) return -1;
+    if (field != AE_FIELD_THEME) return -1;
+
+    b->writes += 1;
+    if (strcmp(value, "uprough-neon") == 0 || strcmp(value, "classic") == 0) {
+        strcpy(b->theme, value);
+    } else {
+        strcpy(b->theme, "classic");   /* what the board does with an unknown id */
+    }
+    return 0;
 }
 
 static fake_board a_board(void)
@@ -65,6 +87,8 @@ static fake_board a_board(void)
     b.cols = "132";
     b.rows = "50";
     b.conference = "7";
+    b.can_write = 1;
+    strcpy(b.theme, "classic");
     return b;
 }
 
@@ -197,6 +221,51 @@ static void a_closed_session_is_safe_to_use(void)
     printf("  [OK] a closed session is safe to use\n");
 }
 
+static void a_door_can_read_and_change_the_theme(void)
+{
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    char theme[32];
+    fake_board b = a_board();
+
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    ae_set_writer(&s, fake_write);
+
+    assert(ae_user_theme(&s, theme, (int)sizeof(theme)) > 0);
+    assert(strcmp(theme, "classic") == 0);
+
+    assert(ae_set_user_theme(&s, "uprough-neon") == 1);
+    assert(b.writes == 1);
+    assert(ae_user_theme(&s, theme, (int)sizeof(theme)) > 0);
+    assert(strcmp(theme, "uprough-neon") == 0);
+
+    /* The board RESOLVES what it is given, so a door must read back rather
+       than assume: an id this board does not have becomes classic. */
+    assert(ae_set_user_theme(&s, "no-such-theme") == 1);
+    assert(ae_user_theme(&s, theme, (int)sizeof(theme)) > 0);
+    assert(strcmp(theme, "classic") == 0);
+    printf("  [OK] a door can read the theme, and change it\n");
+}
+
+static void a_board_without_themes_says_so_rather_than_pretending(void)
+{
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    char theme[32];
+    fake_board b = a_board();
+
+    b.can_write = 0;                    /* a classic AmiExpress */
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+
+    /* No writer at all: the door is told 0, not lied to. */
+    assert(ae_set_user_theme(&s, "uprough-neon") == 0);
+    /* And the read answers "" rather than "classic", which would look like
+       a caller's choice. */
+    assert(ae_user_theme(&s, theme, (int)sizeof(theme)) == 0);
+    assert(theme[0] == '\0');
+    printf("  [OK] a board without themes says so rather than pretending\n");
+}
+
 int main(void)
 {
     printf("ae_session\n");
@@ -207,6 +276,8 @@ int main(void)
     an_absurd_width_is_not_believed();
     a_dropped_carrier_stops_everything();
     a_closed_session_is_safe_to_use();
+    a_door_can_read_and_change_the_theme();
+    a_board_without_themes_says_so_rather_than_pretending();
     printf("ae_session: all passed\n");
     return 0;
 }

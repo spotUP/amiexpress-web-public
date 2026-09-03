@@ -290,6 +290,26 @@ export enum XIMCommand {
   MAX_CMD = 1003,
 
   // Placeholders for network transfers (not in axcommon.e but referenced)
+  /**
+   * THIS BOARD'S OWN COMMANDS, above express.e's MAX_CMD (1003).
+   *
+   * AmiExpress cannot grow into this range without a version bump, and a
+   * classic board answers an unknown command with nothing - which is exactly
+   * the signal a door needs: ask, get an empty reply, fall back. A door is
+   * expected to check AE_HOST first anyway
+   * (Documentation/4-Door-Developers/HOST_DETECTION.md).
+   */
+
+  /**
+   * The caller's THEME, read or written like any other user field.
+   *
+   * A 68K door could draw in the board's theme (the tokens reach it through
+   * sdk/c) but had no way to CHANGE one: the protocol's only outbound verb is
+   * ae_return_command, and there is no user-field write for it in express.e.
+   * So the C theme picker could list seven themes and keep none of them.
+   */
+  AEW_THEME = 10100,
+
   NETUPLOAD = 10001,
   NETDOWNLOAD = 10002,
 }

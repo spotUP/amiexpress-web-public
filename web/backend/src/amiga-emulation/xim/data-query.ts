@@ -208,6 +208,49 @@ debugLog(`  [WRITE] DT_LOCATION: "${newLocation}"`);
         }
         break;
 
+      /**
+       * This board's own command: the caller's theme, read or written.
+       *
+       * A 68K door can draw in the board's theme already - the tokens reach
+       * it through sdk/c - but had no way to CHANGE one, because express.e
+       * has no user-field write for something it never had. A C theme picker
+       * could list seven themes and keep none.
+       *
+       * The write goes through the same resolve-then-store the TypeScript
+       * setTheme does (doors/BBSApi.ts): an id this board does not have
+       * becomes classic rather than being stored, so a door cannot leave a
+       * value in the row that nothing can render.
+       */
+      case XIMCommand.AEW_THEME:
+        if (isRead) {
+          const themeId = String((user as any)?.themePreference || 'classic');
+          this.messageParser.writeMessageString(msg.msgAddr, themeId);
+          for (let i = themeId.length + 1; i < 32; i++) {
+            this.emulator.writeMemory(stringAddr + i, 0);
+          }
+debugLog(`  [READ] AEW_THEME: "${themeId}"`);
+        } else {
+          const asked = this.messageParser.readString(stringAddr, 30);
+          const { themeById } = require('@amiexpress/bbs-door-sdk/engines/ui/theme');
+          const resolved = themeById(asked);
+
+          if (user) {
+            (user as any).themePreference = resolved.id;
+            // Persisted the way every other user change is. A door that set a
+            // theme and lost it on hangup would be worse than no door.
+            try {
+              const { db } = require('../../database');
+              void db.updateUser((user as any).id, { themePreference: resolved.id });
+            } catch (error) {
+              // A door must not die because the row could not be written; the
+              // session still has the theme for as long as the caller is on.
+console.error('[XIMDataQuery] AEW_THEME: could not persist:', error);
+            }
+          }
+debugLog(`  [WRITE] AEW_THEME: asked "${asked}", stored "${resolved.id}"`);
+        }
+        break;
+
       case XIMCommand.DT_PHONENUMBER:
         if (isRead) {
           const phone = user?.phone || '';

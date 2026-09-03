@@ -68,6 +68,58 @@ describe('the C SDK', () => {
     expect(cDefine('include/ae_session.h', 'AE_DEFAULT_ROWS')).toBe(25);
   });
 
+  it('asks the board for the fields the board actually answers', () => {
+    // The bug this exists for: ae_session.h had DT_ISANSI = 123, taken from
+    // the plan's prose. 123 is ACTIVE_NODES. A door asking it would have got
+    // a node count and read it as "yes, this caller takes ANSI".
+    //
+    // The board's own table is the authority (xim/types.ts, itself taken
+    // from axcommon.e), so the C header is checked against it rather than
+    // against anybody's memory.
+    const ximTypes = fs.readFileSync(
+      path.resolve(__dirname, '..', '..', 'web', 'backend', 'src',
+        'amiga-emulation', 'xim', 'types.ts'),
+      'utf8',
+    );
+    const boardValue = (name: string): number => {
+      const match = ximTypes.match(new RegExp(`\\b${name}\\s*=\\s*(\\d+)`));
+      expect(match).toBeTruthy();
+      return Number(match![1]);
+    };
+
+    const header = fs.readFileSync(path.join(cRoot, 'include', 'ae_session.h'), 'utf8');
+    const cValue = (name: string): number => {
+      const match = header.match(new RegExp(`${name}\\s*=\\s*(\\d+)`));
+      expect(match).toBeTruthy();
+      return Number(match![1]);
+    };
+
+    const pairs: Array<[string, string]> = [
+      ['AE_FIELD_USER_NAME', 'DT_NAME'],
+      ['AE_FIELD_USER_LOCATION', 'DT_LOCATION'],
+      ['AE_FIELD_USER_LEVEL', 'DT_SECSTATUS'],
+      ['AE_FIELD_TIME_LEFT', 'DT_TIMELIMIT'],
+      ['AE_FIELD_IS_ANSI', 'DT_ISANSI'],
+      ['AE_FIELD_SCREEN_COLS', 'BB_SCRWIDTH'],
+      ['AE_FIELD_SCREEN_ROWS', 'BB_SCRHEIGHT'],
+      ['AE_FIELD_CONFERENCE', 'BB_CONFNUM'],
+      ['AE_FIELD_THEME', 'AEW_THEME'],
+    ];
+
+    for (const [cName, boardName] of pairs) {
+      expect([cName, cValue(cName)]).toEqual([cName, boardValue(boardName)]);
+    }
+  });
+
+  it('keeps this board\'s own commands above what AmiExpress can reach', () => {
+    // express.e's MAX_CMD is 1003. A board extension below it would collide
+    // the day AmiExpress uses that number, and nobody would find out until a
+    // door on real hardware did something surprising.
+    const header = fs.readFileSync(path.join(cRoot, 'include', 'ae_session.h'), 'utf8');
+    const theme = Number(header.match(/AE_FIELD_THEME\s*=\s*(\d+)/)![1]);
+    expect(theme).toBeGreaterThan(1003);
+  });
+
   it('agrees about which widths are compact, across the boundary', () => {
     // The TypeScript side, for the record this test exists to protect: the C
     // is tested in sdk/c/tests/test_ui_profile.c against these same widths.

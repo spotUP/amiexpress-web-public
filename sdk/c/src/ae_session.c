@@ -19,12 +19,19 @@ int ae_open(ae_session *s, ae_transport_fn transport, void *context,
     if (cap < AE_SESSION_MIN_STORAGE) return -1;
 
     s->transport = transport;
+    s->write = 0;
     s->context = context;
     s->storage = storage;
     s->cap = cap;
     s->node = node;
     s->carrier = 1;
     return 0;
+}
+
+void ae_set_writer(ae_session *s, ae_write_fn write)
+{
+    if (!s) return;
+    s->write = write;
 }
 
 void ae_close(ae_session *s)
@@ -125,4 +132,36 @@ int ae_screen_rows(ae_session *s)
 int ae_conference(ae_session *s)
 {
     return ask_int(s, AE_FIELD_CONFERENCE, 1);
+}
+
+int ae_user_theme(ae_session *s, char *out, int n)
+{
+    int got = ask(s, AE_FIELD_THEME, out, n);
+
+    /* A board with no themes answers nothing, and "" is what a door should
+       see - not "classic", which would look like a caller's choice. */
+    return got > 0 ? got : 0;
+}
+
+int ae_set_user_theme(ae_session *s, const char *theme_id)
+{
+    char round_trip[64];
+
+    if (!s || !s->transport || !theme_id || !*theme_id) return 0;
+    if (!s->carrier) return 0;
+
+    if (s->write) {
+        if (s->write(s->context, AE_FIELD_THEME, theme_id) < 0) {
+            s->carrier = 0;
+            return 0;
+        }
+    } else {
+        return 0;               /* a transport that cannot write */
+    }
+
+    /* Read it back rather than trusting the write: the board RESOLVES what
+       it was given (an id it does not have becomes classic), so what came
+       back is the only honest answer to "what is the theme now". */
+    if (ae_user_theme(s, round_trip, (int) sizeof(round_trip)) <= 0) return 0;
+    return 1;
 }
