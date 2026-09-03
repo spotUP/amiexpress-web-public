@@ -415,6 +415,16 @@ export function TerminalPage(): JSX.Element {
       onConnect={handleConnect}
       onDoorChange={setActiveDoorId}
       onSurfaceChange={setSurface}
+      /*
+       * Desktop centres the terminal box inside the terminal's own wrapper -
+       * that is what puts a canvas session on the page ground instead of in
+       * the corner. A handheld session must NOT: the on-screen keyboard
+       * reserves the bottom of the viewport (terminal-page--with-input) and
+       * the terminal belongs at the top of what is left. Measured on a
+       * 390x844 phone with the 260px strip reserved: centring drops the box
+       * 166px (xterm) / 158px (canvas) into the middle of that area.
+       */
+      centerInHost={!isHandheldMode}
     />
   );
 

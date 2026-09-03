@@ -95,6 +95,17 @@ interface BBSTerminalProps {
    */
   fillParent?: boolean;
   /**
+   * Fixed 80x25 mode only: centre the terminal box in the host's box.
+   *
+   * True (the default) is the plain reading of a fixed-size screen sitting on
+   * a page. A host whose layout is anchored elsewhere passes false - the BBS
+   * page does for a handheld session, where the on-screen keyboard reserves
+   * the bottom of the viewport and the terminal belongs at the TOP of what is
+   * left (measured on a 390x844 phone: centring drops it 166px, opening a gap
+   * under the notch). Wide/fullscreen mode ignores this: it fills the screen.
+   */
+  centerInHost?: boolean;
+  /**
    * Fires with the door id whenever a browser-side (client or hybrid) door
    * starts, and with null when it ends. Lets the host page swap in
    * door-specific UI, such as the mobile game controls.
@@ -183,6 +194,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   forcedMode,
   keepFocused,
   fillParent,
+  centerInHost = true,
   onDoorChange,
   onSurfaceChange,
 }, ref) => {
@@ -3372,7 +3384,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
   return (
     <div
-      className={`min-h-screen w-full ${className}`}
+      className={className}
       style={{
         // Fixed 80x25 mode: the PAGE owns the ground (the host paints its
         // near-black --bbs-page-bg around the terminal box); the black belongs
@@ -3397,8 +3409,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         // is space-filling and so cannot be shrink-wrapped - sat in the corner
         // with the page ground down one side ("the petscii mode is not centered
         // like the normal term", sysop, 2026-09-03). Inline, so the centring
-        // cannot go missing with a stylesheet again.
-        ...(terminalMode === 'fixed' && {
+        // cannot go missing with a stylesheet again. `centerInHost` is the
+        // host's veto: a handheld page keeps its terminal at the top of the
+        // strip the on-screen keyboard leaves it.
+        ...(terminalMode === 'fixed' && centerInHost && {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

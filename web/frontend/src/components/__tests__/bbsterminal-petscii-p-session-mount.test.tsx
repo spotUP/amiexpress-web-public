@@ -245,4 +245,15 @@ describe('a PETSCII canvas session is framed and centred on a desktop like an xt
     expect(box.contains(container.querySelector('canvas'))).toBe(true);
     expect(escaped).toEqual([]);
   });
+
+  // The host keeps a veto: the BBS page reserves the bottom of a phone for the
+  // on-screen keyboard and wants the terminal at the top of what is left.
+  it('leaves the box where the host put it when the host vetoes centring', () => {
+    const { container } = render(
+      <BBSTerminal backendUrl="http://localhost:3001" centerInHost={false} />
+    );
+    expect(centring(container.firstElementChild as HTMLElement)).toEqual({
+      display: '', alignItems: '', justifyContent: '',
+    });
+  });
 });

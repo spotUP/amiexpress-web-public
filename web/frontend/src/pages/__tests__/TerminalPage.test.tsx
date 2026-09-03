@@ -350,6 +350,42 @@ describe('TerminalPage desktop 80x25 framing', () => {
   });
 });
 
+/**
+ * The terminal centres its own box in whatever host it is given (that is what
+ * puts a PETSCII canvas on the page ground instead of in the top-left corner,
+ * 2026-09-03). A phone must opt out: `terminal-page--with-input` reserves the
+ * bottom 260px for the on-screen keyboard, and the terminal belongs at the TOP
+ * of the strip that leaves. Measured on a 390x844 phone replica of the box
+ * model: centring drops the box 166px (xterm) / 158px (canvas) into the middle
+ * of that area, opening a gap under the notch.
+ */
+describe('a handheld session keeps the terminal at the top of the reserved area', () => {
+  it('vetoes the terminal\'s own centring on a phone, and allows it on a desktop', () => {
+    setPhoneViewport();
+    render(<TerminalPage />);
+    expect(harness.props?.centerInHost).toBe(false);
+
+    cleanup();
+
+    setDesktopViewport();
+    render(<TerminalPage />);
+    expect(harness.props?.centerInHost).toBe(true);
+  });
+
+  it('withdraws the centring when a desktop session drops to handheld sizing', () => {
+    setDesktopViewport();
+    render(<TerminalPage />);
+    expect(harness.props?.centerInHost).toBe(true);
+
+    act(() => {
+      setPhoneViewport();
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    expect(harness.props?.centerInHost).toBe(false);
+  });
+});
+
 describe('TerminalPage keeps ONE terminal for the life of the session', () => {
   // The socket lives in BBSTerminal's mount effect; a remount disconnects it
   // and the board starts over. On 2026-09-02 the P answer did exactly that
