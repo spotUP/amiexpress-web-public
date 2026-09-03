@@ -20,9 +20,9 @@ import {
   createBox,
   createList,
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
-import { themeStyles, themeById, attachMasthead, footerHints, footerStyle } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import { themeStyles, themeById, attachDoorChrome, footerStyle } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
-import { getCompactProfile, effectsAllowed } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { getCompactProfile } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { CompactProfile } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 interface DoorSession {
@@ -127,21 +127,6 @@ export async function createApp(session: DoorSession): Promise<void> {
     content: '',
     style: s.bar.style,
   });
-  // A 40-column screen has no spare cells for decoration, and a 20fps row
-  // repaint is a lot of PETSCII bytes for a C64 to swallow. The title still
-  // draws; it just stops moving. (SDK: effectsAllowed(), same call the other
-  // three compact doors make.)
-  const stopMasthead = effectsAllowed(screenWidth)
-    ? attachMasthead(mastheadRow as any, theme, {
-    title: 'DOOR THEME',
-    // One column short: writing a row's last cell leaves the terminal in a
-    // pending-wrap state and clips the final character.
-    width: Math.max(1, screenWidth - 1),
-    rail: s.accent,
-    ink: s.ink,
-    render: () => screen.render(),
-      })
-    : ((mastheadRow as any).setContent(' DOOR THEME '), () => undefined);
 
   const active = theme.id;
 
@@ -184,7 +169,7 @@ export async function createApp(session: DoorSession): Promise<void> {
     style: s.plain.style,
   });
 
-  createBox({
+  const footer = createBox({
     parent: screen,
     bottom: 0,
     left: 0,
@@ -195,11 +180,33 @@ export async function createApp(session: DoorSession): Promise<void> {
     clickable: false,
     mouse: false,
     style: footerStyle(theme),
-    content: ' ' + footerHints(
-      buildFooterHints(compact),
-      { key: s.key, dim: s.dim },
-      s.rail
-    ),
+    content: '',
+  });
+
+  /**
+   * The whole chrome, from the ONE SDK call: the moving rail, the theme's
+   * glitches and the hint line, all gated on the width tier together.
+   *
+   * This is the screen people judge a theme FROM, and it was showing two
+   * of the three things a theme does - it had the rail and the footer and
+   * no glitches at all, so `uprough-neon` and `slate-slash` looked like
+   * palettes rather than like themes.
+   */
+  const chrome = attachDoorChrome(theme, {
+    width: screenWidth,
+    title: 'DOOR THEME',
+    masthead: mastheadRow as any,
+    footer: footer as any,
+    // The door already picks its hint set from the LIVE profile; the SDK
+    // drops the branding tail on its own at the 40-column tier.
+    hints: buildFooterHints(compact),
+    footerPad: ' ',
+    // The LIST is the only thing here with rows to spare - damaging the
+    // masthead or the hints would read as the door being broken.
+    glitch: list as any,
+    glitchOptions: { tickMs: 400 },
+    styles: s,
+    render: () => screen.render(),
   });
 
   list.focus();
@@ -207,9 +214,10 @@ export async function createApp(session: DoorSession): Promise<void> {
 
   await new Promise<void>((resolve) => {
     const done = () => {
-      // Stop the masthead before the screen goes - a timer writing to a
-      // destroyed screen is how a door takes the session with it.
-      try { stopMasthead(); } catch { /* leaving anyway */ }
+      // Stop the chrome before the screen goes - a timer writing to a
+      // destroyed screen is how a door takes the session with it. stop()
+      // also puts back any row a glitch was in the middle of damaging.
+      try { chrome.stop(); } catch { /* leaving anyway */ }
       try { input.disable(); } catch { /* leaving anyway */ }
       // Gives the board its 80 columns back and unhooks resize and Alt+Enter.
       terminalMode.dispose();

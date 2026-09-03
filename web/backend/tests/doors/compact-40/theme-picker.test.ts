@@ -79,9 +79,19 @@ describe('theme-picker compact (40-column) layout', () => {
 
   // The effect gate. A rail repainting its row twenty times a second is
   // ~4KB/s of PETSCII for one row of decoration; at XXS no timer is started.
-  it('40 columns: the SDK masthead is never attached; 80 columns: it is', async () => {
+  it('40 columns: the chrome does not animate; 80 columns: it does', async () => {
     const { createApp } = require('../../../../../Doors/theme-picker/app');
-    const spy = jest.spyOn(chrome, 'attachMasthead').mockReturnValue(() => undefined);
+    // The door asks the SDK for its whole chrome in one call; the spy passes
+    // through so the real handle can be stopped and no timer outlives the
+    // test. What the chrome DOES at each width is proven in
+    // sdk/tests/unit/door-chrome.test.ts.
+    const real = chrome.attachDoorChrome;
+    const started: Array<{ stop(): void; animated: boolean }> = [];
+    const spy = jest.spyOn(chrome, 'attachDoorChrome').mockImplementation(((...args: unknown[]) => {
+      const handle = (real as any)(...args);
+      started.push(handle);
+      return handle;
+    }) as any);
     const screens: any[] = [];
     // Screens are created by createScreen inside the door; grabbing them back
     // is not needed - the spy records the call (or its absence) either way.
@@ -98,14 +108,19 @@ describe('theme-picker compact (40-column) layout', () => {
         };
         const run = createApp({ bbs, user: { username: 'C64USER' } });
         await new Promise((r) => setTimeout(r, 20));
-        expect(spy).toHaveBeenCalledTimes(expected);
-        if (expected === 1) {
-          // ...and drawn to the SCREEN's width, not a constant.
-          expect((spy.mock.calls[0][2] as { width: number }).width).toBe(79);
-        }
+        // The wiring pin: the chrome is asked for at EVERY width - it is the
+        // chrome itself that decides what moves.
+        expect(spy).toHaveBeenCalledTimes(1);
+        // jest's SpyInstance infers `unknown` for this call's args here (the
+        // spied module comes through a plain `require`, so @types/jest
+        // cannot recover attachDoorChrome's real parameter types); narrow
+        // back to the fields these assertions read.
+        expect((spy.mock.calls[0][1] as { width: number }).width).toBe(width);
+        expect(started[started.length - 1].animated).toBe(expected === 1);
         void run;
       }
     } finally {
+      for (const handle of started) { try { handle.stop(); } catch { /* leaving anyway */ } }
       spy.mockRestore();
       for (const s of screens) { try { s.destroy(); } catch { /* leaving anyway */ } }
     }

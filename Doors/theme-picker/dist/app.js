@@ -104,21 +104,6 @@ async function createApp(session) {
         content: '',
         style: s.bar.style,
     });
-    // A 40-column screen has no spare cells for decoration, and a 20fps row
-    // repaint is a lot of PETSCII bytes for a C64 to swallow. The title still
-    // draws; it just stops moving. (SDK: effectsAllowed(), same call the other
-    // three compact doors make.)
-    const stopMasthead = (0, blessed_1.effectsAllowed)(screenWidth)
-        ? (0, theme_1.attachMasthead)(mastheadRow, theme, {
-            title: 'DOOR THEME',
-            // One column short: writing a row's last cell leaves the terminal in a
-            // pending-wrap state and clips the final character.
-            width: Math.max(1, screenWidth - 1),
-            rail: s.accent,
-            ink: s.ink,
-            render: () => screen.render(),
-        })
-        : (mastheadRow.setContent(' DOOR THEME '), () => undefined);
     const active = theme.id;
     const list = (0, blessed_helpers_1.createList)({
         parent: screen,
@@ -156,7 +141,7 @@ async function createApp(session) {
         content: buildNote(s, compact),
         style: s.plain.style,
     });
-    (0, blessed_helpers_1.createBox)({
+    const footer = (0, blessed_helpers_1.createBox)({
         parent: screen,
         bottom: 0,
         left: 0,
@@ -167,16 +152,42 @@ async function createApp(session) {
         clickable: false,
         mouse: false,
         style: (0, theme_1.footerStyle)(theme),
-        content: ' ' + (0, theme_1.footerHints)(buildFooterHints(compact), { key: s.key, dim: s.dim }, s.rail),
+        content: '',
+    });
+    /**
+     * The whole chrome, from the ONE SDK call: the moving rail, the theme's
+     * glitches and the hint line, all gated on the width tier together.
+     *
+     * This is the screen people judge a theme FROM, and it was showing two
+     * of the three things a theme does - it had the rail and the footer and
+     * no glitches at all, so `uprough-neon` and `slate-slash` looked like
+     * palettes rather than like themes.
+     */
+    const chrome = (0, theme_1.attachDoorChrome)(theme, {
+        width: screenWidth,
+        title: 'DOOR THEME',
+        masthead: mastheadRow,
+        footer: footer,
+        // The door already picks its hint set from the LIVE profile; the SDK
+        // drops the branding tail on its own at the 40-column tier.
+        hints: buildFooterHints(compact),
+        footerPad: ' ',
+        // The LIST is the only thing here with rows to spare - damaging the
+        // masthead or the hints would read as the door being broken.
+        glitch: list,
+        glitchOptions: { tickMs: 400 },
+        styles: s,
+        render: () => screen.render(),
     });
     list.focus();
     screen.render();
     await new Promise((resolve) => {
         const done = () => {
-            // Stop the masthead before the screen goes - a timer writing to a
-            // destroyed screen is how a door takes the session with it.
+            // Stop the chrome before the screen goes - a timer writing to a
+            // destroyed screen is how a door takes the session with it. stop()
+            // also puts back any row a glitch was in the middle of damaging.
             try {
-                stopMasthead();
+                chrome.stop();
             }
             catch { /* leaving anyway */ }
             try {
