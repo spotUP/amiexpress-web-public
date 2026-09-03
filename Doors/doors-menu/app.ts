@@ -229,6 +229,20 @@ export function buildDoorRow(
   return `${s.accent(`[${typeLabel.padEnd(3)}]`)} ${s.ok(cmd)} ${s.ink(clip(door.name, room))}`;
 }
 
+/**
+ * The paints a footer row needs: the key cap, the description, and the
+ * theme's branding mark.
+ *
+ * Named rather than left as `any` so the 40-column test's stub styles are
+ * checked against the same shape the door passes - three members, which is
+ * exactly what this row draws with.
+ */
+export interface FooterPaints {
+  key(text: string): string;
+  dim(text: string): string;
+  rail: string;
+}
+
 /** The hints this door offers, at the width tier it is drawn at. */
 export const FOOTER_HINTS: readonly FooterHint[] = [
   { key: 'Up/Down', does: 'Navigate' },
@@ -255,7 +269,7 @@ export const FOOTER_HINTS_COMPACT: readonly FooterHint[] = [
  *
  * Kept exported because the 40-column test drives it directly.
  */
-export function buildFooterContent(s: any, width: number): string {
+export function buildFooterContent(s: FooterPaints, width: number): string {
   const compact = getCompactProfile(width);
   // The rail tail is decoration and the XXS row has no spare cells for it.
   return footerHints(
@@ -897,7 +911,7 @@ export async function createApp(session: DoorSession) {
     // Attached to the LIST because it is the only thing on screen with rows
     // to spare: damaging the header or the key hints would read as the door
     // being broken rather than as atmosphere.
-    glitch: mainList as any,
+    glitch: mainList,
     glitchOptions: {
       // Considered several times a second. The dice and the minimum gap in
       // glitch.ts decide how often one actually fires; this only sets how

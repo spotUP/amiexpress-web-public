@@ -21,6 +21,19 @@ export declare function buildDoorRow(door: {
     name: string;
     size?: number;
 }, s: any, width: number): string;
+/**
+ * The paints a footer row needs: the key cap, the description, and the
+ * theme's branding mark.
+ *
+ * Named rather than left as `any` so the 40-column test's stub styles are
+ * checked against the same shape the door passes - three members, which is
+ * exactly what this row draws with.
+ */
+export interface FooterPaints {
+    key(text: string): string;
+    dim(text: string): string;
+    rail: string;
+}
 /** The hints this door offers, at the width tier it is drawn at. */
 export declare const FOOTER_HINTS: readonly FooterHint[];
 /** The same hints, shortened for the 40-column tier. */
@@ -34,7 +47,7 @@ export declare const FOOTER_HINTS_COMPACT: readonly FooterHint[];
  *
  * Kept exported because the 40-column test drives it directly.
  */
-export declare function buildFooterContent(s: any, width: number): string;
+export declare function buildFooterContent(s: FooterPaints, width: number): string;
 export declare function createApp(session: DoorSession): Promise<void>;
 export {};
 //# sourceMappingURL=app.d.ts.map
