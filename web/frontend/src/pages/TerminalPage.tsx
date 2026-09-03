@@ -125,8 +125,6 @@ export function TerminalPage(): JSX.Element {
   const fontSize = !isHandheldMode && terminalMode === 'wide'
     ? DESKTOP_FONT_SIZE
     : zoomedFontSize(fitSize, zoomFraction);
-  const fontSizeRef = useRef(fontSize);
-  fontSizeRef.current = fontSize;
   /** The page's own box - the honest content area the fit measures against. */
   const pageRef = useRef<HTMLDivElement>(null);
   const isMobileRef = useRef(isMobile);
@@ -259,7 +257,13 @@ export function TerminalPage(): JSX.Element {
 
   // A new override changes the effective size and the leftover the bezel has
   // to absorb; the FIT itself is unchanged, so this settles in one pass.
-  useEffect(() => { refit(); }, [zoomFraction, refit]);
+  //
+  // `terminalMode` is here for the way BACK from a door's wide/fullscreen
+  // mode: refit() refuses to touch a terminal that is not on the 80-column
+  // grid, so the fit that matters is the one taken the moment the door hands
+  // the screen back. Without it the grid observer eventually notices and the
+  // screen snaps a frame late.
+  useEffect(() => { refit(); }, [zoomFraction, terminalMode, refit]);
 
   // Suppress iOS native keyboard on portrait mobile; restore on landscape.
   useEffect(() => {

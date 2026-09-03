@@ -2889,8 +2889,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backendUrl, showConnectionError, onConnectionError, onConnect, onDisconnect]);
 
-  // Handle cell-size changes - the fit, the viewer's override, or both. The
-  // page hands the effective size down; nothing here multiplies it.
+  // Handle cell-size changes - the fit, the viewer's override, or both.
+  //
+  // The page hands the effective size down and nothing here multiplies it, so
+  // there is one PRODUCER of a cell size. Not one WRITER of
+  // `options.fontSize`: the page's own fit probes real sizes onto the live
+  // terminal (TerminalPage's refit -> measure), which is the whole reason it
+  // ends the search by applying the size the terminal will KEEP.
   useEffect(() => {
     if (terminalInstance.current) {
       terminalInstance.current.options.fontSize = fontSize;

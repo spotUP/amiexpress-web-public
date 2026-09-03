@@ -43,14 +43,18 @@ interface TerminalDouble {
 }
 
 const harness = vi.hoisted(() => ({
-  props: null as { fontSize?: number; onZoomChange?: (f: number) => void } | null,
+  props: null as {
+    fontSize?: number;
+    onZoomChange?: (f: number) => void;
+    onTerminalModeChange?: (mode: 'fixed' | 'wide') => void;
+  } | null,
   term: null as TerminalDouble | null,
 }));
 
 vi.mock('@amiexpress/terminal', async () => ({
   ...(await import('../../../../../packages/terminal/src/utils/terminal-zoom')),
   BBSTerminal: React.forwardRef((props: Record<string, unknown>, ref: React.Ref<unknown>) => {
-    harness.props = props as { fontSize?: number; onZoomChange?: (f: number) => void };
+    harness.props = props as NonNullable<typeof harness.props>;
     React.useImperativeHandle(ref, () => ({
       focus: () => undefined,
       sendCommand: () => undefined,
@@ -238,5 +242,30 @@ describe('a session whose xterm is hidden does not break the fit', () => {
     act(() => { window.dispatchEvent(new Event('resize')); });
     expect(bezelOf(page)).toBeLessThan(40);
     expect(bezelOf(page)).toBe(before);
+  });
+});
+
+describe('coming back from a door fullscreen re-fits at once', () => {
+  it('takes the fit for the window the door left behind, not the one it started in', () => {
+    const { container } = mountAt(1280, 800);
+    const large = harness.props?.fontSize as number;
+
+    // The door goes fullscreen: refit() refuses to touch a terminal that is
+    // not on the 80-column grid, so every fit while it runs is a no-op...
+    act(() => { harness.props?.onTerminalModeChange?.('wide'); });
+    harness.term!.cols = 132;
+    resizeTo(container, 800, 600);
+    expect(harness.props?.fontSize as number).toBe(16); // wide keeps its own size
+
+    // ...and the window the viewer comes back to is smaller than the one they
+    // left. The fit has to be taken on the way out of wide mode, not a frame
+    // later when the grid observer happens to notice.
+    harness.term!.cols = BBS_COLS;
+    act(() => { harness.props?.onTerminalModeChange?.('fixed'); });
+    const small = harness.props?.fontSize as number;
+    expect(small).toBeLessThan(large);
+    const grid = gridFor(small);
+    expect(grid.width).toBeLessThanOrEqual(800);
+    expect(grid.height).toBeLessThanOrEqual(600);
   });
 });
