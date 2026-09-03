@@ -203,7 +203,7 @@ export async function createApp(session: DoorSession): Promise<void> {
     footerPad: ' ',
     // The LIST is the only thing here with rows to spare - damaging the
     // masthead or the hints would read as the door being broken.
-    glitch: list as any,
+    glitch: list,
     glitchOptions: { tickMs: 400 },
     styles: s,
     render: () => screen.render(),
