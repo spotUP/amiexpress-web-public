@@ -306,7 +306,7 @@ export async function createApp(session: DoorSession) {
     // Unused while there is no masthead, and still the honest answer to
     // "what is this screen" if one ever gains a row to live on.
     title: 'LIVE CHAT',
-    glitch: chatLog as any,
+    glitch: chatLog,
     glitchOptions: {
       // A glitch fired mid-keystroke is a lost keystroke: every keypress,
       // local or from another node, rebuilds the whole log content, and the
