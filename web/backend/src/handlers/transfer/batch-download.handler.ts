@@ -29,6 +29,9 @@ export interface ResolvedFile {
   confNum: number;
   dirNum: number;
   fullPath: string;
+  /** Set only for a pooled file: which drive holds it, and under what key. */
+  driveNumber?: number;
+  objectKey?: string;
   comment?: string;
   description?: string;
   isFree?: boolean;
@@ -37,10 +40,13 @@ export interface ResolvedFile {
 /**
  * The file behind a caller's spelling, materialised if it lives in the pool.
  *
- * A pooled area is asked FIRST and its answer is final. A conference whose
- * files went to a bucket can still have a stale copy of one of them sitting in
+ * A pooled area is asked FIRST, and a pooled HIT wins outright: a conference
+ * whose files went to a bucket can still have a stale copy of one of them in
  * its old `Files/` directory, and serving those bytes would hand the caller a
- * version the board itself no longer considers current.
+ * version the board no longer considers current. A pooled MISS still falls
+ * through to the local walk, and that local copy is then served - which is
+ * deliberate, because a part-migrated conference holds some of its files in
+ * each place and both have to be reachable.
  *
  * Throws `StorageUnavailableError` when the volume cannot answer. It must not
  * be caught here and turned into null: null means "no such file", and a caller
@@ -62,6 +68,10 @@ export async function resolveFile(
         confNum,
         dirNum: 1,
         fullPath: remote.fullPath,
+        // Kept so a transfer can fetch the object again if the cache evicted
+        // it between resolution and send.
+        driveNumber: remote.driveNumber,
+        objectKey: remote.key,
       };
     }
   }

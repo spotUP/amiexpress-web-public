@@ -15,6 +15,7 @@ import {
   remoteAreasFor,
   remoteLocationFor,
   areaLocalRoot,
+  usableRemoteAreasFor,
   type RemoteArea,
 } from '../../src/storage/remote-areas';
 
@@ -126,8 +127,73 @@ describe('remoteAreaFromDisk', () => {
 });
 
 describe('areaLocalRoot', () => {
-  it('is the conference directory plus the area leaf', () => {
+  it('resolves the BBS: assign against the board directory', () => {
     expect(areaLocalRoot(area(), DATA_DIR)).toBe(path.join(DATA_DIR, 'Conf1', 'Files'));
+  });
+
+  it('follows the real path, not the conference number', () => {
+    // DLPATH.n is free text. Deriving `<conf dir>/<leaf>` for an area that
+    // points elsewhere would name a directory the area has nothing to do with.
+    expect(areaLocalRoot({ conferenceId: 1, path: 'BBS:Archive/Warez/' }, DATA_DIR)).toBe(
+      path.join(DATA_DIR, 'Archive', 'Warez')
+    );
+  });
+
+  it('is null for another AmigaDOS volume, which this process cannot resolve', () => {
+    expect(areaLocalRoot({ conferenceId: 1, path: 'DH1:Warez/Files/' }, DATA_DIR)).toBeNull();
+  });
+
+  it('takes an absolute path as itself', () => {
+    expect(areaLocalRoot({ conferenceId: 3, path: '/mnt/files/Conf3/Files' }, DATA_DIR)).toBe(
+      path.join('/mnt', 'files', 'Conf3', 'Files')
+    );
+  });
+});
+
+describe('usableRemoteAreasFor', () => {
+  const configured = (n: number) => n === 2;
+  const collect = (): { warn: (m: string) => void; lines: string[] } => {
+    const lines: string[] = [];
+    return { warn: (m: string) => lines.push(m), lines };
+  };
+
+  it('keeps an area whose drive is in the pool', () => {
+    const w = collect();
+    expect(usableRemoteAreasFor(1, [area()], configured, w.warn).map(a => a.id)).toEqual([1]);
+    expect(w.lines).toEqual([]);
+  });
+
+  it('drops an area naming a drive Drives.info does not have, and says which', () => {
+    // Left in, NameIndexRegistry throws a plain Error for the unknown drive
+    // BEFORE the local fallback runs, so every download in the conference -
+    // including the files on local disk - would answer "storage error".
+    const w = collect();
+    const areas = [area({ id: 1, storageVolume: 9 })];
+
+    expect(usableRemoteAreasFor(1, areas, configured, w.warn)).toEqual([]);
+    expect(w.lines.join('')).toContain('DRIVE.9');
+    expect(w.lines.join('')).toContain('local disk');
+  });
+
+  it('drops the second of two areas that would share one object prefix', () => {
+    // Both spell Conf1/Files/: their objects would collide in the bucket and
+    // the inverse lookup could only ever name one of them.
+    const w = collect();
+    const areas = [
+      area({ id: 1, dirNumber: 1, path: 'BBS:Conf1/Files/' }),
+      area({ id: 2, dirNumber: 2, path: 'DH1:Archive/Files/' }),
+    ];
+
+    expect(usableRemoteAreasFor(1, areas, configured, w.warn).map(a => a.id)).toEqual([1]);
+    expect(w.lines.join('')).toContain('Conf1/Files/');
+  });
+
+  it('keeps two areas whose directories differ', () => {
+    const areas = [
+      area({ id: 1, dirNumber: 1, path: 'BBS:Conf1/Files/' }),
+      area({ id: 2, dirNumber: 2, path: 'BBS:Conf1/Extra/' }),
+    ];
+    expect(usableRemoteAreasFor(1, areas, configured, collect().warn).map(a => a.id)).toEqual([1, 2]);
   });
 });
 
@@ -166,6 +232,11 @@ describe('locateByRealPath', () => {
 
   it('is null for a path in a local area', () => {
     expect(locateByRealPath(path.join(DATA_DIR, 'Conf2', 'Files', 'X.LHA'), areas, DATA_DIR)).toBeNull();
+  });
+
+  it('is null for a path under an area on another AmigaDOS volume', () => {
+    const elsewhere = [area({ id: 4, conferenceId: 1, path: 'DH1:Warez/Files/', storageVolume: 2 })];
+    expect(locateByRealPath(path.join(DATA_DIR, 'Conf1', 'Files', 'X.LHA'), elsewhere, DATA_DIR)).toBeNull();
   });
 
   it('is null for a path outside every area', () => {

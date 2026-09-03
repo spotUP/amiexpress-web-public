@@ -16,7 +16,13 @@
  */
 import * as path from 'path';
 import * as fs from 'fs';
-import { objectPrefixFor, remoteAreasFor, remoteLocationFor, type CatalogLocationRow } from './remote-areas';
+import {
+  objectPrefixFor,
+  remoteLocationFor,
+  usableRemoteAreasFor,
+  type CatalogLocationRow,
+  type RemoteArea,
+} from './remote-areas';
 import type { StorageContext } from './storage-context';
 import { isStorageUnavailable } from './file-cache';
 
@@ -45,7 +51,7 @@ export async function materialiseRemoteFile(
   conferenceId: number,
   storage: StorageContext
 ): Promise<RemoteFile | null> {
-  for (const area of remoteAreasFor(conferenceId, storage.areas)) {
+  for (const area of usableAreas(conferenceId, storage)) {
     const driveNumber = area.storageVolume;
     if (driveNumber === undefined) continue;
 
@@ -56,6 +62,73 @@ export async function materialiseRemoteFile(
     return await materialise(driveNumber, key, storage);
   }
   return null;
+}
+
+/**
+ * Every pooled file of this conference whose name the caller accepts - the
+ * wildcard form of the lookup above. `D DEMO*.LHA` is ordinary BBS usage, and
+ * a pooled area has no directory for `readdirSync` to walk.
+ *
+ * The matcher comes from the caller so the storage layer does not become a
+ * third wildcard dialect; see `NameIndex.match`.
+ */
+export async function materialiseRemoteMatches(
+  matches: (name: string) => boolean,
+  conferenceId: number,
+  storage: StorageContext
+): Promise<RemoteFile[]> {
+  const found: RemoteFile[] = [];
+  for (const area of usableAreas(conferenceId, storage)) {
+    const driveNumber = area.storageVolume;
+    if (driveNumber === undefined) continue;
+
+    const index = storage.names.forArea(driveNumber, objectPrefixFor(area));
+    for (const key of await index.match(matches)) {
+      found.push(await materialise(driveNumber, key, storage));
+    }
+  }
+  return found;
+}
+
+/**
+ * The local path for a file resolved earlier in this command, fetched again if
+ * the cache has since evicted it.
+ *
+ * The gap is real: `D` resolves its files, prints them, waits at the "start
+ * download?" prompt and only then hands paths to Zmodem, which existsSync-
+ * checks every one and tells the caller "files not found" if any is missing.
+ * Another node's fetch can evict a clean cached copy inside that window.
+ *
+ * Re-materialising at send time is the whole fix - deliberately NOT a pin API
+ * on FileCache. Its pins exist for bytes that are the only copy of something
+ * not yet uploaded; a transfer-scoped pin would be a second lifetime rule in a
+ * module that just had one removed for being a second record, and a caller who
+ * disconnects mid-transfer would leak it. A pooled object always has its copy
+ * in the bucket, so fetching it again is correct and costs a request only in
+ * the rare case it was actually evicted.
+ */
+export async function rematerialise(
+  file: { fullPath: string; driveNumber?: number; objectKey?: string },
+  storage: StorageContext | null
+): Promise<string> {
+  if (!storage || file.driveNumber === undefined || !file.objectKey) return file.fullPath;
+  return await storage.cache.ensureLocal(file.driveNumber, file.objectKey);
+}
+
+/** Drives already reported as unconfigured - one line per drive, not per download. */
+const warnedDrives = new Set<string>();
+
+function usableAreas(conferenceId: number, storage: StorageContext): RemoteArea[] {
+  return usableRemoteAreasFor(
+    conferenceId,
+    storage.areas,
+    driveNumber => storage.volumes.byNumber(driveNumber) !== undefined,
+    message => {
+      if (warnedDrives.has(message)) return;
+      warnedDrives.add(message);
+      process.stdout.write(`${message}\n`);
+    }
+  );
 }
 
 /**

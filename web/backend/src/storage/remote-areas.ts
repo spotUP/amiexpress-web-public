@@ -21,6 +21,23 @@
  * does not know. The DB column stays as the admin-page mirror Task 11 reports
  * from; nothing branches on it.
  *
+ * ONE PREFIX PER AREA, AND IT COMES FROM THE DOWNLOAD PATH.
+ *
+ * An area has a `dlPath` and a `ulPath`, and only the download one becomes a
+ * prefix. `Upload/` stays a LOCAL staging concept: Zmodem writes into the
+ * playpen because a truncated temp file is recoverable and a truncated object
+ * is not, and Task 9 then puts the FINISHED file into the same area prefix
+ * that downloads read. So `remoteAreaFromDisk` drops `ulPath` deliberately -
+ * there is one prefix per area, not one per direction, and an uploaded file
+ * must land where the download side already looks.
+ *
+ * TWO AREAS MUST NEVER SHARE A PREFIX. The prefix is built from the
+ * conference number and the area's leaf directory, so `BBS:Conf1/Files/` and
+ * `DH1:Archive/Files/` in the same conference both spell `Conf1/Files/` and
+ * their objects would collide in the bucket under identical keys - and the
+ * inverse lookup could only ever answer with one of them. `usableRemoteAreasFor`
+ * refuses the duplicates rather than letting the pool silently merge two areas.
+ *
  * This module is deliberately I/O free - `remote-download.ts` does the
  * fetching - so the upload path, the download path and DosLibrary all decide
  * "is this remote, and under what key" from the same few pure functions rather
@@ -129,9 +146,36 @@ export function objectPrefixFor(area: { conferenceId: number; path: string }): s
   return `Conf${area.conferenceId}/${leafOf(area.path)}/`;
 }
 
-/** Where this area's files would sit on local disk, remote or not. */
-export function areaLocalRoot(area: { conferenceId: number; path: string }, dataDir: string): string {
-  return path.join(getConferenceDir(area.conferenceId, dataDir), leafOf(area.path));
+/**
+ * Where this area's files sit on local disk - resolved from the area's REAL
+ * path, or null when that path is not under the board at all.
+ *
+ * DLPATH.n is free text. `BBS:Conf1/Files/` is the board assign and maps to
+ * `<dataDir>/Conf1/Files`; an absolute path is itself; but `DH1:Warez/Files/`
+ * names another AmigaDOS volume this process cannot resolve, and DERIVING a
+ * root for it from the conference number would produce a directory the area
+ * has nothing to do with. A door writing under such an area would then be
+ * classified local, and its write would never reach the pool. Null says "not
+ * locatable", and `locateByRealPath` skips it instead of guessing.
+ */
+export function areaLocalRoot(
+  area: { conferenceId: number; path: string },
+  dataDir: string
+): string | null {
+  const areaPath = area.path.trim();
+  if (areaPath === '') return path.join(getConferenceDir(area.conferenceId, dataDir), DEFAULT_AREA_LEAF);
+
+  const volume = AMIGA_VOLUME.exec(areaPath);
+  if (volume) {
+    const name = volume[0].slice(0, -1).toUpperCase();
+    if (name !== 'BBS') return null; // another AmigaDOS volume - not ours to locate
+    const relative = areaPath.slice(volume[0].length).replace(/^\/+/, '').replace(/\/+$/, '');
+    if (relative === '') return null;
+    return path.join(dataDir, ...relative.split('/'));
+  }
+
+  if (path.isAbsolute(areaPath)) return path.resolve(areaPath.replace(/\/+$/, ''));
+  return path.join(dataDir, ...areaPath.replace(/\/+$/, '').split('/'));
 }
 
 export function remoteAreaFromDisk(area: DiskFileArea): RemoteArea {
@@ -148,6 +192,65 @@ export function remoteAreaFromDisk(area: DiskFileArea): RemoteArea {
 /** The pooled areas of one conference, in the order the board declared them. */
 export function remoteAreasFor(conferenceId: number, areas: readonly RemoteArea[]): RemoteArea[] {
   return areas.filter(area => area.conferenceId === conferenceId && isRemoteArea(area));
+}
+
+/**
+ * The pooled areas of one conference that can actually be used, with the
+ * reason logged for each one dropped.
+ *
+ * Two ways a marker passes the loader and still cannot be honoured, and both
+ * of them break LOCAL downloads if they are not dropped here:
+ *
+ *  - `STORAGEDRIVE.1=9` on a board whose Drives.info stops at 3 is a valid
+ *    integer the loader cannot check, since it does not know the pool. Left
+ *    in, the first lookup throws "no volume configured for drive 9" from
+ *    NameIndexRegistry - BEFORE the local fallback runs - so every download in
+ *    that conference answers "storage error", including the files sitting on
+ *    local disk right there.
+ *  - Two areas resolving to the same prefix would share one key space in the
+ *    bucket: one area's DEMO.LHA overwrites the other's, and the inverse
+ *    lookup can only ever name one of them.
+ *
+ * Dropping means "treat as local", which is the safe direction: the caller
+ * falls through to the disk walk it always had.
+ */
+export function usableRemoteAreasFor(
+  conferenceId: number,
+  areas: readonly RemoteArea[],
+  isConfiguredDrive: (driveNumber: number) => boolean,
+  warn: (message: string) => void
+): RemoteArea[] {
+  const usable: RemoteArea[] = [];
+  const prefixOwner = new Map<string, RemoteArea>();
+
+  for (const area of remoteAreasFor(conferenceId, areas)) {
+    const driveNumber = area.storageVolume;
+    if (driveNumber === undefined) continue;
+
+    if (!isConfiguredDrive(driveNumber)) {
+      warn(
+        `[Storage] Conf${area.conferenceId} dir ${area.dirNumber} names DRIVE.${driveNumber}, ` +
+          `which is not in Drives.info - the area is treated as local disk.`
+      );
+      continue;
+    }
+
+    const prefix = objectPrefixFor(area);
+    const owner = prefixOwner.get(prefix);
+    if (owner) {
+      warn(
+        `[Storage] Conf${area.conferenceId} dir ${area.dirNumber} ("${area.path}") would use the ` +
+          `same object prefix "${prefix}" as dir ${owner.dirNumber} ("${owner.path}") - ` +
+          `the later area is treated as local disk. Give them different directory names.`
+      );
+      continue;
+    }
+
+    prefixOwner.set(prefix, area);
+    usable.push(area);
+  }
+
+  return usable;
 }
 
 /**
@@ -179,7 +282,9 @@ export function locateByRealPath(
   let best: { area: RemoteArea; relative: string; rootLength: number } | null = null;
   for (const area of areas) {
     if (!isRemoteArea(area)) continue;
-    const root = path.resolve(areaLocalRoot(area, dataDir));
+    const localRoot = areaLocalRoot(area, dataDir);
+    if (localRoot === null) continue; // not under the board - cannot be located
+    const root = path.resolve(localRoot);
     const relative = containedIn(root, resolved);
     if (relative === null) continue;
     if (!best || root.length > best.rootLength) {
