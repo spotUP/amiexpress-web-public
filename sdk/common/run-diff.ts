@@ -32,7 +32,11 @@
  *
  * Attribute dedup inside a run compares the SGR STRING, so a caller whose
  * cells hold structured attributes only has to make `sgr()` a pure function
- * of that state.
+ * of that state. Comparing the string, not the state, means two DIFFERENT
+ * cell states that render to the same bytes dedup to one emission where a
+ * state compare would have re-emitted - identical on the wire, and anyway
+ * unreachable for the C64 caller, whose sixteen palette entries are sixteen
+ * distinct colours.
  *
  * Leaf module: no imports, so importing it (via the
  * `@amiexpress/bbs-door-sdk/common/run-diff` subpath) pulls in nothing else

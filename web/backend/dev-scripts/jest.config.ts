@@ -41,5 +41,6 @@ module.exports = {
       '<rootDir>/../../sdk/engines/ui/ansi-editor/core/cp437.ts',
     '^@amiexpress/bbs-door-sdk/petscii$': '<rootDir>/../../sdk/petscii/index.ts',
     '^@amiexpress/bbs-door-sdk/petscii/frame$': '<rootDir>/../../sdk/petscii/frame/index.ts',
+    '^@amiexpress/bbs-door-sdk/common/run-diff$': '<rootDir>/../../sdk/common/run-diff.ts',
   },
 };

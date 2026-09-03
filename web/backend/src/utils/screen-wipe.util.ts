@@ -425,8 +425,9 @@ function renderGridFull(grid: Cell[][]): string {
  * a step that changed nothing sends nothing at all.
  *
  * (This was `renderDiff` copied line for line onto a second cell model. The
- * duplication is recorded as paid off in
- * `.superpowers/sdd/2026-09-03-screen-wipes/progress.md` Round 3 item 1.)
+ * duplication was Round 3 item 1 of
+ * `.superpowers/sdd/2026-09-03-screen-wipes/progress.md`; Round 4 of that
+ * ledger closes it and records where the shared walk went and why.)
  *
  * Why it matters: a full repaint per frame is 2.5-10 KB, and the terminal
  * paces what it receives (packages/terminal/src/utils/modem-emulator.ts caps
