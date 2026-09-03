@@ -285,10 +285,18 @@ export class FileCache {
         // nothing to clean up
       }
       // Throwing here would turn a successful upload into a failure and a
-      // failed upload into a lost pin. The sidecar markers still pin every
-      // staged file, and eviction is off while the record is incomplete.
-      this.journalUntrusted = true;
-      console.warn(`[storage] cannot write cache journal ${this.journalPath}: ${String(err)}`);
+      // failed upload into a lost pin. And eviction must NOT be disabled: this
+      // process's `dirty` map is intact and the sidecar marker already pins
+      // the file durably, so nothing is unsafe to delete. Disabling would
+      // deadlock the board in exactly the case eviction is the remedy for -
+      // under ENOSPC this write and the marker write fail TOGETHER, so the
+      // journal branch would switch eviction off for good and the disk would
+      // never recover. Only a journal that PARSES as corrupt disables it,
+      // because only then is it unknown which files were pinned.
+      console.warn(
+        `[storage] cannot write cache journal ${this.journalPath}: ${String(err)}; ` +
+          `pending uploads are held in memory and by their sidecar markers`
+      );
     }
   }
 
@@ -350,6 +358,29 @@ export class FileCache {
     }
   }
 
+  /**
+   * Whether the marker beside a staged file disagrees with the file now.
+   *
+   * This is the guard on the REPLAY path, and it has to be here rather than
+   * only on adoption. In the power-loss case the journal SURVIVES - it is
+   * written temp-then-rename, and `markDirty` journals the entry before the
+   * upload is attempted - so `loadJournal` puts the id straight into `dirty`
+   * and `recoverFromDisk` never looks at the stamp. Without this check
+   * `flushPending` would then hand the truncated file to `writeBack`, which
+   * re-stamps the marker from the file it is about to upload and puts short
+   * bytes over a good object.
+   *
+   * No marker, or one that cannot be read, means there is nothing to check
+   * against - the journal is the record and the replay goes ahead.
+   */
+  private markerDisagreesWithFile(localPath: string): boolean {
+    const markerPath = this.markerPathFor(localPath);
+    if (!fs.existsSync(markerPath)) return false;
+    const marker = this.readMarker(markerPath);
+    if (!marker) return false;
+    return !this.markerMatchesFile(marker, localPath);
+  }
+
   private removeMarker(localPath: string): void {
     try {
       fs.unlinkSync(this.markerPathFor(localPath));
@@ -391,26 +422,38 @@ export class FileCache {
       }
       if (!name.endsWith(MARKER_SUFFIX)) return;
 
-      // The marker sits beside its file, so the file's path is derived from
-      // the marker's own location rather than trusted from its contents - it
-      // is right even for a marker too corrupt to parse.
       const stagedPath = full.slice(0, -MARKER_SUFFIX.length);
+      const marker = this.readMarker(full);
+
       if (!fs.existsSync(stagedPath)) {
-        // There are no bytes left to protect, and leaving the marker is not
-        // harmless: `evictTo` skips markers, so the next cold fetch of this
-        // key lands a perfectly clean copy at exactly this path and it is
-        // un-evictable for the life of the cache directory, across every
-        // restart. Nothing else ever removes one.
-        try {
-          fs.unlinkSync(full);
-        } catch {
-          // Someone else got there first.
+        // Leaving a marker whose file is gone is not harmless: `evictTo` skips
+        // markers, so the next cold fetch of that key lands a perfectly clean
+        // copy at exactly this path and it is un-evictable for the life of the
+        // cache directory. Nothing else ever removes one.
+        //
+        // But a `.dirty` name is NOT proof of a marker. An object whose key
+        // genuinely ends `.dirty` caches to a file with this exact name, and
+        // deleting one because it has no sibling would delete a payload - the
+        // ONLY copy of it, if it were itself staged and un-uploaded. The
+        // module header books such a key as over-pinned; it must never book it
+        // as deleted. So a sweep requires the file to parse as a marker AND to
+        // name the very path it sits beside.
+        if (marker && path.resolve(marker.localPath) === path.resolve(stagedPath)) {
+          try {
+            fs.unlinkSync(full);
+          } catch {
+            // Someone else got there first.
+          }
+          console.warn(`[storage] removed dirty marker ${full}: the staged file it protected is gone`);
+        } else {
+          console.warn(
+            `[storage] ${full} ends in ${MARKER_SUFFIX} but does not describe the file beside it; leaving it alone. ` +
+              `If it is a real marker its pending upload cannot be replayed and a sysop should look.`
+          );
         }
-        console.warn(`[storage] removed dirty marker ${full}: the staged file it protected is gone`);
         return;
       }
 
-      const marker = this.readMarker(full);
       if (!marker) return; // unreadable: still pinned by existing, not replayable
       const id = this.id(marker.driveNumber, marker.key);
       if (this.dirty.has(id)) return;
@@ -818,6 +861,18 @@ export class FileCache {
         this.removeMarker(entry.localPath);
         this.saveJournal(id);
         console.warn(`[storage] pending upload ${id} has no staged file at ${entry.localPath}; dropping it`);
+        continue;
+      }
+      if (this.markerDisagreesWithFile(entry.localPath)) {
+        // Present but not what was staged. Uploading it would destroy a good
+        // object in the pool. Park it: drop the journal entry so nothing
+        // retries it, and leave the marker, which keeps the file pinned.
+        this.dirty.delete(id);
+        this.saveJournal(id);
+        console.warn(
+          `[storage] pending upload ${id} does not match the marker written for it; it will NOT be uploaded. ` +
+            `${entry.localPath} is kept and pinned pending a sysop.`
+        );
         continue;
       }
       try {

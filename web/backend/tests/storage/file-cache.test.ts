@@ -566,3 +566,144 @@ describe('FileCache.overBudgetBytes while eviction is disabled', () => {
     }
   });
 });
+
+describe('blockOn is actually wired to blockOutcome', () => {
+  /**
+   * The unit tests above pin the FUNCTION; they do not pin that blockOn calls
+   * it. Reverting the call site to the old `if (!done || Date.now() > deadline)`
+   * leaves every behavioural test green, the probe included, because at a real
+   * timeout both terms are true in almost every run - the bug only shows in a
+   * sliver no test can schedule. So the wiring gets a structural guard, the
+   * pattern tests/amiga-emulation/jh-sf-sync-emit.test.ts uses for the same
+   * class of unobservable-but-critical ordering.
+   */
+  const source = fs.readFileSync(path.resolve(__dirname, '../../src/storage/file-cache.ts'), 'utf8');
+
+  function postLoopBodyOfBlockOn(): string {
+    const method = source.indexOf('private blockOn<T>(');
+    expect(method).toBeGreaterThan(-1);
+    const afterLoop = source.indexOf('clearTimeout(timer);', method);
+    expect(afterLoop).toBeGreaterThan(-1);
+    const endOfMethod = source.indexOf('\n  }\n', afterLoop);
+    expect(endOfMethod).toBeGreaterThan(-1);
+    return source.slice(afterLoop, endOfMethod);
+  }
+
+  it('decides on blockOutcome(succeeded, failed)', () => {
+    expect(postLoopBodyOfBlockOn()).toContain('blockOutcome(succeeded, failed)');
+  });
+
+  it('consults no clock after the loop', () => {
+    // `Date.now()` belongs in the predicate and nowhere after it. Reading it
+    // to decide the outcome is the bug this whole guard exists for.
+    expect(postLoopBodyOfBlockOn()).not.toContain('Date.now()');
+  });
+});
+
+describe('FileCache replay verifies the staged bytes', () => {
+  it('parks a truncated file on the replay path, with the journal intact', async () => {
+    const { cache, backend, dir, volumes } = setup();
+    await backend.put('Files/DOOR.DAT', Buffer.alloc(400, 1)); // the good object in the pool
+
+    const local = cache.localPathFor(2, 'Files/DOOR.DAT');
+    fs.mkdirSync(path.dirname(local), { recursive: true });
+    fs.writeFileSync(local, Buffer.alloc(400, 9));
+    backend.down = true;
+    await expect(cache.writeBack(2, 'Files/DOOR.DAT', local)).rejects.toThrow();
+
+    // Power loss. Nothing was fsynced, so the staged file comes back
+    // truncated - but the JOURNAL survives, because it is written
+    // temp-then-rename and markDirty wrote it before the upload was tried.
+    // That is the case that actually happens, and it never reaches the
+    // adoption path's stamp check.
+    fs.writeFileSync(local, Buffer.alloc(120, 9));
+
+    const reborn = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+    // Straight into `dirty` from the journal - recoverFromDisk never looked.
+    expect(reborn.isDirty(2, 'Files/DOOR.DAT')).toBe(true);
+
+    backend.down = false;
+    await reborn.flushPending();
+
+    // The good object in the pool is untouched.
+    expect((await backend.get('Files/DOOR.DAT')).length).toBe(400);
+    // Parked: nothing will retry it.
+    expect(reborn.isDirty(2, 'Files/DOOR.DAT')).toBe(false);
+    // And the local bytes are kept and still pinned, for a sysop to look at.
+    reborn.evictTo(0);
+    expect(fs.existsSync(local)).toBe(true);
+  });
+
+  it('still replays a staged file that matches its marker', async () => {
+    const { cache, backend, dir, volumes } = setup();
+    const local = cache.localPathFor(2, 'Files/GOOD.DAT');
+    fs.mkdirSync(path.dirname(local), { recursive: true });
+    fs.writeFileSync(local, Buffer.alloc(400, 3));
+    backend.down = true;
+    await expect(cache.writeBack(2, 'Files/GOOD.DAT', local)).rejects.toThrow();
+
+    const reborn = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+    backend.down = false;
+    await reborn.flushPending();
+
+    expect((await backend.get('Files/GOOD.DAT')).length).toBe(400);
+    expect(reborn.isDirty(2, 'Files/GOOD.DAT')).toBe(false);
+  });
+});
+
+describe('FileCache never sweeps a payload that merely looks like a marker', () => {
+  it('leaves an object whose key ends in .dirty alone', () => {
+    const { cache, dir, volumes } = setup();
+    // A real cached object whose KEY ends `.dirty`. By name it is
+    // indistinguishable from a marker, and it has no sibling - which is
+    // exactly the shape the stale-marker sweep looks for. Deleting it would
+    // destroy a payload, and the only copy of it if it were staged and
+    // un-uploaded.
+    const payload = cache.localPathFor(2, 'Files/NOTES.dirty');
+    fs.mkdirSync(path.dirname(payload), { recursive: true });
+    fs.writeFileSync(payload, 'a real object, not a marker');
+
+    new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+
+    expect(fs.existsSync(payload)).toBe(true);
+  });
+
+  it('leaves a parseable file that does not name the path it sits beside', () => {
+    const { cache, dir, volumes } = setup();
+    const payload = cache.localPathFor(2, 'Files/CONFIG.dirty');
+    fs.mkdirSync(path.dirname(payload), { recursive: true });
+    // Parses as a marker, but describes some other file - so it is not the
+    // marker for THIS path and says nothing about whether these bytes matter.
+    fs.writeFileSync(
+      payload,
+      JSON.stringify({ driveNumber: 2, key: 'Files/SOMETHING.ELSE', localPath: '/somewhere/else.bin' })
+    );
+
+    new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+
+    expect(fs.existsSync(payload)).toBe(true);
+  });
+});
+
+describe('FileCache journal write failures', () => {
+  it('warns but leaves eviction enabled - ENOSPC must not switch off the remedy', () => {
+    const { dir, volumes } = setup();
+    // A directory where the journal file belongs, so every rename onto it
+    // fails - standing in for the write failure ENOSPC produces, which under
+    // real ENOSPC happens at the SAME MOMENT as the marker write failure.
+    fs.mkdirSync(path.join(dir, '.pending.json'));
+
+    const cache = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+    const local = path.join(dir, 'staged.bin');
+    fs.writeFileSync(local, 'precious');
+
+    cache.markDirty(2, 'Files/X.DAT', local);
+
+    // The in-memory map holds it and the sidecar marker pins it durably, so
+    // nothing here is unsafe to delete. Only a journal that PARSES as corrupt
+    // leaves it unknown which files were pinned.
+    expect(cache.isEvictionDisabled()).toBe(false);
+    expect(cache.isDirty(2, 'Files/X.DAT')).toBe(true);
+    expect(fs.existsSync(`${local}.dirty`)).toBe(true);
+  });
+});
