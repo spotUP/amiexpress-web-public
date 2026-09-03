@@ -12,6 +12,74 @@ import { getSystemTime } from '../utils/date-time.util';
 export class FileRepository extends BaseRepository<any> {
   constructor(db: any) { super(db); }
 
+  /**
+   * Map a raw file_entries row to a FileEntry. storage_volume/object_key are
+   * NULL for every row on every board that has not configured a bucket -
+   * that NULL becomes undefined, meaning "this file is on local disk".
+   */
+  private mapFileEntryRow(row: any): FileEntry {
+    return {
+      id: row.id,
+      filename: row.filename,
+      description: row.description,
+      size: row.size,
+      uploader: row.uploader,
+      uploadDate: new Date(row.uploaddate * 1000),
+      downloads: row.downloads,
+      areaId: row.areaid,
+      fileIdDiz: row.fileiddiz,
+      rating: row.rating,
+      votes: row.votes,
+      status: row.status as 'active' | 'held' | 'deleted',
+      checked: row.checked as 'N' | 'P' | 'F',
+      comment: row.comment,
+      storageVolume: row.storage_volume ?? undefined,
+      objectKey: row.object_key ?? undefined
+    };
+  }
+
+  /**
+   * Map a raw file_areas row to a FileArea. storage_volume/volume_class_pref
+   * are NULL for every area on every board that has not configured a bucket.
+   */
+  private mapFileAreaRow(row: any): FileArea {
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      path: row.path,
+      conferenceId: row.conferenceid,
+      maxFiles: row.maxfiles,
+      uploadAccess: row.uploadaccess,
+      downloadAccess: row.downloadaccess,
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000),
+      storageVolume: row.storage_volume ?? undefined,
+      volumeClassPref: (row.volume_class_pref ?? undefined) as 'FREE' | 'PAID' | undefined
+    };
+  }
+
+  /**
+   * Record that a file now lives on a pooled volume, under the given object
+   * key. Later tasks call this after a successful upload to object storage.
+   */
+  recordLocation(filename: string, areaId: number, driveNumber: number, objectKey: string): void {
+    this.run(
+      'UPDATE file_entries SET storage_volume = ?, object_key = ? WHERE filename = ? AND areaid = ?',
+      [driveNumber, objectKey, filename, areaId]
+    );
+  }
+
+  /**
+   * The admin's "what is on this volume" report. Returns every entry on the
+   * drive - not a page of them - since this is the whole mitigation a sysop
+   * gets when a provider closes their account.
+   */
+  entriesOnVolume(driveNumber: number): FileEntry[] {
+    const rows = this.all<any>('SELECT * FROM file_entries WHERE storage_volume = ?', [driveNumber]);
+    return rows.map(row => this.mapFileEntryRow(row));
+  }
+
   async createFileEntry(file: Omit<FileEntry, 'id'>): Promise<number> {
 
     const stmt = this.prepare(`
@@ -98,22 +166,7 @@ console.error(`[Database] Failed to sync file entry to disk:`, error);
     const stmt = this.prepare(sql);
     const rows = stmt.all(...params) as any[];
 
-    return rows.map(row => ({
-      id: row.id,
-      filename: row.filename,
-      description: row.description,
-      size: row.size,
-      uploader: row.uploader,
-      uploadDate: new Date(row.uploaddate * 1000),
-      downloads: row.downloads,
-      areaId: row.areaid,
-      fileIdDiz: row.fileiddiz,
-      rating: row.rating,
-      votes: row.votes,
-      status: row.status as 'active' | 'held' | 'deleted',
-      checked: row.checked as 'N' | 'P' | 'F',
-      comment: row.comment
-    }));
+    return rows.map(row => this.mapFileEntryRow(row));
   }
 
   async updateFileEntry(id: number, updates: Partial<FileEntry>): Promise<void> {
@@ -142,22 +195,7 @@ console.error(`[Database] Failed to sync file entry to disk:`, error);
       if (row) {
         const area = await this.getFileAreaById(row.areaid);
         if (area) {
-          const fullEntry: FileEntry = {
-            id: row.id,
-            filename: row.filename,
-            description: row.description,
-            size: row.size,
-            uploader: row.uploader,
-            uploadDate: new Date(row.uploaddate * 1000),
-            downloads: row.downloads,
-            areaId: row.areaid,
-            fileIdDiz: row.fileiddiz,
-            rating: row.rating,
-            votes: row.votes,
-            status: row.status as 'active' | 'held' | 'deleted',
-            checked: row.checked as 'N' | 'P' | 'F',
-            comment: row.comment
-          };
+          const fullEntry: FileEntry = this.mapFileEntryRow(row);
           fileAreaManager.updateFileEntry(fullEntry, area);
 console.log(`[Database] Synced updated file entry "${row.filename}" to ${area.name}.dir`);
         }
@@ -186,22 +224,7 @@ console.error(`[Database] Failed to sync updated file entry to disk:`, error);
     const row = stmt.get(id) as any;
     if (!row) return null;
 
-    return {
-      id: row.id,
-      filename: row.filename,
-      description: row.description,
-      size: row.size,
-      uploader: row.uploader,
-      uploadDate: new Date(row.uploaddate * 1000),
-      downloads: row.downloads,
-      areaId: row.areaid,
-      fileIdDiz: row.fileiddiz,
-      rating: row.rating,
-      votes: row.votes,
-      status: row.status as 'active' | 'held' | 'deleted',
-      checked: row.checked as 'N' | 'P' | 'F',
-      comment: row.comment
-    };
+    return this.mapFileEntryRow(row);
   }
 
   async deleteFileEntry(id: number): Promise<void> {
@@ -295,18 +318,7 @@ console.error(`[Database] Failed to create .dir file:`, error);
     const stmt = this.prepare('SELECT * FROM file_areas WHERE conferenceid = ? ORDER BY id');
     const rows = stmt.all(conferenceId) as any[];
 
-    return rows.map(row => ({
-      id: row.id,
-      name: row.name,
-      description: row.description,
-      path: row.path,
-      conferenceId: row.conferenceid,
-      maxFiles: row.maxfiles,
-      uploadAccess: row.uploadaccess,
-      downloadAccess: row.downloadaccess,
-      created: new Date(row.created * 1000),
-      updated: new Date(row.updated * 1000)
-    }));
+    return rows.map(row => this.mapFileAreaRow(row));
   }
 
   async getFileAreaById(id: number): Promise<FileArea | null> {
@@ -316,18 +328,7 @@ console.error(`[Database] Failed to create .dir file:`, error);
 
     if (!row) return null;
 
-    return {
-      id: row.id,
-      name: row.name,
-      description: row.description,
-      path: row.path,
-      conferenceId: row.conferenceid,
-      maxFiles: row.maxfiles,
-      uploadAccess: row.uploadaccess,
-      downloadAccess: row.downloadaccess,
-      created: new Date(row.created * 1000),
-      updated: new Date(row.updated * 1000)
-    };
+    return this.mapFileAreaRow(row);
   }
 
   async getFilesByArea(areaId: number): Promise<FileEntry[]> {
@@ -335,22 +336,7 @@ console.error(`[Database] Failed to create .dir file:`, error);
     const stmt = this.prepare('SELECT * FROM file_entries WHERE areaid = ? ORDER BY uploaddate DESC');
     const rows = stmt.all(areaId) as any[];
 
-    return rows.map(row => ({
-      id: row.id,
-      filename: row.filename,
-      description: row.description,
-      size: row.size,
-      uploader: row.uploader,
-      uploadDate: new Date(row.uploaddate * 1000),
-      downloads: row.downloads,
-      areaId: row.areaid,
-      fileIdDiz: row.fileiddiz,
-      rating: row.rating,
-      votes: row.votes,
-      status: row.status as 'active' | 'held' | 'deleted',
-      checked: row.checked as 'N' | 'P' | 'F',
-      comment: row.comment
-    }));
+    return rows.map(row => this.mapFileEntryRow(row));
   }
 
   async getFileStatisticsByConference(conferenceId: number): Promise<{

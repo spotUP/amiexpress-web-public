@@ -123,6 +123,10 @@ export interface FileArea {
   downloadAccess: number;
   created: Date;
   updated: Date;
+  /** The drive this area's files live on. Undefined means local disk - every area on every board that has not configured a bucket. */
+  storageVolume?: number;
+  /** Which class of pooled volume new files in this area prefer. Undefined means local disk. */
+  volumeClassPref?: 'FREE' | 'PAID';
 }
 
 export interface FileEntry {
@@ -142,6 +146,10 @@ export interface FileEntry {
   status: 'active' | 'held' | 'deleted';
   checked: 'N' | 'P' | 'F';
   comment?: string;
+  /** The drive holding this object. Undefined means local disk - every row on every board that has not configured a bucket. */
+  storageVolume?: number;
+  /** The object key on that drive. Undefined means local disk. */
+  objectKey?: string;
 }
 
 export interface Conference {
