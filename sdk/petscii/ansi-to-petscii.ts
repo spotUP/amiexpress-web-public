@@ -17,7 +17,7 @@
  */
 import { PetsciiMachine, type PetsciiMachineState } from './petscii-machine';
 import { C64_PALETTE_COLODORE, PETSCII_COLOR_TO_VIC, hexToRgb } from './c64-palette';
-import { screenCodeToPetscii } from './screen-codes';
+import { printablePetsciiToScreenCode, screenCodeToPetscii } from './screen-codes';
 import { asciiToPetsciiByte } from './ascii-to-petscii';
 
 const COLS = 40;
@@ -108,6 +108,9 @@ export function petsciiMoveTo(state: PetsciiMachineState, x: number, y: number, 
   for (let col = state.cursorX; col > x; col--) out.push(0x9D);
 }
 
+/** State of the deferred-wrap latch; see `AnsiToPetsciiTransducer.pendingWrap`. */
+type PendingWrap = 'none' | 'wrapped' | 'held';
+
 export class AnsiToPetsciiTransducer {
   readonly machine = new PetsciiMachine();
   private readonly palette: readonly string[];
@@ -124,10 +127,23 @@ export class AnsiToPetsciiTransducer {
    * boundary on the NEXT printable. A newline that arrives while the flag is
    * set must therefore land on the row the wrap already reached, not the one
    * after it - otherwise every line that is exactly a multiple of 40 columns
-   * long eats a blank row. Set by a printable that wrapped, cleared by any
-   * cursor-moving operation, consumed by newline().
+   * long eats a blank row.
+   *
+   * Three states, because the two ways a row can end differ in WHERE the
+   * KERNAL cursor is left:
+   *  - 'none'    nothing held.
+   *  - 'wrapped' a printable filled column 39 of a row above the bottom. The
+   *              KERNAL cursor has ALREADY crossed to (0, r+1) while an ANSI
+   *              terminal still sits on (39, r), so every operation that walks
+   *              from the cursor owes one extra step back.
+   *  - 'held'    a printable filled column 39 of the BOTTOM row. `printAtBottomRight`
+   *              kept the KERNAL cursor on (39,24) - crossing there would scroll,
+   *              and an ANSI terminal never scrolls on a printable - so both
+   *              cursors agree and the scroll ANSI owes is still to come.
+   * Cleared by any cursor-moving operation; consumed by newline() and by the
+   * next printable.
    */
-  private pendingWrap = false;
+  private pendingWrap: PendingWrap = 'none';
   /**
    * VIC index the ANSI stream currently asks the BACKGROUND to be (SGR
    * 40-47/100-107/48;5/48;2), or null for "default". Per-cell background has
@@ -158,7 +174,7 @@ export class AnsiToPetsciiTransducer {
     this.bold = false;
     this.ansiReverse = false;
     this.savedCursor = null;
-    this.pendingWrap = false;
+    this.pendingWrap = 'none';
     this.ansiBg = null;
     this.screenBg = 0;
   }
@@ -179,7 +195,7 @@ export class AnsiToPetsciiTransducer {
    */
   observe(bytes: Uint8Array | number[]): void {
     this.machine.feed(bytes);
-    this.pendingWrap = false;
+    this.pendingWrap = 'none';
   }
 
   /** Resolve anything held across chunks (a trailing CR becomes a lone CR; a partial escape is dropped). */
@@ -212,8 +228,21 @@ export class AnsiToPetsciiTransducer {
         continue;
       }
       if (ch === '\n') { this.newline(out); i++; continue; }
-      if (code === 0x08 || code === 0x7F) { this.pendingWrap = false; this.emit(out, 0x9D); i++; continue; }
+      if (code === 0x08 || code === 0x7F) {
+        // xterm clears the pending wrap and steps ONE cell left from column 39.
+        // In 'wrapped' the KERNAL already crossed the boundary, so getting to
+        // the cell ANSI would land on takes two steps, not one.
+        const steps = this.pendingWrap === 'wrapped' ? 2 : 1;
+        this.pendingWrap = 'none';
+        for (let k = 0; k < steps; k++) this.emit(out, 0x9D);
+        i++;
+        continue;
+      }
       if (ch === '\t') {
+        // A tab settles the latch without crossing the boundary: xterm stops at
+        // column 39. In 'wrapped' the KERNAL is already past it, so it walks back.
+        if (this.pendingWrap === 'wrapped') this.emit(out, 0x9D);
+        this.pendingWrap = 'none';
         const x = this.machine.state.cursorX;
         const next = Math.min(COLS - 1, (Math.floor(x / 8) + 1) * 8);
         for (let k = x; k < next; k++) this.printByte(out, 0x20);
@@ -276,12 +305,74 @@ export class AnsiToPetsciiTransducer {
   /**
    * Emit one printable byte and latch a deferred wrap when it crossed the
    * right edge. Every path that puts a glyph on the screen goes through here
-   * so the latch can never be missed (plain text, inverse-only glyphs, PUA).
+   * so the latch can never be missed (plain text, inverse-only glyphs, PUA,
+   * and the blanks an erase paints).
    */
   private emitPrintable(out: number[], byte: number): void {
-    const atLastColumn = this.machine.state.cursorX === COLS - 1;
+    const st = this.machine.state;
+    if (this.pendingWrap === 'held') {
+      // The held boundary is crossed NOW, and crossing it from the bottom row
+      // is exactly one scroll - which is what an ANSI terminal does too, just
+      // one printable later than the KERNAL would have. $0D scrolls and homes
+      // the column; it also clears reverse, so the caller's choice is put back.
+      const reverse = st.reverse;
+      this.pendingWrap = 'none';
+      this.emit(out, 0x0D);
+      this.setReverse(reverse, out);
+    }
+    if (st.cursorX === COLS - 1 && st.cursorY === ROWS - 1) return this.printAtBottomRight(out, byte);
+    const atLastColumn = st.cursorX === COLS - 1;
     this.emit(out, byte);
-    this.pendingWrap = atLastColumn && this.machine.state.cursorX === 0;
+    this.pendingWrap = atLastColumn && st.cursorX === 0 ? 'wrapped' : 'none';
+  }
+
+  /**
+   * The one cell a KERNAL screen editor cannot simply print into.
+   *
+   * Advancing the cursor off (39,24) SCROLLS THE WHOLE SCREEN, and an ANSI
+   * terminal never scrolls on a printable - it holds the cursor at the last
+   * column (deferred wrap) and crosses only on the next one. blessed writes
+   * that cell on the FIRST render of every 40x25 screen (`Screen._diff` walks
+   * the whole buffer against an invalidated `lastBuffer`), so without this the
+   * C64 sat one row above what the door believed from its first frame onwards
+   * and every later diff repaint landed on the wrong row - the sysop's BUGS
+   * screenshot: one menu row painted twice, and each shorter replacement string
+   * leaving the tail of the longer text that had scrolled up under it.
+   *
+   * The KERNAL idiom that fills the cell without scrolling: print the glyph one
+   * cell left, step back onto it, INSERT ($94) - which shifts the rest of the
+   * logical line right, dropping nothing, because (39,24) IS the line's last
+   * cell - and re-print what (38,24) held. INSERT carries the reverse bit and
+   * the colour with the glyph, so the cell that arrives at (39,24) is the one
+   * the stream asked for, and the cursor never leaves (39,24).
+   *
+   * `screenCodeToPetscii` round-trips exactly (`printablePetsciiToScreenCode`
+   * is its inverse over 0x00-0x7F and neither depends on the charset bank), so
+   * the restored cell is byte-identical to the one the oracle recorded.
+   */
+  private printAtBottomRight(out: number[], byte: number): void {
+    const st = this.machine.state;
+    const target = (ROWS - 1) * COLS + (COLS - 1);
+    const wanted = printablePetsciiToScreenCode(byte) | (st.reverse ? 0x80 : 0);
+    // Already what the stream is asking for - a repaint of an unchanged cell,
+    // which is most of what an erase or a full-row fill asks for here.
+    if (st.screen[target] !== wanted || st.colorRam[target] !== st.pen) {
+      const left = target - 1;
+      const heldCode = st.screen[left];
+      const heldPen = st.colorRam[left];
+      const wantReverse = st.reverse;
+      const wantPen = st.pen;
+      this.emit(out, 0x9D);            // onto (38,24)
+      this.emit(out, byte);            // the glyph lands there; cursor back on (39,24)
+      this.emit(out, 0x9D);            // onto (38,24) again
+      this.emit(out, 0x94);            // INSERT slides the glyph into (39,24)
+      this.setReverse((heldCode & 0x80) !== 0, out);
+      this.setPen(heldPen, out);
+      this.emit(out, screenCodeToPetscii(heldCode & 0x7F));   // (38,24) restored; cursor on (39,24)
+      this.setReverse(wantReverse, out);
+      this.setPen(wantPen, out);
+    }
+    this.pendingWrap = 'held';
   }
 
   /** Print one PETSCII byte as text: bank 1, reverse re-asserted from the ANSI state (RETURN cancels it on the C64). */
@@ -310,11 +401,14 @@ export class AnsiToPetsciiTransducer {
    */
   private newline(out: number[]): void {
     const st = this.machine.state;
-    if (this.pendingWrap) {
-      this.pendingWrap = false;
+    if (this.pendingWrap === 'wrapped') {
+      this.pendingWrap = 'none';
       while (st.cursorX > 0) this.emit(out, 0x9D);
       return;
     }
+    // 'held': the C64 cursor really is on (39,24), and $0D really does scroll
+    // from there - which is exactly what an ANSI newline on the bottom row does.
+    this.pendingWrap = 'none';
     if (this.machine.logicalLineEndRow(st.cursorY) !== st.cursorY) {
       this.moveTo(0, st.cursorY + 1, out);
       return;
@@ -324,7 +418,14 @@ export class AnsiToPetsciiTransducer {
 
   /** Lone CR: column 0 of the same row. $9D never crosses a row boundary here because x lefts from column x stop at 0. */
   private carriageOnly(out: number[]): void {
-    this.pendingWrap = false;
+    // 'wrapped': the KERNAL is on (0, r+1) while ANSI still holds column 39 of
+    // row r, so column 0 of "the same row" is one row UP, not where it stands.
+    if (this.pendingWrap === 'wrapped') {
+      this.pendingWrap = 'none';
+      this.emit(out, 0x91);
+      return;
+    }
+    this.pendingWrap = 'none';
     const x = this.machine.state.cursorX;
     for (let k = 0; k < x; k++) this.emit(out, 0x9D);
   }
@@ -389,11 +490,16 @@ export class AnsiToPetsciiTransducer {
     if (next === '7') { const st = this.machine.state; this.savedCursor = { x: st.cursorX, y: st.cursorY }; return 2; }
     if (next === '8') { if (this.savedCursor) this.moveTo(this.savedCursor.x, this.savedCursor.y, out); return 2; }
     if (next === 'M') { const st = this.machine.state; this.moveTo(st.cursorX, Math.max(0, st.cursorY - 1), out); return 2; }
+    // IND: down one row, column kept, SCROLLING at the bottom - which is $11
+    // exactly (PetsciiMachine.cursorDown scrolls on row 24). moveTo() would
+    // clamp instead and silently swallow the scroll. NEL is CR+LF.
+    if (next === 'D') { this.pendingWrap = 'none'; this.emit(out, 0x11); return 2; }
+    if (next === 'E') { this.newline(out); return 2; }
     if (next === 'c') {
       // RIS: full reset. The screen background goes back to the terminal
       // default (black) NOW - deferring it to the next $0E would black the
       // screen at an arbitrary later moment, or never, if the bank never flips.
-      this.pendingWrap = false;
+      this.pendingWrap = 'none';
       this.emit(out, 0x93);
       this.bold = false;
       this.ansiReverse = false;
@@ -406,11 +512,19 @@ export class AnsiToPetsciiTransducer {
   }
 
   private csi(params: string, final: string, out: number[]): void {
-    const isPrivate = params.startsWith('?');
+    // A private-parameter prefix makes the WHOLE sequence private, and xterm
+    // uses '<' '=' '>' as well as '?' (modifyOtherKeys 'ESC[>4;2m', secondary
+    // DA 'ESC[>c'). Recognising only '?' let 'ESC[>4;2m' reach sgr(), where
+    // parseInt('>4') is NaN and NaN is read as SGR 0 - a spurious full
+    // attribute reset. `petscii/frame/ansi-screen.ts`, which mirrors this
+    // parser, has always matched all four.
+    const prefix = /^[<=>?]/.test(params) ? params[0] : '';
+    const isPrivate = prefix !== '';
     const nums = (isPrivate ? params.slice(1) : params).split(';').map((p) => (p === '' ? NaN : parseInt(p, 10)));
     const n = (idx: number, dflt: number) => (Number.isNaN(nums[idx]) || nums[idx] === undefined ? dflt : nums[idx]);
     const st = this.machine.state;
     if (isPrivate) {
+      if (prefix !== '?') return; // '<' '=' '>': terminal queries and key-modifier modes, nothing to model
       // ?25 cursor show/hide, ?1000-1006 mouse, ?7 wrap: no C64 equivalent. ?47/?1049 alternate screen:
       // blessed repaints a full frame on entry and the BBS repaints on exit - a clear is the honest translation.
       if ((n(0, 0) === 47 || n(0, 0) === 1049) && (final === 'h' || final === 'l')) this.clearKeepingCursor(out, 0, 0);
@@ -445,7 +559,7 @@ export class AnsiToPetsciiTransducer {
    * `pendingWrap` (a transducer concern) and feeding the oracle stay here.
    */
   private moveTo(x: number, y: number, out: number[]): void {
-    this.pendingWrap = false; // any explicit cursor move settles the deferred wrap
+    this.pendingWrap = 'none'; // any explicit cursor move settles the deferred wrap
     const start = out.length;
     petsciiMoveTo(this.machine.state, x, y, out);
     if (out.length > start) this.machine.feed(out.slice(start));
@@ -499,16 +613,18 @@ export class AnsiToPetsciiTransducer {
    * Printing through column 39 makes the KERNAL wrap and link the row below
    * into this logical line - harmless, because newline() consults
    * logicalLineEndRow and never issues a $0D from a non-final row (Task 2).
-   * Cell (39,24) is never written: a print there scrolls the whole screen,
-   * which ANSI erase never does, and nothing can have been printed there
-   * without scrolling either, so it is blank whenever it matters.
+   * The blanks go through `emitPrintable`, so cell (39,24) is erased like every
+   * other cell instead of being skipped: a plain print there would scroll, which
+   * an ANSI erase never does, and `printAtBottomRight` is what makes it
+   * reachable without scrolling. Leaving it out would strand there whatever
+   * glyph a previous frame put in it.
    */
   private fillRow(r: number, x0: number, x1: number, out: number[]): void {
-    const last = r === ROWS - 1 ? Math.min(x1, COLS - 2) : Math.min(x1, COLS - 1);
+    const last = Math.min(x1, COLS - 1);
     if (last < x0) return;
     this.moveTo(x0, r, out);
     this.setReverse(false, out);
-    for (let x = x0; x <= last; x++) this.emit(out, 0x20);
+    for (let x = x0; x <= last; x++) this.emitPrintable(out, 0x20);
   }
 
   /** ANSI erase never moves the cursor; the fill does, so it is walked back afterwards. */
@@ -567,7 +683,7 @@ export class AnsiToPetsciiTransducer {
    * already black, so the common case still costs zero bytes.
    */
   private clearKeepingCursor(out: number[], x: number, y: number): void {
-    this.pendingWrap = false;
+    this.pendingWrap = 'none';
     this.emit(out, 0x93);
     this.screenBg = this.ansiBg ?? 0;
     this.restoreScreenBg(out);

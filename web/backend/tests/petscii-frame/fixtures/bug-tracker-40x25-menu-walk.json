@@ -1,0 +1,142 @@
+[
+ {
+  "phase": "boot",
+  "data": "\u001b]0;Bug Tracker v1.0.0\u0007"
+ },
+ {
+  "phase": "boot",
+  "data": "\u001b]0;Bug Tracker v1.0.0\u0007"
+ },
+ {
+  "phase": "boot",
+  "data": "\u001b[?25l"
+ },
+ {
+  "phase": "boot",
+  "data": "\u001b[?1000h"
+ },
+ {
+  "phase": "boot",
+  "data": "\u001b[?1003h"
+ },
+ {
+  "phase": "boot",
+  "data": "\u001b[?1006h"
+ },
+ {
+  "phase": "boot",
+  "data": "\u001b[2J"
+ },
+ {
+  "phase": "boot",
+  "data": "\u001b[H"
+ },
+ {
+  "phase": "boot",
+  "data": "\u001b[0m"
+ },
+ {
+  "phase": "boot",
+  "data": "\u001b[2J"
+ },
+ {
+  "phase": "boot",
+  "data": "\u001b[H"
+ },
+ {
+  "phase": "boot",
+  "data": "\u001b[1;1H\u001b[0;44;37m BUG TRACKER                            \u001b[2;1H\u001b[0;40;37m BUGS 0  OPEN 0                         \u001b[3;1H >>\u001b[0;1;43;37m[N] New Bug Report\u001b[0;40;37m                   \u001b[4;1H   [L] List All Bugs                    \u001b[5;1H   [M] My Bug Reports                   \u001b[6;1H   [S] Search Bugs                      \u001b[7;1H   [A] Analytics Dashboard              \u001b[8;1H   [T] Sysop Tools                      \u001b[9;1H   [W] Webhook Settings                 \u001b[10;1H   [Q] Quit                             \u001b[11;1H                                        \u001b[12;1H                                        \u001b[13;1H                                        \u001b[14;1H                                        \u001b[15;1H                                        \u001b[16;1H                                        \u001b[17;1H                                        \u001b[18;1H                                        \u001b[19;1H                                        \u001b[20;1H                                        \u001b[21;1H                                        \u001b[22;1H                                        \u001b[23;1H                                        \u001b[24;1H                                        \u001b[25;1H\u001b[0;44;90m \u001b[0;1;44;33mESC:\u001b[0;44;90m Back  \u001b[0;1;44;33mQ:\u001b[0;44;90m Quit                     "
+ },
+ {
+  "phase": "boot",
+  "data": "\u001b[13;2H\u001b[0;1;40;37mQuick Stats:\u001b[15;2H\u001b[0;40;37mTotal\u001b[15;8HBugs:\u001b[15;14H0\u001b[16;2HOpen:\u001b[16;8H0\u001b[17;2HFixed:\u001b[17;9H0\u001b[18;2HClosed:\u001b[18;10H0\u001b[20;2H\u001b[0;1;40;37mThis Week:\u001b[21;2H\u001b[0;40;37mCreated:\u001b[21;11H0\u001b[22;2HResolved:\u001b[22;12H0\u001b[24;1H\u001b[0;40;90m \u001b[0;40;33mEnt\u001b[0;40;90m pick  \u001b[0;40;31mQ\u001b[0;40;90m quit                       "
+ },
+ {
+  "phase": "down-1",
+  "data": "\u001b[3;2H\u001b[0;40;37m  [N] New Bug Report\u001b[4;2H>>\u001b[0;1;43;37m[L] List All Bugs"
+ },
+ {
+  "phase": "down-2",
+  "data": "\u001b[4;2H\u001b[0;40;37m  [L] List All Bugs\u001b[5;2H>>\u001b[0;1;43;37m[M] My Bug Reports"
+ },
+ {
+  "phase": "down-3",
+  "data": "\u001b[5;2H\u001b[0;40;37m  [M] My Bug Reports\u001b[6;2H>>\u001b[0;1;43;37m[S] Search Bugs"
+ },
+ {
+  "phase": "down-4",
+  "data": "\u001b[6;2H\u001b[0;40;37m  [S] Search Bugs\u001b[7;2H>>\u001b[0;1;43;37m[A] Analytics Dashboard"
+ },
+ {
+  "phase": "down-5",
+  "data": "\u001b[7;2H\u001b[0;40;37m  [A] Analytics Dashboard\u001b[8;2H>>\u001b[0;1;43;37m[T] Sysop Tools"
+ },
+ {
+  "phase": "down-6",
+  "data": "\u001b[8;2H\u001b[0;40;37m  [T] Sysop Tools\u001b[9;2H>>\u001b[0;1;43;37m[W] Webhook Settings"
+ },
+ {
+  "phase": "down-7",
+  "data": "\u001b[9;2H\u001b[0;40;37m  [W] Webhook Settings\u001b[10;2H>>\u001b[0;1;43;37m[Q] Quit"
+ },
+ {
+  "phase": "up-1",
+  "data": "\u001b[9;2H\u001b[0;40;37m>>\u001b[0;1;43;37m[W] Webhook Settings\u001b[10;2H\u001b[0;40;37m  [Q] Quit"
+ },
+ {
+  "phase": "up-2",
+  "data": "\u001b[8;2H\u001b[0;40;37m>>\u001b[0;1;43;37m[T] Sysop Tools\u001b[9;2H\u001b[0;40;37m  [W] Webhook Settings"
+ },
+ {
+  "phase": "up-3",
+  "data": "\u001b[7;2H\u001b[0;40;37m>>\u001b[0;1;43;37m[A] Analytics Dashboard\u001b[8;2H\u001b[0;40;37m  [T] Sysop Tools"
+ },
+ {
+  "phase": "up-4",
+  "data": "\u001b[6;2H\u001b[0;40;37m>>\u001b[0;1;43;37m[S] Search Bugs\u001b[7;2H\u001b[0;40;37m  [A] Analytics Dashboard"
+ },
+ {
+  "phase": "up-5",
+  "data": "\u001b[5;2H\u001b[0;40;37m>>\u001b[0;1;43;37m[M] My Bug Reports\u001b[6;2H\u001b[0;40;37m  [S] Search Bugs"
+ },
+ {
+  "phase": "up-6",
+  "data": "\u001b[4;2H\u001b[0;40;37m>>\u001b[0;1;43;37m[L] List All Bugs\u001b[5;2H\u001b[0;40;37m  [M] My Bug Reports"
+ },
+ {
+  "phase": "up-7",
+  "data": "\u001b[3;2H\u001b[0;40;37m>>\u001b[0;1;43;37m[N] New Bug Report\u001b[4;2H\u001b[0;40;37m  [L] List All Bugs"
+ },
+ {
+  "phase": "quit",
+  "data": "\u001b[?1006l"
+ },
+ {
+  "phase": "quit",
+  "data": "\u001b[?1003l"
+ },
+ {
+  "phase": "quit",
+  "data": "\u001b[?1000l"
+ },
+ {
+  "phase": "quit",
+  "data": "\u001b[?25h"
+ },
+ {
+  "phase": "quit",
+  "data": "\u001b[2J"
+ },
+ {
+  "phase": "quit",
+  "data": "\u001b[1;1H"
+ },
+ {
+  "phase": "quit",
+  "data": "\u001b[0m"
+ },
+ {
+  "phase": "quit",
+  "data": "\u001b[0m\u001b[2J\u001b[H"
+ }
+]
