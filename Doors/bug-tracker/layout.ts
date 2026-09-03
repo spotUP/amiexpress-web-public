@@ -12,6 +12,37 @@
  * reads `import.meta.url`, which a CommonJS test runner cannot load.
  */
 import { getCompactProfile } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import type { FooterHint } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+
+/** The hints BUGS offers at the normal tiers. */
+export const BUG_TRACKER_HINTS: readonly FooterHint[] = [
+  { key: 'Arrows', does: 'Navigate' },
+  { key: 'Enter', does: 'Select' },
+  { key: 'ESC', does: 'Back' },
+  { key: 'Q', does: 'Quit' },
+];
+
+/** The two that always apply; the view's own strip lists the rest. */
+export const BUG_TRACKER_HINTS_COMPACT: readonly FooterHint[] = [
+  { key: 'ESC', does: 'Back' },
+  { key: 'Q', does: 'Quit' },
+];
+
+/**
+ * The list the theme's glitches should damage: whichever one the current
+ * view put inside the container. Never the masthead or the hint line -
+ * damage there reads as the door being broken rather than as atmosphere.
+ *
+ * The door detaches and rebuilds its content pane on every view change, so
+ * the chrome asks for this at each tick rather than capturing an element
+ * once at startup.
+ */
+export function listOnScreen(container: { children?: unknown[] } | null | undefined): unknown {
+  const found = (container?.children ?? []).find(
+    (child: any) => typeof child?.setItems === 'function' && Array.isArray(child?.items)
+  );
+  return found ?? null;
+}
 
 export class CompactLayout {
   /** Always a LIVE width - the screen's, read on every access. */

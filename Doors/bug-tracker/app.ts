@@ -21,9 +21,10 @@ import {
   createTerminalModeSwitch, type TerminalModeSwitch,
 } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
 import * as dialogs from './dialogs';
-import { attachMasthead, footerHints, footerStyle } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
-import { effectsAllowed } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { CompactLayout } from './layout.js';
+import { attachDoorChrome, footerStyle, type DoorChrome } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import {
+  CompactLayout, BUG_TRACKER_HINTS, BUG_TRACKER_HINTS_COMPACT, listOnScreen,
+} from './layout.js';
 import {
   BugStorage,
   sendWebhook,
@@ -59,7 +60,8 @@ export class BugTrackerApp {
 
   // UI elements
   private headerBox!: Box;
-  private stopMasthead: (() => void) | null = null;
+  /** The masthead, the rail, the glitches and the hint line - one handle. */
+  private chrome: DoorChrome | null = null;
   private terminalMode: TerminalModeSwitch | null = null;
   private mainContainer!: Box;
   private footerBox!: Box;
@@ -241,18 +243,6 @@ export class BugTrackerApp {
       content: '',
       style: S.bar.style,
     });
-    // A 40-column screen has no spare cells for a moving rail, and 20fps of
-    // row repaint is a lot of PETSCII bytes for a C64. The title still draws;
-    // it just stops moving. (SDK: effectsAllowed().)
-    this.stopMasthead = effectsAllowed(this.screenWidth) ? attachMasthead(mastheadRow as any, THEME, {
-      title: 'BUG TRACKER',
-      // One column short: writing a row's last cell leaves the terminal in
-      // a pending-wrap state and clips the final character.
-      width: Math.max(1, ((this.screen as any).width || 80) - 1),
-      rail: S.accent,
-      ink: S.ink,
-      render: () => this.screen.render(),
-    }) : (mastheadRow.setContent(' BUG TRACKER '), () => undefined);
 
     // Main container - not focusable (children are)
     this.mainContainer = createBox({
@@ -280,26 +270,35 @@ export class BugTrackerApp {
       height: 1,
       ...this.frameless,
       style: footerStyle(THEME),
-      content: ' ' + footerHints(
-        this.compact.collapseChrome
-          ? [
-              // The view's own strip lists its keys; these two always apply.
-              { key: 'ESC', does: 'Back' },
-              { key: 'Q', does: 'Quit' },
-            ]
-          : [
-          { key: 'Arrows', does: 'Navigate' },
-          { key: 'Enter', does: 'Select' },
-          { key: 'ESC', does: 'Back' },
-          { key: 'Q', does: 'Quit' },
-        ],
-        { key: S.key, dim: S.dim },
-        S.rail
-      ),
+      content: '',
       tags: true,
       focusable: false,
       mouse: false,
       clickable: false,
+    });
+
+    /**
+     * The whole chrome, from the ONE SDK call: the moving rail, the theme's
+     * glitches and the hint line, gated on the width tier together.
+     *
+     * This door had the rail and the footer and no glitches, because its
+     * content pane is rebuilt on every view change and there was nothing
+     * stable to attach them to. The chrome takes a GETTER for that reason -
+     * it damages whichever list is on screen at the tick, and skips the
+     * tick when a view has none.
+     */
+    this.chrome = attachDoorChrome(THEME, {
+      width: this.screenWidth,
+      title: 'BUG TRACKER',
+      masthead: mastheadRow as any,
+      footer: this.footerBox as any,
+      hints: BUG_TRACKER_HINTS,
+      compactHints: BUG_TRACKER_HINTS_COMPACT,
+      footerPad: ' ',
+      glitch: () => listOnScreen(this.mainContainer),
+      glitchOptions: { tickMs: 400 },
+      styles: S,
+      render: () => this.screen.render(),
     });
   }
 
@@ -1962,9 +1961,9 @@ export class BugTrackerApp {
   private quit(): void {
     // Stop the masthead before the screen goes: a timer still writing to a
     // destroyed screen is how a door takes the session with it.
-    if (this.stopMasthead) {
-      try { this.stopMasthead(); } catch { /* leaving anyway */ }
-      this.stopMasthead = null;
+    if (this.chrome) {
+      try { this.chrome.stop(); } catch { /* leaving anyway */ }
+      this.chrome = null;
     }
     // Gives the board its 80 columns back and unhooks resize and Alt+Enter.
     this.terminalMode?.dispose();
