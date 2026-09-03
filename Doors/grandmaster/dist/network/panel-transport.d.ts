@@ -67,4 +67,27 @@ export interface PanelTransport {
     sendMatchEnd?(packet: PanelMatchEndPacket): void;
     onMatchEnd?(listener: (packet: PanelMatchEndPacket) => void): () => void;
 }
+/**
+ * The match parameters, derived rather than negotiated.
+ *
+ * Both machines need the same seed and the same board ORDER, and the obvious
+ * way to get there is for a host to send them. That is a handshake, and a
+ * handshake is a race: a guest that starts a frame before the setup arrives
+ * builds a different board and the match is lost before it begins.
+ *
+ * So nothing is sent. Both sides already know the match id and who is in it,
+ * and that is enough: the seed is a hash of the id, and the board order is the
+ * player ids sorted. Two machines running this function on the same match
+ * cannot disagree, because there is nothing for them to disagree about.
+ */
+export declare function panelMatchSetupFor(matchId: string, playerIds: string[], levelData: LevelData, engineVersion: string, cursorWaitTime?: number): PanelMatchSetup;
+/**
+ * A match id turned into a seed the panel generator will accept.
+ *
+ * FNV-1a, because it is four lines and has no dependencies; the generator's
+ * own PRNG does the work of making the board unpredictable, so all this has to
+ * do is spread ids apart. Kept inside the engine's seed range, and never zero -
+ * a zero seed is a legal number that produces a suspiciously regular board.
+ */
+export declare function seedFromMatchId(matchId: string): number;
 //# sourceMappingURL=panel-transport.d.ts.map

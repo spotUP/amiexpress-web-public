@@ -222,6 +222,18 @@ export declare class GrandmasterApp {
     /** A fight with Bowser: the versus screen against a health model. */
     private playBowser;
     /**
+     * VS PLAYER: another caller, on this board.
+     *
+     * Matchmaking under its own mode name, so a panel player and a Tetris player
+     * are never put in the same lobby waiting for a game the other cannot play.
+     *
+     * NOTHING IS NEGOTIATED once the lobby starts. Both machines derive the seed
+     * from the match id and the board order from the sorted player ids, so there
+     * is no setup packet to lose and no window in which one side has started and
+     * the other has not.
+     */
+    private runPanelNetplay;
+    /**
      * Watch a game back.
      *
      * Playback is the ordinary screen with the inputs already in the stack's

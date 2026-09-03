@@ -17,7 +17,12 @@ import type { GameEngine } from '../core/game';
 /**
  * Multiplayer game mode
  */
-export type MultiplayerMode = 'versus_1v1' | 'team_2v2' | 'battle_royale';
+export type MultiplayerMode =
+  | 'versus_1v1' | 'team_2v2' | 'battle_royale'
+  // TETRIS ATTACK, which matchmakes separately: a panel player and a Tetris
+  // player put in the same lobby would each be waiting for a game the other
+  // cannot play.
+  | 'panels_1v1';
 
 /**
  * Match state

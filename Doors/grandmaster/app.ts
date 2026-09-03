@@ -50,6 +50,10 @@ import { PanelReplayRecorder, loadReplayV3 } from './core/panels/replay-recorder
 import { stackForReplay } from './core/panels/replay';
 import { PanelReplayStore, type StoredReplay } from './server/panel-replay-store';
 import { chooserLayout, chooserLabels, type ChooserRow } from './ui/panels/chooser';
+import { PanelBrokerTransport } from './network/panel-broker-transport';
+import { PanelNetplaySession } from './network/panel-netplay-session';
+import { panelMatchSetupFor } from './network/panel-transport';
+import { ENGINE_VERSION as PANEL_ENGINE_VERSION } from './core/panels/consts';
 import {
   buildStages, StageClearGame, stageStackOptions, bossHealth, type Stage,
 } from './core/panels/stage-clear';
@@ -1330,6 +1334,13 @@ export class GrandmasterApp {
       raise: isDown(['r', 'x']),
     });
 
+    if (mode === 'vsplayer') {
+      await this.runPanelNetplay(sheet, readInput);
+      this.screen.removeListener('keypress', onKeypress);
+      this.currentScreen = 'menu';
+      return;
+    }
+
     if (mode === 'replays') {
       await this.runReplayBrowser(sheet, readInput);
       this.screen.removeListener('keypress', onKeypress);
@@ -1614,6 +1625,82 @@ export class GrandmasterApp {
   }
 
   /**
+   * VS PLAYER: another caller, on this board.
+   *
+   * Matchmaking under its own mode name, so a panel player and a Tetris player
+   * are never put in the same lobby waiting for a game the other cannot play.
+   *
+   * NOTHING IS NEGOTIATED once the lobby starts. Both machines derive the seed
+   * from the match id and the board order from the sorted player ids, so there
+   * is no setup packet to lose and no window in which one side has started and
+   * the other has not.
+   */
+  private async runPanelNetplay(
+    sheet: Record<string, Sprite>,
+    readInput: () => HeldInput,
+  ): Promise<void> {
+    if (!this.network) {
+      await this.showPanelNotice('No connection to the board. Try again later.');
+      return;
+    }
+
+    const localPlayerId = this.network.getLocalPlayerId()
+      ?? this.session.user?.id ?? this.state.playerName;
+    const lobbyScreen = new LobbyScreen(
+      this.screen, this.state, this.sounds, this.network, localPlayerId,
+    );
+
+    const result = await lobbyScreen.show('matchmaking', 'panels_1v1');
+    if (result.action !== 'start') return;
+
+    const matchState = this.network.getMatchState();
+    const humans = (matchState?.players ?? []).filter((player) => !player.isBot);
+    if (!matchState || humans.length < 2) {
+      await this.showPanelNotice('Nobody else joined. Try VS CPU instead.');
+      return;
+    }
+
+    const setup = panelMatchSetupFor(
+      matchState.matchId,
+      humans.map((player) => player.id),
+      getModern(GARBAGE_MODE_LEVEL),
+      PANEL_ENGINE_VERSION,
+    );
+
+    const transport = new PanelBrokerTransport(this.network);
+    const session = new PanelNetplaySession({ transport, setup });
+
+    const panels = new PanelsVersusScreen({
+      screen: this.screen,
+      player: session.localStack(),
+      opponent: session.remoteStack(),
+      sheet,
+      sounds: this.sounds,
+      readInput,
+      stepper: (input: string) => session.step(input) === 'ran',
+      isOver: () => session.hasEnded(),
+    });
+
+    const onEscape = () => panels.quit();
+    this.screen.key(['escape', 'q', 'Q'], onEscape);
+    try {
+      await panels.run();
+      if (session.desynced()) {
+        await this.showPanelNotice('The other player stopped responding.');
+      } else if (session.localWon() !== undefined) {
+        const result2 = buildPanelsResult(
+          session.localStack(), 'vsplayer', 'tetris_attack', session.localWon(),
+        );
+        this.highScores.addScore(this.state.playerName, result2);
+      }
+    } finally {
+      this.screen.unkey(['escape', 'q', 'Q'], onEscape);
+      session.dispose();
+      transport.dispose();
+    }
+  }
+
+  /**
    * Watch a game back.
    *
    * Playback is the ordinary screen with the inputs already in the stack's
@@ -1813,6 +1900,7 @@ export class GrandmasterApp {
       { wide: 'CHALLENGE    the stage ladder, eight difficulties', compact: 'CHALLENGE' },
       { wide: 'PUZZLE       235 arrangements, one right answer each', compact: 'PUZZLE' },
       { wide: 'STAGE CLEAR  thirty stages and two fights with Bowser', compact: 'STAGE CLEAR' },
+      { wide: 'VS PLAYER    another caller, on this board', compact: 'VS PLAYER' },
       { wide: 'REPLAYS      watch a game back', compact: 'REPLAYS' },
       { wide: 'Back', compact: 'Back' },
     ];
@@ -1820,7 +1908,7 @@ export class GrandmasterApp {
     const labels = chooserLabels(rows, layout);
     const modes: (PanelsMode | null)[] = [
       'endless', 'timeattack', 'vscpu', 'challenge', 'puzzle', 'stageclear',
-      'replays', null,
+      'vsplayer', 'replays', null,
     ];
 
     return new Promise<PanelsMode | null>((resolve) => {

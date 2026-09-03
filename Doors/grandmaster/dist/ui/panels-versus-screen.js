@@ -34,6 +34,8 @@ class PanelsVersusScreen {
         this.frameAccumulator = 0;
         this.lastRender = 0;
         this.quitting = false;
+        /** Set by the caller when its session reports a lost connection. */
+        this.desynced = false;
         this.screen = options.screen;
         this.player = options.player;
         this.opponent = options.opponent;
@@ -41,6 +43,8 @@ class PanelsVersusScreen {
         this.sheet = options.sheet;
         this.readInput = options.readInput;
         this.variant = options.variant ?? (this.screen.width < 80 ? 'c64' : 'wide');
+        this.stepper = options.stepper;
+        this.isOver = options.isOver;
         this.match = new match_1.PanelMatch({ stacks: [this.player, this.opponent] });
     }
     /** Does the opponent have a board to draw, or only a health bar? */
@@ -107,7 +111,14 @@ class PanelsVersusScreen {
     }
     /** One engine frame for both boards. */
     step() {
-        this.player.receiveConfirmedInput((0, input_codec_1.encodeInput)((0, input_codec_1.inputStateToMask)(this.readInput())));
+        const input = (0, input_codec_1.encodeInput)((0, input_codec_1.inputStateToMask)(this.readInput()));
+        // Netplay: the session decides whether this frame may run at all, because
+        // a frame that runs before the other player's input arrives is a desync.
+        if (this.stepper) {
+            this.stepper(input);
+            return;
+        }
+        this.player.receiveConfirmedInput(input);
         if (this.cpu && this.opponent instanceof stack_1.Stack) {
             this.opponent.receiveConfirmedInput((0, input_codec_1.encodeInput)(this.cpu.update()));
         }
@@ -124,6 +135,9 @@ class PanelsVersusScreen {
                 resolve({
                     // Surviving the opponent is the win condition; quitting is not a win.
                     playerWon: !this.quitting && !this.player.gameEnded(),
+                    // A netplay match may end without either board topping out - a side
+                    // that stopped talking - and the session knows which that was.
+                    desynced: this.desynced,
                     score: this.player.score,
                     frames: this.player.stopWatch,
                 });
@@ -137,7 +151,7 @@ class PanelsVersusScreen {
                     this.frameAccumulator -= FRAME_TIME;
                     this.step();
                 }
-                if (this.match.hasEnded() || this.quitting) {
+                if ((this.isOver ? this.isOver() : this.match.hasEnded()) || this.quitting) {
                     finish();
                     return;
                 }

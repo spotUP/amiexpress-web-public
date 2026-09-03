@@ -18,7 +18,7 @@ import type {
   PanelTransport, PanelInputPacket, PanelMatchSetup,
 } from '../../network/panel-transport';
 import { getModern, GARBAGE_MODE_LEVEL } from '../../core/panels/level-data';
-import { ENGINE_VERSIONS } from '../../core/panels/consts';
+import { ENGINE_VERSION } from '../../core/panels/consts';
 import { PanelAi } from '../../ai/panel-ai';
 import { encodeInput } from '../../core/panels/input-codec';
 import type { Stack } from '../../core/panels/stack';
@@ -82,7 +82,7 @@ function setup(seed = 777): PanelMatchSetup {
     // Garbage crosses in a match, so this must be a level that HAS a
     // GARBAGE_HOVER - see GARBAGE_MODE_LEVEL.
     levelData: getModern(GARBAGE_MODE_LEVEL),
-    engineVersion: ENGINE_VERSIONS.CURRENT ?? '046',
+    engineVersion: ENGINE_VERSION,
     cursorWaitTime: 20,
     playerIds: [...PLAYERS],
   };
@@ -109,8 +109,15 @@ function pair(seed = 777): { alice: PanelNetplaySession; bob: PanelNetplaySessio
  * That is the design working, not a divergence, and it is why every comparison
  * below drains first.
  */
-function drain(sessions: PanelNetplaySession[], frames = 10): void {
-  for (let i = 0; i < frames; i++) for (const session of sessions) session.step('A');
+function drain(sessions: PanelNetplaySession[], budget = 50): void {
+  for (let i = 0; i < budget; i++) {
+    const clocks = sessions.map((session) => session.stacks[0].clock);
+    const behind = Math.min(...clocks);
+    if (clocks.every((clock) => clock === behind)) return;
+    // Step ONLY the side that is behind. Stepping both keeps the gap: each
+    // step hands the other side the input it needs for its next frame.
+    sessions[clocks.indexOf(behind)].step('A');
+  }
 }
 
 function boardOf(stack: Stack): string {
@@ -260,7 +267,8 @@ export async function bothSidesNameTheSameWinner(): Promise<void> {
 
   // Frames first: setGameOver records the CURRENT clock, and a stack that has
   // never run records zero - which the match reads as "still playing".
-  drain([alice, bob], 5);
+  for (let i = 0; i < 5; i++) { alice.step('A'); bob.step('A'); }
+  drain([alice, bob]);
 
   alice.stacks[1].setGameOver();
   bob.stacks[1].setGameOver();
@@ -285,4 +293,72 @@ export async function inputFromAStrangerIsIgnored(): Promise<void> {
   assert.strictEqual(alice.step('A'), 'waiting', 'still waiting on bob, not satisfied by a stranger');
   assert.strictEqual(alice.stacks[0].clock, 0);
   void two;
+}
+
+/**
+ * The match parameters are DERIVED, not negotiated, and this is why.
+ *
+ * The obvious design has a host send the seed. That is a handshake, and a
+ * handshake is a race: a guest that runs one frame before the setup arrives
+ * has built a different board and the match is lost before it starts. Both
+ * machines already know the match id and who is in it, so there is nothing to
+ * send - and nothing to lose.
+ */
+export async function bothMachinesDeriveTheSameSetupWithoutTalking(): Promise<void> {
+  const { panelMatchSetupFor, seedFromMatchId } =
+    require('../../network/panel-transport');
+  const level = getModern(GARBAGE_MODE_LEVEL);
+
+  // The same match, asked from two machines whose player lists arrived in
+  // different orders - which is normal, they are two different lobbies.
+  const fromAlice = panelMatchSetupFor('match-42', ['alice', 'bob'], level, '049');
+  const fromBob = panelMatchSetupFor('match-42', ['bob', 'alice'], level, '049');
+
+  assert.strictEqual(fromAlice.seed, fromBob.seed, 'the same seed');
+  assert.deepStrictEqual(
+    fromAlice.playerIds, fromBob.playerIds,
+    'and the same board order, whoever is asking',
+  );
+  assert.deepStrictEqual(fromAlice.playerIds, ['alice', 'bob'], 'sorted');
+
+  // A different match is a different game.
+  assert.notStrictEqual(seedFromMatchId('match-42'), seedFromMatchId('match-43'));
+}
+
+/** A seed the generator will accept: inside its range, and never zero. */
+export async function aDerivedSeedIsAlwaysUsable(): Promise<void> {
+  const { seedFromMatchId } = require('../../network/panel-transport');
+
+  for (const id of ['', 'a', 'match-1', 'a'.repeat(200), 'ÿþ', 'lobby:9:node2']) {
+    const seed = seedFromMatchId(id);
+    assert.ok(Number.isInteger(seed), `${id} gave ${seed}`);
+    assert.ok(seed >= 1, 'never zero - a zero seed makes a suspiciously regular board');
+    assert.ok(seed <= 2147483000, 'inside the generator range');
+  }
+}
+
+/** Two sessions built from a derived setup agree, with no setup packet sent. */
+export async function aDerivedSetupProducesAgreeingSessions(): Promise<void> {
+  const { panelMatchSetupFor } = require('../../network/panel-transport');
+  const one = new LoopbackTransport('alice');
+  const two = new LoopbackTransport('bob');
+  one.peer = two;
+  two.peer = one;
+
+  const level = getModern(GARBAGE_MODE_LEVEL);
+  const alice = new PanelNetplaySession({
+    transport: one,
+    setup: panelMatchSetupFor('m-7', ['bob', 'alice'], level, '049'),
+  });
+  const bob = new PanelNetplaySession({
+    transport: two,
+    setup: panelMatchSetupFor('m-7', ['alice', 'bob'], level, '049'),
+  });
+
+  drain([alice, bob], 200);
+
+  assert.strictEqual(boardOf(alice.stacks[0]), boardOf(bob.stacks[0]));
+  assert.strictEqual(boardOf(alice.stacks[1]), boardOf(bob.stacks[1]));
+  assert.strictEqual(alice.localIndex, 0, 'alice sorts first');
+  assert.strictEqual(bob.localIndex, 1);
 }

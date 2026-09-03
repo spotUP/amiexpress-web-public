@@ -45,12 +45,24 @@ export interface PanelsVersusOptions {
   sounds?: SoundEngine;
   readInput: () => HeldInput;
   variant?: BoardVariant;
+  /**
+   * Run one frame, when something else owns the timing.
+   *
+   * Netplay uses this: a frame may only run once every player's input for it
+   * has arrived, so the session decides whether this tick advances the game or
+   * waits. Given the local input, it returns whether a frame actually ran.
+   */
+  stepper?: (localInput: string) => boolean;
+  /** Is the match over? Asked alongside the boards' own end conditions. */
+  isOver?: () => boolean;
 }
 
 export interface VersusResult {
   playerWon: boolean;
   score: number;
   frames: number;
+  /** True when the match ended because a side stopped talking. */
+  desynced?: boolean;
 }
 
 export class PanelsVersusScreen {
@@ -62,6 +74,8 @@ export class PanelsVersusScreen {
   private readonly readInput: () => HeldInput;
   private readonly variant: BoardVariant;
   private readonly match: PanelMatch;
+  private readonly stepper?: (localInput: string) => boolean;
+  private readonly isOver?: () => boolean;
 
   private layout?: VersusPanelLayout;
   private playerBox?: ReturnType<typeof createBox>;
@@ -72,6 +86,8 @@ export class PanelsVersusScreen {
   private frameAccumulator = 0;
   private lastRender = 0;
   private quitting = false;
+  /** Set by the caller when its session reports a lost connection. */
+  desynced = false;
 
   constructor(options: PanelsVersusOptions) {
     this.screen = options.screen;
@@ -81,6 +97,8 @@ export class PanelsVersusScreen {
     this.sheet = options.sheet;
     this.readInput = options.readInput;
     this.variant = options.variant ?? (this.screen.width < 80 ? 'c64' : 'wide');
+    this.stepper = options.stepper;
+    this.isOver = options.isOver;
     this.match = new PanelMatch({ stacks: [this.player, this.opponent] });
   }
 
@@ -158,7 +176,16 @@ export class PanelsVersusScreen {
 
   /** One engine frame for both boards. */
   private step(): void {
-    this.player.receiveConfirmedInput(encodeInput(inputStateToMask(this.readInput())));
+    const input = encodeInput(inputStateToMask(this.readInput()));
+
+    // Netplay: the session decides whether this frame may run at all, because
+    // a frame that runs before the other player's input arrives is a desync.
+    if (this.stepper) {
+      this.stepper(input);
+      return;
+    }
+
+    this.player.receiveConfirmedInput(input);
     if (this.cpu && this.opponent instanceof Stack) {
       this.opponent.receiveConfirmedInput(encodeInput(this.cpu.update()));
     }
@@ -177,6 +204,9 @@ export class PanelsVersusScreen {
         resolve({
           // Surviving the opponent is the win condition; quitting is not a win.
           playerWon: !this.quitting && !this.player.gameEnded(),
+          // A netplay match may end without either board topping out - a side
+          // that stopped talking - and the session knows which that was.
+          desynced: this.desynced,
           score: this.player.score,
           frames: this.player.stopWatch,
         });
@@ -197,7 +227,7 @@ export class PanelsVersusScreen {
           this.step();
         }
 
-        if (this.match.hasEnded() || this.quitting) {
+        if ((this.isOver ? this.isOver() : this.match.hasEnded()) || this.quitting) {
           finish();
           return;
         }

@@ -34,11 +34,23 @@ export interface PanelsVersusOptions {
     sounds?: SoundEngine;
     readInput: () => HeldInput;
     variant?: BoardVariant;
+    /**
+     * Run one frame, when something else owns the timing.
+     *
+     * Netplay uses this: a frame may only run once every player's input for it
+     * has arrived, so the session decides whether this tick advances the game or
+     * waits. Given the local input, it returns whether a frame actually ran.
+     */
+    stepper?: (localInput: string) => boolean;
+    /** Is the match over? Asked alongside the boards' own end conditions. */
+    isOver?: () => boolean;
 }
 export interface VersusResult {
     playerWon: boolean;
     score: number;
     frames: number;
+    /** True when the match ended because a side stopped talking. */
+    desynced?: boolean;
 }
 export declare class PanelsVersusScreen {
     private readonly screen;
@@ -49,6 +61,8 @@ export declare class PanelsVersusScreen {
     private readonly readInput;
     private readonly variant;
     private readonly match;
+    private readonly stepper?;
+    private readonly isOver?;
     private layout?;
     private playerBox?;
     private centreBox?;
@@ -58,6 +72,8 @@ export declare class PanelsVersusScreen {
     private frameAccumulator;
     private lastRender;
     private quitting;
+    /** Set by the caller when its session reports a lost connection. */
+    desynced: boolean;
     constructor(options: PanelsVersusOptions);
     /** Does the opponent have a board to draw, or only a health bar? */
     private get opponentHasBoard();

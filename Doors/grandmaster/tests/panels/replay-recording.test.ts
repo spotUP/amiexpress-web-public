@@ -19,7 +19,7 @@ import { Stack } from '../../core/panels/stack';
 import { GeneratorSource } from '../../core/panels/generator-source';
 import { getClassicEndless } from '../../core/panels/level-data';
 import { defaultBehaviours } from '../../core/panels/stack';
-import { ENGINE_VERSIONS } from '../../core/panels/consts';
+import { ENGINE_VERSION } from '../../core/panels/consts';
 import { PanelAi } from '../../ai/panel-ai';
 import { encodeInput } from '../../core/panels/input-codec';
 import {
@@ -56,7 +56,7 @@ function playAndRecord(): { stack: Stack; recorder: PanelReplayRecorder; frames:
   stack.startingState();
 
   const recorder = new PanelReplayRecorder({
-    engineVersion: ENGINE_VERSIONS.CURRENT ?? stack.engineVersion,
+    engineVersion: ENGINE_VERSION,
     seed: SEED,
     levelData,
     behaviours: defaultBehaviours(),

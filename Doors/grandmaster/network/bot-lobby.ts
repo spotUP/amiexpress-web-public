@@ -92,6 +92,9 @@ export const MODE_PLAYER_TARGET: Record<string, number> = {
   versus_1v1: 2,
   team_2v2: 4,
   battle_royale: 99,
+  // TETRIS ATTACK is a duel, and has no bot lobby: its CPU opponent is a mode
+  // of its own rather than a seat in this one.
+  panels_1v1: 2,
 };
 
 /** Players a mode wants in total. Unknown modes are a duel. */
