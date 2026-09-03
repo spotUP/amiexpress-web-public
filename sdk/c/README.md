@@ -203,10 +203,32 @@ real setting), and a value too long for the caller is an error rather than a
 silent truncation - truncating a path or a URL is how a door ends up asking
 for something that does not exist.
 
-## What is deliberately not here yet
+## 7. Phase 5 (in progress): the transport, and what a C door still cannot do
 
-A real door ported end to end, and the AEDoor transport lifted in behind
-`ae_transport_fn` (phase 5).
+`include/aedoor.h` and both backends moved here from DoorRepo: the exec
+message round trip (`src/ae_transport_amiga.c`) and the host stand-in the
+tests use (`src/ae_transport_native.c`). `ae_chunk.h` moved with them - how
+many bytes fit in one JH_SM message without tearing an ANSI escape across
+two of them is a fact about the protocol, not about DoorRepo.
+
+`ui_screen_flush()` writes through it now, so a frame composed by any widget
+in this SDK reaches a real caller in one `ae_put`.
+
+**What a 68K door still cannot do, and why the obvious phase 5 door is not
+here yet.** The plan named `Doors/theme-picker` as the port candidate. Its
+whole job is to SAVE a choice, and the AEDoor protocol's only outbound verb
+is `ae_return_command` - there is no `setTheme`, and no user-field write of
+any kind. A C theme-picker today would list the themes and be unable to keep
+one, which is worse than not having it.
+
+Two honest ways forward, in order of size:
+
+1. The DT_* fetches (`ae_session`'s user fields) are specified in the plan
+   but not implemented in this transport - DoorRepo never needed them. That
+   is a protocol addition, not a port.
+2. A door whose job is expressible with what exists - reading and drawing -
+   is the better first proof. A bulletin reader is the obvious one: the
+   files are already on disk, and every widget it needs is built.
 
 And the real AEDoor transport: `examples/doorrepo-c/aedoor_amiga.c` still
 owns it, and `ui_screen`'s sink is deliberately the one place that changes

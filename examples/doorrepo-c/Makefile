@@ -1,9 +1,9 @@
 # Makefile - examples/doorrepo-c
 #
 # Targets:
-#   native      - doorrepo, built for this host with aedoor_native.c (dev/test build)
+#   native      - doorrepo, built for this host with $(SDK_C)/src/ae_transport_native.c (dev/test build)
 #   amiga       - doorrepo.amiga, cross-compiled with vbcc for a real AmigaOS
-#                 node: aedoor_amiga.c + netio.c's real bsdsocket.library
+#                 node: $(SDK_C)/src/ae_transport_amiga.c + netio.c's real bsdsocket.library
 #                 branch, built against this repo's vendored NDK3.2R4 (see
 #                 the AMIGA_NETINCLUDE_VENDOR_LINK block below) by default -
 #                 COMPILE-VERIFIED here (see netio.c's header comment and
@@ -105,10 +105,10 @@ LIVE_HOST = http://bbs.uprough.net
 # sink. One renderer, not two.
 SDK_C = ../../sdk/c
 CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c sha256.c guide.c ansi.c $(SDK_C)/src/ui_ansi.c $(SDK_C)/src/ui_key.c infocache.c $(SDK_C)/src/json_lite.c owner_auth.c
-HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h aedoor.h netio.h ansi.h $(SDK_C)/include/ui_ansi.h infocache.h shell.h $(SDK_C)/include/json_lite.h owner_auth.h dirlist.h
+HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h $(SDK_C)/include/aedoor.h netio.h ansi.h $(SDK_C)/include/ui_ansi.h infocache.h shell.h $(SDK_C)/include/json_lite.h owner_auth.h dirlist.h
 
-NATIVE_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_native.c shell_native.c dirlist_native.c
-AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c aedoor_amiga.c shell_amiga.c dirlist_amiga.c
+NATIVE_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c $(SDK_C)/src/ae_transport_native.c shell_native.c dirlist_native.c
+AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c $(SDK_C)/src/ae_transport_amiga.c shell_amiga.c dirlist_amiga.c
 
 # tools/probe_fetch.c is a head-less diagnostic, not part of the door: it
 # pulls one archive through the same http.c/netio.c path with no catalog and
@@ -158,7 +158,7 @@ doorrepo.amiga-stub: $(AMIGA_SOURCES) $(HEADERS)
 # ---------------------------------------------------------------------
 # syntax (checks native C source files for compilation errors without
 # linking; catches issues like unterminated comments that would otherwise
-# ship undetected. Amiga-only files (aedoor_amiga.c, shell_amiga.c) are
+# ship undetected. Amiga-only files ($(SDK_C)/src/ae_transport_amiga.c, shell_amiga.c) are
 # excluded because they require Amiga system headers unavailable on Unix
 # hosts; the `amiga` and `amiga-stub` targets cover their compilation).
 # ---------------------------------------------------------------------
@@ -196,8 +196,8 @@ test: syntax test-flow test-md5 test-sha256 test-guide test-ansi test-listtxt te
 
 # The key decoder these tests drive lives in the SDK now (see flow.h), so
 # the suite links it rather than a second copy.
-test-flow: flow.c tests/test_flow.c flow.h $(SDK_C)/src/ui_key.c
-	$(CC) $(TEST_CFLAGS) flow.c $(SDK_C)/src/ui_key.c tests/test_flow.c -o build-test-flow
+test-flow: flow.c tests/test_flow.c flow.h $(SDK_C)/src/ui_key.c $(SDK_C)/src/ae_chunk.c
+	$(CC) $(TEST_CFLAGS) flow.c $(SDK_C)/src/ui_key.c $(SDK_C)/src/ae_chunk.c tests/test_flow.c -o build-test-flow
 	./build-test-flow
 
 test-dirlist: dirlist_native.c tests/test_dirlist.c dirlist.h
@@ -222,8 +222,8 @@ test-guide: guide.c tests/test_guide.c guide.h
 	./build-test-guide
 
 # The primitives are the SDK's now; ansi.c is only this door's BBS sink.
-test-ansi: ansi.c $(SDK_C)/src/ui_ansi.c aedoor_native.c tests/test_ansi.c ansi.h
-	$(CC) $(TEST_CFLAGS) ansi.c $(SDK_C)/src/ui_ansi.c aedoor_native.c tests/test_ansi.c -o build-test-ansi
+test-ansi: ansi.c $(SDK_C)/src/ui_ansi.c $(SDK_C)/src/ae_transport_native.c tests/test_ansi.c ansi.h
+	$(CC) $(TEST_CFLAGS) ansi.c $(SDK_C)/src/ui_ansi.c $(SDK_C)/src/ae_transport_native.c tests/test_ansi.c -o build-test-ansi
 	./build-test-ansi
 
 test-listtxt: listtxt.c tests/test_listtxt.c listtxt.h
@@ -238,8 +238,8 @@ test-http: http.c netio.c config.c flow.c tests/test_http.c tests/stub_server.c 
 	$(CC) $(TEST_CFLAGS) http.c netio.c config.c flow.c tests/stub_server.c tests/test_http.c -o build-test-http
 	./build-test-http
 
-test-aedoor-native: aedoor_native.c tests/test_aedoor_native.c aedoor.h
-	$(CC) $(TEST_CFLAGS) aedoor_native.c tests/test_aedoor_native.c -o build-test-aedoor-native
+test-aedoor-native: $(SDK_C)/src/ae_transport_native.c tests/test_aedoor_native.c $(SDK_C)/include/aedoor.h
+	$(CC) $(TEST_CFLAGS) $(SDK_C)/src/ae_transport_native.c tests/test_aedoor_native.c -o build-test-aedoor-native
 	./build-test-aedoor-native
 
 test-infocache: infocache.c tests/test_infocache.c infocache.h

@@ -14,7 +14,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include "../aedoor.h"
+#include "aedoor.h"   /* sdk/c/include - the protocol moved there */
 
 static int tests_run = 0;
 static int tests_passed = 0;
