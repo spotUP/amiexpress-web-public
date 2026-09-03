@@ -242,6 +242,7 @@ export class LeaderboardScreen {
       zone: 'Zone Mode',
       cpu_battle: 'CPU Battle',
       tetrinet: 'TetriNET',
+      tetris_attack: 'Tetris Attack',
     };
     return names[mode];
   }

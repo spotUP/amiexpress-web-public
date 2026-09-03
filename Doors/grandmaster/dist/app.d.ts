@@ -175,6 +175,21 @@ export declare class GrandmasterApp {
      */
     /** TetriNET's own win-points table (core/tetrinet/winlist.ts). */
     private tetrinetWinList;
+    /**
+     * TETRIS ATTACK / Panel de Pon.
+     *
+     * The engine is fed one input CHARACTER per frame, the same way a replay or a
+     * networked opponent feeds it, so cursor auto-repeat, the every-other-frame
+     * swap rule and raise gating all come from the engine rather than a second
+     * implementation here that could drift from it.
+     *
+     * Held keys are read two ways, because the two screens differ. A browser
+     * delivers real key-down and key-up edges, so DoorInputManager knows exactly
+     * what is down. Telnet has no key-up at all, so a keypress marks a key held
+     * for a short window and the player gets discrete steps rather than a hold -
+     * the same compromise input/handler.ts already makes for the Tetris modes.
+     */
+    private startTetrisAttack;
     private showTetriNetLobby;
     /**
      * Start a BBS-internal networked TetriNET match.

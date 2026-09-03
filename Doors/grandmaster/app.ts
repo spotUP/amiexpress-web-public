@@ -44,6 +44,10 @@ import { VersusScreen } from './ui/versus-screen';
 import { SpectatorScreen } from './ui/spectator-screen';
 import { SoloBroadcast } from './network/solo-broadcast';
 import { LeaderboardScreen } from './ui/leaderboard-screen';
+import { PanelsScreen, type HeldInput } from './ui/panels-screen';
+import { Stack as PanelStack } from './core/panels/stack';
+import { GeneratorSource } from './core/panels/generator-source';
+import { getClassicEndless } from './core/panels/level-data';
 import { AttractScreen } from './ui/attract-screen';
 import { InputHandler } from './input/handler';
 import { DEFAULT_KEYS, TIMING } from './input/config';
@@ -755,6 +759,9 @@ export class GrandmasterApp {
       case 'tetrinet':
         await this.showTetriNetLobby();
         break;
+      case 'tetris_attack':
+        await this.startTetrisAttack();
+        break;
       case 'ultra':
         await this.startGame('ultra');
         break;
@@ -1224,6 +1231,90 @@ export class GrandmasterApp {
    */
   /** TetriNET's own win-points table (core/tetrinet/winlist.ts). */
   private tetrinetWinList = new WinList();
+
+  /**
+   * TETRIS ATTACK / Panel de Pon.
+   *
+   * The engine is fed one input CHARACTER per frame, the same way a replay or a
+   * networked opponent feeds it, so cursor auto-repeat, the every-other-frame
+   * swap rule and raise gating all come from the engine rather than a second
+   * implementation here that could drift from it.
+   *
+   * Held keys are read two ways, because the two screens differ. A browser
+   * delivers real key-down and key-up edges, so DoorInputManager knows exactly
+   * what is down. Telnet has no key-up at all, so a keypress marks a key held
+   * for a short window and the player gets discrete steps rather than a hold -
+   * the same compromise input/handler.ts already makes for the Tetris modes.
+   */
+  private async startTetrisAttack(): Promise<void> {
+    this.currentScreen = 'game';
+    this.state.currentMode = 'tetris_attack';
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { loadSpriteSheet } = require('@amiexpress/bbs-door-sdk/engines/graphics/cell-art');
+    const sheet = loadSpriteSheet(path.join(__dirname, 'sprites'));
+
+    const seed = Math.floor(Math.random() * 2147483000) + 1;
+    const stack = new PanelStack({
+      levelData: getClassicEndless('normal'),
+      panelSource: new GeneratorSource(seed, true),
+      doCountdown: true,
+    });
+    stack.startingState();
+
+    /** Telnet fallback: a keypress counts as held for this long. */
+    const HOLD_MS = 100;
+    const pressedUntil = new Map<string, number>();
+    const onKeypress = (_ch: unknown, key: { name?: string } | undefined) => {
+      if (!key || !key.name) return;
+      pressedUntil.set(key.name, Date.now() + HOLD_MS);
+    };
+    this.screen.on('keypress', onKeypress);
+
+    const keyStateAvailable = typeof (this.inputManager as unknown as {
+      isKeyStateActive?: () => boolean;
+    }).isKeyStateActive === 'function';
+
+    const isDown = (names: string[]): boolean => {
+      const manager = this.inputManager as unknown as {
+        isKeyStateActive?: () => boolean;
+        isHeld?: (key: string) => boolean;
+      };
+      if (keyStateAvailable && manager.isKeyStateActive?.() && manager.isHeld) {
+        return names.some((name) => manager.isHeld!(name));
+      }
+      const now = Date.now();
+      return names.some((name) => (pressedUntil.get(name) ?? 0) > now);
+    };
+
+    const readInput = (): HeldInput => ({
+      up: isDown(['up']),
+      down: isDown(['down']),
+      left: isDown(['left']),
+      right: isDown(['right']),
+      swap: isDown(['space', 'z']),
+      raise: isDown(['r', 'x']),
+    });
+
+    const panels = new PanelsScreen({
+      screen: this.screen,
+      stack,
+      sheet,
+      sounds: this.sounds,
+      readInput,
+    });
+
+    const onEscape = () => panels.quit();
+    this.screen.key(['escape', 'q', 'Q'], onEscape);
+
+    try {
+      await panels.run();
+    } finally {
+      this.screen.removeListener('keypress', onKeypress);
+      this.screen.unkey(['escape', 'q', 'Q'], onEscape);
+      this.currentScreen = 'menu';
+    }
+  }
 
   private async showTetriNetLobby(): Promise<void> {
     this.currentScreen = 'lobby';

@@ -17,6 +17,7 @@ export type MenuSelection =
   | 'cpu_battle'
   | 'versus'
   | 'tetrinet'
+  | 'tetris_attack'
   | 'training'
   | 'mission'
   | 'ultra'
@@ -27,6 +28,64 @@ export type MenuSelection =
   | 'stats'
   | 'manual'
   | 'quit';
+
+/**
+ * The menu's selections, index-aligned with the `items` array that renders them
+ * and with the descriptions beside it. Three parallel arrays, so a row added to
+ * one has to be added to all three.
+ *
+ * Hoisted out of the select handler so key bindings can look an index UP rather
+ * than hardcode one - they used to hardcode, and adding rows above them quietly
+ * pointed q/ESC at High Scores and F1 at Settings.
+ */
+/**
+ * The menu's rows, index-aligned with MENU_SELECTIONS below and with the
+ * descriptions in getModeDescription. Adding a row means adding to all three;
+ * tests/panels/menu-wiring.test.ts checks the first two agree.
+ */
+export const MENU_ITEMS: string[] = [
+          'MASTER MODE',
+          'DEATH MODE',
+          'SPRINT 40L',
+          'MARATHON',
+          'CPU BATTLE',
+          'VERSUS',
+          '{yellow-fg}TETRINET{/yellow-fg}',
+          '{lightmagenta-fg}TETRIS ATTACK{/lightmagenta-fg}',
+          'TRAINING',
+          '{green-fg}MISSIONS{/green-fg}',
+          '{cyan-fg}ULTRA 2MIN{/cyan-fg}',
+          '{red-fg}DIG MODE{/red-fg}',
+          '{cyan-fg}ZONE MODE{/cyan-fg}',
+          '{magenta-fg}WATCH A GAME{/magenta-fg}',
+          '',
+          'Settings',
+          'High Scores',
+          '{cyan-fg}Manual (F1){/cyan-fg}',
+          '{red-fg}Quit{/red-fg}',
+];
+
+export const MENU_SELECTIONS: MenuSelection[] = [
+          'master',
+          'death',
+          'sprint',
+          'marathon',
+          'cpu_battle',
+          'versus',
+          'tetrinet',
+          'tetris_attack',
+          'training',
+          'mission',
+          'ultra',
+          'dig',
+          'zone',
+          'spectate',
+          'master',  // Separator line, default to master
+          'settings',
+          'stats',
+          'manual',
+          'quit',
+];
 
 /**
  * Main menu screen
@@ -151,26 +210,7 @@ export class MenuScreen {
         keys: true,
         vi: true,
         mouse: true,
-        items: [
-          'MASTER MODE',
-          'DEATH MODE',
-          'SPRINT 40L',
-          'MARATHON',
-          'CPU BATTLE',
-          'VERSUS',
-          '{yellow-fg}TETRINET{/yellow-fg}',
-          'TRAINING',
-          '{green-fg}MISSIONS{/green-fg}',
-          '{cyan-fg}ULTRA 2MIN{/cyan-fg}',
-          '{red-fg}DIG MODE{/red-fg}',
-          '{cyan-fg}ZONE MODE{/cyan-fg}',
-          '{magenta-fg}WATCH A GAME{/magenta-fg}',
-          '',
-          'Settings',
-          'High Scores',
-          '{cyan-fg}Manual (F1){/cyan-fg}',
-          '{red-fg}Quit{/red-fg}',
-        ],
+        items: MENU_ITEMS,
       });
 
       // Mode description box - middle panel
@@ -244,26 +284,7 @@ export class MenuScreen {
 
       // Handle selection
       menu.on('select', (_item: any, index: number) => {
-        const selections: MenuSelection[] = [
-          'master',
-          'death',
-          'sprint',
-          'marathon',
-          'cpu_battle',
-          'versus',
-          'tetrinet',
-          'training',
-          'mission',
-          'ultra',
-          'dig',
-          'zone',
-          'spectate',
-          'master',  // Separator line, default to master
-          'settings',
-          'stats',
-          'manual',
-          'quit',
-        ];
+        const selections = MENU_SELECTIONS;
 
         const selection = selections[index];
         this.sounds.playSfx('menu_ok');
@@ -282,19 +303,29 @@ export class MenuScreen {
         resolve(selection);
       });
 
+      // These used to be hardcoded indices, and they silently stopped being
+      // correct the moment a row was added above them: q/ESC was selecting
+      // High Scores and F1 was opening Settings. Look the index up instead, so
+      // the next row added to the menu cannot break them again.
+      const indexOfSelection = (wanted: MenuSelection): number => {
+        const index = MENU_SELECTIONS.indexOf(wanted);
+        if (index < 0) throw new Error(`menu has no '${wanted}' entry`);
+        return index;
+      };
+
       // Handle quit key
       menu.key(['q', 'Q'], () => {
-        menu.emit('select', null, 15);  // Trigger quit selection (index 15)
+        menu.emit('select', null, indexOfSelection('quit'));
       });
 
       // Handle ESC key - same as quit
       menu.key(['escape'], () => {
-        menu.emit('select', null, 15);  // Trigger quit selection (index 15)
+        menu.emit('select', null, indexOfSelection('quit'));
       });
 
       // Handle F1 key for manual
       menu.key(['f1'], () => {
-        menu.emit('select', null, 14);  // Trigger manual selection (index 14)
+        menu.emit('select', null, indexOfSelection('manual'));
       });
 
       // Focus and render
@@ -366,6 +397,13 @@ ${p}|_____|__|__|__|__|_|___|____/|_|_|_|__|__|_____| |_| |_____|__|__|{/yellow-
       '16 special blocks,\n' +
       'up to 6 players,\n' +
       'sudden death mode.',
+
+      // TETRIS ATTACK
+      '{bold}{lightmagenta-fg}TETRIS ATTACK{/lightmagenta-fg}{/bold}\n\n' +
+      'Panel de Pon!\n\n' +
+      'Swap panels, build\n' +
+      'chains, survive the\n' +
+      'rising stack.',
 
       // TRAINING
       '{bold}{white-fg}TRAINING{/white-fg}{/bold}\n\n' +
