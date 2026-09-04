@@ -804,9 +804,7 @@ async function sendBotMessageWithTyping(
   const chatSession = activeChatSessions.get(pageId);
   if (!chatSession) return;
 
-  // Save message + emit to Socket.IO admin clients immediately
-  const chatMessage: ChatMessage = {
-    id: '',
+  const saved = repository.addChatMessage({
     pageId,
     senderId: 'bot',
     senderHandle: 'GrumpyBot',
@@ -814,9 +812,7 @@ async function sendBotMessageWithTyping(
     message,
     timestamp: getSystemTime(),
     nodeId
-  };
-
-  const saved = repository.addChatMessage(chatMessage);
+  });
   chatSession.messages.push(saved);
   chatSession.lastActivity = getSystemTime();
 
@@ -828,81 +824,39 @@ async function sendBotMessageWithTyping(
   const typingSpeed = aiConfig?.botTypingSpeed ?? 40;
   const typoProb = aiConfig?.botTypoProbability ?? 0.04;
   const thinkTime = aiConfig?.botThinkTime ?? 1000;
-  const color = '36';
   const userRoom = `user:${page.userId}`;
 
-  // Think time before starting
   if (thinkTime > 0) await new Promise(r => setTimeout(r, thinkTime));
 
-  // Word-wrap the message for the ANSI terminal (80 cols)
-  const wrap = (s: string, w: number) => {
-    const lines: string[] = [];
-    let cur = '';
-    for (const word of s.split(' ')) {
-      if ((cur + ' ' + word).trim().length > w) { lines.push(cur.trim()); cur = word; }
-      else cur += (cur ? ' ' : '') + word;
-    }
-    if (cur.trim()) lines.push(cur.trim());
-    return lines;
-  };
-  const wrappedLines = wrap(message, 78);
+  const wrapped = wordWrapMessage(message, 78, 78);
+  const color = '36';
 
-  /**
-   * Simulate typing on line 23 (typing preview), then commit to the scroll
-   * region on completion. Matches express.e chat() where both sides share
-   * one screen — the web splits them, so this function recreates the ANSI
-   * rendering the BBS user expects to see on their terminal.
-   *
-   * Layout:
-   *   Lines 1-22: scroll region (chat history, scrolls on \r\n)
-   *   Line 23:    typing preview — shows what the other side is typing
-   *   Line 24:    user's input line
-   */
-  const emitToUser = (data: string) => io.to(userRoom).emit('ansi-output', data);
-
-  // Build the full committed message (one ANSI block)
-  let committed = '';
-  for (let li = 0; li < wrappedLines.length; li++) {
-    committed += `\x1b[${color}m${wrappedLines[li]}\x1b[0m\r\n`;
-  }
-  committed += '\r\n'; // blank line after message
-
-  // Show typing preview char by char on line 23
+  // Type each character on line 23 (typing preview), then commit the whole
+  // message to the scroll region (line 22) in one shot.
   let buffer = '';
-  for (let li = 0; li < wrappedLines.length; li++) {
-    const line = wrappedLines[li];
+  for (let li = 0; li < wrapped.length; li++) {
+    const line = wrapped[li];
     for (let ci = 0; ci < line.length; ci++) {
-      const char = line[ci];
-      const isPunct = /[.,!?;:]/.test(char);
-
-      // Determine delay for this character
       const delay = typingSpeed + Math.random() * (typingSpeed * 2);
       await new Promise(r => setTimeout(r, delay));
-
-      buffer += char;
-      // Show typing preview: save cursor → line 23 → clear → preview → restore
-      emitToUser(
+      buffer += line[ci];
+      io.to(userRoom).emit('ansi-output',
         '\x1b7' +
         '\x1b[23;1H\x1b[2K' +
         `\x1b[${color}mGrumpyBot:\x1b[0m ${buffer}` +
         '\x1b8'
       );
-
-      // Occasional typo (not on last char of last line)
-      if (Math.random() < typoProb && (li < wrappedLines.length - 1 || ci < line.length - 1)) {
-        const typoChars = 'asdfghjkl';
-        const typo = typoChars[Math.floor(Math.random() * typoChars.length)];
-        await new Promise(r => setTimeout(r, 200 + Math.random() * 150));
-        // Show typo
-        emitToUser(
+      if (Math.random() < typoProb && (li < wrapped.length - 1 || ci < line.length - 1)) {
+        const typo = 'asdfghjkl'[Math.floor(Math.random() * 9)];
+        await new Promise(r => setTimeout(r, 200));
+        io.to(userRoom).emit('ansi-output',
           '\x1b7' +
           '\x1b[23;1H\x1b[2K' +
           `\x1b[${color}mGrumpyBot:\x1b[0m ${buffer}${typo}` +
           '\x1b8'
         );
         await new Promise(r => setTimeout(r, 250));
-        // Backspace
-        emitToUser(
+        io.to(userRoom).emit('ansi-output',
           '\x1b7' +
           '\x1b[23;1H\x1b[2K' +
           `\x1b[${color}mGrumpyBot:\x1b[0m ${buffer}` +
@@ -911,20 +865,19 @@ async function sendBotMessageWithTyping(
         await new Promise(r => setTimeout(r, 100));
       }
     }
-    if (li < wrappedLines.length - 1) {
-      // Line wrap in preview: clear preview and continue on next line
-      buffer = '';
-      await new Promise(r => setTimeout(r, 100 + Math.random() * 100));
-    }
+    await new Promise(r => setTimeout(r, 80 + Math.random() * 80));
   }
 
-  // Typing done: clear preview line, commit message to scroll region, restore cursor
-  emitToUser(
-    '\x1b7' +                   // save cursor (user is on line 24)
-    '\x1b[23;1H\x1b[2K' +      // clear typing preview
-    '\x1b[22;1H' +              // move to bottom of scroll region
-    committed +                 // write committed message
-    '\x1b8'                     // restore cursor (back to line 24)
+  // Commit: clear preview, position at bottom of scroll region, write message, restore cursor
+  let committed = '\x1b[22;1H';
+  for (const line of wrapped) {
+    committed += `\x1b[${color}m${line}\x1b[0m\r\n`;
+  }
+  io.to(userRoom).emit('ansi-output',
+    '\x1b7' +              // save cursor (user on line 24)
+    '\x1b[23;1H\x1b[2K' +  // clear preview line
+    committed +             // write message in scroll region (line 22+)
+    '\x1b8'                 // restore cursor to line 24
   );
 }
 
@@ -1095,25 +1048,17 @@ console.error('[Operator Chat] Bot response error:', err);
   if (page) {
     const color = senderType === 'sysop' ? '36' : '33';
     const wrappedLines = wordWrapMessage(message, 79, 79);
-    const lineEnding = senderHandle === 'GrumpyBot' ? '\r\n\r\n' : '\r\n';
-    
-    let output = '';
-    
-    if (senderType === 'user') {
-      output = '\x1b[24;1H\x1b[2K';
-      for (const line of wrappedLines) {
-        output += `\x1b[23;1H\x1b[${color}m${line}\x1b[0m${lineEnding}`;
-      }
-      output += '\x1b[24;1H';
-    } else {
-      output = '\x1b7';
-      
-      for (const line of wrappedLines) {
-        output += `\x1b[23;1H\x1b[${color}m${line}\x1b[0m${lineEnding}`;
-      }
-      
-      output += '\x1b8'; // Restore cursor position
+    const lineEnding = '\r\n';
+
+    // Write to scroll region, positioned at the bottom (line 22) so \r\n
+    // scrolls within the scroll region and doesn't clobber the user's input
+    // on line 24. Use save/restore cursor to preserve the input line.
+    let output = '\x1b7'; // save cursor
+    output += '\x1b[22;1H'; // position at bottom of scroll region
+    for (const line of wrappedLines) {
+      output += `\x1b[${color}m${line}\x1b[0m${lineEnding}`;
     }
+    output += '\x1b8'; // restore cursor to input line
 
     // Queue when bot is typing to avoid interleaving; flush when bot finishes
     if ((chatSession as any).botBusy) {
