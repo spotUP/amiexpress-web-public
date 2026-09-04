@@ -24,7 +24,7 @@ export interface PageMeta {
 export const PAGES: PageMeta[] = [
   // ─── Live ──────────────────────────────────────────────────────
   {
-    id: 'dashboard',
+    id: 'overview',
     label: 'Overview',
     category: 'Live',
     footerHint: 'live stats + 24h sparkline  auto-refresh 10s',
@@ -53,25 +53,6 @@ export const PAGES: PageMeta[] = [
     category: 'Live',
     footerHint: '[↑↓] scroll  auto-refresh 30s',
     helpKeys: [['—', 'Live feed of logons, doors and transfers']],
-    implemented: true,
-  },
-  {
-    id: 'logs',
-    label: 'Logs',
-    category: 'Live',
-    footerHint: '[b/p/6] source  [/] filter  [↑↓/PgUp/PgDn] scroll  [g/G] top/tail',
-    helpKeys: [
-      ['b',         'Backend log'],
-      ['p',         'Preview log'],
-      ['6',         '68K door log'],
-      ['/',         'Filter (substring, case-insensitive). [enter] apply, [esc] clear'],
-      ['c',         'Clear an active filter'],
-      ['↑↓',        'Scroll one line at a time'],
-      ['PgUp/PgDn', 'Scroll a page'],
-      ['G',         'Jump to tail (resume follow)'],
-      ['g',         'Jump to top'],
-      ['click',     'Click Backend / Preview / 68K Door at the top to switch'],
-    ],
     implemented: true,
   },
   {
