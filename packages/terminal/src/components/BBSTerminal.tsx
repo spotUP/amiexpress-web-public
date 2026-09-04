@@ -29,6 +29,7 @@ import {
   lineHeightFor,
   readCachedFont,
 } from '../utils/session-font';
+import { readCookieModemSpeed, writeCookieModemSpeed } from '../utils/session-cookie';
 import { getZmodem } from '../utils/zmodem';
 import { MediaHandler } from '../utils/media-handler';
 import { ModemEmulator } from '../utils/modem-emulator';
@@ -888,6 +889,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Initialize modem emulator for client-side speed throttling
     modemEmulatorRef.current = new ModemEmulator(term);
+
+    // Apply cached modem speed from cookie before the server responds,
+    // so the pre-login banner and login prompt pace at the user's
+    // preferred speed rather than full-chat (MAX soft-cap).
+    const cookieBps = readCookieModemSpeed();
+    if (cookieBps !== null) {
+      modemEmulatorRef.current.enable(cookieBps);
+    }
 
     // Canvas bytes go STRAIGHT into the display machine. There is no
     // client-side baud pacing here, and there must not be.
@@ -2270,6 +2279,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (modemEmulatorRef.current) {
         modemEmulatorRef.current.enable(bps);
       }
+      // Persist to cookie so the next session starts at the right speed
+      // before the server responds with the user's saved preference.
+      writeCookieModemSpeed(bps);
       // Nothing to mirror for the canvas: the C64 surface is not paced
       // client-side at all (see enqueuePetscii). Its "modem feel" comes
       // from the server, which throttles the same bytes for both surfaces.

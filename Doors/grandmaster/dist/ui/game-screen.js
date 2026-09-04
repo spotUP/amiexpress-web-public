@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GameScreen = void 0;
+const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const board_effects_1 = require("./board-effects");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const pieces_1 = require("../core/pieces");
@@ -419,6 +420,7 @@ class GameScreen {
     setupUI() {
         // Clear screen
         this.screen.children.forEach(child => child.destroy());
+        const compact = (0, blessed_1.isCompactWidth)(this.screen.width);
         // Outer frame wrapping the entire game area (consistency with main menu)
         this.outerFrame = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
@@ -435,13 +437,24 @@ class GameScreen {
         this.boardBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 1,
-            left: 2,
-            width: 22,
+            left: compact ? 1 : 2,
+            width: compact ? this.screen.width - 2 : 22,
             height: 22,
             border: { type: 'line' },
             style: { bg: 'black', border: { fg: 'white' } },
             fixed: true,
         });
+        // Compact (40-column PETSCII): no side panels, board fills screen
+        if (compact) {
+            this.nextBox = null;
+            this.holdBox = null;
+            this.gradeBox = null;
+            this.statsBox = null;
+            this.sectionBox = null;
+            this.zoneBox = null;
+            this.footerBox = null;
+            return;
+        }
         this.nextBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 1,
@@ -692,14 +705,15 @@ class GameScreen {
             isShaking,
         })) {
             // Apply shake offset
+            const compact = (0, blessed_1.isCompactWidth)(this.screen.width);
             if (isShaking) {
                 const offset = this.shaker.getOffset();
                 this.boardBox.top = 1 + offset.y;
-                this.boardBox.left = 2 + offset.x;
+                this.boardBox.left = (compact ? 1 : 2) + offset.x;
             }
             else {
                 this.boardBox.top = 1;
-                this.boardBox.left = 2;
+                this.boardBox.left = compact ? 1 : 2;
             }
             this.renderBoard(state);
             this.lastBoardHash = boardHash;
@@ -708,20 +722,22 @@ class GameScreen {
         // Update next/hold if changed
         // HIDE NEXT (item 7): draw an empty queue rather than the real one, and
         // keep lastNext in step so the preview comes back the frame it expires.
-        const hideNext = (0, mission_run_1.nextIsHidden)(state);
-        const nextToDraw = hideNext ? [] : state.nextQueue.slice(0, 3);
-        if (JSON.stringify(nextToDraw) !== JSON.stringify(this.lastNext)) {
-            this.renderNext(nextToDraw);
-            this.lastNext = [...nextToDraw];
-            needsRender = true;
+        if (this.nextBox) {
+            const hideNext = (0, mission_run_1.nextIsHidden)(state);
+            const nextToDraw = hideNext ? [] : state.nextQueue.slice(0, 3);
+            if (JSON.stringify(nextToDraw) !== JSON.stringify(this.lastNext)) {
+                this.renderNext(nextToDraw);
+                this.lastNext = [...nextToDraw];
+                needsRender = true;
+            }
         }
-        if (state.holdPiece !== this.lastHold) {
+        if (this.holdBox && state.holdPiece !== this.lastHold) {
             this.renderHold(state.holdPiece);
             this.lastHold = state.holdPiece;
             needsRender = true;
         }
         // Stats update (always update if lines/score changed)
-        if (state.score !== this.lastScore || state.level !== this.lastLevel || state.combo !== this.lastCombo) {
+        if (this.statsBox && (state.score !== this.lastScore || state.level !== this.lastLevel || state.combo !== this.lastCombo)) {
             this.renderStats(state);
             this.lastScore = state.score;
             this.lastLevel = state.level;
@@ -729,7 +745,7 @@ class GameScreen {
             needsRender = true;
         }
         // Grade and Section (always updated)
-        if (state.grade !== this.lastGrade || this.gradeAnimProgress > 0) {
+        if (this.gradeBox && (state.grade !== this.lastGrade || this.gradeAnimProgress > 0)) {
             const gradeColor = this.getAnimatedGradeColor(state.grade);
             const gradeSize = this.getAnimatedGradeSize(state.grade);
             const gradePadding = ' '.repeat(Math.floor((13 - state.grade.length) / 2));
@@ -740,7 +756,7 @@ class GameScreen {
         // sectionTime is nonzero for the entire game, so the old
         // `sectionTime !== 0` made this branch (and needsRender) true on every
         // pass. The timer readout only needs ~4 Hz.
-        if (state.section !== this.lastSection || Date.now() - this.lastSectionInfoRender >= 250) {
+        if (this.sectionBox && (state.section !== this.lastSection || Date.now() - this.lastSectionInfoRender >= 250)) {
             this.renderSectionInfo(state);
             this.lastSection = state.section;
             this.lastSectionInfoRender = Date.now();
@@ -819,6 +835,8 @@ class GameScreen {
         return `\n {${color}-fg}${String(pct).padStart(3)}%{/${color}-fg} {gray-fg}[${bar}]{/gray-fg}\n ${hint}`;
     }
     renderZone(state) {
+        if (!this.zoneBox)
+            return;
         if (state.mode !== 'zone') {
             this.zoneBox.hide();
             return;
@@ -1233,7 +1251,9 @@ class GameScreen {
                 : state.lastSectionResult === 'REGRET' ? 'red' : 'yellow';
             content += `\n {${resultColor}-fg}${state.lastSectionResult}{/${resultColor}-fg}`;
         }
-        this.sectionBox.setContent(content);
+        if (this.sectionBox) {
+            this.sectionBox.setContent(content);
+        }
     }
     /**
      * Render board with pieces

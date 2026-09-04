@@ -15,7 +15,14 @@
  * client-side cache that covers the pre-login window, and the one function
  * that applies all of it to an xterm instance. No caller builds a font
  * stack or a line-height map of its own.
+ *
+ * Caches are two-tier: cookie (survives cross-domain, server-readable) and
+ * localStorage (faster, JS-only). Both are written; read prefers
+ * localStorage for speed, falls back to cookie for cold/private-browsing
+ * visits.
  */
+
+import { readCookieFont, writeCookieFont } from './session-cookie';
 
 /**
  * The board's default font, identical to the backend default
@@ -83,16 +90,26 @@ export function isBbsFont(font: string | null | undefined): font is BbsFont {
 
 /**
  * The font this browser last saw the board use, or null when there is no
- * usable cached value. Only a known BBS font is returned; localStorage may
- * be unavailable (private mode, storage disabled), which is not an error.
+ * usable cached value. Only a known BBS font is returned.
+ *
+ * Tries localStorage first (faster, survives page reload), then the cookie
+ * (server-readable, survives cross-domain, covers private-browsing windows
+ * where localStorage is unavailable).
  */
 export function readCachedFont(): BbsFont | null {
   try {
     const cached = window.localStorage.getItem(FONT_CACHE_KEY);
-    return isBbsFont(cached) ? cached : null;
+    if (isBbsFont(cached)) return cached;
   } catch {
-    return null;
+    /* localStorage unavailable -- fall through to cookie */
   }
+  try {
+    const fromCookie = readCookieFont();
+    if (isBbsFont(fromCookie)) return fromCookie;
+  } catch {
+    /* cookie unavailable */
+  }
+  return null;
 }
 
 /** Remember the font for the next connect's pre-login window. */
@@ -101,8 +118,9 @@ export function writeCachedFont(font: string): void {
   try {
     window.localStorage.setItem(FONT_CACHE_KEY, font);
   } catch {
-    /* storage unavailable - the server preference still owns the session */
+    /* storage unavailable */
   }
+  writeCookieFont(font);
 }
 
 /** The fallback half of every BBS font stack, and the family the forced
