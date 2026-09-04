@@ -95,13 +95,12 @@ import { showManual } from './ui/manual';
 import { showTrainingConfig } from './ui/training-config';
 import * as path from 'path';
 import { resolveDoorRoot } from '@amiexpress/bbs-door-sdk/settings';
-import { listPacks } from './core/mission-store';
+import { loadMissionPack } from './core/mission-pack';
 import { MissionRun } from './core/mission-run';
 import { MissionProgress } from './core/mission-progress';
 import type { Mission, MissionPack } from './core/mission-types';
 import { showMissionSelect, formatClearTime } from './ui/mission-select';
 import { showMissionBriefing, pickMission } from './ui/mission-briefing';
-import { showMissionEditor } from './ui/mission-editor';
 
 // Default gamepad button mapping for GrandMaster.
 // Parse a trigger string (e.g. "button:a", "dpad:left", "axis:left-x:negative")
@@ -842,18 +841,6 @@ export class GrandmasterApp {
    * objectives this engine cannot judge rather than handing the player a
    * mission that can never end (core/mission-pack.ts).
    */
-  /**
-   * Is the caller a sysop?
-   *
-   * 255 is the board's own top level. The editor writes a file every player
-   * on this board then plays from, so it is the one thing in this door that
-   * asks who is holding the keyboard.
-   */
-  private isSysop(): boolean {
-    const user = this.session.user as { accessLevel?: number; secLevel?: number } | undefined;
-    return (user?.accessLevel ?? user?.secLevel ?? 0) >= 255;
-  }
-
   private async startMission(): Promise<void> {
     let pack: MissionPack;
     try {
@@ -861,16 +848,7 @@ export class GrandmasterApp {
       // data/ is gitignored runtime state (the database, high scores, the
       // mission progress record). A pack put there would never have reached
       // the board at all.
-      // The shipped pack, plus any a sysop wrote on this board. A sysop
-      // pack lives under data/ because assets/ is the door's checkout and
-      // the Doors volume sync only ever adds - an edit there would be
-      // overwritten by the next deploy (core/mission-store.ts).
-      const doorRoot = resolveDoorRoot(__dirname);
-      const stored = listPacks(doorRoot, path.join(doorRoot, 'data'));
-      if (stored.packs.length === 0) {
-        throw new Error(stored.problems.join('\n') || 'no mission packs found');
-      }
-      pack = stored.packs[0].pack;
+      pack = loadMissionPack(path.join(resolveDoorRoot(__dirname), 'assets', 'missions', 'starter.json'));
     } catch (error) {
       await this.showMessage('MISSIONS', `Could not load the mission pack:\n${(error as Error).message}`);
       return;
@@ -885,18 +863,8 @@ export class GrandmasterApp {
       pack,
       (missionId) => this.missionProgress.getClear(this.state.playerName, pack.name, missionId),
       {
-        select: (p) => showMissionSelect(
-          this.screen, p, this.missionProgress, this.state.playerName, this.isSysop()),
+        select: (p) => showMissionSelect(this.screen, p, this.missionProgress, this.state.playerName),
         brief: (m, clear) => showMissionBriefing(this.screen, m, clear),
-        // Only a sysop is offered this, and only a sysop's key reaches it.
-        edit: async (p) => {
-          if (!this.isSysop()) return p;
-          const doorRoot = resolveDoorRoot(__dirname);
-          await showMissionEditor(this.screen, p, path.join(doorRoot, 'data'));
-          const reloaded = listPacks(doorRoot, path.join(doorRoot, 'data'));
-          return reloaded.packs.find((entry) => entry.pack.name === p.name)?.pack
-            ?? reloaded.packs[0]?.pack ?? p;
-        },
       }
     );
     this.inputManager.resume();
@@ -1310,7 +1278,10 @@ export class GrandmasterApp {
     const sheet = loadSpriteSheet(path.join(__dirname, 'sprites'));
 
     const mode = await this.chooseTetrisAttackMode();
-    if (!mode) return;
+    if (!mode) {
+      this.currentScreen = 'menu';
+      return;
+    }
 
     // Challenge starts at difficulty 1 stage 1; the ladder is walked by the
     // mode's own screen once it exists.
@@ -1329,81 +1300,65 @@ export class GrandmasterApp {
     });
     stack.startingState();
 
-    // INPUT COMES FROM THE DOOR'S OWN HANDLER, which is where the real press
-    // edges already are (input/handler.ts) and why the TGM modes feel the way
-    // they do. This used to poll the SDK input manager, whose held-key
-    // tracking is off unless a door opts in - so the answer was always no, and
-    // every session fell back to the character stream and inherited the
-    // client's auto-repeat: one move, a pause of nearly half a second, then a
-    // burst.
-    //
-    // Edges are QUEUED rather than sampled. Polling a held flag once a frame
-    // drops a tap that begins and ends between two polls, and tapping is how
-    // this game is played; an edge cannot be missed, and each one is worth
-    // exactly one frame of that key.
-    // Presses are COUNTED, not collected in a set.
-    //
-    // A set loses the second of two taps: both land in the same gap between
-    // frames and the set holds one. That is not a rare case - a blessed
-    // repaint pushed over a socket does not fit in a frame, so under load the
-    // gap is several frames wide and a player tapping quickly loses presses.
-    // Reported as "sometimes when I click to swap tiles it doesn't work".
-    const pendingEdges = new Map<string, number>();
-    const stopWatchingEdges = this.inputHandler.onKeyEdge((name) => {
-      pendingEdges.set(name, (pendingEdges.get(name) ?? 0) + 1);
-    });
+    /** Telnet fallback: a keypress counts as held for this long. */
+    const HOLD_MS = 100;
+    const pressedUntil = new Map<string, number>();
+    const onKeypress = (_ch: unknown, key: { name?: string } | undefined) => {
+      if (!key || !key.name) return;
+      pressedUntil.set(key.name, Date.now() + HOLD_MS);
+    };
+    this.screen.on('keypress', onKeypress);
+
+    const keyStateAvailable = typeof (this.inputManager as unknown as {
+      isKeyStateActive?: () => boolean;
+    }).isKeyStateActive === 'function';
 
     const isDown = (names: string[]): boolean => {
-      // A press that has not been spent yet always counts.
-      const tapped = names.some((name) => (pendingEdges.get(name) ?? 0) > 0);
-      // Real key-up only exists in a browser. On telnet the edge IS the whole
-      // input, and the player gets discrete steps rather than a hold.
-      const held = this.inputHandler.isKeyStateMode()
-        && names.some((name) => this.inputHandler.heldKeys().has(name));
-      return tapped || held;
+      const manager = this.inputManager as unknown as {
+        isKeyStateActive?: () => boolean;
+        isHeld?: (key: string) => boolean;
+      };
+      if (keyStateAvailable && manager.isKeyStateActive?.() && manager.isHeld) {
+        return names.some((name) => manager.isHeld!(name));
+      }
+      const now = Date.now();
+      return names.some((name) => (pressedUntil.get(name) ?? 0) > now);
     };
 
-    const readInput = (): HeldInput => {
-      const input: HeldInput = {
-        up: isDown(['up']),
-        down: isDown(['down']),
-        left: isDown(['left']),
-        right: isDown(['right']),
-        swap: isDown(['space', 'z']),
-        raise: isDown(['r', 'x']),
-      };
-      // Spend ONE press of every key that had one. Spending per key rather
-      // than clearing the lot keeps a second tap for the next frame instead of
-      // throwing it away, and still lets two different keys pressed together
-      // reach the engine as one input character.
-      for (const [name, count] of pendingEdges) {
-        if (count <= 1) pendingEdges.delete(name);
-        else pendingEdges.set(name, count - 1);
-      }
-      return input;
-    };
+    const readInput = (): HeldInput => ({
+      up: isDown(['up']),
+      down: isDown(['down']),
+      left: isDown(['left']),
+      right: isDown(['right']),
+      swap: isDown(['space', 'z']),
+      raise: isDown(['r', 'x']),
+    });
 
     if (mode === 'vsplayer') {
       await this.runPanelNetplay(sheet, readInput);
-      stopWatchingEdges();
+      this.screen.removeListener('keypress', onKeypress);
+      this.currentScreen = 'menu';
       return;
     }
 
     if (mode === 'replays') {
       await this.runReplayBrowser(sheet, readInput);
-      stopWatchingEdges();
+      this.screen.removeListener('keypress', onKeypress);
+      this.currentScreen = 'menu';
       return;
     }
 
     if (mode === 'stageclear') {
       await this.runStageClear(sheet, readInput);
-      stopWatchingEdges();
+      this.screen.removeListener('keypress', onKeypress);
+      this.currentScreen = 'menu';
       return;
     }
 
     if (mode === 'puzzle') {
-      await this.runPuzzleSet(sheet, readInput);
-      stopWatchingEdges();
+      await this.runPuzzleSet(sheet, readInput, onKeypress);
+      this.screen.removeListener('keypress', onKeypress);
+      this.currentScreen = 'menu';
       return;
     }
 
@@ -1480,25 +1435,10 @@ export class GrandmasterApp {
       if (recorder && recorder.frames > 0) {
         this.panelReplays.save(recorder.fileName(finished), recorder.toReplayV3(finished));
       }
-
-      // Say how it ended. Without this the board simply vanishes back to the
-      // menu the instant the stack tops out, which reads as the door falling
-      // over rather than as a game finishing.
-      if (finished) {
-        const seconds = Math.floor(stack.stopWatch / 60);
-        const clock = `${Math.floor(seconds / 60)}'${String(seconds % 60).padStart(2, '0')}`;
-        const verdict = mode === 'timeattack'
-          ? "TIME UP"
-          : (versusOpponent
-            ? (('playerWon' in outcome && outcome.playerWon) ? 'YOU WIN' : 'YOU LOSE')
-            : 'GAME OVER');
-        await this.showPanelNotice(
-          `${verdict}   ${stack.score} points, speed ${stack.speed}, ${clock}`,
-        );
-      }
     } finally {
-      stopWatchingEdges();
+      this.screen.removeListener('keypress', onKeypress);
       this.screen.unkey(['escape', 'q', 'Q'], onEscape);
+      this.currentScreen = 'menu';
     }
   }
 
@@ -1520,6 +1460,7 @@ export class GrandmasterApp {
   private async runPuzzleSet(
     sheet: Record<string, Sprite>,
     readInput: () => HeldInput,
+    onKeypress: (ch: unknown, key: { name?: string } | undefined) => void,
   ): Promise<void> {
     const sets = loadShippedPuzzles();
     const chosen = await this.choosePuzzleSet(sets);
@@ -1576,6 +1517,7 @@ export class GrandmasterApp {
       result.score = solved;
       this.highScores.addScore(this.state.playerName, result);
     }
+    void onKeypress;
   }
 
   /**

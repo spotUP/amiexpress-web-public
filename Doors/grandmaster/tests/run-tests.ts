@@ -13,9 +13,7 @@
 
 /* eslint-disable no-console */
 
-const TEST_MODULES = ['./menu-keys.test',
-  './mission-editor.test',
-  './versus-layout.test',
+const TEST_MODULES = ['./versus-layout.test',
   // TETRIS ATTACK (Panel de Pon). The panels engine is proved against
   // panel-attack's own fixtures; see tests/panels/prng.test.ts.
   './panels/prng.test',
@@ -41,7 +39,6 @@ const TEST_MODULES = ['./menu-keys.test',
   './panels/skill-chains.test',
   './panels/replay-recording.test',
   './panels/netplay.test',
-  './panels/input-edges.test',
   './versus-render.test',
   './versus-repaint.test',
   './fullscreen.test',

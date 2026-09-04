@@ -5,18 +5,73 @@
  * Displays game mode selection and options
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MenuScreen = exports.MENU_SELECTIONS = void 0;
+exports.MenuScreen = exports.MENU_SELECTIONS = exports.MENU_ITEMS = void 0;
+exports.menuRowsFor = menuRowsFor;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 /**
- * Main menu screen
- */
-/**
- * What each menu row does, in the order the rows are drawn.
+ * The menu's selections, index-aligned with the `items` array that renders them
+ * and with the descriptions beside it. Three parallel arrays, so a row added to
+ * one has to be added to all three.
  *
- * At module scope so a key handler can ask for a row by name. The two lists
- * - this one and the `items` array below - have to stay the same length and
- * the same order; tests/panels/menu-wiring.test.ts is what says so.
+ * Hoisted out of the select handler so key bindings can look an index UP rather
+ * than hardcode one - they used to hardcode, and adding rows above them quietly
+ * pointed q/ESC at High Scores and F1 at Settings.
  */
+/**
+ * The menu's rows, index-aligned with MENU_SELECTIONS below and with the
+ * descriptions in getModeDescription. Adding a row means adding to all three;
+ * tests/panels/menu-wiring.test.ts checks the first two agree.
+ */
+exports.MENU_ITEMS = [
+    'MASTER MODE',
+    'DEATH MODE',
+    'SPRINT 40L',
+    'MARATHON',
+    'CPU BATTLE',
+    'VERSUS',
+    '{yellow-fg}TETRINET{/yellow-fg}',
+    '{lightmagenta-fg}TETRIS ATTACK{/lightmagenta-fg}',
+    'TRAINING',
+    '{green-fg}MISSIONS{/green-fg}',
+    '{cyan-fg}ULTRA 2MIN{/cyan-fg}',
+    '{red-fg}DIG MODE{/red-fg}',
+    '{cyan-fg}ZONE MODE{/cyan-fg}',
+    '{magenta-fg}WATCH A GAME{/magenta-fg}',
+    '',
+    'Settings',
+    'High Scores',
+    '{cyan-fg}Manual (F1){/cyan-fg}',
+    '{red-fg}Quit{/red-fg}',
+];
+/**
+ * The rows a screen of this width may offer.
+ *
+ * At forty columns the door offers ONLY TETRIS ATTACK, plus the manual and the
+ * way out. That is what makes the MIN_COLUMNS=40 mark on GMASTER.info honest:
+ * the door genuinely fits a C64 screen, it just has less on it there. The TGM
+ * and TETRINET screens are 80-column compositions and are HIDDEN rather than
+ * folded - folding an 80-column layout onto 40 is what produced the stray
+ * glyphs and unreadable rows this board has seen before.
+ *
+ * Returns index-aligned arrays, as the caller expects.
+ */
+function menuRowsFor(width) {
+    if (!(0, blessed_1.isCompactWidth)(width)) {
+        return { items: exports.MENU_ITEMS, selections: exports.MENU_SELECTIONS };
+    }
+    const wanted = ['tetris_attack', 'manual', 'quit'];
+    const items = [];
+    const selections = [];
+    for (const selection of wanted) {
+        const index = exports.MENU_SELECTIONS.indexOf(selection);
+        if (index < 0)
+            continue;
+        items.push(exports.MENU_ITEMS[index]);
+        selections.push(selection);
+    }
+    return { items, selections };
+}
 exports.MENU_SELECTIONS = [
     'master',
     'death',
@@ -25,18 +80,22 @@ exports.MENU_SELECTIONS = [
     'cpu_battle',
     'versus',
     'tetrinet',
+    'tetris_attack',
     'training',
     'mission',
     'ultra',
     'dig',
     'zone',
     'spectate',
-    'master', // the separator row, which behaves as the first entry
+    'master', // Separator line, default to master
     'settings',
     'stats',
     'manual',
     'quit',
 ];
+/**
+ * Main menu screen
+ */
 class MenuScreen {
     constructor(screen, state, sounds) {
         this.screen = screen;
@@ -64,7 +123,9 @@ class MenuScreen {
             // in the top-left corner with the rest of the window black - "the
             // menus in gmaster isnt responise" (2026-09-02) - so the whole block
             // is centred in whatever room there is, and follows a resize.
-            const MENU_COLS = 80;
+            // Which rows this screen may offer, and how wide the composition is.
+            const menuRows = menuRowsFor(this.screen.width);
+            const MENU_COLS = (0, blessed_1.isCompactWidth)(this.screen.width) ? this.screen.width : 80;
             const MENU_ROWS = 24;
             const offsetX = () => Math.max(0, Math.floor((this.screen.width - MENU_COLS) / 2));
             const offsetY = () => Math.max(0, Math.floor((this.screen.height - MENU_ROWS) / 2));
@@ -145,26 +206,7 @@ class MenuScreen {
                 keys: true,
                 vi: true,
                 mouse: true,
-                items: [
-                    'MASTER MODE',
-                    'DEATH MODE',
-                    'SPRINT 40L',
-                    'MARATHON',
-                    'CPU BATTLE',
-                    'VERSUS',
-                    '{yellow-fg}TETRINET{/yellow-fg}',
-                    'TRAINING',
-                    '{green-fg}MISSIONS{/green-fg}',
-                    '{cyan-fg}ULTRA 2MIN{/cyan-fg}',
-                    '{red-fg}DIG MODE{/red-fg}',
-                    '{cyan-fg}ZONE MODE{/cyan-fg}',
-                    '{magenta-fg}WATCH A GAME{/magenta-fg}',
-                    '',
-                    'Settings',
-                    'High Scores',
-                    '{cyan-fg}Manual (F1){/cyan-fg}',
-                    '{red-fg}Quit{/red-fg}',
-                ],
+                items: menuRows.items,
             });
             // Mode description box - middle panel
             const descBox = (0, blessed_helpers_1.createBox)({
@@ -236,7 +278,8 @@ class MenuScreen {
             this.screen.render();
             // Handle selection
             menu.on('select', (_item, index) => {
-                const selection = exports.MENU_SELECTIONS[index];
+                const selections = menuRows.selections;
+                const selection = selections[index];
                 this.sounds.playSfx('menu_ok');
                 // Clean up
                 cleanupResize?.();
@@ -250,23 +293,27 @@ class MenuScreen {
                 this.screen.render();
                 resolve(selection);
             });
-            // q, ESC and F1 pick their row BY NAME.
-            //
-            // They used to emit a hardcoded index - 15 for quit, 14 for the
-            // manual - which was right when the menu had sixteen rows. It has
-            // eighteen now, so q and ESC opened HIGH SCORES and F1 opened
-            // SETTINGS: nothing errored, the keys just did the wrong thing
-            // (reported on main, 2026-09-03).
-            const rowFor = (selection) => exports.MENU_SELECTIONS.indexOf(selection);
+            // These used to be hardcoded indices, and they silently stopped being
+            // correct the moment a row was added above them: q/ESC was selecting
+            // High Scores and F1 was opening Settings. Look the index up instead, so
+            // the next row added to the menu cannot break them again.
+            const indexOfSelection = (wanted) => {
+                const index = menuRows.selections.indexOf(wanted);
+                if (index < 0)
+                    throw new Error(`menu has no '${wanted}' entry`);
+                return index;
+            };
+            // Handle quit key
             menu.key(['q', 'Q'], () => {
-                menu.emit('select', null, rowFor('quit'));
+                menu.emit('select', null, indexOfSelection('quit'));
             });
-            // ESC leaves, the same as q.
+            // Handle ESC key - same as quit
             menu.key(['escape'], () => {
-                menu.emit('select', null, rowFor('quit'));
+                menu.emit('select', null, indexOfSelection('quit'));
             });
+            // Handle F1 key for manual
             menu.key(['f1'], () => {
-                menu.emit('select', null, rowFor('manual'));
+                menu.emit('select', null, indexOfSelection('manual'));
             });
             // Focus and render
             menu.focus();
@@ -329,6 +376,12 @@ ${p}|_____|__|__|__|__|_|___|____/|_|_|_|__|__|_____| |_| |_____|__|__|{/yellow-
                 '16 special blocks,\n' +
                 'up to 6 players,\n' +
                 'sudden death mode.',
+            // TETRIS ATTACK
+            '{bold}{lightmagenta-fg}TETRIS ATTACK{/lightmagenta-fg}{/bold}\n\n' +
+                'Panel de Pon!\n\n' +
+                'Swap panels, build\n' +
+                'chains, survive the\n' +
+                'rising stack.',
             // TRAINING
             '{bold}{white-fg}TRAINING{/white-fg}{/bold}\n\n' +
                 'Practice mode.\n\n' +
