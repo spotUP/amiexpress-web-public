@@ -352,6 +352,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const [petsciiMachine, setPetsciiMachine] = useState<PetsciiMachine | null>(null);
   const petsciiTransducerRef = useRef<AnsiToPetsciiTransducer | null>(null);
   const petsciiCanvasRef = useRef<PetsciiCanvasHandle | null>(null);
+  /** Cursor visibility for PETSCII mode. Defaults to true (visible). */
+  const [petsciiCursorVisible, setPetsciiCursorVisible] = useState(true);
   const clearPetsciiSession = useCallback(() => {
     surfaceRef.current = 'xterm';
     petsciiMachineRef.current = null;
@@ -2247,6 +2249,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       enqueuePetscii(bytes);
     });
 
+    // Cursor visibility for PETSCII mode. The backend sends this when the
+    // cursor should be shown (during prompts/input) or hidden (during
+    // passive display). In ANSI mode this is done via \x1b[?25h/\x1b[?25l
+    // which xterm handles natively, but the PETSCII transducer drops those
+    // escapes, so we need a dedicated event.
+    socket.on('cursor-visibility', (visible: boolean) => {
+      setPetsciiCursorVisible(visible);
+    });
+
     // Modem speed emulation handler.
     // NB: bps === 0 used to mean "disable throttling entirely", which let
     // xterm.js paint a full 80×25 screen in a single ~16ms frame and made
@@ -3563,6 +3574,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
             machine={petsciiMachine}
             focusable
             focusOnMount
+            cursorVisible={petsciiCursorVisible}
             onData={(bytes) => {
               // keymap.ts bytes -> the same ASCII/ANSI the server reads from
               // xterm, via the SDK's shared PETSCII input map (cursor and

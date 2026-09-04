@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Text, useStdout } from 'ink';
 import Gradient from 'ink-gradient';
 import { useUptime } from '../hooks/useUptime.js';
-import { T, BORDER_STYLE } from '../theme/blessed-theme.js';
+import { T, Rail } from '../theme/blessed-theme.js';
 
 interface Props {
   username: string | null;
@@ -25,20 +25,23 @@ export function Header({ username, backendUp, previewUp, watchUp }: Props) {
   const uptime = useUptime();
   const { stdout } = useStdout();
   const termWidth = stdout?.columns ?? 80;
+  const [railFrame, setRailFrame] = useState(0);
 
-  const borderChar = '-';
-  const topBorder = borderChar.repeat(termWidth);
-  const bottomBorder = borderChar.repeat(termWidth);
+  // Animate slashes every 250ms
+  useEffect(() => {
+    const id = setInterval(() => setRailFrame(f => f + 1), 250);
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <Box flexDirection="column" width={termWidth}>
-      <Text color={T.chrome}>{topBorder}</Text>
       <Box flexDirection="row" justifyContent="space-between" paddingX={1}>
-        <Box>
+        <Box flexDirection="row" gap={2}>
+          <Text color={T.chrome} bold><Rail frame={railFrame} /></Text>
           <Gradient name="rainbow">
             <Text bold>AmiExpress-Web</Text>
           </Gradient>
-          <Text color={T.dim}>  Ultra Vibed by Spot/Up Rough</Text>
+          <Text color={T.dim}>Ultra Vibed by Spot/Up Rough</Text>
         </Box>
         <Box flexDirection="row" gap={3}>
           {username && <Text color={T.dim}>sysop: {username}</Text>}
@@ -48,7 +51,7 @@ export function Header({ username, backendUp, previewUp, watchUp }: Props) {
           <StatusPill label="Watch" up={watchUp} />
         </Box>
       </Box>
-      <Text color={T.chrome}>{bottomBorder}</Text>
+      <Text color={T.chrome}>{'='.repeat(termWidth)}</Text>
     </Box>
   );
 }

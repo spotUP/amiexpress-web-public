@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
-
-const SPINNER = ['|', '/', '-', '\\'];
+import { T, BlessedText, BlessedSpinner } from '../theme/blessed-theme.js';
 
 interface Props {
   error: string | null;
@@ -14,7 +13,6 @@ export function LoginPrompt({ error, loading, onLogin }: Props) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [backendReady, setBackendReady] = useState(false);
-  const [spinIdx, setSpinIdx] = useState(0);
   const [dots, setDots] = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -41,7 +39,6 @@ export function LoginPrompt({ error, loading, onLogin }: Props) {
   useEffect(() => {
     if (backendReady) return;
     const id = setInterval(() => {
-      setSpinIdx(i => (i + 1) % SPINNER.length);
       setDots(d => d.length >= 3 ? '' : d + '.');
     }, 250);
     return () => clearInterval(id);
@@ -73,53 +70,65 @@ export function LoginPrompt({ error, loading, onLogin }: Props) {
     }
   });
 
+  // Fixed-width input: pad to 30 chars so layout never shifts.
+  // Blinking `_` cursor avoids the full-width █ wrapping bug in some terminals.
+  const FIELD_W = 30;
+  const cursorChar = '_';
+  const renderField = (value: string, active: boolean) => {
+    const cursor = active ? cursorChar : ' ';
+    const padded = (value + cursor).padEnd(FIELD_W + 1, ' ');
+    return <Text>{padded}</Text>;
+  };
+
   if (!backendReady) {
     return (
-      <Box flexDirection="column" alignItems="center" justifyContent="center" height="100%">
-        <Box flexDirection="column" borderStyle="double" borderColor="yellow" padding={2} width={50}>
-          <Text bold color="cyan">AmiExpress-Web Console</Text>
-          <Text dimColor>Ultra Vibed by Spot/Up Rough</Text>
+      <Box flexDirection="column" alignItems="center" justifyContent="center">
+        <Box flexDirection="column" borderStyle="single" borderColor={T.accent} padding={2} width={52}>
+          <Text bold color={T.accent}>AmiExpress-Web Console</Text>
+          <Text color={T.dim}>Ultra Vibed by Spot/Up Rough</Text>
           <Box marginTop={1} />
-          <Text color="yellow">{SPINNER[spinIdx]} Waiting for backend{dots}</Text>
+          <Box flexDirection="row" gap={1}>
+            <Text color={T.accent}>Waiting for backend{dots}</Text>
+          </Box>
           <Box marginTop={1} />
-          <Text dimColor>The BBS server is starting up. Login will</Text>
-          <Text dimColor>appear automatically when it is ready.</Text>
+          <Text color={T.dim}>The BBS server is starting up. Login will</Text>
+          <Text color={T.dim}>appear automatically when it is ready.</Text>
         </Box>
       </Box>
     );
   }
 
   return (
-    <Box flexDirection="column" alignItems="center" justifyContent="center" height="100%">
-      <Box flexDirection="column" borderStyle="double" borderColor="cyan" padding={2} width={50}>
-        <Text bold color="cyan">AmiExpress-Web Console</Text>
-        <Text dimColor>Ultra Vibed by Spot/Up Rough</Text>
+    <Box flexDirection="column" alignItems="center" justifyContent="center">
+      <Box flexDirection="column" borderStyle="single" borderColor={T.chrome} padding={2} width={52}>
+        <Text bold color={T.accent}>AmiExpress-Web Console</Text>
+        <Text color={T.dim}>Ultra Vibed by Spot/Up Rough</Text>
         <Box marginTop={1} />
 
         <Box flexDirection="column" gap={1}>
           <Box>
-            <Text color={field === 'username' ? 'cyan' : 'white'}>Username: </Text>
-            <Text>{username}{field === 'username' ? '█' : ''}</Text>
+            <Text color={field === 'username' ? T.accent : T.dim}>Username: </Text>
+            {renderField(username, field === 'username')}
           </Box>
           <Box>
-            <Text color={field === 'password' ? 'cyan' : 'white'}>Password: </Text>
-            <Text>{'*'.repeat(password.length)}{field === 'password' ? '█' : ''}</Text>
+            <Text color={field === 'password' ? T.accent : T.dim}>Password: </Text>
+            {renderField('*'.repeat(password.length), field === 'password')}
           </Box>
         </Box>
 
         {error && (
           <Box marginTop={1}>
-            <Text color="red">{error}</Text>
+            <Text color={T.alert}>{error}</Text>
           </Box>
         )}
         {loading && (
           <Box marginTop={1}>
-            <Text color="yellow">Authenticating...</Text>
+            <Text color={T.accent}>Authenticating...</Text>
           </Box>
         )}
 
         <Box marginTop={1}>
-          <Text dimColor>[tab] switch field  [enter] next/login</Text>
+          <Text color={T.dim}>[tab] switch field  [enter] next/login</Text>
         </Box>
       </Box>
     </Box>

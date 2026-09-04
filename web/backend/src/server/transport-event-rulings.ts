@@ -785,6 +785,15 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "same class as set-font and theme-preference, and writing an escape for it " +
     "would have been a guess dressed as a translation.",
   },
+  "cursor-visibility": {
+    kind: "web-only",
+    note:
+    "PETSCII text cursor visibility - the backend sends cursor-visibility " +
+    "to hide the PETSCII canvas cursor when the caller is not in a prompt " +
+    "or input context (matching ANSI mode's ?25h/?25l behavior). The " +
+    "PetsciiCanvas reads this prop to blink or hide the cursor block. " +
+    "In ANSI mode the escape is handled by xterm natively.",
+  },
   "data": {
     kind: "not-transport",
     owner: "TelnetConnection / SSHConnection / WSTerminalConnection",

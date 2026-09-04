@@ -38,7 +38,7 @@ import { HealthDeploymentPage } from './components/tabs/HealthDeploymentPage.js'
 import { ScreenFilesPage } from './components/tabs/ScreenFilesPage.js';
 import { DEFAULT_PAGE } from './pages/registry.js';
 import { getNodes } from './api/client.js';
-import { T, BlessedText } from './theme/blessed-theme.js';
+import { T, CURRENT_THEME } from './theme/blessed-theme.js';
 
 interface Props {
   username: string;
@@ -146,7 +146,7 @@ export function App({ username }: Props) {
       <Header username={username} backendUp={backendUp} previewUp={true} watchUp={true} />
       <Box flexDirection="row" flexGrow={1}>
         <Sidebar activePageId={activePage} onSelect={setActivePage} focus={focusPanel === 'sidebar'} />
-        <Box flexGrow={1} flexDirection="column" paddingX={1}>
+        <Box flexGrow={1} flexDirection="column" borderStyle="single" borderColor={focusPanel === 'content' ? T.accent : T.chrome} paddingX={1}>
           {showRestart ? (
             <RestartDialog onClose={() => setShowRestart(false)} />
           ) : showHelp ? (

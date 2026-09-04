@@ -8,24 +8,18 @@ export interface PetsciiCanvasProps {
   machine: PetsciiMachine;
   /** VIC-II color palette, indexed 0-15. Defaults to Colodore. */
   palette?: readonly string[];
-  /**
-   * Upper bound on the integer render scale fed to the canvas's backing
-   * store (see `fitScale`/the fill-fit policy below) - a roomy container
-   * still won't render past this many native C64 pixels per screen pixel.
-   * Defaults to 4 (320x200 native -> 1280x800 backing-store resolution at
-   * that cap, CSS-downscaled to whatever actually fits).
-   */
   scale?: number;
   /** Keyboard input, already translated to PETSCII bytes. */
   onData?: (bytes: number[]) => void;
-  /**
-   * Whether the canvas takes keyboard focus (tabIndex 0). BBSTerminal
-   * passes true for a full-canvas PETSCII session, where the canvas owns
-   * keyboard input via onData.
-   */
   focusable?: boolean;
-  /** Focus the canvas as soon as it mounts (the full-canvas session makes it the keyboard surface). */
   focusOnMount?: boolean;
+  /**
+   * Whether the text cursor is visible. When provided, overrides the
+   * internal blink state. When undefined, the cursor blinks normally.
+   * Set to false when the user is not in a prompt/input context, true
+   * when waiting for input (matching ANSI mode's ?25h/?25l behavior).
+   */
+  cursorVisible?: boolean;
 }
 
 export interface PetsciiCanvasHandle {
@@ -66,6 +60,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
   palette = C64_PALETTE_COLODORE,
   scale: maxScale = 4,
   onData,
+  cursorVisible = true,
   focusable = false,
   focusOnMount = false,
 }, ref) => {
@@ -177,7 +172,10 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
 
     // Block cursor: a solid cell in the cursor's ink color, blinking on an
     // interval, matching the C64's solid-reverse-block screen-editor cursor.
-    if (cursorOn) {
+    // When cursorVisible prop is provided, it overrides the blink state so
+    // the backend can hide the cursor when not in a prompt/input context.
+    const effectiveCursorOn = cursorVisible !== undefined ? cursorVisible : cursorOn;
+    if (effectiveCursorOn) {
       const cursorIdx = s.cursorY * COLS + s.cursorX;
       ctx.fillStyle = palette[s.colorRam[cursorIdx] & 0x0F];
       ctx.fillRect(border + s.cursorX * destCell, border + s.cursorY * destCell, destCell, destCell);
