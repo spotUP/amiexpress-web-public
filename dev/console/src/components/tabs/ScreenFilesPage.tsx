@@ -17,7 +17,7 @@ export function ScreenFilesPage() {
     setLoading(true);
     try {
       const data = await getInfoFiles();
-      setFiles(data);
+      setFiles(Array.isArray(data) ? data : []);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -41,8 +41,8 @@ export function ScreenFilesPage() {
     return <BlessedText variant="alert">Error: {error}</BlessedText>;
   }
 
-  const displayFiles = files.slice(0, MAX_DISPLAY);
-  const selected = files[selectedIdx];
+  const displayFiles = (files || []).slice(0, MAX_DISPLAY);
+  const selected = (files || [])[selectedIdx];
 
   return (
     <Box flexDirection="column">

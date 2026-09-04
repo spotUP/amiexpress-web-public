@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getImportSessions, validateImport, executeImport, cancelImport, deleteImport, listExports, createExport } from '../../api/client.js';
+import { T } from '../../theme/blessed-theme.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
 import type { ImportSession } from '../../api/client.js';
 
@@ -114,7 +115,7 @@ export function ImportExportPage() {
     }
   };
 
-  if (loading) return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading...</Text></Box>;
+  if (loading) return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading...</Text></Box>;
 
   return (
     <Box flexDirection="column">
@@ -127,20 +128,20 @@ export function ImportExportPage() {
       )}
 
       <Box marginBottom={1}>
-        <Text bold color={section === 'import' ? 'cyan' : 'white'}>[1] Import</Text>
+        <Text bold color={section === 'import' ? T.accent : T.ink}>[1] Import</Text>
         <Text>  </Text>
-        <Text bold color={section === 'export' ? 'cyan' : 'white'}>[2] Export</Text>
+        <Text bold color={section === 'export' ? T.accent : T.ink}>[2] Export</Text>
       </Box>
 
       {error && (
         <Box marginBottom={1}>
-          <Text color="red">Error: {error}</Text>
+          <Text color={T.alert}>Error: {error}</Text>
         </Box>
       )}
 
       {status && (
         <Box marginBottom={1}>
-          <Text color="green">{status}</Text>
+          <Text color={T.ok}>{status}</Text>
         </Box>
       )}
 
@@ -155,7 +156,7 @@ export function ImportExportPage() {
             <>
               {sessions.map((s, i) => (
                 <Box key={s.id}>
-                  <Text color={i === selectedSessionIdx ? 'cyan' : 'white'} bold={i === selectedSessionIdx}>
+                  <Text color={i === selectedSessionIdx ? T.accent : T.ink} bold={i === selectedSessionIdx}>
                     {i === selectedSessionIdx ? '▶ ' : '  '}
                     {s.filename ?? `(${s.id.slice(0, 8)}...)`}
                   </Text>

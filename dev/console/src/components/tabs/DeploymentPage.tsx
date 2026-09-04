@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getDeploymentHealth, getDeploymentSystemInfo, getDeploymentDatabaseStats } from '../../api/client.js';
+import { T } from '../../theme/blessed-theme.js';
 
 interface HealthData {
   success?: boolean;
@@ -57,8 +58,8 @@ export function DeploymentPage() {
     if (input === 'r') load();
   });
 
-  if (loading && !health) return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading deployment info...</Text></Box>;
-  if (error) return <Text color="red">Error: {error}</Text>;
+  if (loading && !health) return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading deployment info...</Text></Box>;
+  if (error) return <Text color={T.alert}>Error: {error}</Text>;
 
   const healthData = health?.data as any;
   const sysData = systemInfo?.data as any;
@@ -67,20 +68,20 @@ export function DeploymentPage() {
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="cyan">DEPLOYMENT</Text>
+        <Text bold color={T.accent}>DEPLOYMENT</Text>
         <Text dimColor>  (auto-refresh 30s)</Text>
       </Box>
 
       {/* Health */}
       <Box marginBottom={1}>
-        <Text bold color="cyan">HEALTH</Text>
+        <Text bold color={T.accent}>HEALTH</Text>
       </Box>
       <Box marginLeft={2} marginBottom={2}>
         <Text>
           {healthData?.status === 'healthy' || health?.success ? (
-            <Text color="green">● healthy</Text>
+            <Text color={T.ok}>● healthy</Text>
           ) : (
-            <Text color="red">● unhealthy</Text>
+            <Text color={T.alert}>● unhealthy</Text>
           )}
         </Text>
         {healthData?.uptime && <Text dimColor>  uptime {healthData.uptime}</Text>}
@@ -88,7 +89,7 @@ export function DeploymentPage() {
 
       {/* System Info */}
       <Box marginBottom={1}>
-        <Text bold color="cyan">SYSTEM INFO</Text>
+        <Text bold color={T.accent}>SYSTEM INFO</Text>
       </Box>
       <Box marginLeft={2} marginBottom={2} flexDirection="column">
         {sysData?.hostname && (
@@ -130,7 +131,7 @@ export function DeploymentPage() {
 
       {/* Database Stats */}
       <Box marginBottom={1}>
-        <Text bold color="cyan">DATABASE</Text>
+        <Text bold color={T.accent}>DATABASE</Text>
       </Box>
       <Box marginLeft={2} flexDirection="column">
         {dbData?.users !== undefined && (

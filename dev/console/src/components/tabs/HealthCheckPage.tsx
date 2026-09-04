@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getHealthCheck, autoFixHealth, type HealthIssue } from '../../api/client.js';
+import { T } from '../../theme/blessed-theme.js';
 
 interface HealthData {
   issues?: HealthIssue[];
@@ -53,18 +54,18 @@ export function HealthCheckPage() {
     }
   });
 
-  if (loading && !data) return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Running health check...</Text></Box>;
-  if (error) return <Text color="red">Error: {error}</Text>;
+  if (loading && !data) return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Running health check...</Text></Box>;
+  if (error) return <Text color={T.alert}>Error: {error}</Text>;
 
   const sevColor = (sev?: string) =>
-    sev === 'error' ? 'red' : sev === 'warning' ? 'yellow' : 'green';
+    sev === 'error' ? T.alert : sev === 'warning' ? T.warn : T.ok;
   const sevSymbol = (sev?: string) =>
     sev === 'error' ? '✗' : sev === 'warning' ? '!' : '✓';
 
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color={data?.healthy ? 'green' : 'yellow'}>
+        <Text bold color={data?.healthy ? T.ok : T.warn}>
           {data?.healthy ? '✓ HEALTHY' : 'ISSUES FOUND'}
         </Text>
         <Text dimColor>  ({issues.length} issue{issues.length === 1 ? '' : 's'}, {fixable.length} fixable, auto-refresh 30s)</Text>
@@ -81,7 +82,7 @@ export function HealthCheckPage() {
               {sevSymbol(issue.severity)} {(issue.severity ?? 'info').toUpperCase()}
             </Text>
             {issue.category && <Text dimColor> [{issue.category}]</Text>}
-            {issue.fixable && <Text color="cyan"> [fixable]</Text>}
+            {issue.fixable && <Text color={T.accent}> [fixable]</Text>}
           </Box>
           <Box marginLeft={2}>
             <Text>{issue.message}</Text>
@@ -96,12 +97,12 @@ export function HealthCheckPage() {
 
       {fixing && (
         <Box marginTop={1}>
-          <Text color="yellow"><Spinner type="dots" /></Text>
+          <Text color={T.warn}><Spinner type="dots" /></Text>
           <Text> Auto-fixing...</Text>
         </Box>
       )}
 
-      {status && <Box marginTop={1}><Text color="green">{status}</Text></Box>}
+      {status && <Box marginTop={1}><Text color={T.ok}>{status}</Text></Box>}
     </Box>
   );
 }

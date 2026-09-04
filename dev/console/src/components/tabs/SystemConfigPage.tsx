@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getSystemConfig, updateSystemConfig } from '../../api/client.js';
+import { T } from '../../theme/blessed-theme.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
 import type { SystemConfig } from '../../api/types.js';
 
@@ -115,13 +116,13 @@ export function SystemConfigPage() {
     if (input === 'R') setPending({});
   });
 
-  if (loading) return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading config...</Text></Box>;
-  if (error) return <Text color="red">Error: {error}</Text>;
+  if (loading) return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading config...</Text></Box>;
+  if (error) return <Text color={T.alert}>Error: {error}</Text>;
 
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="cyan">SYSTEM CONFIG</Text>
+        <Text bold color={T.accent}>SYSTEM CONFIG</Text>
         <Text dimColor>  ({FIELDS.length} fields, {dirty ? `${Object.keys(pending).length} pending` : 'clean'})</Text>
       </Box>
 
@@ -132,12 +133,12 @@ export function SystemConfigPage() {
         const masked = typeof val === 'string' && val === '***';
         return (
           <Box key={f.key}>
-            <Text color={isSel ? 'cyan' : isPending ? 'yellow' : 'white'} bold={isSel}>
+            <Text color={isSel ? T.accent : isPending ? T.warn : T.ink} bold={isSel}>
               {isSel ? '▶ ' : '  '}
               {f.label.padEnd(22)}
               {isPending ? '* ' : '  '}
             </Text>
-            <Text color={masked ? 'gray' : isPending ? 'yellow' : 'white'}>
+            <Text color={masked ? T.dim : isPending ? T.warn : T.ink}>
               {fmtVal(val, f.type)}
             </Text>
           </Box>
@@ -146,16 +147,16 @@ export function SystemConfigPage() {
 
       {saving && (
         <Box marginTop={1}>
-          <Text color="yellow"><Spinner type="dots" /></Text>
+          <Text color={T.warn}><Spinner type="dots" /></Text>
           <Text> Saving...</Text>
         </Box>
       )}
 
-      {status && <Box marginTop={1}><Text color="green">{status}</Text></Box>}
+      {status && <Box marginTop={1}><Text color={T.ok}>{status}</Text></Box>}
 
       {mode === 'edit' && selected && (
-        <Box marginTop={1} flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1}>
-          <Text color="cyan">Edit {selected.label} ({selected.type}):</Text>
+        <Box marginTop={1} flexDirection="column" borderStyle="round" borderColor={T.warn} paddingX={1}>
+          <Text color={T.accent}>Edit {selected.label} ({selected.type}):</Text>
           <Box>
             <Text>{'> '}</Text>
             <Text>{editValue}█</Text>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text } from 'ink';
 import Spinner from 'ink-spinner';
 import { getSystemStats } from '../../api/client.js';
+import { T } from '../../theme/blessed-theme.js';
 import type { SystemStats } from '../../api/types.js';
 
 function fmt(n: number | undefined): string {
@@ -42,11 +43,11 @@ export function StatisticsPage() {
   }, []);
 
   if (loading) {
-    return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading statistics...</Text></Box>;
+    return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading statistics...</Text></Box>;
   }
 
   if (error) {
-    return <Text color="red">Error: {error}</Text>;
+    return <Text color={T.alert}>Error: {error}</Text>;
   }
 
   if (!stats) return null;
@@ -54,52 +55,52 @@ export function StatisticsPage() {
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="cyan">STATISTICS</Text>
+        <Text bold color={T.accent}>STATISTICS</Text>
         <Text dimColor>  (all-time + today)</Text>
       </Box>
 
       {/* All-time totals */}
-      <Box flexDirection="column" marginBottom={1} paddingX={1} borderStyle="round" borderColor="cyan">
-        <Text bold color="cyan">All-Time Totals</Text>
+      <Box flexDirection="column" marginBottom={1} paddingX={1} borderStyle="round" borderColor={T.accent}>
+        <Text bold color={T.accent}>All-Time Totals</Text>
         <Box marginTop={1} flexDirection="column">
           <Box>
             <Text>  Total Users:     </Text>
-            <Text color="white">{fmt(stats.allTime?.totalUsers)}</Text>
+            <Text color={T.ink}>{fmt(stats.allTime?.totalUsers)}</Text>
           </Box>
           <Box>
             <Text>  Total Messages:  </Text>
-            <Text color="white">{fmt(stats.allTime?.totalMessages)}</Text>
+            <Text color={T.ink}>{fmt(stats.allTime?.totalMessages)}</Text>
           </Box>
           <Box>
             <Text>  Total Files:     </Text>
-            <Text color="white">{fmt(stats.allTime?.totalFiles)}</Text>
+            <Text color={T.ink}>{fmt(stats.allTime?.totalFiles)}</Text>
           </Box>
           <Box>
             <Text>  Total Bytes:     </Text>
-            <Text color="white">{fmtBytes(stats.allTime?.totalBytes)}</Text>
+            <Text color={T.ink}>{fmtBytes(stats.allTime?.totalBytes)}</Text>
           </Box>
           <Box>
             <Text>  Total Downloads: </Text>
-            <Text color="white">{fmt(stats.allTime?.totalDownloads)}</Text>
+            <Text color={T.ink}>{fmt(stats.allTime?.totalDownloads)}</Text>
           </Box>
           <Box>
             <Text>  Total Calls:     </Text>
-            <Text color="white">{fmt(stats.allTime?.totalCalls)}</Text>
+            <Text color={T.ink}>{fmt(stats.allTime?.totalCalls)}</Text>
           </Box>
         </Box>
       </Box>
 
       {/* Today */}
-      <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor="cyan">
-        <Text bold color="cyan">Today</Text>
+      <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor={T.accent}>
+        <Text bold color={T.accent}>Today</Text>
         <Box marginTop={1} flexDirection="column">
           <Box>
             <Text>  Calls Today:    </Text>
-            <Text color="white">{fmt(stats.today?.calls)}</Text>
+            <Text color={T.ink}>{fmt(stats.today?.calls)}</Text>
           </Box>
           <Box>
             <Text>  Active Users:   </Text>
-            <Text color="white">{fmt(stats.today?.activeUsers)}</Text>
+            <Text color={T.ink}>{fmt(stats.today?.activeUsers)}</Text>
           </Box>
         </Box>
       </Box>

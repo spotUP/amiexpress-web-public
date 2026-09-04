@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink';
 import Spinner from 'ink-spinner';
 import { getLogs } from '../../api/client.js';
+import { T } from '../../theme/blessed-theme.js';
 import { useMouse, type MouseClick } from '../../hooks/useMouse.js';
 
 type LogSource = 'backend' | 'frontend' | 'door68k';
@@ -144,18 +145,18 @@ export function LogsTab() {
     <Box flexDirection="column">
       <Box marginBottom={1} gap={3}>
         {(['backend', 'frontend', 'door68k'] as LogSource[]).map(s => (
-          <Text key={s} color={s === source ? 'cyan' : 'white'} bold={s === source} underline={s === source}>
+          <Text key={s} color={s === source ? T.accent : T.ink} bold={s === source} underline={s === source}>
             {SOURCE_LABELS[s]}
           </Text>
         ))}
-        {loading && <Text color="yellow"><Spinner type="dots" /></Text>}
+        {loading && <Text color={T.warn}><Spinner type="dots" /></Text>}
       </Box>
 
       {/* Filter line — visible while editing or when a filter is active */}
       {(editingFilter || filter) && (
         <Box>
-          <Text color="cyan">{editingFilter ? '/' : 'filter: '}</Text>
-          <Text color={editingFilter ? 'white' : 'yellow'}>
+          <Text color={T.accent}>{editingFilter ? '/' : 'filter: '}</Text>
+          <Text color={editingFilter ? T.ink : T.warn}>
             {filter}{editingFilter ? '█' : ''}
           </Text>
           {editingFilter && <Text dimColor>  [enter] apply  [esc] clear</Text>}
@@ -171,7 +172,7 @@ export function LogsTab() {
         </Text>
       </Box>
 
-      {error && <Text color="red">Error: {error}</Text>}
+      {error && <Text color={T.alert}>Error: {error}</Text>}
 
       {/* Render the visible slice. Truncate width to keep one line per entry. */}
       {display.map((line, i) => (

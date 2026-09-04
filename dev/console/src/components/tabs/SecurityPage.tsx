@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { CrudList } from '../CrudList.js';
 import { getSecurity, createSecurity, updateSecurity, deleteSecurity } from '../../api/client.js';
+import { T } from '../../theme/blessed-theme.js';
 import type { SecurityRow } from '../../api/types.js';
 
 // The security endpoint takes a level (1-255). Default to 255 (sysop).
@@ -17,7 +18,7 @@ export function SecurityPage() {
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="cyan">Security ACS · level {level}</Text>
+        <Text bold color={T.accent}>Security ACS · level {level}</Text>
         <Text dimColor>  [&lt;] [&gt;] step level by 5</Text>
       </Box>
       <CrudList<SecurityRow>

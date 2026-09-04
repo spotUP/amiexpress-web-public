@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { useNodes } from '../../hooks/useNodes.js';
+import { T } from '../../theme/blessed-theme.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
 import { kickNode, chatNode } from '../../api/client.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
@@ -21,13 +22,13 @@ function formatDuration(lastActivity?: string): string {
 function NodeRow({ node, selected }: { node: NodeStatus; selected: boolean }) {
   return (
     <Box>
-      <Text color={selected ? 'cyan' : 'white'} bold={selected}>
+      <Text color={selected ? T.accent : T.ink} bold={selected}>
         {selected ? '▶ ' : '  '}
       </Text>
-      <Text color={selected ? 'cyan' : 'white'} bold={selected}>
+      <Text color={selected ? T.accent : T.ink} bold={selected}>
         {`N${node.nodeId}`.padEnd(4)}
       </Text>
-      <Text color={node.online ? 'white' : 'gray'}>
+      <Text color={node.online ? T.ink : T.dim}>
         {(node.username ?? '—').padEnd(14)}
       </Text>
       <Text dimColor>{(node.location ?? '—').padEnd(20)}</Text>
@@ -74,19 +75,19 @@ export function NodesTab() {
     }
   });
 
-  if (error) return <Text color="red">Error: {error}</Text>;
+  if (error) return <Text color={T.alert}>Error: {error}</Text>;
 
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="cyan">
+        <Text bold color={T.accent}>
           {'  NODE'.padEnd(6)}{'USER'.padEnd(14)}{'LOCATION'.padEnd(20)}{'ACTIVITY'.padEnd(20)}{'SINCE'}
         </Text>
       </Box>
 
       {nodes.length === 0 ? (
         <Box>
-          <Text color="yellow"><Spinner type="dots" /></Text>
+          <Text color={T.warn}><Spinner type="dots" /></Text>
           <Text> Connecting...</Text>
         </Box>
       ) : (
@@ -97,7 +98,7 @@ export function NodesTab() {
 
       {status && (
         <Box marginTop={1}>
-          <Text color="green">{status}</Text>
+          <Text color={T.ok}>{status}</Text>
         </Box>
       )}
 
@@ -118,7 +119,7 @@ export function NodesTab() {
 
       {mode === 'chat-input' && selected && (
         <Box marginTop={1} flexDirection="column">
-          <Text color="cyan">Chat to N{selected.nodeId} ({selected.username}):</Text>
+          <Text color={T.accent}>Chat to N{selected.nodeId} ({selected.username}):</Text>
           <Box>
             <Text>{'> '}</Text>
             <Text>{chatText}█</Text>

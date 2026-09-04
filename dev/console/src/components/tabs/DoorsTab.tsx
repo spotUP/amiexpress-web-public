@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput, useStdout } from 'ink';
 import Spinner from 'ink-spinner';
 import { getDoors, reloadDoors } from '../../api/client.js';
+import { T } from '../../theme/blessed-theme.js';
 import { useGridClick } from '../../hooks/useRowClick.js';
 import { SIDEBAR_WIDTH } from '../Sidebar.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
@@ -80,15 +81,15 @@ export function DoorsTab() {
     if (input === 'r') load();
   });
 
-  if (loading) return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading doors...</Text></Box>;
-  if (error) return <Text color="red">Error: {error}</Text>;
+  if (loading) return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading doors...</Text></Box>;
+  if (error) return <Text color={T.alert}>Error: {error}</Text>;
 
   const enabledCount = doors.filter(d => d.enabled).length;
 
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="cyan">DOORS</Text>
+        <Text bold color={T.accent}>DOORS</Text>
         <Text dimColor>  ({enabledCount}/{doors.length} enabled, {cols} cols)</Text>
       </Box>
 
@@ -102,7 +103,7 @@ export function DoorsTab() {
             return (
               <Box key={colIdx} width={ITEM_WIDTH}>
                 <Text
-                  color={isSelected ? 'cyan' : door.enabled ? 'white' : 'gray'}
+                  color={isSelected ? T.accent : door.enabled ? T.ink : T.dim}
                   bold={isSelected}
                 >
                   {formatItem(door, isSelected)}
@@ -115,12 +116,12 @@ export function DoorsTab() {
 
       {reloading && (
         <Box marginTop={1}>
-          <Text color="yellow"><Spinner type="dots" /></Text>
+          <Text color={T.warn}><Spinner type="dots" /></Text>
           <Text> Reloading all doors...</Text>
         </Box>
       )}
 
-      {status && <Box marginTop={1}><Text color="green">{status}</Text></Box>}
+      {status && <Box marginTop={1}><Text color={T.ok}>{status}</Text></Box>}
 
       {confirming && (
         <Box marginTop={1}>

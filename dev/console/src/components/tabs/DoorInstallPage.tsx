@@ -66,7 +66,7 @@ export function DoorInstallPage() {
     if (input === 'r') loadDoors();
   });
 
-  if (loading) return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading doors...</Text></Box>;
+  if (loading) return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading doors...</Text></Box>;
 
   const displayDoors = doors.slice(0, MAX_DISPLAY_DOORS);
   const remaining = doors.length - MAX_DISPLAY_DOORS;

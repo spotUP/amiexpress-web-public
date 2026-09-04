@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getInfoFiles, getInfoFile, updateInfoFile, toggleTooltypeComment, type InfoFileEntry, type InfoTooltype } from '../../api/client.js';
+import { T } from '../../theme/blessed-theme.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
 
 const ITEMS_START_ROW = 7;
@@ -151,14 +152,14 @@ export function InfoFilesPage() {
     }
   });
 
-  if (loading && files.length === 0) return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading info files...</Text></Box>;
-  if (error) return <Text color="red">Error: {error}</Text>;
+  if (loading && files.length === 0) return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading info files...</Text></Box>;
+  if (error) return <Text color={T.alert}>Error: {error}</Text>;
 
   if (mode === 'list') {
     return (
       <Box flexDirection="column">
         <Box marginBottom={1}>
-          <Text bold color="cyan">INFO FILES</Text>
+          <Text bold color={T.accent}>INFO FILES</Text>
           <Text dimColor>  ({files.length} files)</Text>
         </Box>
         {files.length === 0 ? (
@@ -166,7 +167,7 @@ export function InfoFilesPage() {
         ) : (
           files.map((f, i) => (
             <Box key={f.path}>
-              <Text color={i === selectedFileIdx ? 'cyan' : 'white'} bold={i === selectedFileIdx}>
+              <Text color={i === selectedFileIdx ? T.accent : T.ink} bold={i === selectedFileIdx}>
                 {i === selectedFileIdx ? '▶ ' : '  '}
                 {f.name || f.path}
               </Text>
@@ -185,7 +186,7 @@ export function InfoFilesPage() {
     return (
       <Box flexDirection="column">
         <Box marginBottom={1}>
-          <Text bold color="cyan">INFO FILE: {selectedFile?.name || selectedFile?.path}</Text>
+          <Text bold color={T.accent}>INFO FILE: {selectedFile?.name || selectedFile?.path}</Text>
           <Text dimColor>  ({tooltypes.length} tooltypes)</Text>
         </Box>
 
@@ -194,13 +195,13 @@ export function InfoFilesPage() {
         ) : (
           tooltypes.map((f, i) => (
             <Box key={f.key}>
-              <Text color={i === selectedFieldIdx ? 'cyan' : 'white'} bold={i === selectedFieldIdx}>
+              <Text color={i === selectedFieldIdx ? T.accent : T.ink} bold={i === selectedFieldIdx}>
                 {i === selectedFieldIdx ? '▶ ' : '  '}
                 {f.commented ? ';' : ' '}
                 {f.key.padEnd(20)}
                 {' = '}
               </Text>
-              <Text color={f.commented ? 'gray' : 'white'}>
+              <Text color={f.commented ? T.dim : T.ink}>
                 {f.value ?? ''}
               </Text>
             </Box>
@@ -209,12 +210,12 @@ export function InfoFilesPage() {
 
         {saving && (
           <Box marginTop={1}>
-            <Text color="yellow"><Spinner type="dots" /></Text>
+            <Text color={T.warn}><Spinner type="dots" /></Text>
             <Text> Saving...</Text>
           </Box>
         )}
 
-        {status && <Box marginTop={1}><Text color="green">{status}</Text></Box>}
+        {status && <Box marginTop={1}><Text color={T.ok}>{status}</Text></Box>}
 
         <Box marginTop={2}>
           <Text dimColor>[↑↓] select  [e]dit value  [t]oggle comment  [s]ave  [esc] back</Text>
@@ -228,11 +229,11 @@ export function InfoFilesPage() {
     return (
       <Box flexDirection="column">
         <Box marginBottom={1}>
-          <Text bold color="cyan">EDIT: {currentField?.key}</Text>
+          <Text bold color={T.accent}>EDIT: {currentField?.key}</Text>
         </Box>
 
-        <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1} marginBottom={2}>
-          <Text color="cyan">Value ({currentField?.key}):</Text>
+        <Box flexDirection="column" borderStyle="round" borderColor={T.warn} paddingX={1} marginBottom={2}>
+          <Text color={T.accent}>Value ({currentField?.key}):</Text>
           <Box>
             <Text>{'> '}</Text>
             <Text>{editValue}█</Text>

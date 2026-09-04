@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getConferences, updateConference, getConferenceHealth, fixConference } from '../../api/client.js';
+import { T } from '../../theme/blessed-theme.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
 import type { ConferenceConfig, ConferenceHealth } from '../../api/types.js';
 
@@ -85,20 +86,20 @@ export function ConfsTab() {
     if (input === 'r') load();
   });
 
-  if (loading) return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading...</Text></Box>;
-  if (error) return <Text color="red">Error: {error}</Text>;
+  if (loading) return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading...</Text></Box>;
+  if (error) return <Text color={T.alert}>Error: {error}</Text>;
 
   if (mode === 'health-result' && healthResult) {
     return (
-      <Box flexDirection="column" borderStyle="round" borderColor={healthResult.healthy ? 'green' : 'yellow'} padding={1}>
-        <Text bold color={healthResult.healthy ? 'green' : 'yellow'}>
+      <Box flexDirection="column" borderStyle="round" borderColor={healthResult.healthy ? T.ok : T.warn} padding={1}>
+        <Text bold color={healthResult.healthy ? T.ok : T.warn}>
           Conf {healthResult.conferenceId}: {healthResult.name}
         </Text>
-        <Text color={healthResult.healthy ? 'green' : 'red'}>
+        <Text color={healthResult.healthy ? T.ok : T.alert}>
           {healthResult.healthy ? '✓ Healthy' : '✗ Issues found'}
         </Text>
         {healthResult.issues.map((issue, i) => (
-          <Text key={i} color="yellow">  • {issue}</Text>
+          <Text key={i} color={T.warn}>  • {issue}</Text>
         ))}
         {healthResult.fixable && <Text dimColor>  Press [f] to auto-fix</Text>}
         <Box marginTop={1}><Text dimColor>[esc] back</Text></Box>
@@ -108,8 +109,8 @@ export function ConfsTab() {
 
   if (mode === 'fix-result') {
     return (
-      <Box flexDirection="column" borderStyle="round" borderColor="green" padding={1}>
-        <Text bold color="green">Auto-fix complete</Text>
+      <Box flexDirection="column" borderStyle="round" borderColor={T.ok} padding={1}>
+        <Text bold color={T.ok}>Auto-fix complete</Text>
         <Text>{fixResult}</Text>
         <Box marginTop={1}><Text dimColor>[esc] back</Text></Box>
       </Box>
@@ -119,7 +120,7 @@ export function ConfsTab() {
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="cyan">
+        <Text bold color={T.accent}>
           {'  #'.padEnd(6)}{'NAME'.padEnd(30)}{'DIRS'.padEnd(6)}{'STATUS'}
         </Text>
       </Box>
@@ -128,7 +129,7 @@ export function ConfsTab() {
         const enabled = (c as any).enabled !== false;
         return (
           <Box key={c.id}>
-            <Text color={i === selectedIdx ? 'cyan' : enabled ? 'white' : 'gray'} bold={i === selectedIdx}>
+            <Text color={i === selectedIdx ? T.accent : enabled ? T.ink : T.dim} bold={i === selectedIdx}>
               {i === selectedIdx ? '▶ ' : '  '}
               {String(c.conference_id).padEnd(4)}
               {c.name.slice(0, 28).padEnd(30)}
@@ -141,12 +142,12 @@ export function ConfsTab() {
 
       {actionLoading && (
         <Box marginTop={1}>
-          <Text color="yellow"><Spinner type="dots" /></Text>
+          <Text color={T.warn}><Spinner type="dots" /></Text>
           <Text> Working...</Text>
         </Box>
       )}
 
-      {status && <Box marginTop={1}><Text color="green">{status}</Text></Box>}
+      {status && <Box marginTop={1}><Text color={T.ok}>{status}</Text></Box>}
     </Box>
   );
 }

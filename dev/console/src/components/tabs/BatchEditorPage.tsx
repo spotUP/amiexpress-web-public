@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { listBatches, getBatch, saveBatch, validateBatch } from '../../api/client.js';
+import { T } from '../../theme/blessed-theme.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
 
 const ITEMS_START_ROW = 7;
@@ -126,19 +127,19 @@ export function BatchEditorPage() {
     setState('view');
   };
 
-  if (loading) return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading batches...</Text></Box>;
+  if (loading) return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading batches...</Text></Box>;
 
   if (state === 'list') {
     return (
       <Box flexDirection="column">
         <Box marginBottom={1}>
-          <Text bold color="cyan">BATCH FILES</Text>
+          <Text bold color={T.accent}>BATCH FILES</Text>
           <Text dimColor>  ({batchNames.length})</Text>
         </Box>
 
         {error && (
           <Box marginBottom={1}>
-            <Text color="red">Error: {error}</Text>
+            <Text color={T.alert}>Error: {error}</Text>
           </Box>
         )}
 
@@ -147,7 +148,7 @@ export function BatchEditorPage() {
         ) : (
           batchNames.map((name, i) => (
             <Box key={name}>
-              <Text color={i === selectedIdx ? 'cyan' : 'white'} bold={i === selectedIdx}>
+              <Text color={i === selectedIdx ? T.accent : T.ink} bold={i === selectedIdx}>
                 {i === selectedIdx ? '▶ ' : '  '}
                 {name}
               </Text>
@@ -180,13 +181,13 @@ export function BatchEditorPage() {
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="cyan">{currentBatch?.name}</Text>
+        <Text bold color={T.accent}>{currentBatch?.name}</Text>
         <Text dimColor>  ({lines.length} lines)</Text>
       </Box>
 
       {status && (
         <Box marginBottom={1}>
-          <Text color={status.includes('Error') ? 'red' : 'green'}>{status}</Text>
+          <Text color={status.includes('Error') ? T.alert : T.ok}>{status}</Text>
         </Box>
       )}
 
@@ -196,11 +197,11 @@ export function BatchEditorPage() {
         const lineNum = String(globalIdx + 1).padStart(2, '0');
         return (
           <Box key={`line-${globalIdx}`}>
-            <Text color={isSel ? 'cyan' : 'white'} bold={isSel}>
+            <Text color={isSel ? T.accent : T.ink} bold={isSel}>
               {isSel && isEditing ? '▶ ' : '  '}
               {lineNum}:
             </Text>
-            <Text color={isSel && isEditing ? 'yellow' : 'white'}>
+            <Text color={isSel && isEditing ? T.warn : T.ink}>
               {isEditing && isSel ? editValue : line}
             </Text>
           </Box>
@@ -208,7 +209,7 @@ export function BatchEditorPage() {
       })}
 
       {isEditing && (
-        <Box marginTop={1} borderStyle="round" borderColor="yellow" padding={1} width={50}>
+        <Box marginTop={1} borderStyle="round" borderColor={T.warn} padding={1} width={50}>
           <Text dimColor>[enter] commit  [esc] cancel  [backspace] delete</Text>
         </Box>
       )}

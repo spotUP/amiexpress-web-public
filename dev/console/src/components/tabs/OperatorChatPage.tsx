@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getSocket } from '../../api/socket.js';
+import { T } from '../../theme/blessed-theme.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
 
 const ITEMS_START_ROW = 9;
@@ -152,7 +153,7 @@ export function OperatorChatPage() {
   if (error) {
     return (
       <Box flexDirection="column">
-        <Text color="red">Operator Chat error: {error}</Text>
+        <Text color={T.alert}>Operator Chat error: {error}</Text>
         <Text dimColor>Reconnecting...</Text>
       </Box>
     );
@@ -163,26 +164,26 @@ export function OperatorChatPage() {
     return (
       <Box flexDirection="column">
         <Box marginBottom={1} flexDirection="column">
-          <Text bold color="cyan">CHAT — {active.userHandle} (N{active.nodeId})</Text>
+          <Text bold color={T.accent}>CHAT — {active.userHandle} (N{active.nodeId})</Text>
           <Text dimColor>conf: {active.conferenceName} · {messages.length} messages · [esc] end</Text>
         </Box>
 
         {last.length === 0 && (
           <Box>
-            <Text color="yellow"><Spinner type="dots" /></Text>
+            <Text color={T.warn}><Spinner type="dots" /></Text>
             <Text dimColor> Waiting for messages...</Text>
           </Box>
         )}
         {last.map(m => (
           <Box key={m.id}>
-            <Text color={m.senderType === 'sysop' ? 'cyan' : 'green'} bold>
+            <Text color={m.senderType === 'sysop' ? T.accent : T.ok} bold>
               {m.senderType === 'sysop' ? 'sysop' : m.senderHandle}:
             </Text>
             <Text> {m.message}</Text>
           </Box>
         ))}
 
-        <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1}>
+        <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor={T.accent} paddingX={1}>
           <Box>
             <Text>{'> '}</Text>
             <Text>{draft}█</Text>
@@ -199,12 +200,12 @@ export function OperatorChatPage() {
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="cyan">OPERATOR CHAT</Text>
+        <Text bold color={T.accent}>OPERATOR CHAT</Text>
         <Text dimColor>  ({pages.length} pages, click or [enter] to accept)</Text>
       </Box>
 
       <Box marginBottom={1}>
-        <Text bold color="cyan">{'  USER'.padEnd(18)}{'NODE'.padEnd(7)}{'CONF'.padEnd(20)}{'STATUS'.padEnd(12)}{'WAITED'}</Text>
+        <Text bold color={T.accent}>{'  USER'.padEnd(18)}{'NODE'.padEnd(7)}{'CONF'.padEnd(20)}{'STATUS'.padEnd(12)}{'WAITED'}</Text>
       </Box>
 
       {pages.length === 0 && (
@@ -215,7 +216,7 @@ export function OperatorChatPage() {
         const ageSec = Math.floor((Date.now() - p.createdAt) / 1000);
         return (
           <Box key={p.id}>
-            <Text color={i === selectedIdx ? 'cyan' : p.status === 'pending' ? 'yellow' : 'gray'} bold={i === selectedIdx}>
+            <Text color={i === selectedIdx ? T.accent : p.status === 'pending' ? T.warn : T.dim} bold={i === selectedIdx}>
               {i === selectedIdx ? '▶ ' : '  '}
               {(p.userHandle ?? '—').slice(0, 16).padEnd(18)}
               {String(p.nodeId ?? '?').padEnd(7)}

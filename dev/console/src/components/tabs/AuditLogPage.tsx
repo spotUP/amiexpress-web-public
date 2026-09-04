@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getAuditLog, type AuditEntry } from '../../api/client.js';
+import { T } from '../../theme/blessed-theme.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
 
 const ITEMS_START_ROW = 7;
@@ -51,26 +52,26 @@ export function AuditLogPage() {
   });
 
   if (loading && entries.length === 0) {
-    return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading audit log...</Text></Box>;
+    return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading audit log...</Text></Box>;
   }
-  if (error) return <Text color="red">Error: {error}</Text>;
+  if (error) return <Text color={T.alert}>Error: {error}</Text>;
 
   const sel = visible[selectedIdx];
 
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="cyan">AUDIT LOG</Text>
+        <Text bold color={T.accent}>AUDIT LOG</Text>
         <Text dimColor>  ({visible.length} entries{filter ? `, table=${filter}` : ''})</Text>
       </Box>
 
       <Box marginBottom={1}>
-        <Text bold color="cyan">{'  TIME'.padEnd(22)}{'TABLE'.padEnd(20)}{'ACTION'.padEnd(10)}{'BY'.padEnd(16)}{'RECORD'}</Text>
+        <Text bold color={T.accent}>{'  TIME'.padEnd(22)}{'TABLE'.padEnd(20)}{'ACTION'.padEnd(10)}{'BY'.padEnd(16)}{'RECORD'}</Text>
       </Box>
 
       {visible.slice(0, 18).map((e, i) => (
         <Box key={e.id}>
-          <Text color={i === selectedIdx ? 'cyan' : 'white'} bold={i === selectedIdx}>
+          <Text color={i === selectedIdx ? T.accent : T.ink} bold={i === selectedIdx}>
             {i === selectedIdx ? '▶ ' : '  '}
             {(e.timestamp ?? '—').slice(0, 19).padEnd(20)}
             {(e.table_name ?? '—').slice(0, 18).padEnd(20)}
@@ -83,14 +84,14 @@ export function AuditLogPage() {
 
       {filtering && (
         <Box marginTop={1}>
-          <Text color="cyan">Filter by table: {filter}█</Text>
+          <Text color={T.accent}>Filter by table: {filter}█</Text>
           <Text dimColor>  [enter] apply  [esc] cancel</Text>
         </Box>
       )}
 
       {!filtering && sel && (
-        <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1}>
-          <Text bold color="cyan">Selected entry</Text>
+        <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor={T.dim} paddingX={1}>
+          <Text bold color={T.accent}>Selected entry</Text>
           <Text dimColor>before:</Text>
           <Text>{sel.before ? JSON.stringify(sel.before).slice(0, 200) : '(none)'}</Text>
           <Text dimColor>after:</Text>

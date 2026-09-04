@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getSessions, getSessionLog, type SessionInfo } from '../../api/client.js';
+import { T } from '../../theme/blessed-theme.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
 
 const ITEMS_START_ROW = 7;
@@ -65,8 +66,8 @@ export function SessionLogsPage() {
     if (input === 'r') load();
   });
 
-  if (loading) return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading sessions...</Text></Box>;
-  if (error) return <Text color="red">Error: {error}</Text>;
+  if (loading) return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading sessions...</Text></Box>;
+  if (error) return <Text color={T.alert}>Error: {error}</Text>;
 
   if (logFor) {
     const lines: string[] = Array.isArray(logData?.lines)
@@ -77,10 +78,10 @@ export function SessionLogsPage() {
     return (
       <Box flexDirection="column">
         <Box marginBottom={1}>
-          <Text bold color="cyan">SESSION LOG</Text>
+          <Text bold color={T.accent}>SESSION LOG</Text>
           <Text dimColor>  {logFor.slice(0, 12)}…  ({lines.length} lines)  [esc] back</Text>
         </Box>
-        {logLoading && <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading log...</Text></Box>}
+        {logLoading && <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading log...</Text></Box>}
         {lines.slice(-30).map((line, i) => (
           <Text key={i} dimColor={i < lines.length - 5}>{line.slice(0, 200)}</Text>
         ))}
@@ -91,17 +92,17 @@ export function SessionLogsPage() {
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="cyan">SESSION LOGS</Text>
+        <Text bold color={T.accent}>SESSION LOGS</Text>
         <Text dimColor>  ({sessions.length} sessions, [enter] view)</Text>
       </Box>
 
       <Box marginBottom={1}>
-        <Text bold color="cyan">{'  USER'.padEnd(18)}{'NODE'.padEnd(7)}{'STARTED'.padEnd(22)}{'STATUS'}</Text>
+        <Text bold color={T.accent}>{'  USER'.padEnd(18)}{'NODE'.padEnd(7)}{'STARTED'.padEnd(22)}{'STATUS'}</Text>
       </Box>
 
       {sessions.slice(0, 18).map((s, i) => (
         <Box key={s.id}>
-          <Text color={i === selectedIdx ? 'cyan' : 'white'} bold={i === selectedIdx}>
+          <Text color={i === selectedIdx ? T.accent : T.ink} bold={i === selectedIdx}>
             {i === selectedIdx ? '▶ ' : '  '}
             {(s.username ?? '—').slice(0, 16).padEnd(18)}
             {String(s.nodeId ?? '?').padEnd(7)}

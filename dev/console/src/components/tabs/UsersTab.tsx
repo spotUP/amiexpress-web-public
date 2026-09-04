@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getUsers, updateUser, deleteUser } from '../../api/client.js';
+import { T } from '../../theme/blessed-theme.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
 import type { UserRecord } from '../../api/types.js';
@@ -102,13 +103,13 @@ export function UsersTab() {
     }
   });
 
-  if (loading) return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading users...</Text></Box>;
-  if (error) return <Text color="red">Error: {error}</Text>;
+  if (loading) return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading users...</Text></Box>;
+  if (error) return <Text color={T.alert}>Error: {error}</Text>;
 
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="cyan">
+        <Text bold color={T.accent}>
           {'  USER'.padEnd(18)}{'SL'.padEnd(5)}{'CALLS'.padEnd(8)}{'LAST ON'.padEnd(20)}{'LOCATION'}
         </Text>
         <Text dimColor>  ({filtered.length}/{users.length})</Text>
@@ -116,7 +117,7 @@ export function UsersTab() {
 
       {visibleUsers.map((u, i) => (
         <Box key={u.username + i}>
-          <Text color={i === selectedIdx ? 'cyan' : 'white'} bold={i === selectedIdx}>
+          <Text color={i === selectedIdx ? T.accent : T.ink} bold={i === selectedIdx}>
             {i === selectedIdx ? '▶ ' : '  '}
             {u.username.padEnd(16)}
             {String(getSecLevel(u)).padEnd(5)}
@@ -129,16 +130,16 @@ export function UsersTab() {
 
       {searching && (
         <Box marginTop={1}>
-          <Text color="cyan">Search: {searchText}█</Text>
+          <Text color={T.accent}>Search: {searchText}█</Text>
           <Text dimColor>  [esc] clear  [enter] done</Text>
         </Box>
       )}
 
-      {status && <Box marginTop={1}><Text color="green">{status}</Text></Box>}
+      {status && <Box marginTop={1}><Text color={T.ok}>{status}</Text></Box>}
 
       {mode === 'edit-sl' && selected && (
         <Box marginTop={1} flexDirection="column">
-          <Text color="cyan">New SL for {selected.username} (0-255): {editSlValue}█</Text>
+          <Text color={T.accent}>New SL for {selected.username} (0-255): {editSlValue}█</Text>
           <Text dimColor>[enter] save  [esc] cancel</Text>
         </Box>
       )}

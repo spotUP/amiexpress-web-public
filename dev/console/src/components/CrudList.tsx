@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { T, BlessedText } from '../theme/blessed-theme.js';
+import Spinner from 'ink-spinner';
+import { T } from '../theme/blessed-theme.js';
 import { useRowClick } from '../hooks/useRowClick.js';
 import { ConfirmDialog } from './shared/ConfirmDialog.js';
 
