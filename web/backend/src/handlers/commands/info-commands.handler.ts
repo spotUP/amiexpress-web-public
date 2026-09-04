@@ -14,7 +14,7 @@ import { config as appConfig } from '../../config';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/acs.util';
 import { AnsiUtil } from '../../utils/ansi.util';
-import { isNarrow } from '../../utils/table-format.util';
+import { headingIndent, isNarrow } from '../../utils/table-format.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { db } from '../../database';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
@@ -242,7 +242,8 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
 
   // express.e:25730-25732 - exact format with colored asterisks
   emitText(socket, '\r\n');
-  emitText(socket, '                       \x1b[34m*\x1b[0m--\x1b[33mUSER CONFIGURATION\x1b[0m--\x1b[34m*\x1b[0m\r\n');
+  const configHeading = '\x1b[34m*\x1b[0m--\x1b[33mUSER CONFIGURATION\x1b[0m--\x1b[34m*\x1b[0m';
+  emitText(socket, `${headingIndent(session, 'userConfiguration', configHeading)}${configHeading}\r\n`);
   emitText(socket, '\r\n');
 
   // Option 0: Login Name - express.e:25724-25728

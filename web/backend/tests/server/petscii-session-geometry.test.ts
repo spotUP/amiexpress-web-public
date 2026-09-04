@@ -206,10 +206,17 @@ describe('applyWindowSizeReport (index.ts NAWS listener body)', () => {
 });
 
 describe('both reporters go through the one gate', () => {
-  // The bodies are driven above; these keep index.ts delegating to them
-  // rather than growing a second unguarded write.
-  it('index.ts window-size assigns no geometry of its own', () => {
-    const src = fs.readFileSync(path.resolve(__dirname, '../../src/index.ts'), 'utf8');
+  // The bodies are driven above; these keep the telnet/SSH entry point
+  // delegating to them rather than growing a second unguarded write.
+  //
+  // The handlers moved from src/index.ts to src/server/transport-session.ts
+  // with plan TP-2 (thoughts/shared/plans/2026-09-03-ssh-telnet-parity.md):
+  // index.ts starts real servers on import, so the entry point could not be
+  // driven by a test while it lived there. The pin follows the code.
+  const ENTRY_POINT = '../../src/server/transport-session.ts';
+
+  it('the transport entry point window-size assigns no geometry of its own', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, ENTRY_POINT), 'utf8');
     const handler = src.slice(src.indexOf('connection.on("window-size"'));
     const body = handler.slice(0, handler.indexOf('\n  });'));
     expect(body).toContain('applyWindowSizeReport(connection.session, width, height)');
@@ -218,13 +225,21 @@ describe('both reporters go through the one gate', () => {
     expect(body).not.toMatch(/session\.petsciiMode\s*=/);
   });
 
-  it('index.ts terminal-type (TTYPE) assigns no geometry of its own', () => {
-    const src = fs.readFileSync(path.resolve(__dirname, '../../src/index.ts'), 'utf8');
+  it('the transport entry point terminal-type (TTYPE) assigns no geometry of its own', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, ENTRY_POINT), 'utf8');
     const handler = src.slice(src.indexOf('connection.on(\n    "terminal-type"'));
     const body = handler.slice(0, handler.indexOf('\n  );'));
     expect(body).toContain('applyTerminalTypeReport(connection.session, info)');
     expect(body).not.toMatch(/session\.screenWidth\s*=/);
     expect(body).not.toMatch(/session\.screenHeight\s*=/);
     expect(body).not.toMatch(/session\.petsciiMode\s*=/);
+  });
+
+  it('index.ts no longer carries a copy of either handler', () => {
+    // The move is only a move if the old body is gone: two copies would drift.
+    const indexSrc = fs.readFileSync(path.resolve(__dirname, '../../src/index.ts'), 'utf8');
+    expect(indexSrc).not.toContain('connection.on("window-size"');
+    expect(indexSrc).not.toContain('connection.on(\n    "terminal-type"');
+    expect(indexSrc).not.toContain('function setupTelnetSSHHandler');
   });
 });

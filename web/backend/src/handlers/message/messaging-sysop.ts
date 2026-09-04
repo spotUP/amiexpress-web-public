@@ -9,6 +9,7 @@ import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { emitText, emitPrompt } from '../../utils/output.util';
+import { headingIndent, messageIndent, movePrompt } from '../../utils/table-format.util';
 
 // Dependencies for move/edit operations (injected via setMoveEditDependencies)
 let _conferences: any[] = [];
@@ -39,8 +40,13 @@ export async function handleMsgMoveConfInput(socket: any, session: BBSSession, i
   // L = list conferences - express.e:27030-27034
   if (command === 'L') {
     emitText(socket, '\r\n');
-    emitText(socket, '                                 ');
-    emitText(socket, AnsiUtil.colorize('Conference List', 'green'));
+    // ONE string, ONE emit: split in two the choke saw 33 spaces and a
+    // short heading, never the 48-column row they concatenate into.
+    const confHeading = 'Conference List';
+    emitText(
+      socket,
+      `${headingIndent(session, 'conferenceList', confHeading)}${AnsiUtil.colorize(confHeading, 'green')}`
+    );
     emitText(socket, '\r\n\r\n');
 
     // Display accessible conferences
@@ -49,7 +55,7 @@ export async function handleMsgMoveConfInput(socket: any, session: BBSSession, i
     }
 
     emitText(socket, '\r\n');
-    emitPrompt(socket, 'Conference Number to move to (L to List): ');
+    emitPrompt(socket, movePrompt(session, 'conference'));
     return;
   }
 
@@ -58,7 +64,7 @@ export async function handleMsgMoveConfInput(socket: any, session: BBSSession, i
   if (isNaN(destConf) || destConf < 1) {
     emitText(socket, '\r\n');
     emitText(socket, AnsiUtil.errorLine('Invalid conference number'));
-    emitPrompt(socket, 'Conference Number to move to (L to List): ');
+    emitPrompt(socket, movePrompt(session, 'conference'));
     return;
   }
 
@@ -68,7 +74,7 @@ export async function handleMsgMoveConfInput(socket: any, session: BBSSession, i
     emitText(socket, '\r\n');
     emitText(socket, AnsiUtil.errorLine('You do not have access to the requested conference'));
     emitText(socket, '\r\n');
-    emitPrompt(socket, 'Conference Number to move to (L to List): ');
+    emitPrompt(socket, movePrompt(session, 'conference'));
     return;
   }
 
@@ -96,7 +102,7 @@ export async function handleMsgMoveConfInput(socket: any, session: BBSSession, i
   const destMsgBases = _messageBases.filter(mb => mb.conferenceId === destConf);
   if (destMsgBases.length > 1) {
     emitText(socket, '\r\n');
-    emitPrompt(socket, 'Messagebase Number to move to (L to List): ');
+    emitPrompt(socket, movePrompt(session, 'messagebase'));
     session.subState = LoggedOnSubState.MSG_MOVE_MSGBASE_INPUT;
   } else {
     // Single msgbase, use it and go to confirmation
@@ -126,8 +132,11 @@ export async function handleMsgMoveMsgBaseInput(socket: any, session: BBSSession
   // L = list message bases - express.e:27064-27071
   if (command === 'L') {
     emitText(socket, '\r\n');
-    emitText(socket, '                                 ');
-    emitText(socket, AnsiUtil.colorize('Messagebase List', 'green'));
+    const mbHeading = 'Messagebase List';
+    emitText(
+      socket,
+      `${headingIndent(session, 'messagebaseList', mbHeading)}${AnsiUtil.colorize(mbHeading, 'green')}`
+    );
     emitText(socket, '\r\n\r\n');
 
     const destMsgBases = _messageBases.filter(mb => mb.conferenceId === destConf);
@@ -136,7 +145,7 @@ export async function handleMsgMoveMsgBaseInput(socket: any, session: BBSSession
     });
 
     emitText(socket, '\r\n');
-    emitPrompt(socket, 'Messagebase Number to move to (L to List): ');
+    emitPrompt(socket, movePrompt(session, 'messagebase'));
     return;
   }
 
@@ -147,7 +156,7 @@ export async function handleMsgMoveMsgBaseInput(socket: any, session: BBSSession
   if (isNaN(destMsgBaseNum) || destMsgBaseNum < 1 || destMsgBaseNum > destMsgBases.length) {
     emitText(socket, '\r\n');
     emitText(socket, AnsiUtil.errorLine('Invalid message base number'));
-    emitPrompt(socket, 'Messagebase Number to move to (L to List): ');
+    emitPrompt(socket, movePrompt(session, 'messagebase'));
     return;
   }
 
@@ -255,7 +264,7 @@ export async function handleMsgEditHeaderFrom(socket: any, session: BBSSession, 
 
   // Prompt for To - express.e:11623-11627
   const currentTo = session.tempData.editHeader.to;
-  emitText(socket, `     ${AnsiUtil.colorize('  To', 'cyan')}${AnsiUtil.colorize(':', 'yellow')} `);
+  emitText(socket, `${messageIndent(session, 'to')}${AnsiUtil.colorize('  To', 'cyan')}${AnsiUtil.colorize(':', 'yellow')} `);
   emitText(socket, `${AnsiUtil.colorize('(', 'green')}${AnsiUtil.colorize('Enter', 'yellow')}${AnsiUtil.colorize(')', 'green')}`);
   emitText(socket, `=${AnsiUtil.colorize("'", 'green')}${AnsiUtil.colorize(currentTo, 'yellow')}${AnsiUtil.colorize("'", 'green')}${AnsiUtil.colorize('?', 'green')} `);
   session.subState = LoggedOnSubState.MSG_EDIT_HEADER_TO;
@@ -296,7 +305,7 @@ export async function handleMsgEditHeaderSubject(socket: any, session: BBSSessio
   // express.e:11636-11640: Private prompt — only shown if aFlag=FALSE (not ALL recipient)
   const editTo = (session.tempData.editHeader.to || '').toUpperCase();
   if (editTo !== 'ALL' && editTo !== 'EALL') {
-    emitText(socket, '         \x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
+    emitText(socket, `${messageIndent(session, 'private')}\x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m `);
     session.subState = LoggedOnSubState.MSG_EDIT_HEADER_PRIVATE;
   } else {
     // ALL/EALL recipients can't be private — skip to save

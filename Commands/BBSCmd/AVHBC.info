@@ -6,3 +6,4 @@ DESCRIPTION=Van Helsing's BaudChecker by pSy! - DayDream minimum-baud gate door
 MULTINODE=YES
 PRIORITY=SAME
 STACK=8192
+C64_ADAPT=40

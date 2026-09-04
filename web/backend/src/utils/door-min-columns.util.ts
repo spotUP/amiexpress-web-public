@@ -38,6 +38,10 @@ import { doorScreenWidth, C64_COLUMNS } from '../amiga-emulation/xim/screen-widt
  *  (same rule as ANSI_GRAPHICS_PROMPT, login-connect.service.ts:57). */
 export const DOOR_NEEDS_80_NOTICE = '\r\nTHIS DOOR NEEDS AN 80 COLUMN SCREEN\r\n';
 
+/** The browser cousin of the notice above, same rule and same shape: uppercase
+ *  ASCII only, so a power-on C64 on the PETSCII telnet port can read it. */
+export const DOOR_NEEDS_BROWSER_NOTICE = '\r\nTHIS DOOR NEEDS A WEB BROWSER\r\n';
+
 export const DEFAULT_MIN_COLUMNS = 80;
 
 export interface MinColumnsDoorShape {
@@ -49,10 +53,15 @@ export interface MinColumnsDoorShape {
   minColumns?: number;
   /** C64_ADAPT resolved once at registration, the way minColumns is. */
   c64Adapt?: number;
+  /** CLIENT_ONLY resolved once at registration, the way minColumns is; and, for
+   *  a DOORS-menu entry, folded together with the manifest's `runtime` so the
+   *  [WEB] marker and the launch gate read ONE value on ONE object. */
+  needsBrowser?: boolean;
   toolTypes?: Record<string, string>;
   doorInfo?: {
     minColumns?: number;
     c64Adapt?: number;
+    needsBrowser?: boolean;
     toolTypes?: Record<string, string>;
   };
 }
@@ -132,8 +141,19 @@ export function sessionColumns(session: { screenWidth?: number; petsciiMode?: bo
  * 68K types that route to executeAmigaDoor and for nothing else. A TS door
  * paints its own blessed UI and would be untouched by the adapter, so marking
  * one C64_ADAPT must not open it.
+ *
+ * AREXX IS NOT ON THIS LIST, AND MUST NOT BE ADDED. An AREXX door never
+ * constructs an AmigaDoorSession, so its output never crosses the adapter's
+ * seam and no amount of C64_ADAPT would reduce a single row of it; the caller
+ * would be let in and then served 80-column bytes. (Its 40-column story is
+ * BB_SCRWIDTH, fixed separately at 823825f39.) The list carried the string
+ * 'AMI' until 2026-09-03, which looked like AREXX was covered and was in fact
+ * dead - the enum spells that type 'AIM' (utils/amiga-command-parser.util.ts),
+ * so 'AMI' matched no door at all. The dead string is gone rather than
+ * corrected, and `adapted-door-types.test.ts` pins the membership so neither
+ * the typo nor a well-meaning "fix" can come back.
  */
-export const ADAPTED_DOOR_TYPES: ReadonlySet<string> = new Set(['XIM', 'DD', 'AMI', 'SIM', 'FIM']);
+export const ADAPTED_DOOR_TYPES: ReadonlySet<string> = new Set(['XIM', 'DD', 'SIM', 'FIM']);
 
 /**
  * The columns this door claims it reaches THROUGH the adapter, or null.
@@ -213,3 +233,74 @@ export function doorShowsC64Mark(door: MinColumnsDoorShape | null | undefined): 
   const claim = adaptClaimFor(door);
   return claim !== null && claim <= C64_COLUMNS;
 }
+
+/**
+ * A CLIENT_ONLY tooltype, read the way every other boolean tooltype on this
+ * board is read (`utils/amiga-command-parser.util.ts:747-755`,
+ * `doors/amigaDoorManager.ts:301-307`): the literal string YES, and nothing
+ * else.
+ *
+ * Default-CLOSED in the only direction that is safe here, which is the
+ * OPPOSITE direction from MIN_COLUMNS: absent means "not browser-only", so an
+ * unmarked door keeps the access it has today. A tooltype boolean cannot
+ * default to true - every existing .info on every existing board would read it
+ * as off - so the flag states the restriction, never the permission.
+ */
+function clientOnlyTooltype(value: string | undefined): boolean {
+  return String(value ?? '').trim().toUpperCase() === 'YES';
+}
+
+/**
+ * THE predicate: does this door require a browser the caller may not have?
+ *
+ * Two sources, in the order declaredMinColumns() uses so the two families can
+ * never disagree about which registration object carries the truth:
+ *  - manifest `runtime: 'client'` - the whole door IS a browser bundle. This is
+ *    the primary source and is derived, never copied: the manifest on disk is
+ *    the truth and nothing mirrors it into a second place.
+ *  - `CLIENT_ONLY=YES` - a hybrid whose server half is RPC-only and cannot
+ *    stand alone. `Doors/arkanoid` is the one such door today: its server half
+ *    is RPC handlers (`Doors/arkanoid/server.ts`) and `executeDoor` then awaits
+ *    `bridge.waitForSessionEnd` (`handlers/door.handler.ts`), a promise that on
+ *    a byte transport can never resolve because `endSession`
+ *    (`doors/client-door-bridge.ts:455`) is reachable only from
+ *    `socket.once('disconnect')` (`:319`), and 'disconnect' is on the emitter's
+ *    synthetic bus where nothing fires it.
+ *
+ * A hybrid WITHOUT the tooltype is NOT refused: fourteen of the fifteen export
+ * a real SDK door and paint a usable blessed UI with no browser half at all.
+ * They skip executeClientDoor and run their server half.
+ *
+ * `manifest` is the shape loadDoorManifestForExecution returns; only `runtime`
+ * is read, so it is narrowed rather than typed `any`. Pass null where no
+ * manifest has been loaded - the DOORS-menu marker does exactly that once the
+ * runtime has already been folded onto the entry's `needsBrowser`.
+ */
+export function doorNeedsBrowser(
+  door: MinColumnsDoorShape | null | undefined,
+  manifest: { runtime?: string } | null | undefined,
+): boolean {
+  if (String(manifest?.runtime ?? '').trim().toLowerCase() === 'client') return true;
+  if (!door) return false;
+  return (
+    door.needsBrowser === true ||
+    clientOnlyTooltype(door.toolTypes?.['CLIENT_ONLY']) ||
+    door.doorInfo?.needsBrowser === true ||
+    clientOnlyTooltype(door.doorInfo?.toolTypes?.['CLIENT_ONLY'])
+  );
+}
+
+/**
+ * Does this door earn the [WEB] marker in the DOORS list?
+ *
+ * Deliberately the SAME function as the gate rather than a sibling of
+ * doorShowsC64Mark(): the caller-side question here is identical on both sides
+ * (does this transport carry a browser), so a second predicate would only be a
+ * chance for marker and gate to disagree - which is precisely how a TS door
+ * tagged C64_ADAPT=40 came to be marked [C64] and then refused.
+ *
+ * The row is MARKED, never hidden. Hiding would make a sysop's door invisible
+ * with no explanation; the marker says why up front and the notice says it
+ * again if the caller tries anyway.
+ */
+export const DOOR_NEEDS_BROWSER_MARK = ' [WEB]';

@@ -21,6 +21,7 @@ import { checkSecurity } from '../../utils/security.util';
 import { emitText } from '../../utils/output.util';
 import { config } from '../../config';
 import { getSystemTime } from '../../utils/date-time.util';
+import { messageIndent } from '../../utils/table-format.util';
 import {
   isExtSendMsgBase,
   applyConfForwardMail,
@@ -178,7 +179,7 @@ export async function handleForwardMessageSubjectInput(socket: any, session: BBS
   session.tempData.forwardData.subject = input.substring(0, 30);
 
   // Prompt for privacy (express.e:9837-9851)
-  emitText(socket, '         \x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
+  emitText(socket, `${messageIndent(session, 'private')}\x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m `);
   session.subState = LoggedOnSubState.FORWARD_MESSAGE_PRIVATE;
 }
 

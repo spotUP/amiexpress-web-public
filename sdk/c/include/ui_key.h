@@ -22,6 +22,14 @@
  * that turns out not to belong to a sequence is handed BACK, never eaten.
  *
  * The values are what doorrepo.c's UI_KEY_* aliases have always been. */
+
+#ifndef UI_KEY_H
+#define UI_KEY_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define UI_KEY_UP    1000
 #define UI_KEY_DOWN  1001
 #define UI_KEY_PGUP  1002
@@ -46,12 +54,7 @@ typedef struct ui_key_source {
  * must deliver it before reading again. */
 int ui_decode_escape(const ui_key_source *src, int *pushback);
 
-#ifndef UI_KEY_H
-#define UI_KEY_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /*
  * The whole loop: read one key, decoding an escape sequence if that is what
@@ -59,6 +62,10 @@ extern "C" {
  * to -1 and hand the same pointer back every time.
  */
 int ui_key_read(const ui_key_source *src, int *pushback);
+
+#ifdef __cplusplus
+}
+#endif
 
 #ifdef __cplusplus
 }

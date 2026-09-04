@@ -9,6 +9,7 @@ import { BBSSession } from '../../index';
 import { BBSState, LoggedOnSubState } from '../../constants/bbs-states';
 import { displayScreen } from '../screen.handler';
 import { resetPetsciiModel } from '../../utils/petscii-session-model';
+import { transportCapabilities } from '../../server/transport-adapter';
 
 /**
  * Get the appropriate output event name based on session terminal type
@@ -160,7 +161,7 @@ console.log('[PETSCII] PETSCII mode enabled - setting terminal to 40x25');
     // (`handlers/command.handler.ts`) and the first screen. Task OC-5.
     resetPetsciiModel(session);
     socket.emit('terminal-resize', { cols: 40, rows: 25 });
-  } else if (hasR) {
+  } else if (hasR && transportCapabilities(session).rip) {
     // express.e:29545 - RIP mode: .rip screens served first, framed by
     // displayScreen with \x1b[1!..\x1b[2! for the web terminal's canvas.
     session.ripMode = true;
@@ -169,6 +170,25 @@ console.log('[PETSCII] PETSCII mode enabled - setting terminal to 40x25');
     session.screenWidth = 80;
     session.screenHeight = 24;
 console.log('[RIP] RIP graphics mode enabled - .rip screens preferred');
+  } else if (hasR) {
+    // WEB_: express.e:29545 sends RIPscrip to whoever asks for it. This port
+    // has no server-side rasteriser - RIP is drawn by RIPtermJS in the browser
+    // (packages/terminal/src/rip), the WEB_ deviation already recorded at
+    // handlers/screen.handler.ts:1864 - so answering R on a byte transport
+    // shipped `!|` source across the caller's screen as literal text. Fall back
+    // to ANSI and say so, once, in the C64-legible uppercase the graphics
+    // prompt itself uses (services/login-connect.service.ts).
+    //
+    // socket.emit(getOutputEvent(...)), not emitText: every other line this
+    // file writes goes out that way, and mixing in the buffered wrapper here
+    // would let the notice land AFTER the screen that follows it.
+    session.ripMode = false;
+    session.petsciiMode = false;
+    session.ansiEnabled = true;
+    session.screenWidth = 80;
+    session.screenHeight = 24;
+console.log('[RIP] RIP requested on a transport with no rasteriser - falling back to ANSI');
+    socket.emit(getOutputEvent(session), '\r\nRIP GRAPHICS NEED A WEB BROWSER - USING ANSI\r\n');
   } else {
     // express.e:29538-29539 - If 'N' in string, disable ANSI
     session.ansiEnabled = !hasN;

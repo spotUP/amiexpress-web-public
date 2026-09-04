@@ -135,6 +135,26 @@ const SIGNATURES: Record<string, Signature> = {
   rtw: { door: 'rTW v2.01', fromBbsMenu: true },
   ustats: { door: 'YoUr USeR StAtS', fromBbsMenu: true },
   what: { door: 'WHAT: Transfer Activities v2.0' },
+  // The three doors marked on 2026-09-03. Their captures are HARNESS captures,
+  // so no BBS menu rides along and `fromBbsMenu` stays false for all three.
+  // Each signature is picked from the part of the screen the MARK is a promise
+  // about - the working part, not the logo the crop is allowed to spoil.
+  b: { door: 'Top Uploaders' },
+  j: { door: 'Lamer Zone' },
+  doorrepo: { door: 'DoorRepo v1.0' },
+  // Batch 2, 2026-09-03. Same rule: a line from the working part of the
+  // screen, exact case, and only characters the transducer can map (the
+  // suite filters unmappable ones out, but a signature made of them would
+  // assert nothing).
+  size: { door: 'Total Bytes: 655450' },
+  ulist: { door: 'cODED bY sVEN tHE cREATOR' },
+  wall: { door: 'Enter your Line' },
+  chat: { door: 'Rm(   0) Node' },
+  mrcstat1: { door: 'MRC Chat Status' },
+  pager5d: { door: 'Please enter your page reason' },
+  dtagwall: { door: 'What color do you want on your line?' },
+  avhbc: { door: 'Van Helsing' },
+  hackcheck: { door: 'Digits:' },
 };
 
 // ---------------------------------------------------------------- sessions

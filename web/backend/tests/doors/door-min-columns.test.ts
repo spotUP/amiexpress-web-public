@@ -189,7 +189,12 @@ describe('doorOpensForC64', () => {
   const ansi = { petsciiMode: false, screenWidth: 80 };
 
   it('is true for a marked 68K door on a PETSCII session at a width it claims', () => {
-    for (const type of ['XIM', 'DD', 'AMI', 'SIM', 'FIM', 'xim', 'dd']) {
+    // 'AMI' was in this list until 2026-09-03 and never matched a real door:
+    // DoorType spells the AREXX type 'AIM', so the member was a dead string
+    // and this case was asserting a type nothing on the board can have. The
+    // string is gone from ADAPTED_DOOR_TYPES; the AREXX refusal is asserted in
+    // the type case below and pinned in tests/doors/adapted-door-types.test.ts.
+    for (const type of ['XIM', 'DD', 'SIM', 'FIM', 'xim', 'dd']) {
       expect(doorOpensForC64({ type, toolTypes: { C64_ADAPT: '40' } }, c64)).toBe(true);
     }
   });
@@ -206,7 +211,9 @@ describe('doorOpensForC64', () => {
   });
 
   it('is false for door types that never reach the adapter seam', () => {
-    for (const type of ['TS', 'typescript', 'AREXX', 'MCI', 'WEB', 'python', undefined]) {
+    // 'AIM' and 'AMI' are both here on purpose: the real AREXX spelling, and
+    // the typo that used to look like it covered AREXX.
+    for (const type of ['TS', 'typescript', 'AREXX', 'AIM', 'AMI', 'MCI', 'WEB', 'python', undefined]) {
       expect(doorOpensForC64({ type, toolTypes: { C64_ADAPT: '40' } } as any, c64)).toBe(false);
     }
   });

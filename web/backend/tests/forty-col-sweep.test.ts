@@ -55,6 +55,10 @@ jest.mock('../src/index', () => {
 
 import { printableLength, wrapForSession, wrapDoorTextForSession } from '../src/utils/wrap-for-session.util';
 import {
+  headingIndent,
+  messageIndent,
+  movePrompt,
+  messageRule,
   narrowClip,
   narrowField,
   narrowFileLines,
@@ -140,6 +144,41 @@ describe('40-column sweep: tables', () => {
 
   it('fields, rules and clips', () => {
     fits([narrowField(LONG, LONG), narrowField(EMPTY, EMPTY), narrowRule(), narrowRule('='), narrowClip(LONG)]);
+  });
+
+  it('the message-header rules and indents (E / R / F / edit line)', () => {
+    // Every shape express.e draws above a message prompt, at the C64 width.
+    // The pre-fix bug was the headerBox: 55 columns, folded by the prose
+    // choke into a `(` row and a `------)` row.
+    for (const kind of ['headerBox', 'editLine', 'bodyRuler'] as const) {
+      fits([messageRule(C64, kind)]);
+    }
+    for (const kind of ['to', 'private', 'editLine'] as const) {
+      fits([messageIndent(C64, kind)], NARROW_PROMPT_WIDTH);
+    }
+  });
+
+  it('the centred headings (M conference/msgbase lists, TS, W)', () => {
+    // The indent plus the heading, which is the row that reaches the glass -
+    // the pre-fix bug emitted those two as separate payloads, so a 48-column
+    // row went out that the choke had never seen whole.
+    for (const [kind, heading] of [
+      ['conferenceList', 'Conference List'],
+      ['messagebaseList', 'Messagebase List'],
+      ['languageList', 'Available Languages'],
+      ['userConfiguration', '\x1b[34m*\x1b[0m--USER CONFIGURATION--*'],
+    ] as const) {
+      fits([`${headingIndent(C64, kind, heading)}${heading}`]);
+    }
+    // A heading wider than the screen gets NO indent - left-aligned, never
+    // negative-padded - so the choke can still wrap it inside forty.
+    expect(headingIndent(C64, 'conferenceList', LONG)).toBe('');
+    fits(wrapForSession(`${headingIndent(C64, 'conferenceList', LONG)}${LONG}`, C64).split('\r\n'));
+  });
+
+  it('the message-move prompts (the M command)', () => {
+    // Trailing prompts: 39, not 40 - the cursor rests on this row.
+    fits([movePrompt(C64, 'conference'), movePrompt(C64, 'messagebase')], NARROW_PROMPT_WIDTH);
   });
 
   it('file search results', () => {

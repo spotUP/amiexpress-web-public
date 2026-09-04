@@ -21,8 +21,15 @@ import { applyGraphicsAnswer } from '../../src/handlers/command-handler/pre-logi
 function makeSocket() {
   return { emit: jest.fn() };
 }
-function makeSession(): any {
-  return { tempData: {} };
+/**
+ * The transport matters to exactly one answer. `R` asks for RIPscrip, which
+ * this port rasterises in the browser and nowhere else (TP-6 of the SSH/telnet
+ * parity plan), so the R branch is now conditional on
+ * transportCapabilities(session).rip. Every case below that is not about R is
+ * unaffected; the ones that are say which caller they mean.
+ */
+function makeSession(connectionType: 'web' | 'telnet' | 'ssh' = 'web'): any {
+  return { tempData: {}, connectionType };
 }
 
 describe('applyGraphicsAnswer (express.e:29538-29546)', () => {
@@ -68,6 +75,23 @@ describe('applyGraphicsAnswer (express.e:29538-29546)', () => {
     applyGraphicsAnswer(socket, session, 'N');
     expect(session.ansiEnabled).toBe(false);
     expect(session.ripMode).toBe(false);
+  });
+
+  test('R on a byte transport falls back to ANSI and says so - no RIPscrip source on the wire', () => {
+    // WEB_ deviation: express.e sends RIPscrip to whoever asks. There is no
+    // server-side rasteriser here, so answering R on telnet/SSH used to ship
+    // `!|` source across the caller's screen as literal text.
+    for (const transport of ['telnet', 'ssh'] as const) {
+      const socket = makeSocket();
+      const session = makeSession(transport);
+      applyGraphicsAnswer(socket, session, 'R');
+      expect(session.ripMode).toBe(false);
+      expect(session.ansiEnabled).toBe(true);
+      expect(session.petsciiMode).toBe(false);
+      expect(session.screenWidth).toBe(80);
+      const said = socket.emit.mock.calls.map((c: any[]) => String(c[1] ?? '')).join('');
+      expect(said).toContain('RIP GRAPHICS NEED A WEB BROWSER - USING ANSI');
+    }
   });
 
   test('RQ sets RIP and the quick-logon flag together', () => {

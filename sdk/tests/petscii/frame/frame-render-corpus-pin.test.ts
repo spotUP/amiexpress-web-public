@@ -1,5 +1,5 @@
 /**
- * BYTE PIN: renderDiff's exact output over the eleven adapter corpus fixtures.
+ * BYTE PIN: renderDiff's exact output over every adapter corpus fixture.
  *
  * Captured BEFORE renderDiff became an adapter over the shared run differ
  * (`sdk/common/run-diff.ts`), so the refactor is provably byte-for-byte: a
@@ -37,7 +37,18 @@ interface Pin {
   sha256: string;
 }
 
-/** The eleven fixtures, pinned. */
+/**
+ * Every fixture, pinned.
+ *
+ * The ELEVEN captured before the shared-run-differ refactor are frozen: a
+ * changed hash among them IS the regression this file exists to catch, and
+ * none of them may be re-measured to make anything pass.
+ *
+ * The thirteen below them are captures added on 2026-09-03 with the doors
+ * they were taken from; their hashes are the FIRST measurement of new inputs,
+ * not a re-measurement of old ones, and they are frozen from here on under the
+ * same rule.
+ */
 const PINS: Record<string, Pin> = {
   aehelp: { renders: 21, bytes: 11883, sha256: 'af1abce9f143fff0ac3f81bab2f8ace2e3185fa24c2a417bf5c1b2ff3204d659' },
   six_status: { renders: 23, bytes: 15421, sha256: '2c489896be4561cdb50bdc8f4091b749fd38bf590c395698f8015b934a97e8bd' },
@@ -50,6 +61,18 @@ const PINS: Record<string, Pin> = {
   rtw: { renders: 69, bytes: 142674, sha256: '39f110f486baab98efc7d167259390520dcd730f4fbe5a7f26b645d61014071c' },
   ustats: { renders: 217, bytes: 289249, sha256: 'b949a6d27a116714e7f0d9de40d025f0fbe7df10a701629cea416d45a23df28a' },
   what: { renders: 13, bytes: 1679, sha256: '5be96bf9b4b4bd8477aa3d0b6a6da486169042ac1d7c3b78b87e3030f7ee9467' },
+  b: { renders: 17, bytes: 9737, sha256: '2e337396ac8fe2a5a07470c4fdf67b7ec038e8d091d90630582d5299dc89d575' },
+  j: { renders: 39, bytes: 7249, sha256: '9d527cb2615b2bb54d24f90c13e0b609c4a35b3b0885fcbedbe7c06601c37aba' },
+  doorrepo: { renders: 22, bytes: 12062, sha256: '5b563469b13ca9e76856a621d5aca463e4f5e7217db4da94049a864db4d7375a' },
+  size: { renders: 9, bytes: 1837, sha256: '48b7306611e685a35602657f982250fe6386cd1ae7cd4fd5c8d8a1fdae854313' },
+  ulist: { renders: 22, bytes: 6297, sha256: '509706f398c52cefa712d390ef03b4002318a798e475e098f150e40213c39eb1' },
+  wall: { renders: 3, bytes: 4422, sha256: 'de8c04bf70456615a1ae1e878c87e9f19a288219b6790a099be6995a580592ce' },
+  chat: { renders: 49, bytes: 37701, sha256: '94ce198cd0f6fc7edf28d9e78610e631b9583e4620a5220a3ee932ddd7892bea' },
+  mrcstat1: { renders: 7, bytes: 951, sha256: '014fe8e6fed2a87b056ae76ee41457ec10fbfcd195261959d3b266738ebd0271' },
+  pager5d: { renders: 18, bytes: 1417, sha256: '7ed6b3f50c15a12f54cf79540cb718ac54286baa7664b576cc23e7ec3de0e92e' },
+  dtagwall: { renders: 26, bytes: 9517, sha256: '3f8abed6ba0b1a258bf7524b876c13caaa5ac7229593ecd9d610442cb0902fee' },
+  avhbc: { renders: 6, bytes: 373, sha256: 'f83aad48906dfa640bfe4372866394b973c5ce94bab6cec9d7815865423ea0c6' },
+  hackcheck: { renders: 12, bytes: 1624, sha256: 'aa25e1dfa09db75b8b854410bc0e0831f89741e4c777805ac0f64e264cdecc3a' },
 };
 
 function renderChain(id: string): Pin {

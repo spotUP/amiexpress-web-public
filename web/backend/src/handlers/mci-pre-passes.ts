@@ -304,22 +304,24 @@ screenDebug('[MCI] Total commands to execute:', commandsToExecute.length);
   if (parsed.includes('~ML.')) {
     // ~ML. - Message Base List (express.e:5621-5635)
     let msgBaseList = '';
+    // ONE row builder for the real bases AND the two fallbacks below. The
+    // fallbacks used to emit the WIDE 21-space row unconditionally, three
+    // lines under the narrow branch they should have been taking: a board
+    // with no message bases (or a getMessageBases error) put a 54-column
+    // row on a 40-column screen. C64/40-col follow-up, 2026-09-03.
+    const msgBaseRow = (num: number, name: string): string =>
+      narrow
+        ? row(`  \x1b[32m${num}\x1b[33m) \x1b[35m${name.substring(0, 33)}\x1b[0m`)
+        : row(`                     \x1b[32m${num}\x1b[33m) \x1b[35m${name.padEnd(30, ' ')}\x1b[36m\x1b[0m`);
     try {
       const messageBases = await db.getMessageBases(session.currentConf);
       if (messageBases.length > 0) {
         for (let i = 0; i < messageBases.length; i++) {
-          const num = i + 1;
-          const name = messageBases[i].name || 'Default';
-          if (narrow) {
-            msgBaseList += row(`  \x1b[32m${num}\x1b[33m) \x1b[35m${name.substring(0, 33)}\x1b[0m`);
-            continue;
-          }
-          const namePadded = name.padEnd(30, ' ');
-          msgBaseList += `                     \x1b[32m${num}\x1b[33m) \x1b[35m${namePadded}\x1b[36m\x1b[0m\r\n`;
+          msgBaseList += msgBaseRow(i + 1, messageBases[i].name || 'Default');
         }
       } else {
         // If no message bases, show default
-        msgBaseList = row('                     \x1b[32m1\x1b[33m) \x1b[35mDefault                       \x1b[36m\x1b[0m');
+        msgBaseList = msgBaseRow(1, 'Default');
       }
     } catch (error) {
 console.error('[parseMciCodes] Error getting message base list:', error);
@@ -331,7 +333,7 @@ console.error('[parseMciCodes] Error getting message base list:', error);
         { error: (error as Error).message },
         DebugSeverity.WARNING
       );
-      msgBaseList = row('                     \x1b[32m1\x1b[33m) \x1b[35mDefault                       \x1b[36m\x1b[0m');
+      msgBaseList = msgBaseRow(1, 'Default');
     }
     parsed = parsed.replace(/~ML\./g, generated(msgBaseList));
   }

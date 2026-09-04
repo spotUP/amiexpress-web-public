@@ -17,6 +17,7 @@ import { mailOnSysopComment } from '../../services/mail-notification.service';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 import { getSystemTime, formatLongDateTime } from '../../utils/date-time.util';
+import { messageIndent, messageRule } from '../../utils/table-format.util';
 
 
 // Dependencies (injected from index.ts)
@@ -1277,7 +1278,7 @@ export function handleMessageEditLineInput(socket: any, session: BBSSession, inp
   const lineIndex = parsedLine - 1;
   const currentContent = messageData.body[lineIndex];
   emitText(socket, '\r\n    Edit Line');
-  emitText(socket, '\r\n   (---------------------------------------------------------------------------)\r\n    ');
+  emitText(socket, `\r\n${messageRule(session, 'editLine')}\r\n${messageIndent(session, 'editLine')}`);
   emitText(socket, currentContent);
   // Pre-fill inputBuffer so pressing Enter immediately commits existing content unchanged
   // (matches express.e lineInput pre-fill: Enter = keep, typing = replace)
@@ -1344,7 +1345,7 @@ function promptForPrivate(socket: any, session: BBSSession): void {
   }
 
   // express.e:10861 aePuts('         [36mPrivate ') then yesNo(2) → '[32m([33my[32m/[33mN[32m)[32m?[0m '
-  emitText(socket, '         \x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m ');
+  emitText(socket, `${messageIndent(session, 'private')}\x1b[36mPrivate \x1b[32m(\x1b[33my\x1b[32m/\x1b[33mN\x1b[32m)?\x1b[0m `);
   session.subState = LoggedOnSubState.POST_MESSAGE_PRIVATE;
 }
 
@@ -1620,7 +1621,7 @@ export function promptForMessageBody(socket: any, session: BBSSession): void {
   emitText(socket, '\r\n   Enter your text. (Enter) alone to end. (75 chars/line)\r\n');
   // express.e:10150-10152: StrCopy(str,'|-------...');SetStr(str,75);StringF(tempstr,'   (\s)\b\n',str)
   // SetStr to 75: 9 full |-------| groups (72 chars) + |-- (3 chars) = 75
-  emitText(socket, '   (|-------|-------|-------|-------|-------|-------|-------|-------|-------|--)\r\n');
+  emitText(socket, `${messageRule(session, 'bodyRuler')}\r\n`);
 
   const entry = session.tempData.messageEntry;
 

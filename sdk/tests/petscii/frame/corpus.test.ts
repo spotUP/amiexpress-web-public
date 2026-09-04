@@ -34,8 +34,22 @@ interface ManifestEntry {
   sha256: string;
   harness: string;
   cwd: string;
-  /** Capture fixtures (`<id>.ans`) only: the commit the door binaries were taken from. */
+  /** Corpus capture fixtures (`<id>.ans`) only: the commit the door binaries were taken from. */
   binariesFrom?: string;
+  /**
+   * The `Commands/BBSCmd/<CMD>.info` registrations this fixture is the PROOF
+   * for - one command, or several when one binary is registered more than
+   * once (`Doors/RTW/RTW` answers to both RTW and WHO). Every command named
+   * here must carry `C64_ADAPT=40` in its real bytes, and its binary must be
+   * on disk.
+   *
+   * This field is the single source the launch suites derive their marked-door
+   * lists from, so a `.info` cannot be marked without a capture behind it and
+   * a capture cannot claim a door that is not marked. Absent on the eight
+   * `binariesFrom` captures, whose doors LEFT the tree at `1cdddac24` and
+   * survive only as fixtures.
+   */
+  installed?: string | string[];
   /**
    * Golden fixtures (`<id>.txt`) only. A door-corpus integration golden is
    * 8-bit door output with the ESC sequences already stripped, so it is read
@@ -54,6 +68,10 @@ interface ManifestEntry {
   notes: string;
 }
 const manifest: Record<string, ManifestEntry> = JSON.parse(fs.readFileSync(path.join(DIR, 'manifest.json'), 'utf8'));
+
+/** The registrations a fixture is the proof for, always as a list. */
+const installedOf = (e: ManifestEntry): string[] =>
+  e.installed === undefined ? [] : Array.isArray(e.installed) ? e.installed : [e.installed];
 
 /** A door-corpus integration golden (latin1 `<id>.txt`) rather than a harness capture (utf8 `<id>.ans`). */
 const isGolden = (e: ManifestEntry) => e.encoding === 'latin1';
@@ -155,12 +173,51 @@ for (const [id, entry] of Object.entries(manifest)) {
         expect({ id, exists: fs.existsSync(src) }).toEqual({ id, exists: true });
         expect({ id, same: fs.readFileSync(src).equals(raw) }).toEqual({ id, same: true });
         expect(entry.harness).toContain('door-corpus/run.ts --capture');
+      } else if (entry.installed) {
+        // An INSTALLED capture: the door is on the board today.
+        // NOT `--doortype XIM`: these cover four adapter types (XIM, DD, FIM
+        // and SIM all reach executeAmigaDoor, which is where the adapter
+        // installs), so what is asserted is that the line names a type at all
+        // and drives one of the commands this entry claims.
+        expect(entry.harness).toContain('run-amiga-door.ts');
+        expect(entry.harness).toContain('--doortype ');
+        expect(entry.harness).toContain(`--command ${installedOf(entry)[0]}`);
+        expect(entry.cwd).toEqual('web/backend');
       } else {
         expect(entry.harness).toContain('--doortype XIM');
         expect(entry.harness).toContain('--timeout 25');
         expect({ cwd: entry.cwd, from: entry.binariesFrom }).toEqual({ cwd: 'web/backend', from: '1cdddac24^' });
       }
     });
+
+    /**
+     * The two halves of a mark, checked against the REAL bytes: the door this
+     * fixture was captured from is still on disk, and every registration the
+     * fixture claims still declares C64_ADAPT=40. Runs for goldens as well as
+     * captures - `rtw` is a golden and it is the proof for two registrations.
+     */
+    (installedOf(entry).length > 0 ? it : it.skip)(
+      'is the proof for registrations that exist, are marked, and still have their binary',
+      () => {
+        const repo = path.resolve(__dirname, '../../../..');
+        const binary = path.join(repo, entry.binary);
+        expect({ id, binary: entry.binary, exists: fs.existsSync(binary) })
+          .toEqual({ id, binary: entry.binary, exists: true });
+        for (const command of installedOf(entry)) {
+          const infoPath = path.join(repo, 'Commands/BBSCmd', `${command}.info`);
+          expect({ id, command, exists: fs.existsSync(infoPath) })
+            .toEqual({ id, command, exists: true });
+          // Read the tooltype out of the real bytes. The .info files on this
+          // board come in two shapes - Amiga icon binaries and plain text -
+          // and both put the tooltype on its own `KEY=VALUE` run, so a latin1
+          // scan for the exact assignment answers for either without dragging
+          // the backend's parser into an SDK test.
+          const infoBytes = fs.readFileSync(infoPath).toString('latin1');
+          expect({ id, command, marked: /(^|[^A-Z_])C64_ADAPT=40(\0|\n|\r|$)/.test(infoBytes) })
+            .toEqual({ id, command, marked: true });
+        }
+      },
+    );
 
     it('is a real capture: raw ANSI with content', () => {
       expect(ansi.length).toBeGreaterThan(150);
@@ -271,7 +328,39 @@ for (const [id, entry] of Object.entries(manifest)) {
  * to two rows - correct behaviour, and not door output at all, which is what
  * `containsBbsMenu` in the manifest records.
  */
-const EXPECTED_ROWS: Record<string, number> = { what: 25, rtw: 26, ustats: 26 };
+const EXPECTED_ROWS: Record<string, number> = {
+  what: 25,
+  rtw: 26,
+  ustats: 26,
+  // The three doors marked on 2026-09-03. These are HARNESS captures, so the
+  // last frame is the door's own screen and no BBS menu rides along - the
+  // expansion above 25 is the ladder's, not the board's.
+  //
+  // `b` at 30: Bulls' five-row ASCII logo crops, and its three three-column
+  // bulletin rows each split into two, so five rows leave the top. The six
+  // entries, their labels and the prompt all stay on the glass, which is what
+  // the mark claims.
+  // `j` at 27: JoinCnf's bordered box; two rows leave the top and the
+  // conference list, the CURRENT CONFERENCE line and the prompt remain.
+  // `doorrepo` at 26: one row over, and DoorRepo's whole payload lives in the
+  // left 28 columns, so the crop drops only the empty right-hand pane.
+  b: 30,
+  j: 27,
+  doorrepo: 26,
+  // Batch 2, 2026-09-03. Five of these fit a C64 screen with rows to spare
+  // (`mrcstat1` and `chat` need no reduction at all); the three that come out
+  // over 25 do so by REFLOW, not by losing anything - `wall`'s comment stream
+  // simply occupies more rows at 40 than at 80.
+  size: 26,
+  ulist: 26,
+  wall: 40,
+  chat: 27,
+  mrcstat1: 25,
+  pager5d: 25,
+  dtagwall: 29,
+  avhbc: 25,
+  hackcheck: 26,
+};
 
 function lastFrameOf(id: string): Frame {
   const frames = framesOf(fixtureText(id, manifest[id]));

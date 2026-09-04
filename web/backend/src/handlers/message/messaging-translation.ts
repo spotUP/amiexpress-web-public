@@ -10,6 +10,7 @@ import { LoggedOnSubState } from '../../constants/bbs-states';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { translationService, TranslatorMode } from '../../services/TranslationService';
 import { emitText, emitPrompt, flushOutput } from '../../utils/output.util';
+import { headingIndent } from '../../utils/table-format.util';
 
 // ============================================================================
 // TRANSLATION COMMANDS (T/TS/T!/T*) - express.e:11065-11103, 12108-12145
@@ -154,7 +155,11 @@ async function displayChooseTranslator(socket: any, session: BBSSession): Promis
 
   // Display SCREEN_LANGUAGES if it exists - express.e:11395-11397
   // (simplified - we just display the list inline)
-  emitText(socket, AnsiUtil.colorize('                         Available Languages', 'green'));
+  const languagesHeading = 'Available Languages';
+  emitText(
+    socket,
+    AnsiUtil.colorize(`${headingIndent(session, 'languageList', languagesHeading)}${languagesHeading}`, 'green')
+  );
   emitText(socket, '\r\n\r\n');
 
   // List languages with numbers - express.e uses displayScreen(SCREEN_LANGUAGES)

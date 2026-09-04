@@ -128,7 +128,11 @@
     "harness": "npx tsx dev/scripts/door-corpus/run.ts --capture rtw",
     "cwd": "repo root",
     "containsBbsMenu": true,
-    "notes": "Real Time Who v2.01: 78-column bordered node table, then the door exits and the BBS repaints its own menu - the capture's LAST frame is that menu (three-column command rows plus the prompt), which is why containsBbsMenu is true."
+    "notes": "Real Time Who v2.01: 78-column bordered node table, then the door exits and the BBS repaints its own menu - the capture's LAST frame is that menu (three-column command rows plus the prompt), which is why containsBbsMenu is true.",
+    "installed": [
+      "RTW",
+      "WHO"
+    ]
   },
   "ustats": {
     "binary": "Doors/ustats/stats",
@@ -145,7 +149,8 @@
     "harness": "npx tsx dev/scripts/door-corpus/run.ts --capture ustats",
     "cwd": "repo root",
     "containsBbsMenu": true,
-    "notes": "uSEr StAtS v1.0: centred banners over label-dots-value rows; the capture continues past the door into the BBS menu and prompt, so the LAST frame is the menu."
+    "notes": "uSEr StAtS v1.0: centred banners over label-dots-value rows; the capture continues past the door into the BBS menu and prompt, so the LAST frame is the menu.",
+    "installed": "S"
   },
   "what": {
     "binary": "Doors/What/WHAT",
@@ -162,6 +167,187 @@
     "harness": "npx tsx dev/scripts/door-corpus/run.ts --capture what",
     "cwd": "repo root",
     "containsBbsMenu": false,
-    "notes": "WHAT Transfer Activities v2.0: one static 78-column box table on an idle board. Door output only - the capture ends before the BBS repaints, so the LAST frame is the door's own screen."
+    "notes": "WHAT Transfer Activities v2.0: one static 78-column box table on an idle board. Door output only - the capture ends before the BBS repaints, so the LAST frame is the door's own screen.",
+    "installed": "WHAT"
+  },
+  "b": {
+    "binary": "Doors/EmP_Tools/Bulls",
+    "command": "B",
+    "script": [
+      "3000 \\r",
+      "6000 \\r",
+      "9000 q\\r"
+    ],
+    "bytes": 1287,
+    "sha256": "a1e50298ce14b082c96733ee5aec35014f726859b3a780ba7750984d3f078d2f",
+    "harness": "printf '%s\\n' '3000 \\r' '6000 \\r' '9000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/EmP_Tools/Bulls 1 --doortype XIM --command B --timeout 25 > b.ans",
+    "cwd": "web/backend",
+    "installed": "B",
+    "notes": "Bulls 2.2 (EMPiRE), the board's B command. Cursor-addressed menu (ESC[H ESC[9B, ESC[59C) over a five-row ASCII logo; the six bulletin entries are three-column rows that split into two 40-column rows each. Marked C64_ADAPT=40 on 2026-09-03."
+  },
+  "j": {
+    "binary": "Doors/emp_tools/Joincnf",
+    "command": "J",
+    "script": [
+      "4000 \\r",
+      "7000 \\r",
+      "10000 q\\r"
+    ],
+    "bytes": 1917,
+    "sha256": "3c928769205a33c7f608bab741605b9bba94a7c80950709b13e8a13f4936778e",
+    "harness": "printf '%s\\n' '4000 \\r' '7000 \\r' '10000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/emp_tools/Joincnf 1 --doortype XIM --command J --timeout 25 > j.ans",
+    "cwd": "web/backend",
+    "installed": "J",
+    "notes": "JoinCnf 4.0 (EMPiRE), the board's J command. Bordered conference box with a selection bar; the list, the CURRENT CONFERENCE line and the prompt survive at 40, the logo and the outer rules do not. Marked C64_ADAPT=40 on 2026-09-03."
+  },
+  "doorrepo": {
+    "binary": "Doors/DoorRepo/doorrepo.amiga",
+    "command": "DOORREPO",
+    "script": [
+      "5000 \\r",
+      "9000 \\r",
+      "13000 q\\r"
+    ],
+    "bytes": 6056,
+    "sha256": "c96876831089ee21906023ec0cd28b2878b53b8d2d765f1db99b753c49c97daf",
+    "harness": "printf '%s\\n' '5000 \\r' '9000 \\r' '13000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/DoorRepo/doorrepo.amiga 1 --doortype XIM --command DOORREPO --timeout 30 > doorrepo.ans",
+    "cwd": "web/backend",
+    "installed": "DOORREPO",
+    "notes": "DoorRepo v1.0, the board's DOORREPO command. Two-pane layout whose whole payload sits in the left 28 columns, so the crop drops only the empty right-hand detail pane. Marked C64_ADAPT=40 on 2026-09-03."
+  },
+  "size": {
+    "binary": "Doors/SizeCheck/SizeCheck",
+    "command": "SIZE",
+    "script": [
+      "4000 \\r",
+      "8000 \\r",
+      "12000 q\\r"
+    ],
+    "bytes": 394,
+    "sha256": "07e21b15010dfe3a83ac9b22c3c3856c8227f1d1dd526845c710491c8db7f95f",
+    "harness": "printf '%s\\n' '4000 \\r' '8000 \\r' '12000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/SizeCheck/SizeCheck 1 --doortype XIM --command SIZE --timeout 25 > size.ans",
+    "cwd": "web/backend",
+    "installed": "SIZE",
+    "notes": "SizeCheck v1.1: two per-directory rows and a totals row. `narrow` shortens only the transient 'Loading... Counting...' progress text; every byte and file count survives. Marked C64_ADAPT=40 on 2026-09-03."
+  },
+  "ulist": {
+    "binary": "Doors/5D-User/5D-User",
+    "command": "ULIST",
+    "script": [
+      "4000 \\r",
+      "8000 \\r",
+      "12000 q\\r"
+    ],
+    "bytes": 3579,
+    "sha256": "49132728759d0f7fcc1f672a421a311b2c8d09c498798a56e73be5aa1e946771",
+    "harness": "printf '%s\\n' '4000 \\r' '8000 \\r' '12000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/5D-User/5D-User 1 --doortype XIM --command ULIST --timeout 25 > ulist.ans",
+    "cwd": "web/backend",
+    "installed": "ULIST",
+    "notes": "5D-User v1.0: a ten-row user table inside a box. Every record - number, handle, location, pages, upload and download bytes - survives at 40; what narrows is the header labels, the two right-hand menu options ((F)uLL hELP!, (KEYPAD) sCROLLING) and the credits. Marked C64_ADAPT=40 on 2026-09-03."
+  },
+  "wall": {
+    "binary": "Doors/dRE/dRE!WAll/dRE!WAll",
+    "command": "WALL",
+    "script": [
+      "4000 \\r",
+      "8000 \\r",
+      "12000 q\\r"
+    ],
+    "bytes": 2927,
+    "sha256": "dfe9fcad99d34fbfb57b3fc034c78b54fad436c952b0e6afd2825fc2589b5f89",
+    "harness": "printf '%s\\n' '4000 \\r' '8000 \\r' '12000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/dRE/dRE!WAll/dRE!WAll 1 --doortype XIM --command WALL --timeout 25 > wall.ans",
+    "cwd": "web/backend",
+    "installed": "WALL",
+    "notes": "dRE!WAll v2.0: a scrolling comment wall. Nothing is cropped and nothing is truncated - the rows reflow, so a C64 caller sees the same entries over more rows and the oldest scroll off sooner than at 80. Marked C64_ADAPT=40 on 2026-09-03."
+  },
+  "chat": {
+    "binary": "doors/Nodechat/newchat",
+    "command": "CHAT",
+    "script": [
+      "4000 \\r",
+      "8000 \\r",
+      "12000 q\\r"
+    ],
+    "bytes": 3544,
+    "sha256": "f4a777c084a7de155422518288342bf81545b282c360126fffb81c305195cb6b",
+    "harness": "printf '%s\\n' '4000 \\r' '8000 \\r' '12000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/doors/Nodechat/newchat 1 --doortype XIM --command CHAT --timeout 25 > chat.ans",
+    "cwd": "web/backend",
+    "installed": "CHAT",
+    "notes": "Nodechat: the node list is 36 columns wide, so it already fits a C64 screen - zero cropped cells, zero truncations. The '>' glyphs in the output are the door's own. Marked C64_ADAPT=40 on 2026-09-03."
+  },
+  "mrcstat1": {
+    "binary": "Doors/mrc/mrcstat1",
+    "command": "MRCSTAT1",
+    "script": [
+      "4000 \\r",
+      "8000 \\r",
+      "12000 q\\r"
+    ],
+    "bytes": 252,
+    "sha256": "caf28ed44459d6e2438fc0a00e0ccb715bf6b9f0e1c69363fade7ff3f16c8c60",
+    "harness": "printf '%s\\n' '4000 \\r' '8000 \\r' '12000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/mrc/mrcstat1 1 --doortype XIM --command MRCSTAT1 --timeout 25 > mrcstat1.ans",
+    "cwd": "web/backend",
+    "installed": "MRCSTAT1",
+    "notes": "MRC chat status: a 25-column box, so it fits a C64 screen whole - the cleanest case in the corpus, zero cropped cells and zero truncations. Marked C64_ADAPT=40 on 2026-09-03."
+  },
+  "pager5d": {
+    "binary": "Doors/5DPAGER/Doors/5D/5D_Page/5D_Page",
+    "command": "5DPAGER",
+    "script": [
+      "4000 \\r",
+      "8000 \\r",
+      "12000 q\\r"
+    ],
+    "bytes": 826,
+    "sha256": "846378b5de786cb0d74ce1a6382aed53201109f4d808874952e64c66b8cce50d",
+    "harness": "printf '%s\\n' '4000 \\r' '8000 \\r' '12000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/5DPAGER/Doors/5D/5D_Page/5D_Page 1 --doortype FIM --command 5DPAGER --timeout 25 > pager5d.ans",
+    "cwd": "web/backend",
+    "installed": "5DPAGER",
+    "notes": "5D_Page v0.01, the corpus's only FIM fixture. A 61-column box: the crop takes the right border and nothing else, so the title, the 'Please enter your page reason:' prompt and the registration line all reach the caller. Marked C64_ADAPT=40 on 2026-09-03."
+  },
+  "dtagwall": {
+    "binary": "Doors/DreamTagWall/DreamTagWall",
+    "command": "DTAGWALL",
+    "script": [
+      "4000 \\r",
+      "8000 \\r",
+      "12000 q\\r"
+    ],
+    "bytes": 1256,
+    "sha256": "de1121b4ea0e4582d089bc1f27256834a157d029b5d35354f8417b5c23eff6d6",
+    "harness": "printf '%s\\n' '4000 \\r' '8000 \\r' '12000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/DreamTagWall/DreamTagWall 1 --doortype DD --command DTAGWALL --timeout 25 > dtagwall.ans",
+    "cwd": "web/backend",
+    "installed": "DTAGWALL",
+    "notes": "DreamTagWall: wall entries, the bomb-the-wall prompt and the eight-colour menu, all at 40 with zero cropped cells and zero truncations. Marked C64_ADAPT=40 on 2026-09-03."
+  },
+  "avhbc": {
+    "binary": "Doors/AVHBaudCheck/AVH-BaudCheck",
+    "command": "AVHBC",
+    "script": [
+      "4000 \\r",
+      "8000 \\r",
+      "12000 q\\r"
+    ],
+    "bytes": 324,
+    "sha256": "259e7417cc8df6642f66b299385d721055af0a283614b90d4cec4b54ce07025f",
+    "harness": "printf '%s\\n' '4000 \\r' '8000 \\r' '12000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/AVHBaudCheck/AVH-BaudCheck 1 --doortype DD --command AVHBC --timeout 25 > avhbc.ans",
+    "cwd": "web/backend",
+    "installed": "AVHBC",
+    "notes": "Van Helsing's BaudChecker v0.1: three centred rows and a verdict. `deindent` pulls the 23-column centring off; only the '=' rules crop, and a cropped rule is still a rule. Marked C64_ADAPT=40 on 2026-09-03."
+  },
+  "hackcheck": {
+    "binary": "Doors/HackCheck/HackCheck",
+    "command": "HACKCHECK",
+    "script": [
+      "4000 \\r",
+      "8000 \\r",
+      "12000 q\\r"
+    ],
+    "bytes": 548,
+    "sha256": "d4bfe71494c057ccd9d2f747b0a3bc4e708f02f4e50a76c98a07a89842321ca6",
+    "harness": "printf '%s\\n' '4000 \\r' '8000 \\r' '12000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/HackCheck/HackCheck 1 --doortype DD --command HACKCHECK --timeout 25 > hackcheck.ans",
+    "cwd": "web/backend",
+    "installed": "HACKCHECK",
+    "notes": "DD HaCkChecK: reverse-video rules, a centred title and a 52-column question that reflows over two rows. Zero cropped cells, zero truncations. Its registered-trademark glyph is not in the PETSCII table and shows as '?' - the door's choice of glyph, not the ladder's doing. Marked C64_ADAPT=40 on 2026-09-03."
   }
 }

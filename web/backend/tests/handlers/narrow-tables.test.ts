@@ -578,6 +578,60 @@ describe('5c conference / message-base MCI lists (screen.handler.ts parseMciCode
     }
   });
 
+  /**
+   * The ~ML. fallbacks: a board with no message bases, and a
+   * getMessageBases() that throws. Both used to emit the WIDE 21-space row
+   * unconditionally, three lines under the narrow branch the real rows take
+   * - a 54-column row on a 40-column screen. C64/40-col follow-up,
+   * 2026-09-03. RED proof: put `row('                     ...Default...')`
+   * back at either site and the two 40-col cases below fail at 54 columns.
+   */
+  const DEFAULT_WIDE =
+    '                     \x1b[32m1\x1b[33m) \x1b[35m' + 'Default'.padEnd(30, ' ') + '\x1b[36m\x1b[0m\r\n';
+  const DEFAULT_NARROW = '  \x1b[32m1\x1b[33m) \x1b[35mDefault\x1b[0m\r\n';
+
+  function withNoMessageBases(): void {
+    const { Database } = require('../../src/database');
+    Database.prototype.getMessageBases = jest.fn().mockResolvedValue([]);
+  }
+
+  function withFailingMessageBases(): void {
+    const { Database } = require('../../src/database');
+    Database.prototype.getMessageBases = jest.fn().mockRejectedValue(new Error('no db'));
+  }
+
+  test('80-col PIN: the ~ML. no-bases fallback is byte-identical', async () => {
+    const driver = wide();
+    const screen = prepare(driver);
+    withNoMessageBases();
+    expect((await screen.parseMciCodes('~ML.', driver.session)).parsed).toBe(DEFAULT_WIDE);
+  });
+
+  test('80-col PIN: the ~ML. error fallback is byte-identical', async () => {
+    const driver = wide();
+    const screen = prepare(driver);
+    withFailingMessageBases();
+    expect((await screen.parseMciCodes('~ML.', driver.session)).parsed).toBe(DEFAULT_WIDE);
+  });
+
+  test('40-col: the ~ML. no-bases fallback takes the narrow branch', async () => {
+    const driver = narrow();
+    const screen = prepare(driver);
+    withNoMessageBases();
+    const parsed = (await screen.parseMciCodes('~ML.', driver.session)).parsed;
+    expect(parsed).toBe(DEFAULT_NARROW);
+    expectFitsNarrow(parsed.split('\r\n').filter((l: string) => l.length > 0));
+  });
+
+  test('40-col: the ~ML. error fallback takes the narrow branch', async () => {
+    const driver = narrow();
+    const screen = prepare(driver);
+    withFailingMessageBases();
+    const parsed = (await screen.parseMciCodes('~ML.', driver.session)).parsed;
+    expect(parsed).toBe(DEFAULT_NARROW);
+    expectFitsNarrow(parsed.split('\r\n').filter((l: string) => l.length > 0));
+  });
+
   test('40-col: the exact single-column rows', async () => {
     expect(await render(narrow(), '~CL.')).toBe(
       '  \x1b[32m  1\x1b[33m) \x1b[35mAmiga Demo Scene Chat!\x1b[0m\r\n' +

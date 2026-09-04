@@ -43,6 +43,22 @@
 import type { Screen } from '../engines/ui/blessed';
 import { setupInputHandler, removeInputHandler } from './blessed-helpers';
 
+/**
+ * The part of the BBS host object held-key tracking needs.
+ *
+ * `deliversKeyEvents` is the transport capability the SDK asks before it
+ * registers an edge handler: true only where key-down / key-up EDGES actually
+ * arrive (a browser over socket.io). A byte transport - telnet, SSH - delivers
+ * a character stream with no key-up, so it answers false and doors take their
+ * character path. The property is optional because an older or partial host
+ * may not define it, and the guard reads a missing answer as "no edges".
+ */
+export interface KeyEdgeHost {
+  deliversKeyEvents?: boolean;
+  onKeyDown?(callback: (key: string, keyState: Record<string, boolean>) => void): void;
+  onKeyUp?(callback: (key: string, keyState: Record<string, boolean>) => void): void;
+}
+
 export interface DoorInputOptions {
   /**
    * Enable BBS game mode (raw keyboard events, bypass line buffering)
@@ -245,18 +261,29 @@ export class DoorInputManager {
   }
 
   /**
-   * Attach key-down/key-up handlers, if the session can deliver them.
+   * Attach key-down/key-up handlers, if the TRANSPORT can deliver them.
    *
    * Silently does nothing when the transport has no key events - telnet and
    * SSH sessions, for instance. isKeyStateActive() then stays false and the
    * door keeps whatever character-driven path it had.
+   *
+   * The question asked here is the transport's capability, `bbs.deliversKeyEvents`,
+   * NOT whether the host object happens to define the two methods. The host
+   * defines them unconditionally (web/backend/src/doors/BBSApi.ts), so a
+   * method-existence check answered "yes, edges" for a telnet caller that can
+   * never send a key-up, and every arcade door then waited on a held set that
+   * could not fill.
+   *
+   * DEFAULT-CLOSED: a host that does not answer the question reports no edges.
+   * A door that wrongly takes its character path is playable; a door that
+   * wrongly waits for edges is frozen.
    */
   private setupHeldKeyTracking(): void {
     if (!this.options.trackHeldKeys) return;
 
-    const bbs = this.session?.bbs;
-    if (!bbs?.onKeyDown || !bbs?.onKeyUp) {
-      this.log('Held-key tracking requested but this session sends no key events');
+    const bbs: KeyEdgeHost | undefined = this.session?.bbs;
+    if (!bbs?.deliversKeyEvents || !bbs.onKeyDown || !bbs.onKeyUp) {
+      this.log('Held-key tracking requested but this transport sends no key events');
       return;
     }
 
