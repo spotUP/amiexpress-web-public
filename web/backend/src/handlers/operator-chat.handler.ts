@@ -520,7 +520,63 @@ console.error('[Operator Chat] Discord notification failed:', error);
     }
   }
 
-  // 3. Browser push notifications
+  // 3a. Pushover notification
+  if (config.pushoverAppToken && config.pushoverUserKey) {
+    try {
+      await axios.post('https://api.pushover.net/1/messages.json', {
+        token: config.pushoverAppToken,
+        user: config.pushoverUserKey,
+        title: `Operator Page — ${page.userHandle}`,
+        message: `${page.userHandle} on N${page.nodeId} in ${page.conferenceName} — ${page.lastCommand}`,
+        sound: 'persistent',
+        priority: 1,
+        url: `${process.env.BASE_URL || 'http://localhost:3001'}/admin/operator-chat`,
+        url_title: 'Open Operator Chat',
+      }, { timeout: 5000 });
+      notificationUpdates.pushover = true;
+    } catch (error) {
+console.error('[Operator Chat] Pushover notification failed:', error);
+    }
+  }
+
+  // 3b. Gotify notification
+  if (config.gotifyUrl && config.gotifyAppToken) {
+    try {
+      const gotifyUrl = config.gotifyUrl.replace(/\/+$/, '');
+      await axios.post(`${gotifyUrl}/message`, {
+        title: `Operator Page — ${page.userHandle}`,
+        message: `${page.userHandle} on N${page.nodeId} in ${page.conferenceName}`,
+        priority: 5,
+      }, {
+        headers: { 'X-Gotify-Key': config.gotifyAppToken },
+        timeout: 5000,
+      });
+      notificationUpdates.gotify = true;
+    } catch (error) {
+console.error('[Operator Chat] Gotify notification failed:', error);
+    }
+  }
+
+  // 3c. ntfy.sh notification
+  if (config.ntfyTopic) {
+    try {
+      const ntfyBase = (config.ntfyUrl || 'https://ntfy.sh').replace(/\/+$/, '');
+      await axios.post(`${ntfyBase}/${encodeURIComponent(config.ntfyTopic)}`, `${page.userHandle} on N${page.nodeId} in ${page.conferenceName}`, {
+        headers: {
+          'Title': `Operator Page — ${page.userHandle}`,
+          'Priority': 'urgent',
+          'Tags': 'bell',
+          'Click': `${process.env.BASE_URL || 'http://localhost:3001'}/admin/operator-chat`,
+        },
+        timeout: 5000,
+      });
+      notificationUpdates.ntfy = true;
+    } catch (error) {
+console.error('[Operator Chat] ntfy.sh notification failed:', error);
+    }
+  }
+
+  // 4. Browser push notifications
   try {
     const {
       isWebPushEnabled,

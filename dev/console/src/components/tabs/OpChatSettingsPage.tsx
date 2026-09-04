@@ -23,6 +23,13 @@ const FIELDS: Field[] = [
   // Discord
   { key: 'discordWebhook',  label: 'Discord Webhook',      type: 'string' },
   { key: 'discordUserId',   label: 'Discord User ID',      type: 'string' },
+  // Push channels
+  { key: 'pushoverUserKey', label: 'Pushover User Key',    type: 'string' },
+  { key: 'pushoverAppToken',label: 'Pushover Token',       type: 'string' },
+  { key: 'gotifyUrl',       label: 'Gotify Server URL',    type: 'string' },
+  { key: 'gotifyAppToken',  label: 'Gotify App Token',     type: 'string' },
+  { key: 'ntfyTopic',       label: 'ntfy.sh Topic',        type: 'string' },
+  { key: 'ntfyUrl',         label: 'ntfy.sh Server URL',   type: 'string' },
   // AI
   { key: 'aiEnabled',       label: 'AI Bot Enabled',       type: 'bool' },
   { key: 'aiProvider',      label: 'AI Provider',          type: 'select', options: ['openrouter', 'groq', 'gemini', 'rule-based'] },
@@ -40,7 +47,7 @@ function fmtVal(val: unknown, field: Field): string {
   if (val === undefined || val === null) return '—';
   if (field.type === 'bool') return val ? 'on' : 'off';
   if (field.type === 'select') return String(val);
-  if (field.key.endsWith('ApiKey')) {
+  if (field.key.endsWith('ApiKey') || field.key.endsWith('AppToken') || field.key.endsWith('UserKey')) {
     const s = String(val);
     return s ? s.slice(0, 8) + '…' : '(empty)';
   }
@@ -166,7 +173,7 @@ export function OpChatSettingsPage() {
         const isSel = i === selectedIdx;
         const isPending = f.key in pending;
         const val = isPending ? pending[f.key] : (config as any)?.[f.key];
-        const masked = f.key.endsWith('ApiKey') || f.key === 'aiSystemPrompt';
+        const masked = f.key.endsWith('ApiKey') || f.key.endsWith('AppToken') || f.key.endsWith('UserKey') || f.key === 'aiSystemPrompt';
         return (
           <Box key={f.key}>
             <Box flexDirection="row" alignItems="center">

@@ -127,6 +127,13 @@ export interface OperatorChatConfig {
   allowedSecLevels: number[];      // Security levels allowed to page (default: all)
   notifyOnPage: boolean;           // Show in-system notifications when users page
   notifyDiscord: boolean;          // Send Discord notifications via webhook
+  // Push notification channels
+  pushoverUserKey?: string;        // Pushover user key
+  pushoverAppToken?: string;       // Pushover application token
+  gotifyUrl?: string;              // Gotify server URL
+  gotifyAppToken?: string;         // Gotify application token
+  ntfyTopic?: string;              // ntfy.sh topic name
+  ntfyUrl?: string;                // ntfy server URL (default https://ntfy.sh)
   // AI bot configuration
   aiEnabled: boolean;              // Enable AI bot on timeout
   aiProvider: 'groq' | 'gemini' | 'openrouter' | 'rule-based'; // AI provider

@@ -748,6 +748,66 @@ export function OperatorChatSettingsPage() {
           </div>
         </section>
 
+        {/* Third-party Push Notification Channels */}
+        <section className="bg-surface-1 border border-border rounded-lg p-6">
+          <h2 className="text-xl font-semibold text-content-primary mb-4 flex items-center gap-2">
+            <Bell className="w-5 h-5" />
+            Phone/Desktop Push Channels
+          </h2>
+
+          <div className="space-y-4">
+            <p className="text-sm text-content-secondary">Send push notifications to your phone or desktop when users page. Leave empty to skip a channel.</p>
+
+            {/* Pushover */}
+            <div className="border-b border-border pb-4">
+              <h3 className="text-sm font-medium text-content-primary mb-2">Pushover</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-content-primary mb-1">User Key</label>
+                  <input type="text" {...register('pushoverUserKey')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="uy7..." autoComplete="off" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-content-primary mb-1">App Token</label>
+                  <input type="password" {...register('pushoverAppToken')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="az..." autoComplete="off" />
+                </div>
+              </div>
+              <p className="text-xs text-content-secondary mt-1">Create an app at <span className="font-mono">pushover.net/apps</span> — one-time $5 purchase</p>
+            </div>
+
+            {/* Gotify */}
+            <div className="border-b border-border pb-4">
+              <h3 className="text-sm font-medium text-content-primary mb-2">Gotify (self-hosted)</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-content-primary mb-1">Server URL</label>
+                  <input type="url" {...register('gotifyUrl')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="https://gotify.example.com" autoComplete="off" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-content-primary mb-1">App Token</label>
+                  <input type="password" {...register('gotifyAppToken')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="A..." autoComplete="off" />
+                </div>
+              </div>
+              <p className="text-xs text-content-secondary mt-1">Open source push server — <span className="font-mono">gotify.net</span></p>
+            </div>
+
+            {/* ntfy.sh */}
+            <div>
+              <h3 className="text-sm font-medium text-content-primary mb-2">ntfy.sh</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-content-primary mb-1">Topic Name</label>
+                  <input type="text" {...register('ntfyTopic')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="bbs-pages" autoComplete="off" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-content-primary mb-1">Server URL (optional)</label>
+                  <input type="url" {...register('ntfyUrl')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="https://ntfy.sh" autoComplete="off" />
+                </div>
+              </div>
+              <p className="text-xs text-content-secondary mt-1">Install the ntfy app on your phone and subscribe to your topic. Leave server URL as default for public ntfy.sh</p>
+            </div>
+          </div>
+        </section>
+
         {/* AI Bot Settings */}
         <section className="bg-surface-1 border border-border rounded-lg p-6">
           <h2 className="text-xl font-semibold text-content-primary mb-4 flex items-center gap-2">

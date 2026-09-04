@@ -129,7 +129,13 @@ export class OperatorChatRepository {
         ai_system_prompt TEXT DEFAULT '',
         groq_api_key TEXT DEFAULT '',
         gemini_api_key TEXT DEFAULT '',
-        openrouter_api_key TEXT DEFAULT ''
+        openrouter_api_key TEXT DEFAULT '',
+        pushover_user_key TEXT DEFAULT '',
+        pushover_app_token TEXT DEFAULT '',
+        gotify_url TEXT DEFAULT '',
+        gotify_app_token TEXT DEFAULT '',
+        ntfy_topic TEXT DEFAULT '',
+        ntfy_url TEXT DEFAULT 'https://ntfy.sh'
       )
     `);
 
@@ -166,6 +172,24 @@ export class OperatorChatRepository {
     } catch (e) { /* Column already exists */ }
     try {
       this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN openrouter_api_key TEXT DEFAULT ''`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN pushover_user_key TEXT DEFAULT ''`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN pushover_app_token TEXT DEFAULT ''`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN gotify_url TEXT DEFAULT ''`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN gotify_app_token TEXT DEFAULT ''`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN ntfy_topic TEXT DEFAULT ''`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN ntfy_url TEXT DEFAULT 'https://ntfy.sh'`);
     } catch (e) { /* Column already exists */ }
 
     // Push notification subscriptions table
@@ -496,7 +520,13 @@ export class OperatorChatRepository {
       aiSystemPrompt: row.ai_system_prompt || '',
       groqApiKey: row.groq_api_key || '',
       geminiApiKey: row.gemini_api_key || '',
-      openRouterApiKey: row.openrouter_api_key || ''
+      openRouterApiKey: row.openrouter_api_key || '',
+      pushoverUserKey: row.pushover_user_key || '',
+      pushoverAppToken: row.pushover_app_token || '',
+      gotifyUrl: row.gotify_url || '',
+      gotifyAppToken: row.gotify_app_token || '',
+      ntfyTopic: row.ntfy_topic || '',
+      ntfyUrl: row.ntfy_url || 'https://ntfy.sh'
     };
   }
 
@@ -534,7 +564,13 @@ export class OperatorChatRepository {
         ai_system_prompt = ?,
         groq_api_key = ?,
         gemini_api_key = ?,
-        openrouter_api_key = ?
+        openrouter_api_key = ?,
+        pushover_user_key = ?,
+        pushover_app_token = ?,
+        gotify_url = ?,
+        gotify_app_token = ?,
+        ntfy_topic = ?,
+        ntfy_url = ?
       WHERE id = 1
     `).run(
       merged.enabled ? 1 : 0,
@@ -562,7 +598,13 @@ export class OperatorChatRepository {
       merged.aiSystemPrompt ?? '',
       merged.groqApiKey ?? '',
       merged.geminiApiKey ?? '',
-      merged.openRouterApiKey ?? ''
+      merged.openRouterApiKey ?? '',
+      merged.pushoverUserKey ?? '',
+      merged.pushoverAppToken ?? '',
+      merged.gotifyUrl ?? '',
+      merged.gotifyAppToken ?? '',
+      merged.ntfyTopic ?? '',
+      merged.ntfyUrl ?? 'https://ntfy.sh'
     );
   }
 
