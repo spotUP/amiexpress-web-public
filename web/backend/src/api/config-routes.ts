@@ -1872,20 +1872,25 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
         // "User updated successfully", the disk record changed, and the
         // account kept its old password - reported on the live board for
         // Phantasm, whose disk fragment and database hash disagreed.
-        if (password) {
-          try {
-            const dbUser = await database.getUserByUsername(updatedUser.username);
-            if (dbUser) {
-              await database.updateUser(dbUser.id, { passwordHash: updatedUser.passwordHash });
-            } else {
-              console.warn(
-                `[Users] ${updatedUser.username} has no database row; the new password ` +
-                `cannot take effect until the account is imported`
-              );
-            }
-          } catch (error) {
-            return handleError(res, error);
+        // Same issue applies to secLevel: the admin page shows the DB value,
+        // and login reads it, so the disk-only change was invisible.
+        try {
+          const dbUser = await database.getUserByUsername(updatedUser.username);
+          if (dbUser) {
+            const dbUpdates: Record<string, unknown> = {};
+            if (password) dbUpdates.passwordHash = updatedUser.passwordHash;
+            if (updates.secLevel !== undefined) dbUpdates.secLevel = updates.secLevel;
+            if (updates.realname !== undefined) dbUpdates.realname = updates.realname;
+            if (updates.location !== undefined) dbUpdates.location = updates.location;
+            if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+            if (updates.email !== undefined) dbUpdates.email = updates.email;
+            if (updates.timeLimit !== undefined) dbUpdates.timeLimit = updates.timeLimit;
+            if (updates.expert !== undefined) dbUpdates.expert = updates.expert;
+            if (updates.ansi !== undefined) dbUpdates.ansi = updates.ansi;
+            await database.updateUser(dbUser.id, dbUpdates);
           }
+        } catch (error) {
+          return handleError(res, error);
         }
 
         // Remove password hash from response

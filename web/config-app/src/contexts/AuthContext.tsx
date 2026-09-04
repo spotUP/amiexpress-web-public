@@ -49,8 +49,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const data = await apiClient.getAdminPermissions();
       if (data?.perms) setAdminPerms(data.perms);
-    } catch {
-      // Non-sysop users get 403 — that's fine, use defaults
+    } catch (e: any) {
+      console.log('[Auth] Admin perms not available:', e?.message || '403 - using defaults');
     }
   }, []);
 
