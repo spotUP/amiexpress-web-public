@@ -187,55 +187,11 @@ What does not survive: `double` borders (`ansi_box` draws `+ - |`) and the
 exact shades. What does: the identity - phosphor stays green, neon stays
 magenta, classic stays cyan and yellow.
 
-`ui_settings.h` reads the files a TypeScript door reads:
-`door.settings.json` marks the root and `settings.json` holds the sysop's
-answers (`sdk/core/settings.ts`). A sysop configures a door once and it does
-not matter which language it happens to be written in.
+## What is deliberately not here yet
 
-Reading only - writing is the admin UI's job, and a door that rewrote its own
-settings file would race the thing editing it. `ui_door_dir` walks up from
-where the binary started, so a compiled door in `dist/` finds the settings
-beside its source, exactly as `resolveDoorRoot()` does.
-
-Falling back is explicit everywhere: a missing key takes the door's own
-default, a garbled number falls back rather than reading as 0 (which is a
-real setting), and a value too long for the caller is an error rather than a
-silent truncation - truncating a path or a URL is how a door ends up asking
-for something that does not exist.
-
-## 7. Phase 5 (in progress): the transport, and what a C door still cannot do
-
-`include/aedoor.h` and both backends moved here from DoorRepo: the exec
-message round trip (`src/ae_transport_amiga.c`) and the host stand-in the
-tests use (`src/ae_transport_native.c`). `ae_chunk.h` moved with them - how
-many bytes fit in one JH_SM message without tearing an ANSI escape across
-two of them is a fact about the protocol, not about DoorRepo.
-
-`ui_screen_flush()` writes through it now, so a frame composed by any widget
-in this SDK reaches a real caller in one `ae_put`.
-
-`ae_field_read`/`ae_field_write` are the round trips `ae_session` needed and
-DoorRepo never used, so the user fields work on a real board now.
-`ae_open_bbs()` is the one call a door makes to get a session wired to them.
-
-**The direction flag reads backwards from what it looks like**: `Data != 0`
-is a READ and `Data == 0` is a WRITE. Getting it the wrong way round does not
-error - it writes the door's uninitialised buffer into the caller's user
-record - so it is stated in the code rather than left to be inferred.
-
-### The proof door
-
-`examples/theme-picker/` is `Doors/theme-picker` (255 lines of TypeScript),
-ported: **19,856 bytes** of 68K binary, drawn with the SDK's widgets, reading
-and writing through the protocol.
-
-It is deliberately the same door. The theme in force is MARKED rather than
-merely highlighted, because the highlight follows the cursor and says nothing
-about what is saved. The screen is drawn in the theme you are leaving, so it
-is itself an example of what you have. And it asks where it is running before
-offering to save: on a classic AmiExpress it lists the themes and says
-plainly that the board cannot keep one, rather than pretending ENTER did
-something.
+Settings over the door's JSON (the rest of phase 4); a real door ported end
+to end, and the AEDoor transport lifted in behind `ae_transport_fn`
+(phase 5).
 
 And the real AEDoor transport: `examples/doorrepo-c/aedoor_amiga.c` still
 owns it, and `ui_screen`'s sink is deliberately the one place that changes
