@@ -1,5 +1,44 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiClient } from '../api/client';
+
+/**
+ * Every screen file as a picture.
+ *
+ * "How can we make it easy for artists to find everything? render mugshots of
+ * all screen files?" - yes, and it is the only thing that makes a directory of
+ * 891 files browsable: a designer recognises the art, never the path.
+ *
+ * The bytes are fetched only when a card comes into view. Fetching 891 screens
+ * to fill one screenful would be slower than the list it replaces, and most of
+ * them are never looked at.
+ *
+ * A concurrency limiter prevents the browser from firing 30+ requests at once
+ * when the initial viewport fills with cards — on localhost tsx compilation
+ * makes each ~500ms, saturating connection pools and blocking the UI thread.
+ */
+
+/** Max concurrent screen file fetches. */
+const MAX_CONCURRENT = 4;
+
+let pending: Array<() => void> = [];
+let inFlight = 0;
+
+function acquire(): Promise<void> {
+  if (inFlight < MAX_CONCURRENT) {
+    inFlight++;
+    return Promise.resolve();
+  }
+  return new Promise(resolve => { pending.push(resolve); });
+}
+
+function release(): void {
+  const next = pending.shift();
+  if (next) {
+    next();
+  } else {
+    inFlight--;
+  }
+}
 import { ScreenArt } from './ScreenArt';
 
 /**
@@ -61,9 +100,18 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
     if (!visible || content !== null) return;
 
     let cancelled = false;
-    apiClient.getScreenFile(item.path)
-      .then(res => { if (!cancelled) setContent((res.data as { content?: string })?.content ?? ''); })
-      .catch(() => { if (!cancelled) setContent(''); });
+    (async () => {
+      await acquire();
+      if (cancelled) { release(); return; }
+      try {
+        const res = await apiClient.getScreenFile(item.path);
+        if (!cancelled) setContent((res.data as { content?: string })?.content ?? '');
+      } catch {
+        if (!cancelled) setContent('');
+      } finally {
+        if (!cancelled) release();
+      }
+    })();
 
     return () => { cancelled = true; };
   }, [visible, content, item.path]);
