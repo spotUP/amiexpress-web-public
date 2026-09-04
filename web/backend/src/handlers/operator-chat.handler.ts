@@ -324,18 +324,21 @@ console.log('[Operator Chat] Permission denied - user secLevel:', userSecLevel, 
 console.log('[Operator Chat] No sysops online, page will be queued for notification');
   }
 
-  // Get actual conference name
-  const { getDatabase } = require('./command-handler/dependency-injection');
-  const db = getDatabase();
-  let conferenceName = `Conference ${session.currentConf}`;
-  try {
-    const conferences = await db.getConferences();
-    const currentConf = conferences.find((c: any) => c.id === session.currentConf);
-    if (currentConf) {
-      conferenceName = currentConf.name;
+  // Get actual conference name — use the session's cached name first
+  // (set by the menu system), fall back to database lookup.
+  let conferenceName = session.currentConfName || 'Main';
+  if (!session.currentConfName) {
+    try {
+      const { getDatabase } = require('./command-handler/dependency-injection');
+      const db = getDatabase();
+      const conferences = await db.getConferences();
+      const currentConf = conferences.find((c: any) => c.id === session.currentConf);
+      if (currentConf) {
+        conferenceName = currentConf.name;
+      }
+    } catch (error) {
+  console.error('[Operator Chat] Failed to get conference name:', error);
     }
-  } catch (error) {
-console.error('[Operator Chat] Failed to get conference name:', error);
   }
 
   // Create page request
