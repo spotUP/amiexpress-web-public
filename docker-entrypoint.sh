@@ -906,5 +906,7 @@ echo "[Entrypoint] Native dependencies installed for $NATIVE_INSTALL_COUNT doors
 # The main application handles this automatically via new-user.handler.ts
 
 # Execute the main command (typically: npx tsx src/index.ts)
+# Don't exit on errors — let the server handle its own failures
+set +e
 echo "[Entrypoint] Starting BBS server..."
 exec "$@"
