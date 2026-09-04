@@ -3,10 +3,11 @@ import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getDoors, installDoorArchive } from '../../api/client.js';
 import type { DoorInfo } from '../../api/types.js';
-
-const ITEMS_START_ROW = 7;
+import { T, BlessedBox, BlessedText } from '../../theme/blessed-theme.js';
 
 type Mode = 'list' | 'install';
+
+const MAX_DISPLAY_DOORS = 15;
 
 export function DoorInstallPage() {
   const [doors, setDoors] = useState<DoorInfo[]>([]);
@@ -61,56 +62,50 @@ export function DoorInstallPage() {
       if (input && !key.ctrl && !key.meta) setInstallPath(v => v + input);
       return;
     }
-
     if (input === 'i') setMode('install');
     if (input === 'r') loadDoors();
   });
 
   if (loading) return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading doors...</Text></Box>;
 
+  const displayDoors = doors.slice(0, MAX_DISPLAY_DOORS);
+  const remaining = doors.length - MAX_DISPLAY_DOORS;
+
   return (
     <Box flexDirection="column">
-      <Box marginBottom={1}>
-        <Text bold color="cyan">INSTALLED DOORS</Text>
-        <Text dimColor>  ({doors.length} doors)</Text>
+      <Box marginBottom={1} flexDirection="row" gap={2}>
+        <BlessedText variant="accent" bold>INSTALLED DOORS</BlessedText>
+        <BlessedText variant="dim">({doors.length} doors)</BlessedText>
       </Box>
 
-      {error && (
-        <Box marginBottom={1}>
-          <Text color="red">Error: {error}</Text>
-        </Box>
-      )}
+      {error && <BlessedText variant="alert">Error: {error}</BlessedText>}
 
-      {doors.map((d, i) => (
-        <Box key={`${d.door_name}-${i}`}>
-          <Text>{d.door_name ?? '(unnamed)'}</Text>
-          {d.door_command && <Text dimColor>  [{d.door_command}]</Text>}
+      {displayDoors.map(d => (
+        <Box key={d.door_name}>
+          <BlessedText>{d.door_name ?? '(unnamed)'}</BlessedText>
+          {d.door_command && <BlessedText variant="dim">  [{d.door_command}]</BlessedText>}
         </Box>
       ))}
+      {remaining > 0 && <BlessedText variant="dim">... and {remaining} more</BlessedText>}
 
-      <Box marginTop={2} flexDirection="column">
-        <Text bold color="yellow">Install Door Archive</Text>
-        <Box marginTop={1} borderStyle="round" borderColor="yellow" padding={1} width={60}>
-          <Box flexDirection="column" width={58}>
-            <Box>
-              <Text>Path: </Text>
-              <Text color="cyan">{installPath}</Text>
-              {installing && <Text color="yellow"> [installing...]</Text>}
+      <Box marginTop={1} flexDirection="column">
+        {mode === 'install' ? (
+          <BlessedBox style="line" label="Install Door" padding={1}>
+            <Box flexDirection="row">
+              <BlessedText>Path:</BlessedText>
+              <Text color={T.accent}>{installPath}</Text>
+              {installing && <Text color={T.accent}> [installing...]</Text>}
             </Box>
             {status && (
-              <Box marginTop={1}>
-                <Text color={status.includes('Error') ? 'red' : 'green'}>{status}</Text>
-              </Box>
+              <BlessedText variant={status.includes('Error') ? 'alert' : 'ok'}>{status}</BlessedText>
             )}
-            <Box marginTop={1}>
-              <Text dimColor>[enter] install  [esc] cancel</Text>
-            </Box>
+            <BlessedText variant="dim">[enter] install  [esc] cancel</BlessedText>
+          </BlessedBox>
+        ) : (
+          <Box flexDirection="row" gap={1}>
+            <Text color={T.dim}>[i] install path  [r] refresh</Text>
           </Box>
-        </Box>
-      </Box>
-
-      <Box marginTop={1}>
-        <Text dimColor>[i]nstall path  [r]efresh  [↑↓] scroll</Text>
+        )}
       </Box>
     </Box>
   );

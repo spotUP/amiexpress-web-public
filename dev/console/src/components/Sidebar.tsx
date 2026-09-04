@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { useMouse, useHover, type MouseEvent } from '../hooks/useMouse.js';
 import { CATEGORIES, CATEGORY_COLLAPSED, PAGES, type CategoryName, type PageMeta } from '../pages/registry.js';
-import { THEME, BOX, BORDER_STYLE } from '../theme/blessed-theme.js';
+import { T, CURRENT_THEME, BORDER_STYLE } from '../theme/blessed-theme.js';
 
 export const SIDEBAR_WIDTH = 22;
 const SIDEBAR_FIRST_ROW = 5;
@@ -118,14 +118,14 @@ export function Sidebar({ activePageId, onSelect, focus }: Props) {
   });
 
   return (
-    <Box flexDirection="column" borderStyle={BORDER_STYLE.single} borderColor={THEME.border.fg} width={SIDEBAR_WIDTH}>
+    <Box flexDirection="column" borderStyle={BORDER_STYLE[CURRENT_THEME.border]} borderColor={T.chrome} width={SIDEBAR_WIDTH}>
       {CATEGORIES.map((cat, ci) => {
         const isExpanded = expandedCats.has(cat);
         return (
           <Box key={cat} flexDirection="column">
             <Box paddingX={1}>
-              <Text bold color={THEME.primary.fg} dimColor>
-                {isExpanded ? BOX.single.teeUp : BOX.single.teeDown} [{ci + 1}] {cat.toUpperCase()}
+              <Text bold color={T.accent} dimColor>
+                {isExpanded ? '\u2518' : '\u2510'} [{ci + 1}] {cat.toUpperCase()}
               </Text>
             </Box>
             {isExpanded && PAGES.filter(p => p.category === cat).map(p => {
@@ -135,29 +135,27 @@ export function Sidebar({ activePageId, onSelect, focus }: Props) {
 
               let color: string;
               let isBold = false;
-              let inverse = false;
 
               if (isActive) {
-                color = THEME.selection.fg;
-                inverse = true;
+                color = T.selectionInk;
               } else if (isHovered) {
-                color = THEME.hover.fg;
+                color = T.accent;
                 isBold = true;
               } else if (isImplemented) {
-                color = 'white';
+                color = T.ink;
               } else {
-                color = THEME.secondary.fg;
+                color = T.dim;
               }
 
               return (
                 <Box key={p.id} paddingX={1}>
                   <Text
                     color={color}
-                    bold={isBold}
-                    inverse={inverse}
+                    bold={isBold || isActive}
+                    inverse={isActive}
                     dimColor={!isImplemented}
                   >
-                    {isActive ? BOX.single.teeRight + ' ' : isHovered ? '○ ' : '  '}{p.label}
+                    {isActive ? '* ' : isHovered ? '> ' : '  '}{p.label}
                   </Text>
                 </Box>
               );

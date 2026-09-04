@@ -1,8 +1,8 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useStdout } from 'ink';
 import Gradient from 'ink-gradient';
 import { useUptime } from '../hooks/useUptime.js';
-import { THEME, BOX, BORDER_STYLE } from '../theme/blessed-theme.js';
+import { T, BORDER_STYLE } from '../theme/blessed-theme.js';
 
 interface Props {
   username: string | null;
@@ -14,51 +14,41 @@ interface Props {
 function StatusPill({ label, up }: { label: string; up: boolean }) {
   return (
     <Box marginRight={2} flexDirection="row" gap={1}>
-      <Text color={up ? THEME.success.fg : THEME.danger.fg}>{up ? '●' : '○'}</Text>
-      <Text color={up ? THEME.success.fg : THEME.danger.fg}>{up ? '✓' : '✗'}</Text>
-      <Text dimColor>{label}</Text>
-    </Box>
-  );
-}
-
-function BlessedBorder({ children }: { children: React.ReactNode }) {
-  const width = 80;
-  const top = BOX.double.topLeft + BOX.double.horizontal.repeat(width - 2) + BOX.double.topRight;
-  const bottom = BOX.double.bottomLeft + BOX.double.horizontal.repeat(width - 2) + BOX.double.bottomRight;
-
-  return (
-    <Box flexDirection="column" width={width}>
-      <Text color={THEME.border.fg}>{top}</Text>
-      <Box flexDirection="row" width={width - 2} paddingX={1}>
-        <Text color={THEME.border.fg}>{BOX.double.vertical}</Text>
-        <Box flexGrow={1}>{children}</Box>
-        <Text color={THEME.border.fg}>{BOX.double.vertical}</Text>
-      </Box>
-      <Text color={THEME.border.fg}>{bottom}</Text>
+      <Text color={up ? T.ok : T.alert}>{up ? '*' : 'o'}</Text>
+      <Text color={up ? T.ok : T.alert}>{up ? '[OK]' : '[!]'}</Text>
+      <Text color={T.dim}>{label}</Text>
     </Box>
   );
 }
 
 export function Header({ username, backendUp, previewUp, watchUp }: Props) {
   const uptime = useUptime();
+  const { stdout } = useStdout();
+  const termWidth = stdout?.columns ?? 80;
+
+  const borderChar = '-';
+  const topBorder = borderChar.repeat(termWidth);
+  const bottomBorder = borderChar.repeat(termWidth);
 
   return (
-    <BlessedBorder>
-      <Box justifyContent="space-between">
+    <Box flexDirection="column" width={termWidth}>
+      <Text color={T.chrome}>{topBorder}</Text>
+      <Box flexDirection="row" justifyContent="space-between" paddingX={1}>
         <Box>
           <Gradient name="rainbow">
-            <Text bold>{BOX.double.vertical} AmiExpress-Web {BOX.double.vertical}</Text>
+            <Text bold>AmiExpress-Web</Text>
           </Gradient>
-          <Text dimColor>{BOX.single.vertical}  Ultra Vibed by Spot/Up Rough</Text>
+          <Text color={T.dim}>  Ultra Vibed by Spot/Up Rough</Text>
         </Box>
         <Box flexDirection="row" gap={3}>
-          {username && <Text dimColor>{BOX.single.vertical} sysop: {username}</Text>}
-          <Text dimColor>{BOX.single.vertical} UP {uptime}</Text>
+          {username && <Text color={T.dim}>sysop: {username}</Text>}
+          <Text color={T.dim}>UP {uptime}</Text>
           <StatusPill label="Backend" up={backendUp} />
           <StatusPill label="Preview" up={previewUp} />
           <StatusPill label="Watch" up={watchUp} />
         </Box>
       </Box>
-    </BlessedBorder>
+      <Text color={T.chrome}>{bottomBorder}</Text>
+    </Box>
   );
 }
