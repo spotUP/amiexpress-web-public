@@ -19,13 +19,9 @@ import { findSecurityScreen } from '../utils/screen-security.util';
 import { readTooltypeMap } from '../utils/info-file.util';
 import {
   ScreenDirType, SCREEN_DIR_MAP, getScreenDirType, getScreenFileName,
-  resolveNodeScreenDir, screenSearchLocations, isScreenFile,
+  resolveNodeScreenDir, screenSearchLocations,
 } from './screen-resolution';
-import { countMciCodes, scanMciCodes } from './mci-catalog';
-import { readScreenFlags } from './screen-flags';
 import { parseMciReferences, type MciReference } from './mci-references';
-import { commandLocationIsLive, loadCommandFromInfo } from '../utils/amiga-command-parser.util';
-import { BBSPaths } from '../utils/bbs-paths.util';
 import { conferenceDir, conferenceNumbers } from '../conferences/conference-paths';
 import { loadConfConfig } from '../services/conf-config.service';
 import { screenTypeNames } from './screen-metadata';
@@ -111,30 +107,6 @@ export interface ScreenFileFacts {
    * its live screens were read by nothing.
    */
   generated?: 'backup' | 'runtime';
-  /**
-   * How many times each MCI code appears in this file, by catalog code.
-   *
-   * Counted from the buffer already in hand, so the census costs nothing on
-   * top of the read and is cached with the rest of the file's facts. The
-   * manager needs it to say "used in 179 files" beside `~SP` rather than
-   * listing a hundred codes with nothing to tell them apart.
-   */
-  mciCodes: Record<string, number>;
-  /**
-   * Nothing here but the codes the board runs - no art at all.
-   *
-   * A screen is a program, and 258 of this board's files are pure plumbing:
-   * `AWAITSCREEN.TXT` is `~CC_V-AWAIT|`, `LOGON10.TXT` is four includes and a
-   * pause. Strip the codes, strip the escapes, strip the whitespace, and
-   * nothing printable is left. An artist should never open one - the art they
-   * are looking for is in the file those codes PULL IN.
-   *
-   * Flagged, never hidden by the index. The manager decides what to show; a
-   * file the index refuses to report is a file a sysop cannot find, and this
-   * board has been told once already that its live screens were read by
-   * nothing.
-   */
-  codesOnly: boolean;
 }
 
 export type ScreenProblem = 'empty' | 'colour-codes-without-escape';
@@ -195,6 +167,18 @@ export interface ScreenIndex {
   conferences: ConferenceFacts[];
   bulletins: BulletinFacts[];
   builtAt: string;
+}
+
+/** The extensions the loader will accept for a screen (ScreenTypes.info plus this port's own). */
+const SCREEN_EXTENSIONS = ['.txt', '.gr', '.ibm', '.seq', '.rip', '.ans', '.asc'];
+
+function isScreenFile(name: string): boolean {
+  if (name.endsWith('.backup')) return false;
+  const lower = name.toLowerCase();
+  // `bbsConfig.info.txt` is a config file's text sidecar, not a screen - it
+  // ends in .txt and has nothing to do with what a caller sees.
+  if (lower.endsWith('.info') || lower.includes('.info.')) return false;
+  return SCREEN_EXTENSIONS.some(ext => lower.endsWith(ext));
 }
 
 function listDir(dir: string): string[] {
@@ -326,21 +310,11 @@ const BACKUP_NAME = /(\.bak\b|\.old\b|\.orig\b|\.stale\b|\.backup|~$|\.save\b|\.
  * Files the BOARD writes, which an edit would simply lose.
  *
  * express.e writes `Node<n>/CallersLog` and the other logs without a screen
- * extension, so they were never listed.
- *
- * `Callers.txt` and `callers!.txt` used to be here on the sysop's word and are
- * NOT board-written: express.e's only writer is `callersLog()`, which builds
- * `Node<n>/CallersLog` (express.e:9499) and never a `.txt`. On this board all
- * 62 copies are one of two hashes, the oldest stamped 2008, and not one is
- * dirty in git while every `Node<n>/CallersLog` is - the board rewrites the
- * log and leaves the screen alone. They are hand-drawn ANSI: a framed
- * `Spee N Name Location On-Time Action H:MM` header a designer may want to
- * edit.
- *
- * `Bulletins/lastc.txt` stays: Super-AmiLog (`Utils/lastcallers`) signs it in
- * the art, and RUNTIME_CONTENT's last-callers marker catches it too.
+ * extension, so they were never listed. `Screens/Callers.txt` is the last-
+ * callers display in screen form; the sysop identified it, and it is named
+ * here rather than guessed at from content.
  */
-const RUNTIME_NAME = /^(callerslog.*|lastc\.txt|.*\.log)$/i;
+const RUNTIME_NAME = /^(callers!?\.txt|callerslog.*|lastc\.txt|.*\.log)$/i;
 
 /**
  * Signatures of the tools that WRITE screens on this board.
@@ -358,18 +332,7 @@ const RUNTIME_CONTENT: { marker: RegExp; tool: string }[] = [
   { marker: /l\s*AST\s*c\s*ALLERS|LAST CALLERS/i, tool: 'a last-callers generator' },
 ];
 
-function classifyGenerated(
-  relPath: string,
-  buf: Buffer,
-  baseDir: string,
-): 'backup' | 'runtime' | undefined {
-  // The sysop's own answer first. `art` is an override that says the
-  // heuristics below are wrong about this file, so it returns nothing rather
-  // than a classification.
-  const flag = readScreenFlags(baseDir)[relPath];
-  if (flag === 'art') return undefined;
-  if (flag) return flag;
-
+function classifyGenerated(relPath: string, buf: Buffer): 'backup' | 'runtime' | undefined {
   const name = path.basename(relPath);
   if (BACKUP_NAME.test(name)) return 'backup';
   if (RUNTIME_NAME.test(name)) return 'runtime';
@@ -382,26 +345,6 @@ function classifyGenerated(
   }
 
   return undefined;
-}
-
-/**
- * Is there anything in this file but codes?
- *
- * Take out every MCI code, then every ANSI escape, then all whitespace and
- * control bytes. What remains is what a caller would SEE drawn by this file
- * itself - and for a screen that only pulls other screens in, that is nothing.
- */
-export function isCodesOnly(text: string): boolean {
-  let rest = text;
-  // Back to front, so an earlier removal never shifts a later offset.
-  for (const code of scanMciCodes(text).sort((a, b) => b.at - a.at)) {
-    rest = rest.slice(0, code.at) + rest.slice(code.at + code.text.length);
-  }
-
-  return rest
-    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
-    .replace(/[\s\x00-\x1f\x7f]/g, '')
-    .length === 0;
 }
 
 function fileProblems(buf: Buffer, format: ScreenFormat): ScreenProblem[] {
@@ -478,146 +421,21 @@ function commandName(baseDir: string, command: string): string | undefined {
   }
 }
 
-/**
- * Every command the board has an icon for, with the name IT calls the command.
- *
- * `~CC_gwall|` runs a command; `Commands/BBSCmd/GWALL.info` says the board
- * calls it "Global Wall" and who may run it. A picker that showed `gwall`
- * would be showing the sysop a filename, and the icon has been carrying the
- * real name all along.
- */
-export interface BbsCommandChoice {
-  /** What goes after `~CC_` - the icon's base name, in its own casing. */
-  command: string;
-  /** The icon's NAME tooltype, when it has one. */
-  name?: string;
-  /** The icon's ACCESS tooltype, as written. */
-  access?: string;
-}
-
-export function listBbsCommands(baseDir: string): BbsCommandChoice[] {
-  const dir = path.join(baseDir, 'Commands', 'BBSCmd');
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(dir);
-  } catch {
-    return [];
-  }
-
-  const choices: BbsCommandChoice[] = [];
-  for (const entry of entries) {
-    if (!entry.toLowerCase().endsWith('.info')) continue;
-    const command = entry.slice(0, -'.info'.length);
-    if (!command) continue;
-
-    let tooltypes: Map<string, string>;
-    try {
-      tooltypes = readTooltypeMap(path.join(dir, entry));
-    } catch {
-      choices.push({ command });
-      continue;
-    }
-
-    choices.push({
-      command,
-      name: tooltypes.get('NAME')?.trim() || undefined,
-      access: tooltypes.get('ACCESS')?.trim() || undefined,
-    });
-  }
-
-  return choices.sort((a, b) => a.command.localeCompare(b.command));
-}
-
-/**
- * Whether pressing that key does anything.
- *
- * An icon is not enough. `Commands/BBSCmd/<name>.info` can survive a door that
- * has been uninstalled, and the loader then SKIPS the registration - so the
- * screen still advertises the key, the caller still presses it, and nothing
- * happens. Reported from the live board 2026-09-02: "we have an mci command
- * that doesnt find its door as its not installed but its not listed as a
- * health issue".
- *
- * The liveness rule is the board's own - commandLocationIsLive - and not a
- * second one written here. It has to be, because the obvious rule is wrong:
- * nothing named `Doors/bbslink/bbslink` has ever existed on this board and 24
- * live commands point at it, so a missing FILE inside a door directory is
- * normal and only a missing DIRECTORY means the door is gone.
- */
 function commandExists(baseDir: string, command: string): boolean {
   const dir = path.join(baseDir, 'Commands', 'BBSCmd');
-  const icon = amigafs.findCaseInsensitive(dir, `${command}.info`);
-  if (!icon) return false;
-
-  try {
-    const definition = loadCommandFromInfo(icon);
-    // An icon with no tooltypes at all reads as null; the board keeps such a
-    // registration, so this does too rather than calling art dead.
-    if (!definition) return true;
-    return commandLocationIsLive(baseDir, definition);
-  } catch {
-    return true;
-  }
+  return !!amigafs.findCaseInsensitive(dir, `${command}.info`);
 }
 
 /**
  * The file an `~SS_`/`~SR_` target names, as it sits on disk.
  *
- * `BBS:screens/x.txt` and `screens/x.txt` mean the same file, and an Amiga
- * volume is case-insensitive in every part of a path - the directory as much
- * as the filename.
- *
- * Through BBSPaths, because a screen names its target in Amiga assigns and
- * `BBS:` is not the only one this board uses - `WORK:bbs/Screens/logoff/logoff`
- * appears in 42 of them. Stripping `BBS:` by hand answered for one assign and
- * treated the rest as literal directory names, which is a different verdict
- * from the one the loader reaches at runtime. Same resolver, same answer.
+ * `BBS:screens/x.txt` and `screens/x.txt` mean the same file, and the volume is
+ * case-insensitive, so the answer is whatever findCaseInsensitive turns up.
  */
-function boardPath(baseDir: string, target: string): string {
-  const resolved = new BBSPaths(baseDir).resolveAmigaPath(target);
-  const absolute = path.isAbsolute(resolved)
-    ? resolved
-    : path.join(baseDir, resolved.replace(/\//g, path.sep));
-
-  /*
-   * A leading `bbs/` under the board root collapses away, because that is
-   * what the BOARD does with it - twice, in two different ways.
-   *
-   * This board's screens say `~3SR_WORK:bbs/Screens/logoff/logoff`. `WORK:`
-   * is the board root, so read literally that names `<root>/bbs/Screens/...`
-   * and there is no `bbs` directory - which is how the manager came to report
-   * a hundred live references as pointing at nothing, and how it told a sysop
-   * that art the board displays every logoff was never displayed. The sysop
-   * said so plainly: "the logoff ansi logos are also flagged as not in use i
-   * doubt that".
-   *
-   * The runtime strips it in the `~SR_` sentinel (screen.handler:558-562) and
-   * again on the `~SS_` path (screen.handler:1031). The index has to make the
-   * same move or it is answering a different question from the board.
-   */
-  const prefix = path.join(baseDir, 'bbs') + path.sep;
-  if (absolute.toLowerCase().startsWith(prefix.toLowerCase())) {
-    return path.join(baseDir, absolute.slice(prefix.length));
-  }
-  return absolute;
-}
-
 function resolveScreenReference(baseDir: string, target: string): string | null {
-  /*
-   * EVERY component case-insensitively, not just the filename.
-   *
-   * findCaseInsensitive matches the last part and takes the DIRECTORY exactly
-   * as written, so `~SS_BBS:screens/flt.txt` went looking for a `screens/`
-   * that this board spells `Screens/`. A developer's Mac hides that - its
-   * filesystem is case-insensitive itself - and the Linux container does not,
-   * so the manager called six live codes dead while the board was displaying
-   * that art perfectly well. Reported by the sysop: "the flt and uprough art
-   * files do display on the live site so you are wrong".
-   *
-   * amigafs.resolvePath walks each component the way the LOADER does, so this
-   * now answers the same question the board answers.
-   */
-  return amigafs.resolvePath(boardPath(baseDir, target));
+  const rel = target.replace(/^BBS:/i, '').replace(/\//g, path.sep);
+  const full = path.join(baseDir, rel);
+  return amigafs.findCaseInsensitive(path.dirname(full), path.basename(full));
 }
 
 /**
@@ -629,19 +447,15 @@ function resolveScreenReference(baseDir: string, target: string): string | null 
  * from at random, and art somebody drew.
  */
 function numberedPool(baseDir: string, target: string): string[] {
-  const full = boardPath(baseDir, target);
+  const rel = target.replace(/^BBS:/i, '').replace(/\//g, path.sep);
+  const full = path.join(baseDir, rel);
   const dir = path.dirname(full);
   const basename = path.basename(full);
   const stem = basename.replace(/\.[^.]*$/, '');
 
   try {
-    // amigafs, so a pool written `screens/logoff` is found in `Screens/logoff`
-    // - the same reason resolveScreenReference walks with it.
-    return amigafs.readdirSync(dir)
-      // `\\.` or the END of the name: this board's flt pool is `001.flt`,
-      // `002.flt` with no extension at all, and requiring one after the stem
-      // called all 58 references to it dead while the board showed the art.
-      .filter(name => new RegExp(`^\\d+\\.${stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\.|$)`, 'i').test(name))
+    return fs.readdirSync(dir)
+      .filter(name => new RegExp(`^\\d+\\.${stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.`, 'i').test(name))
       .map(name => path.join(dir, name));
   } catch {
     return [];
@@ -653,37 +467,6 @@ function screenRefExists(baseDir: string, target: string): boolean {
 }
 
 /**
- * Whether each reference still points at something, and what the board calls
- * it.
- *
- * Deliberately NOT cached with the rest of a file's facts. These two answers
- * are the only ones that come from OTHER files: install the missing door and
- * the screen's own bytes have not changed, so a cached `resolves: false` would
- * outlive the problem and the health page would go on reporting a door that is
- * now sitting there.
- */
-function resolveRefs(baseDir: string, refs: MciReference[]): MciReference[] {
-  return refs.map(ref => ({
-    ...ref,
-    resolves: ref.code === 'CL'
-      ? true
-      : ref.code === 'CC'
-        ? commandExists(baseDir, ref.target)
-        // `~SR_` names a BASE, not a file: the board picks at random from
-        // `001.logoff.txt`..`999.logoff.txt` beside it, and nothing called
-        // plain `logoff` ever exists. Asking whether the base itself is on
-        // disk called 12 live references dead.
-        : ref.code === 'SR'
-          ? numberedPool(baseDir, ref.target).length > 0
-            || screenRefExists(baseDir, ref.target)
-          : screenRefExists(baseDir, ref.target),
-    // "~CC_gwall" is a command name; "Global Wall" is what the sysop calls
-    // it. The icon knows, so the manager can say it.
-    targetName: ref.code === 'CC' ? commandName(baseDir, ref.target) : undefined,
-  }));
-}
-
-/**
  * The facts for a file, remembered until the file changes.
  *
  * Every fact here comes from the BYTES - the sha256, the MCI references, the
@@ -691,9 +474,6 @@ function resolveRefs(baseDir: string, refs: MciReference[]): MciReference[] {
  * file. Keyed on size and mtime: an edit through the manager changes both, and
  * a build that re-reads 1,145 unchanged files to say the same thing again is
  * what a sysop experiences as "why does it take so long".
- *
- * The one thing it does NOT hold settled is whether each MCI reference
- * resolves - see resolveRefs.
  */
 const factsCache = new Map<string, { mtimeMs: number; size: number; facts: ScreenFileFacts }>();
 
@@ -703,13 +483,8 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
     const cached = factsCache.get(absPath);
     if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
       // A copy: callers fill in readBy, which belongs to a build and not to
-      // the file, and the references are re-resolved because what they point
-      // at can appear or vanish without this file being touched.
-      return {
-        ...cached.facts,
-        readBy: [],
-        mci: resolveRefs(baseDir, cached.facts.mci),
-      };
+      // the file.
+      return { ...cached.facts, readBy: [] };
     }
   } catch { /* a file that will not stat is read below and fails there */ }
 
@@ -721,16 +496,17 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
   // noise that looks like references.
   const mci = format === 'rip' || format === 'petscii'
     ? []
-    : resolveRefs(baseDir, parseMciReferences(buf.toString('latin1')));
-
-  /*
-   * Measured on the bytes already in hand, beside the MCI census. Only for a
-   * text-shaped screen: RIP and PETSCII carry their own conventions and
-   * "strip the escapes" means nothing in them.
-   */
-  const codesOnly = (format === 'ansi' || format === 'text') && buf.length > 0
-    ? isCodesOnly(buf.toString('latin1'))
-    : false;
+    : parseMciReferences(buf.toString('latin1')).map(ref => ({
+        ...ref,
+        resolves: ref.code === 'CL'
+          ? true
+          : ref.code === 'CC'
+            ? commandExists(baseDir, ref.target)
+            : screenRefExists(baseDir, ref.target),
+        // "~CC_gwall" is a command name; "Global Wall" is what the sysop calls
+        // it. The icon knows, so the manager can say it.
+        targetName: ref.code === 'CC' ? commandName(baseDir, ref.target) : undefined,
+      }));
 
   const facts: ScreenFileFacts = {
     // Readers are filled in by buildScreenIndex, which is the only place that
@@ -738,10 +514,7 @@ export function screenFileFacts(baseDir: string, absPath: string): ScreenFileFac
     readBy: [],
     sauce: readSauce(buf),
     problems: fileProblems(buf, format),
-    generated: classifyGenerated(path.relative(baseDir, absPath), buf, baseDir),
-    // latin1: an Amiga high-bit byte is not UTF-8, and a code is ASCII either way.
-    mciCodes: countMciCodes(buf.toString('latin1')),
-    codesOnly,
+    generated: classifyGenerated(path.relative(baseDir, absPath), buf),
     relPath: path.relative(baseDir, absPath),
     bytes: buf.length,
     format,
@@ -854,19 +627,10 @@ export function buildScreenIndex(baseDir: string): ScreenIndex {
       });
       if (locations.length === 0) continue;
 
+      const dir = locations[0].dir;
+      const ownDir = scope === 'node' ? path.join(baseDir, `Node${id}`) : dir;
+
       let found: string | null = null;
-      /*
-       * The directory the screen was actually found in - NOT locations[0].
-       *
-       * A screen is searched for in several places and the variants below are
-       * listed from one of them. Taking the first meant a screen found in a
-       * LATER location had its readers counted in a directory that does not
-       * contain it: `LOGON24` resolves to `Screens/Logon24hrs.txt` and its
-       * readers were looked for in the board root, so the file came back read
-       * by nobody. Reported by the sysop, who knew better: "Logon24hrs.txt is
-       * flagged as not used but it's used when a user runs out of time".
-       */
-      let foundIn = locations[0].dir;
       for (const location of locations) {
         // The same call the loader makes, so the answer is the loader's answer.
         const hit = findSecurityScreen(path.join(location.dir, fileName), 255, '.TXT', false, false);
@@ -875,12 +639,8 @@ export function buildScreenIndex(baseDir: string): ScreenIndex {
         // which on a case-insensitive filesystem is not the name on disk. The
         // manager shows and edits real filenames, so report the real one.
         found = amigafs.findCaseInsensitive(path.dirname(hit), path.basename(hit)) || hit;
-        foundIn = location.dir;
         break;
       }
-
-      const dir = foundIn;
-      const ownDir = scope === 'node' ? path.join(baseDir, `Node${id}`) : dir;
 
       // Everything in that directory this screen can serve, and to whom. The
       // loader picks ONE of these per caller; all of them are read by the board.
@@ -1035,19 +795,5 @@ export function getScreenIndex(baseDir: string): ScreenIndex {
 
 /** Called by every write route: the next read rebuilds. */
 export function invalidateScreenIndex(): void {
-  cached = null;
-}
-
-/**
- * Forget what every file was, not just how the index was assembled.
- *
- * A file's facts are cached on its own size and mtime, which is right for an
- * edit and WRONG for a sysop's flag: marking a screen as art changes what the
- * manager should say about bytes that did not move. Without this the override
- * was written to disk, read back correctly, and never reached the answer -
- * caught by the test that marked a file and asked the index about it.
- */
-export function invalidateScreenFacts(): void {
-  factsCache.clear();
   cached = null;
 }

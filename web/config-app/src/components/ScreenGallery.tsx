@@ -1,4 +1,6 @@
-import { ScreenThumbnail } from './ScreenThumbnail';
+import { useEffect, useRef, useState } from 'react';
+import { apiClient } from '../api/client';
+import { ScreenArt } from './ScreenArt';
 
 /**
  * Every screen file as a picture.
@@ -30,21 +32,58 @@ interface ScreenGalleryProps {
   isLoading?: boolean;
 }
 
-/** One card. The picture comes from ScreenThumbnail, which both the gallery
- * and the screen tables use - see that component for why the fetch and the
- * pixels are governed separately. */
+/** One card. Draws nothing until it is scrolled to. */
 function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: string) => void }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [content, setContent] = useState<string | null>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const element = ref.current;
+    // jsdom has no IntersectionObserver; a test environment simply draws.
+    if (!element || typeof IntersectionObserver === 'undefined') {
+      setVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '200px' });
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible || content !== null) return;
+
+    let cancelled = false;
+    apiClient.getScreenFile(item.path)
+      .then(res => { if (!cancelled) setContent((res.data as { content?: string })?.content ?? ''); })
+      .catch(() => { if (!cancelled) setContent(''); });
+
+    return () => { cancelled = true; };
+  }, [visible, content, item.path]);
+
   return (
     <button
+      ref={ref}
       type="button"
       className="text-left border border-border hover:border-border-strong p-2 space-y-1"
       onClick={() => onOpen(item.path)}
     >
       <div className="h-32 overflow-hidden bg-black">
-        <ScreenThumbnail path={item.path} scale={0.28} className="h-full" />
+        {content
+          ? <ScreenArt content={content} scale={0.28} />
+          // A card that is waiting looks like it is waiting. Blank black reads
+          // as an empty screen, which is a thing some of these actually are.
+          : <div className="h-full w-full animate-pulse bg-surface-2/40" />}
       </div>
       <div className="text-xs">
-        <span className="block font-mono text-content-primary truncate">{item.label}</span>
+        <span className="block font-topaz text-content-primary truncate">{item.label}</span>
         {item.detail && (
           <span className={`block truncate ${item.problem ? 'text-status-warn' : 'text-content-secondary'}`}>
             {item.detail}

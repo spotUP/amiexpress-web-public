@@ -407,6 +407,14 @@ class ApiClient {
     });
   }
 
+  /** Put the escape byte back in front of a damaged screen's colour codes. */
+  async repairScreenFile(filePath: string) {
+    return this.request<ApiResponse>(`${API_BASE}/screens/repair`, {
+      method: 'POST',
+      body: JSON.stringify({ path: filePath }),
+    });
+  }
+
   async deleteScreenFile(filePath: string) {
     return this.request<ApiResponse>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`, { method: 'DELETE' });
   }

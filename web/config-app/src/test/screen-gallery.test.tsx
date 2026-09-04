@@ -129,7 +129,7 @@ describe('the gallery', () => {
     expect(await screen.findByText(/and 2 identical copies/)).toBeTruthy();
   });
 
-  it('leaves out plumbing - leftovers, board-written files, codes-only - until asked', async () => {
+  it('leaves out leftovers and files the board writes, until asked', async () => {
     const user = userEvent.setup();
     render(<ScreenFilesPage />, { wrapper });
     await screen.findByTestId('screen-gallery');
@@ -137,9 +137,7 @@ describe('the gallery', () => {
     expect(screen.queryByText(/Screens\/Callers\.txt/)).toBeNull();
     expect(screen.queryByText(/Menu copy\.txt/)).toBeNull();
 
-    // One page-wide control now: it governs the gallery AND the three
-    // screen tables, so it lives beside the search box rather than in a tab.
-    await user.click(screen.getByLabelText(/show plumbing/i));
+    await user.click(screen.getByLabelText(/show leftovers/i));
 
     expect(await screen.findByText(/written by the board/)).toBeTruthy();
     expect(screen.getByText(/a leftover copy/)).toBeTruthy();
