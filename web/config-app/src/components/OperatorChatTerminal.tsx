@@ -235,11 +235,21 @@ export function OperatorChatTerminal({
     const term = xtermRef.current;
     if (!term) return;
 
-    // Only process new messages
-    const newMessages = messages.slice(lastMessageCountRef.current);
+    // Filter out server-echoed sysop messages that duplicate a local-* echo
+    const deduped = messages.filter((msg, _i, arr) => {
+      if (!msg.id.startsWith('local-') && msg.senderType === 'sysop') {
+        return !arr.some(
+          (m) => m.id.startsWith('local-') && m.message === msg.message
+        );
+      }
+      return true;
+    });
+
+    // Only process new messages (past the last count, minus local-* echoes)
+    const newMessages = deduped.slice(lastMessageCountRef.current);
     if (newMessages.length === 0) return;
 
-    lastMessageCountRef.current = messages.length;
+    lastMessageCountRef.current = deduped.length;
 
     // Move cursor to scroll region and write messages
     term.write('\x1b[s'); // Save cursor
