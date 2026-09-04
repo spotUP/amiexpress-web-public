@@ -69,6 +69,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { path: 'users', label: 'Users', icon: Users, minLevel: 255, description: 'Accounts, levels and flags' },
       { path: 'security', label: 'Access Levels', icon: Shield, minLevel: 255, description: 'Access/ACS.<level>.info permission sets' },
+      { path: 'admin-roles', label: 'Admin Roles', icon: Shield, minLevel: 255, description: 'Configure which security levels can access admin sections' },
     ],
   },
   {
@@ -106,13 +107,17 @@ export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 
 /**
  * Filter nav items/groups to only those the given security level can see.
+ * Uses live permissions when available, otherwise falls back to hardcoded minLevel.
  * A missing minLevel defaults to 255 (sysop-only).
  */
-export function navItemsForLevel(secLevel: number): NavGroup[] {
+export function navItemsForLevel(secLevel: number, perms?: Record<string, number>): NavGroup[] {
   return NAV_GROUPS
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => (item.minLevel ?? 255) <= secLevel),
+      items: group.items.filter((item) => {
+        const minLevel = perms?.[item.path] ?? item.minLevel ?? 255;
+        return secLevel >= minLevel;
+      }),
     }))
     .filter((group) => group.items.length > 0);
 }

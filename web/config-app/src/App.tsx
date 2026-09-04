@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import { AppShell } from './components/AppShell/AppShell';
 import { SkeletonRows } from './components/ui/states';
@@ -10,6 +10,7 @@ import { ActivityPage } from './pages/ActivityPage';
 import { SystemConfigPage } from './pages/SystemConfigPage';
 import { DoorsPage } from './pages/DoorsPage';
 import { ScreenFilesPage } from './pages/ScreenFilesPage';
+import { AdminRolesPage } from './pages/AdminRolesPage';
 import { AuditLogPage } from './pages/AuditLogPage';
 import { SecurityPage } from './pages/SecurityPage';
 import { UsersPage } from './pages/UsersPage';
@@ -55,9 +56,10 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return isAuthenticated ? <>{children}</> : <Navigate to="/admin/login" />;
 }
 
-/** Route that only sysops (SL >= 255) can access. Non-sysops are redirected to /admin/screens. */
+/** Route guard that checks the live admin permissions for the current path. */
 function SysopRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, secLevel } = useAuth();
+  const { isAuthenticated, isLoading, secLevel, adminPerms } = useAuth();
+  const location = useLocation();
 
   if (isLoading) {
     return (
@@ -68,7 +70,12 @@ function SysopRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAuthenticated) return <Navigate to="/admin/login" />;
-  if (secLevel < 255) return <Navigate to="/admin/screens" />;
+
+  // Extract the path segment after /admin/ to look up live permissions
+  const routeKey = location.pathname.replace(/^\/admin\//, '').split('/')[0];
+  const minLevel = adminPerms[routeKey] ?? 255;
+
+  if (secLevel < minLevel) return <Navigate to="/admin/screens" />;
   return <>{children}</>;
 }
 
@@ -98,6 +105,7 @@ function App() {
         {/* People — sysop-only */}
         <Route path="users" element={<SysopRoute><UsersPage /></SysopRoute>} />
         <Route path="security" element={<SysopRoute><SecurityPage /></SysopRoute>} />
+        <Route path="admin-roles" element={<SysopRoute><AdminRolesPage /></SysopRoute>} />
 
         {/* Content — screens editor accessible at 100+, rest sysop-only */}
         <Route path="conferences" element={<SysopRoute><ConferencesWorkspace /></SysopRoute>} />

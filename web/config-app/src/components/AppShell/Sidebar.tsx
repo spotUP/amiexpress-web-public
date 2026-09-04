@@ -12,13 +12,13 @@ import { useAuth } from '../../contexts/AuthContext';
 import { ADMIN_BASE, navItemsForLevel, groupForPath } from './nav-config';
 
 export function Sidebar() {
-  const { user, logout } = useAuth();
+  const { user, logout, adminPerms } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   // A collapsed group opens itself when the current page lives inside it, so
   // you are never looking at a sidebar that hides where you are.
-  const visibleGroups = navItemsForLevel(user?.secLevel ?? 0);
+  const visibleGroups = navItemsForLevel(user?.secLevel ?? 0, adminPerms);
   const activeGroupTitle = groupForPath(location.pathname)?.title;
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(

@@ -1004,6 +1004,20 @@ class ApiClient {
     });
   }
 
+  // Admin Permissions
+  async getAdminPermissions() {
+    return this.request<{ perms: Record<string, number>; sections: Array<{ key: string; label: string }> }>(
+      `${API_BASE}/admin-permissions`
+    );
+  }
+
+  async setAdminPermissions(perms: Record<string, number>) {
+    return this.request<{ perms: Record<string, number> }>(`${API_BASE}/admin-permissions`, {
+      method: 'PUT',
+      body: JSON.stringify({ perms }),
+    });
+  }
+
 }
 
 export const apiClient = new ApiClient();

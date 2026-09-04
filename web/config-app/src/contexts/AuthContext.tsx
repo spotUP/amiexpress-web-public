@@ -33,6 +33,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   secLevel: number;
+  adminPerms: Record<string, number>;
   login: (username: string, password: string, rememberMe?: boolean) => Promise<User | null>;
   logout: () => void;
 }
@@ -42,6 +43,16 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => readStoredUser());
   const [isLoading, setIsLoading] = useState(true);
+  const [adminPerms, setAdminPerms] = useState<Record<string, number>>({});
+
+  const loadPerms = useCallback(async () => {
+    try {
+      const data = await apiClient.getAdminPermissions();
+      if (data?.perms) setAdminPerms(data.perms);
+    } catch {
+      // Non-sysop users get 403 — that's fine, use defaults
+    }
+  }, []);
 
   const refreshUserFromToken = useCallback(async () => {
     const token = apiClient.getToken();
@@ -58,9 +69,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { user: fetched } = await apiClient.me();
       setUser(fetched);
       persistUser(fetched);
+      // Load admin permissions after confirming auth
+      await loadPerms();
     } catch (error: any) {
-      // Only log out on explicit auth errors (401/403/404)
-      // Keep user logged in on network errors (they may be temporary)
       const isAuthError = error.message?.includes('401') ||
                           error.message?.includes('403') ||
                           error.message?.includes('404') ||
@@ -75,7 +86,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         persistUser(null);
       } else {
-        // Network error - keep stored user, try again later
         console.warn('[Auth] Network error during token refresh, keeping stored user:', error.message);
         const storedUser = readStoredUser();
         if (storedUser) {
@@ -85,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [loadPerms]);
 
   useEffect(() => {
     refreshUserFromToken();
@@ -131,6 +141,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (data?.user) {
       setUser(data.user);
       persistUser(data.user);
+      // Load permissions immediately after login so the sidebar is correct on first render
+      await loadPerms();
     }
     return data?.user ?? null;
   };
@@ -148,6 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         isLoading,
         secLevel: user?.secLevel ?? 0,
+        adminPerms,
         login,
         logout,
       }}

@@ -33,10 +33,12 @@ import { enhancePrompt, analyzePrompt, enhanceAudioDescription, analyzeAudioDesc
 import { reloadDoorCommands } from '../handlers/command-execution.handler';
 import { getConferenceDir } from '../utils/file-hold.util';
 import { webTerminalGate, isReservedPath } from './web-terminal-gate';
+import { AdminPermissionsHandler } from '../handlers/admin/admin-permissions.handler';
 
 // Initialize handlers
 const authHandler = new AuthHandler(db);
 const sessionLogsHandler = new SessionLogsHandler();
+const adminPermsHandler = new AdminPermissionsHandler();
 
 // File upload configuration
 // Express.e uses Node#/Playpen for uploaded files (express.e:19573-19584)
@@ -147,6 +149,14 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // ===== Screen Files API - Screen-editor level required =====
   const { screensRouter } = require('../api/screens-routes');
   app.use('/api/screens', authenticateToken(db), requireLevel(100), screensRouter);
+
+  // ===== Admin Permissions API - Sysop-only =====
+  app.get('/api/admin-permissions', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
+    adminPermsHandler.get(req, res)
+  );
+  app.put('/api/admin-permissions', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
+    adminPermsHandler.put(req as AuthRequest, res)
+  );
 
   // ===== Chat API - Public Routes (for web chat authentication) =====
   const chatRouter = createChatRouter(db);
