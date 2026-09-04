@@ -332,6 +332,21 @@ export function OperatorChatPage() {
     const message = messageText || inputMessage.trim();
     if (!message) return;
 
+    // Echo locally so the sysop sees their own text immediately — without
+    // this the bot response can arrive before the server echo, producing
+    // interleaved or missing lines.
+    const localMsg: ChatMessage = {
+      id: 'local-' + Date.now(),
+      pageId: activeChat.id,
+      senderId: 'sysop',
+      senderHandle: 'Sysop',
+      senderType: 'sysop',
+      message,
+      timestamp: Date.now(),
+      nodeId: activeChat.nodeId ?? 0,
+    };
+    setMessages(prev => [...prev, localMsg]);
+
     socket.emit('operator:send-message', {
       pageId: activeChat.id,
       message,
@@ -486,7 +501,16 @@ export function OperatorChatPage() {
                 {/* Classic Messages Mode */}
                 <div className="flex-1 overflow-y-auto p-4 bg-surface-0">
                   <div className="space-y-1" style={{ fontFamily: '"mOsOul", "Courier New", monospace' }}>
-                    {messages.map((msg) => (
+                    {messages.filter((msg, _i, arr) => {
+              // Skip server-echoed sysop messages when a local echo exists
+              // with the exact same content (prevents duplicate on render)
+              if (!msg.id.startsWith('local-') && msg.senderType === 'sysop') {
+                return !arr.some(
+                  (m) => m.id.startsWith('local-') && m.message === msg.message && m.senderHandle === msg.senderHandle
+                );
+              }
+              return true;
+            }).map((msg) => (
                       <div key={msg.id} className="text-sm">
                         <span className={msg.senderType === 'sysop' ? 'text-status-info' : 'text-status-warn'}>
                           [{formatTime(msg.timestamp)}]
