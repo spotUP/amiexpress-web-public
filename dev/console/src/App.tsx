@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, useInput, useApp, useStdout, useStdin } from 'ink';
 import { Header } from './components/Header.js';
 import { Sidebar } from './components/Sidebar.js';
@@ -83,6 +83,7 @@ export function App({ username }: Props) {
   const { stdout } = useStdout();
   const termHeight = stdout?.rows ?? 24;
   const [activePage, setActivePage] = useState<string>(DEFAULT_PAGE);
+  const [focusPanel, setFocusPanel] = useState<'sidebar' | 'content' | 'footer'>('sidebar');
   const [backendUp, setBackendUp] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showRestart, setShowRestart] = useState(false);
@@ -118,6 +119,13 @@ export function App({ username }: Props) {
     if (showRestart || showHelp) return;
     if (input === 'q' && !key.ctrl) exit();
     if (input === '?') setShowHelp(s => !s);
+    // Tab/Shift+Tab cycles through panels
+    if (key.tab && !key.shift) {
+      setFocusPanel(p => p === 'sidebar' ? 'content' : p === 'content' ? 'footer' : 'sidebar');
+    }
+    if (key.tab && key.shift) {
+      setFocusPanel(p => p === 'sidebar' ? 'footer' : p === 'content' ? 'sidebar' : 'content');
+    }
   });
 
   useEffect(() => {
@@ -142,7 +150,7 @@ export function App({ username }: Props) {
     <Box flexDirection="column" height={termHeight}>
       <Header username={username} backendUp={backendUp} previewUp={true} watchUp={true} />
       <Box flexDirection="row" flexGrow={1}>
-        <Sidebar activePageId={activePage} onSelect={setActivePage} />
+        <Sidebar activePageId={activePage} onSelect={setActivePage} focus={focusPanel === 'sidebar'} />
         <Box flexGrow={1} flexDirection="column" paddingX={1}>
           {showRestart ? (
             <RestartDialog onClose={() => setShowRestart(false)} />

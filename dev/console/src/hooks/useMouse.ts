@@ -35,15 +35,14 @@ function ensureInitialized(): void {
   if (initialized) return;
   initialized = true;
 
-  // Enable button events (1000) + motion-on-button (1002 = press/release/motion
-  // while a button is held). 1002 is enough for hover while clicking; if
-  // someone wants pure hover they can change this to 1003.
-  process.stdout.write('\x1b[?1000h\x1b[?1002h\x1b[?1006h');
-  dbg('mouse mode enabled (1000h, 1002h, 1006h)');
+  // Enable button events (1000) + all motion tracking (1003) for real hover support
+  // 1003 reports every mouse movement, not just during button hold.
+  process.stdout.write('\x1b[?1000h\x1b[?1003h\x1b[?1006h');
+  dbg('mouse mode enabled (1000h, 1003h, 1006h)');
 
   // Make sure to disable on exit/signals
   const cleanup = () => {
-    process.stdout.write('\x1b[?1000l\x1b[?1002l\x1b[?1006l');
+    process.stdout.write('\x1b[?1000l\x1b[?1003l\x1b[?1006l');
   };
   process.on('exit', cleanup);
   process.on('SIGINT', () => { cleanup(); process.exit(0); });
@@ -79,7 +78,7 @@ function ensureInitialized(): void {
         clicks.push({
           col,
           row,
-          button: cb & 0x43,
+          button: cb & 0x03,
           shift: (cb & 0x04) !== 0,
           meta:  (cb & 0x08) !== 0,
           ctrl:  (cb & 0x10) !== 0,

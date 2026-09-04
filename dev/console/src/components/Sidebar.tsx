@@ -1,14 +1,11 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { useMouse, useHover, type MouseEvent } from '../hooks/useMouse.js';
 import { CATEGORIES, CATEGORY_COLLAPSED, PAGES, type CategoryName, type PageMeta } from '../pages/registry.js';
 import { THEME, BOX, BORDER_STYLE } from '../theme/blessed-theme.js';
 
 export const SIDEBAR_WIDTH = 22;
-const SIDEBAR_INNER_LEFT_COL = 2;
-const SIDEBAR_INNER_RIGHT_COL = SIDEBAR_WIDTH - 2;
 const SIDEBAR_FIRST_ROW = 5;
-const SIDEBAR_LAST_ROW_OFFSET_FROM_BOTTOM = 3;
 
 interface RenderedRow {
   row: number;
@@ -39,9 +36,10 @@ export function buildRenderedRows(expandedCats: Set<CategoryName>): RenderedRow[
 interface Props {
   activePageId: string;
   onSelect: (id: string) => void;
+  focus: boolean;
 }
 
-export function Sidebar({ activePageId, onSelect }: Props) {
+export function Sidebar({ activePageId, onSelect, focus }: Props) {
   const [expandedCats, setExpandedCats] = useState<Set<CategoryName>>(() => {
     const expanded = new Set<CategoryName>();
     for (const cat of CATEGORIES) {
@@ -98,15 +96,24 @@ export function Sidebar({ activePageId, onSelect }: Props) {
     [rendered],
   );
 
+  // useRefs avoid stale closures in useInput (Ink registers the handler once)
+  const activePageRef = useRef(activePageId);
+  activePageRef.current = activePageId;
+  const orderRef = useRef(implementedOrder);
+  orderRef.current = implementedOrder;
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+
   useInput((input, key) => {
-    const idx = implementedOrder.indexOf(activePageId);
-    if (key.upArrow && idx > 0) onSelect(implementedOrder[idx - 1]!);
-    if (key.downArrow && idx >= 0 && idx < implementedOrder.length - 1) onSelect(implementedOrder[idx + 1]!);
-    const n = parseInt(input);
+    if (!focus) return;
+    const idx = orderRef.current.indexOf(activePageRef.current);
+    if (key.upArrow && idx > 0) onSelectRef.current(orderRef.current[idx - 1]!);
+    if (key.downArrow && idx >= 0 && idx < orderRef.current.length - 1) onSelectRef.current(orderRef.current[idx + 1]!);
+    const n = parseInt(input, 10);
     if (n >= 1 && n <= CATEGORIES.length) {
       const cat = CATEGORIES[n - 1]!;
       const first = PAGES.find(p => p.category === cat && p.implemented);
-      if (first) onSelect(first.id);
+      if (first) onSelectRef.current(first.id);
     }
   });
 
@@ -166,7 +173,3 @@ export function Sidebar({ activePageId, onSelect }: Props) {
 export function isInSidebar(col: number): boolean {
   return col >= 1 && col <= SIDEBAR_WIDTH;
 }
-
-void SIDEBAR_INNER_LEFT_COL;
-void SIDEBAR_INNER_RIGHT_COL;
-void SIDEBAR_LAST_ROW_OFFSET_FROM_BOTTOM;
