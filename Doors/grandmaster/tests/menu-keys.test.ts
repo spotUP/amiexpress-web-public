@@ -14,20 +14,22 @@
  */
 
 import assert from 'assert';
+import * as fs from 'fs';
+import * as path from 'path';
 
-import { MENU_ITEMS, MENU_SELECTIONS } from '../ui/menu';
+import { MENU_SELECTIONS } from '../ui/menu';
 
-/**
- * The drawn rows.
- *
- * This used to read them out of the source with a string search, because the
- * rows were an array literal inside the widget call and there was nothing to
- * import. They are a module constant now - the compact menu has to be able to
- * filter them - so the test reads the array itself, which is both simpler and
- * harder to fool: a search for `items: [` finds whatever now sits there.
- */
-function drawnRows(): readonly string[] {
-  return MENU_ITEMS;
+/** The drawn rows, read out of the source that draws them. */
+function drawnRows(): string[] {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'ui', 'menu.ts'), 'utf8');
+  const start = source.indexOf('items: [');
+  assert.ok(start > 0, 'the menu still builds its rows from an items array');
+  const end = source.indexOf('],', start);
+  return source.slice(start + 'items: ['.length, end)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("'") || line.startsWith('"'))
+    .map((line) => line.replace(/^['"]|['"],?$/g, ''));
 }
 
 export async function quitIsTheRowThatQuits(): Promise<void> {
