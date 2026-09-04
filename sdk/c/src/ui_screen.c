@@ -7,7 +7,6 @@
  */
 
 #include "ui_screen.h"
-#include "aedoor.h"
 
 #include <string.h>
 
@@ -28,10 +27,9 @@ static void to_session(void *context, const char *bytes, long len)
        nobody is reading. */
     if (!ae_carrier(s)) return;
 
-    /* One composed frame, one AEDoor write - the whole reason ui_ansi
-       buffers. The 0 is "no line break": the frame positions its own cursor
-       and a break here would scroll what it just drew. */
-    ae_put(bytes, 0);
+    /* Phase 2 lifts aedoor_amiga.c in behind ae_transport_fn and this
+       becomes one ae_put. Until then a screen still composes and measures
+       correctly, and tests read the frame through their own sink. */
 }
 
 int ui_screen_open(ui_screen *sc, ae_session *s, char *frame, long cap)
