@@ -122,7 +122,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 120s
 
 networks:
   # Shared with the amiexpress-doorserver stack so the bbs container can

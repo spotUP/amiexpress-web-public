@@ -298,16 +298,17 @@
               fi
 
               # Health endpoint must respond (proves the container actually
-              # started, not just got created and crashed). docker-compose
-              # declares start_period: 60s, so allow up to 60s.
+              # started, not just got created and crashed). The entrypoint
+              # syncs doors, screens, and content before starting the server
+              # — allow up to 120s.
               echo "Waiting for /health to respond..."
-              for i in $(seq 1 30); do
+              for i in $(seq 1 60); do
                 if curl -fsS http://localhost:3001/health >/dev/null 2>&1; then
                   echo "OK: /health responding after ${i}*2s"
                   break
                 fi
-                if [ "$i" = "30" ]; then
-                  echo "ERROR: /health never responded after 60s" >&2
+                if [ "$i" = "60" ]; then
+                  echo "ERROR: /health never responded after 120s" >&2
                   docker logs amiexpress-bbs --tail 100 >&2
 
                   # Put the board back up before failing.
