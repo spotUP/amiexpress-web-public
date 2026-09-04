@@ -877,11 +877,13 @@ const aiConfig: AIProviderConfig = {
     chatSession.botMessageHistory = context.messageHistory;
     await sendBotMessageWithTyping(io, repository, pageId, botResponse, page.nodeId, page);
     chatSession.botBusy = false;
+    flushPendingUserAnsi(chatSession, io);
     // Recurse — process any more queued messages
     processBotQueue(io, repository, pageId, chatSession);
   }).catch(err => {
 console.error('[Operator Chat] Bot queue response error:', err);
     chatSession.botBusy = false;
+    flushPendingUserAnsi(chatSession, io);
   });
 }
 
@@ -965,12 +967,14 @@ console.log('[Operator Chat] Bot busy, queuing message');
         (chatSession as any).botMessageHistory = context.messageHistory;
         await sendBotMessageWithTyping(io, repository, pageId, botResponse, nodeId, page);
         (chatSession as any).botBusy = false;
+        flushPendingUserAnsi(chatSession as any, io);
 
         // Process any queued messages
         processBotQueue(io, repository, pageId, chatSession as any);
       }).catch(err => {
 console.error('[Operator Chat] Bot response error:', err);
         (chatSession as any).botBusy = false;
+        flushPendingUserAnsi(chatSession as any, io);
       });
     }
   }
@@ -981,36 +985,23 @@ console.error('[Operator Chat] Bot response error:', err);
     timestamp: saved.timestamp.getTime()
   });
 
-  // Emit to User (Linear ANSI text) — skip when bot is typing to avoid line interleaving
-  if ((chatSession as any).botBusy) return;
-
+  // Emit to User (Linear ANSI text) — queue when bot is typing, flush after bot done
   const page = repository.getPageRequest(pageId);
   if (page) {
-    // AmiExpress Style: Color + Text + Newline
     const color = senderType === 'sysop' ? '36' : '33';
-    
-    // Word-wrap the message to fit within 79 columns (to avoid natural wrap at 80)
     const wrappedLines = wordWrapMessage(message, 79, 79);
-    
-    // Determine line ending:
-    // GrumpyBot: Double Enter (\r\n\r\n) to signal turn end automatically
-    // Humans: Single Enter (\r\n) - they will type double enter themselves
     const lineEnding = senderHandle === 'GrumpyBot' ? '\r\n\r\n' : '\r\n';
     
     let output = '';
     
     if (senderType === 'user') {
-      // User sent: Clear input line, print message(s), reset cursor
-      output = '\x1b[24;1H\x1b[2K'; // Clear input line
-      
+      output = '\x1b[24;1H\x1b[2K';
       for (const line of wrappedLines) {
         output += `\x1b[23;1H\x1b[${color}m${line}\x1b[0m${lineEnding}`;
       }
-      
-      output += '\x1b[24;1H'; // Move cursor to start of input
+      output += '\x1b[24;1H';
     } else {
-      // Sysop sent: Preserve user input (save cursor), print message(s), restore cursor
-      output = '\x1b7'; // Save cursor position
+      output = '\x1b7';
       
       for (const line of wrappedLines) {
         output += `\x1b[23;1H\x1b[${color}m${line}\x1b[0m${lineEnding}`;
@@ -1019,7 +1010,22 @@ console.error('[Operator Chat] Bot response error:', err);
       output += '\x1b8'; // Restore cursor position
     }
 
-    io.to(`user:${page.userId}`).emit('ansi-output', output);
+    // Queue when bot is typing to avoid interleaving; flush when bot finishes
+    if ((chatSession as any).botBusy) {
+      if (!(chatSession as any).userPendingAnsi) (chatSession as any).userPendingAnsi = [];
+      (chatSession as any).userPendingAnsi.push({ userId: page.userId, ansi: output });
+    } else {
+      io.to(`user:${page.userId}`).emit('ansi-output', output);
+    }
+  }
+}
+
+/** Flush pending user ANSI output queued while bot was typing */
+function flushPendingUserAnsi(chatSession: any, io: any): void {
+  const pending = chatSession.userPendingAnsi || [];
+  chatSession.userPendingAnsi = [];
+  for (const item of pending) {
+    io.to(`user:${item.userId}`).emit('ansi-output', item.ansi);
   }
 }
 
