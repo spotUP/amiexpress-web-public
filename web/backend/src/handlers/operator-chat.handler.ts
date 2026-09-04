@@ -129,6 +129,25 @@ console.log(`[Operator Chat] Sysop ${session.user.username} set status to ${data
       socket.emit('operator:pending-pages', pendingWithTimestamps);
     });
 
+    socket.on('operator:get-active-chats', async () => {
+      if (!session?.user || session.user.secLevel < 100) {
+        socket.emit('operator:error', { message: 'Unauthorized' });
+        return;
+      }
+
+      const botChats = Array.from(activeChatSessions.entries())
+        .filter(([_, cs]) => (cs as any).isBotControlled)
+        .map(([id, cs]) => ({
+          pageId: id,
+          userHandle: cs.userHandle,
+          userNodeId: cs.userNodeId,
+          startedAt: cs.startedAt.getTime(),
+          lastActivity: cs.lastActivity.getTime(),
+          messageCount: cs.messages.length,
+        }));
+      socket.emit('operator:active-chats', botChats);
+    });
+
     socket.on('operator:accept-page', async (data: { pageId: string }) => {
       if (!session?.user || session.user.secLevel < 100) {
         socket.emit('operator:error', { message: 'Unauthorized' });
@@ -648,9 +667,29 @@ async function acceptPage(
   sysopSessionId: string
 ): Promise<void> {
   const page = repository.getPageRequest(pageId);
-  if (!page || page.status !== PageStatus.PENDING) {
-console.error(`[Operator Chat] Cannot accept page ${pageId}: not found or not pending`);
+  if (!page) {
+console.error(`[Operator Chat] Cannot accept page ${pageId}: not found`);
     return;
+  }
+
+  // Allow sysop to take over a bot-controlled chat. The bot sets status to
+  // ACCEPTED with sysopId='bot', so a real sysop accepting the same page
+  // should replace the bot rather than being rejected.
+  const isBotControlled = page.status === PageStatus.ACCEPTED && page.sysopId === 'bot';
+  if (page.status !== PageStatus.PENDING && !isBotControlled) {
+console.error(`[Operator Chat] Cannot accept page ${pageId}: status is ${page.status}, not pending`);
+    return;
+  }
+
+  if (isBotControlled) {
+console.log(`[Operator Chat] Sysop taking over bot-controlled page ${pageId}`);
+    // Stop any ongoing bot processing for this page
+    const chatSession = activeChatSessions.get(pageId);
+    if (chatSession) {
+      (chatSession as any).isBotControlled = false;
+      (chatSession as any).botBusy = false;
+      (chatSession as any).botMessageHistory = [];
+    }
   }
 
   // CRITICAL: Stop the paging dots animation IMMEDIATELY
@@ -1187,6 +1226,14 @@ console.log(`[Operator Chat] WARNING: No chat session found to mark as bot-contr
       sendChatMessage(io, repository, page.id, 'bot', 'GrumpyBot', 'sysop', introMsg, page.nodeId);
 
 console.log(`[Operator Chat] Grumpy bot activated for page ${page.id}`);
+
+      // Notify admin pages about the bot-controlled chat so the sysop can take over
+      io.emit('operator:bot-activated', {
+        pageId: page.id,
+        userHandle: page.userHandle,
+        userNodeId: page.nodeId,
+        startedAt: Date.now(),
+      });
     }
   }
 }

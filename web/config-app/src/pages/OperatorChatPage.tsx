@@ -28,6 +28,15 @@ interface ChatMessage {
   nodeId: number;
 }
 
+interface BotChatInfo {
+  pageId: string;
+  userHandle: string;
+  userNodeId: number;
+  startedAt: number;
+  lastActivity: number;
+  messageCount: number;
+}
+
 const QUICK_REPLIES = [
   { label: 'Hold on', message: 'Hold on, I\'ll be right with you...' },
   { label: 'On my way', message: 'On my way!' },
@@ -38,6 +47,7 @@ const QUICK_REPLIES = [
 export function OperatorChatPage() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [pendingPages, setPendingPages] = useState<PageRequest[]>([]);
+  const [botChats, setBotChats] = useState<BotChatInfo[]>([]);
   const [activeChat, setActiveChat] = useState<PageRequest | null>(null);
   /**
    * The socket handlers below are registered once, so reading `activeChat`
@@ -58,10 +68,6 @@ export function OperatorChatPage() {
 
   // Initialize Socket.IO connection
   useEffect(() => {
-    // Request notification permission so browser can show alert even when tab is backgrounded
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
     // Get auth token from URL query params (for Discord links) or localStorage (for logged-in admins)
     const urlParams = new URLSearchParams(window.location.search);
     const urlToken = urlParams.get('token');
@@ -103,10 +109,18 @@ export function OperatorChatPage() {
 
     socketInstance.on('connect', () => {
       console.log('[Operator Chat] Connected to server, socket ID:', socketInstance.id);
-      setConnectionError(null); // Clear any previous error
+      setConnectionError(null);
       // Request pending pages
       socketInstance.emit('operator:get-pending-pages');
       console.log('[Operator Chat] Requested pending pages');
+      // Request active bot-controlled chats
+      socketInstance.emit('operator:get-active-chats');
+      console.log('[Operator Chat] Requested active bot chats');
+
+      // Request notification permission on connect (user gestured by clicking into page)
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
     });
 
     socketInstance.on('connect_error', (error) => {
@@ -134,8 +148,10 @@ export function OperatorChatPage() {
         return [...prev, page];
       });
 
-      // Show browser notification
-      if ('Notification' in window && Notification.permission === 'granted') {
+      // Show browser notification using Notification API
+      // check for the permission string value, not the function
+      const notifAvail = typeof Notification !== 'undefined' && Notification.permission;
+      if (notifAvail && Notification.permission === 'granted') {
         try {
           new Notification('Operator Page — ' + page.userHandle, {
             body: `${page.userHandle} on N${page.nodeId} — ${page.conferenceName}`,
@@ -176,6 +192,40 @@ export function OperatorChatPage() {
       console.log('[Operator Chat] Pending pages received:', pages.length, 'pages');
       console.log('[Operator Chat] Pages data:', pages);
       setPendingPages(pages);
+    });
+
+    socketInstance.on('operator:active-chats', (chats: BotChatInfo[]) => {
+      console.log('[Operator Chat] Active bot-controlled chats:', chats.length);
+      setBotChats(chats);
+    });
+
+    socketInstance.on('operator:bot-activated', (chat: BotChatInfo) => {
+      console.log('[Operator Chat] Bot activated for page:', chat.pageId);
+      setBotChats(prev => {
+        const exists = prev.find(c => c.pageId === chat.pageId);
+        return exists ? prev : [...prev, chat];
+      });
+
+      // Show browser notification so sysop knows a bot is handling the caller
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification('Bot Handling — ' + chat.userHandle, {
+            body: `GrumpyBot is chatting with ${chat.userHandle} on N${chat.userNodeId} — click to take over`,
+            tag: 'bot-chat',
+            requireInteraction: true,
+          });
+        } catch { /* not supported */ }
+      }
+    });
+
+    socketInstance.on('operator:chat-ended', ({ pageId }: { pageId: string }) => {
+      console.log('[Operator Chat] Chat ended:', pageId);
+      if (activeChatRef.current?.id === pageId) {
+        setActiveChat(null);
+        setMessages([]);
+      }
+      setPendingPages(prev => prev.filter(p => p.id !== pageId));
+      setBotChats(prev => prev.filter(c => c.pageId !== pageId));
     });
 
     socketInstance.on('operator:error', (data: { message: string }) => {
@@ -241,13 +291,39 @@ export function OperatorChatPage() {
 
     socket.emit('operator:accept-page', {
       pageId: page.id,
-      sysopId: 'sysop', // TODO: Get from auth context
+      sysopId: 'sysop',
       sysopHandle: 'Sysop',
       sysopSessionId: socket.id,
     });
 
     setActiveChat(page);
     setPendingPages(prev => prev.filter(p => p.id !== page.id));
+  };
+
+  const handleTakeOver = (chat: BotChatInfo) => {
+    if (!socket) return;
+
+    socket.emit('operator:accept-page', {
+      pageId: chat.pageId,
+      sysopId: 'sysop',
+      sysopHandle: 'Sysop',
+      sysopSessionId: socket.id,
+    });
+
+    // Build a minimal page-like object for activeChat state
+    setActiveChat({
+      id: chat.pageId,
+      userId: '',
+      userHandle: chat.userHandle,
+      nodeId: chat.userNodeId,
+      conferenceId: 0,
+      conferenceName: 'Bot Chat',
+      timeOnline: Math.floor((Date.now() - chat.startedAt) / 1000),
+      lastCommand: '—',
+      status: 'accepted' as const,
+      createdAt: chat.startedAt,
+    });
+    setBotChats(prev => prev.filter(c => c.pageId !== chat.pageId));
   };
 
   const handleSendMessage = (messageText?: string) => {
@@ -306,6 +382,7 @@ export function OperatorChatPage() {
         </h1>
         <p className="text-sm text-content-secondary mt-1">
           {pendingPages.length} pending page{pendingPages.length !== 1 ? 's' : ''}
+          {botChats.length > 0 && ` · ${botChats.length} bot chat${botChats.length !== 1 ? 's' : ''}`}
           {activeChat && ' - In active chat'}
         </p>
       </div>
@@ -477,7 +554,7 @@ export function OperatorChatPage() {
         ) : (
           /* Pending Pages List */
           <div className="flex-1 p-6">
-            {pendingPages.length === 0 ? (
+            {pendingPages.length === 0 && botChats.length === 0 ? (
               <div className="text-center text-content-secondary mt-12">
                 <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-50" />
                 <p className="text-lg">No pending pages</p>
@@ -485,34 +562,75 @@ export function OperatorChatPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                <h2 className="text-xl font-bold text-content-primary mb-4">Pending Page Requests</h2>
-                {pendingPages.map((page) => (
-                  <div
-                    key={page.id}
-                    className="bg-surface-1 border border-border rounded-lg p-4 hover:border-accent transition-colors"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="font-bold text-lg text-content-primary">{page.userHandle}</span>
-                          <span className="text-sm text-content-secondary">Node {page.nodeId}</span>
-                        </div>
-                        <div className="text-sm text-content-secondary">
-                          {page.conferenceName} | Online: {formatDuration(page.timeOnline)}
-                        </div>
-                        <div className="text-xs text-content-secondary mt-1">
-                          Last command: {page.lastCommand} | {formatTime(page.createdAt)}
+                {pendingPages.length > 0 && (
+                  <>
+                    <h2 className="text-xl font-bold text-content-primary mb-4">Pending Page Requests</h2>
+                    {pendingPages.map((page) => (
+                      <div
+                        key={page.id}
+                        className="bg-surface-1 border border-border rounded-lg p-4 hover:border-accent transition-colors"
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <div className="flex items-center gap-3 mb-2">
+                              <span className="font-bold text-lg text-content-primary">{page.userHandle}</span>
+                              <span className="text-sm text-content-secondary">Node {page.nodeId}</span>
+                            </div>
+                            <div className="text-sm text-content-secondary">
+                              {page.conferenceName} | Online: {formatDuration(page.timeOnline)}
+                            </div>
+                            <div className="text-xs text-content-secondary mt-1">
+                              Last command: {page.lastCommand} | {formatTime(page.createdAt)}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleAcceptPage(page)}
+                            className="px-4 py-2 bg-accent hover:bg-accent/80 text-content-inverse rounded"
+                          >
+                            Accept
+                          </button>
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleAcceptPage(page)}
-                        className="px-4 py-2 bg-accent hover:bg-accent/80 text-content-inverse rounded"
+                    ))}
+                  </>
+                )}
+
+                {botChats.length > 0 && (
+                  <>
+                    <h2 className="text-xl font-bold text-content-primary mb-2 mt-6">Bot-Handled Chats</h2>
+                    <p className="text-sm text-content-secondary mb-4">
+                      GrumpyBot is chatting with these callers. Click to take over.
+                    </p>
+                    {botChats.map((chat) => (
+                      <div
+                        key={chat.pageId}
+                        className="bg-surface-1 border border-warn/40 rounded-lg p-4 hover:border-accent transition-colors"
                       >
-                        Accept
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <div className="flex items-center gap-3 mb-2">
+                              <span className="font-bold text-lg text-content-primary">{chat.userHandle}</span>
+                              <span className="text-sm text-content-secondary">Node {chat.userNodeId}</span>
+                              <span className="text-xs bg-warn/20 text-warn px-2 py-0.5 rounded">Bot</span>
+                            </div>
+                            <div className="text-sm text-content-secondary">
+                              {chat.messageCount} messages exchanged
+                            </div>
+                            <div className="text-xs text-content-secondary mt-1">
+                              Active since {formatTime(chat.startedAt)}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleTakeOver(chat)}
+                            className="px-4 py-2 bg-warn hover:bg-warn/80 text-content-inverse rounded flex items-center gap-2"
+                          >
+                            Take Over
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             )}
           </div>
