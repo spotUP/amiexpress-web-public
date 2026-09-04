@@ -895,7 +895,10 @@ console.log('[Operator Chat] Bot busy, queuing message');
         provider: config.aiEnabled ? config.aiProvider : 'rule-based',
         modelName: config.aiModelName,
         temperature: config.aiTemperature,
-        systemPrompt: config.aiSystemPrompt
+        systemPrompt: config.aiSystemPrompt,
+        groqApiKey: config.groqApiKey,
+        geminiApiKey: config.geminiApiKey,
+        openRouterApiKey: config.openRouterApiKey
       };
 
       getGrumpySysopResponse(message, context, aiConfig).then(async botResponse => {

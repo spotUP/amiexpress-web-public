@@ -31,6 +31,9 @@ export interface AIProviderConfig {
   modelName: string;
   temperature: number;
   systemPrompt: string;
+  groqApiKey?: string;
+  geminiApiKey?: string;
+  openRouterApiKey?: string;
 }
 
 interface OpenRouterModel {
@@ -417,7 +420,7 @@ const RULE_BASED_RESPONSES = {
  * Tier 1: Groq (Fast, Free, Llama 3.1)
  */
 async function getGroqResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = aiConfig.groqApiKey || process.env.GROQ_API_KEY;
   if (!apiKey) {
 console.log('[Grumpy Bot] No GROQ_API_KEY configured, skipping Groq');
     return null;
@@ -469,7 +472,7 @@ console.error('[Grumpy Bot] Groq failed:', error instanceof Error ? error.messag
 }
 
 async function getGeminiResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = aiConfig.geminiApiKey || process.env.GEMINI_API_KEY;
   if (!apiKey) {
 console.log('[Grumpy Bot] No GEMINI_API_KEY configured, skipping Gemini');
     return null;
@@ -579,7 +582,7 @@ console.log('[Grumpy Bot] No OpenRouter free models available');
     return null;
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = aiConfig.openRouterApiKey || process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
 console.log('[Grumpy Bot] No OPENROUTER_API_KEY configured. OpenRouter requires an API key even for free models.');
     return null;

@@ -133,6 +133,10 @@ export interface OperatorChatConfig {
   aiModelName: string;             // Override model name (empty = provider default)
   aiTemperature: number;           // Temperature 0-2 (default 0.9)
   aiSystemPrompt: string;          // Override system prompt/personality
+  // API keys for AI providers (stored in DB, settable via UI)
+  groqApiKey: string;              // GROQ_API_KEY
+  geminiApiKey: string;            // GEMINI_API_KEY
+  openRouterApiKey: string;        // OPENROUTER_API_KEY
 }
 
 /**
