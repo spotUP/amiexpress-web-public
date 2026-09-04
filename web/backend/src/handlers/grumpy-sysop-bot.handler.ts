@@ -50,6 +50,19 @@ let cachedFreeModels: string[] = [];
 let lastModelDiscovery: number = 0;
 const MODEL_CACHE_DURATION = 3600000; // 1 hour in milliseconds
 
+/**
+ * Hardcoded fallback free models when the OpenRouter model discovery API
+ * returns nothing (API format change, network issue, etc.).
+ * Kept current as of 2026-09-04.
+ */
+const FALLBACK_FREE_MODELS: string[] = [
+  'google/gemma-2-9b-it:free',
+  'meta-llama/llama-3.2-3b-instruct:free',
+  'microsoft/phi-3.5-mini-instruct:free',
+  'mistralai/mistral-7b-instruct:free',
+  'cognitivecomputations/dolphin-2.9.1-llama-3.1-8b:free',
+];
+
 // BBS Help Knowledge Base (from AmiExpress wiki)
 const BBS_HELP_KNOWLEDGE = `
 === AMIEXPRESS BBS COMMANDS ===
@@ -562,7 +575,12 @@ console.log('[Grumpy Bot] Discovering free models...');
   const freeModels = await discoverFreeModels();
 
   if (freeModels.length === 0) {
-console.log('[Grumpy Bot] No free models found');
+console.log('[Grumpy Bot] No free models from API, trying hardcoded fallback list');
+    cachedFreeModels = [...FALLBACK_FREE_MODELS];
+    lastModelDiscovery = now;
+    if (cachedFreeModels.length > 0) {
+      return cachedFreeModels[0];
+    }
     return null;
   }
 
@@ -798,6 +816,9 @@ export async function getGrumpySysopResponse(
 console.log('[Grumpy Bot] Using AI response');
       return `[AI] ${aiResponse}`;
     }
+console.log('[Grumpy Bot] AI cascade returned nothing — falling back to rule-based');
+  } else {
+console.log('[Grumpy Bot] AI provider set to "rule-based" — skipping AI cascade entirely');
   }
 
   // Fall back to rule-based (always works, no API keys needed)
