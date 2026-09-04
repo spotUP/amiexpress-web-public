@@ -392,10 +392,7 @@ COPY data/amiga-roms/aros-ext.bin /app/default-data/amiga-roms/aros-ext.bin
 # ConfConfig.info: NCONFS, NAME.n, LOCATION.n (conference list)
 # Conf*.info: Per-conference settings (NDIRS, DLPATH, ULPATH for file areas)
 # Note: bbsConfig.info is gitignored (user-specific) - synced via deploy/sync-to-server.sh
-COPY ConfConfig.info Conf.DB Doors.info NamesNotAllowed.info /app/default-data/
-COPY Conf1.info Conf2.info Conf3.info Conf4.info Conf5.info Conf6.info Conf7.info /app/default-data/
-COPY Conf8.info Conf9.info Conf10.info Conf11.info Conf12.info Conf13.info Conf14.info /app/default-data/
-COPY Node0.info Node1.info Node2.info Node3.info Node4.info Node5.info Node6.info /app/default-data/
+COPY Conf.DB /app/default-data/
 
 # The template ships ONE copy of each node screen, not forty-one.
 #
@@ -443,7 +440,6 @@ COPY S /app/default-data/S
 COPY Scripts /app/default-data/Scripts
 COPY System /app/default-data/System
 COPY AmiXnet /app/default-data/AmiXnet
-COPY RIPgraphics /app/default-data/RIPgraphics
 COPY Partdownload /app/default-data/Partdownload
 
 # Copy remaining root-level .info files (batch configs, system configs)
