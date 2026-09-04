@@ -61,7 +61,7 @@ export function OperatorChatPage() {
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [userTypingBuffer, setUserTypingBuffer] = useState('');
-  const [useTerminalMode, setUseTerminalMode] = useState(true);
+  const [useTerminalMode, setUseTerminalMode] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -337,6 +337,8 @@ export function OperatorChatPage() {
       message,
       nodeId: activeChat.nodeId,
     });
+    // Send Enter keystroke to clear typing preview on BBS user's terminal
+    socket.emit('operator:keystroke', { pageId: activeChat.id, keystroke: 'Enter' });
 
     setInputMessage('');
     inputRef.current?.focus();
@@ -528,17 +530,34 @@ export function OperatorChatPage() {
                     ))}
                   </div>
 
-                  {/* Input */}
+                  {/* Input — sends real-time keystrokes for express.e 1:1 chat */}
                   <div className="flex gap-2">
                     <input
                       ref={inputRef}
                       type="text"
                       value={inputMessage}
-                      onChange={(e) => setInputMessage(e.target.value)}
-                      onKeyPress={(e) => {
+                      onChange={(e) => {
+                        const newVal = e.target.value;
+                        const prev = inputMessage;
+                        // Detect added chars (typing or paste) and send each as keystroke
+                        if (newVal.length > prev.length) {
+                          const added = newVal.slice(prev.length);
+                          for (const char of added) {
+                            socket?.emit('operator:keystroke', { pageId: activeChat.id, keystroke: char });
+                          }
+                        }
+                        setInputMessage(newVal);
+                      }}
+                      onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
                           handleSendMessage();
+                          socket?.emit('operator:keystroke', { pageId: activeChat.id, keystroke: 'Enter' });
+                          return;
+                        }
+                        if (e.key === 'Backspace') {
+                          socket?.emit('operator:keystroke', { pageId: activeChat.id, keystroke: 'Backspace' });
+                          return;
                         }
                       }}
                       placeholder="Type your message..."
