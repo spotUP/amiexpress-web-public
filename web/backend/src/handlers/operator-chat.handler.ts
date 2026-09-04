@@ -409,6 +409,7 @@ console.error('[Operator Chat] Failed to join page/user rooms:', err);
 
     dotCount++;
     socket.emit('ansi-output', ' .');
+    io.to('sysops').emit('operator:paging-dot');
 
     // After 30 dots, show final message and return to normal BBS operation
     if (dotCount >= maxDots) {

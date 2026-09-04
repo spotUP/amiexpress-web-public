@@ -546,18 +546,11 @@ export function OperatorChatSettingsPage() {
                 Browser Push Notifications
               </h3>
 
-              {!push.isSupported ? (
+              {!push.isEnabled ? (
                 <div className="bg-surface-1/50 border border-border-strong rounded p-3">
                   <p className="text-sm text-content-secondary flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" />
-                    Push notifications are not supported in this browser
-                  </p>
-                </div>
-              ) : !push.isEnabled ? (
-                <div className="bg-surface-1/50 border border-border-strong rounded p-3">
-                  <p className="text-sm text-content-secondary flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4" />
-                    Push notifications not configured on server. Add VAPID keys to enable.
+                    Push notifications not configured on server. Set VAPID keys or use the browser Notification API (auto-enabled on this page).
                   </p>
                 </div>
               ) : push.isSubscribed ? (

@@ -155,6 +155,23 @@ export function OperatorChatPage() {
       }
     });
 
+    socketInstance.on('operator:paging-dot', () => {
+      // Play short beep for each paging dot so sysop can hear someone is paging
+      try {
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 800;
+        osc.type = 'sine';
+        gain.gain.value = 0.15;
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+        osc.stop(ctx.currentTime + 0.08);
+      } catch { /* audio not available */ }
+    });
+
     socketInstance.on('operator:pending-pages', (pages: PageRequest[]) => {
       console.log('[Operator Chat] Pending pages received:', pages.length, 'pages');
       console.log('[Operator Chat] Pages data:', pages);
