@@ -5,7 +5,7 @@ import { CATEGORIES, CATEGORY_COLLAPSED, PAGES, type CategoryName, type PageMeta
 import { T, CURRENT_THEME, BORDER_STYLE } from '../theme/blessed-theme.js';
 
 export const SIDEBAR_WIDTH = 22;
-const SIDEBAR_FIRST_ROW = 5;
+const SIDEBAR_FIRST_ROW = 4;
 
 interface RenderedRow {
   row: number;
