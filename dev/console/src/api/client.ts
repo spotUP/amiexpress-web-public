@@ -93,6 +93,16 @@ export async function getLastCallers(limit = 50) {
   return res.data ?? [];
 }
 
+export async function getLastUploads(limit = 20) {
+  const res = await request<{ success: boolean; data: Array<{ id: number; filename: string; size?: number; uploader?: string; uploadDate?: string }> }>(`/api/stats/last-uploads?limit=${limit}`);
+  return res.data ?? [];
+}
+
+export async function getLastDownloads(limit = 20) {
+  const res = await request<{ success: boolean; data: Array<{ id: number; filename: string; size?: number; uploader?: string; downloadCount?: number; areaName?: string }> }>(`/api/stats/last-downloads?limit=${limit}`);
+  return res.data ?? [];
+}
+
 export async function getSystemStats() {
   const res = await request<{ success: boolean; data: import('./types.js').SystemStats }>('/api/stats/system');
   return res.data;
