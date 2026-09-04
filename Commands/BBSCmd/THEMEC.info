@@ -1,7 +1,7 @@
-BBSCMD=THEMEC
+BBSCMD=DOORREPO
 NAME=Theme (C door)
 TYPE=XIM
-LOCATION=Doors/THEMEC/themec
+LOCATION=Doors:ThemeC/theme-picker
 DESCRIPTION=Pick how the doors look - the C port of THEME
 ACCESS=0
 MULTINODE=YES
