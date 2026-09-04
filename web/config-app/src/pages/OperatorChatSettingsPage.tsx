@@ -765,13 +765,15 @@ export function OperatorChatSettingsPage() {
                 <div>
                   <label className="block text-xs font-medium text-content-primary mb-1">User Key</label>
                   <input type="text" {...register('pushoverUserKey')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="uy7..." autoComplete="off" />
+                  <a href="https://pushover.net/" target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline mt-1 inline-block">pushover.net — get your User Key</a>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-content-primary mb-1">App Token</label>
                   <input type="password" {...register('pushoverAppToken')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="az..." autoComplete="off" />
+                  <a href="https://pushover.net/apps" target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline mt-1 inline-block">pushover.net/apps — create an application</a>
                 </div>
               </div>
-              <p className="text-xs text-content-secondary mt-1">Create an app at <span className="font-mono">pushover.net/apps</span> — one-time $5 purchase</p>
+              <p className="text-xs text-content-secondary mt-1">One-time $5 purchase. Install the Pushover app on your phone, then create an application above.</p>
             </div>
 
             {/* Gotify */}
@@ -781,13 +783,15 @@ export function OperatorChatSettingsPage() {
                 <div>
                   <label className="block text-xs font-medium text-content-primary mb-1">Server URL</label>
                   <input type="url" {...register('gotifyUrl')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="https://gotify.example.com" autoComplete="off" />
+                  <a href="https://gotify.net/docs/install" target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline mt-1 inline-block">gotify.net — install guide</a>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-content-primary mb-1">App Token</label>
                   <input type="password" {...register('gotifyAppToken')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="A..." autoComplete="off" />
+                  <span className="text-xs text-content-secondary mt-1 inline-block">Create an app in Gotify Web UI → Apps → Create Application</span>
                 </div>
               </div>
-              <p className="text-xs text-content-secondary mt-1">Open source push server — <span className="font-mono">gotify.net</span></p>
+              <p className="text-xs text-content-secondary mt-1">Open source push server. Install with Docker: <span className="font-mono">docker run -p 8080:80 gotify/server</span></p>
             </div>
 
             {/* ntfy.sh */}
@@ -797,13 +801,15 @@ export function OperatorChatSettingsPage() {
                 <div>
                   <label className="block text-xs font-medium text-content-primary mb-1">Topic Name</label>
                   <input type="text" {...register('ntfyTopic')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="bbs-pages" autoComplete="off" />
+                  <a href="https://ntfy.sh/" target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline mt-1 inline-block">ntfy.sh — pick any topic name</a>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-content-primary mb-1">Server URL (optional)</label>
                   <input type="url" {...register('ntfyUrl')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="https://ntfy.sh" autoComplete="off" />
+                  <a href="https://docs.ntfy.sh/install/" target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline mt-1 inline-block">docs.ntfy.sh — self-hosting guide</a>
                 </div>
               </div>
-              <p className="text-xs text-content-secondary mt-1">Install the ntfy app on your phone and subscribe to your topic. Leave server URL as default for public ntfy.sh</p>
+              <p className="text-xs text-content-secondary mt-1">Install the ntfy app on your phone from <a href="https://f-droid.org/packages/io.heckel.ntfy/" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">F-Droid</a> or <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">Google Play</a>, then subscribe to your topic.</p>
             </div>
           </div>
         </section>
@@ -856,18 +862,21 @@ export function OperatorChatSettingsPage() {
             {/* API Keys */}
             <div className="border-t border-border pt-4 space-y-3">
               <h3 className="text-sm font-medium text-content-primary">API Keys</h3>
-              <p className="text-xs text-content-secondary">Leave empty to use environment variables (GROQ_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY)</p>
+              <p className="text-xs text-content-secondary">Leave empty to use environment variables (<span className="font-mono">GROQ_API_KEY</span>, <span className="font-mono">GEMINI_API_KEY</span>, <span className="font-mono">OPENROUTER_API_KEY</span>)</p>
               <div>
                 <label className="block text-sm font-medium text-content-primary mb-1">OpenRouter API Key</label>
                 <input type="password" {...register('openRouterApiKey')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="sk-or-v1-..." autoComplete="off" />
+                <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline mt-1 inline-block">openrouter.ai/keys — create API key</a>
               </div>
               <div>
                 <label className="block text-sm font-medium text-content-primary mb-1">Groq API Key</label>
                 <input type="password" {...register('groqApiKey')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="gsk_..." autoComplete="off" />
+                <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline mt-1 inline-block">console.groq.com/keys — create API key (free)</a>
               </div>
               <div>
                 <label className="block text-sm font-medium text-content-primary mb-1">Gemini API Key</label>
                 <input type="password" {...register('geminiApiKey')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="AIzaSy..." autoComplete="off" />
+                <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-xs text-accent hover:underline mt-1 inline-block">aistudio.google.com/apikey — create API key (free)</a>
               </div>
             </div>
 
