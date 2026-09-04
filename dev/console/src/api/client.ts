@@ -662,52 +662,57 @@ export interface ScreenIndex {
 }
 
 export async function getScreenIndex(): Promise<ScreenIndex> {
-  const res = await request<{ success: boolean; screens: ScreenIndexEntry[]; unused: ScreenFileFacts[]; files: Record<string, ScreenFileFacts>; conferences: ConferenceFacts[]; bulletins: BulletinFacts[]; builtAt: string; [k: string]: unknown }>('/api/screens');
+  const res = await request<{ success: boolean; data: { screens?: ScreenIndexEntry[]; unused?: ScreenFileFacts[]; files?: Record<string, ScreenFileFacts>; conferences?: ConferenceFacts[]; bulletins?: BulletinFacts[]; builtAt?: string; callersByLevel?: Record<string, number> } }>('/api/screens');
+  const d = res.data ?? {};
   return {
-    screens: res.screens ?? [],
-    unused: res.unused ?? [],
-    files: res.files ?? {},
-    conferences: res.conferences ?? [],
-    bulletins: res.bulletins ?? [],
-    builtAt: res.builtAt ?? '',
+    screens: (d.screens ?? []) as ScreenIndexEntry[],
+    unused: (d.unused ?? []) as ScreenFileFacts[],
+    files: (d.files ?? {}) as Record<string, ScreenFileFacts>,
+    conferences: (d.conferences ?? []) as ConferenceFacts[],
+    bulletins: (d.bulletins ?? []) as BulletinFacts[],
+    builtAt: d.builtAt ?? '',
   };
 }
 
 export async function getScreenFile(path: string) {
-  const res = await request<{ success: boolean; data: ScreenFileFacts & { content: string } }>(`/api/screens/file?path=${encodeURIComponent(path)}`);
+  const res = await request<{ success: boolean; data?: ScreenFileFacts & { content: string } }>(`/api/screens/file?path=${encodeURIComponent(path)}`);
   return res.data;
 }
 
 export async function putScreenFile(path: string, content: string, targets?: string[]) {
-  return request<{ success: boolean; written: string[] }>('/api/screens/file', {
+  const res = await request<{ success: boolean; data?: { written?: string[] } }>('/api/screens/file', {
     method: 'PUT',
     body: JSON.stringify({ content, targets }),
   });
+  return res.data ?? {};
 }
 
 export async function deleteScreenFile(path: string) {
-  return request<{ success: boolean; deleted: boolean; backup: string; stopsResolving: string[] }>(`/api/screens/file?path=${encodeURIComponent(path)}`, {
+  const res = await request<{ success: boolean; data?: { deleted?: boolean; backup?: string; stopsResolving?: string[] } }>(`/api/screens/file?path=${encodeURIComponent(path)}`, {
     method: 'DELETE',
   });
+  return res.data ?? { deleted: false, backup: '', stopsResolving: [] };
 }
 
 export async function repairScreenFile(path: string) {
-  return request<{ success: boolean; path: string; backup: string; repaired: number }>('/api/screens/repair', {
+  const res = await request<{ success: boolean; data?: { path?: string; backup?: string; repaired?: number } }>('/api/screens/repair', {
     method: 'POST',
     body: JSON.stringify({ path }),
   });
+  return res.data ?? { path: '', backup: '', repaired: 0 };
 }
 
 export async function getSharedScreenDirs() {
-  const res = await request<{ success: boolean; directories: Array<{ dir: string; files: string[] }> }>('/api/screens/shared-directories');
-  return res.directories ?? [];
+  const res = await request<{ success: boolean; data?: { directories?: Array<{ dir: string; files: string[] }> } }>('/api/screens/shared-directories');
+  return res.data?.directories ?? [];
 }
 
 export async function shareScreens(nodes: number[], sharedDir: string, dryRun?: boolean) {
-  return request<{ success: boolean; blocked: string[]; canShare: boolean; wouldWrite: string[]; tooltype: string }>('/api/screens/share', {
+  const res = await request<{ success: boolean; data?: { blocked?: string[]; canShare?: boolean; wouldWrite?: string[]; tooltype?: string } }>('/api/screens/share', {
     method: 'POST',
     body: JSON.stringify({ nodes, sharedDir, dryRun }),
   });
+  return res.data ?? {};
 }
 
 // Deployment monitoring (read-only)

@@ -154,9 +154,12 @@ class AttractScreen {
             return; // Exit if interrupted during boot
         // Setup input to exit on any key DURING demo
         this.setupInput();
-        // Main attract loop
-        this.attractState = 'demo';
-        this.startDemo();
+        // At 40 columns the demo playfield (22x22) and info panel (50x22)
+        // do not fit. Skip the demo and go straight to attract cycling.
+        if (this.screen.width >= 80) {
+            this.attractState = 'demo';
+            this.startDemo();
+        }
         this.updateInterval = setInterval(() => {
             if (!this.running) {
                 if (this.updateInterval)
@@ -285,13 +288,16 @@ class AttractScreen {
             this.screen.on('keypress', titleHandler);
             this.screen.on('mouse', titleHandler);
         });
-        // Listen for a key, but cap the wait at 10s. C64 callers on a real
-        // serial line have already seen the title by the time the door's
-        // first byte paints; a 10s wait is generous.
+        // Rainbow cycle on a 40-col PETSCII title, matching the full boot's
+        // animation but with a single bold title row instead of full-block art.
+        const RAINBOW = ['red', 'yellow', 'green', 'cyan', 'blue', 'magenta'];
+        let cycle = 0;
         const startTime = Date.now();
         const maxTitleWait = 10000;
         while (this.running && !titleKeyPressed && (Date.now() - startTime < maxTitleWait)) {
-            this.mainBox.setContent('{bold}{yellow-fg}GRANDMASTER{/yellow-fg}{/bold}\n' +
+            const color = RAINBOW[cycle];
+            cycle = (cycle + 1) % RAINBOW.length;
+            this.mainBox.setContent('{bold}{' + color + '-fg}GRANDMASTER{/' + color + '-fg}{/bold}\n' +
                 '\n' +
                 '{cyan-fg}A Tetris: The Grand Master 3 Tribute{/cyan-fg}\n' +
                 '\n' +
