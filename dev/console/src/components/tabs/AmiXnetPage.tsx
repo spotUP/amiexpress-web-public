@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getInfoFile, updateInfoFile, type InfoTooltype } from '../../api/client.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
+import { T } from '../../theme/blessed-theme.js';
 
 const ITEMS_START_ROW = 7;
 const AMIXNET_PATH = 'AmiXnet.info';
@@ -101,14 +102,14 @@ export function AmiXnetPage() {
     }
   });
 
-  if (loading) return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading AmiXnet.info...</Text></Box>;
-  if (error) return <Text color="red">Error: {error}</Text>;
+  if (loading) return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading AmiXnet.info...</Text></Box>;
+  if (error) return <Text color={T.alert}>Error: {error}</Text>;
 
   if (mode === 'view') {
     return (
       <Box flexDirection="column">
         <Box marginBottom={1}>
-          <Text bold color="cyan">AMIXNET</Text>
+          <Text bold color={T.accent}>AMIXNET</Text>
           <Text dimColor>  ({tooltypes.length} settings)</Text>
         </Box>
 
@@ -117,12 +118,12 @@ export function AmiXnetPage() {
         ) : (
           tooltypes.map((f, i) => (
             <Box key={f.key}>
-              <Text color={i === selectedIdx ? 'cyan' : 'white'} bold={i === selectedIdx}>
+              <Text color={i === selectedIdx ? T.accent : T.ink} bold={i === selectedIdx}>
                 {i === selectedIdx ? '▶ ' : '  '}
                 {f.key.padEnd(20)}
                 {' = '}
               </Text>
-              <Text color="white">
+              <Text color={T.ink}>
                 {f.value ?? ''}
               </Text>
             </Box>
@@ -131,12 +132,12 @@ export function AmiXnetPage() {
 
         {saving && (
           <Box marginTop={1}>
-            <Text color="yellow"><Spinner type="dots" /></Text>
+            <Text color={T.warn}><Spinner type="dots" /></Text>
             <Text> Saving...</Text>
           </Box>
         )}
 
-        {status && <Box marginTop={1}><Text color="green">{status}</Text></Box>}
+        {status && <Box marginTop={1}><Text color={T.ok}>{status}</Text></Box>}
 
         <Box marginTop={2}>
           <Text dimColor>[↑↓] select  [e]dit value  [s]ave  [r]efresh</Text>
@@ -150,11 +151,11 @@ export function AmiXnetPage() {
     return (
       <Box flexDirection="column">
         <Box marginBottom={1}>
-          <Text bold color="cyan">EDIT: {field?.key}</Text>
+          <Text bold color={T.accent}>EDIT: {field?.key}</Text>
         </Box>
 
-        <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1} marginBottom={2}>
-          <Text color="cyan">Value ({field?.key}):</Text>
+        <Box flexDirection="column" borderStyle="round" borderColor={T.warn} paddingX={1} marginBottom={2}>
+          <Text color={T.accent}>Value ({field?.key}):</Text>
           <Box>
             <Text>{'> '}</Text>
             <Text>{editValue}█</Text>

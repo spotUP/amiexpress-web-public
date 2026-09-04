@@ -135,6 +135,21 @@ export class OperatorChatRepository {
     try {
       this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN discord_user_id TEXT`);
     } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN ai_enabled INTEGER DEFAULT 1`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN ai_provider TEXT DEFAULT 'openrouter'`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN ai_model_name TEXT DEFAULT ''`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN ai_temperature REAL DEFAULT 0.9`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN ai_system_prompt TEXT DEFAULT ''`);
+    } catch (e) { /* Column already exists */ }
 
     // Push notification subscriptions table
     this.db.exec(`
@@ -454,11 +469,14 @@ export class OperatorChatRepository {
       vibrateEnabled: row.vibrate_enabled === 1,
       discordWebhook: row.discord_webhook,
       discordUserId: row.discord_user_id,
-      // Rows written before the coercion above hold strings; read them as
-      // numbers so an existing board starts working without a re-save.
       allowedSecLevels: toSecurityLevels(JSON.parse(row.allowed_sec_levels || '[]')),
-      notifyOnPage: row.notify_on_page !== 0, // Default true if null
-      notifyDiscord: row.notify_discord !== 0  // Default true if null
+      notifyOnPage: row.notify_on_page !== 0,
+      notifyDiscord: row.notify_discord !== 0,
+      aiEnabled: row.ai_enabled === 1,
+      aiProvider: (row.ai_provider as 'groq' | 'gemini' | 'openrouter' | 'rule-based') || 'openrouter',
+      aiModelName: row.ai_model_name || '',
+      aiTemperature: row.ai_temperature ?? 0.9,
+      aiSystemPrompt: row.ai_system_prompt || ''
     };
   }
 
@@ -488,7 +506,12 @@ export class OperatorChatRepository {
         discord_user_id = ?,
         allowed_sec_levels = ?,
         notify_on_page = ?,
-        notify_discord = ?
+        notify_discord = ?,
+        ai_enabled = ?,
+        ai_provider = ?,
+        ai_model_name = ?,
+        ai_temperature = ?,
+        ai_system_prompt = ?
       WHERE id = 1
     `).run(
       merged.enabled ? 1 : 0,
@@ -506,14 +529,14 @@ export class OperatorChatRepository {
       merged.vibrateEnabled ? 1 : 0,
       merged.discordWebhook ?? null,
       merged.discordUserId ?? null,
-      // NUMBERS, whatever the caller sent. A checkbox group posts its values
-      // as strings, so this column filled with ["10","20"] while
-      // operator-chat.handler.ts:255 tests `.includes(userSecLevel)` against a
-      // number - and ["10"].includes(10) is false, so no non-sysop could page
-      // the sysop at all.
       JSON.stringify(toSecurityLevels(merged.allowedSecLevels)),
       merged.notifyOnPage ? 1 : 0,
-      merged.notifyDiscord ? 1 : 0
+      merged.notifyDiscord ? 1 : 0,
+      merged.aiEnabled ? 1 : 0,
+      merged.aiProvider ?? 'openrouter',
+      merged.aiModelName ?? '',
+      merged.aiTemperature ?? 0.9,
+      merged.aiSystemPrompt ?? ''
     );
   }
 

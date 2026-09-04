@@ -69,6 +69,20 @@ export const PAGES: PageMeta[] = [
     ],
     implemented: true,
   },
+  {
+    id: 'opchat-settings',
+    label: 'Chat Settings',
+    category: 'System',
+    footerHint: '[enter] toggle/edit  [r]efresh  [s]ave',
+    helpKeys: [
+      ['↑↓', 'Select a field'],
+      ['enter', 'Toggle bool, cycle select, or edit value'],
+      ['s', 'Save pending changes'],
+      ['r', 'Refresh from server'],
+      ['R', 'Revert pending changes'],
+    ],
+    implemented: true,
+  },
 
   // ─── People ─────────────────────────────────────────────────────
   {

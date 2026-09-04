@@ -55,6 +55,23 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return isAuthenticated ? <>{children}</> : <Navigate to="/admin/login" />;
 }
 
+/** Route that only sysops (SL >= 255) can access. Non-sysops are redirected to /admin/screens. */
+function SysopRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading, secLevel } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-surface-0 p-5">
+        <SkeletonRows rows={8} />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) return <Navigate to="/admin/login" />;
+  if (secLevel < 255) return <Navigate to="/admin/screens" />;
+  return <>{children}</>;
+}
+
 function App() {
   return (
     <Routes>
@@ -72,32 +89,32 @@ function App() {
       >
         <Route index element={<OverviewPage />} />
 
-        {/* Live */}
-        <Route path="activity" element={<ActivityPage />} />
+        {/* Live — sysop-only except Overview */}
+        <Route path="activity" element={<SysopRoute><ActivityPage /></SysopRoute>} />
         <Route path="screens" element={<ScreenFilesPage />} />
-        <Route path="nodes" element={<NodesWorkspace />} />
-        <Route path="operator-chat" element={<OperatorChatWorkspace />} />
+        <Route path="nodes" element={<SysopRoute><NodesWorkspace /></SysopRoute>} />
+        <Route path="operator-chat" element={<SysopRoute><OperatorChatWorkspace /></SysopRoute>} />
 
-        {/* People */}
-        <Route path="users" element={<UsersPage />} />
-        <Route path="security" element={<SecurityPage />} />
+        {/* People — sysop-only */}
+        <Route path="users" element={<SysopRoute><UsersPage /></SysopRoute>} />
+        <Route path="security" element={<SysopRoute><SecurityPage /></SysopRoute>} />
 
-        {/* Content */}
-        <Route path="conferences" element={<ConferencesWorkspace />} />
-        <Route path="doors" element={<DoorsPage />} />
+        {/* Content — screens editor accessible at 100+, rest sysop-only */}
+        <Route path="conferences" element={<SysopRoute><ConferencesWorkspace /></SysopRoute>} />
+        <Route path="doors" element={<SysopRoute><DoorsPage /></SysopRoute>} />
 
-        {/* System */}
-        <Route path="system" element={<SystemConfigPage />} />
-        <Route path="config-files" element={<ConfigFilesWorkspace />} />
-        <Route path="lookup-tables" element={<LookupTablesWorkspace />} />
-        <Route path="health" element={<HealthWorkspace />} />
+        {/* System — sysop-only */}
+        <Route path="system" element={<SysopRoute><SystemConfigPage /></SysopRoute>} />
+        <Route path="config-files" element={<SysopRoute><ConfigFilesWorkspace /></SysopRoute>} />
+        <Route path="lookup-tables" element={<SysopRoute><LookupTablesWorkspace /></SysopRoute>} />
+        <Route path="health" element={<SysopRoute><HealthWorkspace /></SysopRoute>} />
 
-        {/* Diagnostics */}
-        <Route path="statistics" element={<StatisticsPage />} />
-        <Route path="logs" element={<LogsPage />} />
-        <Route path="session-logs" element={<LazyPage><SessionLogsPage /></LazyPage>} />
-        <Route path="audit" element={<AuditLogPage />} />
-        <Route path="import-export" element={<LazyPage><ImportExportPage /></LazyPage>} />
+        {/* Diagnostics — sysop-only */}
+        <Route path="statistics" element={<SysopRoute><StatisticsPage /></SysopRoute>} />
+        <Route path="logs" element={<SysopRoute><LogsPage /></SysopRoute>} />
+        <Route path="session-logs" element={<SysopRoute><LazyPage><SessionLogsPage /></LazyPage></SysopRoute>} />
+        <Route path="audit" element={<SysopRoute><AuditLogPage /></SysopRoute>} />
+        <Route path="import-export" element={<SysopRoute><LazyPage><ImportExportPage /></LazyPage></SysopRoute>} />
 
         {/*
           Permanent redirects for every destination folded into a tab, from one

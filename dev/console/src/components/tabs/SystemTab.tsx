@@ -10,6 +10,7 @@ import { useMouse, type MouseClick } from '../../hooks/useMouse.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
 import type { SystemConfig, NodeStatus } from '../../api/types.js';
+import { T } from '../../theme/blessed-theme.js';
 
 type Panel = 'nodes' | 'config';
 type NodeAction = 'start' | 'exit' | 'reserve' | 'sysop';
@@ -103,27 +104,27 @@ export function SystemTab() {
     setPendingAction(null);
   }
 
-  if (loading) return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading...</Text></Box>;
+  if (loading) return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading...</Text></Box>;
 
   return (
     <Box flexDirection="column">
       {/* Panel switcher */}
       <Box marginBottom={1} gap={3}>
-        <Text color={panel === 'nodes' ? 'cyan' : 'white'} bold={panel === 'nodes'} underline={panel === 'nodes'}>[n] Nodes</Text>
-        <Text color={panel === 'config' ? 'cyan' : 'white'} bold={panel === 'config'} underline={panel === 'config'}>[c] Config</Text>
+        <Text color={panel === 'nodes' ? T.accent : T.ink} bold={panel === 'nodes'} underline={panel === 'nodes'}>[n] Nodes</Text>
+        <Text color={panel === 'config' ? T.accent : T.ink} bold={panel === 'config'} underline={panel === 'config'}>[c] Config</Text>
         <Text dimColor>  Quiet mode: </Text>
-        <Text color={quietMode ? 'yellow' : 'green'}>{quietMode ? 'ON' : 'OFF'}</Text>
+        <Text color={quietMode ? T.warn : T.ok}>{quietMode ? 'ON' : 'OFF'}</Text>
         <Text dimColor>  [Q] toggle</Text>
       </Box>
 
       {panel === 'nodes' && (
         <Box flexDirection="column">
           <Box marginBottom={1}>
-            <Text bold color="cyan">{'  NODE'.padEnd(7)}{'USER'.padEnd(16)}{'STATE'.padEnd(20)}{'ACTIVITY'}</Text>
+            <Text bold color={T.accent}>{'  NODE'.padEnd(7)}{'USER'.padEnd(16)}{'STATE'.padEnd(20)}{'ACTIVITY'}</Text>
           </Box>
           {nodes.map((n, i) => (
             <Box key={n.nodeId}>
-              <Text color={i === selectedIdx ? 'cyan' : n.online ? 'white' : 'gray'} bold={i === selectedIdx}>
+              <Text color={i === selectedIdx ? T.accent : n.online ? T.ink : T.dim} bold={i === selectedIdx}>
                 {i === selectedIdx ? '▶ ' : '  '}
                 {`N${n.nodeId}`.padEnd(5)}
                 {(n.username ?? '—').padEnd(16)}
@@ -139,8 +140,8 @@ export function SystemTab() {
       )}
 
       {panel === 'config' && config && (
-        <Box flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1}>
-          <Text bold color="cyan">System Configuration</Text>
+        <Box flexDirection="column" borderStyle="single" borderColor={T.chrome} paddingX={1}>
+          <Text bold color={T.accent}>System Configuration</Text>
           {[
             ['BBS Name', config.bbs_name],
             ['Sysop', config.sysop_name],
@@ -151,7 +152,7 @@ export function SystemTab() {
           ].map(([label, val]) => (
             <Box key={label}>
               <Text dimColor>{label!.padEnd(16)}</Text>
-              <Text color="white">{val}</Text>
+              <Text color={T.ink}>{val}</Text>
             </Box>
           ))}
         </Box>
@@ -159,12 +160,12 @@ export function SystemTab() {
 
       {actionLoading && (
         <Box marginTop={1}>
-          <Text color="yellow"><Spinner type="dots" /></Text>
+          <Text color={T.warn}><Spinner type="dots" /></Text>
           <Text> Executing...</Text>
         </Box>
       )}
 
-      {status && <Box marginTop={1}><Text color="green">{status}</Text></Box>}
+      {status && <Box marginTop={1}><Text color={T.ok}>{status}</Text></Box>}
 
       {pendingAction && selected && (
         <Box marginTop={1}>

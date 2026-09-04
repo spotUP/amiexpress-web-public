@@ -181,14 +181,17 @@ export function ScreenFilesPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  type ScreenEntry = { label: string; path: string | null; screen: string; facts: ScreenFileFacts | undefined };
+
   const items = useMemo(() => {
-    if (!index) return { entries: [] as { label: string; path: string; screen?: string; facts?: ScreenFileFacts }[] };
+    if (!index) return { entries: [] as ScreenEntry[] };
 
     if (tab === 'unused') {
       return {
         entries: index.unused.map(f => ({
           label: `${f.path}  ${formatSize(f.bytes)}  ${f.format}`,
           path: f.path,
+          screen: f.path,
           facts: f,
         })),
       };
@@ -199,6 +202,7 @@ export function ScreenFilesPage() {
         entries: index.bulletins.map(b => ({
           label: `#${b.number}  ${b.title ?? '(no title)'}  ${b.file}`,
           path: b.file,
+          screen: b.file,
           facts: index.files[b.file],
         })),
       };
@@ -216,10 +220,11 @@ export function ScreenFilesPage() {
     return {
       entries: filtered.map(s => {
         const r = s.resolutions[0];
-        const label = r?.file
-          ? `${s.screen.padEnd(30)} ${r.file.padEnd(40)} ${r.scope}${r.id != null ? r.id : ''}`
-          : `${s.screen.padEnd(30)} (no resolution)`;
-        return { label, path: r?.file ?? s.screen, screen: s.screen, facts: r?.file ? index.files[r.file] : undefined };
+        if (!r || !r.file) {
+          return { label: `${s.screen.padEnd(30)} (no resolution)`, path: null, screen: s.screen, facts: undefined };
+        }
+        const label = `${s.screen.padEnd(30)} ${r.file.padEnd(40)} ${r.scope}${r.id != null ? r.id : ''}`;
+        return { label, path: r.file, screen: s.screen, facts: index.files[r.file] };
       }),
     };
   }, [index, tab]);
@@ -286,10 +291,14 @@ export function ScreenFilesPage() {
     if (key.upArrow) { setSelectedIdx(i => Math.max(0, i - 1)); return; }
     if (key.downArrow) { setSelectedIdx(i => Math.min(items.entries.length - 1, i + 1)); return; }
     if (input === 'r') { load(); return; }
-    if (input === 'v' && selected) { openPreview(selected.path); return; }
-    if (input === 'd' && selected) { setDetail(selected.facts ?? null); return; }
-    if (input === 'x' && selected) { setConfirmDelete(selected.path); return; }
-    if (input === 'p' && selected) { handleRepair(selected.path); return; }
+    if (input === 'v' && selected && selected.path) { openPreview(selected.path); return; }
+    if (input === 'd' && selected) {
+      const f = selected.facts || { path: selected.path ?? selected.screen, bytes: 0, format: '—', sha256: '', readBy: [], mci: [], sauce: null, problems: [] };
+      setDetail(f);
+      return;
+    }
+    if (input === 'x' && selected && selected.path) { setConfirmDelete(selected.path); return; }
+    if (input === 'p' && selected && selected.path) { handleRepair(selected.path); return; }
     if (input === 'q' || input === 'escape') { setDetail(null); return; }
   });
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text, useInput } from 'ink';
+import { T } from '../theme/blessed-theme.js';
 import { pageById } from '../pages/registry.js';
 
 const GLOBAL: Array<[string, string]> = [
@@ -26,23 +27,23 @@ export function HelpOverlay({ activePageId, onClose }: Props) {
   const tabKeys = page?.helpKeys ?? [];
 
   return (
-    <Box flexDirection="column" paddingX={2} paddingY={1} borderStyle="double" borderColor="cyan">
-      <Text bold color="cyan">Help — {page?.label ?? activePageId}</Text>
+    <Box flexDirection="column" paddingX={2} paddingY={1} borderStyle="double" borderColor={T.chrome}>
+      <Text bold color={T.accent}>Help — {page?.label ?? activePageId}</Text>
       {tabKeys.length > 0 && (
         <Box marginTop={1} flexDirection="column">
           {tabKeys.map(([k, desc], i) => (
             <Box key={i}>
-              <Box width={10}><Text color="yellow">{k}</Text></Box>
+              <Box width={10}><Text color={T.warn}>{k}</Text></Box>
               <Text>{desc}</Text>
             </Box>
           ))}
         </Box>
       )}
       <Box marginTop={1} flexDirection="column">
-        <Text bold color="cyan" dimColor>Global</Text>
+        <Text bold color={T.accent} dimColor>Global</Text>
         {GLOBAL.map(([k, desc], i) => (
           <Box key={i}>
-            <Box width={10}><Text color="yellow">{k}</Text></Box>
+            <Box width={10}><Text color={T.warn}>{k}</Text></Box>
             <Text dimColor>{desc}</Text>
           </Box>
         ))}

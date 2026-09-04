@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import { T } from '../theme/blessed-theme.js';
 
 const LOGO = [
@@ -29,6 +29,9 @@ interface SplashScreenProps {
 }
 
 export function SplashScreen({ onDone }: SplashScreenProps) {
+  // Claim stdin raw mode immediately so LoginPrompt works on first keystroke
+  useInput(() => {});
+
   useEffect(() => {
     const timer = setTimeout(onDone, 2000);
     return () => clearTimeout(timer);

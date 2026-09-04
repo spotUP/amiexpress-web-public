@@ -18,6 +18,7 @@ import { Box, Text, useInput, useApp } from 'ink';
 import { spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import { T } from '../theme/blessed-theme.js';
 
 type Mode = 'normal' | 'debug' | 'quick' | 'clean';
 type Scope = 'full' | 'bbs-only' | 'sdk-only' | 'telnet-only';
@@ -118,19 +119,19 @@ export function RestartDialog({ onClose }: Props) {
   }
 
   return (
-    <Box flexDirection="column" paddingX={2} paddingY={1} borderStyle="double" borderColor="cyan">
-      <Text bold color="cyan">Restart dev stack</Text>
+    <Box flexDirection="column" paddingX={2} paddingY={1} borderStyle="double" borderColor={T.chrome}>
+      <Text bold color={T.accent}>Restart dev stack</Text>
       <Text dimColor>Pick options, then [r] or [F10] to restart. [esc] to cancel.</Text>
 
       <Box marginTop={1} flexDirection="column">
-        <Text bold color="cyan" dimColor>Mode</Text>
+        <Text bold color={T.accent} dimColor>Mode</Text>
         {MODES.map(([m, label, hint], i) => {
           const focused = cursor === i;
           const selected = mode === m;
           return (
             <Box key={m}>
-              <Text color={focused ? 'cyan' : undefined}>{focused ? '▶ ' : '  '}</Text>
-              <Box width={3}><Text color={selected ? 'green' : undefined}>{rowMarker(selected)}</Text></Box>
+              <Text color={focused ? T.accent : undefined}>{focused ? '▶ ' : '  '}</Text>
+              <Box width={3}><Text color={selected ? T.ok : undefined}>{rowMarker(selected)}</Text></Box>
               <Box width={20}><Text bold={selected}>{label}</Text></Box>
               <Text dimColor>{hint}</Text>
             </Box>
@@ -139,15 +140,15 @@ export function RestartDialog({ onClose }: Props) {
       </Box>
 
       <Box marginTop={1} flexDirection="column">
-        <Text bold color="cyan" dimColor>Scope</Text>
+        <Text bold color={T.accent} dimColor>Scope</Text>
         {SCOPES.map(([s, label, hint], i) => {
           const row = MODES.length + i;
           const focused = cursor === row;
           const selected = scope === s;
           return (
             <Box key={s}>
-              <Text color={focused ? 'cyan' : undefined}>{focused ? '▶ ' : '  '}</Text>
-              <Box width={3}><Text color={selected ? 'green' : undefined}>{rowMarker(selected)}</Text></Box>
+              <Text color={focused ? T.accent : undefined}>{focused ? '▶ ' : '  '}</Text>
+              <Box width={3}><Text color={selected ? T.ok : undefined}>{rowMarker(selected)}</Text></Box>
               <Box width={20}><Text bold={selected}>{label}</Text></Box>
               <Text dimColor>{hint}</Text>
             </Box>
@@ -156,14 +157,14 @@ export function RestartDialog({ onClose }: Props) {
       </Box>
 
       <Box marginTop={1} flexDirection="column">
-        <Text bold color="cyan" dimColor>Flags</Text>
+        <Text bold color={T.accent} dimColor>Flags</Text>
         {(() => {
           const row = MODES.length + SCOPES.length;
           const focused = cursor === row;
           return (
             <Box>
-              <Text color={focused ? 'cyan' : undefined}>{focused ? '▶ ' : '  '}</Text>
-              <Box width={3}><Text color={noWatch ? 'green' : undefined}>{noWatch ? '✓' : ' '}</Text></Box>
+              <Text color={focused ? T.accent : undefined}>{focused ? '▶ ' : '  '}</Text>
+              <Box width={3}><Text color={noWatch ? T.ok : undefined}>{noWatch ? '✓' : ' '}</Text></Box>
               <Box width={20}><Text bold={noWatch}>--no-watch</Text></Box>
               <Text dimColor>disable door file watcher</Text>
             </Box>
@@ -172,8 +173,8 @@ export function RestartDialog({ onClose }: Props) {
       </Box>
 
       <Box marginTop={1} flexDirection="column">
-        <Text bold color="cyan" dimColor>Resolved command</Text>
-        <Text color="yellow">{cmdLine}</Text>
+        <Text bold color={T.accent} dimColor>Resolved command</Text>
+        <Text color={T.warn}>{cmdLine}</Text>
       </Box>
 
       <Box marginTop={1}>

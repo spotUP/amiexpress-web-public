@@ -23,6 +23,16 @@ interface ChatContext {
   messageHistory: Array<{ role: 'user' | 'bot'; content: string }>;
 }
 
+/**
+ * AI configuration from OperatorChatConfig
+ */
+export interface AIProviderConfig {
+  provider: 'groq' | 'gemini' | 'openrouter' | 'rule-based';
+  modelName: string;
+  temperature: number;
+  systemPrompt: string;
+}
+
 interface OpenRouterModel {
   id: string;
   name: string;
@@ -406,7 +416,7 @@ const RULE_BASED_RESPONSES = {
 /**
  * Tier 1: Groq (Fast, Free, Llama 3.1)
  */
-async function getGroqResponse(userMessage: string, context: ChatContext): Promise<string | null> {
+async function getGroqResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
 console.log('[Grumpy Bot] No GROQ_API_KEY configured, skipping Groq');
@@ -414,8 +424,9 @@ console.log('[Grumpy Bot] No GROQ_API_KEY configured, skipping Groq');
   }
 
   try {
+    const systemPrompt = aiConfig.systemPrompt || GRUMPY_SYSOP_PERSONALITY;
     const messages = [
-      { role: 'system', content: GRUMPY_SYSOP_PERSONALITY },
+      { role: 'system', content: systemPrompt },
       { role: 'system', content: BBS_HELP_KNOWLEDGE },
       { role: 'system', content: `User context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes` },
       ...context.messageHistory.map(msg => ({
@@ -425,22 +436,23 @@ console.log('[Grumpy Bot] No GROQ_API_KEY configured, skipping Groq');
       { role: 'user', content: userMessage }
     ];
 
-console.log('[Grumpy Bot] Trying Groq (llama-3.1-8b-instant)...');
+    const model = aiConfig.modelName || 'llama-3.1-8b-instant';
+console.log(`[Grumpy Bot] Trying Groq (${model})...`);
 
     const response = await axios.post(
       'https://api.groq.com/openai/v1/chat/completions',
       {
-        model: 'llama-3.1-8b-instant',
-        messages: messages,
+        model,
+        messages,
         max_tokens: 150,
-        temperature: 0.9,
+        temperature: aiConfig.temperature,
       },
       {
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
-        timeout: 8000 // 8 second timeout (Groq is fast)
+        timeout: 8000
       }
     );
 
@@ -456,10 +468,7 @@ console.error('[Grumpy Bot] Groq failed:', error instanceof Error ? error.messag
   }
 }
 
-/**
- * Tier 2: Google Gemini (Free, Good Quality)
- */
-async function getGeminiResponse(userMessage: string, context: ChatContext): Promise<string | null> {
+async function getGeminiResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
 console.log('[Grumpy Bot] No GEMINI_API_KEY configured, skipping Gemini');
@@ -467,35 +476,26 @@ console.log('[Grumpy Bot] No GEMINI_API_KEY configured, skipping Gemini');
   }
 
   try {
-    // Gemini uses different message format
-    const systemPrompt = `${GRUMPY_SYSOP_PERSONALITY}\n\n${BBS_HELP_KNOWLEDGE}\n\nUser context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes`;
+    const systemPrompt = aiConfig.systemPrompt || GRUMPY_SYSOP_PERSONALITY;
+    const fullPrompt = `${systemPrompt}\n\n${BBS_HELP_KNOWLEDGE}\n\nUser context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes\n\n${
+      context.messageHistory.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n')
+    }\nUser: ${userMessage}\nAssistant:`;
 
-    const conversationHistory = context.messageHistory
-      .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
-      .join('\n');
-
-    const fullPrompt = `${systemPrompt}\n\n${conversationHistory}\nUser: ${userMessage}\nAssistant:`;
-
-console.log('[Grumpy Bot] Trying Gemini (gemini-1.5-flash)...');
+    const model = aiConfig.modelName || 'gemini-1.5-flash';
+console.log(`[Grumpy Bot] Trying Gemini (${model})...`);
 
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       {
-        contents: [{
-          parts: [{
-            text: fullPrompt
-          }]
-        }],
+        contents: [{ parts: [{ text: fullPrompt }] }],
         generationConfig: {
           maxOutputTokens: 150,
-          temperature: 0.9,
+          temperature: aiConfig.temperature,
         }
       },
       {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        timeout: 10000 // 10 second timeout
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000
       }
     );
 
@@ -570,9 +570,9 @@ console.log('[Grumpy Bot] No free models found');
   return freeModels[0];
 }
 
-async function getOpenRouterResponse(userMessage: string, context: ChatContext): Promise<string | null> {
+async function getOpenRouterResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
   // Try to get a free model
-  const freeModel = await getFreeModel();
+  const freeModel = aiConfig.modelName || await getFreeModel();
 
   if (!freeModel) {
 console.log('[Grumpy Bot] No OpenRouter free models available');
@@ -586,8 +586,9 @@ console.log('[Grumpy Bot] No OPENROUTER_API_KEY configured. OpenRouter requires 
   }
 
   try {
+    const systemPrompt = aiConfig.systemPrompt || GRUMPY_SYSOP_PERSONALITY;
     const messages = [
-      { role: 'system', content: GRUMPY_SYSOP_PERSONALITY },
+      { role: 'system', content: systemPrompt },
       { role: 'system', content: BBS_HELP_KNOWLEDGE },
       { role: 'system', content: `User context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes` },
       ...context.messageHistory.map(msg => ({
@@ -605,7 +606,7 @@ console.log(`[Grumpy Bot] Trying OpenRouter (${freeModel})...`);
         model: freeModel,
         messages: messages,
         max_tokens: 1000,
-        temperature: 0.9,
+        temperature: aiConfig.temperature,
       },
       {
         headers: {
@@ -635,7 +636,7 @@ console.error('[Grumpy Bot] Data:', JSON.stringify(error.response.data));
     if (cachedFreeModels.length > 1) {
 console.log('[Grumpy Bot] Trying next OpenRouter model...');
       cachedFreeModels.shift();
-      return getOpenRouterResponse(userMessage, context);
+      return getOpenRouterResponse(userMessage, context, aiConfig);
     }
 
     // Clear cache
@@ -646,21 +647,26 @@ console.log('[Grumpy Bot] Trying next OpenRouter model...');
 }
 
 /**
- * Master AI Response Function - Cascading Fallback
- * Tries: Groq → Gemini → OpenRouter → Rule-based
+ * Master AI Response Function
+ * Cascades through all available providers.
+ * Configured provider is tried first, then the rest as fallback.
  */
-async function getAIResponse(userMessage: string, context: ChatContext): Promise<string | null> {
-  // Tier 1: Groq (fastest)
-  let response = await getGroqResponse(userMessage, context);
-  if (response) return response;
+async function getAIResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
+  const preferred = aiConfig.provider || 'openrouter';
 
-  // Tier 2: Gemini (best quality)
-  response = await getGeminiResponse(userMessage, context);
-  if (response) return response;
+  // Ordered cascade: preferred first, then rest as fallback
+  const cascade: Array<'groq' | 'gemini' | 'openrouter'> =
+    preferred === 'groq' ? ['groq', 'gemini', 'openrouter'] :
+    preferred === 'gemini' ? ['gemini', 'groq', 'openrouter'] :
+    ['openrouter', 'groq', 'gemini'];
 
-  // Tier 3: OpenRouter (fallback)
-  response = await getOpenRouterResponse(userMessage, context);
-  if (response) return response;
+  for (const provider of cascade) {
+    let response: string | null = null;
+    if (provider === 'groq') response = await getGroqResponse(userMessage, context, aiConfig);
+    else if (provider === 'gemini') response = await getGeminiResponse(userMessage, context, aiConfig);
+    else if (provider === 'openrouter') response = await getOpenRouterResponse(userMessage, context, aiConfig);
+    if (response) return response;
+  }
 
 console.log('[Grumpy Bot] All AI providers failed, falling back to rule-based');
   return null;
@@ -777,20 +783,31 @@ function randomFrom<T>(array: T[]): T {
  */
 export async function getGrumpySysopResponse(
   userMessage: string,
-  context: ChatContext
+  context: ChatContext,
+  aiConfig?: AIProviderConfig
 ): Promise<string> {
-  // Try AI first
-  const aiResponse = await getAIResponse(userMessage, context);
+  const cfg = aiConfig || DEFAULT_AI_CONFIG;
 
-  if (aiResponse) {
+  // If AI is enabled and provider is set, try the AI cascade first
+  if (cfg.provider !== 'rule-based') {
+    const aiResponse = await getAIResponse(userMessage, context, cfg);
+    if (aiResponse) {
 console.log('[Grumpy Bot] Using AI response');
-    return `[AI] ${aiResponse}`;
+      return `[AI] ${aiResponse}`;
+    }
   }
 
-  // Fall back to rule-based
+  // Fall back to rule-based (always works, no API keys needed)
 console.log('[Grumpy Bot] Using rule-based response');
-  return `[RB] ${getRuleBasedResponse(userMessage)}`;
+  return `[RB] ${getRuleBasedResponse(userMessage, context)}`;
 }
+
+export const DEFAULT_AI_CONFIG: AIProviderConfig = {
+  provider: 'openrouter',
+  modelName: '',
+  temperature: 0.9,
+  systemPrompt: GRUMPY_SYSOP_PERSONALITY
+};
 
 /**
  * Initialize message when bot takes over

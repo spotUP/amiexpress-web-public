@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { T, BlessedText, BlessedSpinner } from '../theme/blessed-theme.js';
+import { T } from '../theme/blessed-theme.js';
 
 interface Props {
   error: string | null;
@@ -12,40 +12,10 @@ export function LoginPrompt({ error, loading, onLogin }: Props) {
   const [field, setField] = useState<'username' | 'password'>('username');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [backendReady, setBackendReady] = useState(false);
-  const [dots, setDots] = useState('');
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const check = async () => {
-      try {
-        const url = (process.env['AMIEXPRESS_URL'] ?? 'http://localhost:3001') + '/health';
-        const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
-        if (!cancelled && res.ok) {
-          setBackendReady(true);
-          if (pollRef.current) clearInterval(pollRef.current);
-        }
-      } catch {
-        // not ready yet
-      }
-    };
-    check();
-    pollRef.current = setInterval(check, 2000);
-    return () => { cancelled = true; if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
-
-  // Animate the spinner + dots while waiting
-  useEffect(() => {
-    if (backendReady) return;
-    const id = setInterval(() => {
-      setDots(d => d.length >= 3 ? '' : d + '.');
-    }, 250);
-    return () => clearInterval(id);
-  }, [backendReady]);
+  const dots = useDots();
 
   useInput((input, key) => {
-    if (loading || !backendReady) return;
+    if (loading) return;
 
     if (key.return) {
       if (field === 'username') {
@@ -70,33 +40,12 @@ export function LoginPrompt({ error, loading, onLogin }: Props) {
     }
   });
 
-  // Fixed-width input: pad to 30 chars so layout never shifts.
-  // Blinking `_` cursor avoids the full-width █ wrapping bug in some terminals.
   const FIELD_W = 30;
-  const cursorChar = '_';
   const renderField = (value: string, active: boolean) => {
-    const cursor = active ? cursorChar : ' ';
+    const cursor = active ? '_' : ' ';
     const padded = (value + cursor).padEnd(FIELD_W + 1, ' ');
     return <Text>{padded}</Text>;
   };
-
-  if (!backendReady) {
-    return (
-      <Box flexDirection="column" alignItems="center" justifyContent="center">
-        <Box flexDirection="column" borderStyle="single" borderColor={T.accent} padding={2} width={52}>
-          <Text bold color={T.accent}>AmiExpress-Web Console</Text>
-          <Text color={T.dim}>Ultra Vibed by Spot/Up Rough</Text>
-          <Box marginTop={1} />
-          <Box flexDirection="row" gap={1}>
-            <Text color={T.accent}>Waiting for backend{dots}</Text>
-          </Box>
-          <Box marginTop={1} />
-          <Text color={T.dim}>The BBS server is starting up. Login will</Text>
-          <Text color={T.dim}>appear automatically when it is ready.</Text>
-        </Box>
-      </Box>
-    );
-  }
 
   return (
     <Box flexDirection="column" alignItems="center" justifyContent="center">
@@ -123,7 +72,7 @@ export function LoginPrompt({ error, loading, onLogin }: Props) {
         )}
         {loading && (
           <Box marginTop={1}>
-            <Text color={T.accent}>Authenticating...</Text>
+            <Text color={T.accent}>Authenticating{dots}</Text>
           </Box>
         )}
 
@@ -133,4 +82,13 @@ export function LoginPrompt({ error, loading, onLogin }: Props) {
       </Box>
     </Box>
   );
+}
+
+function useDots(): string {
+  const [dots, setDots] = useState('');
+  useEffect(() => {
+    const id = setInterval(() => setDots(d => d.length >= 3 ? '' : d + '.'), 250);
+    return () => clearInterval(id);
+  }, []);
+  return dots;
 }

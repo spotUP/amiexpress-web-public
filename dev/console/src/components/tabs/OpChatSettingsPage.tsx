@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getOperatorChatConfig, updateOperatorChatConfig } from '../../api/client.js';
+import { T } from '../../theme/blessed-theme.js';
+import { ToggleSwitch } from '../shared/InlineEdit.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
 
 const ITEMS_START_ROW = 7;
@@ -9,22 +11,36 @@ const ITEMS_START_ROW = 7;
 interface Field {
   key: string;
   label: string;
-  type: 'string' | 'number';
+  type: 'string' | 'number' | 'bool' | 'select';
+  options?: string[];
 }
 
-// Backend uses camelCase fields nested under data.
 const FIELDS: Field[] = [
-  { key: 'pageTimeout',      label: 'Page Timeout (s)',  type: 'number' },
-  { key: 'pageCooldown',     label: 'Cooldown (s)',      type: 'number' },
-  { key: 'maxActivePages',   label: 'Max Active Pages',  type: 'number' },
-  { key: 'discordWebhook',   label: 'Discord Webhook',   type: 'string' },
-  { key: 'discordUserId',    label: 'Discord User ID',   type: 'string' },
+  // General
+  { key: 'pageTimeout',     label: 'Page Timeout (s)',     type: 'number' },
+  { key: 'pageCooldown',    label: 'Cooldown (s)',         type: 'number' },
+  { key: 'maxActivePages',  label: 'Max Active Pages',     type: 'number' },
+  // Discord
+  { key: 'discordWebhook',  label: 'Discord Webhook',      type: 'string' },
+  { key: 'discordUserId',   label: 'Discord User ID',      type: 'string' },
+  // AI
+  { key: 'aiEnabled',       label: 'AI Bot Enabled',       type: 'bool' },
+  { key: 'aiProvider',      label: 'AI Provider',          type: 'select', options: ['openrouter', 'groq', 'gemini', 'rule-based'] },
+  { key: 'aiModelName',     label: 'AI Model Name',        type: 'string' },
+  { key: 'aiTemperature',   label: 'AI Temperature',       type: 'number' },
+  { key: 'aiSystemPrompt',  label: 'AI System Prompt',     type: 'string' },
 ];
 
 type Mode = 'list' | 'edit';
 
-function fmtVal(val: unknown): string {
+function fmtVal(val: unknown, field: Field): string {
   if (val === undefined || val === null) return '—';
+  if (field.type === 'bool') return val ? 'on' : 'off';
+  if (field.type === 'select') return String(val);
+  if (field.key === 'aiSystemPrompt') {
+    const s = String(val);
+    return s.length > 40 ? s.slice(0, 39) + '…' : s || '(default)';
+  }
   return String(val);
 }
 
@@ -52,73 +68,90 @@ export function OpChatSettingsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const selected = FIELDS[selectedIdx];
   const dirty = Object.keys(pending).length > 0;
 
-  // Allow click to select a field
   useRowClick(FIELDS.length, ITEMS_START_ROW, setSelectedIdx, mode === 'list');
+
+  const doSave = useCallback(async (patch: Record<string, unknown>) => {
+    setSaving(true);
+    try {
+      await updateOperatorChatConfig(patch);
+      setStatus('Saved');
+      setPending({});
+      await load();
+    } catch (e: unknown) {
+      setStatus(`Error: ${e instanceof Error ? e.message : 'Save failed'}`);
+    } finally {
+      setSaving(false);
+    }
+  }, [load]);
+
+  const handleBoolToggle = useCallback(() => {
+    if (!selected || selected.type !== 'bool') return;
+    const cur = (pending[selected.key] ?? (config as any)?.[selected.key]) as boolean | undefined;
+    const newVal = cur === true ? false : true;
+    setPending(p => ({ ...p, [selected.key]: newVal }));
+    doSave({ [selected.key]: newVal });
+  }, [selected, config, pending, doSave]);
+
+  const handleSelectCycle = useCallback(() => {
+    if (!selected || selected.type !== 'select' || !selected.options) return;
+    const cur = (pending[selected.key] ?? (config as any)?.[selected.key]) as string;
+    const idx = selected.options.indexOf(cur);
+    const next = selected.options[(idx + 1) % selected.options.length]!;
+    setPending(p => ({ ...p, [selected.key]: next }));
+    doSave({ [selected.key]: next });
+  }, [selected, config, pending, doSave]);
 
   useInput((input, key) => {
     if (mode === 'edit') {
-      if (key.escape) {
-        setMode('list');
-        return;
-      }
+      if (key.escape) { setMode('list'); return; }
       if (key.return) {
         if (selected) {
+          const t = selected.type;
           let parsed: unknown = editValue;
-          if (selected.type === 'number') {
+          if (t === 'number') {
             const n = parseFloat(editValue);
             parsed = isNaN(n) ? 0 : n;
           }
           setPending(p => ({ ...p, [selected.key]: parsed }));
+          doSave({ [selected.key]: parsed });
         }
         setMode('list');
         return;
       }
-      if (key.backspace || key.delete) {
-        setEditValue(v => v.slice(0, -1));
-        return;
-      }
-      if (input && !key.ctrl && !key.meta) {
-        setEditValue(v => v + input);
-      }
+      if (key.backspace || key.delete) { setEditValue(v => v.slice(0, -1)); return; }
+      if (input && !key.ctrl && !key.meta) setEditValue(v => v + input);
       return;
     }
 
     if (key.upArrow) setSelectedIdx(i => Math.max(0, i - 1));
     if (key.downArrow) setSelectedIdx(i => Math.min(FIELDS.length - 1, i + 1));
-    if (input === 'e' && selected) {
+    if (key.return && selected) {
+      if (selected.type === 'bool') { handleBoolToggle(); return; }
+      if (selected.type === 'select') { handleSelectCycle(); return; }
       const cur = (pending[selected.key] ?? (config as any)?.[selected.key]);
       setEditValue(cur === undefined || cur === null ? '' : String(cur));
       setMode('edit');
+      return;
     }
     if (input === 's' && dirty && !saving) {
-      setSaving(true);
-      updateOperatorChatConfig(pending)
-        .then(() => {
-          setStatus('Saved');
-          setPending({});
-          load();
-        })
-        .catch((e: Error) => setStatus(`Error: ${e.message}`))
-        .finally(() => setSaving(false));
+      doSave(pending);
     }
     if (input === 'r') load();
     if (input === 'R') setPending({});
   });
 
-  if (loading) return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading config...</Text></Box>;
-  if (error) return <Text color="red">Error: {error}</Text>;
+  if (loading) return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading config...</Text></Box>;
+  if (error) return <Text color={T.alert}>Error: {error}</Text>;
 
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="cyan">OPERATOR CHAT SETTINGS</Text>
+        <Text bold color={T.accent}>OPERATOR CHAT SETTINGS</Text>
         <Text dimColor>  ({FIELDS.length} fields, {dirty ? `${Object.keys(pending).length} pending` : 'clean'})</Text>
       </Box>
 
@@ -126,37 +159,47 @@ export function OpChatSettingsPage() {
         const isSel = i === selectedIdx;
         const isPending = f.key in pending;
         const val = isPending ? pending[f.key] : (config as any)?.[f.key];
+        const masked = f.key === 'aiSystemPrompt';
         return (
           <Box key={f.key}>
-            <Text color={isSel ? 'cyan' : isPending ? 'yellow' : 'white'} bold={isSel}>
-              {isSel ? '▶ ' : '  '}
-              {f.label.padEnd(22)}
-              {isPending ? '* ' : '  '}
-            </Text>
-            <Text color={isPending ? 'yellow' : 'white'}>
-              {fmtVal(val)}
-            </Text>
+            <Box flexDirection="row" alignItems="center">
+              <Text color={T.ink} bold={isSel} inverse={isSel}>
+                {isSel ? '▶ ' : '  '}
+              </Text>
+              <Text color={isPending ? T.warn : T.dim} inverse={isSel}>{f.label.padEnd(24)}</Text>
+              {f.type === 'bool' ? (
+                <ToggleSwitch value={!!val} disabled={!isSel || saving} />
+              ) : f.type === 'select' ? (
+                <Text color={isPending ? T.warn : T.ink} inverse={isSel}>
+                  {String(val ?? '—')}{isSel ? ' (enter to cycle)' : ''}
+                </Text>
+              ) : (
+                <Text color={masked ? T.dim : isPending ? T.warn : T.ink} inverse={isSel}>
+                  {fmtVal(val, f)}
+                </Text>
+              )}
+            </Box>
           </Box>
         );
       })}
 
       {saving && (
         <Box marginTop={1}>
-          <Text color="yellow"><Spinner type="dots" /></Text>
+          <Text color={T.warn}><Spinner type="dots" /></Text>
           <Text> Saving...</Text>
         </Box>
       )}
 
-      {status && <Box marginTop={1}><Text color="green">{status}</Text></Box>}
+      {status && <Box marginTop={1}><Text color={T.ok}>{status}</Text></Box>}
 
-      {mode === 'edit' && selected && (
-        <Box marginTop={1} flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1}>
-          <Text color="cyan">Edit {selected.label} ({selected.type}):</Text>
+      {mode === 'edit' && selected && selected.type === 'string' && (
+        <Box marginTop={1} flexDirection="column" borderStyle="round" borderColor={T.warn} paddingX={1}>
+          <Text color={T.accent}>Edit {selected.label}:</Text>
           <Box>
             <Text>{'> '}</Text>
             <Text>{editValue}█</Text>
           </Box>
-          <Text dimColor>[enter] commit  [esc] cancel</Text>
+          <Text dimColor>[enter] save  [esc] cancel</Text>
         </Box>
       )}
     </Box>

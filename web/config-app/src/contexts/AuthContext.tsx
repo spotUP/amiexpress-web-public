@@ -32,7 +32,8 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  secLevel: number;
+  login: (username: string, password: string, rememberMe?: boolean) => Promise<void>;
   logout: () => void;
 }
 
@@ -125,9 +126,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', handleStorage);
   }, [refreshUserFromToken]);
 
-  const login = async (username: string, password: string) => {
-    // No try/catch: it only rethrew. The caller (LoginPage) shows the message.
-    const data = await apiClient.login(username, password);
+  const login = async (username: string, password: string, rememberMe = false) => {
+    const data = await apiClient.login(username, password, rememberMe);
     if (data?.user) {
       setUser(data.user);
       persistUser(data.user);
@@ -146,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isAuthenticated: !!user,
         isLoading,
+        secLevel: user?.secLevel ?? 0,
         login,
         logout,
       }}

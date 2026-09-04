@@ -14,6 +14,7 @@ import { HealthCheckPage } from './components/tabs/HealthCheckPage.js';
 import { AuditLogPage } from './components/tabs/AuditLogPage.js';
 import { SessionLogsPage } from './components/tabs/SessionLogsPage.js';
 import { OperatorChatPage } from './components/tabs/OperatorChatPage.js';
+import { OpChatSettingsPage } from './components/tabs/OpChatSettingsPage.js';
 import { LanguagesPage } from './components/tabs/LanguagesPage.js';
 import { ProtocolsPage } from './components/tabs/ProtocolsPage.js';
 import { ComputersPage } from './components/tabs/ComputersPage.js';
@@ -50,7 +51,8 @@ const PAGE_COMPONENTS: Record<string, React.FC | undefined> = {
   overview:       DashboardTab,
   activity:       ActivityPage,
   nodes:          NodesTab,
-  'operator-chat': OperatorChatPage,
+  'operator-chat':   OperatorChatPage,
+  'opchat-settings': OpChatSettingsPage,
   // People
   users:          UsersTab,
   security:       SecurityPage,

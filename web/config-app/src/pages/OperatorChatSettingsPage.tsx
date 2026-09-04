@@ -28,6 +28,11 @@ interface OperatorChatConfig {
     endMinute: number;
     customMessage?: string;
   };
+  aiEnabled: boolean;
+  aiProvider: 'groq' | 'gemini' | 'openrouter' | 'rule-based';
+  aiModelName: string;
+  aiTemperature: number;
+  aiSystemPrompt: string;
 }
 
 export function OperatorChatSettingsPage() {
@@ -52,7 +57,7 @@ export function OperatorChatSettingsPage() {
     queryFn: () => apiClient.getAcsLevels(),
   });
 
-  const { register, watch, getValues } = useForm<OperatorChatConfig>({
+  const { register, watch, getValues, setValue } = useForm<OperatorChatConfig>({
     values: config,
   });
 
@@ -345,7 +350,15 @@ export function OperatorChatSettingsPage() {
                   <input
                     type="checkbox"
                     value={level.value}
-                    {...register('allowedSecLevels')}
+                    checked={getValues('allowedSecLevels')?.includes(level.value) ?? false}
+                    onChange={(e) => {
+                      const current = getValues('allowedSecLevels') || [];
+                      if (e.target.checked) {
+                        setValue('allowedSecLevels', [...current, level.value]);
+                      } else {
+                        setValue('allowedSecLevels', current.filter(v => v !== level.value));
+                      }
+                    }}
                     className="w-4 h-4"
                   />
                   {level.label}
@@ -739,37 +752,77 @@ export function OperatorChatSettingsPage() {
           </div>
         </section>
 
-        {/* Grumpy Bot Settings */}
+        {/* AI Bot Settings */}
         <section className="bg-surface-1 border border-border rounded-lg p-6">
           <h2 className="text-xl font-semibold text-content-primary mb-4 flex items-center gap-2">
             <Bot className="w-5 h-5" />
-            Grumpy Bot Settings
+            AI Bot Settings
           </h2>
 
           <div className="space-y-4">
             <div className="bg-status-warn/10 border border-status-warn/50 rounded p-3">
               <p className="text-sm text-status-warn">
-                <strong>Note:</strong> The grumpy bot automatically activates when a page times out.
-                It types naturally with occasional typos for a more human-like experience.
+                <strong>Note:</strong> The AI bot automatically activates when a page times out.
+                Configure which AI provider to use, or choose "Rule-based only" to use the
+                built-in response patterns. API keys are set via environment variables:
+                <code className="ml-1 px-1 bg-surface-0 rounded">GROQ_API_KEY</code>,
+                <code className="px-1 bg-surface-0 rounded">GEMINI_API_KEY</code>,
+                <code className="px-1 bg-surface-0 rounded">OPENROUTER_API_KEY</code>.
               </p>
             </div>
 
-            <div className="text-sm text-content-secondary space-y-1">
-              <p>- <strong>Typing Speed:</strong> 40-180ms per character (variable)</p>
-              <p>• <strong>Typo Rate:</strong> 8% chance per character</p>
-              <p>• <strong>Typo Correction:</strong> 300ms pause, then backspace and correct</p>
-              <p>• <strong>Personality:</strong> Grumpy 1990s BBS sysop with Amiga nostalgia</p>
+            {/* Enable AI */}
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" {...register('aiEnabled')} className="w-4 h-4" />
+              <div>
+                <span className="text-sm font-medium text-content-primary">Enable AI Bot</span>
+                <p className="text-xs text-content-secondary">When disabled, only rule-based responses are used</p>
+              </div>
+            </label>
+
+            {/* Provider */}
+            <div>
+              <label className="block text-sm font-medium text-content-primary mb-1">AI Provider</label>
+              <select {...register('aiProvider')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded">
+                <option value="openrouter">OpenRouter (auto-discovers free models)</option>
+                <option value="groq">Groq (fast, Llama 3.1 8B)</option>
+                <option value="gemini">Google Gemini (good quality, 1.5 Flash)</option>
+                <option value="rule-based">Rule-based only (no API key needed)</option>
+              </select>
+              <p className="text-xs text-content-secondary mt-1">Select which AI provider to use. When a provider-specific model is set below, it overrides the default.</p>
+            </div>
+
+            {/* Model Name */}
+            <div>
+              <label className="block text-sm font-medium text-content-primary mb-1">Model Name (optional)</label>
+              <input type="text" {...register('aiModelName')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded" placeholder="Leave empty for provider default" />
+              <p className="text-xs text-content-secondary mt-1">Override the default model for the selected provider. For OpenRouter, you can specify any model ID from openrouter.ai/models.</p>
+            </div>
+
+            {/* Temperature */}
+            <div>
+              <label className="block text-sm font-medium text-content-primary mb-1">Temperature: {watch('aiTemperature') ?? 0.9}</label>
+              <input type="range" min="0" max="2" step="0.1" {...register('aiTemperature', { valueAsNumber: true })} className="w-full" />
+              <div className="flex justify-between text-xs text-content-secondary">
+                <span>0 (deterministic)</span>
+                <span>1 (balanced)</span>
+                <span>2 (creative)</span>
+              </div>
+            </div>
+
+            {/* System Prompt */}
+            <div>
+              <label className="block text-sm font-medium text-content-primary mb-1">System Prompt / Personality</label>
+              <textarea {...register('aiSystemPrompt')} rows={6} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="Leave empty for default grumpy sysop personality" />
+              <p className="text-xs text-content-secondary mt-1">Custom system prompt that defines the bot's personality and behavior. Leave empty to use the default grumpy 1990s sysop personality.</p>
             </div>
 
             <div className="bg-surface-0 border border-border rounded p-3">
-              <p className="text-sm font-medium text-content-primary mb-2">Bot Personality Traits:</p>
-              <ul className="text-sm text-content-secondary space-y-1 list-disc list-inside">
-                <li>Veteran sysop since 1989, seen everything</li>
-                <li>Complains about newbies but eventually helps</li>
-                <li>Uses 90s BBS slang (warez, elite, phreaking)</li>
-                <li>Proud of Amiga 4000, dislikes "IBM clone trash"</li>
-                <li>References FidoNet, TradeWars, Legend of the Red Dragon</li>
-              </ul>
+              <p className="text-sm font-medium text-content-primary mb-2">Fallback Chain:</p>
+              <ol className="text-sm text-content-secondary space-y-1 list-decimal list-inside">
+                <li>Configured provider (or cascade: Groq → Gemini → OpenRouter if set to cascade)</li>
+                <li>Rule-based patterns (built-in, works without any API key)</li>
+              </ol>
             </div>
           </div>
         </section>

@@ -41,7 +41,7 @@ export class AuthHandler {
    */
   async login(req: Request, res: Response): Promise<void> {
     try {
-      const { username, password } = req.body;
+      const { username, password, rememberMe } = req.body;
       const safeUsername = sanitizeInput(username);
 
       if (!safeUsername || !password) {
@@ -62,8 +62,8 @@ export class AuthHandler {
         return;
       }
 
-      if (user.secLevel < 255) {
-        res.status(403).json({ error: 'Sysop access required' });
+      if (user.secLevel < 10) {
+        res.status(403).json({ error: 'Access denied' });
         return;
       }
 
@@ -74,9 +74,9 @@ export class AuthHandler {
         callsToday: user.callsToday + 1
       });
 
-      // Generate tokens
+      // Generate tokens — longer refresh lifetime when rememberMe is set
       const accessToken = await this.db.generateAccessToken(user);
-      const refreshToken = await this.db.generateRefreshToken(user);
+      const refreshToken = await this.db.generateRefreshToken(user, !!rememberMe);
 
       const publicUser = this.toPublicUser(user);
       res.json({

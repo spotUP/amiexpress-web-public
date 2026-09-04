@@ -27,7 +27,7 @@ import {
 import { OperatorChatRepository } from '../database/operator-chat.repository';
 import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
-import { getGrumpySysopResponse, getGrumpyBotIntroMessage } from './grumpy-sysop-bot.handler';
+import { getGrumpySysopResponse, getGrumpyBotIntroMessage, type AIProviderConfig, DEFAULT_AI_CONFIG } from './grumpy-sysop-bot.handler';
 import {
   renderPicker,
   handlePickerInput,
@@ -222,7 +222,7 @@ console.log(`[Operator Chat] Sysop ${session.user.username} set status to ${data
   // Start page timeout checker
   setInterval(() => {
     checkPageTimeouts(io, repository);
-  }, 10000); // Check every 10 seconds
+  }, 1000); // Check every 1 second for tight bot takeover
 }
 
 /**
@@ -693,6 +693,140 @@ console.log(`[Operator Chat] Page ${pageId} accepted by ${sysopHandle}`);
 }
 
 /**
+ * Send bot message with natural typing simulation to the Amiga user.
+ * Admin Socket.IO clients get the full message immediately.
+ */
+async function sendBotMessageWithTyping(
+  io: any,
+  repository: OperatorChatRepository,
+  pageId: string,
+  message: string,
+  nodeId: number,
+  page: any
+): Promise<void> {
+  const chatSession = activeChatSessions.get(pageId);
+  if (!chatSession) return;
+
+  // Save message + emit to Socket.IO admin clients immediately
+  const chatMessage: ChatMessage = {
+    id: '',
+    pageId,
+    senderId: 'bot',
+    senderHandle: 'GrumpyBot',
+    senderType: 'sysop',
+    message,
+    timestamp: getSystemTime(),
+    nodeId
+  };
+
+  const saved = repository.addChatMessage(chatMessage);
+  chatSession.messages.push(saved);
+  chatSession.lastActivity = getSystemTime();
+
+  io.to(`page:${pageId}`).emit('operator:message', {
+    ...saved,
+    timestamp: saved.timestamp.getTime()
+  });
+
+  // Simulate natural typing for the Amiga user: human-like 40-180ms/char
+  const color = '36';
+  const wordWrap = (s: string, w: number) => {
+    const lines: string[] = [];
+    let cur = '';
+    for (const word of s.split(' ')) {
+      if ((cur + ' ' + word).trim().length > w) { lines.push(cur.trim()); cur = word; }
+      else cur += (cur ? ' ' : '') + word;
+    }
+    if (cur.trim()) lines.push(cur.trim());
+    return lines;
+  };
+
+  const wrappedLines = wordWrap(message, 79);
+  let output = '\x1b7';
+
+  for (let li = 0; li < wrappedLines.length; li++) {
+    const line = wrappedLines[li];
+    // Send each character with natural typing delay
+    for (let ci = 0; ci < line.length; ci++) {
+      const delay = 40 + Math.random() * 140; // 40-180ms per char
+      await new Promise(r => setTimeout(r, delay));
+
+      // 8% typo chance: insert a wrong char, pause, backspace, correct
+      if (Math.random() < 0.08 && ci < line.length - 1) {
+        const typo = String.fromCharCode(97 + Math.floor(Math.random() * 26));
+        io.to(`user:${page.userId}`).emit('ansi-output', `\x1b[${color}m${typo}\x1b[0m`);
+        await new Promise(r => setTimeout(r, 300 + Math.random() * 200));
+        io.to(`user:${page.userId}`).emit('ansi-output', '\b \b');
+        await new Promise(r => setTimeout(r, 100 + Math.random() * 100));
+      }
+
+      io.to(`user:${page.userId}`).emit('ansi-output', `\x1b[${color}m${line[ci]!}\x1b[0m`);
+    }
+    io.to(`user:${page.userId}`).emit('ansi-output', '\r\n');
+    await new Promise(r => setTimeout(r, 200 + Math.random() * 300));
+  }
+
+  // End with double enter to signal turn is done
+  await new Promise(r => setTimeout(r, 300));
+  io.to(`user:${page.userId}`).emit('ansi-output', '\r\n');
+  io.to(`user:${page.userId}`).emit('ansi-output', '\x1b8');
+}
+
+/**
+ * Process bot message queue — respond to messages that arrived while bot was typing
+ */
+function processBotQueue(
+  io: any,
+  repository: OperatorChatRepository,
+  pageId: string,
+  chatSession: any
+): void {
+  const session = activeChatSessions.get(pageId);
+  if (!session) return;
+
+  const queue = chatSession.botQueue || [];
+  chatSession.botQueue = [];
+  if (queue.length === 0) return;
+
+  // Take the last message (most recent — skip accumulated intermediate messages)
+  const lastMsg = queue[queue.length - 1]!;
+  const page = repository.getPageRequest(pageId);
+  if (!page) return;
+
+  const context = {
+    userHandle: page.userHandle,
+    nodeId: page.nodeId,
+    conferenceName: page.conferenceName,
+    timeOnline: Math.floor((Date.now() - page.createdAt.getTime()) / 1000),
+    messageHistory: chatSession.botMessageHistory || []
+  };
+  context.messageHistory.push({ role: 'user', content: lastMsg });
+  chatSession.botMessageHistory = context.messageHistory;
+
+  chatSession.botBusy = true;
+  const config = repository.getConfig();
+  const aiConfig: AIProviderConfig = {
+    provider: config.aiEnabled ? config.aiProvider : 'rule-based',
+    modelName: config.aiModelName,
+    temperature: config.aiTemperature,
+    systemPrompt: config.aiSystemPrompt
+  };
+
+  // Update the status message for the user
+  getGrumpySysopResponse(lastMsg, context, aiConfig).then(async botResponse => {
+    context.messageHistory.push({ role: 'bot', content: botResponse });
+    chatSession.botMessageHistory = context.messageHistory;
+    await sendBotMessageWithTyping(io, repository, pageId, botResponse, page.nodeId, page);
+    chatSession.botBusy = false;
+    // Recurse — process any more queued messages
+    processBotQueue(io, repository, pageId, chatSession);
+  }).catch(err => {
+console.error('[Operator Chat] Bot queue response error:', err);
+    chatSession.botBusy = false;
+  });
+}
+
+/**
  * Send chat message
  * Linear style: Just raw text with color codes, no timestamps
  */
@@ -735,6 +869,15 @@ async function sendChatMessage(
   // message before responding, which is non-obvious; users typed a question
   // and waited indefinitely.
   if ((chatSession as any).isBotControlled && senderType === 'user' && message.trim() !== '') {
+    // Skip if bot is already typing
+    if ((chatSession as any).botBusy) {
+console.log('[Operator Chat] Bot busy, queuing message');
+      if (!(chatSession as any).botQueue) (chatSession as any).botQueue = [];
+      (chatSession as any).botQueue.push(message);
+      return;
+    }
+
+    (chatSession as any).botBusy = true;
     const page = repository.getPageRequest(pageId);
     if (page) {
       const context = {
@@ -747,16 +890,25 @@ async function sendChatMessage(
       context.messageHistory.push({ role: 'user', content: message });
       (chatSession as any).botMessageHistory = context.messageHistory;
 
-      getGrumpySysopResponse(message, context).then(botResponse => {
+      const config = repository.getConfig();
+      const aiConfig: AIProviderConfig = {
+        provider: config.aiEnabled ? config.aiProvider : 'rule-based',
+        modelName: config.aiModelName,
+        temperature: config.aiTemperature,
+        systemPrompt: config.aiSystemPrompt
+      };
+
+      getGrumpySysopResponse(message, context, aiConfig).then(async botResponse => {
         context.messageHistory.push({ role: 'bot', content: botResponse });
         (chatSession as any).botMessageHistory = context.messageHistory;
-        // Persist + emit immediately. The previous 0.5-1.0s setTimeout +
-        // simulateNaturalTyping (20-80ms/char with typo simulation) added
-        // 3-5s of artificial latency on top of the LLM round-trip; express.e
-        // has no such delay — sysop chars echo at line speed.
-        sendChatMessage(io, repository, pageId, 'bot', 'GrumpyBot', 'sysop', botResponse, nodeId);
+        await sendBotMessageWithTyping(io, repository, pageId, botResponse, nodeId, page);
+        (chatSession as any).botBusy = false;
+
+        // Process any queued messages
+        processBotQueue(io, repository, pageId, chatSession as any);
       }).catch(err => {
 console.error('[Operator Chat] Bot response error:', err);
+        (chatSession as any).botBusy = false;
       });
     }
   }

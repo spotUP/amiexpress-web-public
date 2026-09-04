@@ -52,11 +52,33 @@ export const requireSysop = () => {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    // Sysop level is typically 255 in AmiExpress
     if (req.user.secLevel < 255) {
       return res.status(403).json({
         error: 'Sysop access required',
         message: 'This operation requires sysop-level privileges'
+      });
+    }
+
+    next();
+  };
+};
+
+/**
+ * Middleware to require a minimum security level.
+ * Must be used after authenticateToken.
+ *
+ * Usage: `requireLevel(100)` for screen editors, `requireLevel(255)` for full sysop.
+ */
+export const requireLevel = (minLevel: number) => {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    if (req.user.secLevel < minLevel) {
+      return res.status(403).json({
+        error: 'Access denied',
+        message: `This operation requires security level ${minLevel} or higher`
       });
     }
 

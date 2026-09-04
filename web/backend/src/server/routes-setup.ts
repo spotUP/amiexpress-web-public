@@ -22,7 +22,7 @@ import { db } from '../database';
 import { config } from '../config';
 import { AuthHandler } from '../handlers/user/auth.handler';
 import { SessionLogsHandler } from '../handlers/admin/session-logs.handler';
-import { authenticateToken, requireSysop, AuthRequest } from '../middleware/auth.middleware';
+import { authenticateToken, requireSysop, requireLevel, AuthRequest } from '../middleware/auth.middleware';
 import { createConfigRouter } from '../api/config-routes';
 import { createBatchRouter } from '../api/batch-routes';
 import { createImportRouter } from '../handlers/admin/import.handler';
@@ -105,7 +105,7 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
 
   // ===== Authentication Routes =====
   app.post('/auth/login', (req: Request, res: Response) => authHandler.login(req, res));
-  app.get('/auth/me', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
+  app.get('/auth/me', authenticateToken(db), (req: Request, res: Response) =>
     authHandler.me(req as AuthRequest, res)
   );
   app.post('/auth/register', (req: Request, res: Response) => authHandler.register(req, res));
@@ -144,9 +144,9 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   const { infoEditorRouter } = require('../api/info-editor-routes');
   app.use('/api/info-editor', authenticateToken(db), requireSysop(), infoEditorRouter);
 
-  // ===== Screen Files API - Sysop-only Routes =====
+  // ===== Screen Files API - Screen-editor level required =====
   const { screensRouter } = require('../api/screens-routes');
-  app.use('/api/screens', authenticateToken(db), requireSysop(), screensRouter);
+  app.use('/api/screens', authenticateToken(db), requireLevel(100), screensRouter);
 
   // ===== Chat API - Public Routes (for web chat authentication) =====
   const chatRouter = createChatRouter(db);

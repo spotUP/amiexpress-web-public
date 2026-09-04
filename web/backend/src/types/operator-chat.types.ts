@@ -127,6 +127,12 @@ export interface OperatorChatConfig {
   allowedSecLevels: number[];      // Security levels allowed to page (default: all)
   notifyOnPage: boolean;           // Show in-system notifications when users page
   notifyDiscord: boolean;          // Send Discord notifications via webhook
+  // AI bot configuration
+  aiEnabled: boolean;              // Enable AI bot on timeout
+  aiProvider: 'groq' | 'gemini' | 'openrouter' | 'rule-based'; // AI provider
+  aiModelName: string;             // Override model name (empty = provider default)
+  aiTemperature: number;           // Temperature 0-2 (default 0.9)
+  aiSystemPrompt: string;          // Override system prompt/personality
 }
 
 /**

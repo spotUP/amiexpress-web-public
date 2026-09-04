@@ -273,16 +273,14 @@ class ApiClient {
   }
 
   // Authentication
-  async login(username: string, password: string) {
+  async login(username: string, password: string, rememberMe = false) {
     const response = await this.request<{ accessToken: string; refreshToken: string; user: any }>(`${AUTH_BASE}/login`, {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, rememberMe }),
     });
     if (response.accessToken) {
       this.setToken(response.accessToken);
     }
-    // Kept, not discarded: it is what stops an eight-hour access token from
-    // ending a seven-day session.
     writeAdminRefreshToken(response.refreshToken ?? null);
     return { token: response.accessToken, user: response.user };
   }

@@ -2803,14 +2803,15 @@ console.warn('Password verification error:', error);
     return jwt.sign(payload, secret, { expiresIn: '8h' });
   }
 
-  async generateRefreshToken(user: any): Promise<string> {
+  async generateRefreshToken(user: any, rememberMe?: boolean): Promise<string> {
     const secret = process.env.JWT_REFRESH_SECRET || 'amiexpress-refresh-secret-change-in-production';
     const payload = {
       userId: user.id,
       username: user.username
     };
 
-    return jwt.sign(payload, secret, { expiresIn: '7d' });
+    const expiresIn = rememberMe ? '30d' : '7d';
+    return jwt.sign(payload, secret, { expiresIn });
   }
 
   async verifyAccessToken(token: string): Promise<{ userId: string; username: string; secLevel: number }> {

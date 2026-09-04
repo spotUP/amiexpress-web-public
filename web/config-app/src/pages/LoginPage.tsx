@@ -6,6 +6,7 @@ import { LogIn } from 'lucide-react';
 export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -18,7 +19,7 @@ export function LoginPage() {
     setIsLoading(true);
 
     try {
-      await login(username, password);
+      await login(username, password, rememberMe);
       navigate('/admin/system');
     } catch (err: any) {
       setError(err.message || 'Login failed. Please check your credentials.');
@@ -76,6 +77,19 @@ export function LoginPage() {
               />
             </div>
 
+            <div className="flex items-center">
+              <input
+                id="remember-me"
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="h-4 w-4 rounded border-border bg-surface-2 text-accent focus:ring-accent"
+              />
+              <label htmlFor="remember-me" className="ml-2 text-sm text-content-secondary">
+                Remember me for 30 days
+              </label>
+            </div>
+
             <button
               type="submit"
               disabled={isLoading}
@@ -89,7 +103,7 @@ export function LoginPage() {
           {/* Footer */}
           <div className="mt-6 pt-6 border-t border-border">
             <p className="text-xs text-content-secondary text-center">
-              Sysop-level access required
+              Sysop-level access required for full configuration
             </p>
           </div>
         </div>

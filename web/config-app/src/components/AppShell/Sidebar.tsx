@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, LogOut, User } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { ADMIN_BASE, NAV_GROUPS, groupForPath } from './nav-config';
+import { ADMIN_BASE, navItemsForLevel, groupForPath } from './nav-config';
 
 export function Sidebar() {
   const { user, logout } = useAuth();
@@ -18,10 +18,11 @@ export function Sidebar() {
 
   // A collapsed group opens itself when the current page lives inside it, so
   // you are never looking at a sidebar that hides where you are.
+  const visibleGroups = navItemsForLevel(user?.secLevel ?? 0);
   const activeGroupTitle = groupForPath(location.pathname)?.title;
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
-      NAV_GROUPS.filter((group) => group.collapsedByDefault).map((group) => [group.title, true])
+      visibleGroups.filter((group) => group.collapsedByDefault).map((group) => [group.title, true])
     )
   );
 
@@ -38,7 +39,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3">
-        {NAV_GROUPS.map((group) => {
+        {visibleGroups.map((group) => {
           const isCollapsed = collapsed[group.title] && group.title !== activeGroupTitle;
 
           return (

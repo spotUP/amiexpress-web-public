@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { MessageSquare, Clock, User, Hash, Terminal } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { OperatorChatTerminal } from '../components/OperatorChatTerminal';
@@ -58,6 +58,10 @@ export function OperatorChatPage() {
 
   // Initialize Socket.IO connection
   useEffect(() => {
+    // Request notification permission so browser can show alert even when tab is backgrounded
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
     // Get auth token from URL query params (for Discord links) or localStorage (for logged-in admins)
     const urlParams = new URLSearchParams(window.location.search);
     const urlToken = urlParams.get('token');
@@ -129,6 +133,17 @@ export function OperatorChatPage() {
         console.log('[Operator Chat] Adding page to pending list, current count:', prev.length);
         return [...prev, page];
       });
+
+      // Show browser notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification('Operator Page — ' + page.userHandle, {
+            body: `${page.userHandle} on N${page.nodeId} — ${page.conferenceName}`,
+            tag: 'operator-page',
+            requireInteraction: true,
+          });
+        } catch { /* not supported */ }
+      }
 
       // Play notification sound
       const audio = new Audio('/notification.mp3');

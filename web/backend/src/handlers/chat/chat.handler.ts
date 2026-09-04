@@ -18,6 +18,7 @@ import { LoggedOnSubState } from '../../constants/bbs-states';
 
 import { ChatState } from '../../services/use-cases/chat-session.use-case';
 import { getSystemTime } from '../../utils/date-time.util';
+import { db } from '../../database';
 
 // Dependencies that need to be injected externally (circular dependency workaround)
 let executePagerDoor: (socket: any, session: BBSSession, chatSession: ChatSession) => boolean;
@@ -247,9 +248,16 @@ console.log(`Operator paged at ${getSystemTime().toISOString()} by ${session.use
 
     socket.emit('ansi-output', `\r\n${displayTime}\r\n\r\nPaging ${sysopName} (CTRL-C to Abort). .`);
 
-    // Start the paging dots animation - 30 dots over 30 seconds
+    // Match dots duration to the configured operator chat page timeout
     let dotCount = 0;
-    const maxDots = 30;
+    let maxDots = 30;
+    try {
+      const opChatRepo = db.getOperatorChatRepository();
+      const opConfig = opChatRepo.getConfig();
+      maxDots = opConfig.pageTimeout ?? 120;
+    } catch {
+      maxDots = 30;
+    }
 
     const dotInterval = setInterval(() => {
       // express.e:20353-20360 — chatF check happens before anything else
