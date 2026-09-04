@@ -106,6 +106,15 @@ export const NAV_GROUPS: NavGroup[] = [
 export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 
 /**
+ * The hardcoded minimum security level for a given admin path.
+ * Used as fallback when live perms are unavailable (non-sysop users get 403).
+ */
+export function hardcodedMinLevel(path: string): number {
+  const item = NAV_ITEMS.find((i) => i.path === path);
+  return item?.minLevel ?? 255;
+}
+
+/**
  * Filter nav items/groups to only those the given security level can see.
  * Uses live permissions when available, otherwise falls back to hardcoded minLevel.
  * A missing minLevel defaults to 255 (sysop-only).

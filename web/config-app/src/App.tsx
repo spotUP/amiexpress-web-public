@@ -4,6 +4,7 @@ import { useAuth } from './contexts/AuthContext';
 import { AppShell } from './components/AppShell/AppShell';
 import { SkeletonRows } from './components/ui/states';
 import { LEGACY_ROUTES } from './routes/legacy-routes';
+import { hardcodedMinLevel } from './components/AppShell/nav-config';
 import { LoginPage } from './pages/LoginPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { ActivityPage } from './pages/ActivityPage';
@@ -73,7 +74,9 @@ function SysopRoute({ children }: { children: React.ReactNode }) {
 
   // Extract the path segment after /admin/ to look up live permissions
   const routeKey = location.pathname.replace(/^\/admin\//, '').split('/')[0];
-  const minLevel = adminPerms[routeKey] ?? 255;
+  // Live perms loaded from API (may be empty for non-sysop users who get 403).
+  // Fall back to the hardcoded nav-config minLevel when live perms are absent.
+  const minLevel = routeKey in adminPerms ? adminPerms[routeKey] : hardcodedMinLevel(routeKey);
 
   if (secLevel < minLevel) return <Navigate to="/admin/screens" />;
   return <>{children}</>;
