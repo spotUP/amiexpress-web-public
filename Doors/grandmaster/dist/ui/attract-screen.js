@@ -7,6 +7,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AttractScreen = void 0;
+exports.attractModeFor = attractModeFor;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const game_1 = require("../core/game");
 const bot_player_1 = require("../ai/bot-player");
@@ -17,6 +18,17 @@ const screen_shake_1 = require("../effects/screen-shake");
 const particles_1 = require("../effects/particles");
 const transitions_1 = require("../effects/transitions");
 const animations_1 = require("../effects/animations");
+/**
+ * Which attract sequence to run at a given width.
+ *
+ * I/O-free, no blessed, no screen. 'full' is the 80-column boot with the
+ * 5-line full-block ASCII art and rainbow cycle. 'compact' is a single
+ * bold title row, sized for a 40x25 PETSCII canvas. This helper is the
+ * one place the width rule lives, so the test pins it without a terminal.
+ */
+function attractModeFor(width) {
+    return width < 80 ? 'compact' : 'full';
+}
 /**
  * Attract Mode Screen
  *
@@ -165,6 +177,14 @@ class AttractScreen {
      */
     async showBootSequence() {
         this.attractState = 'boot';
+        // The full-block ASCII logo does not translate to PETSCII: each line is
+        // wider than 40 columns and folds mid-row, and the rainbow cycle on a
+        // 40-col canvas is mostly noise. At 40 columns show a single bold row
+        // and go straight to the press-key prompt.
+        if (attractModeFor(this.screen.width) === 'compact') {
+            await this.showCompactBootSequence();
+            return;
+        }
         const logo = [
             '   ██████  ██████   █████  ███    ██ ██████  ',
             '  ██       ██   ██ ██   ██ ████   ██ ██   ██ ',
@@ -244,6 +264,44 @@ class AttractScreen {
         // If key was pressed, exit attract mode immediately to enter game
         if (titleKeyPressed) {
             // Add delay to trap input and prevent it from bleeding through to menu
+            await new Promise(resolve => setTimeout(resolve, 100));
+            this.exit();
+        }
+    }
+    /**
+     * The 40-column boot. Replaces the 5-line full-block ASCII logo and its
+     * 6-colour rainbow cycle with a single bold title row. The PETSCII
+     * canvas has no per-cell background, so the full-block art would print
+     * as the same 'rvs space' in every cell - the visual distinction comes
+     * from foreground colour, which the door sets, but the per-line
+     * rainbow cycle is wasted at 40 columns. The single-row title plus
+     * a press-key prompt is what the SKILL ("One door, three screens")
+     * says fits a C64 canvas.
+     */
+    async showCompactBootSequence() {
+        let titleKeyPressed = false;
+        const titleHandler = () => { titleKeyPressed = true; };
+        setImmediate(() => {
+            this.screen.on('keypress', titleHandler);
+            this.screen.on('mouse', titleHandler);
+        });
+        // Listen for a key, but cap the wait at 10s. C64 callers on a real
+        // serial line have already seen the title by the time the door's
+        // first byte paints; a 10s wait is generous.
+        const startTime = Date.now();
+        const maxTitleWait = 10000;
+        while (this.running && !titleKeyPressed && (Date.now() - startTime < maxTitleWait)) {
+            this.mainBox.setContent('{bold}{yellow-fg}GRANDMASTER{/yellow-fg}{/bold}\n' +
+                '\n' +
+                '{cyan-fg}A Tetris: The Grand Master 3 Tribute{/cyan-fg}\n' +
+                '\n' +
+                '{yellow-fg}{blink}Press any key to start!{/blink}{/yellow-fg}');
+            this.screen.render();
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        this.screen.removeListener('keypress', titleHandler);
+        this.screen.removeListener('mouse', titleHandler);
+        if (titleKeyPressed) {
             await new Promise(resolve => setTimeout(resolve, 100));
             this.exit();
         }

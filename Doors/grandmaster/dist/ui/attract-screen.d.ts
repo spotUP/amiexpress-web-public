@@ -8,6 +8,15 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { SoundEngine } from '../audio/sounds';
 import type { AppState } from '../core/types';
 /**
+ * Which attract sequence to run at a given width.
+ *
+ * I/O-free, no blessed, no screen. 'full' is the 80-column boot with the
+ * 5-line full-block ASCII art and rainbow cycle. 'compact' is a single
+ * bold title row, sized for a 40x25 PETSCII canvas. This helper is the
+ * one place the width rule lives, so the test pins it without a terminal.
+ */
+export declare function attractModeFor(width: number): 'full' | 'compact';
+/**
  * Attract Mode Screen
  *
  * Auto-plays demo gameplay, shows leaderboards, tips, and credits
@@ -65,6 +74,17 @@ export declare class AttractScreen {
      * Show boot sequence animation
      */
     private showBootSequence;
+    /**
+     * The 40-column boot. Replaces the 5-line full-block ASCII logo and its
+     * 6-colour rainbow cycle with a single bold title row. The PETSCII
+     * canvas has no per-cell background, so the full-block art would print
+     * as the same 'rvs space' in every cell - the visual distinction comes
+     * from foreground colour, which the door sets, but the per-line
+     * rainbow cycle is wasted at 40 columns. The single-row title plus
+     * a press-key prompt is what the SKILL ("One door, three screens")
+     * says fits a C64 canvas.
+     */
+    private showCompactBootSequence;
     /**
      * Start demo gameplay
      */

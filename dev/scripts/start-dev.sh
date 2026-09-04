@@ -162,8 +162,8 @@ print_step "Installing dependencies"
 # Backend dependencies
 if [ ! -d "web/backend/node_modules" ]; then
     print_info "Installing backend dependencies..."
-    cd web/backend && npm install &> /dev/null
-    cd ../..
+cd "$PROJECT_ROOT/web/backend"
+    cd ""/..
     print_success "Backend dependencies installed"
 else
     print_success "Backend dependencies already installed"
@@ -171,16 +171,16 @@ fi
 
 # Frontend dependencies
 print_info "Installing/verifying frontend dependencies..."
-cd web/frontend
+cd "$PROJECT_ROOT/web/frontend"
 rm -rf node_modules .vite-temp 2>/dev/null || true
 npm install --include=dev &> /dev/null
-cd ..
+cd "$PROJECT_ROOT"
 print_success "Frontend dependencies installed"
 
 # Step 6: Start backend
 print_step "Starting backend server"
 
-cd web/backend
+cd "$PROJECT_ROOT/web/backend"
 
 # Create log directory
 mkdir -p ../logs
@@ -211,7 +211,7 @@ while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
 done
 echo ""
 
-cd ..
+cd ""
 
 if [ "$BACKEND_READY" = true ]; then
     print_success "Backend is running on http://localhost:3001"
@@ -227,7 +227,7 @@ fi
 # Step 7: Start frontend
 print_step "Starting frontend server"
 
-cd web/frontend
+cd "$PROJECT_ROOT/web/frontend"
 
 print_info "Starting frontend on port 5173..."
 npx vite > ../logs/frontend.log 2>&1 &
@@ -257,7 +257,7 @@ while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
 done
 echo ""
 
-cd ..
+cd ""
 
 if [ "$FRONTEND_READY" = true ]; then
     # Determine which port it's on
