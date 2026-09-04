@@ -33,7 +33,7 @@ NDK  ?= /opt/homebrew/Cellar/m68k-amiga-elf-gcc/13.1.0/m68k-amiga-elf/sys-includ
 VC    = VBCC=$(VBCC) vc
 AMIGA_CFLAGS = +aos68k -c99 -DAMIGA -Iinclude -I"$(VBCC)/targets/m68k-amigaos/include" -I"$(NDK)"
 
-MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_theme
+MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_theme ui_settings json_lite ae_chunk ae_transport_amiga
 AMIGA_OBJS = $(patsubst %,build/amiga/%.o,$(MODULES))
 
 .PHONY: all test amiga lib measure clean
@@ -44,7 +44,7 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_theme
+test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_theme build/test_ui_settings
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
@@ -52,6 +52,7 @@ test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_
 	./build/test_ui_chrome
 	./build/test_ui_input
 	./build/test_ui_theme
+	./build/test_ui_settings
 
 build/test_ae_host: src/ae_host.c tests/test_ae_host.c include/ae_host.h
 	@mkdir -p build
@@ -80,6 +81,10 @@ build/test_ui_input: src/ui_ansi.c src/ui_key.c src/ui_input.c tests/test_ui_inp
 build/test_ui_theme: src/ui_theme.c tests/test_ui_theme.c include/ui_theme.h include/theme_tables.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ui_theme.c tests/test_ui_theme.c -o $@
+
+build/test_ui_settings: src/ui_settings.c src/json_lite.c tests/test_ui_settings.c include/ui_settings.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) -D_DEFAULT_SOURCE src/ui_settings.c src/json_lite.c tests/test_ui_settings.c -o $@
 
 # The generated table must match tokens.ts. Needs node; skipped where there
 # is none, because a C toolchain is not required to have one.
