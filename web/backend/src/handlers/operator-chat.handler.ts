@@ -1040,18 +1040,25 @@ async function endChat(io: any, repository: OperatorChatRepository, pageId: stri
   repository.updatePageStatus(pageId, PageStatus.ENDED);
   await logChatTranscript(repository, chatSession);
 
-  // Simple End Message
-  const endMessage =
-    '\x1b[?25l' + // Hide cursor
-    '\x1b[r' + // Reset scroll region
-    '\x1b[?1000l\x1b[?1006l' + // Disable mouse
-    '\r\n\r\nEnding Chat.\r\n' + // Exact text from express.e
-    '\r\n' +
-    '\x1b[32mPress any key to continue...\x1b[0m' +
-    '\x1b[?25h';
-
   const page = repository.getPageRequest(pageId);
   if (page) {
+    // Return user to menu
+    const userSession = userSessions.get(page.userId);
+    if (userSession) {
+      userSession.subState = LoggedOnSubState.DISPLAY_MENU;
+      userSession.menuPause = true;
+      delete userSession.tempData?.pageId;
+    }
+
+    const endMessage =
+      '\x1b[?25l' +
+      '\x1b[r' +
+      '\x1b[?1000l\x1b[?1006l' +
+      '\r\n\r\nEnding Chat.\r\n' +
+      '\r\n' +
+      '\x1b[32mPress any key to continue...\x1b[0m' +
+      '\x1b[?25h';
+
     io.to(`user:${page.userId}`).emit('ansi-output', endMessage);
   }
 
