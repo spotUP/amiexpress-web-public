@@ -12,6 +12,8 @@
 # - /app/default-data - Default data template (read-only, from image)
 
 set -e
+# Don't exit on errors during sync — the server must always start
+set +e
 
 BBS_DATA_DIR="${BBS_DATA_DIR:-/app/data/bbs}"
 DATABASE_DIR="${DATABASE_DIR:-/app/data/db}"
@@ -109,7 +111,7 @@ fi
 # When in doubt, default to VOLUME-OWNED. False positives in IMAGE-OWNED
 # silently nuke sysop edits.
 
-IMAGE_OWNED_INFO="Doors.info NamesNotAllowed.info Access.info Commands.info Protocols.info Storage.info Private.info HELP.info Utils.info Zoom.info Areas.info AmiXnet.info UUCP.info batch0.info batch1.info batch2.info batch3.info batch4.info batch5.info batch6.info batch000.info Conf.DB"
+IMAGE_OWNED_INFO="Doors.info NamesNotAllowed.info Access.info Commands.info Storage.info Private.info HELP.info Utils.info Zoom.info Areas.info AmiXnet.info UUCP.info batch0.info batch1.info batch3.info batch4.info batch5.info batch6.info batch000.info Conf.DB"
 
 # TRACKED: the image is authoritative until the sysop changes it.
 #
@@ -906,7 +908,5 @@ echo "[Entrypoint] Native dependencies installed for $NATIVE_INSTALL_COUNT doors
 # The main application handles this automatically via new-user.handler.ts
 
 # Execute the main command (typically: npx tsx src/index.ts)
-# Don't exit on errors — let the server handle its own failures
-set +e
 echo "[Entrypoint] Starting BBS server..."
 exec "$@"
