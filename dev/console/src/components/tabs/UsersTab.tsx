@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getUsers, updateUser, deleteUser } from '../../api/client.js';
 import { T } from '../../theme/blessed-theme.js';
+import { ToggleSwitch } from '../shared/InlineEdit.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
 import type { UserRecord } from '../../api/types.js';
@@ -82,6 +83,14 @@ export function UsersTab() {
         else if (pageStart + PAGE < filtered.length) { setPageStart(p => p + PAGE); setSelectedIdx(0); }
       }
       if (input === 'e' && selected) { setEditSlValue(String(getSecLevel(selected))); setMode('edit-sl'); }
+      if (input === 't' && selected) {
+        const id = selected.id ?? selected.username;
+        const isBanned = getSecLevel(selected) === 0;
+        const newSl = isBanned ? 50 : 0;
+        updateUser(id, { secLevel: newSl })
+          .then(() => { setStatus(isBanned ? `${selected.username} unbanned (SL=50)` : `${selected.username} banned`); loadUsers(); })
+          .catch((e: Error) => setStatus(`Error: ${e.message}`));
+      }
       if (input === 'b' && selected) setMode('confirm-ban');
       if (input === 'd' && selected) setMode('confirm-delete');
       if (input === '/') { setSearching(true); setSearchText(''); }
@@ -136,6 +145,14 @@ export function UsersTab() {
       )}
 
       {status && <Box marginTop={1}><Text color={T.ok}>{status}</Text></Box>}
+
+      {selected && mode === 'list' && (
+        <Box marginTop={1} flexDirection="row" gap={2} alignItems="center">
+          <Text color={T.dim}>Ban status:</Text>
+          <ToggleSwitch value={getSecLevel(selected) > 0} />
+          <Text dimColor>[t] toggle  [e] edit SL</Text>
+        </Box>
+      )}
 
       {mode === 'edit-sl' && selected && (
         <Box marginTop={1} flexDirection="column">

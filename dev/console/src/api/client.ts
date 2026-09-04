@@ -144,6 +144,13 @@ export async function reloadDoors() {
   });
 }
 
+export async function updateDoor(id: string | number, updates: Partial<import('./types.js').DoorInfo>) {
+  return request<{ success: boolean; message?: string }>(`/api/config/doors/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+}
+
 export async function getSystemConfig() {
   const res = await request<{ success: boolean; data: import('./types.js').SystemConfig }>('/api/config/system');
   return res.data;
@@ -592,7 +599,116 @@ export async function deleteGlobalWallComment(id: string) {
   return request<{ success: boolean }>(`/api/globalwall/comments/${id}`, { method: 'DELETE' });
 }
 
-// ───── Phase E: Deployment, Info Files, AmiXnet, Op Chat Settings ──
+// ───── Phase F: Screens (full management) ────────────────────────────
+
+export interface ScopeResolution {
+  scope: 'node' | 'conf' | 'board';
+  id: number | null;
+  dir: string;
+  dirIsShared: boolean;
+  file: string | null;
+  variants: string[];
+}
+
+export interface ScreenIndexEntry {
+  screen: string;
+  dirType: string;
+  resolutions: ScopeResolution[];
+  missingScopes: number;
+  duplicateGroups: { sha256: string; paths: string[] }[];
+}
+
+export interface SauceFacts {
+  title: string;
+  author: string;
+  group: string;
+  date: string;
+  font: string;
+  colours: number;
+}
+
+export interface ScreenFileFacts {
+  path: string;
+  bytes: number;
+  format: string;
+  sha256: string;
+  readBy: string[];
+  mci: Array<{ code: string; target: string; resolves: boolean }>;
+  sauce: SauceFacts | null;
+  problems: string[];
+}
+
+export interface ConferenceFacts {
+  id: number;
+  name: string;
+  dir: string;
+  fileAreas: number;
+  messageBases: number;
+}
+
+export interface BulletinFacts {
+  number: number;
+  file: string;
+  title?: string;
+}
+
+export interface ScreenIndex {
+  screens: ScreenIndexEntry[];
+  unused: ScreenFileFacts[];
+  files: Record<string, ScreenFileFacts>;
+  conferences: ConferenceFacts[];
+  bulletins: BulletinFacts[];
+  builtAt: string;
+}
+
+export async function getScreenIndex(): Promise<ScreenIndex> {
+  const res = await request<{ success: boolean; screens: ScreenIndexEntry[]; unused: ScreenFileFacts[]; files: Record<string, ScreenFileFacts>; conferences: ConferenceFacts[]; bulletins: BulletinFacts[]; builtAt: string; [k: string]: unknown }>('/api/screens');
+  return {
+    screens: res.screens ?? [],
+    unused: res.unused ?? [],
+    files: res.files ?? {},
+    conferences: res.conferences ?? [],
+    bulletins: res.bulletins ?? [],
+    builtAt: res.builtAt ?? '',
+  };
+}
+
+export async function getScreenFile(path: string) {
+  const res = await request<{ success: boolean; data: ScreenFileFacts & { content: string } }>(`/api/screens/file?path=${encodeURIComponent(path)}`);
+  return res.data;
+}
+
+export async function putScreenFile(path: string, content: string, targets?: string[]) {
+  return request<{ success: boolean; written: string[] }>('/api/screens/file', {
+    method: 'PUT',
+    body: JSON.stringify({ content, targets }),
+  });
+}
+
+export async function deleteScreenFile(path: string) {
+  return request<{ success: boolean; deleted: boolean; backup: string; stopsResolving: string[] }>(`/api/screens/file?path=${encodeURIComponent(path)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function repairScreenFile(path: string) {
+  return request<{ success: boolean; path: string; backup: string; repaired: number }>('/api/screens/repair', {
+    method: 'POST',
+    body: JSON.stringify({ path }),
+  });
+}
+
+export async function getSharedScreenDirs() {
+  const res = await request<{ success: boolean; directories: Array<{ dir: string; files: string[] }> }>('/api/screens/shared-directories');
+  return res.directories ?? [];
+}
+
+export async function shareScreens(nodes: number[], sharedDir: string, dryRun?: boolean) {
+  return request<{ success: boolean; blocked: string[]; canShare: boolean; wouldWrite: string[]; tooltype: string }>('/api/screens/share', {
+    method: 'POST',
+    body: JSON.stringify({ nodes, sharedDir, dryRun }),
+  });
+}
 
 // Deployment monitoring (read-only)
 export async function getDeploymentHealth() {

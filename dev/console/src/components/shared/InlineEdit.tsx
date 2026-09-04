@@ -6,7 +6,7 @@ import { T } from '../../theme/blessed-theme.js';
 
 interface ToggleSwitchProps {
   value: boolean;
-  onChange: (value: boolean) => void;
+  onChange?: (value: boolean) => void;
   label?: string;
   disabled?: boolean;
 }

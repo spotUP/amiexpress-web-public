@@ -3,14 +3,12 @@ import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getSystemConfig, updateSystemConfig } from '../../api/client.js';
 import { T } from '../../theme/blessed-theme.js';
+import { ToggleSwitch, InlineEdit } from '../shared/InlineEdit.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
 import type { SystemConfig } from '../../api/types.js';
 
 const ITEMS_START_ROW = 7;
 
-// Fields to surface in the TUI editor. Each entry: [key, label, type].
-// Sensitive fields (smtp_password, reg_key) come back as '***' from the
-// backend; we exclude them so the user can't accidentally overwrite.
 const FIELDS: Array<{ key: string; label: string; type: 'string' | 'number' | 'bool' }> = [
   { key: 'bbs_name',                label: 'BBS Name',           type: 'string' },
   { key: 'sysop_name',              label: 'Sysop Name',         type: 'string' },
@@ -36,21 +34,15 @@ const FIELDS: Array<{ key: string; label: string; type: 'string' | 'number' | 'b
 
 type Mode = 'list' | 'edit';
 
-function fmtVal(val: unknown, type: 'string' | 'number' | 'bool'): string {
-  if (val === undefined || val === null) return '—';
-  if (type === 'bool') return val ? 'on' : 'off';
-  return String(val);
-}
-
 export function SystemConfigPage() {
   const [config, setConfig] = useState<SystemConfig | null>(null);
-  const [pending, setPending] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [mode, setMode] = useState<Mode>('list');
   const [editValue, setEditValue] = useState('');
   const [saving, setSaving] = useState(false);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -58,7 +50,6 @@ export function SystemConfigPage() {
     try {
       const data = await getSystemConfig();
       setConfig(data ?? null);
-      setPending({});
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed');
     } finally {
@@ -69,30 +60,50 @@ export function SystemConfigPage() {
   useEffect(() => { load(); }, [load]);
 
   const selected = FIELDS[selectedIdx];
-  const dirty = Object.keys(pending).length > 0;
 
-  // Allow click to select a field
+  const doSave = useCallback(async (key: string, value: unknown) => {
+    setSavingKey(key);
+    setSaving(true);
+    setStatus(null);
+    try {
+      await updateSystemConfig({ [key]: value });
+      const field = FIELDS.find(f => f.key === key);
+      setStatus(`${field?.label ?? key} saved`);
+      await load();
+    } catch (e: unknown) {
+      setStatus(`Error: ${e instanceof Error ? e.message : 'Save failed'}`);
+    } finally {
+      setSaving(false);
+      setSavingKey(null);
+    }
+  }, [load]);
+
+  const commitEdit = useCallback(() => {
+    if (!selected) return;
+    const t = selected.type;
+    let parsed: unknown = editValue;
+    if (t === 'number') {
+      const n = parseFloat(editValue);
+      parsed = isNaN(n) ? 0 : n;
+    } else if (t === 'bool') {
+      parsed = /^(1|on|true|yes|y)$/i.test(editValue);
+    }
+    doSave(selected.key, parsed);
+    setMode('list');
+  }, [selected, editValue, doSave]);
+
+  const toggleBool = useCallback(() => {
+    if (!selected || selected.type !== 'bool') return;
+    const cur = (config as any)?.[selected.key];
+    doSave(selected.key, !cur);
+  }, [selected, config, doSave]);
+
   useRowClick(FIELDS.length, ITEMS_START_ROW, setSelectedIdx, mode === 'list');
 
   useInput((input, key) => {
     if (mode === 'edit') {
       if (key.escape) { setMode('list'); return; }
-      if (key.return) {
-        // commit pending edit
-        if (selected) {
-          const t = selected.type;
-          let parsed: unknown = editValue;
-          if (t === 'number') {
-            const n = parseFloat(editValue);
-            parsed = isNaN(n) ? 0 : n;
-          } else if (t === 'bool') {
-            parsed = /^(1|on|true|yes|y)$/i.test(editValue);
-          }
-          setPending(p => ({ ...p, [selected.key]: parsed }));
-        }
-        setMode('list');
-        return;
-      }
+      if (key.return) { commitEdit(); return; }
       if (key.backspace || key.delete) { setEditValue(v => v.slice(0, -1)); return; }
       if (input && !key.ctrl && !key.meta) setEditValue(v => v + input);
       return;
@@ -100,20 +111,14 @@ export function SystemConfigPage() {
 
     if (key.upArrow) setSelectedIdx(i => Math.max(0, i - 1));
     if (key.downArrow) setSelectedIdx(i => Math.min(FIELDS.length - 1, i + 1));
-    if (input === 'e' && selected) {
-      const cur = (pending[selected.key] ?? (config as any)?.[selected.key]);
+    if (key.return && selected && selected.type === 'bool') {
+      toggleBool();
+    } else if (key.return && selected) {
+      const cur = (config as any)?.[selected.key];
       setEditValue(cur === undefined || cur === null ? '' : String(cur));
       setMode('edit');
     }
-    if (input === 's' && dirty && !saving) {
-      setSaving(true);
-      updateSystemConfig(pending)
-        .then(() => { setStatus('Saved'); setPending({}); load(); })
-        .catch((e: Error) => setStatus(`Error: ${e.message}`))
-        .finally(() => setSaving(false));
-    }
     if (input === 'r') load();
-    if (input === 'R') setPending({});
   });
 
   if (loading) return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading config...</Text></Box>;
@@ -123,45 +128,43 @@ export function SystemConfigPage() {
     <Box flexDirection="column">
       <Box marginBottom={1}>
         <Text bold color={T.accent}>SYSTEM CONFIG</Text>
-        <Text dimColor>  ({FIELDS.length} fields, {dirty ? `${Object.keys(pending).length} pending` : 'clean'})</Text>
       </Box>
 
       {FIELDS.map((f, i) => {
         const isSel = i === selectedIdx;
-        const isPending = f.key in pending;
-        const val = isPending ? pending[f.key] : (config as any)?.[f.key];
+        const val = (config as any)?.[f.key];
         const masked = typeof val === 'string' && val === '***';
+        const isSavingField = saving && savingKey === f.key;
         return (
           <Box key={f.key}>
-            <Text color={isSel ? T.accent : isPending ? T.warn : T.ink} bold={isSel}>
-              {isSel ? '▶ ' : '  '}
-              {f.label.padEnd(22)}
-              {isPending ? '* ' : '  '}
-            </Text>
-            <Text color={masked ? T.dim : isPending ? T.warn : T.ink}>
-              {fmtVal(val, f.type)}
-            </Text>
+            <Box flexDirection="row" alignItems="center">
+              <Text color={isSel ? T.accent : T.ink} bold={isSel}>
+                {isSel ? '▶ ' : '  '}
+              </Text>
+              <Text color={T.dim}>{f.label.padEnd(22)}</Text>
+              {f.type === 'bool' ? (
+                <ToggleSwitch value={!!val} disabled={!isSel || saving} />
+              ) : (
+                <Text color={masked ? T.dim : isSavingField ? T.warn : T.ink}>
+                  {masked ? '***' : String(val ?? '—')}
+                  {isSavingField && <Spinner type="dots" />}
+                </Text>
+              )}
+            </Box>
           </Box>
         );
       })}
 
-      {saving && (
-        <Box marginTop={1}>
-          <Text color={T.warn}><Spinner type="dots" /></Text>
-          <Text> Saving...</Text>
-        </Box>
-      )}
+      {status && !saving && <Box marginTop={1}><Text color={T.ok}>{status}</Text></Box>}
 
-      {status && <Box marginTop={1}><Text color={T.ok}>{status}</Text></Box>}
-
-      {mode === 'edit' && selected && (
+      {mode === 'edit' && selected && selected.type !== 'bool' && (
         <Box marginTop={1} flexDirection="column" borderStyle="round" borderColor={T.warn} paddingX={1}>
-          <Text color={T.accent}>Edit {selected.label} ({selected.type}):</Text>
+          <Text color={T.accent}>Edit {selected.label}:</Text>
           <Box>
             <Text>{'> '}</Text>
             <Text>{editValue}█</Text>
           </Box>
-          <Text dimColor>[enter] commit  [esc] cancel</Text>
+          <Text dimColor>[enter] save  [esc] cancel</Text>
         </Box>
       )}
     </Box>

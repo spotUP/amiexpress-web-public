@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { T } from '../theme/blessed-theme.js';
+import { ToggleSwitch } from './shared/InlineEdit.js';
 import { useRowClick } from '../hooks/useRowClick.js';
 import { ConfirmDialog } from './shared/ConfirmDialog.js';
 
@@ -212,8 +213,7 @@ export function CrudList<T extends { id: number }>({
 
       // Edit current field value
       if (field.type === 'bool') {
-        if (input === 'y' || input === '1') { setEditValues(v => ({ ...v, [field.key]: true })); }
-        if (input === 'n' || input === '0') { setEditValues(v => ({ ...v, [field.key]: false })); }
+        if (input === ' ') { setEditValues(v => ({ ...v, [field.key]: !v[field.key] })); }
       } else if (field.type === 'number') {
         if (key.backspace || key.delete) {
           setEditValues(v => ({ ...v, [field.key]: String(v[field.key] ?? '').slice(0, -1) }));
@@ -270,9 +270,13 @@ export function CrudList<T extends { id: number }>({
                 {field.label}:
                 {' '}
                 {field.type === 'bool' ? (
-                  <Text color={editValues[field.key] ? T.ok : T.alert}>
-                    {editValues[field.key] ? 'yes' : 'no'}
-                  </Text>
+                  i === editFieldIdx ? (
+                    <ToggleSwitch value={!!editValues[field.key]} onChange={v => setEditValues(vv => ({ ...vv, [field.key]: v }))} />
+                  ) : (
+                    <Text color={editValues[field.key] ? T.ok : T.alert}>
+                      {editValues[field.key] ? 'yes' : 'no'}
+                    </Text>
+                  )
                 ) : (
                   <Text color={T.accent}>{String(editValues[field.key] ?? '')}</Text>
                 )}
