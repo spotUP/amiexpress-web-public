@@ -25,7 +25,7 @@
  * which is why `onApply` runs before the tree is re-tinted.
  */
 
-import type { Theme, ThemeTokens } from './tokens.js';
+import { CLASSIC, type Theme, type ThemeTokens } from './tokens.js';
 
 /**
  * The token roles, in the order a value is claimed when two roles share one.
@@ -194,4 +194,19 @@ export function resolveTheme(source: unknown): Theme | null {
   }
 
   return null;
+}
+
+/**
+ * The current active theme, resolved from the global door settings.
+ * Returns the theme that the SDK's resolveTheme reads from the door's
+ * session state - the one applyTheme() last wrote.
+ */
+
+
+/**
+ * The current active theme, resolved from the global door settings.
+ * Defaults to CLASSIC when no theme is set.
+ */
+export function activeTheme(): Theme {
+  return resolveTheme(typeof globalThis !== 'undefined' ? (globalThis as any).__doorTheme : null) ?? CLASSIC;
 }

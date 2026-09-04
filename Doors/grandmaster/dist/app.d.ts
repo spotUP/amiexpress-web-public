@@ -154,14 +154,6 @@ export declare class GrandmasterApp {
      * objectives this engine cannot judge rather than handing the player a
      * mission that can never end (core/mission-pack.ts).
      */
-    /**
-     * Is the caller a sysop?
-     *
-     * 255 is the board's own top level. The editor writes a file every player
-     * on this board then plays from, so it is the one thing in this door that
-     * asks who is holding the keyboard.
-     */
-    private isSysop;
     private startMission;
     /** Seconds the run that just ended lasted. */
     private lastRunSeconds;
