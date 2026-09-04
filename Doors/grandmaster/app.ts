@@ -1277,11 +1277,15 @@ export class GrandmasterApp {
     const { loadSpriteSheet } = require('@amiexpress/bbs-door-sdk/engines/graphics/cell-art');
     const sheet = loadSpriteSheet(path.join(__dirname, 'sprites'));
 
-    const mode = await this.chooseTetrisAttackMode();
-    if (!mode) {
-      this.currentScreen = 'menu';
-      return;
-    }
+    // Loop: pick a mode, play, return to mode picker — same as the TGM
+    // modes do (startGame -> showMainMenu). ESC during the game goes back
+    // to the mode list, not the main menu.
+    while (true) {
+      const mode = await this.chooseTetrisAttackMode();
+      if (!mode) {
+        // Back selected — exit to main menu
+        break;
+      }
 
     // Challenge starts at difficulty 1 stage 1; the ladder is walked by the
     // mode's own screen once it exists.
@@ -1337,29 +1341,25 @@ export class GrandmasterApp {
     if (mode === 'vsplayer') {
       await this.runPanelNetplay(sheet, readInput);
       this.screen.removeListener('keypress', onKeypress);
-      this.currentScreen = 'menu';
-      return;
+      continue;
     }
 
     if (mode === 'replays') {
       await this.runReplayBrowser(sheet, readInput);
       this.screen.removeListener('keypress', onKeypress);
-      this.currentScreen = 'menu';
-      return;
+      continue;
     }
 
     if (mode === 'stageclear') {
       await this.runStageClear(sheet, readInput);
       this.screen.removeListener('keypress', onKeypress);
-      this.currentScreen = 'menu';
-      return;
+      continue;
     }
 
     if (mode === 'puzzle') {
       await this.runPuzzleSet(sheet, readInput, onKeypress);
       this.screen.removeListener('keypress', onKeypress);
-      this.currentScreen = 'menu';
-      return;
+      continue;
     }
 
     // Vs CPU and Challenge share one screen: the two opponents differ in what
@@ -1438,8 +1438,11 @@ export class GrandmasterApp {
     } finally {
       this.screen.removeListener('keypress', onKeypress);
       this.screen.unkey(['escape', 'q', 'Q'], onEscape);
-      this.currentScreen = 'menu';
     }
+    }
+    // If we broke out of the loop (user selected Back from mode menu),
+    // return to the main menu.
+    this.currentScreen = 'menu';
   }
 
   /**

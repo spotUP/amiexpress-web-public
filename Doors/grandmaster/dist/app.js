@@ -1129,150 +1129,153 @@ class GrandmasterApp {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { loadSpriteSheet } = require('@amiexpress/bbs-door-sdk/engines/graphics/cell-art');
         const sheet = loadSpriteSheet(path.join(__dirname, 'sprites'));
-        const mode = await this.chooseTetrisAttackMode();
-        if (!mode) {
-            this.currentScreen = 'menu';
-            return;
-        }
-        // Challenge starts at difficulty 1 stage 1; the ladder is walked by the
-        // mode's own screen once it exists.
-        const challengeStage = (0, challenge_mode_1.createStages)(1, attack_patterns_1.hasChallengeFile)[0];
-        const seed = Math.floor(Math.random() * 2147483000) + 1;
-        // A mode with garbage in it MUST be on a modern level: the classic presets
-        // have no GARBAGE_HOVER, so the first garbage a player clears throws.
-        const hasGarbage = mode === 'vscpu' || mode === 'challenge';
-        const stack = new stack_1.Stack({
-            levelData: hasGarbage ? (0, level_data_1.getModern)(level_data_1.GARBAGE_MODE_LEVEL) : (0, level_data_1.getClassicEndless)('normal'),
-            panelSource: new generator_source_1.GeneratorSource(seed, true),
-            doCountdown: true,
-            // Time Attack is two minutes; Endless runs until the stack tops out.
-            timeLimit: mode === 'timeattack' ? consts_2.TIME_ATTACK_FRAMES : undefined,
-        });
-        stack.startingState();
-        /** Telnet fallback: a keypress counts as held for this long. */
-        const HOLD_MS = 100;
-        const pressedUntil = new Map();
-        const onKeypress = (_ch, key) => {
-            if (!key || !key.name)
-                return;
-            pressedUntil.set(key.name, Date.now() + HOLD_MS);
-        };
-        this.screen.on('keypress', onKeypress);
-        const keyStateAvailable = typeof this.inputManager.isKeyStateActive === 'function';
-        const isDown = (names) => {
-            const manager = this.inputManager;
-            if (keyStateAvailable && manager.isKeyStateActive?.() && manager.isHeld) {
-                return names.some((name) => manager.isHeld(name));
+        // Loop: pick a mode, play, return to mode picker — same as the TGM
+        // modes do (startGame -> showMainMenu). ESC during the game goes back
+        // to the mode list, not the main menu.
+        while (true) {
+            const mode = await this.chooseTetrisAttackMode();
+            if (!mode) {
+                // Back selected — exit to main menu
+                break;
             }
-            const now = Date.now();
-            return names.some((name) => (pressedUntil.get(name) ?? 0) > now);
-        };
-        const readInput = () => ({
-            up: isDown(['up']),
-            down: isDown(['down']),
-            left: isDown(['left']),
-            right: isDown(['right']),
-            swap: isDown(['space', 'z']),
-            raise: isDown(['r', 'x']),
-        });
-        if (mode === 'vsplayer') {
-            await this.runPanelNetplay(sheet, readInput);
-            this.screen.removeListener('keypress', onKeypress);
-            this.currentScreen = 'menu';
-            return;
-        }
-        if (mode === 'replays') {
-            await this.runReplayBrowser(sheet, readInput);
-            this.screen.removeListener('keypress', onKeypress);
-            this.currentScreen = 'menu';
-            return;
-        }
-        if (mode === 'stageclear') {
-            await this.runStageClear(sheet, readInput);
-            this.screen.removeListener('keypress', onKeypress);
-            this.currentScreen = 'menu';
-            return;
-        }
-        if (mode === 'puzzle') {
-            await this.runPuzzleSet(sheet, readInput, onKeypress);
-            this.screen.removeListener('keypress', onKeypress);
-            this.currentScreen = 'menu';
-            return;
-        }
-        // Vs CPU and Challenge share one screen: the two opponents differ in what
-        // they ARE, not in how they are driven. Vs CPU faces a real board played by
-        // the bot; Challenge faces a boardless health model driven by an attack
-        // script, and its slot draws a danger bar instead of panels.
-        const versusOpponent = mode === 'vscpu'
-            ? new stack_1.Stack({
-                levelData: (0, level_data_1.getModern)(level_data_1.GARBAGE_MODE_LEVEL),
-                panelSource: new generator_source_1.GeneratorSource(seed + 1, true),
+            // Challenge starts at difficulty 1 stage 1; the ladder is walked by the
+            // mode's own screen once it exists.
+            const challengeStage = (0, challenge_mode_1.createStages)(1, attack_patterns_1.hasChallengeFile)[0];
+            const seed = Math.floor(Math.random() * 2147483000) + 1;
+            // A mode with garbage in it MUST be on a modern level: the classic presets
+            // have no GARBAGE_HOVER, so the first garbage a player clears throws.
+            const hasGarbage = mode === 'vscpu' || mode === 'challenge';
+            const stack = new stack_1.Stack({
+                levelData: hasGarbage ? (0, level_data_1.getModern)(level_data_1.GARBAGE_MODE_LEVEL) : (0, level_data_1.getClassicEndless)('normal'),
+                panelSource: new generator_source_1.GeneratorSource(seed, true),
                 doCountdown: true,
-            })
-            : mode === 'challenge'
-                ? new simulated_stack_1.SimulatedStack({
-                    attackSettings: (0, attack_patterns_1.loadChallengeAttack)(1, challengeStage.attackStage),
-                    healthSettings: challengeStage.healthSettings,
-                })
-                : null;
-        if (versusOpponent && versusOpponent instanceof stack_1.Stack)
-            versusOpponent.startingState();
-        // Solo games are recorded in panel-attack's own format, so a caller can
-        // watch their game back here and open the same file in Panel Attack.
-        const recorder = versusOpponent ? undefined : new replay_recorder_1.PanelReplayRecorder({
-            engineVersion: stack.engineVersion,
-            seed,
-            levelData: stack.levelData,
-            behaviours: stack.behaviours,
-            mode: mode === 'timeattack' ? 'timeattack' : 'endless',
-            playerName: this.state.playerName,
-            doCountdown: true,
-            shockEnabled: true,
-        });
-        const panels = versusOpponent
-            ? new panels_versus_screen_1.PanelsVersusScreen({
-                screen: this.screen,
-                player: stack,
-                opponent: versusOpponent,
-                cpu: versusOpponent instanceof stack_1.Stack
-                    ? new panel_ai_1.PanelAi(versusOpponent, Math.min(5, panel_ai_1.MAX_AI_LEVEL))
-                    : undefined,
-                sheet,
-                sounds: this.sounds,
-                readInput,
-            })
-            : new panels_screen_1.PanelsScreen({
-                screen: this.screen,
-                stack,
-                sheet,
-                sounds: this.sounds,
-                readInput,
-                recorder,
+                // Time Attack is two minutes; Endless runs until the stack tops out.
+                timeLimit: mode === 'timeattack' ? consts_2.TIME_ATTACK_FRAMES : undefined,
             });
-        const onEscape = () => panels.quit();
-        this.screen.key(['escape', 'q', 'Q'], onEscape);
-        try {
-            const outcome = await panels.run();
-            // Only a game that actually finished counts. Leaving early with ESC is
-            // not a score, and recording it would put junk on the leaderboard.
-            const finished = stack.gameEnded()
-                || (versusOpponent ? versusOpponent.gameEnded() : false);
-            if (finished) {
-                const beatTheOpponent = 'playerWon' in outcome ? outcome.playerWon : undefined;
-                const result = (0, score_report_1.buildPanelsResult)(stack, mode, 'tetris_attack', beatTheOpponent);
-                this.highScores.addScore(this.state.playerName, result);
+            stack.startingState();
+            /** Telnet fallback: a keypress counts as held for this long. */
+            const HOLD_MS = 100;
+            const pressedUntil = new Map();
+            const onKeypress = (_ch, key) => {
+                if (!key || !key.name)
+                    return;
+                pressedUntil.set(key.name, Date.now() + HOLD_MS);
+            };
+            this.screen.on('keypress', onKeypress);
+            const keyStateAvailable = typeof this.inputManager.isKeyStateActive === 'function';
+            const isDown = (names) => {
+                const manager = this.inputManager;
+                if (keyStateAvailable && manager.isKeyStateActive?.() && manager.isHeld) {
+                    return names.some((name) => manager.isHeld(name));
+                }
+                const now = Date.now();
+                return names.some((name) => (pressedUntil.get(name) ?? 0) > now);
+            };
+            const readInput = () => ({
+                up: isDown(['up']),
+                down: isDown(['down']),
+                left: isDown(['left']),
+                right: isDown(['right']),
+                swap: isDown(['space', 'z']),
+                raise: isDown(['r', 'x']),
+            });
+            if (mode === 'vsplayer') {
+                await this.runPanelNetplay(sheet, readInput);
+                this.screen.removeListener('keypress', onKeypress);
+                continue;
             }
-            // A replay is worth nothing beside the game it came from, so this is
-            // best-effort: the store swallows a write it cannot make.
-            if (recorder && recorder.frames > 0) {
-                this.panelReplays.save(recorder.fileName(finished), recorder.toReplayV3(finished));
+            if (mode === 'replays') {
+                await this.runReplayBrowser(sheet, readInput);
+                this.screen.removeListener('keypress', onKeypress);
+                continue;
+            }
+            if (mode === 'stageclear') {
+                await this.runStageClear(sheet, readInput);
+                this.screen.removeListener('keypress', onKeypress);
+                continue;
+            }
+            if (mode === 'puzzle') {
+                await this.runPuzzleSet(sheet, readInput, onKeypress);
+                this.screen.removeListener('keypress', onKeypress);
+                continue;
+            }
+            // Vs CPU and Challenge share one screen: the two opponents differ in what
+            // they ARE, not in how they are driven. Vs CPU faces a real board played by
+            // the bot; Challenge faces a boardless health model driven by an attack
+            // script, and its slot draws a danger bar instead of panels.
+            const versusOpponent = mode === 'vscpu'
+                ? new stack_1.Stack({
+                    levelData: (0, level_data_1.getModern)(level_data_1.GARBAGE_MODE_LEVEL),
+                    panelSource: new generator_source_1.GeneratorSource(seed + 1, true),
+                    doCountdown: true,
+                })
+                : mode === 'challenge'
+                    ? new simulated_stack_1.SimulatedStack({
+                        attackSettings: (0, attack_patterns_1.loadChallengeAttack)(1, challengeStage.attackStage),
+                        healthSettings: challengeStage.healthSettings,
+                    })
+                    : null;
+            if (versusOpponent && versusOpponent instanceof stack_1.Stack)
+                versusOpponent.startingState();
+            // Solo games are recorded in panel-attack's own format, so a caller can
+            // watch their game back here and open the same file in Panel Attack.
+            const recorder = versusOpponent ? undefined : new replay_recorder_1.PanelReplayRecorder({
+                engineVersion: stack.engineVersion,
+                seed,
+                levelData: stack.levelData,
+                behaviours: stack.behaviours,
+                mode: mode === 'timeattack' ? 'timeattack' : 'endless',
+                playerName: this.state.playerName,
+                doCountdown: true,
+                shockEnabled: true,
+            });
+            const panels = versusOpponent
+                ? new panels_versus_screen_1.PanelsVersusScreen({
+                    screen: this.screen,
+                    player: stack,
+                    opponent: versusOpponent,
+                    cpu: versusOpponent instanceof stack_1.Stack
+                        ? new panel_ai_1.PanelAi(versusOpponent, Math.min(5, panel_ai_1.MAX_AI_LEVEL))
+                        : undefined,
+                    sheet,
+                    sounds: this.sounds,
+                    readInput,
+                })
+                : new panels_screen_1.PanelsScreen({
+                    screen: this.screen,
+                    stack,
+                    sheet,
+                    sounds: this.sounds,
+                    readInput,
+                    recorder,
+                });
+            const onEscape = () => panels.quit();
+            this.screen.key(['escape', 'q', 'Q'], onEscape);
+            try {
+                const outcome = await panels.run();
+                // Only a game that actually finished counts. Leaving early with ESC is
+                // not a score, and recording it would put junk on the leaderboard.
+                const finished = stack.gameEnded()
+                    || (versusOpponent ? versusOpponent.gameEnded() : false);
+                if (finished) {
+                    const beatTheOpponent = 'playerWon' in outcome ? outcome.playerWon : undefined;
+                    const result = (0, score_report_1.buildPanelsResult)(stack, mode, 'tetris_attack', beatTheOpponent);
+                    this.highScores.addScore(this.state.playerName, result);
+                }
+                // A replay is worth nothing beside the game it came from, so this is
+                // best-effort: the store swallows a write it cannot make.
+                if (recorder && recorder.frames > 0) {
+                    this.panelReplays.save(recorder.fileName(finished), recorder.toReplayV3(finished));
+                }
+            }
+            finally {
+                this.screen.removeListener('keypress', onKeypress);
+                this.screen.unkey(['escape', 'q', 'Q'], onEscape);
             }
         }
-        finally {
-            this.screen.removeListener('keypress', onKeypress);
-            this.screen.unkey(['escape', 'q', 'Q'], onEscape);
-            this.currentScreen = 'menu';
-        }
+        // If we broke out of the loop (user selected Back from mode menu),
+        // return to the main menu.
+        this.currentScreen = 'menu';
     }
     /**
      * Which panel mode to play.

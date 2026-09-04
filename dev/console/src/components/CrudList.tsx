@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
-import Spinner from 'ink-spinner';
+import { T, BlessedText } from '../theme/blessed-theme.js';
 import { useRowClick } from '../hooks/useRowClick.js';
 import { ConfirmDialog } from './shared/ConfirmDialog.js';
 
@@ -232,21 +232,21 @@ export function CrudList<T extends { id: number }>({
     }
   });
 
-  if (loading) return <Box><Text color="yellow"><Spinner type="dots" /></Text><Text> Loading {title.toLowerCase()}...</Text></Box>;
-  if (error) return <Text color="red">Error: {error}</Text>;
+  if (loading) return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading {title.toLowerCase()}...</Text></Box>;
+  if (error) return <Text color={T.alert}>Error: {error}</Text>;
 
   const headerRow = columns.map(col => col.label.padEnd(col.width)).join('');
 
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold color="cyan">{headerRow}</Text>
+        <Text bold color={T.accent}>{headerRow}</Text>
         <Text dimColor>  ({filtered.length}/{items.length})</Text>
       </Box>
 
       {visibleItems.map((item, i) => (
         <Box key={item.id + '-' + i}>
-          <Text color={i === selectedIdx ? 'cyan' : 'white'} bold={i === selectedIdx}>
+          <Text color={i === selectedIdx ? T.accent : T.ink} bold={i === selectedIdx}>
             {i === selectedIdx ? '▶ ' : '  '}
             {renderRow(item)}
           </Text>
@@ -255,7 +255,7 @@ export function CrudList<T extends { id: number }>({
 
       {searching && (
         <Box marginTop={1}>
-          <Text color="cyan">Search: {searchText}█</Text>
+          <Text color={T.accent}>Search: {searchText}█</Text>
           <Text dimColor>  [esc] clear  [enter] done</Text>
         </Box>
       )}
@@ -264,16 +264,16 @@ export function CrudList<T extends { id: number }>({
         <Box marginTop={1} flexDirection="column">
           {editFields.map((field, i) => (
             <Box key={field.key} marginTop={i > 0 ? 0 : 0}>
-              <Text color={i === editFieldIdx ? 'yellow' : 'white'}>
+              <Text color={i === editFieldIdx ? T.warn : T.ink}>
                 {i === editFieldIdx ? '> ' : '  '}
                 {field.label}:
                 {' '}
                 {field.type === 'bool' ? (
-                  <Text color={editValues[field.key] ? 'green' : 'red'}>
+                  <Text color={editValues[field.key] ? T.ok : T.alert}>
                     {editValues[field.key] ? 'yes' : 'no'}
                   </Text>
                 ) : (
-                  <Text color="cyan">{String(editValues[field.key] ?? '')}</Text>
+                  <Text color={T.accent}>{String(editValues[field.key] ?? '')}</Text>
                 )}
                 {i === editFieldIdx && <Text>█</Text>}
               </Text>
@@ -295,7 +295,7 @@ export function CrudList<T extends { id: number }>({
         </Box>
       )}
 
-      {status && <Box marginTop={1}><Text color="green">{status}</Text></Box>}
+      {status && <Box marginTop={1}><Text color={T.ok}>{status}</Text></Box>}
     </Box>
   );
 }

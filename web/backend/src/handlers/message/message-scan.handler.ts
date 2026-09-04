@@ -756,6 +756,16 @@ console.warn('[advanceConferenceScan] no confScanState found');
         continue;
       }
 
+      // Update scan pointer using the highest message number from scan results.
+      // This must happen BEFORE yielding, so when the user answers N and
+      // advanceConferenceScan is called again, the same messages are not found.
+      // countNewMessages may return lastScanned=0 if the headers file is empty,
+      // so we always compute it from the actual scan results.
+      const scanLast = scanMsgs.reduce((max, m) => Math.max(max, m.msgNum), 0);
+      if (scanLast > 0) {
+        await updateScanPointer(user.id, conf, msgBaseId, scanLast);
+      }
+
       // express.e:11712-11715 — blank lines + table header + reset
       const narrow = isNarrow(session);
       socket.emit('ansi-output', '\r\n\r\n');

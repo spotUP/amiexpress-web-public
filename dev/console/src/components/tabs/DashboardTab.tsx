@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import Gradient from 'ink-gradient';
 import BigText from 'ink-big-text';
 import Spinner from 'ink-spinner';
+import { T } from '../../theme/blessed-theme.js';
 import { useDashboardStats } from '../../hooks/useDashboardStats.js';
 import { buildSparkline } from '../../utils/sparkline.js';
 
@@ -28,12 +29,12 @@ function StatCard({
   lines: { label: string; value: string | number; flash?: boolean }[];
 }) {
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={2} paddingY={0} minWidth={22}>
-      <Text bold color="cyan">{title}</Text>
+    <Box flexDirection="column" borderStyle="round" borderColor={T.accent} paddingX={2} paddingY={0} minWidth={22}>
+      <Text bold color={T.accent}>{title}</Text>
       {lines.map(({ label, value, flash }) => (
         <Box key={label}>
           <Text dimColor>{label.padEnd(12)}</Text>
-          <Text color={flash ? 'yellow' : 'white'} bold={flash}>
+          <Text color={flash ? T.warn : T.ink} bold={flash}>
             {String(value)}
           </Text>
         </Box>
@@ -69,7 +70,7 @@ export function DashboardTab() {
     return (
       <Box flexDirection="column" alignItems="center" justifyContent="center" paddingY={4}>
         <Box>
-          <Text color="yellow"><Spinner type="dots" /></Text>
+          <Text color={T.warn}><Spinner type="dots" /></Text>
           <Text dimColor> Loading dashboard...</Text>
         </Box>
       </Box>
@@ -77,7 +78,7 @@ export function DashboardTab() {
   }
 
   if (error) {
-    return <Text color="red">Error: {error}</Text>;
+    return <Text color={T.alert}>Error: {error}</Text>;
   }
 
   return (
@@ -120,18 +121,18 @@ export function DashboardTab() {
       </Box>
 
       {/* Sparkline */}
-      <Box flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1} marginBottom={1}>
-        <Text bold color="cyan">CALLS — last 24h</Text>
-        <Text color="green">{sparkline || '(no data)'}</Text>
+      <Box flexDirection="column" borderStyle="single" borderColor={T.accent} paddingX={1} marginBottom={1}>
+        <Text bold color={T.accent}>CALLS — last 24h</Text>
+        <Text color={T.ok}>{sparkline || '(no data)'}</Text>
         <Text dimColor>{'└' + '─'.repeat(24) + '┘  now →'}</Text>
       </Box>
 
       {/* Recent activity */}
       <Box flexDirection="column">
-        <Text bold color="cyan" dimColor>RECENT CALLERS</Text>
+        <Text bold color={T.accent} dimColor>RECENT CALLERS</Text>
         {recentCallers.slice(0, 5).map(c => (
           <Box key={c.id}>
-            <Text color={c.action === 'Logged on' ? 'green' : 'gray'}>
+            <Text color={c.action === 'Logged on' ? T.ok : T.dim}>
               {c.action === 'Logged on' ? '→' : '←'}
             </Text>
             <Text> {c.username.padEnd(14)}</Text>

@@ -260,7 +260,7 @@ export function BlessedProgressBar({
   );
 }
 
-// Rail — animated slashes
+// Rail — animated slashes, constant-width (door railFrame pattern)
 interface RailProps {
   theme?: Theme;
   frame?: number;
@@ -269,7 +269,10 @@ interface RailProps {
 export function Rail({ theme, frame = 0 }: RailProps) {
   const t = theme?.tokens ?? T;
   const rail = theme?.rail ?? CURRENT_THEME.rail;
-  const animated = rail ? rail.slice(0, (frame % 5) + 1) : '';
+  const period = rail.length;
+  if (period === 0) return null;
+  const shift = frame % period;
+  const animated = ' '.repeat(shift) + rail.slice(0, period - shift);
   return (
     <Text color={t.accent} bold>
       {animated}

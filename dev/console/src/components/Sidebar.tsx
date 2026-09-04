@@ -118,7 +118,7 @@ export function Sidebar({ activePageId, onSelect, focus }: Props) {
   });
 
   return (
-    <Box flexDirection="column" borderStyle={BORDER_STYLE[CURRENT_THEME.border]} borderColor={T.chrome} width={SIDEBAR_WIDTH}>
+    <Box flexDirection="column" borderStyle={BORDER_STYLE[CURRENT_THEME.border]} borderColor={focus ? T.accent : T.chrome} width={SIDEBAR_WIDTH}>
       {CATEGORIES.map((cat, ci) => {
         const isExpanded = expandedCats.has(cat);
         return (
