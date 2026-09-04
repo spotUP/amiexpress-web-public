@@ -48,11 +48,9 @@ export async function theWindowsTakeTheThemesChromeColour(): Promise<void> {
   const h = await openWithTheme('quiet-phosphor');
   const ui = h.app.uiManager;
 
-  // The primary colour draws every border since 2026-09-03 - "all borders in
-  // the app needs to use the themes primary color as well" (sysop).
-  assert.strictEqual(ui.lobbyWindow.style.border.fg, h.theme.tokens.accent,
-    'the lobby window frame is the theme\'s primary colour, not a hardcoded cyan');
-  assert.strictEqual(ui.tableWindow.style.border.fg, h.theme.tokens.accent);
+  assert.strictEqual(ui.lobbyWindow.style.border.fg, h.theme.tokens.chrome,
+    'the lobby window frame is the theme\'s chrome colour, not a hardcoded cyan');
+  assert.strictEqual(ui.tableWindow.style.border.fg, h.theme.tokens.chrome);
 
   await h.app.shutdown();
   await h.finished;
@@ -62,14 +60,7 @@ export async function theBarsAndSelectionFollowTheTheme(): Promise<void> {
   const h = await openWithTheme('uprough-neon');
   const ui = h.app.uiManager;
 
-  // The bars are the primary colour with the ground on top, the same rule
-  // the SDK's themeStyles applies for every other door.
-  assert.strictEqual(ui.statusBar.style.bg, h.theme.tokens.accent,
-    'the status bar is painted in the theme\'s primary colour');
-  assert.strictEqual(ui.statusBar.style.fg, h.theme.tokens.ground,
-    'and its text is the ground, which is black in every theme');
-  assert.strictEqual(ui.topBar.style.bg, h.theme.tokens.accent,
-    'the menu bar too - that is the bar the sysop was looking at');
+  assert.strictEqual(ui.statusBar.style.bg, h.theme.tokens.bar, 'the status bar takes the bar token');
   assert.strictEqual(ui.lobbyList.style.selected.bg, h.theme.tokens.selectionBg,
     'the highlighted row takes the selection token');
 
@@ -114,7 +105,7 @@ export async function aBoardWithNoThemeStillOpens(): Promise<void> {
   const finished = app.run();
   await new Promise((r) => setTimeout(r, 1500));
 
-  assert.strictEqual(app.uiManager.lobbyWindow.style.border.fg, themeById('classic').tokens.accent);
+  assert.strictEqual(app.uiManager.lobbyWindow.style.border.fg, themeById('classic').tokens.chrome);
 
   await app.shutdown();
   await finished;
@@ -149,7 +140,7 @@ export async function theThemeMenuRepaintsTheDoorOnTheFly(): Promise<void> {
 
   const { THEMES } = await import('@amiexpress/bbs-door-sdk/engines/ui/theme');
   const next = THEMES[1];
-  assert.strictEqual(ui.lobbyWindow.style.border.fg, next.tokens.accent,
+  assert.strictEqual(ui.lobbyWindow.style.border.fg, next.tokens.chrome,
     'the lobby frame followed the highlighted theme while the door stayed open');
 
   press('enter');

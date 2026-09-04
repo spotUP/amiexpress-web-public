@@ -31,41 +31,35 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../../sdk/node_modules/@babel/runtime/helpers/arrayWithHoles.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/arrayWithHoles.js
 var require_arrayWithHoles = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/arrayWithHoles.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/arrayWithHoles.js"(exports, module) {
     function _arrayWithHoles(r) {
-      if (Array.isArray(r))
-        return r;
+      if (Array.isArray(r)) return r;
     }
     module.exports = _arrayWithHoles, module.exports.__esModule = true, module.exports["default"] = module.exports;
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/iterableToArrayLimit.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/iterableToArrayLimit.js
 var require_iterableToArrayLimit = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/iterableToArrayLimit.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/iterableToArrayLimit.js"(exports, module) {
     function _iterableToArrayLimit(r, l) {
       var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"];
       if (null != t) {
         var e, n, i, u, a = [], f = true, o = false;
         try {
           if (i = (t = t.call(r)).next, 0 === l) {
-            if (Object(t) !== t)
-              return;
+            if (Object(t) !== t) return;
             f = false;
-          } else
-            for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = true)
-              ;
+          } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = true) ;
         } catch (r2) {
           o = true, n = r2;
         } finally {
           try {
-            if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u))
-              return;
+            if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return;
           } finally {
-            if (o)
-              throw n;
+            if (o) throw n;
           }
         }
         return a;
@@ -75,27 +69,25 @@ var require_iterableToArrayLimit = __commonJS({
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/arrayLikeToArray.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/arrayLikeToArray.js
 var require_arrayLikeToArray = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/arrayLikeToArray.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/arrayLikeToArray.js"(exports, module) {
     function _arrayLikeToArray(r, a) {
       (null == a || a > r.length) && (a = r.length);
-      for (var e = 0, n = Array(a); e < a; e++)
-        n[e] = r[e];
+      for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e];
       return n;
     }
     module.exports = _arrayLikeToArray, module.exports.__esModule = true, module.exports["default"] = module.exports;
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/unsupportedIterableToArray.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/unsupportedIterableToArray.js
 var require_unsupportedIterableToArray = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/unsupportedIterableToArray.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/unsupportedIterableToArray.js"(exports, module) {
     var arrayLikeToArray = require_arrayLikeToArray();
     function _unsupportedIterableToArray(r, a) {
       if (r) {
-        if ("string" == typeof r)
-          return arrayLikeToArray(r, a);
+        if ("string" == typeof r) return arrayLikeToArray(r, a);
         var t = {}.toString.call(r).slice(8, -1);
         return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? arrayLikeToArray(r, a) : void 0;
       }
@@ -104,9 +96,9 @@ var require_unsupportedIterableToArray = __commonJS({
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/nonIterableRest.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/nonIterableRest.js
 var require_nonIterableRest = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/nonIterableRest.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/nonIterableRest.js"(exports, module) {
     function _nonIterableRest() {
       throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
     }
@@ -114,9 +106,9 @@ var require_nonIterableRest = __commonJS({
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/slicedToArray.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/slicedToArray.js
 var require_slicedToArray = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/slicedToArray.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/slicedToArray.js"(exports, module) {
     var arrayWithHoles = require_arrayWithHoles();
     var iterableToArrayLimit = require_iterableToArrayLimit();
     var unsupportedIterableToArray = require_unsupportedIterableToArray();
@@ -128,20 +120,19 @@ var require_slicedToArray = __commonJS({
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/classCallCheck.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/classCallCheck.js
 var require_classCallCheck = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/classCallCheck.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/classCallCheck.js"(exports, module) {
     function _classCallCheck(a, n) {
-      if (!(a instanceof n))
-        throw new TypeError("Cannot call a class as a function");
+      if (!(a instanceof n)) throw new TypeError("Cannot call a class as a function");
     }
     module.exports = _classCallCheck, module.exports.__esModule = true, module.exports["default"] = module.exports;
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/typeof.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/typeof.js
 var require_typeof = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/typeof.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/typeof.js"(exports, module) {
     function _typeof(o) {
       "@babel/helpers - typeof";
       return module.exports = _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o2) {
@@ -154,18 +145,16 @@ var require_typeof = __commonJS({
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/toPrimitive.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/toPrimitive.js
 var require_toPrimitive = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/toPrimitive.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/toPrimitive.js"(exports, module) {
     var _typeof = require_typeof()["default"];
     function toPrimitive(t, r) {
-      if ("object" != _typeof(t) || !t)
-        return t;
+      if ("object" != _typeof(t) || !t) return t;
       var e = t[Symbol.toPrimitive];
       if (void 0 !== e) {
         var i = e.call(t, r || "default");
-        if ("object" != _typeof(i))
-          return i;
+        if ("object" != _typeof(i)) return i;
         throw new TypeError("@@toPrimitive must return a primitive value.");
       }
       return ("string" === r ? String : Number)(t);
@@ -174,9 +163,9 @@ var require_toPrimitive = __commonJS({
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/toPropertyKey.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/toPropertyKey.js
 var require_toPropertyKey = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/toPropertyKey.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/toPropertyKey.js"(exports, module) {
     var _typeof = require_typeof()["default"];
     var toPrimitive = require_toPrimitive();
     function toPropertyKey(t) {
@@ -187,9 +176,9 @@ var require_toPropertyKey = __commonJS({
   }
 });
 
-// ../../sdk/node_modules/@babel/runtime/helpers/createClass.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/createClass.js
 var require_createClass = __commonJS({
-  "../../sdk/node_modules/@babel/runtime/helpers/createClass.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/@babel/runtime/helpers/createClass.js"(exports, module) {
     var toPropertyKey = require_toPropertyKey();
     function _defineProperties(e, r) {
       for (var t = 0; t < r.length; t++) {
@@ -206,12 +195,12 @@ var require_createClass = __commonJS({
   }
 });
 
-// ../../sdk/node_modules/automation-events/build/es5/bundle.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/automation-events/build/es5/bundle.js
 var require_bundle = __commonJS({
-  "../../sdk/node_modules/automation-events/build/es5/bundle.js"(exports, module) {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/automation-events/build/es5/bundle.js"(exports, module) {
     (function(global, factory) {
       typeof exports === "object" && typeof module !== "undefined" ? factory(exports, require_slicedToArray(), require_classCallCheck(), require_createClass()) : typeof define === "function" && define.amd ? define(["exports", "@babel/runtime/helpers/slicedToArray", "@babel/runtime/helpers/classCallCheck", "@babel/runtime/helpers/createClass"], factory) : (global = typeof globalThis !== "undefined" ? globalThis : global || self, factory(global.automationEvents = {}, global._slicedToArray, global._classCallCheck, global._createClass));
-    })(exports, function(exports2, _slicedToArray, _classCallCheck, _createClass) {
+    })(exports, (function(exports2, _slicedToArray, _classCallCheck, _createClass) {
       "use strict";
       var createExtendedExponentialRampToValueAutomationEvent = function createExtendedExponentialRampToValueAutomationEvent2(value, endTime, insertTime) {
         return {
@@ -315,7 +304,7 @@ var require_bundle = __commonJS({
       var isSetTargetAutomationEvent = function isSetTargetAutomationEvent2(automationEvent) {
         return automationEvent.type === "setTarget";
       };
-      var AutomationEventList2 = /* @__PURE__ */ function() {
+      var AutomationEventList2 = /* @__PURE__ */ (function() {
         function AutomationEventList3(defaultValue) {
           _classCallCheck(this, AutomationEventList3);
           this._automationEvents = [];
@@ -445,7 +434,7 @@ var require_bundle = __commonJS({
             return this._defaultValue;
           }
         }]);
-      }();
+      })();
       var createCancelAndHoldAutomationEvent2 = function createCancelAndHoldAutomationEvent3(cancelTime) {
         return {
           cancelTime,
@@ -488,18 +477,18 @@ var require_bundle = __commonJS({
       exports2.createSetTargetAutomationEvent = createSetTargetAutomationEvent2;
       exports2.createSetValueAutomationEvent = createSetValueAutomationEvent2;
       exports2.createSetValueCurveAutomationEvent = createSetValueCurveAutomationEvent2;
-    });
+    }));
   }
 });
 
-// ../../sdk/node_modules/chiptune3/chiptune3.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/chiptune3/chiptune3.js
 var chiptune3_exports = {};
 __export(chiptune3_exports, {
   ChiptuneJsPlayer: () => ChiptuneJsPlayer
 });
 var defaultCfg, ChiptuneJsPlayer;
 var init_chiptune3 = __esm({
-  "../../sdk/node_modules/chiptune3/chiptune3.js"() {
+  "../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/chiptune3/chiptune3.js"() {
     defaultCfg = {
       repeatCount: -1,
       // -1 = play endless, 0 = play once, do not repeat
@@ -536,8 +525,7 @@ var init_chiptune3 = __esm({
           this.processNode.port.postMessage({ cmd: "config", val: this.config });
           this.fireEvent("onInitialized");
           this.processNode.connect(this.gain);
-          if (this.destination)
-            this.gain.connect(this.destination);
+          if (this.destination) this.gain.connect(this.destination);
         }).catch((e) => console.error(e));
       }
       // msg from worklet
@@ -792,7 +780,7 @@ var ProtocolHelper = class {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/index.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/index.js
 var esm_exports = {};
 __export(esm_exports, {
   AMOscillator: () => AMOscillator,
@@ -967,7 +955,7 @@ __export(esm_exports, {
   version: () => version
 });
 
-// ../../sdk/node_modules/tone/build/esm/core/type/Conversions.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/type/Conversions.js
 function dbToGain(db) {
   return Math.pow(10, db / 20);
 }
@@ -994,20 +982,20 @@ function mtof(midi) {
   return A4 * Math.pow(2, (midi - 69) / 12);
 }
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/module.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/module.js
 var import_automation_events2 = __toESM(require_bundle());
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/abort-error.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/abort-error.js
 var createAbortError = () => new DOMException("", "AbortError");
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/add-active-input-connection-to-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/add-active-input-connection-to-audio-node.js
 var createAddActiveInputConnectionToAudioNode = (insertElementInSet2) => {
   return (activeInputs, source, [output, input, eventListener], ignoreDuplicates) => {
     insertElementInSet2(activeInputs[input], [source, output, eventListener], (activeInputConnection) => activeInputConnection[0] === source && activeInputConnection[1] === output, ignoreDuplicates);
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/add-audio-node-connections.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/add-audio-node-connections.js
 var createAddAudioNodeConnections = (audioNodeConnectionsStore) => {
   return (audioNode, audioNodeRenderer, nativeAudioNode) => {
     const activeInputs = [];
@@ -1023,14 +1011,14 @@ var createAddAudioNodeConnections = (audioNodeConnectionsStore) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/add-audio-param-connections.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/add-audio-param-connections.js
 var createAddAudioParamConnections = (audioParamConnectionsStore) => {
   return (audioParam, audioParamRenderer) => {
     audioParamConnectionsStore.set(audioParam, { activeInputs: /* @__PURE__ */ new Set(), passiveInputs: /* @__PURE__ */ new WeakMap(), renderer: audioParamRenderer });
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/globals.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/globals.js
 var ACTIVE_AUDIO_NODE_STORE = /* @__PURE__ */ new WeakSet();
 var AUDIO_NODE_CONNECTIONS_STORE = /* @__PURE__ */ new WeakMap();
 var AUDIO_NODE_STORE = /* @__PURE__ */ new WeakMap();
@@ -1042,7 +1030,7 @@ var CYCLE_COUNTERS = /* @__PURE__ */ new WeakMap();
 var NODE_NAME_TO_PROCESSOR_CONSTRUCTOR_MAPS = /* @__PURE__ */ new WeakMap();
 var NODE_TO_PROCESSOR_MAPS = /* @__PURE__ */ new WeakMap();
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-constructible.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-constructible.js
 var handler = {
   construct() {
     return handler;
@@ -1058,7 +1046,7 @@ var isConstructible = (constructible) => {
   return true;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/split-import-statements.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/split-import-statements.js
 var IMPORT_STATEMENT_REGEX = /^import(?:(?:[\s]+[\w]+|(?:[\s]+[\w]+[\s]*,)?[\s]*\{[\s]*[\w]+(?:[\s]+as[\s]+[\w]+)?(?:[\s]*,[\s]*[\w]+(?:[\s]+as[\s]+[\w]+)?)*[\s]*}|(?:[\s]+[\w]+[\s]*,)?[\s]*\*[\s]+as[\s]+[\w]+)[\s]+from)?(?:[\s]*)("([^"\\]|\\.)+"|'([^'\\]|\\.)+')(?:[\s]*);?/;
 var splitImportStatements = (source, url) => {
   const importStatements = [];
@@ -1074,7 +1062,7 @@ var splitImportStatements = (source, url) => {
   return [importStatements.join(";"), sourceWithoutImportStatements];
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/add-audio-worklet-module.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/add-audio-worklet-module.js
 var verifyParameterDescriptors = (parameterDescriptors) => {
   if (parameterDescriptors !== void 0 && !Array.isArray(parameterDescriptors)) {
     throw new TypeError("The parameterDescriptors property of given value for processorCtor is not an array.");
@@ -1185,7 +1173,7 @@ var createAddAudioWorkletModule = (cacheTestResult2, createNotSupportedError2, e
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-value-for-key.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-value-for-key.js
 var getValueForKey = (map, key) => {
   const value = map.get(key);
   if (value === void 0) {
@@ -1194,7 +1182,7 @@ var getValueForKey = (map, key) => {
   return value;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/pick-element-from-set.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/pick-element-from-set.js
 var pickElementFromSet = (set, predicate) => {
   const matchingElements = Array.from(set).filter(predicate);
   if (matchingElements.length > 1) {
@@ -1208,7 +1196,7 @@ var pickElementFromSet = (set, predicate) => {
   return matchingElement;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-passive-input-connection-to-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-passive-input-connection-to-audio-node.js
 var deletePassiveInputConnectionToAudioNode = (passiveInputs, source, output, input) => {
   const passiveInputConnections = getValueForKey(passiveInputs, source);
   const matchingConnection = pickElementFromSet(passiveInputConnections, (passiveInputConnection) => passiveInputConnection[0] === output && passiveInputConnection[1] === input);
@@ -1218,12 +1206,12 @@ var deletePassiveInputConnectionToAudioNode = (passiveInputs, source, output, in
   return matchingConnection;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-event-listeners-of-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-event-listeners-of-audio-node.js
 var getEventListenersOfAudioNode = (audioNode) => {
   return getValueForKey(EVENT_LISTENERS, audioNode);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/set-internal-state-to-active.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/set-internal-state-to-active.js
 var setInternalStateToActive = (audioNode) => {
   if (ACTIVE_AUDIO_NODE_STORE.has(audioNode)) {
     throw new Error("The AudioNode is already stored.");
@@ -1232,12 +1220,12 @@ var setInternalStateToActive = (audioNode) => {
   getEventListenersOfAudioNode(audioNode).forEach((eventListener) => eventListener(true));
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/audio-worklet-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/audio-worklet-node.js
 var isAudioWorkletNode = (audioNode) => {
   return "port" in audioNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/set-internal-state-to-passive.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/set-internal-state-to-passive.js
 var setInternalStateToPassive = (audioNode) => {
   if (!ACTIVE_AUDIO_NODE_STORE.has(audioNode)) {
     throw new Error("The AudioNode is not stored.");
@@ -1246,14 +1234,14 @@ var setInternalStateToPassive = (audioNode) => {
   getEventListenersOfAudioNode(audioNode).forEach((eventListener) => eventListener(false));
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/set-internal-state-to-passive-when-necessary.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/set-internal-state-to-passive-when-necessary.js
 var setInternalStateToPassiveWhenNecessary = (audioNode, activeInputs) => {
   if (!isAudioWorkletNode(audioNode) && activeInputs.every((connections) => connections.size === 0)) {
     setInternalStateToPassive(audioNode);
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/add-connection-to-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/add-connection-to-audio-node.js
 var createAddConnectionToAudioNode = (addActiveInputConnectionToAudioNode2, addPassiveInputConnectionToAudioNode2, connectNativeAudioNodeToNativeAudioNode2, deleteActiveInputConnectionToAudioNode2, disconnectNativeAudioNodeFromNativeAudioNode2, getAudioNodeConnections2, getAudioNodeTailTime2, getEventListenersOfAudioNode2, getNativeAudioNode2, insertElementInSet2, isActiveAudioNode2, isPartOfACycle2, isPassiveAudioNode2) => {
   const tailTimeTimeoutIds = /* @__PURE__ */ new WeakMap();
   return (source, destination, output, input, isOffline) => {
@@ -1309,7 +1297,7 @@ var createAddConnectionToAudioNode = (addActiveInputConnectionToAudioNode2, addP
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/add-passive-input-connection-to-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/add-passive-input-connection-to-audio-node.js
 var createAddPassiveInputConnectionToAudioNode = (insertElementInSet2) => {
   return (passiveInputs, input, [source, output, eventListener], ignoreDuplicates) => {
     const passiveInputConnections = passiveInputs.get(source);
@@ -1321,7 +1309,7 @@ var createAddPassiveInputConnectionToAudioNode = (insertElementInSet2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/add-silent-connection.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/add-silent-connection.js
 var createAddSilentConnection = (createNativeGainNode2) => {
   return (nativeContext, nativeAudioScheduledSourceNode) => {
     const nativeGainNode = createNativeGainNode2(nativeContext, {
@@ -1340,14 +1328,14 @@ var createAddSilentConnection = (createNativeGainNode2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/add-unrendered-audio-worklet-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/add-unrendered-audio-worklet-node.js
 var createAddUnrenderedAudioWorkletNode = (getUnrenderedAudioWorkletNodes2) => {
   return (nativeContext, audioWorkletNode) => {
     getUnrenderedAudioWorkletNodes2(nativeContext).add(audioWorkletNode);
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/analyser-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/analyser-node-constructor.js
 var DEFAULT_OPTIONS = {
   channelCount: 2,
   channelCountMode: "max",
@@ -1419,12 +1407,12 @@ var createAnalyserNodeConstructor = (audionNodeConstructor, createAnalyserNodeRe
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-owned-by-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-owned-by-context.js
 var isOwnedByContext = (nativeAudioNode, nativeContext) => {
   return nativeAudioNode.context === nativeContext;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/analyser-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/analyser-node-renderer-factory.js
 var createAnalyserNodeRendererFactory = (createNativeAnalyserNode2, getNativeAudioNode2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeAnalyserNodes = /* @__PURE__ */ new WeakMap();
@@ -1459,7 +1447,7 @@ var createAnalyserNodeRendererFactory = (createNativeAnalyserNode2, getNativeAud
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-buffer-copy-channel-methods-out-of-bounds-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-buffer-copy-channel-methods-out-of-bounds-support.js
 var testAudioBufferCopyChannelMethodsOutOfBoundsSupport = (nativeAudioBuffer) => {
   try {
     nativeAudioBuffer.copyToChannel(new Float32Array(1), 0, -1);
@@ -1469,10 +1457,10 @@ var testAudioBufferCopyChannelMethodsOutOfBoundsSupport = (nativeAudioBuffer) =>
   return true;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/index-size-error.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/index-size-error.js
 var createIndexSizeError = () => new DOMException("", "IndexSizeError");
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-buffer-get-channel-data-method.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-buffer-get-channel-data-method.js
 var wrapAudioBufferGetChannelDataMethod = (audioBuffer) => {
   audioBuffer.getChannelData = /* @__PURE__ */ ((getChannelData) => {
     return (channel) => {
@@ -1488,7 +1476,7 @@ var wrapAudioBufferGetChannelDataMethod = (audioBuffer) => {
   })(audioBuffer.getChannelData);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-buffer-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-buffer-constructor.js
 var DEFAULT_OPTIONS2 = {
   numberOfChannels: 1
 };
@@ -1522,14 +1510,14 @@ var createAudioBufferConstructor = (audioBufferStore2, cacheTestResult2, createN
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/constants.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/constants.js
 var MOST_NEGATIVE_SINGLE_FLOAT = -34028234663852886e22;
 var MOST_POSITIVE_SINGLE_FLOAT = -MOST_NEGATIVE_SINGLE_FLOAT;
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-active-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-active-audio-node.js
 var isActiveAudioNode = (audioNode) => ACTIVE_AUDIO_NODE_STORE.has(audioNode);
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-buffer-source-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-buffer-source-node-constructor.js
 var DEFAULT_OPTIONS3 = {
   buffer: null,
   channelCount: 2,
@@ -1627,7 +1615,7 @@ var createAudioBufferSourceNodeConstructor = (audioNodeConstructor2, createAudio
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-buffer-source-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-buffer-source-node-renderer-factory.js
 var createAudioBufferSourceNodeRendererFactory = (connectAudioParam2, createNativeAudioBufferSourceNode2, getNativeAudioNode2, renderAutomation2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeAudioBufferSourceNodes = /* @__PURE__ */ new WeakMap();
@@ -1683,47 +1671,47 @@ var createAudioBufferSourceNodeRendererFactory = (connectAudioParam2, createNati
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/audio-buffer-source-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/audio-buffer-source-node.js
 var isAudioBufferSourceNode = (audioNode) => {
   return "playbackRate" in audioNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/biquad-filter-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/biquad-filter-node.js
 var isBiquadFilterNode = (audioNode) => {
   return "frequency" in audioNode && "gain" in audioNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/constant-source-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/constant-source-node.js
 var isConstantSourceNode = (audioNode) => {
   return "offset" in audioNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/gain-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/gain-node.js
 var isGainNode = (audioNode) => {
   return !("frequency" in audioNode) && "gain" in audioNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/oscillator-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/oscillator-node.js
 var isOscillatorNode = (audioNode) => {
   return "detune" in audioNode && "frequency" in audioNode && !("gain" in audioNode);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/stereo-panner-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/stereo-panner-node.js
 var isStereoPannerNode = (audioNode) => {
   return "pan" in audioNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-audio-node-connections.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-audio-node-connections.js
 var getAudioNodeConnections = (audioNode) => {
   return getValueForKey(AUDIO_NODE_CONNECTIONS_STORE, audioNode);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-audio-param-connections.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-audio-param-connections.js
 var getAudioParamConnections = (audioParam) => {
   return getValueForKey(AUDIO_PARAM_CONNECTIONS_STORE, audioParam);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/deactivate-active-audio-node-input-connections.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/deactivate-active-audio-node-input-connections.js
 var deactivateActiveAudioNodeInputConnections = (audioNode, trace) => {
   const { activeInputs } = getAudioNodeConnections(audioNode);
   activeInputs.forEach((connections) => connections.forEach(([source]) => {
@@ -1746,17 +1734,17 @@ var deactivateActiveAudioNodeInputConnections = (audioNode, trace) => {
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/deactivate-audio-graph.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/deactivate-audio-graph.js
 var deactivateAudioGraph = (context2) => {
   deactivateActiveAudioNodeInputConnections(context2.destination, []);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-valid-latency-hint.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-valid-latency-hint.js
 var isValidLatencyHint = (latencyHint) => {
   return latencyHint === void 0 || typeof latencyHint === "number" || typeof latencyHint === "string" && (latencyHint === "balanced" || latencyHint === "interactive" || latencyHint === "playback");
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-context-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-context-constructor.js
 var createAudioContextConstructor = (baseAudioContextConstructor2, createInvalidStateError2, createNotSupportedError2, createUnknownError2, mediaElementAudioSourceNodeConstructor2, mediaStreamAudioDestinationNodeConstructor2, mediaStreamAudioSourceNodeConstructor2, mediaStreamTrackAudioSourceNodeConstructor2, nativeAudioContextConstructor2) => {
   return class AudioContext extends baseAudioContextConstructor2 {
     constructor(options = {}) {
@@ -1882,7 +1870,7 @@ var createAudioContextConstructor = (baseAudioContextConstructor2, createInvalid
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-destination-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-destination-node-constructor.js
 var createAudioDestinationNodeConstructor = (audioNodeConstructor2, createAudioDestinationNodeRenderer2, createIndexSizeError2, createInvalidStateError2, createNativeAudioDestinationNode, getNativeContext2, isNativeOfflineAudioContext2, renderInputsOfAudioNode2) => {
   return class AudioDestinationNode extends audioNodeConstructor2 {
     constructor(context2, channelCount) {
@@ -1921,7 +1909,7 @@ var createAudioDestinationNodeConstructor = (audioNodeConstructor2, createAudioD
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-destination-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-destination-node-renderer-factory.js
 var createAudioDestinationNodeRenderer = (renderInputsOfAudioNode2) => {
   const renderedNativeAudioDestinationNodes = /* @__PURE__ */ new WeakMap();
   const createAudioDestinationNode = async (proxy, nativeOfflineAudioContext) => {
@@ -1941,7 +1929,7 @@ var createAudioDestinationNodeRenderer = (renderInputsOfAudioNode2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-listener-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-listener-factory.js
 var createAudioListenerFactory = (createAudioParam2, createNativeChannelMergerNode2, createNativeConstantSourceNode2, createNativeScriptProcessorNode2, createNotSupportedError2, getFirstSample2, isNativeOfflineAudioContext2, overwriteAccessors2) => {
   return (context2, nativeContext) => {
     const nativeListener = nativeContext.listener;
@@ -2159,17 +2147,17 @@ var createAudioListenerFactory = (createAudioParam2, createNativeChannelMergerNo
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/audio-node.js
 var isAudioNode = (audioNodeOrAudioParam) => {
   return "context" in audioNodeOrAudioParam;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/audio-node-output-connection.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/audio-node-output-connection.js
 var isAudioNodeOutputConnection = (outputConnection) => {
   return isAudioNode(outputConnection[0]);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/insert-element-in-set.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/insert-element-in-set.js
 var insertElementInSet = (set, element, predicate, ignoreDuplicates) => {
   for (const lmnt of set) {
     if (predicate(lmnt)) {
@@ -2183,12 +2171,12 @@ var insertElementInSet = (set, element, predicate, ignoreDuplicates) => {
   return true;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/add-active-input-connection-to-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/add-active-input-connection-to-audio-param.js
 var addActiveInputConnectionToAudioParam = (activeInputs, source, [output, eventListener], ignoreDuplicates) => {
   insertElementInSet(activeInputs, [source, output, eventListener], (activeInputConnection) => activeInputConnection[0] === source && activeInputConnection[1] === output, ignoreDuplicates);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/add-passive-input-connection-to-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/add-passive-input-connection-to-audio-param.js
 var addPassiveInputConnectionToAudioParam = (passiveInputs, [source, output, eventListener], ignoreDuplicates) => {
   const passiveInputConnections = passiveInputs.get(source);
   if (passiveInputConnections === void 0) {
@@ -2198,12 +2186,12 @@ var addPassiveInputConnectionToAudioParam = (passiveInputs, [source, output, eve
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/native-audio-node-faker.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/native-audio-node-faker.js
 var isNativeAudioNodeFaker = (nativeAudioNodeOrNativeAudioNodeFaker) => {
   return "inputs" in nativeAudioNodeOrNativeAudioNodeFaker;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/connect-native-audio-node-to-native-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/connect-native-audio-node-to-native-audio-node.js
 var connectNativeAudioNodeToNativeAudioNode = (nativeSourceAudioNode, nativeDestinationAudioNode, output, input) => {
   if (isNativeAudioNodeFaker(nativeDestinationAudioNode)) {
     const fakeNativeDestinationAudioNode = nativeDestinationAudioNode.inputs[input];
@@ -2214,7 +2202,7 @@ var connectNativeAudioNodeToNativeAudioNode = (nativeSourceAudioNode, nativeDest
   return [nativeDestinationAudioNode, output, input];
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-active-input-connection.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-active-input-connection.js
 var deleteActiveInputConnection = (activeInputConnections, source, output) => {
   for (const activeInputConnection of activeInputConnections) {
     if (activeInputConnection[0] === source && activeInputConnection[1] === output) {
@@ -2225,12 +2213,12 @@ var deleteActiveInputConnection = (activeInputConnections, source, output) => {
   return null;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-active-input-connection-to-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-active-input-connection-to-audio-param.js
 var deleteActiveInputConnectionToAudioParam = (activeInputs, source, output) => {
   return pickElementFromSet(activeInputs, (activeInputConnection) => activeInputConnection[0] === source && activeInputConnection[1] === output);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-event-listeners-of-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-event-listeners-of-audio-node.js
 var deleteEventListenerOfAudioNode = (audioNode, eventListener) => {
   const eventListeners = getEventListenersOfAudioNode(audioNode);
   if (!eventListeners.delete(eventListener)) {
@@ -2238,7 +2226,7 @@ var deleteEventListenerOfAudioNode = (audioNode, eventListener) => {
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-passive-input-connection-to-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/delete-passive-input-connection-to-audio-param.js
 var deletePassiveInputConnectionToAudioParam = (passiveInputs, source, output) => {
   const passiveInputConnections = getValueForKey(passiveInputs, source);
   const matchingConnection = pickElementFromSet(passiveInputConnections, (passiveInputConnection) => passiveInputConnection[0] === output);
@@ -2248,7 +2236,7 @@ var deletePassiveInputConnectionToAudioParam = (passiveInputs, source, output) =
   return matchingConnection;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/disconnect-native-audio-node-from-native-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/disconnect-native-audio-node-from-native-audio-node.js
 var disconnectNativeAudioNodeFromNativeAudioNode = (nativeSourceAudioNode, nativeDestinationAudioNode, output, input) => {
   if (isNativeAudioNodeFaker(nativeDestinationAudioNode)) {
     nativeSourceAudioNode.disconnect(nativeDestinationAudioNode.inputs[input], output, 0);
@@ -2257,27 +2245,27 @@ var disconnectNativeAudioNodeFromNativeAudioNode = (nativeSourceAudioNode, nativ
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-native-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-native-audio-node.js
 var getNativeAudioNode = (audioNode) => {
   return getValueForKey(AUDIO_NODE_STORE, audioNode);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-native-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-native-audio-param.js
 var getNativeAudioParam = (audioParam) => {
   return getValueForKey(AUDIO_PARAM_STORE, audioParam);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-part-of-a-cycle.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-part-of-a-cycle.js
 var isPartOfACycle = (audioNode) => {
   return CYCLE_COUNTERS.has(audioNode);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-passive-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-passive-audio-node.js
 var isPassiveAudioNode = (audioNode) => {
   return !ACTIVE_AUDIO_NODE_STORE.has(audioNode);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-node-disconnect-method-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-node-disconnect-method-support.js
 var testAudioNodeDisconnectMethodSupport = (nativeAudioContext, nativeAudioWorkletNodeConstructor2) => {
   return new Promise((resolve) => {
     if (nativeAudioWorkletNodeConstructor2 !== null) {
@@ -2312,7 +2300,7 @@ var testAudioNodeDisconnectMethodSupport = (nativeAudioContext, nativeAudioWorkl
   });
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/visit-each-audio-node-once.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/visit-each-audio-node-once.js
 var visitEachAudioNodeOnce = (cycles, visitor) => {
   const counts = /* @__PURE__ */ new Map();
   for (const cycle of cycles) {
@@ -2324,12 +2312,12 @@ var visitEachAudioNodeOnce = (cycles, visitor) => {
   counts.forEach((count, audioNode) => visitor(audioNode, count));
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/native-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/native-audio-node.js
 var isNativeAudioNode = (nativeAudioNodeOrAudioParam) => {
   return "context" in nativeAudioNodeOrAudioParam;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-node-disconnect-method.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-node-disconnect-method.js
 var wrapAudioNodeDisconnectMethod = (nativeAudioNode) => {
   const connections = /* @__PURE__ */ new Map();
   nativeAudioNode.connect = /* @__PURE__ */ ((connect2) => {
@@ -2388,7 +2376,7 @@ var wrapAudioNodeDisconnectMethod = (nativeAudioNode) => {
   })(nativeAudioNode.disconnect);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-node-constructor.js
 var addConnectionToAudioParamOfAudioContext = (source, destination, output, isOffline) => {
   const { activeInputs, passiveInputs } = getAudioParamConnections(destination);
   const { outputs } = getAudioNodeConnections(source);
@@ -2635,7 +2623,7 @@ var createAudioNodeConstructor = (addAudioNodeConnections, addConnectionToAudioN
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-param-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-param-factory.js
 var import_automation_events = __toESM(require_bundle());
 var createAudioParamFactory = (addAudioParamConnections, audioParamAudioNodeStore2, audioParamStore, createAudioParamRenderer2, createCancelAndHoldAutomationEvent2, createCancelScheduledValuesAutomationEvent2, createExponentialRampToValueAutomationEvent2, createLinearRampToValueAutomationEvent2, createSetTargetAutomationEvent2, createSetValueAutomationEvent2, createSetValueCurveAutomationEvent2, nativeAudioContextConstructor2, setValueAtTimeUntilPossible2) => {
   return (audioNode, isAudioParamOfOfflineAudioContext, nativeAudioParam, maxValue = null, minValue = null) => {
@@ -2786,7 +2774,7 @@ var createAudioParamFactory = (addAudioParamConnections, audioParamAudioNodeStor
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-param-renderer.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-param-renderer.js
 var createAudioParamRenderer = (automationEventList) => {
   return {
     replay(audioParam) {
@@ -2814,7 +2802,7 @@ var createAudioParamRenderer = (automationEventList) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/read-only-map.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/read-only-map.js
 var ReadOnlyMap = class {
   constructor(parameters) {
     this._map = new Map(parameters);
@@ -2842,7 +2830,7 @@ var ReadOnlyMap = class {
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-worklet-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-worklet-node-constructor.js
 var DEFAULT_OPTIONS4 = {
   channelCount: 2,
   // Bug #61: The channelCountMode should be 'max' according to the spec but is set to 'explicit' to achieve consistent behavior.
@@ -2902,7 +2890,7 @@ var createAudioWorkletNodeConstructor = (addUnrenderedAudioWorkletNode2, audioNo
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/copy-from-channel.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/copy-from-channel.js
 function copyFromChannel(audioBuffer, parent, key, channelNumber, bufferOffset) {
   if (typeof audioBuffer.copyFromChannel === "function") {
     if (parent[key].byteLength === 0) {
@@ -2920,7 +2908,7 @@ function copyFromChannel(audioBuffer, parent, key, channelNumber, bufferOffset) 
   }
 }
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/copy-to-channel.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/copy-to-channel.js
 var copyToChannel = (audioBuffer, parent, key, channelNumber, bufferOffset) => {
   if (typeof audioBuffer.copyToChannel === "function") {
     if (parent[key].byteLength !== 0) {
@@ -2933,7 +2921,7 @@ var copyToChannel = (audioBuffer, parent, key, channelNumber, bufferOffset) => {
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/create-nested-arrays.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/create-nested-arrays.js
 var createNestedArrays = (x, y) => {
   const arrays = [];
   for (let i = 0; i < x; i += 1) {
@@ -2947,14 +2935,14 @@ var createNestedArrays = (x, y) => {
   return arrays;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-audio-worklet-processor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-audio-worklet-processor.js
 var getAudioWorkletProcessor = (nativeOfflineAudioContext, proxy) => {
   const nodeToProcessorMap = getValueForKey(NODE_TO_PROCESSOR_MAPS, nativeOfflineAudioContext);
   const nativeAudioWorkletNode = getNativeAudioNode(proxy);
   return getValueForKey(nodeToProcessorMap, nativeAudioWorkletNode);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-worklet-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/audio-worklet-node-renderer-factory.js
 var processBuffer = async (proxy, renderedBuffer, nativeOfflineAudioContext, options, outputChannelCount, processorConstructor, exposeCurrentFrameAndCurrentTime2) => {
   const length = renderedBuffer === null ? Math.ceil(proxy.context.length / 128) * 128 : renderedBuffer.length;
   const numberOfInputChannels = options.channelCount * options.numberOfInputs;
@@ -3186,7 +3174,7 @@ var createAudioWorkletNodeRendererFactory = (connectAudioParam2, connectMultiple
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/base-audio-context-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/base-audio-context-constructor.js
 var createBaseAudioContextConstructor = (addAudioWorkletModule2, analyserNodeConstructor2, audioBufferConstructor2, audioBufferSourceNodeConstructor2, biquadFilterNodeConstructor2, channelMergerNodeConstructor2, channelSplitterNodeConstructor2, constantSourceNodeConstructor2, convolverNodeConstructor2, decodeAudioData2, delayNodeConstructor2, dynamicsCompressorNodeConstructor2, gainNodeConstructor2, iIRFilterNodeConstructor2, minimalBaseAudioContextConstructor2, oscillatorNodeConstructor2, pannerNodeConstructor2, periodicWaveConstructor2, stereoPannerNodeConstructor2, waveShaperNodeConstructor2) => {
   return class BaseAudioContext extends minimalBaseAudioContextConstructor2 {
     constructor(_nativeContext, numberOfChannels) {
@@ -3268,7 +3256,7 @@ var createBaseAudioContextConstructor = (addAudioWorkletModule2, analyserNodeCon
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/biquad-filter-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/biquad-filter-node-constructor.js
 var DEFAULT_OPTIONS5 = {
   Q: 1,
   channelCount: 2,
@@ -3329,7 +3317,7 @@ var createBiquadFilterNodeConstructor = (audioNodeConstructor2, createAudioParam
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/biquad-filter-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/biquad-filter-node-renderer-factory.js
 var createBiquadFilterNodeRendererFactory = (connectAudioParam2, createNativeBiquadFilterNode2, getNativeAudioNode2, renderAutomation2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeBiquadFilterNodes = /* @__PURE__ */ new WeakMap();
@@ -3376,7 +3364,7 @@ var createBiquadFilterNodeRendererFactory = (connectAudioParam2, createNativeBiq
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/cache-test-result.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/cache-test-result.js
 var createCacheTestResult = (ongoingTests, testResults) => {
   return (tester, test) => {
     const cachedTestResult = testResults.get(tester);
@@ -3406,7 +3394,7 @@ var createCacheTestResult = (ongoingTests, testResults) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/channel-merger-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/channel-merger-node-constructor.js
 var DEFAULT_OPTIONS6 = {
   channelCount: 1,
   channelCountMode: "explicit",
@@ -3425,7 +3413,7 @@ var createChannelMergerNodeConstructor = (audioNodeConstructor2, createChannelMe
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/channel-merger-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/channel-merger-node-renderer-factory.js
 var createChannelMergerNodeRendererFactory = (createNativeChannelMergerNode2, getNativeAudioNode2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeAudioNodes = /* @__PURE__ */ new WeakMap();
@@ -3457,7 +3445,7 @@ var createChannelMergerNodeRendererFactory = (createNativeChannelMergerNode2, ge
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/channel-splitter-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/channel-splitter-node-constructor.js
 var DEFAULT_OPTIONS7 = {
   channelCount: 6,
   channelCountMode: "explicit",
@@ -3476,7 +3464,7 @@ var createChannelSplitterNodeConstructor = (audioNodeConstructor2, createChannel
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/channel-splitter-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/channel-splitter-node-renderer-factory.js
 var createChannelSplitterNodeRendererFactory = (createNativeChannelSplitterNode2, getNativeAudioNode2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeAudioNodes = /* @__PURE__ */ new WeakMap();
@@ -3508,14 +3496,14 @@ var createChannelSplitterNodeRendererFactory = (createNativeChannelSplitterNode2
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/connect-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/connect-audio-param.js
 var createConnectAudioParam = (renderInputsOfAudioParam2) => {
   return (nativeOfflineAudioContext, audioParam, nativeAudioParam) => {
     return renderInputsOfAudioParam2(audioParam, nativeOfflineAudioContext, nativeAudioParam);
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/connect-multiple-outputs.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/connect-multiple-outputs.js
 var createConnectMultipleOutputs = (createIndexSizeError2) => {
   return (outputAudioNodes, destination, output = 0, input = 0) => {
     const outputAudioNode = outputAudioNodes[output];
@@ -3529,7 +3517,7 @@ var createConnectMultipleOutputs = (createIndexSizeError2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/connected-native-audio-buffer-source-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/connected-native-audio-buffer-source-node-factory.js
 var createConnectedNativeAudioBufferSourceNodeFactory = (createNativeAudioBufferSourceNode2) => {
   return (nativeContext, nativeAudioNode) => {
     const nativeAudioBufferSourceNode = createNativeAudioBufferSourceNode2(nativeContext, {
@@ -3554,7 +3542,7 @@ var createConnectedNativeAudioBufferSourceNodeFactory = (createNativeAudioBuffer
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/constant-source-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/constant-source-node-constructor.js
 var DEFAULT_OPTIONS8 = {
   channelCount: 2,
   channelCountMode: "max",
@@ -3612,7 +3600,7 @@ var createConstantSourceNodeConstructor = (audioNodeConstructor2, createAudioPar
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/constant-source-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/constant-source-node-renderer-factory.js
 var createConstantSourceNodeRendererFactory = (connectAudioParam2, createNativeConstantSourceNode2, getNativeAudioNode2, renderAutomation2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeConstantSourceNodes = /* @__PURE__ */ new WeakMap();
@@ -3663,7 +3651,7 @@ var createConstantSourceNodeRendererFactory = (connectAudioParam2, createNativeC
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/convert-number-to-unsigned-long.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/convert-number-to-unsigned-long.js
 var createConvertNumberToUnsignedLong = (unit32Array) => {
   return (value) => {
     unit32Array[0] = value;
@@ -3671,7 +3659,7 @@ var createConvertNumberToUnsignedLong = (unit32Array) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/convolver-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/convolver-node-constructor.js
 var DEFAULT_OPTIONS9 = {
   buffer: null,
   channelCount: 2,
@@ -3721,7 +3709,7 @@ var createConvolverNodeConstructor = (audioNodeConstructor2, createConvolverNode
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/convolver-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/convolver-node-renderer-factory.js
 var createConvolverNodeRendererFactory = (createNativeConvolverNode2, getNativeAudioNode2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeConvolverNodes = /* @__PURE__ */ new WeakMap();
@@ -3758,7 +3746,7 @@ var createConvolverNodeRendererFactory = (createNativeConvolverNode2, getNativeA
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/create-native-offline-audio-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/create-native-offline-audio-context.js
 var createCreateNativeOfflineAudioContext = (createNotSupportedError2, nativeOfflineAudioContextConstructor2) => {
   return (numberOfChannels, length, sampleRate) => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -3775,10 +3763,10 @@ var createCreateNativeOfflineAudioContext = (createNotSupportedError2, nativeOff
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/data-clone-error.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/data-clone-error.js
 var createDataCloneError = () => new DOMException("", "DataCloneError");
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/detach-array-buffer.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/detach-array-buffer.js
 var detachArrayBuffer = (arrayBuffer) => {
   const { port1, port2 } = new MessageChannel();
   return new Promise((resolve) => {
@@ -3798,7 +3786,7 @@ var detachArrayBuffer = (arrayBuffer) => {
   });
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/decode-audio-data.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/decode-audio-data.js
 var createDecodeAudioData = (audioBufferStore2, cacheTestResult2, createDataCloneError2, createEncodingError2, detachedArrayBuffers, getNativeContext2, isNativeContext2, testAudioBufferCopyChannelMethodsOutOfBoundsSupport2, testPromiseSupport2, wrapAudioBufferCopyChannelMethods2, wrapAudioBufferCopyChannelMethodsOutOfBounds2) => {
   return (anyContext, audioData) => {
     const nativeContext = isNativeContext2(anyContext) ? anyContext : getNativeContext2(anyContext);
@@ -3854,7 +3842,7 @@ var createDecodeAudioData = (audioBufferStore2, cacheTestResult2, createDataClon
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/decrement-cycle-counter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/decrement-cycle-counter.js
 var createDecrementCycleCounter = (connectNativeAudioNodeToNativeAudioNode2, cycleCounters, getAudioNodeConnections2, getNativeAudioNode2, getNativeAudioParam2, getNativeContext2, isActiveAudioNode2, isNativeOfflineAudioContext2) => {
   return (audioNode, count) => {
     const cycleCounter = cycleCounters.get(audioNode);
@@ -3884,7 +3872,7 @@ var createDecrementCycleCounter = (connectNativeAudioNodeToNativeAudioNode2, cyc
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/delay-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/delay-node-constructor.js
 var DEFAULT_OPTIONS10 = {
   channelCount: 2,
   channelCountMode: "max",
@@ -3910,7 +3898,7 @@ var createDelayNodeConstructor = (audioNodeConstructor2, createAudioParam2, crea
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/delay-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/delay-node-renderer-factory.js
 var createDelayNodeRendererFactory = (connectAudioParam2, createNativeDelayNode2, getNativeAudioNode2, renderAutomation2, renderInputsOfAudioNode2) => {
   return (maxDelayTime) => {
     const renderedNativeDelayNodes = /* @__PURE__ */ new WeakMap();
@@ -3948,26 +3936,26 @@ var createDelayNodeRendererFactory = (connectAudioParam2, createNativeDelayNode2
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/delete-active-input-connection-to-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/delete-active-input-connection-to-audio-node.js
 var createDeleteActiveInputConnectionToAudioNode = (pickElementFromSet2) => {
   return (activeInputs, source, output, input) => {
     return pickElementFromSet2(activeInputs[input], (activeInputConnection) => activeInputConnection[0] === source && activeInputConnection[1] === output);
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/delete-unrendered-audio-worklet-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/delete-unrendered-audio-worklet-node.js
 var createDeleteUnrenderedAudioWorkletNode = (getUnrenderedAudioWorkletNodes2) => {
   return (nativeContext, audioWorkletNode) => {
     getUnrenderedAudioWorkletNodes2(nativeContext).delete(audioWorkletNode);
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/guards/delay-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/guards/delay-node.js
 var isDelayNode = (audioNode) => {
   return "delayTime" in audioNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/detect-cycles.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/detect-cycles.js
 var createDetectCycles = (audioParamAudioNodeStore2, getAudioNodeConnections2, getValueForKey2) => {
   return function detectCycles(chain, nextLink) {
     const audioNode = isAudioNode(nextLink) ? nextLink : getValueForKey2(audioParamAudioNodeStore2, nextLink);
@@ -3985,7 +3973,7 @@ var createDetectCycles = (audioParamAudioNodeStore2, getAudioNodeConnections2, g
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/disconnect-multiple-outputs.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/disconnect-multiple-outputs.js
 var getOutputAudioNodeAtIndex = (createIndexSizeError2, outputAudioNodes, output) => {
   const outputAudioNode = outputAudioNodes[output];
   if (outputAudioNode === void 0) {
@@ -4017,7 +4005,7 @@ var createDisconnectMultipleOutputs = (createIndexSizeError2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/dynamics-compressor-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/dynamics-compressor-node-constructor.js
 var DEFAULT_OPTIONS11 = {
   attack: 3e-3,
   channelCount: 2,
@@ -4096,7 +4084,7 @@ var createDynamicsCompressorNodeConstructor = (audioNodeConstructor2, createAudi
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/dynamics-compressor-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/dynamics-compressor-node-renderer-factory.js
 var createDynamicsCompressorNodeRendererFactory = (connectAudioParam2, createNativeDynamicsCompressorNode2, getNativeAudioNode2, renderAutomation2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeDynamicsCompressorNodes = /* @__PURE__ */ new WeakMap();
@@ -4145,10 +4133,10 @@ var createDynamicsCompressorNodeRendererFactory = (connectAudioParam2, createNat
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/encoding-error.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/encoding-error.js
 var createEncodingError = () => new DOMException("", "EncodingError");
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/evaluate-source.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/evaluate-source.js
 var createEvaluateSource = (window3) => {
   return (source) => new Promise((resolve, reject) => {
     if (window3 === null) {
@@ -4192,7 +4180,7 @@ var createEvaluateSource = (window3) => {
   });
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/event-target-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/event-target-constructor.js
 var createEventTargetConstructor = (wrapEventListener2) => {
   return class EventTarget {
     constructor(_nativeEventTarget) {
@@ -4221,7 +4209,7 @@ var createEventTargetConstructor = (wrapEventListener2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/expose-current-frame-and-current-time.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/expose-current-frame-and-current-time.js
 var createExposeCurrentFrameAndCurrentTime = (window3) => {
   return (currentTime, sampleRate, fn) => {
     Object.defineProperties(window3, {
@@ -4249,7 +4237,7 @@ var createExposeCurrentFrameAndCurrentTime = (window3) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/fetch-source.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/fetch-source.js
 var createFetchSource = (createAbortError2) => {
   return async (url) => {
     try {
@@ -4263,7 +4251,7 @@ var createFetchSource = (createAbortError2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/gain-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/gain-node-constructor.js
 var DEFAULT_OPTIONS12 = {
   channelCount: 2,
   channelCountMode: "max",
@@ -4287,7 +4275,7 @@ var createGainNodeConstructor = (audioNodeConstructor2, createAudioParam2, creat
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/gain-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/gain-node-renderer-factory.js
 var createGainNodeRendererFactory = (connectAudioParam2, createNativeGainNode2, getNativeAudioNode2, renderAutomation2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeGainNodes = /* @__PURE__ */ new WeakMap();
@@ -4324,12 +4312,12 @@ var createGainNodeRendererFactory = (connectAudioParam2, createNativeGainNode2, 
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/get-active-audio-worklet-node-inputs.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/get-active-audio-worklet-node-inputs.js
 var createGetActiveAudioWorkletNodeInputs = (activeAudioWorkletNodeInputsStore2, getValueForKey2) => {
   return (nativeAudioWorkletNode) => getValueForKey2(activeAudioWorkletNodeInputsStore2, nativeAudioWorkletNode);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/get-audio-node-renderer.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/get-audio-node-renderer.js
 var createGetAudioNodeRenderer = (getAudioNodeConnections2) => {
   return (audioNode) => {
     const audioNodeConnections = getAudioNodeConnections2(audioNode);
@@ -4340,7 +4328,7 @@ var createGetAudioNodeRenderer = (getAudioNodeConnections2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/get-audio-node-tail-time.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/get-audio-node-tail-time.js
 var createGetAudioNodeTailTime = (audioNodeTailTimeStore2) => {
   return (audioNode) => {
     var _a;
@@ -4348,7 +4336,7 @@ var createGetAudioNodeTailTime = (audioNodeTailTimeStore2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/get-audio-param-renderer.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/get-audio-param-renderer.js
 var createGetAudioParamRenderer = (getAudioParamConnections2) => {
   return (audioParam) => {
     const audioParamConnections = getAudioParamConnections2(audioParam);
@@ -4359,17 +4347,17 @@ var createGetAudioParamRenderer = (getAudioParamConnections2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/get-backup-offline-audio-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/get-backup-offline-audio-context.js
 var createGetBackupOfflineAudioContext = (backupOfflineAudioContextStore2) => {
   return (nativeContext) => {
     return backupOfflineAudioContextStore2.get(nativeContext);
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/invalid-state-error.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/invalid-state-error.js
 var createInvalidStateError = () => new DOMException("", "InvalidStateError");
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/get-native-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/get-native-context.js
 var createGetNativeContext = (contextStore) => {
   return (context2) => {
     const nativeContext = contextStore.get(context2);
@@ -4380,7 +4368,7 @@ var createGetNativeContext = (contextStore) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/get-or-create-backup-offline-audio-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/get-or-create-backup-offline-audio-context.js
 var createGetOrCreateBackupOfflineAudioContext = (backupOfflineAudioContextStore2, nativeOfflineAudioContextConstructor2) => {
   return (nativeContext) => {
     let backupOfflineAudioContext = backupOfflineAudioContextStore2.get(nativeContext);
@@ -4396,7 +4384,7 @@ var createGetOrCreateBackupOfflineAudioContext = (backupOfflineAudioContextStore
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/get-unrendered-audio-worklet-nodes.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/get-unrendered-audio-worklet-nodes.js
 var createGetUnrenderedAudioWorkletNodes = (unrenderedAudioWorkletNodeStore2) => {
   return (nativeContext) => {
     const unrenderedAudioWorkletNodes = unrenderedAudioWorkletNodeStore2.get(nativeContext);
@@ -4407,10 +4395,10 @@ var createGetUnrenderedAudioWorkletNodes = (unrenderedAudioWorkletNodeStore2) =>
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/invalid-access-error.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/invalid-access-error.js
 var createInvalidAccessError = () => new DOMException("", "InvalidAccessError");
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-iir-filter-node-get-frequency-response-method.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-iir-filter-node-get-frequency-response-method.js
 var wrapIIRFilterNodeGetFrequencyResponseMethod = (nativeIIRFilterNode) => {
   nativeIIRFilterNode.getFrequencyResponse = /* @__PURE__ */ ((getFrequencyResponse) => {
     return (frequencyHz, magResponse, phaseResponse) => {
@@ -4422,7 +4410,7 @@ var wrapIIRFilterNodeGetFrequencyResponseMethod = (nativeIIRFilterNode) => {
   })(nativeIIRFilterNode.getFrequencyResponse);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/iir-filter-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/iir-filter-node-constructor.js
 var DEFAULT_OPTIONS13 = {
   channelCount: 2,
   channelCountMode: "max",
@@ -4447,7 +4435,7 @@ var createIIRFilterNodeConstructor = (audioNodeConstructor2, createNativeIIRFilt
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/filter-buffer.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/filter-buffer.js
 var filterBuffer = (feedback, feedbackLength, feedforward, feedforwardLength, minLength, xBuffer, yBuffer, bufferIndex, bufferLength, input, output) => {
   const inputLength = input.length;
   let i = bufferIndex;
@@ -4472,7 +4460,7 @@ var filterBuffer = (feedback, feedbackLength, feedforward, feedforwardLength, mi
   return i;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/iir-filter-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/iir-filter-node-renderer-factory.js
 var filterFullBuffer = (renderedBuffer, nativeOfflineAudioContext, feedback, feedforward) => {
   const convertedFeedback = feedback instanceof Float64Array ? feedback : new Float64Array(feedback);
   const convertedFeedforward = feedforward instanceof Float64Array ? feedforward : new Float64Array(feedforward);
@@ -4562,7 +4550,7 @@ var createIIRFilterNodeRendererFactory = (createNativeAudioBufferSourceNode2, ge
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/increment-cycle-counter-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/increment-cycle-counter-factory.js
 var createIncrementCycleCounterFactory = (cycleCounters, disconnectNativeAudioNodeFromNativeAudioNode2, getAudioNodeConnections2, getNativeAudioNode2, getNativeAudioParam2, isActiveAudioNode2) => {
   return (isOffline) => {
     return (audioNode, count) => {
@@ -4589,7 +4577,7 @@ var createIncrementCycleCounterFactory = (cycleCounters, disconnectNativeAudioNo
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-any-audio-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-any-audio-context.js
 var createIsAnyAudioContext = (contextStore, isNativeAudioContext2) => {
   return (anything) => {
     const nativeContext = contextStore.get(anything);
@@ -4597,17 +4585,17 @@ var createIsAnyAudioContext = (contextStore, isNativeAudioContext2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-any-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-any-audio-node.js
 var createIsAnyAudioNode = (audioNodeStore, isNativeAudioNode3) => {
   return (anything) => audioNodeStore.has(anything) || isNativeAudioNode3(anything);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-any-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-any-audio-param.js
 var createIsAnyAudioParam = (audioParamStore, isNativeAudioParam2) => {
   return (anything) => audioParamStore.has(anything) || isNativeAudioParam2(anything);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-any-offline-audio-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-any-offline-audio-context.js
 var createIsAnyOfflineAudioContext = (contextStore, isNativeOfflineAudioContext2) => {
   return (anything) => {
     const nativeContext = contextStore.get(anything);
@@ -4615,45 +4603,45 @@ var createIsAnyOfflineAudioContext = (contextStore, isNativeOfflineAudioContext2
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-audio-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-audio-context.js
 var createIsNativeAudioContext = (nativeAudioContextConstructor2) => {
   return (anything) => {
     return nativeAudioContextConstructor2 !== null && anything instanceof nativeAudioContextConstructor2;
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-audio-node.js
 var createIsNativeAudioNode = (window3) => {
   return (anything) => {
     return window3 !== null && typeof window3.AudioNode === "function" && anything instanceof window3.AudioNode;
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-audio-param.js
 var createIsNativeAudioParam = (window3) => {
   return (anything) => {
     return window3 !== null && typeof window3.AudioParam === "function" && anything instanceof window3.AudioParam;
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-context.js
 var createIsNativeContext = (isNativeAudioContext2, isNativeOfflineAudioContext2) => {
   return (anything) => {
     return isNativeAudioContext2(anything) || isNativeOfflineAudioContext2(anything);
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-offline-audio-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-native-offline-audio-context.js
 var createIsNativeOfflineAudioContext = (nativeOfflineAudioContextConstructor2) => {
   return (anything) => {
     return nativeOfflineAudioContextConstructor2 !== null && anything instanceof nativeOfflineAudioContextConstructor2;
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-secure-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-secure-context.js
 var createIsSecureContext = (window3) => window3 !== null && window3.isSecureContext;
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/is-supported-promise.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/is-supported-promise.js
 var createIsSupportedPromise = async (cacheTestResult2, testAudioBufferCopyChannelMethodsSubarraySupport, testAudioContextCloseMethodSupport, testAudioContextDecodeAudioDataMethodTypeErrorSupport, testAudioContextOptionsSupport, testAudioNodeConnectMethodSupport, testAudioWorkletProcessorNoOutputsSupport, testChannelMergerNodeChannelCountSupport, testConstantSourceNodeAccurateSchedulingSupport, testConvolverNodeBufferReassignabilitySupport, testConvolverNodeChannelCountSupport, testDomExceptionContrucorSupport, testIsSecureContextSupport, testMediaStreamAudioSourceNodeMediaStreamWithoutAudioTrackSupport, testStereoPannerNodeDefaultValueSupport, testTransferablesSupport2) => {
   if (cacheTestResult2(testAudioBufferCopyChannelMethodsSubarraySupport, testAudioBufferCopyChannelMethodsSubarraySupport) && cacheTestResult2(testAudioContextCloseMethodSupport, testAudioContextCloseMethodSupport) && cacheTestResult2(testAudioContextOptionsSupport, testAudioContextOptionsSupport) && cacheTestResult2(testAudioNodeConnectMethodSupport, testAudioNodeConnectMethodSupport) && cacheTestResult2(testChannelMergerNodeChannelCountSupport, testChannelMergerNodeChannelCountSupport) && cacheTestResult2(testConstantSourceNodeAccurateSchedulingSupport, testConstantSourceNodeAccurateSchedulingSupport) && cacheTestResult2(testConvolverNodeBufferReassignabilitySupport, testConvolverNodeBufferReassignabilitySupport) && cacheTestResult2(testConvolverNodeChannelCountSupport, testConvolverNodeChannelCountSupport) && cacheTestResult2(testDomExceptionContrucorSupport, testDomExceptionContrucorSupport) && cacheTestResult2(testIsSecureContextSupport, testIsSecureContextSupport) && cacheTestResult2(testMediaStreamAudioSourceNodeMediaStreamWithoutAudioTrackSupport, testMediaStreamAudioSourceNodeMediaStreamWithoutAudioTrackSupport)) {
     const results = await Promise.all([
@@ -4667,7 +4655,7 @@ var createIsSupportedPromise = async (cacheTestResult2, testAudioBufferCopyChann
   return false;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/media-element-audio-source-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/media-element-audio-source-node-constructor.js
 var createMediaElementAudioSourceNodeConstructor = (audioNodeConstructor2, createNativeMediaElementAudioSourceNode2, getNativeContext2, isNativeOfflineAudioContext2) => {
   return class MediaElementAudioSourceNode extends audioNodeConstructor2 {
     constructor(context2, options) {
@@ -4685,7 +4673,7 @@ var createMediaElementAudioSourceNodeConstructor = (audioNodeConstructor2, creat
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/media-stream-audio-destination-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/media-stream-audio-destination-node-constructor.js
 var DEFAULT_OPTIONS14 = {
   channelCount: 2,
   channelCountMode: "explicit",
@@ -4709,7 +4697,7 @@ var createMediaStreamAudioDestinationNodeConstructor = (audioNodeConstructor2, c
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/media-stream-audio-source-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/media-stream-audio-source-node-constructor.js
 var createMediaStreamAudioSourceNodeConstructor = (audioNodeConstructor2, createNativeMediaStreamAudioSourceNode2, getNativeContext2, isNativeOfflineAudioContext2) => {
   return class MediaStreamAudioSourceNode extends audioNodeConstructor2 {
     constructor(context2, options) {
@@ -4727,7 +4715,7 @@ var createMediaStreamAudioSourceNodeConstructor = (audioNodeConstructor2, create
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/media-stream-track-audio-source-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/media-stream-track-audio-source-node-constructor.js
 var createMediaStreamTrackAudioSourceNodeConstructor = (audioNodeConstructor2, createNativeMediaStreamTrackAudioSourceNode2, getNativeContext2) => {
   return class MediaStreamTrackAudioSourceNode extends audioNodeConstructor2 {
     constructor(context2, options) {
@@ -4738,7 +4726,7 @@ var createMediaStreamTrackAudioSourceNodeConstructor = (audioNodeConstructor2, c
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/minimal-audio-context-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/minimal-audio-context-constructor.js
 var createMinimalAudioContextConstructor = (createInvalidStateError2, createNotSupportedError2, createUnknownError2, minimalBaseAudioContextConstructor2, nativeAudioContextConstructor2) => {
   return class MinimalAudioContext extends minimalBaseAudioContextConstructor2 {
     constructor(options = {}) {
@@ -4852,7 +4840,7 @@ var createMinimalAudioContextConstructor = (createInvalidStateError2, createNotS
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/minimal-base-audio-context-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/minimal-base-audio-context-constructor.js
 var createMinimalBaseAudioContextConstructor = (audioDestinationNodeConstructor2, createAudioListener2, eventTargetConstructor2, isNativeOfflineAudioContext2, unrenderedAudioWorkletNodeStore2, wrapEventListener2) => {
   return class MinimalBaseAudioContext extends eventTargetConstructor2 {
     constructor(_nativeContext, numberOfChannels) {
@@ -4893,7 +4881,7 @@ var createMinimalBaseAudioContextConstructor = (audioDestinationNodeConstructor2
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-promise-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-promise-support.js
 var testPromiseSupport = (nativeContext) => {
   const uint32Array = new Uint32Array([1179011410, 40, 1163280727, 544501094, 16, 131073, 44100, 176400, 1048580, 1635017060, 4, 0]);
   try {
@@ -4910,7 +4898,7 @@ var testPromiseSupport = (nativeContext) => {
   return false;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/minimal-offline-audio-context-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/minimal-offline-audio-context-constructor.js
 var DEFAULT_OPTIONS15 = {
   numberOfChannels: 1
 };
@@ -4970,7 +4958,7 @@ var createMinimalOfflineAudioContextConstructor = (cacheTestResult2, createInval
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/monitor-connections.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/monitor-connections.js
 var createMonitorConnections = (insertElementInSet2, isNativeAudioNode3) => {
   return (nativeAudioNode, whenConnected, whenDisconnected) => {
     const connections = /* @__PURE__ */ new Set();
@@ -5028,7 +5016,7 @@ var createMonitorConnections = (insertElementInSet2, isNativeAudioNode3) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/assign-native-audio-node-option.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/assign-native-audio-node-option.js
 var assignNativeAudioNodeOption = (nativeAudioNode, options, option) => {
   const value = options[option];
   if (value !== void 0 && value !== nativeAudioNode[option]) {
@@ -5036,19 +5024,19 @@ var assignNativeAudioNodeOption = (nativeAudioNode, options, option) => {
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/assign-native-audio-node-options.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/assign-native-audio-node-options.js
 var assignNativeAudioNodeOptions = (nativeAudioNode, options) => {
   assignNativeAudioNodeOption(nativeAudioNode, options, "channelCount");
   assignNativeAudioNodeOption(nativeAudioNode, options, "channelCountMode");
   assignNativeAudioNodeOption(nativeAudioNode, options, "channelInterpretation");
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-analyser-node-get-float-time-domain-data-method-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-analyser-node-get-float-time-domain-data-method-support.js
 var testAnalyserNodeGetFloatTimeDomainDataMethodSupport = (nativeAnalyserNode) => {
   return typeof nativeAnalyserNode.getFloatTimeDomainData === "function";
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-analyser-node-get-float-time-domain-data-method.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-analyser-node-get-float-time-domain-data-method.js
 var wrapAnalyserNodeGetFloatTimeDomainDataMethod = (nativeAnalyserNode) => {
   nativeAnalyserNode.getFloatTimeDomainData = (array) => {
     const byteTimeDomainData = new Uint8Array(array.length);
@@ -5061,7 +5049,7 @@ var wrapAnalyserNodeGetFloatTimeDomainDataMethod = (nativeAnalyserNode) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-analyser-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-analyser-node-factory.js
 var createNativeAnalyserNodeFactory = (cacheTestResult2, createIndexSizeError2) => {
   return (nativeContext, options) => {
     const nativeAnalyserNode = nativeContext.createAnalyser();
@@ -5080,7 +5068,7 @@ var createNativeAnalyserNodeFactory = (cacheTestResult2, createIndexSizeError2) 
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-buffer-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-buffer-constructor.js
 var createNativeAudioBufferConstructor = (window3) => {
   if (window3 === null) {
     return null;
@@ -5091,7 +5079,7 @@ var createNativeAudioBufferConstructor = (window3) => {
   return null;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/assign-native-audio-node-audio-param-value.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/assign-native-audio-node-audio-param-value.js
 var assignNativeAudioNodeAudioParamValue = (nativeAudioNode, options, audioParam) => {
   const value = options[audioParam];
   if (value !== void 0 && value !== nativeAudioNode[audioParam].value) {
@@ -5099,7 +5087,7 @@ var assignNativeAudioNodeAudioParamValue = (nativeAudioNode, options, audioParam
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-buffer-source-node-start-method-consecutive-calls.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-buffer-source-node-start-method-consecutive-calls.js
 var wrapAudioBufferSourceNodeStartMethodConsecutiveCalls = (nativeAudioBufferSourceNode) => {
   nativeAudioBufferSourceNode.start = /* @__PURE__ */ ((start2) => {
     let isScheduled = false;
@@ -5113,7 +5101,7 @@ var wrapAudioBufferSourceNodeStartMethodConsecutiveCalls = (nativeAudioBufferSou
   })(nativeAudioBufferSourceNode.start);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-scheduled-source-node-start-method-negative-parameters.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-scheduled-source-node-start-method-negative-parameters.js
 var wrapAudioScheduledSourceNodeStartMethodNegativeParameters = (nativeAudioScheduledSourceNode) => {
   nativeAudioScheduledSourceNode.start = /* @__PURE__ */ ((start2) => {
     return (when = 0, offset = 0, duration) => {
@@ -5125,7 +5113,7 @@ var wrapAudioScheduledSourceNodeStartMethodNegativeParameters = (nativeAudioSche
   })(nativeAudioScheduledSourceNode.start);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-scheduled-source-node-stop-method-negative-parameters.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-scheduled-source-node-stop-method-negative-parameters.js
 var wrapAudioScheduledSourceNodeStopMethodNegativeParameters = (nativeAudioScheduledSourceNode) => {
   nativeAudioScheduledSourceNode.stop = /* @__PURE__ */ ((stop) => {
     return (when = 0) => {
@@ -5137,7 +5125,7 @@ var wrapAudioScheduledSourceNodeStopMethodNegativeParameters = (nativeAudioSched
   })(nativeAudioScheduledSourceNode.stop);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-buffer-source-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-buffer-source-node-factory.js
 var createNativeAudioBufferSourceNodeFactory = (addSilentConnection2, cacheTestResult2, testAudioBufferSourceNodeStartMethodConsecutiveCallsSupport2, testAudioBufferSourceNodeStartMethodOffsetClampingSupport2, testAudioBufferSourceNodeStopMethodNullifiedBufferSupport2, testAudioScheduledSourceNodeStartMethodNegativeParametersSupport2, testAudioScheduledSourceNodeStopMethodConsecutiveCallsSupport2, testAudioScheduledSourceNodeStopMethodNegativeParametersSupport2, wrapAudioBufferSourceNodeStartMethodOffsetClampling, wrapAudioBufferSourceNodeStopMethodNullifiedBuffer, wrapAudioScheduledSourceNodeStopMethodConsecutiveCalls2) => {
   return (nativeContext, options) => {
     const nativeAudioBufferSourceNode = nativeContext.createBufferSource();
@@ -5170,7 +5158,7 @@ var createNativeAudioBufferSourceNodeFactory = (addSilentConnection2, cacheTestR
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-context-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-context-constructor.js
 var createNativeAudioContextConstructor = (window3) => {
   if (window3 === null) {
     return null;
@@ -5181,7 +5169,7 @@ var createNativeAudioContextConstructor = (window3) => {
   return window3.hasOwnProperty("webkitAudioContext") ? window3.webkitAudioContext : null;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-destination-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-destination-node.js
 var createNativeAudioDestinationNodeFactory = (createNativeGainNode2, overwriteAccessors2) => {
   return (nativeContext, channelCount, isNodeOfNativeOfflineAudioContext) => {
     const nativeAudioDestinationNode = nativeContext.destination;
@@ -5231,7 +5219,7 @@ var createNativeAudioDestinationNodeFactory = (createNativeGainNode2, overwriteA
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-worklet-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-worklet-node-constructor.js
 var createNativeAudioWorkletNodeConstructor = (window3) => {
   if (window3 === null) {
     return null;
@@ -5239,7 +5227,7 @@ var createNativeAudioWorkletNodeConstructor = (window3) => {
   return window3.hasOwnProperty("AudioWorkletNode") ? window3.AudioWorkletNode : null;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-clonability-of-audio-worklet-node-options.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-clonability-of-audio-worklet-node-options.js
 var testClonabilityOfAudioWorkletNodeOptions = (audioWorkletNodeOptions) => {
   const { port1 } = new MessageChannel();
   try {
@@ -5249,7 +5237,7 @@ var testClonabilityOfAudioWorkletNodeOptions = (audioWorkletNodeOptions) => {
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-worklet-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-worklet-node-factory.js
 var createNativeAudioWorkletNodeFactory = (createInvalidStateError2, createNativeAudioWorkletNodeFaker2, createNativeGainNode2, createNotSupportedError2, monitorConnections2) => {
   return (nativeContext, baseLatency, nativeAudioWorkletNodeConstructor2, name, processorConstructor, options) => {
     if (nativeAudioWorkletNodeConstructor2 !== null) {
@@ -5356,7 +5344,7 @@ var createNativeAudioWorkletNodeFactory = (createInvalidStateError2, createNativ
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/compute-buffer-size.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/compute-buffer-size.js
 var computeBufferSize = (baseLatency, sampleRate) => {
   if (baseLatency === null) {
     return 512;
@@ -5364,7 +5352,7 @@ var computeBufferSize = (baseLatency, sampleRate) => {
   return Math.max(512, Math.min(16384, Math.pow(2, Math.round(Math.log2(baseLatency * sampleRate)))));
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/clone-audio-worklet-node-options.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/clone-audio-worklet-node-options.js
 var cloneAudioWorkletNodeOptions = (audioWorkletNodeOptions) => {
   return new Promise((resolve, reject) => {
     const { port1, port2 } = new MessageChannel();
@@ -5382,13 +5370,13 @@ var cloneAudioWorkletNodeOptions = (audioWorkletNodeOptions) => {
   });
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/create-audio-worklet-processor-promise.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/create-audio-worklet-processor-promise.js
 var createAudioWorkletProcessorPromise = async (processorConstructor, audioWorkletNodeOptions) => {
   const clonedAudioWorkletNodeOptions = await cloneAudioWorkletNodeOptions(audioWorkletNodeOptions);
   return new processorConstructor(clonedAudioWorkletNodeOptions);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/create-audio-worklet-processor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/create-audio-worklet-processor.js
 var createAudioWorkletProcessor = (nativeContext, nativeAudioWorkletNode, processorConstructor, audioWorkletNodeOptions) => {
   let nodeToProcessorMap = NODE_TO_PROCESSOR_MAPS.get(nativeContext);
   if (nodeToProcessorMap === void 0) {
@@ -5400,7 +5388,7 @@ var createAudioWorkletProcessor = (nativeContext, nativeAudioWorkletNode, proces
   return audioWorkletProcessorPromise;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-worklet-node-faker-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-audio-worklet-node-faker-factory.js
 var createNativeAudioWorkletNodeFakerFactory = (connectMultipleOutputs2, createIndexSizeError2, createInvalidStateError2, createNativeChannelMergerNode2, createNativeChannelSplitterNode2, createNativeConstantSourceNode2, createNativeGainNode2, createNativeScriptProcessorNode2, createNotSupportedError2, disconnectMultipleOutputs2, exposeCurrentFrameAndCurrentTime2, getActiveAudioWorkletNodeInputs2, monitorConnections2) => {
   return (nativeContext, baseLatency, processorConstructor, options) => {
     if (options.numberOfInputs === 0 && options.numberOfOutputs === 0) {
@@ -5766,7 +5754,7 @@ var createNativeAudioWorkletNodeFakerFactory = (connectMultipleOutputs2, createI
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-biquad-filter-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-biquad-filter-node.js
 var createNativeBiquadFilterNode = (nativeContext, options) => {
   const nativeBiquadFilterNode = nativeContext.createBiquadFilter();
   assignNativeAudioNodeOptions(nativeBiquadFilterNode, options);
@@ -5778,7 +5766,7 @@ var createNativeBiquadFilterNode = (nativeContext, options) => {
   return nativeBiquadFilterNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-channel-merger-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-channel-merger-node-factory.js
 var createNativeChannelMergerNodeFactory = (nativeAudioContextConstructor2, wrapChannelMergerNode2) => {
   return (nativeContext, options) => {
     const nativeChannelMergerNode = nativeContext.createChannelMerger(options.numberOfInputs);
@@ -5790,7 +5778,7 @@ var createNativeChannelMergerNodeFactory = (nativeAudioContextConstructor2, wrap
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-channel-splitter-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-channel-splitter-node.js
 var wrapChannelSplitterNode = (channelSplitterNode) => {
   const channelCount = channelSplitterNode.numberOfOutputs;
   Object.defineProperty(channelSplitterNode, "channelCount", {
@@ -5819,7 +5807,7 @@ var wrapChannelSplitterNode = (channelSplitterNode) => {
   });
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-channel-splitter-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-channel-splitter-node.js
 var createNativeChannelSplitterNode = (nativeContext, options) => {
   const nativeChannelSplitterNode = nativeContext.createChannelSplitter(options.numberOfOutputs);
   assignNativeAudioNodeOptions(nativeChannelSplitterNode, options);
@@ -5827,7 +5815,7 @@ var createNativeChannelSplitterNode = (nativeContext, options) => {
   return nativeChannelSplitterNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-constant-source-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-constant-source-node-factory.js
 var createNativeConstantSourceNodeFactory = (addSilentConnection2, cacheTestResult2, createNativeConstantSourceNodeFaker2, testAudioScheduledSourceNodeStartMethodNegativeParametersSupport2, testAudioScheduledSourceNodeStopMethodNegativeParametersSupport2) => {
   return (nativeContext, options) => {
     if (nativeContext.createConstantSource === void 0) {
@@ -5847,14 +5835,14 @@ var createNativeConstantSourceNodeFactory = (addSilentConnection2, cacheTestResu
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/intercept-connections.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/intercept-connections.js
 var interceptConnections = (original, interceptor) => {
   original.connect = interceptor.connect.bind(interceptor);
   original.disconnect = interceptor.disconnect.bind(interceptor);
   return original;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-constant-source-node-faker-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-constant-source-node-faker-factory.js
 var createNativeConstantSourceNodeFakerFactory = (addSilentConnection2, createNativeAudioBufferSourceNode2, createNativeGainNode2, monitorConnections2) => {
   return (nativeContext, { offset, ...audioNodeOptions }) => {
     const audioBuffer = nativeContext.createBuffer(1, 2, 44100);
@@ -5940,7 +5928,7 @@ var createNativeConstantSourceNodeFakerFactory = (addSilentConnection2, createNa
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-convolver-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-convolver-node-factory.js
 var createNativeConvolverNodeFactory = (createNotSupportedError2, overwriteAccessors2) => {
   return (nativeContext, options) => {
     const nativeConvolverNode = nativeContext.createConvolver();
@@ -5971,7 +5959,7 @@ var createNativeConvolverNodeFactory = (createNotSupportedError2, overwriteAcces
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-delay-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-delay-node.js
 var createNativeDelayNode = (nativeContext, options) => {
   const nativeDelayNode = nativeContext.createDelay(options.maxDelayTime);
   assignNativeAudioNodeOptions(nativeDelayNode, options);
@@ -5979,7 +5967,7 @@ var createNativeDelayNode = (nativeContext, options) => {
   return nativeDelayNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-dynamics-compressor-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-dynamics-compressor-node-factory.js
 var createNativeDynamicsCompressorNodeFactory = (createNotSupportedError2) => {
   return (nativeContext, options) => {
     const nativeDynamicsCompressorNode = nativeContext.createDynamicsCompressor();
@@ -5999,7 +5987,7 @@ var createNativeDynamicsCompressorNodeFactory = (createNotSupportedError2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-gain-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-gain-node.js
 var createNativeGainNode = (nativeContext, options) => {
   const nativeGainNode = nativeContext.createGain();
   assignNativeAudioNodeOptions(nativeGainNode, options);
@@ -6007,7 +5995,7 @@ var createNativeGainNode = (nativeContext, options) => {
   return nativeGainNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-iir-filter-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-iir-filter-node-factory.js
 var createNativeIIRFilterNodeFactory = (createNativeIIRFilterNodeFaker2) => {
   return (nativeContext, baseLatency, options) => {
     if (nativeContext.createIIRFilter === void 0) {
@@ -6019,7 +6007,7 @@ var createNativeIIRFilterNodeFactory = (createNativeIIRFilterNodeFaker2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-iir-filter-node-faker-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-iir-filter-node-faker-factory.js
 function divide(a, b) {
   const denominator = b[0] * b[0] + b[1] * b[1];
   return [(a[0] * b[0] + a[1] * b[1]) / denominator, (a[1] * b[0] - a[0] * b[1]) / denominator];
@@ -6154,12 +6142,12 @@ var createNativeIIRFilterNodeFakerFactory = (createInvalidAccessError2, createIn
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-media-element-audio-source-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-media-element-audio-source-node.js
 var createNativeMediaElementAudioSourceNode = (nativeAudioContext, options) => {
   return nativeAudioContext.createMediaElementSource(options.mediaElement);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-media-stream-audio-destination-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-media-stream-audio-destination-node.js
 var createNativeMediaStreamAudioDestinationNode = (nativeAudioContext, options) => {
   const nativeMediaStreamAudioDestinationNode = nativeAudioContext.createMediaStreamDestination();
   assignNativeAudioNodeOptions(nativeMediaStreamAudioDestinationNode, options);
@@ -6169,7 +6157,7 @@ var createNativeMediaStreamAudioDestinationNode = (nativeAudioContext, options) 
   return nativeMediaStreamAudioDestinationNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-media-stream-audio-source-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-media-stream-audio-source-node.js
 var createNativeMediaStreamAudioSourceNode = (nativeAudioContext, { mediaStream }) => {
   const audioStreamTracks = mediaStream.getAudioTracks();
   audioStreamTracks.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -6179,7 +6167,7 @@ var createNativeMediaStreamAudioSourceNode = (nativeAudioContext, { mediaStream 
   return nativeMediaStreamAudioSourceNode;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-media-stream-track-audio-source-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-media-stream-track-audio-source-node-factory.js
 var createNativeMediaStreamTrackAudioSourceNodeFactory = (createInvalidStateError2, isNativeOfflineAudioContext2) => {
   return (nativeAudioContext, { mediaStreamTrack }) => {
     if (typeof nativeAudioContext.createMediaStreamTrackSource === "function") {
@@ -6197,7 +6185,7 @@ var createNativeMediaStreamTrackAudioSourceNodeFactory = (createInvalidStateErro
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-offline-audio-context-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-offline-audio-context-constructor.js
 var createNativeOfflineAudioContextConstructor = (window3) => {
   if (window3 === null) {
     return null;
@@ -6208,7 +6196,7 @@ var createNativeOfflineAudioContextConstructor = (window3) => {
   return window3.hasOwnProperty("webkitOfflineAudioContext") ? window3.webkitOfflineAudioContext : null;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-oscillator-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-oscillator-node-factory.js
 var createNativeOscillatorNodeFactory = (addSilentConnection2, cacheTestResult2, testAudioScheduledSourceNodeStartMethodNegativeParametersSupport2, testAudioScheduledSourceNodeStopMethodConsecutiveCallsSupport2, testAudioScheduledSourceNodeStopMethodNegativeParametersSupport2, wrapAudioScheduledSourceNodeStopMethodConsecutiveCalls2) => {
   return (nativeContext, options) => {
     const nativeOscillatorNode = nativeContext.createOscillator();
@@ -6234,7 +6222,7 @@ var createNativeOscillatorNodeFactory = (addSilentConnection2, cacheTestResult2,
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-panner-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-panner-node-factory.js
 var createNativePannerNodeFactory = (createNativePannerNodeFaker2) => {
   return (nativeContext, options) => {
     const nativePannerNode = nativeContext.createPanner();
@@ -6260,7 +6248,7 @@ var createNativePannerNodeFactory = (createNativePannerNodeFaker2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-panner-node-faker-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-panner-node-faker-factory.js
 var createNativePannerNodeFakerFactory = (connectNativeAudioNodeToNativeAudioNode2, createInvalidStateError2, createNativeChannelMergerNode2, createNativeGainNode2, createNativeScriptProcessorNode2, createNativeWaveShaperNode2, createNotSupportedError2, disconnectNativeAudioNodeFromNativeAudioNode2, getFirstSample2, monitorConnections2) => {
   return (nativeContext, { coneInnerAngle, coneOuterAngle, coneOuterGain, distanceModel, maxDistance, orientationX, orientationY, orientationZ, panningModel, positionX, positionY, positionZ, refDistance, rolloffFactor, ...audioNodeOptions }) => {
     const pannerNode = nativeContext.createPanner();
@@ -6534,7 +6522,7 @@ var createNativePannerNodeFakerFactory = (connectNativeAudioNodeToNativeAudioNod
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-periodic-wave-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-periodic-wave-factory.js
 var createNativePeriodicWaveFactory = (createIndexSizeError2) => {
   return (nativeContext, { disableNormalization, imag, real }) => {
     const convertedImag = imag instanceof Float32Array ? imag : new Float32Array(imag);
@@ -6547,12 +6535,12 @@ var createNativePeriodicWaveFactory = (createIndexSizeError2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-script-processor-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-script-processor-node.js
 var createNativeScriptProcessorNode = (nativeContext, bufferSize, numberOfInputChannels, numberOfOutputChannels) => {
   return nativeContext.createScriptProcessor(bufferSize, numberOfInputChannels, numberOfOutputChannels);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-stereo-panner-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-stereo-panner-node-factory.js
 var createNativeStereoPannerNodeFactory = (createNativeStereoPannerNodeFaker, createNotSupportedError2) => {
   return (nativeContext, options) => {
     const channelCountMode = options.channelCountMode;
@@ -6577,7 +6565,7 @@ var createNativeStereoPannerNodeFactory = (createNativeStereoPannerNodeFaker, cr
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-stereo-panner-node-faker-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-stereo-panner-node-faker-factory.js
 var createNativeStereoPannerNodeFakerFactory = (createNativeChannelMergerNode2, createNativeChannelSplitterNode2, createNativeGainNode2, createNativeWaveShaperNode2, createNotSupportedError2, monitorConnections2) => {
   const CURVE_SIZE = 16385;
   const DC_CURVE = new Float32Array([1, 1]);
@@ -6819,7 +6807,7 @@ var createNativeStereoPannerNodeFakerFactory = (createNativeChannelMergerNode2, 
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-wave-shaper-node-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-wave-shaper-node-factory.js
 var createNativeWaveShaperNodeFactory = (createConnectedNativeAudioBufferSourceNode2, createInvalidStateError2, createNativeWaveShaperNodeFaker2, isDCCurve2, monitorConnections2, nativeAudioContextConstructor2, overwriteAccessors2) => {
   return (nativeContext, options) => {
     const nativeWaveShaperNode = nativeContext.createWaveShaper();
@@ -6864,7 +6852,7 @@ var createNativeWaveShaperNodeFactory = (createConnectedNativeAudioBufferSourceN
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/native-wave-shaper-node-faker-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/native-wave-shaper-node-faker-factory.js
 var createNativeWaveShaperNodeFakerFactory = (createConnectedNativeAudioBufferSourceNode2, createInvalidStateError2, createNativeGainNode2, isDCCurve2, monitorConnections2) => {
   return (nativeContext, { curve, oversample, ...audioNodeOptions }) => {
     const negativeWaveShaperNode = nativeContext.createWaveShaper();
@@ -7014,10 +7002,10 @@ var createNativeWaveShaperNodeFakerFactory = (createConnectedNativeAudioBufferSo
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/not-supported-error.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/not-supported-error.js
 var createNotSupportedError = () => new DOMException("", "NotSupportedError");
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/offline-audio-context-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/offline-audio-context-constructor.js
 var DEFAULT_OPTIONS16 = {
   numberOfChannels: 1
 };
@@ -7085,7 +7073,7 @@ var createOfflineAudioContextConstructor = (baseAudioContextConstructor2, cacheT
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/oscillator-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/oscillator-node-constructor.js
 var DEFAULT_OPTIONS17 = {
   channelCount: 2,
   channelCountMode: "max",
@@ -7171,7 +7159,7 @@ var createOscillatorNodeConstructor = (audioNodeConstructor2, createAudioParam2,
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/oscillator-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/oscillator-node-renderer-factory.js
 var createOscillatorNodeRendererFactory = (connectAudioParam2, createNativeOscillatorNode2, getNativeAudioNode2, renderAutomation2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeOscillatorNodes = /* @__PURE__ */ new WeakMap();
@@ -7231,7 +7219,7 @@ var createOscillatorNodeRendererFactory = (connectAudioParam2, createNativeOscil
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/panner-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/panner-node-constructor.js
 var DEFAULT_OPTIONS18 = {
   channelCount: 2,
   channelCountMode: "clamped-max",
@@ -7338,7 +7326,7 @@ var createPannerNodeConstructor = (audioNodeConstructor2, createAudioParam2, cre
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/panner-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/panner-node-renderer-factory.js
 var createPannerNodeRendererFactory = (connectAudioParam2, createNativeChannelMergerNode2, createNativeConstantSourceNode2, createNativeGainNode2, createNativePannerNode2, getNativeAudioNode2, nativeOfflineAudioContextConstructor2, renderAutomation2, renderInputsOfAudioNode2, renderNativeOfflineAudioContext2) => {
   return () => {
     const renderedNativeAudioNodes = /* @__PURE__ */ new WeakMap();
@@ -7501,7 +7489,7 @@ var createPannerNodeRendererFactory = (connectAudioParam2, createNativeChannelMe
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/periodic-wave-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/periodic-wave-constructor.js
 var DEFAULT_OPTIONS19 = {
   disableNormalization: false
 };
@@ -7520,7 +7508,7 @@ var createPeriodicWaveConstructor = (createNativePeriodicWave2, getNativeContext
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/render-automation.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/render-automation.js
 var createRenderAutomation = (getAudioParamRenderer, renderInputsOfAudioParam2) => {
   return (nativeOfflineAudioContext, audioParam, nativeAudioParam) => {
     const audioParamRenderer = getAudioParamRenderer(audioParam);
@@ -7529,7 +7517,7 @@ var createRenderAutomation = (getAudioParamRenderer, renderInputsOfAudioParam2) 
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/render-inputs-of-audio-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/render-inputs-of-audio-node.js
 var createRenderInputsOfAudioNode = (getAudioNodeConnections2, getAudioNodeRenderer2, isPartOfACycle2) => {
   return async (audioNode, nativeOfflineAudioContext, nativeAudioNode) => {
     const audioNodeConnections = getAudioNodeConnections2(audioNode);
@@ -7544,7 +7532,7 @@ var createRenderInputsOfAudioNode = (getAudioNodeConnections2, getAudioNodeRende
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/render-inputs-of-audio-param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/render-inputs-of-audio-param.js
 var createRenderInputsOfAudioParam = (getAudioNodeRenderer2, getAudioParamConnections2, isPartOfACycle2) => {
   return async (audioParam, nativeOfflineAudioContext, nativeAudioParam) => {
     const audioParamConnections = getAudioParamConnections2(audioParam);
@@ -7558,7 +7546,7 @@ var createRenderInputsOfAudioParam = (getAudioNodeRenderer2, getAudioParamConnec
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/render-native-offline-audio-context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/render-native-offline-audio-context.js
 var createRenderNativeOfflineAudioContext = (cacheTestResult2, createNativeGainNode2, createNativeScriptProcessorNode2, testOfflineAudioContextCurrentTimeSupport) => {
   return (nativeOfflineAudioContext) => {
     if (cacheTestResult2(testPromiseSupport, () => testPromiseSupport(nativeOfflineAudioContext))) {
@@ -7592,19 +7580,19 @@ var createRenderNativeOfflineAudioContext = (cacheTestResult2, createNativeGainN
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/set-active-audio-worklet-node-inputs.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/set-active-audio-worklet-node-inputs.js
 var createSetActiveAudioWorkletNodeInputs = (activeAudioWorkletNodeInputsStore2) => {
   return (nativeAudioWorkletNode, activeInputs) => {
     activeAudioWorkletNodeInputsStore2.set(nativeAudioWorkletNode, activeInputs);
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/set-audio-node-tail-time.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/set-audio-node-tail-time.js
 var createSetAudioNodeTailTime = (audioNodeTailTimeStore2) => {
   return (audioNode, tailTime) => audioNodeTailTimeStore2.set(audioNode, tailTime);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/start-rendering.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/start-rendering.js
 var createStartRendering = (audioBufferStore2, cacheTestResult2, getAudioNodeRenderer2, getUnrenderedAudioWorkletNodes2, renderNativeOfflineAudioContext2, testAudioBufferCopyChannelMethodsOutOfBoundsSupport2, wrapAudioBufferCopyChannelMethods2, wrapAudioBufferCopyChannelMethodsOutOfBounds2) => {
   return (destination, nativeOfflineAudioContext) => getAudioNodeRenderer2(destination).render(destination, nativeOfflineAudioContext).then(() => Promise.all(Array.from(getUnrenderedAudioWorkletNodes2(nativeOfflineAudioContext)).map((audioWorkletNode) => getAudioNodeRenderer2(audioWorkletNode).render(audioWorkletNode, nativeOfflineAudioContext)))).then(() => renderNativeOfflineAudioContext2(nativeOfflineAudioContext)).then((audioBuffer) => {
     if (typeof audioBuffer.copyFromChannel !== "function") {
@@ -7618,7 +7606,7 @@ var createStartRendering = (audioBufferStore2, cacheTestResult2, getAudioNodeRen
   });
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/stereo-panner-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/stereo-panner-node-constructor.js
 var DEFAULT_OPTIONS20 = {
   channelCount: 2,
   /*
@@ -7646,7 +7634,7 @@ var createStereoPannerNodeConstructor = (audioNodeConstructor2, createAudioParam
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/stereo-panner-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/stereo-panner-node-renderer-factory.js
 var createStereoPannerNodeRendererFactory = (connectAudioParam2, createNativeStereoPannerNode2, getNativeAudioNode2, renderAutomation2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeStereoPannerNodes = /* @__PURE__ */ new WeakMap();
@@ -7687,7 +7675,7 @@ var createStereoPannerNodeRendererFactory = (connectAudioParam2, createNativeSte
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-buffer-constructor-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-buffer-constructor-support.js
 var createTestAudioBufferConstructorSupport = (nativeAudioBufferConstructor2) => {
   return () => {
     if (nativeAudioBufferConstructor2 === null) {
@@ -7702,7 +7690,7 @@ var createTestAudioBufferConstructorSupport = (nativeAudioBufferConstructor2) =>
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-buffer-copy-channel-methods-subarray-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-buffer-copy-channel-methods-subarray-support.js
 var createTestAudioBufferCopyChannelMethodsSubarraySupport = (nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -7723,7 +7711,7 @@ var createTestAudioBufferCopyChannelMethodsSubarraySupport = (nativeOfflineAudio
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-context-close-method-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-context-close-method-support.js
 var createTestAudioContextCloseMethodSupport = (nativeAudioContextConstructor2) => {
   return () => {
     if (nativeAudioContextConstructor2 === null) {
@@ -7742,7 +7730,7 @@ var createTestAudioContextCloseMethodSupport = (nativeAudioContextConstructor2) 
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-context-decode-audio-data-method-type-error-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-context-decode-audio-data-method-type-error-support.js
 var createTestAudioContextDecodeAudioDataMethodTypeErrorSupport = (nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -7772,7 +7760,7 @@ var createTestAudioContextDecodeAudioDataMethodTypeErrorSupport = (nativeOffline
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-context-options-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-context-options-support.js
 var createTestAudioContextOptionsSupport = (nativeAudioContextConstructor2) => {
   return () => {
     if (nativeAudioContextConstructor2 === null) {
@@ -7789,7 +7777,7 @@ var createTestAudioContextOptionsSupport = (nativeAudioContextConstructor2) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-node-connect-method-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-node-connect-method-support.js
 var createTestAudioNodeConnectMethodSupport = (nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -7803,7 +7791,7 @@ var createTestAudioNodeConnectMethodSupport = (nativeOfflineAudioContextConstruc
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-worklet-processor-no-outputs-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-worklet-processor-no-outputs-support.js
 var createTestAudioWorkletProcessorNoOutputsSupport = (nativeAudioWorkletNodeConstructor2, nativeOfflineAudioContextConstructor2) => {
   return async () => {
     if (nativeAudioWorkletNodeConstructor2 === null) {
@@ -7846,7 +7834,7 @@ var createTestAudioWorkletProcessorNoOutputsSupport = (nativeAudioWorkletNodeCon
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-worklet-processor-post-message-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-audio-worklet-processor-post-message-support.js
 var createTestAudioWorkletProcessorPostMessageSupport = (nativeAudioWorkletNodeConstructor2, nativeOfflineAudioContextConstructor2) => {
   return async () => {
     if (nativeAudioWorkletNodeConstructor2 === null) {
@@ -7880,7 +7868,7 @@ var createTestAudioWorkletProcessorPostMessageSupport = (nativeAudioWorkletNodeC
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-channel-merger-node-channel-count-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-channel-merger-node-channel-count-support.js
 var createTestChannelMergerNodeChannelCountSupport = (nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -7900,7 +7888,7 @@ var createTestChannelMergerNodeChannelCountSupport = (nativeOfflineAudioContextC
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-constant-source-node-accurate-scheduling-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-constant-source-node-accurate-scheduling-support.js
 var createTestConstantSourceNodeAccurateSchedulingSupport = (nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -7915,7 +7903,7 @@ var createTestConstantSourceNodeAccurateSchedulingSupport = (nativeOfflineAudioC
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-convolver-node-buffer-reassignability-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-convolver-node-buffer-reassignability-support.js
 var createTestConvolverNodeBufferReassignabilitySupport = (nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -7933,7 +7921,7 @@ var createTestConvolverNodeBufferReassignabilitySupport = (nativeOfflineAudioCon
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-convolver-node-channel-count-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-convolver-node-channel-count-support.js
 var createTestConvolverNodeChannelCountSupport = (nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -7950,12 +7938,12 @@ var createTestConvolverNodeChannelCountSupport = (nativeOfflineAudioContextConst
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-is-secure-context-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-is-secure-context-support.js
 var createTestIsSecureContextSupport = (window3) => {
   return () => window3 !== null && window3.hasOwnProperty("isSecureContext");
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-media-stream-audio-source-node-media-stream-without-audio-track-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-media-stream-audio-source-node-media-stream-without-audio-track-support.js
 var createTestMediaStreamAudioSourceNodeMediaStreamWithoutAudioTrackSupport = (nativeAudioContextConstructor2) => {
   return () => {
     if (nativeAudioContextConstructor2 === null) {
@@ -7973,7 +7961,7 @@ var createTestMediaStreamAudioSourceNodeMediaStreamWithoutAudioTrackSupport = (n
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-offline-audio-context-current-time-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-offline-audio-context-current-time-support.js
 var createTestOfflineAudioContextCurrentTimeSupport = (createNativeGainNode2, nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -7996,7 +7984,7 @@ var createTestOfflineAudioContextCurrentTimeSupport = (createNativeGainNode2, na
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/test-stereo-panner-node-default-value-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/test-stereo-panner-node-default-value-support.js
 var createTestStereoPannerNodeDefaultValueSupport = (nativeOfflineAudioContextConstructor2) => {
   return () => {
     if (nativeOfflineAudioContextConstructor2 === null) {
@@ -8020,10 +8008,10 @@ var createTestStereoPannerNodeDefaultValueSupport = (nativeOfflineAudioContextCo
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/unknown-error.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/unknown-error.js
 var createUnknownError = () => new DOMException("", "UnknownError");
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/wave-shaper-node-constructor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/wave-shaper-node-constructor.js
 var DEFAULT_OPTIONS21 = {
   channelCount: 2,
   channelCountMode: "max",
@@ -8071,7 +8059,7 @@ var createWaveShaperNodeConstructor = (audioNodeConstructor2, createInvalidState
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/wave-shaper-node-renderer-factory.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/wave-shaper-node-renderer-factory.js
 var createWaveShaperNodeRendererFactory = (createNativeWaveShaperNode2, getNativeAudioNode2, renderInputsOfAudioNode2) => {
   return () => {
     const renderedNativeWaveShaperNodes = /* @__PURE__ */ new WeakMap();
@@ -8108,10 +8096,10 @@ var createWaveShaperNodeRendererFactory = (createNativeWaveShaperNode2, getNativ
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/window.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/window.js
 var createWindow = () => typeof window === "undefined" ? null : window;
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/wrap-audio-buffer-copy-channel-methods.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/wrap-audio-buffer-copy-channel-methods.js
 var createWrapAudioBufferCopyChannelMethods = (convertNumberToUnsignedLong2, createIndexSizeError2) => {
   return (audioBuffer) => {
     audioBuffer.copyFromChannel = (destination, channelNumberAsNumber, bufferOffsetAsNumber = 0) => {
@@ -8143,7 +8131,7 @@ var createWrapAudioBufferCopyChannelMethods = (convertNumberToUnsignedLong2, cre
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/wrap-audio-buffer-copy-channel-methods-out-of-bounds.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/wrap-audio-buffer-copy-channel-methods-out-of-bounds.js
 var createWrapAudioBufferCopyChannelMethodsOutOfBounds = (convertNumberToUnsignedLong2) => {
   return (audioBuffer) => {
     audioBuffer.copyFromChannel = /* @__PURE__ */ ((copyFromChannel2) => {
@@ -8167,7 +8155,7 @@ var createWrapAudioBufferCopyChannelMethodsOutOfBounds = (convertNumberToUnsigne
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/wrap-audio-buffer-source-node-stop-method-nullified-buffer.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/wrap-audio-buffer-source-node-stop-method-nullified-buffer.js
 var createWrapAudioBufferSourceNodeStopMethodNullifiedBuffer = (overwriteAccessors2) => {
   return (nativeAudioBufferSourceNode, nativeContext) => {
     const nullifiedBuffer = nativeContext.createBuffer(1, 1, 44100);
@@ -8183,7 +8171,7 @@ var createWrapAudioBufferSourceNodeStopMethodNullifiedBuffer = (overwriteAccesso
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/factories/wrap-channel-merger-node.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/factories/wrap-channel-merger-node.js
 var createWrapChannelMergerNode = (createInvalidStateError2, monitorConnections2) => {
   return (nativeContext, channelMergerNode) => {
     channelMergerNode.channelCount = 1;
@@ -8212,7 +8200,7 @@ var createWrapChannelMergerNode = (createInvalidStateError2, monitorConnections2
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-first-sample.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/get-first-sample.js
 var getFirstSample = (audioBuffer, buffer, channelNumber) => {
   if (audioBuffer.copyFromChannel === void 0) {
     return audioBuffer.getChannelData(channelNumber)[0];
@@ -8221,7 +8209,7 @@ var getFirstSample = (audioBuffer, buffer, channelNumber) => {
   return buffer[0];
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-dc-curve.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/is-dc-curve.js
 var isDCCurve = (curve) => {
   if (curve === null) {
     return false;
@@ -8233,7 +8221,7 @@ var isDCCurve = (curve) => {
   return curve[length / 2 - 1] + curve[length / 2] !== 0;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/overwrite-accessors.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/overwrite-accessors.js
 var overwriteAccessors = (object, property, createGetter, createSetter) => {
   let prototype = object;
   while (!prototype.hasOwnProperty(property)) {
@@ -8243,7 +8231,7 @@ var overwriteAccessors = (object, property, createGetter, createSetter) => {
   Object.defineProperty(object, property, { get: createGetter(get), set: createSetter(set) });
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/sanitize-audio-worklet-node-options.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/sanitize-audio-worklet-node-options.js
 var sanitizeAudioWorkletNodeOptions = (options) => {
   return {
     ...options,
@@ -8258,12 +8246,12 @@ var sanitizeAudioWorkletNodeOptions = (options) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/sanitize-channel-splitter-options.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/sanitize-channel-splitter-options.js
 var sanitizeChannelSplitterOptions = (options) => {
   return { ...options, channelCount: options.numberOfOutputs };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/sanitize-periodic-wave-options.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/sanitize-periodic-wave-options.js
 var sanitizePeriodicWaveOptions = (options) => {
   const { imag, real } = options;
   if (imag === void 0) {
@@ -8278,7 +8266,7 @@ var sanitizePeriodicWaveOptions = (options) => {
   return { ...options, imag, real };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/set-value-at-time-until-possible.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/set-value-at-time-until-possible.js
 var setValueAtTimeUntilPossible = (audioParam, value, startTime) => {
   try {
     audioParam.setValueAtTime(value, startTime);
@@ -8290,7 +8278,7 @@ var setValueAtTimeUntilPossible = (audioParam, value, startTime) => {
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-buffer-source-node-start-method-consecutive-calls-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-buffer-source-node-start-method-consecutive-calls-support.js
 var testAudioBufferSourceNodeStartMethodConsecutiveCallsSupport = (nativeContext) => {
   const nativeAudioBufferSourceNode = nativeContext.createBufferSource();
   nativeAudioBufferSourceNode.start();
@@ -8302,7 +8290,7 @@ var testAudioBufferSourceNodeStartMethodConsecutiveCallsSupport = (nativeContext
   return false;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-buffer-source-node-start-method-offset-clamping-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-buffer-source-node-start-method-offset-clamping-support.js
 var testAudioBufferSourceNodeStartMethodOffsetClampingSupport = (nativeContext) => {
   const nativeAudioBufferSourceNode = nativeContext.createBufferSource();
   const nativeAudioBuffer = nativeContext.createBuffer(1, 1, 44100);
@@ -8315,7 +8303,7 @@ var testAudioBufferSourceNodeStartMethodOffsetClampingSupport = (nativeContext) 
   return true;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-buffer-source-node-stop-method-nullified-buffer-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-buffer-source-node-stop-method-nullified-buffer-support.js
 var testAudioBufferSourceNodeStopMethodNullifiedBufferSupport = (nativeContext) => {
   const nativeAudioBufferSourceNode = nativeContext.createBufferSource();
   nativeAudioBufferSourceNode.start();
@@ -8327,7 +8315,7 @@ var testAudioBufferSourceNodeStopMethodNullifiedBufferSupport = (nativeContext) 
   return true;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-scheduled-source-node-start-method-negative-parameters-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-scheduled-source-node-start-method-negative-parameters-support.js
 var testAudioScheduledSourceNodeStartMethodNegativeParametersSupport = (nativeContext) => {
   const nativeAudioBufferSourceNode = nativeContext.createOscillator();
   try {
@@ -8338,7 +8326,7 @@ var testAudioScheduledSourceNodeStartMethodNegativeParametersSupport = (nativeCo
   return false;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-scheduled-source-node-stop-method-consecutive-calls-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-scheduled-source-node-stop-method-consecutive-calls-support.js
 var testAudioScheduledSourceNodeStopMethodConsecutiveCallsSupport = (nativeContext) => {
   const nativeAudioBuffer = nativeContext.createBuffer(1, 1, 44100);
   const nativeAudioBufferSourceNode = nativeContext.createBufferSource();
@@ -8353,7 +8341,7 @@ var testAudioScheduledSourceNodeStopMethodConsecutiveCallsSupport = (nativeConte
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-scheduled-source-node-stop-method-negative-parameters-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-scheduled-source-node-stop-method-negative-parameters-support.js
 var testAudioScheduledSourceNodeStopMethodNegativeParametersSupport = (nativeContext) => {
   const nativeAudioBufferSourceNode = nativeContext.createOscillator();
   try {
@@ -8364,7 +8352,7 @@ var testAudioScheduledSourceNodeStopMethodNegativeParametersSupport = (nativeCon
   return false;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-worklet-node-options-clonability.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-audio-worklet-node-options-clonability.js
 var testAudioWorkletNodeOptionsClonability = (audioWorkletNodeOptions) => {
   const { port1, port2 } = new MessageChannel();
   try {
@@ -8375,7 +8363,7 @@ var testAudioWorkletNodeOptionsClonability = (audioWorkletNodeOptions) => {
   }
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-dom-exception-constructor-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-dom-exception-constructor-support.js
 var testDomExceptionConstructorSupport = () => {
   try {
     new DOMException();
@@ -8385,7 +8373,7 @@ var testDomExceptionConstructorSupport = () => {
   return true;
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-transferables-support.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/test-transferables-support.js
 var testTransferablesSupport = () => new Promise((resolve) => {
   const arrayBuffer = new ArrayBuffer(0);
   const { port1, port2 } = new MessageChannel();
@@ -8393,7 +8381,7 @@ var testTransferablesSupport = () => new Promise((resolve) => {
   port2.postMessage(arrayBuffer, [arrayBuffer]);
 });
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-buffer-source-node-start-method-offset-clamping.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-buffer-source-node-start-method-offset-clamping.js
 var wrapAudioBufferSourceNodeStartMethodOffsetClamping = (nativeAudioBufferSourceNode) => {
   nativeAudioBufferSourceNode.start = /* @__PURE__ */ ((start2) => {
     return (when = 0, offset = 0, duration) => {
@@ -8408,7 +8396,7 @@ var wrapAudioBufferSourceNodeStartMethodOffsetClamping = (nativeAudioBufferSourc
   })(nativeAudioBufferSourceNode.start);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-scheduled-source-node-stop-method-consecutive-calls.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-audio-scheduled-source-node-stop-method-consecutive-calls.js
 var wrapAudioScheduledSourceNodeStopMethodConsecutiveCalls = (nativeAudioScheduledSourceNode, nativeContext) => {
   const nativeGainNode = nativeContext.createGain();
   nativeAudioScheduledSourceNode.connect(nativeGainNode);
@@ -8437,7 +8425,7 @@ var wrapAudioScheduledSourceNodeStopMethodConsecutiveCalls = (nativeAudioSchedul
   })(nativeAudioScheduledSourceNode.stop);
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-event-listener.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/helpers/wrap-event-listener.js
 var wrapEventListener = (target, eventListener) => {
   return (event) => {
     const descriptor = { value: target };
@@ -8452,7 +8440,7 @@ var wrapEventListener = (target, eventListener) => {
   };
 };
 
-// ../../sdk/node_modules/standardized-audio-context/build/es2019/module.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/standardized-audio-context/build/es2019/module.js
 var addActiveInputConnectionToAudioNode = createAddActiveInputConnectionToAudioNode(insertElementInSet);
 var addPassiveInputConnectionToAudioNode = createAddPassiveInputConnectionToAudioNode(insertElementInSet);
 var deleteActiveInputConnectionToAudioNode = createDeleteActiveInputConnectionToAudioNode(pickElementFromSet);
@@ -8594,7 +8582,7 @@ var isAnyAudioParam = createIsAnyAudioParam(AUDIO_PARAM_STORE, isNativeAudioPara
 var isAnyOfflineAudioContext = createIsAnyOfflineAudioContext(CONTEXT_STORE, isNativeOfflineAudioContext);
 var isSupported = () => createIsSupportedPromise(cacheTestResult, createTestAudioBufferCopyChannelMethodsSubarraySupport(nativeOfflineAudioContextConstructor), createTestAudioContextCloseMethodSupport(nativeAudioContextConstructor), createTestAudioContextDecodeAudioDataMethodTypeErrorSupport(nativeOfflineAudioContextConstructor), createTestAudioContextOptionsSupport(nativeAudioContextConstructor), createTestAudioNodeConnectMethodSupport(nativeOfflineAudioContextConstructor), createTestAudioWorkletProcessorNoOutputsSupport(nativeAudioWorkletNodeConstructor, nativeOfflineAudioContextConstructor), createTestChannelMergerNodeChannelCountSupport(nativeOfflineAudioContextConstructor), createTestConstantSourceNodeAccurateSchedulingSupport(nativeOfflineAudioContextConstructor), createTestConvolverNodeBufferReassignabilitySupport(nativeOfflineAudioContextConstructor), createTestConvolverNodeChannelCountSupport(nativeOfflineAudioContextConstructor), testDomExceptionConstructorSupport, createTestIsSecureContextSupport(window2), createTestMediaStreamAudioSourceNodeMediaStreamWithoutAudioTrackSupport(nativeAudioContextConstructor), createTestStereoPannerNodeDefaultValueSupport(nativeOfflineAudioContextConstructor), testTransferablesSupport);
 
-// ../../sdk/node_modules/tone/build/esm/core/util/AdvancedTypeCheck.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/AdvancedTypeCheck.js
 function isAudioParam(arg) {
   return isAnyAudioParam(arg);
 }
@@ -8611,7 +8599,7 @@ function isAudioBuffer(arg) {
   return arg instanceof audioBufferConstructor;
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Debug.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Debug.js
 var Debug_exports = {};
 __export(Debug_exports, {
   assert: () => assert,
@@ -8624,7 +8612,7 @@ __export(Debug_exports, {
   warn: () => warn
 });
 
-// ../../sdk/node_modules/tone/build/esm/core/util/TypeCheck.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/TypeCheck.js
 function isUndef(arg) {
   return arg === void 0;
 }
@@ -8653,7 +8641,7 @@ function isNote(arg) {
   return isString(arg) && /^([a-g]{1}(?:b|#|x|bb)?)(-?[0-9]+)/i.test(arg);
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Debug.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Debug.js
 function assert(statement, error) {
   if (!statement) {
     throw new Error(error);
@@ -8691,7 +8679,7 @@ function warn(...args) {
   defaultLogger.warn(...args);
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Defaults.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Defaults.js
 function noCopy(key, arg) {
   return key === "value" || isAudioParam(arg) || isAudioNode2(arg) || isAudioBuffer(arg);
 }
@@ -8760,7 +8748,7 @@ function omitFromObject(obj, omit) {
   return obj;
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Math.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Math.js
 var EPSILON = 1e-6;
 function GT(a, b) {
   return a > b + EPSILON;
@@ -8778,10 +8766,10 @@ function clamp(value, min, max) {
   return Math.max(Math.min(value, max), min);
 }
 
-// ../../sdk/node_modules/tone/build/esm/version.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/version.js
 var version = "15.3.10";
 
-// ../../sdk/node_modules/tone/build/esm/core/context/AudioContext.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/AudioContext.js
 function createAudioContext(options) {
   return new audioContextConstructor(options);
 }
@@ -8795,7 +8783,7 @@ function createAudioWorkletNode(context2, name, options) {
   return new (context2 instanceof (theWindow === null || theWindow === void 0 ? void 0 : theWindow.BaseAudioContext) ? theWindow === null || theWindow === void 0 ? void 0 : theWindow.AudioWorkletNode : audioWorkletNodeConstructor)(context2, name, options);
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/Tone.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/Tone.js
 var Tone = class {
   constructor() {
     this.debug = false;
@@ -8851,7 +8839,7 @@ var Tone = class {
 };
 Tone.version = version;
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Timeline.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Timeline.js
 var Timeline = class _Timeline extends Tone {
   constructor() {
     super();
@@ -9162,15 +9150,11 @@ var Timeline = class _Timeline extends Tone {
   }
 };
 
-// ../../sdk/node_modules/tslib/tslib.es6.mjs
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tslib/tslib.es6.mjs
 function __decorate(decorators, target, key, desc) {
   var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-  if (typeof Reflect === "object" && typeof Reflect.decorate === "function")
-    r = Reflect.decorate(decorators, target, key, desc);
-  else
-    for (var i = decorators.length - 1; i >= 0; i--)
-      if (d = decorators[i])
-        r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+  if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+  else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
   return c > 3 && r && Object.defineProperty(target, key, r), r;
 }
 function __awaiter(thisArg, _arguments, P, generator) {
@@ -9201,7 +9185,7 @@ function __awaiter(thisArg, _arguments, P, generator) {
   });
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/clock/Ticker.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/clock/Ticker.js
 var Ticker = class {
   constructor(callback, type, updateInterval, contextSampleRate) {
     this._callback = callback;
@@ -9306,7 +9290,7 @@ var Ticker = class {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Emitter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Emitter.js
 var Emitter = class _Emitter extends Tone {
   constructor() {
     super(...arguments);
@@ -9406,7 +9390,7 @@ var Emitter = class _Emitter extends Tone {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/context/BaseContext.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/BaseContext.js
 var BaseContext = class extends Emitter {
   constructor() {
     super(...arguments);
@@ -9422,7 +9406,7 @@ var BaseContext = class extends Emitter {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/context/ContextInitialization.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/ContextInitialization.js
 var notifyNewContext = [];
 function onContextInit(cb) {
   notifyNewContext.push(cb);
@@ -9438,7 +9422,7 @@ function closeContext(ctx) {
   notifyCloseContext.forEach((cb) => cb(ctx));
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/context/Context.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/Context.js
 var Context = class _Context extends BaseContext {
   constructor() {
     var _a, _b;
@@ -9875,7 +9859,7 @@ var Context = class _Context extends BaseContext {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/context/DummyContext.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/DummyContext.js
 var DummyContext = class extends BaseContext {
   constructor() {
     super(...arguments);
@@ -10014,7 +9998,7 @@ var DummyContext = class extends BaseContext {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Interface.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Interface.js
 function readOnly(target, property) {
   if (isArray(property)) {
     property.forEach((str) => readOnly(target, str));
@@ -10037,7 +10021,7 @@ function writable(target, property) {
 var noOp = () => {
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/context/ToneAudioBuffer.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/ToneAudioBuffer.js
 var ToneAudioBuffer = class _ToneAudioBuffer extends Tone {
   constructor() {
     super();
@@ -10337,7 +10321,7 @@ var ToneAudioBuffer = class _ToneAudioBuffer extends Tone {
 ToneAudioBuffer.baseUrl = "";
 ToneAudioBuffer.downloads = [];
 
-// ../../sdk/node_modules/tone/build/esm/core/context/OfflineContext.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/OfflineContext.js
 var OfflineContext = class extends Context {
   constructor() {
     super({
@@ -10400,7 +10384,7 @@ var OfflineContext = class extends Context {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/Global.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/Global.js
 var dummyContext = new DummyContext();
 var globalContext = dummyContext;
 function getContext() {
@@ -10433,7 +10417,7 @@ if (theWindow && !theWindow.TONE_SILENCE_LOGGING) {
   console.log(`%c${printString}`, "background: #000; color: #fff");
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/type/TimeBase.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/type/TimeBase.js
 var TimeBaseClass = class _TimeBaseClass extends Tone {
   /**
    * @param context The context associated with the time value. Used to compute
@@ -10673,7 +10657,7 @@ var TimeBaseClass = class _TimeBaseClass extends Tone {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/type/Time.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/type/Time.js
 var TimeClass = class _TimeClass extends TimeBaseClass {
   constructor() {
     super(...arguments);
@@ -10791,7 +10775,7 @@ function Time(value, units) {
   return new TimeClass(getContext(), value, units);
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/type/Frequency.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/type/Frequency.js
 var FrequencyClass = class _FrequencyClass extends TimeClass {
   constructor() {
     super(...arguments);
@@ -11057,7 +11041,7 @@ function Frequency(value, units) {
   return new FrequencyClass(getContext(), value, units);
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/type/TransportTime.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/type/TransportTime.js
 var TransportTimeClass = class extends TimeClass {
   constructor() {
     super(...arguments);
@@ -11074,7 +11058,7 @@ function TransportTime(value, units) {
   return new TransportTimeClass(getContext(), value, units);
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/context/ToneWithContext.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/ToneWithContext.js
 var ToneWithContext = class _ToneWithContext extends Tone {
   constructor() {
     super();
@@ -11224,7 +11208,7 @@ var ToneWithContext = class _ToneWithContext extends Tone {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/context/Param.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/Param.js
 var Param = class _Param extends ToneWithContext {
   constructor() {
     const options = optionsFromArguments(_Param.getDefaults(), arguments, [
@@ -11607,7 +11591,7 @@ var Param = class _Param extends ToneWithContext {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/context/ToneAudioNode.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/ToneAudioNode.js
 var ToneAudioNode = class _ToneAudioNode extends ToneWithContext {
   constructor() {
     super(...arguments);
@@ -11885,7 +11869,7 @@ function fanIn(...nodes) {
   }
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/context/Gain.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/Gain.js
 var Gain = class _Gain extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Gain.getDefaults(), arguments, [
@@ -11926,7 +11910,7 @@ var Gain = class _Gain extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Split.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Split.js
 var Split = class _Split extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Split.getDefaults(), arguments, [
@@ -11949,7 +11933,7 @@ var Split = class _Split extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/analysis/Analyser.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/analysis/Analyser.js
 var Analyser = class _Analyser extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Analyser.getDefaults(), arguments, ["type", "size"]);
@@ -12051,7 +12035,7 @@ var Analyser = class _Analyser extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/analysis/MeterBase.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/analysis/MeterBase.js
 var MeterBase = class _MeterBase extends ToneAudioNode {
   constructor() {
     super(optionsFromArguments(_MeterBase.getDefaults(), arguments));
@@ -12069,7 +12053,7 @@ var MeterBase = class _MeterBase extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/analysis/DCMeter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/analysis/DCMeter.js
 var DCMeter = class _DCMeter extends MeterBase {
   constructor() {
     super(optionsFromArguments(_DCMeter.getDefaults(), arguments));
@@ -12086,7 +12070,7 @@ var DCMeter = class _DCMeter extends MeterBase {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/analysis/FFT.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/analysis/FFT.js
 var FFT = class _FFT extends MeterBase {
   constructor() {
     const options = optionsFromArguments(_FFT.getDefaults(), arguments, [
@@ -12145,7 +12129,7 @@ var FFT = class _FFT extends MeterBase {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/OneShotSource.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/OneShotSource.js
 var OneShotSource = class extends ToneAudioNode {
   constructor(options) {
     super(options);
@@ -12280,7 +12264,7 @@ var OneShotSource = class extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/ToneConstantSource.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/ToneConstantSource.js
 var ToneConstantSource = class _ToneConstantSource extends OneShotSource {
   constructor() {
     var _a;
@@ -12358,7 +12342,7 @@ var ToneConstantSource = class _ToneConstantSource extends OneShotSource {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Signal.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Signal.js
 var Signal = class _Signal extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Signal.getDefaults(), arguments, [
@@ -12564,7 +12548,7 @@ function disconnectSignal(signal, destination, outputNum, inputNum) {
   disconnect(signal, destination, outputNum, inputNum);
 }
 
-// ../../sdk/node_modules/tone/build/esm/signal/SignalOperator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/SignalOperator.js
 var SignalOperator = class _SignalOperator extends ToneAudioNode {
   constructor() {
     super(optionsFromArguments(_SignalOperator.getDefaults(), arguments, [
@@ -12583,7 +12567,7 @@ var SignalOperator = class _SignalOperator extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/WaveShaper.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/WaveShaper.js
 var WaveShaper = class _WaveShaper extends SignalOperator {
   constructor() {
     const options = optionsFromArguments(_WaveShaper.getDefaults(), arguments, ["mapping", "length"]);
@@ -12657,7 +12641,7 @@ var WaveShaper = class _WaveShaper extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Abs.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Abs.js
 var Abs = class extends SignalOperator {
   constructor() {
     super(...arguments);
@@ -12685,7 +12669,7 @@ var Abs = class extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/OnePoleFilter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/OnePoleFilter.js
 var OnePoleFilter = class _OnePoleFilter extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_OnePoleFilter.getDefaults(), arguments, ["frequency", "type"]);
@@ -12775,7 +12759,7 @@ var OnePoleFilter = class _OnePoleFilter extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/analysis/Follower.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/analysis/Follower.js
 var Follower = class _Follower extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Follower.getDefaults(), arguments, ["smoothing"]);
@@ -12813,7 +12797,7 @@ var Follower = class _Follower extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/analysis/Meter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/analysis/Meter.js
 var Meter = class _Meter extends MeterBase {
   constructor() {
     const options = optionsFromArguments(_Meter.getDefaults(), arguments, [
@@ -12882,7 +12866,7 @@ var Meter = class _Meter extends MeterBase {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/analysis/Waveform.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/analysis/Waveform.js
 var Waveform = class _Waveform extends MeterBase {
   constructor() {
     const options = optionsFromArguments(_Waveform.getDefaults(), arguments, ["size"]);
@@ -12915,7 +12899,7 @@ var Waveform = class _Waveform extends MeterBase {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Panner.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Panner.js
 var Panner = class _Panner extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Panner.getDefaults(), arguments, [
@@ -12951,7 +12935,7 @@ var Panner = class _Panner extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Volume.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Volume.js
 var Volume = class _Volume extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Volume.getDefaults(), arguments, [
@@ -13005,7 +12989,7 @@ var Volume = class _Volume extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/PanVol.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/PanVol.js
 var PanVol = class _PanVol extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_PanVol.getDefaults(), arguments, [
@@ -13056,7 +13040,7 @@ var PanVol = class _PanVol extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Solo.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Solo.js
 var Solo = class _Solo extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Solo.getDefaults(), arguments, [
@@ -13152,7 +13136,7 @@ var Solo = class _Solo extends ToneAudioNode {
 Solo._allSolos = /* @__PURE__ */ new Map();
 Solo._soloed = /* @__PURE__ */ new Map();
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Channel.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Channel.js
 var Channel = class _Channel extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Channel.getDefaults(), arguments, [
@@ -13263,7 +13247,7 @@ var Channel = class _Channel extends ToneAudioNode {
 };
 Channel.buses = /* @__PURE__ */ new Map();
 
-// ../../sdk/node_modules/tone/build/esm/signal/GainToAudio.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/GainToAudio.js
 var GainToAudio = class extends SignalOperator {
   constructor() {
     super(...arguments);
@@ -13285,7 +13269,7 @@ var GainToAudio = class extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/CrossFade.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/CrossFade.js
 var CrossFade = class _CrossFade extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_CrossFade.getDefaults(), arguments, ["fade"]);
@@ -13338,7 +13322,7 @@ var CrossFade = class _CrossFade extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Merge.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Merge.js
 var Merge = class _Merge extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Merge.getDefaults(), arguments, [
@@ -13360,7 +13344,7 @@ var Merge = class _Merge extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Add.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Add.js
 var Add = class _Add extends Signal {
   constructor() {
     super(optionsFromArguments(_Add.getDefaults(), arguments, ["value"]));
@@ -13384,7 +13368,7 @@ var Add = class _Add extends Signal {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Multiply.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Multiply.js
 var Multiply = class _Multiply extends Signal {
   constructor() {
     const options = optionsFromArguments(_Multiply.getDefaults(), arguments, ["value"]);
@@ -13411,7 +13395,7 @@ var Multiply = class _Multiply extends Signal {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Negate.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Negate.js
 var Negate = class extends SignalOperator {
   constructor() {
     super(...arguments);
@@ -13434,7 +13418,7 @@ var Negate = class extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Subtract.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Subtract.js
 var Subtract = class _Subtract extends Signal {
   constructor() {
     super(optionsFromArguments(_Subtract.getDefaults(), arguments, ["value"]));
@@ -13460,7 +13444,7 @@ var Subtract = class _Subtract extends Signal {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/MidSideMerge.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/MidSideMerge.js
 var MidSideMerge = class _MidSideMerge extends ToneAudioNode {
   constructor() {
     super(optionsFromArguments(_MidSideMerge.getDefaults(), arguments));
@@ -13499,7 +13483,7 @@ var MidSideMerge = class _MidSideMerge extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/MidSideSplit.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/MidSideSplit.js
 var MidSideSplit = class _MidSideSplit extends ToneAudioNode {
   constructor() {
     super(optionsFromArguments(_MidSideSplit.getDefaults(), arguments));
@@ -13536,7 +13520,7 @@ var MidSideSplit = class _MidSideSplit extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Mono.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Mono.js
 var Mono = class _Mono extends ToneAudioNode {
   constructor() {
     super(optionsFromArguments(_Mono.getDefaults(), arguments));
@@ -13557,7 +13541,7 @@ var Mono = class _Mono extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/BiquadFilter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/BiquadFilter.js
 var BiquadFilter = class _BiquadFilter extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_BiquadFilter.getDefaults(), arguments, ["frequency", "type"]);
@@ -13656,7 +13640,7 @@ var BiquadFilter = class _BiquadFilter extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/Filter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/Filter.js
 var Filter = class _Filter extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Filter.getDefaults(), arguments, [
@@ -13799,7 +13783,7 @@ var Filter = class _Filter extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/MultibandSplit.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/MultibandSplit.js
 var MultibandSplit = class _MultibandSplit extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_MultibandSplit.getDefaults(), arguments, ["lowFrequency", "highFrequency"]);
@@ -13877,7 +13861,7 @@ var MultibandSplit = class _MultibandSplit extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/context/Listener.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/Listener.js
 var ListenerInstance = class extends ToneAudioNode {
   constructor() {
     super(...arguments);
@@ -13953,7 +13937,7 @@ onContextClose((context2) => {
   context2.listener.dispose();
 });
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Panner3D.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Panner3D.js
 var Panner3D = class _Panner3D extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Panner3D.getDefaults(), arguments, ["positionX", "positionY", "positionZ"]);
@@ -14122,7 +14106,7 @@ var Panner3D = class _Panner3D extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/channel/Recorder.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/channel/Recorder.js
 var Recorder = class _Recorder extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Recorder.getDefaults(), arguments);
@@ -14223,7 +14207,7 @@ var Recorder = class _Recorder extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/dynamics/Compressor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/dynamics/Compressor.js
 var Compressor = class _Compressor extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Compressor.getDefaults(), arguments, ["threshold", "ratio"]);
@@ -14305,7 +14289,7 @@ var Compressor = class _Compressor extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/GreaterThanZero.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/GreaterThanZero.js
 var GreaterThanZero = class _GreaterThanZero extends SignalOperator {
   constructor() {
     super(optionsFromArguments(_GreaterThanZero.getDefaults(), arguments));
@@ -14335,7 +14319,7 @@ var GreaterThanZero = class _GreaterThanZero extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/GreaterThan.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/GreaterThan.js
 var GreaterThan = class _GreaterThan extends Signal {
   constructor() {
     const options = optionsFromArguments(_GreaterThan.getDefaults(), arguments, ["value"]);
@@ -14367,7 +14351,7 @@ var GreaterThan = class _GreaterThan extends Signal {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/dynamics/Gate.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/dynamics/Gate.js
 var Gate = class _Gate extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Gate.getDefaults(), arguments, [
@@ -14424,7 +14408,7 @@ var Gate = class _Gate extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/dynamics/Limiter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/dynamics/Limiter.js
 var Limiter = class _Limiter extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Limiter.getDefaults(), arguments, [
@@ -14462,7 +14446,7 @@ var Limiter = class _Limiter extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/dynamics/MidSideCompressor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/dynamics/MidSideCompressor.js
 var MidSideCompressor = class _MidSideCompressor extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_MidSideCompressor.getDefaults(), arguments);
@@ -14508,7 +14492,7 @@ var MidSideCompressor = class _MidSideCompressor extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/dynamics/MultibandCompressor.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/dynamics/MultibandCompressor.js
 var MultibandCompressor = class _MultibandCompressor extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_MultibandCompressor.getDefaults(), arguments);
@@ -14568,7 +14552,7 @@ var MultibandCompressor = class _MultibandCompressor extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Decorator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Decorator.js
 function range(min, max = Infinity) {
   const valueMap = /* @__PURE__ */ new WeakMap();
   return function(target, propertyKey) {
@@ -14602,7 +14586,7 @@ function timeRange(min, max = Infinity) {
   };
 }
 
-// ../../sdk/node_modules/tone/build/esm/component/envelope/Envelope.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/envelope/Envelope.js
 var Envelope = class _Envelope extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Envelope.getDefaults(), arguments, ["attack", "decay", "sustain", "release"]);
@@ -14991,7 +14975,7 @@ var EnvelopeCurves = (() => {
   };
 })();
 
-// ../../sdk/node_modules/tone/build/esm/component/envelope/AmplitudeEnvelope.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/envelope/AmplitudeEnvelope.js
 var AmplitudeEnvelope = class _AmplitudeEnvelope extends Envelope {
   constructor() {
     super(optionsFromArguments(_AmplitudeEnvelope.getDefaults(), arguments, [
@@ -15021,7 +15005,7 @@ var AmplitudeEnvelope = class _AmplitudeEnvelope extends Envelope {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Pow.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Pow.js
 var Pow = class _Pow extends SignalOperator {
   constructor() {
     const options = optionsFromArguments(_Pow.getDefaults(), arguments, [
@@ -15070,7 +15054,7 @@ var Pow = class _Pow extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Scale.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Scale.js
 var Scale = class _Scale extends SignalOperator {
   constructor() {
     const options = optionsFromArguments(_Scale.getDefaults(), arguments, [
@@ -15132,7 +15116,7 @@ var Scale = class _Scale extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/envelope/FrequencyEnvelope.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/envelope/FrequencyEnvelope.js
 var FrequencyEnvelope = class _FrequencyEnvelope extends Envelope {
   constructor() {
     const options = optionsFromArguments(_FrequencyEnvelope.getDefaults(), arguments, ["attack", "decay", "sustain", "release"]);
@@ -15203,7 +15187,7 @@ var FrequencyEnvelope = class _FrequencyEnvelope extends Envelope {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/Convolver.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/Convolver.js
 var Convolver = class _Convolver extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Convolver.getDefaults(), arguments, ["url", "onload"]);
@@ -15281,7 +15265,7 @@ var Convolver = class _Convolver extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/EQ3.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/EQ3.js
 var EQ3 = class _EQ3 extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_EQ3.getDefaults(), arguments, [
@@ -15354,7 +15338,7 @@ var EQ3 = class _EQ3 extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/worklet/WorkletGlobalScope.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/worklet/WorkletGlobalScope.js
 var workletContext = /* @__PURE__ */ new Set();
 function addToWorklet(classOrFunction) {
   workletContext.add(classOrFunction);
@@ -15370,7 +15354,7 @@ function getWorkletGlobalScope() {
   return Array.from(workletContext).join("\n");
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/worklet/ToneAudioWorklet.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/worklet/ToneAudioWorklet.js
 var ToneAudioWorklet = class _ToneAudioWorklet extends ToneAudioNode {
   constructor(options) {
     super(options);
@@ -15406,7 +15390,7 @@ var ToneAudioWorklet = class _ToneAudioWorklet extends ToneAudioNode {
 };
 ToneAudioWorklet._workletPromises = /* @__PURE__ */ new WeakMap();
 
-// ../../sdk/node_modules/tone/build/esm/core/worklet/ToneAudioWorkletProcessor.worklet.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/worklet/ToneAudioWorkletProcessor.worklet.js
 var toneAudioWorkletProcessor = (
   /* javascript */
   `
@@ -15443,7 +15427,7 @@ var toneAudioWorkletProcessor = (
 );
 addToWorklet(toneAudioWorkletProcessor);
 
-// ../../sdk/node_modules/tone/build/esm/core/worklet/SingleIOProcessor.worklet.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/worklet/SingleIOProcessor.worklet.js
 var singleIOProcess = (
   /* javascript */
   `
@@ -15517,7 +15501,7 @@ var singleIOProcess = (
 );
 addToWorklet(singleIOProcess);
 
-// ../../sdk/node_modules/tone/build/esm/core/worklet/DelayLine.worklet.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/worklet/DelayLine.worklet.js
 var delayLine = (
   /* javascript */
   `
@@ -15568,7 +15552,7 @@ var delayLine = (
 );
 addToWorklet(delayLine);
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/FeedbackCombFilter.worklet.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/FeedbackCombFilter.worklet.js
 var workletName = "feedback-comb-filter";
 var feedbackCombFilter = (
   /* javascript */
@@ -15606,7 +15590,7 @@ var feedbackCombFilter = (
 );
 registerProcessor(workletName, feedbackCombFilter);
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/FeedbackCombFilter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/FeedbackCombFilter.js
 var FeedbackCombFilter = class _FeedbackCombFilter extends ToneAudioWorklet {
   constructor() {
     const options = optionsFromArguments(_FeedbackCombFilter.getDefaults(), arguments, ["delayTime", "resonance"]);
@@ -15661,7 +15645,7 @@ var FeedbackCombFilter = class _FeedbackCombFilter extends ToneAudioWorklet {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/LowpassCombFilter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/LowpassCombFilter.js
 var LowpassCombFilter = class _LowpassCombFilter extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_LowpassCombFilter.getDefaults(), arguments, ["delayTime", "resonance", "dampening"]);
@@ -15705,7 +15689,7 @@ var LowpassCombFilter = class _LowpassCombFilter extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/util/StateTimeline.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/StateTimeline.js
 var StateTimeline = class extends Timeline {
   constructor(initial = "stopped") {
     super();
@@ -15775,7 +15759,7 @@ var StateTimeline = class extends Timeline {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/clock/TickParam.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/clock/TickParam.js
 var TickParam = class _TickParam extends Param {
   constructor() {
     const options = optionsFromArguments(_TickParam.getDefaults(), arguments, ["value"]);
@@ -15978,7 +15962,7 @@ var TickParam = class _TickParam extends Param {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/clock/TickSignal.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/clock/TickSignal.js
 var TickSignal = class _TickSignal extends Signal {
   constructor() {
     const options = optionsFromArguments(_TickSignal.getDefaults(), arguments, ["value"]);
@@ -16031,7 +16015,7 @@ var TickSignal = class _TickSignal extends Signal {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/clock/TickSource.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/clock/TickSource.js
 var TickSource = class _TickSource extends ToneWithContext {
   constructor() {
     const options = optionsFromArguments(_TickSource.getDefaults(), arguments, ["frequency"]);
@@ -16321,7 +16305,7 @@ var TickSource = class _TickSource extends ToneWithContext {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/clock/Clock.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/clock/Clock.js
 var Clock = class _Clock extends ToneWithContext {
   constructor() {
     const options = optionsFromArguments(_Clock.getDefaults(), arguments, [
@@ -16540,7 +16524,7 @@ var Clock = class _Clock extends ToneWithContext {
 };
 Emitter.mixin(Clock);
 
-// ../../sdk/node_modules/tone/build/esm/core/context/Delay.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/Delay.js
 var Delay = class _Delay extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Delay.getDefaults(), arguments, [
@@ -16586,7 +16570,7 @@ var Delay = class _Delay extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/context/Destination.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/Destination.js
 var DestinationInstance = class _DestinationInstance extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_DestinationInstance.getDefaults(), arguments);
@@ -16667,7 +16651,7 @@ onContextClose((context2) => {
   context2.destination.dispose();
 });
 
-// ../../sdk/node_modules/tone/build/esm/core/context/Offline.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/Offline.js
 function Offline(callback_1, duration_1) {
   return __awaiter(this, arguments, void 0, function* (callback, duration, channels = 2, sampleRate = getContext().sampleRate) {
     const originalContext = getContext();
@@ -16681,7 +16665,7 @@ function Offline(callback_1, duration_1) {
   });
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/context/ToneAudioBuffers.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/context/ToneAudioBuffers.js
 var ToneAudioBuffers = class _ToneAudioBuffers extends Tone {
   constructor() {
     super();
@@ -16761,7 +16745,7 @@ var ToneAudioBuffers = class _ToneAudioBuffers extends Tone {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/type/Midi.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/type/Midi.js
 var MidiClass = class _MidiClass extends FrequencyClass {
   constructor() {
     super(...arguments);
@@ -16822,7 +16806,7 @@ function Midi(value, units) {
   return new MidiClass(getContext(), value, units);
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/type/Ticks.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/type/Ticks.js
 var TicksClass = class extends TransportTimeClass {
   constructor() {
     super(...arguments);
@@ -16870,7 +16854,7 @@ function Ticks(value, units) {
   return new TicksClass(getContext(), value, units);
 }
 
-// ../../sdk/node_modules/tone/build/esm/core/util/Draw.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/Draw.js
 var DrawInstance = class extends ToneWithContext {
   constructor() {
     super(...arguments);
@@ -16939,7 +16923,7 @@ onContextClose((context2) => {
   context2.draw.dispose();
 });
 
-// ../../sdk/node_modules/tone/build/esm/core/util/IntervalTimeline.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/IntervalTimeline.js
 var IntervalTimeline = class extends Tone {
   constructor() {
     super(...arguments);
@@ -17404,10 +17388,10 @@ var IntervalNode = class {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/type/Units.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/type/Units.js
 var Units_exports = {};
 
-// ../../sdk/node_modules/tone/build/esm/effect/Effect.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Effect.js
 var Effect = class extends ToneAudioNode {
   constructor(options) {
     super(options);
@@ -17447,7 +17431,7 @@ var Effect = class extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/AudioToGain.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/AudioToGain.js
 var AudioToGain = class extends SignalOperator {
   constructor() {
     super(...arguments);
@@ -17469,7 +17453,7 @@ var AudioToGain = class extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/Zero.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/Zero.js
 var Zero = class _Zero extends SignalOperator {
   constructor() {
     super(optionsFromArguments(_Zero.getDefaults(), arguments));
@@ -17489,7 +17473,7 @@ var Zero = class _Zero extends SignalOperator {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/util/TimelineValue.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/util/TimelineValue.js
 var TimelineValue = class extends Tone {
   /**
    * @param initialValue The value to return if there is no scheduled values
@@ -17525,7 +17509,7 @@ var TimelineValue = class extends Tone {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/clock/TransportEvent.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/clock/TransportEvent.js
 var TransportEvent = class _TransportEvent {
   /**
    * @param transport The transport object which the event belongs to
@@ -17576,7 +17560,7 @@ var TransportEvent = class _TransportEvent {
 };
 TransportEvent._eventId = 0;
 
-// ../../sdk/node_modules/tone/build/esm/core/clock/TransportRepeatEvent.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/clock/TransportRepeatEvent.js
 var TransportRepeatEvent = class _TransportRepeatEvent extends TransportEvent {
   /**
    * @param transport The transport object which the event belongs to
@@ -17661,7 +17645,7 @@ var TransportRepeatEvent = class _TransportRepeatEvent extends TransportEvent {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/core/clock/Transport.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/core/clock/Transport.js
 var TransportInstance = class _TransportInstance extends ToneWithContext {
   constructor() {
     const options = optionsFromArguments(_TransportInstance.getDefaults(), arguments);
@@ -18197,7 +18181,7 @@ onContextClose((context2) => {
   context2.transport.dispose();
 });
 
-// ../../sdk/node_modules/tone/build/esm/source/Source.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/Source.js
 var Source = class extends ToneAudioNode {
   constructor(options) {
     super(options);
@@ -18420,7 +18404,7 @@ var Source = class extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/OscillatorInterface.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/OscillatorInterface.js
 function generateWaveform(instance, length) {
   return __awaiter(this, void 0, void 0, function* () {
     const duration = length / instance.context.sampleRate;
@@ -18438,7 +18422,7 @@ function generateWaveform(instance, length) {
   });
 }
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/ToneOscillatorNode.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/ToneOscillatorNode.js
 var ToneOscillatorNode = class _ToneOscillatorNode extends OneShotSource {
   constructor() {
     const options = optionsFromArguments(_ToneOscillatorNode.getDefaults(), arguments, ["frequency", "type"]);
@@ -18515,7 +18499,7 @@ var ToneOscillatorNode = class _ToneOscillatorNode extends OneShotSource {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/Oscillator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/Oscillator.js
 var Oscillator = class _Oscillator extends Source {
   constructor() {
     const options = optionsFromArguments(_Oscillator.getDefaults(), arguments, ["frequency", "type"]);
@@ -18844,7 +18828,7 @@ var Oscillator = class _Oscillator extends Source {
 };
 Oscillator._periodicWaveCache = [];
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/LFO.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/LFO.js
 var LFO = class _LFO extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_LFO.getDefaults(), arguments, [
@@ -19052,7 +19036,7 @@ var LFO = class _LFO extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/LFOEffect.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/LFOEffect.js
 var LFOEffect = class extends Effect {
   constructor(options) {
     super(options);
@@ -19126,7 +19110,7 @@ var LFOEffect = class extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/AutoFilter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/AutoFilter.js
 var AutoFilter = class _AutoFilter extends LFOEffect {
   constructor() {
     const options = optionsFromArguments(_AutoFilter.getDefaults(), arguments, ["frequency", "baseFrequency", "octaves"]);
@@ -19178,7 +19162,7 @@ var AutoFilter = class _AutoFilter extends LFOEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/AutoPanner.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/AutoPanner.js
 var AutoPanner = class _AutoPanner extends LFOEffect {
   constructor() {
     const options = optionsFromArguments(_AutoPanner.getDefaults(), arguments, ["frequency"]);
@@ -19205,7 +19189,7 @@ var AutoPanner = class _AutoPanner extends LFOEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/signal/ScaleExp.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/ScaleExp.js
 var ScaleExp = class _ScaleExp extends Scale {
   constructor() {
     const options = optionsFromArguments(_ScaleExp.getDefaults(), arguments, ["min", "max", "exponent"]);
@@ -19240,7 +19224,7 @@ var ScaleExp = class _ScaleExp extends Scale {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/AutoWah.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/AutoWah.js
 var AutoWah = class _AutoWah extends Effect {
   constructor() {
     const options = optionsFromArguments(_AutoWah.getDefaults(), arguments, [
@@ -19350,7 +19334,7 @@ var AutoWah = class _AutoWah extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/BitCrusher.worklet.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/BitCrusher.worklet.js
 var workletName2 = "bit-crusher";
 var bitCrusherWorklet = (
   /* javascript */
@@ -19377,7 +19361,7 @@ var bitCrusherWorklet = (
 );
 registerProcessor(workletName2, bitCrusherWorklet);
 
-// ../../sdk/node_modules/tone/build/esm/effect/BitCrusher.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/BitCrusher.js
 var BitCrusher = class _BitCrusher extends Effect {
   constructor() {
     const options = optionsFromArguments(_BitCrusher.getDefaults(), arguments, ["bits"]);
@@ -19440,7 +19424,7 @@ var BitCrusherWorklet = class _BitCrusherWorklet extends ToneAudioWorklet {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/Chebyshev.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Chebyshev.js
 var Chebyshev = class _Chebyshev extends Effect {
   constructor() {
     const options = optionsFromArguments(_Chebyshev.getDefaults(), arguments, ["order"]);
@@ -19515,7 +19499,7 @@ var Chebyshev = class _Chebyshev extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/StereoEffect.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/StereoEffect.js
 var StereoEffect = class extends ToneAudioNode {
   constructor(options) {
     super(options);
@@ -19565,7 +19549,7 @@ var StereoEffect = class extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/StereoFeedbackEffect.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/StereoFeedbackEffect.js
 var StereoFeedbackEffect = class extends StereoEffect {
   constructor(options) {
     super(options);
@@ -19603,7 +19587,7 @@ var StereoFeedbackEffect = class extends StereoEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/Chorus.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Chorus.js
 var Chorus = class _Chorus extends StereoFeedbackEffect {
   constructor() {
     const options = optionsFromArguments(_Chorus.getDefaults(), arguments, [
@@ -19744,7 +19728,7 @@ var Chorus = class _Chorus extends StereoFeedbackEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/Distortion.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Distortion.js
 var Distortion = class _Distortion extends Effect {
   constructor() {
     const options = optionsFromArguments(_Distortion.getDefaults(), arguments, ["distortion"]);
@@ -19799,7 +19783,7 @@ var Distortion = class _Distortion extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/FeedbackEffect.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/FeedbackEffect.js
 var FeedbackEffect = class extends Effect {
   constructor(options) {
     super(options);
@@ -19826,7 +19810,7 @@ var FeedbackEffect = class extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/FeedbackDelay.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/FeedbackDelay.js
 var FeedbackDelay = class _FeedbackDelay extends FeedbackEffect {
   constructor() {
     const options = optionsFromArguments(_FeedbackDelay.getDefaults(), arguments, ["delayTime", "feedback"]);
@@ -19855,7 +19839,7 @@ var FeedbackDelay = class _FeedbackDelay extends FeedbackEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/Freeverb.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Freeverb.js
 var combFilterTunings = [
   1557 / 44100,
   1617 / 44100,
@@ -19933,7 +19917,7 @@ var Freeverb = class _Freeverb extends StereoEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/component/filter/PhaseShiftAllpass.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/component/filter/PhaseShiftAllpass.js
 var PhaseShiftAllpass = class extends ToneAudioNode {
   constructor(options) {
     super(options);
@@ -19984,7 +19968,7 @@ var PhaseShiftAllpass = class extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/FrequencyShifter.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/FrequencyShifter.js
 var FrequencyShifter = class _FrequencyShifter extends Effect {
   constructor() {
     const options = optionsFromArguments(_FrequencyShifter.getDefaults(), arguments, ["frequency"]);
@@ -20044,7 +20028,7 @@ var FrequencyShifter = class _FrequencyShifter extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/JCReverb.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/JCReverb.js
 var combFilterDelayTimes = [
   1687 / 25e3,
   1601 / 25e3,
@@ -20108,7 +20092,7 @@ var JCReverb = class _JCReverb extends StereoEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/Phaser.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Phaser.js
 var Phaser = class _Phaser extends StereoEffect {
   constructor() {
     const options = optionsFromArguments(_Phaser.getDefaults(), arguments, [
@@ -20207,7 +20191,7 @@ var Phaser = class _Phaser extends StereoEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/StereoXFeedbackEffect.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/StereoXFeedbackEffect.js
 var StereoXFeedbackEffect = class extends StereoFeedbackEffect {
   constructor(options) {
     super(options);
@@ -20219,7 +20203,7 @@ var StereoXFeedbackEffect = class extends StereoFeedbackEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/PingPongDelay.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/PingPongDelay.js
 var PingPongDelay = class _PingPongDelay extends StereoXFeedbackEffect {
   constructor() {
     const options = optionsFromArguments(_PingPongDelay.getDefaults(), arguments, ["delayTime", "feedback"]);
@@ -20265,7 +20249,7 @@ var PingPongDelay = class _PingPongDelay extends StereoXFeedbackEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/PitchShift.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/PitchShift.js
 var PitchShift = class _PitchShift extends FeedbackEffect {
   constructor() {
     const options = optionsFromArguments(_PitchShift.getDefaults(), arguments, ["pitch"]);
@@ -20384,7 +20368,7 @@ var PitchShift = class _PitchShift extends FeedbackEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/buffer/ToneBufferSource.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/buffer/ToneBufferSource.js
 var ToneBufferSource = class _ToneBufferSource extends OneShotSource {
   constructor() {
     const options = optionsFromArguments(_ToneBufferSource.getDefaults(), arguments, ["url", "onload"]);
@@ -20546,7 +20530,7 @@ var ToneBufferSource = class _ToneBufferSource extends OneShotSource {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/Noise.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/Noise.js
 var Noise = class _Noise extends Source {
   constructor() {
     const options = optionsFromArguments(_Noise.getDefaults(), arguments, [
@@ -20732,7 +20716,7 @@ var _noiseBuffers = {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/Reverb.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Reverb.js
 var Reverb = class _Reverb extends Effect {
   constructor() {
     const options = optionsFromArguments(_Reverb.getDefaults(), arguments, [
@@ -20815,7 +20799,7 @@ var Reverb = class _Reverb extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/MidSideEffect.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/MidSideEffect.js
 var MidSideEffect = class extends Effect {
   constructor(options) {
     super(options);
@@ -20853,7 +20837,7 @@ var MidSideEffect = class extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/StereoWidener.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/StereoWidener.js
 var StereoWidener = class _StereoWidener extends MidSideEffect {
   constructor() {
     const options = optionsFromArguments(_StereoWidener.getDefaults(), arguments, ["width"]);
@@ -20902,7 +20886,7 @@ var StereoWidener = class _StereoWidener extends MidSideEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/Tremolo.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Tremolo.js
 var Tremolo = class _Tremolo extends StereoEffect {
   constructor() {
     const options = optionsFromArguments(_Tremolo.getDefaults(), arguments, [
@@ -21019,7 +21003,7 @@ var Tremolo = class _Tremolo extends StereoEffect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/effect/Vibrato.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/effect/Vibrato.js
 var Vibrato = class _Vibrato extends Effect {
   constructor() {
     const options = optionsFromArguments(_Vibrato.getDefaults(), arguments, [
@@ -21075,7 +21059,7 @@ var Vibrato = class _Vibrato extends Effect {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/event/ToneEvent.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/event/ToneEvent.js
 var ToneEvent = class _ToneEvent extends ToneWithContext {
   constructor() {
     const options = optionsFromArguments(_ToneEvent.getDefaults(), arguments, ["callback", "value"]);
@@ -21339,7 +21323,7 @@ var ToneEvent = class _ToneEvent extends ToneWithContext {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/event/Loop.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/event/Loop.js
 var Loop = class _Loop extends ToneWithContext {
   constructor() {
     const options = optionsFromArguments(_Loop.getDefaults(), arguments, [
@@ -21488,7 +21472,7 @@ var Loop = class _Loop extends ToneWithContext {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/event/Part.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/event/Part.js
 var Part = class _Part extends ToneEvent {
   constructor() {
     const options = optionsFromArguments(_Part.getDefaults(), arguments, [
@@ -21837,7 +21821,7 @@ var Part = class _Part extends ToneEvent {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/event/PatternGenerator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/event/PatternGenerator.js
 function* upPatternGen(numValues) {
   let index = 0;
   while (index < numValues) {
@@ -21953,7 +21937,7 @@ function* PatternGenerator(numValues, pattern = "up") {
   }
 }
 
-// ../../sdk/node_modules/tone/build/esm/event/Pattern.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/event/Pattern.js
 var Pattern = class _Pattern extends Loop {
   constructor() {
     const options = optionsFromArguments(_Pattern.getDefaults(), arguments, [
@@ -22018,7 +22002,7 @@ var Pattern = class _Pattern extends Loop {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/event/Sequence.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/event/Sequence.js
 var Sequence = class _Sequence extends ToneEvent {
   constructor() {
     const options = optionsFromArguments(_Sequence.getDefaults(), arguments, ["callback", "events", "subdivision"]);
@@ -22228,7 +22212,7 @@ var Sequence = class _Sequence extends ToneEvent {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/AMOscillator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/AMOscillator.js
 var AMOscillator = class _AMOscillator extends Source {
   constructor() {
     const options = optionsFromArguments(_AMOscillator.getDefaults(), arguments, ["frequency", "type", "modulationType"]);
@@ -22351,7 +22335,7 @@ var AMOscillator = class _AMOscillator extends Source {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/FatOscillator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/FatOscillator.js
 var FatOscillator = class _FatOscillator extends Source {
   constructor() {
     const options = optionsFromArguments(_FatOscillator.getDefaults(), arguments, ["frequency", "type", "spread"]);
@@ -22527,7 +22511,7 @@ var FatOscillator = class _FatOscillator extends Source {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/FMOscillator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/FMOscillator.js
 var FMOscillator = class _FMOscillator extends Source {
   constructor() {
     const options = optionsFromArguments(_FMOscillator.getDefaults(), arguments, ["frequency", "type", "modulationType"]);
@@ -22666,7 +22650,7 @@ var FMOscillator = class _FMOscillator extends Source {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/PulseOscillator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/PulseOscillator.js
 var PulseOscillator = class _PulseOscillator extends Source {
   constructor() {
     const options = optionsFromArguments(_PulseOscillator.getDefaults(), arguments, ["frequency", "width"]);
@@ -22789,7 +22773,7 @@ var PulseOscillator = class _PulseOscillator extends Source {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/PWMOscillator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/PWMOscillator.js
 var PWMOscillator = class _PWMOscillator extends Source {
   constructor() {
     const options = optionsFromArguments(_PWMOscillator.getDefaults(), arguments, ["frequency", "modulationFrequency"]);
@@ -22901,7 +22885,7 @@ var PWMOscillator = class _PWMOscillator extends Source {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/oscillator/OmniOscillator.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/oscillator/OmniOscillator.js
 var OmniOscillatorSourceMap = {
   am: AMOscillator,
   fat: FatOscillator,
@@ -23204,7 +23188,7 @@ var OmniOscillator = class _OmniOscillator extends Source {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/Instrument.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/Instrument.js
 var Instrument = class _Instrument extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Instrument.getDefaults(), arguments);
@@ -23325,7 +23309,7 @@ var Instrument = class _Instrument extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/Monophonic.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/Monophonic.js
 var Monophonic = class _Monophonic extends Instrument {
   constructor() {
     const options = optionsFromArguments(_Monophonic.getDefaults(), arguments);
@@ -23399,7 +23383,7 @@ __decorate([
   timeRange(0)
 ], Monophonic.prototype, "portamento", void 0);
 
-// ../../sdk/node_modules/tone/build/esm/instrument/Synth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/Synth.js
 var Synth = class _Synth extends Monophonic {
   constructor() {
     const options = optionsFromArguments(_Synth.getDefaults(), arguments);
@@ -23472,7 +23456,7 @@ var Synth = class _Synth extends Monophonic {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/ModulationSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/ModulationSynth.js
 var ModulationSynth = class _ModulationSynth extends Monophonic {
   constructor() {
     const options = optionsFromArguments(_ModulationSynth.getDefaults(), arguments);
@@ -23585,7 +23569,7 @@ var ModulationSynth = class _ModulationSynth extends Monophonic {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/AMSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/AMSynth.js
 var AMSynth = class _AMSynth extends ModulationSynth {
   constructor() {
     super(optionsFromArguments(_AMSynth.getDefaults(), arguments));
@@ -23606,7 +23590,7 @@ var AMSynth = class _AMSynth extends ModulationSynth {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/MonoSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/MonoSynth.js
 var MonoSynth = class _MonoSynth extends Monophonic {
   constructor() {
     const options = optionsFromArguments(_MonoSynth.getDefaults(), arguments);
@@ -23698,7 +23682,7 @@ var MonoSynth = class _MonoSynth extends Monophonic {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/DuoSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/DuoSynth.js
 var DuoSynth = class _DuoSynth extends Monophonic {
   constructor() {
     const options = optionsFromArguments(_DuoSynth.getDefaults(), arguments);
@@ -23823,7 +23807,7 @@ var DuoSynth = class _DuoSynth extends Monophonic {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/FMSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/FMSynth.js
 var FMSynth = class _FMSynth extends ModulationSynth {
   constructor() {
     const options = optionsFromArguments(_FMSynth.getDefaults(), arguments);
@@ -23853,7 +23837,7 @@ var FMSynth = class _FMSynth extends ModulationSynth {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/MembraneSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/MembraneSynth.js
 var MembraneSynth = class _MembraneSynth extends Synth {
   constructor() {
     const options = optionsFromArguments(_MembraneSynth.getDefaults(), arguments);
@@ -23900,7 +23884,7 @@ __decorate([
   timeRange(0, 0.5)
 ], MembraneSynth.prototype, "pitchDecay", void 0);
 
-// ../../sdk/node_modules/tone/build/esm/instrument/MetalSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/MetalSynth.js
 var inharmRatios = [1, 1.483, 1.932, 2.546, 2.63, 3.897];
 var MetalSynth = class _MetalSynth extends Monophonic {
   constructor() {
@@ -24070,7 +24054,7 @@ var MetalSynth = class _MetalSynth extends Monophonic {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/NoiseSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/NoiseSynth.js
 var NoiseSynth = class _NoiseSynth extends Instrument {
   constructor() {
     const options = optionsFromArguments(_NoiseSynth.getDefaults(), arguments);
@@ -24152,7 +24136,7 @@ var NoiseSynth = class _NoiseSynth extends Instrument {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/PluckSynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/PluckSynth.js
 var PluckSynth = class _PluckSynth extends Instrument {
   constructor() {
     const options = optionsFromArguments(_PluckSynth.getDefaults(), arguments);
@@ -24218,7 +24202,7 @@ var PluckSynth = class _PluckSynth extends Instrument {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/PolySynth.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/PolySynth.js
 var PolySynth = class _PolySynth extends Instrument {
   constructor() {
     const options = optionsFromArguments(_PolySynth.getDefaults(), arguments, ["voice", "options"]);
@@ -24474,7 +24458,7 @@ var PolySynth = class _PolySynth extends Instrument {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/instrument/Sampler.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/instrument/Sampler.js
 var Sampler = class _Sampler extends Instrument {
   constructor() {
     const options = optionsFromArguments(_Sampler.getDefaults(), arguments, ["urls", "onload", "baseUrl"], "urls");
@@ -24776,7 +24760,7 @@ __decorate([
   timeRange(0)
 ], Sampler.prototype, "release", void 0);
 
-// ../../sdk/node_modules/tone/build/esm/signal/SyncedSignal.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/signal/SyncedSignal.js
 var SyncedSignal = class extends Signal {
   constructor() {
     const options = optionsFromArguments(Signal.getDefaults(), arguments, [
@@ -24891,7 +24875,7 @@ var SyncedSignal = class extends Signal {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/buffer/GrainPlayer.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/buffer/GrainPlayer.js
 var GrainPlayer = class _GrainPlayer extends Source {
   constructor() {
     const options = optionsFromArguments(_GrainPlayer.getDefaults(), arguments, ["url", "onload"]);
@@ -25096,7 +25080,7 @@ var GrainPlayer = class _GrainPlayer extends Source {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/buffer/Player.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/buffer/Player.js
 var Player = class _Player extends Source {
   constructor() {
     const options = optionsFromArguments(_Player.getDefaults(), arguments, [
@@ -25472,7 +25456,7 @@ __decorate([
   timeRange(0)
 ], Player.prototype, "fadeOut", void 0);
 
-// ../../sdk/node_modules/tone/build/esm/source/buffer/Players.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/buffer/Players.js
 var Players = class _Players extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_Players.getDefaults(), arguments, ["urls", "onload"], "urls");
@@ -25613,7 +25597,7 @@ var Players = class _Players extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/source/UserMedia.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/source/UserMedia.js
 var UserMedia = class _UserMedia extends ToneAudioNode {
   constructor() {
     const options = optionsFromArguments(_UserMedia.getDefaults(), arguments, ["volume"]);
@@ -25789,7 +25773,7 @@ var UserMedia = class _UserMedia extends ToneAudioNode {
   }
 };
 
-// ../../sdk/node_modules/tone/build/esm/index.js
+// ../../../../../../../../..~/Code/amiexpress-web/sdk/node_modules/tone/build/esm/index.js
 function now() {
   return getContext().now();
 }
@@ -28203,14 +28187,12 @@ function ensureTracker() {
   return tracker;
 }
 async function playTrack(name) {
-  if (currentTrack === name)
-    return;
+  if (currentTrack === name) return;
   currentTrack = name;
   const seq = ++trackSeq;
   try {
     const engine = ensureTracker();
-    if (!engine)
-      return;
+    if (!engine) return;
     if (trackerContext && trackerContext.state === "suspended") {
       void trackerContext.resume().catch(() => {
       });
@@ -28221,26 +28203,22 @@ async function playTrack(name) {
       const res = await fetch(
         `${base}/api/doors/PENGO/assets/${encodeURIComponent(name)}`
       );
-      if (!res.ok)
-        throw new Error(`asset ${name}: HTTP ${res.status}`);
+      if (!res.ok) throw new Error(`asset ${name}: HTTP ${res.status}`);
       buffer = await res.arrayBuffer();
       trackCache.set(name, buffer);
     }
-    if (seq !== trackSeq)
-      return;
+    if (seq !== trackSeq) return;
     engine.play(buffer);
   } catch (e) {
     console.warn("[Pengo] music unavailable:", e);
   }
 }
 function startMusicPoll() {
-  if (musicPoll)
-    return;
+  if (musicPoll) return;
   musicPoll = setInterval(async () => {
     try {
       const result = await door.rpc("getMusicTrack", {});
-      if (result && result.track)
-        void playTrack(result.track);
+      if (result && result.track) void playTrack(result.track);
     } catch {
     }
   }, MUSIC_POLL_MS);
@@ -28268,8 +28246,7 @@ door.on("init", () => {
 });
 door.on("connect", (user) => {
   console.log(`[Pengo] Connected as ${user.name}`);
-  if (!stopSfx)
-    stopSfx = installArcadeSfx(audio);
+  if (!stopSfx) stopSfx = installArcadeSfx(audio);
   startMusicPoll();
 });
 function teardown() {

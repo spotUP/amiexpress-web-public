@@ -19,15 +19,9 @@ size_hello=$(wc -c < "$hello" | tr -d ' ')
 size_box=$(wc -c < "$hello_box" | tr -d ' ')
 delta=$((size_box - size_hello))
 
-hello_list=build/amiga/hello_list
-[ -f "$hello_list" ] || { echo "[ERROR] $hello_list not built - run: make amiga"; exit 1; }
-size_list=$(wc -c < "$hello_list" | tr -d ' ')
-
 echo "hello        (no widget, full library linked): $size_hello bytes"
 echo "hello_box    (one ae_box call)               : $size_box bytes"
-echo "hello_list   (a bordered list with a scroll bar): $size_list bytes"
 echo "the box widget costs                          : $delta bytes"
-echo "the list widget and its ANSI layer cost       : $((size_list - size_hello)) bytes"
 
 # The rule, checked rather than described: a door that never calls ae_box
 # must not carry its code. If the widget's symbols are IN the plain hello

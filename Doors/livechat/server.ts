@@ -42,7 +42,6 @@ function stripTags(text: string): string {
   return text.replace(/{[^}]+}/g, '');
 }
 import { DoorLoader } from '@amiexpress/bbs-door-sdk/utils/DoorLoader';
-import { attachDoorChrome } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 
 // Core state and services
 import { addMessage, setChannel, setDmContext, clearDmContext, AppState } from './core/state';
@@ -60,12 +59,10 @@ import { KeystrokeHandler } from './handlers/keystroke';
 import { CommandHandler } from './handlers/command';
 
 // UI components
-import { processKeystroke, renderTypingPreview, isAnyoneTyping } from './ui/typing-preview';
+import { processKeystroke, renderTypingPreview } from './ui/typing-preview';
 import { createScreen } from './ui/screen';
-import {
-  createMenuBar, MENU_HEIGHT, MASTHEAD_TITLE, type MenuBar,
-} from './ui/menu-bar';
-import { PANEL_BORDER, PANEL_FOCUS_STYLE, refreshPanelChrome } from './ui/theme';
+import { createMenuBar, MENU_HEIGHT, type MenuBar } from './ui/menu-bar';
+import { PANEL_BORDER, PANEL_FOCUS_STYLE } from './ui/theme';
 import { messageIndexAtRow } from './ui/chat-row-map';
 import { solveLayout } from './ui/layout-solver';
 import { createStatusBar, updateStatusBar as updateStatusBarFn, STATUS_HEIGHT } from './ui/status-bar';
@@ -136,7 +133,7 @@ import { createEventsCommand } from './commands/events';
 import { PRESENCE_INDICATORS } from './types';
 import type { PresenceStatus, BBSEvent, Message as ChatMessage } from './types';
 import type { SlashCommand } from './commands/types';
-import { T, S, CURRENT, applyTheme } from './door-theme';
+import { T, applyTheme } from './door-theme';
 
 // Import widget types (Log already imported above)
 
@@ -182,9 +179,6 @@ export async function createApp(session: DoorSession) {
   // anyone ASKING the terminal to grow (see the switch below).
   // The board's theme, before any widget reads a colour from it.
   applyTheme(bbs);
-  // The panel colours are read from the theme once it is known, before
-  // any widget is built (ui/theme.ts).
-  refreshPanelChrome();
 
   const screen = createScreen(bbs);
   // Note: Optimized rendering is now enabled by default in the SDK
@@ -280,56 +274,6 @@ export async function createApp(session: DoorSession) {
 
   // ========== EMOJI BUTTON (next to input box) ==========
   const emojiButton = createEmojiButton(screen);
-
-  // ========== THEME CHROME ==========
-  /**
-   * The theme's moving parts, from the ONE SDK call.
-   *
-   * This door had the theme's COLOURS (door-theme.ts) and none of its
-   * chrome, which is the complaint attachDoorChrome exists to answer - a
-   * palette is not a theme. What LIVECHAT can take is the GLITCHES, and
-   * that is deliberate on both counts:
-   *
-   *   - The masthead rides the run the MENU LABELS leave, from the column
-   *     after the last one to the right edge. Row 0 is the menu bar and
-   *     every row under it is a panel, so there is no spare row - the same
-   *     constraint CARD LOBBY has and the same answer. Below the fit
-   *     threshold (a C64 leaves a handful of columns) the row is hidden and
-   *     the bar keeps the theme's mark, still, at its right end.
-   *   - No footer. The bar along the bottom is a live STATUS line - who
-   *     you are, which node, which channel, whether events are muted -
-   *     which the chrome's hint line would overwrite on every repaint.
-   *
-   * The damage goes on the chat log, the only panel here with rows to
-   * spare: glitching the menu bar, the input box or the status line reads
-   * as the door being broken rather than as atmosphere.
-   *
-   * The width handed over is the LIVE one, so the SDK's own
-   * effectsAllowed() gate is what turns this off at 40 columns - the door
-   * adds no gate of its own and cannot forget one.
-   */
-  const mastheadFits = menuBar.layoutMasthead();
-  const chrome = attachDoorChrome(CURRENT, {
-    width: ((screen as any).width as number) || 80,
-    title: MASTHEAD_TITLE,
-    // Hidden below the fit threshold, and then there is nothing to drive:
-    // the bar's still mark is the branding a 40-column caller gets.
-    masthead: mastheadFits ? menuBar.mastheadRow : undefined,
-    // The run inside the bar, not the screen - the menus own the left end.
-    mastheadWidth: menuBar.mastheadWidth(),
-    glitch: chatLog,
-    glitchOptions: {
-      // A glitch fired mid-keystroke is a lost keystroke: every keypress,
-      // local or from another node, rebuilds the whole log content, and the
-      // repair that follows would put the pre-keystroke text back. The
-      // typing buffers know when anyone in the room is mid-word.
-      isBusy: () => isAnyoneTyping(state.typingBuffers),
-    },
-    styles: S,
-    render: () => screen.render(),
-    // So two callers on the same board are not watching identical damage.
-    seed: nodeId * 7 + 3,
-  });
 
   // ========== EMOJI PICKER ==========
   const emojiPicker = new EmojiPicker(screen);
@@ -1408,11 +1352,7 @@ export async function createApp(session: DoorSession) {
   // ========== POPUP DIALOGS ==========
   // Note: Dialog widgets (Message, Prompt, Question) have built-in fixed heights.
   // Don't pass height: 'shrink' as it breaks nested element rendering.
-  const { modalOverlay, showModal, hideModal: originalHideModal, messageDialog, promptDialog, questionDialog, showMessageDialog, showPromptDialog, showConfirmDialog } = createDialogs(screen, inputBox,
-    // Without this the SDK falls back to its own cyan/green/yellow rules
-    // and the dialogs are the one part of the door a theme never
-    // reached (sysop: "livechat doesnt look themed at all").
-    { frame: S.frame });
+  const { modalOverlay, showModal, hideModal: originalHideModal, messageDialog, promptDialog, questionDialog, showMessageDialog, showPromptDialog, showConfirmDialog } = createDialogs(screen, inputBox);
 
   // Wrap hideModal to restore commandSuggestions z-order after hiding modals
   const hideModal = (widget: any) => {
@@ -1529,9 +1469,7 @@ export async function createApp(session: DoorSession) {
     overlay: true,
     overlayOpacity: 0.5,
     spinner: true,
-    // The theme decides; the loader defaults to it too, but this door used
-    // to name cyan and would have kept it.
-    barColor: T.accent,
+    barColor: 'cyan',
   });
 
   // ========== SETTINGS OVERLAY ==========
@@ -2757,7 +2695,7 @@ export async function createApp(session: DoorSession) {
       void openThemeMenu({
         screen,
         bbs,
-        onApply: (theme) => { applyTheme(theme); refreshPanelChrome(); },
+        onApply: (theme) => applyTheme(theme),
       }).then(() => screen.render());
     },
     onJoinChannel: () => {
@@ -2892,11 +2830,6 @@ export async function createApp(session: DoorSession) {
     // Stop cursor blink interval
     stopCursorBlink();
 
-    // Stop the theme chrome BEFORE the screen goes: a glitch timer writing
-    // to a destroyed screen takes the session with it, and stop() also puts
-    // back any row a glitch was in the middle of damaging.
-    try { chrome.stop(); } catch { /* leaving anyway */ }
-
     // Send leave room only if we are in a room
     if (state.currentChannel) {
       socket.emit('room:leave');
@@ -2940,10 +2873,6 @@ export async function createApp(session: DoorSession) {
     // DRIVEN by a test - toggled wide, resized, toggled back - rather than
     // only started. Nothing in the door reads them from here.
     screen,
-    // Same reason: the masthead's run is decided by the menu labels, and
-    // nothing else on the screen knows where they end.
-    mastheadRow: menuBar.mastheadRow,
-    menuBar: menuBar.element,
     get terminalMode() { return terminalMode; },
     async run() {
       try {

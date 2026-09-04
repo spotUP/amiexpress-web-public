@@ -12,7 +12,6 @@ import {
   themeStyles,
   themeById,
   resolveTheme,
-  setActiveTheme,
   type Theme,
   type ThemeTokens,
   type ThemeStyles,
@@ -20,14 +19,6 @@ import {
 
 export let T: ThemeTokens = themeById('classic').tokens;
 export let S: ThemeStyles = themeStyles(themeById('classic'));
-/**
- * The theme itself, for the SDK chrome.
- *
- * The rail and the glitches are properties of the THEME, not of its colour
- * tokens - attachDoorChrome asks it for both - so the studio has to keep
- * hold of the whole thing and not only the palette it paints with.
- */
-export let THEME: Theme = themeById('classic');
 
 /**
  * Re-theme this door.
@@ -40,10 +31,6 @@ export let THEME: Theme = themeById('classic');
 export function applyTheme(source: unknown): void {
   const theme = resolveTheme(source);
   if (!theme) return;
-  // Tell the SDK too: its widgets pick their own defaults from it
-  // (a menu bar's background, engines/ui/theme/live.ts).
-  setActiveTheme(theme);
   T = theme.tokens;
   S = themeStyles(theme);
-  THEME = theme;
 }

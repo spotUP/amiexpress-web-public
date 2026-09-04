@@ -24,7 +24,6 @@ import { ConfirmModal } from './confirm-modal';
 import { DropdownMenu, type DropdownMenuItem } from './dropdown-menu';
 import { Button } from './button';
 import { openThemeMenu } from './theme-menu';
-import { activeTheme } from '../../theme/live.js';
 import type { ElementOptions } from '../core/types';
 import { trapModalInput } from '../utils/modal-helpers';
 
@@ -813,9 +812,7 @@ export class ANSIEditor extends Box {
       left: 0,
       width: '100%',
       height: 1,
-      // The theme's primary colour, like every other menu bar
-      // (widgets/menu-bar.ts).
-      style: { bg: activeTheme().tokens.accent, fg: activeTheme().tokens.ground },
+      style: { bg: 'gray', fg: 'black' },
       tags: true,
     });
 
@@ -843,11 +840,7 @@ export class ANSIEditor extends Box {
         width: menu.label.length,
         height: 1,
         content: menu.label,
-        style: {
-          bg: activeTheme().tokens.accent,
-          fg: activeTheme().tokens.ground,
-          hover: { bg: activeTheme().tokens.ground, fg: activeTheme().tokens.accent },
-        },
+        style: { bg: 'gray', fg: 'black', hover: { bg: 'blue', fg: 'white' } },
         tags: true,
         mouse: true,
         clickable: true,
