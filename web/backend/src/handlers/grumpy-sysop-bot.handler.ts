@@ -34,6 +34,10 @@ export interface AIProviderConfig {
   groqApiKey?: string;
   geminiApiKey?: string;
   openRouterApiKey?: string;
+  // Bot typing behaviour
+  botTypingSpeed?: number;         // Base ms per character (default 40)
+  botTypoProbability?: number;     // Chance of typo per character 0-1 (default 0.04)
+  botThinkTime?: number;           // Pause before responding in ms (default 1000)
 }
 
 interface OpenRouterModel {
@@ -830,7 +834,10 @@ export const DEFAULT_AI_CONFIG: AIProviderConfig = {
   provider: 'openrouter',
   modelName: '',
   temperature: 0.9,
-  systemPrompt: GRUMPY_SYSOP_PERSONALITY
+  systemPrompt: GRUMPY_SYSOP_PERSONALITY,
+  botTypingSpeed: 40,
+  botTypoProbability: 0.04,
+  botThinkTime: 1000,
 };
 
 /**
@@ -888,13 +895,24 @@ export async function simulateNaturalTyping(
   io: any,
   pageId: string,
   message: string,
-  onComplete: () => void
+  onComplete: () => void,
+  options?: {
+    typingSpeed?: number;
+    typoProbability?: number;
+    thinkTime?: number;
+  }
 ): Promise<void> {
-  const TYPO_PROBABILITY = 0.04; // 4% chance of typo per character
-  const MIN_TYPING_DELAY = 20; // ms (fast typing)
-  const MAX_TYPING_DELAY = 80; // ms (slow typing)
+  const TYPO_PROBABILITY = options?.typoProbability ?? 0.04;
+  const MIN_TYPING_DELAY = options?.typingSpeed ?? 20;
+  const MAX_TYPING_DELAY = MIN_TYPING_DELAY * 3;
   const PAUSE_AFTER_TYPO = 150; // ms (pause to "realize" mistake)
   const BACKSPACE_DELAY = 40; // ms per backspace
+
+  // Think time before starting
+  const thinkTime = options?.thinkTime ?? 0;
+  if (thinkTime > 0) {
+    await sleep(thinkTime);
+  }
 
   let buffer = '';
 

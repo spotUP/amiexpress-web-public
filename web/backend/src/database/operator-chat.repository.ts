@@ -135,7 +135,10 @@ export class OperatorChatRepository {
         gotify_url TEXT DEFAULT '',
         gotify_app_token TEXT DEFAULT '',
         ntfy_topic TEXT DEFAULT '',
-        ntfy_url TEXT DEFAULT 'https://ntfy.sh'
+        ntfy_url TEXT DEFAULT 'https://ntfy.sh',
+        bot_typing_speed INTEGER DEFAULT 40,
+        bot_typo_probability REAL DEFAULT 0.04,
+        bot_think_time INTEGER DEFAULT 1000
       )
     `);
 
@@ -190,6 +193,15 @@ export class OperatorChatRepository {
     } catch (e) { /* Column already exists */ }
     try {
       this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN ntfy_url TEXT DEFAULT 'https://ntfy.sh'`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN bot_typing_speed INTEGER DEFAULT 40`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN bot_typo_probability REAL DEFAULT 0.04`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN bot_think_time INTEGER DEFAULT 1000`);
     } catch (e) { /* Column already exists */ }
 
     // Push notification subscriptions table
@@ -525,8 +537,11 @@ export class OperatorChatRepository {
       pushoverAppToken: row.pushover_app_token || '',
       gotifyUrl: row.gotify_url || '',
       gotifyAppToken: row.gotify_app_token || '',
-      ntfyTopic: row.ntfy_topic || '',
-      ntfyUrl: row.ntfy_url || 'https://ntfy.sh'
+ntfyTopic: row.ntfy_topic || '',
+      ntfyUrl: row.ntfy_url || 'https://ntfy.sh',
+      botTypingSpeed: row.bot_typing_speed ?? 40,
+      botTypoProbability: row.bot_typo_probability ?? 0.04,
+      botThinkTime: row.bot_think_time ?? 1000,
     };
   }
 
@@ -570,7 +585,10 @@ export class OperatorChatRepository {
         gotify_url = ?,
         gotify_app_token = ?,
         ntfy_topic = ?,
-        ntfy_url = ?
+        ntfy_url = ?,
+        bot_typing_speed = ?,
+        bot_typo_probability = ?,
+        bot_think_time = ?
       WHERE id = 1
     `).run(
       merged.enabled ? 1 : 0,
@@ -604,7 +622,10 @@ export class OperatorChatRepository {
       merged.gotifyUrl ?? '',
       merged.gotifyAppToken ?? '',
       merged.ntfyTopic ?? '',
-      merged.ntfyUrl ?? 'https://ntfy.sh'
+      merged.ntfyUrl ?? 'https://ntfy.sh',
+      merged.botTypingSpeed ?? 40,
+      merged.botTypoProbability ?? 0.04,
+      merged.botThinkTime ?? 1000
     );
   }
 

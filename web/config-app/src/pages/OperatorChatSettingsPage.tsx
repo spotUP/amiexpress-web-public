@@ -36,6 +36,9 @@ interface OperatorChatConfig {
   groqApiKey: string;
   geminiApiKey: string;
   openRouterApiKey: string;
+  botTypingSpeed: number;
+  botTypoProbability: number;
+  botThinkTime: number;
 }
 
 export function OperatorChatSettingsPage() {
@@ -888,6 +891,45 @@ export function OperatorChatSettingsPage() {
                 <span>0 (deterministic)</span>
                 <span>1 (balanced)</span>
                 <span>2 (creative)</span>
+              </div>
+            </div>
+
+            {/* Typing Speed */}
+            <div>
+              <label className="block text-sm font-medium text-content-primary mb-1">
+                Typing Speed: {watch('botTypingSpeed') ?? 40} ms/char
+              </label>
+              <input type="range" min="5" max="200" step="5" {...register('botTypingSpeed', { valueAsNumber: true })} className="w-full" />
+              <div className="flex justify-between text-xs text-content-secondary">
+                <span>5 (lightning)</span>
+                <span>40 (normal)</span>
+                <span>200 (hunt & peck)</span>
+              </div>
+            </div>
+
+            {/* Typo Probability */}
+            <div>
+              <label className="block text-sm font-medium text-content-primary mb-1">
+                Typos: {((watch('botTypoProbability') ?? 0.04) * 100).toFixed(0)}%
+              </label>
+              <input type="range" min="0" max="0.5" step="0.01" {...register('botTypoProbability', { valueAsNumber: true })} className="w-full" />
+              <div className="flex justify-between text-xs text-content-secondary">
+                <span>0% (none)</span>
+                <span>4% (normal)</span>
+                <span>50% (very clumsy)</span>
+              </div>
+            </div>
+
+            {/* Think Time */}
+            <div>
+              <label className="block text-sm font-medium text-content-primary mb-1">
+                Think Time: {(watch('botThinkTime') ?? 1000) / 1000}s
+              </label>
+              <input type="range" min="0" max="5000" step="100" {...register('botThinkTime', { valueAsNumber: true })} className="w-full" />
+              <div className="flex justify-between text-xs text-content-secondary">
+                <span>0s (instant)</span>
+                <span>1s (normal)</span>
+                <span>5s (very thoughtful)</span>
               </div>
             </div>
 

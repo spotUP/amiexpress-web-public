@@ -798,7 +798,8 @@ async function sendBotMessageWithTyping(
   pageId: string,
   message: string,
   nodeId: number,
-  page: any
+  page: any,
+  aiConfig?: AIProviderConfig
 ): Promise<void> {
   const chatSession = activeChatSessions.get(pageId);
   if (!chatSession) return;
@@ -824,7 +825,17 @@ async function sendBotMessageWithTyping(
     timestamp: saved.timestamp.getTime()
   });
 
-  // Simulate natural typing for the Amiga user: human-like 40-180ms/char
+  // Configurable typing params
+  const typingSpeed = aiConfig?.botTypingSpeed ?? 40;
+  const typoProb = aiConfig?.botTypoProbability ?? 0.04;
+  const thinkTime = aiConfig?.botThinkTime ?? 1000;
+
+  // Think time: pause before starting to respond
+  if (thinkTime > 0) {
+    await new Promise(r => setTimeout(r, thinkTime));
+  }
+
+  // Simulate natural typing for the Amiga user
   const color = '36';
   const wordWrap = (s: string, w: number) => {
     const lines: string[] = [];
@@ -838,32 +849,27 @@ async function sendBotMessageWithTyping(
   };
 
   const wrappedLines = wordWrap(message, 79);
-  let output = '\x1b7';
-
   for (let li = 0; li < wrappedLines.length; li++) {
     const line = wrappedLines[li];
-    // Send each character with natural typing delay
     for (let ci = 0; ci < line.length; ci++) {
-      const delay = 40 + Math.random() * 140; // 40-180ms per char
+      const delay = typingSpeed + Math.random() * (typingSpeed * 3);
       await new Promise(r => setTimeout(r, delay));
 
-      // 8% typo chance: insert a wrong char, pause, backspace, correct
-      if (Math.random() < 0.08 && ci < line.length - 1) {
+      if (Math.random() < typoProb && ci < line.length - 1) {
         const typo = String.fromCharCode(97 + Math.floor(Math.random() * 26));
         io.to(`user:${page.userId}`).emit('ansi-output', `\x1b[${color}m${typo}\x1b[0m`);
-        await new Promise(r => setTimeout(r, 300 + Math.random() * 200));
+        await new Promise(r => setTimeout(r, 200 + Math.random() * 150));
         io.to(`user:${page.userId}`).emit('ansi-output', '\b \b');
-        await new Promise(r => setTimeout(r, 100 + Math.random() * 100));
+        await new Promise(r => setTimeout(r, 80 + Math.random() * 70));
       }
 
       io.to(`user:${page.userId}`).emit('ansi-output', `\x1b[${color}m${line[ci]!}\x1b[0m`);
     }
     io.to(`user:${page.userId}`).emit('ansi-output', '\r\n');
-    await new Promise(r => setTimeout(r, 200 + Math.random() * 300));
+    await new Promise(r => setTimeout(r, 100 + Math.random() * 150));
   }
 
-  // End with double enter to signal turn is done
-  await new Promise(r => setTimeout(r, 300));
+  await new Promise(r => setTimeout(r, 200));
   io.to(`user:${page.userId}`).emit('ansi-output', '\r\n');
   io.to(`user:${page.userId}`).emit('ansi-output', '\x1b8');
 }
@@ -908,13 +914,16 @@ const aiConfig: AIProviderConfig = {
         systemPrompt: config.aiSystemPrompt,
         groqApiKey: config.groqApiKey,
         geminiApiKey: config.geminiApiKey,
-        openRouterApiKey: config.openRouterApiKey
+        openRouterApiKey: config.openRouterApiKey,
+        botTypingSpeed: config.botTypingSpeed,
+        botTypoProbability: config.botTypoProbability,
+        botThinkTime: config.botThinkTime,
       };
 
       getGrumpySysopResponse(lastMsg, context, aiConfig).then(async botResponse => {
     context.messageHistory.push({ role: 'bot', content: botResponse });
     chatSession.botMessageHistory = context.messageHistory;
-    await sendBotMessageWithTyping(io, repository, pageId, botResponse, page.nodeId, page);
+    await sendBotMessageWithTyping(io, repository, pageId, botResponse, page.nodeId, page, aiConfig);
     chatSession.botBusy = false;
     flushPendingUserAnsi(chatSession, io);
     // Recurse — process any more queued messages
@@ -998,13 +1007,16 @@ console.log('[Operator Chat] Bot busy, queuing message');
         systemPrompt: config.aiSystemPrompt,
         groqApiKey: config.groqApiKey,
         geminiApiKey: config.geminiApiKey,
-        openRouterApiKey: config.openRouterApiKey
+        openRouterApiKey: config.openRouterApiKey,
+        botTypingSpeed: config.botTypingSpeed,
+        botTypoProbability: config.botTypoProbability,
+        botThinkTime: config.botThinkTime,
       };
 
       getGrumpySysopResponse(message, context, aiConfig).then(async botResponse => {
         context.messageHistory.push({ role: 'bot', content: botResponse });
         (chatSession as any).botMessageHistory = context.messageHistory;
-        await sendBotMessageWithTyping(io, repository, pageId, botResponse, nodeId, page);
+        await sendBotMessageWithTyping(io, repository, pageId, botResponse, nodeId, page, aiConfig);
         (chatSession as any).botBusy = false;
         flushPendingUserAnsi(chatSession as any, io);
 

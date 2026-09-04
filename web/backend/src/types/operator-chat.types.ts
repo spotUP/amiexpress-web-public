@@ -144,6 +144,10 @@ export interface OperatorChatConfig {
   groqApiKey: string;              // GROQ_API_KEY
   geminiApiKey: string;            // GEMINI_API_KEY
   openRouterApiKey: string;        // OPENROUTER_API_KEY
+  // Bot typing behaviour
+  botTypingSpeed: number;          // Base ms per character (default 40, range 5-200)
+  botTypoProbability: number;      // Chance of typo per character 0-1 (default 0.04)
+  botThinkTime: number;            // Pause before responding in ms (default 1000, range 0-5000)
 }
 
 /**
