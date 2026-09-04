@@ -126,7 +126,7 @@ export function UsersTab() {
 
       {visibleUsers.map((u, i) => (
         <Box key={u.username + i}>
-          <Text color={i === selectedIdx ? T.accent : T.ink} bold={i === selectedIdx}>
+          <Text color={T.ink} bold={i === selectedIdx} inverse={i === selectedIdx}>
             {i === selectedIdx ? '▶ ' : '  '}
             {u.username.padEnd(16)}
             {String(getSecLevel(u)).padEnd(5)}

@@ -22,10 +22,10 @@ function formatDuration(lastActivity?: string): string {
 function NodeRow({ node, selected }: { node: NodeStatus; selected: boolean }) {
   return (
     <Box>
-      <Text color={selected ? T.accent : T.ink} bold={selected}>
+      <Text color={selected ? T.ink : T.ink} bold={selected} inverse={selected}>
         {selected ? '▶ ' : '  '}
       </Text>
-      <Text color={selected ? T.accent : T.ink} bold={selected}>
+      <Text color={selected ? T.ink : T.ink} bold={selected} inverse={selected}>
         {`N${node.nodeId}`.padEnd(4)}
       </Text>
       <Text color={node.online ? T.ink : T.dim}>

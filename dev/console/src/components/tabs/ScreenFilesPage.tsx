@@ -1,6 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { getScreenIndex, getScreenFile, type ScreenFileFacts, type ScreenIndex } from '../../api/client.js';
+import {
+  getScreenIndex, getScreenFile, deleteScreenFile, repairScreenFile,
+  type ScreenFileFacts, type ScreenIndex,
+} from '../../api/client.js';
 import { T, BlessedBox, BlessedText, BlessedSpinner } from '../../theme/blessed-theme.js';
 
 type Tab = 'all' | 'node' | 'conf' | 'board' | 'unused' | 'bulletins';
@@ -29,15 +32,12 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
 }
 
-/** ANSI to Ink. Breaks a string with ANSI escapes into <Text> segments. */
 function AnsiText({ text }: { text: string }) {
   const segments = useMemo(() => {
     const parts: { text: string; color?: string; bold?: boolean }[] = [];
     let last = 0;
     let fg: string | undefined;
     let bold = false;
-
-    // Match ANSI escape sequences
     const re = /\x1b\[([0-9;]*)m/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {
@@ -48,9 +48,7 @@ function AnsiText({ text }: { text: string }) {
         const n = parseInt(code, 10);
         if (n === 0) { fg = undefined; bold = false; }
         else if (n === 1) { bold = true; }
-        else if (n === 7) { /* inverse — can't easily do in Ink */ }
         else if (ANSI_FG[n]) { fg = ANSI_FG[n]; }
-        else if (n >= 40 && n <= 47) { /* bg — skip */ }
       }
       last = re.lastIndex;
     }
@@ -69,7 +67,6 @@ function AnsiText({ text }: { text: string }) {
   );
 }
 
-/** ANSI preview component — renders screen content in a scrollable box. */
 function AnsiPreview({ content, path, onClose }: { content: string; path: string; onClose: () => void }) {
   const lines = useMemo(() => content.split(/\r?\n/), [content]);
   const [scrollY, setScrollY] = useState(0);
@@ -91,7 +88,6 @@ function AnsiPreview({ content, path, onClose }: { content: string; path: string
         <BlessedText variant="accent" bold>PREVIEW: {path}</BlessedText>
         <BlessedText variant="dim">({lines.length} lines)</BlessedText>
       </Box>
-
       <BlessedBox style="line" padding={1} flexDirection="column">
         {visible.map((line, i) => (
           <Box key={i} height={1}>
@@ -99,18 +95,31 @@ function AnsiPreview({ content, path, onClose }: { content: string; path: string
           </Box>
         ))}
       </BlessedBox>
-
       {maxScroll > 0 && (
         <Box marginTop={1}>
-          <BlessedText variant="dim">
-            Line {scrollY + 1}–{scrollY + visible.length} of {lines.length}
-          </BlessedText>
+          <BlessedText variant="dim">Line {scrollY + 1}–{scrollY + visible.length} of {lines.length}</BlessedText>
         </Box>
       )}
-
       <Box flexDirection="row" gap={1} marginTop={1}>
         <BlessedText variant="dim">[↑↓] Scroll  [PgUp/PgDn] Page  [q] Back</BlessedText>
       </Box>
+    </Box>
+  );
+}
+
+function ConfirmDialog({ message, onConfirm, onCancel }: { message: string; onConfirm: () => void; onCancel: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+
+  useInput((input, key) => {
+    if (confirming) return;
+    if (input === 'y' || input === 'Y') { setConfirming(true); onConfirm(); return; }
+    if (input === 'n' || input === 'N' || key.escape) { onCancel(); return; }
+  });
+
+  return (
+    <Box flexDirection="column" padding={1}>
+      <BlessedText variant="alert" bold>{message}</BlessedText>
+      <BlessedText variant="dim">Press [Y] to confirm  [N/Esc] to cancel</BlessedText>
     </Box>
   );
 }
@@ -125,8 +134,11 @@ export function ScreenFilesPage() {
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [previewContent, setPreviewContent] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [operationResult, setOperationResult] = useState<string | null>(null);
+  const [showMciAll, setShowMciAll] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -137,9 +149,9 @@ export function ScreenFilesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const items = useMemo(() => {
     if (!index) return { entries: [] as { label: string; path: string; screen?: string; facts?: ScreenFileFacts }[] };
@@ -186,7 +198,6 @@ export function ScreenFilesPage() {
 
   const selected = items.entries[selectedIdx];
 
-  // Load preview content
   const openPreview = async (path: string) => {
     setPreviewPath(path);
     setPreviewLoading(true);
@@ -204,8 +215,35 @@ export function ScreenFilesPage() {
     }
   };
 
+  const handleDelete = async (path: string) => {
+    try {
+      const result = await deleteScreenFile(path);
+      setOperationResult(`Deleted: ${path} (backup: ${result.backup})`);
+      setConfirmDelete(null);
+      load();
+    } catch (e: unknown) {
+      setOperationResult(`Delete failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      setConfirmDelete(null);
+    }
+  };
+
+  const handleRepair = async (path: string) => {
+    try {
+      const result = await repairScreenFile(path);
+      setOperationResult(`Repaired: ${path} (${result.repaired} fixes, backup: ${result.backup})`);
+      load();
+    } catch (e: unknown) {
+      setOperationResult(`Repair failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    }
+  };
+
   useInput((input, key) => {
-    if (previewContent !== null || previewLoading) return; // preview mode handles its own input
+    if (confirmDelete) return; // confirmation dialog handles its own input
+    if (operationResult) {
+      if (input === 'q' || key.escape) { setOperationResult(null); }
+      return;
+    }
+    if (previewContent !== null || previewLoading) return;
 
     if (key.tab) {
       setTab(t => {
@@ -222,6 +260,8 @@ export function ScreenFilesPage() {
     if (input === 'r') { load(); return; }
     if (input === 'v' && selected) { openPreview(selected.path); return; }
     if (input === 'd' && selected) { setDetail(selected.facts ?? null); return; }
+    if (input === 'x' && selected) { setConfirmDelete(selected.path); return; }
+    if (input === 'p' && selected) { handleRepair(selected.path); return; }
     if (input === 'q' || input === 'escape') { setDetail(null); return; }
   });
 
@@ -237,6 +277,29 @@ export function ScreenFilesPage() {
   }
 
   if (!index) return null;
+
+  // Operation result message
+  if (operationResult) {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <BlessedText variant={operationResult.startsWith('Deleted') || operationResult.startsWith('Repaired') ? 'accent' : 'alert'} bold>
+          {operationResult}
+        </BlessedText>
+        <Box marginTop={1}><BlessedText variant="dim">[q] Back</BlessedText></Box>
+      </Box>
+    );
+  }
+
+  // Delete confirmation
+  if (confirmDelete) {
+    return (
+      <ConfirmDialog
+        message={`Delete screen file: ${confirmDelete}?`}
+        onConfirm={() => handleDelete(confirmDelete)}
+        onCancel={() => setConfirmDelete(null)}
+      />
+    );
+  }
 
   // Preview mode
   if (previewContent !== null) {
@@ -256,13 +319,18 @@ export function ScreenFilesPage() {
   // Detail view
   if (detail) {
     const f = detail;
+    const brokenMci = f.mci?.filter(m => !m.resolves) ?? [];
+    const okMci = f.mci?.filter(m => m.resolves) ?? [];
+    const displayMci = showMciAll ? f.mci ?? [] : brokenMci;
+
     return (
       <Box flexDirection="column" padding={1}>
         <BlessedText variant="accent" bold>{f.path}</BlessedText>
         <Text>Size: {formatSize(f.bytes)}  Format: {f.format}</Text>
         <Text>SHA256: {f.sha256?.slice(0, 16)}...</Text>
+
         {f.sauce && (
-          <Box flexDirection="column">
+          <Box flexDirection="column" marginTop={1}>
             <BlessedText variant="accent" bold>SAUCE</BlessedText>
             <Text>Title: {f.sauce.title}</Text>
             <Text>Author: {f.sauce.author}</Text>
@@ -270,29 +338,49 @@ export function ScreenFilesPage() {
             <Text>Font: {f.sauce.font}</Text>
           </Box>
         )}
+
         {f.readBy && f.readBy.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
             <BlessedText variant="accent" bold>Read by ({f.readBy.length} scopes)</BlessedText>
             {f.readBy.slice(0, 10).map((r, i) => <Text key={i}>  {r}</Text>)}
           </Box>
         )}
+
         {f.mci && f.mci.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
-            <BlessedText variant="accent" bold>MCI refs ({f.mci.length})</BlessedText>
-            {f.mci.slice(0, 15).map((m, i) => (
+            <Box flexDirection="row" gap={1}>
+              <BlessedText variant="accent" bold>MCI refs ({f.mci.length})</BlessedText>
+              {brokenMci.length > 0 && (
+                <BlessedText variant="alert">({brokenMci.length} broken)</BlessedText>
+              )}
+            </Box>
+            {displayMci.slice(0, 20).map((m, i) => (
               <Text key={i}>
                 {m.resolves ? '[OK]' : '[XX]'} {m.code} {m.target}
               </Text>
             ))}
+            {!showMciAll && brokenMci.length === 0 && okMci.length > 0 && (
+              <BlessedText variant="dim">All MCI refs resolve — press [m] to show all</BlessedText>
+            )}
+            {!showMciAll && brokenMci.length > 0 && okMci.length > 0 && (
+              <BlessedText variant="dim">Showing {brokenMci.length} broken — press [m] for all {f.mci.length}</BlessedText>
+            )}
+            {showMciAll && f.mci.length > 20 && (
+              <BlessedText variant="dim">... and {f.mci.length - 20} more</BlessedText>
+            )}
           </Box>
         )}
+
         {f.problems && f.problems.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
             <BlessedText variant="alert" bold>Problems</BlessedText>
             {f.problems.map((p, i) => <Text key={i}>  {p}</Text>)}
           </Box>
         )}
-        <Box marginTop={1}><BlessedText variant="dim">[q] Back  [r] Refresh  [v] View ANSI</BlessedText></Box>
+
+        <Box flexDirection="row" gap={1} marginTop={1}>
+          <BlessedText variant="dim">[q] Back  [v] View  [x] Delete  [p] Repair  [m] MCI all</BlessedText>
+        </Box>
       </Box>
     );
   }
@@ -345,11 +433,9 @@ export function ScreenFilesPage() {
             <BlessedText variant="accent" bold>{selected.facts.path}</BlessedText>
             <Text>  {formatSize(selected.facts.bytes)}  {selected.facts.format}</Text>
           </Box>
-          {selected.facts.sauce && (
-            <Text>SAUCE: {selected.facts.sauce.title}</Text>
-          )}
+          {selected.facts.sauce && <Text>SAUCE: {selected.facts.sauce.title}</Text>}
           {selected.facts.mci && selected.facts.mci.length > 0 && (
-            <Text>MCI: {selected.facts.mci.length} refs</Text>
+            <Text>MCI: {selected.facts.mci.length} refs ({selected.facts.mci.filter(m => !m.resolves).length} broken)</Text>
           )}
           {selected.facts.problems && selected.facts.problems.length > 0 && (
             <Text>Problems: {selected.facts.problems.join(', ')}</Text>
@@ -359,7 +445,7 @@ export function ScreenFilesPage() {
 
       {/* Footer */}
       <Box flexDirection="row" gap={1} marginTop={1}>
-        <BlessedText variant="dim">[Tab] Tab  [↑↓] Scroll  [v] View  [d] Detail  [r] Refresh</BlessedText>
+        <BlessedText variant="dim">[Tab] Tab  [↑↓] Scroll  [v] View  [d] Detail  [x] Delete  [p] Repair  [r] Refresh</BlessedText>
       </Box>
     </Box>
   );

@@ -247,7 +247,7 @@ export function CrudList<T extends { id: number }>({
 
       {visibleItems.map((item, i) => (
         <Box key={item.id + '-' + i}>
-          <Text color={i === selectedIdx ? T.selectionInk : T.ink} bold inverse={i === selectedIdx}>
+          <Text inverse={i === selectedIdx} bold={i === selectedIdx}>
             {i === selectedIdx ? '▶ ' : '  '}
             {renderRow(item)}
           </Text>
