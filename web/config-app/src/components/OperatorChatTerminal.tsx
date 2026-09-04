@@ -53,6 +53,9 @@ export function OperatorChatTerminal({
     });
   };
 
+  // Check if a message is from the bot
+  const isBotMessage = (msg: ChatMessage) => msg.senderHandle === 'GrumpyBot';
+
   // Write a chat message to terminal
   const writeMessage = useCallback((term: Terminal, msg: ChatMessage) => {
     const timeColor = msg.senderType === 'sysop' ? '\x1b[36m' : '\x1b[33m'; // Cyan for sysop, yellow for user
@@ -61,6 +64,9 @@ export function OperatorChatTerminal({
 
     term.write(`${timeColor}[${formatTime(msg.timestamp)}]${reset} `);
     term.write(`${nameColor}${msg.senderHandle}:${reset} `);
+    if (isBotMessage(msg)) {
+      term.write(`\x1b[33m[AI]\x1b[0m `);
+    }
     term.write(`${msg.message}\r\n`);
   }, []);
 
@@ -153,6 +159,12 @@ export function OperatorChatTerminal({
             onEndChat();
             return;
           }
+
+          // Echo the sent message in the scroll region (line 22) so \r\n
+          // advances and scrolls properly instead of overwriting the input line.
+          terminal.write('\x1b[22;1H'); // bottom of scroll region
+          terminal.write(`\x1b[36m[${formatTime(Date.now())}]\x1b[0m `);
+          terminal.write(`\x1b[32mSysop:\x1b[0m ${input}\r\n`);
 
           // Send message
           onSendMessage(input);

@@ -420,6 +420,9 @@ export function OperatorChatPage() {
                     <div className="flex items-center gap-2">
                       <User className="w-4 h-4 text-accent" />
                       <span className="font-bold text-content-primary">{activeChat.userHandle}</span>
+                      {botChats.some(c => c.pageId === activeChat.id) && (
+                        <span className="text-xs bg-warn/20 text-warn px-1.5 py-0.5 rounded font-medium">Bot</span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 text-sm text-content-secondary">
                       <Hash className="w-3 h-3" />
@@ -490,6 +493,9 @@ export function OperatorChatPage() {
                         <span className={msg.senderType === 'sysop' ? 'text-status-ok' : 'text-status-info'}>
                           {msg.senderHandle}:
                         </span>
+                        {(msg.senderHandle === 'GrumpyBot') && (
+                          <span className="text-xs bg-warn/20 text-warn px-1 ml-1 rounded">[AI]</span>
+                        )}
                         {' '}
                         <span className="text-content-primary whitespace-pre-wrap break-words">
                           {msg.message}
