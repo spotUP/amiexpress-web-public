@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, useInput } from 'ink';
 import { ComputersPage } from './ComputersPage.js';
 import { ScreenTypesPage } from './ScreenTypesPage.js';
 import { LanguagesPage } from './LanguagesPage.js';
 import { ProtocolsPage } from './ProtocolsPage.js';
 import { FileCheckersPage } from './FileCheckersPage.js';
+import { TabBar } from '../shared/TabBar.js';
 
 type Tab = 'computers' | 'screen-types' | 'languages' | 'protocols' | 'file-checkers';
 
@@ -29,12 +30,8 @@ export function LookupTablesPage() {
 
   return (
     <Box flexDirection="column">
-      <Box marginBottom={1} flexWrap="wrap">
-        {TABS.map((t, i) => (
-          <Text key={t.id} bold={tab === t.id} color={tab === t.id ? 'cyan' : 'white'}>
-            {i > 0 ? '  ' : ''}[{t.hotkey}] {t.label}
-          </Text>
-        ))}
+      <Box marginBottom={1}>
+        <TabBar tabs={TABS} activeTab={tab} onChange={setTab} />
       </Box>
       {tab === 'computers' && <ComputersPage />}
       {tab === 'screen-types' && <ScreenTypesPage />}

@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getImportSessions, validateImport, executeImport, cancelImport, deleteImport, listExports, createExport } from '../../api/client.js';
 import { T } from '../../theme/blessed-theme.js';
+import { TabBar } from '../shared/TabBar.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
 import type { ImportSession } from '../../api/client.js';
 
@@ -10,6 +11,11 @@ const ITEMS_START_ROW = 7;
 
 type Section = 'import' | 'export';
 type Mode = 'list' | 'confirm';
+
+const SECTIONS: Array<{ id: Section; label: string; hotkey: string }> = [
+  { id: 'import', label: 'Import', hotkey: '1' },
+  { id: 'export', label: 'Export', hotkey: '2' },
+];
 
 export function ImportExportPage() {
   const [section, setSection] = useState<Section>('import');
@@ -128,9 +134,7 @@ export function ImportExportPage() {
       )}
 
       <Box marginBottom={1}>
-        <Text bold color={section === 'import' ? T.accent : T.ink}>[1] Import</Text>
-        <Text>  </Text>
-        <Text bold color={section === 'export' ? T.accent : T.ink}>[2] Export</Text>
+        <TabBar tabs={SECTIONS} activeTab={section} onChange={setSection} />
       </Box>
 
       {error && (

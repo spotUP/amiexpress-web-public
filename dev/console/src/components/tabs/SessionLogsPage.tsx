@@ -102,7 +102,7 @@ export function SessionLogsPage() {
 
       {sessions.slice(0, 18).map((s, i) => (
         <Box key={s.id}>
-          <Text color={i === selectedIdx ? T.accent : T.ink} bold={i === selectedIdx}>
+          <Text color={T.ink} bold={i === selectedIdx} inverse={i === selectedIdx}>
             {i === selectedIdx ? '▶ ' : '  '}
             {(s.username ?? '—').slice(0, 16).padEnd(18)}
             {String(s.nodeId ?? '?').padEnd(7)}

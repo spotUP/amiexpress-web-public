@@ -47,30 +47,12 @@ exports.MENU_ITEMS = [
 /**
  * The rows a screen of this width may offer.
  *
- * At forty columns the door offers ONLY TETRIS ATTACK, plus the manual and the
- * way out. That is what makes the MIN_COLUMNS=40 mark on GMASTER.info honest:
- * the door genuinely fits a C64 screen, it just has less on it there. The TGM
- * and TETRINET screens are 80-column compositions and are HIDDEN rather than
- * folded - folding an 80-column layout onto 40 is what produced the stray
- * glyphs and unreadable rows this board has seen before.
- *
- * Returns index-aligned arrays, as the caller expects.
+ * Returns the full menu regardless of width — the menu list is scrollable
+ * and the layout stacks panels vertically at 40 columns instead of hiding
+ * items. This gives PETSCII callers the same experience as ANSI callers.
  */
 function menuRowsFor(width) {
-    if (!(0, blessed_1.isCompactWidth)(width)) {
-        return { items: exports.MENU_ITEMS, selections: exports.MENU_SELECTIONS };
-    }
-    const wanted = ['tetris_attack', 'manual', 'quit'];
-    const items = [];
-    const selections = [];
-    for (const selection of wanted) {
-        const index = exports.MENU_SELECTIONS.indexOf(selection);
-        if (index < 0)
-            continue;
-        items.push(exports.MENU_ITEMS[index]);
-        selections.push(selection);
-    }
-    return { items, selections };
+    return { items: exports.MENU_ITEMS, selections: exports.MENU_SELECTIONS };
 }
 exports.MENU_SELECTIONS = [
     'master',
@@ -116,134 +98,91 @@ class MenuScreen {
         // Wait for screen clear to propagate (critical for modem speeds)
         await new Promise(resolve => setTimeout(resolve, 200));
         return new Promise((resolve) => {
-            // Dropped when the menu goes away, so a screen that outlives it does
-            // not keep re-centring widgets that no longer exist.
             let cleanupResize = null;
-            // The menu is an 80x24 composition. In a wide terminal it used to sit
-            // in the top-left corner with the rest of the window black - "the
-            // menus in gmaster isnt responise" (2026-09-02) - so the whole block
-            // is centred in whatever room there is, and follows a resize.
-            // Which rows this screen may offer, and how wide the composition is.
+            const compact = (0, blessed_1.isCompactWidth)(this.screen.width);
             const menuRows = menuRowsFor(this.screen.width);
-            const MENU_COLS = (0, blessed_1.isCompactWidth)(this.screen.width) ? this.screen.width : 80;
+            const MENU_COLS = compact ? this.screen.width : 80;
             const MENU_ROWS = 24;
             const offsetX = () => Math.max(0, Math.floor((this.screen.width - MENU_COLS) / 2));
             const offsetY = () => Math.max(0, Math.floor((this.screen.height - MENU_ROWS) / 2));
-            // Play menu music
             this.sounds.playMusic('menu', true);
-            // Clear screen completely
             this.screen.children.forEach(child => child.destroy());
-            // Full-screen background to clear any previous content
             const background = (0, blessed_helpers_1.createBox)({
-                // A ground, not a frame: createBox draws a line border when no
-                // border key is given (Panel's default), which outlines the whole
-                // terminal.
                 border: undefined,
                 parent: this.screen,
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                style: {
-                    bg: 'black',
-                },
+                top: 0, left: 0, width: '100%', height: '100%',
+                style: { bg: 'black' },
             });
-            // Title box - centered, wide enough for ASCII art
-            // Offset top:1 to avoid overlapping any parent border
-            // No border of its own: createBox() draws one by default, and that
-            // outline sat directly above the logo, duplicating the full-screen
-            // background frame right outside it. Dropping it removes that line and
-            // hands the two rows it occupied to the panels below.
+            // Title: compact mode uses single line, wide mode uses 4-row ASCII art
             const title = (0, blessed_helpers_1.createBox)({
                 parent: this.screen,
                 top: 1 + offsetY(),
-                left: 2 + offsetX(),
-                width: 76,
-                height: 4,
+                left: compact ? 0 + offsetX() : 2 + offsetX(),
+                width: compact ? this.screen.width : 76,
+                height: compact ? 1 : 4,
                 border: { type: 'none' },
-                content: this.getTitleArt(),
-                style: {
-                    fg: 'yellow',
-                    bg: 'black',
-                },
+                content: compact ? '{bold}{yellow-fg}GRANDMASTER{/yellow-fg}{/bold}' : this.getTitleArt(),
+                align: 'center',
+                style: { fg: 'yellow', bg: 'black' },
             });
-            // Layout: 2 char margin on each side, panels fill 76 chars
-            // menuPanel: 26, descBox: 30, info: 20 = 76 total
-            // Title art is rows 1-4; panels run row 5 to row 22 (row 23 is the
-            // background frame's bottom edge) = 18 rows.
-            const leftMargin = 2 + offsetX();
-            const panelTop = 5 + offsetY();
-            const panelHeight = 18;
-            // Mode selection list - left panel
+            // At 40 columns: full-width menu panel, no description/player boxes
+            const leftMargin = compact ? 0 + offsetX() : 2 + offsetX();
+            const panelTop = compact ? 3 + offsetY() : 5 + offsetY();
+            const panelHeight = compact ? 20 : 18;
+            const panelWidth = compact ? this.screen.width : 26;
             const menuPanel = (0, blessed_helpers_1.createBox)({
                 parent: this.screen,
                 top: panelTop,
                 left: leftMargin,
-                width: 26,
+                width: panelWidth,
                 height: panelHeight,
-                border: { type: 'line' },
-                label: ' SELECT MODE ',
-                style: {
-                    border: { fg: 'cyan' },
-                },
+                border: compact ? { type: 'none' } : { type: 'line' },
+                label: compact ? '' : ' SELECT MODE ',
+                style: { border: { fg: 'cyan' } },
             });
             const menu = (0, blessed_helpers_1.createList)({
                 parent: menuPanel,
                 top: 0,
                 left: 1,
-                width: 22,
-                height: panelHeight - 2, // Leave room for panel border
+                width: compact ? panelWidth - 2 : 22,
+                height: panelHeight - 2,
                 scrollable: true,
-                scrollbar: {
-                    ch: ' ',
-                    style: { bg: 'cyan' },
-                },
+                scrollbar: compact ? undefined : { ch: ' ', style: { bg: 'cyan' } },
                 style: {
                     border: { fg: 'cyan' },
                     selected: { bg: 'cyan', fg: 'black' },
                     item: { fg: 'white' },
                 },
-                keys: true,
-                vi: true,
-                mouse: true,
+                keys: true, vi: true, mouse: true,
                 items: menuRows.items,
             });
-            // Mode description box - middle panel
-            const descBox = (0, blessed_helpers_1.createBox)({
-                parent: this.screen,
-                top: panelTop,
-                left: leftMargin + 26,
-                width: 30,
-                height: panelHeight,
-                border: { type: 'line' },
-                label: ' DESCRIPTION ',
-                style: { border: { fg: 'gray' } },
-                content: this.getModeDescription(0),
-                fixed: true,
-            });
+            let descBox = null;
+            let info = null;
+            if (!compact) {
+                descBox = (0, blessed_helpers_1.createBox)({
+                    parent: this.screen, top: panelTop, left: leftMargin + 26,
+                    width: 30, height: panelHeight,
+                    border: { type: 'line' }, label: ' DESCRIPTION ',
+                    style: { border: { fg: 'gray' } },
+                    content: this.getModeDescription(0), fixed: true,
+                });
+                info = (0, blessed_helpers_1.createBox)({
+                    parent: this.screen, top: panelTop, left: leftMargin + 26 + 30,
+                    width: 20, height: panelHeight,
+                    border: { type: 'line' }, label: ' PLAYER ',
+                    style: { border: { fg: 'gray' } },
+                    content: this.getPlayerInfo(),
+                });
+            }
             // Update description when selection changes
             menu.on('select item', (_item, index) => {
-                // Play navigation sound when scrolling through menu
                 this.sounds.playSfx('menu_select');
-                descBox.setContent(this.getModeDescription(index));
-                this.screen.render();
+                if (descBox) {
+                    descBox.setContent(this.getModeDescription(index));
+                    this.screen.render();
+                }
             });
-            // Info box - right panel
-            const info = (0, blessed_helpers_1.createBox)({
-                parent: this.screen,
-                top: panelTop,
-                left: leftMargin + 26 + 30,
-                width: 20,
-                height: panelHeight,
-                border: { type: 'line' },
-                label: ' PLAYER ',
-                style: { border: { fg: 'gray' } },
-                content: this.getPlayerInfo(),
-            });
-            // Instructions
             const instructions = (0, blessed_helpers_1.createBox)({
-                // One row of hint text, not a framed panel - see the createBox
-                // default border note in dev/tests/door-regressions.test.ts.
                 border: undefined,
                 parent: this.screen,
                 top: panelTop + panelHeight,
@@ -252,23 +191,40 @@ class MenuScreen {
                 height: 1,
                 align: 'center',
                 style: { fg: 'gray', bg: 'black' },
-                content: 'Arrows: Navigate | Enter: Select | Alt+Enter: Full Screen | ESC/Q: Quit',
+                content: 'Arrows: Navigate | Enter: Select | ESC/Q: Quit',
             });
             // Follow the terminal. Alt+Enter changes the room while the menu is
             // up, and a composition centred once is centred for one size only.
             const recentre = () => {
                 const x = offsetX();
                 const y = offsetY();
-                title.left = 2 + x;
-                title.top = 1 + y;
-                menuPanel.left = 2 + x;
-                menuPanel.top = 5 + y;
-                descBox.left = 2 + x + 26;
-                descBox.top = 5 + y;
-                info.left = 2 + x + 26 + 30;
-                info.top = 5 + y;
-                instructions.left = x;
-                instructions.top = 5 + y + panelHeight;
+                const compactNow = (0, blessed_1.isCompactWidth)(this.screen.width);
+                if (compactNow) {
+                    title.left = x;
+                    title.top = 1 + y;
+                    title.width = this.screen.width;
+                    menuPanel.left = x;
+                    menuPanel.top = 3 + y;
+                    menuPanel.width = this.screen.width;
+                    instructions.left = x;
+                    instructions.top = 3 + y + panelHeight;
+                }
+                else {
+                    title.left = 2 + x;
+                    title.top = 1 + y;
+                    menuPanel.left = 2 + x;
+                    menuPanel.top = 5 + y;
+                    if (descBox) {
+                        descBox.left = 2 + x + 26;
+                        descBox.top = 5 + y;
+                    }
+                    if (info) {
+                        info.left = 2 + x + 26 + 30;
+                        info.top = 5 + y;
+                    }
+                    instructions.left = x;
+                    instructions.top = 5 + y + panelHeight;
+                }
                 this.screen.render();
             };
             this.screen.on('resize', recentre);

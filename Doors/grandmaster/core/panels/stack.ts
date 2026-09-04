@@ -229,6 +229,8 @@ export class Stack implements MatchableStack {
 
   queuedSwapRow = 0;
   queuedSwapColumn = 0;
+  /** Mouse queued a swap; cancel keyboard-triggered re-swap on next frame. */
+  cancelKeyboardSwap = false;
 
   /** Optional observers, for sound and effects. */
   onMatched?: MatchableStack['onMatched'];
@@ -428,7 +430,10 @@ export class Stack implements MatchableStack {
     const state = maskToInputState(decodeInput(this.inputState));
 
     this.swapThisFrame = state.swap;
-    if (this.swapThisFrame && this.swapQueued()) this.swapThisFrame = false;
+    if (this.swapThisFrame && (this.swapQueued() || this.cancelKeyboardSwap)) {
+      this.swapThisFrame = false;
+      this.cancelKeyboardSwap = false;
+    }
 
     let newDir: CursorDirection = null;
     if (state.up) newDir = 'up';
@@ -861,6 +866,19 @@ export class Stack implements MatchableStack {
     this.queuedSwapColumn = Math.min(panel1.column, panel2.column);
     this.queuedSwapRow = panel1.row;
     return true;
+  }
+
+  /**
+   * Queue a swap from a mouse click. Sets cancelKeyboardSwap so the keyboard
+   * controls() does not re-swap on the next frame and undo the mouse swap.
+   */
+  requestMouseSwap(row: number, col: number): boolean {
+    const left = this.panels[row][col];
+    const right = this.panels[row][col + 1];
+    if (!left || !right) return false;
+    const ok = this.tryQueueSwap(left, right);
+    if (ok) this.cancelKeyboardSwap = true;
+    return ok;
   }
 
   canSwap(panel1: Panel, panel2: Panel): boolean {

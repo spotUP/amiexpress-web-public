@@ -185,8 +185,9 @@ export function DoorsTab() {
             return (
               <Box key={colIdx} width={ITEM_WIDTH}>
                 <Text
-                  color={isSelected && !editing ? T.accent : door.enabled ? T.ink : T.dim}
+                  color={door.enabled ? T.ink : T.dim}
                   bold={isSelected && !editing}
+                  inverse={isSelected && !editing}
                 >
                   {formatItem(door, isSelected)}
                 </Text>

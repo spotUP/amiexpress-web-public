@@ -22,18 +22,18 @@ function formatDuration(lastActivity?: string): string {
 function NodeRow({ node, selected }: { node: NodeStatus; selected: boolean }) {
   return (
     <Box>
-      <Text color={selected ? T.ink : T.ink} bold={selected} inverse={selected}>
+      <Text color={selected ? undefined : T.ink} bold={selected} inverse={selected}>
         {selected ? '▶ ' : '  '}
       </Text>
-      <Text color={selected ? T.ink : T.ink} bold={selected} inverse={selected}>
+      <Text color={selected ? undefined : T.ink} bold={selected} inverse={selected}>
         {`N${node.nodeId}`.padEnd(4)}
       </Text>
-      <Text color={node.online ? T.ink : T.dim}>
+      <Text color={node.online ? (selected ? undefined : T.ink) : T.dim} bold={selected} inverse={selected}>
         {(node.username ?? '—').padEnd(14)}
       </Text>
-      <Text dimColor>{(node.location ?? '—').padEnd(20)}</Text>
-      <Text dimColor>{(node.currentActivity ?? node.state ?? '—').padEnd(20)}</Text>
-      <Text dimColor>{formatDuration(node.lastActivity)}</Text>
+      <Text dimColor={!selected} bold={selected} inverse={selected}>{(node.location ?? '—').padEnd(20)}</Text>
+      <Text dimColor={!selected} bold={selected} inverse={selected}>{(node.currentActivity ?? node.state ?? '—').padEnd(20)}</Text>
+      <Text dimColor={!selected} bold={selected} inverse={selected}>{formatDuration(node.lastActivity)}</Text>
     </Box>
   );
 }

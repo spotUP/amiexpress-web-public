@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, useInput } from 'ink';
 import { HealthCheckPage } from './HealthCheckPage.js';
 import { DeploymentPage } from './DeploymentPage.js';
+import { TabBar } from '../shared/TabBar.js';
 
 type Tab = 'health' | 'deployment';
 
@@ -21,11 +22,7 @@ export function HealthDeploymentPage() {
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        {TABS.map((t, i) => (
-          <Text key={t.id} bold={tab === t.id} color={tab === t.id ? 'cyan' : 'white'}>
-            {i > 0 ? '  ' : ''}[{t.hotkey}] {t.label}
-          </Text>
-        ))}
+        <TabBar tabs={TABS} activeTab={tab} onChange={setTab} />
       </Box>
       {tab === 'health' ? <HealthCheckPage /> : <DeploymentPage />}
     </Box>

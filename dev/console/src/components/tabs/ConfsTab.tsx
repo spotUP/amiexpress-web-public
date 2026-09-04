@@ -129,7 +129,7 @@ export function ConfsTab() {
         const enabled = (c as any).enabled !== false;
         return (
           <Box key={c.id}>
-            <Text color={i === selectedIdx ? T.accent : enabled ? T.ink : T.dim} bold={i === selectedIdx}>
+            <Text color={enabled ? T.ink : T.dim} bold={i === selectedIdx} inverse={i === selectedIdx}>
               {i === selectedIdx ? '▶ ' : '  '}
               {String(c.conference_id).padEnd(4)}
               {c.name.slice(0, 28).padEnd(30)}

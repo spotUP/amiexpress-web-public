@@ -25,14 +25,9 @@ export declare const MENU_ITEMS: string[];
 /**
  * The rows a screen of this width may offer.
  *
- * At forty columns the door offers ONLY TETRIS ATTACK, plus the manual and the
- * way out. That is what makes the MIN_COLUMNS=40 mark on GMASTER.info honest:
- * the door genuinely fits a C64 screen, it just has less on it there. The TGM
- * and TETRINET screens are 80-column compositions and are HIDDEN rather than
- * folded - folding an 80-column layout onto 40 is what produced the stray
- * glyphs and unreadable rows this board has seen before.
- *
- * Returns index-aligned arrays, as the caller expects.
+ * Returns the full menu regardless of width — the menu list is scrollable
+ * and the layout stacks panels vertically at 40 columns instead of hiding
+ * items. This gives PETSCII callers the same experience as ANSI callers.
  */
 export declare function menuRowsFor(width: number): {
     items: string[];

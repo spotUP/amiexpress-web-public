@@ -148,7 +148,7 @@ export function BatchEditorPage() {
         ) : (
           batchNames.map((name, i) => (
             <Box key={name}>
-              <Text color={i === selectedIdx ? T.accent : T.ink} bold={i === selectedIdx}>
+              <Text color={T.ink} bold={i === selectedIdx} inverse={i === selectedIdx}>
                 {i === selectedIdx ? '▶ ' : '  '}
                 {name}
               </Text>
@@ -197,11 +197,11 @@ export function BatchEditorPage() {
         const lineNum = String(globalIdx + 1).padStart(2, '0');
         return (
           <Box key={`line-${globalIdx}`}>
-            <Text color={isSel ? T.accent : T.ink} bold={isSel}>
+            <Text color={T.ink} bold={isSel} inverse={isSel}>
               {isSel && isEditing ? '▶ ' : '  '}
               {lineNum}:
             </Text>
-            <Text color={isSel && isEditing ? T.warn : T.ink}>
+            <Text color={isSel && isEditing ? T.warn : T.ink} inverse={isSel && !isEditing}>
               {isEditing && isSel ? editValue : line}
             </Text>
           </Box>

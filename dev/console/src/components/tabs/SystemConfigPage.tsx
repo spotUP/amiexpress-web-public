@@ -138,14 +138,14 @@ export function SystemConfigPage() {
         return (
           <Box key={f.key}>
             <Box flexDirection="row" alignItems="center">
-              <Text color={isSel ? T.accent : T.ink} bold={isSel}>
+              <Text color={T.ink} bold={isSel} inverse={isSel}>
                 {isSel ? '▶ ' : '  '}
               </Text>
-              <Text color={T.dim}>{f.label.padEnd(22)}</Text>
+              <Text color={T.dim} inverse={isSel}>{f.label.padEnd(22)}</Text>
               {f.type === 'bool' ? (
                 <ToggleSwitch value={!!val} disabled={!isSel || saving} />
               ) : (
-                <Text color={masked ? T.dim : isSavingField ? T.warn : T.ink}>
+                <Text color={masked ? T.dim : isSavingField ? T.warn : T.ink} inverse={isSel}>
                   {masked ? '***' : String(val ?? '—')}
                   {isSavingField && <Spinner type="dots" />}
                 </Text>

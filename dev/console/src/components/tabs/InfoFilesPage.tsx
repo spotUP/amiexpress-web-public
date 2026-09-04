@@ -168,7 +168,7 @@ export function InfoFilesPage() {
         ) : (
           files.map((f, i) => (
             <Box key={f.path}>
-              <Text color={i === selectedFileIdx ? T.accent : T.ink} bold={i === selectedFileIdx}>
+              <Text color={T.ink} bold={i === selectedFileIdx} inverse={i === selectedFileIdx}>
                 {i === selectedFileIdx ? '▶ ' : '  '}
                 {f.name || f.path}
               </Text>
@@ -196,13 +196,13 @@ export function InfoFilesPage() {
         ) : (
           tooltypes.map((f, i) => (
             <Box key={f.key}>
-              <Text color={i === selectedFieldIdx ? T.accent : T.ink} bold={i === selectedFieldIdx}>
+              <Text color={T.ink} bold={i === selectedFieldIdx} inverse={i === selectedFieldIdx}>
                 {i === selectedFieldIdx ? '▶ ' : '  '}
                 {f.commented ? ';' : ' '}
                 {f.key.padEnd(20)}
                 {' = '}
               </Text>
-              <Text color={f.commented ? T.dim : T.ink}>
+              <Text color={f.commented ? T.dim : T.ink} inverse={i === selectedFieldIdx}>
                 {f.value ?? ''}
               </Text>
             </Box>

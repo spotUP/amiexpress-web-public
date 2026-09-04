@@ -89,6 +89,17 @@ class PanelsScreen {
             tags: true,
             style: { bg: 'black' },
         });
+        // Mouse click to swap: convert click position to board column and queue swap.
+        this.boardBox.on('click', (data) => {
+            const relX = data.x - layout.board.left;
+            const relY = data.y - layout.board.top;
+            const PANEL_COLS = 2;
+            const col = Math.floor(relX / PANEL_COLS) + 1;
+            const row = Math.floor(relY) + 1;
+            if (col >= 1 && col <= this.stack.width - 1 && relY >= 0 && relY < this.stack.height) {
+                this.stack.requestMouseSwap(row, col);
+            }
+        });
         this.hudBox = (0, bbs_door_sdk_1.createBox)({
             parent: this.screen,
             top: layout.hud.top,

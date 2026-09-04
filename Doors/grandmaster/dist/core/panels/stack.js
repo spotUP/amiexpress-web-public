@@ -125,6 +125,8 @@ class Stack {
         this.inputState = input_codec_1.INPUT_CHARS.idle;
         this.queuedSwapRow = 0;
         this.queuedSwapColumn = 0;
+        /** Mouse queued a swap; cancel keyboard-triggered re-swap on next frame. */
+        this.cancelKeyboardSwap = false;
         // --- garbage ---
         /** What this stack is sending. */
         this.outgoingGarbage = new garbage_queue_1.GarbageQueue();
@@ -328,8 +330,10 @@ class Stack {
     controls() {
         const state = (0, input_codec_1.maskToInputState)((0, input_codec_1.decodeInput)(this.inputState));
         this.swapThisFrame = state.swap;
-        if (this.swapThisFrame && this.swapQueued())
+        if (this.swapThisFrame && (this.swapQueued() || this.cancelKeyboardSwap)) {
             this.swapThisFrame = false;
+            this.cancelKeyboardSwap = false;
+        }
         let newDir = null;
         if (state.up)
             newDir = 'up';
@@ -755,6 +759,20 @@ class Stack {
         this.queuedSwapColumn = Math.min(panel1.column, panel2.column);
         this.queuedSwapRow = panel1.row;
         return true;
+    }
+    /**
+     * Queue a swap from a mouse click. Sets cancelKeyboardSwap so the keyboard
+     * controls() does not re-swap on the next frame and undo the mouse swap.
+     */
+    requestMouseSwap(row, col) {
+        const left = this.panels[row][col];
+        const right = this.panels[row][col + 1];
+        if (!left || !right)
+            return false;
+        const ok = this.tryQueueSwap(left, right);
+        if (ok)
+            this.cancelKeyboardSwap = true;
+        return ok;
     }
     canSwap(panel1, panel2) {
         if (Math.abs(panel1.column - panel2.column) !== 1 || panel1.row !== panel2.row)

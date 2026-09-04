@@ -114,9 +114,10 @@ export function App({ username }: Props) {
     if (showRestart || showHelp) return;
     if (input === 'q' && !key.ctrl) exit();
     if (input === '?') setShowHelp(s => !s);
-    // Tab/Shift+Tab cycles through panels
-    if (key.tab && !key.shift) {
-      setFocusPanel(p => p === 'sidebar' ? 'content' : p === 'content' ? 'footer' : 'sidebar');
+    // Tab cycles sidebar/content/footer — skip when content is focused
+    // so pages like ScreenFilesPage can use Tab internally
+    if (key.tab && !key.shift && focusPanel !== 'content') {
+      setFocusPanel(p => p === 'sidebar' ? 'content' : 'content');
     }
     if (key.tab && key.shift) {
       setFocusPanel(p => p === 'sidebar' ? 'footer' : p === 'content' ? 'sidebar' : 'content');

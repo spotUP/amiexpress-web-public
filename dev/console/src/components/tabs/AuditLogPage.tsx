@@ -71,7 +71,7 @@ export function AuditLogPage() {
 
       {visible.slice(0, 18).map((e, i) => (
         <Box key={e.id}>
-          <Text color={i === selectedIdx ? T.accent : T.ink} bold={i === selectedIdx}>
+          <Text color={T.ink} bold={i === selectedIdx} inverse={i === selectedIdx}>
             {i === selectedIdx ? '▶ ' : '  '}
             {(e.timestamp ?? '—').slice(0, 19).padEnd(20)}
             {(e.table_name ?? '—').slice(0, 18).padEnd(20)}

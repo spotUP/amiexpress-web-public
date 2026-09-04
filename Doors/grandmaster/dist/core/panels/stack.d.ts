@@ -174,6 +174,8 @@ export declare class Stack implements MatchableStack {
     inputState: string;
     queuedSwapRow: number;
     queuedSwapColumn: number;
+    /** Mouse queued a swap; cancel keyboard-triggered re-swap on next frame. */
+    cancelKeyboardSwap: boolean;
     /** Optional observers, for sound and effects. */
     onMatched?: MatchableStack['onMatched'];
     onNewRow?: () => void;
@@ -307,6 +309,11 @@ export declare class Stack implements MatchableStack {
      * Ask for a swap. It does not happen now - it is queued for the next frame.
      */
     tryQueueSwap(panel1: Panel, panel2: Panel): boolean;
+    /**
+     * Queue a swap from a mouse click. Sets cancelKeyboardSwap so the keyboard
+     * controls() does not re-swap on the next frame and undo the mouse swap.
+     */
+    requestMouseSwap(row: number, col: number): boolean;
     canSwap(panel1: Panel, panel2: Panel): boolean;
     /**
      * Perform the swap.

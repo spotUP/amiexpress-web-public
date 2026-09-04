@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { getLastCallers, getLastUploads, getLastDownloads } from '../../api/client.js';
 import { T } from '../../theme/blessed-theme.js';
+import { TabBar } from '../shared/TabBar.js';
 import type { CallerRecord } from '../../api/types.js';
 
 type Tab = 'callers' | 'uploads' | 'downloads';
@@ -78,11 +79,7 @@ export function ActivityPage() {
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        {TABS.map((t, i) => (
-          <Text key={t.id} bold={tab === t.id} color={tab === t.id ? T.accent : T.ink}>
-            {i > 0 ? '  ' : ''}[{t.hotkey}] {t.label}
-          </Text>
-        ))}
+        <TabBar tabs={TABS} activeTab={tab} onChange={setTab} />
         <Text dimColor>  [r] refresh</Text>
       </Box>
 

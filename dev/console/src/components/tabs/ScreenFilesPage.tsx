@@ -5,6 +5,7 @@ import {
   type ScreenFileFacts, type ScreenIndex,
 } from '../../api/client.js';
 import { T, BlessedBox, BlessedText, BlessedSpinner } from '../../theme/blessed-theme.js';
+import { useMouse, useHover, type MouseEvent } from '../../hooks/useMouse.js';
 
 type Tab = 'all' | 'node' | 'conf' | 'board' | 'unused' | 'bulletins';
 
@@ -136,6 +137,33 @@ export function ScreenFilesPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [operationResult, setOperationResult] = useState<string | null>(null);
+  const [hoveredTab, setHoveredTab] = useState<Tab | null>(null);
+
+  const TAB_ROW = 7;
+  const TAB_RANGES: Array<{ from: number; to: number; key: Tab }> = [
+    { from: 24, to: 28, key: 'all' },
+    { from: 30, to: 35, key: 'node' },
+    { from: 37, to: 42, key: 'conf' },
+    { from: 44, to: 50, key: 'board' },
+    { from: 52, to: 59, key: 'unused' },
+    { from: 61, to: 66, key: 'bulletins' },
+  ];
+
+  useMouse(useCallback((e: MouseEvent) => {
+    if (e.button !== 0 || e.row !== TAB_ROW) return;
+    for (const r of TAB_RANGES) {
+      if (e.col >= r.from && e.col <= r.to) { setTab(r.key); break; }
+    }
+  }, []));
+
+  useHover(useCallback((e: { col: number; row: number }) => {
+    if (e.row !== TAB_ROW) { setHoveredTab(null); return; }
+    let found: Tab | null = null;
+    for (const r of TAB_RANGES) {
+      if (e.col >= r.from && e.col <= r.to) { found = r.key; break; }
+    }
+    setHoveredTab(found);
+  }, []));
   const [showMciAll, setShowMciAll] = useState(false);
 
   const load = useCallback(async () => {
@@ -393,17 +421,17 @@ export function ScreenFilesPage() {
     <Box flexDirection="column" padding={1}>
       {/* Tab bar */}
       <Box flexDirection="row" gap={1} marginBottom={1}>
-        {TABS.map(t => (
-          <Box key={t.key}>
-            <Text
-              bold={tab === t.key}
-              inverse={tab === t.key}
-              color={tab === t.key ? T.accent : T.ink}
-            >
-              {' '}{tab === t.key ? '>' : ' '}{t.label}{' '}
-            </Text>
-          </Box>
-        ))}
+        {TABS.map(t => {
+          const active = tab === t.key;
+          const hover = hoveredTab === t.key;
+          return (
+            <Box key={t.key}>
+              <Text bold={active || hover} inverse={active} color={active ? undefined : hover ? T.accent : T.ink}>
+                {' '}{tab === t.key ? '>' : ' '}{t.label}{' '}
+              </Text>
+            </Box>
+          );
+        })}
         <BlessedText variant="dim">({count} screens, {unusedCount} unused, {bulletinsCount} bulls)</BlessedText>
       </Box>
 

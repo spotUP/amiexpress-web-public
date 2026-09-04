@@ -216,7 +216,7 @@ export function OperatorChatPage() {
         const ageSec = Math.floor((Date.now() - p.createdAt) / 1000);
         return (
           <Box key={p.id}>
-            <Text color={i === selectedIdx ? T.accent : p.status === 'pending' ? T.warn : T.dim} bold={i === selectedIdx}>
+            <Text color={p.status === 'pending' ? T.warn : T.dim} bold={i === selectedIdx} inverse={i === selectedIdx}>
               {i === selectedIdx ? '▶ ' : '  '}
               {(p.userHandle ?? '—').slice(0, 16).padEnd(18)}
               {String(p.nodeId ?? '?').padEnd(7)}
