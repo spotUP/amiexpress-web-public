@@ -33,7 +33,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   secLevel: number;
-  login: (username: string, password: string, rememberMe?: boolean) => Promise<void>;
+  login: (username: string, password: string, rememberMe?: boolean) => Promise<User | null>;
   logout: () => void;
 }
 
@@ -132,6 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(data.user);
       persistUser(data.user);
     }
+    return data?.user ?? null;
   };
 
   const logout = () => {

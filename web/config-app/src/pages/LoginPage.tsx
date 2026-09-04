@@ -19,8 +19,12 @@ export function LoginPage() {
     setIsLoading(true);
 
     try {
-      await login(username, password, rememberMe);
-      navigate('/admin/system');
+      const user = await login(username, password, rememberMe);
+      if (user && user.secLevel >= 255) {
+        navigate('/admin/system');
+      } else {
+        navigate('/admin/screens');
+      }
     } catch (err: any) {
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
