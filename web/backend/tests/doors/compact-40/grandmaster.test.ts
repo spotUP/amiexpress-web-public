@@ -22,10 +22,10 @@ describe('grandmaster menu at 40 columns', () => {
   const wide = menuRowsFor(80);
   const tall = menuRowsFor(132);
 
-  it('the 40-column menu is exactly four rows: master, tetris_attack, manual, quit', () => {
-    expect(compact.selections).toEqual(['master', 'tetris_attack', 'manual', 'quit']);
-    expect(compact.items).toHaveLength(4);
-    expect(compact.selections).toHaveLength(4);
+  it('the 40-column menu is exactly three rows: tetris_attack, manual, quit', () => {
+    expect(compact.selections).toEqual(['tetris_attack', 'manual', 'quit']);
+    expect(compact.items).toHaveLength(3);
+    expect(compact.selections).toHaveLength(3);
   });
 
   it('the 40-column items and selections are index-aligned', () => {
