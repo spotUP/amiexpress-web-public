@@ -34,11 +34,13 @@ import { reloadDoorCommands } from '../handlers/command-execution.handler';
 import { getConferenceDir } from '../utils/file-hold.util';
 import { webTerminalGate, isReservedPath } from './web-terminal-gate';
 import { AdminPermissionsHandler } from '../handlers/admin/admin-permissions.handler';
+import { SpriteManagerHandler } from '../handlers/admin/sprite-manager.handler';
 
 // Initialize handlers
 const authHandler = new AuthHandler(db);
 const sessionLogsHandler = new SessionLogsHandler();
 const adminPermsHandler = new AdminPermissionsHandler();
+const spriteManagerHandler = new SpriteManagerHandler();
 
 // File upload configuration
 // Express.e uses Node#/Playpen for uploaded files (express.e:19573-19584)
@@ -156,6 +158,23 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   );
   app.put('/api/admin-permissions', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
     adminPermsHandler.put(req as AuthRequest, res)
+  );
+
+  // ===== Sprite Manager API - Sysop-only =====
+  app.get('/api/sprite-manager/doors', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
+    spriteManagerHandler.listDoors(req, res)
+  );
+  app.get('/api/sprite-manager/:door/sprites', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
+    spriteManagerHandler.listSprites(req as AuthRequest, res)
+  );
+  app.get('/api/sprite-manager/:door/sprite/:file', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
+    spriteManagerHandler.readSprite(req as AuthRequest, res)
+  );
+  app.put('/api/sprite-manager/:door/sprite/:file', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
+    spriteManagerHandler.writeSprite(req as AuthRequest, res)
+  );
+  app.delete('/api/sprite-manager/:door/sprite/:file', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
+    spriteManagerHandler.deleteSprite(req as AuthRequest, res)
   );
 
   // ===== Chat API - Public Routes (for web chat authentication) =====

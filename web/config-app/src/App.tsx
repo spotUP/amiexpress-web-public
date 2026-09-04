@@ -12,6 +12,7 @@ import { SystemConfigPage } from './pages/SystemConfigPage';
 import { DoorsPage } from './pages/DoorsPage';
 import { ScreenFilesPage } from './pages/ScreenFilesPage';
 import { AdminRolesPage } from './pages/AdminRolesPage';
+import { SpriteManagerPage } from './pages/SpriteManagerPage';
 import { AuditLogPage } from './pages/AuditLogPage';
 import { SecurityPage } from './pages/SecurityPage';
 import { UsersPage } from './pages/UsersPage';
@@ -113,6 +114,7 @@ function App() {
         {/* Content — screens editor accessible at 100+, rest sysop-only */}
         <Route path="conferences" element={<SysopRoute><ConferencesWorkspace /></SysopRoute>} />
         <Route path="doors" element={<SysopRoute><DoorsPage /></SysopRoute>} />
+        <Route path="sprite-manager" element={<SysopRoute><SpriteManagerPage /></SysopRoute>} />
 
         {/* System — sysop-only */}
         <Route path="system" element={<SysopRoute><SystemConfigPage /></SysopRoute>} />

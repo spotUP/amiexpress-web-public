@@ -1010,6 +1010,36 @@ class ApiClient {
     });
   }
 
+  // Sprite Manager
+  async listSpriteDoors() {
+    return this.request<{ doors: string[] }>(`${API_BASE}/sprite-manager/doors`);
+  }
+
+  async listSprites(door: string) {
+    return this.request<{ door: string; sprites: Array<{ file: string; size: number; mtime: number; animationCount: number; dimensions: { width: number; height: number } }> }>(
+      `${API_BASE}/sprite-manager/${encodeURIComponent(door)}/sprites`
+    );
+  }
+
+  async getSprite(door: string, file: string) {
+    return this.request<{ content: string; door: string; file: string }>(
+      `${API_BASE}/sprite-manager/${encodeURIComponent(door)}/sprite/${encodeURIComponent(file)}`
+    );
+  }
+
+  async putSprite(door: string, file: string, content: string) {
+    return this.request<{ written: boolean }>(`${API_BASE}/sprite-manager/${encodeURIComponent(door)}/sprite/${encodeURIComponent(file)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    });
+  }
+
+  async deleteSprite(door: string, file: string) {
+    return this.request<{ deleted: boolean }>(`${API_BASE}/sprite-manager/${encodeURIComponent(door)}/sprite/${encodeURIComponent(file)}`, {
+      method: 'DELETE',
+    });
+  }
+
 }
 
 export const apiClient = new ApiClient();
