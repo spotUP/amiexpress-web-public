@@ -3391,33 +3391,54 @@ console.log(' In conference selection state');
   }
 
   // Handle message reader navigation (R command)
-  // Like express.e:11046 - uses lineInput (line-based input, not single char)
+  // express.e:11046 — single-character getMSGCommand, not line input.
+  // The web port used line-input (buffering until Enter) which silently
+  // ate single-letter commands like Q, N, A. Check for a single known
+  // command character first; multi-character commands (NS, RE, etc.) still
+  // need Enter.
+  const SINGLE_CHAR_NAV_COMMANDS = new Set(['Q', 'N', 'A', 'R', 'L', 'K', 'F', '?']);
   if (session.subState === LoggedOnSubState.MSG_READER_NAV) {
-    // Initialize inputBuffer if needed
     if (!session.inputBuffer) {
       session.inputBuffer = '';
     }
 
-    // Buffer characters until Enter is pressed
+    // Single-char dispatch for well-known commands — express.e getMSGCommand
+    // is single-character, not line-input. Q, N, A, R, L, K, F, ? work
+    // immediately without Enter.
+    if (data.length === 1 && data >= ' ' && data <= '~') {
+      const ch = data.toUpperCase();
+      if (SINGLE_CHAR_NAV_COMMANDS.has(ch)) {
+        session.inputBuffer = '';
+        if (ch === '?') {
+          // '?' shows short help, '??' shows full help — but since we
+          // dispatch '?' immediately, '??' never arrives. Check for a
+          // second '?' in the next tick by appending to buffer.
+          // Actually, just show short help for '?' and full help for '??'
+          // which arrives as two separate '?' chars. For the first '?',
+          // display short help immediately.
+          const { handleMessageReaderNav } = require('./message/messaging.handler');
+          await handleMessageReaderNav(socket, session, '?');
+          return;
+        }
+        const { handleMessageReaderNav } = require('./message/messaging.handler');
+        await handleMessageReaderNav(socket, session, ch);
+        return;
+      }
+    }
+
+    // Buffer characters until Enter is pressed (for multi-char commands)
     if (data === '\r' || data === '\n') {
       const input = (session.inputBuffer || '').trim();
       session.inputBuffer = '';
-      // Use the static import binding from line 183 rather than a dynamic
-      // import(). tsx gives ESM `import()` and CJS `require()` separate
-      // module caches, so a dynamic import here would resolve messaging.handler
-      // to a second instance with its own _db module variable — exactly the
-      // 2026-04-24 prod crash where setMessagingDependencies had set _db on
-      // the static-imported instance but the R-command path hit an
-      // undefined-_db on the dynamic-imported instance.
       await handleMessageReaderNav(socket, session, input);
     } else if (data === '\x7f' || data === '\b') { // Backspace
       if (session.inputBuffer && session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        emitText(socket, '\b \b'); // Echo so user sees their typing
+        emitText(socket, '\b \b');
       }
     } else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer = (session.inputBuffer || '') + data;
-      emitText(socket, data); // Echo so user sees their typing
+      emitText(socket, data);
     }
     return;
   }

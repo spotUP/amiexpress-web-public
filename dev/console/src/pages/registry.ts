@@ -160,6 +160,21 @@ export const PAGES: PageMeta[] = [
     ],
     implemented: true,
   },
+  {
+    id: 'screen-files',
+    label: 'Screen Files',
+    category: 'Content',
+    footerHint: '[↑↓] scroll  [enter] edit  [r]efresh',
+    helpKeys: [
+      ['↑↓', 'Scroll files'],
+      ['enter', 'Open selected file for editing'],
+      ['e', 'Edit tooltype key/value'],
+      ['t', 'Toggle comment'],
+      ['s', 'Save changes'],
+      ['r', 'Refresh from server'],
+    ],
+    implemented: true,
+  },
 
   // ─── System ────────────────────────────────────────────────────
   {

@@ -7,10 +7,8 @@ import { DashboardTab } from './components/tabs/DashboardTab.js';
 import { NodesTab } from './components/tabs/NodesTab.js';
 import { UsersTab } from './components/tabs/UsersTab.js';
 import { ConfsTab } from './components/tabs/ConfsTab.js';
-import { CallersTab } from './components/tabs/CallersTab.js';
 import { LogsTab } from './components/tabs/LogsTab.js';
 import { DoorsTab } from './components/tabs/DoorsTab.js';
-import { SystemTab } from './components/tabs/SystemTab.js';
 import { SystemConfigPage } from './components/tabs/SystemConfigPage.js';
 import { HealthCheckPage } from './components/tabs/HealthCheckPage.js';
 import { AuditLogPage } from './components/tabs/AuditLogPage.js';
@@ -29,53 +27,50 @@ import { BatchEditorPage } from './components/tabs/BatchEditorPage.js';
 import { GlobalWallPage } from './components/tabs/GlobalWallPage.js';
 import { DeploymentPage } from './components/tabs/DeploymentPage.js';
 import { InfoFilesPage } from './components/tabs/InfoFilesPage.js';
-import { AmiXnetPage } from './components/tabs/AmiXnetPage.js';
-import { OpChatSettingsPage } from './components/tabs/OpChatSettingsPage.js';
 import { HelpOverlay } from './components/HelpOverlay.js';
 import { RestartDialog } from './components/RestartDialog.js';
+import { ActivityPage } from './components/tabs/ActivityPage.js';
+import { StatisticsPage } from './components/tabs/StatisticsPage.js';
+import { ConfigurationPage } from './components/tabs/ConfigurationPage.js';
+import { ConfigFilesPage } from './components/tabs/ConfigFilesPage.js';
+import { LookupTablesPage } from './components/tabs/LookupTablesPage.js';
+import { HealthDeploymentPage } from './components/tabs/HealthDeploymentPage.js';
+import { ScreenFilesPage } from './components/tabs/ScreenFilesPage.js';
 import { DEFAULT_PAGE } from './pages/registry.js';
 import { getNodes } from './api/client.js';
+import { T, BlessedText } from './theme/blessed-theme.js';
 
 interface Props {
   username: string;
 }
 
-// Map page id → component. Keep separate from registry.ts to avoid pulling
-// every tab module into the registry (which is read by the Sidebar even when
-// some pages aren't implemented yet).
+// Map page id → component. Keys mirror the registry.
 const PAGE_COMPONENTS: Record<string, React.FC | undefined> = {
-  dashboard:      DashboardTab,
+  // Live
+  overview:       DashboardTab,
+  activity:       ActivityPage,
   nodes:          NodesTab,
+  'operator-chat': OperatorChatPage,
+  // People
   users:          UsersTab,
-  confs:          ConfsTab,
-  callers:        CallersTab,
-  logs:           LogsTab,
+  security:       SecurityPage,
+  // Content
+  conferences:    ConfsTab,
   doors:          DoorsTab,
-  system:         SystemTab,
-  // Phase B
-  'system-config': SystemConfigPage,
-  health:          HealthCheckPage,
-  audit:           AuditLogPage,
-  sessions:        SessionLogsPage,
-  'op-chat':       OperatorChatPage,
-  // Phase C
-  languages:       LanguagesPage,
-  protocols:       ProtocolsPage,
-  computers:       ComputersPage,
-  'screen-types':  ScreenTypesPage,
-  drives:          DrivesPage,
-  'file-checkers': FileCheckersPage,
-  security:        SecurityPage,
-  // Phase D
-  'door-install':  DoorInstallPage,
+  'door-install': DoorInstallPage,
+  'global-wall':  GlobalWallPage,
+  'screen-files': ScreenFilesPage,
+  // System
+  configuration:  ConfigurationPage,
+  'config-files': ConfigFilesPage,
+  'lookup-tables': LookupTablesPage,
+  health:         HealthDeploymentPage,
+  // Diagnostics
+  statistics:     StatisticsPage,
+  logs:           LogsTab,
+  'session-logs': SessionLogsPage,
+  audit:          AuditLogPage,
   'import-export': ImportExportPage,
-  'batch-editor':  BatchEditorPage,
-  'global-wall':   GlobalWallPage,
-  // Phase E
-  deployment:       DeploymentPage,
-  'info-files':     InfoFilesPage,
-  amixnet:          AmiXnetPage,
-  'op-chat-settings': OpChatSettingsPage,
 };
 
 export function App({ username }: Props) {
