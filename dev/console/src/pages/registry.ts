@@ -7,7 +7,7 @@
 // its component exists; Sidebar renders unimplemented pages dimmed and refuses
 // selection.
 
-export type CategoryName = 'Live' | 'Users' | 'Content' | 'Files' | 'System' | 'Comms';
+export type CategoryName = 'Live' | 'People' | 'Content' | 'System' | 'Diagnostics';
 
 export interface PageMeta {
   id: string;            // unique stable id, used for routing
@@ -25,7 +25,7 @@ export const PAGES: PageMeta[] = [
   // ─── Live ──────────────────────────────────────────────────────
   {
     id: 'dashboard',
-    label: 'Dashboard',
+    label: 'Overview',
     category: 'Live',
     footerHint: 'live stats + 24h sparkline  auto-refresh 10s',
     helpKeys: [
@@ -48,11 +48,11 @@ export const PAGES: PageMeta[] = [
     implemented: true,
   },
   {
-    id: 'callers',
-    label: 'Callers',
+    id: 'activity',
+    label: 'Activity',
     category: 'Live',
     footerHint: '[↑↓] scroll  auto-refresh 30s',
-    helpKeys: [['—', 'Read-only — auto-refreshes every 30 s']],
+    helpKeys: [['—', 'Live feed of logons, doors and transfers']],
     implemented: true,
   },
   {
@@ -75,7 +75,7 @@ export const PAGES: PageMeta[] = [
     implemented: true,
   },
   {
-    id: 'op-chat',
+    id: 'operator-chat',
     label: 'Operator Chat',
     category: 'Live',
     footerHint: '[enter] accept  [esc] end  [1-4] quick reply',
@@ -89,11 +89,11 @@ export const PAGES: PageMeta[] = [
     implemented: true,
   },
 
-  // ─── Users ─────────────────────────────────────────────────────
+  // ─── People ─────────────────────────────────────────────────────
   {
     id: 'users',
     label: 'Users',
-    category: 'Users',
+    category: 'People',
     footerHint: '[e]dit SL  [b]an  [d]el  [/]search  [↑↓] scroll',
     helpKeys: [
       ['↑↓', 'Scroll users'],
@@ -108,8 +108,8 @@ export const PAGES: PageMeta[] = [
   },
   {
     id: 'security',
-    label: 'Security',
-    category: 'Users',
+    label: 'Access Levels',
+    category: 'People',
     footerHint: '[n]ew  [e]dit  [d]el  [/]search  [r]efresh  [↑↓] scroll',
     helpKeys: [
       ['↑↓', 'Scroll items'],
@@ -122,36 +122,10 @@ export const PAGES: PageMeta[] = [
     ],
     implemented: true,
   },
-  {
-    id: 'audit',
-    label: 'Audit Log',
-    category: 'Users',
-    footerHint: '[/]filter table  [c]lear  [r]efresh  [↑↓] scroll',
-    helpKeys: [
-      ['↑↓', 'Select an entry — its before/after diff shows below'],
-      ['/',  'Filter by table name'],
-      ['c',  'Clear filter'],
-      ['r',  'Refresh from server'],
-    ],
-    implemented: true,
-  },
-  {
-    id: 'sessions',
-    label: 'Session Logs',
-    category: 'Users',
-    footerHint: '[enter] view session log  [r]efresh  [↑↓] scroll',
-    helpKeys: [
-      ['↑↓', 'Select a session'],
-      ['enter / click', 'Open the session log'],
-      ['esc', 'Back to session list (when viewing a log)'],
-      ['r',  'Refresh from server'],
-    ],
-    implemented: true,
-  },
 
   // ─── Content ───────────────────────────────────────────────────
   {
-    id: 'confs',
+    id: 'conferences',
     label: 'Conferences',
     category: 'Content',
     footerHint: '[t]oggle  [h]ealth  [f]ix  [r]efresh  [↑↓] scroll',
@@ -206,43 +180,123 @@ export const PAGES: PageMeta[] = [
     implemented: true,
   },
 
-  // ─── Files ─────────────────────────────────────────────────────
+  // ─── System ────────────────────────────────────────────────────
   {
-    id: 'drives',
-    label: 'Drives',
-    category: 'Files',
-    footerHint: '[n]ew  [e]dit  [d]el  [/]search  [r]efresh  [↑↓] scroll',
+    id: 'configuration',
+    label: 'Configuration',
+    category: 'System',
+    footerHint: '[e]dit  [s]ave  [r]efresh  [R]revert  [↑↓] select',
     helpKeys: [
-      ['↑↓', 'Scroll items'],
-      ['n', 'Create a new row'],
-      ['e', 'Edit the selected row'],
-      ['d', 'Delete the selected row (confirms)'],
-      ['/', 'Search by any column value'],
-      ['r', 'Refresh from server'],
-      ['click', 'Click a row to select it'],
+      ['↑↓', 'Select a field'],
+      ['e',  'Edit the selected field'],
+      ['s',  'Save all pending changes'],
+      ['R',  'Revert all pending changes'],
+      ['r',  'Refresh from server (discards pending)'],
+      ['Pending fields are marked with * and shown in yellow', ''],
     ],
     implemented: true,
   },
   {
-    id: 'file-checkers',
-    label: 'File Checkers',
-    category: 'Files',
-    footerHint: '[n]ew  [e]dit  [d]el  [/]search  [r]efresh  [↑↓] scroll',
+    id: 'config-files',
+    label: 'Configuration Files',
+    category: 'System',
+    footerHint: '[enter] edit  [↑↓] select  [s]ave  [esc] back',
     helpKeys: [
-      ['↑↓', 'Scroll items'],
-      ['n', 'Create a new row'],
-      ['e', 'Edit the selected row'],
-      ['d', 'Delete the selected row (confirms)'],
-      ['/', 'Search by any column value'],
-      ['r', 'Refresh from server'],
-      ['click', 'Click a row to select it'],
+      ['↑↓', 'Select a file (list) or tooltype (edit)'],
+      ['enter', 'Open the selected file for editing'],
+      ['e', 'Edit the selected tooltype value'],
+      ['t', 'Toggle comment on the selected tooltype'],
+      ['s', 'Save all changes to the file'],
+      ['esc', 'Back to file list (from edit mode)'],
+    ],
+    implemented: true,
+  },
+  {
+    id: 'lookup-tables',
+    label: 'Lookup Tables',
+    category: 'System',
+    footerHint: '[1-5] switch tab  [n]ew  [e]dit  [d]el  [↑↓] scroll',
+    helpKeys: [
+      ['1-5', 'Switch between Computers / Screen types / Languages / Protocols / File checkers'],
+      ['n',  'Create a new row'],
+      ['e',  'Edit the selected row'],
+      ['d',  'Delete the selected row (confirms)'],
+    ],
+    implemented: true,
+  },
+  {
+    id: 'health',
+    label: 'Health and Deployment',
+    category: 'System',
+    footerHint: '[f]ix  [r]efresh  auto-refresh 30s',
+    helpKeys: [
+      ['f', 'Run auto-fix for all fixable issues'],
+      ['r', 'Refresh now'],
+      ['Issues in red are errors, yellow are warnings', ''],
+    ],
+    implemented: true,
+  },
+
+  // ─── Diagnostics ───────────────────────────────────────────────
+  {
+    id: 'statistics',
+    label: 'Statistics',
+    category: 'Diagnostics',
+    footerHint: 'all-time + session totals  auto-refresh 30s',
+    helpKeys: [
+      ['—', 'Read-only — auto-refreshes every 30 s'],
+    ],
+    implemented: true,
+  },
+  {
+    id: 'logs',
+    label: 'System Logs',
+    category: 'Diagnostics',
+    footerHint: '[b/p/6] source  [/] filter  [↑↓/PgUp/PgDn] scroll  [g/G] top/tail',
+    helpKeys: [
+      ['b',         'Backend log'],
+      ['p',         'Preview log'],
+      ['6',         '68K door log'],
+      ['/',         'Filter (substring, case-insensitive). [enter] apply, [esc] clear'],
+      ['c',         'Clear an active filter'],
+      ['↑↓',        'Scroll one line at a time'],
+      ['PgUp/PgDn', 'Scroll a page'],
+      ['G',         'Jump to tail (resume follow)'],
+      ['g',         'Jump to top'],
+      ['click',     'Click Backend / Preview / 68K Door at the top to switch'],
+    ],
+    implemented: true,
+  },
+  {
+    id: 'session-logs',
+    label: 'Session Logs',
+    category: 'Diagnostics',
+    footerHint: '[enter] view session log  [r]efresh  [↑↓] scroll',
+    helpKeys: [
+      ['↑↓', 'Select a session'],
+      ['enter / click', 'Open the session log'],
+      ['esc', 'Back to session list (when viewing a log)'],
+      ['r',  'Refresh from server'],
+    ],
+    implemented: true,
+  },
+  {
+    id: 'audit',
+    label: 'Audit Log',
+    category: 'Diagnostics',
+    footerHint: '[/]filter table  [c]lear  [r]efresh  [↑↓] scroll',
+    helpKeys: [
+      ['↑↓', 'Select an entry — its before/after diff shows below'],
+      ['/',  'Filter by table name'],
+      ['c',  'Clear filter'],
+      ['r',  'Refresh from server'],
     ],
     implemented: true,
   },
   {
     id: 'import-export',
-    label: 'Import / Export',
-    category: 'Files',
+    label: 'Import and Export',
+    category: 'Diagnostics',
     footerHint: '[1]mport  [2]xport  [v/x/c/d] (import)  [u/m/f/n] (export)',
     helpKeys: [
       ['1', 'Switch to Import tab'],
@@ -259,191 +313,13 @@ export const PAGES: PageMeta[] = [
     ],
     implemented: true,
   },
-
-  // ─── System ────────────────────────────────────────────────────
-  {
-    id: 'system-config',
-    label: 'System Config',
-    category: 'System',
-    footerHint: '[e]dit  [s]ave  [r]efresh  [R]revert  [↑↓] select',
-    helpKeys: [
-      ['↑↓', 'Select a field'],
-      ['e',  'Edit the selected field'],
-      ['s',  'Save all pending changes'],
-      ['R',  'Revert all pending changes'],
-      ['r',  'Refresh from server (discards pending)'],
-      ['Pending fields are marked with * and shown in yellow', ''],
-    ],
-    implemented: true,
-  },
-  {
-    id: 'health',
-    label: 'Health Check',
-    category: 'System',
-    footerHint: '[f]ix  [r]efresh  auto-refresh 30s',
-    helpKeys: [
-      ['f', 'Run auto-fix for all fixable issues'],
-      ['r', 'Refresh now'],
-      ['Issues in red are errors, yellow are warnings', ''],
-    ],
-    implemented: true,
-  },
-  {
-    id: 'deployment',
-    label: 'Deployment',
-    category: 'System',
-    footerHint: '[r]efresh now  auto-refresh 30s',
-    helpKeys: [
-      ['r', 'Refresh deployment status now'],
-      ['—', 'Shows health, system info, and database statistics'],
-    ],
-    implemented: true,
-  },
-  {
-    id: 'system',
-    label: 'System (legacy)',
-    category: 'System',
-    footerHint: '[n]odes  [c]onfig  [s]tart  [x]exit  [v]reserve  [o]sysop  [Q]uiet',
-    helpKeys: [
-      ['n', 'Switch to Nodes panel'],
-      ['c', 'Switch to Config panel'],
-      ['↑↓', 'Select a node (Nodes panel)'],
-      ['s', 'Start the selected node'],
-      ['x', 'Exit the selected node'],
-      ['v', 'Reserve the selected node'],
-      ['o', 'Sysop-login on the selected node'],
-      ['Q', 'Toggle quiet mode'],
-    ],
-    implemented: true,
-  },
-  {
-    id: 'languages',
-    label: 'Languages',
-    category: 'System',
-    footerHint: '[n]ew  [e]dit  [d]el  [/]search  [r]efresh  [↑↓] scroll',
-    helpKeys: [
-      ['↑↓', 'Scroll items'],
-      ['n', 'Create a new row'],
-      ['e', 'Edit the selected row'],
-      ['d', 'Delete the selected row (confirms)'],
-      ['/', 'Search by any column value'],
-      ['r', 'Refresh from server'],
-      ['click', 'Click a row to select it'],
-    ],
-    implemented: true,
-  },
-  {
-    id: 'protocols',
-    label: 'Protocols',
-    category: 'System',
-    footerHint: '[n]ew  [e]dit  [d]el  [/]search  [r]efresh  [↑↓] scroll',
-    helpKeys: [
-      ['↑↓', 'Scroll items'],
-      ['n', 'Create a new row'],
-      ['e', 'Edit the selected row'],
-      ['d', 'Delete the selected row (confirms)'],
-      ['/', 'Search by any column value'],
-      ['r', 'Refresh from server'],
-      ['click', 'Click a row to select it'],
-    ],
-    implemented: true,
-  },
-  {
-    id: 'computers',
-    label: 'Computers',
-    category: 'System',
-    footerHint: '[n]ew  [e]dit  [d]el  [/]search  [r]efresh  [↑↓] scroll',
-    helpKeys: [
-      ['↑↓', 'Scroll items'],
-      ['n', 'Create a new row'],
-      ['e', 'Edit the selected row'],
-      ['d', 'Delete the selected row (confirms)'],
-      ['/', 'Search by any column value'],
-      ['r', 'Refresh from server'],
-      ['click', 'Click a row to select it'],
-    ],
-    implemented: true,
-  },
-  {
-    id: 'screen-types',
-    label: 'Screen Types',
-    category: 'System',
-    footerHint: '[n]ew  [e]dit  [d]el  [/]search  [r]efresh  [↑↓] scroll',
-    helpKeys: [
-      ['↑↓', 'Scroll items'],
-      ['n', 'Create a new row'],
-      ['e', 'Edit the selected row'],
-      ['d', 'Delete the selected row (confirms)'],
-      ['/', 'Search by any column value'],
-      ['r', 'Refresh from server'],
-      ['click', 'Click a row to select it'],
-    ],
-    implemented: true,
-  },
-
-  // ─── Comms ─────────────────────────────────────────────────────
-  {
-    id: 'amixnet',
-    label: 'AmiXnet',
-    category: 'Comms',
-    footerHint: '[e]dit value  [s]ave  [r]efresh  [↑↓] select',
-    helpKeys: [
-      ['↑↓', 'Select a setting'],
-      ['e', 'Edit the selected setting value'],
-      ['s', 'Save all changes'],
-      ['r', 'Refresh from server'],
-    ],
-    implemented: true,
-  },
-  {
-    id: 'op-chat-settings',
-    label: 'Op Chat Settings',
-    category: 'Comms',
-    footerHint: '[e]dit  [s]ave  [r]efresh  [R]revert  [↑↓] select',
-    helpKeys: [
-      ['↑↓', 'Select a field'],
-      ['e', 'Edit the selected field'],
-      ['s', 'Save all pending changes'],
-      ['R', 'Revert all pending changes'],
-      ['r', 'Refresh from server (discards pending)'],
-    ],
-    implemented: true,
-  },
-  {
-    id: 'batch-editor',
-    label: 'Batch Editor',
-    category: 'Comms',
-    footerHint: '[enter] load  [e]dit  [a]ppend  [d]elete  [s]ave  [v]alidate  [esc] back',
-    helpKeys: [
-      ['↑↓', 'Select a batch file or scroll lines'],
-      ['enter', 'Load the selected batch file'],
-      ['e', 'Edit the selected line'],
-      ['a', 'Append a new line after current'],
-      ['d', 'Delete the current line'],
-      ['s', 'Save all changes'],
-      ['v', 'Validate batch syntax'],
-      ['esc', 'Return to batch list or cancel edit'],
-    ],
-    implemented: true,
-  },
-  {
-    id: 'info-files',
-    label: 'Info Files',
-    category: 'Comms',
-    footerHint: '[enter] edit  [↑↓] select  [e]dit value  [t]oggle comment  [s]ave  [esc] back',
-    helpKeys: [
-      ['↑↓', 'Select a file (list) or tooltype (edit)'],
-      ['enter', 'Open the selected file for editing'],
-      ['e', 'Edit the selected tooltype value'],
-      ['t', 'Toggle comment on the selected tooltype'],
-      ['s', 'Save all changes to the file'],
-      ['esc', 'Back to file list (from edit mode)'],
-    ],
-    implemented: true,
-  },
 ];
 
-export const CATEGORIES: CategoryName[] = ['Live', 'Users', 'Content', 'Files', 'System', 'Comms'];
+export const CATEGORIES: CategoryName[] = ['Live', 'People', 'Content', 'System', 'Diagnostics'];
+
+export const CATEGORY_COLLAPSED: Partial<Record<CategoryName, boolean>> = {
+  Diagnostics: true,
+};
 
 export function pageById(id: string): PageMeta | undefined {
   return PAGES.find(p => p.id === id);
@@ -453,4 +329,4 @@ export function pagesByCategory(cat: CategoryName): PageMeta[] {
   return PAGES.filter(p => p.category === cat);
 }
 
-export const DEFAULT_PAGE = 'dashboard';
+export const DEFAULT_PAGE = 'overview';

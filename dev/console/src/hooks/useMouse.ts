@@ -10,39 +10,46 @@ function dbg(msg: string) {
   }
 }
 
-export interface MouseClick {
+export interface MouseEvent {
   col: number;   // 1-indexed
   row: number;   // 1-indexed
-  button: number; // 0=left, 1=middle, 2=right, 64=wheel-up, 65=wheel-down
+  button: number; // 0=left, 1=middle, 2=right, 32=motion, 64=wheel-up, 65=wheel-down
   shift: boolean;
   meta: boolean;
   ctrl: boolean;
 }
 
-type Listener = (event: MouseClick) => void;
+/** Backward-compat alias. */
+export type MouseClick = MouseEvent;
 
-let listeners: Listener[] = [];
+type ClickListener = (event: MouseEvent) => void;
+type HoverListener = (event: { col: number; row: number }) => void;
+
+let clickListeners: ClickListener[] = [];
+let hoverListeners: HoverListener[] = [];
 let initialized = false;
 let buffer = '';
+let lastPos = { col: 0, row: 0 };
 
 function ensureInitialized(): void {
   if (initialized) return;
   initialized = true;
 
-  // Enable mouse press tracking + SGR extended coords (handles cols > 95 cleanly)
-  // 1000 = button-event, 1006 = SGR extended mode
-  process.stdout.write('\x1b[?1000h\x1b[?1006h');
-  dbg('mouse mode enabled (1000h, 1006h)');
+  // Enable button events (1000) + motion-on-button (1002 = press/release/motion
+  // while a button is held). 1002 is enough for hover while clicking; if
+  // someone wants pure hover they can change this to 1003.
+  process.stdout.write('\x1b[?1000h\x1b[?1002h\x1b[?1006h');
+  dbg('mouse mode enabled (1000h, 1002h, 1006h)');
 
   // Make sure to disable on exit/signals
   const cleanup = () => {
-    process.stdout.write('\x1b[?1000l\x1b[?1006l');
+    process.stdout.write('\x1b[?1000l\x1b[?1002l\x1b[?1006l');
   };
   process.on('exit', cleanup);
   process.on('SIGINT', () => { cleanup(); process.exit(0); });
   process.on('SIGTERM', () => { cleanup(); process.exit(0); });
 
-  // SGR mouse: ESC [ < Cb ; Cx ; Cy M (press) or m (release)
+  // SGR mouse: ESC [ < Cb ; Cx ; Cy M (press / motion) or m (release)
   // Use a buffer because escape sequences may arrive split across reads.
   process.stdin.on('data', (chunk: Buffer | string) => {
     const incoming = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
@@ -50,44 +57,69 @@ function ensureInitialized(): void {
     buffer += incoming;
     const re = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
 
-    // First pass: collect all complete events from the buffer.
-    // Critically: we slice the buffer BEFORE dispatching, so that any
-    // listener that re-emits to stdin (e.g. a hotkey-click handler that
-    // pushes a key character) does NOT re-match the mouse event we are
-    // currently dispatching. Without this, a click on a hotkey hint
-    // recurses until the JS stack overflows.
-    const events: MouseClick[] = [];
+    const clicks: MouseEvent[] = [];
+    const hovers: { col: number; row: number }[] = [];
     let match: RegExpExecArray | null;
     let lastIdx = 0;
     while ((match = re.exec(buffer)) !== null) {
       lastIdx = match.index + match[0].length;
-      if (match[4] !== 'M') continue; // only fire on press, not release
       const cb = parseInt(match[1]!, 10);
-      events.push({
-        col: parseInt(match[2]!, 10),
-        row: parseInt(match[3]!, 10),
-        button: cb & 0x43,
-        shift: (cb & 0x04) !== 0,
-        meta:  (cb & 0x08) !== 0,
-        ctrl:  (cb & 0x10) !== 0,
-      });
+      const col = parseInt(match[2]!, 10);
+      const row = parseInt(match[3]!, 10);
+      const isPress = match[4] === 'M';
+      const isMotion = (cb & 0x20) !== 0;
+
+      if (isMotion) {
+        // Motion events: just track position, no click dispatch
+        if (col !== lastPos.col || row !== lastPos.row) {
+          lastPos = { col, row };
+          hovers.push({ col, row });
+        }
+      } else if (isPress) {
+        clicks.push({
+          col,
+          row,
+          button: cb & 0x43,
+          shift: (cb & 0x04) !== 0,
+          meta:  (cb & 0x08) !== 0,
+          ctrl:  (cb & 0x10) !== 0,
+        });
+      }
     }
     buffer = buffer.slice(lastIdx);
     if (buffer.length > 1024) buffer = buffer.slice(-256);
 
-    // Second pass: dispatch with a clean buffer.
-    for (const ev of events) {
-      for (const l of [...listeners]) l(ev);
+    // Dispatch hovers first, then clicks. Listeners that re-emit to stdin
+    // (e.g. a hotkey-click handler) won't recurse into the same event.
+    for (const h of hovers) {
+      for (const l of [...hoverListeners]) l(h);
+    }
+    for (const ev of clicks) {
+      for (const l of [...clickListeners]) l(ev);
     }
   });
 }
 
-export function useMouse(handler: Listener): void {
+export function useMouse(handler: ClickListener): void {
   useEffect(() => {
     ensureInitialized();
-    listeners.push(handler);
+    clickListeners.push(handler);
     return () => {
-      listeners = listeners.filter(l => l !== handler);
+      clickListeners = clickListeners.filter(l => l !== handler);
     };
   }, [handler]);
+}
+
+export function useHover(handler: HoverListener): void {
+  useEffect(() => {
+    ensureInitialized();
+    hoverListeners.push(handler);
+    return () => {
+      hoverListeners = hoverListeners.filter(l => l !== handler);
+    };
+  }, [handler]);
+}
+
+export function getMousePos(): { col: number; row: number } {
+  return lastPos;
 }

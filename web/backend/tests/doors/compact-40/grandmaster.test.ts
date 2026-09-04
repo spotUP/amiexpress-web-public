@@ -22,10 +22,10 @@ describe('grandmaster menu at 40 columns', () => {
   const wide = menuRowsFor(80);
   const tall = menuRowsFor(132);
 
-  it('the 40-column menu is exactly three rows: master, manual, quit', () => {
-    expect(compact.selections).toEqual(['master', 'manual', 'quit']);
-    expect(compact.items).toHaveLength(3);
-    expect(compact.selections).toHaveLength(3);
+  it('the 40-column menu is exactly four rows: master, tetris_attack, manual, quit', () => {
+    expect(compact.selections).toEqual(['master', 'tetris_attack', 'manual', 'quit']);
+    expect(compact.items).toHaveLength(4);
+    expect(compact.selections).toHaveLength(4);
   });
 
   it('the 40-column items and selections are index-aligned', () => {
@@ -46,9 +46,9 @@ describe('grandmaster menu at 40 columns', () => {
     }
   });
 
-  it('the 80-column menu keeps the full 17-row set', () => {
-    expect(wide.selections).toHaveLength(17);
-    expect(wide.items).toHaveLength(17);
+  it('the 80-column menu keeps the full 19-row set', () => {
+    expect(wide.selections).toHaveLength(19);
+    expect(wide.items).toHaveLength(19);
     // Includes every mode that lives on the 80-column canvas.
     expect(wide.selections).toContain('master');
     expect(wide.selections).toContain('tetrinet');

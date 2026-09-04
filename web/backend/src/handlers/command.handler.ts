@@ -1197,8 +1197,19 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
   // Yielded from advanceConferenceScan when new mail is found in a conference.
   if (session.subState === LoggedOnSubState.CONF_SCAN_MAIL_PROMPT) {
     const ch = (data[0] || '').toUpperCase();
-    if (ch !== 'Y' && ch !== 'N' && ch !== '\r' && ch !== '\n' && ch !== '') {
+    if (ch !== 'Y' && ch !== 'N' && ch !== 'Q' && ch !== '\r' && ch !== '\n' && ch !== '') {
       return; // loop — yesNo(1) ignores unknown chars
+    }
+    if (ch === 'Q') {
+      // Q - Quit mail scan entirely, skip to file scan phase
+      // Clear pending mail state and jump to file scan phase
+      if (session.tempData?.confScanState) {
+        session.tempData.confScanState.mscan = false;
+        session.tempData.confScanState.confIndex = session.tempData.confScanState.confIndex + 1;
+      }
+      const { advanceConferenceScan } = require('./message/message-scan.handler');
+      await advanceConferenceScan(socket, session);
+      return;
     }
     const doRead = (ch !== 'N'); // default yes
     // See MAILSCAN_PROMPT_INPUT above — direct emit so the echo doesn't
