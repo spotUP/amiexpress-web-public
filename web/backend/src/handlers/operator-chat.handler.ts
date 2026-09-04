@@ -805,15 +805,17 @@ function processBotQueue(
 
   chatSession.botBusy = true;
   const config = repository.getConfig();
-  const aiConfig: AIProviderConfig = {
-    provider: config.aiEnabled ? config.aiProvider : 'rule-based',
-    modelName: config.aiModelName,
-    temperature: config.aiTemperature,
-    systemPrompt: config.aiSystemPrompt
-  };
+const aiConfig: AIProviderConfig = {
+        provider: config.aiEnabled ? config.aiProvider : 'rule-based',
+        modelName: config.aiModelName,
+        temperature: config.aiTemperature,
+        systemPrompt: config.aiSystemPrompt,
+        groqApiKey: config.groqApiKey,
+        geminiApiKey: config.geminiApiKey,
+        openRouterApiKey: config.openRouterApiKey
+      };
 
-  // Update the status message for the user
-  getGrumpySysopResponse(lastMsg, context, aiConfig).then(async botResponse => {
+      getGrumpySysopResponse(lastMsg, context, aiConfig).then(async botResponse => {
     context.messageHistory.push({ role: 'bot', content: botResponse });
     chatSession.botMessageHistory = context.messageHistory;
     await sendBotMessageWithTyping(io, repository, pageId, botResponse, page.nodeId, page);

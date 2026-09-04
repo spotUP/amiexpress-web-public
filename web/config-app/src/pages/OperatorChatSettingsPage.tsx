@@ -33,6 +33,9 @@ interface OperatorChatConfig {
   aiModelName: string;
   aiTemperature: number;
   aiSystemPrompt: string;
+  groqApiKey: string;
+  geminiApiKey: string;
+  openRouterApiKey: string;
 }
 
 export function OperatorChatSettingsPage() {
@@ -764,10 +767,8 @@ export function OperatorChatSettingsPage() {
               <p className="text-sm text-status-warn">
                 <strong>Note:</strong> The AI bot automatically activates when a page times out.
                 Configure which AI provider to use, or choose "Rule-based only" to use the
-                built-in response patterns. API keys are set via environment variables:
-                <code className="ml-1 px-1 bg-surface-0 rounded">GROQ_API_KEY</code>,
-                <code className="px-1 bg-surface-0 rounded">GEMINI_API_KEY</code>,
-                <code className="px-1 bg-surface-0 rounded">OPENROUTER_API_KEY</code>.
+                built-in response patterns. API keys can be set in the fields below or via
+                environment variables (will fall back to env vars if form fields are empty).
               </p>
             </div>
 
@@ -797,6 +798,24 @@ export function OperatorChatSettingsPage() {
               <label className="block text-sm font-medium text-content-primary mb-1">Model Name (optional)</label>
               <input type="text" {...register('aiModelName')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded" placeholder="Leave empty for provider default" />
               <p className="text-xs text-content-secondary mt-1">Override the default model for the selected provider. For OpenRouter, you can specify any model ID from openrouter.ai/models.</p>
+            </div>
+
+            {/* API Keys */}
+            <div className="border-t border-border pt-4 space-y-3">
+              <h3 className="text-sm font-medium text-content-primary">API Keys</h3>
+              <p className="text-xs text-content-secondary">Leave empty to use environment variables (GROQ_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY)</p>
+              <div>
+                <label className="block text-sm font-medium text-content-primary mb-1">OpenRouter API Key</label>
+                <input type="password" {...register('openRouterApiKey')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="sk-or-v1-..." autoComplete="off" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-content-primary mb-1">Groq API Key</label>
+                <input type="password" {...register('groqApiKey')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="gsk_..." autoComplete="off" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-content-primary mb-1">Gemini API Key</label>
+                <input type="password" {...register('geminiApiKey')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="AIzaSy..." autoComplete="off" />
+              </div>
             </div>
 
             {/* Temperature */}

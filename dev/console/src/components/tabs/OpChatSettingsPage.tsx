@@ -27,6 +27,9 @@ const FIELDS: Field[] = [
   { key: 'aiEnabled',       label: 'AI Bot Enabled',       type: 'bool' },
   { key: 'aiProvider',      label: 'AI Provider',          type: 'select', options: ['openrouter', 'groq', 'gemini', 'rule-based'] },
   { key: 'aiModelName',     label: 'AI Model Name',        type: 'string' },
+  { key: 'openRouterApiKey', label: 'OpenRouter API Key',  type: 'string' },
+  { key: 'groqApiKey',      label: 'Groq API Key',         type: 'string' },
+  { key: 'geminiApiKey',    label: 'Gemini API Key',       type: 'string' },
   { key: 'aiTemperature',   label: 'AI Temperature',       type: 'number' },
   { key: 'aiSystemPrompt',  label: 'AI System Prompt',     type: 'string' },
 ];
@@ -37,6 +40,10 @@ function fmtVal(val: unknown, field: Field): string {
   if (val === undefined || val === null) return '—';
   if (field.type === 'bool') return val ? 'on' : 'off';
   if (field.type === 'select') return String(val);
+  if (field.key.endsWith('ApiKey')) {
+    const s = String(val);
+    return s ? s.slice(0, 8) + '…' : '(empty)';
+  }
   if (field.key === 'aiSystemPrompt') {
     const s = String(val);
     return s.length > 40 ? s.slice(0, 39) + '…' : s || '(default)';
@@ -159,7 +166,7 @@ export function OpChatSettingsPage() {
         const isSel = i === selectedIdx;
         const isPending = f.key in pending;
         const val = isPending ? pending[f.key] : (config as any)?.[f.key];
-        const masked = f.key === 'aiSystemPrompt';
+        const masked = f.key.endsWith('ApiKey') || f.key === 'aiSystemPrompt';
         return (
           <Box key={f.key}>
             <Box flexDirection="row" alignItems="center">
