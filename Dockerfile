@@ -447,11 +447,8 @@ COPY RIPgraphics /app/default-data/RIPgraphics
 COPY Partdownload /app/default-data/Partdownload
 
 # Copy remaining root-level .info files (batch configs, system configs)
-COPY Access.info Commands.info ComputerList.info Drives.info /app/default-data/
-COPY ScreenTypes.info Protocols.info Storage.info SysopStats.info /app/default-data/
-COPY Private.info HELP.info Languages.info Utils.info FCheck.info /app/default-data/
-COPY Zoom.info Areas.info AmiXnet.info UUCP.info /app/default-data/
-COPY batch0.info batch1.info batch3.info batch4.info batch5.info batch6.info batch000.info /app/default-data/
+# Use wildcard to avoid build failures when files are renamed
+COPY *.info /app/default-data/
 
 # Copy batch files (AmigaDOS maintenance scripts) and other root data files
 COPY batch0 batch1 batch2 batch3 batch4 batch5 batch6 batch000 /app/default-data/
