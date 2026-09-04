@@ -26,7 +26,8 @@ export function InfoFilesPage() {
     setLoading(true);
     try {
       const data = await getInfoFiles();
-      setFiles(data);
+      setFiles(Array.isArray(data) ? data : []);
+      if (!Array.isArray(data)) console.warn('getInfoFiles returned non-array:', data);
       setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed');

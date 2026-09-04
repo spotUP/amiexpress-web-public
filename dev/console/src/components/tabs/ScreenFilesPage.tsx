@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { getScreenIndex, type ScreenIndexEntry, type ScreenFileFacts, type ScreenIndex } from '../../api/client.js';
+import { getScreenIndex, getScreenFile, type ScreenFileFacts, type ScreenIndex } from '../../api/client.js';
 import { T, BlessedBox, BlessedText, BlessedSpinner } from '../../theme/blessed-theme.js';
 
 type Tab = 'all' | 'node' | 'conf' | 'board' | 'unused' | 'bulletins';
@@ -16,10 +16,103 @@ const TABS: { key: Tab; label: string }[] = [
 
 const MAX_LIST = 20;
 
+const ANSI_FG: Record<number, string> = {
+  30: 'black', 31: 'red', 32: 'green', 33: 'yellow',
+  34: 'blue', 35: 'magenta', 36: 'cyan', 37: 'white',
+  90: 'gray', 91: 'red', 92: 'green', 93: 'yellow',
+  94: 'blue', 95: 'magenta', 96: 'cyan', 97: 'white',
+};
+
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}K`;
   return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
+}
+
+/** ANSI to Ink. Breaks a string with ANSI escapes into <Text> segments. */
+function AnsiText({ text }: { text: string }) {
+  const segments = useMemo(() => {
+    const parts: { text: string; color?: string; bold?: boolean }[] = [];
+    let last = 0;
+    let fg: string | undefined;
+    let bold = false;
+
+    // Match ANSI escape sequences
+    const re = /\x1b\[([0-9;]*)m/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) {
+        parts.push({ text: text.slice(last, m.index), color: fg, bold });
+      }
+      for (const code of m[1].split(';').filter(Boolean)) {
+        const n = parseInt(code, 10);
+        if (n === 0) { fg = undefined; bold = false; }
+        else if (n === 1) { bold = true; }
+        else if (n === 7) { /* inverse — can't easily do in Ink */ }
+        else if (ANSI_FG[n]) { fg = ANSI_FG[n]; }
+        else if (n >= 40 && n <= 47) { /* bg — skip */ }
+      }
+      last = re.lastIndex;
+    }
+    if (last < text.length) {
+      parts.push({ text: text.slice(last), color: fg, bold });
+    }
+    return parts;
+  }, [text]);
+
+  return (
+    <Text>
+      {segments.map((s, i) => (
+        <Text key={i} color={s.color} bold={s.bold}>{s.text}</Text>
+      ))}
+    </Text>
+  );
+}
+
+/** ANSI preview component — renders screen content in a scrollable box. */
+function AnsiPreview({ content, path, onClose }: { content: string; path: string; onClose: () => void }) {
+  const lines = useMemo(() => content.split(/\r?\n/), [content]);
+  const [scrollY, setScrollY] = useState(0);
+  const maxScroll = Math.max(0, lines.length - 25);
+
+  useInput((_input, key) => {
+    if (key.upArrow) setScrollY(s => Math.max(0, s - 1));
+    if (key.downArrow) setScrollY(s => Math.min(maxScroll, s + 1));
+    if (key.pageUp) setScrollY(s => Math.max(0, s - 25));
+    if (key.pageDown) setScrollY(s => Math.min(maxScroll, s + 25));
+    if (_input === 'q' || _input === 'escape') { onClose(); return; }
+  });
+
+  const visible = lines.slice(scrollY, scrollY + 25);
+
+  return (
+    <Box flexDirection="column" padding={1}>
+      <Box flexDirection="row" gap={1} marginBottom={1}>
+        <BlessedText variant="accent" bold>PREVIEW: {path}</BlessedText>
+        <BlessedText variant="dim">({lines.length} lines)</BlessedText>
+      </Box>
+
+      <BlessedBox style="line" padding={1} flexDirection="column">
+        {visible.map((line, i) => (
+          <Box key={i} height={1}>
+            <AnsiText text={line} />
+          </Box>
+        ))}
+      </BlessedBox>
+
+      {maxScroll > 0 && (
+        <Box marginTop={1}>
+          <BlessedText variant="dim">
+            Line {scrollY + 1}–{scrollY + visible.length} of {lines.length}
+          </BlessedText>
+        </Box>
+      )}
+
+      <Box flexDirection="row" gap={1} marginTop={1}>
+        <BlessedText variant="dim">[↑↓] Scroll  [PgUp/PgDn] Page  [q] Back</BlessedText>
+      </Box>
+    </Box>
+  );
 }
 
 export function ScreenFilesPage() {
@@ -29,6 +122,9 @@ export function ScreenFilesPage() {
   const [tab, setTab] = useState<Tab>('all');
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [detail, setDetail] = useState<ScreenFileFacts | null>(null);
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [previewContent, setPreviewContent] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -45,7 +141,6 @@ export function ScreenFilesPage() {
 
   useEffect(() => { load(); }, []);
 
-  // Build the list items for the current tab
   const items = useMemo(() => {
     if (!index) return { entries: [] as { label: string; path: string; screen?: string; facts?: ScreenFileFacts }[] };
 
@@ -69,28 +164,17 @@ export function ScreenFilesPage() {
       };
     }
 
-    if (tab === 'node' || tab === 'conf' || tab === 'board') {
-      const filtered = index.screens.filter(s => {
-        const r = s.resolutions[0];
-        if (!r) return false;
-        if (tab === 'node') return r.scope === 'node';
-        if (tab === 'conf') return r.scope === 'conf';
-        return r.scope === 'board';
-      });
-      return {
-        entries: filtered.map(s => {
+    const filtered = tab === 'all' ? index.screens
+      : index.screens.filter(s => {
           const r = s.resolutions[0];
-          const label = r?.file
-            ? `${s.screen.padEnd(30)} ${r.file.padEnd(40)} ${r.scope}${r.id != null ? r.id : ''}`
-            : `${s.screen.padEnd(30)} (no resolution)`;
-          return { label, path: r?.file ?? s.screen, screen: s.screen, facts: r?.file ? index.files[r.file] : undefined };
-        }),
-      };
-    }
+          if (!r) return false;
+          if (tab === 'node') return r.scope === 'node';
+          if (tab === 'conf') return r.scope === 'conf';
+          return r.scope === 'board';
+        });
 
-    // 'all' tab
     return {
-      entries: index.screens.map(s => {
+      entries: filtered.map(s => {
         const r = s.resolutions[0];
         const label = r?.file
           ? `${s.screen.padEnd(30)} ${r.file.padEnd(40)} ${r.scope}${r.id != null ? r.id : ''}`
@@ -102,8 +186,27 @@ export function ScreenFilesPage() {
 
   const selected = items.entries[selectedIdx];
 
-  // Keyboard navigation
+  // Load preview content
+  const openPreview = async (path: string) => {
+    setPreviewPath(path);
+    setPreviewLoading(true);
+    try {
+      const data = await getScreenFile(path);
+      if (data && 'content' in data) {
+        const bytes = Uint8Array.from(atob(data.content as string), c => c.charCodeAt(0));
+        const text = new TextDecoder('latin1').decode(bytes);
+        setPreviewContent(text);
+      }
+    } catch (e: unknown) {
+      setPreviewContent(`Error: ${e instanceof Error ? e.message : 'Failed to load'}`);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   useInput((input, key) => {
+    if (previewContent !== null || previewLoading) return; // preview mode handles its own input
+
     if (key.tab) {
       setTab(t => {
         const keys = TABS.map(t => t.key);
@@ -117,10 +220,8 @@ export function ScreenFilesPage() {
     if (key.upArrow) { setSelectedIdx(i => Math.max(0, i - 1)); return; }
     if (key.downArrow) { setSelectedIdx(i => Math.min(items.entries.length - 1, i + 1)); return; }
     if (input === 'r') { load(); return; }
-    if (input === 'd' && selected) {
-      setDetail(selected.facts ?? null);
-      return;
-    }
+    if (input === 'v' && selected) { openPreview(selected.path); return; }
+    if (input === 'd' && selected) { setDetail(selected.facts ?? null); return; }
     if (input === 'q' || input === 'escape') { setDetail(null); return; }
   });
 
@@ -136,6 +237,21 @@ export function ScreenFilesPage() {
   }
 
   if (!index) return null;
+
+  // Preview mode
+  if (previewContent !== null) {
+    return (
+      <AnsiPreview
+        content={previewContent}
+        path={previewPath ?? ''}
+        onClose={() => { setPreviewContent(null); setPreviewPath(null); }}
+      />
+    );
+  }
+
+  if (previewLoading) {
+    return <Box><BlessedSpinner/><Text> Loading screen content...</Text></Box>;
+  }
 
   // Detail view
   if (detail) {
@@ -155,28 +271,28 @@ export function ScreenFilesPage() {
           </Box>
         )}
         {f.readBy && f.readBy.length > 0 && (
-          <Box flexDirection="column">
+          <Box flexDirection="column" marginTop={1}>
             <BlessedText variant="accent" bold>Read by ({f.readBy.length} scopes)</BlessedText>
             {f.readBy.slice(0, 10).map((r, i) => <Text key={i}>  {r}</Text>)}
           </Box>
         )}
         {f.mci && f.mci.length > 0 && (
-          <Box flexDirection="column">
+          <Box flexDirection="column" marginTop={1}>
             <BlessedText variant="accent" bold>MCI refs ({f.mci.length})</BlessedText>
             {f.mci.slice(0, 15).map((m, i) => (
               <Text key={i}>
-                {m.resolves ? '\x1b[32mOK\x1b[0m' : '\x1b[31mXX\x1b[0m'} {m.code} {m.target}
+                {m.resolves ? '[OK]' : '[XX]'} {m.code} {m.target}
               </Text>
             ))}
           </Box>
         )}
         {f.problems && f.problems.length > 0 && (
-          <Box flexDirection="column">
+          <Box flexDirection="column" marginTop={1}>
             <BlessedText variant="alert" bold>Problems</BlessedText>
             {f.problems.map((p, i) => <Text key={i}>  {p}</Text>)}
           </Box>
         )}
-        <Box marginTop={1}><BlessedText variant="dim">[q] Back  [r] Refresh</BlessedText></Box>
+        <Box marginTop={1}><BlessedText variant="dim">[q] Back  [r] Refresh  [v] View ANSI</BlessedText></Box>
       </Box>
     );
   }
@@ -243,7 +359,7 @@ export function ScreenFilesPage() {
 
       {/* Footer */}
       <Box flexDirection="row" gap={1} marginTop={1}>
-        <BlessedText variant="dim">[Tab] Tab  [↑↓] Scroll  [d] Detail  [r] Refresh</BlessedText>
+        <BlessedText variant="dim">[Tab] Tab  [↑↓] Scroll  [v] View  [d] Detail  [r] Refresh</BlessedText>
       </Box>
     </Box>
   );
