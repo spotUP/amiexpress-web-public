@@ -503,10 +503,12 @@ export function OperatorChatPage() {
                   <div className="space-y-1" style={{ fontFamily: '"mOsOul", "Courier New", monospace' }}>
                     {messages.filter((msg, _i, arr) => {
               // Skip server-echoed sysop messages when a local echo exists
-              // with the exact same content (prevents duplicate on render)
+              // with the exact same content (prevents duplicate on render).
+              // Local echoes use id 'local-*' and the server uses the real
+              // username — compare content + senderType only.
               if (!msg.id.startsWith('local-') && msg.senderType === 'sysop') {
                 return !arr.some(
-                  (m) => m.id.startsWith('local-') && m.message === msg.message && m.senderHandle === msg.senderHandle
+                  (m) => m.id.startsWith('local-') && m.message === msg.message
                 );
               }
               return true;
