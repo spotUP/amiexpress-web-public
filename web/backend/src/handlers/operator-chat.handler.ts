@@ -925,7 +925,9 @@ console.error('[Operator Chat] Bot response error:', err);
     timestamp: saved.timestamp.getTime()
   });
 
-  // Emit to User (Linear ANSI text)
+  // Emit to User (Linear ANSI text) — skip when bot is typing to avoid line interleaving
+  if ((chatSession as any).botBusy) return;
+
   const page = repository.getPageRequest(pageId);
   if (page) {
     // AmiExpress Style: Color + Text + Newline
