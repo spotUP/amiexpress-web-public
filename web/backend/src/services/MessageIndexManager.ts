@@ -330,6 +330,25 @@ console.log(`[MessageIndexManager] Updated header for msg ${msgNumber} in Header
   }
 
   /**
+   * Public rebuild: replace the HeaderFile with a fresh set of headers
+   * and recalculate MailStats. Used by the admin repair/resync endpoint.
+   */
+  rebuildHeaders(confNumber: number, headers: MsgHeader[]): void {
+    this.rewriteHeaderFile(confNumber, headers);
+
+    // Recalculate MailStats from the rebuilt headers
+    let lowestKey = 0;
+    let highMsgNum = 0;
+    let lowestNotDel = 0;
+    for (const h of headers) {
+      if (lowestKey === 0 || h.msgNumb < lowestKey) lowestKey = h.msgNumb;
+      if (h.msgNumb > highMsgNum) highMsgNum = h.msgNumb;
+      if (h.status !== MsgStatus.DELETED && (lowestNotDel === 0 || h.msgNumb < lowestNotDel)) lowestNotDel = h.msgNumb;
+    }
+    this.writeMailStats(confNumber, { lowestKey, highMsgNum, lowestNotDel, pad: Buffer.alloc(6) });
+  }
+
+  /**
    * Serialize mailStat struct to binary buffer (18 bytes)
    */
   private serializeMailStat(stats: MailStat): Buffer {

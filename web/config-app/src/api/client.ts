@@ -1060,6 +1060,14 @@ class ApiClient {
     });
   }
 
+  // Message Repair
+  async repairMessageHeaders(confId: number) {
+    return this.request<{ rebuilt: number; conference: number }>(
+      `${API_BASE}/config/messages/repair-headers?conf=${confId}`,
+      { method: 'POST' }
+    );
+  }
+
 }
 
 export const apiClient = new ApiClient();

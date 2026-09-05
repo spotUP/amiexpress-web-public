@@ -32,6 +32,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { config } from '../config';
 import { getSystemTime } from '../utils/date-time.util';
+import { messageIndexManager, MsgHeader, MsgStatus } from '../services/MessageIndexManager';
+import { conferenceDir } from '../conferences/conference-paths';
 import { isSensitiveField, MASKED_VALUE } from '../utils/secrets-encryption.util';
 
 // Standard API response format
@@ -2393,6 +2395,86 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
         res,
         { ...result, report: updatedReport },
         `Auto-fix complete: ${result.fixed} fixed, ${result.failed} failed`
+      );
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  // ===== Message Repair =====
+
+  /**
+   * POST /api/config/messages/repair-headers?conf=
+   * Rebuild the disk HeaderFile from the database for a conference.
+   * Fixes the "same messages appear new on every login" bug when the
+   * disk headers and DB get out of sync.
+   */
+  router.post('/messages/repair-headers', async (req: any, res: Response) => {
+    try {
+      const confId = parseInt(String(req.query.conf || req.body?.conf || '0'), 10);
+      if (!confId) {
+        return handleError(res, new Error('conf query parameter required'));
+      }
+
+      const bbsRoot = config.get('dataDir');
+      const confPath = conferenceDir(bbsRoot, confId);
+      if (!fs.existsSync(confPath)) {
+        return handleError(res, new Error(`Conference ${confId} directory not found`));
+      }
+
+      // Get all message bases for this conference
+      const msgBases = await database.getMessageBases(confId);
+      if (!msgBases || msgBases.length === 0) {
+        return sendResponse(res, { rebuilt: 0 }, 'No message bases for this conference.');
+      }
+
+      let totalHeaders = 0;
+      for (const msgBase of msgBases) {
+        const messages = await database.getMessages(confId, msgBase.id, { limit: 99999 });
+        if (!messages || messages.length === 0) continue;
+
+        const msgBaseDir = path.join(confPath, 'MsgBase');
+        if (!fs.existsSync(msgBaseDir)) fs.mkdirSync(msgBaseDir, { recursive: true });
+
+        const headers: MsgHeader[] = [];
+        let nextMsgNum = 1;
+
+        for (const msg of messages) {
+          const msgNum = nextMsgNum;
+          const bodyPath = path.join(msgBaseDir, String(msgNum));
+          if (!fs.existsSync(bodyPath)) {
+            try {
+              fs.writeFileSync(bodyPath, msg.body || '', 'latin1');
+            } catch (writeErr) {
+              console.error(`[Repair] Failed to write body for msg ${msgNum}:`, writeErr);
+              continue;
+            }
+          }
+
+          headers.push({
+            status: msg.isPrivate ? MsgStatus.PRIVATE : MsgStatus.NORMAL,
+            msgNumb: msgNum,
+            toName: msg.toUser || 'ALL',
+            fromName: msg.author,
+            subject: msg.subject || '(no subject)',
+            msgDate: Math.floor(msg.timestamp.getTime() / 1000),
+            recv: 0,
+            extMsgNum: -1,
+          });
+          nextMsgNum = msgNum + 1;
+        }
+
+        if (headers.length > 0) {
+          messageIndexManager.rebuildHeaders(confId, headers);
+          totalHeaders += headers.length;
+        }
+      }
+
+      console.log(`[Repair] Rebuilt ${totalHeaders} headers for conference ${confId}`);
+      return sendResponse(
+        res,
+        { rebuilt: totalHeaders, conference: confId },
+        `Rebuilt ${totalHeaders} message headers for conference ${confId}`
       );
     } catch (error) {
       handleError(res, error);
