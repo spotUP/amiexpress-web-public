@@ -805,61 +805,42 @@ async function sendBotMessageWithTyping(
   const chatSession = activeChatSessions.get(pageId);
   if (!chatSession) return;
 
-  const typingSpeed = aiConfig?.botTypingSpeed ?? 40;
-  const typoProb = aiConfig?.botTypoProbability ?? 0.04;
   const thinkTime = aiConfig?.botThinkTime ?? 1000;
   const userRoom = `user:${page.userId}`;
+
+  // Save to DB + emit to admin socket immediately
+  const saved = repository.addChatMessage({
+    pageId,
+    senderId: 'bot',
+    senderHandle: 'GrumpyBot',
+    senderType: 'sysop',
+    message,
+    timestamp: getSystemTime(),
+    nodeId
+  });
+  chatSession.messages.push(saved);
+  chatSession.lastActivity = getSystemTime();
+
+  io.to(`page:${pageId}`).emit('operator:message', {
+    ...saved,
+    timestamp: saved.timestamp.getTime()
+  });
 
   if (thinkTime > 0) await new Promise(r => setTimeout(r, thinkTime));
 
   const wrapped = wordWrapMessage(message, 78, 78);
   const color = '36';
 
-  let buffer = '';
-  for (let li = 0; li < wrapped.length; li++) {
-    const line = wrapped[li];
-    for (let ci = 0; ci < line.length; ci++) {
-      const delay = typingSpeed + Math.random() * (typingSpeed * 2);
-      await new Promise(r => setTimeout(r, delay));
-      buffer += line[ci];
-      io.to(userRoom).emit('ansi-output',
-        '\x1b[23;1H\x1b[2K' +
-        `\x1b[${color}mGrumpyBot:\x1b[0m ${buffer}`
-      );
-      if (Math.random() < typoProb && (li < wrapped.length - 1 || ci < line.length - 1)) {
-        const typo = 'asdfghjkl'[Math.floor(Math.random() * 9)];
-        await new Promise(r => setTimeout(r, 200));
-        io.to(userRoom).emit('ansi-output',
-          '\x1b[23;1H\x1b[2K' +
-          `\x1b[${color}mGrumpyBot:\x1b[0m ${buffer}${typo}`
-        );
-        await new Promise(r => setTimeout(r, 250));
-        io.to(userRoom).emit('ansi-output',
-          '\x1b[23;1H\x1b[2K' +
-          `\x1b[${color}mGrumpyBot:\x1b[0m ${buffer}`
-        );
-        await new Promise(r => setTimeout(r, 100));
-      }
-    }
-    await new Promise(r => setTimeout(r, 80 + Math.random() * 80));
-  }
-
-  // Clear preview line, then deliver via sendChatMessage (which handles
-  // save/restore, scroll region, and DB persistence — no duplicate here).
-  // Clear preview line
-  io.to(userRoom).emit('ansi-output',
-    '\x1b[23;1H\x1b[2K'
-  );
-
-  // Commit the bot message to the scroll region (line 23+).
-  let committed = '\x1b[23;1H';  // bottom of scroll region
+  // Write the bot's message to the bottom of the scroll region (line 23)
+  // in one shot. \r\n after each line scrolls the region, pushing previous
+  // content up. No character-by-character typing preview — that writes to
+  // line 23 and overwrites the user's message before it scrolls.
+  let output = '\x1b[23;1H';
   for (const line of wrapped) {
-    committed += `\x1b[${color}m${line}\x1b[0m\r\n`;
+    output += `\x1b[${color}m${line}\x1b[0m\r\n`;
   }
-  io.to(userRoom).emit('ansi-output',
-    committed +
-    '\x1b[24;1H\x1b[2K'     // position cursor at input line
-  );
+  output += '\x1b[24;1H\x1b[2K';
+  io.to(userRoom).emit('ansi-output', output);
 }
 
 /**
