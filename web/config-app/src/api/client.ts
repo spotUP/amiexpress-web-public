@@ -1040,6 +1040,26 @@ class ApiClient {
     });
   }
 
+  // Screen Revisions
+  async getScreenRevisions(path: string) {
+    return this.request<{ revisions: Array<{ ts: string; file: string; bytes: number; sha256: string; source: string }> }>(
+      `${API_BASE}/screens/revisions?path=${encodeURIComponent(path)}`
+    );
+  }
+
+  async getScreenRevision(path: string, file: string) {
+    return this.request<{ content: string; bytes: number }>(
+      `${API_BASE}/screens/revision?path=${encodeURIComponent(path)}&file=${encodeURIComponent(file)}`
+    );
+  }
+
+  async restoreScreenRevision(path: string, file: string) {
+    return this.request<{ restored: string }>(`${API_BASE}/screens/restore`, {
+      method: 'POST',
+      body: JSON.stringify({ path, file }),
+    });
+  }
+
 }
 
 export const apiClient = new ApiClient();

@@ -31,6 +31,7 @@ import {
   getScreenIndex, invalidateScreenIndex, screenFileFacts, buildScreenIndex,
   listScreenDirectories,
 } from '../screens/screen-index.service';
+import { saveRevision, listRevisions, readRevision, restoreRevision } from '../screens/screen-revisions';
 
 export const screensRouter = express.Router();
 
@@ -198,6 +199,8 @@ function writeToTargets(targets: string[], buf: Buffer): string[] {
 
       let backup: string | null = null;
       if (fs.existsSync(full)) {
+        // Snapshot to .Revisions before overwriting
+        saveRevision(rel);
         backup = `${full}.backup`;
         fs.copyFileSync(full, backup);
       }
@@ -666,4 +669,45 @@ screensRouter.post('/import', upload.single('archive'), (req: Request, res: Resp
   }
 
   return sendOk(res, { plan }, `Imported ${plan.length} file${plan.length === 1 ? '' : 's'}`);
+});
+
+// ===== Revision API =====
+
+/**
+ * GET /api/screens/revisions?path=...
+ * List all stored revisions for a screen file.
+ */
+screensRouter.get('/revisions', (req: Request, res: Response) => {
+  const rel = String(req.query.path || '');
+  if (!rel) return res.status(400).json({ success: false, error: 'path required' });
+  const revisions = listRevisions(rel);
+  return sendOk(res, { revisions });
+});
+
+/**
+ * GET /api/screens/revision?path=&file=
+ * View a specific revision's content as base64.
+ */
+screensRouter.get('/revision', (req: Request, res: Response) => {
+  const rel = String(req.query.path || '');
+  const file = String(req.query.file || '');
+  if (!rel || !file) return res.status(400).json({ success: false, error: 'path and file required' });
+  const buf = readRevision(rel, file);
+  if (!buf) return res.status(404).json({ success: false, error: 'Revision not found' });
+  return sendOk(res, { content: buf.toString('base64'), bytes: buf.length });
+});
+
+/**
+ * POST /api/screens/restore
+ * Body: { path, file }
+ * Restore a revision, snapshotting the current file first.
+ */
+screensRouter.post('/restore', (req: Request, res: Response) => {
+  const rel = String(req.body?.path || '');
+  const file = String(req.body?.file || '');
+  if (!rel || !file) return res.status(400).json({ success: false, error: 'path and file required' });
+  const ok = restoreRevision(rel, file);
+  if (!ok) return res.status(404).json({ success: false, error: 'Revision not found' });
+  invalidateScreenIndex();
+  return sendOk(res, { restored: rel }, `Restored ${file}`);
 });

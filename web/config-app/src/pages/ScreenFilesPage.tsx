@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileImage, AlertTriangle, Download, Share2, Upload, Trash2, Pencil } from 'lucide-react';
+import { FileImage, AlertTriangle, Download, Share2, Upload, Trash2, Pencil, History } from 'lucide-react';
 import { apiClient, type ApiError } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import { fanOutOptions, type FanOutOption } from './screen-write-plan';
@@ -14,6 +14,7 @@ import { ScreenGallery, type GalleryItem } from '../components/ScreenGallery';
 import { formatBytes } from '../lib/format';
 import { ScreenEditor } from '../components/ScreenEditor';
 import { Modal } from '../components/ui/Modal';
+import { ScreenRevisionsPanel } from './ScreenRevisionsPanel';
 import { screenToCanvas } from './screen-bytes';
 import { createSurface, type EditorSurface } from './screen-editor-state';
 import {
@@ -106,6 +107,7 @@ export function ScreenFilesPage() {
    */
   const [pendingEdit, setPendingEdit] = useState<string | null>(null);
   const detailRef = useRef<HTMLElement>(null);
+  const [showRevisions, setShowRevisions] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['screen-index'],
@@ -964,6 +966,12 @@ export function ScreenFilesPage() {
                 <Download size={14} /> Download
               </a>
               <button
+                className="inline-flex items-center gap-1 underline"
+                onClick={() => setShowRevisions(v => !v)}
+              >
+                <History size={14} /> Revisions
+              </button>
+              <button
                 className="inline-flex items-center gap-1 underline text-status-danger"
                 onClick={() => removeFile(openFile)}
               >
@@ -1049,6 +1057,9 @@ export function ScreenFilesPage() {
                 </ul>
               </div>
             )}
+
+            {/* Revisions panel */}
+            {showRevisions && <ScreenRevisionsPanel path={openFile} onClose={() => setShowRevisions(false)} />}
           </div>
         )}
       </Modal>
