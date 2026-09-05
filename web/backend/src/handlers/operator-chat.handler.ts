@@ -851,16 +851,12 @@ async function sendBotMessageWithTyping(
     '\x1b[23;1H\x1b[2K'
   );
 
-  // Commit the bot message directly to the scroll region (line 22+).
-  // Do NOT call sendChatMessage here — sendChatMessage checks isBotControlled
-  // and would trigger another bot response, causing an infinite loop.
-  let committed = '';
+  // Commit the bot message to the scroll region (line 23+).
+  let committed = '\x1b[23;1H';  // bottom of scroll region
   for (const line of wrapped) {
     committed += `\x1b[${color}m${line}\x1b[0m\r\n`;
   }
   io.to(userRoom).emit('ansi-output',
-    '\x1b[23;1H\x1b[2K' +  // clear preview line
-    '\x1b[22;1H' +          // position at bottom of scroll region
     committed +
     '\x1b[24;1H\x1b[2K'     // position cursor at input line
   );
@@ -1033,12 +1029,15 @@ console.error('[Operator Chat] Bot response error:', err);
   if (page) {
     const color = senderType === 'sysop' ? '36' : '33';
     const wrappedLines = wordWrapMessage(message, 79, 79);
-    const lineEnding = '\r\n';
 
-    // Write to scroll region, then position cursor at input line
-    let output = '\x1b[22;1H'; // position at bottom of scroll region
+    // Build output:
+    // 1. \r\n to advance from input line
+    // 2. Position at bottom of scroll region (23), write message with \r\n to scroll
+    // 3. Position at input line (24), clear it
+    let output = '\r\n';
+    output += '\x1b[23;1H'; // position at bottom of scroll region
     for (const line of wrappedLines) {
-      output += `\x1b[${color}m${line}\x1b[0m${lineEnding}`;
+      output += `\x1b[${color}m${line}\x1b[0m\r\n`;
     }
     // Position cursor at input line, ready for next keystroke
     output += '\x1b[24;1H\x1b[2K';
