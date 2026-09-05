@@ -809,23 +809,6 @@ async function sendBotMessageWithTyping(
   const chatSession = activeChatSessions.get(pageId);
   if (!chatSession) return;
 
-  const saved = repository.addChatMessage({
-    pageId,
-    senderId: 'bot',
-    senderHandle: 'GrumpyBot',
-    senderType: 'sysop',
-    message,
-    timestamp: getSystemTime(),
-    nodeId
-  });
-  chatSession.messages.push(saved);
-  chatSession.lastActivity = getSystemTime();
-
-  io.to(`page:${pageId}`).emit('operator:message', {
-    ...saved,
-    timestamp: saved.timestamp.getTime()
-  });
-
   const typingSpeed = aiConfig?.botTypingSpeed ?? 40;
   const typoProb = aiConfig?.botTypoProbability ?? 0.04;
   const thinkTime = aiConfig?.botThinkTime ?? 1000;
@@ -836,10 +819,6 @@ async function sendBotMessageWithTyping(
   const wrapped = wordWrapMessage(message, 78, 78);
   const color = '36';
 
-  // Type each character on line 23 (typing preview only).
-  // After typing, use sendChatMessage to deliver the actual message
-  // to the scroll region — that handles cursor save/restore and
-  // scroll region positioning.
   let buffer = '';
   for (let li = 0; li < wrapped.length; li++) {
     const line = wrapped[li];
@@ -875,9 +854,8 @@ async function sendBotMessageWithTyping(
     await new Promise(r => setTimeout(r, 80 + Math.random() * 80));
   }
 
-  // Clear preview line, then deliver the message via sendChatMessage
-  // so it goes to the scroll region properly (line 22+, with save/restore
-  // cursor, without overwriting anything).
+  // Clear preview line, then deliver via sendChatMessage (which handles
+  // save/restore, scroll region, and DB persistence — no duplicate here).
   io.to(userRoom).emit('ansi-output',
     '\x1b7' +
     '\x1b[23;1H\x1b[2K' +
