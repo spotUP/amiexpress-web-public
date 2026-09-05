@@ -298,18 +298,18 @@ export function validatePointers(confBase: ConfBase, mailStat: MailStat): ConfBa
     lastNewReadConf = mailStat.lowestNotDel;
   }
 
-  // Upper bound validation (express.e:5040-5049)
+  // Upper bound validation (express.e:5040-5049, searchNewMail:11666)
   if (lastMsgReadConf > mailStat.highMsgNum) {
 console.error(
       `validatePointers: lastMsgReadConf ${lastMsgReadConf} > highMsgNum ${mailStat.highMsgNum}`
     );
-    lastMsgReadConf = 0;
+    lastMsgReadConf = mailStat.lowestKey;
   }
   if (lastNewReadConf > mailStat.highMsgNum) {
 console.error(
       `validatePointers: lastNewReadConf ${lastNewReadConf} > highMsgNum ${mailStat.highMsgNum}`
     );
-    lastNewReadConf = 0;
+    lastNewReadConf = mailStat.lowestKey;
   }
 
   return {

@@ -748,6 +748,7 @@ console.warn('[advanceConferenceScan] no confScanState found');
       session.lastScanTotal = (session.lastScanTotal || 0) + newPublic + newPrivate;
       if (lastScanned > 0) {
         await updateScanPointer(user.id, conf, msgBaseId, lastScanned);
+        session.lastNewReadConf = lastScanned;
       }
 
       if (scanMsgs.length === 0) {
@@ -764,6 +765,7 @@ console.warn('[advanceConferenceScan] no confScanState found');
       const scanLast = scanMsgs.reduce((max, m) => Math.max(max, m.msgNum), 0);
       if (scanLast > 0) {
         await updateScanPointer(user.id, conf, msgBaseId, scanLast);
+        session.lastNewReadConf = scanLast;
       }
 
       // express.e:11712-11715 — blank lines + table header + reset
