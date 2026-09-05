@@ -667,7 +667,8 @@ async function acceptPage(
   pageId: string,
   sysopId: string,
   sysopHandle: string,
-  sysopSessionId: string
+  sysopSessionId: string,
+  customIntro?: string
 ): Promise<void> {
   const page = repository.getPageRequest(pageId);
   if (!page) {
@@ -675,9 +676,6 @@ console.error(`[Operator Chat] Cannot accept page ${pageId}: not found`);
     return;
   }
 
-  // Allow sysop to take over a bot-controlled chat. The bot sets status to
-  // ACCEPTED with sysopId='bot', so a real sysop accepting the same page
-  // should replace the bot rather than being rejected.
   const isBotControlled = page.status === PageStatus.ACCEPTED && page.sysopId === 'bot';
   if (page.status !== PageStatus.PENDING && !isBotControlled) {
 console.error(`[Operator Chat] Cannot accept page ${pageId}: status is ${page.status}, not pending`);
@@ -686,7 +684,6 @@ console.error(`[Operator Chat] Cannot accept page ${pageId}: status is ${page.st
 
   if (isBotControlled) {
 console.log(`[Operator Chat] Sysop taking over bot-controlled page ${pageId}`);
-    // Stop any ongoing bot processing for this page
     const chatSession = activeChatSessions.get(pageId);
     if (chatSession) {
       (chatSession as any).isBotControlled = false;
@@ -695,10 +692,8 @@ console.log(`[Operator Chat] Sysop taking over bot-controlled page ${pageId}`);
     }
   }
 
-  // CRITICAL: Stop the paging dots animation IMMEDIATELY
   stopPagingDots(pageId);
 
-  // Add sysop socket to page room for chat fan-out
   const sysopSocket = io.sockets?.sockets?.get(sysopSessionId);
   if (sysopSocket) {
     try {
@@ -709,14 +704,10 @@ console.error(`[Operator Chat] Failed to join sysop socket to page room ${pageId
     }
   }
 
-  // Update page status
   repository.updatePageStatus(pageId, PageStatus.ACCEPTED, sysopId, sysopHandle);
 
-  // Load existing chat messages
   const existingMessages = repository.getChatMessages(pageId);
-console.log(`[Operator Chat] Loaded ${existingMessages.length} existing messages for page ${pageId}`);
 
-  // Create chat session
   const chatSession: ChatSession = {
     pageId,
     userId: page.userId,
@@ -733,7 +724,6 @@ console.log(`[Operator Chat] Loaded ${existingMessages.length} existing messages
 
   activeChatSessions.set(pageId, chatSession);
 
-  // Send history to sysop
   if (existingMessages.length > 0) {
     const messagesWithTimestamps = existingMessages.map(msg => ({
       ...msg,
@@ -747,13 +737,19 @@ console.log(`[Operator Chat] Loaded ${existingMessages.length} existing messages
 
   // Notify user - Linear Chat Setup matching AmiExpress
   // Scroll region 1-23 to keep line 24 for input
-  const userSetupScreen =
-    '\x1b%G' + // Select UTF-8
-    '\x1b[2J\x1b[H' + // Clear Screen and Home Cursor (Clean Slate)
-    '\x1b[?1000h\x1b[?1006h' + // Enable mouse reporting
-    '\x1b[1;23r' + // Set scroll region 1-23
-    '\r\n\r\nThis is ' + sysopHandle + ', How can I help you??\r\n\r\n' +
-    '\x1b[24;1H'; // Move cursor to input line (24)
+  let userSetupScreen =
+    '\x1b%G' +
+    '\x1b[2J\x1b[H' +
+    '\x1b[?1000h\x1b[?1006h' +
+    '\x1b[1;23r';
+  if (customIntro) {
+    // Bot intro: show the intro message immediately without the generic greeting
+    userSetupScreen += '\r\n' + customIntro + '\r\n';
+  } else {
+    // Real sysop: standard express.e greeting
+    userSetupScreen += '\r\n\r\nThis is ' + sysopHandle + ', How can I help you??\r\n\r\n';
+  }
+  userSetupScreen += '\x1b[24;1H';
 
   const targetRoom = `user:${page.userId}`;
   io.to(targetRoom).emit('ansi-output', userSetupScreen);
@@ -861,7 +857,20 @@ async function sendBotMessageWithTyping(
     '\x1b[23;1H\x1b[2K' +
     '\x1b8'
   );
-  sendChatMessage(io, repository, pageId, 'bot', 'GrumpyBot', 'sysop', message, nodeId);
+
+  // Commit the bot message directly to the scroll region (line 22+).
+  // Do NOT call sendChatMessage here — sendChatMessage checks isBotControlled
+  // and would trigger another bot response, causing an infinite loop.
+  let committed = '';
+  for (const line of wrapped) {
+    committed += `\x1b[${color}m${line}\x1b[0m\r\n`;
+  }
+  io.to(userRoom).emit('ansi-output',
+    '\x1b7' +
+    '\x1b[22;1H' +
+    committed +
+    '\x1b8'
+  );
 }
 
 /**
@@ -1180,30 +1189,13 @@ console.log(`[Operator Chat] Direct session lookup failed for userId ${page.user
         }
       }
 
-      // Accept page as "GrumpyBot"
-      await acceptPage(io, repository, page.id, 'bot', 'GrumpyBot', 'grumpy-bot-session');
+      // Send intro message in the setup screen itself rather than as a separate
+      // sendChatMessage call — that would trigger the bot response loop and
+      // also show the generic "This is GrumpyBot, How can I help you??" first.
+      const introMsg = getGrumpyBotIntroMessage();
+      // Re-call acceptPage with customIntro to show the bot's intro directly
+      await acceptPage(io, repository, page.id, 'bot', 'GrumpyBot', 'grumpy-bot-session', introMsg);
 
-      // CRITICAL: Set user's session state to OPERATOR_CHAT_ACTIVE
-      // This ensures their input is handled as chat messages, not commands
-      if (userSession) {
-        // CRITICAL: Stop paging dots via module-level Map (reliable cleanup)
-        // Note: acceptPage already calls stopPagingDots, but we do it again for safety
-        stopPagingDots(page.id);
-
-        // Also clear session reference as backup
-        if (userSession.tempData?.dotIntervalId) {
-          clearInterval(userSession.tempData.dotIntervalId);
-          delete userSession.tempData.dotIntervalId;
-        }
-
-        userSession.subState = LoggedOnSubState.OPERATOR_CHAT_ACTIVE;
-        userSession.inputBuffer = '';
-console.log(`[Operator Chat] Set user session subState to OPERATOR_CHAT_ACTIVE for bot chat, userId=${page.userId}`);
-      } else {
-console.warn(`[Operator Chat] Could not find user session for page ${page.id}, userId=${page.userId}. Available userSessions: ${Array.from(userSessions.keys()).join(', ')}`);
-      }
-
-      // Mark session as bot-controlled
       const chatSession = activeChatSessions.get(page.id);
       if (chatSession) {
         (chatSession as any).isBotControlled = true;
@@ -1212,12 +1204,6 @@ console.log(`[Operator Chat] Set isBotControlled=true for page ${page.id}`);
       } else {
 console.log(`[Operator Chat] WARNING: No chat session found to mark as bot-controlled for page ${page.id}`);
       }
-
-      // Send intro message immediately (express.e has no typing simulation;
-      // sysop chars echo at line speed). The user sees the intro the moment
-      // the bot is activated rather than 2-4s later.
-      const introMsg = getGrumpyBotIntroMessage();
-      sendChatMessage(io, repository, page.id, 'bot', 'GrumpyBot', 'sysop', introMsg, page.nodeId);
 
 console.log(`[Operator Chat] Grumpy bot activated for page ${page.id}`);
 
