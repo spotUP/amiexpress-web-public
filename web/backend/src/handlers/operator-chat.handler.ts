@@ -823,26 +823,20 @@ async function sendBotMessageWithTyping(
       await new Promise(r => setTimeout(r, delay));
       buffer += line[ci];
       io.to(userRoom).emit('ansi-output',
-        '\x1b7' +
         '\x1b[23;1H\x1b[2K' +
-        `\x1b[${color}mGrumpyBot:\x1b[0m ${buffer}` +
-        '\x1b8'
+        `\x1b[${color}mGrumpyBot:\x1b[0m ${buffer}`
       );
       if (Math.random() < typoProb && (li < wrapped.length - 1 || ci < line.length - 1)) {
         const typo = 'asdfghjkl'[Math.floor(Math.random() * 9)];
         await new Promise(r => setTimeout(r, 200));
         io.to(userRoom).emit('ansi-output',
-          '\x1b7' +
           '\x1b[23;1H\x1b[2K' +
-          `\x1b[${color}mGrumpyBot:\x1b[0m ${buffer}${typo}` +
-          '\x1b8'
+          `\x1b[${color}mGrumpyBot:\x1b[0m ${buffer}${typo}`
         );
         await new Promise(r => setTimeout(r, 250));
         io.to(userRoom).emit('ansi-output',
-          '\x1b7' +
           '\x1b[23;1H\x1b[2K' +
-          `\x1b[${color}mGrumpyBot:\x1b[0m ${buffer}` +
-          '\x1b8'
+          `\x1b[${color}mGrumpyBot:\x1b[0m ${buffer}`
         );
         await new Promise(r => setTimeout(r, 100));
       }
@@ -852,10 +846,9 @@ async function sendBotMessageWithTyping(
 
   // Clear preview line, then deliver via sendChatMessage (which handles
   // save/restore, scroll region, and DB persistence — no duplicate here).
+  // Clear preview line
   io.to(userRoom).emit('ansi-output',
-    '\x1b7' +
-    '\x1b[23;1H\x1b[2K' +
-    '\x1b8'
+    '\x1b[23;1H\x1b[2K'
   );
 
   // Commit the bot message directly to the scroll region (line 22+).
@@ -866,10 +859,10 @@ async function sendBotMessageWithTyping(
     committed += `\x1b[${color}m${line}\x1b[0m\r\n`;
   }
   io.to(userRoom).emit('ansi-output',
-    '\x1b7' +
-    '\x1b[22;1H' +
+    '\x1b[23;1H\x1b[2K' +  // clear preview line
+    '\x1b[22;1H' +          // position at bottom of scroll region
     committed +
-    '\x1b8'
+    '\x1b[24;1H\x1b[2K'     // position cursor at input line
   );
 }
 
@@ -1042,14 +1035,13 @@ console.error('[Operator Chat] Bot response error:', err);
     const wrappedLines = wordWrapMessage(message, 79, 79);
     const lineEnding = '\r\n';
 
-    // Write to scroll region, then clear input line and position cursor
-    let output = '\x1b7'; // save cursor
-    output += '\x1b[22;1H'; // position at bottom of scroll region
+    // Write to scroll region, then position cursor at input line
+    let output = '\x1b[22;1H'; // position at bottom of scroll region
     for (const line of wrappedLines) {
       output += `\x1b[${color}m${line}\x1b[0m${lineEnding}`;
     }
-    // Clear input line before restoring cursor so old text doesn't linger
-    output += '\x1b[24;1H\x1b[2K\x1b8';
+    // Position cursor at input line, ready for next keystroke
+    output += '\x1b[24;1H\x1b[2K';
 
     // Queue when bot is typing to avoid interleaving; flush when bot finishes
     if ((chatSession as any).botBusy) {
