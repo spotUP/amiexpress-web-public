@@ -1042,15 +1042,14 @@ console.error('[Operator Chat] Bot response error:', err);
     const wrappedLines = wordWrapMessage(message, 79, 79);
     const lineEnding = '\r\n';
 
-    // Write to scroll region, positioned at the bottom (line 22) so \r\n
-    // scrolls within the scroll region and doesn't clobber the user's input
-    // on line 24. Use save/restore cursor to preserve the input line.
+    // Write to scroll region, then clear input line and position cursor
     let output = '\x1b7'; // save cursor
     output += '\x1b[22;1H'; // position at bottom of scroll region
     for (const line of wrappedLines) {
       output += `\x1b[${color}m${line}\x1b[0m${lineEnding}`;
     }
-    output += '\x1b8'; // restore cursor to input line
+    // Clear input line before restoring cursor so old text doesn't linger
+    output += '\x1b[24;1H\x1b[2K\x1b8';
 
     // Queue when bot is typing to avoid interleaving; flush when bot finishes
     if ((chatSession as any).botBusy) {
