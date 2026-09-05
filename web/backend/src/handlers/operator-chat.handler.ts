@@ -794,6 +794,8 @@ console.log(`[Operator Chat] Page ${pageId} accepted by ${sysopHandle}`);
 /**
  * Send bot message with natural typing simulation to the Amiga user.
  * Admin Socket.IO clients get the full message immediately.
+ * Uses sendChatMessage for the actual delivery (scroll region + cursor
+ * handling) and only does the typing preview on line 23 as a visual effect.
  */
 async function sendBotMessageWithTyping(
   io: any,
@@ -834,8 +836,10 @@ async function sendBotMessageWithTyping(
   const wrapped = wordWrapMessage(message, 78, 78);
   const color = '36';
 
-  // Type each character on line 23 (typing preview), then commit the whole
-  // message to the scroll region (line 22) in one shot.
+  // Type each character on line 23 (typing preview only).
+  // After typing, use sendChatMessage to deliver the actual message
+  // to the scroll region — that handles cursor save/restore and
+  // scroll region positioning.
   let buffer = '';
   for (let li = 0; li < wrapped.length; li++) {
     const line = wrapped[li];
@@ -871,17 +875,15 @@ async function sendBotMessageWithTyping(
     await new Promise(r => setTimeout(r, 80 + Math.random() * 80));
   }
 
-  // Commit: clear preview, position at bottom of scroll region, write message, restore cursor
-  let committed = '\x1b[22;1H';
-  for (const line of wrapped) {
-    committed += `\x1b[${color}m${line}\x1b[0m\r\n`;
-  }
+  // Clear preview line, then deliver the message via sendChatMessage
+  // so it goes to the scroll region properly (line 22+, with save/restore
+  // cursor, without overwriting anything).
   io.to(userRoom).emit('ansi-output',
-    '\x1b7' +              // save cursor (user on line 24)
-    '\x1b[23;1H\x1b[2K' +  // clear preview line
-    committed +             // write message in scroll region (line 22+)
-    '\x1b8'                 // restore cursor to line 24
+    '\x1b7' +
+    '\x1b[23;1H\x1b[2K' +
+    '\x1b8'
   );
+  sendChatMessage(io, repository, pageId, 'bot', 'GrumpyBot', 'sysop', message, nodeId);
 }
 
 /**
