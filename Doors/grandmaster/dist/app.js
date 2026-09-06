@@ -298,12 +298,36 @@ class GrandmasterApp {
      * terminal kept its default of 'game': tapping the main menu rotated a
      * piece that was not there (reported 2026-08-26).
      */
-    announceInputMode() {
+    announceInputMode(mode) {
         try {
-            this.session?.bbs?.setInputMode?.(this._currentScreen === 'game' ? 'game' : 'menu');
+            const announced = mode ?? (this._currentScreen === 'game' ? 'game' : 'menu');
+            this.session?.bbs?.setInputMode?.(announced);
         }
         catch {
             // A door must never die because the terminal could not be told.
+        }
+    }
+    /**
+     * Run a dialog that is a MENU even though the navigation state says 'game'.
+     *
+     * `currentScreen` carries two meanings at once: what is on the glass, and
+     * whether a sub-screen ran - `showMainMenu` repaints only when it is not
+     * 'menu' (see the end of the menu switch). So a mode picker inside a game
+     * flow cannot say 'menu' through that field; setting it there drops the door
+     * out of its menu loop. It announces directly instead, and puts the flow's
+     * own mode back afterwards.
+     *
+     * Without this, TETRIS ATTACK's mode and difficulty pickers were announced
+     * as a playfield, and a phone in gesture mode read every swipe as a piece
+     * move: "i cant swipe in gmaster on the select mode dialog".
+     */
+    async asMenuDialog(run) {
+        this.announceInputMode('menu');
+        try {
+            return await run();
+        }
+        finally {
+            this.announceInputMode();
         }
     }
     constructor(session) {
@@ -1134,7 +1158,7 @@ class GrandmasterApp {
         // modes do (startGame -> showMainMenu). ESC during the game goes back
         // to the mode list, not the main menu.
         while (true) {
-            const mode = await this.chooseTetrisAttackMode();
+            const mode = await this.asMenuDialog(() => this.chooseTetrisAttackMode());
             if (!mode) {
                 // Back selected — exit to main menu
                 break;
@@ -1145,7 +1169,7 @@ class GrandmasterApp {
             // does it, by offering the speed as a choice.
             let difficulty = difficulty_1.DEFAULT_DIFFICULTY;
             if (mode === 'endless' || mode === 'timeattack') {
-                const chosen = await this.chooseClassicDifficulty();
+                const chosen = await this.asMenuDialog(() => this.chooseClassicDifficulty());
                 // Nothing to unsubscribe yet: the input watcher is set up below.
                 if (chosen === null)
                     continue;

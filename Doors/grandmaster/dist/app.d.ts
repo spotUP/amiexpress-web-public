@@ -88,6 +88,21 @@ export declare class GrandmasterApp {
      * piece that was not there (reported 2026-08-26).
      */
     private announceInputMode;
+    /**
+     * Run a dialog that is a MENU even though the navigation state says 'game'.
+     *
+     * `currentScreen` carries two meanings at once: what is on the glass, and
+     * whether a sub-screen ran - `showMainMenu` repaints only when it is not
+     * 'menu' (see the end of the menu switch). So a mode picker inside a game
+     * flow cannot say 'menu' through that field; setting it there drops the door
+     * out of its menu loop. It announces directly instead, and puts the flow's
+     * own mode back afterwards.
+     *
+     * Without this, TETRIS ATTACK's mode and difficulty pickers were announced
+     * as a playfield, and a phone in gesture mode read every swipe as a piece
+     * move: "i cant swipe in gmaster on the select mode dialog".
+     */
+    private asMenuDialog;
     private _voiceRoom;
     private _voiceSocketHandlers;
     constructor(session: DoorSession);
