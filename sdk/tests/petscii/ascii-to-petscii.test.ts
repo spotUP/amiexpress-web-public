@@ -44,7 +44,16 @@ describe('asciiToPetsciiByte', () => {
 
   it('maps an unsupported glyph to $3F, not to a space', () => {
     expect(asciiToPetsciiByte(0x80, 1)).toEqual({ byte: 0x3F, needsReverse: false });
-    expect(asciiToPetsciiByte(0xFF, 1)).toEqual({ byte: 0x3F, needsReverse: false });
+    // PIN MOVED. This used to read 0xFF, which is latin-1 SMALL LETTER Y WITH
+    // DIAERESIS - a letter a 68K door really writes, not an unsupported glyph,
+    // and the assertion was pinning the encoder's OWN omission: 92 of the 96
+    // latin-1 high bytes reached a C64 as '?'. 0xFF now folds to 'y'
+    // ($59). $A7 SECTION SIGN keeps this case honest: its nearest PETSCII
+    // bitmap is a lowercase 's' at d=10/64, a letter the author did not write,
+    // so it is one of the three high bytes deliberately left at '?'
+    // (see tests/petscii/latin1-topaz-fold.test.ts).
+    expect(asciiToPetsciiByte(0xA7, 1)).toEqual({ byte: 0x3F, needsReverse: false });
+    expect(asciiToPetsciiByte(0xFF, 1)).toEqual({ byte: 0x59, needsReverse: false });
   });
 
   it('flags an inverse-only glyph instead of emitting the toggle itself', () => {

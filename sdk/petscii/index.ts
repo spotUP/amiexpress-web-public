@@ -29,6 +29,6 @@ export {
   type PetsciiByteMapping,
   type EncodePetsciiValueOptions,
 } from './ascii-to-petscii';
-export { UNICODE_TO_PETSCII } from './unicode-to-petscii';
+export { LATIN1_TO_PETSCII_FOLD, UNICODE_TO_PETSCII } from './unicode-to-petscii';
 export { petsciiInputToAscii } from './petscii-input';
 export { printableLength, wrapLineToWidth } from './wrap';

@@ -20,7 +20,11 @@
  * Reference: thoughts/shared/research/2026-09-01_true-petscii-reference.md
  * sections 1.1 and 2.
  */
-import { UNICODE_TO_PETSCII, UNICODE_TO_PETSCII_BANK1_ONLY } from './unicode-to-petscii';
+import {
+  LATIN1_TO_PETSCII_FOLD,
+  UNICODE_TO_PETSCII,
+  UNICODE_TO_PETSCII_BANK1_ONLY,
+} from './unicode-to-petscii';
 
 /**
  * One PETSCII byte plus whether it is an INVERSE-only glyph: a handful of
@@ -64,7 +68,19 @@ export function asciiToPetsciiByte(code: number, bank: 0 | 1): PetsciiByteMappin
   // different bitmap in bank 0 are only reachable when encoding for bank 1.
   const mapped = UNICODE_TO_PETSCII.get(glyph)
     ?? (bank === 1 ? UNICODE_TO_PETSCII_BANK1_ONLY.get(glyph) : undefined);
-  if (mapped === undefined) return plain(0x3F);    // unsupported glyph -> '?'
+  if (mapped === undefined) {
+    // A latin-1 high byte is what a 68K door WROTE (its output is decoded
+    // latin1 out of the emulator), so the picture the caller was meant to see
+    // is the Amiga Topaz glyph. Fold it to a character the branches above can
+    // already resolve and re-enter ONCE - the bank rules and the tables above
+    // stay the only place a PETSCII byte is chosen. Every fold target is ASCII
+    // or a glyph in UNICODE_TO_PETSCII and never a latin-1 high byte, so the
+    // recursion is one level deep and cannot cycle
+    // (sdk/tests/petscii/latin1-topaz-fold.test.ts asserts both).
+    const folded = LATIN1_TO_PETSCII_FOLD.get(glyph);
+    if (folded !== undefined) return asciiToPetsciiByte(folded.codePointAt(0) as number, bank);
+    return plain(0x3F);                            // unsupported glyph -> '?'
+  }
   if (typeof mapped === 'number') return plain(mapped);
   return { byte: mapped.rvs, needsReverse: true }; // glyph only exists as the inverse of another
 }

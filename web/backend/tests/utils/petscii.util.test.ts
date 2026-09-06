@@ -389,13 +389,24 @@ describe('petscii.util', () => {
     // local table turned every unmapped glyph into a space, which silently
     // ate whatever the sysop wrote. The ONE SDK table prints '?' instead, so
     // a bad glyph is visible on the C64 rather than invisible.
+    // PIN MOVED (2026-09-06 Topaz fold): the case used to feed 0x80 + 0xFF and
+    // call both "unknown". 0xFF is latin-1 SMALL LETTER Y WITH DIAERESIS, a
+    // byte a 68K door really writes (door output is decoded latin1), and the
+    // assertion was pinning the encoder's own omission - 92 of the 96 latin-1
+    // high bytes reached a C64 as '?'. It now folds to 'y' ($59). 0xA7
+    // SECTION SIGN takes its place: its nearest PETSCII bitmap is a lowercase
+    // 's' at d=10/64, a letter the author did not write, so it is one of
+    // three high bytes deliberately left at '?'
+    // (sdk/tests/petscii/latin1-topaz-fold.test.ts).
     it('should convert unknown characters to ? (SDK table)', () => {
-      const text = String.fromCharCode(0x80) + String.fromCharCode(0xFF);
+      const text = String.fromCharCode(0x80) + String.fromCharCode(0xA7);
       const result = convertAnsiToPetscii(text);
 
       expect(result[0]).toBe(0x0E); // Charset prelude
       expect(result[1]).toBe(0x3F); // '?'
       expect(result[2]).toBe(0x3F); // '?'
+      // ... and the byte this case used to use is now the letter it is.
+      expect(convertAnsiToPetscii(String.fromCharCode(0xFF))[1]).toBe(0x59); // y-diaeresis -> 'y'
     });
 
     it('should still emit the charset prelude for an empty string', () => {
@@ -493,12 +504,16 @@ describe('petscii.util', () => {
 
     // DELIBERATE CHANGE (same plan/task): unmapped glyph is '?' now, not a
     // space - see the convertAnsiToPetscii case above.
+    // PIN MOVED (2026-09-06 Topaz fold) - same reason as the convertAnsiToPetscii
+    // case above: 0xFF is a letter a door writes, 0xA7 is a byte with no
+    // PETSCII shape and no letter.
     it('should convert unknown characters to ? (SDK table)', () => {
-      const text = String.fromCharCode(0x80) + String.fromCharCode(0xFF);
+      const text = String.fromCharCode(0x80) + String.fromCharCode(0xA7);
       const result = convertAsciiToPetsciiOutput(text);
 
       expect(result[0]).toBe(0x3F); // '?'
       expect(result[1]).toBe(0x3F); // '?'
+      expect(convertAsciiToPetsciiOutput(String.fromCharCode(0xFF))[0]).toBe(0x59); // y-diaeresis -> 'y'
     });
   });
 

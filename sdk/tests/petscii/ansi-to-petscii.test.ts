@@ -264,8 +264,17 @@ describe('AnsiToPetsciiTransducer cursor, erase and graphics', () => {
   });
 
   it('unsupported glyphs and ASCII without a PETSCII code are substituted, never dropped', () => {
-    const { display } = run('é\\_|');
-    expect(cell(display, 0, 0)).toBe(0x3F);       // e-acute -> ?
+    const { display } = run('§\\_|');
+    // PIN MOVED. This case used to feed 'é' and assert '?'. A 68K door's
+    // output is decoded latin1, so 'é' is a byte a door WRITES, and the
+    // assertion was guarding the encoder's own gap - 92 of the 96 latin-1
+    // high bytes went to a C64 as '?'. 'é' now folds to 'e' ($45, screen
+    // code $05). '§' replaces it as the substitution case: its nearest
+    // PETSCII bitmap is a lowercase 's' at d=10/64, a letter the author did
+    // not write, so it is one of three high bytes deliberately left at '?'
+    // (sdk/tests/petscii/latin1-topaz-fold.test.ts).
+    expect(cell(display, 0, 0)).toBe(0x3F);       // section sign -> ?
+    expect(cell(run('é').display, 0, 0)).toBe(0x05); // ... and e-acute is now an 'e'
     expect(cell(display, 1, 0)).toBe(0x2F);       // backslash -> /
     expect(cell(display, 2, 0)).toBe(0x64);       // underscore -> lower eighth block
     expect(cell(display, 3, 0)).toBe(0x5D);       // pipe -> vertical bar

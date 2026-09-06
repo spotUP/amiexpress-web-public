@@ -348,6 +348,6 @@
     "harness": "printf '%s\\n' '4000 \\r' '8000 \\r' '12000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/HackCheck/HackCheck 1 --doortype DD --command HACKCHECK --timeout 25 > hackcheck.ans",
     "cwd": "web/backend",
     "installed": "HACKCHECK",
-    "notes": "DD HaCkChecK: reverse-video rules, a centred title and a 52-column question that reflows over two rows. Zero cropped cells, zero truncations. Its registered-trademark glyph is not in the PETSCII table and shows as '?' - the door's choice of glyph, not the ladder's doing. Marked C64_ADAPT=40 on 2026-09-03."
+    "notes": "DD HaCkChecK: reverse-video rules, a centred title and a 52-column question that reflows over two rows. Zero cropped cells, zero truncations. It spells ENTER and FOUR with the registered-trademark glyph, which used to reach a C64 as '?'; since the Topaz fold table (2026-09-06) it folds to 'R', which is what the door author was typing. Marked C64_ADAPT=40 on 2026-09-03."
   }
 }
