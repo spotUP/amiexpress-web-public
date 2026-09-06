@@ -121,6 +121,21 @@ export const PAGES: PageMeta[] = [
     implemented: true,
   },
 
+  {
+    id: 'admin-roles',
+    label: 'Admin Roles',
+    category: 'People',
+    footerHint: '[enter] edit  [s]ave  [R]eset  [r]eload  [↑↓] select',
+    helpKeys: [
+      ['↑↓', 'Select an admin section'],
+      ['enter', 'Edit its minimum security level'],
+      ['s', 'Save pending changes'],
+      ['R', 'Reset all sections to their defaults (not yet saved)'],
+      ['r', 'Reload from server'],
+    ],
+    implemented: true,
+  },
+
   // ─── Content ───────────────────────────────────────────────────
   {
     id: 'conferences',

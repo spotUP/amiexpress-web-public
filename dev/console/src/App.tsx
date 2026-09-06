@@ -22,6 +22,7 @@ import { ScreenTypesPage } from './components/tabs/ScreenTypesPage.js';
 import { DrivesPage } from './components/tabs/DrivesPage.js';
 import { FileCheckersPage } from './components/tabs/FileCheckersPage.js';
 import { SecurityPage } from './components/tabs/SecurityPage.js';
+import { AdminRolesPage } from './components/tabs/AdminRolesPage.js';
 import { DoorInstallPage } from './components/tabs/DoorInstallPage.js';
 import { ImportExportPage } from './components/tabs/ImportExportPage.js';
 import { BatchEditorPage } from './components/tabs/BatchEditorPage.js';
@@ -56,6 +57,7 @@ const PAGE_COMPONENTS: Record<string, React.FC | undefined> = {
   // People
   users:          UsersTab,
   security:       SecurityPage,
+  'admin-roles':  AdminRolesPage,
   // Content
   conferences:    ConfsTab,
   doors:          DoorsTab,

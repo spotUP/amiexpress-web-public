@@ -22,6 +22,8 @@ import {
   updateUser,
   deleteDoor,
   reserveNode,
+  getAdminPermissions,
+  setAdminPermissions,
 } from './client.js';
 
 const BASE_URL = process.env['AMIEXPRESS_URL'] ?? 'http://localhost:3001';
@@ -139,6 +141,25 @@ test('a 400 with a JSON {message} body surfaces just the message, not raw JSON',
       return true;
     },
   );
+});
+
+test('getAdminPermissions GETs /api/admin-permissions, not /api/config/admin-permissions', async () => {
+  stubFetch({ perms: { users: 255 }, sections: [{ key: 'users', label: 'Users', defaultMinLevel: 255 }] });
+  await getAdminPermissions();
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, `${BASE_URL}/api/admin-permissions`);
+  assert.equal(calls[0].method, undefined);
+});
+
+test('setAdminPermissions PUTs { perms } to /api/admin-permissions', async () => {
+  stubFetch({ perms: { users: 100 }, sections: [] });
+  await setAdminPermissions({ users: 100 });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, `${BASE_URL}/api/admin-permissions`);
+  assert.equal(calls[0].method, 'PUT');
+  assert.deepEqual(calls[0].body, { perms: { users: 100 } });
 });
 
 // The incident this whole page exists to fix: the OLD Security page wrote

@@ -829,6 +829,29 @@ export async function toggleTooltypeComment(relativePath: string, key: string) {
   });
 }
 
+// Admin Roles — which security level can reach which admin section.
+// GET/PUT /api/admin-permissions (routes-setup.ts:156-159), NOT under
+// /api/config like almost everything else here — matches
+// web/config-app/src/api/client.ts:999-1013 exactly (same two endpoints,
+// same unwrapped { perms, sections } shape — this handler doesn't use the
+// { success, data } envelope most /api/config/* routes do).
+export interface AdminSectionPerm {
+  key: string;
+  label: string;
+  defaultMinLevel: number;
+}
+
+export async function getAdminPermissions() {
+  return request<{ perms: Record<string, number>; sections: AdminSectionPerm[] }>('/api/admin-permissions');
+}
+
+export async function setAdminPermissions(perms: Record<string, number>) {
+  return request<{ perms: Record<string, number>; sections: AdminSectionPerm[] }>('/api/admin-permissions', {
+    method: 'PUT',
+    body: JSON.stringify({ perms }),
+  });
+}
+
 // Operator chat settings
 export async function updateOperatorChatConfig(config: Record<string, unknown>) {
   return request<{ success: boolean }>('/api/config/operator-chat', {
