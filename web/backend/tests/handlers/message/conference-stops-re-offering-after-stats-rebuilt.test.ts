@@ -223,7 +223,10 @@ describe('a conference stops re-offering everything after its stats are rebuilt'
     // The repair, exactly as it was run on conferences 1 and 3: the stats are
     // re-derived from the headers already on disk.
     messageIndexManager.rebuildHeaders(CONF, messageIndexManager.readHeaderFile(CONF));
-    expect(messageIndexManager.readMailStats(CONF)!.highMsgNum).toBe(HIGHEST);
+    // HIGHEST + 1, not HIGHEST: highMsgNum is the number the NEXT message
+    // takes (express.e:10688/12418), so a base holding 1..18 says 19. See
+    // a-new-message-never-lands-on-top-of-an-existing-one.test.ts.
+    expect(messageIndexManager.readMailStats(CONF)!.highMsgNum).toBe(HIGHEST + 1);
 
     // Log in again. The pointer survives the clamp, so there is nothing new.
     expect(await login(scanHandler)).toEqual([]);

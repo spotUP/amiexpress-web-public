@@ -62,6 +62,60 @@ export enum MsgStatus {
   DELETED = 0x44,   // 'D'
 }
 
+/**
+ * The stats AmiExpress writes for a message base with nothing in it —
+ * express.e:8691-8693, the branch that runs when `MailStats` cannot be opened
+ * and one is created from scratch:
+ *
+ *   mailStat.lowestNotDel := 0
+ *   mailStat.lowestKey    := 1
+ *   mailStat.highMsgNum   := 1
+ *
+ * Note `highMsgNum = 1` on a base holding NO message 1. That is the whole
+ * convention: highMsgNum is the number the NEXT message will take, never the
+ * highest one already written.
+ */
+export function freshMailStat(): MailStat {
+  return { lowestKey: 1, highMsgNum: 1, lowestNotDel: 0, pad: Buffer.alloc(6, 0) };
+}
+
+/**
+ * The MailStats a set of headers implies — the ONE place this port derives
+ * `highMsgNum` from message numbers rather than bumping it, so the +1 lives
+ * here and cannot drift out of a second copy.
+ *
+ * `highMsgNum` is the number express.e hands the NEXT message, so it is
+ * max(msgNumb) + 1 and NOT max(msgNumb):
+ *
+ *   express.e:10688  mh.msgNumb := mailStat.highMsgNum   (the next msg takes it)
+ *   express.e:12418  mailStat.highMsgNum := ... + 1      (bumped after each save)
+ *   express.e:8693   a fresh, EMPTY base starts at 1
+ *   express.e:11759  a caught-up pointer is msgNum+1, so a pointer may
+ *                    legitimately EQUAL highMsgNum
+ *
+ * Getting this one too low is a data-loss bug, not a cosmetic one:
+ * `getNextMessageNumber` returns `highMsgNum` verbatim and express.e:10694-5
+ * opens the body file MODE_NEWFILE, so the next post truncates the body of a
+ * message that already exists. On 2026-09-06 two of this board's conferences
+ * were rebuilt with max(msgNumb) and sat one post away from exactly that.
+ */
+export function deriveMailStatsFromHeaders(headers: MsgHeader[]): MailStat {
+  if (headers.length === 0) return freshMailStat();
+
+  let lowestKey = 0;
+  let highest = 0;
+  let lowestNotDel = 0;
+  for (const h of headers) {
+    if (lowestKey === 0 || h.msgNumb < lowestKey) lowestKey = h.msgNumb;
+    if (h.msgNumb > highest) highest = h.msgNumb;
+    if (h.status !== MsgStatus.DELETED && (lowestNotDel === 0 || h.msgNumb < lowestNotDel)) {
+      lowestNotDel = h.msgNumb;
+    }
+  }
+
+  return { lowestKey, highMsgNum: highest + 1, lowestNotDel, pad: Buffer.alloc(6, 0) };
+}
+
 export class MessageIndexManager {
   private readonly MSGHEADER_SIZE = 110;  // Size of msgHeader struct
   private readonly MAILSTAT_SIZE = 18;     // Size of mailStat struct
@@ -138,13 +192,7 @@ console.log(`[MessageIndexManager] Created HeaderFile for Conf${confNumber}`);
     // Create initial MailStats if it doesn't exist
     // express.e:8691-8693 — fresh msgbase: lowestKey=1, highMsgNum=1, lowestNotDel=0
     if (!fs.existsSync(statsPath)) {
-      const initialStats: MailStat = {
-        lowestKey: 1,
-        highMsgNum: 1,
-        lowestNotDel: 0,
-        pad: Buffer.alloc(6, 0)
-      };
-      this.writeMailStats(confNumber, initialStats);
+      this.writeMailStats(confNumber, freshMailStat());
 console.log(`[MessageIndexManager] Created MailStats for Conf${confNumber}`);
     }
 
@@ -359,17 +407,7 @@ console.log(`[MessageIndexManager] Updated header for msg ${msgNumber} in Header
    */
   rebuildHeaders(confNumber: number, headers: MsgHeader[]): void {
     this.rewriteHeaderFile(confNumber, headers);
-
-    // Recalculate MailStats from the rebuilt headers
-    let lowestKey = 0;
-    let highMsgNum = 0;
-    let lowestNotDel = 0;
-    for (const h of headers) {
-      if (lowestKey === 0 || h.msgNumb < lowestKey) lowestKey = h.msgNumb;
-      if (h.msgNumb > highMsgNum) highMsgNum = h.msgNumb;
-      if (h.status !== MsgStatus.DELETED && (lowestNotDel === 0 || h.msgNumb < lowestNotDel)) lowestNotDel = h.msgNumb;
-    }
-    this.writeMailStats(confNumber, { lowestKey, highMsgNum, lowestNotDel, pad: Buffer.alloc(6) });
+    this.writeMailStats(confNumber, deriveMailStatsFromHeaders(headers));
   }
 
   /**
@@ -463,12 +501,7 @@ console.log(`[MessageIndexManager] Updated header for msg ${msgNumber} in Header
     if (!stats) {
       // Should not happen — initializeMessageIndex creates MailStats. Synthesize
       // express.e fresh-init values, then apply the post-save bump below.
-      stats = {
-        lowestKey: 1,
-        highMsgNum: 1,
-        lowestNotDel: 0,
-        pad: Buffer.alloc(6, 0)
-      };
+      stats = freshMailStat();
     }
 
     // express.e:12418 — UNCONDITIONAL increment (highMsgNum := highMsgNum + 1).
@@ -570,7 +603,7 @@ console.log(`[MessageIndexManager] MailLock released for Conf${confNumber} by no
     const stats = this.readMailStats(confNumber);
     if (!stats) {
       // Fresh msgbase: express.e:8693 inits highMsgNum=1, so first msg id is 1
-      return 1;
+      return freshMailStat().highMsgNum;
     }
     return stats.highMsgNum;
   }
