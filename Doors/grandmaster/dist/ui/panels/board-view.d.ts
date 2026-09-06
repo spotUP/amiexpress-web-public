@@ -31,6 +31,15 @@ export interface BoardViewOptions {
 }
 /** Buffer row for an engine row. Engine counts up from the floor; buffers down. */
 export declare function bufferRowFor(stack: Stack, row: number): number;
+/**
+ * The engine row a buffer row shows: the inverse of bufferRowFor.
+ *
+ * It lives here, beside the mapping it inverts, because a caller that works it
+ * out again gets it backwards - which is exactly what the mouse click handler
+ * did, reading a click as `y + 1` and asking to swap the empty rows above the
+ * stack instead of the ones under the pointer.
+ */
+export declare function engineRowFor(stack: Stack, bufferRow: number): number;
 /** Board size in characters, including the dimmed row when it is shown. */
 export declare function boardSize(stack: Stack, options?: BoardViewOptions): {
     cols: number;

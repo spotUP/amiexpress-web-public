@@ -65,6 +65,7 @@ const replay_recorder_1 = require("./core/panels/replay-recorder");
 const replay_1 = require("./core/panels/replay");
 const panel_replay_store_1 = require("./server/panel-replay-store");
 const chooser_1 = require("./ui/panels/chooser");
+const difficulty_1 = require("./ui/panels/difficulty");
 const panel_broker_transport_1 = require("./network/panel-broker-transport");
 const panel_netplay_session_1 = require("./network/panel-netplay-session");
 const panel_transport_1 = require("./network/panel-transport");
@@ -1138,6 +1139,18 @@ class GrandmasterApp {
                 // Back selected — exit to main menu
                 break;
             }
+            // How fast the solo modes play. The engine's frame table is panel-attack's
+            // and is not ours to edit - the replays and puzzle solutions are pinned to
+            // it - so the way to make the game feel quicker is the way the original
+            // does it, by offering the speed as a choice.
+            let difficulty = difficulty_1.DEFAULT_DIFFICULTY;
+            if (mode === 'endless' || mode === 'timeattack') {
+                const chosen = await this.chooseClassicDifficulty();
+                // Nothing to unsubscribe yet: the input watcher is set up below.
+                if (chosen === null)
+                    continue;
+                difficulty = chosen;
+            }
             // Challenge starts at difficulty 1 stage 1; the ladder is walked by the
             // mode's own screen once it exists.
             const challengeStage = (0, challenge_mode_1.createStages)(1, attack_patterns_1.hasChallengeFile)[0];
@@ -1146,57 +1159,78 @@ class GrandmasterApp {
             // have no GARBAGE_HOVER, so the first garbage a player clears throws.
             const hasGarbage = mode === 'vscpu' || mode === 'challenge';
             const stack = new stack_1.Stack({
-                levelData: hasGarbage ? (0, level_data_1.getModern)(level_data_1.GARBAGE_MODE_LEVEL) : (0, level_data_1.getClassicEndless)('normal'),
+                levelData: hasGarbage
+                    ? (0, level_data_1.getModern)(level_data_1.GARBAGE_MODE_LEVEL)
+                    : (0, level_data_1.getClassicEndless)(difficulty),
                 panelSource: new generator_source_1.GeneratorSource(seed, true),
                 doCountdown: true,
                 // Time Attack is two minutes; Endless runs until the stack tops out.
                 timeLimit: mode === 'timeattack' ? consts_2.TIME_ATTACK_FRAMES : undefined,
             });
             stack.startingState();
-            /** Telnet fallback: a keypress counts as held for this long. */
-            const HOLD_MS = 100;
-            const pressedUntil = new Map();
-            const onKeypress = (_ch, key) => {
-                if (!key || !key.name)
-                    return;
-                pressedUntil.set(key.name, Date.now() + HOLD_MS);
-            };
-            this.screen.on('keypress', onKeypress);
-            const keyStateAvailable = typeof this.inputManager.isKeyStateActive === 'function';
-            const isDown = (names) => {
-                const manager = this.inputManager;
-                if (keyStateAvailable && manager.isKeyStateActive?.() && manager.isHeld) {
-                    return names.some((name) => manager.isHeld(name));
-                }
-                const now = Date.now();
-                return names.some((name) => (pressedUntil.get(name) ?? 0) > now);
-            };
-            const readInput = () => ({
-                up: isDown(['up']),
-                down: isDown(['down']),
-                left: isDown(['left']),
-                right: isDown(['right']),
-                swap: isDown(['space', 'z']),
-                raise: isDown(['r', 'x']),
+            // INPUT COMES FROM THE DOOR'S OWN HANDLER, which is where the real press
+            // edges already are (input/handler.ts) and why the TGM modes feel the way
+            // they do. Asking the SDK input manager instead does not work: its
+            // held-key tracking is off unless a door opts in, this door never did, so
+            // the answer was always no and every session fell back to the character
+            // stream - inheriting the client's auto-repeat, which is one move, a pause
+            // of nearly half a second, then a burst.
+            //
+            // Presses are COUNTED, not collected in a set. A set loses the second of
+            // two taps when both land in the gap between two frames, and a blessed
+            // repaint pushed over a socket does not fit in a frame - so under load the
+            // gap is several frames wide and a player tapping quickly loses presses.
+            const pendingEdges = new Map();
+            const stopWatchingEdges = this.inputHandler.onKeyEdge((name) => {
+                pendingEdges.set(name, (pendingEdges.get(name) ?? 0) + 1);
             });
+            const isDown = (names) => {
+                // A press that has not been spent yet always counts.
+                const tapped = names.some((name) => (pendingEdges.get(name) ?? 0) > 0);
+                // Real key-up only exists in a browser. On telnet the edge IS the whole
+                // input, and the player gets discrete steps rather than a hold.
+                const held = this.inputHandler.isKeyStateMode()
+                    && names.some((name) => this.inputHandler.heldKeys().has(name));
+                return tapped || held;
+            };
+            const readInput = () => {
+                const input = {
+                    up: isDown(['up']),
+                    down: isDown(['down']),
+                    left: isDown(['left']),
+                    right: isDown(['right']),
+                    swap: isDown(['space', 'z']),
+                    raise: isDown(['r', 'x']),
+                };
+                // Spend ONE press of every key that had one, so a second tap waits for
+                // the next frame instead of being thrown away, and two different keys
+                // pressed together still reach the engine as one input character.
+                for (const [name, count] of pendingEdges) {
+                    if (count <= 1)
+                        pendingEdges.delete(name);
+                    else
+                        pendingEdges.set(name, count - 1);
+                }
+                return input;
+            };
             if (mode === 'vsplayer') {
                 await this.runPanelNetplay(sheet, readInput);
-                this.screen.removeListener('keypress', onKeypress);
+                stopWatchingEdges();
                 continue;
             }
             if (mode === 'replays') {
                 await this.runReplayBrowser(sheet, readInput);
-                this.screen.removeListener('keypress', onKeypress);
+                stopWatchingEdges();
                 continue;
             }
             if (mode === 'stageclear') {
                 await this.runStageClear(sheet, readInput);
-                this.screen.removeListener('keypress', onKeypress);
+                stopWatchingEdges();
                 continue;
             }
             if (mode === 'puzzle') {
-                await this.runPuzzleSet(sheet, readInput, onKeypress);
-                this.screen.removeListener('keypress', onKeypress);
+                await this.runPuzzleSet(sheet, readInput);
+                stopWatchingEdges();
                 continue;
             }
             // Vs CPU and Challenge share one screen: the two opponents differ in what
@@ -1269,13 +1303,14 @@ class GrandmasterApp {
                 }
             }
             finally {
-                this.screen.removeListener('keypress', onKeypress);
+                stopWatchingEdges();
                 this.screen.unkey(['escape', 'q', 'Q'], onEscape);
             }
         }
-        // If we broke out of the loop (user selected Back from mode menu),
-        // return to the main menu.
-        this.currentScreen = 'menu';
+        // Leaving the mode menu goes back to the MAIN menu, and saying
+        // currentScreen is already 'menu' is what stops that happening: the caller
+        // reads it to decide whether to redraw, so claiming the menu is up drops
+        // the player out of the door entirely.
     }
     /**
      * Which panel mode to play.
@@ -1292,7 +1327,7 @@ class GrandmasterApp {
      * mode working as intended. Leaving is ESC, and X or Y takes back a move -
      * the keys the original uses.
      */
-    async runPuzzleSet(sheet, readInput, onKeypress) {
+    async runPuzzleSet(sheet, readInput) {
         const sets = (0, puzzle_1.loadShippedPuzzles)();
         const chosen = await this.choosePuzzleSet(sets);
         if (chosen === null)
@@ -1341,7 +1376,6 @@ class GrandmasterApp {
             result.score = solved;
             this.highScores.addScore(this.state.playerName, result);
         }
-        void onKeypress;
     }
     /**
      * STAGE CLEAR: walk the ladder until a stage is failed or the player leaves.
@@ -1602,6 +1636,54 @@ class GrandmasterApp {
                 resolve();
             };
             this.screen.key(['escape', 'q', 'Q', 'enter', 'space'], dismiss);
+        });
+    }
+    /**
+     * How fast to play: the classic four.
+     *
+     * Opens on HARD rather than on the slowest row - a player who has just
+     * chosen TETRIS ATTACK wants to play it, not configure it.
+     */
+    async chooseClassicDifficulty() {
+        const rows = [...difficulty_1.DIFFICULTY_ROWS, { wide: 'Back', compact: 'Back' }];
+        const layout = (0, chooser_1.chooserLayout)(this.screen.width, this.screen.height, rows.length);
+        const labels = (0, chooser_1.chooserLabels)(rows, layout);
+        return new Promise((resolve) => {
+            const box = (0, blessed_helpers_1.createBox)({
+                parent: this.screen,
+                top: 'center',
+                left: 'center',
+                width: layout.width,
+                height: layout.height,
+                label: ' SPEED ',
+                tags: true,
+                style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+            });
+            const list = (0, blessed_helpers_1.createList)({
+                parent: box,
+                top: 1,
+                left: 1,
+                width: layout.innerWidth,
+                height: layout.innerHeight,
+                keys: true,
+                vi: true,
+                mouse: true,
+                tags: true,
+                items: labels,
+                style: { fg: 'white', bg: 'black', selected: { fg: 'black', bg: 'magenta' } },
+            });
+            const done = (choice) => {
+                box.destroy();
+                this.screen.render();
+                resolve(choice);
+            };
+            list.on('select', (_item, index) => {
+                done(index < difficulty_1.DIFFICULTY_VALUES.length ? difficulty_1.DIFFICULTY_VALUES[index] : null);
+            });
+            list.key(['escape', 'q', 'Q'], () => done(null));
+            list.select((0, difficulty_1.defaultDifficultyIndex)());
+            list.focus();
+            this.screen.render();
         });
     }
     /** Which puzzle set to work through. */

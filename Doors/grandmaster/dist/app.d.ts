@@ -245,6 +245,13 @@ export declare class GrandmasterApp {
     private chooseReplay;
     /** A one-line message with a key to dismiss it. */
     private showPanelNotice;
+    /**
+     * How fast to play: the classic four.
+     *
+     * Opens on HARD rather than on the slowest row - a player who has just
+     * chosen TETRIS ATTACK wants to play it, not configure it.
+     */
+    private chooseClassicDifficulty;
     /** Which puzzle set to work through. */
     private choosePuzzleSet;
     private chooseTetrisAttackMode;

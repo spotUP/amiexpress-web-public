@@ -8,6 +8,10 @@
  */
 
 import assert from 'assert';
+
+/** What empty board is drawn with; see paintWell in board-view. */
+const WELL_CHAR = ' ';
+const WELL_INK = 8;
 import { join } from 'path';
 import { loadSpriteSheet, Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { Stack } from '../../core/panels/stack';
@@ -55,15 +59,63 @@ export async function theEngineRowsMapOntoBufferRowsUpsideDown(): Promise<void> 
  * The board is drawn the right way up: after startingState the panels sit at
  * the BOTTOM of the screen, not the top.
  */
+/** A cell holding a panel, as opposed to a cell holding empty board. */
+const hasPanel = (cell: { char: string } | null): boolean =>
+  cell !== null && cell.char !== WELL_CHAR;
+
 export async function theStackIsDrawnSittingOnTheFloor(): Promise<void> {
   const stack = makeStack();
   const board = buildBoard(stack, SHEET, 0, { showCursor: false });
 
-  const filled = (y: number) => board[y].some((cell) => cell !== null);
+  const panelled = (y: number) => board[y].some(hasPanel);
 
-  assert.ok(filled(board.length - 1), 'the incoming row is drawn');
-  assert.ok(filled(board.length - 2), 'and the bottom of the playfield is full');
-  assert.ok(!filled(0), 'while the top of the playfield is empty at the start');
+  assert.ok(panelled(board.length - 1), 'the incoming row is drawn');
+  assert.ok(panelled(board.length - 2), 'and the bottom of the playfield is full');
+  assert.ok(!panelled(0), 'while the top of the playfield holds no panel at the start');
+}
+
+/**
+ * Empty board is PAINTED blank, which is not the same as left unpainted.
+ *
+ * An unpainted cell is a hole in the buffer, and a hole shows whatever was
+ * there last time - so a stack that falls leaves its own ghost behind. Every
+ * cell of the well carries a blank, and the frame around the board is what
+ * says where the playfield is.
+ */
+export async function theEmptyWellIsDrawnRatherThanLeftBlack(): Promise<void> {
+  const stack = makeStack();
+  const board = buildBoard(stack, SHEET, 0, { showCursor: false });
+
+  for (let y = 0; y < board.length; y++) {
+    for (let x = 0; x < board[y].length; x++) {
+      assert.notStrictEqual(
+        board[y][x], null,
+        `nothing is painted at row ${y}, column ${x}`,
+      );
+    }
+  }
+
+  // And the top of the board, where no panel has ever been, is well.
+  assert.ok(board[0].every((cell) => cell?.char === WELL_CHAR));
+}
+
+/** The cursor is the brightest thing on the board, wherever it sits. */
+export async function theCursorIsVisibleOverEmptyBoard(): Promise<void> {
+  const stack = makeStack();
+  // Put it where there are no panels at all.
+  stack.curRow = stack.height - 1;
+  stack.curCol = 1;
+  const board = buildBoard(stack, SHEET, 0);
+
+  const row = board[bufferRowFor(stack, stack.curRow)];
+  const brackets = row.filter((cell) => cell?.char === '[' || cell?.char === ']');
+  assert.strictEqual(brackets.length, 2, 'both halves of the cursor are drawn');
+  for (const cell of brackets) {
+    assert.notStrictEqual(
+      cell?.fg, WELL_INK,
+      'a cursor the same grey as the dots behind it cannot be found',
+    );
+  }
 }
 
 export async function everyPanelOccupiesExactlyTwoColumns(): Promise<void> {

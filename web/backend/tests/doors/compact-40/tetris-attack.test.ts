@@ -144,9 +144,22 @@ describe('TETRIS ATTACK compact (40-column) layout', () => {
    * promise by offering FEWER MODES there, not by folding 80-column screens:
    * the TGM and TETRINET screens are compositions built for 80 and are hidden.
    */
-  it('at 40 columns the menu offers only TETRIS ATTACK, the manual and quit', () => {
+  /**
+   * The C64 gets the SAME menu as everyone else, and every row of it fits.
+   *
+   * This used to assert the opposite: that at 40 columns the door offered only
+   * TETRIS ATTACK, the manual and the way out. That was honest at the time -
+   * the TGM screens were 80-column compositions that painted black at 40, so
+   * offering them promised something the door could not do.
+   *
+   * They adapt now (ui/game-screen.ts branches on isCompactWidth), so hiding
+   * them would be the dishonest choice instead. What still has to hold is that
+   * every row a C64 is offered actually fits on its screen.
+   */
+  it('at 40 columns the menu offers every mode, and every row fits', () => {
     const rows = menuRowsFor(40);
-    expect(rows.selections).toEqual(['tetris_attack', 'manual', 'quit']);
+    expect(rows.selections).toContain('tetris_attack');
+    expect(rows.selections).toContain('master');
     expect(rows.items).toHaveLength(rows.selections.length);
     for (const item of rows.items) {
       expect(printable(item)).toBeLessThanOrEqual(40);

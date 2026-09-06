@@ -103,6 +103,7 @@ export declare class PanelsScreen {
     private readonly sounds?;
     private readonly readInput;
     private readonly variant;
+    private frameBox?;
     private boardBox?;
     private hudBox?;
     private loop?;

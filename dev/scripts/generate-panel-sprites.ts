@@ -57,6 +57,14 @@ interface RawSprite {
 const CELL_W = 2;
 const CELL_H = 1;
 
+/**
+ * The square-pixel character: an upper half block, foreground on top.
+ *
+ * The same one pengo and frogger draw with, for the same reason - it is the
+ * only way a character cell becomes two pixels that are each about square.
+ */
+const PIXEL_CHAR = '▀';
+
 /** ANSI palette indices, by the names cell-art uses. */
 const C = {
   black: 0, red: 1, green: 2, yellow: 3, blue: 4, magenta: 5, cyan: 6, white: 7,
@@ -64,15 +72,17 @@ const C = {
   lightmagenta: 13, lightcyan: 14, lightwhite: 15,
 } as const;
 
+/** The four square pixels of a tile: top-left, top-right, bottom-left, bottom-right. */
+type PixelPattern = readonly [number, number, number, number];
+
 interface PanelDef {
   /** Sprite name; the colour index the engine uses is the array position + 1. */
   name: string;
-  /** The SNES shape, for the 80-column sheet. */
-  shape: string;
-  /** Ground colour at 80 columns. */
-  bg: number;
-  /** Ink for the shape at 80 columns. */
-  fg: number;
+  /** The panel's own colour, and a brighter shade of it. */
+  dark: number;
+  light: number;
+  /** Which of the four pixels take the light shade. */
+  pixels: PixelPattern;
   /** The block glyph that survives to a C64. */
   c64Left: string;
   c64Right: string;
@@ -83,18 +93,51 @@ interface PanelDef {
 /**
  * The seven colours plus shock, in the engine's own order: colour 1 is hearts,
  * 2 circles, 3 triangles, 4 stars, 5 diamonds, 6 inverse triangles, 7 squares,
- * 8 shock. The shapes are the SNES set; the C64 glyphs are chosen so that no
- * two read alike in a single colour, since colour alone is not enough.
+ * 8 shock.
+ *
+ * A PANEL IS FOUR SQUARE PIXELS. Three attempts got here, and the third is
+ * the one the rest of this board already used.
+ *
+ * The SNES shapes went first: a heart, a circle, a star are not in the
+ * character set an Amiga terminal draws, and the caller saw substitution
+ * glyphs where the board should be.
+ *
+ * CP437 blocks replaced them and were worse in a way that only shows on a
+ * screen: a half block paints the FOREGROUND over the ground, so half of
+ * every tile kept the ground colour, and with a dark ink that is black. The
+ * board looked eaten into.
+ *
+ * The answer was already in the door. Every arcade game here - pengo,
+ * frogger - draws in SQUARE PIXELS: one character is an upper half block
+ * whose FOREGROUND is the top pixel and whose BACKGROUND is the bottom one,
+ * so a character cell, which is about twice as tall as it is wide, becomes
+ * two pixels that are each about square. A panel is two characters, so it is
+ * a 2x2 pixel tile.
+ *
+ * Each panel is drawn in two shades of its own colour, and the PATTERN of
+ * those four pixels is what tells two panels apart when the colours cannot -
+ * which matters, because colour alone is no help at all to a colour-blind
+ * player. Nothing in a tile is black.
  */
 const PANELS: PanelDef[] = [
-  { name: 'heart',    shape: '♥', bg: C.red,       fg: C.lightwhite, c64Left: '█', c64Right: '█', c64Fg: C.lightred },
-  { name: 'circle',   shape: '●', bg: C.green,     fg: C.lightwhite, c64Left: '▒', c64Right: '▒', c64Fg: C.lightgreen },
-  { name: 'triangle', shape: '▲', bg: C.cyan,      fg: C.black,      c64Left: '▄', c64Right: '▄', c64Fg: C.lightcyan },
-  { name: 'star',     shape: '★', bg: C.yellow,    fg: C.black,      c64Left: '▀', c64Right: '▀', c64Fg: C.lightyellow },
-  { name: 'diamond',  shape: '◆', bg: C.magenta,   fg: C.lightwhite, c64Left: '▚', c64Right: '▚', c64Fg: C.lightmagenta },
-  { name: 'inverse',  shape: '▼', bg: C.lightblue, fg: C.black,      c64Left: '▞', c64Right: '▞', c64Fg: C.lightblue },
-  { name: 'square',   shape: '■', bg: C.white,     fg: C.black,      c64Left: '▌', c64Right: '▐', c64Fg: C.lightwhite },
-  { name: 'shock',    shape: '!',      bg: C.gray,      fg: C.lightwhite, c64Left: '!',      c64Right: '!',      c64Fg: C.white },
+  // pixels are [topLeft, topRight, bottomLeft, bottomRight]; true is the light
+  // shade. Eight patterns, all distinct, none of them flat in both rows.
+  { name: 'heart',    dark: C.red,       light: C.lightred,     pixels: [1, 1, 0, 0],
+    c64Left: '█', c64Right: '█', c64Fg: C.lightred },
+  { name: 'circle',   dark: C.green,     light: C.lightgreen,   pixels: [0, 0, 1, 1],
+    c64Left: '▒', c64Right: '▒', c64Fg: C.lightgreen },
+  { name: 'triangle', dark: C.cyan,      light: C.lightcyan,    pixels: [1, 0, 0, 1],
+    c64Left: '▄', c64Right: '▄', c64Fg: C.lightcyan },
+  { name: 'star',     dark: C.yellow,    light: C.lightyellow,  pixels: [0, 1, 1, 0],
+    c64Left: '▀', c64Right: '▀', c64Fg: C.lightyellow },
+  { name: 'diamond',  dark: C.magenta,   light: C.lightmagenta, pixels: [1, 0, 1, 0],
+    c64Left: '▚', c64Right: '▚', c64Fg: C.lightmagenta },
+  { name: 'inverse',  dark: C.blue,      light: C.lightblue,    pixels: [0, 1, 0, 1],
+    c64Left: '▞', c64Right: '▞', c64Fg: C.lightblue },
+  { name: 'square',   dark: C.white,     light: C.lightwhite,   pixels: [1, 1, 1, 0],
+    c64Left: '▌', c64Right: '▐', c64Fg: C.lightwhite },
+  { name: 'shock',    dark: C.gray,      light: C.lightwhite,   pixels: [0, 1, 1, 1],
+    c64Left: '!', c64Right: '!', c64Fg: C.white },
 ];
 
 /** One 2x1 frame from its two cells. */
@@ -150,16 +193,26 @@ function animationsFor(
 
 /** The 80-column variant: a shape on a coloured ground. */
 function wideSprite(def: PanelDef): RawSprite {
-  const body: RawCell = [def.shape, def.fg, def.bg];
-  const filler: RawCell = [' ', def.fg, def.bg];
-  // Flash inverts the ink and the ground, which reads at any size.
-  const flash: RawCell = [def.shape, def.bg, def.fg];
-  const flashFill: RawCell = [' ', def.bg, def.fg];
-  // The matched face, before the pop.
-  const face: RawCell = ['·', def.fg, def.bg];
-  const faceFill: RawCell = [' ', def.fg, def.bg];
-  const dim: RawCell = [def.shape, C.gray, C.black];
-  const dimFill: RawCell = [' ', C.gray, C.black];
+  // An upper half block whose FOREGROUND is the top pixel and whose BACKGROUND
+  // is the bottom one. One character, two square pixels; a panel is two
+  // characters, so it is a 2x2 tile.
+  const [topLeft, topRight, bottomLeft, bottomRight] = def.pixels;
+  const shade = (lit: number) => (lit ? def.light : def.dark);
+
+  const pixelCell = (top: number, bottom: number): RawCell =>
+    [PIXEL_CHAR, shade(top), shade(bottom)];
+
+  const body = pixelCell(topLeft, bottomLeft);
+  const filler = pixelCell(topRight, bottomRight);
+  // Flash: the whole tile goes white, which every colour contrasts with.
+  const flash: RawCell = [PIXEL_CHAR, C.lightwhite, C.lightwhite];
+  const flashFill: RawCell = [PIXEL_CHAR, C.lightwhite, C.lightwhite];
+  // The matched face, before the pop: the pattern goes, the colour stays.
+  const face: RawCell = [PIXEL_CHAR, def.light, def.light];
+  const faceFill: RawCell = [PIXEL_CHAR, def.light, def.light];
+  // Dimmed is the row below the floor, which is not in play.
+  const dim: RawCell = [PIXEL_CHAR, C.gray, C.gray];
+  const dimFill: RawCell = [PIXEL_CHAR, C.gray, C.gray];
 
   return {
     name: `panel-${def.name}`,

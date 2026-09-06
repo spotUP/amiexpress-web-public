@@ -50,6 +50,9 @@ import { PanelReplayRecorder, loadReplayV3 } from './core/panels/replay-recorder
 import { stackForReplay } from './core/panels/replay';
 import { PanelReplayStore, type StoredReplay } from './server/panel-replay-store';
 import { chooserLayout, chooserLabels, type ChooserRow } from './ui/panels/chooser';
+import {
+  DIFFICULTY_ROWS, DIFFICULTY_VALUES, DEFAULT_DIFFICULTY, defaultDifficultyIndex,
+} from './ui/panels/difficulty';
 import { PanelBrokerTransport } from './network/panel-broker-transport';
 import { PanelNetplaySession } from './network/panel-netplay-session';
 import { panelMatchSetupFor } from './network/panel-transport';
@@ -60,7 +63,9 @@ import {
 import type { Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { Stack as PanelStack } from './core/panels/stack';
 import { GeneratorSource } from './core/panels/generator-source';
-import { getClassicEndless, getModern, GARBAGE_MODE_LEVEL } from './core/panels/level-data';
+import {
+  getClassicEndless, getModern, GARBAGE_MODE_LEVEL, type ClassicDifficulty,
+} from './core/panels/level-data';
 import { buildPanelsResult, type PanelsMode } from './core/panels/score-report';
 import { PanelsVersusScreen } from './ui/panels-versus-screen';
 import { SimulatedStack } from './core/panels/simulated-stack';
@@ -1287,6 +1292,18 @@ export class GrandmasterApp {
         break;
       }
 
+    // How fast the solo modes play. The engine's frame table is panel-attack's
+    // and is not ours to edit - the replays and puzzle solutions are pinned to
+    // it - so the way to make the game feel quicker is the way the original
+    // does it, by offering the speed as a choice.
+    let difficulty: ClassicDifficulty = DEFAULT_DIFFICULTY;
+    if (mode === 'endless' || mode === 'timeattack') {
+      const chosen = await this.chooseClassicDifficulty();
+      // Nothing to unsubscribe yet: the input watcher is set up below.
+      if (chosen === null) continue;
+      difficulty = chosen;
+    }
+
     // Challenge starts at difficulty 1 stage 1; the ladder is walked by the
     // mode's own screen once it exists.
     const challengeStage = createStages(1, hasChallengeFile)[0];
@@ -1296,7 +1313,9 @@ export class GrandmasterApp {
     // have no GARBAGE_HOVER, so the first garbage a player clears throws.
     const hasGarbage = mode === 'vscpu' || mode === 'challenge';
     const stack = new PanelStack({
-      levelData: hasGarbage ? getModern(GARBAGE_MODE_LEVEL) : getClassicEndless('normal'),
+      levelData: hasGarbage
+        ? getModern(GARBAGE_MODE_LEVEL)
+        : getClassicEndless(difficulty),
       panelSource: new GeneratorSource(seed, true),
       doCountdown: true,
       // Time Attack is two minutes; Endless runs until the stack tops out.
@@ -1304,61 +1323,73 @@ export class GrandmasterApp {
     });
     stack.startingState();
 
-    /** Telnet fallback: a keypress counts as held for this long. */
-    const HOLD_MS = 100;
-    const pressedUntil = new Map<string, number>();
-    const onKeypress = (_ch: unknown, key: { name?: string } | undefined) => {
-      if (!key || !key.name) return;
-      pressedUntil.set(key.name, Date.now() + HOLD_MS);
-    };
-    this.screen.on('keypress', onKeypress);
-
-    const keyStateAvailable = typeof (this.inputManager as unknown as {
-      isKeyStateActive?: () => boolean;
-    }).isKeyStateActive === 'function';
+    // INPUT COMES FROM THE DOOR'S OWN HANDLER, which is where the real press
+    // edges already are (input/handler.ts) and why the TGM modes feel the way
+    // they do. Asking the SDK input manager instead does not work: its
+    // held-key tracking is off unless a door opts in, this door never did, so
+    // the answer was always no and every session fell back to the character
+    // stream - inheriting the client's auto-repeat, which is one move, a pause
+    // of nearly half a second, then a burst.
+    //
+    // Presses are COUNTED, not collected in a set. A set loses the second of
+    // two taps when both land in the gap between two frames, and a blessed
+    // repaint pushed over a socket does not fit in a frame - so under load the
+    // gap is several frames wide and a player tapping quickly loses presses.
+    const pendingEdges = new Map<string, number>();
+    const stopWatchingEdges = this.inputHandler.onKeyEdge((name) => {
+      pendingEdges.set(name, (pendingEdges.get(name) ?? 0) + 1);
+    });
 
     const isDown = (names: string[]): boolean => {
-      const manager = this.inputManager as unknown as {
-        isKeyStateActive?: () => boolean;
-        isHeld?: (key: string) => boolean;
-      };
-      if (keyStateAvailable && manager.isKeyStateActive?.() && manager.isHeld) {
-        return names.some((name) => manager.isHeld!(name));
-      }
-      const now = Date.now();
-      return names.some((name) => (pressedUntil.get(name) ?? 0) > now);
+      // A press that has not been spent yet always counts.
+      const tapped = names.some((name) => (pendingEdges.get(name) ?? 0) > 0);
+      // Real key-up only exists in a browser. On telnet the edge IS the whole
+      // input, and the player gets discrete steps rather than a hold.
+      const held = this.inputHandler.isKeyStateMode()
+        && names.some((name) => this.inputHandler.heldKeys().has(name));
+      return tapped || held;
     };
 
-    const readInput = (): HeldInput => ({
-      up: isDown(['up']),
-      down: isDown(['down']),
-      left: isDown(['left']),
-      right: isDown(['right']),
-      swap: isDown(['space', 'z']),
-      raise: isDown(['r', 'x']),
-    });
+    const readInput = (): HeldInput => {
+      const input: HeldInput = {
+        up: isDown(['up']),
+        down: isDown(['down']),
+        left: isDown(['left']),
+        right: isDown(['right']),
+        swap: isDown(['space', 'z']),
+        raise: isDown(['r', 'x']),
+      };
+      // Spend ONE press of every key that had one, so a second tap waits for
+      // the next frame instead of being thrown away, and two different keys
+      // pressed together still reach the engine as one input character.
+      for (const [name, count] of pendingEdges) {
+        if (count <= 1) pendingEdges.delete(name);
+        else pendingEdges.set(name, count - 1);
+      }
+      return input;
+    };
 
     if (mode === 'vsplayer') {
       await this.runPanelNetplay(sheet, readInput);
-      this.screen.removeListener('keypress', onKeypress);
+      stopWatchingEdges();
       continue;
     }
 
     if (mode === 'replays') {
       await this.runReplayBrowser(sheet, readInput);
-      this.screen.removeListener('keypress', onKeypress);
+      stopWatchingEdges();
       continue;
     }
 
     if (mode === 'stageclear') {
       await this.runStageClear(sheet, readInput);
-      this.screen.removeListener('keypress', onKeypress);
+      stopWatchingEdges();
       continue;
     }
 
     if (mode === 'puzzle') {
-      await this.runPuzzleSet(sheet, readInput, onKeypress);
-      this.screen.removeListener('keypress', onKeypress);
+      await this.runPuzzleSet(sheet, readInput);
+      stopWatchingEdges();
       continue;
     }
 
@@ -1436,13 +1467,14 @@ export class GrandmasterApp {
         this.panelReplays.save(recorder.fileName(finished), recorder.toReplayV3(finished));
       }
     } finally {
-      this.screen.removeListener('keypress', onKeypress);
+      stopWatchingEdges();
       this.screen.unkey(['escape', 'q', 'Q'], onEscape);
     }
     }
-    // If we broke out of the loop (user selected Back from mode menu),
-    // return to the main menu.
-    this.currentScreen = 'menu';
+    // Leaving the mode menu goes back to the MAIN menu, and saying
+    // currentScreen is already 'menu' is what stops that happening: the caller
+    // reads it to decide whether to redraw, so claiming the menu is up drops
+    // the player out of the door entirely.
   }
 
   /**
@@ -1463,7 +1495,6 @@ export class GrandmasterApp {
   private async runPuzzleSet(
     sheet: Record<string, Sprite>,
     readInput: () => HeldInput,
-    onKeypress: (ch: unknown, key: { name?: string } | undefined) => void,
   ): Promise<void> {
     const sets = loadShippedPuzzles();
     const chosen = await this.choosePuzzleSet(sets);
@@ -1520,7 +1551,6 @@ export class GrandmasterApp {
       result.score = solved;
       this.highScores.addScore(this.state.playerName, result);
     }
-    void onKeypress;
   }
 
   /**
@@ -1833,6 +1863,60 @@ export class GrandmasterApp {
         resolve();
       };
       this.screen.key(['escape', 'q', 'Q', 'enter', 'space'], dismiss);
+    });
+  }
+
+  /**
+   * How fast to play: the classic four.
+   *
+   * Opens on HARD rather than on the slowest row - a player who has just
+   * chosen TETRIS ATTACK wants to play it, not configure it.
+   */
+  private async chooseClassicDifficulty(): Promise<ClassicDifficulty | null> {
+    const rows: ChooserRow[] = [...DIFFICULTY_ROWS, { wide: 'Back', compact: 'Back' }];
+    const layout = chooserLayout(this.screen.width, this.screen.height, rows.length);
+    const labels = chooserLabels(rows, layout);
+
+    return new Promise<ClassicDifficulty | null>((resolve) => {
+      const box = createBox({
+        parent: this.screen,
+        top: 'center',
+        left: 'center',
+        width: layout.width,
+        height: layout.height,
+        label: ' SPEED ',
+        tags: true,
+        style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+      });
+
+      const list = createList({
+        parent: box,
+        top: 1,
+        left: 1,
+        width: layout.innerWidth,
+        height: layout.innerHeight,
+        keys: true,
+        vi: true,
+        mouse: true,
+        tags: true,
+        items: labels,
+        style: { fg: 'white', bg: 'black', selected: { fg: 'black', bg: 'magenta' } },
+      });
+
+      const done = (choice: ClassicDifficulty | null) => {
+        box.destroy();
+        this.screen.render();
+        resolve(choice);
+      };
+
+      list.on('select', (_item: unknown, index: number) => {
+        done(index < DIFFICULTY_VALUES.length ? DIFFICULTY_VALUES[index] : null);
+      });
+      list.key(['escape', 'q', 'Q'], () => done(null));
+
+      list.select(defaultDifficultyIndex());
+      list.focus();
+      this.screen.render();
     });
   }
 

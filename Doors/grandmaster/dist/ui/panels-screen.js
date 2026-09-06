@@ -79,6 +79,22 @@ class PanelsScreen {
         // Geometry comes from the live screen width, never from a constant.
         const layout = (0, layout_1.panelsLayout)(this.screen.width, this.screen.height, cols, rows);
         this.layout = layout;
+        // The well gets a frame where there is room for one. The layout has always
+        // said whether to draw it - `border`, from the compact profile - and
+        // nothing read the flag, so the board floated in the middle of an empty
+        // screen with no edge to it. At 40 columns the profile turns borders off.
+        if (layout.border) {
+            this.frameBox = (0, bbs_door_sdk_1.createBox)({
+                parent: this.screen,
+                top: Math.max(0, layout.board.top - 1),
+                left: Math.max(0, layout.board.left - 1),
+                width: layout.board.width + 2,
+                height: layout.board.height + 2,
+                label: ' TETRIS ATTACK ',
+                tags: true,
+                style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
+            });
+        }
         this.boardBox = (0, bbs_door_sdk_1.createBox)({
             parent: this.screen,
             top: layout.board.top,
@@ -89,16 +105,28 @@ class PanelsScreen {
             tags: true,
             style: { bg: 'black' },
         });
-        // Mouse click to swap: convert click position to board column and queue swap.
+        // Mouse click to swap.
+        //
+        // THE BOARD IS DRAWN UPSIDE DOWN relative to the engine: buffer row 0 is
+        // the TOP of the playfield and engine row 1 is the bottom, which is what
+        // bufferRowFor expresses. Reading the click as `y + 1` therefore mirrored
+        // it - clicking the stack asked to swap the empty rows above it, canSwap
+        // refused because both cells were air, and nothing happened. That is the
+        // "sometimes when I click to swap tiles it doesn't work" a caller hit.
+        //
+        // The inverse of bufferRowFor lives beside it, so the two cannot drift.
         this.boardBox.on('click', (data) => {
             const relX = data.x - layout.board.left;
             const relY = data.y - layout.board.top;
-            const PANEL_COLS = 2;
-            const col = Math.floor(relX / PANEL_COLS) + 1;
-            const row = Math.floor(relY) + 1;
-            if (col >= 1 && col <= this.stack.width - 1 && relY >= 0 && relY < this.stack.height) {
-                this.stack.requestMouseSwap(row, col);
-            }
+            const col = Math.floor(relX / board_view_1.PANEL_COLS) + 1;
+            const row = (0, board_view_1.engineRowFor)(this.stack, Math.floor(relY));
+            // A swap needs a panel to its right, and the dimmed incoming row below
+            // the floor is not in play.
+            if (col < 1 || col > this.stack.width - 1)
+                return;
+            if (row < 1 || row > this.stack.height)
+                return;
+            this.stack.requestMouseSwap(row, col);
         });
         this.hudBox = (0, bbs_door_sdk_1.createBox)({
             parent: this.screen,
@@ -225,8 +253,10 @@ class PanelsScreen {
         }
         this.boardBox?.destroy();
         this.hudBox?.destroy();
+        this.frameBox?.destroy();
         this.boardBox = undefined;
         this.hudBox = undefined;
+        this.frameBox = undefined;
         this.screen.render();
     }
 }
