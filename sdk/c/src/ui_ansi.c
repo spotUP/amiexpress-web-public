@@ -65,7 +65,10 @@ void ansi_begin(ansi_buf *b, char *storage, long capacity)
     b->last_fg = -1;
     b->last_bg = -1;
     b->last_bold = -1;
-    b->last_reverse = -1;
+    /* Not -1: the frame opens with SGR 0, which clears reverse, so it is
+       KNOWN to be off. Leaving it unknown put a redundant ESC[27m at the
+       head of every 80-column frame. */
+    b->last_reverse = 0;
 }
 
 void ansi_flush(ansi_buf *b, ansi_sink_fn sink, void *context)
@@ -97,7 +100,10 @@ void ansi_clear(ansi_buf *b)
     b->last_fg = -1;
     b->last_bg = -1;
     b->last_bold = -1;
-    b->last_reverse = -1;
+    /* Not -1: the frame opens with SGR 0, which clears reverse, so it is
+       KNOWN to be off. Leaving it unknown put a redundant ESC[27m at the
+       head of every 80-column frame. */
+    b->last_reverse = 0;
 }
 
 void ansi_goto(ansi_buf *b, int row, int col)
@@ -148,7 +154,10 @@ void ansi_reset(ansi_buf *b)
     b->last_fg = -1;
     b->last_bg = -1;
     b->last_bold = -1;
-    b->last_reverse = -1;
+    /* Not -1: the frame opens with SGR 0, which clears reverse, so it is
+       KNOWN to be off. Leaving it unknown put a redundant ESC[27m at the
+       head of every 80-column frame. */
+    b->last_reverse = 0;
 }
 
 void ansi_cursor(ansi_buf *b, int visible)

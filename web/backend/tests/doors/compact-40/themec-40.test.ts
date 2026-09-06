@@ -168,9 +168,15 @@ describe('THEMEC opens on a 40-column caller', () => {
     // The note is a WHOLE sentence. At 80 it is clipped at cols-3, which on a
     // C64 cut it mid-word ("...KEEP A THEME - SHOW"); the door carries a
     // 40-column form of each of its two sentences instead.
-    const note = rows.find((r) => r.includes('THEME') && r.trim().endsWith('.'));
+    //
+    // Found by matching EITHER sentence, not by the word THEME: the board
+    // answers AEW_THEME since 2026-09-06, so the note this board produces is
+    // "APPLIES THE NEXT TIME A DOOR DRAWS." - which does not contain the word
+    // at all, and the finder that looked for it returned undefined.
+    const NOTES = /^(THIS BOARD CANNOT KEEP A THEME\.|APPLIES THE NEXT TIME A DOOR DRAWS\.)$/;
+    const note = rows.find((r) => NOTES.test(r.trim()));
     expect(note).toBeDefined();
-    expect(note!.trim()).toMatch(/^(THIS BOARD CANNOT KEEP A THEME\.|APPLIES THE NEXT TIME A DOOR DRAWS\.)$/);
+    expect(note!.trim()).toMatch(NOTES);
 
     // And the way out is on the glass.
     expect(rows.join('\n')).toContain('Q=LEAVE');

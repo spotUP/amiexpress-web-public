@@ -6970,20 +6970,22 @@ debugLog(`[dos.library]   Global variables not supported`);
    *
    * Set a local or global shell variable.
    *
-   * Parameters:
-   *   A0 = name (C-string pointer)
-   *   A1 = buffer (value string pointer)
-   *   D0 = size (length of value, -1 for null-terminated)
-   *   D1 = flags (GVF_LOCAL_VAR=0, GVF_GLOBAL_VAR=256, GVF_BINARY_VAR=512)
+   * Parameters (dos.library passes its arguments in D1 up, not A0/A1 -
+   * vbcc's inline/dos_protos.h:485, and Open() two thousand lines above
+   * reads D1/D2 for the same reason):
+   *   D1 = name (C-string pointer)
+   *   D2 = buffer (value string pointer)
+   *   D3 = size (length of value, -1 for null-terminated)
+   *   D4 = flags (GVF_LOCAL_VAR=0, GVF_GLOBAL_VAR=256, GVF_BINARY_VAR=512)
    *
    * Returns:
    *   D0 = BOOL (-1 for success, 0 for failure)
    */
   public SetVar(): void {
-    const nameAddr = this.emulator.getRegister(CPURegister.A0);
-    const bufferAddr = this.emulator.getRegister(CPURegister.A1);
-    const size = this.emulator.getRegister(CPURegister.D0);
-    const flags = this.emulator.getRegister(CPURegister.D1);
+    const nameAddr = this.emulator.getRegister(CPURegister.D1);
+    const bufferAddr = this.emulator.getRegister(CPURegister.D2);
+    const size = this.emulator.getRegister(CPURegister.D3);
+    const flags = this.emulator.getRegister(CPURegister.D4);
 
     const name = this.emulator.readString(nameAddr, 256);
     let value: string;
@@ -7013,20 +7015,20 @@ console.error(`[dos.library] SetVar: EnvironmentManager not initialized`);
    *
    * Get the value of a local or global shell variable.
    *
-   * Parameters:
-   *   A0 = name (C-string pointer)
-   *   A1 = buffer (destination for value)
-   *   D0 = size (buffer size)
-   *   D1 = flags (GVF_LOCAL_VAR=0, GVF_GLOBAL_VAR=256)
+   * Parameters (D1 up - inline/dos_protos.h:488):
+   *   D1 = name (C-string pointer)
+   *   D2 = buffer (destination for value)
+   *   D3 = size (buffer size)
+   *   D4 = flags (GVF_LOCAL_VAR=0, GVF_GLOBAL_VAR=256)
    *
    * Returns:
    *   D0 = Number of characters copied (-1 if not found or error)
    */
   public GetVar(): void {
-    const nameAddr = this.emulator.getRegister(CPURegister.A0);
-    const bufferAddr = this.emulator.getRegister(CPURegister.A1);
-    const size = this.emulator.getRegister(CPURegister.D0);
-    const flags = this.emulator.getRegister(CPURegister.D1);
+    const nameAddr = this.emulator.getRegister(CPURegister.D1);
+    const bufferAddr = this.emulator.getRegister(CPURegister.D2);
+    const size = this.emulator.getRegister(CPURegister.D3);
+    const flags = this.emulator.getRegister(CPURegister.D4);
 
     const name = this.emulator.readString(nameAddr, 256);
 
@@ -7058,16 +7060,16 @@ debugLog(`[dos.library]   Copied ${copyLen} characters: "${value.substring(0, co
    *
    * Delete a local or global shell variable.
    *
-   * Parameters:
-   *   A0 = name (C-string pointer)
-   *   D1 = flags (GVF_LOCAL_VAR=0, GVF_GLOBAL_VAR=256)
+   * Parameters (D1 up - inline/dos_protos.h:491):
+   *   D1 = name (C-string pointer)
+   *   D2 = flags (GVF_LOCAL_VAR=0, GVF_GLOBAL_VAR=256)
    *
    * Returns:
    *   D0 = BOOL (-1 for success, 0 for failure/not found)
    */
   public DeleteVar(): void {
-    const nameAddr = this.emulator.getRegister(CPURegister.A0);
-    const flags = this.emulator.getRegister(CPURegister.D1);
+    const nameAddr = this.emulator.getRegister(CPURegister.D1);
+    const flags = this.emulator.getRegister(CPURegister.D2);
 
     const name = this.emulator.readString(nameAddr, 256);
 
