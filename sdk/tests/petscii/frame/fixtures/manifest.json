@@ -394,5 +394,18 @@
     "cwd": "web/backend",
     "installed": "conftop",
     "notes": "Conference Top Uploaders v2.3 by Bobo/Mystic and Looby/Insane!, the board's conftop command - the 020 build of the same table ctop draws. ZERO narrow marks and zero unmapped glyphs at 40. The 'Total Uploaded Files/Bytes' row is where narrow used to eat BOTH labels ('Total Uploaded> 0 ] Total Uploaded > 0 ]'); the stat rung puts each label with its own number on a row of its own. Marked C64_ADAPT=40 on 2026-09-06."
+  },
+  "sysinfo": {
+    "binary": "Doors/EPUtils/SysInfo/SysInfo",
+    "command": "I",
+    "script": [
+      "6000 n\\r"
+    ],
+    "bytes": 1614,
+    "sha256": "a594c8cd7df4ccc4de990b28e58a2ec2c41d4839fe3a6ed9fd026c353eb4eaa4",
+    "harness": "printf '%s\\n' '6000 n\\r' | env BBS_DATA_DIR=$REPO npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/EPUtils/SysInfo/SysInfo 1 --doortype XIM --command I --timeout 25 > sysinfo.ans",
+    "cwd": "web/backend",
+    "installed": "I",
+    "notes": "SysInfo v2.3 by WHiZ/eQUiNOX, the board's I command. Boxed system information over four panes. ZERO narrow marks and zero unmapped glyphs at 40. Its node row is what the stat rung was written for - 'Init Baud is: 115200 Baud' and 'Sysop Status: Busy at the Moment!' used to reach a caller as 'Init Baud is: >' and 'Sysop Status: B>' - and its three single-column panes are what the prose rung was written for ('Software Running: Kickstart 40.68 Workb>' lost the Workbench version). The capture answers the first pause with n, so the LAST frame is the door's own information screen rather than its exit line. Marked C64_ADAPT=40 on 2026-09-06."
   }
 }

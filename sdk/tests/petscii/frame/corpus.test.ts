@@ -484,6 +484,10 @@ const EXPECTED_ROWS: Record<string, number> = {
   // `conftop` at 32: the 020 build of the same table, six `stat` rows and three
   // `record` rows. 29 of the 32 are painted.
   conftop: 32,
+  // `sysinfo` at 29: SysInfo's four boxed panes. Two rows go to `stat` and two to
+  // `prose`; what still crops is the box rule around them, which is decoration.
+  // 23 of the 29 are painted, so the whole screen fits one page.
+  sysinfo: 29,
 };
 
 function lastFrameOf(id: string): Frame {

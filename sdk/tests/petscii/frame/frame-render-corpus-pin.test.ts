@@ -113,6 +113,7 @@ const PINS: Record<string, Pin> = {
   hackcheck: { renders: 12, bytes: 1624, sha256: 'aa25e1dfa09db75b8b854410bc0e0831f89741e4c777805ac0f64e264cdecc3a' },
   ctop: { renders: 25, bytes: 8983, sha256: 'bbadac75ff602ada72dc70f0469afbeafb521a88dcb64620372ad4b67b784223' },
   conftop: { renders: 22, bytes: 9137, sha256: 'a87497003d9779c8031cf2fb4bbb609bd83cae277e64bac5805f37713f2ba171' },
+  sysinfo: { renders: 22, bytes: 5732, sha256: 'b52efd325c043e34026c5728d930cf40b5ac8d956758959a502cafadd003b7a0' },
 };
 
 function renderChain(id: string): Pin {

@@ -163,6 +163,8 @@ const SIGNATURES: Record<string, Signature> = {
   ctop: { door: '2,020,282,473' },
   // The label the narrow rung used to eat, with its own number beside it.
   conftop: { door: 'Total Uploaded Bytes' },
+  // The two values the stat rung keeps whole on SysInfo's node row.
+  sysinfo: { door: 'Busy at the Moment!' },
 };
 
 // ---------------------------------------------------------------- sessions
