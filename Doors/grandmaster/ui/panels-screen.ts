@@ -260,7 +260,10 @@ export class PanelsScreen {
 
   private renderBoard(tick: number): void {
     if (!this.boardBox) return;
-    const board = buildBoard(this.stack, this.sheet, tick, { variant: this.variant });
+    const board = buildBoard(this.stack, this.sheet, tick, {
+      variant: this.variant,
+      scale: this.layout?.scale,
+    });
     // bufferToTags returns one string per row.
     this.boardBox.setContent(bufferToTags(board).join('\n'));
   }

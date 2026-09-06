@@ -30,6 +30,88 @@ const HUD_COMPACT = 12;
 /** Space between the board and the HUD. */
 const GAP = 2;
 
+/**
+ * How many characters one panel takes, and how many rows.
+ *
+ * A panel is 2x1 characters at its smallest, which reads square on a terminal
+ * whose cells are about twice as tall as they are wide. That is the whole
+ * board on an 80x25 screen and it leaves most of a phone empty: the playfield
+ * is twelve columns of a forty-column screen, and the rest is black.
+ *
+ * So the tile GROWS to fit. The rule is the largest whole multiple that still
+ * leaves room for the board and its HUD, which is a different answer on every
+ * screen and the reason this is computed rather than written down:
+ *
+ *   80x25 terminal   1x  - the classic board, unchanged
+ *   40x25 C64        3x1 - fills the width; a C64 cell is square, so the tile
+ *                          stays 2:1 there, which is the trade the sysop chose
+ *   phone, 40x50     3x2 - a small font gives rows to spend, so the tile grows
+ *                          both ways and the board fills the screen
+ */
+export interface PanelScale {
+  /** Characters per panel, horizontally. Always even: a panel is 2 wide. */
+  x: number;
+  /** Rows per panel. */
+  y: number;
+}
+
+/** Rows the stacked HUD needs under the board, plus the frame around it. */
+const STACKED_HUD_ROWS = 2;
+const FRAME_ROWS = 2;
+const FRAME_COLS = 2;
+
+/**
+ * The biggest tile this screen can hold.
+ *
+ * Never smaller than 1x, because the 2x1 panel is the floor the sprites are
+ * drawn at; and capped, because a board that fills a 200-column terminal in
+ * six enormous tiles is not more readable, it is just bigger.
+ */
+export function panelScale(
+  screenWidth: number,
+  screenHeight: number,
+  boardCols: number,
+  boardRows: number,
+  stacked: boolean,
+): PanelScale {
+  // Beside the board, the HUD's columns are not the board's to grow into.
+  const usableCols = Math.max(
+    1,
+    stacked ? screenWidth - FRAME_COLS : screenWidth - FRAME_COLS - GAP - HUD_WIDE,
+  );
+  const usableRows = Math.max(
+    1,
+    screenHeight - FRAME_ROWS - (stacked ? STACKED_HUD_ROWS : 0),
+  );
+
+  const fitX = Math.max(1, Math.min(MAX_SCALE, Math.floor(usableCols / boardCols)));
+  const fitY = Math.max(1, Math.min(MAX_SCALE, Math.floor(usableRows / boardRows)));
+
+  // A TILE KEEPS ITS SHAPE unless the board owns the whole width.
+  //
+  // Growing width and height independently is how an 80x25 terminal ended up
+  // with 4x1 tiles - eight characters wide and one row tall, which is not a
+  // panel, it is a dash. Where the HUD sits beside the board there is height
+  // to spare and width to spare in different amounts, so the scale is the
+  // smaller of the two and the tile stays the shape it was drawn.
+  if (!stacked) {
+    const uniform = Math.min(fitX, fitY);
+    return { x: uniform, y: uniform };
+  }
+
+  // Stacked, the board is the screen and filling the width is the point - a
+  // C64 has 25 rows, so height caps at 1x while width has room for three, and
+  // a wide tile that fills the screen was the trade chosen over a square tile
+  // in a corner of it. Still bounded, so the stretch stays legible.
+  return { x: Math.min(fitX, fitY + MAX_STRETCH), y: fitY };
+}
+
+/** How much wider than tall a tile may be stretched when it owns the width. */
+const MAX_STRETCH = 2;
+
+/** Beyond this a bigger tile stops helping and starts wasting the screen. */
+const MAX_SCALE = 4;
+
 export interface PanelsLayout {
   /** True at 40 columns: no labels, no chrome, no effects. */
   compact: boolean;
@@ -41,6 +123,10 @@ export interface PanelsLayout {
   hud: { top: number; left: number; width: number; height: number };
   /** Draw a border around the board? Not when there is no room for one. */
   border: boolean;
+  /** Characters and rows per panel; the renderer scales the board by this. */
+  scale: PanelScale;
+  /** Is the HUD under the board rather than beside it? */
+  stacked: boolean;
 }
 
 /**
@@ -59,29 +145,57 @@ export function panelsLayout(
 ): PanelsLayout {
   const compact = isCompactWidth(screenWidth);
   const profile = getCompactProfile(screenWidth);
-  const hudWidth = compact ? HUD_COMPACT : HUD_WIDE;
 
-  const totalWidth = boardCols + GAP + hudWidth;
-  const left = compact
-    ? 1
-    : Math.max(0, Math.floor((screenWidth - totalWidth) / 2));
-  const top = compact
-    ? 0
-    : Math.max(0, Math.floor((screenHeight - boardRows) / 2));
+  // THE HUD GOES UNDER THE BOARD when there is not room for it beside one.
+  //
+  // Side by side, the HUD costs the board sixteen columns it could have grown
+  // into - which on a phone is most of the screen ("the playfield should use
+  // the full phone width"). Stacked, the board takes the width and the HUD
+  // takes two rows under it, which is the single-column rule the compact
+  // profile already asks for everywhere else on this board.
+  // PORTRAIT STACKS, LANDSCAPE SITS BESIDE.
+  //
+  // Not width alone: an 80x25 terminal is narrow in characters but wide on the
+  // glass, and stacking there would replace the classic board with a squat one
+  // nobody asked for. A screen with more ROWS than columns is a phone held
+  // upright, and that is exactly the case where the HUD beside the board costs
+  // it most of the width it could be using.
+  const portrait = screenHeight > screenWidth;
+  const stacked = compact || portrait || screenWidth < boardCols + GAP + HUD_WIDE + 2;
+  const hudWidth = stacked ? screenWidth - FRAME_COLS : HUD_WIDE;
+
+  const scale = panelScale(screenWidth, screenHeight, boardCols, boardRows, stacked);
+  const width = boardCols * scale.x;
+  const height = boardRows * scale.y;
+
+  const totalWidth = stacked ? width : width + GAP + hudWidth;
+  const left = Math.max(1, Math.floor((screenWidth - totalWidth) / 2));
+  const top = stacked
+    ? Math.max(1, Math.floor((screenHeight - height - STACKED_HUD_ROWS) / 2))
+    : Math.max(1, Math.floor((screenHeight - height) / 2));
 
   return {
     compact,
     effects: effectsAllowed(screenWidth),
     tier: getBreakpointName(screenWidth),
-    board: { top, left, width: boardCols, height: boardRows },
-    hud: {
-      top,
-      left: left + boardCols + GAP,
-      width: Math.max(0, Math.min(hudWidth, screenWidth - (left + boardCols + GAP))),
-      height: boardRows,
-    },
+    board: { top, left, width, height },
+    hud: stacked
+      ? {
+        top: top + height,
+        left,
+        width: Math.max(0, Math.min(hudWidth, screenWidth - left)),
+        height: STACKED_HUD_ROWS,
+      }
+      : {
+        top,
+        left: left + width + GAP,
+        width: Math.max(0, Math.min(hudWidth, screenWidth - (left + width + GAP))),
+        height,
+      },
     // getCompactProfile says whether this tier draws frames at all.
     border: profile.borders,
+    scale,
+    stacked,
   };
 }
 

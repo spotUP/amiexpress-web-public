@@ -22,7 +22,21 @@ import type { Stack } from '../../core/panels/stack';
 export declare const PANEL_COLS = 2;
 /** Which sheet to draw from. */
 export type BoardVariant = 'wide' | 'c64';
+/** Characters and rows per panel; 1x1 is the classic 2x1-character panel. */
+export interface BoardScale {
+    x: number;
+    y: number;
+}
 export interface BoardViewOptions {
+    /**
+     * Grow every panel by this many characters and rows.
+     *
+     * The board is built at its natural size and then ENLARGED, rather than
+     * every sprite being redrawn at every size: a panel is a solid tile, so a
+     * bigger one is the same cells repeated, and the sprite sheet stays one
+     * sheet. See panelScale in ./layout for what decides the number.
+     */
+    scale?: BoardScale;
     variant?: BoardVariant;
     /** Draw the cursor over the board. Off for an opponent's board. */
     showCursor?: boolean;
@@ -59,6 +73,14 @@ export declare function boardSize(stack: Stack, options?: BoardViewOptions): {
  */
 export declare function animationFor(panel: Panel, stack: Stack): string | null;
 /**
+ * Repeat every cell `scale.x` across and `scale.y` down.
+ *
+ * Nearest-neighbour on CELLS, which is exact rather than approximate: a panel
+ * is a flat colour, so a tile twice the size is the same cell four times and
+ * nothing is interpolated or lost.
+ */
+export declare function scaleBuffer(buffer: CellBuffer, scale: BoardScale): CellBuffer;
+/**
  * The board, drawn.
  *
  * `tick` is the game's own frame counter, never wall clock - frameAt is a pure
@@ -73,5 +95,5 @@ export declare function buildBoard(stack: Stack, sheet: Record<string, Sprite>, 
  * have to stay readable, since choosing a swap means reading what is under the
  * cursor. Each cell keeps its own colours; only the glyph changes.
  */
-export declare function drawCursor(board: CellBuffer, stack: Stack): void;
+export declare function drawCursor(board: CellBuffer, stack: Stack, scale?: BoardScale): void;
 //# sourceMappingURL=board-view.d.ts.map

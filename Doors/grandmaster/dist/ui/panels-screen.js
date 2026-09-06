@@ -163,7 +163,10 @@ class PanelsScreen {
     renderBoard(tick) {
         if (!this.boardBox)
             return;
-        const board = (0, board_view_1.buildBoard)(this.stack, this.sheet, tick, { variant: this.variant });
+        const board = (0, board_view_1.buildBoard)(this.stack, this.sheet, tick, {
+            variant: this.variant,
+            scale: this.layout?.scale,
+        });
         // bufferToTags returns one string per row.
         this.boardBox.setContent((0, cell_art_1.bufferToTags)(board).join('\n'));
     }

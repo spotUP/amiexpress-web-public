@@ -64,7 +64,22 @@ const SPRITE_BY_COLOR: Readonly<Record<number, string>> = {
 /** The two rows near the top that pulse to warn the player. */
 const DANGER_ROWS = 2;
 
+/** Characters and rows per panel; 1x1 is the classic 2x1-character panel. */
+export interface BoardScale {
+  x: number;
+  y: number;
+}
+
 export interface BoardViewOptions {
+  /**
+   * Grow every panel by this many characters and rows.
+   *
+   * The board is built at its natural size and then ENLARGED, rather than
+   * every sprite being redrawn at every size: a panel is a solid tile, so a
+   * bigger one is the same cells repeated, and the sprite sheet stays one
+   * sheet. See panelScale in ./layout for what decides the number.
+   */
+  scale?: BoardScale;
   variant?: BoardVariant;
   /** Draw the cursor over the board. Off for an opponent's board. */
   showCursor?: boolean;
@@ -174,6 +189,27 @@ function spriteFor(
 }
 
 /**
+ * Repeat every cell `scale.x` across and `scale.y` down.
+ *
+ * Nearest-neighbour on CELLS, which is exact rather than approximate: a panel
+ * is a flat colour, so a tile twice the size is the same cell four times and
+ * nothing is interpolated or lost.
+ */
+export function scaleBuffer(buffer: CellBuffer, scale: BoardScale): CellBuffer {
+  if (scale.x <= 1 && scale.y <= 1) return buffer;
+
+  const out: CellBuffer = [];
+  for (const row of buffer) {
+    const wide: Array<Cell | null> = [];
+    for (const cell of row) {
+      for (let i = 0; i < scale.x; i++) wide.push(cell ? { ...cell } : null);
+    }
+    for (let i = 0; i < scale.y; i++) out.push(wide.map(c => (c ? { ...c } : null)));
+  }
+  return out;
+}
+
+/**
  * The board, drawn.
  *
  * `tick` is the game's own frame counter, never wall clock - frameAt is a pure
@@ -224,9 +260,15 @@ export function buildBoard(
     }
   }
 
-  if (options.showCursor !== false) drawCursor(board, stack);
+  // The cursor is drawn AFTER the enlargement, at the enlarged size. Scaling
+  // it with everything else would repeat the brackets - "[[" and "]]" at 2x -
+  // instead of drawing one cursor around a bigger pair of panels.
+  const scaled = scaleBuffer(board, options.scale ?? { x: 1, y: 1 });
+  if (options.showCursor !== false) {
+    drawCursor(scaled, stack, options.scale ?? { x: 1, y: 1 });
+  }
 
-  return board;
+  return scaled;
 }
 
 /**
@@ -236,14 +278,20 @@ export function buildBoard(
  * have to stay readable, since choosing a swap means reading what is under the
  * cursor. Each cell keeps its own colours; only the glyph changes.
  */
-export function drawCursor(board: CellBuffer, stack: Stack): void {
-  const y = bufferRowFor(stack, stack.curRow);
-  if (y < 0 || y >= board.length) return;
+export function drawCursor(
+  board: CellBuffer, stack: Stack, scale: BoardScale = { x: 1, y: 1 },
+): void {
+  const top = bufferRowFor(stack, stack.curRow) * scale.y;
+  if (top < 0 || top >= board.length) return;
 
-  const left = (stack.curCol - 1) * PANEL_COLS;
-  const right = left + PANEL_COLS * 2 - 1;
-  markCursorCell(board, y, left, '[');
-  markCursorCell(board, y, right, ']');
+  const left = (stack.curCol - 1) * PANEL_COLS * scale.x;
+  const right = left + PANEL_COLS * 2 * scale.x - 1;
+
+  // A taller tile gets a taller cursor, so the pair it holds stays framed.
+  for (let row = top; row < Math.min(board.length, top + scale.y); row++) {
+    markCursorCell(board, row, left, '[');
+    markCursorCell(board, row, right, ']');
+  }
 }
 
 function markCursorCell(board: CellBuffer, y: number, x: number, char: string): void {

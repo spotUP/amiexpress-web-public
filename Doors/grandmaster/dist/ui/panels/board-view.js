@@ -22,6 +22,7 @@ exports.bufferRowFor = bufferRowFor;
 exports.engineRowFor = engineRowFor;
 exports.boardSize = boardSize;
 exports.animationFor = animationFor;
+exports.scaleBuffer = scaleBuffer;
 exports.buildBoard = buildBoard;
 exports.drawCursor = drawCursor;
 const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
@@ -152,6 +153,28 @@ function spriteFor(panel, sheet, variant) {
     return sheet[name] ?? null;
 }
 /**
+ * Repeat every cell `scale.x` across and `scale.y` down.
+ *
+ * Nearest-neighbour on CELLS, which is exact rather than approximate: a panel
+ * is a flat colour, so a tile twice the size is the same cell four times and
+ * nothing is interpolated or lost.
+ */
+function scaleBuffer(buffer, scale) {
+    if (scale.x <= 1 && scale.y <= 1)
+        return buffer;
+    const out = [];
+    for (const row of buffer) {
+        const wide = [];
+        for (const cell of row) {
+            for (let i = 0; i < scale.x; i++)
+                wide.push(cell ? { ...cell } : null);
+        }
+        for (let i = 0; i < scale.y; i++)
+            out.push(wide.map(c => (c ? { ...c } : null)));
+    }
+    return out;
+}
+/**
  * The board, drawn.
  *
  * `tick` is the game's own frame counter, never wall clock - frameAt is a pure
@@ -194,9 +217,14 @@ function buildBoard(stack, sheet, tick, options = {}) {
             (0, cell_art_1.blitSprite)(board, sprite, animation, tick, col - 1, bufferRowFor(stack, row));
         }
     }
-    if (options.showCursor !== false)
-        drawCursor(board, stack);
-    return board;
+    // The cursor is drawn AFTER the enlargement, at the enlarged size. Scaling
+    // it with everything else would repeat the brackets - "[[" and "]]" at 2x -
+    // instead of drawing one cursor around a bigger pair of panels.
+    const scaled = scaleBuffer(board, options.scale ?? { x: 1, y: 1 });
+    if (options.showCursor !== false) {
+        drawCursor(scaled, stack, options.scale ?? { x: 1, y: 1 });
+    }
+    return scaled;
 }
 /**
  * The cursor, drawn over the two panels it holds.
@@ -205,14 +233,17 @@ function buildBoard(stack, sheet, tick, options = {}) {
  * have to stay readable, since choosing a swap means reading what is under the
  * cursor. Each cell keeps its own colours; only the glyph changes.
  */
-function drawCursor(board, stack) {
-    const y = bufferRowFor(stack, stack.curRow);
-    if (y < 0 || y >= board.length)
+function drawCursor(board, stack, scale = { x: 1, y: 1 }) {
+    const top = bufferRowFor(stack, stack.curRow) * scale.y;
+    if (top < 0 || top >= board.length)
         return;
-    const left = (stack.curCol - 1) * exports.PANEL_COLS;
-    const right = left + exports.PANEL_COLS * 2 - 1;
-    markCursorCell(board, y, left, '[');
-    markCursorCell(board, y, right, ']');
+    const left = (stack.curCol - 1) * exports.PANEL_COLS * scale.x;
+    const right = left + exports.PANEL_COLS * 2 * scale.x - 1;
+    // A taller tile gets a taller cursor, so the pair it holds stays framed.
+    for (let row = top; row < Math.min(board.length, top + scale.y); row++) {
+        markCursorCell(board, row, left, '[');
+        markCursorCell(board, row, right, ']');
+    }
 }
 function markCursorCell(board, y, x, char) {
     const row = board[y];
