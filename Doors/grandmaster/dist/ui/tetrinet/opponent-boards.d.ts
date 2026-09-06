@@ -40,6 +40,17 @@ export interface OpponentBoardsOptions {
     /** Characters per cell at full size. One on a square-celled screen, two on a terminal. */
     cellWidth?: number;
     /**
+     * Draw the panel's own frame?
+     *
+     * It costs two columns and two rows, and a lone full-size board brings its
+     * own frame - so on a narrow screen the outer one is the difference between
+     * a full field and a minimap. Fourteen columns hold a twelve-block field
+     * with its frame; the panel's frame leaves twelve, one short, and the widget
+     * quietly fell back to a scaled board: "tetrinet shows a minimap, it doesnt
+     * need to do that if there is only one opponent" (2026-09-06).
+     */
+    frame?: boolean;
+    /**
      * How many fields may be drawn at FULL size, side by side.
      *
      * The in-game side panel leaves this at 1: it is 26 columns wide, so one
@@ -68,6 +79,8 @@ export declare class OpponentBoards {
      * fit two full size playfields?" (2026-09-06).
      */
     private cellWidth;
+    /** Does this panel draw its own frame? */
+    private framed;
     private boardWidth;
     private boardHeight;
     private perRow;

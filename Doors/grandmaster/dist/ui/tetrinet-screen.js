@@ -585,6 +585,9 @@ class TetriNetScreen {
             maxOpponents: compact ? 1 : 5,
             maxFullBoards: 1,
             cellWidth: (0, block_width_1.blockCols)(this.screen.width),
+            // No outer frame at forty columns: the two columns it costs are exactly
+            // the two a full-size field needs, and a lone board has its own.
+            frame: !compact,
         });
         // A BBS terminal is 24 OR 25 rows (Screen clamps to 25). The layout is
         // built for 24, so on a 25-row terminal the last row was left unpainted

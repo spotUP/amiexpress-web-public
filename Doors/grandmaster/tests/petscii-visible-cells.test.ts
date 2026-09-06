@@ -182,3 +182,45 @@ export async function eightyColumnsIsUnchangedAndFits(): Promise<void> {
   );
   screen.destroy();
 }
+
+/**
+ * ONE opponent gets a FULL field, not a scaled one.
+ *
+ * A full TetriNET field is twelve blocks plus its own frame - fourteen
+ * columns at one character each - and the panel around it costs two more. At
+ * forty columns those two are exactly what is missing, so the widget quietly
+ * fell back to a minimap: "tetrinet shows a minimap, it doesnt need to do
+ * that if there is only one opponent" (2026-09-06). The outer frame is
+ * redundant when a lone board brings its own, so it goes.
+ */
+export async function aLoneOpponentIsDrawnFullSize(): Promise<void> {
+  const { OpponentBoards } = require('../ui/tetrinet/opponent-boards');
+  const board = {
+    width: 12,
+    height: 22,
+    grid: Array.from({ length: 22 }, () => Array.from({ length: 12 }, () => 0)),
+  };
+
+  for (const [width, cellWidth, frame, panelWidth] of [
+    [40, 1, false, 14],
+    [80, 2, true, 28],
+  ] as Array<[number, number, boolean, number]>) {
+    const screen: any = new Screen({
+      title: 'ob', width, height: 25, responsive: width !== 80,
+    } as any);
+    const panel: any = new OpponentBoards({
+      parent: screen, top: 0, left: 0, width: panelWidth, height: 24,
+      maxOpponents: 1, maxFullBoards: 1, cellWidth, frame,
+    });
+    panel.updateBoards([{ id: 'a', name: 'Adept', board, alive: true }]);
+
+    const [widget] = [...panel.miniBoards.values()] as any[];
+    assert.ok(widget, `no board drawn at ${width} columns`);
+    assert.strictEqual(
+      widget.cols, 12,
+      `at ${width} columns the lone opponent was scaled to ${widget.cols} columns, not drawn in full`,
+    );
+    assert.strictEqual(widget.cellWidth, cellWidth, 'and at the screen\'s own cell width');
+    screen.destroy();
+  }
+}

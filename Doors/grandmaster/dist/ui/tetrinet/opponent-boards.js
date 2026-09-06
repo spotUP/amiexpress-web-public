@@ -40,6 +40,8 @@ class OpponentBoards {
          * fit two full size playfields?" (2026-09-06).
          */
         this.cellWidth = CELL_WIDTH;
+        /** Does this panel draw its own frame? */
+        this.framed = true;
         // 6 scaled columns + 2 borders, and 8 scaled rows + name + 2 borders.
         // Five of these tile a 28x24 panel: three across (3 * 9 = 27 <= 26 inner
         // plus the last board's own width) and two down.
@@ -61,6 +63,7 @@ class OpponentBoards {
         this.maxFullBoards = 1;
         this.maxOpponents = options.maxOpponents || 5;
         this.cellWidth = options.cellWidth ?? CELL_WIDTH;
+        this.framed = options.frame !== false;
         // The spectator view has the whole screen and lays six fields out in a
         // single row; the in-game panel is a narrow column and keeps its 3x2.
         if (options.boardWidth)
@@ -80,9 +83,9 @@ class OpponentBoards {
             left: options.left,
             width,
             height,
-            border: { type: 'line' },
+            border: options.frame === false ? undefined : { type: 'line' },
             style: { border: { fg: 'cyan' } },
-            label: options.label ?? ' Opponents ',
+            label: options.frame === false ? undefined : (options.label ?? ' Opponents '),
             content: '',
             fixed: true, // Fixed during gameplay, not dockable
             focusable: false,
@@ -303,8 +306,10 @@ class OpponentBoards {
     }
     /** Usable space inside the panel's border. */
     innerSize() {
-        const width = (this.container.width ?? this.boardWidth * this.perRow + 4) - 2;
-        const height = (this.container.height ?? this.boardHeight * 2 + 2) - 2;
+        // A frameless panel's inside IS its size; a framed one loses two of each.
+        const chrome = this.framed ? 2 : 0;
+        const width = (this.container.width ?? this.boardWidth * this.perRow + 4) - chrome;
+        const height = (this.container.height ?? this.boardHeight * 2 + 2) - chrome;
         return { width, height };
     }
     /**
