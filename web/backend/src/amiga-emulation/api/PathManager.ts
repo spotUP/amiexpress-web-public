@@ -9,7 +9,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
 import { resolvePath as resolveCaseInsensitivePath } from '../../utils/amigafs';
-import { AMIGA_ENV_DIR, amigaEnvArchiveDir } from '../utils/env-paths';
+import { amigaEnvArchiveDir, amigaEnvDir, amigaRamDir } from '../utils/env-paths';
 
 export class PathManager {
   /** Map of AmigaDOS logical devices (assigns) to system paths */
@@ -73,7 +73,7 @@ export class PathManager {
     this.assigns.set('s:', this.normalizeAssignPath(path.join(this.baseDir, 'S/')));
     this.assigns.set('work:', this.normalizeAssignPath(this.baseDir));
     this.assigns.set('sami:', this.normalizeAssignPath(path.join(this.baseDir, 'S/')));
-    this.assigns.set('env:', this.normalizeAssignPath(AMIGA_ENV_DIR));
+    this.assigns.set('env:', this.normalizeAssignPath(amigaEnvDir()));
     // ENVARC: is the on-disk half of the AmigaOS environment (see
     // utils/env-paths.ts). Without it, a door's archive write - the one that
     // is supposed to outlive a reboot - fell through the unknown-volume
@@ -94,7 +94,7 @@ export class PathManager {
     this.assigns.set('classes:', this.normalizeAssignPath(path.join(this.baseDir, 'System/Classes/')));
 
     // RAM disk and temp
-    this.assigns.set('ram:', this.normalizeAssignPath('/tmp/ram/'));
+    this.assigns.set('ram:', this.normalizeAssignPath(`${amigaRamDir()}/`));
     this.assigns.set('t:', this.normalizeAssignPath('/tmp/'));
 
 console.log('[PathManager] Initialized assigns:');
@@ -257,8 +257,14 @@ console.log(`[PathManager] Mapped (case-insensitive): "${amiPath}" => "${caseIns
           }
         }
 
+        // Same rule as the volume fallback above (158025e18), which is the
+        // only branch of this function that had it: AmigaDOS looks a name up
+        // case-INSENSITIVELY and creates it case-PRESERVINGLY. Returning the
+        // raw path here is the create case - exactly when a door is about to
+        // write - so it is what mints "conf2/mystuff/New.dat" beside a real
+        // "Conf2/MyStuff/" on the container.
 console.log(`[PathManager] Mapped: "${amiPath}" => "${fullPath}"`);
-        return fullPath;
+        return amigafs.resolveExistingAncestors(fullPath);
       }
     }
 
@@ -288,8 +294,9 @@ console.log(`[PathManager] Relative -> baseDir fallback (case-insensitive): "${a
         }
       }
 
+      // See the volume fallback: the raw path is the create case.
 console.log(`[PathManager] Relative path: "${amiPath}" => "${fullPath}"`);
-      return fullPath;
+      return amigafs.resolveExistingAncestors(fullPath);
     }
 
     // No assign and no current directory - try relative to base
@@ -302,9 +309,10 @@ console.log(`[PathManager] Base relative (case-insensitive): "${amiPath}" => "${
       return basePath;
     }
 
+    // See the volume fallback: the raw path is the create case.
     const fullPath = path.join(this.baseDir, amiPath);
 console.log(`[PathManager] Base relative: "${amiPath}" => "${fullPath}"`);
-    return fullPath;
+    return amigafs.resolveExistingAncestors(fullPath);
   }
 
   /**

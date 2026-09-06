@@ -192,7 +192,19 @@ export function lstatSync(filePath: string): fs.Stats {
 
 /**
  * Case-insensitive writeFileSync
- * Creates file with exact casing provided in path
+ *
+ * Resolves the WHOLE path, leaf included, exactly as openSync and
+ * appendFileSync already do. It used to resolve only the parent directory and
+ * then join path.basename() verbatim, which meant writing "hiscores" into a
+ * directory holding "HISCORES" produced a SECOND file - the STNG bug
+ * (3d7cb9f3f), and the shape of every "the door wrote its data and the next
+ * run read it back empty" report. An Amiga volume cannot hold two files whose
+ * names differ only in case, so a write must land on the one that is there.
+ *
+ * resolveExistingAncestors() is what makes both halves work at once: an
+ * existing file resolves to its real spelling, and a genuinely new leaf still
+ * keeps the caller's case inside a correctly-cased parent. No second case
+ * matcher - it is the same resolvePath() underneath.
  */
 export function writeFileSync(filePath: string, data: string | Buffer, options?: fs.WriteFileOptions): void {
   // For writes, ensure parent directory exists (case-insensitive)
@@ -203,9 +215,9 @@ export function writeFileSync(filePath: string, data: string | Buffer, options?:
     throw new Error(`ENOENT: no such file or directory, open '${filePath}'`);
   }
 
-  // Write to the exact path provided (preserves casing for new files)
-  const targetPath = path.join(resolvedDir, path.basename(filePath));
-  fs.writeFileSync(targetPath, data, options);
+  // The existing file if there is one (whatever its case), otherwise this
+  // leaf spelled as asked, inside the parent's real spelling.
+  fs.writeFileSync(resolveExistingAncestors(filePath), data, options);
 }
 
 /**
@@ -238,7 +250,12 @@ export function unlinkSync(filePath: string): void {
 
 /**
  * Case-insensitive mkdirSync
- * Creates directory with exact casing provided
+ *
+ * Creates the new directory with the caller's casing, but INSIDE the real
+ * spelling of whatever already exists above it. The raw path used to go
+ * straight to fs.mkdirSync, so with recursive:true a missing intermediate was
+ * minted in the caller's case beside the real one - "configs/" beside
+ * "Configs/", "bulletins/" beside "Bulletins/".
  */
 export function mkdirSync(dirPath: string, options?: fs.MakeDirectoryOptions): void {
   // Check if already exists (case-insensitive)
@@ -252,8 +269,9 @@ export function mkdirSync(dirPath: string, options?: fs.MakeDirectoryOptions): v
     return;
   }
 
-  // Create with exact casing
-  fs.mkdirSync(dirPath, options);
+  // Exact casing for the part that is new; the disk's casing for the part
+  // that already exists.
+  fs.mkdirSync(resolveExistingAncestors(dirPath), options);
 }
 
 /**
@@ -287,8 +305,9 @@ export function renameSync(oldPath: string, newPath: string): void {
     throw new Error(`ENOENT: no such file or directory, rename '${oldPath}' -> '${newPath}'`);
   }
 
-  const targetPath = path.join(resolvedNewDir, path.basename(newPath));
-  fs.renameSync(resolvedOld, targetPath);
+  // Whole destination path, leaf included - renaming onto a differently-cased
+  // existing file must REPLACE it, not sit beside it.
+  fs.renameSync(resolvedOld, resolveExistingAncestors(newPath));
 }
 
 /**
@@ -309,8 +328,8 @@ export function copyFileSync(src: string, dest: string, flags?: number): void {
     throw new Error(`ENOENT: no such file or directory, copyfile '${src}' -> '${dest}'`);
   }
 
-  const targetPath = path.join(resolvedDestDir, path.basename(dest));
-  fs.copyFileSync(resolvedSrc, targetPath, flags);
+  // Whole destination path, leaf included - see renameSync.
+  fs.copyFileSync(resolvedSrc, resolveExistingAncestors(dest), flags);
 }
 
 /**
@@ -549,8 +568,8 @@ export function linkSync(existingPath: string, newPath: string): void {
     throw new Error(`ENOENT: no such file or directory, link '${existingPath}' -> '${newPath}'`);
   }
 
-  const targetPath = path.join(resolvedNewDir, path.basename(newPath));
-  fs.linkSync(resolvedExisting, targetPath);
+  // Whole destination path, leaf included - see renameSync.
+  fs.linkSync(resolvedExisting, resolveExistingAncestors(newPath));
 }
 
 /**
@@ -566,10 +585,9 @@ export function symlinkSync(target: string, linkPath: string, type?: fs.symlink.
     throw new Error(`ENOENT: no such file or directory, symlink '${target}' -> '${linkPath}'`);
   }
 
-  const targetLinkPath = path.join(resolvedLinkDir, path.basename(linkPath));
-
-  // Note: target doesn't need to exist for symlink creation
-  fs.symlinkSync(target, targetLinkPath, type);
+  // Whole link path, leaf included - see renameSync. The symlink TARGET is
+  // deliberately untouched: it is a stored string, not a path we open.
+  fs.symlinkSync(target, resolveExistingAncestors(linkPath), type);
 }
 
 /**
