@@ -117,7 +117,13 @@ beforeEach(() => {
   harness.pressGameKey.mockReset();
   harness.releaseGameKey.mockReset();
   harness.sendMouse.mockReset();
+  // These exercise the BUTTON pad, so they ask for it. A phone that has never
+  // been told otherwise now swipes - see readTouchScheme - and the two tests
+  // below were reading the old default rather than stating a preference.
+  window.localStorage.setItem('bbs_touch_scheme', 'buttons');
 });
+
+afterEach(() => window.localStorage.removeItem('bbs_touch_scheme'));
 
 afterEach(cleanup);
 

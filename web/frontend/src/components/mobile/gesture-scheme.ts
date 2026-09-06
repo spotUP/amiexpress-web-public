@@ -334,8 +334,23 @@ export type TouchScheme = 'buttons' | 'gestures';
 
 export const TOUCH_SCHEME_KEY = 'bbs_touch_scheme';
 
+/**
+ * GESTURES ARE THE DEFAULT ON A PHONE.
+ *
+ * The pad was the default because it is discoverable - every control is
+ * visible and labelled. What a beta on real phones showed is that
+ * discoverability is not the problem worth solving: the scheme is stored per
+ * BROWSER, so testers on different browsers got different controls without
+ * knowing a choice existed, and the ones who landed on the pad reported that
+ * swiping "did not work" (2026-09-06). It was working exactly as built; they
+ * had never been shown the scheme that swipes.
+ *
+ * A player who wants the buttons still has them one tap away - the gesture
+ * panel carries the link, and the choice is remembered either way - which is
+ * the same escape hatch the pad always offered in the other direction.
+ */
 export function readTouchScheme(storage: Pick<Storage, 'getItem'>): TouchScheme {
-  return storage.getItem(TOUCH_SCHEME_KEY) === 'gestures' ? 'gestures' : 'buttons';
+  return storage.getItem(TOUCH_SCHEME_KEY) === 'buttons' ? 'buttons' : 'gestures';
 }
 
 export function writeTouchScheme(storage: Pick<Storage, 'setItem'>, scheme: TouchScheme): void {

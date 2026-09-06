@@ -132,8 +132,25 @@ describe('lifting the thumb', () => {
 });
 
 describe('scheme preference', () => {
-  it('defaults to the button pad', () => {
-    expect(readTouchScheme({ getItem: () => null })).toBe('buttons');
+  /**
+   * A phone that has never been told otherwise swipes.
+   *
+   * The pad used to be the default because it is discoverable. A beta on real
+   * phones showed that was the wrong thing to optimise for: the scheme is
+   * stored per BROWSER, so testers on different browsers silently got
+   * different controls, and the ones who landed on the pad reported that
+   * swiping did not work. It was working; they had never been shown it.
+   */
+  it('defaults to gestures, which is what a thumb reaches for', () => {
+    expect(readTouchScheme({ getItem: () => null })).toBe('gestures');
+  });
+
+  it('remembers a player who chose the buttons', () => {
+    const store: Record<string, string> = {};
+    writeTouchScheme({ setItem: (k, v) => { store[k] = v; } }, 'buttons');
+
+    expect(store[TOUCH_SCHEME_KEY]).toBe('buttons');
+    expect(readTouchScheme({ getItem: (k) => store[k] ?? null })).toBe('buttons');
   });
 
   it('remembers a player who chose gestures', () => {
@@ -142,6 +159,12 @@ describe('scheme preference', () => {
 
     expect(store[TOUCH_SCHEME_KEY]).toBe('gestures');
     expect(readTouchScheme({ getItem: (k) => store[k] ?? null })).toBe('gestures');
+  });
+
+  /** An unreadable or unknown value is not a reason to hide the swipes. */
+  it('falls back to gestures on nonsense', () => {
+    expect(readTouchScheme({ getItem: () => 'wobble' })).toBe('gestures');
+    expect(readTouchScheme({ getItem: () => '' })).toBe('gestures');
   });
 });
 
