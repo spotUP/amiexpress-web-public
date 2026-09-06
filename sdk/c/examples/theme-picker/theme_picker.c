@@ -68,12 +68,12 @@ static const char *theme_row(void *context, int index)
 
     row[0] = '\0';
     {
-        char pen[3];
+        char pen[4];
         ui_ink(pen, (strcmp(t->id, active_theme) == 0)
-                    ? row_theme->accent : row_theme->dim);
+                    ? UI_TOKEN(UI_T_ACCENT) : UI_TOKEN(UI_T_DIM));
         strcat(row, pen);
         strcat(row, mark);
-        ui_ink(pen, row_theme->ink);
+        ui_ink(pen, UI_TOKEN(UI_T_INK));
         strcat(row, pen);
     }
     /* The NAME, like the TypeScript picker: "Slate & Slash", not
@@ -101,8 +101,8 @@ static const char *theme_row(void *context, int index)
         if (bytes < sizeof(row) - 2) row[bytes++] = ' ';
         row[bytes] = '\0';
         {
-            char pen[3];
-            ui_ink(pen, row_theme->dim);
+            char pen[4];
+            ui_ink(pen, UI_TOKEN(UI_T_DIM));
             strcat(row, pen);
         }
         strncat(row, t->blurb[0] ? t->blurb : (t->rail[0] ? t->rail : "-"),
@@ -150,8 +150,8 @@ static void door_idle(void *ctx)
     if (!a) return;
     (*a->tick)++;
     ui_masthead_draw_tick(&a->screen->buf, 1, 1, a->screen->cols, "DOOR THEME",
-                          (*a->theme)->rail, (*a->theme)->ground,
-                          (*a->theme)->accent, *a->tick);
+                          (*a->theme)->rail, UI_TOKEN(UI_T_ACCENT),
+                          UI_TOKEN(UI_T_GROUND), *a->tick);
     ui_screen_flush(a->screen);
     /* Ten ticks is a fifth of a second on a PAL Amiga. */
     ae_delay_ticks(10);
@@ -195,6 +195,9 @@ int main(int argc, char **argv)
     ae_user_theme(&session, active_theme, (int)sizeof(active_theme));
     theme = ui_theme_by_id(active_theme);
     row_theme = theme;
+    /* The theme's EXACT colours, so this door writes the same bytes the
+       TypeScript one does rather than the nearest of sixteen. */
+    ansi_set_palette(&screen.buf, theme->rgb, theme->idx, UI_TOKEN_COUNT);
 
     keys.next = door_key;
     keys.pending = door_pending;
@@ -233,10 +236,10 @@ int main(int argc, char **argv)
     }
     /* The primary colour carries the chrome, the same rule the TypeScript
        doors follow since 2026-09-03. */
-    list.chrome = theme->accent;
-    list.ink = theme->ink;
-    list.selected_fg = theme->selection_ink;
-    list.selected_bg = theme->selection_bg;
+    list.chrome = UI_TOKEN(UI_T_ACCENT);
+    list.ink = UI_TOKEN(UI_T_INK);
+    list.selected_fg = UI_TOKEN(UI_T_SELECTION_INK);
+    list.selected_bg = UI_TOKEN(UI_T_SELECTION_BG);
 
     {
         int i;
@@ -258,9 +261,16 @@ int main(int argc, char **argv)
            row here left a C64 caller looking at a screen with no name on it,
            which the TypeScript never did (measured side by side,
            2026-09-06). */
+        /* On the GROUND. The blessed masthead is a row of the theme's own
+           colours on the screen's background - `{ fg: dim, bg: ground }`
+           with the rail and title painted into it - and the C drew it as
+           ground-on-accent, which is a slab of the accent colour with the
+           slashes cut out of it. "the ///// should have black background
+           not light, in all themes" (sysop, 2026-09-07). */
         ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, "DOOR THEME",
                               screen.profile.collapse_chrome ? "" : theme->rail,
-                              theme->ground, theme->accent, rail_tick);
+                              UI_TOKEN(UI_T_ACCENT), UI_TOKEN(UI_T_GROUND),
+                              rail_tick);
         ui_list_draw(&list, &screen.buf);
 
         /* Say what will happen, and say the truth about this board - in
@@ -301,10 +311,10 @@ int main(int argc, char **argv)
                theme's accent and the verb is dim, which is what footerHints
                does and what makes a themed footer look themed. */
             static char h1[40], h2[40], h3[40];
-            char keypen[3], dimpen[3];
+            char keypen[4], dimpen[4];
 
-            ui_ink(keypen, theme->accent);
-            ui_ink(dimpen, theme->dim);
+            ui_ink(keypen, UI_TOKEN(UI_T_ACCENT));
+            ui_ink(dimpen, UI_TOKEN(UI_T_DIM));
 
             sprintf(h1, "%s%s %s%s", keypen, wide ? "Up/Down:" : "Up/Dn:",
                     dimpen, wide ? "Choose" : "Pick");
@@ -340,11 +350,15 @@ int main(int argc, char **argv)
             if (screen.profile.collapse_chrome) {
                 /* No bar: chrome is collapsed here, so the hints are a line
                    of dim text like every other line on the screen. */
-                ansi_color(&screen.buf, theme->dim, ANSI_BLACK, 0);
+                /* -1, not the ground: blessed writes no background for ordinary
+           text and a door that paints one owns every cell it touches. */
+        ansi_color(&screen.buf, UI_TOKEN(UI_T_DIM), -1, 0);
                 ansi_text(&screen.buf, screen.rows, 1, footer, screen.cols - 1);
             } else {
+                /* footerStyle(): `{ fg: dim, bg: bar }`. The C had it as
+                   ground-on-accent - the same inversion as the masthead. */
                 ui_bar_draw(&screen.buf, screen.rows, 1, screen.cols,
-                            footer, theme->ground, theme->accent);
+                            footer, UI_TOKEN(UI_T_DIM), UI_TOKEN(UI_T_BAR));
             }
         }
 
@@ -374,10 +388,11 @@ int main(int argc, char **argv)
                     ae_user_theme(&session, active_theme, (int)sizeof(active_theme));
                     theme = ui_theme_by_id(active_theme);
                     row_theme = theme;
-                    list.chrome = theme->accent;
-                    list.ink = theme->ink;
-                    list.selected_fg = theme->selection_ink;
-                    list.selected_bg = theme->selection_bg;
+                    ansi_set_palette(&screen.buf, theme->rgb, theme->idx, UI_TOKEN_COUNT);
+                    list.chrome = UI_TOKEN(UI_T_ACCENT);
+                    list.ink = UI_TOKEN(UI_T_INK);
+                    list.selected_fg = UI_TOKEN(UI_T_SELECTION_INK);
+                    list.selected_bg = UI_TOKEN(UI_T_SELECTION_BG);
                     saved = 1;
                 }
                 break;

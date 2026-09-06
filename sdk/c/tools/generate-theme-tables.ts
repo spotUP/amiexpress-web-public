@@ -181,11 +181,25 @@ function render(themes: readonly Theme[]): string {
     const border = theme.border === 'none' ? 'UI_BORDER_NONE' : 'UI_BORDER_LINE';
     const rail = JSON.stringify(theme.rail ?? '');
 
+    const rgb = TOKEN_ORDER
+      .map((token) => {
+        const [r, g, b] = rgbOf(theme.tokens[token]);
+        const packed = (r << 16) | (g << 8) | b;
+        return `0x${packed.toString(16).padStart(6, '0')}UL`;
+      })
+      .join(', ');
+
+    const idx = TOKEN_ORDER.map((token) => reduce(theme.tokens[token]).c).join(', ');
+
     return `    {
         "${theme.id}",
         ${JSON.stringify(theme.name ?? theme.id)},
         ${JSON.stringify(theme.blurb ?? '')},
 ${fields}
+        /* The exact colours, in ui_token order. */
+        { ${rgb} },
+        /* And the nearest of sixteen, same order, for a screen with no palette. */
+        { ${idx} },
         ${border},
         ${rail}
     }`;

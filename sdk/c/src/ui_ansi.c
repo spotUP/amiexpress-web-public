@@ -72,6 +72,9 @@ void ansi_begin(ansi_buf *b, char *storage, long capacity)
     /* An ANSI terminal until something says otherwise, which is what every
        existing caller has always been. */
     b->cell_backgrounds = 1;
+    b->palette = 0;
+    b->palette_idx = 0;
+    b->palette_len = 0;
 }
 
 void ansi_flush(ansi_buf *b, ansi_sink_fn sink, void *context)
@@ -118,26 +121,75 @@ void ansi_goto(ansi_buf *b, int row, int col)
     put_char(b, 'H');
 }
 
+/** The exact colour for a token, or -1 for "not one, or no palette". */
+static long token_rgb(const ansi_buf *b, int colour)
+{
+    int n = colour - UI_TOKEN_BASE;
+
+    if (colour < UI_TOKEN_BASE) return -1;
+    if (!b->palette || n < 0 || n >= b->palette_len) return -1;
+    return (long) b->palette[n];
+}
+
+static void put_rgb(ansi_buf *b, int lead, unsigned long rgb)
+{
+    put_int(b, lead);
+    put_str(b, ";2;");
+    put_int(b, (int) ((rgb >> 16) & 0xff));
+    put_char(b, ';');
+    put_int(b, (int) ((rgb >> 8) & 0xff));
+    put_char(b, ';');
+    put_int(b, (int) (rgb & 0xff));
+}
+
 void ansi_color(ansi_buf *b, int fg, int bg, int bold)
 {
     int pen;
     int want_reverse = 0;
+    /* What the CALLER asked for, which is what the cache remembers. Two
+       tokens can share a sixteen-colour fallback and still be different
+       colours - quiet-phosphor's accent and ink both fall back to 10 - so
+       comparing the collapsed value made the second one a no-op and the
+       masthead's title came out in the rail's colour. */
+    int want_fg = fg;
+    int want_bg = bg;
+
+    long fg_rgb = token_rgb(b, fg);
+    long bg_rgb = token_rgb(b, bg);
+
+    /* A token with no truecolour behind it still has to be a colour: the
+       theme's own nearest-of-sixteen for that token. Without this a door
+       that named a token on a plain terminal asked for colour 106. */
+    if (fg >= UI_TOKEN_BASE) {
+        int n = fg - UI_TOKEN_BASE;
+        fg = (b->palette_idx && n < b->palette_len) ? b->palette_idx[n] : ANSI_WHITE;
+    }
+    if (bg >= UI_TOKEN_BASE) {
+        int n = bg - UI_TOKEN_BASE;
+        bg = (b->palette_idx && n < b->palette_len) ? b->palette_idx[n] : ANSI_BLACK;
+    }
 
     /* 8 and up is the bright half of the terminal's sixteen: bold, plus the
        base colour. A caller passes a theme token straight in and does not
-       have to know which half it landed in. */
-    if (fg >= ANSI_BRIGHT) { bold = 1; fg -= ANSI_BRIGHT; }
-    if (bg >= ANSI_BRIGHT) { bg -= ANSI_BRIGHT; }
+       have to know which half it landed in.
+       Only where the colour is a NUMBER, though: with the exact RGB going
+       out there is nothing for bold to brighten, and asking for it anyway
+       moved the C64's rendering of that cell onto a different VIC entry
+       than the TypeScript's. */
+    if (fg >= ANSI_BRIGHT && fg < UI_TOKEN_BASE) { bold = 1; fg -= ANSI_BRIGHT; }
+    else if (fg_rgb >= 0) { bold = 0; }
+    if (bg >= ANSI_BRIGHT && bg < UI_TOKEN_BASE) { bg -= ANSI_BRIGHT; }
     pen = fg;
 
     /* Already showing exactly this? Then the sequence is bytes for
      * nothing - and on this door bytes are milliseconds, because every
      * 198 of them is an XIM message costing about 45ms of 68K emulation. */
-    if (b->last_fg == fg && b->last_bg == bg && b->last_bold == (bold ? 1 : 0)) {
+    if (b->last_fg == want_fg && b->last_bg == want_bg
+        && b->last_bold == (bold ? 1 : 0)) {
         return;
     }
-    b->last_fg = fg;
-    b->last_bg = bg;
+    b->last_fg = want_fg;
+    b->last_bg = want_bg;
     b->last_bold = bold ? 1 : 0;
 
     /* INK ON A BAR, WHERE THERE ARE NO BACKGROUNDS.
@@ -172,13 +224,36 @@ void ansi_color(ansi_buf *b, int fg, int bg, int bold)
         put_str(b, ";7");
     }
     put_char(b, ';');
-    put_int(b, 30 + pen);
+    /* THE EXACT COLOUR when the buffer has the theme's palette, and the
+       nearest of sixteen when it has not. `38;2;r;g;b` is what the
+       TypeScript writes, so the two implementations put the same shade on
+       the same screen; a PETSCII caller gets the nearest VIC either way,
+       because the transducer reduces truecolour on its way out. */
+    if (fg_rgb >= 0) {
+        put_rgb(b, 38, (unsigned long) fg_rgb);
+    } else {
+        put_int(b, 30 + pen);
+    }
     /* Only where a cell can hold one. Asking on a C64 is what gets dropped. */
-    if (bg >= 0 && b->cell_backgrounds) {
+    if (b->cell_backgrounds && (bg_rgb >= 0 || bg >= 0)) {
         put_char(b, ';');
-        put_int(b, 40 + bg);
+        if (bg_rgb >= 0) put_rgb(b, 48, (unsigned long) bg_rgb);
+        else put_int(b, 40 + bg);
     }
     put_char(b, 'm');
+}
+
+void ansi_set_palette(ansi_buf *b, const unsigned long *rgb,
+                      const unsigned char *idx, int count)
+{
+    if (!b) return;
+    b->palette = rgb;
+    b->palette_idx = idx;
+    b->palette_len = (rgb || idx) ? count : 0;
+    /* The colour on screen was written in the old palette's terms. */
+    b->last_fg = -1;
+    b->last_bg = -1;
+    b->last_bold = -1;
 }
 
 void ansi_set_cell_backgrounds(ansi_buf *b, int can)
@@ -238,6 +313,14 @@ static void write_text(ansi_buf *b, int row, int col, const char *text, int maxl
         /* A pen change, and it costs the row no columns (ui_ansi.h). */
         if (c == UI_INK && at[1] != '\0') {
             char what = at[1];
+            if (what == 'T' && at[2] != '\0') {
+                /* A token: the palette decides what colour that is. */
+                char d = at[2];
+                int n = (d >= '0' && d <= '9') ? d - '0' : 10 + (d - 'a');
+                ansi_color(b, UI_TOKEN(n), base_bg, b->last_bold);
+                at += 3;
+                continue;
+            }
             if (what >= '0' && what <= '9') {
                 ansi_color(b, what - '0', base_bg, b->last_bold);
             } else if (what >= 'a' && what <= 'f') {
@@ -282,7 +365,11 @@ unsigned long ui_printable_len(const char *text)
 
     if (!text) return 0;
     while (*text) {
-        if (*text == UI_INK && text[1]) { text += 2; continue; }
+        if (*text == UI_INK && text[1]) {
+            /* Two bytes for a colour, three for a token. */
+            text += (text[1] == 'T' && text[2]) ? 3 : 2;
+            continue;
+        }
         n++;
         text++;
     }
@@ -291,9 +378,23 @@ unsigned long ui_printable_len(const char *text)
 
 void ui_ink(char *out, int colour)
 {
-    int c = colour & 15;
+    int c;
 
     if (!out) return;
+
+    /* A THEME TOKEN, which the palette turns into the exact colour: three
+       bytes, `UI_INK 'T' <hex>`. A door with a palette wants these, because
+       the sixteen-colour form can only be the nearest shade. */
+    if (colour >= UI_TOKEN_BASE) {
+        int n = (colour - UI_TOKEN_BASE) & 15;
+        out[0] = UI_INK;
+        out[1] = 'T';
+        out[2] = (char) (n < 10 ? '0' + n : 'a' + (n - 10));
+        out[3] = '\0';
+        return;
+    }
+
+    c = colour & 15;
     out[0] = UI_INK;
     /* A hex digit, so the bright half fits: '0'-'7' are the base colours and
        '8'-'f' their bold twins. */

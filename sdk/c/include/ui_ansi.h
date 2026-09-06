@@ -102,6 +102,19 @@ typedef struct {
      * seven themes ended up drawing a black bar on a black screen.
      */
     int cell_backgrounds;
+    /**
+     * The theme's exact colours, or NULL for the terminal's sixteen.
+     *
+     * When it is set, a colour of UI_TOKEN(n) or a UI_INK marker naming a
+     * token is written as `38;2;r;g;b` - the same bytes the TypeScript
+     * writes, which is the only way the two implementations can put the
+     * same shade on a screen. Without it every colour is one of sixteen,
+     * which is what a door had before and what a plain terminal gets.
+     */
+    const unsigned long *palette;
+    /** The same tokens as plain colours, for a terminal with no truecolour. */
+    const unsigned char *palette_idx;
+    int palette_len;
 } ansi_buf;
 
 /**
@@ -123,6 +136,17 @@ typedef struct {
  * afford and a tag syntax is not.
  */
 #define UI_INK '\001'
+
+/**
+ * A colour that names a THEME TOKEN rather than a terminal colour.
+ *
+ * `ansi_color(b, UI_TOKEN(UI_T_ACCENT), ...)` writes the theme's exact
+ * accent when the buffer has a palette, and the nearest of sixteen when it
+ * has not. Values below this are plain ANSI colours, so every existing
+ * caller keeps working unchanged.
+ */
+#define UI_TOKEN_BASE 100
+#define UI_TOKEN(n)   (UI_TOKEN_BASE + (n))
 
 /** The marker for one ANSI colour, into a caller's two-byte buffer. */
 void ui_ink(char *out, int colour);
@@ -161,6 +185,13 @@ void ansi_color(ansi_buf *b, int fg, int bg, int bold);
 /* Restores the terminal's default attributes. Always emit this before
  * handing control back to the BBS. */
 void ansi_reset(ansi_buf *b);
+
+/**
+ * Give the buffer the theme's exact colours (ui_theme.rgb), or NULL to go
+ * back to the terminal's sixteen. `count` is UI_TOKEN_COUNT.
+ */
+void ansi_set_palette(ansi_buf *b, const unsigned long *rgb,
+                      const unsigned char *idx, int count);
 
 /* Say whether this terminal's cells can carry a background (see the field).
  * Call once, after ansi_begin, from whatever knows the screen. */

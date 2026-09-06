@@ -123,7 +123,12 @@ async function createApp(session) {
         border: undefined,
         focusable: false,
         content: '',
-        style: s.bar.style,
+        // ON THE GROUND, not on a bar. s.bar.style is `ground on accent` since
+        // the 2026-09-03 menu-bar rule, and a masthead painted that way is a
+        // slab of the accent colour across the top of the screen with the
+        // slashes cut out of it - "the ///// should have black background not
+        // light, in all themes" (sysop, 2026-09-07).
+        style: { fg: theme.tokens.dim, bg: theme.tokens.ground },
     });
     let active = theme.id; /* the SAVED one, which is what [*] marks */
     const list = (0, blessed_helpers_1.createList)({
@@ -230,6 +235,7 @@ async function createApp(session) {
         noteRow.setContent(buildNote(s, compact));
         noteRow.style = s.plain.style;
         footer.style = (0, theme_1.footerStyle)(next);
+        mastheadRow.style = { fg: next.tokens.dim, bg: next.tokens.ground };
         // The rail and the glitches belong to the theme that is leaving.
         try {
             chrome.stop();
@@ -264,6 +270,16 @@ async function createApp(session) {
             terminalMode.dispose();
             try {
                 screen.destroy();
+            }
+            catch { /* leaving anyway */ }
+            // And the terminal goes back to the board's colours. blessed leaves
+            // whatever SGR it last wrote in force, so a door that ran under a
+            // theme handed the BBS its background: the sysop's menu came up on a
+            // light green field after leaving quiet-phosphor (2026-09-07). SGR 0
+            // is the whole of the fix - attributes off, colours default - and the
+            // cursor is put back with it because a door may have hidden it.
+            try {
+                bbs.write('\x1b[0m\x1b[?25h');
             }
             catch { /* leaving anyway */ }
             resolve();

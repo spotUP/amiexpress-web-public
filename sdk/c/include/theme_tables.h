@@ -35,6 +35,10 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
         /* ok            */ ANSI_GREEN,    /* green -> 2 */
         /* warn          */ ANSI_YELLOW,   /* yellow -> 3 */
         /* alert         */ ANSI_RED,      /* red -> 1 */
+        /* The exact colours, in ui_token order. */
+        { 0x000000UL, 0xaaaaaaUL, 0x00aaaaUL, 0x555555UL, 0x0000aaUL, 0xaaaaaaUL, 0xaa5500UL, 0x00aaaaUL, 0x0000aaUL, 0xaaaaaaUL, 0x00aa00UL, 0xaa5500UL, 0xaa0000UL },
+        /* And the nearest of sixteen, same order, for a screen with no palette. */
+        { 0, 7, 6, 8, 4, 7, 3, 6, 4, 7, 2, 3, 1 },
         UI_BORDER_LINE,
         ""
     },
@@ -55,6 +59,10 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
         /* ok            */ ANSI_BRIGHT_GREEN, /* #57E389 -> 10 */
         /* warn          */ ANSI_BRIGHT_YELLOW, /* #F5C451 -> 11 */
         /* alert         */ ANSI_BRIGHT_RED, /* #FF5C7A -> 9 */
+        /* The exact colours, in ui_token order. */
+        { 0x000000UL, 0xc9d4e8UL, 0x48566eUL, 0x48566eUL, 0x000000UL, 0xc9d4e8UL, 0xff3d9aUL, 0x4de0f0UL, 0xaa00aaUL, 0x000000UL, 0x57e389UL, 0xf5c451UL, 0xff5c7aUL },
+        /* And the nearest of sixteen, same order, for a screen with no palette. */
+        { 0, 15, 8, 8, 0, 15, 13, 14, 5, 0, 10, 11, 9 },
         UI_BORDER_LINE,
         "///"
     },
@@ -75,6 +83,10 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
         /* ok            */ ANSI_WHITE,    /* #95A0B4 -> 7 */
         /* warn          */ ANSI_WHITE,    /* #95A0B4 -> 7 */
         /* alert         */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
+        /* The exact colours, in ui_token order. */
+        { 0x000000UL, 0x95a0b4UL, 0x3a4354UL, 0x5a6474UL, 0x000000UL, 0xff3d9aUL, 0xff3d9aUL, 0x5a6474UL, 0xaa00aaUL, 0x000000UL, 0x95a0b4UL, 0x95a0b4UL, 0xff3d9aUL },
+        /* And the nearest of sixteen, same order, for a screen with no palette. */
+        { 0, 7, 8, 8, 0, 13, 13, 8, 5, 0, 7, 7, 13 },
         UI_BORDER_LINE,
         "///"
     },
@@ -95,6 +107,10 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
         /* ok            */ ANSI_BRIGHT_GREEN, /* #57E389 -> 10 */
         /* warn          */ ANSI_BRIGHT_YELLOW, /* #F5C451 -> 11 */
         /* alert         */ ANSI_BRIGHT_RED, /* #FF5C7A -> 9 */
+        /* The exact colours, in ui_token order. */
+        { 0x000000UL, 0xe4ecfaUL, 0x4de0f0UL, 0x48566eUL, 0x000000UL, 0xff3d9aUL, 0xff3d9aUL, 0xf5c451UL, 0xaa00aaUL, 0x000000UL, 0x57e389UL, 0xf5c451UL, 0xff5c7aUL },
+        /* And the nearest of sixteen, same order, for a screen with no palette. */
+        { 0, 15, 14, 8, 0, 13, 13, 11, 5, 0, 10, 11, 9 },
         UI_BORDER_LINE,
         "/////"
     },
@@ -115,6 +131,10 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
         /* ok            */ ANSI_WHITE,    /* #A8B4C8 -> 7 */
         /* warn          */ ANSI_WHITE,    /* #A8B4C8 -> 7 */
         /* alert         */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
+        /* The exact colours, in ui_token order. */
+        { 0x000000UL, 0xa8b4c8UL, 0x2e6e7aUL, 0x5a6474UL, 0x000000UL, 0xff3d9aUL, 0xff3d9aUL, 0x5a6474UL, 0xaa00aaUL, 0x000000UL, 0xa8b4c8UL, 0xa8b4c8UL, 0xff3d9aUL },
+        /* And the nearest of sixteen, same order, for a screen with no palette. */
+        { 0, 7, 6, 8, 0, 13, 13, 8, 5, 0, 7, 7, 13 },
         UI_BORDER_LINE,
         "/////"
     },
@@ -135,6 +155,10 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
         /* ok            */ ANSI_BRIGHT_GREEN, /* #57E389 -> 10 */
         /* warn          */ ANSI_BRIGHT_YELLOW, /* #F5C451 -> 11 */
         /* alert         */ ANSI_BRIGHT_RED, /* #FF8B6B -> 9 */
+        /* The exact colours, in ui_token order. */
+        { 0x000000UL, 0x57e389UL, 0x2e4a3cUL, 0x2e4a3cUL, 0x000000UL, 0x57e389UL, 0x8cffb4UL, 0xf5c451UL, 0x00aa00UL, 0x000000UL, 0x57e389UL, 0xf5c451UL, 0xff8b6bUL },
+        /* And the nearest of sixteen, same order, for a screen with no palette. */
+        { 0, 10, 8, 8, 0, 10, 10, 11, 2, 0, 10, 11, 9 },
         UI_BORDER_NONE,
         "////"
     },
@@ -155,6 +179,10 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
         /* ok            */ ANSI_BRIGHT_GREEN, /* #57E389 -> 10 */
         /* warn          */ ANSI_BRIGHT_GREEN, /* #8CFFB4 -> 10 */
         /* alert         */ ANSI_BRIGHT_GREEN, /* #C8FFDC -> 10 */
+        /* The exact colours, in ui_token order. */
+        { 0x000000UL, 0x57e389UL, 0x1e3a28UL, 0x2e4a3cUL, 0x000000UL, 0x8cffb4UL, 0x8cffb4UL, 0x2e4a3cUL, 0x000000UL, 0xc8ffdcUL, 0x57e389UL, 0x8cffb4UL, 0xc8ffdcUL },
+        /* And the nearest of sixteen, same order, for a screen with no palette. */
+        { 0, 10, 8, 8, 0, 10, 10, 8, 0, 10, 10, 10, 10 },
         UI_BORDER_NONE,
         "////"
     }

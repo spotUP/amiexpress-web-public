@@ -7,6 +7,7 @@
  */
 
 #include "ui_chrome.h"
+#include "ui_theme.h"
 
 #include <string.h>
 
@@ -220,15 +221,32 @@ void ui_masthead_draw_tick(ansi_buf *b, int row, int left, int cols,
 
     run_width = (unsigned long) budget - title_len - 1;
     if (run_width > sizeof(run) - 1) run_width = sizeof(run) - 1;
-    if (run_width > sizeof(line) - title_len - 2) {
-        run_width = sizeof(line) - title_len - 2;
+    /* Room for the run, the space, the title AND the colour marker between
+       them - four bytes that reach the wire but not the screen. Leaving
+       them out of the clamp overran `line` and the rail vanished. */
+    if (run_width > sizeof(line) - title_len - 6) {
+        run_width = sizeof(line) - title_len - 6;
     }
     ui_rail_stream(rail, (int) run_width, tick, 1UL, run, sizeof(run));
 
-    memcpy(line, run, strlen(run));
-    line[strlen(run)] = ' ';
-    memcpy(line + strlen(run) + 1, title, title_len);
-    line[strlen(run) + 1 + title_len] = '\0';
+    /* Two colours, not one: the rail is branding and the title is the name
+       of the screen, and chrome.ts paints them with different stylers -
+       `${rail(run)} ${ink(title)}`. `fg` is the rail's; the title takes the
+       ink token, which the palette resolves to the theme's exact colour. */
+    {
+        unsigned long at = 0;
+        char pen[4];
+
+        memcpy(line + at, run, strlen(run));
+        at += strlen(run);
+        line[at++] = ' ';
+        ui_ink(pen, UI_TOKEN(UI_T_INK));
+        memcpy(line + at, pen, strlen(pen));
+        at += strlen(pen);
+        memcpy(line + at, title, title_len);
+        at += title_len;
+        line[at] = '\0';
+    }
 
     ui_bar_draw(b, row, left, cols, line, fg, bg);
 }

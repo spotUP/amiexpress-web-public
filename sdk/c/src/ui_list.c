@@ -146,7 +146,7 @@ void ui_list_draw(ui_list *list, ansi_buf *b)
         if (chosen && list->caret) {
             /* A caret, and the row in the selection's ink beside it. No
                bar: the caret IS the mark. */
-            ansi_color(b, list->ink, ANSI_BLACK, 1);
+            ansi_color(b, list->ink, -1, 1);
             ansi_text_raw(b, screen_row, inner_left, list->caret,
                           (int) strlen(list->caret));
         } else if (chosen) {
@@ -158,7 +158,11 @@ void ui_list_draw(ui_list *list, ansi_buf *b)
                       list->selected_fg, list->selected_bg);
             ansi_color(b, list->selected_fg, list->selected_bg, 1);
         } else {
-            ansi_color(b, list->ink, ANSI_BLACK, 0);
+            /* No background: a list row is text on whatever the screen is,
+               which is what blessed draws - `style.item` carries a colour
+               and no bg. Painting the ground explicitly made every row a
+               filled band in the C door and none in the TypeScript. */
+            ansi_color(b, list->ink, -1, 0);
         }
 
         /* ansi_text pads to the width, so a shorter row overwrites what was
@@ -179,5 +183,5 @@ void ui_list_draw(ui_list *list, ansi_buf *b)
         }
     }
 
-    ansi_color(b, list->ink, ANSI_BLACK, 0);
+    ansi_color(b, list->ink, -1, 0);
 }
