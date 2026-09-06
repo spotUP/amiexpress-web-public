@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useStdout } from 'ink';
 import Gradient from 'ink-gradient';
 import BigText from 'ink-big-text';
+import { loadLogo, logoFits } from '../../theme/logo.js';
 import Spinner from 'ink-spinner';
 import { T } from '../../theme/blessed-theme.js';
 import { useDashboardStats } from '../../hooks/useDashboardStats.js';
@@ -66,6 +67,10 @@ export function DashboardTab() {
 
   const sparkline = buildSparkline(recentCallers, 24);
 
+  // Read once: the art is only drawn where it fits the pane whole.
+  const { stdout } = useStdout();
+  const [logo] = useState<string[]>(() => (logoFits(stdout?.columns) ? loadLogo() : []));
+
   if (loading && !stats) {
     return (
       <Box flexDirection="column" alignItems="center" justifyContent="center" paddingY={4}>
@@ -83,11 +88,20 @@ export function DashboardTab() {
 
   return (
     <Box flexDirection="column" paddingX={1} paddingY={0}>
-      {/* Banner */}
+      {/* Banner: the board's own art where it fits whole, the rainbow
+          wordmark on a pane too narrow to hold it. */}
       <Box justifyContent="center" marginBottom={0}>
-        <Gradient name="rainbow">
-          <BigText text="SYSOP" font="tiny" />
-        </Gradient>
+        {logo.length > 0 ? (
+          <Box flexDirection="column">
+            {logo.map((line, i) => (
+              <Text key={i} color={T.accent}>{line}</Text>
+            ))}
+          </Box>
+        ) : (
+          <Gradient name="rainbow">
+            <BigText text="SYSOP" font="tiny" />
+          </Gradient>
+        )}
       </Box>
 
       {/* Stat cards */}
