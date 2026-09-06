@@ -5,6 +5,7 @@ import { getDoors, reloadDoors, updateDoor, deleteDoor } from '../../api/client.
 import { T } from '../../theme/blessed-theme.js';
 import { ToggleSwitch } from '../shared/InlineEdit.js';
 import { useGridClick } from '../../hooks/useRowClick.js';
+import { useTextEntryLock } from '../../hooks/useTextEntryLock.js';
 import { SIDEBAR_WIDTH } from '../Sidebar.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
 import type { DoorInfo } from '../../api/types.js';
@@ -33,7 +34,16 @@ export function DoorsTab() {
   const [error, setError] = useState<string | null>(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [confirming, setConfirming] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // The door a pending delete targets, captured by VALUE (not re-derived
+  // from selectedIdx) the moment 'd' is pressed. Two defects this fixes:
+  // (1) a stray mouse click while the dialog is open can no longer retarget
+  // the delete to whatever door the click landed on (the click hook is also
+  // gated below); (2) the confirm dialog's render condition no longer
+  // depends on `doors[selectedIdx]` still resolving to something, so a
+  // reload or selection change while the dialog is up can never make the
+  // dialog vanish while confirmingDelete stays true - which would otherwise
+  // block ALL input with nothing on screen to interact with.
+  const [deleteTarget, setDeleteTarget] = useState<DoorInfo | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -43,6 +53,8 @@ export function DoorsTab() {
   const [editFieldIdx, setEditFieldIdx] = useState(0);
   const [editValues, setEditValues] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
+
+  const confirmingDelete = deleteTarget !== null;
 
   const { stdout } = useStdout();
   const termWidth = stdout?.columns ?? 80;
@@ -65,6 +77,11 @@ export function DoorsTab() {
 
   const rowsPerCol = Math.ceil(doors.length / cols);
   const selected = doors[selectedIdx];
+
+  // Locks the global quit/help hotkeys and the sidebar's arrow-key page
+  // cycling out while a form, a reload confirmation, or a delete
+  // confirmation is up — see dev/console/src/state/text-entry-lock.ts.
+  useTextEntryLock(editing || confirming || confirmingDelete);
 
   const startEdit = () => {
     if (!selected) return;
@@ -113,7 +130,7 @@ export function DoorsTab() {
     rowsPerCol,
     doors.length,
     setSelectedIdx,
-    !confirming,
+    !confirming && !confirmingDelete && !editing,
   );
 
   useInput((input, key) => {
@@ -161,7 +178,7 @@ export function DoorsTab() {
     if (key.leftArrow) setSelectedIdx(i => Math.max(0, i - rowsPerCol));
     if (key.rightArrow) setSelectedIdx(i => Math.min(doors.length - 1, i + rowsPerCol));
     if (input === 'e' && selected) startEdit();
-    if (input === 'd' && selected) setConfirmingDelete(true);
+    if (input === 'd' && selected) setDeleteTarget(selected);
     if (input === 'R') setConfirming(true);
     if (input === 'r') load();
   });
@@ -254,20 +271,26 @@ export function DoorsTab() {
         </Box>
       )}
 
-      {confirmingDelete && selected && (
+      {deleteTarget && (
         <Box marginTop={1}>
           <ConfirmDialog
-            message={`Delete "${selected.door_name}" (${selected.door_command ?? selected.id})? This removes its .info registration. This cannot be undone.`}
+            message={
+              `Delete "${deleteTarget.door_name}" (${deleteTarget.door_command ?? deleteTarget.id})? ` +
+              'This removes its .info registration and every alias registration pointing at the same ' +
+              "directory, and deletes that directory too if nothing else still uses it. Cannot be undone."
+            }
+            requireTypedConfirmation={deleteTarget.door_command ?? String(deleteTarget.id)}
             onConfirm={() => {
-              setConfirmingDelete(false);
-              const command = selected.door_command ?? String(selected.id);
+              const target = deleteTarget;
+              setDeleteTarget(null);
+              const command = target.door_command ?? String(target.id);
               setDeleting(true);
               deleteDoor(command)
-                .then(() => { setStatus(`${selected.door_name} deleted`); setSelectedIdx(0); })
+                .then(() => { setStatus(`${target.door_name} deleted`); setSelectedIdx(0); })
                 .catch((e: Error) => setStatus(`Error: ${e.message}`))
                 .finally(() => { setDeleting(false); load(); });
             }}
-            onCancel={() => setConfirmingDelete(false)}
+            onCancel={() => setDeleteTarget(null)}
           />
         </Box>
       )}
