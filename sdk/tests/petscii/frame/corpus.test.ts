@@ -43,6 +43,13 @@ interface ManifestEntry {
    * here must carry `C64_ADAPT=40` in its real bytes, and its binary must be
    * on disk.
    *
+   * Spelled as the FILE is spelled on disk (`ulist`, `ctop`, `games`), not as
+   * the command is registered - the check below is a case-sensitive
+   * `existsSync`, and a case-sensitive filesystem answers only to the real
+   * name. A suite comparing this against a REGISTERED command name has to
+   * uppercase both sides, because the command a registration answers to is the
+   * uppercased filename; door-min-columns-dispatch does exactly that.
+   *
    * This field is the single source the launch suites derive their marked-door
    * lists from, so a `.info` cannot be marked without a capture behind it and
    * a capture cannot claim a door that is not marked. Absent on the eight

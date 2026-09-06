@@ -481,8 +481,16 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
    * An unmarked TYPE=XIM registration, for the default-closed half: a 68K
    * door that declared nothing is refused at 40 no matter what its
    * neighbours declared. `ACCESS=50`, cleared by the sysop session below.
+   *
+   * Was GWALL until 2026-09-06, when GWALL was re-driven, cleared the bar and
+   * got its mark. `mrcstat2` replaced it and is unmarked on purpose, not by
+   * omission: its whole output is one 48-column line of bracketed fields
+   * (`MRC[OFFLINE] BBS[  0] Rms[  0] ...`), its gutters fall INSIDE the
+   * brackets so `columnSpans` cuts between `BBS[` and `0]`, and no rung that
+   * respects column boundaries can pair a label with its value. See
+   * sdk/petscii/frame/adapt.ts `statRow`.
    */
-  const UNMARKED = 'GWALL';
+  const UNMARKED = 'mrcstat2';
 
   function definitionFromDisk(command: string) {
     const { loadCommandFromInfo } = require('../../src/utils/amiga-command-parser.util');
@@ -670,17 +678,21 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
 
   it('the DOORS list marks every marked door [C64] and marks nothing else', async () => {
     await registerFromDisk([...MARKED.map(([c]) => c), UNMARKED]);
+    // Uppercased on both sides, for the reason the neighbouring case gives: the
+    // command a registration answers to is the uppercased filename, while the
+    // manifest's `installed` is the filename as it is spelled on disk (which is
+    // what lets its `existsSync` check work on a case-sensitive filesystem).
     const marks = new Map(
-      getDoors().map((d) => [d.command, formatDoorLine(d, false).includes('[C64]')]),
+      getDoors().map((d) => [d.command.toUpperCase(), formatDoorLine(d, false).includes('[C64]')]),
     );
-    for (const [command] of MARKED) expect(marks.get(command)).toBe(true);
+    for (const [command] of MARKED) expect(marks.get(command.toUpperCase())).toBe(true);
     // WHO and RTW are the same executable and BOTH now carry the mark, so the
     // list can no longer answer one way for one command and the other way for
     // its twin.
     expect(marks.get('WHO')).toBe(marks.get('RTW'));
     // An unmarked 68K registration is still unmarked - the mark is a
     // per-registration promise, never inherited from the board's other doors.
-    expect(marks.get(UNMARKED)).toBe(false);
+    expect(marks.get(UNMARKED.toUpperCase())).toBe(false);
   });
 
   it(`${UNMARKED} - a 68K door that declared nothing - is still refused at 40`, async () => {
