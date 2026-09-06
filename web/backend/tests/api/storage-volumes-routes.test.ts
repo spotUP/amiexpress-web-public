@@ -489,6 +489,42 @@ describe('Drive Setup storage routes', () => {
       }
     });
 
+    it('reports pendingUploads - a Blocker follow-up: flushPending has no return value any caller sees, so the count is the admin page\'s only signal', async () => {
+      const { setStorageContext } = require('../../src/storage/storage-context');
+      const { FileCache } = require('../../src/storage/file-cache');
+      const { VolumeSet } = require('../../src/storage/volume-set');
+      const { FakeBackend } = require('../storage/fake-backend');
+
+      const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-routes-pending-'));
+      const backend = new FakeBackend({ driveNumber: 2 });
+      backend.down = true; // the volume is unreachable - the upload stays pending
+      const volumes = new VolumeSet([
+        {
+          volume: { driveNumber: 2, kind: 's3', path: 'b', egress: 'FREE', volumeClass: 'FREE' },
+          backend,
+          usedBytes: 0,
+          requestsThisMonth: 0,
+          egressBytesThisMonth: 0,
+          degraded: false,
+        },
+      ]);
+      const cache = new FileCache({ cacheDir, volumes, maxBytes: 1024 });
+      const local = cache.localPathFor(2, 'Files/DOOR.DAT');
+      fs.mkdirSync(path.dirname(local), { recursive: true });
+      fs.writeFileSync(local, Buffer.alloc(10, 9));
+      cache.markDirty(2, 'Files/DOOR.DAT', local);
+
+      setStorageContext({ volumes, cache, names: {} as any, areas: [] });
+      try {
+        const res = await request(app).get('/api/config/drives/pool/status');
+        expect(res.status).toBe(200);
+        expect(res.body.data.pendingUploads).toBe(1);
+      } finally {
+        setStorageContext(null);
+        fs.rmSync(cacheDir, { recursive: true, force: true });
+      }
+    });
+
     it('refuses to discard a path outside the parked directory', async () => {
       const { setStorageContext } = require('../../src/storage/storage-context');
       const { FileCache } = require('../../src/storage/file-cache');

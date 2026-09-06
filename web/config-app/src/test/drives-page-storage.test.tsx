@@ -247,6 +247,33 @@ describe('DrivesPage - pool status', () => {
     expect(screen.getByText(/Unreadable quota/)).toBeInTheDocument();
     expect(screen.queryByText(/storage cache is not active/i)).not.toBeInTheDocument();
   });
+
+  it('says the last refresh failed - still serving the previous config - when the pool is active but bootError is set (Blocker B)', async () => {
+    getDrives.mockResolvedValue({ success: true, data: [s3Drive()] });
+    getDrivePoolStatus.mockResolvedValue({
+      success: true,
+      data: { ...EMPTY_POOL_STATUS, cacheActive: true, bootError: 'DRIVE.2.QUOTA: Unreadable quota "garbage"' },
+    });
+    renderPage();
+
+    expect(await screen.findByText(/last refresh failed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Unreadable quota/)).toBeInTheDocument();
+    // Not the "pool failed to build" wording - the pool IS active, this is a
+    // different, milder outcome.
+    expect(screen.queryByText(/pool failed to build/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the pending uploads count on an active pool', async () => {
+    getDrives.mockResolvedValue({ success: true, data: [s3Drive()] });
+    getDrivePoolStatus.mockResolvedValue({
+      success: true,
+      data: { ...EMPTY_POOL_STATUS, cacheActive: true, pendingUploads: 3 },
+    });
+    renderPage();
+
+    expect(await screen.findByText('Pending Uploads')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
+  });
 });
 
 describe('DrivesPage - contents and retention', () => {

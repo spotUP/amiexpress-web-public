@@ -74,8 +74,16 @@ interface PoolStatus {
   parkedFiles: ParkedFileRow[];
   /** Every complaint the board's own usableRemoteAreasFor would emit, verbatim. */
   brokenAreas: string[];
-  /** Non-null when the pool failed to build - never set merely because no bucket is configured. */
+  /**
+   * Non-null when the LAST build/refresh attempt failed - never set merely
+   * because no bucket is configured. Two shapes, told apart by
+   * `cacheActive`: false+set means the pool has never built successfully;
+   * true+set means a LATER refresh (a conference save, a Drives.info write)
+   * failed but the board is still serving the last configuration that did.
+   */
   bootError: string | null;
+  /** Staged uploads FileCache still owes the pool right now. Undefined with no live context. */
+  pendingUploads?: number;
 }
 
 interface DriveFormData {
@@ -558,9 +566,28 @@ export function DrivesPage() {
           </p>
         )}
 
+        {poolStatus && poolStatus.cacheActive && poolStatus.bootError && (
+          <div className="space-y-2 rounded border border-status-warn/40 bg-status-warn/10 p-3">
+            <div className="flex items-center gap-2 text-status-warn">
+              <AlertTriangle size={16} aria-hidden="true" />
+              <span className="text-sm font-medium">
+                The last refresh failed - still running the previous configuration
+              </span>
+            </div>
+            <pre className="whitespace-pre-wrap break-words font-mono text-xs text-content-secondary">
+              {poolStatus.bootError}
+            </pre>
+          </div>
+        )}
+
         {poolStatus && poolStatus.cacheActive && (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <StatTile label="Parked Files" value={String(parkedFiles.length)} />
+            <StatTile
+              label="Pending Uploads"
+              value={String(poolStatus.pendingUploads ?? 0)}
+              tone={(poolStatus.pendingUploads ?? 0) > 0 ? 'warn' : 'ok'}
+            />
             <StatTile
               label="Over Budget"
               value={formatBytes(poolStatus.overBudgetBytes)}

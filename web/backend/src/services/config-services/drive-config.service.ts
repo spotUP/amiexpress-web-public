@@ -113,16 +113,30 @@ export interface PoolStatus {
    */
   brokenAreas: string[];
   /**
-   * Task 12 review, finding 5. `cacheActive: false` alone reads identically
-   * whether this board was never asked to pool anything, or Drives.info is
-   * broken and the pool that SHOULD exist could not be built - the one
-   * outcome this whole design exists to keep from looking like "not
-   * configured" or "file not found". Non-null exactly when the last build
-   * attempt threw; the page uses this to tell a sysop the pool failed to
-   * build, and what broke, rather than showing the same blank state a board
-   * with no bucket at all shows.
+   * Task 12 review, finding 5, extended in the Blocker B follow-up.
+   * Non-null exactly when the LAST build/refresh attempt threw; cleared on
+   * the next successful one. Two shapes, told apart by `cacheActive`:
+   *
+   *   - `cacheActive: false` and `bootError` set - the pool has never built
+   *     successfully in this process. Distinct from "not configured", the
+   *     original finding 5 gap.
+   *   - `cacheActive: true` and `bootError` set - a LATER refresh (a
+   *     conference save, a Drives.info write) failed, but the board is
+   *     still serving the pool the last successful build produced. A
+   *     Drives.info typo or a read-only disk must not tear down a healthy
+   *     pool - see `refreshStorageContext`'s Blocker B handling.
    */
   bootError: string | null;
+  /**
+   * How many staged uploads `FileCache` still owes the pool right now -
+   * `FileCache.pendingCount()`. The non-blocking replay
+   * `refreshStorageContext` fires has no return value any caller sees, and
+   * its own per-entry failure is silent by design (see `flushPending`), so
+   * this is the one place a sysop can tell "uploads are stuck" from the
+   * admin page rather than from the log. Undefined with no live context,
+   * same third-state convention as `inPool`/`degraded`.
+   */
+  pendingUploads?: number;
 }
 
 export class DriveConfigService {
@@ -688,7 +702,12 @@ console.error(`[DriveConfigService] Failed to write ${drivesInfoPath}:`, error);
       evictionDisabled: live.cache.isEvictionDisabled(),
       parkedFiles,
       brokenAreas,
-      bootError: null,
+      // Blocker B: a LIVE context can still carry a boot error - a later
+      // refresh failed and `refreshStorageContext` kept this (older, still
+      // healthy) context running rather than tearing it down. Non-null here
+      // means "the last refresh failed", not "the pool never built".
+      bootError: getStorageBootError(),
+      pendingUploads: live.cache.pendingCount(),
     };
   }
 

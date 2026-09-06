@@ -98,9 +98,28 @@ export class NameIndexRegistry {
    * not plumb.
    */
   constructor(
-    private readonly volumes: VolumeSet,
+    private volumes: VolumeSet,
     private readonly gateOptions: BackendRetryGateOptions = {}
   ) {}
+
+  /**
+   * Points this registry at a fresh `VolumeSet` after a rebuild, keeping
+   * every cached `NameIndex` and retry gate exactly as they were.
+   *
+   * Task 12 review, the finding-4 follow-up: `refreshStorageContext`
+   * rebuilding the whole pool on every admin save used to construct a BRAND
+   * NEW registry each time, discarding every cached listing along with it -
+   * so the very listing call finding 6 made countable ran again after every
+   * conference save or Drives.info write, against the same request meter
+   * finding 6 exists to protect. `forArea` below only ever consults
+   * `this.volumes` on a cache MISS, to find a backend for an index it has
+   * not built yet - so repointing it here is enough for a drive added or
+   * changed in this rebuild to resolve correctly, while every
+   * already-cached area keeps its listing and its gate untouched.
+   */
+  rebase(volumes: VolumeSet): void {
+    this.volumes = volumes;
+  }
 
   private gateFor(driveNumber: number): BackendRetryGate {
     const existing = this.gates.get(driveNumber);

@@ -69,13 +69,23 @@ class HangingBackend implements StorageBackend {
 
 describe('storage at boot', () => {
   let warn: jest.SpyInstance;
+  let originalHostname: string | undefined;
 
   beforeEach(() => {
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    // Review Blocker C restored HOSTNAME ahead of slot-claiming (the
+    // container case). Most of this file's tests exercise slot-claiming
+    // itself and must not have their result silently swapped out from
+    // under them by whatever the test host's own environment happens to
+    // export - see the dedicated HOSTNAME-priority test below instead.
+    originalHostname = process.env.HOSTNAME;
+    delete process.env.HOSTNAME;
   });
 
   afterEach(() => {
     warn.mockRestore();
+    if (originalHostname === undefined) delete process.env.HOSTNAME;
+    else process.env.HOSTNAME = originalHostname;
   });
 
   it('is null on a board with no s3 drive, so nothing changes for it', async () => {
@@ -191,31 +201,54 @@ describe('storage at boot', () => {
     expect(fs.existsSync(path.join(root, 'etc'))).toBe(false);
   });
 
-  it('review finding 2/3: with no override, two live instances against the same board root get different cache directories, not the same one', async () => {
+  it('review finding 3: with no override, a SEPARATE process on the same board root claims a different slot', async () => {
+    // A genuinely separate process cannot be spawned deterministically in a
+    // unit test, so this proves the mechanism `initStorage` actually relies
+    // on directly: `claimNodeSlot` (node-id.test.ts) already covers the
+    // liveness-checked negotiation in isolation. This test's job is just to
+    // confirm `initStorage` really does route through it for a real board -
+    // seed slot 1 as held by this (unambiguously live) test process, exactly
+    // as a second real process's negotiation would see it, and confirm the
+    // resulting cache directory is NOT slot 1.
     const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.KEYID=k']);
     writeSecret(root, 1, 'sekrit');
-    const backendFactory = () => new FakeBackend({ driveNumber: 1 });
+    const lockDir = path.join(root, 'Storage', 'nodes');
+    fs.mkdirSync(lockDir, { recursive: true });
+    fs.writeFileSync(path.join(lockDir, '1.pid'), String(process.pid));
 
-    // Neither call passes `nodeId` or sets BBS_STORAGE_NODE_ID - this is the
-    // plain default path every board takes with no operator action, which
-    // used to fall back to HOSTNAME (identical for two processes on one bare
-    // host) and, failing that, the bare pid.
-    const a = await initStorage(root, { backendFactory, areas: [] });
-    const b = await initStorage(root, { backendFactory, areas: [] });
+    const storage = await initStorage(root, { backendFactory: () => new FakeBackend({ driveNumber: 1 }), areas: [] });
 
-    expect(a).not.toBeNull();
-    expect(b).not.toBeNull();
-    const dirs = fs.readdirSync(path.join(root, 'Storage', 'cache')).sort();
-    expect(dirs).toEqual(['1', '2']);
-    // Neither directory is named after this process's own pid - the old
-    // silent fallback review finding 2 flagged.
-    expect(dirs).not.toContain(String(process.pid));
+    expect(storage).not.toBeNull();
+    const dirs = fs.readdirSync(path.join(root, 'Storage', 'cache'));
+    expect(dirs).toEqual(['2']);
+  });
+
+  it('review Blocker C: trusts HOSTNAME outright when set, ahead of slot-claiming - the container case', async () => {
+    const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.KEYID=k']);
+    writeSecret(root, 1, 'sekrit');
+    process.env.HOSTNAME = 'container-a';
+
+    const storage = await initStorage(root, { backendFactory: () => new FakeBackend({ driveNumber: 1 }), areas: [] });
+
+    expect(storage).not.toBeNull();
+    expect(fs.existsSync(path.join(root, 'Storage', 'cache', 'container-a'))).toBe(true);
+    // No slot was ever claimed - HOSTNAME short-circuits claimNodeSlot entirely.
+    expect(fs.existsSync(path.join(root, 'Storage', 'nodes'))).toBe(false);
   });
 });
 
 describe('refreshStorageContext', () => {
+  let originalHostname: string | undefined;
+
+  beforeEach(() => {
+    originalHostname = process.env.HOSTNAME;
+    delete process.env.HOSTNAME;
+  });
+
   afterEach(() => {
     setStorageContext(null);
+    if (originalHostname === undefined) delete process.env.HOSTNAME;
+    else process.env.HOSTNAME = originalHostname;
   });
 
   it('finding 1: sets the context before a hanging bucket has any chance to run, and never awaits the replay', async () => {
@@ -304,5 +337,268 @@ describe('refreshStorageContext', () => {
 
     expect(getStorageBootError()).toBeNull();
     expect(getStorageContext()).not.toBeNull();
+  });
+
+  it('review Blocker A: two refreshes of the same board root reuse ONE cache directory, not a new one each time', async () => {
+    const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.KEYID=k']);
+    writeSecret(root, 1, 'sekrit');
+    const fake = new FakeBackend({ driveNumber: 1 });
+
+    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    // A second refresh - what an admin save, a conference change, or a
+    // second Drives.info write all trigger via the SAME function.
+    const areas = [{ id: 1, conferenceId: 1, dirNumber: 1, path: 'BBS:Conf1/Files/', storageVolume: 1 }];
+    await refreshStorageContext(root, areas, { backendFactory: () => fake });
+
+    const dirs = fs.readdirSync(path.join(root, 'Storage', 'cache'));
+    expect(dirs).toHaveLength(1);
+  });
+
+  it('review Blocker A: a pending upload staged before a rebuild is still reachable after it', async () => {
+    const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.KEYID=k']);
+    writeSecret(root, 1, 'sekrit');
+    const fake = new FakeBackend({ driveNumber: 1 });
+
+    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    const firstCacheDir = getStorageContext()!.cache.cacheDir;
+    // Let boot's own (empty - nothing staged yet) scheduled flush settle
+    // before staging anything, so what follows models a door writing a
+    // file SOME TIME after boot, not the same instant as boot's replay.
+    for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));
+
+    // A door writes a file mid-uptime - staged, not yet uploaded.
+    const staged = getStorageContext()!.cache.localPathFor(1, 'Conf1/Files/DEMO.LHA');
+    fs.mkdirSync(path.dirname(staged), { recursive: true });
+    fs.writeFileSync(staged, 'payload');
+    getStorageContext()!.cache.markDirty(1, 'Conf1/Files/DEMO.LHA', staged);
+    expect(fake.puts).toBe(0);
+
+    // An admin save rebuilds the pool while the upload is still pending.
+    // `refreshStorageContext` schedules its own replay automatically - a
+    // second, manual `flushPending()` call here would race that scheduled
+    // one on the same FileCache instance, which is not a path production
+    // ever takes (nothing outside this module calls `flushPending`
+    // directly), so this waits for the automatic one instead of adding a
+    // second attempt.
+    await refreshStorageContext(root, [], { backendFactory: () => fake });
+
+    // Same directory - before this fix, the rebuild would have claimed a
+    // NEW slot and this marker would now sit somewhere nothing scans.
+    expect(getStorageContext()!.cache.cacheDir).toBe(firstCacheDir);
+    for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));
+    expect(fake.puts).toBe(1);
+  });
+
+  it('review Blocker B: a failed REFRESH keeps the previous healthy context running', async () => {
+    const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.KEYID=k']);
+    writeSecret(root, 1, 'sekrit');
+    const fake = new FakeBackend({ driveNumber: 1 });
+
+    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    const healthy = getStorageContext();
+    expect(healthy).not.toBeNull();
+
+    // A hand-edited Drives.info now has a QUOTA typo between admin saves.
+    applyTooltypes(path.join(root, 'Drives.info'), [['DRIVE.1.QUOTA', 'garbage']]);
+    await refreshStorageContext(root, [], { backendFactory: () => fake });
+
+    // The exact same context object is still live - not torn down, not
+    // replaced with null, which would have made every download read as
+    // "file not found" until a sysop fixed the typo.
+    expect(getStorageContext()).toBe(healthy);
+    expect(getStorageBootError()).toMatch(/QUOTA/);
+  });
+
+  it('review "carry live state": degraded, requestsThisMonth and usedBytes survive a rebuild for an unchanged volume', async () => {
+    const root = boardWithDrivesInfo([
+      'DRIVE.1=s3://bucket',
+      'DRIVE.1.ENDPOINT=https://s3.example.com',
+      'DRIVE.1.KEYID=k',
+    ]);
+    writeSecret(root, 1, 'sekrit');
+    const fake = new FakeBackend({ driveNumber: 1 });
+
+    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    const state = getStorageContext()!.volumes.byNumber(1)!;
+    state.degraded = true;
+    state.requestsThisMonth = 42;
+    state.usedBytes = 12345;
+
+    // An unrelated admin save (a conference rename, say) triggers a rebuild.
+    await refreshStorageContext(root, [], { backendFactory: () => fake });
+
+    const rebuilt = getStorageContext()!.volumes.byNumber(1)!;
+    expect(rebuilt.degraded).toBe(true);
+    expect(rebuilt.requestsThisMonth).toBe(42);
+    expect(rebuilt.usedBytes).toBe(12345);
+  });
+
+  it('review "carry live state": a volume whose identity changed does NOT inherit the old counters', async () => {
+    const root = boardWithDrivesInfo([
+      'DRIVE.1=s3://bucket-a',
+      'DRIVE.1.ENDPOINT=https://s3.example.com',
+      'DRIVE.1.KEYID=k',
+    ]);
+    writeSecret(root, 1, 'sekrit');
+    const fake = new FakeBackend({ driveNumber: 1 });
+
+    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    const before = getStorageContext()!.volumes.byNumber(1)!;
+    before.degraded = true;
+    before.requestsThisMonth = 42;
+
+    // Drive 1 now points at a genuinely different bucket.
+    applyTooltypes(path.join(root, 'Drives.info'), [['DRIVE.1', 's3://bucket-b']]);
+    await refreshStorageContext(root, [], { backendFactory: () => fake });
+
+    const rebuilt = getStorageContext()!.volumes.byNumber(1)!;
+    expect(rebuilt.degraded).toBe(false);
+    expect(rebuilt.requestsThisMonth).toBe(0);
+  });
+
+  it('review "carry live state": a rebuild keeps the previous cached listing - no second real list() for an unchanged area', async () => {
+    const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.KEYID=k']);
+    writeSecret(root, 1, 'sekrit');
+    const fake = new FakeBackend({ driveNumber: 1 });
+    await fake.put('Conf1/Files/FILE.LHA', Buffer.from('x'));
+
+    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    await getStorageContext()!.names.forArea(1, 'Conf1/Files/').resolve('file.lha');
+    expect(fake.lists).toBe(1);
+
+    // An unrelated admin save rebuilds the pool.
+    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    await getStorageContext()!.names.forArea(1, 'Conf1/Files/').resolve('file.lha');
+
+    // Still 1 - the cached listing survived the rebuild, so this did not
+    // cost the meter finding 6 was built to protect a second real request.
+    expect(fake.lists).toBe(1);
+  });
+
+  it('sweeps sibling cache directories for orphaned pending markers and reports them loudly', async () => {
+    const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.KEYID=k']);
+    writeSecret(root, 1, 'sekrit');
+    const fake = new FakeBackend({ driveNumber: 1 });
+
+    // A directory from a different (or older) node identity, holding a
+    // pending marker nothing running will ever scan again.
+    const orphanMarker = path.join(
+      root, 'Storage', 'cache', 'orphan-node', '.pending', '1', 'Conf1', 'Files', 'DEMO.LHA.json'
+    );
+    fs.mkdirSync(path.dirname(orphanMarker), { recursive: true });
+    fs.writeFileSync(
+      orphanMarker,
+      JSON.stringify({ driveNumber: 1, key: 'Conf1/Files/DEMO.LHA', localPath: '/irrelevant' })
+    );
+
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await refreshStorageContext(root, [], { backendFactory: () => fake });
+      const messages = errorSpy.mock.calls.map((call) => String(call[0]));
+      expect(messages.some((m) => m.includes('orphan-node') && m.includes('1 pending upload'))).toBe(true);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('logs a flushPending summary even when the failure is per-entry and silent otherwise', async () => {
+    const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.KEYID=k']);
+    writeSecret(root, 1, 'sekrit');
+    const fake = new FakeBackend({ driveNumber: 1 });
+    fake.down = true; // every call fails - models the bucket being unreachable
+
+    const cacheDir = path.join(root, 'Storage', 'cache', 'node-a');
+    const priorState: VolumeState = {
+      volume: { driveNumber: 1, kind: 's3', path: 'bucket', egress: 'FREE', volumeClass: 'FREE' },
+      backend: fake,
+      usedBytes: 0,
+      requestsThisMonth: 0,
+      egressBytesThisMonth: 0,
+      degraded: false,
+    };
+    const priorCache = new FileCache({ cacheDir, volumes: new VolumeSet([priorState]), maxBytes: 1024 * 1024 });
+    const staged = priorCache.localPathFor(1, 'Conf1/Files/DEMO.LHA');
+    fs.mkdirSync(path.dirname(staged), { recursive: true });
+    fs.writeFileSync(staged, 'payload');
+    priorCache.markDirty(1, 'Conf1/Files/DEMO.LHA', staged);
+
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      await refreshStorageContext(root, [], { backendFactory: () => fake, cacheDir });
+      // The non-blocking flush is chained (scheduleFlush) - give it a turn
+      // to run and log before asserting.
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const messages = logSpy.mock.calls.map((call) => String(call[0]));
+      expect(messages.some((m) => m.includes('flushPending') && m.includes('1 of 1'))).toBe(true);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it('serialises overlapping flushes - never more than one put() in flight at once across two rebuilds', async () => {
+    // A second rebuild's own FileCache generation can still legitimately
+    // re-attempt an upload the FIRST generation's marker snapshot already
+    // covers (the staged bytes and their marker only clear once a put truly
+    // lands) - that is a harmless, idempotent duplicate PUT of the same key
+    // and bytes, not the hazard this test is for. The hazard is two
+    // `flushPending` passes actually RUNNING AT THE SAME TIME, racing
+    // `removeMarker`/`writeBack` against each other - this asserts that
+    // never happens, by tracking concurrent `put()` calls directly.
+    const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.KEYID=k']);
+    writeSecret(root, 1, 'sekrit');
+
+    let releaseFirstPut: (() => void) | undefined;
+    const firstPutGate = new Promise<void>((resolve) => {
+      releaseFirstPut = resolve;
+    });
+    let putCount = 0;
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const backend = new FakeBackend({ driveNumber: 1 });
+    const realPut = backend.put.bind(backend);
+    backend.put = async (key: string, body: Buffer) => {
+      putCount++;
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      try {
+        if (putCount === 1) await firstPutGate; // hold only the first put open
+        return await realPut(key, body);
+      } finally {
+        inFlight--;
+      }
+    };
+
+    const cacheDir = path.join(root, 'Storage', 'cache', 'node-a');
+    const priorState: VolumeState = {
+      volume: { driveNumber: 1, kind: 's3', path: 'bucket', egress: 'FREE', volumeClass: 'FREE' },
+      backend,
+      usedBytes: 0,
+      requestsThisMonth: 0,
+      egressBytesThisMonth: 0,
+      degraded: false,
+    };
+    const priorCache = new FileCache({ cacheDir, volumes: new VolumeSet([priorState]), maxBytes: 1024 * 1024 });
+    const staged = priorCache.localPathFor(1, 'Conf1/Files/DEMO.LHA');
+    fs.mkdirSync(path.dirname(staged), { recursive: true });
+    fs.writeFileSync(staged, 'payload');
+    priorCache.markDirty(1, 'Conf1/Files/DEMO.LHA', staged);
+
+    // First refresh starts a flush that is now stuck mid-put.
+    await refreshStorageContext(root, [], { backendFactory: () => backend, cacheDir });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(putCount).toBe(1);
+
+    // A second admin save rebuilds while that put is still outstanding -
+    // its own flush must queue behind the first, not race it.
+    await refreshStorageContext(root, [], { backendFactory: () => backend, cacheDir });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(putCount).toBe(1);
+
+    releaseFirstPut!();
+    for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));
+
+    expect(maxInFlight).toBe(1);
   });
 });

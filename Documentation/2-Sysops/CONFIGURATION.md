@@ -355,10 +355,29 @@ page, which re-triggers the same rebuild) is hand-editing `Drives.info` or a
 `Conf<N>.info` directly on disk, outside the admin pages — nothing watches
 either file for out-of-band edits, so a change made with a text editor is
 invisible to the running board until something asks it to look again. Two
-settings are read once, from the process environment, at the moment a node
-claims its identity, and a running board never re-reads them:
+settings are read from the process environment at boot and a running board
+never re-reads them, even across an admin-triggered rebuild:
 `BBS_STORAGE_NODE_ID` and `BBS_STORAGE_CACHE_MAX_BYTES` (below) — changing
-either always needs a restart.
+either always needs a restart. This is deliberate, not an oversight: this
+process's node identity and the on-disk directory it caches into are fixed
+for its whole lifetime once the first rebuild picks them, specifically so a
+rebuild can never move the directory a previous rebuild's unfinished
+uploads are sitting in — see "Cache directory and sizing" below.
+
+A rebuild that FAILS — a typo introduced by hand-editing `Drives.info`
+between admin-page saves, or a disk that has gone read-only — never tears
+down a pool that was already running: the board keeps serving the last
+configuration that built successfully, and Drive Setup's pool status names
+the failed refresh and why, distinctly from a pool that never built at all.
+Fix the file (or the disk) and save again — through any admin page that
+triggers a rebuild — to pick the correction up; there is nothing to
+restart for this specific case, because nothing was torn down.
+
+A rebuild also never resets what the running pool has already learned: a
+volume already marked degraded, its request count, its known used bytes,
+and the pool's cached file listings all carry forward across an admin save
+unless the drive itself changed identity (a different bucket or endpoint
+under the same drive number) — see "Requests This Month" below.
 
 ### What happens when a volume is unreachable
 
@@ -387,6 +406,14 @@ board — is marked *degraded*, not treated as empty. A degraded volume:
   Setup's pool status shows *why* the pool is inactive in this case, rather
   than the ordinary "not configured" state, so a broken build never reads
   as a board that was simply never asked to pool anything.
+- If a REBUILD fails later — an admin-triggered save that hit a Drives.info
+  typo, or a disk gone read-only — the board does NOT drop back to this
+  "no pool" state. It keeps running whatever configuration last built
+  successfully, exactly as if the failed save had never happened, and
+  Drive Setup's pool status names the failed refresh separately from "no
+  pool at all". A boot failure and a later refresh failure are different
+  outcomes on purpose: nothing was serving callers yet the first time, and
+  something already was the second.
 
 ### One copy is one copy
 
@@ -410,26 +437,50 @@ settings, both optional:
   to stay under this budget; it will never evict a file that is still
   staged for upload, so a sustained ENOSPC-class outage can leave the cache
   over budget rather than lose an unwritten file — this is logged, not
-  silent.
+  silent. Drive Setup's pool status also shows a plain count of staged
+  uploads still owed to the pool right now, so a stuck batch is visible on
+  the page, not only in the log.
 - `BBS_STORAGE_NODE_ID` — identifies this process if you ever run more than
   one backend against the same board root (a container orchestrator
   restarting the board on a new host, or a deliberate second instance). Set
   it and the board trusts it outright as this node's cache directory name;
   you are taking responsibility for uniqueness, which is what setting it
-  deliberately means.
+  deliberately means. Checked in this order when it is not set:
 
-  Leave it unset and the board claims a small integer slot for itself under
-  `Storage/nodes/` instead of guessing from `HOSTNAME` or a bare process id.
-  A restart reclaims the SAME slot — its former holder's process is gone, so
-  the slot is free — which is what makes the crash-recovery bookkeeping work
-  at all: replaying an upload a previous run staged but never finished only
-  works if the restarted process looks in the same cache directory the
-  crashed one used. A second process starting while the first is still
-  alive finds that slot held and claims the next one instead, so two
-  instances against the same board root never share a directory even with
-  no operator action — the one guarantee this section has always stated and
-  a plain `HOSTNAME`/pid guess could not keep on a bare host running more
-  than one instance.
+  1. `HOSTNAME` — trusted outright when the environment sets one, no
+     further check performed. This is the ordinary CONTAINER case: Docker
+     and every common orchestrator already set a distinct `HOSTNAME` per
+     container, so two containers sharing a board root already get
+     different cache directories with no configuration at all.
+  2. A claimed integer SLOT under `Storage/nodes/`, for the bare-host case
+     neither an explicit id nor `HOSTNAME` covers. A restart reclaims the
+     SAME slot — its former holder's process is gone, so the slot is free —
+     which is what makes the crash-recovery bookkeeping work at all:
+     replaying an upload a previous run staged but never finished only
+     works if the restarted process looks in the same cache directory the
+     crashed one used. A second process starting while the first is still
+     alive finds that slot held and claims the next one instead, so two
+     instances against the same board root never share a directory even
+     with no operator action.
+
+  Whichever of the two applies, this process settles on it ONCE, the first
+  time it builds a pool, and reuses that exact answer — including the
+  resolved cache directory itself, not just the id it was derived from —
+  for the rest of its life, across every later admin-triggered rebuild.
+  Never share a `Storage/nodes/` directory (or a bare-host board root at
+  all) between two processes running as literally the same container: a
+  container's own pid namespace makes another container's pid on that same
+  host read as dead the moment it's checked, which would let it walk into
+  a live sibling's cache directory. `HOSTNAME` avoids this for containers
+  precisely because it never asks the slot mechanism to run at all.
+
+  If a node's identity ever changes anyway — `BBS_STORAGE_NODE_ID` edited
+  between restarts, a leftover directory from an older scheme, a reused pid
+  — the previous cache directory's `.pending/` uploads do not simply
+  vanish unnoticed: every OTHER directory under `Storage/cache/` is
+  checked for one on every rebuild, and a sysop sees a loud log line naming
+  the directory and how many uploads are stuck there. Recovering those
+  bytes is manual; the sweep exists so you find out at all.
 
 ### "Requests This Month" is a lower bound, not a meter
 

@@ -180,7 +180,7 @@ interface EvictionCandidate {
 }
 
 export class FileCache {
-  private readonly cacheDir: string;
+  readonly cacheDir: string;
   private readonly volumes: VolumeSet;
   private readonly maxBytes: number;
   private readonly syncTimeoutMs: number;
@@ -683,6 +683,17 @@ export class FileCache {
     return this.dirty.has(this.id(driveNumber, key));
   }
 
+  /**
+   * How many staged uploads are still owed to the pool right now. Task 12
+   * review: the non-blocking `flushPending()` call `refreshStorageContext`
+   * fires has no return value a caller can inspect, and its own per-entry
+   * failure is a silent `catch {}` below - this is the number that lets
+   * `PoolStatus` show a sysop "N uploads still unsent" instead of nothing.
+   */
+  pendingCount(): number {
+    return this.dirty.size;
+  }
+
   /** Bytes the last `evictTo` could not reclaim because everything left is pinned. */
   overBudgetBytes(): number {
     return this.shortfallBytes;
@@ -991,7 +1002,17 @@ export class FileCache {
    * legitimate rewrite, and guessing wrong destroys a good object in the pool
    * with no way back, whereas parking keeps both copies and asks a person.
    */
-  async flushPending(): Promise<void> {
+  /**
+   * Returns how many entries it attempted and how many were STILL pending
+   * when it finished (failed writeBack, or genuinely unavailable) - Task 12
+   * review: `refreshStorageContext` calls this without awaiting it, so
+   * silence here was silence everywhere; a caller that only checked whether
+   * the outer promise rejected never saw "the bucket is down" at all, since
+   * every per-entry failure was swallowed by the bare `catch {}` below and
+   * the loop itself never throws for that reason.
+   */
+  async flushPending(): Promise<{ attempted: number; stillPending: number }> {
+    const attempted = this.dirty.size;
     for (const entry of [...this.dirty.values()]) {
       const id = this.id(entry.driveNumber, entry.key);
       if (!fs.existsSync(entry.localPath)) {
@@ -1013,6 +1034,20 @@ export class FileCache {
         // again.
       }
     }
+    const stillPending = this.dirty.size;
+    if (attempted > 0) {
+      // The one place this whole pass gets a voice. Every per-entry outcome
+      // above is either silent-on-success (the marker is just gone) or
+      // silent-on-failure (the bare catch) by design - this is the summary
+      // that makes "the bucket has been down all along" visible without
+      // reading every line flushPending has ever logged.
+      console.log(
+        stillPending > 0
+          ? `[storage] flushPending: ${stillPending} of ${attempted} pending upload(s) still unsent`
+          : `[storage] flushPending: all ${attempted} pending upload(s) landed`
+      );
+    }
+    return { attempted, stillPending };
   }
 
   // --------------------------------------------------------------- eviction

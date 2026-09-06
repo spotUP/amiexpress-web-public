@@ -1,16 +1,25 @@
 /**
- * Task 12 review, findings 2 and 3: the node-id fallback used when nobody
- * sets `BBS_STORAGE_NODE_ID`.
+ * Task 12 review, findings 2 and 3, and the re-review's Blocker A: the
+ * bare-host node-id fallback used when nobody sets `BBS_STORAGE_NODE_ID`
+ * (and `HOSTNAME` is not set either - see `storage/index.ts#defaultNodeId`
+ * for where `HOSTNAME` sits ahead of this).
  *
- * The old fallback (`HOSTNAME` then the bare pid) had two bugs at once: a
- * restart got a new pid and therefore a new cache directory, orphaning
- * every pending upload the previous run staged (finding 2); and two
- * processes on one bare host with `HOSTNAME` set got the SAME value and
- * therefore the SAME directory, which CONFIGURATION.md says must never
- * happen (finding 3). `claimNodeSlot` fixes both: a slot survives a restart
- * of the same process lineage (its former occupant's pid is dead, so it is
- * reclaimed) and stays distinct for two processes alive at once (a live pid
- * holds its slot, so a second claimant moves on).
+ * The old pid-only fallback had two bugs at once: a restart got a new pid
+ * and therefore a new cache directory, orphaning every pending upload the
+ * previous run staged (finding 2); and two processes on one bare host got
+ * the SAME value whenever `HOSTNAME` happened to be set, which
+ * CONFIGURATION.md says must never happen (finding 3). `claimNodeSlot`
+ * fixes both: a slot survives a restart of the same process lineage (its
+ * former occupant's pid is dead, so it is reclaimed) and stays distinct for
+ * two processes alive at once (a live pid holds its slot, so a second
+ * claimant moves on).
+ *
+ * Blocker A (re-review): the first fix pass left the claim unmemoised, so
+ * calling it twice in the SAME process - which `refreshStorageContext` now
+ * does on every admin save - read its own prior claim back as "held by a
+ * live pid" and moved to the next slot every time, abandoning the previous
+ * slot (and anything still staged under it) on the very first save after
+ * boot. `claimNodeSlot` now memoises per (process, board root).
  */
 import * as fs from 'fs';
 import * as os from 'os';
@@ -65,12 +74,39 @@ describe('claimNodeSlot', () => {
     expect(claimNodeSlot(root)).toBe('1');
   });
 
-  it('two sequential calls with no prior state simulate two concurrent instances and get different slots', () => {
+  it('review Blocker A: memoises the claim - two calls for the same board root in this process return the SAME slot', () => {
     const root = tmpRoot();
 
     const a = claimNodeSlot(root);
     const b = claimNodeSlot(root);
 
-    expect(a).not.toBe(b);
+    expect(a).toBe(b);
+    // Only one lock file exists - the second call never touched disk again.
+    expect(fs.readdirSync(path.join(root, 'Storage', 'nodes'))).toEqual(['1.pid']);
+  });
+
+  it('review Blocker A: different board roots still get independent claims - memoisation is keyed by root, not global', () => {
+    const rootA = tmpRoot();
+    const rootB = tmpRoot();
+
+    expect(claimNodeSlot(rootA)).toBe('1');
+    expect(claimNodeSlot(rootB)).toBe('1');
+  });
+
+  it('never leaves a lock file observable as empty or partial to a racing claimant', () => {
+    // A regression test for the open('wx')-then-write() race: the fix writes
+    // the pid to a private temp file and hard-links it into place, so
+    // `lockPath` is never anything but "absent" or "fully written". This
+    // asserts the end state a correct implementation produces; the race
+    // itself only manifests under genuine concurrency, which a synchronous
+    // single-threaded test cannot force deterministically.
+    const root = tmpRoot();
+    claimNodeSlot(root);
+
+    const lockPath = path.join(root, 'Storage', 'nodes', '1.pid');
+    expect(fs.readFileSync(lockPath, 'utf8').trim()).toBe(String(process.pid));
+    // No leftover temp scratch from the link-and-unlink sequence.
+    const entries = fs.readdirSync(path.join(root, 'Storage', 'nodes'));
+    expect(entries).toEqual(['1.pid']);
   });
 });

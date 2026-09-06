@@ -598,6 +598,44 @@ describe('FileCache parking is a move, not a flag', () => {
     expect(reborn.isDirty(2, 'Files/GOOD.DAT')).toBe(false);
     expect(reborn.parkedFiles()).toEqual([]);
   });
+
+  it('review Blocker follow-up: returns how many it attempted and how many are still pending, and logs a summary', async () => {
+    const { cache, backend, dir, volumes } = setup();
+    const local = cache.localPathFor(2, 'Files/GOOD.DAT');
+    fs.mkdirSync(path.dirname(local), { recursive: true });
+    fs.writeFileSync(local, Buffer.alloc(10, 3));
+    backend.down = true;
+    await expect(cache.writeBack(2, 'Files/GOOD.DAT', local)).rejects.toThrow();
+
+    const reborn = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      const stillDown = await reborn.flushPending();
+      expect(stillDown).toEqual({ attempted: 1, stillPending: 1 });
+      expect(reborn.pendingCount()).toBe(1);
+      expect(logSpy.mock.calls.some((c) => String(c[0]).includes('1 of 1'))).toBe(true);
+
+      backend.down = false;
+      const landed = await reborn.flushPending();
+      expect(landed).toEqual({ attempted: 1, stillPending: 0 });
+      expect(reborn.pendingCount()).toBe(0);
+      expect(logSpy.mock.calls.some((c) => String(c[0]).includes('all 1 pending upload'))).toBe(true);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it('logs nothing extra when there was nothing pending to begin with', async () => {
+    const { cache } = setup();
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      const result = await cache.flushPending();
+      expect(result).toEqual({ attempted: 0, stillPending: 0 });
+      expect(logSpy.mock.calls.some((c) => String(c[0]).includes('flushPending'))).toBe(false);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
 });
 
 describe('FileCache.discardParked', () => {
