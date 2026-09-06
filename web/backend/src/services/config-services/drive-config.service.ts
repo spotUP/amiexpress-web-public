@@ -407,28 +407,38 @@ console.error(`[DriveConfigService] Mirror update failed for drive ${id} (disk w
       );
     }
 
-    // Delete from database
-    const deleted = this.configRepo.deleteDrive(id);
+    // Delete from the database MIRROR. Its change count is not the answer -
+    // see below.
+    this.configRepo.deleteDrive(id);
 
-    // DISK-BASED: remove just this drive from what Drives.info already holds
+    // DISK-BASED: remove just this drive from what Drives.info already holds.
+    // This throws on failure, so reaching the next line means the drive is
+    // really gone from the file the board reads.
     await this.writeDrivesInfoFile({ removeNumber: oldDrive.drive_number });
 
-    if (deleted) {
-      // Log change
-      this.configRepo.logConfigChange(
-        'drives',
-        id,
-        'DELETE',
-        context.userId,
-        context.username,
-        oldDrive,
-        undefined,
-        context.ipAddress,
-        context.userAgent
-      );
-    }
+    // Gate 2, blocker 5: this used to `return deleted` - the MIRROR ROW's
+    // delete count - after Drives.info had already been rewritten. A drive
+    // that exists only on disk (`getDrive` resolves it from disk first, and
+    // every drive on a board that has never used the admin page is one) has
+    // no mirror row, so the count was 0, the route answered
+    // "Drive N not found", and the sysop saw an error per step while the
+    // deletion had in fact happened. Top-down deletion - the escape hatch the
+    // gap guard above tells them to use - is exactly the sequence that hits
+    // it repeatedly. Disk is the truth on this board (Drives.info is what
+    // `parseVolumes` and every door read); the mirror is a mirror.
+    this.configRepo.logConfigChange(
+      'drives',
+      id,
+      'DELETE',
+      context.userId,
+      context.username,
+      oldDrive,
+      undefined,
+      context.ipAddress,
+      context.userAgent
+    );
 
-    return deleted;
+    return true;
   }
 
   /**

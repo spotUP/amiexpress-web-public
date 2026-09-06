@@ -369,13 +369,6 @@ describe('Drive Setup storage routes', () => {
 
     it('allows deleting the highest-numbered drive, which strands nothing', async () => {
       applyTooltypes(path.join(root, 'Drives.info'), [['DRIVE.3', 'DH3:']]);
-      // The DELETE route reports success from the mirror row's own delete
-      // count (unrelated to this finding) - give drive 3 a mirror row at
-      // rowid 3 (matching the URL's :id, which the route passes straight
-      // through to the mirror delete) so that count is meaningful, the way
-      // a drive added through the admin page would have one. Cleared first
-      // so this does not depend on what an earlier test in this shared-db
-      // file left behind.
       const raw = (db as any).db;
       raw.prepare('DELETE FROM drives WHERE drive_number = 3 OR id = 3').run();
       raw.prepare('INSERT INTO drives (rowid, drive_number, drive_path) VALUES (3, 3, ?)').run('DH3:');
@@ -386,6 +379,54 @@ describe('Drive Setup storage routes', () => {
       const info = fs.readFileSync(path.join(root, 'Drives.info'), 'latin1');
       expect(info).not.toMatch(/DRIVE\.3=/);
       expect(info).toContain('DRIVE.2=s3://uprough-cold');
+    });
+
+    /**
+     * Gate 2, blocker 5: the route used to report success from the MIRROR
+     * ROW's delete count, after Drives.info had already been rewritten. Every
+     * drive on a board that has never used the admin page is disk-only and
+     * has no mirror row, so the count was 0 and the sysop got
+     * "Drive N not found" for a deletion that had actually happened. The gap
+     * guard's own escape hatch - delete top-down - is precisely the sequence
+     * that hits it, once per step.
+     */
+    it('reports success for a DISK-ONLY drive, which has no mirror row to count', async () => {
+      applyTooltypes(path.join(root, 'Drives.info'), [['DRIVE.3', 'DH3:']]);
+      const raw = (db as any).db;
+      raw.prepare('DELETE FROM drives WHERE drive_number = 3 OR id = 3').run();
+
+      const res = await request(app).delete('/api/config/drives/3');
+
+      expect(res.status).toBe(200);
+      const info = fs.readFileSync(path.join(root, 'Drives.info'), 'latin1');
+      expect(info).not.toMatch(/DRIVE\.3=/);
+    });
+
+    it('walks a three-drive board down to one without an error on any step', async () => {
+      applyTooltypes(path.join(root, 'Drives.info'), [['DRIVE.3', 'DH3:']]);
+      const raw = (db as any).db;
+      raw.prepare('DELETE FROM drives WHERE drive_number IN (2, 3) OR id IN (2, 3)').run();
+
+      expect((await request(app).delete('/api/config/drives/3')).status).toBe(200);
+      expect((await request(app).delete('/api/config/drives/2')).status).toBe(200);
+
+      const info = fs.readFileSync(path.join(root, 'Drives.info'), 'latin1');
+      expect(info).toContain('DRIVE.1=DH1:');
+      expect(info).not.toMatch(/DRIVE\.2=/);
+      expect(info).not.toMatch(/DRIVE\.3=/);
+    });
+
+    it('still refuses when a real gap would be left, and leaves the file alone', async () => {
+      applyTooltypes(path.join(root, 'Drives.info'), [['DRIVE.3', 'DH3:']]);
+      const raw = (db as any).db;
+      raw.prepare('DELETE FROM drives WHERE drive_number = 1 OR id = 1').run();
+
+      const res = await request(app).delete('/api/config/drives/1');
+
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      const info = fs.readFileSync(path.join(root, 'Drives.info'), 'latin1');
+      expect(info).toContain('DRIVE.1=DH1:');
+      expect(info).toContain('DRIVE.3=DH3:');
     });
   });
 

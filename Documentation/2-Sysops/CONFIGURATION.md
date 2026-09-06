@@ -228,11 +228,11 @@ board's own disk stops being the ceiling on how many files you keep online.
 `Drives.info` builds no S3 client, opens no cache directory, and behaves
 exactly as it always has. Nothing below matters until you add one.
 
-### Two behaviour changes that apply even on a LOCAL-ONLY board
+### Three behaviour changes that apply even on a LOCAL-ONLY board
 
-Building this feature touched two spots in the plain, no-bucket upload path
-that every board runs through, whether or not `Drives.info` names a single
-`s3://` volume. Neither needs `DRIVE.n` configured to take effect:
+Building this feature touched three spots that every board runs through,
+whether or not `Drives.info` names a single `s3://` volume. None of them
+needs `DRIVE.n` configured to take effect:
 
 - **The duplicate-file check now runs BEFORE the physical move, not after.**
   express.e checks for a duplicate and, when it finds one, files the
@@ -252,6 +252,19 @@ that every board runs through, whether or not `Drives.info` names a single
   `ULPATH` is a separate, more space-constrained filesystem from your node's
   playpen, the printed "at one time" figure and the refusal threshold now
   reflect the playpen's room, not the area directory's.
+- **Drive Setup refuses to delete a drive that would leave a gap in
+  `DRIVE.n`.** `DRIVE.n` entries must be numbered contiguously from 1, and
+  the parser stops at the first gap - express.e parity, and the rule the
+  table below already states. So deleting a MIDDLE drive would not remove
+  the drives numbered above it from `Drives.info`; it would make the board
+  stop SEEING them, silently, from the next rebuild. Drive Setup now refuses
+  instead, and this applies to a plain local board too: if you have
+  `DRIVE.1`, `DRIVE.2` and `DRIVE.3` pointing at three local paths, you can
+  no longer delete `DRIVE.2` on its own. **The escape hatch is to delete
+  top-down** - remove `DRIVE.3` first, then `DRIVE.2` - which strands
+  nothing at any step. The refusal message names the exact drives to remove
+  first, highest number to lowest. (If you want to keep the drive above,
+  edit its path onto the lower number and delete the top one instead.)
 
 ### `Drives.info` — the `DRIVE.n` sub-keys
 
@@ -458,11 +471,25 @@ you would assume, but it is worth spelling out because it was NOT always
 true: for a time, deleting a pooled file only removed the `DIR` entry - the
 bucket object stayed, still downloadable through both the `D` command and
 either HTTP download route, and still counted against the drive's quota,
-with nothing on the admin page or in the log to say so. If you deleted a
-pooled file on an older build of this feature and are unsure whether the
-bytes are still sitting in your bucket, check the drive's contents listing
-on the Drive Setup page (or your provider's own console) rather than
-assuming the delete reached the object.
+with nothing on the admin page or in the log to say so.
+
+A successful pooled delete now also gives the drive's quota back. It clears
+the catalog row's record of WHICH drive holds the file (the row itself
+stays), and it decrements the running used-bytes figure the upload gate
+reads, so the two agree and a rebuild does not re-count the deleted bytes.
+Before that, `used` only ever grew: deleting and re-uploading the same file
+repeatedly walked a `DRIVE.n.QUOTA`-bound drive to "full" and started
+refusing uploads to a bucket with plenty of room.
+
+**If you deleted a pooled file on an older build and are unsure whether the
+bytes are still in your bucket, look in your provider's own console.** The
+drive's contents listing on the Drive Setup page cannot answer that
+question: it lists CATALOG rows recorded as living on that drive, not the
+objects the bucket actually holds. What it does now prove is the narrower
+thing: a file that still appears in that listing has not had a successful
+pooled delete recorded against it, and a file that has vanished from it was
+deleted by a build new enough to clear the record. Neither is a statement
+about the bucket - only the provider's console is.
 
 **A drive with `DRIVE.n.RETENTION` set is a special case worth knowing
 about.** Some providers implement object-lock or lifecycle-based retention
@@ -517,6 +544,15 @@ settings, both optional:
   directory walk on every single request. Drive Setup's pool status also
   shows a plain count of staged uploads still owed to the pool right now,
   so a stuck batch is visible on the page, not only in the log.
+
+  **Set this above the largest single file the board serves.** A file bigger
+  than the whole budget cannot be evicted down to fit, so it is kept and the
+  cache simply runs over budget for as long as it is there - logged, once
+  per episode, naming this setting. It is still served correctly; it just
+  means the budget is not being honoured while that file is cached. Setting
+  the budget below your largest file is a configuration mistake worth
+  fixing, not a hazard: the file is never deleted mid-download and never
+  reads as missing.
 - `BBS_STORAGE_NODE_ID` — identifies this process if you ever run more than
   one backend against the same board root (a container orchestrator
   restarting the board on a new host, or a deliberate second instance). Set
