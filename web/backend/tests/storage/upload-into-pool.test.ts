@@ -81,6 +81,8 @@ import type { RemoteArea } from '../../src/storage/remote-areas';
 import { locateRemoteFile } from '../../src/storage/remote-download';
 import { config } from '../../src/config';
 import { FakeBackend } from './fake-backend';
+import { bbsEventEmitter } from '../../src/services/bbs-event-emitter';
+import { webhookService } from '../../src/services/webhook.service';
 
 interface Harness {
   socket: any;
@@ -325,13 +327,70 @@ describe('an upload into a pooled area', () => {
     await processBatchFile(h.socket, h.session, h.data, config);
 
     // The one thing that must stay true: the caller's only copy is still in
-    // the playpen. resumeStuff can offer it back; nothing else can.
+    // the playpen. Nothing sweeps or reconciles it from there today -
+    // cleanPlayPen is never called and resumeStuff only scans PartUpload -
+    // so this is a file only a sysop reading the console can find; see the
+    // ORPHANED log the catch block writes.
     expect(fs.existsSync(h.playpenFile)).toBe(true);
     expect(fs.existsSync(path.join(h.dataDir, 'Conf1', 'HOLD', 'DEMO.ZIP'))).toBe(false);
     // No catalog row claiming the file is in HOLD...
     expect(createdEntries).toHaveLength(0);
     // ...and no DIR entry pointing at a HOLD file that isn't there.
     expect(fs.existsSync(path.join(h.dataDir, 'Conf1', 'DIR1'))).toBe(false);
+  });
+
+  it('credits nobody and tells nobody about a file that never reached HOLD', async () => {
+    // The double-failure case above (put fails, quarantine fails) must not
+    // fall through to the "successful upload" side-effects: crediting the
+    // caller's ratio/byte count, logging to callersLog, announcing the
+    // upload to other users over the BBS event bus, and firing the
+    // NEW_UPLOAD webhook - all for a file that exists nowhere but the
+    // playpen. Every one of those was gated only on `!foundDupe`, and
+    // `quarantineFailed` can only be true when `foundDupe` is false, so
+    // before this fix every one of them fired.
+    const h = harness({ storageVolume: 2 });
+    h.backend.down = true;
+    (globalThis as any).__moveUploadedFileOverride = async () => {
+      throw new Error('HOLD directory disk full');
+    };
+
+    const emitUploadSpy = jest.spyOn(bbsEventEmitter, 'emitUpload').mockImplementation(() => undefined);
+    const webhookSpy = jest.spyOn(webhookService, 'sendWebhook').mockResolvedValue(undefined);
+
+    await processBatchFile(h.socket, h.session, h.data, config);
+
+    // No ratio/byte credit for a file the caller cannot ever download again.
+    expect(h.session.user.uploads).toBeUndefined();
+    expect(h.session.user.bytesUpload).toBeUndefined();
+    // No announcement to other users of a file nobody can list or fetch.
+    expect(emitUploadSpy).not.toHaveBeenCalled();
+    // No external webhook consumer told a file exists that does not.
+    expect(webhookSpy).not.toHaveBeenCalled();
+
+    emitUploadSpy.mockRestore();
+    webhookSpy.mockRestore();
+  });
+
+  it('still credits the caller and tells the world when only the put fails but HOLD succeeds', async () => {
+    // Round-trip on the fix above: quarantineFailed must gate the double
+    // failure ONLY, not every pooled-put failure. A file that lands safely
+    // in HOLD (single failure, the existing express.e:19364-19369 path)
+    // keeps crediting the caller and announcing the upload exactly as it did
+    // before this round - it is a real, sysop-reviewable file on disk.
+    const h = harness({ storageVolume: 2 });
+    h.backend.down = true;
+
+    const emitUploadSpy = jest.spyOn(bbsEventEmitter, 'emitUpload').mockImplementation(() => undefined);
+    const webhookSpy = jest.spyOn(webhookService, 'sendWebhook').mockResolvedValue(undefined);
+
+    await processBatchFile(h.socket, h.session, h.data, config);
+
+    expect(h.session.user.uploads).toBe(1);
+    expect(emitUploadSpy).toHaveBeenCalledTimes(1);
+    expect(webhookSpy).toHaveBeenCalledTimes(1);
+
+    emitUploadSpy.mockRestore();
+    webhookSpy.mockRestore();
   });
 
   it('renames into the local area, untouched, when the area is not pooled', async () => {

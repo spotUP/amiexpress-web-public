@@ -502,8 +502,12 @@ console.error(`[testFile] Error:`, error);
           try {
             await fs.promises.unlink(data.path);
           } catch (unlinkError: any) {
-            // The bytes are in the pool; a playpen leftover is swept into
-            // PartUpload by cleanPlayPen. Not worth failing the upload.
+            // The bytes are in the pool, so this leftover is not the only
+            // copy - but cleanPlayPen (utils/clean-playpen.util.ts) is
+            // exported and called from nowhere in this backend, so nothing
+            // sweeps it today. It sits in the node playpen until a sysop
+            // clears it by hand. Not worth failing the upload over, since
+            // the real bytes are already safe in the pool.
 console.warn(`[Upload] Could not remove playpen copy ${data.path}: ${unlinkError.message}`);
           }
 console.log(
@@ -552,12 +556,22 @@ console.error(`[Upload] Error moving file: ${error.message}`);
 console.log(`[Upload] ${currentFile.filename} held at ${heldAt}`);
           } catch (holdError: any) {
             // The playpen copy is still there, which is the one thing that
-            // must stay true; cleanPlayPen sweeps it into PartUpload. The
-            // file is not in HOLD, so quarantineFailed must suppress the
-            // catalog row and DIR entry below - both would otherwise claim
-            // a location the file never reached.
+            // must stay true - but nothing sweeps it from here today.
+            // cleanPlayPen (utils/clean-playpen.util.ts) is exported and
+            // called from nowhere in this backend, and resumeStuff only
+            // scans <confDir>/PartUpload/, never the raw node playpen. So
+            // this file is orphaned in the playpen, full stop, until a
+            // sysop finds it by hand. Wiring cleanPlayPen into a teardown
+            // path is its own follow-up - deliberately not done here, on a
+            // path already being patched for a different defect.
+            // quarantineFailed must still suppress the catalog row and DIR
+            // entry below - both would otherwise claim a location the file
+            // never reached.
             quarantineFailed = true;
 console.error(`[Upload] Could not move ${currentFile.filename} to HOLD: ${holdError.message}`);
+console.error(
+              `[Upload] ORPHANED: node ${session.nodeId} left ${currentFile.filename} sitting in the playpen at ${data.path} - not in the pool, not in HOLD, not catalogued, not swept by anything; needs a sysop`
+            );
           }
         }
       }
@@ -567,9 +581,10 @@ console.error(`[Upload] Could not move ${currentFile.filename} to HOLD: ${holdEr
     // Skip database insert for duplicates - file already exists in database.
     // Also skip when the pooled put AND the fallback HOLD quarantine both
     // failed: the file is still in the playpen, and a catalog row claiming
-    // status 'hold' would point the sysop at a file that isn't there. A file
-    // left in the playpen is recoverable (resumeStuff can offer it back); a
-    // catalog entry pointing at nothing is not.
+    // status 'hold' would point the sysop at a file that isn't there. Nothing
+    // sweeps or reconciles that playpen file today - see the ORPHANED log in
+    // the holdError catch above - but a stray file a sysop can still find on
+    // disk beats a catalog entry pointing at nothing.
     if (!foundDupe && !quarantineFailed) {
       const fileEntry = {
         filename: currentFile.filename,
@@ -692,8 +707,13 @@ console.error(`[Upload] Error writing DIR file: ${error.message}`);
     // Update user stats in users table (express.e:19379-19384)
     // Express.e: Stats ONLY updated when status=RESULT_SUCCESS (not for duplicates/failures)
     // Use SQL arithmetic to avoid JavaScript number overflow for bytesUpload (BIGINT)
+    //
+    // Also gated on !quarantineFailed: when the pooled put AND the fallback
+    // HOLD quarantine both failed the file exists nowhere but the playpen,
+    // and crediting the caller's ratio/byte count for it would be paying out
+    // for a file nobody can ever download.
     const trackUploads = creditAccountTrackUploads(session.user!);
-    if (trackUploads && !foundDupe) {
+    if (trackUploads && !foundDupe && !quarantineFailed) {
       // Update CPS tracking on user object using real transfer speed from frontend
       const realUploadCPS = session.tempData?.lastUploadCPS || undefined;
       await updateUploadStats(session.user!, data.size, realUploadCPS);
@@ -769,7 +789,7 @@ console.error("[Upload] Error writing user disk files:", diskErr);
       const target = conferences?.find(
         (c: any) => c.id === session.currentConf
       );
-      if (target && trackUploads && !foundDupe) {
+      if (target && trackUploads && !foundDupe && !quarantineFailed) {
         target.uploads = (target.uploads || 0) + 1;
         target.bytesUpload = (target.bytesUpload || 0) + data.size;
         // Use db's delegated method instead of creating new repository
@@ -784,7 +804,8 @@ console.error("[Upload] Failed to persist conference upload stats", err);
 
     // Log file upload (express.e:9493 callersLog)
     // Express.e: Only log successful uploads (not duplicates)
-    if (!foundDupe) {
+    // Also skipped when quarantineFailed: the file was never filed anywhere.
+    if (!foundDupe && !quarantineFailed) {
       await callersLog(
         session.user!.id,
         session.user!.username,
@@ -795,7 +816,9 @@ console.error("[Upload] Failed to persist conference upload stats", err);
 
     // Emit BBS event for LiveChat integration
     // Express.e: Only emit events for successful uploads (not duplicates)
-    if (!foundDupe) {
+    // Also skipped when quarantineFailed: other users must not see an
+    // announcement for a file that can never be listed or fetched.
+    if (!foundDupe && !quarantineFailed) {
       try {
         const conference = await db.getConferenceById(session.currentConf);
         emitUpload({
@@ -814,7 +837,9 @@ console.error("[BBSEvent] Error emitting upload event:", error);
 
     // Trigger webhook for file upload
     // Express.e: Only trigger webhooks for successful uploads (not duplicates)
-    if (!foundDupe) {
+    // Also skipped when quarantineFailed: an external webhook consumer must
+    // not be told a file exists that does not.
+    if (!foundDupe && !quarantineFailed) {
       try {
         const { webhookService, WebhookTrigger } = await import(
           "../services/webhook.service"
