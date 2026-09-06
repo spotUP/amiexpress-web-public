@@ -9,7 +9,7 @@ import { ximDebugLogger } from "../xim/debug-logger";
 import { EnvironmentManager } from "../session/EnvironmentManager";
 import { convertAmigaBytesToAscii } from "../utils/character-conversion";
 import { initializeENVFiles } from "../utils/env-initializer";
-import { AMIGA_ENV_DIR, amigaEnvArchiveDir } from "../utils/env-paths";
+import { amigaEnvArchiveDir, amigaEnvDir, amigaRamDir } from "../utils/env-paths";
 import { getSystemTime, dateTimeToDateStamp } from '../../utils/date-time.util';
 import { debugLog } from "../../utils/debug-log";
 
@@ -295,7 +295,7 @@ console.error('[DosLibrary] EnvironmentManager not initialized');
     // Initialize ENV: device files (Lock/Open/Read access)
     // This creates files like ENV:JC_PWFAIL.*, ENV:STATS@*, etc.
     // that many Amiga doors expect to find on disk
-    initializeENVFiles(AMIGA_ENV_DIR, {
+    initializeENVFiles(amigaEnvDir(), {
       nodeId,
       totalNodes: 8,
       bbsName: 'AmiExpress Web BBS',
@@ -342,7 +342,7 @@ debugLog(`[DosLibrary] Environment variables initialized for node ${nodeId}`);
     this.pathResolver.setBasePaths(rootPath);
 
     this.pathResolver.ensureDirectory(this.bbsDataPath);
-    this.pathResolver.ensureDirectory(AMIGA_ENV_DIR);
+    this.pathResolver.ensureDirectory(amigaEnvDir());
     // ENVARC: is the persistent half of the environment. Open(..., NEWFILE)
     // fails outright when the parent directory is missing, so a door's
     // archive write needs the directory to exist before it runs.
@@ -351,7 +351,7 @@ debugLog(`[DosLibrary] Environment variables initialized for node ${nodeId}`);
     // ZOOSTAT.TMP here, ACP and many doors use it). On a real Amiga the
     // startup-sequence pre-creates it with `makedir RAM:T`; mirror that here
     // so Open(RAM:T/..., MODE_NEWFILE) doesn't ENOENT on a missing parent.
-    this.pathResolver.ensureDirectory("/tmp/ram/T");
+    this.pathResolver.ensureDirectory(path.join(amigaRamDir(), "T"));
     this.doorFileLogPath = path.join(this.rootPath, "logs", "door-68k.log");
   }
 

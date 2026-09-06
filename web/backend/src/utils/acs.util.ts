@@ -114,10 +114,16 @@ let acsConfig: ACSConfig = {
   userSpecificAccess: false
 };
 
-// ENV: assign path for node status files (STATS@N)
-const ENV_ASSIGN_DIR = path.join('/tmp/ram', 'ENV');
+// ENV: assign path for node status files (STATS@N). Same directory the
+// emulator's ENV: assign resolves to (amiga-emulation/utils/env-paths.ts):
+// both halves of the board must agree on where a node's status file lives,
+// so both read RAM_DIR rather than hard-coding /tmp/ram.
+function envAssignDir(): string {
+  return path.join(process.env.RAM_DIR || '/tmp/ram', 'ENV');
+}
 
 function ensureEnvAssignDir(): string {
+  const ENV_ASSIGN_DIR = envAssignDir();
   if (!fs.existsSync(ENV_ASSIGN_DIR)) {
     fs.mkdirSync(ENV_ASSIGN_DIR, { recursive: true });
   }

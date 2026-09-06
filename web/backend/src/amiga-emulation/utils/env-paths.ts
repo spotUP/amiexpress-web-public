@@ -26,12 +26,31 @@
 import * as path from 'path';
 
 /**
- * ENV: - the volatile half, under the RAM: disk the emulator already fakes at
- * /tmp/ram. Intentionally NOT persistent: node status files (STATS@<n>,
- * MODULE@<n>, JC_PWFAIL.<n>) live here and must not survive a crash, or every
- * node comes back reading as still occupied.
+ * RAM: - the volatile disk the emulator fakes on the host filesystem.
+ *
+ * `RAM_DIR` is the project's existing name for it (`src/utils/path-util.ts`
+ * and `src/utils/bbs-paths.util.ts` have read it for as long as they have
+ * existed); the emulator hard-coded `/tmp/ram` instead, which made RAM: - and
+ * therefore ENV: - one directory shared by every process on the machine. That
+ * is a real collision now that each jest worker gets its own board: a suite
+ * booting the emulator copies ITS board's ENVARC: into the one global ENV:,
+ * where the next door to start reads it as its own. Honouring the variable
+ * the rest of the codebase already honours lets a test give itself both
+ * halves of the environment. Unset - which is every production board - it is
+ * the same `/tmp/ram` as before.
  */
-export const AMIGA_ENV_DIR = '/tmp/ram/ENV';
+export function amigaRamDir(): string {
+  return process.env.RAM_DIR || '/tmp/ram';
+}
+
+/**
+ * ENV: - the volatile half, under RAM:. Intentionally NOT persistent: node
+ * status files (STATS@<n>, MODULE@<n>, JC_PWFAIL.<n>) live here and must not
+ * survive a crash, or every node comes back reading as still occupied.
+ */
+export function amigaEnvDir(): string {
+  return path.join(amigaRamDir(), 'ENV');
+}
 
 /**
  * ENVARC: - the archive half, on disk under the BBS root so it rides the

@@ -12,7 +12,7 @@ import * as amigafs from '../../../utils/amigafs';
 import { debugLog } from '../../../utils/debug-log';
 import { PathManager } from '../PathManager';
 import { FileManager } from '../FileManager';
-import { AMIGA_ENV_DIR, amigaEnvArchiveDir } from '../../utils/env-paths';
+import { amigaEnvArchiveDir, amigaEnvDir, amigaRamDir } from '../../utils/env-paths';
 
 /**
  * Configuration for path resolver
@@ -234,7 +234,7 @@ export class DosPathResolver {
     // Handle ENV: device - environment variables
     if (upperPath.startsWith('ENV:')) {
       const relativePath = amigaPath.substring(4);
-      const resolved = path.join(AMIGA_ENV_DIR, relativePath);
+      const resolved = path.join(amigaEnvDir(), relativePath);
       debugLog(`[DosPathResolver] ENV: -> ${resolved}`);
       return resolved;
     }
@@ -242,7 +242,7 @@ export class DosPathResolver {
     // Handle RAM: device
     if (upperPath.startsWith('RAM:')) {
       const relativePath = amigaPath.substring(4);
-      const resolved = path.join('/tmp/ram', relativePath);
+      const resolved = path.join(amigaRamDir(), relativePath);
       debugLog(`[DosPathResolver] RAM: -> ${resolved}`);
       return resolved;
     }
@@ -250,7 +250,7 @@ export class DosPathResolver {
     // Handle T: device - temporary directory
     if (upperPath.startsWith('T:')) {
       const relativePath = amigaPath.substring(2);
-      const resolved = path.join('/tmp/ram/T', relativePath);
+      const resolved = path.join(amigaRamDir(), 'T', relativePath);
       debugLog(`[DosPathResolver] T: -> ${resolved}`);
       return resolved;
     }
