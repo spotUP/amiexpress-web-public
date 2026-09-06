@@ -129,6 +129,19 @@ void ansi_color(ansi_buf *b, int fg, int bg, int bold)
 
     put_str(b, "\033[");
     put_int(b, bold ? 1 : 0);
+    /* The leading 0 is SGR 0, and SGR 0 resets EVERY attribute - reverse
+       video with them. So a colour written while the buffer is in reverse
+       has to put it back in the same sequence, or the reverse lasts exactly
+       until the next colour change.
+       That is not theory: ui_list turned reverse on for a selected row, and
+       ansi_fill's own ansi_color(fg, bg, 0) two calls later wrote ESC[0;37m
+       and cancelled it. On an 80-column terminal nobody saw it, because the
+       highlight there is a background. On a C64 the background is dropped
+       and reverse was all there was, so the sysop saw no highlighted row at
+       all (2026-09-06). */
+    if (!bold && b->last_reverse == 1) {
+        put_str(b, ";7");
+    }
     put_char(b, ';');
     put_int(b, 30 + fg);
     if (bg >= 0) {
@@ -143,6 +156,11 @@ void ansi_reverse(ansi_buf *b, int on)
     if (!b) return;
     if (b->last_reverse == (on ? 1 : 0)) return;
     b->last_reverse = on ? 1 : 0;
+    /* The colour cache is now stale in one direction: the NEXT ansi_color
+       may ask for exactly what was last written, return early, and never
+       re-assert reverse in its SGR 0. Forget the last colour so it writes
+       itself out. */
+    b->last_bold = -1;
     put_str(b, on ? "\033[7m" : "\033[27m");
 }
 

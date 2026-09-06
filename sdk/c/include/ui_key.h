@@ -30,6 +30,17 @@
 extern "C" {
 #endif
 
+/* The bytes AmiExpress hands a door for the cursor keys.
+ *
+ * The board converts them before the door is called (express.e:7514-7528,
+ * ported in web/backend/src/amiga-emulation/xim/io.ts): a door that waits
+ * for ESC [ A will wait for ever on a real board, because the escape
+ * sequence never arrives. */
+#define AE_ARROW_LEFT  2
+#define AE_ARROW_RIGHT 3
+#define AE_ARROW_UP    4
+#define AE_ARROW_DOWN  5
+
 #define UI_KEY_UP    1000
 #define UI_KEY_DOWN  1001
 #define UI_KEY_PGUP  1002

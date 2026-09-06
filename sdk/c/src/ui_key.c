@@ -83,6 +83,23 @@ int ui_key_read(const ui_key_source *src, int *pushback)
        and a door that only knew one of them would look dead to half its
        callers. */
     if (c == '\r' || c == '\n') return UI_KEY_ENTER;
+
+    /* THE ARROWS A BOARD ACTUALLY SENDS.
+     *
+     * AmiExpress converts cursor keys before a door ever sees them:
+     * express.e:7514-7528 turns ESC[A/B/C/D into 4, 5, 3 and 2, and JH_HK
+     * hands the door that single byte (xim/io.ts:755-781 ports it). A door
+     * decoding ESC sequences is decoding something the board already ate,
+     * which is why THEMEC's list did not move under the arrow keys on a real
+     * board while its unit tests passed (sysop, 2026-09-06).
+     *
+     * The ESC path below stays for the rawArrow case and for a door driven
+     * from a terminal directly. */
+    if (c == AE_ARROW_LEFT)  return UI_KEY_PGUP;
+    if (c == AE_ARROW_RIGHT) return UI_KEY_PGDN;
+    if (c == AE_ARROW_UP)    return UI_KEY_UP;
+    if (c == AE_ARROW_DOWN)  return UI_KEY_DOWN;
+
     if (c == 0x1b) return ui_decode_escape(src, pushback);
 
     return c;

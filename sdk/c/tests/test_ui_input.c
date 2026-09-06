@@ -84,6 +84,50 @@ static void the_arrows_decode(void)
     printf("  [OK] the arrows and page keys decode\n");
 }
 
+/**
+ * The arrows a real board sends.
+ *
+ * AmiExpress converts cursor keys before a door is called - ESC[A/B/C/D
+ * become 4, 5, 3 and 2 (express.e:7514-7528, ported in xim/io.ts) - and
+ * JH_HK hands the door that one byte. The decoder read ESC sequences only,
+ * so on a real board the arrow keys did nothing at all: THEMEC's list would
+ * not move under them while this file's ESC cases passed (sysop,
+ * 2026-09-06).
+ */
+static void the_boards_own_arrow_codes_decode(void)
+{
+    typist t; ui_key_source src; int pushback = -1;
+    /* 4 5 3 2 - up, down, right, left, as express.e numbers them. */
+    t.keys = "\x04\x05\x03\x02"; t.at = 0; t.overrun = 0;
+    src = source_for(&t);
+
+    assert(ui_key_read(&src, &pushback) == UI_KEY_UP);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_DOWN);
+    /* Left and right move a list by a page, which is what they do in the
+       ESC path above too. */
+    assert(ui_key_read(&src, &pushback) == UI_KEY_PGDN);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_PGUP);
+    printf("  [OK] the board's own arrow codes decode\n");
+}
+
+/**
+ * And an ordinary key is still itself: the four codes are control bytes no
+ * caller types, but CTRL-B and CTRL-E reach a door as 2 and 5, so this is
+ * worth saying out loud - they are arrows here, deliberately, because that
+ * is what the board means by them.
+ */
+static void an_ordinary_key_is_untouched(void)
+{
+    typist t; ui_key_source src; int pushback = -1;
+    t.keys = "aQ1"; t.at = 0; t.overrun = 0;
+    src = source_for(&t);
+
+    assert(ui_key_read(&src, &pushback) == 'a');
+    assert(ui_key_read(&src, &pushback) == 'Q');
+    assert(ui_key_read(&src, &pushback) == '1');
+    printf("  [OK] an ordinary key is untouched\n");
+}
+
 static void an_escape_alone_is_an_escape(void)
 {
     typist t; ui_key_source src; int pushback = -1;
@@ -244,6 +288,8 @@ int main(void)
     an_ordinary_key_is_itself();
     both_line_endings_mean_enter();
     the_arrows_decode();
+    the_boards_own_arrow_codes_decode();
+    an_ordinary_key_is_untouched();
     an_escape_alone_is_an_escape();
     escape_then_a_key_delivers_both();
     a_lost_caller_is_reported_not_guessed();
