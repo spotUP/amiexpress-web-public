@@ -28,6 +28,18 @@ static char storage[16384];
 #define COLS 80
 #define ROWS 24
 
+/* How many frames this binary paints.
+ *
+ * COMPILE-TIME, because the harness's argument path does not reach the door:
+ * AmigaDOS hands a door one command-line string and what arrives is the node
+ * alone, so a frame count passed on the command line is silently ignored -
+ * two runs that were supposed to differ produced identical output, which is
+ * a measurement that measures nothing. Two binaries, one number each, is
+ * beyond argument. */
+#ifndef BENCH_FRAMES
+#define BENCH_FRAMES 1
+#endif
+
 static void paint_one_frame(ansi_buf *b, int tint)
 {
     int row;
@@ -47,9 +59,15 @@ static void paint_one_frame(ansi_buf *b, int tint)
 
 int main(int argc, char **argv)
 {
-    int node = argc > 1 ? atoi(argv[1]) : 1;
-    int frames = argc > 2 ? atoi(argv[2]) : 1;
+    int node = 1;
+    int frames = BENCH_FRAMES;
     int i;
+
+    /* AmigaDOS hands a door ONE command-line string, so a harness that means
+     * to pass "1 11" may arrive as argv[1] = "1 11" with argc == 2 rather
+     * than as two arguments. Read both shapes: the second argument if there
+     * is one, otherwise the second number inside the first. */
+    if (argc > 1) node = atoi(argv[1]);
 
     if (frames < 1) frames = 1;
 

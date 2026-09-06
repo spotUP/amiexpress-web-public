@@ -101,7 +101,7 @@ check-themes:
 # The 68K library and the two yardstick doors
 # ---------------------------------------------------------------------
 
-amiga: lib build/amiga/hello build/amiga/hello_box build/amiga/hello_list build/amiga/theme-picker build/amiga/bench_repaint
+amiga: lib build/amiga/hello build/amiga/hello_box build/amiga/hello_list build/amiga/theme-picker build/amiga/bench_repaint build/amiga/bench_repaint11
 
 lib: build/amiga/libae.lib
 
@@ -138,6 +138,13 @@ build/amiga/theme-picker: examples/theme-picker/theme_picker.c build/amiga/libae
 build/amiga/bench_repaint: examples/bench/bench_repaint.c build/amiga/libae.lib
 	@mkdir -p build/amiga
 	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
+
+# The pair the repaint measurement needs: identical but for the frame count,
+# so the DIFFERENCE between them is the cost of ten frames with start-up and
+# registration cancelled out.
+build/amiga/bench_repaint11: examples/bench/bench_repaint.c build/amiga/libae.lib
+	@mkdir -p build/amiga
+	$(VC) $(AMIGA_CFLAGS) -DBENCH_FRAMES=11 $< build/amiga/libae.lib -lauto -o $@
 
 measure: amiga
 	@sh tools/measure-link.sh
