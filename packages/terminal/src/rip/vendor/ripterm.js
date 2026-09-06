@@ -2788,7 +2788,7 @@ class RIPterm {
               // defer until mouse is clicked in graphics (1) or text (2) window
               if (this.text.indexOf('$OFF$') > 0) {
                 // clear all in queue and ignore the rest
-                queue = [];
+                queue.length = 0;
               }
               else {
                 let text2 = this.text;
