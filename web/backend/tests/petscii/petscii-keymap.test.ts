@@ -63,10 +63,23 @@ describe('keyEventToPetscii', () => {
     expect(keyEventToPetscii('_', false)).toEqual([0x5F]);
   });
 
-  it('unmapped keys return null', () => {
+  /**
+   * Tab and Escape are NOT C64 keys, and they are mapped anyway.
+   *
+   * This assertion used to include Tab, alongside the modifiers and a glyph
+   * PETSCII does not have - true of a C64 keyboard, and wrong for the thing
+   * this function actually serves: a browser canvas driven by a real
+   * keyboard, in front of doors that navigate with Tab and Escape. A PETSCII
+   * caller could open the TetriNET lobby and not move around it.
+   */
+  it('the door navigation keys the canvas has, a C64 keyboard has not', () => {
+    expect(keyEventToPetscii('Tab', false)).toEqual([0x09]);
+    expect(keyEventToPetscii('Escape', false)).toEqual([0x1B]);
+  });
+
+  it('keys with no byte at all still return null', () => {
     expect(keyEventToPetscii('Shift', false)).toBeNull();
     expect(keyEventToPetscii('Control', false)).toBeNull();
-    expect(keyEventToPetscii('Tab', false)).toBeNull();
     expect(keyEventToPetscii('{', false)).toBeNull();
   });
 });

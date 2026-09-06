@@ -17,6 +17,15 @@ const NAMED_KEYS: { [key: string]: number } = {
   Enter: 0x0D,
   Backspace: 0x14,
   Delete: 0x14,
+  // A C64 keyboard has neither of these, and that is why they were missing -
+  // but the person at this canvas is at a real keyboard, and the board's own
+  // doors navigate with them: a lobby's panes are walked with Tab and backed
+  // out of with Escape. Without them a PETSCII caller reaches the TetriNET
+  // lobby and then cannot move around it ("i cant tab in the tetrinet lobby
+  // in petscii mode"). They travel as their ASCII bytes, which is what the
+  // doors read once petsciiInputToAscii lets them back through.
+  Tab: 0x09,
+  Escape: 0x1B,
   ArrowDown: 0x11,
   ArrowUp: 0x91,
   ArrowRight: 0x1D,

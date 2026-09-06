@@ -14,6 +14,11 @@
  */
 const CONTROL_KEYS: { [byte: number]: string } = {
   0x0D: '\r', 0x8D: '\r',
+  // Not C64 keys - no C64 keyboard has Tab or Escape - but the web PETSCII
+  // canvas is driven by a real keyboard and sends them (keymap.ts), and the
+  // doors navigate with them. Without these two entries the bytes fall
+  // through every branch below and are dropped as "no input meaning".
+  0x09: '\t', 0x1B: '\x1b',
   0x14: '\x7f', 0x7F: '\x7f',
   0x91: '\x1b[A', 0x11: '\x1b[B', 0x1D: '\x1b[C', 0x9D: '\x1b[D',
   0x13: '\x1b[H', 0x94: '\x1b[2~',
