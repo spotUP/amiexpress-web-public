@@ -33,10 +33,24 @@ import { objectPrefixFor, type RemoteArea, type RemoteLocation } from './remote-
 import type { StorageContext } from './storage-context';
 import { usableAreasFor } from './usable-areas';
 
-/** All an area needs to be recognised in the storage context's own list. */
+/**
+ * All an area needs to be recognised in the storage context's own list.
+ *
+ * `dirNumber`, not `id`: whole-branch review finding 6. `storage.areas` is
+ * built once by `server/initialization.ts` from a conference scan
+ * (`loadFileAreasFromDisk` assigns `id` POSITIONALLY, by array index) and
+ * rebuilt independently by `DriveConfigService.refreshLiveStorage` from its
+ * own, separately-derived list - two scans that agree on conference number
+ * and directory number, the tooltype identity (`DLPATH.<dirNumber>`), but
+ * have no reason to agree on array position. Matching on `id` silently lands
+ * an upload on local disk the moment the two scans diverge by even one
+ * area, with no reader ever looking there again. `dirNumber` is the same
+ * stable identity `file-maintenance.handler.ts`'s FM M already matches on
+ * (`usableAreasFor(confNum, storage).find(area => area.dirNumber === destDir)`).
+ */
 export interface UploadAreaRef {
-  id: number;
   conferenceId: number;
+  dirNumber: number;
 }
 
 /**
@@ -50,7 +64,7 @@ export interface UploadAreaRef {
  */
 export function pooledUploadArea(area: UploadAreaRef, storage: StorageContext | null): RemoteArea | null {
   if (!storage) return null;
-  return usableAreasFor(area.conferenceId, storage).find(candidate => candidate.id === area.id) ?? null;
+  return usableAreasFor(area.conferenceId, storage).find(candidate => candidate.dirNumber === area.dirNumber) ?? null;
 }
 
 /**
