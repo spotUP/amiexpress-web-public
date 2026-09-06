@@ -35,6 +35,7 @@ import { MCI_CATALOG, MCI_FAMILY_ORDER, MCI_ENABLED_KEY } from '../screens/mci-c
 import { repairOneFile } from '../screens/screen-repair';
 import { planMciCarry, applyMciCarry, type MciPlacement } from '../screens/mci-carry';
 import { setScreenFlag, readScreenFlags, type ScreenFlag } from '../screens/screen-flags';
+import { saveRevision, listRevisions, readRevision, restoreRevision } from '../screens/screen-revisions';
 
 export const screensRouter = express.Router();
 
@@ -222,6 +223,10 @@ function writeToTargets(targets: string[], bytes: Buffer | ((rel: string) => Buf
 
       let backup: string | null = null;
       if (fs.existsSync(full)) {
+        // Snapshot to .Revisions before overwriting. The `.backup` beside the
+        // file is ONE undo, overwritten by the next write; the revision store
+        // keeps the last ten, which is what the admin's history panel lists.
+        saveRevision(rel);
         backup = `${full}.backup`;
         fs.copyFileSync(full, backup);
       }
@@ -950,4 +955,60 @@ screensRouter.post('/import', upload.single('archive'), (req: Request, res: Resp
   }
 
   return sendOk(res, { plan }, `Imported ${plan.length} file${plan.length === 1 ? '' : 's'}`);
+});
+
+// ===== Revision API =====
+
+/*
+ * A screen's last ten versions, and a way back to one of them.
+ *
+ * Restored here after 08be9a627: that commit redid the three-way merge
+ * a636a00ad never performed and took main's pre-merge screens-routes.ts,
+ * which is a superset of the branch's - except for these three routes and
+ * the saveRevision call above, which had landed on top of the branch-side
+ * file the day AFTER the merge (e29dd5698) and so were in neither side of
+ * the merge it replayed.
+ *
+ * Nothing failed loudly: screen-revisions.ts sat in src with no importer,
+ * config-app's ScreenRevisionsPanel and its three client methods stayed in
+ * the bundle, and the sysop's Revisions button answered 404.
+ */
+
+/**
+ * GET /api/screens/revisions?path=...
+ * List all stored revisions for a screen file.
+ */
+screensRouter.get('/revisions', (req: Request, res: Response) => {
+  const rel = String(req.query.path || '');
+  if (!rel) return res.status(400).json({ success: false, error: 'path required' });
+  const revisions = listRevisions(rel);
+  return sendOk(res, { revisions });
+});
+
+/**
+ * GET /api/screens/revision?path=&file=
+ * View a specific revision's content as base64.
+ */
+screensRouter.get('/revision', (req: Request, res: Response) => {
+  const rel = String(req.query.path || '');
+  const file = String(req.query.file || '');
+  if (!rel || !file) return res.status(400).json({ success: false, error: 'path and file required' });
+  const buf = readRevision(rel, file);
+  if (!buf) return res.status(404).json({ success: false, error: 'Revision not found' });
+  return sendOk(res, { content: buf.toString('base64'), bytes: buf.length });
+});
+
+/**
+ * POST /api/screens/restore
+ * Body: { path, file }
+ * Restore a revision, snapshotting the current file first.
+ */
+screensRouter.post('/restore', (req: Request, res: Response) => {
+  const rel = String(req.body?.path || '');
+  const file = String(req.body?.file || '');
+  if (!rel || !file) return res.status(400).json({ success: false, error: 'path and file required' });
+  const ok = restoreRevision(rel, file);
+  if (!ok) return res.status(404).json({ success: false, error: 'Revision not found' });
+  invalidateScreenIndex();
+  return sendOk(res, { restored: rel }, `Restored ${file}`);
 });
