@@ -3,6 +3,8 @@ import { Box, Text, useStdout } from 'ink';
 import Gradient from 'ink-gradient';
 import BigText from 'ink-big-text';
 import { loadLogo, logoFits } from '../../theme/logo.js';
+import { SIDEBAR_WIDTH } from '../Sidebar.js';
+import { useTerminalColumns } from '../../hooks/useTerminalColumns.js';
 import Spinner from 'ink-spinner';
 import { T } from '../../theme/blessed-theme.js';
 import { useDashboardStats } from '../../hooks/useDashboardStats.js';
@@ -58,6 +60,12 @@ function fmtBytes(b: number | undefined): string {
   return `${(b / 1024).toFixed(0)} KB`;
 }
 
+/** Borders and padding between the sidebar and this tab's content. */
+const CONTENT_CHROME = 4;
+
+/** Read from disk once per process, not per render. */
+const LOGO = loadLogo();
+
 export function DashboardTab() {
   const { stats, nodes, recentCallers, loading, error, lastUpdated } = useDashboardStats(10_000);
 
@@ -67,9 +75,13 @@ export function DashboardTab() {
 
   const sparkline = buildSparkline(recentCallers, 24);
 
-  // Read once: the art is only drawn where it fits the pane whole.
-  const { stdout } = useStdout();
-  const [logo] = useState<string[]>(() => (logoFits(stdout?.columns) ? loadLogo() : []));
+  // Read once, and measure the space this tab actually gets - not the whole
+  // terminal. The sidebar and the surrounding border sit to the left of the
+  // content, so gating on stdout.columns drew the art into a column too
+  // narrow for it and Ink reflowed it into noise.
+  const columns = useTerminalColumns();
+  const available = typeof columns === 'number' ? columns - SIDEBAR_WIDTH - CONTENT_CHROME : undefined;
+  const logo = logoFits(available) ? LOGO : [];
 
   if (loading && !stats) {
     return (

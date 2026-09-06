@@ -3,6 +3,7 @@ import { Box, Text, useInput, useStdout } from 'ink';
 import { T } from '../theme/blessed-theme.js';
 import { loadLogo, logoFits, LOGO_WIDTH } from '../theme/logo.js';
 import { probeBackend, backendUrl } from '../api/client.js';
+import { useTerminalColumns } from '../hooks/useTerminalColumns.js';
 
 interface Props {
   error: string | null;
@@ -10,13 +11,16 @@ interface Props {
   onLogin: (username: string, password: string) => void;
 }
 
+/** Read from disk once per process, not per render. */
+const LOGIN_LOGO = loadLogo();
+
 export function LoginPrompt({ error, loading, onLogin }: Props) {
   const [field, setField] = useState<'username' | 'password'>('username');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const dots = useDots();
-  const { stdout } = useStdout();
-  const logo = useLogo(stdout?.columns);
+  const columns = useTerminalColumns();
+  const logo = logoFits(columns) ? LOGIN_LOGO : [];
   const ready = useBackendReady();
 
   useInput((input, key) => {
@@ -109,15 +113,6 @@ export function LoginPrompt({ error, loading, onLogin }: Props) {
       </Box>
     </Box>
   );
-}
-
-/**
- * Read the logo once, and only when it fits the terminal whole - a wrapped
- * copy of the art is worse than no art.
- */
-function useLogo(columns: number | undefined): string[] {
-  const [logo] = useState<string[]>(() => (logoFits(columns) ? loadLogo() : []));
-  return logo;
 }
 
 /**
