@@ -31,7 +31,9 @@ describe('what each screen is for', () => {
     // The catalogue lives in the backend; this is the list it answers with.
     // A screen added there without a description here shows an empty column,
     // which is the state this file exists to end.
-    const { SCREEN_DIR_MAP } = await import('@bbs/screens/screen-resolution');
+    // The TABLE, not the resolver: screen-resolution reads files, so importing
+    // it here dragged fs and path into a browser app's type-check.
+    const { SCREEN_DIR_MAP } = await import('@bbs/screens/screen-tables');
 
     const missing = Object.keys(SCREEN_DIR_MAP).filter(name => !SCREEN_DESCRIPTIONS[name]);
     expect(missing, `No description for: ${missing.join(', ')}`).toEqual([]);
