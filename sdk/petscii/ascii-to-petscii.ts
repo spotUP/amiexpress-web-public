@@ -20,7 +20,7 @@
  * Reference: thoughts/shared/research/2026-09-01_true-petscii-reference.md
  * sections 1.1 and 2.
  */
-import { UNICODE_TO_PETSCII } from './unicode-to-petscii';
+import { UNICODE_TO_PETSCII, UNICODE_TO_PETSCII_BANK1_ONLY } from './unicode-to-petscii';
 
 /**
  * One PETSCII byte plus whether it is an INVERSE-only glyph: a handful of
@@ -59,7 +59,11 @@ export function asciiToPetsciiByte(code: number, bank: 0 | 1): PetsciiByteMappin
     case 0x7C: return plain(0xDD);                 // | -> vertical bar graphic (same glyph in both banks)
     case 0x7E: return plain(0x2D);                 // ~ -> -
   }
-  const mapped = UNICODE_TO_PETSCII.get(String.fromCodePoint(code));
+  const glyph = String.fromCodePoint(code);
+  // The shared table is bank-agnostic; the three fills whose screen code is a
+  // different bitmap in bank 0 are only reachable when encoding for bank 1.
+  const mapped = UNICODE_TO_PETSCII.get(glyph)
+    ?? (bank === 1 ? UNICODE_TO_PETSCII_BANK1_ONLY.get(glyph) : undefined);
   if (mapped === undefined) return plain(0x3F);    // unsupported glyph -> '?'
   if (typeof mapped === 'number') return plain(mapped);
   return { byte: mapped.rvs, needsReverse: true }; // glyph only exists as the inverse of another

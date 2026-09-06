@@ -1,5 +1,5 @@
 /**
- * The glyphs a C64 CAN print that our encoder turns into '?'.
+ * The glyphs a C64 CAN print that our encoder used to turn into '?'.
  *
  * Recorded by `thoughts/shared/research/2026-09-06_cbase-petscii-viewer.md`
  * section 4. Every row below is a screen code our own normative table
@@ -18,18 +18,25 @@
  * $6B-$6E and $7B-$7F and skipped the rest. $5C is outside that window but
  * qualifies on the same rule - it is the same bitmap in both banks.
  *
- * These are `it.failing` ON PURPOSE. They pass while the gap exists and fail
- * the moment it is closed, which is the signal to delete the `.failing` and
- * fold the rows into `unicode-to-petscii.test.ts`. Closing them also means
- * widening that file's `$C0-$DF` guard (`:12-15`), which today forbids every
- * plain byte in that range except `$C0`, `$DB` and `$DD`.
+ * These rows landed as failing-by-design tests - passing while the gap
+ * existed. The gap is now closed and they are ordinary tests: the ten
+ * bank-invariant rows are plain entries in `UNICODE_TO_PETSCII`, and the
+ * three bank-divergent ones live in `UNICODE_TO_PETSCII_BANK1_ONLY`, which
+ * `asciiToPetsciiByte` consults only when it is encoding for bank 1. Closing
+ * them also widened `unicode-to-petscii.test.ts`'s `$C0-$DF` guard, which
+ * had allowed only `$C0`, `$DB` and `$DD` and so pinned this table's
+ * omission of `$DC` as if it were a rule about the C64.
+ *
+ * Every bitmap below was checked against the character ROM (the PetMe64
+ * outlines the terminal already renders from, rasterised 8x8 per bank)
+ * before the row was written - not against what the name made plausible.
  *
  * Why it matters to a real caller: U+2582, U+2583, U+258E and U+258D are the
  * eighth-block set every progress bar and meter is drawn from, so a blessed
- * door's bar reaches a C64 as a row of '?' although the machine in front of
+ * door's bar reached a C64 as a row of '?' although the machine in front of
  * the caller has the exact glyph in ROM.
  */
-import { UNICODE_TO_PETSCII } from '../../petscii/unicode-to-petscii';
+import { UNICODE_TO_PETSCII, UNICODE_TO_PETSCII_BANK1_ONLY } from '../../petscii/unicode-to-petscii';
 import { asciiToPetsciiByte } from '../../petscii/ascii-to-petscii';
 import { printablePetsciiToScreenCode, screenCodeToPetscii } from '../../petscii/screen-codes';
 
@@ -56,9 +63,10 @@ const BANK_INVARIANT_GAPS: readonly Gap[] = [
 /**
  * Printable in bank 1, but the SAME screen code is a different bitmap in
  * bank 0 (pi at $5E, BLACK UPPER RIGHT TRIANGLE at $5F, BLACK UPPER LEFT
- * TRIANGLE at $69). A plain entry would be wrong in bank 0, so these need a
- * bank-aware decision rather than a row - see the research doc's open
- * questions.
+ * TRIANGLE at $69). A plain entry in the shared, bank-agnostic table would
+ * print those bank-0 glyphs instead - a different glyph, not a near miss -
+ * so the decision taken was bank-aware: `UNICODE_TO_PETSCII_BANK1_ONLY`,
+ * reached only when `bank === 1`, with bank 0 still degrading to '?'.
  */
 const BANK_DIVERGENT_GAPS: readonly Gap[] = [
   ['INVERSE CHECKER BOARD FILL',        0x1fb96, 0x5e, 0xde],
@@ -76,18 +84,21 @@ describe('UNICODE_TO_PETSCII gaps: glyphs the C64 has and we print "?" for', () 
     }
   });
 
-  it.failing('bank-invariant blocks and shades are encodable (10 rows, missing by omission)', () => {
+  it('bank-invariant blocks and shades are encodable in BOTH banks (10 rows, were missing by omission)', () => {
     for (const [name, codePoint, screenCode, petsciiByte] of BANK_INVARIANT_GAPS) {
       const glyph = String.fromCodePoint(codePoint);
       expect(`${name}: ${UNICODE_TO_PETSCII.get(glyph)}`).toBe(`${name}: ${petsciiByte}`);
-      const { byte, needsReverse } = asciiToPetsciiByte(codePoint, 1);
-      expect(`${name}: ${needsReverse}`).toBe(`${name}: false`);
-      expect(`${name}: ${byte}`).toBe(`${name}: ${petsciiByte}`);
-      expect(`${name}: ${printablePetsciiToScreenCode(byte)}`).toBe(`${name}: ${screenCode}`);
+      for (const bank of [0, 1] as const) {
+        const { byte, needsReverse } = asciiToPetsciiByte(codePoint, bank);
+        expect(`${name} bank ${bank}: ${needsReverse}`).toBe(`${name} bank ${bank}: false`);
+        expect(`${name} bank ${bank}: ${byte}`).toBe(`${name} bank ${bank}: ${petsciiByte}`);
+        expect(`${name} bank ${bank}: ${printablePetsciiToScreenCode(byte)}`)
+          .toBe(`${name} bank ${bank}: ${screenCode}`);
+      }
     }
   });
 
-  it.failing('bank-divergent fills are encodable in bank 1 (3 rows, need a bank-aware decision)', () => {
+  it('bank-divergent fills are encodable in bank 1 (3 rows, through the bank-aware table)', () => {
     for (const [name, codePoint, screenCode, petsciiByte] of BANK_DIVERGENT_GAPS) {
       const { byte, needsReverse } = asciiToPetsciiByte(codePoint, 1);
       expect(`${name}: ${needsReverse}`).toBe(`${name}: false`);
@@ -96,5 +107,27 @@ describe('UNICODE_TO_PETSCII gaps: glyphs the C64 has and we print "?" for', () 
     }
   });
 
-  it.todo('decide whether $5E / $5F / $69 get a bank-aware entry or a written exemption');
+  /**
+   * The decision on $5E / $5F / $69, made explicit. Bank-aware, not a plain
+   * row and not an exemption: bank 1 gets the glyph the caller's ROM really
+   * has, bank 0 keeps '?', and the shared table stays bank-agnostic so art
+   * encoded into bank 0 can never pick up pi where a checkerboard was asked
+   * for.
+   */
+  it('keeps the bank-divergent fills OUT of the shared table, and out of bank 0', () => {
+    for (const [name, codePoint, , petsciiByte] of BANK_DIVERGENT_GAPS) {
+      const glyph = String.fromCodePoint(codePoint);
+      expect(`${name}: ${UNICODE_TO_PETSCII.get(glyph)}`).toBe(`${name}: undefined`);
+      expect(`${name}: ${UNICODE_TO_PETSCII_BANK1_ONLY.get(glyph)}`).toBe(`${name}: ${petsciiByte}`);
+      expect(`${name} bank 0: ${asciiToPetsciiByte(codePoint, 0).byte}`).toBe(`${name} bank 0: ${0x3f}`);
+    }
+  });
+
+  /** The four the sysop's meters are drawn from, spelled out by glyph. */
+  it('encodes the eighth-block progress-bar set a blessed door draws with', () => {
+    const bar = '\u2582\u2583\u258E\u258D';
+    const bytes = [...bar].map((g) => asciiToPetsciiByte(g.codePointAt(0) as number, 1).byte);
+    expect(bytes).toEqual([0xaf, 0xb9, 0xb4, 0xb5]);
+    expect(bytes).not.toContain(0x3f);
+  });
 });

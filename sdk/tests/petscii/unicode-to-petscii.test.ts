@@ -10,8 +10,16 @@ describe('UNICODE_TO_PETSCII', () => {
       expect(byte).toBeLessThanOrEqual(0xFF);
       expect(printablePetsciiToScreenCode(byte)).toBeLessThanOrEqual(0x7F);
       if (typeof v === 'number' && byte >= 0xC0 && byte <= 0xDF) {
-        // letters live here in bank 1: only the three graphics shared by both banks are allowed
-        expect([0xC0, 0xDB, 0xDD]).toContain(byte);
+        // Letters live here in bank 1 - but only at $C1-$DA. This used to
+        // allow exactly [$C0, $DB, $DD] and call them "the three graphics
+        // shared by both banks", which was not a rule about the C64: $DC
+        // (screen code $5C, LEFT HALF MEDIUM SHADE) is the same bitmap in
+        // both banks too and belonged here all along. The old assertion was
+        // pinning the table's OMISSION as if it were the C64's design, and
+        // so guarded the very gap that reached a caller as '?'. Widened to
+        // the four non-letter graphics in the window.
+        expect([0xC0, 0xDB, 0xDC, 0xDD]).toContain(byte);
+        expect(byte >= 0xC1 && byte <= 0xDA).toBe(false);
       }
       expect(glyph.length).toBeGreaterThan(0);
     }

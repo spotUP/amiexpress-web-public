@@ -3,13 +3,20 @@
  * PETSCII byte.
  *
  * Only glyphs whose SCREEN CODE renders the same in BOTH charset banks are
- * mapped as plain bytes: screen codes $60-$7F (PETSCII $A0-$BF), plus $40
- * (horizontal bar), $5B (cross) and $5D (vertical bar), and the bank-1-only
- * check mark (screen code $7A -> PETSCII $BA) since transduced text is
- * always printed in bank 1. Screen codes $41-$5A are LETTERS in bank 1, so
- * the bank-0-only graphics that live there - card suits, the bullet, the
- * rounded corners, the diagonals - are substituted with punctuation instead
- * of mapped, or they would come out as random capitals.
+ * mapped as plain bytes: screen codes $60-$7F (PETSCII $A0-$BF) EXCEPT the
+ * two that diverge ($69 and $7A), plus $40 (horizontal bar), $5B (cross),
+ * $5C (left half medium shade, the same bitmap in both banks) and $5D
+ * (vertical bar), and the bank-1-only check mark (screen code $7A ->
+ * PETSCII $BA) since transduced text is always printed in bank 1. Screen
+ * codes $41-$5A are LETTERS in bank 1, so the bank-0-only graphics that live
+ * there - card suits, the bullet, the rounded corners, the diagonals - are
+ * substituted with punctuation instead of mapped, or they would come out as
+ * random capitals.
+ *
+ * Glyphs that exist in bank 1 ONLY - a different bitmap lives at the same
+ * screen code in bank 0 - are kept OUT of this map and listed in
+ * UNICODE_TO_PETSCII_BANK1_ONLY below, which `asciiToPetsciiByte` consults
+ * only when it is encoding for bank 1.
  *
  * Glyphs PETSCII only has as the INVERSE of another glyph carry `{ rvs }`;
  * the transducer wraps those in $12/$92 and restores the latched SGR reverse
@@ -42,6 +49,21 @@ export const UNICODE_TO_PETSCII: ReadonlyMap<string, number | { rvs: number }> =
   ['▏', 0xA5], ['▒', 0xA6], ['▕', 0xA7],
   ['▗', 0xAC], ['▖', 0xBB], ['▝', 0xBC], ['▘', 0xBE], ['▚', 0xBF],
   ['░', 0xA6], ['▓', 0xA6],
+  // the eighth/quarter blocks and the two medium shades (screen codes $5C,
+  // $68, $6A, $6F, $74-$79) - the same bitmap in BOTH banks, verified glyph
+  // by glyph against the character ROM. Astral code points are written
+  // escaped, as the backend's normative table writes them: most editors and
+  // terminals have no font for them.
+  ['▂', 0xAF],            // LOWER ONE QUARTER BLOCK      (sc $6F)
+  ['▃', 0xB9],            // LOWER THREE EIGHTHS BLOCK    (sc $79)
+  ['▎', 0xB4],            // LEFT ONE QUARTER BLOCK       (sc $74)
+  ['▍', 0xB5],            // LEFT THREE EIGHTHS BLOCK     (sc $75)
+  ['\u{1FB87}', 0xAA],         // RIGHT ONE QUARTER BLOCK      (sc $6A)
+  ['\u{1FB88}', 0xB6],         // RIGHT THREE EIGHTHS BLOCK    (sc $76)
+  ['\u{1FB82}', 0xB7],         // UPPER ONE QUARTER BLOCK      (sc $77)
+  ['\u{1FB83}', 0xB8],         // UPPER THREE EIGHTHS BLOCK    (sc $78)
+  ['\u{1FB8C}', 0xDC],         // LEFT HALF MEDIUM SHADE       (sc $5C)
+  ['\u{1FB8F}', 0xA8],         // LOWER HALF MEDIUM SHADE      (sc $68)
   // blocks PETSCII only has as the inverse of another glyph
   ['█', R(0x20)], ['▀', R(0xA2)], ['▐', R(0xA1)],
   ['▛', R(0xAC)], ['▜', R(0xBB)], ['▙', R(0xBC)], ['▟', R(0xBE)], ['▞', R(0xBF)],
@@ -51,4 +73,27 @@ export const UNICODE_TO_PETSCII: ReadonlyMap<string, number | { rvs: number }> =
   ['♠', 0x2A], ['♥', 0x2A], ['♦', 0x2A], ['♣', 0x2A],
   ['→', 0x3E],
   ['\u00A0', 0x20],   // NO-BREAK SPACE (written escaped: invisible in source)
+]);
+
+/**
+ * Glyphs the C64 can print in bank 1 (the shifted/text bank all transduced
+ * text is printed in) where the SAME screen code is a different bitmap in
+ * bank 0. They are deliberately not in the map above, which is bank-agnostic
+ * and is also used to encode into bank 0 art: emitting these bytes there
+ * would print pi for a checkerboard and a solid triangle for a diagonal
+ * fill - a different glyph, not a near miss. `asciiToPetsciiByte` reaches
+ * this table only when `bank === 1`; in bank 0 they still degrade to '?',
+ * which is honest, because bank 0 genuinely has no such glyph.
+ *
+ * Bank 0 at these screen codes, for the record: $5E pi, $5F U+25E5 BLACK
+ * UPPER RIGHT TRIANGLE, $69 U+25E4 BLACK UPPER LEFT TRIANGLE.
+ *
+ * The check mark above ($7A -> $BA) is bank-divergent too and stays in the
+ * shared map: that is a standing decision this table does not reopen, and
+ * moving it would change what bank 0 art already encodes to.
+ */
+export const UNICODE_TO_PETSCII_BANK1_ONLY: ReadonlyMap<string, number> = new Map<string, number>([
+  ['\u{1FB96}', 0xDE],         // INVERSE CHECKER BOARD FILL      (sc $5E)
+  ['\u{1FB98}', 0xDF],         // UPPER LEFT TO LOWER RIGHT FILL  (sc $5F)
+  ['\u{1FB99}', 0xA9],         // UPPER RIGHT TO LOWER LEFT FILL  (sc $69)
 ]);
