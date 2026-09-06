@@ -45,6 +45,12 @@ export interface NavItem {
   minLevel?: number;
   /** Shown in the header under the page title. */
   description?: string;
+  /**
+   * Vocabulary the sidebar filter also matches against, without showing it.
+   * For a merged destination this is the names of what it absorbed - see
+   * routes/legacy-routes.ts - so a sysop hunting the old name still finds it.
+   */
+  keywords?: string[];
 }
 
 export interface NavGroup {
@@ -60,7 +66,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { path: '', label: 'Overview', icon: LayoutDashboard, minLevel: 100, description: 'The state of the board at a glance' },
       { path: 'activity', label: 'Activity', icon: Zap, minLevel: 255, description: 'Live feed of logons, doors and transfers' },
-      { path: 'nodes', label: 'Nodes', icon: Monitor, minLevel: 255, description: 'Live nodes, supervisor commands and per-node settings' },
+      { path: 'nodes', label: 'Nodes', icon: Monitor, minLevel: 255, description: 'Live nodes, supervisor commands and per-node settings', keywords: ['Node Control'] },
       { path: 'operator-chat', label: 'Operator Chat', icon: MessageSquare, minLevel: 255, description: 'Answer a caller paging the sysop' },
     ],
   },
@@ -75,7 +81,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Content',
     items: [
-      { path: 'conferences', label: 'Conferences', icon: MessageSquare, minLevel: 255, description: 'Message areas, and the file paths that belong to them' },
+      { path: 'conferences', label: 'Conferences', icon: MessageSquare, minLevel: 255, description: 'Message areas, and the file paths that belong to them', keywords: ['Drives', 'File Areas', 'DLPATH', 'ULPATH'] },
       { path: 'doors', label: 'Doors', icon: DoorOpen, minLevel: 255, description: 'External programs on the command menu' },
       { path: 'screens', label: 'Screen Files', icon: FileImage, minLevel: 100, description: 'Every screen the board can display, and where it resolves from' },
       { path: 'sprite-manager', label: 'Sprite Manager', icon: FileImage, minLevel: 255, description: 'Upload and manage sprite sheets for installed doors' },
@@ -85,8 +91,8 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'System',
     items: [
       { path: 'system', label: 'Configuration', icon: Settings, minLevel: 255, description: 'bbsConfig.info, section by section' },
-      { path: 'config-files', label: 'Configuration Files', icon: FolderOpen, minLevel: 255, description: 'Every .info file on the board, and the batch scripts' },
-      { path: 'lookup-tables', label: 'Lookup Tables', icon: Boxes, minLevel: 255, description: 'Computers, screen types, languages, protocols and file checkers' },
+      { path: 'config-files', label: 'Configuration Files', icon: FolderOpen, minLevel: 255, description: 'Every .info file on the board, and the batch scripts', keywords: ['System Files', 'AmiXnet', 'Batches', 'Tooltypes'] },
+      { path: 'lookup-tables', label: 'Lookup Tables', icon: Boxes, minLevel: 255, description: 'Computers, screen types, languages, protocols and file checkers', keywords: ['Computers', 'Screen Types', 'Languages', 'Protocols', 'File Checkers'] },
       { path: 'health', label: 'Health and Deployment', icon: Gauge, minLevel: 255, description: 'Filesystem audit, build and container state' },
     ],
   },
@@ -141,4 +147,31 @@ export function groupForPath(pathname: string): NavGroup | undefined {
   const item = navItemForPath(pathname);
   if (!item) return undefined;
   return NAV_GROUPS.find((group) => group.items.includes(item));
+}
+
+/** Case-insensitive substring match against label, description and keywords. */
+export function navItemMatchesQuery(item: NavItem, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+
+  const haystacks = [item.label, item.description, ...(item.keywords ?? [])];
+  return haystacks.some((text) => text?.toLowerCase().includes(needle));
+}
+
+/**
+ * Filters groups down to the items matching the query, dropping any group
+ * left with none. Pass groups already narrowed by navItemsForLevel so the
+ * filter can never surface a destination the caller's level would hide.
+ *
+ * An empty (or whitespace-only) query returns the groups unchanged.
+ */
+export function filterNavGroups(groups: NavGroup[], query: string): NavGroup[] {
+  if (!query.trim()) return groups;
+
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => navItemMatchesQuery(item, query)),
+    }))
+    .filter((group) => group.items.length > 0);
 }

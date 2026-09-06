@@ -7,24 +7,30 @@
 
 import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, LogOut, User } from 'lucide-react';
+import { ChevronDown, LogOut, Search, User, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { ADMIN_BASE, navItemsForLevel, groupForPath } from './nav-config';
+import { ADMIN_BASE, navItemsForLevel, groupForPath, filterNavGroups } from './nav-config';
 
 export function Sidebar() {
   const { user, logout, adminPerms } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [query, setQuery] = useState('');
 
   // A collapsed group opens itself when the current page lives inside it, so
   // you are never looking at a sidebar that hides where you are.
-  const visibleGroups = navItemsForLevel(user?.secLevel ?? 0, adminPerms);
+  const levelGroups = navItemsForLevel(user?.secLevel ?? 0, adminPerms);
   const activeGroupTitle = groupForPath(location.pathname)?.title;
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
-      visibleGroups.filter((group) => group.collapsedByDefault).map((group) => [group.title, true])
+      levelGroups.filter((group) => group.collapsedByDefault).map((group) => [group.title, true])
     )
   );
+
+  // Filtering narrows groups already cut down to the caller's level, so a
+  // query can never surface a destination that level would not otherwise see.
+  const isFiltering = query.trim().length > 0;
+  const visibleGroups = isFiltering ? filterNavGroups(levelGroups, query) : levelGroups;
 
   const handleLogout = () => {
     logout();
@@ -38,9 +44,40 @@ export function Sidebar() {
         <span className="text-2xs uppercase tracking-widest text-content-muted">Sysop</span>
       </div>
 
+      <div className="border-b border-border p-2">
+        <div className="relative flex h-control items-center rounded border border-border-strong bg-surface-0 px-2 focus-within:border-accent">
+          <Search size={14} className="shrink-0 text-content-muted" aria-hidden="true" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setQuery('');
+            }}
+            placeholder="Find a destination"
+            aria-label="Filter admin navigation"
+            className="w-full min-w-0 flex-1 bg-transparent px-2 text-sm text-content-primary placeholder:text-content-muted focus:outline-none"
+          />
+          {isFiltering && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              aria-label="Clear filter"
+              className="shrink-0 text-content-muted transition-colors hover:text-content-primary"
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      </div>
+
       <nav className="flex-1 overflow-y-auto px-2 py-3">
+        {isFiltering && visibleGroups.length === 0 && (
+          <p className="px-2 py-1 text-sm text-content-muted">No destinations match &ldquo;{query.trim()}&rdquo;.</p>
+        )}
+
         {visibleGroups.map((group) => {
-          const isCollapsed = collapsed[group.title] && group.title !== activeGroupTitle;
+          const isCollapsed = !isFiltering && collapsed[group.title] && group.title !== activeGroupTitle;
 
           return (
             <div key={group.title} className="mb-3">
