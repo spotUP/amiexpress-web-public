@@ -15,42 +15,43 @@
  *      `checkSecurity(ACS_OLM)`, which resolves through `Access/ACS.<level>.info`.
  *      Failing THAT used to print "Access denied." - the string he saw. That
  *      string was invented by this port; express.e:25416 returns
- *      RESULT_NOT_ALLOWED and the handler prints nothing at all, so it is gone
- *      and a refused caller now sees NOTHING from the handler.
+ *      RESULT_NOT_ALLOWED and prints nothing at all, so it is gone and a
+ *      refused caller now sees NOTHING from the handler.
  *
- * So the denial is gate 2, and gate 2 reads the board's ACS tooltype files.
- * These tests pin that mechanism from both ends so the next person does not
- * have to re-derive it:
+ * So the denial was gate 2, and gate 2 reads the board's ACS tooltype files.
+ * The cause was MISSING DATA, not a bug: no `Access/ACS.<level>.info` carried
+ * `ACS.OLM` at any level, and `ACS.QUIET_NODE` shipped parenthesised - which
+ * reads as a denial - at 10/20/50/60 and absent at 255. The grant was added
+ * for the sysop's own two levels in commit c9d174630 and proved there against
+ * the live board.
  *
- *   - checkSecurity's answer for the sysop's real security level EQUALS what
- *     an independent reader finds in the live `Access/ACS.<level>.info`. That
- *     holds whether or not the grant is ever added, and it is the standing
- *     proof that the lookup is not consulting the SQL mirror, a stale cache,
- *     or a default.
- *   - A sysop-level user whose ACS level DOES carry `ACS.OLM` reaches the OLM
- *     node prompt; the same user without it is refused. Same for `Q` and
- *     `ACS.QUIET_NODE`, because `Q` is refused by the identical mechanism and
- *     the two were reported as one complaint.
+ * WHAT THIS FILE MAY AND MAY NOT READ
  *
- * The fixtures are the board's OWN `Access/*.info` bytes, copied to a temp
- * board and edited there. Nothing under the live `Access/` is written.
+ * It may read `Access/*.info`: those 13 files are tracked, so they exist in
+ * every checkout, and the suite only ever copies them to a temp board before
+ * touching them.
  *
- * The answer this file records: the grant was MISSING DATA, not a bug. No
- * `Access/ACS.<level>.info` on this board carried `ACS.OLM` at any level -
- * 10, 20, 50, 60 or 255 - so the internal OLM command refused every caller,
- * the level-255 account included. `ACS.QUIET_NODE` shipped commented out at
- * 10/20/50/60 and absent at 255, so `Q` was refused the same way.
+ * It may NOT read `user.data`. That file is gitignored (.gitignore:339), so a
+ * fresh worktree and CI have no such file and the suite died with ENOENT on
+ * `origin/main` (df95e0a3e). It was also reading the sysop's live account on
+ * every run. Every account these tests need is now a fixture the test writes:
+ * 232-byte records with `secStatus` as a big-endian INT at byte 86, the layout
+ * `axobjects.e:11-68` describes and `UserFileManager` writes.
  *
- * The sysop has since granted both at HIS two levels only - 20 (`spot`) and
- * 255 (`sysop`) - and the last describe block pins that against the LIVE
- * `Access/` bytes, including the deliberate absence at 10, 50 and 60.
+ * It also must not depend on what the tracked `Access/` files HAPPEN to grant.
+ * Every mechanism test edits its own temp copy, so granting or revoking a
+ * permission on the real board cannot silently invert the thing under test,
+ * and no test asserts "level 20 has OLM" - board policy is the sysop's to
+ * change without failing a build.
  *
- * A refusal is now SILENT, which means "allowed" and "refused" can no longer
- * be told apart by looking for a denial string. Every test below therefore
- * asserts the positive evidence of the command having RUN (the OLM banner and
- * node prompt, the Quiet Mode line, the toggled flag) or the complete absence
- * of output. Never `not.toContain('Access denied')` on its own - that passes
- * on a refusal too.
+ * THE TRAP IN A SILENT REFUSAL
+ *
+ * A refused caller now sees nothing. So "allowed" and "refused" can no longer
+ * be told apart by looking for a denial string, and `not.toContain('Access
+ * denied')` passes on a refusal too. Every allowed case below asserts POSITIVE
+ * evidence that the command ran - the OLM banner and node prompt, the Quiet
+ * Mode line, the toggled flag - and every refused case asserts an entirely
+ * empty transcript.
  */
 
 import * as fs from 'fs';
@@ -77,20 +78,26 @@ import {
   setOlmDependencies,
 } from '../../src/handlers/transfer/olm.handler';
 
-// The live board. Read only - the guard in tests/live-data-guard.ts throws on
-// any write that lands inside it, and nothing here writes.
+/** The tracked `Access/` directory. Read only, and only ever copied. */
 const BOARD_ROOT = path.resolve(__dirname, '../../../..');
-const LIVE_ACCESS = path.join(BOARD_ROOT, 'Access');
-const LIVE_USER_DATA = path.join(BOARD_ROOT, 'user.data');
+const TRACKED_ACCESS = path.join(BOARD_ROOT, 'Access');
+
+/** The two fixture accounts. Levels chosen to match tracked ACS level files. */
+const SYSOP_LEVEL = 255;
+const MEMBER_LEVEL = 20;
+
+const USER_RECORD_SIZE = 232;
+const SLOT_OFFSET = 84;
+const SEC_STATUS_OFFSET = 86;
 
 /**
  * Independent tooltype reader.
  *
- * Deliberately NOT `parseInfoFile` - the point of the first test is that the
- * production lookup agrees with the BYTES, and checking a parse with the same
- * parser that produced it proves nothing. This walks the DiskObject header
- * (78 bytes), skips DrawerData and both Gadget images, skips the default tool
- * string, and reads the length-prefixed ToolTypes array.
+ * Deliberately NOT `parseInfoFile` - the point of the agreement test is that
+ * the production lookup agrees with the BYTES, and checking a parse with the
+ * same parser that produced it proves nothing. This walks the DiskObject
+ * header (78 bytes), skips DrawerData and both Gadget images, skips the
+ * default tool string, and reads the length-prefixed ToolTypes array.
  */
 function readTooltypesFromBytes(filePath: string): string[] {
   const d = fs.readFileSync(filePath);
@@ -148,28 +155,44 @@ function grantedInBytes(tooltypes: string[], key: string): boolean {
 }
 
 /**
- * The board's real accounts, straight out of `user.data`.
+ * Write a `user.data` FIXTURE.
  *
  * 232-byte records: name[31], pass[9], location[30], phoneNumber[13], one pad
- * byte, then slotNumber and secStatus as big-endian INTs
- * (UserFileManager.ts:640-654 writes the same layout).
+ * byte, then slotNumber and secStatus as big-endian INTs (axobjects.e:11-68;
+ * UserFileManager.serializeUserStruct writes the same layout). Only the three
+ * fields the reader below looks at are filled - the rest stays zero, which is
+ * what an untouched record holds anyway.
  */
-function realAccounts(): Array<{ name: string; secLevel: number }> {
-  const d = fs.readFileSync(LIVE_USER_DATA);
-  const REC = 232;
+function writeUserDataFixture(
+  filePath: string,
+  accounts: Array<{ name: string; secLevel: number }>
+): void {
+  const buf = Buffer.alloc(accounts.length * USER_RECORD_SIZE, 0);
+  accounts.forEach((a, i) => {
+    const base = i * USER_RECORD_SIZE;
+    buf.write(a.name.slice(0, 30), base, 'latin1');
+    buf.writeInt16BE(i + 1, base + SLOT_OFFSET);
+    buf.writeInt16BE(a.secLevel, base + SEC_STATUS_OFFSET);
+  });
+  fs.writeFileSync(filePath, buf);
+}
+
+/** Read a `user.data` back. The reader the suite's own fixture must satisfy. */
+function accountsFromUserData(filePath: string): Array<{ name: string; secLevel: number }> {
+  const d = fs.readFileSync(filePath);
   const out: Array<{ name: string; secLevel: number }> = [];
-  for (let i = 0; i + REC <= d.length; i += REC) {
+  for (let i = 0; i + USER_RECORD_SIZE <= d.length; i += USER_RECORD_SIZE) {
     const name = d.toString('latin1', i, i + 31).split('\0')[0];
     if (!name) continue;
-    out.push({ name, secLevel: d.readInt16BE(i + 86) });
+    out.push({ name, secLevel: d.readInt16BE(i + SEC_STATUS_OFFSET) });
   }
   return out;
 }
 
-function makeUser(secLevel: number): any {
+function makeUser(secLevel: number, username = 'sysop'): any {
   return {
-    id: 'sysop-under-test',
-    username: 'sysop',
+    id: `${username}-under-test`,
+    username,
     secLevel,
     securityFlags: '',
     secOverride: '',
@@ -177,16 +200,52 @@ function makeUser(secLevel: number): any {
   };
 }
 
-/** A temp board carrying a byte copy of the live `Access/` directory. */
-function tempBoardWithLiveAccess(): string {
+/**
+ * A temp board: a byte copy of the tracked `Access/*.info` files plus a
+ * `user.data` the test wrote. Nothing under the real board is written.
+ */
+function tempBoard(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'olm-acs-'));
   const dst = path.join(root, 'Access');
   fs.mkdirSync(dst);
-  for (const f of fs.readdirSync(LIVE_ACCESS)) {
+  for (const f of fs.readdirSync(TRACKED_ACCESS)) {
     if (!/^ACS\.\d+\.info$/i.test(f)) continue;
-    fs.copyFileSync(path.join(LIVE_ACCESS, f), path.join(dst, f));
+    fs.copyFileSync(path.join(TRACKED_ACCESS, f), path.join(dst, f));
   }
+  writeUserDataFixture(path.join(root, 'user.data'), [
+    { name: 'fixture_member', secLevel: MEMBER_LEVEL },
+    { name: 'fixture_sysop', secLevel: SYSOP_LEVEL },
+  ]);
   return root;
+}
+
+/** Every ACS level file the board tracks. */
+function trackedAcsLevels(): number[] {
+  return fs
+    .readdirSync(TRACKED_ACCESS)
+    .map(f => /^ACS\.(\d+)\.info$/i.exec(f))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map(m => parseInt(m[1], 10))
+    .sort((a, b) => a - b);
+}
+
+/**
+ * Put `key` into a temp board's ACS file in one of three states, then reload.
+ * `absent` and `commented` are both denials; only `granted` is a grant.
+ */
+function setPermission(
+  root: string,
+  level: number,
+  key: string,
+  state: 'granted' | 'commented' | 'absent'
+): void {
+  const acsFile = path.join(root, 'Access', `ACS.${level}.info`);
+  let info = parseInfoFile(acsFile);
+  info = removeTooltype(info, key);
+  if (state !== 'absent') info = addTooltype(info, key, '', state === 'commented');
+  writeInfoFile(info);
+  resetAcsLoader();
+  loadAcsAccessFiles(root);
 }
 
 function captureSocket() {
@@ -198,222 +257,128 @@ function captureSocket() {
   };
 }
 
-describe('the sysop can open OLM', () => {
-  const tempRoots: string[] = [];
+const tempRoots: string[] = [];
+function board(): string {
+  const root = tempBoard();
+  tempRoots.push(root);
+  return root;
+}
 
-  beforeEach(() => {
-    resetAcsLoader();
-    // The board's own defaults: no Default.info exists under Access/, so the
-    // default-access tier contributes nothing and the ACS level file decides.
-    setACSConfig({ overrideDefaultAccess: false, userSpecificAccess: false });
-    setOlmDependencies({
-      db: null,
-      sessions: new Map(),
-      io: null,
-      setEnvStat: () => { /* no STATS@ file from a test */ },
-      config: { get: (k: string) => (k === 'olmEnabled' ? true : undefined) },
-    });
-  });
-
-  afterAll(() => {
-    for (const r of tempRoots) fs.rmSync(r, { recursive: true, force: true });
-    resetAcsLoader();
-  });
-
-  it('reads the sysop account out of the real user.data', () => {
-    const accounts = realAccounts();
-    expect(accounts.length).toBeGreaterThan(0);
-    const top = Math.max(...accounts.map(a => a.secLevel));
-    // Olm.info's ACCESS=020 is the BBSCMD gate. The board must still hold an
-    // account that clears it, or the fixture below is meaningless.
-    expect(top).toBeGreaterThanOrEqual(20);
-  });
-
-  it('answers ACS.OLM for the sysop exactly as the live Access/ bytes do', () => {
-    const top = Math.max(...realAccounts().map(a => a.secLevel));
-
-    loadAcsAccessFiles(BOARD_ROOT);
-    const level = findAcsLevel(top);
-    expect(level).toBeGreaterThan(0);
-
-    const bytes = readTooltypesFromBytes(path.join(LIVE_ACCESS, `ACS.${level}.info`));
-
-    // The production lookup and an independent read of the same file must not
-    // disagree. If they ever do, checkSecurity has started answering from
-    // somewhere other than the disk - the SQL mirror, a cache, or a default.
-    expect(checkSecurity(makeUser(top), ACSPermission.OLM))
-      .toBe(grantedInBytes(bytes, 'ACS.OLM'));
-    expect(checkSecurity(makeUser(top), ACSPermission.QUIET_NODE))
-      .toBe(grantedInBytes(bytes, 'ACS.QUIET_NODE'));
-  });
-
-  it('lets a sysop-level user whose ACS level grants ACS.OLM reach the node prompt', async () => {
-    const top = Math.max(...realAccounts().map(a => a.secLevel));
-    const root = tempBoardWithLiveAccess();
-    tempRoots.push(root);
-
-    loadAcsAccessFiles(root);
-    const level = findAcsLevel(top);
-    const acsFile = path.join(root, 'Access', `ACS.${level}.info`);
-
-    // The data change under test, applied to the board's OWN file: grant OLM.
-    let info = parseInfoFile(acsFile);
-    info = removeTooltype(info, 'ACS.OLM');
-    info = addTooltype(info, 'ACS.OLM', '');
-    writeInfoFile(info);
-    resetAcsLoader();
-    loadAcsAccessFiles(root);
-
-    expect(checkSecurity(makeUser(top), ACSPermission.OLM)).toBe(true);
-
-    const cap = captureSocket();
-    const session: any = { user: makeUser(top), nodeId: 1, subState: LoggedOnSubState.DISPLAY_MENU };
-    await handleOlmCommand(cap.socket, session, '');
-
-    expect(cap.text()).toContain('OLM MESSAGE SYSTEM');
-    expect(cap.text()).toContain('OLM to Which Node?');
-    expect(session.subState).toBe(LoggedOnSubState.OLM_NODE_INPUT);
-  });
-
-  it('refuses the same user when the ACS level does not grant ACS.OLM', async () => {
-    const top = Math.max(...realAccounts().map(a => a.secLevel));
-    const root = tempBoardWithLiveAccess();
-    tempRoots.push(root);
-
-    loadAcsAccessFiles(root);
-    const level = findAcsLevel(top);
-    const acsFile = path.join(root, 'Access', `ACS.${level}.info`);
-
-    let info = parseInfoFile(acsFile);
-    info = removeTooltype(info, 'ACS.OLM');
-    writeInfoFile(info);
-    resetAcsLoader();
-    loadAcsAccessFiles(root);
-
-    expect(checkSecurity(makeUser(top), ACSPermission.OLM)).toBe(false);
-
-    const cap = captureSocket();
-    const session: any = { user: makeUser(top), nodeId: 1, subState: LoggedOnSubState.DISPLAY_MENU };
-    await handleOlmCommand(cap.socket, session, '');
-
-    // express.e:25416 - RETURN RESULT_NOT_ALLOWED, and internalCommandOLM
-    // prints nothing on the way out. The refused caller sees NOTHING: not
-    // "Access denied." (this port invented that), not a banner, not a prompt.
-    expect(cap.text()).toBe('');
-    expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
-  });
-
-  it('gates Q on ACS.QUIET_NODE through the identical mechanism', async () => {
-    const top = Math.max(...realAccounts().map(a => a.secLevel));
-    const root = tempBoardWithLiveAccess();
-    tempRoots.push(root);
-
-    loadAcsAccessFiles(root);
-    const level = findAcsLevel(top);
-    const acsFile = path.join(root, 'Access', `ACS.${level}.info`);
-
-    // Denied first - a commented-out tooltype is exactly how ACS.10/20/50/60
-    // ship `(ACS.QUIET_NODE)` today, and it must not read as a grant.
-    let info = parseInfoFile(acsFile);
-    info = removeTooltype(info, 'ACS.QUIET_NODE');
-    info = addTooltype(info, 'ACS.QUIET_NODE', '', true);
-    writeInfoFile(info);
-    resetAcsLoader();
-    loadAcsAccessFiles(root);
-
-    const denied = captureSocket();
-    const deniedSession: any = { user: makeUser(top), nodeId: 1, subState: LoggedOnSubState.DISPLAY_MENU, blockOLM: false };
-    await handleQuietCommand(denied.socket, deniedSession);
-    // express.e:25513-25514 - the ELSE arm of internalCommandQ is a bare
-    // RETURN RESULT_NOT_ALLOWED. Silent, exactly like OLM.
-    expect(denied.text()).toBe('');
-    expect(deniedSession.blockOLM).toBe(false);
-    expect(deniedSession.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
-
-    // Granted - uncommenting the same line is the whole data change.
-    info = parseInfoFile(acsFile);
-    info = removeTooltype(info, 'ACS.QUIET_NODE');
-    info = addTooltype(info, 'ACS.QUIET_NODE', '');
-    writeInfoFile(info);
-    resetAcsLoader();
-    loadAcsAccessFiles(root);
-
-    const allowed = captureSocket();
-    const allowedSession: any = { user: makeUser(top), nodeId: 1, subState: LoggedOnSubState.DISPLAY_MENU, blockOLM: false };
-    await handleQuietCommand(allowed.socket, allowedSession);
-    expect(allowed.text()).toContain('Quiet Mode On');
-    expect(allowedSession.blockOLM).toBe(true);
+beforeEach(() => {
+  resetAcsLoader();
+  // The board's own defaults: no Default.info exists under Access/, so the
+  // default-access tier contributes nothing and the ACS level file decides.
+  setACSConfig({ overrideDefaultAccess: false, userSpecificAccess: false });
+  setOlmDependencies({
+    db: null,
+    sessions: new Map(),
+    io: null,
+    setEnvStat: () => { /* no STATS@ file from a test */ },
+    config: { get: (k: string) => (k === 'olmEnabled' ? true : undefined) },
   });
 });
 
-/**
- * The grant itself, proven against the LIVE `Access/` directory.
- *
- * `Access/ACS.20.info` and `Access/ACS.255.info` were edited through
- * `applyTooltypes` so the sysop's two accounts (`spot` at 20, `sysop` at 255)
- * carry `ACS.OLM` and `ACS.QUIET_NODE`. On 20 the QUIET_NODE entry existed but
- * was PARENTHESISED, which reads as a denial, so uncommenting it was a real
- * edit rather than a no-op.
- *
- * Levels 10, 50 and 60 were deliberately left alone: whether ordinary callers
- * may send online messages is board policy, not a bug fix. That absence is
- * pinned here too, because "grant it for the sysop" is only correct if it did
- * NOT leak to everybody.
- *
- * These read the real files, never a temp copy - a grant proven by re-reading
- * the file the test just wrote proves nothing about the board.
- */
-describe("the sysop's own two levels carry the OLM grants", () => {
-  beforeEach(() => {
-    resetAcsLoader();
-    setACSConfig({ overrideDefaultAccess: false, userSpecificAccess: false });
-    setOlmDependencies({
-      db: null,
-      sessions: new Map(),
-      io: null,
-      setEnvStat: () => { /* no STATS@ file from a test */ },
-      config: { get: (k: string) => (k === 'olmEnabled' ? true : undefined) },
-    });
+afterAll(() => {
+  for (const r of tempRoots) fs.rmSync(r, { recursive: true, force: true });
+  resetAcsLoader();
+});
+
+describe('the fixture accounts are readable the way AmiExpress reads them', () => {
+  it('round-trips a 232-byte record through secStatus at byte 86', () => {
+    const root = board();
+    const accounts = accountsFromUserData(path.join(root, 'user.data'));
+
+    expect(accounts).toEqual([
+      { name: 'fixture_member', secLevel: MEMBER_LEVEL },
+      { name: 'fixture_sysop', secLevel: SYSOP_LEVEL },
+    ]);
+    // Olm.info's ACCESS=020 is the BBSCMD gate. The fixture must still hold an
+    // account that clears it, or the cases below are meaningless.
+    expect(Math.max(...accounts.map(a => a.secLevel))).toBeGreaterThanOrEqual(20);
+  });
+
+  it('resolves each fixture level to a tracked ACS level file', () => {
+    loadAcsAccessFiles(board());
+    // findAcsLevel rounds down to the nearest 5 and walks down (express.e:3025).
+    expect(findAcsLevel(SYSOP_LEVEL)).toBeGreaterThan(0);
+    expect(findAcsLevel(MEMBER_LEVEL)).toBeGreaterThan(0);
+  });
+});
+
+describe('checkSecurity answers from the ACS bytes and nowhere else', () => {
+  // No policy is asserted here: whatever the tracked files say, the production
+  // lookup must say the same. If these two ever disagree, checkSecurity has
+  // started answering from the SQL mirror, a cache, or a default.
+  it.each(trackedAcsLevels())('agrees with the raw bytes of ACS.%i.info', level => {
     loadAcsAccessFiles(BOARD_ROOT);
+    const bytes = readTooltypesFromBytes(path.join(TRACKED_ACCESS, `ACS.${level}.info`));
+
+    expect(checkSecurity(makeUser(level), ACSPermission.OLM))
+      .toBe(grantedInBytes(bytes, 'ACS.OLM'));
+    expect(checkSecurity(makeUser(level), ACSPermission.QUIET_NODE))
+      .toBe(grantedInBytes(bytes, 'ACS.QUIET_NODE'));
   });
 
-  afterAll(() => resetAcsLoader());
+  it('reads a parenthesised tooltype as a denial, not a grant', () => {
+    const root = board();
+    const level = (loadAcsAccessFiles(root), findAcsLevel(SYSOP_LEVEL));
 
-  it.each([20, 255])('grants ACS.OLM and ACS.QUIET_NODE at level %i', level => {
-    const bytes = readTooltypesFromBytes(path.join(LIVE_ACCESS, `ACS.${level}.info`));
+    setPermission(root, level, 'ACS.OLM', 'commented');
+    expect(checkSecurity(makeUser(SYSOP_LEVEL), ACSPermission.OLM)).toBe(false);
 
-    // Independent byte read first: the tooltypes are present AND live, not
-    // parenthesised and not `=NO`.
-    expect(grantedInBytes(bytes, 'ACS.OLM')).toBe(true);
-    expect(grantedInBytes(bytes, 'ACS.QUIET_NODE')).toBe(true);
+    setPermission(root, level, 'ACS.OLM', 'granted');
+    expect(checkSecurity(makeUser(SYSOP_LEVEL), ACSPermission.OLM)).toBe(true);
+  });
+});
 
-    // Then the production lookup, through findAcsLevel, must agree.
-    expect(findAcsLevel(level)).toBe(level);
+describe.each([
+  ['a sysop-level caller', SYSOP_LEVEL],
+  ['a member-level caller', MEMBER_LEVEL],
+])('OLM for %s', (_label, level) => {
+  it('reaches the node prompt when the ACS level grants ACS.OLM', async () => {
+    const root = board();
+    loadAcsAccessFiles(root);
+    setPermission(root, findAcsLevel(level), 'ACS.OLM', 'granted');
     expect(checkSecurity(makeUser(level), ACSPermission.OLM)).toBe(true);
-    expect(checkSecurity(makeUser(level), ACSPermission.QUIET_NODE)).toBe(true);
-  });
 
-  it.each([10, 50, 60])('leaves level %i without either permission', level => {
-    const bytes = readTooltypesFromBytes(path.join(LIVE_ACCESS, `ACS.${level}.info`));
-    expect(grantedInBytes(bytes, 'ACS.OLM')).toBe(false);
-    expect(grantedInBytes(bytes, 'ACS.QUIET_NODE')).toBe(false);
-    expect(checkSecurity(makeUser(level), ACSPermission.OLM)).toBe(false);
-    expect(checkSecurity(makeUser(level), ACSPermission.QUIET_NODE)).toBe(false);
-  });
-
-  it.each([20, 255])('opens the OLM node prompt for a level-%i caller', async level => {
     const cap = captureSocket();
     const session: any = { user: makeUser(level), nodeId: 1, subState: LoggedOnSubState.DISPLAY_MENU };
     await handleOlmCommand(cap.socket, session, '');
 
-    // Positive evidence that the command RAN. A refusal is silent now, so an
-    // absent denial string would prove nothing.
+    // Positive evidence the command RAN. A refusal is silent, so an absent
+    // denial string would prove nothing on its own.
     expect(cap.text()).toContain('OLM MESSAGE SYSTEM');
     expect(cap.text()).toContain('OLM to Which Node?');
     expect(session.subState).toBe(LoggedOnSubState.OLM_NODE_INPUT);
   });
 
-  it.each([20, 255])('toggles quiet mode for a level-%i caller', async level => {
+  it('is refused, silently, when the ACS level does not grant ACS.OLM', async () => {
+    const root = board();
+    loadAcsAccessFiles(root);
+    setPermission(root, findAcsLevel(level), 'ACS.OLM', 'absent');
+    expect(checkSecurity(makeUser(level), ACSPermission.OLM)).toBe(false);
+
+    const cap = captureSocket();
+    const session: any = { user: makeUser(level), nodeId: 1, subState: LoggedOnSubState.DISPLAY_MENU };
+    await handleOlmCommand(cap.socket, session, '');
+
+    // express.e:25416 - RETURN RESULT_NOT_ALLOWED, and internalCommandOLM
+    // prints nothing on the way out. Not "Access denied." (this port invented
+    // that), not a banner, not a prompt.
+    expect(cap.text()).toBe('');
+    expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+  });
+});
+
+describe.each([
+  ['a sysop-level caller', SYSOP_LEVEL],
+  ['a member-level caller', MEMBER_LEVEL],
+])('Q for %s', (_label, level) => {
+  it('toggles quiet mode when the ACS level grants ACS.QUIET_NODE', async () => {
+    const root = board();
+    loadAcsAccessFiles(root);
+    setPermission(root, findAcsLevel(level), 'ACS.QUIET_NODE', 'granted');
+
     const cap = captureSocket();
     const session: any = {
       user: makeUser(level),
@@ -428,16 +393,45 @@ describe("the sysop's own two levels carry the OLM grants", () => {
     expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
   });
 
-  it.each([10, 50, 60])('still refuses a level-%i caller, and does it in silence', async level => {
+  it('is refused, silently, when ACS.QUIET_NODE is only commented out', async () => {
+    // A parenthesised entry is exactly how ACS.10/50/60 still ship
+    // `(ACS.QUIET_NODE)`, and it must not read as a grant.
+    const root = board();
+    loadAcsAccessFiles(root);
+    setPermission(root, findAcsLevel(level), 'ACS.QUIET_NODE', 'commented');
+
+    const cap = captureSocket();
+    const session: any = {
+      user: makeUser(level),
+      nodeId: 1,
+      subState: LoggedOnSubState.DISPLAY_MENU,
+      blockOLM: false,
+    };
+    await handleQuietCommand(cap.socket, session);
+
+    // express.e:25513-25514 - the ELSE arm is a bare RETURN RESULT_NOT_ALLOWED.
+    expect(cap.text()).toBe('');
+    expect(session.blockOLM).toBe(false);
+    expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+  });
+});
+
+describe('OLM and Q are gated by their own separate permissions', () => {
+  it('lets OLM through while Q is still refused', async () => {
+    const root = board();
+    loadAcsAccessFiles(root);
+    const level = findAcsLevel(SYSOP_LEVEL);
+    setPermission(root, level, 'ACS.OLM', 'granted');
+    setPermission(root, level, 'ACS.QUIET_NODE', 'absent');
+
     const olm = captureSocket();
-    const olmSession: any = { user: makeUser(level), nodeId: 1, subState: LoggedOnSubState.DISPLAY_MENU };
+    const olmSession: any = { user: makeUser(SYSOP_LEVEL), nodeId: 1, subState: LoggedOnSubState.DISPLAY_MENU };
     await handleOlmCommand(olm.socket, olmSession, '');
-    expect(olm.text()).toBe('');
-    expect(olmSession.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+    expect(olm.text()).toContain('OLM MESSAGE SYSTEM');
 
     const quiet = captureSocket();
     const quietSession: any = {
-      user: makeUser(level),
+      user: makeUser(SYSOP_LEVEL),
       nodeId: 1,
       subState: LoggedOnSubState.DISPLAY_MENU,
       blockOLM: false,
@@ -445,5 +439,30 @@ describe("the sysop's own two levels carry the OLM grants", () => {
     await handleQuietCommand(quiet.socket, quietSession);
     expect(quiet.text()).toBe('');
     expect(quietSession.blockOLM).toBe(false);
+  });
+
+  it('lets Q through while OLM is still refused', async () => {
+    const root = board();
+    loadAcsAccessFiles(root);
+    const level = findAcsLevel(SYSOP_LEVEL);
+    setPermission(root, level, 'ACS.OLM', 'absent');
+    setPermission(root, level, 'ACS.QUIET_NODE', 'granted');
+
+    const quiet = captureSocket();
+    const quietSession: any = {
+      user: makeUser(SYSOP_LEVEL),
+      nodeId: 1,
+      subState: LoggedOnSubState.DISPLAY_MENU,
+      blockOLM: false,
+    };
+    await handleQuietCommand(quiet.socket, quietSession);
+    expect(quiet.text()).toContain('Quiet Mode On');
+    expect(quietSession.blockOLM).toBe(true);
+
+    const olm = captureSocket();
+    const olmSession: any = { user: makeUser(SYSOP_LEVEL), nodeId: 1, subState: LoggedOnSubState.DISPLAY_MENU };
+    await handleOlmCommand(olm.socket, olmSession, '');
+    expect(olm.text()).toBe('');
+    expect(olmSession.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
   });
 });
