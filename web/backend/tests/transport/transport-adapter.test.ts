@@ -51,7 +51,7 @@ const SDK_DIR = path.join(REPO_ROOT, 'sdk');
 const DOORS_DIR = path.join(REPO_ROOT, 'Doors');
 
 /**
- * THE PIN. 246 names, produced by greps A and B of the census documented at the
+ * THE PIN. 245 names, produced by greps A and B of the census documented at the
  * top of `src/server/transport-adapter.ts` and committed here. Case 2 re-runs
  * both greps and fails, BY NAME, on any difference.
  */
@@ -110,7 +110,6 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'complete',
   'connection',
   'cursor-style',
-  'cursor-visibility',
   'data',
   'disconnect',
   'door-active',
@@ -552,7 +551,7 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     expect({ invented }).toEqual({ invented: [] });
 
     expect(ruled).toEqual(pinned);
-    expect(ruled.length).toBe(246);
+    expect(ruled.length).toBe(245);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -583,11 +582,15 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // web-only 114 -> 116; `operator:paging-dot` (a `sysops` socket.io room)
     // and `operator:bot-activated` (a server-wide io broadcast) never address
     // a session socket at all, so not-transport 102 -> 104. Total 242 -> 246.
+    //
+    // Then `cursor-visibility` went away again with the helper that was its
+    // only emit site (utils/terminal-utils.ts setCursorVisible, which nothing
+    // called): web-only 116 -> 115, total 246 -> 245.
     expect(counts).toEqual({
       render: 5,
       translate: 11,
       dead: 10,
-      'web-only': 116,
+      'web-only': 115,
       'not-transport': 104,
     });
   });
@@ -617,7 +620,12 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // `operator:active-chats` (handlers/operator-chat.handler.ts:148),
     // `operator:paging-dot` (:434) and `operator:bot-activated` (:1182). Each
     // is ruled in EVENT_RULINGS with the receiver that earns its class.
-    expect(fromA.length).toBe(154);
+    //
+    // 153 now: `cursor-visibility` had NO SENDER - setCursorVisible() was the
+    // only site that emitted it and nothing in the tree called setCursorVisible
+    // - so the helper was deleted rather than left asserting behaviour no code
+    // performs, and the name left arm A with it. Union 246 -> 245.
+    expect(fromA.length).toBe(153);
     // 86 from sdk/, 14 from Doors/, `ansi-output` in both. The plan records the
     // Doors arm as 0; that was a zsh `nomatch` artefact and the module header
     // records the correction.

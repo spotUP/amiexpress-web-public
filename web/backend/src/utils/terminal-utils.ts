@@ -29,19 +29,6 @@ export const ANSI = {
 } as const;
 
 /**
- * Set cursor visibility on a socket. Emits the ANSI escape for xterm (ANSI mode)
- * AND the cursor-visibility event for PETSCII mode (which the PetsciiCanvas reads
- * because the PETSCII transducer drops ?25h/?25l escapes).
- *
- * @param socket - Socket.io socket
- * @param visible - Whether the cursor should be visible
- */
-export function setCursorVisible(socket: any, visible: boolean): void {
-  socket.emit('ansi-output', visible ? ANSI.SHOW_CURSOR : ANSI.HIDE_CURSOR);
-  socket.emit('cursor-visibility', visible);
-}
-
-/**
  * Double buffering helper for xterm.js
  * Builds a buffered output string with cursor hiding to prevent flickering
  *

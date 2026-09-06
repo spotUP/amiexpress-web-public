@@ -1,5 +1,5 @@
 /**
- * THE RULING TABLE - 246 event names, each with a written reason.
+ * THE RULING TABLE - 245 event names, each with a written reason.
  *
  * Split out of `server/transport-adapter.ts` for the repo's 2000-line ceiling
  * (`.husky` pre-commit size check): the adapter is BEHAVIOUR, this file is the
@@ -55,12 +55,17 @@
  * Only the arms' split moved; the union is what proves nothing is unruled, and
  * the suite asserts that by name.
  *
- * RE-RUN 2026-09-06, and this time the union DID move: A is 154, B is still 99,
- * the UNION IS 246. Four names were added to the tree after the census was
- * taken and none was ruled, which is what the pin's guard is for. All four are
- * grep A's - backend emits - and each is ruled below with its evidence:
- *   - `cursor-visibility` (utils/terminal-utils.ts:39), a browser-canvas
- *     concern - and one whose only emit site sits in a function nothing calls.
+ * RE-RUN 2026-09-06, and this time the union DID move: A was 154, B is still
+ * 99, the UNION was 246. Four names had been added to the tree after the census
+ * was taken and none was ruled, which is what the pin's guard is for. All four
+ * were grep A's - backend emits - and each is ruled below with its evidence:
+ *   - `cursor-visibility` (utils/terminal-utils.ts:39) - REMOVED AGAIN in the
+ *     commit after the one that ruled it. Its only emit site was
+ *     setCursorVisible(), a helper nothing called, whose ANSI half duplicated
+ *     the SDK's own BBSClient.setCursorVisible (sdk/client/index.ts:517) and
+ *     whose PETSCII half asserted a behaviour no code performed. Deleting the
+ *     helper takes the name back out of grep A: A is 153 and the UNION IS 245,
+ *     which is where this table stands.
  *   - `operator:active-chats` (handlers/operator-chat.handler.ts:148), the
  *     request/response sibling of operator:pending-pages.
  *   - `operator:paging-dot` (:434), a `sysops` ROOM emit. The paging caller's
@@ -802,22 +807,6 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "terminal has no pointer to shape at all. So this is browser chrome, the " +
     "same class as set-font and theme-preference, and writing an escape for it " +
     "would have been a guess dressed as a translation.",
-  },
-  "cursor-visibility": {
-    kind: "web-only",
-    note:
-    "PETSCII canvas cursor visibility. Its consumer is a browser one - " +
-    "packages/terminal/src/components/BBSTerminal.tsx feeds it to " +
-    "PetsciiCanvas's `cursorVisible` prop - and a byte-transport C64 has no " +
-    "canvas: over telnet the PETSCII bytes go to the real machine, whose own " +
-    "screen editor owns the cursor. web-only is therefore the class. THE " +
-    "SENDER, HOWEVER, DOES NOT EXIST: the only emit site is " +
-    "utils/terminal-utils.ts:39 inside setCursorVisible(), and grepping the " +
-    "tree for that name returns one hit, its own definition. The note the " +
-    "ruling landed with (\"the backend sends cursor-visibility\") asserted " +
-    "behaviour no code performs; this entry records the class the name would " +
-    "carry and the fact that nothing emits it, and the dead helper is removed " +
-    "in the commit that follows.",
   },
   "data": {
     kind: "not-transport",
