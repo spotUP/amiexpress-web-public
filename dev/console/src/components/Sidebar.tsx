@@ -11,7 +11,12 @@ import { isTextEntryActive } from '../state/text-entry-lock.js';
 // a second line. dev-console-launcher.test.ts pins this against the registry.
 export const SIDEBAR_CHROME = 6;
 export const SIDEBAR_WIDTH = 28;
-const SIDEBAR_FIRST_ROW = 4;
+// Screen row of the sidebar's first item. The header occupies rows 1-3 and
+// the sidebar's own top border is row 4, so items start at 5. Measured by
+// rendering Header + Sidebar in a sized pty: '[1] LIVE' lands on row 5 and
+// 'Overview' on row 6. At 4 every click resolved one row above the label the
+// sysop aimed at.
+const SIDEBAR_FIRST_ROW = 5;
 
 interface RenderedRow {
   row: number;
