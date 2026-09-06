@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, useStdout } from 'ink';
 import { T } from '../theme/blessed-theme.js';
+import { loadLogo, logoFits, LOGO_WIDTH } from '../theme/logo.js';
 
 interface Props {
   error: string | null;
@@ -13,6 +14,8 @@ export function LoginPrompt({ error, loading, onLogin }: Props) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const dots = useDots();
+  const { stdout } = useStdout();
+  const logo = useLogo(stdout?.columns);
 
   useInput((input, key) => {
     if (loading) return;
@@ -40,6 +43,10 @@ export function LoginPrompt({ error, loading, onLogin }: Props) {
     }
   });
 
+  // The art is wider than the plain box, so the box grows to hold it and
+  // shrinks back on a narrow terminal where the logo is not drawn at all.
+  const boxWidth = logo.length > 0 ? LOGO_WIDTH + 6 : 52;
+
   const FIELD_W = 30;
   const renderField = (value: string, active: boolean) => {
     const cursor = active ? '_' : ' ';
@@ -49,7 +56,14 @@ export function LoginPrompt({ error, loading, onLogin }: Props) {
 
   return (
     <Box flexDirection="column" alignItems="center" justifyContent="center">
-      <Box flexDirection="column" borderStyle="single" borderColor={T.chrome} padding={2} width={52}>
+      <Box flexDirection="column" borderStyle="single" borderColor={T.chrome} padding={2} width={boxWidth}>
+        {logo.length > 0 && (
+          <Box flexDirection="column" marginBottom={1}>
+            {logo.map((line, i) => (
+              <Text key={i} color={T.accent}>{line}</Text>
+            ))}
+          </Box>
+        )}
         <Text bold color={T.accent}>AmiExpress-Web Console</Text>
         <Text color={T.dim}>Ultra Vibed by Spot/Up Rough</Text>
         <Box marginTop={1} />
@@ -82,6 +96,15 @@ export function LoginPrompt({ error, loading, onLogin }: Props) {
       </Box>
     </Box>
   );
+}
+
+/**
+ * Read the logo once, and only when it fits the terminal whole - a wrapped
+ * copy of the art is worse than no art.
+ */
+function useLogo(columns: number | undefined): string[] {
+  const [logo] = useState<string[]>(() => (logoFits(columns) ? loadLogo() : []));
+  return logo;
 }
 
 function useDots(): string {

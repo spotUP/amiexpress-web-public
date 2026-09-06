@@ -241,11 +241,26 @@ if [ -t 1 ] && command -v tmux &>/dev/null && [ -z "${TMUX:-}" ]; then
 fi
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Display startup mode
+# Display startup mode.
+#
+# The ASCII logo is the same asset the console TUI draws above its login
+# fields (dev/console/src/theme/logo.ts). It is 79 columns wide, so on a
+# pane too narrow to hold it whole we fall back to the plain box rather than
+# print wrapped art.
+# REPO_ROOT is not resolved until later in the script, so derive the path
+# the same way it does rather than depend on ordering.
+LOGO_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/dev/assets/amiexpress-logo.txt"
+LOGO_COLS=79
+term_cols() { tput cols 2>/dev/null || echo 80; }
+
 printf "%b\n" "${CYAN}${BOLD}"
-echo "╔═══════════════════════════════════════════════════════════════════╗"
-echo "║                    AmiExpress BBS Startup                         ║"
-echo "╚═══════════════════════════════════════════════════════════════════╝"
+if [ -f "$LOGO_FILE" ] && [ "$(term_cols)" -ge "$LOGO_COLS" ]; then
+  cat "$LOGO_FILE"
+else
+  echo "╔═══════════════════════════════════════════════════════════════════╗"
+  echo "║                    AmiExpress BBS Startup                         ║"
+  echo "╚═══════════════════════════════════════════════════════════════════╝"
+fi
 printf "%b\n" "${RESET}"
 
 if [ "$DEBUG_MODE" = true ]; then

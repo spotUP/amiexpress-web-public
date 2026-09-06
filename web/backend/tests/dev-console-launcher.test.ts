@@ -69,6 +69,41 @@ describe('dev console launcher', () => {
    * bash prompt instead. Nothing was wrong with the prompt: it was never the
    * focused pane.
    */
+  /**
+   * The logo is one asset with two consumers: this script's startup pane and
+   * the console's login screen (dev/console/src/theme/logo.ts). Both gate on
+   * it being 79 columns wide, so the width is a contract, not a detail - art
+   * that no longer fits wraps into noise in both places at once.
+   */
+  describe('the shared ASCII logo', () => {
+    const logo = readFileSync(
+      join(__dirname, '..', '..', '..', 'dev', 'assets', 'amiexpress-logo.txt'),
+      'utf8'
+    );
+
+    it('is exactly the width both consumers gate on', () => {
+      const lines = logo.replace(/\n$/, '').split('\n');
+      const width = Math.max(...lines.map(l => l.length));
+
+      expect(width).toBe(79);
+      expect(lines).toHaveLength(20);
+    });
+
+    it('keeps the artist tag, which is the one non-ASCII glyph in the art', () => {
+      // Stored as UTF-8 so `cat` and Ink render it the same; a latin-1
+      // round-trip would turn it into a replacement character.
+      expect(logo).toContain('tG\u00f8');
+    });
+
+    it('is printed by the launcher, with a fallback when the pane is too narrow', () => {
+      expect(script).toMatch(/LOGO_FILE=/);
+      expect(script).toMatch(/LOGO_COLS=79/);
+      expect(script).toMatch(/cat "\$LOGO_FILE"/);
+      // The plain box survives as the narrow-terminal branch.
+      expect(script).toMatch(/AmiExpress BBS Startup/);
+    });
+  });
+
   it('attaches with the console pane focused, not the server-log pane', () => {
     const body = launcherBody();
 
