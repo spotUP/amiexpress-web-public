@@ -456,3 +456,33 @@ describe('AnsiToPetsciiTransducer SGR extended color parsing', () => {
     expect(color(display, 0, 0)).toBe(2);
   });
 });
+
+/**
+ * `CSI ?25l` / `?25h` - hide and show the cursor.
+ *
+ * Nothing goes on the WIRE: a C64 has no hide-cursor code, so there is
+ * nothing to translate the sequence INTO, and a telnet caller must see the
+ * same bytes as before. But the web terminal draws the cursor from the model,
+ * so the model has to carry the answer or a full-screen door gets a PETSCII
+ * cursor blinking over its playfield (reported against GRANDMASTER,
+ * 2026-09-06).
+ */
+describe('AnsiToPetsciiTransducer cursor visibility', () => {
+  it('records a hidden cursor in the model without putting a byte on the wire', () => {
+    const t = new AnsiToPetsciiTransducer();
+    expect(t.machine.state.cursorShown).toBe(true);
+
+    expect([...t.transduce('\x1b[?25l')]).toEqual([]);
+    expect(t.machine.state.cursorShown).toBe(false);
+
+    expect([...t.transduce('\x1b[?25h')]).toEqual([]);
+    expect(t.machine.state.cursorShown).toBe(true);
+  });
+
+  it('leaves the other private modes alone', () => {
+    const t = new AnsiToPetsciiTransducer();
+    t.transduce('\x1b[?25l');
+    t.transduce('\x1b[?1000h');           // mouse tracking: still nothing to model
+    expect(t.machine.state.cursorShown).toBe(false);
+  });
+});

@@ -527,9 +527,9 @@ export class GameScreen {
     });
 
     const wellCols = BOARD_COLUMNS * blockCols(this.screen.width);
-    this.boardLeft = compact
-      ? Math.max(1, Math.floor((this.screen.width - (wellCols + 2)) / 2))
-      : 2;
+    // Left, not centred: the hud sits beside it at 40 columns, the way it
+    // does at 80.
+    this.boardLeft = compact ? 1 : 2;
 
     this.boardBox = createBox({
       parent: this.screen,
@@ -542,12 +542,49 @@ export class GameScreen {
       fixed: true,
     });
 
-    // Compact (40-column PETSCII): no side panels, board fills screen
+    // Compact (40 columns): the well is as wide as its blocks - twelve
+    // characters, not the twenty-two an 80-column screen needs - so there IS
+    // room beside it now, and the screen that had NO hud at all gets the two
+    // panels a player cannot play without: the numbers and the next queue.
+    //
+    // The other four (grade, section, zone, footer) stay off. They are the
+    // wide screen's furniture, and twenty-five rows do not hold them.
     if (compact) {
-      this.nextBox = null;
+      const hudLeft = this.boardLeft + wellCols + 3;
+      const hudWidth = Math.max(10, this.screen.width - hudLeft - 1);
+
+      this.statsBox = createBox({
+        parent: this.screen,
+        top: 1,
+        left: hudLeft,
+        width: hudWidth,
+        height: 12,
+        border: { type: 'line' },
+        style: { bg: 'black', border: { fg: 'green' } },
+        label: ' STATS ',
+        fixed: true,
+        focusable: false,
+        mouse: false,
+        clickable: false,
+      });
+
+      this.nextBox = createBox({
+        parent: this.screen,
+        top: 13,
+        left: hudLeft,
+        width: hudWidth,
+        height: 10,
+        border: { type: 'line' },
+        style: { bg: 'black', border: { fg: 'cyan' } },
+        label: ' NEXT ',
+        fixed: true,
+        focusable: false,
+        mouse: false,
+        clickable: false,
+      });
+
       this.holdBox = null;
       this.gradeBox = null;
-      this.statsBox = null;
       this.sectionBox = null;
       this.zoneBox = null;
       this.footerBox = null;
@@ -1704,15 +1741,19 @@ export class GameScreen {
    * Get mini piece preview
    */
   private getMiniPiece(type: PieceType, rotationSystem: string): string {
-    const block = this.getBlockChar(type, rotationSystem);
+    const cols = blockCols(this.screen.width);
+    const block = fitCell(this.getBlockChar(type, rotationSystem), cols);
+    // Indents are counted in CELLS, not characters, so a preview keeps its
+    // shape on a screen where a block is one character wide.
+    const p = (cells: number) => ' '.repeat(cells * cols);
     const patterns: Record<PieceType, string> = {
-      I: `  ${block}${block}${block}${block}`,
-      O: `    ${block}${block}\n    ${block}${block}`,
-      T: `      ${block}\n    ${block}${block}${block}`,
-      S: `      ${block}${block}\n    ${block}${block}`,
-      Z: `    ${block}${block}\n      ${block}${block}`,
-      J: `    ${block}\n    ${block}${block}${block}`,
-      L: `        ${block}\n    ${block}${block}${block}`,
+      I: `${p(1)}${block}${block}${block}${block}`,
+      O: `${p(2)}${block}${block}\n${p(2)}${block}${block}`,
+      T: `${p(3)}${block}\n${p(2)}${block}${block}${block}`,
+      S: `${p(3)}${block}${block}\n${p(2)}${block}${block}`,
+      Z: `${p(2)}${block}${block}\n${p(3)}${block}${block}`,
+      J: `${p(2)}${block}\n${p(2)}${block}${block}${block}`,
+      L: `${p(4)}${block}\n${p(2)}${block}${block}${block}`,
     };
     return patterns[type] || '';
   }

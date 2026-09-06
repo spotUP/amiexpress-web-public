@@ -197,7 +197,12 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
     // default - the blink state decides. It defaulted to `true` between
     // c8e0f4dff and this fix, which made `cursorOn` unreachable and left the
     // block permanently lit on every PETSCII session.
-    const effectiveCursorOn = cursorVisible ?? cursorOn;
+    //
+    // A door that HID the cursor (`CSI ?25l`) outranks both. The model carries
+    // that now, because the canvas is what draws the cursor and a full-screen
+    // door still got one blinking over its playfield ("i see a blinking petscii
+    // cursor in game", 2026-09-06).
+    const effectiveCursorOn = s.cursorShown === false ? false : (cursorVisible ?? cursorOn);
     if (effectiveCursorOn) {
       const cursorIdx = s.cursorY * COLS + s.cursorX;
       ctx.fillStyle = palette[s.colorRam[cursorIdx] & 0x0F];

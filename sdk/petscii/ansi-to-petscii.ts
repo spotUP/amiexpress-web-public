@@ -595,8 +595,16 @@ export class AnsiToPetsciiTransducer {
     const st = this.machine.state;
     if (isPrivate) {
       if (prefix !== '?') return; // '<' '=' '>': terminal queries and key-modifier modes, nothing to model
-      // ?25 cursor show/hide, ?1000-1006 mouse, ?7 wrap: no C64 equivalent. ?47/?1049 alternate screen:
-      // blessed repaints a full frame on entry and the BBS repaints on exit - a clear is the honest translation.
+      // ?25 show/hide: nothing goes on the WIRE - a C64 has no hide-cursor code
+      // - but the model carries it, because the web terminal draws the cursor
+      // from the model and a door that hid it still got one blinking over its
+      // playfield. ?1000-1006 mouse, ?7 wrap: no C64 equivalent. ?47/?1049
+      // alternate screen: blessed repaints a full frame on entry and the BBS
+      // repaints on exit - a clear is the honest translation.
+      if (n(0, 0) === 25 && (final === 'h' || final === 'l')) {
+        this.machine.state.cursorShown = final === 'h';
+        return;
+      }
       if ((n(0, 0) === 47 || n(0, 0) === 1049) && (final === 'h' || final === 'l')) this.clearKeepingCursor(out, 0, 0);
       return;
     }

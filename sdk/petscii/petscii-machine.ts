@@ -49,6 +49,18 @@ export interface PetsciiMachineState {
   pen: number;           // VIC index, power-on 14
   background: number;    // VIC index, power-on 0 (CCGMS $02 <colour> sets it, $0E blacks it)
   border: number;        // VIC index, power-on 0 (always tied to `background`)
+  /**
+   * Whether a cursor should be DRAWN. Not a PETSCII byte and not on the wire.
+   *
+   * A real C64 has no hide-cursor code, which is why the transducer drops
+   * `CSI ?25l` rather than translating it - there is nothing to translate it
+   * INTO. But the web terminal draws the cursor itself, from this state, and a
+   * full-screen door that hid the cursor still got a PETSCII one blinking over
+   * its playfield (reported 2026-09-06 against GRANDMASTER). The screen model
+   * is the honest place for it: a telnet C64 sees no change, because no byte
+   * changes.
+   */
+  cursorShown: boolean;
 }
 
 export class PetsciiMachine {
@@ -57,7 +69,7 @@ export class PetsciiMachine {
     screen: new Uint8Array(CELLS).fill(0x20),
     colorRam: new Uint8Array(CELLS).fill(14),
     cursorX: 0, cursorY: 0, charsetBank: 0, reverse: false,
-    pen: 14, background: 0, border: 0,
+    pen: 14, background: 0, border: 0, cursorShown: true,
   };
   /** rowLinked[y] = true when row y is the continuation of row y-1 (logical 80-char line) */
   private rowLinked: boolean[] = new Array(ROWS).fill(false);

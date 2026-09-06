@@ -298,6 +298,20 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const newUserPromptUsername = useRef<string>('');
   const passwordMode = useRef<boolean>(false);
   const doorActive = useRef<boolean>(false);
+  /**
+   * The same fact as `doorActive`, as STATE, because the PETSCII canvas takes
+   * it as a prop and a ref cannot re-render.
+   *
+   * A C64's cursor is a screen-EDITOR artifact. A door that owns the whole
+   * screen has no editor and wants no cursor, but the canvas draws one from
+   * the model wherever the last paint left it - so a playfield had a block
+   * blinking in it ("i see a blinking petscii cursor in game"). xterm never
+   * showed this because a door hides the cursor there; the blessed program
+   * starts with `_cursorHidden = true` and so never writes the hide byte at
+   * all, which means there is nothing on the wire for the transducer to
+   * translate. The browser knows anyway: `door-active` says so.
+   */
+  const [doorOwnsScreen, setDoorOwnsScreen] = useState(false);
   const reconnectPending = useRef<boolean>(false);
   const forcedDisconnectRef = useRef<boolean>(false);  // Track server-initiated disconnect (logoff)
   const doorReadyMap = useRef<Record<string, boolean>>({});
@@ -2567,6 +2581,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     socket.on('door-active', (active: boolean) => {
       console.log('[BBSTerminal] door-active received:', active);
       doorActive.current = active;
+      setDoorOwnsScreen(active);
       // Skip the modem soft-cap while a door is running — door output
       // should feel instant. The pacing is for BBS navigation only.
       modemEmulatorRef.current?.setDoorActive(active);
@@ -3648,6 +3663,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           <PetsciiCanvas
             ref={petsciiCanvasRef}
             machine={petsciiMachine}
+            cursorVisible={doorOwnsScreen ? false : undefined}
             focusable
             focusOnMount
             onData={(bytes) => {
