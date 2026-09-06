@@ -689,6 +689,34 @@ class ApiClient {
     });
   }
 
+  async getDrivePoolStatus() {
+    return this.request<ApiResponse>(`${API_BASE}/config/drives/pool/status`);
+  }
+
+  async discardParkedFile(localPath: string) {
+    return this.request<ApiResponse>(`${API_BASE}/config/drives/pool/parked/discard`, {
+      method: 'POST',
+      body: JSON.stringify({ localPath }),
+    });
+  }
+
+  async writeDriveSecret(driveNumber: number, secret: string) {
+    return this.request<ApiResponse>(`${API_BASE}/config/drives/${driveNumber}/secret`, {
+      method: 'POST',
+      body: JSON.stringify({ secret }),
+    });
+  }
+
+  async testDrive(driveNumber: number) {
+    return this.request<ApiResponse>(`${API_BASE}/config/drives/${driveNumber}/test`, {
+      method: 'POST',
+    });
+  }
+
+  async getDriveContents(driveNumber: number) {
+    return this.request<ApiResponse>(`${API_BASE}/config/drives/${driveNumber}/contents`);
+  }
+
   // Computer Types
   async getComputerTypes() {
     return this.request<ApiResponse>(`${API_BASE}/config/computers`);

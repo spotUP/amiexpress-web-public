@@ -1,18 +1,70 @@
 /**
  * Drive Configuration Service
  * Handles drive path configuration (Drives.info / TOOLTYPE_DRIVES)
+ *
+ * Task 11 turned this from a path-only list into the surface that configures
+ * and watches the pool: every DRIVE.n sub-key `volume-config.ts` parses (kind,
+ * quota, class, egress, retention, key id, request budget), the bytes the
+ * catalog actually holds on each drive, whether the live process has marked
+ * it degraded or out of requests, and the operator actions - a write-only
+ * secret, a connectivity test, a contents listing, and pool-wide status
+ * (parked files, eviction shortfall, areas a mis-numbered STORAGEDRIVE has
+ * broken).
  */
 
 import type { Database } from '../../database';
 import { getSystemTime } from '../../utils/date-time.util';
 import type { ConfigRepository } from '../../database/config-repository';
-import type { DriveConfig } from '../../database/types';
+import type { DriveConfig, FileEntry } from '../../database/types';
 import { DriveConfigSchema, type RequestContext } from '../config.schemas';
 import { applyTooltypes, readTooltypeMap } from '../../utils/info-file.util';
 import { mergeForWrite } from './config-merge.util';
 import { config as appConfig } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
+import { parseVolumes, readVolumeSecret, type EgressPosture, type VolumeClass } from '../../storage/volume-config';
+import { getStorageContext } from '../../storage/storage-context';
+import type { StorageBackend } from '../../storage/storage-backend';
+import { LocalBackend } from '../../storage/local-backend';
+import { createS3Backend } from '../../storage/s3-backend';
+import { brokenRemoteAreas, remoteAreaFromDisk, type BrokenRemoteArea } from '../../storage/remote-areas';
+import { loadFileAreasFromDisk } from '../file-areas-loader';
+import { loadConfConfig } from '../conf-config.service';
+
+/** `GET /api/config/drives` - a drive, decorated with the pool facts the page shows. */
+export interface DriveConfigView extends DriveConfig {
+  kind: 'local' | 's3';
+  quotaBytes?: number;
+  /** From the catalog (`SUM(size) WHERE storage_volume = n`), never the in-process counter. */
+  usedBytes: number;
+  volumeClass: VolumeClass;
+  egress: EgressPosture;
+  retentionDays?: number;
+  keyId?: string;
+  requestBudget?: number;
+  requestsThisMonth?: number;
+  /** Only known when the storage subsystem is live in this process (Task 12). */
+  degraded: boolean;
+  outOfRequests: boolean;
+}
+
+/** A quarantined file, for the admin page - see `FileCache.parkedFiles`. */
+export interface ParkedFileView {
+  driveNumber: number;
+  /** A DISPLAY LABEL, not the pool object's key - see FileCache.discardParked. */
+  label: string;
+  localPath: string;
+  sizeBytes: number;
+}
+
+export interface PoolStatus {
+  /** False before Task 12 wires the subsystem into the board, or on a board with no pool. */
+  cacheActive: boolean;
+  overBudgetBytes: number;
+  evictionDisabled: boolean;
+  parkedFiles: ParkedFileView[];
+  brokenAreas: BrokenRemoteArea[];
+}
 
 export class DriveConfigService {
   private configRepo: ConfigRepository;
@@ -21,66 +73,84 @@ export class DriveConfigService {
     this.configRepo = database.getConfigRepository();
   }
 
-  async getAllDrives(): Promise<DriveConfig[]> {
-    // DISK-BASED: Load from Drives.info
+  async getAllDrives(): Promise<DriveConfigView[]> {
+    // DISK-BASED: Load from Drives.info, the same file the board itself reads.
     const bbsRoot = appConfig.get('dataDir');
     const drivesInfoPath = path.join(bbsRoot, 'Drives.info');
 
     if (!fs.existsSync(drivesInfoPath)) {
-console.warn('[DriveConfigService] Drives.info not found, falling back to database');
-      return this.configRepo.getAllDrives();
+      return [];
     }
 
-    try {
-      const stats = fs.statSync(drivesInfoPath);
-      // Convert tooltypes to uppercase map
-      const toolTypes = readTooltypeMap(drivesInfoPath);
+    const stats = fs.statSync(drivesInfoPath);
+    // parseVolumes throws on a malformed QUOTA/RETENTION/REQUESTS line by
+    // design (volume-config.ts) - that is a Drives.info the board itself
+    // cannot boot the pool from, and the sysop needs to see exactly which
+    // line is wrong, not a page that silently fell back to a stale mirror.
+    const volumes = parseVolumes(bbsRoot);
+    const usedByVolume = this.database.usedBytesByVolume();
+    const live = getStorageContext();
 
-      // Parse DRIVE.N tooltypes
-      const drives: DriveConfig[] = [];
-      let driveNum = 1;
+    return volumes.map((volume): DriveConfigView => {
+      const liveState = live?.volumes.byNumber(volume.driveNumber);
+      return {
+        id: volume.driveNumber,
+        drive_number: volume.driveNumber,
+        drive_path: volume.kind === 's3' ? `s3://${volume.path}` : volume.path,
+        enabled: true,
+        created_at: stats.birthtime,
+        updated_at: stats.mtime,
+        kind: volume.kind,
+        quotaBytes: volume.quotaBytes,
+        usedBytes: usedByVolume.get(volume.driveNumber) ?? 0,
+        volumeClass: volume.volumeClass,
+        egress: volume.egress,
+        retentionDays: volume.retentionDays,
+        keyId: volume.keyId,
+        requestBudget: volume.requestBudget,
+        requestsThisMonth: liveState?.requestsThisMonth,
+        degraded: liveState?.degraded ?? false,
+        outOfRequests: live?.volumes.isOutOfRequests(volume.driveNumber) ?? false,
+      };
+    });
+  }
 
-      while (true) {
-        const drivePath = toolTypes.get(`DRIVE.${driveNum}`);
-        if (!drivePath) break;
-
-        drives.push({
-          id: driveNum,
-          drive_number: driveNum,
-          drive_path: drivePath,
-          enabled: true,
-          created_at: stats.birthtime,
-          updated_at: stats.mtime
-        });
-
-        driveNum++;
-        if (driveNum > 50) break; // Safety limit
-      }
-
-console.log(`[DriveConfigService] Loaded ${drives.length} drives from disk files`);
-      return drives;
-    } catch (error) {
-console.error('[DriveConfigService] Error reading Drives.info:', error);
-      return this.configRepo.getAllDrives();
-    }
+  /** A view built from the DB mirror alone - a drive `getAllDrives` has not seen on disk yet. */
+  private toDefaultView(drive: DriveConfig): DriveConfigView {
+    return {
+      ...drive,
+      kind: 'local',
+      quotaBytes: undefined,
+      usedBytes: 0,
+      volumeClass: 'PAID',
+      egress: 'METERED',
+      retentionDays: undefined,
+      keyId: undefined,
+      requestBudget: undefined,
+      requestsThisMonth: undefined,
+      degraded: false,
+      outOfRequests: false,
+    };
   }
 
   /**
    * Resolve the drive the admin is pointing at.
    *
    * The list this id came from is the one on DISK, where the id is the entry's
-   * position. Looking that number up as a database rowid is a different
-   * namespace: with the table empty every edit throws "not found", and with
-   * the table partly filled it edits a DIFFERENT record. Disk first, mirror as
-   * the fallback - the same resolution ComputerConfigService.getComputerType
-   * uses, and the same fault the doors page had.
+   * position (== its drive number). Looking that number up as a database
+   * rowid is a different namespace: with the table empty every edit throws
+   * "not found", and with the table partly filled it edits a DIFFERENT
+   * record. Disk first, mirror as the fallback - the same resolution
+   * ComputerConfigService.getComputerType uses, and the same fault the doors
+   * page had.
    */
-async getDrive(id: number): Promise<DriveConfig | null> {
+  async getDrive(id: number): Promise<DriveConfigView | null> {
     const onDisk = await this.getAllDrives();
     const fromDisk = onDisk.find(d => d.id === id);
     if (fromDisk) return fromDisk;
 
-    return this.configRepo.getDriveById(id);
+    const fromDb = await this.configRepo.getDriveById(id);
+    return fromDb ? this.toDefaultView(fromDb) : null;
   }
 
   async getDriveByNumber(driveNumber: number): Promise<DriveConfig | null> {
@@ -278,5 +348,183 @@ console.log(`[DriveConfigService] Wrote ${drivesInfoPath} with ${merged.length} 
     } catch (error) {
 console.error(`[DriveConfigService] Failed to write ${drivesInfoPath}:`, error);
     }
+  }
+
+  // ------------------------------------------------------------- the secret
+
+  /**
+   * Writes `Storage/<n>.key`, exactly the way `door-launch-token.ts:44-52`
+   * writes `DoorRepo.token`: 0600 on the write itself and again via
+   * `chmodSync`, tolerating a filesystem with no POSIX modes. The secret is
+   * NEVER written into Drives.info - that file sits under the board root
+   * where every door and every backup can read it, which is why
+   * `volume-config.ts` keeps SECRET out of it in the first place.
+   */
+  async writeDriveSecret(driveNumber: number, secret: string): Promise<void> {
+    const bbsRoot = appConfig.get('dataDir');
+    const keyPath = path.join(bbsRoot, 'Storage', `${driveNumber}.key`);
+    fs.mkdirSync(path.dirname(keyPath), { recursive: true });
+    fs.writeFileSync(keyPath, `${secret}\n`, { encoding: 'utf8', mode: 0o600 });
+    try {
+      fs.chmodSync(keyPath, 0o600);
+    } catch {
+      // A filesystem without POSIX modes (a FAT-mounted volume, some Windows
+      // setups) cannot narrow this; the board still runs.
+    }
+  }
+
+  // --------------------------------------------------------------- testing
+
+  private buildBackendFor(bbsRoot: string, driveNumber: number): StorageBackend {
+    const volumes = parseVolumes(bbsRoot);
+    const volume = volumes.find(v => v.driveNumber === driveNumber);
+    if (!volume) throw new Error(`Drive ${driveNumber} not found`);
+    if (volume.kind === 'local') return new LocalBackend(volume.driveNumber, volume.path);
+
+    const secret = readVolumeSecret(bbsRoot, volume.driveNumber);
+    if (!secret) throw new Error(`DRIVE.${driveNumber} has no secret configured`);
+    return createS3Backend(volume, secret);
+  }
+
+  /**
+   * Proves a bucket is reachable with one round trip, not a promise of one.
+   *
+   * A local drive is a plain disk path with no network involved, so there is
+   * nothing this test meaningfully exercises for `kind: 'local'` - it reports
+   * reachable without touching the filesystem.
+   *
+   * For an s3 volume this calls `list()`, per the design this page was
+   * planned against - but against a prefix a real area will not have used
+   * (`__connectivity_probe__/`), not `''`. `StorageBackend.list` is
+   * deliberately one of only five calls an adapter has to implement
+   * (storage-backend.ts), so reusing it here rather than adding a sixth,
+   * ping-only method is the right call; walking the WHOLE bucket on every
+   * click of a "Test" button is not - that is real request-budget spend
+   * against Oracle's 50,000-a-month ceiling for a button a sysop might click
+   * repeatedly while debugging a bad key.
+   */
+  async testVolume(driveNumber: number): Promise<{ reachable: boolean; error?: string }> {
+    const bbsRoot = appConfig.get('dataDir');
+    let backend: StorageBackend;
+    try {
+      backend = this.buildBackendFor(bbsRoot, driveNumber);
+    } catch (error) {
+      return { reachable: false, error: error instanceof Error ? error.message : String(error) };
+    }
+    if (backend instanceof LocalBackend) return { reachable: true };
+
+    try {
+      await backend.list('__connectivity_probe__/');
+      return { reachable: true };
+    } catch (error) {
+      return { reachable: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  // -------------------------------------------------------------- contents
+
+  /** The catalog rows on one drive - "what would be lost if this volume disappeared". */
+  async contentsOf(driveNumber: number): Promise<FileEntry[]> {
+    return this.database.entriesOnVolume(driveNumber);
+  }
+
+  // ----------------------------------------------------------- pool status
+
+  /**
+   * Conferences for a file-area scan, straight off disk.
+   *
+   * The same two-tier fallback `server/initialization.ts#refreshConferencesFromDisk`
+   * uses ahead of its Conf.DB-header and database tiers: ConfConfig.info
+   * first, then whichever `Conf<N>.info` files exist. Calling that function
+   * directly would pull in its side effects - syncing the conferences table,
+   * rebinding module-level arrays other handlers hold live references to -
+   * for what is here a read-only admin listing; the last-resort Conf.DB
+   * header tier is a boot-time concern for a legacy import and is left out,
+   * so a board relying on it alone will under-report broken areas here until
+   * it also has a ConfConfig.info or Conf*.info files, which every board this
+   * feature targets already does.
+   */
+  private conferencesForAreaScan(bbsRoot: string): Array<{ id: number; name: string }> {
+    const confConfig = loadConfConfig(bbsRoot);
+    if (confConfig && confConfig.confCount > 0) {
+      return Array.from({ length: confConfig.confCount }, (_, i) => ({
+        id: i + 1,
+        name: confConfig.entries[i]?.name || `Conference ${i + 1}`,
+      }));
+    }
+    let confFiles: string[];
+    try {
+      confFiles = fs.readdirSync(bbsRoot).filter(f => /^Conf\d+\.info$/.test(f));
+    } catch {
+      return [];
+    }
+    const numbers = confFiles
+      .map(f => parseInt(f.match(/\d+/)?.[0] ?? '0', 10))
+      .filter(n => n > 0);
+    const max = numbers.length > 0 ? Math.max(...numbers) : 0;
+    return Array.from({ length: max }, (_, i) => ({ id: i + 1, name: `Conference ${i + 1}` }));
+  }
+
+  private statSizeOf(localPath: string): number {
+    try {
+      return fs.statSync(localPath).size;
+    } catch {
+      return 0; // vanished under us; nothing to report
+    }
+  }
+
+  /**
+   * Pool-wide facts nothing else surfaces: quarantined files with their
+   * sizes, bytes the cache could not evict, whether eviction itself has
+   * stopped because it cannot read its pin record, and pooled areas a
+   * mis-numbered STORAGEDRIVE has silently broken.
+   *
+   * `brokenAreas` is disk-only and answers even before Task 12 wires the
+   * subsystem into the running board - a mis-numbered drive is a fact about
+   * Drives.info and Conf*.info, not about the live process. The rest needs a
+   * live `FileCache`, which does not exist until Task 12 boots one;
+   * `cacheActive: false` says so rather than reporting zeroes that would read
+   * as "nothing parked" when the true answer is "nobody has looked yet".
+   */
+  async getPoolStatus(): Promise<PoolStatus> {
+    const bbsRoot = appConfig.get('dataDir');
+    const volumes = parseVolumes(bbsRoot);
+    const isConfiguredDrive = (driveNumber: number): boolean =>
+      volumes.some(v => v.driveNumber === driveNumber);
+
+    const conferences = this.conferencesForAreaScan(bbsRoot);
+    const areas = loadFileAreasFromDisk(bbsRoot, conferences).map(remoteAreaFromDisk);
+    const brokenAreas = brokenRemoteAreas(areas, isConfiguredDrive);
+
+    const live = getStorageContext();
+    if (!live) {
+      return { cacheActive: false, overBudgetBytes: 0, evictionDisabled: false, parkedFiles: [], brokenAreas };
+    }
+
+    const parkedFiles: ParkedFileView[] = live.cache.parkedFiles().map(f => ({
+      driveNumber: f.driveNumber,
+      label: f.key,
+      localPath: f.localPath,
+      sizeBytes: this.statSizeOf(f.localPath),
+    }));
+
+    return {
+      cacheActive: true,
+      overBudgetBytes: live.cache.overBudgetBytes(),
+      evictionDisabled: live.cache.isEvictionDisabled(),
+      parkedFiles,
+      brokenAreas,
+    };
+  }
+
+  /**
+   * Permanently discards one quarantined file. See `FileCache.discardParked`:
+   * `localPath` is the parked file's real identity, and the only one that is
+   * safe to act on - never the display label `parkedFiles()` also carries.
+   */
+  async discardParkedFile(localPath: string): Promise<void> {
+    const live = getStorageContext();
+    if (!live) throw new Error('the storage cache is not active on this process');
+    live.cache.discardParked(localPath);
   }
 }

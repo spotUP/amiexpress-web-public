@@ -276,6 +276,26 @@ export class ConfigService {
     return this.driveService.deleteDrive(...args);
   }
 
+  async writeDriveSecret(...args: Parameters<DriveConfigService['writeDriveSecret']>) {
+    return this.driveService.writeDriveSecret(...args);
+  }
+
+  async testVolume(...args: Parameters<DriveConfigService['testVolume']>) {
+    return this.driveService.testVolume(...args);
+  }
+
+  async contentsOfDrive(...args: Parameters<DriveConfigService['contentsOf']>) {
+    return this.driveService.contentsOf(...args);
+  }
+
+  async getPoolStatus(): ReturnType<DriveConfigService['getPoolStatus']> {
+    return this.driveService.getPoolStatus();
+  }
+
+  async discardParkedFile(...args: Parameters<DriveConfigService['discardParkedFile']>) {
+    return this.driveService.discardParkedFile(...args);
+  }
+
   // ===== Computer Types =====
   async getAllComputerTypes(): Promise<ComputerType[]> {
     return this.computerService.getAllComputerTypes();

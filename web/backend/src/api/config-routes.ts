@@ -1327,6 +1327,87 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
     }
   });
 
+  /**
+   * GET /api/config/drives/pool/status
+   * Parked files, eviction shortfall and areas a mis-numbered STORAGEDRIVE
+   * has broken - the pool-wide facts no single drive row carries.
+   */
+  router.get('/drives/pool/status', async (_req: Request, res: Response) => {
+    try {
+      const status = await configService.getPoolStatus();
+      sendResponse(res, status);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * POST /api/config/drives/pool/parked/discard
+   * Permanently discards one quarantined file, by the exact localPath
+   * GET /drives/pool/status reported for it - never by drive+key, which is a
+   * display label (FileCache.discardParked).
+   */
+  router.post('/drives/pool/parked/discard', async (req: any, res: Response) => {
+    try {
+      const { localPath } = req.body ?? {};
+      if (!localPath || typeof localPath !== 'string') {
+        return handleError(res, new Error('localPath must be a non-empty string'));
+      }
+      await configService.discardParkedFile(localPath);
+      sendResponse(res, { discarded: true }, 'Parked file discarded');
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * POST /api/config/drives/:n/secret
+   * Writes Storage/<n>.key at 0600. Write-only: there is no GET for this -
+   * the secret never appears in any drives response.
+   */
+  router.post('/drives/:n/secret', async (req: any, res: Response) => {
+    try {
+      const driveNumber = parseInt(req.params.n, 10);
+      const { secret } = req.body ?? {};
+      if (!secret || typeof secret !== 'string' || secret.trim() === '') {
+        return handleError(res, new Error('secret must be a non-empty string'));
+      }
+      await configService.writeDriveSecret(driveNumber, secret);
+      sendResponse(res, { driveNumber }, 'Secret saved');
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * POST /api/config/drives/:n/test
+   * One `list()` against the volume, reporting reachable or not - never the
+   * whole bucket (see DriveConfigService.testVolume).
+   */
+  router.post('/drives/:n/test', async (req: Request, res: Response) => {
+    try {
+      const driveNumber = parseInt(req.params.n, 10);
+      const result = await configService.testVolume(driveNumber);
+      sendResponse(res, result);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
+   * GET /api/config/drives/:n/contents
+   * The catalog rows on this drive - what would be lost if it disappeared.
+   */
+  router.get('/drives/:n/contents', async (req: Request, res: Response) => {
+    try {
+      const driveNumber = parseInt(req.params.n, 10);
+      const entries = await configService.contentsOfDrive(driveNumber);
+      sendResponse(res, entries);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
   // ===== Computer Types (TOOLTYPE_COMPUTERLIST) =====
 
   /**
