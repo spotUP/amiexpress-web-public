@@ -233,120 +233,111 @@ export interface ConfScanState {
 }
 
 /**
- * Get messages that match the searchNewMail criteria for a user
- * express.e:11706 — toName === confMailName || 'eall' || 'all', msgNum > pointer, not deleted
+ * The ONE test for "this message is new mail for this user".
  *
- * @param userId - User ID
- * @param conferenceId - Conference ID
- * @param messageBaseId - Message base ID
- * @param username - Username (case-insensitive match)
- * @param bbsDataPath - BBS data directory
- * @returns Array of matching ScanMessage entries
+ * express.e:11706, verbatim, inside searchNewMail's single walk:
+ *
+ *   IF(((stringCompare(mailHeader.toName,confMailName)=RESULT_SUCCESS) OR
+ *       (stringCompare(mailHeader.toName,'eall')=RESULT_SUCCESS) OR
+ *       ((stringCompare(mailHeader.toName,'all')=RESULT_SUCCESS) AND
+ *        (cb.handle[0] AND MAILSCAN_ALL))))
+ *      AND (mailHeader.recv=0)
+ *
+ * with `IF(mailHeader.status="D") THEN JUMP getNextMSG` (express.e:11704)
+ * ahead of it.
+ *
+ * It is a function, and exported, because this port used to ask the question
+ * TWICE and got two different answers. `countNewMessages` produced the number
+ * the caller was TOLD and never looked at `recv`; `getMessagesForConfScan`
+ * produced the list he was GIVEN and did. The sysop read a message, and every
+ * login afterwards announced one new private message and then offered him
+ * nothing to read. express.e cannot drift that way: it has one loop, sets
+ * mailFlag and prints the row inside this same IF, and the count IS the
+ * matches.
+ *
+ * Note what is NOT here: a match on `fromName`. `countNewMessages` used to
+ * count a private message as new when the user was its SENDER, which
+ * express.e never does - his own outgoing mail counted against him.
  */
-async function getMessagesForConfScan(
+export function isNewMailFor(
+  candidate: ScanCandidate,
+  confMailName: string,
+  includeAllInScan: boolean
+): boolean {
+  // express.e:11704 - a killed message is skipped before the test.
+  if (candidate.deleted) return false;
+
+  const toLower = candidate.toName.trim().toLowerCase();
+  const addressed =
+    (confMailName !== '' && toLower === confMailName) ||
+    toLower === 'eall' ||
+    (toLower === 'all' && includeAllInScan);
+
+  return addressed && !candidate.received;
+}
+
+/**
+ * One message, normalised out of whichever source this board has.
+ *
+ * The HeaderFile is the real one; the disk walk is the fallback for a base
+ * whose HeaderFile is missing. Both are reduced to the same four facts the
+ * predicate above tests, so neither path can grow its own version of the rule.
+ */
+interface ScanCandidate {
+  msgNum: number;
+  toName: string;
+  fromName: string;
+  subject: string;
+  isPrivate: boolean;
+  deleted: boolean;
+  received: boolean;
+}
+
+/** What one message base's scan found. */
+interface ConfScanResult {
+  /** The messages to offer the caller, in message-number order. */
+  messages: ScanMessage[];
+  /**
+   * Every new message in the base, addressed to anyone. `%NM`, and a port
+   * addition - express.e's searchNewMail has no such counter, it only has
+   * mailFlag. Deliberately NOT derived from the predicate: this is "what
+   * arrived here since you last looked", not "what is waiting for you".
+   */
+  newPublic: number;
+  /**
+   * `%PM`. Derived from `messages`, so the number the caller is told and the
+   * list he is given cannot disagree - that was the bug.
+   */
+  newPrivate: number;
+  /** The highest message number walked, for the pointer. */
+  lastScanned: number;
+  mailStatHigh: number;
+}
+
+/**
+ * Walk one message base ONCE and answer both questions from the same pass.
+ *
+ * express.e:11651-11735 searchNewMail. Replaces getMessagesForConfScan and
+ * countNewMessages, which walked the same headers twice with two copies of
+ * the rule.
+ */
+async function scanConferenceForNewMail(
   userId: string,
   conferenceId: number,
   messageBaseId: number,
   user: any,
   bbsDataPath: string
-): Promise<ScanMessage[]> {
+): Promise<ConfScanResult> {
   // express.e:11706 — toName == confMailName (per-conf display name selected
-  // by NAME_TYPE_USERNAME/REALNAME/INTERNETNAME). Previously we used
-  // user.username directly, which silently hid mail addressed to the user's
-  // realName / internetName in REALNAME / INTERNETNAME conferences.
+  // by NAME_TYPE_USERNAME/REALNAME/INTERNETNAME). A raw username here
+  // silently hid mail addressed to the user's realName / internetName in
+  // REALNAME / INTERNETNAME conferences.
   const { getConfMailNameFor } = require('./message-entry.handler');
-  const safeName = String(getConfMailNameFor(user, conferenceId, messageBaseId) || '').toLowerCase();
-  const results: ScanMessage[] = [];
+  const confMailName = String(getConfMailNameFor(user, conferenceId, messageBaseId) || '')
+    .toLowerCase();
 
-  try {
-    const mailStat = messageIndexManager.readMailStats(conferenceId);
-    const headers = messageIndexManager.readHeaderFile(conferenceId);
-    const confBase = await loadMsgPointers(userId, conferenceId, messageBaseId);
-    const validated = mailStat ? validatePointers(confBase, mailStat) : confBase;
-    const pointer = validated.lastNewReadConf || 0;
-
-    // express.e:11706 gates 'all'-addressed messages on the per-conf
-    // MAILSCAN_ALL flag (cb.handle[0] AND MAILSCAN_ALL). We pull that
-    // bit out of the user's confBase.scanFlags (synced from Conf.DB).
-    const MAILSCAN_ALL_BIT = 1 << 7;
-    const includeAllInScan = (validated.scanFlags & MAILSCAN_ALL_BIT) !== 0;
-
-    if (headers.length > 0) {
-      for (const header of headers) {
-        if (header.msgNumb <= pointer) continue;
-        if (header.status === MsgStatus.DELETED) continue;
-        if (!messageFileExists(conferenceId, header.msgNumb, bbsDataPath)) continue;
-
-        const toLower = (header.toName || '').trim().toLowerCase();
-        const isPrivate = header.status === MsgStatus.PRIVATE;
-
-        // express.e:11706 — match toName === confMailName, 'eall', or 'all'
-        // AND (mailHeader.recv=0) — exclude messages already marked received.
-        // 'all' is gated on the MAILSCAN_ALL bit; without it set, 'all'
-        // messages don't surface in mail scan.
-        const matchesUser = toLower === safeName;
-        const matchesEall = toLower === 'eall';
-        const matchesAll = toLower === 'all' && includeAllInScan;
-        if ((matchesUser || matchesEall || matchesAll) && header.recv === 0) {
-          results.push({
-            msgNum: header.msgNumb,
-            isPrivate,
-            from: (header.fromName || '').trim(),
-            subject: ''  // HeaderFile doesn't carry subject; read from msg file on demand
-          });
-        }
-      }
-    } else {
-      // Disk-based fallback. Same MAILSCAN_ALL gate as the HeaderFile path.
-      const messageIds = await getAllMessageIds(conferenceId, bbsDataPath);
-      for (const msgNum of messageIds) {
-        if (msgNum <= pointer) continue;
-        const message = await readMessageFile(conferenceId, msgNum, bbsDataPath);
-        if (!message) continue;
-
-        const toLower = (message.to || '').trim().toLowerCase();
-
-        // express.e:11706 AND (mailHeader.recv=0) — skip already-received messages.
-        // 'all' gated on MAILSCAN_ALL flag (computed above as includeAllInScan).
-        const matchesUser = toLower === safeName;
-        const matchesEall = toLower === 'eall';
-        const matchesAll = toLower === 'all' && includeAllInScan;
-        if ((matchesUser || matchesEall || matchesAll) && !message.receivedAt) {
-          results.push({
-            msgNum,
-            isPrivate: message.isPrivate === true,
-            from: (message.from || '').trim(),
-            subject: (message.subject || '').trim()
-          });
-        }
-      }
-    }
-  } catch (error) {
-console.error(`[getMessagesForConfScan] conf ${conferenceId} msgBase ${messageBaseId}:`, error);
-  }
-
-  return results;
-}
-
-/**
- * Count new messages for a user in a specific message base
- *
- * @param userId - User ID
- * @param conferenceId - Conference ID
- * @param messageBaseId - Message base ID
- * @returns Count of new messages
- */
-async function countNewMessages(
-  userId: string,
-  conferenceId: number,
-  messageBaseId: number,
-  user: any
-): Promise<{ newPublic: number; newPrivate: number; lastScanned: number; mailStatHigh: number }> {
-  // Same per-conf confMailName plumbing as getMessagesForConfScan above.
-  const { getConfMailNameFor } = require('./message-entry.handler');
-  const safeName = String(getConfMailNameFor(user, conferenceId, messageBaseId) || '').toLowerCase();
+  const messages: ScanMessage[] = [];
   let newPublic = 0;
-  let newPrivate = 0;
   let lastScanned = 0;
   let mailStatHigh = 0;
 
@@ -357,79 +348,85 @@ async function countNewMessages(
     const validated = mailStat ? validatePointers(confBase, mailStat) : confBase;
 
     const pointer = validated.lastNewReadConf || 0;
-    mailStatHigh = mailStat?.highMsgNum || 0;
     lastScanned = pointer;
+    mailStatHigh = mailStat?.highMsgNum || 0;
+
+    // express.e:11706 gates 'all'-addressed messages on the per-conf
+    // MAILSCAN_ALL flag (cb.handle[0] AND MAILSCAN_ALL). We pull that bit out
+    // of the user's confBase.scanFlags (synced from Conf.DB).
+    const MAILSCAN_ALL_BIT = 1 << 7;
+    const includeAllInScan = (validated.scanFlags & MAILSCAN_ALL_BIT) !== 0;
+
+    /** Every candidate above the pointer that has a body file to show. */
+    const candidates: ScanCandidate[] = [];
 
     if (headers.length > 0) {
-      // Use binary HeaderFile if available, but only count entries that have
-      // a readable .msg file in Messages/. HeaderFile may contain entries from
-      // an old import that were never written as Messages/*.msg files, causing
-      // a false new-message count when the reader finds nothing to show.
-      const bbsDataPath = config.get('dataDir');
       for (const header of headers) {
-        if (header.msgNumb <= pointer) {
-          continue;
-        }
-        if (header.status === MsgStatus.DELETED) {
-          continue;
-        }
-        if (!messageFileExists(conferenceId, header.msgNumb, bbsDataPath)) {
-          continue;
-        }
+        if (header.msgNumb <= pointer) continue;
+        // A HeaderFile entry with no body file is an old import that was never
+        // written to Messages/; counting it gives a new-message count the
+        // reader then cannot satisfy.
+        if (!messageFileExists(conferenceId, header.msgNumb, bbsDataPath)) continue;
 
-        lastScanned = Math.max(lastScanned, header.msgNumb);
-
-        const toLower = (header.toName || '').trim().toLowerCase();
-        const fromLower = (header.fromName || '').trim().toLowerCase();
-        const isPrivate = header.status === MsgStatus.PRIVATE;
-
-        if (isPrivate) {
-          if (safeName && (toLower === safeName || fromLower === safeName)) {
-            newPrivate++;
-          }
-        } else {
-          newPublic++;
-        }
+        candidates.push({
+          msgNum: header.msgNumb,
+          toName: header.toName || '',
+          fromName: (header.fromName || '').trim(),
+          // HeaderFile carries no subject; the reader reads it from the body
+          // file on demand.
+          subject: '',
+          isPrivate: header.status === MsgStatus.PRIVATE,
+          deleted: header.status === MsgStatus.DELETED,
+          received: header.recv !== 0,
+        });
       }
     } else {
-      // Read from disk .msg files (AmiExpress format)
-      // This is the PRIMARY method - database is only for web UI/search
-      const bbsDataPath = config.get('dataDir');
+      // Disk fallback, for a base whose HeaderFile is missing.
       const messageIds = await getAllMessageIds(conferenceId, bbsDataPath);
-
       for (const msgNum of messageIds) {
-        if (msgNum <= pointer) {
-          continue;
-        }
-
-        // Read message from disk
+        if (msgNum <= pointer) continue;
         const message = await readMessageFile(conferenceId, msgNum, bbsDataPath);
-        if (!message) {
-          continue; // Skip if file doesn't exist or is corrupted
-        }
+        if (!message) continue;
 
-        lastScanned = Math.max(lastScanned, msgNum);
-
-        const toLower = (message.to || '').trim().toLowerCase();
-        const fromLower = (message.from || '').trim().toLowerCase();
-        const isPrivate = message.isPrivate;
-
-        if (isPrivate) {
-          if (safeName && (toLower === safeName || fromLower === safeName)) {
-            newPrivate++;
-          }
-        } else {
-          newPublic++;
-        }
+        candidates.push({
+          msgNum,
+          toName: message.to || '',
+          fromName: (message.from || '').trim(),
+          subject: (message.subject || '').trim(),
+          isPrivate: message.isPrivate === true,
+          deleted: false,
+          received: Boolean(message.receivedAt),
+        });
       }
-
       mailStatHigh = messageIds.length > 0 ? Math.max(...messageIds) : 0;
     }
+
+    for (const candidate of candidates) {
+      lastScanned = Math.max(lastScanned, candidate.msgNum);
+
+      if (!candidate.deleted && !candidate.isPrivate) newPublic++;
+
+      if (isNewMailFor(candidate, confMailName, includeAllInScan)) {
+        messages.push({
+          msgNum: candidate.msgNum,
+          isPrivate: candidate.isPrivate,
+          from: candidate.fromName,
+          subject: candidate.subject,
+        });
+      }
+    }
   } catch (error) {
-console.error(`Error counting messages in conf ${conferenceId} msgbase ${messageBaseId}:`, error);
+console.error(`[scanConferenceForNewMail] conf ${conferenceId} msgBase ${messageBaseId}:`, error);
   }
 
-  return { newPublic, newPrivate, lastScanned, mailStatHigh };
+  return {
+    messages,
+    newPublic,
+    // BY CONSTRUCTION, not by remembering to test the same field twice.
+    newPrivate: messages.filter(m => m.isPrivate).length,
+    lastScanned,
+    mailStatHigh,
+  };
 }
 
 /**
@@ -508,12 +505,13 @@ export async function performSingleConfMailScan(socket: any, session: any, conf:
   const confName = _conferences.find((c: any) => c.id === conf)?.name || `Conf ${conf}`;
   const bbsDataPath = config.get('dataDir');
 
-  // express.e:11706 — getMessagesForConfScan / countNewMessages now derive
-  // confMailName per-conference internally from the user object, so REALNAME
-  // / INTERNETNAME conferences pick up the right toName for the filter.
-  const scanMsgs = await getMessagesForConfScan(user.id, conf, msgBaseId, user, bbsDataPath);
-
-  const { newPublic, newPrivate, lastScanned } = await countNewMessages(user.id, conf, msgBaseId, user);
+  // ONE walk. express.e:11651-11735 searchNewMail sets mailFlag and prints
+  // the row inside the same IF that matches, so the number and the list are
+  // the same thing there; two calls here were two chances to disagree, and
+  // they did. confMailName is derived per-conference inside, so REALNAME /
+  // INTERNETNAME conferences pick up the right toName for the filter.
+  const { messages: scanMsgs, newPublic, newPrivate, lastScanned } =
+    await scanConferenceForNewMail(user.id, conf, msgBaseId, user, bbsDataPath);
   session.lastScanNewPublic = (session.lastScanNewPublic || 0) + newPublic;
   session.lastScanNewPrivate = (session.lastScanNewPrivate || 0) + newPrivate;
   session.lastScanTotal = (session.lastScanTotal || 0) + newPublic + newPrivate;
@@ -734,15 +732,12 @@ console.warn('[advanceConferenceScan] no confScanState found');
       // express.e:11670: inside searchNewMail, print header per conf
       socket.emit('ansi-output', `\x1b[32mScanning Conference\x1b[33m: \x1b[0m${confName} - `);
 
-      // Get mail-scan messages (matching confMailName, eall, all).
-      // express.e:11706 uses confMailName (per-conf display name), not raw
-      // username — getMessagesForConfScan derives this internally now.
-      const scanMsgs = await getMessagesForConfScan(user.id, conf, msgBaseId, user, bbsDataPath);
-
-      // Update scan counters
-      const { newPublic, newPrivate, lastScanned } = await countNewMessages(
-        user.id, conf, msgBaseId, user
-      );
+      // ONE walk - the messages to offer and the counters to announce come
+      // from the same pass. express.e:11706 uses confMailName (the per-conf
+      // display name), not the raw username; scanConferenceForNewMail derives
+      // it internally.
+      const { messages: scanMsgs, newPublic, newPrivate, lastScanned } =
+        await scanConferenceForNewMail(user.id, conf, msgBaseId, user, bbsDataPath);
       session.lastScanNewPublic = (session.lastScanNewPublic || 0) + newPublic;
       session.lastScanNewPrivate = (session.lastScanNewPrivate || 0) + newPrivate;
       session.lastScanTotal = (session.lastScanTotal || 0) + newPublic + newPrivate;
@@ -760,8 +755,8 @@ console.warn('[advanceConferenceScan] no confScanState found');
       // Update scan pointer using the highest message number from scan results.
       // This must happen BEFORE yielding, so when the user answers N and
       // advanceConferenceScan is called again, the same messages are not found.
-      // countNewMessages may return lastScanned=0 if the headers file is empty,
-      // so we always compute it from the actual scan results.
+      // scanConferenceForNewMail may return lastScanned=0 if the headers file
+      // is empty, so we always compute it from the actual scan results.
       const scanLast = scanMsgs.reduce((max, m) => Math.max(max, m.msgNum), 0);
       if (scanLast > 0) {
         await updateScanPointer(user.id, conf, msgBaseId, scanLast);

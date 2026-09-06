@@ -22,11 +22,13 @@
  *     in a `.catch` while setting `msg.receivedAt` in memory anyway: the
  *     session looked right, the disk still said recv=0.
  *
- * (2) NOT FIXED - `countNewMessages` (message-scan.handler.ts:340-395), which
- *     produces the NUMBER the caller is told, does not look at `recv` at all,
- *     while `getMessagesForConfScan` (same file, :290) does. So the reader
- *     correctly stops offering a message that has been read while the count
- *     goes on announcing it. That is the `it.failing` below.
+ * (2) FIXED - `countNewMessages` produced the NUMBER the caller is told and
+ *     never looked at `recv`, while `getMessagesForConfScan` produced the
+ *     LIST he is given and did. The reader correctly stopped offering a
+ *     message that had been read while the count went on announcing it. Both
+ *     are one walk now, `scanConferenceForNewMail`, over one predicate,
+ *     `isNewMailFor` (express.e:11706), with newPrivate derived from the
+ *     matched list.
  *
  * (3) NOT FIXED, and not reachable from a unit test - Conf1's
  *     MsgBase/MailStats says highMsgNum=151 while its HeaderFile holds
@@ -69,6 +71,7 @@ describe('mail the sysop has read stays read', () => {
   let db: any;
   let sysop: any;
   let originalBbsRoot: string | undefined;
+  let originalDataDir: string | undefined;
   let tmpRoot: string;
 
   beforeAll(async () => {
@@ -77,11 +80,14 @@ describe('mail the sysop has read stays read', () => {
     sysop = await db.getUserByUsername('sysop');
     if (!sysop) throw new Error('sysop user missing');
     originalBbsRoot = process.env.BBS_ROOT;
+    originalDataDir = process.env.BBS_DATA_DIR;
   });
 
   afterEach(() => {
     jest.resetModules();
     process.env.BBS_ROOT = originalBbsRoot;
+    if (originalDataDir === undefined) delete process.env.BBS_DATA_DIR;
+    else process.env.BBS_DATA_DIR = originalDataDir;
     jest.restoreAllMocks();
     if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
   });
@@ -89,7 +95,14 @@ describe('mail the sysop has read stays read', () => {
   /** A one-conference board: mail for the sysop, beside a poisoned record. */
   function setUpBoard() {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'amix-mail-read-'));
+    // BOTH roots. messageIndexManager resolves its HeaderFile from BBS_ROOT,
+    // and `config.get('dataDir')` - which messageFileExists uses to look for
+    // the body file - reads BBS_DATA_DIR and otherwise defaults to the REPO
+    // ROOT. Set only BBS_ROOT and the scan reads headers from the temp board
+    // while testing for bodies in the developer's own Conf1/MsgBase, so the
+    // suite passes or fails on which files that machine happens to have.
     process.env.BBS_ROOT = tmpRoot;
+    process.env.BBS_DATA_DIR = tmpRoot;
     jest.resetModules();
 
     const tooltypes = require('../src/utils/conference-tooltypes.util');
@@ -180,12 +193,13 @@ describe('mail the sysop has read stays read', () => {
   });
 
   /**
-   * Defect (2). `countNewMessages` never consults `recv`, so the caller is
-   * still told he has one new private message with nothing behind it. Marked
-   * `failing` rather than deleted: it turns red the day it is fixed, and
-   * whoever fixes it flips this line.
+   * Was defect (2), fixed: `countNewMessages` never consulted `recv`, so the
+   * caller was still told he had one new private message with nothing behind
+   * it. There is one walk and one predicate now - `isNewMailFor` - and
+   * `newPrivate` is `messages.filter(isPrivate).length`, so the number and
+   * the list cannot disagree by construction.
    */
-  test.failing('and the login stops saying there is one', async () => {
+  test('and the login stops saying there is one', async () => {
     const { performConferenceScan, markMessageReceived } = setUpBoard();
 
     await login(performConferenceScan);
