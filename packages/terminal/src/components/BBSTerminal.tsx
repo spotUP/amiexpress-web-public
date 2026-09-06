@@ -1546,8 +1546,19 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // door-specific UI. The backend never emits door:unload-client, so the
     // authoritative "door ended" signal is game-mode=false (client-door-bridge
     // emits it from endSession).
-    const setActiveClientDoor = (doorId: string | null) => {
+    const setActiveClientDoor = (doorId: string | null, reason: string) => {
       if (activeClientDoorId.current === doorId) return;
+      // Which door the page thinks is running decides which on-screen controls
+      // it shows, and losing it mid-door drops the player back to the generic
+      // BBS keyboard with no way to swipe ("i cant swipe in gmaster on the
+      // select mode dialog and it shows the normal osd keyboard"). The only
+      // "door ended" signal this client has is game-mode going false, which a
+      // door ALSO does when it puts a menu up - so when this goes wrong, the
+      // reason is the thing worth knowing.
+      console.log(
+        `[BBSTerminal] active door ${activeClientDoorId.current ?? 'none'}`
+        + ` -> ${doorId ?? 'none'} (${reason})`,
+      );
       activeClientDoorId.current = doorId;
       onDoorChangeRef.current?.(doorId);
     };
@@ -1644,7 +1655,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
       // CRITICAL: Reset game mode on new connection to prevent stuck input state
       gameMode.current = false;
-      setActiveClientDoor(null);
+      setActiveClientDoor(null, 'socket connected');
       keyState.current = {};
       // Clear key repeat timers
       Object.keys(keyRepeatTimers.current).forEach(key => {
@@ -2616,7 +2627,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         window.dispatchEvent(new CustomEvent('bbs:door-unload', {
           detail: { doorId: activeClientDoorId.current },
         }));
-        setActiveClientDoor(null);
+        setActiveClientDoor(null, 'game mode off');
       }
       // Clear key states and repeat timers when switching modes
       keyState.current = {};
@@ -2673,7 +2684,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       const doorName = data.manifest?.name || data.doorId;
       writeTerm(`\r\n\x1b[36mLoading ${doorName}...\x1b[0m\r\n`);
       doorActive.current = true;
-      setActiveClientDoor(data.doorId);
+      setActiveClientDoor(data.doorId, 'door:load-client');
       doorReadyMap.current[data.sessionId] = false;
       if (!doorMessageBuffer.current[data.sessionId]) {
         doorMessageBuffer.current[data.sessionId] = [];
@@ -2716,7 +2727,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         console.error(`[ClientDoor] Failed to load bundle:`, error);
         writeTerm('\r\n\x1b[31mError loading door bundle\x1b[0m\r\n');
         doorActive.current = false;
-        setActiveClientDoor(null);
+        setActiveClientDoor(null, 'client bundle failed to load');
         // A door that failed to load must not leave the pointer captured.
         capturePointer.current = false;
         applyPointerCapture(false);
@@ -2758,7 +2769,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         delete (window as any).__BBS__;
       }
       doorActive.current = false;
-      setActiveClientDoor(null);
+      setActiveClientDoor(null, 'door session ended');
       // Give the pointer back. A game declares capturePointer and hides the
       // cursor; if it unloads without game mode being switched off first,
       // the hidden cursor outlived it and every later door inherited it -

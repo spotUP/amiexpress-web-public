@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback, type CSSProperties } from 're
 import { BBSTerminal, type BBSTerminalRef, type TerminalMouseEventType } from '@amiexpress/terminal';
 import { MobileBBSKeyboard } from '../components/mobile/MobileBBSKeyboard';
 import { visibleHeight, visibleTop } from '../components/mobile/terminal-fit';
+import { refusePageZoom } from '../components/mobile/page-zoom';
 import { MobileGameControls } from '../components/mobile/MobileGameControls';
 import { MobileGameGestures } from '../components/mobile/MobileGameGestures';
 import {
@@ -466,6 +467,9 @@ export function TerminalPage(): JSX.Element {
   // A door that never declares a mode gets the game scheme, and every door
   // starts fresh rather than inheriting the last one's menu state.
   useEffect(() => { setInputMode('game'); }, [activeDoorId]);
+
+  // The page does not zoom; the terminal does. See page-zoom.ts.
+  useEffect(() => refusePageZoom(document), []);
 
   const chooseScheme = useCallback((scheme: TouchScheme) => {
     writeTouchScheme(window.localStorage, scheme);
