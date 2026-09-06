@@ -140,6 +140,22 @@ static const char *drawn(ui_list *list)
     return frame;
 }
 
+/**
+ * The same, onto a screen whose cells cannot carry a background - a C64.
+ *
+ * The widget asks for the same colours either way; ui_ansi decides how to
+ * paint them (ui_ansi.h, cell_backgrounds).
+ */
+static const char *drawn_without_backgrounds(ui_list *list)
+{
+    static ansi_buf b;
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ansi_set_cell_backgrounds(&b, 0);
+    ui_list_draw(list, &b);
+    frame[b.len] = '\0';
+    return frame;
+}
+
 static void it_draws_the_rows_that_are_visible(void)
 {
     ui_list list = a_list(50, 10);
@@ -225,10 +241,9 @@ static void a_screen_without_backgrounds_marks_the_row_in_reverse(void)
     ui_list list = a_list(50, 10);
     const char *out;
 
-    list.cell_backgrounds = 0;
     list.selected_bg = ANSI_BLUE;
     ui_list_select(&list, 0);
-    out = drawn(&list);
+    out = drawn_without_backgrounds(&list);
 
     /* SGR 7 on, and it is turned off again before the door draws anything
        else - a frame that leaves reverse latched paints the rest of the
@@ -241,6 +256,51 @@ static void a_screen_without_backgrounds_marks_the_row_in_reverse(void)
 }
 
 /**
+ * The bar is painted in the BAR's colour, not the ink's.
+ *
+ * Reverse video swaps pen and ground, so the pen IS the bar. Five of the
+ * seven themes carry a black selection ink - the colour meant to sit ON a
+ * bright bar - and painting the bar in it put black on a black screen: the
+ * sysop saw no highlight at all on 2026-09-06, except under phosphor-muted,
+ * the one theme whose selection ink is not black.
+ */
+static void the_reversed_bar_takes_the_selection_background(void)
+{
+    ui_list list = a_list(50, 10);
+    const char *out;
+
+    list.selected_bg = ANSI_MAGENTA;   /* the bar */
+    list.selected_fg = ANSI_BLACK;     /* the ink that sits on it */
+    ui_list_select(&list, 0);
+    out = drawn_without_backgrounds(&list);
+
+    /* 30 + 5: magenta as a FOREGROUND, which reverse turns into the bar. */
+    assert(strstr(out, "35m") != 0);
+    /* And never the ink as the pen, which is the black-on-black case. */
+    assert(strstr(out, ";30m") == 0);
+    printf("  [OK] the reversed bar takes the selection background\n");
+}
+
+/**
+ * phosphor-muted is the exception and it has to keep working: its selection
+ * BACKGROUND is black and its ink is green, so there the ink is the half
+ * that can be seen.
+ */
+static void a_black_selection_background_falls_back_to_the_ink(void)
+{
+    ui_list list = a_list(50, 10);
+    const char *out;
+
+    list.selected_bg = ANSI_BLACK;
+    list.selected_fg = ANSI_GREEN;
+    ui_list_select(&list, 0);
+    out = drawn_without_backgrounds(&list);
+
+    assert(strstr(out, "32m") != 0);   /* green pen */
+    printf("  [OK] a black selection background falls back to the ink\n");
+}
+
+/**
  * The 80-column tier is untouched: it keeps the filled bar it always had,
  * and never emits reverse video.
  */
@@ -249,7 +309,6 @@ static void a_screen_with_backgrounds_keeps_the_filled_bar(void)
     ui_list list = a_list(50, 10);
     const char *out;
 
-    list.cell_backgrounds = 1;
     list.selected_bg = ANSI_BLUE;
     ui_list_select(&list, 0);
     out = drawn(&list);
@@ -281,6 +340,8 @@ int main(void)
     the_thumb_moves_with_the_window();
     the_selected_row_is_a_filled_bar();
     a_screen_without_backgrounds_marks_the_row_in_reverse();
+    the_reversed_bar_takes_the_selection_background();
+    a_black_selection_background_falls_back_to_the_ink();
     a_screen_with_backgrounds_keeps_the_filled_bar();
     the_profile_says_which_screens_have_backgrounds();
     printf("ui_list: all passed\n");

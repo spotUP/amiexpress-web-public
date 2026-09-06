@@ -131,9 +131,6 @@ int main(int argc, char **argv)
     list.context = &wide;
     list.label = " THEMES ";
     list.borders = screen.profile.borders;
-    /* A C64 has no per-cell background, so the selected row is marked with
-       reverse video there instead of a coloured bar (ui_list.h). */
-    list.cell_backgrounds = screen.profile.cell_backgrounds;
     /* The primary colour carries the chrome, the same rule the TypeScript
        doors follow since 2026-09-03. */
     list.chrome = theme->accent;

@@ -26,7 +26,6 @@ void ui_list_init(ui_list *list)
     list->ink = ANSI_WHITE;
     list->selected_fg = ANSI_WHITE;
     list->selected_bg = ANSI_BLUE;
-    list->cell_backgrounds = 1;
     list->borders = 1;
 }
 
@@ -143,22 +142,15 @@ void ui_list_draw(ui_list *list, ansi_buf *b)
         /* The selected row is a filled bar, not just coloured text: a
            highlight that stops at the end of the word leaves the eye
            hunting for where the selection is. */
-        if (chosen && list->cell_backgrounds) {
+        if (chosen) {
+            /* Ink on a bar. On a screen whose cells cannot carry a
+               background, ansi_color turns this into reverse video in the
+               bar's colour - the widget does not need to know which kind of
+               screen it is on (ui_ansi.h, cell_backgrounds). */
             ansi_fill(b, screen_row, inner_left, inner_width,
                       list->selected_fg, list->selected_bg);
             ansi_color(b, list->selected_fg, list->selected_bg, 1);
-        } else if (chosen) {
-            /* No per-cell background here, so the bar is drawn the way a C64
-               draws one: reverse video in the selection's own ink. The fill
-               still runs - it is what makes the highlight reach the end of
-               the row rather than stopping at the end of the word - but with
-               no background asked for, because asking is what gets dropped. */
-            ansi_reverse(b, 1);
-            ansi_color(b, list->selected_fg, -1, 1);
-            ansi_fill(b, screen_row, inner_left, inner_width,
-                      list->selected_fg, -1);
         } else {
-            ansi_reverse(b, 0);
             ansi_color(b, list->ink, ANSI_BLACK, 0);
         }
 
@@ -174,6 +166,5 @@ void ui_list_draw(ui_list *list, ansi_buf *b)
         }
     }
 
-    ansi_reverse(b, 0);
     ansi_color(b, list->ink, ANSI_BLACK, 0);
 }

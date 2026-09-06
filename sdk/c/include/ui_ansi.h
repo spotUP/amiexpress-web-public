@@ -69,6 +69,21 @@ typedef struct {
     int last_bold;
     /** Reverse video as last emitted; -1 after a reset, so it re-emits. */
     int last_reverse;
+    /**
+     * A cell on this terminal may carry its own background colour.
+     *
+     * 1 for an ANSI terminal, 0 for a C64: the VIC-II has one screen
+     * background and per-cell background is dropped on the way out
+     * (sdk/petscii/ansi-to-petscii.ts). Where it is 0, ansi_color() paints
+     * "ink on a coloured bar" as REVERSE VIDEO in the bar's colour, which
+     * is the same picture by the only means a C64 has.
+     *
+     * It lives here, on the writer, rather than in each widget: a bar, a
+     * status line, a box label and a selected row all have the same
+     * problem, and one of them remembering to handle it is how five of the
+     * seven themes ended up drawing a black bar on a black screen.
+     */
+    int cell_backgrounds;
 } ansi_buf;
 
 /* Binds a buffer to caller storage and empties it. */
@@ -94,6 +109,10 @@ void ansi_color(ansi_buf *b, int fg, int bg, int bold);
 /* Restores the terminal's default attributes. Always emit this before
  * handing control back to the BBS. */
 void ansi_reset(ansi_buf *b);
+
+/* Say whether this terminal's cells can carry a background (see the field).
+ * Call once, after ansi_begin, from whatever knows the screen. */
+void ansi_set_cell_backgrounds(ansi_buf *b, int can);
 
 /* Reverse video on or off (SGR 7 / 27).
  *

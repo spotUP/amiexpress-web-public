@@ -7,6 +7,7 @@
  */
 
 #include "ui_screen.h"
+#include "ui_ansi.h"
 #include "aedoor.h"
 
 #include <string.h>
@@ -54,6 +55,9 @@ void ui_screen_measure(ui_screen *sc)
     /* The tier follows the size, always - a door that asked once at startup
        and then widened would draw an 80-column layout into 40 cells. */
     sc->profile = ui_profile_for(sc->cols);
+    /* And the writer is told what this screen can paint, so every bar,
+       status line and selected row gets it without asking. */
+    ansi_set_cell_backgrounds(&sc->buf, sc->profile.cell_backgrounds);
 }
 
 void ui_screen_flush(ui_screen *sc)

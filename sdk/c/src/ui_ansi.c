@@ -69,6 +69,9 @@ void ansi_begin(ansi_buf *b, char *storage, long capacity)
        KNOWN to be off. Leaving it unknown put a redundant ESC[27m at the
        head of every 80-column frame. */
     b->last_reverse = 0;
+    /* An ANSI terminal until something says otherwise, which is what every
+       existing caller has always been. */
+    b->cell_backgrounds = 1;
 }
 
 void ansi_flush(ansi_buf *b, ansi_sink_fn sink, void *context)
@@ -117,6 +120,9 @@ void ansi_goto(ansi_buf *b, int row, int col)
 
 void ansi_color(ansi_buf *b, int fg, int bg, int bold)
 {
+    int pen = fg;
+    int want_reverse = 0;
+
     /* Already showing exactly this? Then the sequence is bytes for
      * nothing - and on this door bytes are milliseconds, because every
      * 198 of them is an XIM message costing about 45ms of 68K emulation. */
@@ -127,28 +133,51 @@ void ansi_color(ansi_buf *b, int fg, int bg, int bold)
     b->last_bg = bg;
     b->last_bold = bold ? 1 : 0;
 
+    /* INK ON A BAR, WHERE THERE ARE NO BACKGROUNDS.
+     *
+     * A C64 cell cannot carry one, so a caller asking for dark ink on a
+     * bright bar would get the ink and nothing else - black on black under
+     * five of the seven themes. Reverse video in the BAR's colour is the
+     * same picture: the cell is painted in the pen and the glyph shows
+     * through in the screen's background.
+     *
+     * A background OF the screen colour is not a bar at all, so it asks for
+     * no reverse and the ink is the pen, exactly as before. */
+    if (!b->cell_backgrounds) {
+        if (bg > ANSI_BLACK) {
+            pen = bg;
+            want_reverse = 1;
+        }
+    }
+
+    if (b->last_reverse != want_reverse) {
+        b->last_reverse = want_reverse;
+        put_str(b, want_reverse ? "\033[7m" : "\033[27m");
+    }
+
     put_str(b, "\033[");
     put_int(b, bold ? 1 : 0);
     /* The leading 0 is SGR 0, and SGR 0 resets EVERY attribute - reverse
        video with them. So a colour written while the buffer is in reverse
        has to put it back in the same sequence, or the reverse lasts exactly
-       until the next colour change.
-       That is not theory: ui_list turned reverse on for a selected row, and
-       ansi_fill's own ansi_color(fg, bg, 0) two calls later wrote ESC[0;37m
-       and cancelled it. On an 80-column terminal nobody saw it, because the
-       highlight there is a background. On a C64 the background is dropped
-       and reverse was all there was, so the sysop saw no highlighted row at
-       all (2026-09-06). */
+       until the next colour change. */
     if (!bold && b->last_reverse == 1) {
         put_str(b, ";7");
     }
     put_char(b, ';');
-    put_int(b, 30 + fg);
-    if (bg >= 0) {
+    put_int(b, 30 + pen);
+    /* Only where a cell can hold one. Asking on a C64 is what gets dropped. */
+    if (bg >= 0 && b->cell_backgrounds) {
         put_char(b, ';');
         put_int(b, 40 + bg);
     }
     put_char(b, 'm');
+}
+
+void ansi_set_cell_backgrounds(ansi_buf *b, int can)
+{
+    if (!b) return;
+    b->cell_backgrounds = can ? 1 : 0;
 }
 
 void ansi_reverse(ansi_buf *b, int on)
