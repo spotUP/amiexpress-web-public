@@ -10,6 +10,29 @@ export function getToken(): string | null {
   return _token;
 }
 
+export function clearToken(): void {
+  _token = null;
+}
+
+// Every page in this TUI calls request() directly with no shared session
+// concept above it (dev/console had `login()` and nothing else auth-related
+// - no me(), no logout(), no 401 handling anywhere:
+// web-vs-tui-admin-gap-audit.md, Depth Gap 12). Before this, an expired
+// token surfaced as a raw "HTTP 401: ..." on whatever page happened to be
+// open, and the only way back to the login screen was killing the process.
+//
+// One place recognises 401 instead of every page inventing its own: set via
+// useAuth's effect (index.tsx renders LoginPrompt whenever useAuth's token
+// is null), so a 401 from ANY call, on ANY page, drops the whole console
+// back to the login screen with an explanatory message - not a stack of
+// per-page error banners the sysop has to notice and interpret themselves.
+type UnauthorizedHandler = () => void;
+let _onUnauthorized: UnauthorizedHandler | null = null;
+
+export function setUnauthorizedHandler(fn: UnauthorizedHandler | null): void {
+  _onUnauthorized = fn;
+}
+
 // A non-responding backend must not freeze a caller forever: password reset
 // and user creation both have a form with no way out while their submit
 // promise is pending, and this is what makes it eventually settle even if
@@ -38,6 +61,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (!res.ok) {
+    if (res.status === 401) {
+      // Clear FIRST, then notify: the handler (useAuth) re-renders straight
+      // to LoginPrompt, and a stale in-memory token must not survive that
+      // swap only to be reused by whatever the sysop types in next.
+      clearToken();
+      _onUnauthorized?.();
+    }
     const text = await res.text().catch(() => res.statusText);
     // These are read under time pressure - `HTTP 400: {"success":false,
     // "message":"..."}` buries the one line that matters inside JSON the

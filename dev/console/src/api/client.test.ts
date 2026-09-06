@@ -22,6 +22,10 @@ import {
   updateUser,
   deleteDoor,
   reserveNode,
+  setToken,
+  getToken,
+  setUnauthorizedHandler,
+  getUsers,
   getAdminPermissions,
   setAdminPermissions,
   createConference,
@@ -402,6 +406,39 @@ test('deleteFileCheckerError DELETEs the flat /file-checker-errors/:id route, no
 
   assert.equal(calls[0].url, `${BASE_URL}/api/config/file-checker-errors/3`);
   assert.equal(calls[0].method, 'DELETE');
+});
+
+test('a 401 clears the stored token and fires the registered unauthorized handler', async () => {
+  setToken('stale-token');
+  stubFetch({ success: false, message: 'jwt expired' }, false, 401);
+
+  let handlerCalls = 0;
+  setUnauthorizedHandler(() => { handlerCalls++; });
+  try {
+    await assert.rejects(() => getUsers(), (err: Error) => {
+      assert.equal(err.message, 'HTTP 401: jwt expired');
+      return true;
+    });
+    assert.equal(handlerCalls, 1);
+    assert.equal(getToken(), null);
+  } finally {
+    setUnauthorizedHandler(null);
+  }
+});
+
+test('a non-401 error does not fire the unauthorized handler', async () => {
+  setToken('still-good');
+  stubFetch({ success: false, message: 'nope' }, false, 400);
+
+  let handlerCalls = 0;
+  setUnauthorizedHandler(() => { handlerCalls++; });
+  try {
+    await assert.rejects(() => getUsers());
+    assert.equal(handlerCalls, 0);
+    assert.equal(getToken(), 'still-good');
+  } finally {
+    setUnauthorizedHandler(null);
+  }
 });
 
 // The incident this whole page exists to fix: the OLD Security page wrote
