@@ -627,7 +627,15 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
       expect(c64AdapterFor(socket)).toBeNull();
       expect(socket.emit).toBe(originalEmit);
       // The door that ran is the one the .info points at.
-      expect(fs.existsSync(path.join(root, ...location.split('/')))).toBe(true);
+      //
+      // Through amigafs, because the two spellings of the same door are both
+      // real: the manifest records `Doors/RTW/rtw` (the file on this disk)
+      // and WHO.info says `DOORS:RTW/RTW`, which is what registerFromDisk
+      // wrote under the temp root. One file on a Mac, two names on Linux -
+      // and the board itself resolves either, which is the behaviour worth
+      // asserting.
+      const amigafs = require('../../src/utils/amigafs');
+      expect(amigafs.resolvePath(path.join(root, ...location.split('/')))).not.toBeNull();
     },
   );
 
