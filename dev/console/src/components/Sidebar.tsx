@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import { useMouse, useHover, type MouseEvent } from '../hooks/useMouse.js';
 import { CATEGORIES, CATEGORY_COLLAPSED, PAGES, type CategoryName, type PageMeta } from '../pages/registry.js';
 import { T, CURRENT_THEME, BORDER_STYLE } from '../theme/blessed-theme.js';
+import { isTextEntryActive } from '../state/text-entry-lock.js';
 
 export const SIDEBAR_WIDTH = 22;
 const SIDEBAR_FIRST_ROW = 4;
@@ -105,7 +106,13 @@ export function Sidebar({ activePageId, onSelect, focus }: Props) {
   onSelectRef.current = onSelect;
 
   useInput((input, key) => {
-    if (!focus) return;
+    // isTextEntryActive: while the active page owns the keyboard for a form
+    // or free-text field, up/down (and the digit-driven category jump below)
+    // must not also move the sidebar's selection - that swaps the mounted
+    // page out from under the form and discards whatever was typed. See
+    // dev/console/src/state/text-entry-lock.ts. Mouse clicks still work as
+    // an escape hatch (separate useMouse handler, unaffected by this).
+    if (!focus || isTextEntryActive()) return;
     const idx = orderRef.current.indexOf(activePageRef.current);
     if (key.upArrow && idx > 0) onSelectRef.current(orderRef.current[idx - 1]!);
     if (key.downArrow && idx >= 0 && idx < orderRef.current.length - 1) onSelectRef.current(orderRef.current[idx + 1]!);

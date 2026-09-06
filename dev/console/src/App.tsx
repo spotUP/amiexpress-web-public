@@ -39,6 +39,7 @@ import { ScreenFilesPage } from './components/tabs/ScreenFilesPage.js';
 import { DEFAULT_PAGE } from './pages/registry.js';
 import { getNodes } from './api/client.js';
 import { T, CURRENT_THEME } from './theme/blessed-theme.js';
+import { isTextEntryActive } from './state/text-entry-lock.js';
 
 interface Props {
   username: string;
@@ -110,8 +111,18 @@ export function App({ username }: Props) {
   }, [stdin]);
 
   useInput((input, key) => {
+    // Ctrl-Q always exits, lock or no lock: a page that fails to release
+    // isTextEntryActive (a bug elsewhere) must never turn into a console
+    // that cannot be quit at all.
+    if (input === 'q' && key.ctrl) { exit(); return; }
     // Block other global hotkeys while a modal is open so the modal owns input.
     if (showRestart || showHelp) return;
+    // While a page owns the keyboard for free text or a form (password
+    // reset, user creation, a security-flag toggle list, a delete
+    // confirmation...), plain 'q' and '?' must reach the page instead of
+    // quitting the console or swapping in the help overlay out from under
+    // it. See dev/console/src/state/text-entry-lock.ts.
+    if (isTextEntryActive()) return;
     if (input === 'q' && !key.ctrl) exit();
     if (input === '?') setShowHelp(s => !s);
     // Tab cycles sidebar/content/footer — skip when content is focused
