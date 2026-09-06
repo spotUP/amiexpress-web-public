@@ -60,6 +60,19 @@ interface Pin {
  * characters, never lose them (`what` keeps its byte count, `kd_confstats`
  * keeps `AmiExpress-Web` instead of `Ami>`). The other 16 hashes are untouched.
  *
+ * FOUR were re-measured for the LAST change of 2026-09-06, `narrowRow` shrinking
+ * DECORATION before CONTENT: `color_wall`, `super_stats`, `rtw` and `gwall`.
+ * Measured the same way and it is the sharpest measurement of the set, because
+ * this change moves NO row to a different rule at all - every frame of all 28
+ * fixtures chooses exactly what it chose before - it only changes WHICH column
+ * inside a narrowed row gives up its cells. So the rule census says nothing and
+ * these hashes are the evidence. Sixteen rows render differently and every one
+ * of them gains: `color_wall` keeps `cOLORWALL v1.3` where it read `cOLO>`,
+ * `super_stats` keeps `[D-zign by Recall/-U!]` where it read
+ * `[D-zign by Recal>`, nine `rtw` rows keep more of their menu labels, and
+ * `gwall`'s footer keeps more of its credits. `rtw` grows 1301 bytes because
+ * its logo rows now carry more glyphs, not fewer. The other 24 are untouched.
+ *
  * THREE more with the `prose` rung, last on 2026-09-06: `kd_confstats`, `what`
  * and `ulist`. Measured the same way; exactly three fixtures have a row that
  * changes rule, each of them a SINGLE-column box row `narrow` was cutting off -
@@ -89,12 +102,12 @@ const PINS: Record<string, Pin> = {
   aehelp: { renders: 21, bytes: 11883, sha256: 'af1abce9f143fff0ac3f81bab2f8ace2e3185fa24c2a417bf5c1b2ff3204d659' },
   six_status: { renders: 23, bytes: 18434, sha256: 'ea04de48389e1bd1f2975bcc2bf7d0153b458f765c8e4f3811cd5774a593896e' },
   kd_confstats: { renders: 29, bytes: 24370, sha256: '5d8b1a4fc896e45b965eeea390e1adf1f7c8c67b61294e0fc846148a9ae8d930' },
-  color_wall: { renders: 30, bytes: 9794, sha256: '5b27f9935589cdb32a342773deeea015bc24028ca9d02e9d3fc689277982322c' },
+  color_wall: { renders: 30, bytes: 9786, sha256: '4195cfcc3c36fcd345696af0f021d283381a047db502d7f0980932ac65bd5b28' },
   who: { renders: 6, bytes: 906, sha256: '49802e5fc0cae0a1723e418fa4197b82665e23e1bb2e16875b54580837d90cc8' },
   ratiorep: { renders: 10, bytes: 2910, sha256: '53db616b0045b7afdfe5ecb247ccfd64663b1ca600c54548d49c524c498a0cc8' },
-  super_stats: { renders: 21, bytes: 10337, sha256: 'b3368ae37580cbbeafa51b64b6d8f2685c13a295aaaed3afc4e2c56c4a71915e' },
+  super_stats: { renders: 21, bytes: 10385, sha256: '0b3788be627f7a435680d9decfd434011b8367b2dbb5e7d7f687cbd04660ebd6' },
   hststat: { renders: 12, bytes: 2484, sha256: '0746281e3871a50468228989d86b0ca69dbea5b7c3c9faaa90bb9d4a60485b2c' },
-  rtw: { renders: 69, bytes: 142674, sha256: '39f110f486baab98efc7d167259390520dcd730f4fbe5a7f26b645d61014071c' },
+  rtw: { renders: 69, bytes: 143975, sha256: '3cb53e6eeaf2ebca2ddfa1150cce30bee1e0b7235a3e4cba6aa577b8af629ed9' },
   ustats: { renders: 217, bytes: 289249, sha256: 'b949a6d27a116714e7f0d9de40d025f0fbe7df10a701629cea416d45a23df28a' },
   what: { renders: 13, bytes: 3736, sha256: '845215cdb700a0de47901f4dacbd3985a286432f9f3e007a8fa04b7940e54237' },
   b: { renders: 17, bytes: 10269, sha256: '1914422b391657000fde0ad5e71e69d37b7d89704c92e2b88d73834d26ff5eeb' },
@@ -109,7 +122,7 @@ const PINS: Record<string, Pin> = {
   dtagwall: { renders: 26, bytes: 6112, sha256: 'cf637615bc8d5935c8a9a56a3a9e1251c1c164bc20c836c105589f6265183a34' },
   avhbc: { renders: 6, bytes: 373, sha256: 'f83aad48906dfa640bfe4372866394b973c5ce94bab6cec9d7815865423ea0c6' },
   // First measurement of a new input, frozen from here on under the rule above.
-  gwall: { renders: 22, bytes: 9861, sha256: 'ae048300a9c9ca568e8ede698bee2da27b0b28797ff3524370953332829132bc' },
+  gwall: { renders: 22, bytes: 9832, sha256: '7d1f1cb1d7c6f8e96f1054a620d5b887864695afe77a66ee89f6e75a3039c5b4' },
   hackcheck: { renders: 12, bytes: 1624, sha256: 'aa25e1dfa09db75b8b854410bc0e0831f89741e4c777805ac0f64e264cdecc3a' },
   ctop: { renders: 25, bytes: 8983, sha256: 'bbadac75ff602ada72dc70f0469afbeafb521a88dcb64620372ad4b67b784223' },
   conftop: { renders: 22, bytes: 9137, sha256: 'a87497003d9779c8031cf2fb4bbb609bd83cae277e64bac5805f37713f2ba171' },

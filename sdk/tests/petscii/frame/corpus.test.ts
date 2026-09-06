@@ -23,6 +23,12 @@ import { PetsciiMachine } from '../../../petscii/petscii-machine';
 
 const COLS = 40;
 const ROWS = 25;
+/**
+ * `narrowRow`'s floor, restated rather than imported: it is deliberately not
+ * exported from adapt.ts, and a test that reads a constant out of the module it
+ * is checking asserts nothing about it. One character of content plus the mark.
+ */
+const MIN_COLUMN = 2;
 
 const DIR = path.join(__dirname, 'fixtures');
 
@@ -149,18 +155,24 @@ function cursorFromRules(f: Frame): Cursor {
  * that matches is not always the one the rule kept; the shortest that still
  * lets every later column line up is the true parse.
  */
-function narrowKeepsColumns(parts: string[], out: string): boolean {
+function narrowParse(parts: string[], out: string): boolean[] | null {
+  const cut: boolean[] = new Array(parts.length).fill(false);
   const walk = (i: number, s: string): boolean => {
     if (i === parts.length) return s.length === 0;
     const p = parts[i];
     const after = (rest: string) => (i === parts.length - 1 ? walk(i + 1, rest) : rest.startsWith(' ') && walk(i + 1, rest.slice(1)));
+    cut[i] = false;
     if (s.startsWith(p) && after(s.slice(p.length))) return true;
     for (let k = Math.min(p.length - 1, s.length - 1); k >= 1; k--) {
-      if (s.slice(0, k) === p.slice(0, k) && s[k] === '>' && after(s.slice(k + 1))) return true;
+      if (s.slice(0, k) === p.slice(0, k) && s[k] === '>' && after(s.slice(k + 1))) { cut[i] = true; return true; }
     }
     return false;
   };
-  return walk(0, out);
+  return walk(0, out) ? cut : null;
+}
+
+function narrowKeepsColumns(parts: string[], out: string): boolean {
+  return narrowParse(parts, out) !== null;
 }
 
 /**
@@ -335,6 +347,28 @@ for (const [id, entry] of Object.entries(manifest)) {
             expect({ ...where, columns: parts.length > 0 }).toEqual({ ...where, columns: true });
             expect({ ...where, kept: narrowKeepsColumns(parts, text(joined).trimEnd()) })
               .toEqual({ ...where, kept: true });
+            // DECORATION FIRST (2026-09-06): no column carrying an
+            // alphanumeric gives up a cell while a column carrying none can
+            // still pay. `WarOLM` pads an absent node's cells with
+            // `=================` and the widest-first order spent that width
+            // on `No Node Present` instead, putting the mark inside a value.
+            //
+            // Read off the PARSE, not off a substring search: `gwall`'s footer
+            // has a `- ---` column and the string `- ---` also occurs inside
+            // `---- ---[oR>`, so `includes` called an untouched column spent.
+            // `narrowParse` says which columns actually carry the mark.
+            //
+            // The property: if any column carrying an alphanumeric was
+            // shortened, then no column carrying none was left with width to
+            // give - they are all down to the two cells a narrowed column
+            // cannot go below.
+            const alnum = (t: string) => /[A-Za-z0-9]/.test(t);
+            const cut = narrowParse(parts, text(joined).trimEnd()) as boolean[];
+            const contentCut = parts.filter((p, i) => cut[i] && alnum(p));
+            if (contentCut.length > 0) {
+              const unspent = parts.filter((p, i) => !alnum(p) && !cut[i] && p.length > MIN_COLUMN);
+              expect({ ...where, contentCut, unspent }).toEqual({ ...where, contentCut, unspent: [] });
+            }
           } else {
             // reflow: no character lost or reordered, whatever the wrap did
             // with the whitespace it broke on.

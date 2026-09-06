@@ -354,10 +354,41 @@ export function deindentRow(cells: Row, cols: number): RuleResult {
  * characters, which is the trade a 40-column screen exists to make.
  *
  * The columns come from `columnSpans`; the outer border parts are already
- * dropped there. Each gutter between two columns becomes ONE space, then the
- * WIDEST column is shrunk one cell at a time until the row fits - widest
- * first, so a two-character node number survives whole while a 40-character
- * description gives up its tail. A shortened column ends in TRUNCATION_MARK.
+ * dropped there. Each gutter between two columns becomes ONE space, then
+ * columns are shrunk one cell at a time until the row fits. A shortened column
+ * ends in TRUNCATION_MARK.
+ *
+ * WHICH column gives up a cell is decided in TWO PASSES, DECORATION FIRST
+ * (2026-09-06). A column with no alphanumeric in it is a placeholder or a rule
+ * - `WarOLM`'s node table pads its empty USER and LOCATION cells with
+ * `=================` - and characters taken off one of those cost the reader
+ * nothing, while the same characters taken off the column beside it cost a
+ * fact. Every such column is taken down to MIN_COLUMN before any column with
+ * content gives up a single cell; within each pass the widest goes first, so a
+ * two-character node number still survives whole while a 40-character
+ * description gives up its tail.
+ *
+ * The row that forced it, from a harness capture of the door:
+ *
+ *   | 00 | ================= | ======================= | No Node Present  |
+ *   widest-first:    00 ==========> ===========> No Node Pre>
+ *   decoration-first: 00 =========> =========> No Node Present
+ *
+ * `No Node Present` is the ACTION field of a node row. `NO NODE PRE>` is the
+ * mark landing inside a value, which is the one thing the ladder is not allowed
+ * to do.
+ *
+ * A column WITH content can never lose more this way than it did before, and
+ * that is arithmetic rather than a measurement: the number of cells the row has
+ * to give up is fixed, this order spends every cell the decoration columns can
+ * spare before touching a content column, so a content column absorbs
+ * `max(0, needed - decorationCapacity)` - the minimum any order could leave it.
+ * Sixteen rows in the corpus move and every one of them gains: `color_wall`
+ * keeps `cOLORWALL v1.3` instead of `cOLO>`, `super_stats` keeps
+ * `[D-zign by Recall/-U!]` instead of `[D-zign by Recal>`, and nine `rtw` rows
+ * keep more of their menu labels. corpus.test.ts asserts the ordering directly:
+ * no row shortens a column with content while a column without content is still
+ * above MIN_COLUMN.
  *
  * DECLINES (returns null) when there is no column structure, or when the
  * shrink would take a column below MIN_COLUMN cells: the caller then falls
@@ -370,11 +401,21 @@ export function narrowRow(cells: Row, cols: number): RuleResult | null {
   if (spans.length === 0) return null;
 
   const widths = spans.map(([a, b]) => b - a);
+  // DECORATION FIRST: a column with no alphanumeric in it is a placeholder or a
+  // rule, and characters taken off one cost the reader nothing.
+  const decoration = spans.map((span) => !hasAlnum(cells, span));
   let total = widths.reduce((n, w) => n + w, 0) + (widths.length - 1);
   while (total > cols) {
-    let widest = 0;
-    for (let i = 1; i < widths.length; i++) if (widths[i] > widths[widest]) widest = i;
-    if (widths[widest] <= MIN_COLUMN) return null;
+    let widest = -1;
+    for (const wantDecoration of [true, false]) {
+      for (let i = 0; i < widths.length; i++) {
+        if (decoration[i] !== wantDecoration) continue;
+        if (widths[i] <= MIN_COLUMN) continue;
+        if (widest < 0 || widths[i] > widths[widest]) widest = i;
+      }
+      if (widest >= 0) break;
+    }
+    if (widest < 0) return null;
     widths[widest]--;
     total--;
   }

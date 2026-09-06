@@ -572,6 +572,57 @@ describe('adaptRows / adaptFrame', () => {
  * the ladder. All three would otherwise satisfy "one gutter, a field past
  * column 40".
  */
+describe('narrow shrinks decoration before content', () => {
+  it('a node that is not there says so, instead of saying NO NODE PRE>', () => {
+    // WarOLM's node table, its own bytes: the USER and LOCATION cells of an
+    // absent node are padded with '=' runs, and those two runs are the widest
+    // columns in the row. Shrinking the WIDEST column first spread the loss
+    // evenly and the caller read `00 ==========> ===========> No Node Pre>` -
+    // the truncation mark inside a value. The '=' runs are decoration and can
+    // afford it; the ACTION field cannot.
+    const node = row('    | 00 | ================= | ======================= | No Node Present  |');
+    expect(chooseRule(node, 40)).toBe('narrow');
+    expect(str(applyRule('narrow', node, 40).rows[0]))
+      .toBe('00 =========> =========> No Node Present');
+  });
+
+  it('a door keeps its own name when the border beside it can pay instead', () => {
+    // color_wall's masthead: four '_'/'|' runs around the title.
+    const masthead = row('|__|_____|_____|__| cOLORWALL v1.3 (w) bY sHADOW mAN/aFL `94 |__|_____|_____|__|');
+    const out = str(applyRule('narrow', masthead, 40).rows[0]);
+    expect(out).toContain('cOLORWALL v1.3');
+    // ...which the widest-first order could not do: it reached `cOLO>`.
+    expect(out).not.toContain('cOLO>');
+  });
+
+  it('no column with content is shortened while a column without content can still pay', () => {
+    // The ordering itself, stated as the property the rung guarantees. A
+    // content column may only be marked once every decoration column is down to
+    // MIN_COLUMN (or was already at or below it).
+    // Split on a space would not do: `No Node Present` has spaces of its own.
+    // The property is stated on the columns instead - every column that carries
+    // an alphanumeric survives WHOLE, and the truncation marks are all on
+    // columns that carry none.
+    const node = row('    | 00 | ================= | ======================= | No Node Present  |');
+    const parts = columnParts(node).map((p) => p.map((c) => c.ch).join('').trim());
+    const out = str(applyRule('narrow', node, 40).rows[0]);
+    const alnum = (t: string) => /[A-Za-z0-9]/.test(t);
+
+    for (const part of parts.filter(alnum)) expect(out).toContain(part);
+    // ...and the row DID have to give up cells, so the decoration paid for all
+    // of it: as many marks as there are decoration columns.
+    expect((out.match(new RegExp(`\\${TRUNCATION_MARK}`, 'g')) ?? []).length)
+      .toBe(parts.filter((p) => !alnum(p)).length);
+  });
+
+  it('a table of content columns is unaffected: there is no decoration to spend', () => {
+    // `who`'s header - every column carries letters, so both passes see the
+    // same set and the order is the old widest-first one.
+    const header = row('  ND#/Calls    User/PhoneNumber                Location/Action');
+    expect(str(applyRule('narrow', header, 40).rows[0])).toBe('ND#/Calls User/PhoneNum> Location/Action');
+  });
+});
+
 describe('record', () => {
   /** dRE!WAll: message at column 0, author in a 17-column field at column 61. */
   const wall = (message: string, author: string) =>
