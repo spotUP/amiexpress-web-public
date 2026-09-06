@@ -75,6 +75,24 @@ export function resolveScreenPath(relativePath: string): string | null {
   return real;
 }
 
+/**
+ * A backslash has no legitimate use in a screen relative path on this board
+ * (Amiga/POSIX paths here use `/`) - but `containedScreenPath`'s
+ * `path.resolve` treats it as an ordinary character, not a separator, so
+ * `..\..\..\..\proc\self\environ` resolves to a harmless-looking path
+ * INSIDE the board root (a single, weird filename component) and passes
+ * containment - while screen-revisions.ts's `revDirFor` collapses BOTH `/`
+ * and `\` to `_`, so that same string sanitises to the IDENTICAL revision
+ * directory the forward-slash traversal variant would have used. One
+ * request string bypasses containment; the other (correctly rejected by
+ * containedScreenPath) is the one that actually wrote there. Rejecting any
+ * backslash outright, before containedScreenPath ever runs, closes that
+ * gap for the three revision routes below.
+ */
+function hasBackslash(s: string): boolean {
+  return s.includes('\\');
+}
+
 /** The envelope every admin page unwraps - `success`, `data`, `message`. */
 function sendOk<T>(res: Response, data: T, message?: string): void {
   res.json({
@@ -326,11 +344,21 @@ screensRouter.put('/file', (req: Request, res: Response) => {
   // Snapshot whatever is there NOW, before it is overwritten. This is the
   // only call site: screen-revisions.ts's own writer (saveRevision) existed
   // with nothing calling it, so every earlier "revision" was recorded
-  // nowhere and GET /revisions always answered empty. Best-effort per target
-  // - a missing target has nothing to snapshot, which saveRevision already
-  // treats as a no-op.
+  // nowhere and GET /revisions always answered empty.
+  //
+  // MUST go through resolveScreenPath first, never a raw `target` string:
+  // a `targets` entry naming `../../../../proc/self/environ` used to reach
+  // saveRevision's own bare `path.resolve(baseDir, relPath)` directly,
+  // walking straight out of the board root — an arbitrary file read gated
+  // by nothing but this route's normal level-100 auth. resolveScreenPath
+  // does the same double containment check (before AND after the Amiga
+  // case-insensitive lookup) every OTHER read in this file already relies
+  // on; a target that fails it has nothing safe to snapshot, matching
+  // saveRevision's own pre-existing no-op for "nothing there yet".
   for (const target of targets) {
-    try { saveRevision(target); } catch { /* best effort, matches saveRevision's own resilience */ }
+    const resolved = resolveScreenPath(target);
+    if (!resolved) continue;
+    try { saveRevision(path.relative(config.get('dataDir'), resolved)); } catch { /* best effort */ }
   }
 
   try {
@@ -510,7 +538,7 @@ screensRouter.delete('/file', (req: Request, res: Response) => {
  */
 screensRouter.get('/revisions', (req: Request, res: Response) => {
   const rel = String(req.query.path || '');
-  if (!containedScreenPath(rel)) {
+  if (hasBackslash(rel) || !containedScreenPath(rel)) {
     return res.status(400).json({ success: false, error: 'Path outside the board root' });
   }
   return sendOk(res, { revisions: listRevisions(rel) });
@@ -525,7 +553,7 @@ screensRouter.get('/revisions', (req: Request, res: Response) => {
 screensRouter.get('/revision', (req: Request, res: Response) => {
   const rel = String(req.query.path || '');
   const file = String(req.query.file || '');
-  if (!containedScreenPath(rel)) {
+  if (hasBackslash(rel) || hasBackslash(file) || !containedScreenPath(rel)) {
     return res.status(400).json({ success: false, error: 'Path outside the board root' });
   }
   const buf = readRevision(rel, file);
@@ -544,7 +572,7 @@ screensRouter.get('/revision', (req: Request, res: Response) => {
 screensRouter.post('/restore', (req: Request, res: Response) => {
   const rel = String(req.body?.path || '');
   const file = String(req.body?.file || '');
-  if (!containedScreenPath(rel)) {
+  if (hasBackslash(rel) || hasBackslash(file) || !containedScreenPath(rel)) {
     return res.status(400).json({ success: false, error: 'Path outside the board root' });
   }
   const ok = restoreRevision(rel, file);

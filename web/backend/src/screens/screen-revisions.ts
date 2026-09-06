@@ -2,12 +2,25 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { config } from '../config';
+import * as amigafs from '../utils/amigafs';
 
 const MAX_REVISIONS_PER_FILE = 10;
 const REVISIONS_DIR = 'Screens/.Revisions';
 
 function revisionsRoot(): string {
   return path.resolve(path.join(config.get('dataDir'), REVISIONS_DIR));
+}
+
+/**
+ * True if `full` is `root` itself or a genuine descendant of it — never a
+ * sibling that merely shares `root` as a string prefix (`/data/bbs-evil`
+ * looks like it "starts with" `/data/bbs` if you don't check for the
+ * trailing separator). Both callers below used to skip this check entirely
+ * (saveRevision) or get it wrong the same way containedScreenPath elsewhere
+ * in this codebase already guards against (restoreRevision).
+ */
+function isContained(full: string, root: string): boolean {
+  return full === root || full.startsWith(root + path.sep);
 }
 
 /** Relative path of a screen file → its revisions directory. */
@@ -24,40 +37,88 @@ export interface RevisionMeta {
   file: string;
   /** Byte size of the original. */
   bytes: number;
-  /** SHA256 of the original — for dedup. */
+  /**
+   * The short (12 hex char) hash already embedded in the filename — NOT a
+   * fresh full SHA256 of the file's bytes. Every list/prune pass used to
+   * re-read and re-hash every revision's full content synchronously, on the
+   * request thread, for every single screen save (dedup check, then again
+   * for pruning) — this is the identity the filename already encodes, at
+   * the cost of a readdir + regex instead of N full file reads.
+   */
   sha256: string;
   /** Relative path of the original screen file. */
   source: string;
 }
 
+const REVISION_FILENAME_RE = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z_([0-9a-f]+)\.bin$/;
+
+/**
+ * Parse `<ts>_<shortHash>.bin` back into its parts without touching the
+ * file's content. The encoding side is `new Date().toISOString().replace(
+ * /[:.]/g, '-')` (saveRevision below) — every `:` AND the millisecond `.`
+ * collapse to `-`, so decoding needs the FIXED positions the ISO format
+ * guarantees, not a positional index into the whole string. The previous
+ * version indexed the wrong character (its `i === 10` branch could never
+ * fire — position 10 is `T`, not a match the surrounding `/-/g` replace
+ * ever visits) and turned the seconds/milliseconds separator into a second
+ * colon instead of a period, producing "...56:789Z" — not a valid ISO
+ * string `new Date()` can parse, so every row fell back to the raw
+ * filename instead of a readable timestamp.
+ */
+function parseRevisionFilename(file: string): { ts: string; shortHash: string } | null {
+  const m = REVISION_FILENAME_RE.exec(file);
+  if (!m) return null;
+  const [, date, hh, mm, ss, ms, shortHash] = m;
+  return { ts: `${date}T${hh}:${mm}:${ss}.${ms}Z`, shortHash };
+}
+
 /**
  * Snapshot a screen file before it is overwritten.
  *
- * Called from the PUT handler BEFORE the write happens. Stores the current
- * content in `Screens/.Revisions/<safe-name>/<ts>_<short-hash>.bin` and
- * prunes to MAX_REVISIONS_PER_FILE.
+ * Called from the PUT handler BEFORE the write happens, with the RESOLVED
+ * relative path (from resolveScreenPath, via path.relative) — never a raw
+ * request string. This function used to do nothing but `path.resolve(
+ * baseDir, relPath)` with no containment check at all: a PUT body naming
+ * `../../../../proc/self/environ` as a target walked straight out of the
+ * board root, read the process's environment (JWT secret, DB credentials,
+ * anything the container can open), and snapshotted it into this board's
+ * own revisions directory — a live, unauthenticated-beyond-level-100
+ * arbitrary file read. `isContained` here is independent, defense-in-depth
+ * on top of the caller's own guard: a future call site that forgets to
+ * pre-validate must not reopen this hole.
  */
 export function saveRevision(relPath: string): void {
   const baseDir = config.get('dataDir');
-  const full = path.resolve(baseDir, relPath);
-  if (!fs.existsSync(full)) return;
+  const root = path.resolve(baseDir);
+  const joined = path.resolve(baseDir, relPath);
+  if (!isContained(joined, root)) return;
 
-  const buf = fs.readFileSync(full);
+  // Case-insensitive resolution, matching every other read in
+  // screens-routes.ts (resolveScreenPath) — a bare fs.existsSync(joined)
+  // silently no-ops on a Linux container when the request's casing doesn't
+  // match the file's real casing, so a snapshot that "worked" on a
+  // developer's Mac quietly never happened in production.
+  const real = amigafs.resolvePath(joined);
+  if (!real || !isContained(real, root) || !fs.existsSync(real)) return;
+
+  const buf = fs.readFileSync(real);
   const sha256 = crypto.createHash('sha256').update(buf).digest('hex');
-  const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const shortHash = sha256.slice(0, 12);
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const revFile = `${ts}_${shortHash}.bin`;
   const revDir = revDirFor(relPath);
 
-  fs.mkdirSync(revDir, { recursive: true });
-
-  // Don't store a revision identical to the latest one
+  // Don't store a revision identical to the latest one — compared by the
+  // short hash already in that revision's filename, no read required.
   const existing = listRevisions(relPath);
-  if (existing.length > 0 && existing[0].sha256 === sha256) return;
+  if (existing.length > 0 && existing[0].sha256 === shortHash) return;
 
+  fs.mkdirSync(revDir, { recursive: true });
   fs.writeFileSync(path.join(revDir, revFile), buf);
 
-  // Prune oldest
+  // Prune oldest — a second listRevisions() call is necessary (the
+  // directory changed under the first one), but it's now a readdir + stat
+  // + filename parse, not N full reads and N fresh SHA256s.
   const all = listRevisions(relPath);
   for (let i = MAX_REVISIONS_PER_FILE; i < all.length; i++) {
     try { fs.unlinkSync(path.join(revDir, all[i].file)); } catch { /* best effort */ }
@@ -65,7 +126,8 @@ export function saveRevision(relPath: string): void {
 }
 
 /**
- * List all revisions for a screen file, newest first.
+ * List all revisions for a screen file, newest first. Reads directory
+ * entries and stats them — never the file content (see RevisionMeta.sha256).
  */
 export function listRevisions(relPath: string): RevisionMeta[] {
   const revDir = revDirFor(relPath);
@@ -76,18 +138,15 @@ export function listRevisions(relPath: string): RevisionMeta[] {
       .reverse();
 
     return files.map(file => {
-      const fullPath = path.join(revDir, file);
+      const parsed = parseRevisionFilename(file);
+      if (!parsed) return null;
       try {
-        const buf = fs.readFileSync(fullPath);
-        const stat = fs.statSync(fullPath);
-        // Parse ts prefix: "2026-09-04T22-30-00-000Z_abcd1234.bin"
-        const ts = file.replace(/_\w+\.bin$/, '').replace(/-/g, (m, i) =>
-          i === 10 ? 'T' : i === 13 || i === 16 || i === 19 ? ':' : m);
+        const stat = fs.statSync(path.join(revDir, file));
         return {
-          ts: ts,
+          ts: parsed.ts,
           file,
-          bytes: buf.length,
-          sha256: crypto.createHash('sha256').update(buf).digest('hex'),
+          bytes: stat.size,
+          sha256: parsed.shortHash,
           source: relPath,
         };
       } catch {
@@ -100,12 +159,19 @@ export function listRevisions(relPath: string): RevisionMeta[] {
 }
 
 /**
- * Read a specific revision's content.
+ * Read a specific revision's content by filename.
+ *
+ * `file` is caller-supplied (the GET /api/screens/revision route passes
+ * req.query.file straight through) — `full === revDir` can never legitimately
+ * happen (a revision is always a FILE under revDir, not revDir itself), and
+ * the previous `full.startsWith(revDir)` check had the same sibling-prefix
+ * hole `isContained` fixes elsewhere in this file, on top of never
+ * rejecting a `file` value containing its own `../` traversal.
  */
 export function readRevision(relPath: string, file: string): Buffer | null {
   const revDir = revDirFor(relPath);
-  const full = path.join(revDir, file);
-  if (!full.startsWith(revDir)) return null; // guard traversal
+  const full = path.resolve(revDir, file);
+  if (!isContained(full, revDir)) return null;
   try {
     return fs.readFileSync(full);
   } catch {
@@ -122,12 +188,23 @@ export function restoreRevision(relPath: string, file: string): boolean {
   if (!buf) return false;
 
   const baseDir = config.get('dataDir');
-  const full = path.resolve(baseDir, relPath);
-  if (!full.startsWith(path.resolve(baseDir))) return false;
+  const root = path.resolve(baseDir);
+  const joined = path.resolve(baseDir, relPath);
+  if (!isContained(joined, root)) return false;
 
-  // Snapshot the current file before overwriting
+  // Resolve to the file's REAL on-disk path/casing before writing back — a
+  // differently-cased restore request must overwrite the same file
+  // everything else in this module treats as canonical, not create a
+  // second, wrongly-cased duplicate beside it (the exact class of bug
+  // screens-routes.ts's own top-of-file doc comment names). Falls back to
+  // the joined path when nothing exists yet (the original screen was
+  // deleted) — restoring should still be able to recreate it.
+  const real = amigafs.resolvePath(joined) ?? joined;
+  if (!isContained(real, root)) return false;
+
+  // Snapshot the current file before overwriting, if there is one.
   saveRevision(relPath);
 
-  fs.writeFileSync(full, buf);
+  fs.writeFileSync(real, buf);
   return true;
 }
