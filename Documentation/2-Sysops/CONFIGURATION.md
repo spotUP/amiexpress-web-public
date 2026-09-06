@@ -228,6 +228,31 @@ board's own disk stops being the ceiling on how many files you keep online.
 `Drives.info` builds no S3 client, opens no cache directory, and behaves
 exactly as it always has. Nothing below matters until you add one.
 
+### Two behaviour changes that apply even on a LOCAL-ONLY board
+
+Building this feature touched two spots in the plain, no-bucket upload path
+that every board runs through, whether or not `Drives.info` names a single
+`s3://` volume. Neither needs `DRIVE.n` configured to take effect:
+
+- **The duplicate-file check now runs BEFORE the physical move, not after.**
+  express.e checks for a duplicate and, when it finds one, files the
+  incoming upload into HOLD instead of the area - this board used to run
+  that check *after* moving the file into the area, which is harmless on
+  local disk (a rename either way) but would have been actively wrong for a
+  pooled area (see below). The practical effect for every board: a duplicate
+  upload now goes to HOLD before it ever touches the destination directory,
+  rather than briefly overwriting the existing file and then being moved out
+  again.
+- **The upload floor now measures `Node<N>/Playpen`, not the area's
+  `ULPATH`.** `rz` writes into the node's playpen, never into the area
+  directory directly, so that is what express.e's `rFreeSpace()` was always
+  checking; the two happened to be the same filesystem on a board with no
+  pool, which is what made the distinction invisible until pooling could
+  make `ULPATH` a bucket with no local free-space concept at all. If your
+  `ULPATH` is a separate, more space-constrained filesystem from your node's
+  playpen, the printed "at one time" figure and the refusal threshold now
+  reflect the playpen's room, not the area directory's.
+
 ### `Drives.info` — the `DRIVE.n` sub-keys
 
 `DRIVE.n` keeps its express.e meaning (`express.e:17400-17424`): drive `n`,
@@ -425,6 +450,55 @@ a *cache*, not a backup, and evicts files it can re-fetch under disk
 pressure by design. If a file area matters enough to keep, back up the
 bucket the way you'd back up anything else you can't afford to lose.
 
+### Deleting a file from a pooled area
+
+`FM`'s `D` (delete) on a file in a pooled area removes the object from the
+bucket itself, not only the local `DIR` listing line. That is the behaviour
+you would assume, but it is worth spelling out because it was NOT always
+true: for a time, deleting a pooled file only removed the `DIR` entry - the
+bucket object stayed, still downloadable through both the `D` command and
+either HTTP download route, and still counted against the drive's quota,
+with nothing on the admin page or in the log to say so. If you deleted a
+pooled file on an older build of this feature and are unsure whether the
+bytes are still sitting in your bucket, check the drive's contents listing
+on the Drive Setup page (or your provider's own console) rather than
+assuming the delete reached the object.
+
+**A drive with `DRIVE.n.RETENTION` set is a special case worth knowing
+about.** Some providers implement object-lock or lifecycle-based retention
+by keeping deleted bytes recoverable (or simply refusing to purge them) for
+the configured period, independent of anything this board does - `DELETE`
+succeeds from the board's point of view, the file disappears from every
+listing here, and the provider may still be holding the bytes under its own
+policy. The board has no way to know which providers actually enforce that
+for your bucket, so a delete from a `RETENTION`-bound drive prints a warning
+saying so; if you need bytes gone permanently and immediately, that is a
+setting on the provider's side, not something this board's delete command
+controls.
+
+### Quarantined ("parked") files
+
+A staged upload whose bytes no longer match what its own pending record
+expected - the shape a power loss mid-write leaves behind - is never
+guessed at. Rather than risk replaying truncated bytes over a good object in
+the bucket, the board moves the file to `Storage/cache/<node-id>/.parked/`
+and logs that it did so, naming the file. A parked file:
+
+- does **not** count against `BBS_STORAGE_CACHE_MAX_BYTES` (it does not sit
+  in the eviction namespace at all, so it also cannot be silently reclaimed
+  by the cache running low on room);
+- is **not** uploaded, retried, or otherwise acted on automatically; and
+- has **no promotion path** back into the pool. The board does not guess
+  which key, if any, a parked file was meant to become - that decision
+  stays a person's to make.
+
+Drive Setup's pool status page lists every parked file with its size and
+path. Recovering one is manual: look at the bytes at the listed path,
+decide whether they are worth keeping, and either re-upload them through
+the normal path (as a fresh upload into the area) if they are, or discard
+them from the same page if they are not. There is no third option - a
+parked file is not "fixed" by anything the board does on its own.
+
 ### Cache directory and sizing
 
 Downloaded objects are cached locally under `Storage/cache/<node-id>/` so a
@@ -437,9 +511,12 @@ settings, both optional:
   to stay under this budget; it will never evict a file that is still
   staged for upload, so a sustained ENOSPC-class outage can leave the cache
   over budget rather than lose an unwritten file — this is logged, not
-  silent. Drive Setup's pool status also shows a plain count of staged
-  uploads still owed to the pool right now, so a stuck batch is visible on
-  the page, not only in the log.
+  silent. Eviction runs automatically as traffic moves through the cache -
+  after a download lands and after an upload is confirmed - rather than on
+  a fixed timer, so it keeps pace with real use without paying for a full
+  directory walk on every single request. Drive Setup's pool status also
+  shows a plain count of staged uploads still owed to the pool right now,
+  so a stuck batch is visible on the page, not only in the log.
 - `BBS_STORAGE_NODE_ID` — identifies this process if you ever run more than
   one backend against the same board root (a container orchestrator
   restarting the board on a new host, or a deliberate second instance). Set
