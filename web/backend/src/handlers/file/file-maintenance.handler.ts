@@ -334,7 +334,7 @@ console.log('[FM] Starting file maintenance');
         continue;
       }
 
-      const dirContent = fs.readFileSync(dirFilePath, 'utf-8');
+      const dirContent = fs.readFileSync(dirFilePath, 'latin1');
       const dirLines = dirContent.split(/\r?\n/);
       const entries = parseDirFile(dirContent);
 
@@ -550,6 +550,34 @@ console.log('[FM] Starting file maintenance');
     await this.afterAction(socket, session, nextPos);
   }
 
+  /**
+   * DIR files hold Amiga text: high-bit bytes carrying ANSI art, not UTF-8.
+   * Reading one as 'utf-8' turns every such byte into U+FFFD and writing it
+   * back makes that permanent - a single FM delete destroyed 42 bytes of art
+   * belonging to OTHER entries in Conf2/Dir1 on 2026-09-06. 'latin1' is a
+   * byte-preserving round trip: every byte maps to the code point of the same
+   * value and back again unchanged.
+   */
+  private static readDirFile(dirFilePath: string): string[] {
+    return fs.readFileSync(dirFilePath, 'latin1').split(/\r?\n/);
+  }
+
+  /**
+   * Rewrite a DIR file, keeping a copy of what was there.
+   *
+   * The listing is the board's only record of a file - it is not in the
+   * database and the DIR files are gitignored, so a bad rewrite is
+   * unrecoverable. The .bak is what makes it recoverable.
+   */
+  private static writeDirFile(dirFilePath: string, lines: string[]): void {
+    try {
+      fs.copyFileSync(dirFilePath, `${dirFilePath}.bak`);
+    } catch (error) {
+      console.error('[FM] Could not back up the directory listing:', error);
+    }
+    fs.writeFileSync(dirFilePath, lines.join('\r\n'), 'latin1');
+  }
+
   private static async performDelete(
     socket: any,
     session: BBSSession,
@@ -566,14 +594,20 @@ console.log('[FM] Starting file maintenance');
       return;
     }
 
-    const lines = fs.readFileSync(dirFilePath, 'utf-8').split(/\r?\n/);
+    const lines = this.readDirFile(dirFilePath);
     const start = currentFile.lineNumber ?? 0;
     const end = start + (currentFile.rawLines?.length || 1);
     const updated = [...lines.slice(0, start), ...lines.slice(end)];
 
-    fs.writeFileSync(dirFilePath, updated.join('\r\n'), 'utf-8');
+    this.writeDirFile(dirFilePath, updated);
 
-    await this.deletePhysicalFile(session, currentFile.filename, ctx.dirNum);
+    let physicalError: string | null = null;
+    try {
+      await this.deletePhysicalFile(session, currentFile.filename, ctx.dirNum);
+    } catch (error) {
+      physicalError = error instanceof Error ? error.message : String(error);
+      console.error('[FM] Physical delete failed:', error);
+    }
 
     // Database sync - optional, not required for BBS operation
     // Doors read from DIR files on disk, not from database
@@ -581,6 +615,18 @@ console.log('[FM] Starting file maintenance');
 
     if (_callersLog) {
       _callersLog(session.user?.id || null, session.user?.username || 'unknown', 'Deleted file', currentFile.filename, session.nodeId || 1);
+    }
+
+    if (physicalError) {
+      // The listing entry is gone but the file is not. Saying "complete" here
+      // is how a sysop loses a listing and keeps the bytes without knowing.
+      socket.emit('ansi-output', AnsiUtil.errorLine(
+        `Removed from the listing, but the file could not be deleted: ${physicalError}`
+      ));
+      socket.emit('ansi-output', AnsiUtil.errorLine(
+        `The previous listing is saved as ${path.basename(dirFilePath)}.bak`
+      ));
+      return;
     }
 
     socket.emit('ansi-output', AnsiUtil.successLine('Delete operation complete'));
@@ -604,21 +650,21 @@ console.log('[FM] Starting file maintenance');
     const destMeta = this.getDirMeta(conferencePath, destDir, ctx.maxDirs);
     const destPath = destMeta.path;
 
-    const srcLines = fs.readFileSync(dirFilePath, 'utf-8').split(/\r?\n/);
+    const srcLines = this.readDirFile(dirFilePath);
     const start = currentFile.lineNumber ?? 0;
     const end = start + (currentFile.rawLines?.length || 1);
     const entryLines = srcLines.slice(start, end);
     const remaining = [...srcLines.slice(0, start), ...srcLines.slice(end)];
 
-    fs.writeFileSync(dirFilePath, remaining.join('\r\n'), 'utf-8');
+    this.writeDirFile(dirFilePath, remaining);
 
     const destLines = fs.existsSync(destPath)
-      ? fs.readFileSync(destPath, 'utf-8').split(/\r?\n/)
+      ? this.readDirFile(destPath)
       : [];
 
     const merged = destLines.concat(entryLines);
     fs.mkdirSync(path.dirname(destPath), { recursive: true });
-    fs.writeFileSync(destPath, merged.join('\r\n'), 'utf-8');
+    this.writeDirFile(destPath, merged);
 
     await this.movePhysicalFile(session, currentFile.filename, ctx.dirNum, destDir);
 
@@ -693,25 +739,28 @@ console.log('[FM] Starting file maintenance');
     return list;
   }
 
-  private static async getConfiguredPaths(keys: Array<'DLPATH' | 'ULPATH'>): Promise<string[]> {
-    if (!_db?.query) return [];
-    const results: string[] = [];
-
-    for (const key of keys) {
-      try {
-        // Use parameterized query to prevent SQL injection
-        const rows = await _db.query(`SELECT value FROM system_config WHERE key LIKE ? || '.%'`, [key]);
-        for (const row of rows.rows || []) {
-          if (row.value) {
-            results.push(row.value);
-          }
-        }
-      } catch (error) {
-console.error(`[FM] Failed to read ${key} paths:`, error);
-      }
-    }
-
-    return results;
+  /**
+   * Extra file paths a sysop has configured, beyond the conference's own
+   * directories.
+   *
+   * There are none to read today, and that is deliberate. This used to run
+   *
+   *     SELECT value FROM system_config WHERE key LIKE ? || '.%'
+   *
+   * against a table that is a SINGLE ROW OF NAMED COLUMNS - no `key`, no
+   * `value`. It threw "no such column: value" on every board on every call,
+   * was swallowed by the catch, and returned an empty list anyway. On
+   * 2026-09-06 that silence let a delete strip an entry out of Conf2/Dir1
+   * while never locating the file, and still report success.
+   *
+   * Returning empty HONESTLY is the same answer without the lie. DLPATH and
+   * ULPATH in AmiExpress live in the conference's own `.info` tooltypes, not
+   * in `system_config`; wiring them up means reading them through the
+   * conference path helpers (`utils/file-hold.util.ts#getConferenceDir` and
+   * `services/conferences/conference-paths.ts`), never by guessing a column.
+   */
+  private static async getConfiguredPaths(_keys: Array<'DLPATH' | 'ULPATH'>): Promise<string[]> {
+    return [];
   }
 
   private static async getUploadBase(confNum: number): Promise<string | null> {
