@@ -30,8 +30,9 @@ import * as fsp from 'fs/promises';
 import { getConferenceDir } from '../../utils/file-hold.util';
 import { getStorageContext } from '../../storage/storage-context';
 import { usableAreasFor } from '../../storage/usable-areas';
-import { putUploadIntoPool } from '../../storage/remote-upload';
+import { putUploadIntoPool, uploadObjectKey } from '../../storage/remote-upload';
 import { storageFailureText } from '../../storage/remote-download';
+import { objectPrefixFor } from '../../storage/remote-areas';
 
 import type { BBSSession } from '../../index';
 
@@ -605,9 +606,13 @@ console.log('[FM] Starting file maintenance');
 
     this.writeDirFile(dirFilePath, updated);
 
+    // Both halves matter: the pooled delete can return a RETENTION warning,
+    // and it can throw - in which case the listing entry is already gone and
+    // the sysop must be told rather than congratulated.
     let physicalError: string | null = null;
+    let retentionWarning: string | null = null;
     try {
-      await this.deletePhysicalFile(session, currentFile.filename, ctx.dirNum);
+      retentionWarning = await this.deletePhysicalFile(session, currentFile.filename, ctx.dirNum);
     } catch (error) {
       physicalError = error instanceof Error ? error.message : String(error);
       console.error('[FM] Physical delete failed:', error);
@@ -634,6 +639,9 @@ console.log('[FM] Starting file maintenance');
     }
 
     socket.emit('ansi-output', AnsiUtil.successLine('Delete operation complete'));
+    if (retentionWarning) {
+      socket.emit('ansi-output', AnsiUtil.warningLine(retentionWarning));
+    }
   }
 
   private static async performMove(
@@ -697,19 +705,86 @@ console.log('[FM] Starting file maintenance');
     socket.emit('ansi-output', AnsiUtil.successLine(`Move operation successful to directory ${destDir}`));
   }
 
-  private static async deletePhysicalFile(session: BBSSession, filename: string, dirNum?: number) {
+  /**
+   * Deletes the bytes behind a DIR entry - local disk, or the pool object
+   * when the area is pooled.
+   *
+   * Before this, a pooled area's DELETE only unlinked LOCAL candidates
+   * (HOLD/LCFILES/DIRn/DLPATH/ULPATH - see `buildFileCandidates`), none of
+   * which exist for a file whose bytes live in a bucket. The DIR line went;
+   * the object did not - it still resolved, still served through `D` and
+   * both HTTP download routes, and still consumed quota. `forget` drops it
+   * from the pool's own name index (so `D`/listings stop finding it without
+   * waiting on a re-list) and `backend.delete` removes the object itself;
+   * any local cache copy is dropped too so a stale hit does not go on
+   * serving it until the next eviction sweep happens to reclaim it.
+   *
+   * Returns a warning to show the sysop when this drive is RETENTION-bound:
+   * `DeleteObject` on a bucket with object-lock/versioning or a lifecycle
+   * retention policy can leave the bytes recoverable (or simply retained)
+   * for the configured period despite this call succeeding - this codebase
+   * has no way to know which providers enforce that, so it says so rather
+   * than implying the delete is unconditionally final everywhere.
+   */
+  private static async deletePhysicalFile(
+    session: BBSSession,
+    filename: string,
+    dirNum?: number
+  ): Promise<string | null> {
     const confNum = session.currentConf || 1;
     const dataDir = _config.get('dataDir');
-    const candidates = await this.buildFileCandidates(confNum, filename, dirNum);
 
+    const storage = getStorageContext();
+    const pooledArea =
+      storage && dirNum !== undefined
+        ? usableAreasFor(confNum, storage).find(area => area.dirNumber === dirNum)
+        : undefined;
+
+    if (pooledArea && storage && pooledArea.storageVolume !== undefined) {
+      const driveNumber = pooledArea.storageVolume;
+      const prefix = objectPrefixFor(pooledArea);
+      const key = uploadObjectKey(pooledArea, filename);
+      const state = storage.volumes.byNumber(driveNumber);
+
+      if (state) {
+        try {
+          await state.backend.delete(key);
+        } catch (error) {
+          console.error(
+            `[FileMaintenance] could not delete ${filename} (DRIVE.${driveNumber}:${key}) from the pool: ` +
+              `${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      }
+      storage.names.forArea(driveNumber, prefix).forget(key);
+
+      // A staged, un-uploaded copy is the only copy of something the pool
+      // does not have yet - never delete a dirty local file, budget or no
+      // budget, delete command or eviction.
+      if (!storage.cache.isDirty(driveNumber, key)) {
+        try {
+          fs.unlinkSync(storage.cache.localPathFor(driveNumber, key));
+        } catch {
+          // Not cached locally right now - nothing to remove.
+        }
+      }
+
+      return state?.volume.retentionDays !== undefined
+        ? `DRIVE.${driveNumber} has a ${state.volume.retentionDays}-day RETENTION policy - the provider may ` +
+            `keep these bytes recoverable for that long even though the delete succeeded here.`
+        : null;
+    }
+
+    const candidates = await this.buildFileCandidates(confNum, filename, dirNum);
     for (const filePath of candidates) {
       try {
         await fsp.unlink(filePath);
-        return;
+        return null;
       } catch {
         // Try next candidate
       }
     }
+    return null;
   }
 
   /**
