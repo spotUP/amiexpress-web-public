@@ -127,6 +127,8 @@ export class PanelsScreen {
   private frameBox?: ReturnType<typeof createBox>;
   /** The well's vertical edges where a full frame has no rows to spare. */
   private railBoxes: Array<ReturnType<typeof createBox>> = [];
+  /** Does the HUD draw a frame? Only where it sits beside the board. */
+  private hudFramed = false;
   private boardBox?: ReturnType<typeof createBox>;
   private hudBox?: ReturnType<typeof createBox>;
   private loop?: ReturnType<typeof setInterval>;
@@ -213,6 +215,11 @@ export class PanelsScreen {
           left: column,
           width: 1,
           height: layout.board.height,
+          // createBox draws a border BY DEFAULT, and a border on a
+          // one-column box is a tall bracket with corners - which is what a
+          // caller saw: "the playfield borders are weird". The rail IS the
+          // content.
+          border: undefined,
           tags: true,
           style: { fg: 'magenta', bg: 'black' },
           content: Array.from({ length: layout.board.height }, () => glyph).join('\n'),
@@ -267,15 +274,25 @@ export class PanelsScreen {
       this.stack.requestMouseSwap(row, col);
     });
 
+    // A HUD BESIDE THE BOARD IS A PANEL, so it gets a panel's frame.
+    //
+    // Stacked under the board it is one row and there is nothing to frame;
+    // beside it there are rows to spare and a frameless column of numbers
+    // floats: "the hud has no borders" (2026-09-06).
+    this.hudFramed = !layout.stacked
+      && layout.hud.width >= 8
+      && layout.hud.height >= 4;
+
     this.hudBox = createBox({
       parent: this.screen,
       top: layout.hud.top,
       left: layout.hud.left,
       width: layout.hud.width,
       height: layout.hud.height,
-      border: undefined,
+      border: this.hudFramed ? { type: 'line' } : undefined,
+      label: this.hudFramed ? ' STATS ' : undefined,
       tags: true,
-      style: { fg: 'white', bg: 'black' },
+      style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
     });
   }
 
@@ -291,7 +308,14 @@ export class PanelsScreen {
     const seconds = Math.floor(stack.stopWatch / 60);
     const timeText = `${Math.floor(seconds / 60)}'${String(seconds % 60).padStart(2, '0')}`;
 
-    this.hudBox.setContent(hudLines(this.layout, {
+    // Inside a frame the usable width is two less, and hudLines clips to the
+    // width it is given - so hand it the inner one or every label loses its
+    // last two characters.
+    const hudLayout = this.hudFramed
+      ? { ...this.layout, hud: { ...this.layout.hud, width: Math.max(1, this.layout.hud.width - 2) } }
+      : this.layout;
+
+    this.hudBox.setContent(hudLines(hudLayout, {
       score: stack.score,
       speed: stack.speed,
       timeText,

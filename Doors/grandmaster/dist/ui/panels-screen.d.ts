@@ -106,6 +106,8 @@ export declare class PanelsScreen {
     private frameBox?;
     /** The well's vertical edges where a full frame has no rows to spare. */
     private railBoxes;
+    /** Does the HUD draw a frame? Only where it sits beside the board. */
+    private hudFramed;
     private boardBox?;
     private hudBox?;
     private loop?;

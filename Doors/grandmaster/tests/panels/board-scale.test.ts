@@ -388,3 +388,54 @@ export async function aHeldSwapKeySwapsExactlyOnce(): Promise<void> {
   assert.strictEqual(swapsByEdge, 1, 'one press, one swap');
   assert.ok(swapsByHold > 1, 'and the held rule is what produced the flip-back');
 }
+
+/**
+ * The well's rails are RAILS, and the HUD beside it is a panel.
+ *
+ * `createBox` draws a border by default, so the one-column rail boxes each
+ * drew a whole box - a tall bracket with corners either side of the well:
+ * "the playfield borders are weird". And the HUD passed `border: undefined`
+ * from the days when it was one row under the board, so a column of numbers
+ * floated with nothing around it: "the hud has no borders" (2026-09-06).
+ */
+export async function theWellHasRailsAndTheHudHasAFrame(): Promise<void> {
+  const { Screen } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
+  const { loadSpriteSheet } = require('@amiexpress/bbs-door-sdk/engines/graphics/cell-art');
+  const { PanelsScreen } = require('../../ui/panels-screen');
+  const path = require('path');
+
+  const screen: any = new Screen({ title: 'rails', width: 40, height: 25, responsive: true });
+  const panels: any = new PanelsScreen({
+    screen,
+    stack: stackOf(),
+    sheet: loadSpriteSheet(path.join(__dirname, '..', '..', 'sprites')),
+    sounds: { playSfx() {}, playMusic() {}, stop() {}, stopMusic() {} },
+    readInput: () => ({ up: false, down: false, left: false, right: false, swap: false, raise: false }),
+    variant: 'c64',
+  });
+  panels.setupUI();
+  panels.repaint();
+
+  const rows: string[] = screen.buffer.map((row: any[]) => row.map((c: any) => c[1]).join(''));
+  const layout = panels.layout;
+
+  // A rail is a column of one glyph - no corners, no top or bottom piece.
+  for (const column of [layout.board.left - 1, layout.board.left + layout.board.width]) {
+    const drawn = new Set(
+      rows.slice(layout.board.top, layout.board.top + layout.board.height)
+        .map((row) => row[column]),
+    );
+    assert.deepStrictEqual(
+      [...drawn], ['│'],
+      `the rail at column ${column} is not a plain vertical line: ${[...drawn].join('')}`,
+    );
+  }
+
+  // And the HUD is framed, with its labels inside the frame.
+  assert.ok(panels.hudBox.border, 'the HUD beside the board has a frame');
+  const hudText = rows.slice(layout.hud.top, layout.hud.top + layout.hud.height).join('\n');
+  assert.match(hudText, /STATS/, 'and says what it is');
+  assert.match(hudText, /POINT/, 'with the labels still spelled out');
+
+  screen.destroy();
+}
