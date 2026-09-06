@@ -33,6 +33,21 @@ export interface StorageVolume {
   requestBudget?: number;
 }
 
+/**
+ * Whether two volume records name the SAME underlying drive - Task 12
+ * review (the carry-forward and rebase follow-ups): used to decide whether
+ * it is safe to carry a live counter, an uploaded-size correction, or a
+ * cached NameIndex forward across a rebuild. A drive number reused for a
+ * genuinely different bucket (a different path or endpoint) must not
+ * inherit a stranger's counters, corrections, or cached listing - it must
+ * start clean and be re-resolved against the new target.
+ */
+export function sameVolumeIdentity(a: StorageVolume, b: StorageVolume): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === 'local') return a.path === b.path;
+  return a.path === b.path && a.endpoint === b.endpoint;
+}
+
 const UNITS: Record<string, number> = { K: 1024, M: 1024 ** 2, G: 1024 ** 3, T: 1024 ** 4 };
 
 export function parseQuota(text: string): number {

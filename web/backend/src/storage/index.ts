@@ -23,9 +23,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { VolumeSet, type VolumeState } from './volume-set';
-import { parseQuota, type StorageVolume } from './volume-config';
+import { parseQuota, sameVolumeIdentity, type StorageVolume } from './volume-config';
 import type { StorageBackend } from './storage-backend';
-import { FileCache } from './file-cache';
+import { FileCache, isProcessAlive } from './file-cache';
 import { NameIndexRegistry } from './name-index-registry';
 import type { RemoteArea } from './remote-areas';
 import type { StorageContext } from './storage-context';
@@ -160,19 +160,6 @@ export async function initStorage(
 }
 
 /**
- * Whether two volume records name the SAME underlying drive, for deciding
- * whether it is safe to carry a live counter forward across a rebuild - see
- * `carryLiveState`. A drive number reused for a genuinely different bucket
- * (a different `path`/`endpoint`) must start its counters at zero, not
- * inherit a stranger's `degraded`/`requestsThisMonth`.
- */
-function sameVolumeIdentity(a: StorageVolume, b: StorageVolume): boolean {
-  if (a.kind !== b.kind) return false;
-  if (a.kind === 'local') return a.path === b.path;
-  return a.path === b.path && a.endpoint === b.endpoint;
-}
-
-/**
  * Carries live, in-process state forward across a rebuild - Task 12 review,
  * the "four more, smaller" item: every rebuild used to construct a brand new
  * `VolumeSet` (every `VolumeState` zeroed) and a brand new `NameIndexRegistry`
@@ -183,15 +170,20 @@ function sameVolumeIdentity(a: StorageVolume, b: StorageVolume): boolean {
  * meter finding 6 exists to protect.
  *
  * `next` is mutated in place (its fresh `VolumeState`s take on the previous
- * values) and its `names` registry is repointed at `next.volumes` via
- * `rebase` rather than replaced, so every cached `NameIndex` and gate
- * `previous` had survives. Only volumes whose identity is unchanged
+ * values, and `FileCache.uploadedSizes` - the overwrite-delta correction,
+ * see `exportUploadedSizes`'s own doc - is merged forward too, a re-review
+ * defect this same follow-up introduced by carrying `usedBytes` without
+ * it) and its `names` registry is repointed at `next.volumes` via `rebase`
+ * rather than replaced, so every cached `NameIndex` and gate `previous` had
+ * survives (`rebase` itself evicts anything bound to a drive whose identity
+ * changed - see its own doc). Only volumes whose identity is unchanged
  * (`sameVolumeIdentity`) inherit anything; a drive that is new, removed, or
  * points at a genuinely different bucket starts clean.
  */
 function carryLiveState(previous: StorageContext | null, next: StorageContext): StorageContext {
   if (!previous) return next;
 
+  const unchangedDrives = new Set<number>();
   for (const prevState of previous.volumes.states) {
     const nextState = next.volumes.byNumber(prevState.volume.driveNumber);
     if (!nextState || !sameVolumeIdentity(prevState.volume, nextState.volume)) continue;
@@ -199,7 +191,9 @@ function carryLiveState(previous: StorageContext | null, next: StorageContext): 
     nextState.requestsThisMonth = prevState.requestsThisMonth;
     nextState.usedBytes = prevState.usedBytes;
     nextState.egressBytesThisMonth = prevState.egressBytesThisMonth;
+    unchangedDrives.add(prevState.volume.driveNumber);
   }
+  next.cache.importUploadedSizes(previous.cache.exportUploadedSizes(unchangedDrives));
 
   previous.names.rebase(next.volumes);
   // Give the caller back the carried-forward registry rather than the
@@ -245,6 +239,39 @@ function scheduleFlush(cache: FileCache): void {
 }
 
 /**
+ * Whether the node a `Storage/cache/<name>` directory belongs to is still a
+ * LIVE peer, when that can be told at all - Task 12 re-review defect 4.
+ *
+ * A directory named as a plain integer is a `claimNodeSlot` slot - the one
+ * case this process can check directly, exactly the way `claimNodeSlot`
+ * itself does: read `Storage/nodes/<name>.pid` and ask `isProcessAlive`.
+ * The `pid-<n>` fallback name (the `MAX_SLOTS`-exhausted escape hatch)
+ * embeds the same signal directly in its own name. Neither check crosses a
+ * container boundary - a pid is only ever meaningful in the pid namespace
+ * that wrote it - which is exactly why this returns `null`, not `false`,
+ * for anything else (an explicit `BBS_STORAGE_NODE_ID`, or a container's
+ * `HOSTNAME`): there is no signal here to trust either way for those, and
+ * the sweep keeps reporting them exactly as it did before this fix, which
+ * is the documented, accepted limit of what a single container can know
+ * about a sibling's.
+ */
+function isNodeStillActive(bbsRoot: string, nodeDirName: string): boolean | null {
+  if (/^\d+$/.test(nodeDirName)) {
+    const lockPath = path.join(bbsRoot, 'Storage', 'nodes', `${nodeDirName}.pid`);
+    try {
+      const pid = Number(fs.readFileSync(lockPath, 'utf8').trim());
+      if (Number.isInteger(pid) && pid > 0) return isProcessAlive(pid);
+    } catch {
+      // No lock file, or unreadable - nothing currently holds this slot.
+    }
+    return false;
+  }
+  const pidFallback = /^pid-(\d+)$/.exec(nodeDirName);
+  if (pidFallback) return isProcessAlive(Number(pidFallback[1]));
+  return null;
+}
+
+/**
  * Task 12 review: "the invariant is no pending marker is ever left where
  * nothing will scan it, NOT the id is stable." Id stability can still slip -
  * a changed `BBS_STORAGE_NODE_ID`, a directory an older node-id scheme left
@@ -256,8 +283,23 @@ function scheduleFlush(cache: FileCache): void {
  * staged by a different node identity, and replaying them from here could
  * race whatever (if anything) still owns them - it exists purely so a sysop
  * finds out, rather than the bytes sitting there silently for ever.
+ *
+ * `activeCacheDir` is `null` when this build produced no pool at all (the
+ * last s3 drive was just removed, say) - re-review defect 4: the sweep used
+ * to run only `if (storage)`, so the very directory that WAS active a
+ * moment ago, and may still hold bytes nothing will flush now that no
+ * `FileCache` exists to do it, went unswept and unreported. With no active
+ * directory to exclude, every directory under `Storage/cache/` is a
+ * candidate.
+ *
+ * A directory whose node is confirmed STILL LIVE (`isNodeStillActive` -
+ * true) is skipped outright - re-review defect 4's other half: on a bare
+ * host running two instances, node 2 used to report node 1's perfectly
+ * normal in-flight queue as an orphan on every boot and every later admin
+ * save, training a sysop to ignore the one message that actually carries
+ * this invariant.
  */
-function sweepOrphanedCacheDirs(bbsRoot: string, activeCacheDir: string): void {
+function sweepOrphanedCacheDirs(bbsRoot: string, activeCacheDir: string | null): void {
   const cacheRoot = path.join(bbsRoot, 'Storage', 'cache');
   let entries: string[];
   try {
@@ -266,9 +308,11 @@ function sweepOrphanedCacheDirs(bbsRoot: string, activeCacheDir: string): void {
     return; // No cache root yet - nothing to sweep.
   }
 
-  const activeName = path.basename(path.resolve(activeCacheDir));
+  const activeName = activeCacheDir ? path.basename(path.resolve(activeCacheDir)) : null;
   for (const name of entries) {
-    if (name === activeName) continue;
+    if (activeName !== null && name === activeName) continue;
+    if (isNodeStillActive(bbsRoot, name) === true) continue; // a live peer's own, normal queue
+
     const dir = path.join(cacheRoot, name);
     let isDir = false;
     try {
@@ -281,9 +325,9 @@ function sweepOrphanedCacheDirs(bbsRoot: string, activeCacheDir: string): void {
     const orphaned = countPendingMarkers(path.join(dir, '.pending'));
     if (orphaned > 0) {
       console.error(
-        `[storage] ${orphaned} pending upload marker(s) sit under ${dir}, which no node identity this ` +
-          `process is using owns - they will not be replayed until a sysop investigates. This can follow ` +
-          `a changed BBS_STORAGE_NODE_ID, a directory an older node-id scheme left behind, or pid reuse.`
+        `[storage] ${orphaned} pending upload marker(s) sit under ${dir}, which no LIVE node identity ` +
+          `owns - they will not be replayed until a sysop investigates. This can follow a changed ` +
+          `BBS_STORAGE_NODE_ID, a directory an older node-id scheme left behind, or pid reuse.`
       );
     }
   }
@@ -372,8 +416,12 @@ export async function refreshStorageContext(
 
     if (storage) {
       storage = carryLiveState(previous, storage);
-      sweepOrphanedCacheDirs(bbsRoot, storage.cache.cacheDir);
     }
+    // Runs whether or not this build produced a pool - re-review defect 4:
+    // deleting the last s3 drive used to skip the sweep entirely, leaving
+    // the directory that WAS active a moment ago (and may still hold bytes
+    // nothing will flush now) unswept and unreported.
+    sweepOrphanedCacheDirs(bbsRoot, storage ? storage.cache.cacheDir : null);
 
     // A clean (non-throwing) result REPLACES the context even when it is
     // null - that is a genuine "no bucket configured any more" state (the

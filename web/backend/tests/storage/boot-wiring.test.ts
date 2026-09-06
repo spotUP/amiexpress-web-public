@@ -433,6 +433,41 @@ describe('refreshStorageContext', () => {
     expect(rebuilt.usedBytes).toBe(12345);
   });
 
+  it('review defect 1: usedBytes reflects the DELTA on an overwrite after a rebuild, not the sum', async () => {
+    // The bug this proves fixed: carryLiveState carried usedBytes forward
+    // while the new FileCache generation's uploadedSizes map started
+    // empty, so writeBack's overwrite-delta correction ("credit back the
+    // previous size before charging the new one") had nothing to credit
+    // back and charged the full new size on top of the already-counted
+    // old one.
+    const root = boardWithDrivesInfo([
+      'DRIVE.1=s3://bucket',
+      'DRIVE.1.ENDPOINT=https://s3.example.com',
+      'DRIVE.1.KEYID=k',
+    ]);
+    writeSecret(root, 1, 'sekrit');
+    const fake = new FakeBackend({ driveNumber: 1 });
+
+    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    const staged = getStorageContext()!.cache.localPathFor(1, 'Conf1/Files/DOOR.DAT');
+    fs.mkdirSync(path.dirname(staged), { recursive: true });
+    fs.writeFileSync(staged, Buffer.alloc(100, 1));
+    await getStorageContext()!.cache.writeBack(1, 'Conf1/Files/DOOR.DAT', staged);
+    expect(getStorageContext()!.volumes.byNumber(1)!.usedBytes).toBe(100);
+
+    // An admin save (a conference rename, unrelated to this file) rebuilds
+    // the pool - a brand new FileCache generation.
+    await refreshStorageContext(root, [], { backendFactory: () => fake });
+
+    // The door rewrites its file - smaller this time.
+    fs.writeFileSync(staged, Buffer.alloc(40, 2));
+    await getStorageContext()!.cache.writeBack(1, 'Conf1/Files/DOOR.DAT', staged);
+
+    // 100 -> 40 is a delta of -60, giving 40 total. The bug this fixes gave
+    // 140 (100 carried forward, plus the full 40 charged again on top).
+    expect(getStorageContext()!.volumes.byNumber(1)!.usedBytes).toBe(40);
+  });
+
   it('review "carry live state": a volume whose identity changed does NOT inherit the old counters', async () => {
     const root = boardWithDrivesInfo([
       'DRIVE.1=s3://bucket-a',
@@ -496,6 +531,101 @@ describe('refreshStorageContext', () => {
       await refreshStorageContext(root, [], { backendFactory: () => fake });
       const messages = errorSpy.mock.calls.map((call) => String(call[0]));
       expect(messages.some((m) => m.includes('orphan-node') && m.includes('1 pending upload'))).toBe(true);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('review defect 4: does NOT report a sibling slot directory whose owning process is still alive - a normal peer, not an orphan', async () => {
+    const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.KEYID=k']);
+    writeSecret(root, 1, 'sekrit');
+    const fake = new FakeBackend({ driveNumber: 1 });
+
+    // Node "1" is a live peer on this bare host - its lock file names THIS
+    // test process, unambiguously alive - with a perfectly normal pending
+    // upload of its own.
+    const lockDir = path.join(root, 'Storage', 'nodes');
+    fs.mkdirSync(lockDir, { recursive: true });
+    fs.writeFileSync(path.join(lockDir, '1.pid'), String(process.pid));
+    const peerMarker = path.join(
+      root, 'Storage', 'cache', '1', '.pending', '1', 'Conf1', 'Files', 'DEMO.LHA.json'
+    );
+    fs.mkdirSync(path.dirname(peerMarker), { recursive: true });
+    fs.writeFileSync(
+      peerMarker,
+      JSON.stringify({ driveNumber: 1, key: 'Conf1/Files/DEMO.LHA', localPath: '/irrelevant' })
+    );
+
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      // This process claims slot 2 (slot 1 is held by its own, live pid).
+      await refreshStorageContext(root, [], { backendFactory: () => fake });
+      const messages = errorSpy.mock.calls.map((call) => String(call[0]));
+      expect(messages.some((m) => m.includes('pending upload'))).toBe(false);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('review defect 4: DOES report a sibling slot directory whose owning process is dead', async () => {
+    const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.KEYID=k']);
+    writeSecret(root, 1, 'sekrit');
+    const fake = new FakeBackend({ driveNumber: 1 });
+
+    const lockDir = path.join(root, 'Storage', 'nodes');
+    fs.mkdirSync(lockDir, { recursive: true });
+    fs.writeFileSync(path.join(lockDir, '1.pid'), '999999'); // a pid nothing alive holds
+    const deadMarker = path.join(
+      root, 'Storage', 'cache', '1', '.pending', '1', 'Conf1', 'Files', 'DEAD.LHA.json'
+    );
+    fs.mkdirSync(path.dirname(deadMarker), { recursive: true });
+    fs.writeFileSync(
+      deadMarker,
+      JSON.stringify({ driveNumber: 1, key: 'Conf1/Files/DEAD.LHA', localPath: '/irrelevant' })
+    );
+
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      // An explicit cacheDir bypasses node-slot claiming entirely for
+      // THIS run's own active directory, so slot "1" (whose lock names a
+      // dead pid, seeded above) is left alone as a genuine sibling to
+      // inspect rather than reclaimed as this run's own directory.
+      await refreshStorageContext(root, [], {
+        backendFactory: () => fake,
+        cacheDir: path.join(root, 'Storage', 'cache', 'this-run'),
+      });
+      const messages = errorSpy.mock.calls.map((call) => String(call[0]));
+      expect(messages.some((m) => m.includes('1 pending upload') && m.includes(path.join('cache', '1')))).toBe(true);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('review defect 4: sweeps and reports even when the rebuild results in no pool at all', async () => {
+    const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.KEYID=k']);
+    writeSecret(root, 1, 'sekrit');
+    const fake = new FakeBackend({ driveNumber: 1 });
+
+    // A stray directory with a pending marker, unrelated to this run's own
+    // active directory, present before the pool disappears.
+    const strayMarker = path.join(
+      root, 'Storage', 'cache', 'stray', '.pending', '1', 'Conf1', 'Files', 'GONE.LHA.json'
+    );
+    fs.mkdirSync(path.dirname(strayMarker), { recursive: true });
+    fs.writeFileSync(
+      strayMarker,
+      JSON.stringify({ driveNumber: 1, key: 'Conf1/Files/GONE.LHA', localPath: '/irrelevant' })
+    );
+
+    // The sysop removes the last s3 drive - this rebuild produces NO pool.
+    applyTooltypes(path.join(root, 'Drives.info'), [], { removeKeys: (key) => /^DRIVE\.\d+/.test(key) });
+
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await refreshStorageContext(root, []);
+      expect(getStorageContext()).toBeNull();
+      const messages = errorSpy.mock.calls.map((call) => String(call[0]));
+      expect(messages.some((m) => m.includes('stray') && m.includes('1 pending upload'))).toBe(true);
     } finally {
       errorSpy.mockRestore();
     }

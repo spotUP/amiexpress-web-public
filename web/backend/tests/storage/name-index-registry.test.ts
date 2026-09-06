@@ -181,4 +181,66 @@ describe('NameIndexRegistry', () => {
     expect(backend.lists).toBe(1);
     expect(state.requestsThisMonth).toBe(1);
   });
+
+  it('review defect 2: after rebase, a cached index reaches the CURRENT backend and charges the CURRENT VolumeState, not the one it was built with', async () => {
+    const backend1 = new FakeBackend({ driveNumber: 2 });
+    const state1 = s3State(2, backend1);
+    const registry = new NameIndexRegistry(new VolumeSet([state1]));
+
+    const index = registry.forArea(2, 'Files/');
+    await index.refresh();
+    expect(backend1.lists).toBe(1);
+    expect(state1.requestsThisMonth).toBe(1);
+
+    // An admin save rebuilds the pool - SAME drive identity (same `path`,
+    // both undefined `endpoint`), but a genuinely different backend AND
+    // VolumeState object, exactly what a real rebuild produces even when
+    // nothing about the bucket itself changed.
+    const backend2 = new FakeBackend({ driveNumber: 2 });
+    const state2 = s3State(2, backend2);
+    registry.rebase(new VolumeSet([state2]));
+
+    // Same identity - the cached index must survive the rebase, not be evicted.
+    expect(registry.forArea(2, 'Files/')).toBe(index);
+
+    await index.refresh();
+
+    // The fresh call reached the NEW backend and charged the NEW state -
+    // before this fix it kept hitting backend1/state1 forever.
+    expect(backend2.lists).toBe(1);
+    expect(state2.requestsThisMonth).toBe(1);
+    expect(backend1.lists).toBe(1); // untouched by the second refresh
+    expect(state1.requestsThisMonth).toBe(1); // the dead state stopped counting
+  });
+
+  it('review defect 2: rebase evicts a cached index whose drive was repointed at a different bucket', () => {
+    const backend1 = new FakeBackend({ driveNumber: 2 });
+    const registry = new NameIndexRegistry(new VolumeSet([s3State(2, backend1)]));
+
+    const before = registry.forArea(2, 'Files/');
+
+    // The sysop repoints drive 2 at a genuinely different bucket through
+    // Drive Setup.
+    const backend2 = new FakeBackend({ driveNumber: 2 });
+    const changedState = s3State(2, backend2);
+    changedState.volume.path = 'a-genuinely-different-bucket';
+    registry.rebase(new VolumeSet([changedState]));
+
+    const after = registry.forArea(2, 'Files/');
+
+    // Evicted and rebuilt, not reused with a listing that still describes
+    // the OLD bucket's objects.
+    expect(after).not.toBe(before);
+  });
+
+  it('review defect 2: rebase evicts a cached index for a drive that disappeared from the new VolumeSet entirely', () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    const registry = new NameIndexRegistry(new VolumeSet([s3State(2, backend)]));
+
+    const before = registry.forArea(2, 'Files/');
+    registry.rebase(new VolumeSet([])); // drive 2 removed
+
+    expect(() => registry.forArea(2, 'Files/')).toThrow(/drive 2/);
+    expect(before).toBeDefined(); // the stale reference itself is harmless once orphaned
+  });
 });

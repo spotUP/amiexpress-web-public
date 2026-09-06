@@ -21,6 +21,17 @@ services:
         # caller didn't set GIT_SHA.
         GIT_SHA: ${GIT_SHA:-unknown}
     container_name: amiexpress-bbs
+    # Pinned, not left to the Docker default (the container ID, which
+    # changes on every --force-recreate or image rebuild). The backend
+    # pooled-storage subsystem (web/backend/src/storage/node-id.ts) reads
+    # HOSTNAME to name its cache directory under Storage/cache/<hostname>/
+    # so a restarted container keeps finding its own staged, not-yet-
+    # uploaded files. See CONFIGURATION.md, "Cache directory and sizing",
+    # for what happens if this value ever changes anyway (the old
+    # directory is abandoned, reported by the orphan sweep, never
+    # auto-recovered). BBS_STORAGE_NODE_ID, if ever set below, wins over
+    # this.
+    hostname: amiexpress-bbs
     restart: unless-stopped
     ports:
       - "3001:3001"     # HTTP/WebSocket (BBS + Admin + SDK)

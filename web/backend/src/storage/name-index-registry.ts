@@ -33,51 +33,66 @@
  */
 import { BackendRetryGate, NameIndex } from './name-index';
 import type { BackendRetryGateOptions } from './name-index';
-import type { VolumeState, VolumeSet } from './volume-set';
+import { sameVolumeIdentity } from './volume-config';
+import type { VolumeSet } from './volume-set';
 import type { StorageBackend } from './storage-backend';
 
 function cacheKey(driveNumber: number, prefix: string): string {
   return `${driveNumber}:${prefix}`;
 }
 
+function driveNumberOfKey(key: string): number {
+  return Number(key.slice(0, key.indexOf(':')));
+}
+
 /**
- * `state.backend`, wrapped so every call it makes charges `requestsThisMonth`
- * - Task 12 review finding 6. `FileCache.ensureLocal`/`writeBack` already
- * charge the meter themselves for the calls THEY make directly against
- * `state.backend`; this wraps the copy handed to `NameIndex` so the listing
- * call `NameIndex.refresh()` makes (`name-index.ts:358`) is counted too,
- * without double-charging the direct callers, since they never see this
- * wrapper.
+ * A backend that resolves its target drive's CURRENT `VolumeState` from
+ * `lookupVolumes()` on every single call, rather than closing over one
+ * captured at construction time - Task 12 re-review defect 2.
+ *
+ * `NameIndexRegistry.rebase` keeps a cached `NameIndex` alive across a
+ * rebuild for the sake of its cached listing and retry gate, but the
+ * backend that index was BUILT with used to be captured once, at whatever
+ * `VolumeState` existed the first time `forArea` was called for it. Two
+ * consequences followed from that, both invisible until the SECOND admin
+ * save: every listing call kept charging `requestsThisMonth` on that first,
+ * now-dead `VolumeState` object - so the live counter `carryLiveState`
+ * seeds only counts up to the first rebuild, then goes silent forever,
+ * quietly reopening finding 6 - and every real network call kept hitting
+ * the FIRST backend's credentials, endpoint and bucket, so a sysop who
+ * rotates a secret or repoints a drive through Drive Setup got a rebuild
+ * that reported success while name resolution kept using the old client
+ * until a restart, which is finding 4's own failure mode.
+ *
+ * Resolving fresh each call fixes both without needing to know whether a
+ * given call happens to be the index's first or its fifth: whatever
+ * `lookupVolumes().byNumber(driveNumber)` answers right now is what pays
+ * for the call and what serves it.
  *
  * All five methods are wrapped, not just `list` - `NameIndex` only calls
- * `list` today, but a half-wrapped backend would silently stop counting the
- * day that changes, which is exactly the kind of gap this finding exists to
- * close.
+ * `list` today, but a half-wrapped backend would silently stop counting
+ * (or stop following a rotated backend) the day that changes.
  */
-function countingBackend(state: VolumeState): StorageBackend {
-  const real = state.backend;
+function countingBackend(driveNumber: number, lookupVolumes: () => VolumeSet): StorageBackend {
+  const currentState = () => {
+    const state = lookupVolumes().byNumber(driveNumber);
+    if (!state) {
+      throw new Error(`NameIndexRegistry: no volume configured for drive ${driveNumber}`);
+    }
+    return state;
+  };
+  const charge = async <T>(call: (backend: StorageBackend) => Promise<T>): Promise<T> => {
+    const state = currentState();
+    state.requestsThisMonth++;
+    return call(state.backend);
+  };
   return {
-    driveNumber: real.driveNumber,
-    head: (key) => {
-      state.requestsThisMonth++;
-      return real.head(key);
-    },
-    get: (key) => {
-      state.requestsThisMonth++;
-      return real.get(key);
-    },
-    put: (key, body) => {
-      state.requestsThisMonth++;
-      return real.put(key, body);
-    },
-    delete: (key) => {
-      state.requestsThisMonth++;
-      return real.delete(key);
-    },
-    list: (prefix) => {
-      state.requestsThisMonth++;
-      return real.list(prefix);
-    },
+    driveNumber,
+    head: (key) => charge((backend) => backend.head(key)),
+    get: (key) => charge((backend) => backend.get(key)),
+    put: (key, body) => charge((backend) => backend.put(key, body)),
+    delete: (key) => charge((backend) => backend.delete(key)),
+    list: (prefix) => charge((backend) => backend.list(prefix)),
   };
 }
 
@@ -104,21 +119,40 @@ export class NameIndexRegistry {
 
   /**
    * Points this registry at a fresh `VolumeSet` after a rebuild, keeping
-   * every cached `NameIndex` and retry gate exactly as they were.
+   * every cached `NameIndex` and retry gate exactly as they were - EXCEPT
+   * for a drive whose identity actually changed, whose index is evicted
+   * outright.
    *
-   * Task 12 review, the finding-4 follow-up: `refreshStorageContext`
-   * rebuilding the whole pool on every admin save used to construct a BRAND
-   * NEW registry each time, discarding every cached listing along with it -
-   * so the very listing call finding 6 made countable ran again after every
-   * conference save or Drives.info write, against the same request meter
-   * finding 6 exists to protect. `forArea` below only ever consults
-   * `this.volumes` on a cache MISS, to find a backend for an index it has
-   * not built yet - so repointing it here is enough for a drive added or
-   * changed in this rebuild to resolve correctly, while every
-   * already-cached area keeps its listing and its gate untouched.
+   * Task 12 review, the finding-4 follow-up, then the re-review's defect 2:
+   * `refreshStorageContext` rebuilding the whole pool on every admin save
+   * used to construct a BRAND NEW registry each time, discarding every
+   * cached listing along with it - so the very listing call finding 6 made
+   * countable ran again after every conference save or Drives.info write,
+   * against the same request meter finding 6 exists to protect. Simply
+   * repointing `this.volumes` fixed that for a drive whose bucket did not
+   * change (`countingBackend` above now resolves the current `VolumeState`
+   * on every call, so a cached index keeps counting and keeps calling
+   * correctly across any number of rebuilds) - but a drive a sysop
+   * REPOINTED at a genuinely different bucket cannot be fixed the same way:
+   * the cached `NameIndex`'s in-memory name map still lists the OLD
+   * bucket's objects, and no amount of re-resolving the backend at call
+   * time changes what names it already believes exist. Such an index is
+   * evicted here, so the next `forArea` call for it builds a fresh one and
+   * lists the NEW bucket instead of serving a stale answer with a "success"
+   * on the admin page.
    */
   rebase(volumes: VolumeSet): void {
+    const previous = this.volumes;
     this.volumes = volumes;
+
+    for (const key of [...this.indexes.keys()]) {
+      const driveNumber = driveNumberOfKey(key);
+      const oldState = previous.byNumber(driveNumber);
+      const newState = volumes.byNumber(driveNumber);
+      if (!oldState || !newState || !sameVolumeIdentity(oldState.volume, newState.volume)) {
+        this.indexes.delete(key);
+      }
+    }
   }
 
   private gateFor(driveNumber: number): BackendRetryGate {
@@ -141,7 +175,8 @@ export class NameIndexRegistry {
       throw new Error(`NameIndexRegistry: no volume configured for drive ${driveNumber}`);
     }
 
-    const index = new NameIndex(countingBackend(state), prefix, { retryGate: this.gateFor(driveNumber) });
+    const backend = countingBackend(driveNumber, () => this.volumes);
+    const index = new NameIndex(backend, prefix, { retryGate: this.gateFor(driveNumber) });
     this.indexes.set(key, index);
     return index;
   }

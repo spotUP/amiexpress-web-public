@@ -694,6 +694,39 @@ export class FileCache {
     return this.dirty.size;
   }
 
+  /**
+   * Every id THIS process has itself uploaded, restricted to the given
+   * drives, and the size it charged the volume for it.
+   *
+   * Task 12 review defect 1: a rebuild used to construct a brand new
+   * `FileCache` - and therefore a brand new, EMPTY `uploadedSizes` - while
+   * `carryLiveState` (storage/index.ts) carried `usedBytes` forward on the
+   * VolumeState beside it. `writeBack` below credits back the previous
+   * size from exactly this map before charging the new one
+   * (`usedBytes += body.length - previous`), so an empty map after a
+   * rebuild made the FIRST overwrite of any key uploaded earlier in the
+   * process credit back 0 and charge the FULL new size again - inflating
+   * `usedBytes` by the file's old size on every admin save that preceded
+   * an overwrite, exactly the failure this map's own doc comment above
+   * exists to prevent. Filtered by driveNumber (not exported whole) so a
+   * rebuild that changed a drive's identity does not carry forward a
+   * correction computed against a different bucket - see
+   * `sameVolumeIdentity` (volume-config.ts).
+   */
+  exportUploadedSizes(driveNumbers: ReadonlySet<number>): ReadonlyMap<string, number> {
+    const result = new Map<string, number>();
+    for (const [entryId, size] of this.uploadedSizes) {
+      const driveNumber = Number(entryId.slice(0, entryId.indexOf(':')));
+      if (driveNumbers.has(driveNumber)) result.set(entryId, size);
+    }
+    return result;
+  }
+
+  /** Merges previously-known uploaded sizes into this cache - see `exportUploadedSizes`. */
+  importUploadedSizes(entries: ReadonlyMap<string, number>): void {
+    for (const [entryId, size] of entries) this.uploadedSizes.set(entryId, size);
+  }
+
   /** Bytes the last `evictTo` could not reclaim because everything left is pinned. */
   overBudgetBytes(): number {
     return this.shortfallBytes;
