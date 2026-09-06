@@ -321,6 +321,37 @@ describe('Drive Setup storage routes', () => {
     });
   });
 
+  describe('POST /api/config/drives', () => {
+    it('creates the drive number the sysop asked for, even when its DB rowid collides with an existing on-disk drive number', async () => {
+      // Whole-branch review finding 3: getDrive(id) resolves DISK-FIRST BY
+      // DRIVE NUMBER, but createDrive hands it a SQLite ROWID - a different
+      // namespace entirely. A truly fresh mirror table's first-ever row gets
+      // rowid 1, which is also DRIVE.1's own drive number on disk (see
+      // beforeEach) - the exact, ordinary case the review named, not a
+      // contrived one. Reset the table explicitly so this does not depend
+      // on test execution order.
+      const raw = (db as any).db;
+      raw.exec('DELETE FROM drives');
+      raw.exec("DELETE FROM sqlite_sequence WHERE name = 'drives'");
+
+      const res = await request(app)
+        .post('/api/config/drives')
+        .send({ drive_number: 3, drive_path: 'DH3:' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.drive_number).toBe(3);
+      expect(res.body.data.drive_path).toBe('DH3:');
+
+      const info = fs.readFileSync(path.join(root, 'Drives.info'), 'latin1');
+      expect(info).toContain('DRIVE.3=DH3:');
+      // DRIVE.1 - the drive the buggy rowid-as-drive-number lookup would
+      // have resolved instead - must be untouched, not rewritten with
+      // DRIVE.3's own path.
+      expect(info).toContain('DRIVE.1=DH1:');
+      expect(info).not.toContain('DRIVE.1=DH3:');
+    });
+  });
+
   describe('PUT /api/config/drives/:id - renumbering an s3 drive', () => {
     it('refuses to renumber an s3 drive - it would strand DRIVE.n.QUOTA/KEYID/ENDPOINT and its credentials', async () => {
       const res = await request(app).put('/api/config/drives/2').send({ drive_number: 5 });

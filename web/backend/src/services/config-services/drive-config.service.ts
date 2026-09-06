@@ -266,7 +266,18 @@ export class DriveConfigService {
       description: validated.description
     });
 
-    const newDrive = await this.getDrive(id);
+    // `getDrive(id)` resolves DISK-FIRST BY DRIVE NUMBER (see its own doc) -
+    // `id` here is the mirror table's SQLite rowid, a completely different
+    // namespace. On a board whose mirror table is emptier than its on-disk
+    // drive numbers (the normal case now this page is disk-authoritative),
+    // the rowid can coincide with an EXISTING on-disk drive number and
+    // resolve THAT drive instead of the one just created - Drives.info
+    // would then be rewritten with the existing drive's own entry (a
+    // no-op) while the drive_number the sysop actually asked for is never
+    // written at all, yet this call reports success. Resolve by the number
+    // that was actually validated and inserted, not by the rowid.
+    const fromDb = this.configRepo.getDriveByNumber(validated.drive_number);
+    const newDrive = fromDb ? this.toDefaultView(fromDb) : null;
     if (!newDrive) {
       throw new Error('Failed to create drive');
     }
