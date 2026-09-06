@@ -5,6 +5,7 @@ import { T } from '../theme/blessed-theme.js';
 import { ToggleSwitch } from './shared/InlineEdit.js';
 import { useRowClick } from '../hooks/useRowClick.js';
 import { ConfirmDialog } from './shared/ConfirmDialog.js';
+import { useTextEntryLock } from '../hooks/useTextEntryLock.js';
 
 const ITEMS_START_ROW = 7;
 
@@ -81,6 +82,17 @@ export function CrudList<T extends { id: number }>({
   useRowClick(visibleItems.length, ITEMS_START_ROW, (idx) => {
     setSelectedIdx(idx);
   }, mode === 'list' && !searching);
+
+  // Search, edit, new, and delete-confirm all collect free text or arrow
+  // input this component's own idle 'list' mode does not use for anything
+  // but browsing — the global 'q'/'?' hotkeys and the sidebar's arrow-key
+  // page cycling must not steal keys from a search box or a numeric field.
+  // wave 1's review flagged this as latent in every CrudList consumer
+  // (Computers/Screen Types/Languages/Protocols/File Checkers) since it only
+  // retrofitted the four pages that wave touched directly — fixed here once,
+  // for all of them, rather than in each page. See
+  // dev/console/src/state/text-entry-lock.ts.
+  useTextEntryLock(mode !== 'list' || searching);
 
   const renderRow = (row: T): string => {
     return columns.map(col => col.render(row).padEnd(col.width)).join('');

@@ -38,6 +38,10 @@ import {
   getScreenRevision,
   restoreScreenRevision,
   repairAllScreens,
+  getNodeConfigs,
+  createNodeConfig,
+  updateNodeConfig,
+  deleteNodeConfig,
 } from './client.js';
 
 const BASE_URL = process.env['AMIEXPRESS_URL'] ?? 'http://localhost:3001';
@@ -319,6 +323,41 @@ test('repairAllScreens POSTs { dryRun } to /api/screens/repair-all', async () =>
   assert.equal(calls[0].method, 'POST');
   assert.deepEqual(calls[0].body, { dryRun: true });
   assert.deepEqual(res.damaged, ['a.txt', 'b.txt']);
+});
+
+test('getNodeConfigs GETs /api/config/nodes and synthesises id from node_number', async () => {
+  stubFetch({ success: true, data: [{ node_number: 3, priority: 5, telnet: true }] });
+  const rows = await getNodeConfigs();
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/nodes`);
+  assert.equal(rows[0].id, 3);
+  assert.equal(rows[0].node_number, 3);
+});
+
+test('createNodeConfig POSTs to /api/config/nodes', async () => {
+  stubFetch({ success: true, data: { node_number: 4 } });
+  await createNodeConfig({ node_number: 4, priority: 1 });
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/nodes`);
+  assert.equal(calls[0].method, 'POST');
+  assert.deepEqual(calls[0].body, { node_number: 4, priority: 1 });
+});
+
+test('updateNodeConfig PUTs /api/config/nodes/:nodeNumber, not a synthesised id path', async () => {
+  stubFetch({ success: true, data: { node_number: 3 } });
+  await updateNodeConfig(3, { telnet: false });
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/nodes/3`);
+  assert.equal(calls[0].method, 'PUT');
+  assert.deepEqual(calls[0].body, { telnet: false });
+});
+
+test('deleteNodeConfig DELETEs /api/config/nodes/:nodeNumber', async () => {
+  stubFetch({ success: true, message: 'Node configuration deleted' });
+  await deleteNodeConfig(3);
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/nodes/3`);
+  assert.equal(calls[0].method, 'DELETE');
 });
 
 // The incident this whole page exists to fix: the OLD Security page wrote

@@ -157,6 +157,37 @@ export interface DriveRow {
   drive_path: string;
   enabled: boolean;
 }
+// Mirrors web/backend/src/services/config.schemas.ts's NodeConfigSchema.
+// `id` is not a real backend field — CrudList requires one, and this
+// client/UI treats node_number as the identity (matching the backend routes,
+// which are keyed by :nodeNumber, not a row id).
+export interface NodeConfigRow {
+  id: number; // === node_number
+  node_number: number;
+  node_start?: string;
+  priority?: number;
+  screens?: string;
+  capitol_files?: boolean;
+  def_screens?: boolean;
+  no_mci_msg?: boolean;
+  sysop_chat_color?: number;
+  user_chat_color?: number;
+  break_chat?: boolean;
+  sentby_files?: boolean;
+  keep_upload_credit?: boolean;
+  free_resuming?: boolean;
+  callers_log?: boolean;
+  start_log?: boolean;
+  door_log?: boolean;
+  ud_log?: boolean;
+  log_host?: boolean;
+  telnet?: boolean;
+  ftp?: boolean;
+  disable_quick_logons?: boolean;
+  view_password?: boolean;
+  no_rad_boogie?: boolean;
+}
+
 export interface FileCheckerRow {
   id: number;
   checker_name: string;

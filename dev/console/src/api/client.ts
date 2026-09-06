@@ -130,6 +130,45 @@ export async function createUser(
   );
 }
 
+// Node Configuration — per-node settings (NODESTART tooltypes, chat colours,
+// which logs a node keeps, quiet-hours flags...), distinct from the LIVE
+// status polling NodesTab shows. GET/POST/PUT/DELETE /api/config/nodes*
+// (config-routes.ts:168-243), matching web/config-app/src/api/client.ts:
+// 443-464's getNodeConfigs/getNodeConfig/createNodeConfig/updateNodeConfig/
+// deleteNodeConfig exactly.
+// The backend's rows have no `id` field at all — they're keyed by
+// node_number (config.schemas.ts's NodeConfigSchema). CrudList requires
+// `{ id: number }`, so `id` is synthesised here as an alias for
+// node_number; every write below (update/create/delete) is keyed off
+// node_number regardless, matching the backend routes' own :nodeNumber param.
+export async function getNodeConfigs() {
+  const rows = await requestList<Omit<import('./types.js').NodeConfigRow, 'id'>>('/api/config/nodes');
+  return rows.map(row => ({ ...row, id: row.node_number }));
+}
+
+export async function getNodeConfig(nodeNumber: number) {
+  const res = await request<{ success: boolean; data?: import('./types.js').NodeConfigRow }>(`/api/config/nodes/${nodeNumber}`);
+  return res.data ?? null;
+}
+
+export async function createNodeConfig(config: Partial<import('./types.js').NodeConfigRow>) {
+  return request<{ success: boolean; data: import('./types.js').NodeConfigRow; message?: string }>('/api/config/nodes', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  });
+}
+
+export async function updateNodeConfig(nodeNumber: number, patch: Partial<import('./types.js').NodeConfigRow>) {
+  return request<{ success: boolean; data: import('./types.js').NodeConfigRow; message?: string }>(`/api/config/nodes/${nodeNumber}`, {
+    method: 'PUT',
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteNodeConfig(nodeNumber: number) {
+  return request<{ success: boolean; message?: string }>(`/api/config/nodes/${nodeNumber}`, { method: 'DELETE' });
+}
+
 export async function getConferences() {
   const res = await request<{ success: boolean; data: import('./types.js').ConferenceConfig[] }>('/api/config/conferences');
   return res.data ?? [];

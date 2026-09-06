@@ -4,7 +4,7 @@ import { Header } from './components/Header.js';
 import { Sidebar } from './components/Sidebar.js';
 import { Footer } from './components/Footer.js';
 import { DashboardTab } from './components/tabs/DashboardTab.js';
-import { NodesTab } from './components/tabs/NodesTab.js';
+import { NodesPage } from './components/tabs/NodesPage.js';
 import { UsersTab } from './components/tabs/UsersTab.js';
 import { ConfsTab } from './components/tabs/ConfsTab.js';
 import { LogsTab } from './components/tabs/LogsTab.js';
@@ -51,7 +51,7 @@ const PAGE_COMPONENTS: Record<string, React.FC | undefined> = {
   // Live
   overview:       DashboardTab,
   activity:       ActivityPage,
-  nodes:          NodesTab,
+  nodes:          NodesPage,
   'operator-chat':   OperatorChatPage,
   'opchat-settings': OpChatSettingsPage,
   // People
