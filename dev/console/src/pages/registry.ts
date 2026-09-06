@@ -140,11 +140,12 @@ export const PAGES: PageMeta[] = [
     id: 'doors',
     label: 'Doors',
     category: 'Content',
-    footerHint: '[r]efresh  [R]eload all  [e]dit settings  [↑↓←→] navigate',
+    footerHint: '[r]efresh  [R]eload all  [e]dit  [d]elete  [↑↓←→] navigate',
     helpKeys: [
       ['↑↓←→', 'Navigate the door grid'],
       ['e',    'Inline edit name/command/enabled'],
       ['space','Toggle enabled in edit mode'],
+      ['d',    'Delete the selected door (confirmation)'],
       ['r',    'Refresh from server'],
       ['R',    'Reload all doors (confirmation)'],
       ['click', 'Click any door cell to select'],

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput, useStdout } from 'ink';
 import Spinner from 'ink-spinner';
-import { getDoors, reloadDoors, updateDoor } from '../../api/client.js';
+import { getDoors, reloadDoors, updateDoor, deleteDoor } from '../../api/client.js';
 import { T } from '../../theme/blessed-theme.js';
 import { ToggleSwitch } from '../shared/InlineEdit.js';
 import { useGridClick } from '../../hooks/useRowClick.js';
@@ -33,8 +33,10 @@ export function DoorsTab() {
   const [error, setError] = useState<string | null>(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [confirming, setConfirming] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Edit state
   const [editing, setEditing] = useState(false);
@@ -115,7 +117,7 @@ export function DoorsTab() {
   );
 
   useInput((input, key) => {
-    if (confirming) return;
+    if (confirming || confirmingDelete) return;
 
     if (editing) {
       const field = EDIT_FIELDS[editFieldIdx];
@@ -159,6 +161,7 @@ export function DoorsTab() {
     if (key.leftArrow) setSelectedIdx(i => Math.max(0, i - rowsPerCol));
     if (key.rightArrow) setSelectedIdx(i => Math.min(doors.length - 1, i + rowsPerCol));
     if (input === 'e' && selected) startEdit();
+    if (input === 'd' && selected) setConfirmingDelete(true);
     if (input === 'R') setConfirming(true);
     if (input === 'r') load();
   });
@@ -227,6 +230,13 @@ export function DoorsTab() {
 
       {status && <Box marginTop={1}><Text color={T.ok}>{status}</Text></Box>}
 
+      {deleting && (
+        <Box marginTop={1}>
+          <Text color={T.warn}><Spinner type="dots" /></Text>
+          <Text> Deleting door...</Text>
+        </Box>
+      )}
+
       {confirming && (
         <Box marginTop={1}>
           <ConfirmDialog
@@ -240,6 +250,24 @@ export function DoorsTab() {
                 .finally(() => { setReloading(false); load(); });
             }}
             onCancel={() => setConfirming(false)}
+          />
+        </Box>
+      )}
+
+      {confirmingDelete && selected && (
+        <Box marginTop={1}>
+          <ConfirmDialog
+            message={`Delete "${selected.door_name}" (${selected.door_command ?? selected.id})? This removes its .info registration. This cannot be undone.`}
+            onConfirm={() => {
+              setConfirmingDelete(false);
+              const command = selected.door_command ?? String(selected.id);
+              setDeleting(true);
+              deleteDoor(command)
+                .then(() => { setStatus(`${selected.door_name} deleted`); setSelectedIdx(0); })
+                .catch((e: Error) => setStatus(`Error: ${e.message}`))
+                .finally(() => { setDeleting(false); load(); });
+            }}
+            onCancel={() => setConfirmingDelete(false)}
           />
         </Box>
       )}

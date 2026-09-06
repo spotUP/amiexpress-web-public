@@ -167,6 +167,16 @@ export async function updateDoor(id: string | number, updates: Partial<import('.
   });
 }
 
+// Identified by COMMAND, not the list-position `id` above — the door list is
+// loaded from disk and numbered by position, so an :id would find nothing or
+// the wrong door. Matches web/config-app/src/api/client.ts's deleteDoor and
+// backend DELETE /api/config/doors/:command (config-routes.ts:721).
+export async function deleteDoor(command: string) {
+  return request<{ success: boolean; message?: string }>(`/api/config/doors/${encodeURIComponent(command)}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function getSystemConfig() {
   const res = await request<{ success: boolean; data: import('./types.js').SystemConfig }>('/api/config/system');
   return res.data;
