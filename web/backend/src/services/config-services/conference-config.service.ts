@@ -127,6 +127,22 @@ console.warn(`[ConferenceConfigService] Conf${i}.info not found, skipping`);
           location: confConfig.entries[i - 1]?.location || `BBS:Conf${i}/`,
           ndirs: fromDisk.ndirs,
           dlpath_1: fromDisk.dlpaths[1],
+          storagedrive_1: fromDisk.storagedrives[1],
+          storagedrive_2: fromDisk.storagedrives[2],
+          storagedrive_3: fromDisk.storagedrives[3],
+          storagedrive_4: fromDisk.storagedrives[4],
+          storagedrive_5: fromDisk.storagedrives[5],
+          storagedrive_6: fromDisk.storagedrives[6],
+          storagedrive_7: fromDisk.storagedrives[7],
+          storagedrive_8: fromDisk.storagedrives[8],
+          storagedrive_9: fromDisk.storagedrives[9],
+          storagedrive_10: fromDisk.storagedrives[10],
+          storagedrive_11: fromDisk.storagedrives[11],
+          storagedrive_12: fromDisk.storagedrives[12],
+          storagedrive_13: fromDisk.storagedrives[13],
+          storagedrive_14: fromDisk.storagedrives[14],
+          storagedrive_15: fromDisk.storagedrives[15],
+          storagedrive_16: fromDisk.storagedrives[16],
           dlpath_2: fromDisk.dlpaths[2],
           dlpath_3: fromDisk.dlpaths[3],
           dlpath_4: fromDisk.dlpaths[4],
@@ -338,6 +354,7 @@ console.error('[ConferenceConfigService] Conference list refresh failed (disk is
 
     const dlpaths: { [key: number]: string } = {};
     const ulpaths: { [key: number]: string } = {};
+    const storagedrives: { [key: number]: number } = {};
     const validatedAny = validated as any;
     for (let i = 1; i <= 16; i++) {
       const dlKey = `dlpath_${i}`;
@@ -351,9 +368,16 @@ console.error('[ConferenceConfigService] Conference list refresh failed (disk is
       if (typeof validatedAny[ulKey] === 'string') {
         ulpaths[i] = validatedAny[ulKey];
       }
+      // 0 is a real answer here - "put this directory back on local disk" -
+      // so a number of any value counts as a change, unlike a truthiness test.
+      const sdKey = `storagedrive_${i}`;
+      if (typeof validatedAny[sdKey] === 'number') {
+        storagedrives[i] = validatedAny[sdKey];
+      }
     }
     if (Object.keys(dlpaths).length > 0) confInfoUpdates.dlpaths = dlpaths;
     if (Object.keys(ulpaths).length > 0) confInfoUpdates.ulpaths = ulpaths;
+    if (Object.keys(storagedrives).length > 0) confInfoUpdates.storagedrives = storagedrives;
 
     if (Object.keys(confInfoUpdates).length > 0) {
       await this.conferenceSetup.updateConferenceInfoFile(conferenceId, confInfoUpdates);

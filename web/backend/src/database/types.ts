@@ -453,6 +453,26 @@ export interface ConferenceConfig {
 
   // Directory Settings (1-16)
   ndirs: number;
+  /**
+   * STORAGEDRIVE.n from Conf<N>.info: which DRIVE.n this directory's files
+   * live on, or 0 for local disk. 0 is the absence of the tooltype.
+   */
+  storagedrive_1?: number;
+  storagedrive_2?: number;
+  storagedrive_3?: number;
+  storagedrive_4?: number;
+  storagedrive_5?: number;
+  storagedrive_6?: number;
+  storagedrive_7?: number;
+  storagedrive_8?: number;
+  storagedrive_9?: number;
+  storagedrive_10?: number;
+  storagedrive_11?: number;
+  storagedrive_12?: number;
+  storagedrive_13?: number;
+  storagedrive_14?: number;
+  storagedrive_15?: number;
+  storagedrive_16?: number;
   dlpath_1: string;
   dlpath_2: string;
   dlpath_3: string;

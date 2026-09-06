@@ -34,6 +34,19 @@ export function ConferencesPage() {
   const { showSuccess, showError, confirm } = useNotification();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingConference, setEditingConference] = useState<ConferenceConfig | null>(null);
+
+  /**
+   * The drives the board actually has. A directory can only be pointed at a
+   * drive that is in Drives.info - offering anything else would write a
+   * STORAGEDRIVE.n that usableAreasFor drops, taking the file area with it.
+   */
+  const { data: drives = [] } = useQuery<
+    Array<{ drive_number: number; drive_path: string; kind: 'local' | 's3' }>
+  >({
+    queryKey: ['drives'],
+    queryFn: async () => ((await apiClient.getDrives()).data ?? []) as never,
+    staleTime: 60_000,
+  });
   const [formData, setFormData] = useState<ConferenceFormData>({
     conference_id: 1,
     name: '',
@@ -481,7 +494,51 @@ export function ConferencesPage() {
                   </p>
 
                   {pathRows(formData as never).map((row) => (
-                    <div key={row.dir} className="grid grid-cols-2 gap-3">
+                    <div key={row.dir} className="space-y-2 border-b border-border pb-3 last:border-0">
+                      {/* Which DRIVE this directory's files live on. Local disk
+                          is the absence of STORAGEDRIVE.n, so it is a real
+                          choice here rather than a blank. A bucket that is not
+                          in Drives.info cannot be offered at all, which is the
+                          point of driving these buttons off the drive list. */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="label mb-0">Dir {row.dir} lives on</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFormData((current) => ({ ...current, [`storagedrive_${row.dir}`]: 0 } as never))
+                          }
+                          className={`rounded border px-2 py-0.5 text-xs transition-colors ${
+                            !(formData as never as Record<string, number>)[`storagedrive_${row.dir}`]
+                              ? 'border-accent bg-accent/10 text-accent'
+                              : 'border-border text-content-secondary hover:border-accent/50'
+                          }`}
+                        >
+                          This server
+                        </button>
+                        {drives.map((drive) => (
+                          <button
+                            key={drive.drive_number}
+                            type="button"
+                            onClick={() =>
+                              setFormData((current) => ({
+                                ...current,
+                                [`storagedrive_${row.dir}`]: drive.drive_number,
+                              } as never))
+                            }
+                            className={`rounded border px-2 py-0.5 text-xs transition-colors ${
+                              (formData as never as Record<string, number>)[`storagedrive_${row.dir}`] ===
+                              drive.drive_number
+                                ? 'border-accent bg-accent/10 text-accent'
+                                : 'border-border text-content-secondary hover:border-accent/50'
+                            }`}
+                            title={drive.drive_path}
+                          >
+                            {drive.kind === 's3' ? drive.drive_path.replace(/^s3:\/\//, '') : drive.drive_path}
+                          </button>
+                        ))}
+                      </div>
+
+                    <div className="grid grid-cols-2 gap-3">
                       {(['download', 'upload'] as const).map((side) => {
                         const cell = row[side];
                         const field = `${side === 'download' ? 'dlpath' : 'ulpath'}_${row.dir}`;
@@ -523,6 +580,7 @@ export function ConferencesPage() {
                           </div>
                         );
                       })}
+                    </div>
                     </div>
                   ))}
                 </div>

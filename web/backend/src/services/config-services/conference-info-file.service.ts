@@ -112,6 +112,16 @@ export interface ConferenceInfoFields {
   dlpaths: Record<number, string>;
   /** ULPATH.1 .. ULPATH.16, keyed 1-based. */
   ulpaths: Record<number, string>;
+  /**
+   * STORAGEDRIVE.1 .. STORAGEDRIVE.16, keyed 1-based: which DRIVE.n a
+   * directory's files live on. 0 means local disk, the default.
+   *
+   * This is the tooltype that puts a file area in the pool, and nothing in
+   * the admin could set it - a sysop had to write it into Conf<N>.info by
+   * hand, which made a configured bucket unreachable from the interface that
+   * configures buckets.
+   */
+  storagedrives: Record<number, number>;
 }
 
 /** Read a conference's settings out of its tooltypes. */
@@ -123,12 +133,19 @@ export function readConferenceFields(toolTypes: ToolTypes): ConferenceInfoFields
 
   const dlpaths: Record<number, string> = {};
   const ulpaths: Record<number, string> = {};
+  const storagedrives: Record<number, number> = {};
   for (let i = 1; i <= MAX_FILE_AREAS; i += 1) {
     dlpaths[i] = toolTypes.get(`DLPATH.${i}`) ?? '';
     ulpaths[i] = toolTypes.get(`ULPATH.${i}`) ?? '';
+    // A conference-wide STORAGEDRIVE (no .n) applies to every directory that
+    // does not name its own - remote-areas.ts reads it the same way.
+    const perDir = toolTypes.get(`STORAGEDRIVE.${i}`) ?? toolTypes.get('STORAGEDRIVE');
+    const parsed = perDir === undefined ? 0 : Number.parseInt(perDir, 10);
+    storagedrives[i] = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
   }
 
   return {
+    storagedrives,
     ndirs: number('NDIRS', 0),
     min_access_level: number('MIN_ACCESS', 0),
     max_access_level: number('MAX_ACCESS', 255),
@@ -185,6 +202,20 @@ export function applyConferenceFields(toolTypes: ToolTypes, updates: ConferenceF
       toolTypes.set(key, '1');
     } else {
       toolTypes.delete(key);
+    }
+  }
+
+  if (updates.storagedrives) {
+    for (const [index, drive] of Object.entries(updates.storagedrives)) {
+      const key = `STORAGEDRIVE.${index}`;
+      // 0 is "local disk", and local disk is the ABSENCE of the tooltype -
+      // writing STORAGEDRIVE.n=0 would name a drive that does not exist and
+      // usableAreasFor would drop the area entirely.
+      if (!drive || drive <= 0) {
+        toolTypes.delete(key);
+      } else {
+        toolTypes.set(key, String(drive));
+      }
     }
   }
 
