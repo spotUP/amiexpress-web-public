@@ -41,12 +41,15 @@ exports.UIManager = void 0;
 const blessed_1 = __importStar(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
+const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 const constants_1 = require("../lib/constants");
 const utils_1 = require("../lib/utils");
 const card_style_1 = require("../lib/card-style");
 const cardEngine = new bbs_door_sdk_1.CardEngine();
+/** The headline beside the rail. Full words: this is a label, not a code. */
+const MASTHEAD_TITLE = 'CARD LOBBY';
 class UIManager {
-    constructor(screen, desktop) {
+    constructor(screen, desktop, nodeId = 1) {
         /** Whether this session's terminal can draw unicode card faces. */
         this.unicodeCapable = false;
         /** Lines above the log (UNO context) and the door's own lines below it. */
@@ -55,8 +58,15 @@ class UIManager {
         this.dealAnimationInProgress = false;
         this.menuButtons = [];
         this.menus = [];
+        /** The column after the last menu button; where the masthead run starts. */
+        this.mastheadLeft = 1;
+        /** Columns the masthead run may use, from the LIVE screen width. */
+        this.mastheadRun = 0;
+        /** The SDK's chrome: the animated rail and the theme's glitches. */
+        this.chrome = null;
         this.screen = screen;
         this.desktop = desktop;
+        this.nodeId = nodeId;
     }
     getDealAnimationInProgress() {
         return this.dealAnimationInProgress;
@@ -79,9 +89,10 @@ class UIManager {
             clickable: false,
             tags: true,
             style: { fg: constants_1.UI_THEME.topBar.fg, bg: constants_1.UI_THEME.topBar.bg },
-            // The theme's mark, right-aligned behind the menu items. `{|}` is
-            // blessed's right-align; the dropdown menus draw over the left end.
-            content: constants_1.UI_THEME.rail ? `{|}${constants_1.UI_THEME.rail} ` : '',
+            // The theme's mark used to be printed here, right-aligned and still.
+            // It is drawn by the masthead below now; layoutMasthead() puts it back
+            // on this row when the screen is too narrow for one.
+            content: '',
         });
         this.topInfoBar = (0, blessed_helpers_1.createBox)({
             // Panel adds a line border unless the key is present; these are
@@ -162,6 +173,123 @@ class UIManager {
             this.menuButtons.push(button);
             left += menu.label.length + 3;
         });
+        // The masthead goes in the TOP BAR, because this door has no spare row:
+        // row 0 is the menu bar and every row under it is a window or a panel.
+        // It takes the run the menus leave, from the column after the last menu
+        // button to the right edge. Drawing it into the bar's own content
+        // instead would put an animated slash in each one-column gap BETWEEN
+        // the menu labels, which reads as damage rather than as branding.
+        this.mastheadLeft = left;
+        this.mastheadRow = (0, blessed_helpers_1.createBox)({
+            border: undefined,
+            parent: this.topBar,
+            top: 0,
+            left,
+            width: `100%-${left}`,
+            height: 1,
+            fixed: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
+            tags: true,
+            style: { fg: constants_1.UI_THEME.topBar.fg, bg: constants_1.UI_THEME.topBar.bg },
+            content: '',
+        });
+        this.layoutMasthead();
+    }
+    /**
+     * Size the masthead run to the LIVE screen, and say whether one fits.
+     *
+     * What is left after the menus is what there is: on a 40-column C64 they
+     * leave six columns, which is not a masthead but a clipped word. There the
+     * bar keeps the still mark it drew before there was a masthead at all.
+     */
+    layoutMasthead() {
+        const width = this.screen.width || 80;
+        const room = width - this.mastheadLeft;
+        // The title, plus enough rail beside it to read as a rail.
+        const fits = room >= MASTHEAD_TITLE.length + 6;
+        this.mastheadRow.width = `100%-${this.mastheadLeft}`;
+        if (fits)
+            this.mastheadRow.show();
+        else
+            this.mastheadRow.hide();
+        // One short of the run's last cell: writing a row's final cell leaves
+        // the terminal in a pending-wrap state and the last glyph is clipped.
+        this.mastheadRun = Math.max(1, room - 1);
+        // `{|}` is blessed's right-align; the dropdown menus draw over the left
+        // end, which is why the mark sat at the other one.
+        this.topBar.setContent(!fits && constants_1.UI_THEME.rail ? `{|}${constants_1.UI_THEME.rail} ` : '');
+        return fits;
+    }
+    /**
+     * The whole chrome, from the ONE SDK call: the slash rail that draws
+     * itself in and then slides, and the theme's glitches.
+     *
+     * CARD LOBBY had the theme's COLOURS and none of its chrome - the sysop's
+     * "only colors makes no great theme". Every moving part here is the SDK's;
+     * a door that hand-rolled a rail timer would be the seventh copy of one.
+     *
+     * No `footer` is passed. The bottom row is the SDK StatusBar and it
+     * carries live state - who you are, your chips, where you are, the last
+     * notice - so there is no free row for a hint line, and the door's key
+     * hints already sit in the lobby window's own two bars.
+     *
+     * Re-callable: a resize changes what the menus leave, and a rail sized for
+     * 80 columns would strand the title mid-screen in a wide terminal.
+     */
+    attachChrome() {
+        this.stopChrome();
+        const theme = (0, constants_1.activeTheme)();
+        const fits = this.layoutMasthead();
+        this.chrome = (0, theme_1.attachDoorChrome)(theme, {
+            // The LIVE width, never 80: every moving part is gated on it, and the
+            // 40-column tier turns them all off through this one number.
+            width: this.screen.width || 80,
+            title: MASTHEAD_TITLE,
+            masthead: fits ? this.mastheadRow : undefined,
+            // The masthead sits inside the top bar to the right of the menus, so
+            // its run is nothing like the screen's width.
+            mastheadWidth: this.mastheadRun,
+            // Asked at every tick, because this door swaps what is on screen.
+            glitch: () => this.glitchPane(),
+            glitchOptions: { tickMs: 400 },
+            render: () => this.screen.render(),
+            seed: this.nodeId * 7 + 3,
+        });
+    }
+    /**
+     * Stop every chrome timer.
+     *
+     * Part of teardown, not an optimisation: a timer that outlives the screen
+     * writes to a destroyed one and takes the session with it.
+     */
+    stopChrome() {
+        if (!this.chrome)
+            return;
+        try {
+            this.chrome.stop();
+        }
+        catch { /* leaving anyway */ }
+        this.chrome = null;
+    }
+    /**
+     * The pane the theme's glitches damage, chosen at every tick.
+     *
+     * Never the top bar and never the status bar: damage THERE reads as the
+     * door being broken rather than as atmosphere. What is left is whichever
+     * pane is currently up and has rows to spare - and which that is changes,
+     * which is why the SDK is handed a function rather than an element.
+     */
+    glitchPane() {
+        // A hand is running: the activity log is the panel with rows to spare.
+        if (this.activityPanel && !this.activityPanel.hidden)
+            return this.activityContent;
+        // The lobby: the table list is what everybody is looking at.
+        if (this.lobbyWindow && !this.lobbyWindow.hidden)
+            return this.lobbyList;
+        // A table with no hand dealt yet - the details pane is all there is.
+        return this.tableContent;
     }
     /**
      * The footer: who you are, what you have, where you are, and the last
@@ -186,6 +314,29 @@ class UIManager {
                 { id: 'notice', content: '' },
             ],
         });
+    }
+    /**
+     * The table strip: game, pot, stakes, buy-in, and whose turn it is.
+     *
+     * The door decides WHAT is true - which table, what the pot stands at,
+     * whose turn - and this paints it, because the widget and its width live
+     * here. `null` is the resting label, for no table or one that has gone.
+     */
+    renderTableInfoBar(table, pot, turnLabel) {
+        if (!table) {
+            this.topInfoBar.setContent(' Card Lobby ');
+            return;
+        }
+        const segments = [
+            `{${constants_1.UI_THEME.accent}-fg}${table.gameName}{/}`,
+            `{${constants_1.UI_THEME.accentAlt}-fg}Pot: ${pot}{/}`,
+            `{${constants_1.UI_THEME.accent}-fg}Stakes: ${table.stakesLabel}{/}`,
+            `{green-fg}Buy-in: ${table.buyIn}{/}`,
+        ];
+        if (turnLabel)
+            segments.push(`{white-fg}${turnLabel}{/}`);
+        const width = Number(this.topInfoBar.width) || 80;
+        this.topInfoBar.setContent((0, utils_1.padColumn)(` ${segments.join('   ')} `, width));
     }
     buildWindows(callbacks) {
         const { onLobbySelect, createTableFlow, joinSelectedTable, observeSelectedTable, toggleFilters, manualRefresh, runAction } = callbacks;
@@ -396,6 +547,8 @@ class UIManager {
             },
         });
         this.buildTablePanels();
+        // Last, because the glitches are aimed at panes built above this line.
+        this.attachChrome();
     }
     /**
      * The window geometry, from the screen's CURRENT size.
@@ -455,6 +608,9 @@ class UIManager {
         }
         this.layoutTablePanels();
         this.layoutActionButtons();
+        // The menus leave a different run in a resized terminal, and the rail is
+        // sized once when it is attached.
+        this.attachChrome();
     }
     buildTablePanels() {
         const panelStyle = { border: constants_1.UI_THEME.windowBorder, bg: constants_1.UI_THEME.windowBg };

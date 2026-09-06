@@ -16,6 +16,7 @@
 import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { PANEL_BORDER, PANEL_BORDER_FOCUS } from '../../../../Doors/livechat/ui/theme';
+import { themeById } from '../../../../sdk/engines/ui/theme';
 
 const DOOR = join(__dirname, '..', '..', '..', '..', 'Doors', 'livechat');
 
@@ -35,8 +36,16 @@ describe('the theme', () => {
   it('is dim when a panel is not active, bright when it is', () => {
     // The signal that matters is DIM versus BRIGHT - the widest gap the
     // palette offers. Dark blue on black was close to unreadable.
-    expect(PANEL_BORDER).toBe('gray');
-    expect(PANEL_BORDER_FOCUS).toBe('white');
+    //
+    // The two colours stopped being the literals 'gray' and 'white' on
+    // 2026-09-03: "livechat doesnt look themed at all", then "all bordes in
+    // the app needs to use the themes primary color as well" (sysop). They
+    // are the theme's own two now - accent for an idle border, ink for the
+    // focused one - and classic's accent/ink ARE gray and white, so the
+    // door a caller with no theme sees is unchanged.
+    const classic = themeById('classic').tokens;
+    expect(PANEL_BORDER).toBe(classic.accent);
+    expect(PANEL_BORDER_FOCUS).toBe(classic.ink);
   });
 
   it('never uses the dark blue that could not be seen', () => {
