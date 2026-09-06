@@ -14,7 +14,8 @@ export function parseHotkeys(label: string, startCol: number):
   Array<{ key: string; from: number; to: number }> {
   const out: Array<{ key: string; from: number; to: number }> = [];
   // Single-character key inside [], optionally followed by non-space chars.
-  const re = /\[([A-Za-z0-9/?!])\](\S*)/g;
+  // '#' added for the Audit Log's record-id filter (AuditLogPage.tsx).
+  const re = /\[([A-Za-z0-9/?!#])\](\S*)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(label)) !== null) {
     const from = startCol + m.index;
