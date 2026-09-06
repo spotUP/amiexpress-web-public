@@ -16,7 +16,7 @@
 
 import assert from 'assert';
 import { panelsLayout, panelScale, CELL_ASPECT } from '../../ui/panels/layout';
-import { buildBoard, scaleBuffer } from '../../ui/panels/board-view';
+import { buildBoard, scaleBuffer, boardSize } from '../../ui/panels/board-view';
 import { Stack } from '../../core/panels/stack';
 import { GeneratorSource } from '../../core/panels/generator-source';
 import { getClassicEndless } from '../../core/panels/level-data';
@@ -186,4 +186,45 @@ export async function theDrawnBoardIsTheScaledSize(): Promise<void> {
   // One cursor, drawn once per row of the taller tile - not repeated per cell.
   const brackets = board.flat().filter(c => c?.char === '[' || c?.char === ']');
   assert.strictEqual(brackets.length, 2 * 2, 'two brackets, two rows tall');
+}
+
+/**
+ * THE C64 TILE IS 2x2, and the incoming row is what pays for it.
+ *
+ * Twelve panel rows at double height need 24 of a C64's 25 rows; a thirteenth
+ * row - the incoming one panel-attack dims under the stack - would need 26.
+ * The choice was a 12x24 board a player can read or a 6x13 one with a warning
+ * row under it, and the sysop asked for the bigger tile: "can we make the
+ * pieces bigger in tetris attack in petscii mode?" (2026-09-06). The border
+ * and one of the HUD's two rows go with it.
+ *
+ * Pinned because it is a TRADE, not an improvement: whoever puts the incoming
+ * row back has to take the tile down to 1x1, and should see that here.
+ */
+export async function theC64TileIsAsBigAsTwentyFiveRowsAllow(): Promise<void> {
+  const opts = { variant: 'c64' as const, showIncomingRow: false };
+  const { cols, rows } = boardSize(stackOf(), opts);
+
+  assert.strictEqual(cols, 6, 'six panels, one character each');
+  assert.strictEqual(rows, 12, 'and no incoming row, which is what buys the height');
+
+  const layout = panelsLayout(40, 25, cols, rows, CELL_ASPECT.petscii);
+  assert.deepStrictEqual(layout.scale, { x: 2, y: 2 }, 'a 2x2 tile, square on a square cell');
+  assert.strictEqual(layout.board.width, 12);
+  assert.strictEqual(layout.board.height, 24);
+  assert.strictEqual(layout.border, false, 'there is no room for a frame as well');
+  assert.strictEqual(layout.hud.height, 1, 'and the HUD gives up one of its two rows');
+  assert.strictEqual(
+    layout.board.top + layout.board.height + layout.hud.height, 25,
+    'board and HUD fill the screen exactly - a row more would not fit',
+  );
+}
+
+/** The terminal is untouched: it has rows to spare and keeps its frame. */
+export async function aTerminalKeepsItsFrameAndItsIncomingRow(): Promise<void> {
+  const { rows } = boardSize(stackOf(), { variant: 'wide', showIncomingRow: true });
+  assert.strictEqual(rows, 13, 'the incoming row is drawn on a terminal');
+
+  const layout = panelsLayout(80, 25, 12, rows, CELL_ASPECT.terminal);
+  assert.strictEqual(layout.border, true, '80 columns still frames the board');
 }

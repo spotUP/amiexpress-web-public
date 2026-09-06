@@ -93,6 +93,27 @@ export const CELL_ASPECT = {
  */
 const MAX_TILE_ASPECT = 2;
 
+/**
+ * What the chrome costs the board, in rows and columns.
+ *
+ * A frame and a two-row HUD are worth their space on a screen with rows to
+ * spare. On a C64 they are the difference between a 2x2 tile and a 1x1 one:
+ * twelve panel rows at double height need 24 of the 25 rows there are, so the
+ * border and one of the HUD's rows have to go for the tile to double. Making
+ * the cost a parameter is what lets the caller decide that.
+ */
+export interface PanelChrome {
+  frameRows: number;
+  frameCols: number;
+  hudRows: number;
+}
+
+const DEFAULT_CHROME: PanelChrome = {
+  frameRows: FRAME_ROWS,
+  frameCols: FRAME_COLS,
+  hudRows: STACKED_HUD_ROWS,
+};
+
 export function panelScale(
   screenWidth: number,
   screenHeight: number,
@@ -100,15 +121,16 @@ export function panelScale(
   boardRows: number,
   stacked: boolean,
   cellAspect: number = CELL_ASPECT.terminal,
+  chrome: PanelChrome = DEFAULT_CHROME,
 ): PanelScale {
   // Beside the board, the HUD's columns are not the board's to grow into.
   const usableCols = Math.max(
     1,
-    stacked ? screenWidth - FRAME_COLS : screenWidth - FRAME_COLS - GAP - HUD_WIDE,
+    stacked ? screenWidth - chrome.frameCols : screenWidth - chrome.frameCols - GAP - HUD_WIDE,
   );
   const usableRows = Math.max(
     1,
-    screenHeight - FRAME_ROWS - (stacked ? STACKED_HUD_ROWS : 0),
+    screenHeight - chrome.frameRows - (stacked ? chrome.hudRows : 0),
   );
 
   const fitX = Math.max(1, Math.min(MAX_SCALE, Math.floor(usableCols / boardCols)));
@@ -193,18 +215,33 @@ export function panelsLayout(
   // it most of the width it could be using.
   const portrait = screenHeight > screenWidth;
   const stacked = compact || portrait || screenWidth < boardCols + GAP + HUD_WIDE + 2;
-  const hudWidth = stacked ? screenWidth - FRAME_COLS : HUD_WIDE;
+  const hudWidth = stacked ? screenWidth - (compact ? 0 : FRAME_COLS) : HUD_WIDE;
+
+  // A SQUARE-CELLED SCREEN SPENDS ITS CHROME ON THE TILE.
+  //
+  // The C64's twenty-five rows hold twelve panel rows at double height only
+  // if the border and one of the HUD's two rows give way - 12*2 + 1 = 25
+  // exactly. That is the whole difference between a 6x12 board of single
+  // characters and a 12x24 one that can be read across the room, and the
+  // sysop asked for the bigger tile: "can we make the pieces bigger in tetris
+  // attack in petscii mode?" (2026-09-06). Elsewhere there are rows to spare
+  // and the frame is worth its space.
+  const square = cellAspect >= CELL_ASPECT.petscii;
+  const chrome: PanelChrome = square && stacked
+    ? { frameRows: 0, frameCols: 0, hudRows: 1 }
+    : DEFAULT_CHROME;
 
   const scale = panelScale(
-    screenWidth, screenHeight, boardCols, boardRows, stacked, cellAspect,
+    screenWidth, screenHeight, boardCols, boardRows, stacked, cellAspect, chrome,
   );
   const width = boardCols * scale.x;
   const height = boardRows * scale.y;
 
   const totalWidth = stacked ? width : width + GAP + hudWidth;
   const left = Math.max(1, Math.floor((screenWidth - totalWidth) / 2));
+  const hudRows = stacked ? chrome.hudRows : 0;
   const top = stacked
-    ? Math.max(1, Math.floor((screenHeight - height - STACKED_HUD_ROWS) / 2))
+    ? Math.max(0, Math.floor((screenHeight - height - hudRows) / 2))
     : Math.max(1, Math.floor((screenHeight - height) / 2));
 
   return {
@@ -217,7 +254,7 @@ export function panelsLayout(
         top: top + height,
         left,
         width: Math.max(0, Math.min(hudWidth, screenWidth - left)),
-        height: STACKED_HUD_ROWS,
+        height: hudRows,
       }
       : {
         top,

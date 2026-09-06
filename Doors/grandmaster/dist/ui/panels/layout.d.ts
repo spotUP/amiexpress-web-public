@@ -61,7 +61,21 @@ export declare const CELL_ASPECT: {
     /** PETSCII on a C64: 8x8 pixels, square. */
     readonly petscii: 1;
 };
-export declare function panelScale(screenWidth: number, screenHeight: number, boardCols: number, boardRows: number, stacked: boolean, cellAspect?: number): PanelScale;
+/**
+ * What the chrome costs the board, in rows and columns.
+ *
+ * A frame and a two-row HUD are worth their space on a screen with rows to
+ * spare. On a C64 they are the difference between a 2x2 tile and a 1x1 one:
+ * twelve panel rows at double height need 24 of the 25 rows there are, so the
+ * border and one of the HUD's rows have to go for the tile to double. Making
+ * the cost a parameter is what lets the caller decide that.
+ */
+export interface PanelChrome {
+    frameRows: number;
+    frameCols: number;
+    hudRows: number;
+}
+export declare function panelScale(screenWidth: number, screenHeight: number, boardCols: number, boardRows: number, stacked: boolean, cellAspect?: number, chrome?: PanelChrome): PanelScale;
 export interface PanelsLayout {
     /** True at 40 columns: no labels, no chrome, no effects. */
     compact: boolean;

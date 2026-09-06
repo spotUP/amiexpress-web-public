@@ -167,7 +167,7 @@ export class PanelsScreen {
 
   /** Lay the board and HUD out, centred in whatever room there is. */
   private setupUI(): void {
-    const { cols, rows } = boardSize(this.stack, { variant: this.variant });
+    const { cols, rows } = boardSize(this.stack, this.boardOptions());
     // Geometry comes from the live screen width, never from a constant.
     // A PETSCII cell is square; an xterm cell is half as wide as it is tall.
     // The layout has to know which, because it decides what a square TILE is.
@@ -263,10 +263,27 @@ export class PanelsScreen {
     }).join('\n'));
   }
 
+  /**
+   * What the board IS on this screen - the same answer for its size and for
+   * its paint, or the two disagree and the stack draws a row out of place.
+   *
+   * The C64 does not draw the incoming row. Twelve panel rows at double
+   * height need 24 of its 25 rows, and a thirteenth would need 26: the choice
+   * is a 12x24 board a player can read or a 6x13 one with a row of warning
+   * under it. The sysop asked for the bigger tile, and this is what it costs -
+   * the rising row is felt rather than seen there.
+   */
+  private boardOptions(): { variant: BoardVariant; showIncomingRow: boolean } {
+    return {
+      variant: this.variant,
+      showIncomingRow: this.variant !== 'c64',
+    };
+  }
+
   private renderBoard(tick: number): void {
     if (!this.boardBox) return;
     const board = buildBoard(this.stack, this.sheet, tick, {
-      variant: this.variant,
+      ...this.boardOptions(),
       scale: this.layout?.scale,
     });
     // bufferToTags returns one string per row.

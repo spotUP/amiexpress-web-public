@@ -15,6 +15,7 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { TetriNetEngine } from '../core/tetrinet/tetrinet-engine';
 import { blockCols, fitCell, cellsCanCarryBackground } from './block-width';
+import { isCompactWidth } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 /** Playfield columns, in BLOCKS. TetriNET's field is twelve wide, not ten. */
 const TETRINET_COLUMNS = 12;
@@ -570,6 +571,19 @@ export class TetriNetScreen {
     // gmaster ones, it looks wider than it is".
     const wellCols = TETRINET_COLUMNS * blockCols(this.screen.width);
 
+    // THE RIGHT COLUMN STARTS WHERE THE WELL ENDS, and ends at the screen.
+    //
+    // Every panel here was placed at column 26 and the opponents at 52 -
+    // an 80-column screen's numbers. On a C64 the panels ran off the right
+    // edge mid-word and the opponents were drawn entirely past it, which is
+    // why there were none: "the layout is broken and i see no opponents in
+    // tetrinet petscii" (2026-09-06).
+const holdEnabled = this.engine.isHoldEnabled();
+    const compact = isCompactWidth(this.screen.width);
+    const sideLeft = wellCols + 2 + (compact ? 1 : 0);
+    const sideWidth = Math.max(12, this.screen.width - sideLeft - (compact ? 0 : 28));
+    const holdWidth = holdEnabled ? Math.floor((sideWidth - 1) / 2) : sideWidth;
+
     this.boardBox = createBox({
       parent: this.screen,
       top: 0,
@@ -582,12 +596,11 @@ export class TetriNetScreen {
     });
 
     // Next piece, and - when the house rule is on - Hold beside it.
-    const holdEnabled = this.engine.isHoldEnabled();
     this.previewBox = createBox({
       parent: this.screen,
       top: 0,
-      left: 26,
-      width: holdEnabled ? 13 : 26,
+      left: sideLeft,
+      width: holdWidth,
       height: 6,
       border: { type: 'line' },
       style: { border: { fg: 'cyan' } },
@@ -602,8 +615,8 @@ export class TetriNetScreen {
       this.holdBox = createBox({
         parent: this.screen,
         top: 0,
-        left: 39,
-        width: 13,
+        left: sideLeft + holdWidth + 1,
+        width: sideWidth - holdWidth - 1,
         height: 6,
         border: { type: 'line' },
         style: { border: { fg: 'cyan' } },
@@ -619,8 +632,8 @@ export class TetriNetScreen {
     this.inventoryPanel = new InventoryPanel({
       parent: this.screen,
       top: 6,
-      left: 26,
-      width: 26,
+      left: sideLeft,
+      width: sideWidth,
       maxSlots: 10,
     });
 
@@ -628,18 +641,18 @@ export class TetriNetScreen {
     this.targetSelector = new TargetSelector({
       parent: this.screen,
       top: 9,
-      left: 26,
-      width: 26,
-      height: 8,
+      left: sideLeft,
+      width: sideWidth,
+      height: compact ? 4 : 8,
     });
 
     // Score / level / lines. In versus this is a bar under the board; the
     // TetriNET field is too tall for that, so it sits in the right column.
     this.statsBox = createBox({
       parent: this.screen,
-      top: 17,
-      left: 26,
-      width: 26,
+      top: compact ? 13 : 17,
+      left: sideLeft,
+      width: sideWidth,
       height: 4,
       border: { type: 'line' },
       style: { border: { fg: 'green' } },
@@ -655,9 +668,9 @@ export class TetriNetScreen {
     // announced with a box across the middle of the playfield.
     this.noticeBox = createBox({
       parent: this.screen,
-      top: 21,
-      left: 26,
-      width: 26,
+      top: compact ? 17 : 21,
+      left: sideLeft,
+      width: sideWidth,
       height: 1,
       border: { type: 'none' },
       content: '',
@@ -675,9 +688,9 @@ export class TetriNetScreen {
     // death is actually running.
     this.suddenDeathBox = createBox({
       parent: this.screen,
-      top: 22,
-      left: 26,
-      width: 26,
+      top: compact ? 18 : 22,
+      left: sideLeft,
+      width: sideWidth,
       height: 2,
       border: { type: 'none' },
       content: '',
@@ -689,12 +702,15 @@ export class TetriNetScreen {
     });
 
     // Opponent fields
+    // Compact: under the right column's panels, in the rows they leave -
+    // there is no second column to put them in, and an opponent nobody can
+    // see is the whole complaint.
     this.opponentBoards = new OpponentBoards({
       parent: this.screen,
-      top: 0,
-      left: 52,
-      width: 28,
-      height: 24,
+      top: compact ? 19 : 0,
+      left: compact ? sideLeft : sideLeft + sideWidth + 1,
+      width: compact ? sideWidth : 28,
+      height: compact ? 5 : 24,
       maxOpponents: 5,
     });
 
@@ -1272,7 +1288,10 @@ export class TetriNetScreen {
     let content = '';
     for (const row of shape) {
       for (const cell of row) {
-        content += cell ? block : '  ';
+        // The preview follows the BOARD's block width; it used to be two
+        // characters whatever the board did, so a C64 preview was twice the
+        // size of the piece it previewed.
+        content += fitCell(cell ? block : '  ', blockCols(this.screen.width));
       }
       content += '\n';
     }
@@ -1294,7 +1313,10 @@ export class TetriNetScreen {
     let content = '';
     for (const row of shape) {
       for (const cell of row) {
-        content += cell ? this.getBlockChar(pieceType) : '  ';
+        content += fitCell(
+          cell ? this.getBlockChar(pieceType) : '  ',
+          blockCols(this.screen.width),
+        );
       }
       content += '\n';
     }

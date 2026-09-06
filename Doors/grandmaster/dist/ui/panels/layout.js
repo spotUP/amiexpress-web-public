@@ -63,10 +63,15 @@ exports.CELL_ASPECT = {
  * a screen whose cells are square. The cap is on what reaches the eye.
  */
 const MAX_TILE_ASPECT = 2;
-function panelScale(screenWidth, screenHeight, boardCols, boardRows, stacked, cellAspect = exports.CELL_ASPECT.terminal) {
+const DEFAULT_CHROME = {
+    frameRows: FRAME_ROWS,
+    frameCols: FRAME_COLS,
+    hudRows: STACKED_HUD_ROWS,
+};
+function panelScale(screenWidth, screenHeight, boardCols, boardRows, stacked, cellAspect = exports.CELL_ASPECT.terminal, chrome = DEFAULT_CHROME) {
     // Beside the board, the HUD's columns are not the board's to grow into.
-    const usableCols = Math.max(1, stacked ? screenWidth - FRAME_COLS : screenWidth - FRAME_COLS - GAP - HUD_WIDE);
-    const usableRows = Math.max(1, screenHeight - FRAME_ROWS - (stacked ? STACKED_HUD_ROWS : 0));
+    const usableCols = Math.max(1, stacked ? screenWidth - chrome.frameCols : screenWidth - chrome.frameCols - GAP - HUD_WIDE);
+    const usableRows = Math.max(1, screenHeight - chrome.frameRows - (stacked ? chrome.hudRows : 0));
     const fitX = Math.max(1, Math.min(MAX_SCALE, Math.floor(usableCols / boardCols)));
     const fitY = Math.max(1, Math.min(MAX_SCALE, Math.floor(usableRows / boardRows)));
     // A TILE KEEPS ITS SHAPE unless the board owns the whole width.
@@ -121,14 +126,28 @@ function panelsLayout(screenWidth, screenHeight, boardCols, boardRows, cellAspec
     // it most of the width it could be using.
     const portrait = screenHeight > screenWidth;
     const stacked = compact || portrait || screenWidth < boardCols + GAP + HUD_WIDE + 2;
-    const hudWidth = stacked ? screenWidth - FRAME_COLS : HUD_WIDE;
-    const scale = panelScale(screenWidth, screenHeight, boardCols, boardRows, stacked, cellAspect);
+    const hudWidth = stacked ? screenWidth - (compact ? 0 : FRAME_COLS) : HUD_WIDE;
+    // A SQUARE-CELLED SCREEN SPENDS ITS CHROME ON THE TILE.
+    //
+    // The C64's twenty-five rows hold twelve panel rows at double height only
+    // if the border and one of the HUD's two rows give way - 12*2 + 1 = 25
+    // exactly. That is the whole difference between a 6x12 board of single
+    // characters and a 12x24 one that can be read across the room, and the
+    // sysop asked for the bigger tile: "can we make the pieces bigger in tetris
+    // attack in petscii mode?" (2026-09-06). Elsewhere there are rows to spare
+    // and the frame is worth its space.
+    const square = cellAspect >= exports.CELL_ASPECT.petscii;
+    const chrome = square && stacked
+        ? { frameRows: 0, frameCols: 0, hudRows: 1 }
+        : DEFAULT_CHROME;
+    const scale = panelScale(screenWidth, screenHeight, boardCols, boardRows, stacked, cellAspect, chrome);
     const width = boardCols * scale.x;
     const height = boardRows * scale.y;
     const totalWidth = stacked ? width : width + GAP + hudWidth;
     const left = Math.max(1, Math.floor((screenWidth - totalWidth) / 2));
+    const hudRows = stacked ? chrome.hudRows : 0;
     const top = stacked
-        ? Math.max(1, Math.floor((screenHeight - height - STACKED_HUD_ROWS) / 2))
+        ? Math.max(0, Math.floor((screenHeight - height - hudRows) / 2))
         : Math.max(1, Math.floor((screenHeight - height) / 2));
     return {
         compact,
@@ -140,7 +159,7 @@ function panelsLayout(screenWidth, screenHeight, boardCols, boardRows, cellAspec
                 top: top + height,
                 left,
                 width: Math.max(0, Math.min(hudWidth, screenWidth - left)),
-                height: STACKED_HUD_ROWS,
+                height: hudRows,
             }
             : {
                 top,
