@@ -41,18 +41,38 @@ export function buildThemeItems(
   compact: CompactProfile,
   width = 80
 ): string[] {
-  // `[*] ` costs four of the row's columns, and the last one is left empty
-  // (writing a row's final cell leaves the terminal in a pending-wrap state).
-  const nameRoom = Math.max(4, width - 5);
+  // `[*] ` costs four of the row's columns, blessed's own selected-item
+  // caret ('»', which reaches a caller as '>>') costs two more, and the last
+  // one is left empty - writing a row's final cell leaves the terminal in a
+  // pending-wrap state. Forgetting the caret is what let two of the seven
+  // rows wrap onto the theme underneath them at 80 columns.
+  const nameRoom = Math.max(4, width - 4 - 2 - 1);
   return themes.map(t => {
     // The one in use is marked rather than merely highlighted: the
     // highlight follows the cursor and says nothing about what is saved.
     const mark = t.id === active ? s.accent('[*]') : s.dim('[ ]');
     // 40 columns: name only. `[*] ` costs 4 of them and a folded row eats
     // the theme underneath it, which is how the C64 lost a third of this list.
-    return compact.singleColumn
-      ? `${mark} ${s.ink(t.name.substring(0, nameRoom))}`
-      : `${mark} ${s.ink(t.name.padEnd(16))} ${s.dim(t.blurb)}`;
+    if (compact.singleColumn) {
+      return `${mark} ${s.ink(t.name.substring(0, nameRoom))}`;
+    }
+    // CLIPPED, not folded. padEnd(16) does not truncate, so a name longer
+    // than the column pushed the blurb past the edge and blessed wrapped the
+    // row onto the next one - eating the theme underneath it, which is the
+    // exact fault the 40-column branch above exists to avoid. Measured at 80
+    // on 2026-09-06: two of the seven rows wrapped.
+    //
+    // The two halves are clipped as one line and then split back at the
+    // column, so the styling brackets never fall inside a cut.
+    const line = `${t.name.padEnd(16)} ${t.blurb}`.substring(0, nameRoom);
+    // The boundary is where the gap actually is: after the padding for a
+    // short name, after the name itself for one that overflows the column.
+    // Splitting at 16 regardless replaced a real character with the gap -
+    // "Slate & Slash (m ted)".
+    const cut = Math.max(16, t.name.length);
+    const namePart = line.slice(0, cut);
+    const blurbPart = line.slice(cut + 1);
+    return `${mark} ${s.ink(namePart)} ${s.dim(blurbPart)}`;
   });
 }
 
@@ -252,6 +272,14 @@ export async function createApp(session: DoorSession): Promise<void> {
 
     screen.render();
   };
+
+  // Open ON the theme in use, which is what the SDK's in-door menu does
+  // (widgets/theme-menu.ts's startAt) and what the C picker has always
+  // done. Starting at row 0 put the cursor on Classic for everybody.
+  {
+    const at = Math.max(0, themes.findIndex((t) => t.id === active));
+    (list as any).select(at);
+  }
 
   list.focus();
   screen.render();

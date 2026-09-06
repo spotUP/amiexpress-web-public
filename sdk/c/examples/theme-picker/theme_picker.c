@@ -78,14 +78,21 @@ static const char *theme_row(void *context, int index)
        At 80 the name is padded to sixteen and the blurb follows, which is
        what buildThemeItems does - the two doors are one screen. */
     if (wide) {
-        unsigned long pad = strlen(row);
-        unsigned long want = 4 + 16;       /* "[*] " + the name column */
-        while (pad < want && pad < sizeof(row) - 2) row[pad++] = ' ';
-        /* And ALWAYS one space: padEnd(16) does not truncate, so a name
-           longer than the column still gets its gap - without this,
-           "Slate & Slash (muted)" ran straight into its own blurb. */
-        if (pad < sizeof(row) - 2) row[pad++] = ' ';
-        row[pad] = '\0';
+        /* Columns to pad, bytes to write - the row carries colour markers,
+           so its printable width and its length are different numbers.
+           Mixing them truncated every name (measured against the blessed
+           picker, 2026-09-06). */
+        unsigned long cols_now = ui_printable_len(row);
+        unsigned long bytes = strlen(row);
+        unsigned long want = 4 + 16;       /* "[*] " plus the name column */
+
+        while (cols_now < want && bytes < sizeof(row) - 2) {
+            row[bytes++] = ' ';
+            cols_now++;
+        }
+        /* And always one space, because padEnd does not truncate. */
+        if (bytes < sizeof(row) - 2) row[bytes++] = ' ';
+        row[bytes] = '\0';
         {
             char pen[3];
             ui_ink(pen, row_theme->dim);
@@ -135,7 +142,7 @@ static void door_idle(void *ctx)
 
     if (!a) return;
     (*a->tick)++;
-    ui_masthead_draw_tick(&a->screen->buf, 1, 1, a->screen->cols, "THEME",
+    ui_masthead_draw_tick(&a->screen->buf, 1, 1, a->screen->cols, "DOOR THEME",
                           (*a->theme)->rail, (*a->theme)->ground,
                           (*a->theme)->accent, *a->tick);
     ui_screen_flush(a->screen);
@@ -189,18 +196,24 @@ int main(int argc, char **argv)
     keys.ctx = 0;
 
     ui_list_init(&list);
+    /* Row 3, no frame, hard against the left margin - where the blessed
+       picker puts its list (top: 2 under a masthead row and a blank one).
+       A box was the C door's own invention and the sysop saw it at once. */
     list.top = 3;
-    list.left = 2;
-    list.width = screen.cols - 2;
-    list.height = screen.rows - 5;
+    list.left = 1;
+    list.width = screen.cols - 1;
+    list.height = ui_theme_count();
     list.count = ui_theme_count();
     list.row = theme_row;
     list.context = &wide;
     list.label = " THEMES ";
-    list.borders = screen.profile.borders;
+    /* The TypeScript list has `border: undefined` at every width. */
+    list.borders = 0;
     /* ">>" where a bar will not fit, which is what the TypeScript picker
        shows on a C64. */
-    list.caret = screen.profile.caret_selection ? ">>" : 0;
+    /* blessed marks the selected row with a caret at EVERY width - it is
+       the list's own `»`, which reaches a caller as ">>". */
+    list.caret = ">>";
 
     /* The rail slides only where decorative motion is allowed - never on the
        40-column tier, where a moving effect leaves stray glyphs mid-row. */
@@ -232,14 +245,15 @@ int main(int argc, char **argv)
         const char *note;
 
         ansi_clear(&screen.buf);
-        /* The masthead is CHROME, and the 40-column tier collapses chrome
-           (ui_profile.h) - the TypeScript picker shows no bar there either,
-           and a full-width one costs a row a C64 has not got. */
-        if (!screen.profile.collapse_chrome) {
-            ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, "THEME",
-                                  theme->rail, theme->ground, theme->accent,
-                                  rail_tick);
-        }
+        /* At EVERY width. The blessed door keeps its masthead row on a C64
+           and loses only the RAIL - ui_masthead_draw_tick drops that on its
+           own when the title leaves no room for a run. Suppressing the whole
+           row here left a C64 caller looking at a screen with no name on it,
+           which the TypeScript never did (measured side by side,
+           2026-09-06). */
+        ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, "DOOR THEME",
+                              screen.profile.collapse_chrome ? "" : theme->rail,
+                              theme->ground, theme->accent, rail_tick);
         ui_list_draw(&list, &screen.buf);
 
         /* Say what will happen, and say the truth about this board - in
@@ -261,7 +275,11 @@ int main(int argc, char **argv)
                 : "This board cannot keep a theme.";
         }
         ansi_color(&screen.buf, theme->dim, theme->ground, 0);
-        ansi_text(&screen.buf, screen.rows - 1, 2, note, screen.cols - 3);
+        /* One blank row under the last theme, like the TypeScript's
+           `top: listRows + 3`. It used to sit at the bottom of the screen,
+           twelve rows away from what it was talking about. */
+        ansi_text(&screen.buf, list.top + ui_theme_count() + 1, 3,
+                  note, screen.cols - 3);
 
         {
             char footer[160];
@@ -290,13 +308,33 @@ int main(int argc, char **argv)
                 optional[n++] = h2;
             }
             sprintf(h3, "%sQ: %s%s", keypen, dimpen, wide ? "Leave" : "Bye");
-            ui_footer_build(footer, sizeof(footer), screen.cols,
-                            "", optional, n, h3);
+            /* ` hints  <rail>` - footerPad plus the branding tail, which is
+               what attachDoorChrome appends (chrome.ts: the rail at the end
+               is branding, not a hint, so it stays dim). */
+            {
+                static char tail[24];
+                if (wide && theme->rail[0]) {
+                    sprintf(tail, "%s%s", dimpen, theme->rail);
+                } else {
+                    tail[0] = '\0';
+                }
+                /* No prefix: ui_footer_build would follow it with its own
+                   two-space separator, and the SDK's footerPad is ONE
+                   space. It goes on below, in front of the whole line. */
+                ui_footer_build(footer, sizeof(footer), screen.cols - 1,
+                                "", optional, n, h3);
+                memmove(footer + 1, footer, strlen(footer) + 1);
+                footer[0] = ' ';
+                if (tail[0] && strlen(footer) + strlen(tail) + 3 < sizeof(footer)) {
+                    strcat(footer, "  ");
+                    strcat(footer, tail);
+                }
+            }
             if (screen.profile.collapse_chrome) {
                 /* No bar: chrome is collapsed here, so the hints are a line
                    of dim text like every other line on the screen. */
                 ansi_color(&screen.buf, theme->dim, ANSI_BLACK, 0);
-                ansi_text(&screen.buf, screen.rows, 2, footer, screen.cols - 3);
+                ansi_text(&screen.buf, screen.rows, 1, footer, screen.cols - 1);
             } else {
                 ui_bar_draw(&screen.buf, screen.rows, 1, screen.cols,
                             footer, theme->ground, theme->accent);

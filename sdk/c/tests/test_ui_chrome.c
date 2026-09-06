@@ -108,9 +108,17 @@ static void paint_narrow_masthead(ansi_buf *b)
 static void the_masthead_carries_the_title_then_the_rail(void)
 {
     const char *wide = drew(paint_masthead);
-    assert(strstr(wide, "CARD LOBBY") != 0);
-    assert(strstr(wide, "/") != 0);
-    printf("  [OK] the masthead carries the title, then the rail\n");
+    const char *title = strstr(wide, "CARD LOBBY");
+    const char *slash = strstr(wide, "/");
+
+    assert(title != 0);
+    assert(slash != 0);
+    /* THE RAIL FIRST. `${rail(run)} ${ink(title)}` is chrome.ts's line(),
+       and the C drew it the other way round until 2026-09-06 - which is
+       one of the reasons the two theme pickers did not look like the same
+       board. The order is the assertion now, not just the presence. */
+    assert(slash < title);
+    printf("  [OK] the masthead carries the rail, then the title\n");
 }
 
 static void the_rail_is_what_gets_cut(void)

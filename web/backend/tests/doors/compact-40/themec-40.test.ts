@@ -158,12 +158,12 @@ describe('THEMEC opens on a 40-column caller', () => {
       expect(Number(m[2])).toBeLessThanOrEqual(40);
     }
 
-    // NO masthead at 40. The 40-column tier collapses chrome, and the
-    // TypeScript picker shows no bar there either - the two doors were put
-    // side by side on 2026-09-06 and this is one of the differences that
-    // closed. A full-width bar costs a row a C64 has not got.
-    expect(rows[0]).not.toContain('THEME');
-    // The list starts at the top instead, with the cursor's caret on it.
+    // The masthead row is on the glass at 40 too, carrying the title and no
+    // rail - which is what the blessed picker draws there, measured screen
+    // against screen on 2026-09-06. What a C64 loses is the RAIL, not the
+    // name of the door.
+    expect(rows[0].trim()).toBe('DOOR THEME');
+    // And the cursor is a caret, as it is at every width in blessed.
     expect(rows.join('\n')).toContain('>>');
 
     // Every theme is on the glass, one per row, none eaten by the row below.

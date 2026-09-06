@@ -172,8 +172,9 @@ void ui_masthead_draw_tick(ansi_buf *b, int row, int left, int cols,
                            int fg, int bg, int tick)
 {
     char line[256];
+    char run[256];
     unsigned long title_len;
-    unsigned long pos;
+    unsigned long run_width;
     int budget = cols;
 
     if (!b || cols <= 0) return;
@@ -183,25 +184,52 @@ void ui_masthead_draw_tick(ansi_buf *b, int row, int left, int cols,
     title_len = ui_printable_len(title);
     if (title_len > (unsigned long) budget) title_len = (unsigned long) budget;
 
-    memcpy(line, title, title_len);
-    pos = title_len;
-
-    /* The rail is branding: it fills whatever the title left, and when there
-       is nothing left it simply is not drawn. The title is never cut for it. */
-    if (rail && *rail) {
-        if (pos < (unsigned long) budget) {
-            char run[256];
-            unsigned long run_width = (unsigned long) budget - pos - 1;
-
-            line[pos++] = ' ';
-            if (run_width > sizeof(run) - 1) run_width = sizeof(run) - 1;
-            ui_rail_stream(rail, (int) run_width, tick, 1UL, run, sizeof(run));
-            memcpy(line + pos, run, strlen(run));
-            pos += strlen(run);
-        }
+    /* THE RAIL FIRST, THE TITLE AT THE END OF IT.
+     *
+     * `${rail(run)} ${ink(title)}` - chrome.ts's line(), and the order
+     * matters to a reader: the branding sweeps in and the name of the
+     * screen is where the eye stops. The C drew it the other way round and
+     * the two doors did not look like the same board (sysop, 2026-09-06).
+     *
+     * One column short of the width is the caller's job; the RUN is sized
+     * here, title and its separating space taken off. */
+    if (!rail || !*rail) {
+        /* No rail: ` ${title} `, exactly - chrome.ts sets that content and
+           returns, and the space in front of it is on the glass. */
+        unsigned long at = 0;
+        if ((unsigned long) budget > title_len + 1) line[at++] = ' ';
+        memcpy(line + at, title, title_len);
+        at += title_len;
+        if ((unsigned long) budget > at) line[at++] = ' ';
+        line[at] = '\0';
+        ui_bar_draw(b, row, left, cols, line, fg, bg);
+        return;
     }
 
-    line[pos] = '\0';
+    /* No room for a rail beside the title - which is a narrow screen, not a
+       theme without one - so the title takes the row alone. Computed BEFORE
+       the subtraction: these are unsigned, and budget - title_len - 1 on a
+       40-column screen with a long title wraps to four billion and smashes
+       the stack (it did, on the first run of the C suite after this). */
+    if ((unsigned long) budget <= title_len + 1) {
+        memcpy(line, title, title_len);
+        line[title_len] = '\0';
+        ui_bar_draw(b, row, left, cols, line, fg, bg);
+        return;
+    }
+
+    run_width = (unsigned long) budget - title_len - 1;
+    if (run_width > sizeof(run) - 1) run_width = sizeof(run) - 1;
+    if (run_width > sizeof(line) - title_len - 2) {
+        run_width = sizeof(line) - title_len - 2;
+    }
+    ui_rail_stream(rail, (int) run_width, tick, 1UL, run, sizeof(run));
+
+    memcpy(line, run, strlen(run));
+    line[strlen(run)] = ' ';
+    memcpy(line + strlen(run) + 1, title, title_len);
+    line[strlen(run) + 1 + title_len] = '\0';
+
     ui_bar_draw(b, row, left, cols, line, fg, bg);
 }
 
