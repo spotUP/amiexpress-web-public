@@ -22,7 +22,13 @@ import { mergeForWrite } from './config-merge.util';
 import { config as appConfig } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
-import { parseVolumes, readVolumeSecret, type EgressPosture, type VolumeClass } from '../../storage/volume-config';
+import {
+  parseVolumes,
+  readVolumeSecret,
+  type EgressPosture,
+  type StorageVolume,
+  type VolumeClass,
+} from '../../storage/volume-config';
 import { getStorageContext } from '../../storage/storage-context';
 import type { StorageBackend } from '../../storage/storage-backend';
 import { LocalBackend } from '../../storage/local-backend';
@@ -43,6 +49,16 @@ export interface DriveConfigView extends DriveConfig {
   retentionDays?: number;
   keyId?: string;
   requestBudget?: number;
+  /**
+   * Undefined until the storage subsystem is live in this process (Task 12).
+   * Once live: an IN-PROCESS counter, incremented by `FileCache.ensureLocal`
+   * / `writeBack` (every download/upload that actually reaches the volume)
+   * and by `testVolume`'s connectivity probe - never read from the provider,
+   * never persisted. It resets to 0 on every restart and undercounts a month
+   * that spans one, and it does NOT yet count `NameIndex.refresh()`'s
+   * listing calls (storage/name-index.ts), so treat it as a LOWER BOUND on
+   * the real request count, not an exact meter - see CONFIGURATION.md.
+   */
   requestsThisMonth?: number;
   /**
    * Whether `Storage/<n>.key` (or `BBS_STORAGE_<n>_SECRET`) resolves to a
@@ -100,7 +116,16 @@ export interface PoolStatus {
 export class DriveConfigService {
   private configRepo: ConfigRepository;
 
-  constructor(private database: Database) {
+  constructor(
+    private database: Database,
+    /**
+     * Testing seam: overrides how `testVolume` builds an s3 backend, so a
+     * test can hand it a fake rather than a real AWS client. Defaults to
+     * `createS3Backend`, same as `VolumeSet.fromBoard`'s own seam
+     * (storage/volume-set.ts) - production never sets this.
+     */
+    private readonly backendFactory: (volume: StorageVolume, secret: string) => StorageBackend = createS3Backend
+  ) {
     this.configRepo = database.getConfigRepository();
   }
 
@@ -438,7 +463,7 @@ console.error(`[DriveConfigService] Failed to write ${drivesInfoPath}:`, error);
 
     const secret = readVolumeSecret(bbsRoot, volume.driveNumber);
     if (!secret) throw new Error(`DRIVE.${driveNumber} has no secret configured`);
-    return createS3Backend(volume, secret);
+    return this.backendFactory(volume, secret);
   }
 
   /**
@@ -468,10 +493,26 @@ console.error(`[DriveConfigService] Failed to write ${drivesInfoPath}:`, error);
     }
     if (backend instanceof LocalBackend) return { reachable: true };
 
+    // `list()` below is one real request against the provider - the same
+    // meter `FileCache.ensureLocal`/`writeBack` already count on every
+    // download and upload (file-cache.ts:795, :961). Counted against the
+    // LIVE pool's state when this process has booted one (Task 12), win or
+    // lose: a failed call still spent the request, exactly as
+    // `FakeBackend.charge()` models it in the test suite. A board that has
+    // not booted a pool yet (or is testing a drive number Drives.info does
+    // not have live) has nothing to count against, and that is fine - the
+    // admin page shows no figure for a volume with no live state either.
+    const countRequest = (): void => {
+      const state = getStorageContext()?.volumes.byNumber(driveNumber);
+      if (state) state.requestsThisMonth++;
+    };
+
     try {
       await backend.list('__connectivity_probe__/');
+      countRequest();
       return { reachable: true };
     } catch (error) {
+      countRequest();
       return { reachable: false, error: error instanceof Error ? error.message : String(error) };
     }
   }

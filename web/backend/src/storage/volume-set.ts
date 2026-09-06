@@ -32,6 +32,16 @@ export interface VolumeState {
   degraded: boolean;
 }
 
+export interface VolumeSetOptions {
+  /**
+   * Testing seam: overrides how an s3 volume's backend is constructed.
+   * Defaults to `createS3Backend`, the real AWS client. Never used for a
+   * `kind: 'local'` volume, which always gets a real `LocalBackend` - a local
+   * drive is a plain disk path with nothing to fake.
+   */
+  backendFactory?: (volume: StorageVolume, secret: string) => StorageBackend;
+}
+
 export class VolumeSet {
   constructor(public readonly states: readonly VolumeState[]) {}
 
@@ -48,7 +58,8 @@ export class VolumeSet {
    * So each volume's construction is wrapped individually; a failure here
    * warns naming the drive and skips just that volume.
    */
-  static fromBoard(bbsRoot: string): VolumeSet {
+  static fromBoard(bbsRoot: string, opts: VolumeSetOptions = {}): VolumeSet {
+    const makeS3Backend = opts.backendFactory ?? createS3Backend;
     const states: VolumeState[] = [];
     for (const volume of parseVolumes(bbsRoot)) {
       try {
@@ -64,7 +75,7 @@ export class VolumeSet {
           console.warn(`[storage] DRIVE.${volume.driveNumber} has no secret; volume disabled`);
           continue;
         }
-        states.push(VolumeSet.blank(volume, createS3Backend(volume, secret)));
+        states.push(VolumeSet.blank(volume, makeS3Backend(volume, secret)));
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         console.warn(`[storage] DRIVE.${volume.driveNumber} is misconfigured (${detail}); volume disabled`);
