@@ -15,6 +15,8 @@ import type {
   MouseEvent,
 } from './types';
 import { applyResponsiveMixin, ResponsiveBehavior, type ResponsiveState } from './responsive-mixin';
+import { borderCharsFor } from './border-chars';
+import { wrapAnsiText } from './wrap-text';
 import type { BreakpointName } from './responsive-constants';
 import type { SwipeOptions, LongPressOptions } from './touch-gestures';
 
@@ -1085,57 +1087,15 @@ export class Element extends EventEmitter {
    */
   private _wrapContent(text: string, width: number): string[] {
     const lines: string[] = [];
-    const textLines = text.split(/\r?\n/);
 
-    for (const line of textLines) {
+    for (const line of text.split(/\r?\n/)) {
       if (this._textWidth(line) <= width) {
         lines.push(line);
         continue;
       }
-
-      // Word wrap with ANSI preservation
-      let currentLine = '';
-      let currentWidth = 0;
-      let inAnsi = false;
-      let ansiBuffer = '';
-      let activeAnsi = ''; // Track active ANSI codes
-
-      for (let i = 0; i < line.length; i++) {
-        const ch = line[i];
-
-        // Start of ANSI escape
-        if (ch === ESC) {
-          inAnsi = true;
-          ansiBuffer = ch;
-          continue;
-        }
-
-        // Inside ANSI escape
-        if (inAnsi) {
-          ansiBuffer += ch;
-          if (ch === 'm') {
-            inAnsi = false;
-            currentLine += ansiBuffer;
-            activeAnsi += ansiBuffer;
-            ansiBuffer = '';
-          }
-          continue;
-        }
-
-        // Regular character
-        if (currentWidth >= width) {
-          lines.push(currentLine);
-          currentLine = activeAnsi + ch; // Start new line with active formatting
-          currentWidth = 1;
-        } else {
-          currentLine += ch;
-          currentWidth++;
-        }
-      }
-
-      if (currentLine) {
-        lines.push(currentLine);
-      }
+      // One wrapper, shared with List: this used to break at a hard column
+      // while calling itself a word wrap.
+      lines.push(...wrapAnsiText(line, width, (t) => this._textWidth(t)));
     }
 
     return lines;
@@ -2357,35 +2317,15 @@ export class Element extends EventEmitter {
       ? this.options.border
       : (this.options.border.type || 'line');
 
-    // Border character sets - Amiga ASCII only
-    const borders: any = {
-      line: {
-        topLeft: '.', topRight: '.', bottomLeft: '`', bottomRight: '\'',
-        horizontal: '-', vertical: '|',
-      },
-      heavy: {
-        topLeft: '+', topRight: '+', bottomLeft: '+', bottomRight: '+',
-        horizontal: '=', vertical: '|',
-      },
-      double: {
-        topLeft: '+', topRight: '+', bottomLeft: '+', bottomRight: '+',
-        horizontal: '=', vertical: '|',
-      },
-      round: {
-        topLeft: '.', topRight: '.', bottomLeft: '`', bottomRight: '\'',
-        horizontal: '-', vertical: '|',
-      },
-      bg: {
-        topLeft: ' ', topRight: ' ', bottomLeft: ' ', bottomRight: ' ',
-        horizontal: ' ', vertical: ' ',
-      },
-      ascii: {
-        topLeft: '.', topRight: '.', bottomLeft: '`', bottomRight: '\'',
-        horizontal: '-', vertical: '|',
-      },
+    // ONE table, shared with Screen._renderBorder - which is what actually
+    // paints. This copy used to spell the same six sets out again, so the two
+    // would drift the moment either was touched.
+    const chars = borderCharsFor(type, (this.screen as any)?.petscii === true);
+    return {
+      topLeft: chars.tl, topRight: chars.tr,
+      bottomLeft: chars.bl, bottomRight: chars.br,
+      horizontal: chars.h, vertical: chars.v,
     };
-
-    return borders[type] || borders.line;
   }
 
   /**

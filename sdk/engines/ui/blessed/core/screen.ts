@@ -7,6 +7,7 @@ import { Program } from './program';
 import { cursor, screen as screenAnsi, attrs, blend, parseTags, stripAnsi, convert } from './colors';
 import { KeyBindings } from './keybindings';
 import { ResponsiveLayoutManager, type ResponsiveConfig } from './responsive-layout';
+import { borderCharsFor } from './border-chars';
 import type { ScreenOptions, KeyEvent, MouseEvent } from './types';
 
 // Use String.fromCharCode(27) for ESC to survive Terser minification
@@ -98,8 +99,25 @@ export class Screen extends Element {
   // When enabled, does NOT invalidate lastBuffer on each render, dramatically reducing output
   // Perfect for modem emulation where every byte counts
   private _slowConnectionMode: boolean = false;
+  /**
+   * The caller is a C64, and the screen may use PETSCII's own graphics.
+   *
+   * A door draws the same widgets for every caller; what CHANGES is which
+   * glyphs those widgets are made of. An Amiga terminal gets the ASCII the
+   * board has always drawn - `.` corners and `-` rules - and a PETSCII
+   * caller gets the box-drawing characters the character ROM actually has,
+   * which the transducer maps cell for cell ($70 $40 $6E ...). Without this
+   * the C64 was shown an imitation of ASCII drawn in a font that had the real
+   * thing all along.
+   */
+  public petscii: boolean = false;
 
-  constructor(options: ScreenOptions & { input?: any; output?: (data: string) => void; responsive?: boolean } = {}) {
+  constructor(options: ScreenOptions & {
+    input?: any;
+    output?: (data: string) => void;
+    responsive?: boolean;
+    petscii?: boolean;
+  } = {}) {
     // BBS Terminal Constraints (when not in responsive mode):
     // - Width: 80 columns (classic BBS standard)
     // - Height: 24 rows (classic BBS standard)
@@ -126,6 +144,7 @@ export class Screen extends Element {
     this._width = bbsWidth;
     this._height = bbsHeight;
     this._responsive = options.responsive || false;
+    this.petscii = options.petscii === true;
     this.screen = this;
 
     console.log(`[Screen] Created: ${bbsWidth}x${bbsHeight}, responsive=${this._responsive}, options.width=${options.width}, options.height=${options.height}`);
@@ -1404,16 +1423,7 @@ export class Screen extends Element {
     // Mark border area as dirty so _diff() outputs the changes
     this._markDirty(pos.xi, pos.yi, pos.xl - 1, pos.yl - 1);
 
-    const borderChars: Record<string, { tl: string; tr: string; bl: string; br: string; h: string; v: string }> = {
-      line:   { tl: '.', tr: '.',  bl: '`', br: '\'', h: '-', v: '|' },
-      heavy:  { tl: '+', tr: '+',  bl: '+', br: '+',  h: '=', v: '|' },
-      double: { tl: '+', tr: '+',  bl: '+', br: '+',  h: '=', v: '|' },
-      round:  { tl: '.', tr: '.',  bl: '`', br: '\'', h: '-', v: '|' },
-      ascii:  { tl: '.', tr: '.',  bl: '`', br: '\'', h: '-', v: '|' },
-      bg:     { tl: ' ', tr: ' ',  bl: ' ', br: ' ',  h: ' ', v: ' ' },
-    };
-
-    const chars = borderChars[borderType] ?? borderChars.line;
+    const chars = borderCharsFor(borderType, this.petscii);
 
     // Determine border style with hover/focus/disabled support
     let borderStyle = (element.options.style as any)?.border || {};
@@ -1508,7 +1518,7 @@ export class Screen extends Element {
       if (borderType === 'ascii') {
         // For ASCII borders, strip tags and use labelAttr
         const strippedLabel = rawLabel.replace(/\{[^}]+\}/g, '');
-        this._renderAsciiLabel(pos, strippedLabel, labelAttr, attr);
+        this._renderAsciiLabel(pos, strippedLabel, labelAttr, attr, chars.h);
       } else if (hasInlineTags) {
         // Parse blessed tags and render with inline styles
         const labelText = ` ${rawLabel} `;
@@ -1548,7 +1558,17 @@ export class Screen extends Element {
     }
   }
 
-  private _renderAsciiLabel(pos: any, label: string, labelAttr: number, borderAttr: number): void {
+  /**
+   * `rule` is the border set's OWN horizontal, not a hard-coded '-'.
+   *
+   * This method repaints the top edge either side of the label, and it spelled
+   * the dash out itself - so a screen drawing PETSCII box glyphs got a real
+   * $40 rule everywhere except beside a label, where an ASCII hyphen appeared
+   * mid-edge.
+   */
+  private _renderAsciiLabel(
+    pos: any, label: string, labelAttr: number, borderAttr: number, rule: string = '-',
+  ): void {
     if (!label) return;
     // Guard: check buffer row exists
     if (!this.buffer[pos.yi]) return;
@@ -1571,7 +1591,7 @@ export class Screen extends Element {
     for (let x = pos.xi + 1; x < start && x < this.width; x += 1) {
       // Guard: check buffer cell exists
       if (x >= 0 && this.buffer[pos.yi][x]) {
-        this.buffer[pos.yi][x] = [borderAttr, '-'];
+        this.buffer[pos.yi][x] = [borderAttr, rule];
       }
     }
 
@@ -1579,7 +1599,7 @@ export class Screen extends Element {
     for (let x = end; x < pos.xl - 1 && x < this.width; x += 1) {
       // Guard: check buffer cell exists
       if (x >= 0 && this.buffer[pos.yi][x]) {
-        this.buffer[pos.yi][x] = [borderAttr, '-'];
+        this.buffer[pos.yi][x] = [borderAttr, rule];
       }
     }
   }

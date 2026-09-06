@@ -8,7 +8,8 @@
  */
 
 import { Element } from '../core/element';
-import { parseTags, textWidth } from '../core/colors';
+import { parseTags, textWidth, stripAnsi } from '../core/colors';
+import { wrapAnsiText as wrapAnsi } from '../core/wrap-text';
 import type { ListOptions, KeyEvent, MouseEvent } from '../core/types';
 import type { ResponsiveState } from '../core/responsive-mixin';
 import type { BreakpointName } from '../core/responsive-constants';
@@ -860,55 +861,15 @@ export class List extends Element {
 
   private wrapAnsiText(text: string, width: number): string[] {
     const lines: string[] = [];
-    if (width <= 0) return lines;
 
-    const textLines = text.split(/\r?\n/);
-
-    for (const line of textLines) {
-      if (textWidth(line) <= width) {
+    for (const line of text.split(/\r?\n/)) {
+      if (stripAnsi(line).length <= width) {
         lines.push(line);
         continue;
       }
-
-      let currentLine = '';
-      let currentWidth = 0;
-      let inAnsi = false;
-      let ansiBuffer = '';
-      let activeAnsi = '';
-
-      for (let i = 0; i < line.length; i += 1) {
-        const ch = line[i];
-
-        if (ch === ESC) {
-          inAnsi = true;
-          ansiBuffer = ch;
-          continue;
-        }
-
-        if (inAnsi) {
-          ansiBuffer += ch;
-          if (ch === 'm') {
-            inAnsi = false;
-            currentLine += ansiBuffer;
-            activeAnsi += ansiBuffer;
-            ansiBuffer = '';
-          }
-          continue;
-        }
-
-        if (currentWidth >= width) {
-          lines.push(currentLine);
-          currentLine = activeAnsi + ch;
-          currentWidth = 1;
-        } else {
-          currentLine += ch;
-          currentWidth += 1;
-        }
-      }
-
-      if (currentLine) {
-        lines.push(currentLine);
-      }
+      // The engine's one wrapper. This was a near-verbatim copy of
+      // Element._wrapContent, hard-breaking mid-word on every narrow row.
+      lines.push(...wrapAnsi(line, width, (t) => stripAnsi(t).length));
     }
 
     return lines;

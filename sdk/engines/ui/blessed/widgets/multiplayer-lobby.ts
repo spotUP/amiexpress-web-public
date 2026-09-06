@@ -42,6 +42,7 @@ import { Textbox } from './textbox';
 import { DockablePanel } from './dockable-panel';
 import { ListTable } from './listtable';
 import { EventEmitter } from '../core/events';
+import { isCompactWidth } from '../core/responsive-constants';
 import type { Screen } from '../core/screen';
 import type { ElementOptions } from '../core/types';
 
@@ -428,6 +429,50 @@ export class MultiplayerLobby extends EventEmitter {
   private chatInput: Textbox | null = null;
   private leaderboardBox: Box | null = null;
   private settingsEditorBox: Box | null = null;
+  /**
+   * Narrow screens show ONE panel at a time, and this says which is which.
+   *
+   * Each entry pairs a panel with the element Tab focuses inside it, so the
+   * cycle that already walks the focusable lists can reveal the panel owning
+   * the next one. Empty on a wide screen, where every panel is visible at
+   * once and there is nothing to reveal.
+   */
+  private compactPanels: Array<{ panel: any; target: () => any }> = [];
+
+  /**
+   * Show the panel that owns `target`, and hide the panels sharing its space.
+   *
+   * A no-op on a wide screen, where `compactPanels` is populated but every
+   * panel already has its own column and nothing was ever hidden. Focusing a
+   * BUTTON leaves the panels as they are: the buttons sit on their own row
+   * and do not belong to any panel.
+   */
+  private revealCompactPanelFor(target: any): void {
+    if (!this.compactMode || this.compactPanels.length === 0 || !target) return;
+    const owner = this.compactPanels.find((entry) => entry.target() === target);
+    if (!owner) return;
+    for (const entry of this.compactPanels) {
+      if (entry.panel === owner.panel) entry.panel.show?.();
+      else entry.panel.hide?.();
+    }
+  }
+
+  /**
+   * Hidden for a reason other than the compact one-panel rule.
+   *
+   * The compact cycle has to ignore its OWN hiding - a panel is hidden
+   * exactly because another is showing - while still skipping the elements a
+   * feature flag turned off. Those are never registered as compact panels, so
+   * the difference is registration.
+   */
+  private isPermanentlyHidden(target: any): boolean {
+    if (!target) return true;
+    const owned = this.compactPanels.some((entry) => entry.target() === target);
+    return owned ? false : !!target.hidden;
+  }
+
+  /** Whether this lobby is laid out one panel at a time. */
+  private compactMode = false;
   private settingsEditorList: List | null = null;
   private selectedSettingIndex: number = 0;
   private teamSelector: List | null = null;
@@ -577,11 +622,20 @@ export class MultiplayerLobby extends EventEmitter {
       tags: true,
     });
 
-    // Two-column layout for Tab 1
-    const leftColWidth = Math.floor((screenWidth - 6) / 2);
-    const rightColWidth = screenWidth - leftColWidth - 6;
+    // Two columns, or ONE PANEL AT A TIME on a narrow screen.
+    //
+    // Splitting 40 columns in two leaves thirteen characters of content per
+    // panel, and "Slot 2: (empty)" is fifteen - so every row broke mid-word
+    // ("(e" / "mpty)") and the lobby read as rubble. A C64 screen is not a
+    // small desktop; it shows one thing at a time. Tab already cycles the
+    // panels, so the narrow layout gives each of them the whole width and
+    // reveals them one by one through the cycle that already exists.
+    const compact = isCompactWidth(screenWidth);
+    this.compactMode = compact;
+    const leftColWidth = compact ? screenWidth - 4 : Math.floor((screenWidth - 6) / 2);
+    const rightColWidth = compact ? screenWidth - 4 : screenWidth - leftColWidth - 6;
     const leftColLeft = 2;
-    const rightColLeft = leftColWidth + 4;
+    const rightColLeft = compact ? 2 : leftColWidth + 4;
 
     // Player list (left column, full height)
     const playerListHeight = availableHeight;
@@ -599,6 +653,7 @@ export class MultiplayerLobby extends EventEmitter {
       draggable: false,
       showMinimizeButton: false,
     });
+    this.compactPanels.push({ panel: playerPanel, target: () => this.playerList });
     this.playerList = new List({
       parent: playerPanel,
       top: panelContentTop,
@@ -638,10 +693,13 @@ export class MultiplayerLobby extends EventEmitter {
       console.log('[MultiplayerLobby] playerList select item:', index);
     });
 
-    // Right column panels (stacked: Team, Room Settings, Game Options)
+    // Right column panels (stacked: Team, Room Settings, Game Options).
+    // Compact: each one is the whole area, and only the focused one is shown.
     let rightTop = 0;
     const rightPanelCount = (hasTeams ? 1 : 0) + 1 + (hasSettingsEditor ? 1 : 0);
-    const basePanelHeight = Math.floor(availableHeight / rightPanelCount);
+    const basePanelHeight = compact
+      ? availableHeight
+      : Math.floor(availableHeight / rightPanelCount);
 
     // Team selector (if enabled)
     if (hasTeams) {
@@ -680,7 +738,8 @@ export class MultiplayerLobby extends EventEmitter {
       this.teamSelector.on('select', (_item: unknown, index: number) => {
         void this.selectTeam(index);
       });
-      rightTop += teamSelectorHeight;
+      this.compactPanels.push({ panel: teamPanel, target: () => this.teamSelector });
+      if (!compact) rightTop += teamSelectorHeight;
     }
 
     // Room settings panel
@@ -708,12 +767,14 @@ export class MultiplayerLobby extends EventEmitter {
       content: '',
       tags: true,
     });
-    rightTop += roomSettingsHeight;
+    this.compactPanels.push({ panel: settingsPanel, target: () => null });
+    if (!compact) rightTop += roomSettingsHeight;
 
     // Settings editor (if enabled)
     if (hasSettingsEditor) {
       const remainingHeight = availableHeight - rightTop;
       const settingsEditorHeight = Math.max(4, remainingHeight);
+      // Registered after construction below, once the box exists.
       this.settingsEditorBox = new DockablePanel({
         parent: this.tab1Container,
         top: rightTop,
@@ -1126,6 +1187,19 @@ export class MultiplayerLobby extends EventEmitter {
       });
     }
 
+    // On a narrow screen the panels share the same space, so the one that
+    // owns the focused element is the one that shows. Wide screens show them
+    // all and this does nothing.
+    if (this.settingsEditorBox) {
+      this.compactPanels.push({
+        panel: this.settingsEditorBox,
+        target: () => this.settingsEditorList,
+      });
+    }
+    if (isCompactWidth(screenWidth) && this.compactPanels.length > 0) {
+      this.revealCompactPanelFor(this.playerList);
+    }
+
     // Tab key cycles focus between panels and buttons (skip hidden ones).
     const allFocusTargets = [
       this.playerList,
@@ -1149,7 +1223,12 @@ export class MultiplayerLobby extends EventEmitter {
     // which can land on an already-focused element (looks like Tab does
     // nothing) or skip past several. Reported live 2026-08-24.
     const cycleFocus = (direction: 1 | -1): void => {
-      const focusTargets = getVisibleFocusTargets();
+      // Narrow: cycle over ALL targets, not the visible ones. A panel that is
+      // hidden because another is showing must still be reachable, or Tab
+      // would trap the caller in whichever panel happened to open first.
+      const focusTargets = isCompactWidth(screenWidth)
+        ? allFocusTargets.filter((t) => !this.isPermanentlyHidden(t))
+        : getVisibleFocusTargets();
       if (focusTargets.length === 0) return;
       const currentIndex = focusTargets.indexOf(this.focusedElement() as any);
       // Focus sitting outside the cycle entirely (chat input, a tab button):
@@ -1158,7 +1237,9 @@ export class MultiplayerLobby extends EventEmitter {
       const nextIndex = currentIndex === -1
         ? (direction === 1 ? 0 : focusTargets.length - 1)
         : (currentIndex + direction + focusTargets.length) % focusTargets.length;
-      focusTargets[nextIndex]?.focus();
+      const next = focusTargets[nextIndex];
+      this.revealCompactPanelFor(next);
+      next?.focus();
       this.parent.render();
     };
     // Return TRUE so Screen treats Tab as consumed. A screen key handler

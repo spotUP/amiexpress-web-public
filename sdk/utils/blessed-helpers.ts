@@ -988,10 +988,18 @@ export function createScreen(
       : (data: string) => bbs.write(data)
     : options?.output;
 
+  // Which ALPHABET this caller reads. Unicode capability is not the question:
+  // a web PETSCII session is a browser and reports Unicode, yet its glyphs go
+  // through the transducer to a C64 character ROM. The session knows; ask it.
+  const petscii = typeof (bbs as any)?.isPetsciiMode === 'function'
+    ? (bbs as any).isPetsciiMode() === true
+    : false;
+
   const screen = blessed.screen({
     smartCSR: false, // Disabled to prevent jumping/flickering in high-frequency TUI apps
     dockBorders: false, // Disabled for more stable layout rendering
     fullUnicode: unicodeCapable, // Unicode for capable terminals, ACS for Amiga/legacy
+    petscii,
     terminal: 'xterm',
     tags: true,
     width: termSize.width,
