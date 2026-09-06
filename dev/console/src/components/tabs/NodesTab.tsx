@@ -4,6 +4,7 @@ import Spinner from 'ink-spinner';
 import { useNodes } from '../../hooks/useNodes.js';
 import { T } from '../../theme/blessed-theme.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
+import { useTextEntryLock } from '../../hooks/useTextEntryLock.js';
 import { kickNode, reserveNode } from '../../api/client.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
 import type { NodeStatus } from '../../api/types.js';
@@ -45,6 +46,13 @@ export function NodesTab() {
   const { nodes, error } = useNodes();
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [mode, setMode] = useState<Mode>('list');
+  // The node a confirm-kick or reserve-input is acting on, captured by ID at
+  // the moment the mode was entered. `nodes` re-polls every 3s
+  // (useNodes.ts), which can reorder or shrink the array while a dialog is
+  // open — resolving the target by `nodes[selectedIdx]` at ACTION time
+  // (rather than at the moment the key was pressed) could kick or reserve a
+  // different node than the one the sysop was shown.
+  const [targetNodeId, setTargetNodeId] = useState<number | null>(null);
   const [reserveText, setReserveText] = useState('');
   const [status, setStatus] = useState<string | null>(null);
 
@@ -53,36 +61,61 @@ export function NodesTab() {
   // control, so it cannot require the node to be online. Kick still checks
   // `selected.online` below — there is nothing to disconnect otherwise.
   const selected = nodes[selectedIdx];
+  // Resolved by the captured id, not the live selection, so the confirm
+  // dialog and reserve prompt keep showing (and acting on) the SAME node
+  // even if a re-poll changes what `selected` currently points at. Username
+  // display is still read live off `nodes` (nice-to-have, not load-bearing);
+  // the id itself is what every action below actually uses.
+  const target = targetNodeId !== null ? nodes.find(n => n.nodeId === targetNodeId) : undefined;
 
   useRowClick(nodes.length, ITEMS_START_ROW, (idx) => {
     setSelectedIdx(idx);
   }, mode === 'list');
 
+  // Locks out the global quit/help hotkeys and the sidebar's arrow-key page
+  // cycling while a kick/reserve is being confirmed or a username is being
+  // typed — see dev/console/src/state/text-entry-lock.ts.
+  useTextEntryLock(mode !== 'list');
+
   useInput((input, key) => {
     if (mode === 'list') {
       if (key.upArrow) setSelectedIdx(i => Math.max(0, i - 1));
       if (key.downArrow) setSelectedIdx(i => Math.min(nodes.length - 1, i + 1));
-      if (input === 'k' && selected?.online) setMode('confirm-kick');
+      if (input === 'k' && selected?.online) { setTargetNodeId(selected.nodeId); setMode('confirm-kick'); }
       if (input === 'v' && selected) {
         if (selected.reservedFor) {
           // Mirrors the web admin's "Clear Reservation" button: clearing an
           // existing reservation is a toggle, not a new destructive action,
           // so it fires immediately rather than opening the text prompt.
-          reserveNode(selected.nodeId)
-            .then(() => setStatus(`Reservation cleared on N${selected.nodeId}`))
+          // Immediate (no mode change), so there is no window for the list
+          // to reorder before this fires — `selected.nodeId` here is safe.
+          const nodeId = selected.nodeId;
+          reserveNode(nodeId)
+            .then(() => setStatus(`Reservation cleared on N${nodeId}`))
             .catch((e: Error) => setStatus(`Error: ${e.message}`));
         } else {
+          setTargetNodeId(selected.nodeId);
           setReserveText('');
+          setStatus(null);
           setMode('reserve-input');
         }
       }
     } else if (mode === 'reserve-input') {
-      if (key.escape) { setMode('list'); setReserveText(''); }
-      if (key.return && reserveText.trim() && selected) {
+      if (key.escape) { setMode('list'); setReserveText(''); setTargetNodeId(null); return; }
+      if (key.return) {
         const username = reserveText.trim();
-        reserveNode(selected.nodeId, username)
-          .then(() => { setStatus(`N${selected.nodeId} reserved for ${username}`); setMode('list'); setReserveText(''); })
-          .catch((e: Error) => { setStatus(`Error: ${e.message}`); setMode('list'); });
+        if (!username) {
+          // Silently doing nothing here reads as a hang, not as "type
+          // something first" — say so instead of eating the keypress.
+          setStatus('Type a username to reserve, or Esc to cancel');
+          return;
+        }
+        if (targetNodeId === null) { setMode('list'); return; }
+        const nodeId = targetNodeId;
+        reserveNode(nodeId, username)
+          .then(() => { setStatus(`N${nodeId} reserved for ${username}`); setMode('list'); setReserveText(''); setTargetNodeId(null); })
+          .catch((e: Error) => { setStatus(`Error: ${e.message}`); setMode('list'); setTargetNodeId(null); });
+        return;
       }
       if (key.backspace || key.delete) setReserveText(t => t.slice(0, -1));
       else if (input && !key.ctrl && !key.meta) setReserveText(t => t + input);
@@ -116,24 +149,26 @@ export function NodesTab() {
         </Box>
       )}
 
-      {mode === 'confirm-kick' && selected && (
+      {mode === 'confirm-kick' && targetNodeId !== null && (
         <Box marginTop={1}>
           <ConfirmDialog
-            message={`Kick ${selected.username ?? `N${selected.nodeId}`}?`}
+            message={`Kick ${target?.username ?? `N${targetNodeId}`}?`}
             onConfirm={() => {
-              kickNode(selected.nodeId)
-                .then(() => setStatus(`Kicked N${selected.nodeId}`))
+              const nodeId = targetNodeId;
+              kickNode(nodeId)
+                .then(() => setStatus(`Kicked N${nodeId}`))
                 .catch((e: Error) => setStatus(`Error: ${e.message}`));
               setMode('list');
+              setTargetNodeId(null);
             }}
-            onCancel={() => setMode('list')}
+            onCancel={() => { setMode('list'); setTargetNodeId(null); }}
           />
         </Box>
       )}
 
-      {mode === 'reserve-input' && selected && (
+      {mode === 'reserve-input' && targetNodeId !== null && (
         <Box marginTop={1} flexDirection="column">
-          <Text color={T.accent}>Reserve N{selected.nodeId} for username:</Text>
+          <Text color={T.accent}>Reserve N{targetNodeId}{target?.username ? ` (currently ${target.username})` : ''} for username:</Text>
           <Box>
             <Text>{'> '}</Text>
             <Text>{reserveText}█</Text>
