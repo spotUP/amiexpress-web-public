@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/src/index.js",
     "start:strip": "node dist/strip/strip.js",
-    "dev": "tsx src/index.tsx"
+    "dev": "tsx src/index.tsx",
+    "test": "node --test --import tsx src/**/*.test.ts"
   },
   "dependencies": {
     "chalk": "^5.3.0",
