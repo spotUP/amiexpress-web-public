@@ -8,16 +8,36 @@ export interface PetsciiCanvasProps {
   machine: PetsciiMachine;
   /** VIC-II color palette, indexed 0-15. Defaults to Colodore. */
   palette?: readonly string[];
+  /**
+   * Upper bound on the integer render scale fed to the canvas's backing
+   * store (see `fitScale`/the fill-fit policy below) - a roomy container
+   * still won't render past this many native C64 pixels per screen pixel.
+   * Defaults to 4 (320x200 native -> 1280x800 backing-store resolution at
+   * that cap, CSS-downscaled to whatever actually fits).
+   */
   scale?: number;
   /** Keyboard input, already translated to PETSCII bytes. */
   onData?: (bytes: number[]) => void;
+  /**
+   * Whether the canvas takes keyboard focus (tabIndex 0). BBSTerminal
+   * passes true for a full-canvas PETSCII session, where the canvas owns
+   * keyboard input via onData.
+   */
   focusable?: boolean;
+  /** Focus the canvas as soon as it mounts (the full-canvas session makes it the keyboard surface). */
   focusOnMount?: boolean;
   /**
-   * Whether the text cursor is visible. When provided, overrides the
-   * internal blink state. When undefined, the cursor blinks normally.
-   * Set to false when the user is not in a prompt/input context, true
-   * when waiting for input (matching ANSI mode's ?25h/?25l behavior).
+   * OVERRIDE for the cursor's blink, and nothing else. OMIT IT - and the
+   * default is to omit it - and the cursor blinks on `CURSOR_BLINK_MS` the
+   * way a C64's screen-editor cursor does, which is the only behaviour this
+   * board ships today. Pass `false` to hold it dark, `true` to hold it
+   * solid; a caller that wants a game screen with no cursor is what this is
+   * for.
+   *
+   * It USED TO DEFAULT TO `true`, which made `cursorOn` unreachable and
+   * froze the block solid on every PETSCII session (regression from
+   * c8e0f4dff, fixed 2026-09-06). A default here is not a neutral choice:
+   * any non-undefined value switches the blink off.
    */
   cursorVisible?: boolean;
 }
@@ -60,7 +80,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
   palette = C64_PALETTE_COLODORE,
   scale: maxScale = 4,
   onData,
-  cursorVisible = true,
+  cursorVisible,
   focusable = false,
   focusOnMount = false,
 }, ref) => {
@@ -170,17 +190,24 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
       }
     }
 
-    // Block cursor: a solid cell in the cursor's ink color, blinking on an
+    // Block cursor: a solid cell in the cursor's ink color, BLINKING on an
     // interval, matching the C64's solid-reverse-block screen-editor cursor.
-    // When cursorVisible prop is provided, it overrides the blink state so
-    // the backend can hide the cursor when not in a prompt/input context.
-    const effectiveCursorOn = cursorVisible !== undefined ? cursorVisible : cursorOn;
+    // `cursorVisible` is an override for a caller that wants it held solid
+    // or held dark; when it is undefined - which is the normal case, and the
+    // default - the blink state decides. It defaulted to `true` between
+    // c8e0f4dff and this fix, which made `cursorOn` unreachable and left the
+    // block permanently lit on every PETSCII session.
+    const effectiveCursorOn = cursorVisible ?? cursorOn;
     if (effectiveCursorOn) {
       const cursorIdx = s.cursorY * COLS + s.cursorX;
       ctx.fillStyle = palette[s.colorRam[cursorIdx] & 0x0F];
       ctx.fillRect(border + s.cursorX * destCell, border + s.cursorY * destCell, destCell, destCell);
     }
-  }, [machine, palette, scale, cursorOn, width, height, border]);
+    // `cursorVisible` belongs in this list: without it a change to the
+    // override kept the STALE closure - the repaint effects below re-run on
+    // `draw`'s identity, so a prop the memo does not watch cannot reach the
+    // glass until something else happens to change.
+  }, [machine, palette, scale, cursorOn, cursorVisible, width, height, border]);
 
   // Keep a ref to the latest draw() so the onUpdate subscription below
   // doesn't need to be torn down and rebuilt every cursor blink.
