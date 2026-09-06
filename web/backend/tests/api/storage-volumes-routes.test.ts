@@ -352,6 +352,43 @@ describe('Drive Setup storage routes', () => {
     });
   });
 
+  describe('DELETE /api/config/drives/:id - refusing to strand a higher-numbered drive', () => {
+    it('refuses to delete a drive that would leave a gap, stranding a drive above it', async () => {
+      // parseVolumes stops at the first gap (deliberate express.e parity) -
+      // deleting DRIVE.2 here would leave DRIVE.1, DRIVE.3 on disk, and the
+      // whole pool would stop seeing DRIVE.3 from the very next rebuild.
+      applyTooltypes(path.join(root, 'Drives.info'), [['DRIVE.3', 'DH3:']]);
+
+      const res = await request(app).delete('/api/config/drives/2');
+
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      const info = fs.readFileSync(path.join(root, 'Drives.info'), 'latin1');
+      expect(info).toContain('DRIVE.2=s3://uprough-cold');
+      expect(info).toContain('DRIVE.3=DH3:');
+    });
+
+    it('allows deleting the highest-numbered drive, which strands nothing', async () => {
+      applyTooltypes(path.join(root, 'Drives.info'), [['DRIVE.3', 'DH3:']]);
+      // The DELETE route reports success from the mirror row's own delete
+      // count (unrelated to this finding) - give drive 3 a mirror row at
+      // rowid 3 (matching the URL's :id, which the route passes straight
+      // through to the mirror delete) so that count is meaningful, the way
+      // a drive added through the admin page would have one. Cleared first
+      // so this does not depend on what an earlier test in this shared-db
+      // file left behind.
+      const raw = (db as any).db;
+      raw.prepare('DELETE FROM drives WHERE drive_number = 3 OR id = 3').run();
+      raw.prepare('INSERT INTO drives (rowid, drive_number, drive_path) VALUES (3, 3, ?)').run('DH3:');
+
+      const res = await request(app).delete('/api/config/drives/3');
+
+      expect(res.status).toBe(200);
+      const info = fs.readFileSync(path.join(root, 'Drives.info'), 'latin1');
+      expect(info).not.toMatch(/DRIVE\.3=/);
+      expect(info).toContain('DRIVE.2=s3://uprough-cold');
+    });
+  });
+
   describe('PUT /api/config/drives/:id - renumbering an s3 drive', () => {
     it('refuses to renumber an s3 drive - it would strand DRIVE.n.QUOTA/KEYID/ENDPOINT and its credentials', async () => {
       const res = await request(app).put('/api/config/drives/2').send({ drive_number: 5 });

@@ -384,6 +384,29 @@ console.error(`[DriveConfigService] Mirror update failed for drive ${id} (disk w
       return false;
     }
 
+    // `parseVolumes` stops at the first gap in DRIVE.n - deliberate express.e
+    // parity with freeDiskSpace() (volume-config.ts). Deleting a MIDDLE drive
+    // number does not remove the drives numbered above it from Drives.info;
+    // it makes the whole pool stop SEEING them, silently, from the very next
+    // rebuild - every area whose STORAGEDRIVE names one of them then answers
+    // "File not found" for files that are perfectly fine. Refuse rather than
+    // create that gap; a sysop who really means to remove a middle drive can
+    // still delete top-down.
+    const bbsRoot = appConfig.get('dataDir');
+    const strandedNumbers = parseVolumes(bbsRoot)
+      .map(v => v.driveNumber)
+      .filter(n => n > oldDrive.drive_number);
+    if (strandedNumbers.length > 0) {
+      const plural = strandedNumbers.length > 1;
+      throw new Error(
+        `Deleting DRIVE.${oldDrive.drive_number} would leave a gap in Drives.info, making ` +
+          `DRIVE.${strandedNumbers.join(', DRIVE.')} invisible to the whole pool from the next rebuild ` +
+          `on - every area on ${plural ? 'those drives' : 'that drive'} would start reporting its files ` +
+          `as missing. Delete DRIVE.${strandedNumbers[strandedNumbers.length - 1]} down to ` +
+          `DRIVE.${oldDrive.drive_number} first, highest number to lowest.`
+      );
+    }
+
     // Delete from database
     const deleted = this.configRepo.deleteDrive(id);
 
