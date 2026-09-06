@@ -88,6 +88,11 @@ export interface PanelsLayout {
         left: number;
         width: number;
         height: number;
+        /**
+         * Rows of the bottom panel row that are NOT drawn, so a bottom rule has
+         * a row to live on. Zero everywhere there was room for both.
+         */
+        clipped: number;
     };
     hud: {
         top: number;

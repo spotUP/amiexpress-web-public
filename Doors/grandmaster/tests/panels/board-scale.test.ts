@@ -221,7 +221,13 @@ export async function theC64TileIsAsBigAsTwentyFiveRowsAllow(): Promise<void> {
   const layout = panelsLayout(40, 25, cols, rows, CELL_ASPECT.petscii);
   assert.deepStrictEqual(layout.scale, { x: 2, y: 2 }, 'a 2x2 tile, square on a square cell');
   assert.strictEqual(layout.board.width, 12);
-  assert.strictEqual(layout.board.height, 24);
+  // Twelve whole panels would be twenty-four rows; the board draws
+  // twenty-three, because the bottom row gives up its lower half so the well
+  // can have a floor (2026-09-07). The panels themselves are still 2x2 - the
+  // last one is simply cut off at the rule, which is what the sysop asked
+  // for over losing either the tile size or the border.
+  assert.strictEqual(layout.board.height, 23);
+  assert.strictEqual(layout.board.clipped, 1);
   assert.strictEqual(layout.border, false, 'there is no room for a frame as well');
 
   // AND THE HUD SITS BESIDE IT. Twelve columns of board leave twenty-eight,
@@ -442,6 +448,19 @@ export async function theWellHasRailsAndTheHudHasAFrame(): Promise<void> {
     lid.indexOf('\u2500') > lid.indexOf('\u250c'),
     'with a rule between them',
   );
+
+  // AND A FLOOR, bought with half of the bottom panel row: "maybe we can
+  // allow chopping off half the blocks at the bottom to get a border"
+  // (2026-09-07). The board is one row shorter than whole panels would make
+  // it, and that row carries the rule.
+  assert.strictEqual(layout.board.clipped, 1, 'the bottom panel row gives up its half');
+  assert.strictEqual(
+    layout.board.height % layout.scale.y, layout.scale.y - 1,
+    'so the board is a half-row short of whole panels',
+  );
+  const floorRow = rows[layout.board.top + layout.board.height] ?? '';
+  assert.ok(floorRow.indexOf('\u2514') >= 0, `no floor under the well: "${floorRow.trim()}"`);
+  assert.ok(floorRow.indexOf('\u2518') >= 0, 'and it is closed at both corners');
 
   // And the HUD is framed, with its labels inside the frame.
   assert.ok(panels.hudBox.border, 'the HUD beside the board has a frame');

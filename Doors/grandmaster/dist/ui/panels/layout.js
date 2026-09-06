@@ -164,18 +164,33 @@ function panelsLayout(screenWidth, screenHeight, boardCols, boardRows, cellAspec
     const chrome = chromeFor(stacked);
     const scale = panelScale(screenWidth, screenHeight, boardCols, boardRows, stacked, cellAspect, chrome);
     const width = boardCols * scale.x;
-    const height = boardRows * scale.y;
+    const fullHeight = boardRows * scale.y;
     const totalWidth = stacked ? width : width + GAP + hudWidth;
     const left = Math.max(1, Math.floor((screenWidth - totalWidth) / 2));
     const hudRows = stacked ? chrome.hudRows : 0;
     const top = stacked
-        ? Math.max(0, Math.floor((screenHeight - height - hudRows) / 2))
-        : Math.max(1, Math.floor((screenHeight - height) / 2));
+        ? Math.max(0, Math.floor((screenHeight - fullHeight - hudRows) / 2))
+        : Math.max(1, Math.floor((screenHeight - fullHeight) / 2));
+    // A WELL NEEDS A FLOOR MORE THAN IT NEEDS A WHOLE BOTTOM ROW.
+    //
+    // Where the tile grew to fill a square-celled screen there is no row left
+    // under the board for a bottom rule, and the well was open at the bottom.
+    // The sysop's call: "maybe we can allow chopping off half the blocks at the
+    // bottom to get a border" (2026-09-07). So the last panel row gives up its
+    // bottom half - one row - and the rule takes it.
+    //
+    // Only where the well is drawn with rules rather than a widget frame
+    // (`border === false`), only when the tile is tall enough to have a half to
+    // give, and only when there is genuinely no spare row: a screen with room
+    // keeps whole panels.
+    const spareBelow = screenHeight - (top + fullHeight);
+    const clipped = !profile.borders && scale.y > 1 && spareBelow < 1 ? 1 : 0;
+    const height = fullHeight - clipped;
     return {
         compact,
         effects: (0, blessed_1.effectsAllowed)(screenWidth),
         tier: (0, blessed_1.getBreakpointName)(screenWidth),
-        board: { top, left, width, height },
+        board: { top, left, width, height, clipped },
         hud: stacked
             ? {
                 top: top + height,

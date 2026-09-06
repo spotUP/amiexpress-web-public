@@ -117,20 +117,29 @@ class PanelsScreen {
             // anyway. A bottom rule would need a twenty-sixth row that does not
             // exist; the alternative is halving the tile, which the sysop already
             // rejected.
-            if (layout.board.top >= 1) {
-                const lid = '\u250c' + '\u2500'.repeat(Math.max(0, layout.board.width)) + '\u2510';
+            const ruleLeft = Math.max(0, layout.board.left - 1);
+            const rule = (left, right) => left + '\u2500'.repeat(Math.max(0, layout.board.width)) + right;
+            const ruleRow = (row, content) => {
                 this.railBoxes.push((0, bbs_door_sdk_1.createBox)({
                     parent: this.screen,
-                    top: layout.board.top - 1,
-                    left: Math.max(0, layout.board.left - 1),
-                    width: Math.min(this.screen.width - Math.max(0, layout.board.left - 1), lid.length),
+                    top: row,
+                    left: ruleLeft,
+                    width: Math.min(this.screen.width - ruleLeft, content.length),
                     height: 1,
                     border: undefined,
                     tags: true,
                     style: { fg: 'magenta', bg: 'black' },
-                    content: lid,
+                    content,
                 }));
-            }
+            };
+            if (layout.board.top >= 1)
+                ruleRow(layout.board.top - 1, rule('\u250c', '\u2510'));
+            // The floor. `layout.board.clipped` is the half-row the bottom panel
+            // row gave up to make room for it; where nothing was clipped the row
+            // below the board was already free.
+            const floor = layout.board.top + layout.board.height;
+            if (floor < this.screen.height)
+                ruleRow(floor, rule('\u2514', '\u2518'));
             for (const [column, glyph] of [
                 [layout.board.left - 1, '\u2502'],
                 [layout.board.left + layout.board.width, '\u2502'],
