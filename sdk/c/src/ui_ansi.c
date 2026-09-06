@@ -120,8 +120,15 @@ void ansi_goto(ansi_buf *b, int row, int col)
 
 void ansi_color(ansi_buf *b, int fg, int bg, int bold)
 {
-    int pen = fg;
+    int pen;
     int want_reverse = 0;
+
+    /* 8 and up is the bright half of the terminal's sixteen: bold, plus the
+       base colour. A caller passes a theme token straight in and does not
+       have to know which half it landed in. */
+    if (fg >= ANSI_BRIGHT) { bold = 1; fg -= ANSI_BRIGHT; }
+    if (bg >= ANSI_BRIGHT) { bg -= ANSI_BRIGHT; }
+    pen = fg;
 
     /* Already showing exactly this? Then the sequence is bytes for
      * nothing - and on this door bytes are milliseconds, because every
@@ -231,8 +238,11 @@ static void write_text(ansi_buf *b, int row, int col, const char *text, int maxl
         /* A pen change, and it costs the row no columns (ui_ansi.h). */
         if (c == UI_INK && at[1] != '\0') {
             char what = at[1];
-            if (what >= '0' && what <= '7') {
+            if (what >= '0' && what <= '9') {
                 ansi_color(b, what - '0', base_bg, b->last_bold);
+            } else if (what >= 'a' && what <= 'f') {
+                /* The bright half; ansi_color turns it into bold + base. */
+                ansi_color(b, 10 + (what - 'a'), base_bg, b->last_bold);
             } else if (what == 'B') {
                 ansi_color(b, b->last_fg, base_bg, 1);
             } else if (what == 'b') {
@@ -281,9 +291,13 @@ unsigned long ui_printable_len(const char *text)
 
 void ui_ink(char *out, int colour)
 {
+    int c = colour & 15;
+
     if (!out) return;
     out[0] = UI_INK;
-    out[1] = (char) ('0' + (colour & 7));
+    /* A hex digit, so the bright half fits: '0'-'7' are the base colours and
+       '8'-'f' their bold twins. */
+    out[1] = (char) (c < 10 ? '0' + c : 'a' + (c - 10));
     out[2] = '\0';
 }
 

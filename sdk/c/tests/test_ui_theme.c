@@ -25,11 +25,18 @@ static void every_theme_is_a_theme(void)
         assert(t->rail != 0);              /* "" is fine, NULL is not */
         assert(t->border == UI_BORDER_LINE || t->border == UI_BORDER_NONE);
 
-        /* Every token is one of the eight a C door can actually draw. */
-        assert(t->ground <= 7 && t->ink <= 7 && t->chrome <= 7 && t->dim <= 7);
-        assert(t->bar <= 7 && t->bar_ink <= 7 && t->accent <= 7);
-        assert(t->accent_alt <= 7 && t->selection_bg <= 7 && t->selection_ink <= 7);
-        assert(t->ok <= 7 && t->warn <= 7 && t->alert <= 7);
+        /* Every token is one of the SIXTEEN a terminal has: eight base
+           colours and their bold twins. Eight was the first cut and it made
+           `ink: white` and `dim: gray` the same number, so a C door drew a
+           row's mark, name and blurb in one colour (2026-09-07). */
+        assert(t->ground <= 15 && t->ink <= 15 && t->chrome <= 15 && t->dim <= 15);
+        assert(t->bar <= 15 && t->bar_ink <= 15 && t->accent <= 15);
+        assert(t->accent_alt <= 15 && t->selection_bg <= 15 && t->selection_ink <= 15);
+        assert(t->ok <= 15 && t->warn <= 15 && t->alert <= 15);
+
+        /* And ink is never the same colour as dim: the contrast between them
+           is what a list row is built out of. */
+        assert(t->ink != t->dim);
     }
     printf("  [OK] every theme is a theme, in colours a terminal has\n");
 }
@@ -59,10 +66,19 @@ static void each_theme_keeps_its_identity(void)
     /* The reduction throws shades away; it must not throw away what the
        theme IS. Two reductions failed this before the generator matched on
        hue: neon's pink came out red, and phosphor's green came out cyan. */
-    assert(ui_theme_by_id("uprough-neon")->accent == ANSI_MAGENTA);
-    assert(ui_theme_by_id("quiet-phosphor")->accent == ANSI_GREEN);
-    assert(ui_theme_by_id("classic")->accent == ANSI_YELLOW);
-    assert(ui_theme_by_id("classic")->chrome == ANSI_CYAN);
+    /* The HUE is the identity; which half of the sixteen it lands in is
+       brightness. neon's pink is a light magenta and takes the bright row -
+       that is the theme keeping its colour, not losing it - so the check is
+       on the base colour with the bright bit taken off. */
+    #define BASE(c) ((c) & 7)
+    assert(BASE(ui_theme_by_id("uprough-neon")->accent) == ANSI_MAGENTA);
+    assert(BASE(ui_theme_by_id("quiet-phosphor")->accent) == ANSI_GREEN);
+    assert(BASE(ui_theme_by_id("classic")->accent) == ANSI_YELLOW);
+    assert(BASE(ui_theme_by_id("classic")->chrome) == ANSI_CYAN);
+    /* And a light theme colour really is on the bright row, or the C door
+       draws a demoscene pink as the dull magenta nobody chose. */
+    assert(ui_theme_by_id("uprough-neon")->accent >= ANSI_BRIGHT);
+    #undef BASE
     printf("  [OK] each theme keeps the colour it is known by\n");
 }
 

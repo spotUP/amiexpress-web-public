@@ -25,7 +25,7 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
         /* ground        */ ANSI_BLACK,    /* black -> 0 */
         /* ink           */ ANSI_WHITE,    /* white -> 7 */
         /* chrome        */ ANSI_CYAN,     /* cyan -> 6 */
-        /* dim           */ ANSI_WHITE,    /* gray -> 7 */
+        /* dim           */ ANSI_GRAY,     /* gray -> 8 */
         /* bar           */ ANSI_BLUE,     /* blue -> 4 */
         /* bar_ink       */ ANSI_WHITE,    /* white -> 7 */
         /* accent        */ ANSI_YELLOW,   /* yellow -> 3 */
@@ -43,18 +43,18 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
         "Slate & Slash",
         "Quiet slate chrome, one magenta accent, room to breathe.",
         /* ground        */ ANSI_BLACK,    /* black -> 0 */
-        /* ink           */ ANSI_WHITE,    /* #C9D4E8 -> 7 */
-        /* chrome        */ ANSI_WHITE,    /* #48566E -> 7 */
-        /* dim           */ ANSI_WHITE,    /* #48566E -> 7 */
+        /* ink           */ ANSI_BRIGHT_WHITE, /* #C9D4E8 -> 15 */
+        /* chrome        */ ANSI_GRAY,     /* #48566E -> 8 */
+        /* dim           */ ANSI_GRAY,     /* #48566E -> 8 */
         /* bar           */ ANSI_BLACK,    /* black -> 0 */
-        /* bar_ink       */ ANSI_WHITE,    /* #C9D4E8 -> 7 */
-        /* accent        */ ANSI_MAGENTA,  /* #FF3D9A -> 5 */
-        /* accent_alt    */ ANSI_CYAN,     /* #4DE0F0 -> 6 */
+        /* bar_ink       */ ANSI_BRIGHT_WHITE, /* #C9D4E8 -> 15 */
+        /* accent        */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
+        /* accent_alt    */ ANSI_BRIGHT_CYAN, /* #4DE0F0 -> 14 */
         /* selection_bg  */ ANSI_MAGENTA,  /* magenta -> 5 */
         /* selection_ink */ ANSI_BLACK,    /* black -> 0 */
-        /* ok            */ ANSI_GREEN,    /* #57E389 -> 2 */
-        /* warn          */ ANSI_YELLOW,   /* #F5C451 -> 3 */
-        /* alert         */ ANSI_RED,      /* #FF5C7A -> 1 */
+        /* ok            */ ANSI_BRIGHT_GREEN, /* #57E389 -> 10 */
+        /* warn          */ ANSI_BRIGHT_YELLOW, /* #F5C451 -> 11 */
+        /* alert         */ ANSI_BRIGHT_RED, /* #FF5C7A -> 9 */
         UI_BORDER_LINE,
         "///"
     },
@@ -64,17 +64,17 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
         "Near-monochrome. One accent, spent on the selection.",
         /* ground        */ ANSI_BLACK,    /* black -> 0 */
         /* ink           */ ANSI_WHITE,    /* #95A0B4 -> 7 */
-        /* chrome        */ ANSI_WHITE,    /* #3A4354 -> 7 */
-        /* dim           */ ANSI_WHITE,    /* #5A6474 -> 7 */
+        /* chrome        */ ANSI_GRAY,     /* #3A4354 -> 8 */
+        /* dim           */ ANSI_GRAY,     /* #5A6474 -> 8 */
         /* bar           */ ANSI_BLACK,    /* black -> 0 */
-        /* bar_ink       */ ANSI_MAGENTA,  /* #FF3D9A -> 5 */
-        /* accent        */ ANSI_MAGENTA,  /* #FF3D9A -> 5 */
-        /* accent_alt    */ ANSI_WHITE,    /* #5A6474 -> 7 */
+        /* bar_ink       */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
+        /* accent        */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
+        /* accent_alt    */ ANSI_GRAY,     /* #5A6474 -> 8 */
         /* selection_bg  */ ANSI_MAGENTA,  /* magenta -> 5 */
         /* selection_ink */ ANSI_BLACK,    /* black -> 0 */
         /* ok            */ ANSI_WHITE,    /* #95A0B4 -> 7 */
         /* warn          */ ANSI_WHITE,    /* #95A0B4 -> 7 */
-        /* alert         */ ANSI_MAGENTA,  /* #FF3D9A -> 5 */
+        /* alert         */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
         UI_BORDER_LINE,
         "///"
     },
@@ -83,18 +83,18 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
         "Uprough Neon",
         "Demoscene magenta and cyan, double-ruled, masthead slashes.",
         /* ground        */ ANSI_BLACK,    /* black -> 0 */
-        /* ink           */ ANSI_WHITE,    /* #E4ECFA -> 7 */
-        /* chrome        */ ANSI_CYAN,     /* #4DE0F0 -> 6 */
-        /* dim           */ ANSI_WHITE,    /* #48566E -> 7 */
+        /* ink           */ ANSI_BRIGHT_WHITE, /* #E4ECFA -> 15 */
+        /* chrome        */ ANSI_BRIGHT_CYAN, /* #4DE0F0 -> 14 */
+        /* dim           */ ANSI_GRAY,     /* #48566E -> 8 */
         /* bar           */ ANSI_BLACK,    /* black -> 0 */
-        /* bar_ink       */ ANSI_MAGENTA,  /* #FF3D9A -> 5 */
-        /* accent        */ ANSI_MAGENTA,  /* #FF3D9A -> 5 */
-        /* accent_alt    */ ANSI_YELLOW,   /* #F5C451 -> 3 */
+        /* bar_ink       */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
+        /* accent        */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
+        /* accent_alt    */ ANSI_BRIGHT_YELLOW, /* #F5C451 -> 11 */
         /* selection_bg  */ ANSI_MAGENTA,  /* magenta -> 5 */
         /* selection_ink */ ANSI_BLACK,    /* black -> 0 */
-        /* ok            */ ANSI_GREEN,    /* #57E389 -> 2 */
-        /* warn          */ ANSI_YELLOW,   /* #F5C451 -> 3 */
-        /* alert         */ ANSI_RED,      /* #FF5C7A -> 1 */
+        /* ok            */ ANSI_BRIGHT_GREEN, /* #57E389 -> 10 */
+        /* warn          */ ANSI_BRIGHT_YELLOW, /* #F5C451 -> 11 */
+        /* alert         */ ANSI_BRIGHT_RED, /* #FF5C7A -> 9 */
         UI_BORDER_LINE,
         "/////"
     },
@@ -105,16 +105,16 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
         /* ground        */ ANSI_BLACK,    /* black -> 0 */
         /* ink           */ ANSI_WHITE,    /* #A8B4C8 -> 7 */
         /* chrome        */ ANSI_CYAN,     /* #2E6E7A -> 6 */
-        /* dim           */ ANSI_WHITE,    /* #5A6474 -> 7 */
+        /* dim           */ ANSI_GRAY,     /* #5A6474 -> 8 */
         /* bar           */ ANSI_BLACK,    /* black -> 0 */
-        /* bar_ink       */ ANSI_MAGENTA,  /* #FF3D9A -> 5 */
-        /* accent        */ ANSI_MAGENTA,  /* #FF3D9A -> 5 */
-        /* accent_alt    */ ANSI_WHITE,    /* #5A6474 -> 7 */
+        /* bar_ink       */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
+        /* accent        */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
+        /* accent_alt    */ ANSI_GRAY,     /* #5A6474 -> 8 */
         /* selection_bg  */ ANSI_MAGENTA,  /* magenta -> 5 */
         /* selection_ink */ ANSI_BLACK,    /* black -> 0 */
         /* ok            */ ANSI_WHITE,    /* #A8B4C8 -> 7 */
         /* warn          */ ANSI_WHITE,    /* #A8B4C8 -> 7 */
-        /* alert         */ ANSI_MAGENTA,  /* #FF3D9A -> 5 */
+        /* alert         */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
         UI_BORDER_LINE,
         "/////"
     },
@@ -123,18 +123,18 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
         "Quiet Phosphor",
         "One phosphor hue, no borders, hierarchy by brightness alone.",
         /* ground        */ ANSI_BLACK,    /* black -> 0 */
-        /* ink           */ ANSI_GREEN,    /* #57E389 -> 2 */
-        /* chrome        */ ANSI_WHITE,    /* #2E4A3C -> 7 */
-        /* dim           */ ANSI_WHITE,    /* #2E4A3C -> 7 */
+        /* ink           */ ANSI_BRIGHT_GREEN, /* #57E389 -> 10 */
+        /* chrome        */ ANSI_GRAY,     /* #2E4A3C -> 8 */
+        /* dim           */ ANSI_GRAY,     /* #2E4A3C -> 8 */
         /* bar           */ ANSI_BLACK,    /* black -> 0 */
-        /* bar_ink       */ ANSI_GREEN,    /* #57E389 -> 2 */
-        /* accent        */ ANSI_GREEN,    /* #8CFFB4 -> 2 */
-        /* accent_alt    */ ANSI_YELLOW,   /* #F5C451 -> 3 */
+        /* bar_ink       */ ANSI_BRIGHT_GREEN, /* #57E389 -> 10 */
+        /* accent        */ ANSI_BRIGHT_GREEN, /* #8CFFB4 -> 10 */
+        /* accent_alt    */ ANSI_BRIGHT_YELLOW, /* #F5C451 -> 11 */
         /* selection_bg  */ ANSI_GREEN,    /* green -> 2 */
         /* selection_ink */ ANSI_BLACK,    /* black -> 0 */
-        /* ok            */ ANSI_GREEN,    /* #57E389 -> 2 */
-        /* warn          */ ANSI_YELLOW,   /* #F5C451 -> 3 */
-        /* alert         */ ANSI_RED,      /* #FF8B6B -> 1 */
+        /* ok            */ ANSI_BRIGHT_GREEN, /* #57E389 -> 10 */
+        /* warn          */ ANSI_BRIGHT_YELLOW, /* #F5C451 -> 11 */
+        /* alert         */ ANSI_BRIGHT_RED, /* #FF8B6B -> 9 */
         UI_BORDER_NONE,
         "////"
     },
@@ -143,18 +143,18 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
         "Quiet Phosphor (muted)",
         "One hue and nothing else. Brightness alone carries the hierarchy.",
         /* ground        */ ANSI_BLACK,    /* black -> 0 */
-        /* ink           */ ANSI_GREEN,    /* #57E389 -> 2 */
-        /* chrome        */ ANSI_WHITE,    /* #1E3A28 -> 7 */
-        /* dim           */ ANSI_WHITE,    /* #2E4A3C -> 7 */
+        /* ink           */ ANSI_BRIGHT_GREEN, /* #57E389 -> 10 */
+        /* chrome        */ ANSI_GRAY,     /* #1E3A28 -> 8 */
+        /* dim           */ ANSI_GRAY,     /* #2E4A3C -> 8 */
         /* bar           */ ANSI_BLACK,    /* black -> 0 */
-        /* bar_ink       */ ANSI_GREEN,    /* #8CFFB4 -> 2 */
-        /* accent        */ ANSI_GREEN,    /* #8CFFB4 -> 2 */
-        /* accent_alt    */ ANSI_WHITE,    /* #2E4A3C -> 7 */
+        /* bar_ink       */ ANSI_BRIGHT_GREEN, /* #8CFFB4 -> 10 */
+        /* accent        */ ANSI_BRIGHT_GREEN, /* #8CFFB4 -> 10 */
+        /* accent_alt    */ ANSI_GRAY,     /* #2E4A3C -> 8 */
         /* selection_bg  */ ANSI_BLACK,    /* black -> 0 */
-        /* selection_ink */ ANSI_GREEN,    /* #C8FFDC -> 2 */
-        /* ok            */ ANSI_GREEN,    /* #57E389 -> 2 */
-        /* warn          */ ANSI_GREEN,    /* #8CFFB4 -> 2 */
-        /* alert         */ ANSI_GREEN,    /* #C8FFDC -> 2 */
+        /* selection_ink */ ANSI_BRIGHT_GREEN, /* #C8FFDC -> 10 */
+        /* ok            */ ANSI_BRIGHT_GREEN, /* #57E389 -> 10 */
+        /* warn          */ ANSI_BRIGHT_GREEN, /* #8CFFB4 -> 10 */
+        /* alert         */ ANSI_BRIGHT_GREEN, /* #C8FFDC -> 10 */
         UI_BORDER_NONE,
         "////"
     }

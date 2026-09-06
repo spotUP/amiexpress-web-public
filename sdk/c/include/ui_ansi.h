@@ -48,6 +48,24 @@
 #define ANSI_MAGENTA 5
 #define ANSI_CYAN    6
 #define ANSI_WHITE   7
+/**
+ * The bright half. A terminal has sixteen colours, not eight: the bold bit
+ * picks the second row, and a theme's ink and dim are usually one of each -
+ * white against gray. Reducing both to ANSI_WHITE, which the generated table
+ * did until 2026-09-07, drew the mark, the name and the blurb in one colour
+ * and made six of the seven themes look like the same grey screen.
+ *
+ * ansi_color() takes any of these: 8 and up mean bold plus the base colour.
+ */
+#define ANSI_BRIGHT      8
+#define ANSI_GRAY        (ANSI_BRIGHT + ANSI_BLACK)
+#define ANSI_BRIGHT_RED  (ANSI_BRIGHT + ANSI_RED)
+#define ANSI_BRIGHT_GREEN (ANSI_BRIGHT + ANSI_GREEN)
+#define ANSI_BRIGHT_YELLOW (ANSI_BRIGHT + ANSI_YELLOW)
+#define ANSI_BRIGHT_BLUE (ANSI_BRIGHT + ANSI_BLUE)
+#define ANSI_BRIGHT_MAGENTA (ANSI_BRIGHT + ANSI_MAGENTA)
+#define ANSI_BRIGHT_CYAN (ANSI_BRIGHT + ANSI_CYAN)
+#define ANSI_BRIGHT_WHITE (ANSI_BRIGHT + ANSI_WHITE)
 
 /* A frame under construction. `data` is caller-owned storage; `len` is how
  * much of it is used; `cap` is its size. Once `len` would exceed `cap` the

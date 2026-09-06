@@ -21,7 +21,18 @@ import * as path from 'path';
 
 import { THEMES, type Theme, type ThemeTokens } from '../../engines/ui/theme';
 
-/** The eight ANSI colours a C door has, as the RGB a terminal draws. */
+/**
+ * The SIXTEEN colours a C door has, as the RGB a terminal draws them.
+ *
+ * Eight was the table's first cut and it lost the distinction the themes are
+ * built on: `ink: 'white'` and `dim: 'gray'` both landed on ANSI_WHITE, so a
+ * C door drew the mark, the name and the blurb in one colour while the
+ * TypeScript drew three (measured screen against screen, 2026-09-07 - the
+ * sysop's "many colors are wrong between the two").
+ *
+ * The bright half is the bold bit; ansi_color() splits an index of 8 or more
+ * back into bold plus the base.
+ */
 const ANSI: Array<{ name: string; c: number; rgb: [number, number, number] }> = [
   { name: 'ANSI_BLACK',   c: 0, rgb: [0, 0, 0] },
   { name: 'ANSI_RED',     c: 1, rgb: [170, 0, 0] },
@@ -31,6 +42,14 @@ const ANSI: Array<{ name: string; c: number; rgb: [number, number, number] }> = 
   { name: 'ANSI_MAGENTA', c: 5, rgb: [170, 0, 170] },
   { name: 'ANSI_CYAN',    c: 6, rgb: [0, 170, 170] },
   { name: 'ANSI_WHITE',   c: 7, rgb: [170, 170, 170] },
+  { name: 'ANSI_GRAY',            c: 8,  rgb: [85, 85, 85] },
+  { name: 'ANSI_BRIGHT_RED',      c: 9,  rgb: [255, 85, 85] },
+  { name: 'ANSI_BRIGHT_GREEN',    c: 10, rgb: [85, 255, 85] },
+  { name: 'ANSI_BRIGHT_YELLOW',   c: 11, rgb: [255, 255, 85] },
+  { name: 'ANSI_BRIGHT_BLUE',     c: 12, rgb: [85, 85, 255] },
+  { name: 'ANSI_BRIGHT_MAGENTA',  c: 13, rgb: [255, 85, 255] },
+  { name: 'ANSI_BRIGHT_CYAN',     c: 14, rgb: [85, 255, 255] },
+  { name: 'ANSI_BRIGHT_WHITE',    c: 15, rgb: [255, 255, 255] },
 ];
 
 /** blessed's colour names, for the classic theme, which uses no hex. */
@@ -114,15 +133,29 @@ function reduce(value: string): { name: string; c: number } {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
 
+  // THE GREY RAMP HAS FOUR STEPS, not two. A terminal's sixteen colours give
+  // black, gray (85), silver (170) and white (255), and the themes use three
+  // of them at once: `ground` black, `dim` gray, `ink` white. Folding the
+  // middle two together is what drew every row of the C picker in one colour.
   if (max - min < 40) {
-    return max < 48
-      ? { name: 'ANSI_BLACK', c: 0 }
-      : { name: 'ANSI_WHITE', c: 7 };
+    if (max < 48) return { name: 'ANSI_BLACK', c: 0 };
+    if (max < 128) return { name: 'ANSI_GRAY', c: 8 };
+    if (max < 224) return { name: 'ANSI_WHITE', c: 7 };
+    return { name: 'ANSI_BRIGHT_WHITE', c: 15 };
   }
 
   const hue = hueOf(r, g, b);
   for (const sector of HUE_SECTORS) {
-    if (hue < sector.upTo) return { name: sector.name, c: sector.c };
+    if (hue < sector.upTo) {
+      // A light colour takes the bright half of its own hue: #FF3D9A is
+      // bright magenta, not the dim magenta a demoscene theme never asked
+      // for. The threshold is the midpoint between the two rows' peaks
+      // (170 and 255).
+      const bright = max >= 212;
+      return bright
+        ? { name: `ANSI_BRIGHT_${sector.name.replace('ANSI_', '')}`, c: sector.c + 8 }
+        : { name: sector.name, c: sector.c };
+    }
   }
   return { name: 'ANSI_WHITE', c: 7 };
 }
