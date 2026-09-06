@@ -7,7 +7,10 @@ import { T, BlessedBox, BlessedText } from '../../theme/blessed-theme.js';
 
 type Mode = 'list' | 'install';
 
-const MAX_DISPLAY_DOORS = 15;
+// One page of the list, matching CrudList's paging so both lists behave the
+// same way under the arrow keys. The list is paged, never truncated - with
+// 116 doors installed, "... and 101 more" was a dead end.
+const PAGE = 20;
 
 export function DoorInstallPage() {
   const [doors, setDoors] = useState<DoorInfo[]>([]);
@@ -17,6 +20,8 @@ export function DoorInstallPage() {
   const [installPath, setInstallPath] = useState('');
   const [installing, setInstalling] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const [pageStart, setPageStart] = useState(0);
 
   const loadDoors = useCallback(async () => {
     setLoading(true);
@@ -24,6 +29,8 @@ export function DoorInstallPage() {
     try {
       const data = await getDoors();
       setDoors(data);
+      setPageStart(0);
+      setSelectedIdx(0);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load doors');
     } finally {
@@ -54,6 +61,10 @@ export function DoorInstallPage() {
     }
   };
 
+  const visibleDoors = doors.slice(pageStart, pageStart + PAGE);
+  const pageCount = Math.max(1, Math.ceil(doors.length / PAGE));
+  const pageNumber = Math.floor(pageStart / PAGE) + 1;
+
   useInput((input, key) => {
     if (mode === 'install') {
       if (key.escape) { setMode('list'); setInstallPath(''); return; }
@@ -62,14 +73,43 @@ export function DoorInstallPage() {
       if (input && !key.ctrl && !key.meta) setInstallPath(v => v + input);
       return;
     }
-    if (input === 'i') setMode('install');
-    if (input === 'r') loadDoors();
+    if (input === 'i') { setMode('install'); return; }
+    if (input === 'r') { loadDoors(); return; }
+
+    // Arrows walk the page and roll onto the next one at its edges, exactly
+    // as CrudList does.
+    if (key.upArrow) {
+      if (selectedIdx > 0) setSelectedIdx(i => i - 1);
+      else if (pageStart > 0) { setPageStart(p => p - PAGE); setSelectedIdx(PAGE - 1); }
+      return;
+    }
+    if (key.downArrow) {
+      if (selectedIdx < visibleDoors.length - 1) setSelectedIdx(i => i + 1);
+      else if (pageStart + PAGE < doors.length) { setPageStart(p => p + PAGE); setSelectedIdx(0); }
+      return;
+    }
+    if (key.pageUp) {
+      setPageStart(p => Math.max(0, p - PAGE));
+      setSelectedIdx(0);
+      return;
+    }
+    if (key.pageDown) {
+      setPageStart(p => (p + PAGE < doors.length ? p + PAGE : p));
+      setSelectedIdx(0);
+      return;
+    }
+    if (input === 'g') { setPageStart(0); setSelectedIdx(0); return; }
+    if (input === 'G') {
+      const lastPage = Math.max(0, Math.floor((doors.length - 1) / PAGE) * PAGE);
+      setPageStart(lastPage);
+      setSelectedIdx(Math.max(0, doors.length - lastPage - 1));
+      return;
+    }
   });
 
   if (loading) return <Box><Text color={T.warn}><Spinner type="dots" /></Text><Text> Loading doors...</Text></Box>;
 
-  const displayDoors = doors.slice(0, MAX_DISPLAY_DOORS);
-  const remaining = doors.length - MAX_DISPLAY_DOORS;
+
 
   return (
     <Box flexDirection="column">
@@ -80,13 +120,26 @@ export function DoorInstallPage() {
 
       {error && <BlessedText variant="alert">Error: {error}</BlessedText>}
 
-      {displayDoors.map(d => (
-        <Box key={d.door_name}>
-          <BlessedText>{d.door_name ?? '(unnamed)'}</BlessedText>
+      {visibleDoors.map((d, i) => (
+        <Box key={d.door_name ?? `door-${pageStart + i}`}>
+          <Text
+            color={i === selectedIdx ? T.selectionInk : undefined}
+            inverse={i === selectedIdx}
+            bold={i === selectedIdx}
+          >
+            {d.door_name ?? '(unnamed)'}
+          </Text>
           {d.door_command && <BlessedText variant="dim">  [{d.door_command}]</BlessedText>}
         </Box>
       ))}
-      {remaining > 0 && <BlessedText variant="dim">... and {remaining} more</BlessedText>}
+      {doors.length > PAGE && (
+        <Box marginTop={1}>
+          <BlessedText variant="dim">
+            Showing {pageStart + 1}-{pageStart + visibleDoors.length} of {doors.length}
+            {'  -  page '}{pageNumber}/{pageCount}
+          </BlessedText>
+        </Box>
+      )}
 
       <Box marginTop={1} flexDirection="column">
         {mode === 'install' ? (
@@ -103,7 +156,7 @@ export function DoorInstallPage() {
           </BlessedBox>
         ) : (
           <Box flexDirection="row" gap={1}>
-            <Text color={T.dim}>[i] install path  [r] refresh</Text>
+            <Text color={T.dim}>[up/down] move  [pgup/pgdn] page  [g/G] first/last  [i] install path  [r] refresh</Text>
           </Box>
         )}
       </Box>
