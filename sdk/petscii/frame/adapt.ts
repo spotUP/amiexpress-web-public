@@ -8,6 +8,7 @@
  *   repeat    a row of IDENTICAL columns: as many whole copies as fit, rest dropped
  *   stat      a `Label: value` row: its columns PACK onto as many rows as they
  *             need, never split, so no value is shortened
+ *   prose     a row whose ONE column is a sentence: wrapped, not truncated
  *   narrow    one row, columns preserved, over-wide cells truncated with '>'
  *   record    a two-field row (message + a right-hand author/tag): the left
  *             field reflows, the field stays flush against the right margin
@@ -15,7 +16,8 @@
  *   reflow    word wrap, attributes travel with their cell
  *   split     plain halves, blank second half dropped
  *
- * Ladder order: crop -> deindent -> record -> repeat -> stat -> narrow -> reflow/split. `narrow` exists
+ * Ladder order: crop -> deindent -> record -> repeat -> stat -> prose -> narrow ->
+ * reflow/split. `narrow` exists
  * because splitting a TABLE in half puts its right-hand columns on a row of
  * their own with no header: that is how a 25-row door screen came out 34-46
  * rows and lost its title to tail-paging (rtw 46, ustats 35, what 34 before
@@ -79,10 +81,10 @@
  * Pure TypeScript: no DOM, no Node imports.
  */
 import { wrapLineToWidth } from '../wrap';
-import { classifyRow, columnSpans, contentWidth, hasTabularGutters, isRuleRow, looksLikeAsciiArt, rowText } from './classify';
+import { classifyRow, columnParts, columnSpans, contentWidth, hasTabularGutters, isRuleRow, looksLikeAsciiArt, rowText } from './classify';
 import { Cell, Cursor, Frame, blankCell, cloneCell, isBlank, makeFrame, padRow } from './types';
 
-export type AdaptRule = 'crop' | 'deindent' | 'gutter' | 'narrow' | 'record' | 'repeat' | 'reflow' | 'split' | 'stat';
+export type AdaptRule = 'crop' | 'deindent' | 'gutter' | 'narrow' | 'prose' | 'record' | 'repeat' | 'reflow' | 'split' | 'stat';
 export type RegionRule = AdaptRule | 'auto';
 
 export interface RegionPin {
@@ -211,6 +213,7 @@ export function chooseRule(cells: Row, cols: number): AdaptRule {
   // widest column is the VALUE, so narrow shortens exactly the thing that
   // cannot survive being shortened. See `statRow`.
   if (statRow(cells, cols) !== null) return 'stat';
+  if (proseRow(cells, cols) !== null) return 'prose';
   if (narrowRow(cells, cols) !== null) return 'narrow';
   return classifiedRule(cells);
 }
@@ -808,6 +811,74 @@ export function statRow(cells: Row, cols: number): RuleResult | null {
   };
 }
 
+/**
+ * LOSSLESS but for the border: the row is ONE column and that column is a
+ * SENTENCE, so it wraps instead of being cut off.
+ *
+ * `Olm`'s help line is the case. The door writes
+ * `|  Use Cursor Keys To Choose, <-\' Enter To Select,  Q or ESC To Quit  |`,
+ * and the double space before `Q` is enough for the ladder to read the row as
+ * columns, so `narrow` took it. `narrow` is a TABLE rule: it earns its
+ * truncation by keeping every column in place and in order. Here there is only
+ * one column, so there is nothing to keep in place, and all the rule did was
+ * hand the caller `Use Cursor Keys To Choose, <-\' Enter To>` - a help line that
+ * no longer says how to quit the door.
+ *
+ * GUARDS, each measured against every frame of every fixture:
+ *
+ * - EXACTLY ONE column. This is the guard that does the work. Without it the
+ *   rung eats `rtw`'s and `ustats`' three-column command menus (rtw 26 -> 35
+ *   adapted rows, which is the exact doubling `narrow` was added to stop) and
+ *   `mrcstat2`'s four bracketed fields. With two or more columns the truncation
+ *   buys alignment; with one it buys nothing.
+ * - The column is not ART by the board's own frozen detector. This one is
+ *   measured too: without it `rtw`'s three logo rows
+ *   (`|Sk!n/     ______/     /     /     ______// \\__ ...`), `ustats`' copy of
+ *   one of them and `kd_confstats`' `|------...------+ UpB4Dn Files:` rule all
+ *   become "prose" and get wrapped into two rows of broken box glyphs. Art is
+ *   `split`'s, and it has been since Phase 3.
+ *
+ *   There is deliberately NO "it must be more than one word" guard. It would
+ *   have excluded nothing in the corpus, and a single over-long token - a URL,
+ *   a path - is better hard-split by the wrapper, which keeps every character,
+ *   than truncated by `narrow`, which does not.
+ * - The column does not fit `cols` on its own. If it fits, `narrow` prints it
+ *   whole on one row and there is nothing to fix.
+ *
+ * Six rows in the whole corpus change: `Olm`\'s help line, `SysInfo`\'s
+ * `Software Running: Kickstart 40.68 Workbench 40.42` (the Workbench version
+ * was being cut off), two `ulist` rows (one of them the board\'s phone number),
+ * `what`\'s title/copyright and `kd_confstats`\' credits.
+ *
+ * Like `narrow`, it drops the row\'s border and the padding outside the column;
+ * unlike `narrow`, it drops nothing else.
+ */
+export function proseRow(cells: Row, cols: number): RuleResult | null {
+  const spans = columnSpans(cells);
+  if (spans.length !== 1) return null;
+  const [a, b] = spans[0];
+  if (b - a <= cols) return null;
+  const text = cells.slice(a, b).map((c) => c.ch).join('');
+  if (looksLikeAsciiArt(text)) return null;
+
+  const flowed = reflowRow(cells.slice(a, b), cols);
+  const last = flowed.rows.length - 1;
+  const end: RuleCursor = flowed.map(b - a - 1);
+  return {
+    rows: flowed.rows,
+    applied: 'prose',
+    // Total map: the indent, the border and the padding either side of the
+    // column belong to the rows next to them - anything before the column maps
+    // to the start of its first row, anything after to the end of its last.
+    map: (x) => {
+      const i = clampIndex(cells, x);
+      if (i < a) return { row: 0, x: 0 };
+      if (i < b) return flowed.map(i - a);
+      return { row: last, x: clampCol(cols, end.x + 1) };
+    },
+  };
+}
+
 export function applyRule(rule: AdaptRule, cells: Row, cols: number): RuleResult {
   switch (rule) {
     case 'crop': return cropRow(cells, cols);
@@ -824,6 +895,9 @@ export function applyRule(rule: AdaptRule, cells: Row, cols: number): RuleResult
     // A pinned 'stat' on a row it declines falls through to the rung that owns
     // columnar rows, exactly as a pinned 'repeat' does.
     case 'stat': return statRow(cells, cols) ?? applyRule('narrow', cells, cols);
+    // A pinned 'prose' on a row that is not one sentence falls through the same
+    // way, to the rung that owns columnar rows.
+    case 'prose': return proseRow(cells, cols) ?? applyRule('narrow', cells, cols);
     case 'gutter': return gutterRow(cells, cols);
     case 'reflow': return reflowRow(cells, cols);
     case 'split': return splitRow(cells, cols);

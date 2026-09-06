@@ -297,6 +297,17 @@ for (const [id, entry] of Object.entries(manifest)) {
             // Lossless: one row, and only LEADING blanks are gone.
             expect({ ...where, rows: out.length }).toEqual({ ...where, rows: 1 });
             expect({ ...where, kept: text(joined).trimEnd() }).toEqual({ ...where, kept: text(src).trim() });
+          } else if (rule === 'prose') {
+            // The row's ONE column, wrapped. Like `narrow` it drops the row's
+            // border and the padding outside the column; unlike `narrow` it
+            // drops nothing else, which is the whole point.
+            const parts = columnParts(src);
+            expect({ ...where, columns: parts.length }).toEqual({ ...where, columns: 1 });
+            const column = text(parts[0] as ReadonlyArray<Cell>);
+            expect({ ...where, chars: squeeze(text(joined)) }).toEqual({ ...where, chars: squeeze(column) });
+            if (words(column).every((w) => w.length <= COLS)) {
+              expect({ ...where, words: words(rowsText(out)) }).toEqual({ ...where, words: words(column) });
+            }
           } else if (rule === 'stat') {
             // Every column whole, in order, none split across a row boundary.
             // `stat` reaches `columnSpans` the same way `narrow` does, so like
@@ -391,7 +402,12 @@ const EXPECTED_ROWS: Record<string, number> = {
   // `Upload   Activities -> Total files: [  >`, which stops mid-number and
   // never reaches "Total bytes" at all. As records they cost a second row each
   // and keep `Total bytes: [               0 ]`. Two rows for two numbers.
-  what: 27,
+  // ...and 27 -> 28 later the same day with the `prose` rung: its title row,
+  // `| WHAT: Transfer Activities v2.0 [REL 2] Copyright (c)1994-95
+  // Bobo/Mystic! |`, is ONE column and `narrow` was cutting it at
+  // `[REL 2] >`. One column is nothing to keep in line, so the truncation
+  // bought nothing; wrapped, the credit is whole.
+  what: 28,
   rtw: 26,
   ustats: 26,
   // The three doors marked on 2026-09-03. These are HARNESS captures, so the
@@ -429,7 +445,11 @@ const EXPECTED_ROWS: Record<string, number> = {
   // this count never reach a caller: the adapter's window is measured against
   // the PAINTED height (c64-door-adapter.ts `adapted()`), and 11 < 25.
   size: 28,
-  ulist: 26,
+  // `ulist` 26 -> 28 on 2026-09-06 with the `prose` rung. Two of its
+  // single-column box rows were being cut: the keypad menu line and
+  // `tO cONTACT uS cALL : pOWERBOX II +49-30-3242112 dUAL`, whose PHONE NUMBER
+  // stopped at `+49-30>`. A phone number is data.
+  ulist: 28,
   // RE-PINNED 2026-09-06 with the `record` rung, DOWNWARDS, and that direction
   // is the point: `wall` 40 -> 33 and `dtagwall` 29 -> 25. Both doors write a
   // RECORD - a message at column 0 and an author near column 80 - and the

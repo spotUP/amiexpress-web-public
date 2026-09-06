@@ -1,4 +1,4 @@
-import { adaptFrame, adaptRows, chooseRule, cropRow, gutterRow, reflowRow, splitRow, deindentRow, narrowRow, repeatRow, recordFields, statRow, isCroppable, applyRule, TRUNCATION_MARK, AdaptRule } from '../../../petscii/frame/adapt';
+import { adaptFrame, adaptRows, chooseRule, cropRow, gutterRow, reflowRow, splitRow, deindentRow, narrowRow, repeatRow, recordFields, statRow, proseRow, isCroppable, applyRule, TRUNCATION_MARK, AdaptRule } from '../../../petscii/frame/adapt';
 import { textToFrame, makeFrame, frameText, Cell } from '../../../petscii/frame/types';
 import { contentWidth, columnParts } from '../../../petscii/frame/classify';
 import { wrapLineToWidth } from '../../../petscii/wrap';
@@ -739,6 +739,58 @@ describe('record', () => {
  * Named after the sysop's second report (2026-09-06), where dRE!WAll's STYLE.1
  * reached a C64 as `Dre> Dre!> Dre!> Dre!> Dre!> Dre!> Dre!>`.
  */
+describe('prose', () => {
+  it('the quit line reads as a sentence', () => {
+    // WarOLM's help line, its own bytes. The DOUBLE SPACE before `Q` is enough
+    // for the ladder to read the row as columns, so `narrow` - a TABLE rule -
+    // took it and handed the caller
+    // `Use Cursor Keys To Choose, <-' Enter To>`: a help line that no longer
+    // says how to quit the door.
+    const help = row("    |  Use Cursor Keys To Choose, <-' Enter To Select,  Q or ESC To Quit  |");
+    expect(chooseRule(help, 40)).toBe('prose');
+    expect(applyRule('prose', help, 40).rows.map(str)).toEqual([
+      "Use Cursor Keys To Choose, <-' Enter To",
+      'Select,  Q or ESC To Quit',
+    ]);
+  });
+
+  it('a three-column menu keeps its columns and keeps narrowing', () => {
+    // `rtw`'s command menu. This is the guard that carries the rung: without
+    // "exactly one column" these nine rows wrap and rtw goes from 26 adapted
+    // rows to 35 - the exact doubling `narrow` was added to stop.
+    const menu = row(' [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS');
+    expect(proseRow(menu, 40)).toBeNull();
+    expect(chooseRule(menu, 40)).toBe('narrow');
+  });
+
+  it('a row of box glyphs is still art, and art is split\'s', () => {
+    // `rtw`'s logo row: one column, wider than the screen, and wrapping it
+    // produces two rows of broken box glyphs.
+    const logo = row(' |Sk!n/     ______/     /     /     ______// \\__    _\\__\\___    _ /s      . |');
+    expect(proseRow(logo, 40)).toBeNull();
+  });
+
+  it('a column that already fits is left to narrow, which prints it whole', () => {
+    const fits = row('               |     ACP Kickstart 40.68 Workbench 40.42       |');
+    expect(proseRow(fits, 40)).toBeNull();
+    expect(str(applyRule('narrow', fits, 40).rows[0])).toBe('ACP Kickstart 40.68 Workbench 40.42');
+  });
+
+  it('a pinned prose on a row that is not one column falls through to narrow', () => {
+    const menu = row(' [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS');
+    expect(applyRule('prose', menu, 40).applied).toBe('narrow');
+  });
+
+  it('the cursor follows its source column onto the row its words landed on', () => {
+    const help = row("    |  Use Cursor Keys To Choose, <-' Enter To Select,  Q or ESC To Quit  |");
+    const out = applyRule('prose', help, 40);
+    const q = str(help).indexOf('Q or ESC');
+    expect(out.map(q).row).toBe(1);
+    // ...and the border, which the rung drops, maps onto the row beside it
+    expect(out.map(0)).toEqual({ row: 0, x: 0 });
+  });
+});
+
 describe('stat', () => {
   it('a byte count is not truncated into a wrong number', () => {
     // ctop's record row, its own bytes: `Top Uploader Record` and `: DeaTure`

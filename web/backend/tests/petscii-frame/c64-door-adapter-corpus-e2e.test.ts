@@ -432,6 +432,12 @@ function ruleViolations(frame: Frame): Array<Record<string, unknown>> {
     } else if (rule === 'deindent') {
       if (out.length !== 1) bad.push({ ...where, why: 'deindent produced more than one row' });
       if (cellText(joined).trimEnd() !== cellText(src).trim()) bad.push({ ...where, why: 'deindent lost more than leading blanks' });
+    } else if (rule === 'prose') {
+      const parts = columnParts(src);
+      if (parts.length !== 1) bad.push({ ...where, why: 'prose on a row that is not one column' });
+      else if (squeeze(cellText(joined)) !== squeeze(cellText(parts[0] as ReadonlyArray<Cell>))) {
+        bad.push({ ...where, why: 'prose lost or reordered characters of its column' });
+      }
     } else if (rule === 'stat') {
       const parts = columnParts(src).map((p) => cellText(p as ReadonlyArray<Cell>).replace(/ {2,}/g, ' '));
       if (parts.length < 2) bad.push({ ...where, why: 'stat on a row with fewer than two columns' });
