@@ -305,11 +305,17 @@ export function drawCursor(
   const left = (stack.curCol - 1) * cols * scale.x;
   const right = left + cols * 2 * scale.x - 1;
 
-  // A taller tile gets a taller cursor, so the pair it holds stays framed.
-  for (let row = top; row < Math.min(board.length, top + scale.y); row++) {
-    markCursorCell(board, row, left, '[');
-    markCursorCell(board, row, right, ']');
-  }
+  // ONE ROW OF BRACKETS, however tall the tile.
+  //
+  // A bracket REPLACES the cell it lands in, so bracketing every row of a 2x2
+  // pair takes the whole outer column of both panels - half of each piece
+  // went black under the cursor (reported on a C64, 2026-09-06, where the
+  // tile is four cells). The middle row reads as a cursor and leaves the
+  // panels' colour visible above and below it.
+  const middle = top + Math.floor(Math.max(1, scale.y) / 2);
+  const row = Math.min(middle, board.length - 1);
+  markCursorCell(board, row, left, '[');
+  markCursorCell(board, row, right, ']');
 }
 
 function markCursorCell(board: CellBuffer, y: number, x: number, char: string): void {

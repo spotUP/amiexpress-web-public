@@ -104,6 +104,8 @@ export declare class PanelsScreen {
     private readonly readInput;
     private readonly variant;
     private frameBox?;
+    /** The well's vertical edges where a full frame has no rows to spare. */
+    private railBoxes;
     private boardBox?;
     private hudBox?;
     private loop?;

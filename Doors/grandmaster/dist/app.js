@@ -1230,14 +1230,23 @@ class GrandmasterApp {
                     && names.some((name) => this.inputHandler.heldKeys().has(name));
                 return tapped || held;
             };
+            // A SWAP IS AN EDGE, NEVER A HOLD.
+            //
+            // `isDown` answers true for as long as a key is held, which is what the
+            // cursor keys want - hold right, walk right. A swap held down is a swap
+            // every frame, and the engine's every-other-frame rule turns that into
+            // swap, swap back, swap: "the old issue with pieces flipping back when i
+            // flip them in tetris attack is still here" (2026-09-06). One press, one
+            // swap - and the same for a manual raise, which is a push, not a lean.
+            const isEdge = (names) => names.some((name) => (pendingEdges.get(name) ?? 0) > 0);
             const readInput = () => {
                 const input = {
                     up: isDown(['up']),
                     down: isDown(['down']),
                     left: isDown(['left']),
                     right: isDown(['right']),
-                    swap: isDown(['space', 'z']),
-                    raise: isDown(['r', 'x']),
+                    swap: isEdge(['space', 'z']),
+                    raise: isEdge(['r', 'x']),
                 };
                 // Spend ONE press of every key that had one, so a second tap waits for
                 // the next frame instead of being thrown away, and two different keys

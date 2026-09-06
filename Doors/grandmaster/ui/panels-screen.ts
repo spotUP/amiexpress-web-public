@@ -125,6 +125,8 @@ export class PanelsScreen {
   private readonly variant: BoardVariant;
 
   private frameBox?: ReturnType<typeof createBox>;
+  /** The well's vertical edges where a full frame has no rows to spare. */
+  private railBoxes: Array<ReturnType<typeof createBox>> = [];
   private boardBox?: ReturnType<typeof createBox>;
   private hudBox?: ReturnType<typeof createBox>;
   private loop?: ReturnType<typeof setInterval>;
@@ -192,6 +194,32 @@ export class PanelsScreen {
     // said whether to draw it - `border`, from the compact profile - and
     // nothing read the flag, so the board floated in the middle of an empty
     // screen with no edge to it. At 40 columns the profile turns borders off.
+    // RAILS WHERE A FRAME WILL NOT FIT.
+    //
+    // A full frame costs two rows, and on a C64 the board and its HUD row
+    // already fill all twenty-five - so `border` is false there and the well
+    // had no edge at all: "tetris attack has no frame borders" (2026-09-06).
+    // Columns are not scarce, though, so the well gets vertical rails: the
+    // same edge, drawn in the space that exists.
+    if (!layout.border) {
+      for (const [column, glyph] of [
+        [layout.board.left - 1, '\u2502'],
+        [layout.board.left + layout.board.width, '\u2502'],
+      ] as Array<[number, string]>) {
+        if (column < 0 || column >= this.screen.width) continue;
+        this.railBoxes.push(createBox({
+          parent: this.screen,
+          top: layout.board.top,
+          left: column,
+          width: 1,
+          height: layout.board.height,
+          tags: true,
+          style: { fg: 'magenta', bg: 'black' },
+          content: Array.from({ length: layout.board.height }, () => glyph).join('\n'),
+        }));
+      }
+    }
+
     if (layout.border) {
       this.frameBox = createBox({
         parent: this.screen,
@@ -397,6 +425,8 @@ export class PanelsScreen {
     this.boardBox?.destroy();
     this.hudBox?.destroy();
     this.frameBox?.destroy();
+    for (const rail of this.railBoxes) rail?.destroy?.();
+    this.railBoxes = [];
     this.boardBox = undefined;
     this.hudBox = undefined;
     this.frameBox = undefined;

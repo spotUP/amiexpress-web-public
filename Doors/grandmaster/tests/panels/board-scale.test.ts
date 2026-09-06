@@ -183,9 +183,19 @@ export async function theDrawnBoardIsTheScaledSize(): Promise<void> {
   assert.strictEqual(board.length, ROWS * 2);
   assert.strictEqual(board[0].length, COLS * 3);
 
-  // One cursor, drawn once per row of the taller tile - not repeated per cell.
+  // ONE ROW of brackets, however tall the tile.
+  //
+  // This asserted one pair per row - and a bracket REPLACES the cell it lands
+  // in, so on a 2x2 tile that took the whole outer column of both panels and
+  // half of each piece went black under the cursor (2026-09-06). The middle
+  // row reads as a cursor and leaves the colour visible above and below.
   const brackets = board.flat().filter(c => c?.char === '[' || c?.char === ']');
-  assert.strictEqual(brackets.length, 2 * 2, 'two brackets, two rows tall');
+  assert.strictEqual(brackets.length, 2, 'one pair of brackets, on one row');
+
+  const bracketRows = new Set(
+    board.flatMap((row, y) => row.some(c => c?.char === '[' || c?.char === ']') ? [y] : []),
+  );
+  assert.strictEqual(bracketRows.size, 1, 'and they share a row');
 }
 
 /**
@@ -335,4 +345,46 @@ export async function theCompactHudDropsFieldsRatherThanDigits(): Promise<void> 
     !/P9999999[^9]|P99999999$/.test(line) || line.includes('P999999999'),
     `the score was sliced mid-number: "${line}"`,
   );
+}
+
+/**
+ * A SWAP IS ONE PRESS, not one per frame it is held.
+ *
+ * `isDown` answers true for as long as a key is held - right for the cursor
+ * keys, wrong for a swap. Held for a few frames, the engine's
+ * every-other-frame rule turns it into swap, swap back, swap: "the old issue
+ * with pieces flipping back when i flip them in tetris attack is still here"
+ * (2026-09-06).
+ *
+ * Driven through the door's own edge counter, which is what the game reads.
+ */
+export async function aHeldSwapKeySwapsExactlyOnce(): Promise<void> {
+  const pendingEdges = new Map<string, number>();
+  const held = new Set<string>(['space']);
+
+  // The two rules, as app.ts spells them.
+  const isDown = (names: string[]): boolean =>
+    names.some((n) => (pendingEdges.get(n) ?? 0) > 0) || names.some((n) => held.has(n));
+  const isEdge = (names: string[]): boolean =>
+    names.some((n) => (pendingEdges.get(n) ?? 0) > 0);
+
+  const spend = () => {
+    for (const [name, count] of pendingEdges) {
+      if (count <= 1) pendingEdges.delete(name);
+      else pendingEdges.set(name, count - 1);
+    }
+  };
+
+  // One press, then five frames of the key still being down.
+  pendingEdges.set('space', 1);
+  let swapsByEdge = 0;
+  let swapsByHold = 0;
+  for (let frame = 0; frame < 6; frame++) {
+    if (isEdge(['space'])) swapsByEdge++;
+    if (isDown(['space'])) swapsByHold++;
+    spend();
+  }
+
+  assert.strictEqual(swapsByEdge, 1, 'one press, one swap');
+  assert.ok(swapsByHold > 1, 'and the held rule is what produced the flip-back');
 }
