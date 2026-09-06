@@ -191,12 +191,26 @@ const CREDENTIAL_OR_CONFIG_NAMES = new Set([
   'PermanentRedirect',
 ]);
 
+/**
+ * Re-arming, NOT sticky - matches the pattern `usable-areas.ts` uses for its
+ * own "don't repeat, but don't go silent forever" warnings. A sustained bad
+ * secret used to log this line on EVERY failing call - every `D`, every `U`,
+ * every listing - which floods the log on a disk-constrained board (this one
+ * has hit ENOSPC twice this year) exactly when disk space matters most. Long
+ * enough not to flood; short enough that a sysop who just fixed one drive's
+ * secret still finds out promptly about the next thing that goes wrong.
+ */
+const CREDENTIAL_WARNING_REARM_MS = 5 * 60 * 1000;
+
 /** Attaches the original failure as `.cause` without widening the error's public shape. */
 function withCause<E extends Error>(error: E, cause: unknown): E {
   return Object.assign(error, { cause });
 }
 
 export class S3Backend implements StorageBackend {
+  /** When each failure NAME last got its one-line operator log - see `unavailable`. */
+  private readonly lastCredentialWarningAt = new Map<string, number>();
+
   constructor(
     public readonly driveNumber: number,
     private readonly bucket: string,
@@ -233,11 +247,16 @@ export class S3Backend implements StorageBackend {
     const label = status !== undefined ? `${name} (${status})` : name;
     const detail = err?.message ? `${label}: ${err.message}` : label;
     if (CREDENTIAL_OR_CONFIG_NAMES.has(name)) {
-      // eslint-disable-next-line no-console -- operator-facing container log, not BBS session output.
-      console.error(
-        `[S3Backend] drive ${this.driveNumber} storage failure looks like a credential or ` +
-          `configuration problem, not a transient one, and will not self-heal by retrying: ${detail}`
-      );
+      const now = Date.now();
+      const last = this.lastCredentialWarningAt.get(name);
+      if (last === undefined || now - last >= CREDENTIAL_WARNING_REARM_MS) {
+        this.lastCredentialWarningAt.set(name, now);
+        // eslint-disable-next-line no-console -- operator-facing container log, not BBS session output.
+        console.error(
+          `[S3Backend] drive ${this.driveNumber} storage failure looks like a credential or ` +
+            `configuration problem, not a transient one, and will not self-heal by retrying: ${detail}`
+        );
+      }
     }
     throw withCause(
       new StorageUnavailableError(this.driveNumber, `drive ${this.driveNumber}: ${detail}`),

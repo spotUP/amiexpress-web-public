@@ -218,6 +218,57 @@ describe('S3Backend', () => {
       }
     });
 
+    it('does not flood the log on a sustained bad secret - one line per re-arm window, not one per call', async () => {
+      const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      try {
+        const { client } = clientReturning(() => {
+          throw namedError('SignatureDoesNotMatch');
+        });
+        const backend = new S3Backend(2, 'b', client);
+
+        // Every one of these is a separate D, U or listing hitting the SAME
+        // wrong secret - the exact shape a sustained credential problem
+        // takes on a live board.
+        for (let i = 0; i < 5; i++) {
+          await expect(backend.get('k')).rejects.toBeInstanceOf(StorageUnavailableError);
+        }
+
+        expect(spy).toHaveBeenCalledTimes(1);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('logs again once the re-arm window has passed', async () => {
+      const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      const nowSpy = jest.spyOn(Date, 'now');
+      try {
+        const { client } = clientReturning(() => {
+          throw namedError('SignatureDoesNotMatch');
+        });
+        const backend = new S3Backend(2, 'b', client);
+
+        nowSpy.mockReturnValue(0);
+        await expect(backend.get('k')).rejects.toBeInstanceOf(StorageUnavailableError);
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        // Still inside the window - suppressed.
+        nowSpy.mockReturnValue(60_000);
+        await expect(backend.get('k')).rejects.toBeInstanceOf(StorageUnavailableError);
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        // Past the window - this is not the sticky latch a stuck secret
+        // must never become; a sysop who is still fighting the problem
+        // deserves to see it recur.
+        nowSpy.mockReturnValue(6 * 60 * 1000);
+        await expect(backend.get('k')).rejects.toBeInstanceOf(StorageUnavailableError);
+        expect(spy).toHaveBeenCalledTimes(2);
+      } finally {
+        spy.mockRestore();
+        nowSpy.mockRestore();
+      }
+    });
+
     it('does not log for an ordinary transient failure', async () => {
       const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
       try {
