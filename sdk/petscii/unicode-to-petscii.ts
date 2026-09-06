@@ -73,6 +73,19 @@ export const UNICODE_TO_PETSCII: ReadonlyMap<string, number | { rvs: number }> =
   ['♠', 0x2A], ['♥', 0x2A], ['♦', 0x2A], ['♣', 0x2A],
   ['→', 0x3E],
   ['\u00A0', 0x20],   // NO-BREAK SPACE (written escaped: invisible in source)
+  // MACRON, the Amiga's byte $AF (latin1 is how a 68K door's output is decoded:
+  // amiga-emulation/api/DosLibrary.ts:1222). Amiga BBS art draws a horizontal
+  // rule at the TOP of the cell with it and the mirror rule at the BOTTOM with
+  // '_', in pairs - dRE!WAll's STYLE.2 and STYLE.4 are `___` / ticks / `¯¯¯`,
+  // and 636 bytes of it sit in the board's own door screens. asciiToPetsciiByte
+  // has mapped '_' to $A4 (screen code $64, LOWER ONE EIGHTH BLOCK) since the
+  // table was written; this is the same decision for the other half of the
+  // pair. Rasterised 8x8 from the PetMe64 outlines the terminal renders from
+  // (PUA $E000 + bank*$100 + screen code), screen code $63 is one lit pixel row
+  // at the TOP in BOTH banks and $64 one lit row at the bottom in both, so this
+  // belongs in the shared, bank-agnostic table and not in the bank-1-only one.
+  // Before this row a C64 caller got '?' for every cell of such a rule.
+  ['\u00AF', 0xA3],   // MACRON -> UPPER ONE EIGHTH BLOCK (sc $63)
 ]);
 
 /**

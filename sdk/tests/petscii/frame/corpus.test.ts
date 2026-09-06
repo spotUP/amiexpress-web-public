@@ -353,11 +353,21 @@ const EXPECTED_ROWS: Record<string, number> = {
   // simply occupies more rows at 40 than at 80.
   size: 26,
   ulist: 26,
-  wall: 40,
+  // RE-PINNED 2026-09-06 with the `record` rung, DOWNWARDS, and that direction
+  // is the point: `wall` 40 -> 33 and `dtagwall` 29 -> 25. Both doors write a
+  // RECORD - a message at column 0 and an author near column 80 - and the
+  // ladder used to spend TWO rows on each of them, the second holding nothing
+  // but a name at whatever column the split or the reflow happened to leave it
+  // (61-40 = 21 for `wall`). Each entry now costs one row with its author flush
+  // against column 40, so `dtagwall` fits a 25-row screen outright and `wall`
+  // loses seven rows of the eight it was over. Nothing is dropped: the corpus's
+  // reflow invariant (every non-blank character, in order) still holds for both,
+  // which is what makes this a smaller number rather than a lossier one.
+  wall: 33,
   chat: 27,
   mrcstat1: 25,
   pager5d: 25,
-  dtagwall: 29,
+  dtagwall: 25,
   avhbc: 25,
   hackcheck: 26,
 };

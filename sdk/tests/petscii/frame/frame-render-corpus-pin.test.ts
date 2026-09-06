@@ -48,6 +48,18 @@ interface Pin {
  * they were taken from; their hashes are the FIRST measurement of new inputs,
  * not a re-measurement of old ones, and they are frozen from here on under the
  * same rule.
+ *
+ * `wall` and `dtagwall` were RE-MEASURED on 2026-09-06, and this is the one
+ * kind of re-measurement the rule above allows: the ladder gained a rung
+ * (`record`, adapt.ts), so the FRAMES changed by design and renderDiff faithfully
+ * renders the new ones. The pin exists to catch a renderer that stopped being
+ * byte-identical under a REFACTOR, not to freeze the adapter's output. Which
+ * fixtures were allowed to move was decided by measurement, not by whichever
+ * ones went red: every frame of all 23 fixtures was run through `chooseRule`
+ * before and after, and exactly these two doors' rows change rule - `rtw`'s
+ * half-painted menu row was the third, and the rung was tightened until it was
+ * excluded rather than the pin re-measured to accept it. The remaining 21
+ * hashes are untouched and stay frozen.
  */
 const PINS: Record<string, Pin> = {
   aehelp: { renders: 21, bytes: 11883, sha256: 'af1abce9f143fff0ac3f81bab2f8ace2e3185fa24c2a417bf5c1b2ff3204d659' },
@@ -66,11 +78,11 @@ const PINS: Record<string, Pin> = {
   doorrepo: { renders: 22, bytes: 12062, sha256: '5b563469b13ca9e76856a621d5aca463e4f5e7217db4da94049a864db4d7375a' },
   size: { renders: 9, bytes: 1837, sha256: '48b7306611e685a35602657f982250fe6386cd1ae7cd4fd5c8d8a1fdae854313' },
   ulist: { renders: 22, bytes: 6297, sha256: '509706f398c52cefa712d390ef03b4002318a798e475e098f150e40213c39eb1' },
-  wall: { renders: 3, bytes: 4422, sha256: 'de8c04bf70456615a1ae1e878c87e9f19a288219b6790a099be6995a580592ce' },
+  wall: { renders: 3, bytes: 4782, sha256: '9d880fb46142bd6d40283592e90836b25ef3caa679174c54fcf12cd36a0f0624' },
   chat: { renders: 49, bytes: 37701, sha256: '94ce198cd0f6fc7edf28d9e78610e631b9583e4620a5220a3ee932ddd7892bea' },
   mrcstat1: { renders: 7, bytes: 951, sha256: '014fe8e6fed2a87b056ae76ee41457ec10fbfcd195261959d3b266738ebd0271' },
   pager5d: { renders: 18, bytes: 1417, sha256: '7ed6b3f50c15a12f54cf79540cb718ac54286baa7664b576cc23e7ec3de0e92e' },
-  dtagwall: { renders: 26, bytes: 9517, sha256: '3f8abed6ba0b1a258bf7524b876c13caaa5ac7229593ecd9d610442cb0902fee' },
+  dtagwall: { renders: 26, bytes: 6112, sha256: 'cf637615bc8d5935c8a9a56a3a9e1251c1c164bc20c836c105589f6265183a34' },
   avhbc: { renders: 6, bytes: 373, sha256: 'f83aad48906dfa640bfe4372866394b973c5ce94bab6cec9d7815865423ea0c6' },
   hackcheck: { renders: 12, bytes: 1624, sha256: 'aa25e1dfa09db75b8b854410bc0e0831f89741e4c777805ac0f64e264cdecc3a' },
 };

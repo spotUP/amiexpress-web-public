@@ -6,11 +6,13 @@
  *             the whole row is a horizontal rule - truncating one leaves one)
  *   deindent  drop the leading blanks when the row then fits (lossless)
  *   narrow    one row, columns preserved, over-wide cells truncated with '>'
+ *   record    a two-field row (message + a right-hand author/tag): the left
+ *             field reflows, the field stays flush against the right margin
  *   gutter    runs of 2+ spaces collapse to one; still wide -> split
  *   reflow    word wrap, attributes travel with their cell
  *   split     plain halves, blank second half dropped
  *
- * Ladder order: crop -> deindent -> narrow -> reflow/split. `narrow` exists
+ * Ladder order: crop -> deindent -> narrow -> record -> reflow/split. `narrow` exists
  * because splitting a TABLE in half puts its right-hand columns on a row of
  * their own with no header: that is how a 25-row door screen came out 34-46
  * rows and lost its title to tail-paging (rtw 46, ustats 35, what 34 before
@@ -18,6 +20,34 @@
  * documented and pinned in the corpus test: the runs of blanks BETWEEN columns
  * (each gutter becomes one space) and the tail of a cell too wide to fit,
  * which is replaced by the truncation mark '>'.
+ *
+ * `record` exists for the OTHER shape a 68K door paints across 80 columns: a
+ * RECORD - a variable-length left field and one compact right-hand field the
+ * door has already positioned near column 80. dRE!WAll writes its comment at
+ * column 0 and the author at column 61; dtagwall writes `[sysop]` at column 66.
+ * The ladder had no notion of a field, so those rows went to `split` (author
+ * re-landed at 61-40 = 21) or to `reflow` (author landed wherever the leftover
+ * run of blanks happened to break), each entry cost two rows, and the sysop's
+ * report was exactly that: "use the full 40 columns for the tags/usernames, the
+ * usernames are not right aligned" and "long 80 column comments needs to be
+ * split to two lines".
+ *
+ * The fix belongs at THIS level and not at three others that were considered:
+ * not in the glyph encoder (it sees characters, not rows); not in the diff
+ * renderer (it is handed cells and cannot know which of them are the author);
+ * and not in a per-door pack (packs are for ART, Phase 4, and the shape is not
+ * one door's - it is every wall-like and listing-like door's, which is the
+ * reason the ladder exists at all). The one real alternative was to AMEND
+ * `narrowRow` to accept a single gutter: rejected, because narrow keeps the row
+ * on ONE row and pays for it in truncation, so a long comment would lose its
+ * tail - the very thing the report asks to have wrapped instead. narrow is
+ * right for a table of small fixed columns; record is right for a prose field
+ * beside a name.
+ *
+ * What `record` guarantees a reader: the field is on the LAST row the record
+ * produced, flush against column `cols`; a wrapped continuation row carries no
+ * field. Reading down, every row up to and including the next field-bearing row
+ * belongs to that field's author.
  *
  * Rule 1 (pack override) and rule 6 (viewport) are Phases 4-5. A pinned
  * region names the rule for a span of source rows; 'auto' classifies.
@@ -46,10 +76,10 @@
  * Pure TypeScript: no DOM, no Node imports.
  */
 import { wrapLineToWidth } from '../wrap';
-import { classifyRow, columnSpans, contentWidth, hasTabularGutters, isRuleRow, rowText } from './classify';
+import { classifyRow, columnSpans, contentWidth, hasTabularGutters, isRuleRow, looksLikeAsciiArt, rowText } from './classify';
 import { Cell, Cursor, Frame, blankCell, cloneCell, isBlank, makeFrame, padRow } from './types';
 
-export type AdaptRule = 'crop' | 'deindent' | 'gutter' | 'narrow' | 'reflow' | 'split';
+export type AdaptRule = 'crop' | 'deindent' | 'gutter' | 'narrow' | 'record' | 'reflow' | 'split';
 export type RegionRule = AdaptRule | 'auto';
 
 export interface RegionPin {
@@ -142,10 +172,12 @@ function isCroppableRule(cells: Row, cols: number): boolean {
   return isRuleRow(cells) && indentOf(cells) < cols;
 }
 
-export function chooseRule(cells: Row, cols: number): AdaptRule {
-  if (isCroppable(cells, cols) || isCroppableRule(cells, cols)) return 'crop';
-  if (contentWidth(cells) - indentOf(cells) <= cols) return 'deindent';
-  if (narrowRow(cells, cols) !== null) return 'narrow';
+/**
+ * The bottom of the ladder: what a row gets once crop, deindent, narrow and
+ * record have all declined. Split out so a PINNED rule that declines can fall
+ * back to the rule the row would have had, rather than to a guess.
+ */
+function classifiedRule(cells: Row): AdaptRule {
   switch (classifyRow(cells)) {
     // A bordered row only reaches here when `narrowRow` declined (a column
     // would have fallen below two cells). Then the old behaviour stands: the
@@ -155,6 +187,18 @@ export function chooseRule(cells: Row, cols: number): AdaptRule {
     case 'table': return 'gutter';
     default: return 'reflow';
   }
+}
+
+export function chooseRule(cells: Row, cols: number): AdaptRule {
+  if (isCroppable(cells, cols) || isCroppableRule(cells, cols)) return 'crop';
+  if (contentWidth(cells) - indentOf(cells) <= cols) return 'deindent';
+  if (narrowRow(cells, cols) !== null) return 'narrow';
+  // AFTER narrow, so a row with real table structure is never read as a
+  // record: `recordFields` needs exactly one gutter and narrow owns two or
+  // more, but a BORDERED row has one gutter and columns both, and narrow must
+  // keep it a box.
+  if (recordRow(cells, cols) !== null) return 'record';
+  return classifiedRule(cells);
 }
 
 export function cropRow(cells: Row, cols: number): RuleResult {
@@ -355,6 +399,122 @@ export function narrowRow(cells: Row, cols: number): RuleResult | null {
   };
 }
 
+/**
+ * The two fields of a RECORD row: a left field and one compact right-hand
+ * field, in SOURCE columns `[start, end)`, both trimmed.
+ */
+export interface RecordFields {
+  left: [number, number];
+  right: [number, number];
+}
+
+const hasAlnum = (cells: Row, [a, b]: [number, number]) => {
+  for (let x = a; x < b; x++) if (/[A-Za-z0-9]/.test(cells[x].ch)) return true;
+  return false;
+};
+
+/**
+ * The row is a RECORD: a left field, ONE run of blanks, and a right-hand field
+ * that is a single atom - a username, a handle, a tag.
+ *
+ * Every condition below is a guard against reading a sentence as a record, and
+ * each was checked against the whole 23-fixture 68K corpus (the rows it must
+ * NOT take are named):
+ *
+ * - EXACTLY ONE interior run of two or more blanks. Two or more runs is a
+ *   table, and `narrowRow` - which the ladder consults first - already owns it.
+ * - The right field starts at or after `cols`. It is the fact that the field
+ *   sits in the half of the row a 40-column screen cannot show that makes it a
+ *   field rather than a word after a wide space.
+ * - The right field contains NO blank. This is the discriminator that keeps the
+ *   two-column stat rows out: `six_status` "Byte Limit..: 0 | Slot Number..: 0",
+ *   `ratiorep`, `super_stats`, `b`'s bulletin menu and `j`'s and `b`'s
+ *   "[JoinCnf 4.0 - EMPiRE]" footers all have a multi-word right-hand half,
+ *   which is prose to be reflowed and not an atom to be right-aligned. A field
+ *   can only be moved as a unit if it IS a unit.
+ * - Both fields contain at least one alphanumeric. Keeps decoration out:
+ *   `super_stats` row 18 ends in a lone '.', `j` rows 8-12 in a lone '|'.
+ * - The field plus one character of content fits in `cols`. A field that fills
+ *   the screen on its own is not a field any more.
+ * - The LEFT field is not ART by the board's own frozen detector. A record's
+ *   left field is a MESSAGE, and reflowing it is the whole point; a left field
+ *   made of decoration means the row is art and `split` already owns it. This
+ *   is what keeps `rtw`'s half-painted menu row out - 60 columns of block
+ *   glyphs beside `[E....LEAV`, which has no blank in it and would otherwise
+ *   read as a tag. Reusing `looksLikeAsciiArt` rather than capping the field's
+ *   width keeps the decision on the classifier the rest of the ladder already
+ *   agrees with, instead of on a tuned constant.
+ */
+export function recordFields(cells: Row, cols: number): RecordFields | null {
+  const width = contentWidth(cells);
+  if (width === 0) return null;
+  const indent = indentOf(cells);
+  const runs: Array<[number, number]> = [];
+  for (let x = indent; x < width; x++) {
+    if (!isBlank(cells[x])) continue;
+    const start = x;
+    while (x < width && isBlank(cells[x])) x++;
+    if (x < width && x - start >= 2) runs.push([start, x]);   // interior only
+  }
+  if (runs.length !== 1) return null;
+
+  const left: [number, number] = [indent, runs[0][0]];
+  const right: [number, number] = [runs[0][1], width];
+  if (left[1] <= left[0] || right[1] <= right[0]) return null;
+  if (right[0] < cols) return null;
+  if (right[1] - right[0] + 2 > cols) return null;
+  for (let x = right[0]; x < right[1]; x++) if (isBlank(cells[x])) return null;
+  if (!hasAlnum(cells, left) || !hasAlnum(cells, right)) return null;
+  if (looksLikeAsciiArt(rowText(cells.slice(left[0], left[1])))) return null;
+  return { left, right };
+}
+
+/**
+ * The record rung: the left field reflows across as many rows as it needs and
+ * the right-hand field is placed FLUSH AGAINST COLUMN `cols` on the LAST of
+ * them - on a row of its own only when the reflowed tail leaves no room for it
+ * plus one separating blank.
+ *
+ * Loses nothing: every character of both fields survives, which is why the
+ * corpus's reflow invariant (the row's non-blank characters, in order, are
+ * unchanged) holds for this rule too. What it drops is the run of blanks
+ * between the fields, exactly as `narrow` and `gutter` do.
+ *
+ * DECLINES (returns null) on any row that is not a record; the caller falls
+ * through to the classified rule unchanged.
+ */
+export function recordRow(cells: Row, cols: number): RuleResult | null {
+  const fields = recordFields(cells, cols);
+  if (!fields) return null;
+  const { left, right } = fields;
+
+  const flowed = reflowRow(cells.slice(left[0], left[1]), cols);
+  const rows = flowed.rows.map((r) => r.map(cloneCell));
+  const fieldLen = right[1] - right[0];
+  const at = cols - fieldLen;
+
+  let last = rows.length - 1;
+  if (contentWidth(rows[last]) + 1 > at) { rows.push(padRow([], cols)); last = rows.length - 1; }
+  for (let k = 0; k < fieldLen; k++) rows[last][at + k] = cloneCell(cells[right[0] + k]);
+
+  // Total map over 0..cells.length-1. The indent and the gutter belong to the
+  // rows either side of them, so the cursor never lands in a place the reader
+  // sees nothing: an indent column maps to the start of the first row, a
+  // gutter column to the end of the left field's last row, and anything past
+  // the field to the field's last cell.
+  const where: RuleCursor[] = new Array(cells.length);
+  const leftEnd: RuleCursor = flowed.map(Math.max(0, left[1] - left[0] - 1));
+  for (let x = 0; x < cells.length; x++) {
+    if (x < left[0]) where[x] = { row: 0, x: 0 };
+    else if (x < left[1]) where[x] = flowed.map(x - left[0]);
+    else if (x < right[0]) where[x] = { row: leftEnd.row, x: clampCol(cols, leftEnd.x + 1) };
+    else if (x < right[1]) where[x] = { row: last, x: at + (x - right[0]) };
+    else where[x] = { row: last, x: clampCol(cols, cols - 1) };
+  }
+
+  return { rows, applied: 'record', map: (x) => where[clampIndex(cells, x)] };
+}
+
 export function applyRule(rule: AdaptRule, cells: Row, cols: number): RuleResult {
   switch (rule) {
     case 'crop': return cropRow(cells, cols);
@@ -362,6 +522,9 @@ export function applyRule(rule: AdaptRule, cells: Row, cols: number): RuleResult
     // A pinned 'narrow' on a row `narrowRow` declines falls through to the
     // rule it would have had before the ladder grew: plain halves.
     case 'narrow': return narrowRow(cells, cols) ?? splitRow(cells, cols);
+    // A pinned 'record' on a row that is not one falls through to the rule the
+    // row would have had without the pin.
+    case 'record': return recordRow(cells, cols) ?? applyRule(classifiedRule(cells), cells, cols);
     case 'gutter': return gutterRow(cells, cols);
     case 'reflow': return reflowRow(cells, cols);
     case 'split': return splitRow(cells, cols);

@@ -551,3 +551,81 @@ describe('adaptRows / adaptFrame', () => {
     expect(out.cells[24][39].ch).toBe('x');   // the ADAPTER keeps it; renderDiff is what refuses to paint it - documented, not hidden
   });
 });
+
+/**
+ * The `record` rung: a two-field row, its right-hand field kept flush against
+ * the right margin. Named after the sysop's report on dRE!WAll (2026-09-06):
+ * "use the full 40 columns for the tags/usernames, the usernames are not right
+ * aligned" and "long 80 column comments needs to be split to two lines".
+ *
+ * The three "not a record" cases are the discriminators, taken from real rows
+ * of the 68K corpus, and they are the reason this rung does not eat the rest of
+ * the ladder. All three would otherwise satisfy "one gutter, a field past
+ * column 40".
+ */
+describe('record', () => {
+  /** dRE!WAll: message at column 0, author in a 17-column field at column 61. */
+  const wall = (message: string, author: string) =>
+    row(message.padEnd(61, ' ') + author.padEnd(17, ' '));
+
+  it('an entry that fits is ONE row with the author flush against column 40', () => {
+    expect(chooseRule(wall('test 1', 'spot'), 40)).toBe('record');
+    const out = applyRule('record', wall('test 1', 'spot'), 40);
+    expect(out.rows).toHaveLength(1);
+    expect(str(out.rows[0])).toBe('test 1'.padEnd(36, ' ') + 'spot');
+    expect(str(out.rows[0]).length).toBe(40);
+  });
+
+  it('a long comment wraps and the author rides the LAST row, not a row of its own', () => {
+    const message = 'VIRGIN LINE VIRGIN LINE VIRGIN LINE VIRGIN LINE VIRGIN LINE';
+    const out = applyRule('record', wall(message, 'dR.dRE!/tRSi'), 40);
+    expect(out.rows).toHaveLength(2);
+    // every word survives, in order, and nothing is truncated
+    expect(words(out.rows.map(str).join(' ')).slice(0, -1)).toEqual(words(message));
+    expect(str(out.rows[1]).slice(40 - 12)).toBe('dR.dRE!/tRSi');
+    // the continuation row carries no author: that is what tells a reader which
+    // text belongs to which name
+    expect(str(out.rows[0]).endsWith('dR.dRE!/tRSi')).toBe(false);
+  });
+
+  it('the author takes a row of its own only when the reflowed tail leaves no room', () => {
+    const message = 'x'.repeat(20) + ' ' + 'y'.repeat(36);   // the tail wraps to exactly 36 of the 40
+    const out = applyRule('record', wall(message, 'spot'), 40);
+    expect(out.rows).toHaveLength(3);
+    expect(str(out.rows[2])).toBe('spot'.padStart(40, ' '));
+  });
+
+  // ---- not a record --------------------------------------------------------
+
+  it('a two-column stat row is NOT a record: its right half is prose, not an atom', () => {
+    // six_status, ratiorep, super_stats all paint this shape.
+    const stat = row('Byte Limit..........: 0'.padEnd(49, ' ') + 'Slot Number...........: 0');
+    expect(chooseRule(stat, 40)).not.toBe('record');
+  });
+
+  it('an art left field is NOT a record: the row is decoration and split owns it', () => {
+    // rtw's half-painted menu row: 60 columns of block glyphs beside a
+    // blank-free `[E...LEAV`.
+    const art = row('####  -  ####  ###########  ####'.padEnd(62, ' ') + '[E####LEAV');
+    expect(chooseRule(art, 40)).not.toBe('record');
+  });
+
+  it('a field that is only decoration is NOT a record', () => {
+    // super_stats row 18 ends in a lone '.', j rows 8-12 in a lone '|'.
+    expect(chooseRule(row('a sentence that runs on and on and on and on'.padEnd(70, ' ') + '.'), 40)).not.toBe('record');
+  });
+
+  it('a pinned record on a row that is not one falls through to the rule it would have had', () => {
+    expect(applyRule('record', row(PROSE), 40).applied).toBe('reflow');
+    expect(applyRule('record', row(ART), 40).applied).toBe('split');
+  });
+
+  it('the cursor follows its source column into the field', () => {
+    const cells = wall('test 1', 'spot');
+    const out = applyRule('record', cells, 40);
+    expect(out.map(0)).toEqual({ row: 0, x: 0 });
+    expect(out.map(5)).toEqual({ row: 0, x: 5 });
+    expect(out.map(61)).toEqual({ row: 0, x: 36 });     // first cell of the author
+    expect(out.map(64)).toEqual({ row: 0, x: 39 });     // last cell of the author
+  });
+});
