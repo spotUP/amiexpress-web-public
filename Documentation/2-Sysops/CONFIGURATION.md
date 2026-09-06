@@ -482,6 +482,19 @@ settings, both optional:
   the directory and how many uploads are stuck there. Recovering those
   bytes is manual; the sweep exists so you find out at all.
 
+  **This check can only confirm liveness for a claimed slot** (it reads
+  `Storage/nodes/<n>.pid` and asks whether that pid is still running,
+  exactly the way claiming a slot does) — never for a directory named
+  after an explicit `BBS_STORAGE_NODE_ID` or a container's `HOSTNAME`,
+  which is precisely the supported multi-instance path described above.
+  For a slot it confirms is dead, the log line says so plainly. For a
+  named sibling it cannot check either way, the log line says it cannot
+  verify ownership, not that nothing owns it — a live, perfectly healthy
+  sibling named this way can still appear in this log, and that is not
+  evidence of a problem by itself. Treat a "cannot verify" line as a
+  prompt to confirm the named sibling is actually still running (or was
+  meant to be), not as proof the bytes are stranded.
+
 ### "Requests This Month" is a lower bound, not a meter
 
 The Drive Setup admin page shows a running request count per volume. Read

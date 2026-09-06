@@ -298,6 +298,16 @@ function isNodeStillActive(bbsRoot: string, nodeDirName: string): boolean | null
  * normal in-flight queue as an orphan on every boot and every later admin
  * save, training a sysop to ignore the one message that actually carries
  * this invariant.
+ *
+ * A THIRD re-review pass on this same finding: `isNodeStillActive` can only
+ * confirm liveness for a slot or a `pid-<n>` name - an explicit
+ * `BBS_STORAGE_NODE_ID` or a container's `HOSTNAME` (CONFIGURATION.md's own
+ * documented multi-instance path) comes back `null`, unverifiable either
+ * way. The message below must say exactly that for the `null` case - NOT
+ * "no live node owns this", which claims a certainty the check does not
+ * have and would train the very distrust this whole mechanism exists to
+ * avoid, just for a different, healthier sibling than the one defect 4
+ * first named.
  */
 function sweepOrphanedCacheDirs(bbsRoot: string, activeCacheDir: string | null): void {
   const cacheRoot = path.join(bbsRoot, 'Storage', 'cache');
@@ -311,7 +321,8 @@ function sweepOrphanedCacheDirs(bbsRoot: string, activeCacheDir: string | null):
   const activeName = activeCacheDir ? path.basename(path.resolve(activeCacheDir)) : null;
   for (const name of entries) {
     if (activeName !== null && name === activeName) continue;
-    if (isNodeStillActive(bbsRoot, name) === true) continue; // a live peer's own, normal queue
+    const liveness = isNodeStillActive(bbsRoot, name);
+    if (liveness === true) continue; // a live peer's own, normal queue
 
     const dir = path.join(cacheRoot, name);
     let isDir = false;
@@ -323,11 +334,28 @@ function sweepOrphanedCacheDirs(bbsRoot: string, activeCacheDir: string | null):
     if (!isDir) continue;
 
     const orphaned = countPendingMarkers(path.join(dir, '.pending'));
-    if (orphaned > 0) {
+    if (orphaned === 0) continue;
+
+    // `liveness === false` is a CONFIRMED dead owner (a slot or a `pid-<n>`
+    // name this process could check directly) - `null` is a name it has no
+    // way to check at all (an explicit BBS_STORAGE_NODE_ID, or a
+    // container's HOSTNAME - CONFIGURATION.md's documented multi-instance
+    // path). The message must not claim more certainty than that: telling
+    // a sysop "nothing owns this" about a perfectly healthy named sibling
+    // is the exact failure this check exists to prevent.
+    if (liveness === false) {
       console.error(
-        `[storage] ${orphaned} pending upload marker(s) sit under ${dir}, which no LIVE node identity ` +
-          `owns - they will not be replayed until a sysop investigates. This can follow a changed ` +
-          `BBS_STORAGE_NODE_ID, a directory an older node-id scheme left behind, or pid reuse.`
+        `[storage] ${orphaned} pending upload marker(s) sit under ${dir}, whose owner this process ` +
+          `confirmed is no longer running - they will not be replayed until a sysop investigates. ` +
+          `This can follow a directory an older node-id scheme left behind, or pid reuse.`
+      );
+    } else {
+      console.error(
+        `[storage] ${orphaned} pending upload marker(s) sit under ${dir} - this process cannot verify ` +
+          `whether a live node still owns it (an explicit BBS_STORAGE_NODE_ID or a container's HOSTNAME ` +
+          `is not checkable from here). If a live sibling owns it, this is expected and not a problem; ` +
+          `if nothing does, they will not be replayed until a sysop investigates. This can follow a ` +
+          `changed BBS_STORAGE_NODE_ID.`
       );
     }
   }

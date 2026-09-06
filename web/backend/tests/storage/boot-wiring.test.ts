@@ -510,13 +510,14 @@ describe('refreshStorageContext', () => {
     expect(fake.lists).toBe(1);
   });
 
-  it('sweeps sibling cache directories for orphaned pending markers and reports them loudly', async () => {
+  it('sweeps a named sibling directory (unverifiable liveness) and reports it WITHOUT claiming nothing owns it', async () => {
     const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.KEYID=k']);
     writeSecret(root, 1, 'sekrit');
     const fake = new FakeBackend({ driveNumber: 1 });
 
-    // A directory from a different (or older) node identity, holding a
-    // pending marker nothing running will ever scan again.
+    // A directory named the way an explicit BBS_STORAGE_NODE_ID or a
+    // container's HOSTNAME names one - not a slot, not a `pid-<n>`
+    // fallback, so `isNodeStillActive` has no signal for it either way.
     const orphanMarker = path.join(
       root, 'Storage', 'cache', 'orphan-node', '.pending', '1', 'Conf1', 'Files', 'DEMO.LHA.json'
     );
@@ -530,7 +531,14 @@ describe('refreshStorageContext', () => {
     try {
       await refreshStorageContext(root, [], { backendFactory: () => fake });
       const messages = errorSpy.mock.calls.map((call) => String(call[0]));
-      expect(messages.some((m) => m.includes('orphan-node') && m.includes('1 pending upload'))).toBe(true);
+      const message = messages.find((m) => m.includes('orphan-node') && m.includes('1 pending upload'));
+      expect(message).toBeDefined();
+      // The re-review fix this proves: for a name this process cannot
+      // verify, the message must say so, not assert a certainty ("no live
+      // node owns this") it does not have - a healthy CONFIGURATION.md
+      // multi-instance sibling would be named exactly like this one.
+      expect(message).toMatch(/cannot verify/i);
+      expect(message).not.toMatch(/confirmed is no longer running/i);
     } finally {
       errorSpy.mockRestore();
     }
@@ -595,7 +603,12 @@ describe('refreshStorageContext', () => {
         cacheDir: path.join(root, 'Storage', 'cache', 'this-run'),
       });
       const messages = errorSpy.mock.calls.map((call) => String(call[0]));
-      expect(messages.some((m) => m.includes('1 pending upload') && m.includes(path.join('cache', '1')))).toBe(true);
+      const message = messages.find((m) => m.includes('1 pending upload') && m.includes(path.join('cache', '1')));
+      expect(message).toBeDefined();
+      // A slot's liveness IS verifiable, and this one was confirmed dead -
+      // the message may say so plainly, unlike the unverifiable case above.
+      expect(message).toMatch(/confirmed is no longer running/i);
+      expect(message).not.toMatch(/cannot verify/i);
     } finally {
       errorSpy.mockRestore();
     }
