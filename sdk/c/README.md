@@ -101,7 +101,36 @@ the smallest door crosses 8 KB or the proof door crosses 64 KB, and it fails
 if `hello` is found carrying `ae_box` symbols - which would mean the library
 is being linked whole and the granular link is a fiction.
 
-**Still unmeasured: repaint latency.** `handoff.md` says ~45 ms per 198-byte
+### Repaint: half measured
+
+A full 80x24 coloured frame from a C door is **4,409 bytes on the wire**,
+which at the 198-byte JH_SM payload is **22.3 messages** - the plan estimated
+20-30, and that half of Risk 1 now has a number instead of an estimate.
+
+`examples/bench/bench_repaint.c` is the door that produced it: N full-screen
+frames, every row painted, every row changing colour each frame so nothing
+anywhere can elide a repaint as "no change". It is built by `make amiga` and
+is meant to be measured by SLOPE - one frame against eleven - so the
+emulator's start-up and the door's registration fall out of the difference.
+
+**The milliseconds are still missing**, and the reason is worth writing down
+so the next attempt does not start where this one did. Driving the bench
+through `web/backend/src/scripts/run-amiga-door.ts` is not repeatable today:
+one run completed (exit 0, 4,409 bytes out), and every run after it hung,
+including the identical command. The hang is not the emulator and not the
+arguments - a hung run stops after the two `[DoorLogger]` lines, before
+`door:status initializing`, where a good run goes on to print 1,616 lines.
+Imports are not the cause either: loading `AmigaDoorSession` on its own takes
+886 ms. `SKIP_DB_INIT=1` makes no difference. So the stall is inside the
+runner's own start-up, between creating the logger and starting the session,
+and that is where to look next.
+
+Until that is fixed the 45 ms per message in `handoff.md` stands unverified.
+If it holds, 22 messages is about a second per frame, and every widget needs
+the dirty-region interface the plan's Risk 1 describes - so this measurement
+decides real design, and guessing it would be worse than leaving it open.
+
+**Also unmeasured: repaint latency.** `handoff.md` says ~45 ms per 198-byte
 XIM message and a full 80x24 coloured frame is 20-30 messages; the plan's
 Risk 1 turns on whether that holds. It needs a door driven through the real
 emulator, not a link, so it is not in `make measure`.
