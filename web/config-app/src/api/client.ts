@@ -823,9 +823,14 @@ class ApiClient {
   }
 
   // Audit Log
+  //
+  // The backend reads req.query.table (config-routes.ts:2012-2017), not
+  // `tableName` - the table filter on this page silently matched nothing on
+  // every request. Found while porting this endpoint to dev/console; fixed
+  // here too since the bug is in this shared param name, not the TUI.
   async getAuditLog(tableName?: string, recordId?: number, limit?: number) {
     const params = new URLSearchParams();
-    if (tableName) params.append('tableName', tableName);
+    if (tableName) params.append('table', tableName);
     if (recordId) params.append('recordId', recordId.toString());
     if (limit) params.append('limit', limit.toString());
 

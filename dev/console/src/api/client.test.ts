@@ -42,6 +42,7 @@ import {
   createNodeConfig,
   updateNodeConfig,
   deleteNodeConfig,
+  getAuditLog,
 } from './client.js';
 
 const BASE_URL = process.env['AMIEXPRESS_URL'] ?? 'http://localhost:3001';
@@ -358,6 +359,21 @@ test('deleteNodeConfig DELETEs /api/config/nodes/:nodeNumber', async () => {
 
   assert.equal(calls[0].url, `${BASE_URL}/api/config/nodes/3`);
   assert.equal(calls[0].method, 'DELETE');
+});
+
+test('getAuditLog sends `table`, not `tableName` - the backend reads req.query.table', async () => {
+  stubFetch({ success: true, data: [] });
+  await getAuditLog({ tableName: 'doors', recordId: 7, limit: 25 });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/audit?table=doors&recordId=7&limit=25`);
+});
+
+test('getAuditLog omits params that were not supplied', async () => {
+  stubFetch({ success: true, data: [] });
+  await getAuditLog({});
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/audit`);
 });
 
 // The incident this whole page exists to fix: the OLD Security page wrote

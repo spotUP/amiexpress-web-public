@@ -4,22 +4,27 @@ import Spinner from 'ink-spinner';
 import { getAuditLog, type AuditEntry } from '../../api/client.js';
 import { T } from '../../theme/blessed-theme.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
+import { useTextEntryLock } from '../../hooks/useTextEntryLock.js';
 
 const ITEMS_START_ROW = 7;
 const PAGE_LIMIT = 50;
+
+type FilterMode = 'none' | 'table' | 'record';
 
 export function AuditLogPage() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState('');
-  const [filtering, setFiltering] = useState(false);
+  const [tableFilter, setTableFilter] = useState('');
+  const [recordFilter, setRecordFilter] = useState('');
+  const [filterMode, setFilterMode] = useState<FilterMode>('none');
+  const [filterDraft, setFilterDraft] = useState('');
   const [selectedIdx, setSelectedIdx] = useState(0);
 
-  const load = useCallback(async (tableName?: string) => {
+  const load = useCallback(async (table: string, recordId: string) => {
     setLoading(true);
     try {
-      const data = await getAuditLog({ tableName, limit: PAGE_LIMIT });
+      const data = await getAuditLog({ tableName: table || undefined, recordId: recordId || undefined, limit: PAGE_LIMIT });
       setEntries(data);
       setError(null);
       setSelectedIdx(0);
@@ -30,25 +35,45 @@ export function AuditLogPage() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(tableFilter, recordFilter); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const visible = entries;
 
-  useRowClick(visible.length, ITEMS_START_ROW, setSelectedIdx, !filtering);
+  useRowClick(visible.length, ITEMS_START_ROW, setSelectedIdx, filterMode === 'none');
+
+  // A table-name or record-id filter box collects free text/digits — must
+  // not lose keys to the sidebar's arrow-key page cycling or the global
+  // 'q'/'?' hotkeys. See dev/console/src/state/text-entry-lock.ts.
+  useTextEntryLock(filterMode !== 'none');
 
   useInput((input, key) => {
-    if (filtering) {
-      if (key.escape) { setFiltering(false); setFilter(''); load(); return; }
-      if (key.return) { setFiltering(false); load(filter || undefined); return; }
-      if (key.backspace || key.delete) { setFilter(f => f.slice(0, -1)); return; }
-      if (input && !key.ctrl) setFilter(f => f + input);
+    if (filterMode !== 'none') {
+      if (key.escape) {
+        setFilterMode('none');
+        if (filterMode === 'table') { setTableFilter(''); load('', recordFilter); }
+        else { setRecordFilter(''); load(tableFilter, ''); }
+        return;
+      }
+      if (key.return) {
+        if (filterMode === 'table') { setTableFilter(filterDraft); load(filterDraft, recordFilter); }
+        else { setRecordFilter(filterDraft); load(tableFilter, filterDraft); }
+        setFilterMode('none');
+        return;
+      }
+      if (key.backspace || key.delete) { setFilterDraft(f => f.slice(0, -1)); return; }
+      if (filterMode === 'record') {
+        if (input && /[0-9]/.test(input)) setFilterDraft(f => f + input);
+        return;
+      }
+      if (input && !key.ctrl) setFilterDraft(f => f + input);
       return;
     }
     if (key.upArrow) setSelectedIdx(i => Math.max(0, i - 1));
     if (key.downArrow) setSelectedIdx(i => Math.min(visible.length - 1, i + 1));
-    if (input === '/') { setFiltering(true); setFilter(''); }
-    if (input === 'r') load(filter || undefined);
-    if (input === 'c') { setFilter(''); load(); }
+    if (input === '/') { setFilterMode('table'); setFilterDraft(tableFilter); }
+    if (input === '#') { setFilterMode('record'); setFilterDraft(recordFilter); }
+    if (input === 'r') load(tableFilter, recordFilter);
+    if (input === 'c') { setTableFilter(''); setRecordFilter(''); load('', ''); }
   });
 
   if (loading && entries.length === 0) {
@@ -62,7 +87,11 @@ export function AuditLogPage() {
     <Box flexDirection="column">
       <Box marginBottom={1}>
         <Text bold color={T.accent}>AUDIT LOG</Text>
-        <Text dimColor>  ({visible.length} entries{filter ? `, table=${filter}` : ''})</Text>
+        <Text dimColor>
+          {'  '}({visible.length} entries
+          {tableFilter ? `, table=${tableFilter}` : ''}
+          {recordFilter ? `, record=${recordFilter}` : ''})
+        </Text>
       </Box>
 
       <Box marginBottom={1}>
@@ -82,14 +111,16 @@ export function AuditLogPage() {
         </Box>
       ))}
 
-      {filtering && (
+      {filterMode !== 'none' && (
         <Box marginTop={1}>
-          <Text color={T.accent}>Filter by table: {filter}█</Text>
-          <Text dimColor>  [enter] apply  [esc] cancel</Text>
+          <Text color={T.accent}>
+            {filterMode === 'table' ? 'Filter by table: ' : 'Filter by record id: '}{filterDraft}█
+          </Text>
+          <Text dimColor>  [enter] apply  [esc] clear</Text>
         </Box>
       )}
 
-      {!filtering && sel && (
+      {filterMode === 'none' && sel && (
         <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor={T.dim} paddingX={1}>
           <Text bold color={T.accent}>Selected entry</Text>
           <Text dimColor>before:</Text>

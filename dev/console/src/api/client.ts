@@ -471,9 +471,15 @@ export interface AuditEntry {
   timestamp: string;
 }
 
-export async function getAuditLog(opts: { tableName?: string; limit?: number } = {}) {
+// The backend reads req.query.table (config-routes.ts:2012-2017), but this
+// sent `tableName` — the table filter silently matched nothing on every
+// request, on both clients (web/config-app/src/api/client.ts:826-836 had the
+// identical bug). Also adds `recordId`, which the backend already accepts
+// and neither client previously exposed at all.
+export async function getAuditLog(opts: { tableName?: string; recordId?: number | string; limit?: number } = {}) {
   const params = new URLSearchParams();
-  if (opts.tableName) params.set('tableName', opts.tableName);
+  if (opts.tableName) params.set('table', opts.tableName);
+  if (opts.recordId !== undefined && opts.recordId !== '') params.set('recordId', String(opts.recordId));
   if (opts.limit) params.set('limit', String(opts.limit));
   const q = params.toString();
   const res = await request<{ success: boolean; data: AuditEntry[] }>(`/api/config/audit${q ? '?' + q : ''}`);
