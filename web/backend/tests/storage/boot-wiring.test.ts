@@ -409,7 +409,7 @@ describe('refreshStorageContext', () => {
     expect(getStorageBootError()).toMatch(/QUOTA/);
   });
 
-  it('review "carry live state": degraded, requestsThisMonth and usedBytes survive a rebuild for an unchanged volume', async () => {
+  it('review "carry live state": degraded and requestsThisMonth survive a rebuild for an unchanged volume', async () => {
     const root = boardWithDrivesInfo([
       'DRIVE.1=s3://bucket',
       'DRIVE.1.ENDPOINT=https://s3.example.com',
@@ -422,6 +422,9 @@ describe('refreshStorageContext', () => {
     const state = getStorageContext()!.volumes.byNumber(1)!;
     state.degraded = true;
     state.requestsThisMonth = 42;
+    // A stale in-process figure nothing reconciles - finding 2 of the
+    // whole-branch review. Unlike degraded/requestsThisMonth, this must NOT
+    // survive a rebuild: see the dedicated re-seeding tests below.
     state.usedBytes = 12345;
 
     // An unrelated admin save (a conference rename, say) triggers a rebuild.
@@ -430,7 +433,66 @@ describe('refreshStorageContext', () => {
     const rebuilt = getStorageContext()!.volumes.byNumber(1)!;
     expect(rebuilt.degraded).toBe(true);
     expect(rebuilt.requestsThisMonth).toBe(42);
-    expect(rebuilt.usedBytes).toBe(12345);
+  });
+
+  it('finding 2: usedBytes is RESEEDED from the catalog on every build, never carried across a rebuild', async () => {
+    // VolumeState.usedBytes starts at 0 in VolumeSet.blank() and used to be
+    // the only thing that ever changed it in-process (FileCache.writeBack) -
+    // nothing reconciled it against the catalog, so after any restart a
+    // bucket already holding files reported itself empty and the upload
+    // gate never refused anything. `usedBytesByVolume` is the seam
+    // production wires to `Database.usedBytesByVolume()` (the catalog's own
+    // SUM(size) - see file-repository.ts) to fix that.
+    const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.KEYID=k']);
+    writeSecret(root, 1, 'sekrit');
+    const fake = new FakeBackend({ driveNumber: 1 });
+    let catalogBytes = 0;
+    const usedBytesByVolume = () => new Map([[1, catalogBytes]]);
+
+    await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume });
+    expect(getStorageContext()!.volumes.byNumber(1)!.usedBytes).toBe(0);
+
+    // The catalog grows - a caller elsewhere finished an upload and recorded
+    // it - entirely outside this process's own in-memory counters.
+    catalogBytes = 4096;
+    await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume });
+
+    expect(getStorageContext()!.volumes.byNumber(1)!.usedBytes).toBe(4096);
+  });
+
+  it('finding 2: a bucket the catalog already shows full refuses uploads from the FIRST build - the gate, before any transfer', async () => {
+    // The case the pre-fix tests could not see: no writeBack, no prior admin
+    // action, no rebuild in this process at all - just a fresh boot against
+    // a catalog that already says the quota is spent. Before finding 2,
+    // VolumeState.usedBytes started at 0 unconditionally, so this exact
+    // drive would have reported 10 GB free on every restart no matter what
+    // the catalog held, and the upload gate (VolumeSet.freeBytesOn, what
+    // poolSpaceFor/the U command's floor check reads) would never fire.
+    const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.QUOTA=10G', 'DRIVE.1.KEYID=k']);
+    writeSecret(root, 1, 'sekrit');
+    const fake = new FakeBackend({ driveNumber: 1 });
+    const tenGB = 10 * 1024 ** 3;
+    const usedBytesByVolume = () => new Map([[1, tenGB]]);
+
+    const storage = await initStorage(root, { backendFactory: () => fake, usedBytesByVolume, areas: [] });
+
+    expect(storage).not.toBeNull();
+    expect(storage!.volumes.freeBytesOn(1)).toBe(0);
+    expect(fake.puts).toBe(0); // proven without ever attempting a transfer
+  });
+
+  it('finding 2: a failing usedBytesByVolume degrades to 0 rather than taking the build down', async () => {
+    const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.KEYID=k']);
+    writeSecret(root, 1, 'sekrit');
+    const fake = new FakeBackend({ driveNumber: 1 });
+    const usedBytesByVolume = (): Map<number, number> => {
+      throw new Error('database not ready');
+    };
+
+    const storage = await initStorage(root, { backendFactory: () => fake, usedBytesByVolume, areas: [] });
+
+    expect(storage).not.toBeNull();
+    expect(storage!.volumes.byNumber(1)!.usedBytes).toBe(0);
   });
 
   it('review defect 1: usedBytes reflects the DELTA on an overwrite after a rebuild, not the sum', async () => {
@@ -439,7 +501,10 @@ describe('refreshStorageContext', () => {
     // empty, so writeBack's overwrite-delta correction ("credit back the
     // previous size before charging the new one") had nothing to credit
     // back and charged the full new size on top of the already-counted
-    // old one.
+    // old one. Finding 2 replaced the carry with a catalog re-seed, so this
+    // now models the catalog learning about the first write BEFORE the
+    // rebuild - exactly what a real recordLocation/createFileEntry call
+    // would have done at the time.
     const root = boardWithDrivesInfo([
       'DRIVE.1=s3://bucket',
       'DRIVE.1.ENDPOINT=https://s3.example.com',
@@ -447,17 +512,21 @@ describe('refreshStorageContext', () => {
     ]);
     writeSecret(root, 1, 'sekrit');
     const fake = new FakeBackend({ driveNumber: 1 });
+    let catalogBytes = 0;
+    const usedBytesByVolume = () => new Map([[1, catalogBytes]]);
 
-    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume });
     const staged = getStorageContext()!.cache.localPathFor(1, 'Conf1/Files/DOOR.DAT');
     fs.mkdirSync(path.dirname(staged), { recursive: true });
     fs.writeFileSync(staged, Buffer.alloc(100, 1));
     await getStorageContext()!.cache.writeBack(1, 'Conf1/Files/DOOR.DAT', staged);
     expect(getStorageContext()!.volumes.byNumber(1)!.usedBytes).toBe(100);
+    catalogBytes = 100; // the catalog now agrees - the write was recorded
 
     // An admin save (a conference rename, unrelated to this file) rebuilds
-    // the pool - a brand new FileCache generation.
-    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    // the pool - a brand new FileCache generation, its usedBytes RESEEDED
+    // from the catalog rather than carried.
+    await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume });
 
     // The door rewrites its file - smaller this time.
     fs.writeFileSync(staged, Buffer.alloc(40, 2));

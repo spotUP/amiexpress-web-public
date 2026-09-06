@@ -493,7 +493,9 @@ export async function initializeData(io?: SocketIOServer) {
       // here, through the same `refreshStorageContext` boot uses, means a
       // live change reaches the pool exactly when it reaches everything
       // else, with no restart in between.
-      await refreshStorageContext(bbsRoot, fileAreas.map(remoteAreaFromDisk));
+      await refreshStorageContext(bbsRoot, fileAreas.map(remoteAreaFromDisk), {
+        usedBytesByVolume: () => db.usedBytesByVolume(),
+      });
     });
 
     await refreshConferencesFromDisk(bbsRoot);
@@ -515,7 +517,9 @@ export async function initializeData(io?: SocketIOServer) {
     // awaits its own pending-upload replay; see `refreshStorageContext`'s
     // doc for why a hanging bucket must not be able to delay `setDatabase`,
     // dependency injection or `server.listen` below.
-    await refreshStorageContext(bbsRoot, fileAreas.map(remoteAreaFromDisk));
+    await refreshStorageContext(bbsRoot, fileAreas.map(remoteAreaFromDisk), {
+      usedBytesByVolume: () => db.usedBytesByVolume(),
+    });
 
     setDatabase(db);
     setHelpers({ callersLog, loadFlagged, loadHistory });

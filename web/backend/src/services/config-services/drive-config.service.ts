@@ -476,7 +476,13 @@ console.error(`[DriveConfigService] Failed to write ${drivesInfoPath}:`, error);
   private async refreshLiveStorage(bbsRoot: string): Promise<void> {
     const conferences = this.conferencesForAreaScan(bbsRoot);
     const areas = loadFileAreasFromDisk(bbsRoot, conferences).map(remoteAreaFromDisk);
-    await refreshStorageContext(bbsRoot, areas);
+    await refreshStorageContext(bbsRoot, areas, {
+      // Finding 2 of the whole-branch review: usedBytes is re-seeded from
+      // the catalog on every build now, not carried across a rebuild - see
+      // storage/index.ts#carryLiveState. Every Drives.info write goes
+      // through this same rebuild, so it must carry the seam too.
+      usedBytesByVolume: () => this.database.usedBytesByVolume(),
+    });
   }
 
   // ------------------------------------------------------------- the secret

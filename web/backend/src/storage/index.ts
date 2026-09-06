@@ -124,6 +124,19 @@ export interface InitStorageOptions {
   maxCacheBytes?: number;
   /** Forwarded to `FileCache` - tests use a short one. */
   syncTimeoutMs?: number;
+  /**
+   * The catalog's bytes-per-drive figure - `Database.usedBytesByVolume()`
+   * (`file-repository.ts#usedBytesByVolume`), whose own doc explains why it,
+   * and not an in-process counter, is the number that can be trusted.
+   *
+   * Production (`server/initialization.ts`, `DriveConfigService`) always
+   * passes `() => db.usedBytesByVolume()`. Left undefined here - rather than
+   * defaulting to that call directly - so a test that builds a `VolumeSet`
+   * with no real SQLite database behind it (most of `tests/storage/`) keeps
+   * getting `usedBytes: 0`, exactly as before this finding was fixed: this
+   * function must never reach for the live database on its own.
+   */
+  usedBytesByVolume?: () => ReadonlyMap<number, number>;
 }
 
 /**
@@ -143,6 +156,35 @@ export async function initStorage(
 ): Promise<StorageContext | null> {
   const volumes = VolumeSet.fromBoard(bbsRoot, { backendFactory: opts.backendFactory });
   if (!volumes.hasPool()) return null;
+
+  // Finding 2 (whole-branch review): `VolumeState.usedBytes` starts at 0 in
+  // `VolumeSet.blank()` and is otherwise only ever INCREMENTED by
+  // `FileCache.writeBack` - so after any restart a bucket already holding
+  // files reports itself as empty, and `place()`/`freeBytesOn()` (the upload
+  // gate) never refuse an upload no matter how full the catalog says the
+  // drive actually is. Seed every s3 volume's counter from the catalog - the
+  // number `usedBytesByVolume`'s own doc names as the one that can be
+  // trusted - before this VolumeSet is handed to anything.
+  //
+  // Best-effort: a database that is not ready yet (or, in a test, not wired
+  // up at all - see `usedBytesByVolume`'s own doc) must not take the whole
+  // pool down with it. Leaving the counter at 0 on failure is the same
+  // under-count this finding fixes, not a new failure mode.
+  if (opts.usedBytesByVolume) {
+    try {
+      const usedByVolume = opts.usedBytesByVolume();
+      for (const state of volumes.states) {
+        if (state.volume.kind !== 's3') continue;
+        state.usedBytes = usedByVolume.get(state.volume.driveNumber) ?? 0;
+      }
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[storage] could not seed used-bytes from the catalog (${detail}); every volume starts this ` +
+          `process at 0 until the next successful rebuild`
+      );
+    }
+  }
 
   const cache = new FileCache({
     cacheDir: opts.cacheDir ?? defaultCacheDir(bbsRoot, opts.nodeId),
@@ -179,6 +221,16 @@ export async function initStorage(
  * changed - see its own doc). Only volumes whose identity is unchanged
  * (`sameVolumeIdentity`) inherit anything; a drive that is new, removed, or
  * points at a genuinely different bucket starts clean.
+ *
+ * `usedBytes` is the one field this deliberately does NOT carry any more -
+ * finding 2 of the whole-branch review. `initStorage` just RE-SEEDED it from
+ * the catalog (`usedBytesByVolume`) for every s3 volume in `next`, which is
+ * always at least as fresh as whatever `previous` was carrying (the catalog
+ * only moves forward - every write that changes it goes through
+ * `recordLocation`/`createFileEntry` before this rebuild ever runs), so
+ * carrying the OLD in-process figure here would silently overwrite a
+ * correct number with a stale one on every single rebuild. Re-seed, don't
+ * carry: this is the fix, not an omission.
  */
 function carryLiveState(previous: StorageContext | null, next: StorageContext): StorageContext {
   if (!previous) return next;
@@ -189,7 +241,6 @@ function carryLiveState(previous: StorageContext | null, next: StorageContext): 
     if (!nextState || !sameVolumeIdentity(prevState.volume, nextState.volume)) continue;
     nextState.degraded = prevState.degraded;
     nextState.requestsThisMonth = prevState.requestsThisMonth;
-    nextState.usedBytes = prevState.usedBytes;
     nextState.egressBytesThisMonth = prevState.egressBytesThisMonth;
     unchangedDrives.add(prevState.volume.driveNumber);
   }
