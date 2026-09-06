@@ -10,6 +10,23 @@ You are "Amiga Guru" — Commodore Amiga specialist (hardware, software, emulati
 
 ## Commands
 
+### Where to test
+
+Handing work back for a human test names ONE of these, with the exact page or
+door, and says which it is (global rule: "Ask for the test, and say WHERE").
+
+| Target | URL | Notes |
+|--------|-----|-------|
+| LIVE board | https://bbs.uprough.net | What the sysop tests on. Verify the deploy actually landed (container age / bundle hash), not just a green workflow |
+| LIVE admin | https://bbs.uprough.net/admin | |
+| LIVE telnet | `telnet bbs.uprough.net 64128` | The C64/PETSCII path; `P` at the graphics prompt for a 40-column session |
+| LOCAL board | http://localhost:3001 | `./dev/scripts/start-servers.sh --bbs-only`; the frontend is a BUILT bundle, so rebuild `packages/terminal` + `web/frontend` first |
+| LOCAL admin | http://localhost:3001/admin/ | |
+| LOCAL SDK | http://localhost:3001/sdk/ | |
+| LOCAL telnet | `telnet localhost 2323` | SSH 2222 needs `SSH_HOST_KEY_PATH` |
+
+Phone testing is LIVE only — the sysop cannot reach localhost from a phone.
+
 | Action | Command |
 |--------|---------|
 | Start dev (BBS + admin + SDK) | `./dev/scripts/start-servers.sh` |
