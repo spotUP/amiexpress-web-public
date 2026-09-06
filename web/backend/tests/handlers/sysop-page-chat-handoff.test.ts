@@ -119,6 +119,16 @@ describe("sysop page chat handoff (task 18, round 2, finding #1)", () => {
     // Wire BOTH parties into session-manager's live lookup maps — exactly
     // what a real connected socket does — so resolveCounterpartSocket()
     // can find either side regardless of who initiates.
+    //
+    // `socketId` is part of that wiring and was missing here: a real web
+    // connection assigns it in the same breath as the socketToUser entry
+    // (server/socket-handlers.ts:177, and again on reconnect at
+    // server/auth-socket-handlers.ts:161). TP-10's registry resolves a web
+    // session through `session.socketId`, deliberately never through
+    // `session.socket` (the DEAD socket after a reconnect), so a fixture that
+    // sets only the map is a session no live push could reach.
+    userSession.socketId = "sock-user";
+    sysopSession.socketId = "sock-sysop";
     userSessions.set("user-1", userSession);
     socketToUser.set("sock-user", "user-1");
     userSessions.set("sysop-1", sysopSession);

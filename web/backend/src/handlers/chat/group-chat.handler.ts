@@ -13,6 +13,7 @@
 
 import { Socket } from 'socket.io';
 import { getSessionBySocketId, getSocketIdByUserId } from '../../server/session-manager';
+import { emitterForSession, socketIoSocketFor } from '../../server/session-emitter-registry';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
@@ -748,12 +749,18 @@ console.log('👢 Room kick request:', session.user?.id, data.targetUsername);
     );
 
     if (targetSession) {
-      const [targetSocketId, targetSess] = targetSession;
-      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      const [, targetSess] = targetSession;
+      // TP-10: the ONE registry. This used to be
+      // an io-namespace lookup on the SESSIONS MAP KEY - and that key is the
+      // nodeId (server/session-manager.ts setSession), not a socket id, so the
+      // kicked user was notified on NO transport. The room `leave` still needs
+      // a real socket.io socket and asks for it separately; a byte transport
+      // is in no room and correctly gets null.
+      const targetSocket = emitterForSession(targetSess, io);
 
       if (targetSocket) {
         // Leave Socket.io room
-        targetSocket.leave('room:' + session.currentRoomId);
+        socketIoSocketFor(targetSess, io)?.leave('room:' + session.currentRoomId);
 
         // Restore previous state
         if (targetSess.previousState && targetSess.previousSubState) {
@@ -845,8 +852,9 @@ console.log('🔇 Room mute request:', session.user?.id, data.targetUsername, da
     );
 
     if (targetSession) {
-      const [targetSocketId] = targetSession;
-      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      const [, targetSess] = targetSession;
+      // TP-10: same registry, same reason as the kick above.
+      const targetSocket = emitterForSession(targetSess, io);
 
       if (targetSocket) {
         const msg = data.mute

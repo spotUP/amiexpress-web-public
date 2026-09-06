@@ -21,6 +21,7 @@
 import express, { Request, Response } from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { sessions, socketToNodeId, getSocketIdByNodeId } from '../server/session-manager';
+import { emitterForNodeId } from '../server/session-emitter-registry';
 import { getSystemTime } from '../utils/date-time.util';
 import {
   setNodeReservation,
@@ -258,22 +259,30 @@ export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof e
 
     // Actually disconnect. This used to emit SV_KICKUSER on a channel nothing
     // subscribes to and report success, so the caller stayed online and the
-    // sysop was told they had been removed. A browser node IS its socket, so
-    // closing the socket is what kicking one means here.
-    const socket = io.sockets.sockets.get(validation.socketId!);
-    if (!socket) {
+    // sysop was told they had been removed.
+    //
+    // TP-10: resolved through the ONE session-emitter registry. The lookup this
+    // replaced reached into the io namespace by getSocketIdByNodeId(nodeId) -
+    // and that map holds socket.io sockets and nothing else, so kicking a telnet or
+    // SSH node from the admin dashboard 404'd with "no active socket
+    // connection" while the caller stayed online. `system-message` is rendered
+    // on a byte transport by the transport adapter (TP-4), and the connection
+    // emitter maps `disconnect` to closing the connection, so both halves of
+    // the kick now cross.
+    const target = emitterForNodeId(nodeId, io);
+    if (!target) {
       return res.status(404).json({
         success: false,
-        message: `Node ${nodeId} has no active socket connection`,
+        message: `Node ${nodeId} has no active connection`,
       });
     }
 
-    socket.emit('system-message', {
+    target.emitter.emit('system-message', {
       text: reason
         ? `\r\nDisconnected by the sysop: ${reason}\r\n`
         : '\r\nDisconnected by the sysop.\r\n',
     });
-    socket.disconnect(true);
+    target.emitter.disconnect(true);
 
     console.log(`[Node Control] Kicked node ${nodeId} (socket: ${validation.socketId})`);
 

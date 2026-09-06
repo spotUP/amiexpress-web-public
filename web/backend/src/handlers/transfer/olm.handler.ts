@@ -17,6 +17,7 @@ import { ACSPermission } from '../../constants/acs-permissions';
 import { EnvStat } from '../../constants/env-codes';
 import { checkSecurity } from '../../utils/acs.util';
 import { getSocketIdByNodeId } from '../../server/session-manager';
+import { emitterForSession } from '../../server/session-emitter-registry';
 
 import type { BBSSession } from '../../index';
 // Session type
@@ -323,14 +324,28 @@ console.log('📤 [OLM] Sending packet to', targetSocketId, 'last:', last);
       }
 
       // express.e:1464-1473 - Check if user is at command prompt
-      if (targetSession.subState === LoggedOnSubState.READ_COMMAND ||
-          targetSession.subState === LoggedOnSubState.READ_SHORTCUTS) {
+      // TP-10: the IMMEDIATE branch resolves the recipient through the ONE
+      // session-emitter registry. It used to be `io.to(targetSocketId)`, a
+      // socket.io room a telnet or SSH caller is not in and never was, so the
+      // common case - the recipient sitting at the command prompt - wrote the
+      // message into nothing while the sysop was told OLM SENT. The QUEUE
+      // branch below always crossed, because it mutates the target's session
+      // and the recipient's own emitter drains it; this is that idea with the
+      // emitter made findable.
+      const targetEmitter =
+        (targetSession.subState === LoggedOnSubState.READ_COMMAND ||
+          targetSession.subState === LoggedOnSubState.READ_SHORTCUTS)
+          ? emitterForSession(targetSession, io)
+          : null;
+      if (targetEmitter) {
         // Display immediately
         for (const line of targetSession.olmBuffer) {
-          io.to(targetSocketId).emit('ansi-output', line);
+          targetEmitter.emit('ansi-output', line);
         }
         targetSession.olmBuffer = [];
       } else {
+        // No live emitter (or not at the prompt): fall back to the queue, so a
+        // message is never lost to a lookup that came back empty.
         // Queue for later display - express.e:1468-1472
         if (!targetSession.olmQueue) {
           targetSession.olmQueue = [];

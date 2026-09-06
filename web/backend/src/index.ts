@@ -97,6 +97,7 @@ import {
 import { SSHServerImpl, SSHConnection } from "./server/ssh-server";
 import { SSHKeyUtil } from "./utils/ssh-key.util";
 import type { WireCharset } from "./utils/wire-encoding.util";
+import type { LoginEmitter } from "./types/login-emitter";
 import type { OutputAttributes } from "./utils/output-pacing";
 import { findSecurityScreen } from "./utils/screen-security.util";
 import { DEFAULT_CONNECTION_BAUD } from "./constants/modem";
@@ -368,6 +369,16 @@ export interface BBSSession {
   pendingDoorCommands?: string[]; // Commands queued by doors to run after exit
   socket?: any; // Active socket instance (used for reconnect-safe output)
   socketId?: string; // Active socket id for this session
+  /**
+   * The telnet/SSH connection emitter that reaches this session, bound by
+   * `server/session-emitter-registry.ts` (TP-10) at the transport entry point
+   * and dropped at close. Web sessions leave it undefined: their live socket is
+   * resolved from `socketId` through the io namespace, because `socket` above
+   * is the DEAD socket after a reconnect. NOTHING should read this field
+   * directly - `emitterForSession()` is the one reader, so both transports get
+   * one answer.
+   */
+  connectionEmitter?: LoginEmitter | null;
   bbsApi?: any; // Active BBS API instance for doors (used to rebind socket on reconnect)
   keyState?: Record<string, boolean>; // Current key state for simultaneous input (which keys are pressed)
   gameModeEnabled?: boolean; // Whether game mode is active (raw keydown/keyup events)
