@@ -6,10 +6,22 @@
  *
  * Reuses CrudList (dev/console/src/components/CrudList.tsx) rather than a
  * bespoke page — same reasoning as the other Lookup Tables entries. CrudList
- * requires a numeric `id`; the backend's rows have none (they're keyed by
- * node_number), so client.ts's getNodeConfigs() synthesises `id =
- * node_number` and every write below is keyed off that same value, matching
- * the backend's own :nodeNumber route param.
+ * requires a numeric `id`; the backend's own rows already carry one
+ * (node-config.service.ts: `id: nodeNum + 1`, 1-based — distinct from the
+ * 0-based `node_number` field), and it is the value every
+ * GET/PUT/DELETE /api/config/nodes/:nodeNumber route actually expects. See
+ * client.ts's getNodeConfigs() doc comment for the bug this used to be
+ * (deleting the wrong node) when that real id was overwritten with
+ * node_number instead of trusted as-is.
+ *
+ * `node_number` stays out of the PATCH body on every `update` call below —
+ * the backend's own updateNodeConfig prefers `updates.node_number` (read as
+ * a raw 0-based node index) over the URL's id whenever it's present
+ * (node-config.service.ts:212), so resubmitting an edited node_number on an
+ * EXISTING row would redirect the write to a DIFFERENT node's Node<N>.info,
+ * independent of which row was actually selected. It stays an editable
+ * field only because `create` needs it (a new node config has no other way
+ * to say which node it's for).
  *
  * NodeConfigSchema (config.schemas.ts:184-221) declares 23 fields.
  * CrudList's edit form has no scrolling — it renders every editField in one
@@ -65,7 +77,7 @@ export function NodeConfigPage() {
       editFields={editFields}
       getAll={getNodeConfigs}
       create={(row) => createNodeConfig(row)}
-      update={(id, patch) => updateNodeConfig(id, patch)}
+      update={(id, patch) => updateNodeConfig(id, { ...patch, node_number: undefined })}
       remove={(id) => deleteNodeConfig(id)}
     />
   );

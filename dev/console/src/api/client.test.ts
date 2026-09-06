@@ -333,17 +333,19 @@ test('repairAllScreens POSTs { dryRun } to /api/screens/repair-all', async () =>
   assert.deepEqual(res.damaged, ['a.txt', 'b.txt']);
 });
 
-test('getNodeConfigs GETs /api/config/nodes and synthesises id from node_number', async () => {
-  stubFetch({ success: true, data: [{ node_number: 3, priority: 5, telnet: true }] });
+test('getNodeConfigs GETs /api/config/nodes and trusts the backend id as-is (never re-derives it from node_number)', async () => {
+  // The backend's real shape: id is 1-based (nodeNum + 1), node_number is
+  // 0-based - two DIFFERENT numbers, not aliases of each other.
+  stubFetch({ success: true, data: [{ id: 4, node_number: 3, priority: 5, telnet: true }] });
   const rows = await getNodeConfigs();
 
   assert.equal(calls[0].url, `${BASE_URL}/api/config/nodes`);
-  assert.equal(rows[0].id, 3);
+  assert.equal(rows[0].id, 4);
   assert.equal(rows[0].node_number, 3);
 });
 
 test('createNodeConfig POSTs to /api/config/nodes', async () => {
-  stubFetch({ success: true, data: { node_number: 4 } });
+  stubFetch({ success: true, data: { id: 5, node_number: 4 } });
   await createNodeConfig({ node_number: 4, priority: 1 });
 
   assert.equal(calls[0].url, `${BASE_URL}/api/config/nodes`);
@@ -351,21 +353,44 @@ test('createNodeConfig POSTs to /api/config/nodes', async () => {
   assert.deepEqual(calls[0].body, { node_number: 4, priority: 1 });
 });
 
-test('updateNodeConfig PUTs /api/config/nodes/:nodeNumber, not a synthesised id path', async () => {
-  stubFetch({ success: true, data: { node_number: 3 } });
-  await updateNodeConfig(3, { telnet: false });
+test('updateNodeConfig PUTs /api/config/nodes/:id - the id CrudList holds, not node_number', async () => {
+  stubFetch({ success: true, data: { id: 4, node_number: 3 } });
+  await updateNodeConfig(4, { telnet: false });
 
-  assert.equal(calls[0].url, `${BASE_URL}/api/config/nodes/3`);
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/nodes/4`);
   assert.equal(calls[0].method, 'PUT');
   assert.deepEqual(calls[0].body, { telnet: false });
 });
 
-test('deleteNodeConfig DELETEs /api/config/nodes/:nodeNumber', async () => {
-  stubFetch({ success: true, message: 'Node configuration deleted' });
-  await deleteNodeConfig(3);
+test('deleteNodeConfig DELETEs /api/config/nodes/:id - a row whose node_number is 3 must issue DELETE .../4', async () => {
+  // End-to-end: a real backend row (id=4, node_number=3) flows through
+  // getNodeConfigs() unmodified, and deleting BY THAT ROW's id must hit
+  // node 4 in the URL, not node 3 - the exact regression this fixes
+  // (deleteNodeConfig used to be called with the WRONG number because
+  // getNodeConfigs() overwrote id with node_number).
+  stubFetch({ success: true, data: [{ id: 4, node_number: 3, priority: 5 }] });
+  const rows = await getNodeConfigs();
 
-  assert.equal(calls[0].url, `${BASE_URL}/api/config/nodes/3`);
+  stubFetch({ success: true, message: 'Node configuration deleted' });
+  await deleteNodeConfig(rows[0].id);
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/nodes/4`);
   assert.equal(calls[0].method, 'DELETE');
+});
+
+test("NodeConfigPage's update wrapper strips node_number from the PATCH body", async () => {
+  // node-config.service.ts's updateNodeConfig prefers updates.node_number
+  // (read as a raw 0-based node index) over the URL id whenever it's
+  // present - so an edit that resubmits an (accidentally changed)
+  // node_number would redirect the write to a different node entirely.
+  // NodeConfigPage.tsx never sends it; this pins that contract at the
+  // client.ts level so a future change to updateNodeConfig can't quietly
+  // reopen it by requiring node_number again.
+  stubFetch({ success: true, data: { id: 4, node_number: 3 } });
+  await updateNodeConfig(4, { priority: 9, node_number: undefined });
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/nodes/4`);
+  assert.deepEqual(calls[0].body, { priority: 9 });
 });
 
 test('getAuditLog sends `table`, not `tableName` - the backend reads req.query.table', async () => {

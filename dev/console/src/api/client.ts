@@ -166,18 +166,29 @@ export async function createUser(
 // (config-routes.ts:168-243), matching web/config-app/src/api/client.ts:
 // 443-464's getNodeConfigs/getNodeConfig/createNodeConfig/updateNodeConfig/
 // deleteNodeConfig exactly.
-// The backend's rows have no `id` field at all — they're keyed by
-// node_number (config.schemas.ts's NodeConfigSchema). CrudList requires
-// `{ id: number }`, so `id` is synthesised here as an alias for
-// node_number; every write below (update/create/delete) is keyed off
-// node_number regardless, matching the backend routes' own :nodeNumber param.
+//
+// The backend's rows DO carry a real `id` already — node-config.service.ts:
+// 39-41 sets `id: nodeNum + 1` (1-based) alongside `node_number: nodeNum`
+// (0-based), and every GET/PUT/DELETE /api/config/nodes/:nodeNumber route
+// param is that same 1-based value (node-config.service.ts's
+// getNodeConfig doc comment: "the UI uses nodeNumber as the literal 1-based
+// number" — nodeIndex = nodeNumber - 1 before touching Node<nodeIndex>.info
+// on disk). An earlier version of this file OVERWROTE that real `id` with
+// the raw 0-based `node_number`, on the mistaken belief the schema (which
+// validates writable FIELDS, not the full response shape) meant the
+// response had no id at all — so `[d]` on the row displayed as node 3 sent
+// DELETE /api/config/nodes/3, which unlinks Node2.info (nodeIndex = 3 - 1),
+// the WRONG node, with a CrudList confirmation ("Delete row #3") that gave
+// no way to notice. Trust the backend's `id` as-is; never re-derive it from
+// node_number.
 export async function getNodeConfigs() {
-  const rows = await requestList<Omit<import('./types.js').NodeConfigRow, 'id'>>('/api/config/nodes');
-  return rows.map(row => ({ ...row, id: row.node_number }));
+  return requestList<import('./types.js').NodeConfigRow>('/api/config/nodes');
 }
 
-export async function getNodeConfig(nodeNumber: number) {
-  const res = await request<{ success: boolean; data?: import('./types.js').NodeConfigRow }>(`/api/config/nodes/${nodeNumber}`);
+// `id` here (and below) is the 1-based value above — CrudList always calls
+// update/remove with `selected.id`, never `selected.node_number`.
+export async function getNodeConfig(id: number) {
+  const res = await request<{ success: boolean; data?: import('./types.js').NodeConfigRow }>(`/api/config/nodes/${id}`);
   return res.data ?? null;
 }
 
@@ -188,15 +199,15 @@ export async function createNodeConfig(config: Partial<import('./types.js').Node
   });
 }
 
-export async function updateNodeConfig(nodeNumber: number, patch: Partial<import('./types.js').NodeConfigRow>) {
-  return request<{ success: boolean; data: import('./types.js').NodeConfigRow; message?: string }>(`/api/config/nodes/${nodeNumber}`, {
+export async function updateNodeConfig(id: number, patch: Partial<import('./types.js').NodeConfigRow>) {
+  return request<{ success: boolean; data: import('./types.js').NodeConfigRow; message?: string }>(`/api/config/nodes/${id}`, {
     method: 'PUT',
     body: JSON.stringify(patch),
   });
 }
 
-export async function deleteNodeConfig(nodeNumber: number) {
-  return request<{ success: boolean; message?: string }>(`/api/config/nodes/${nodeNumber}`, { method: 'DELETE' });
+export async function deleteNodeConfig(id: number) {
+  return request<{ success: boolean; message?: string }>(`/api/config/nodes/${id}`, { method: 'DELETE' });
 }
 
 export async function getConferences() {

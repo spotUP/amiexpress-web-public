@@ -158,11 +158,14 @@ export interface DriveRow {
   enabled: boolean;
 }
 // Mirrors web/backend/src/services/config.schemas.ts's NodeConfigSchema.
-// `id` is not a real backend field — CrudList requires one, and this
-// client/UI treats node_number as the identity (matching the backend routes,
-// which are keyed by :nodeNumber, not a row id).
+// `id` IS a real backend field: node-config.service.ts's getNodeConfigs()
+// sets `id: nodeNum + 1` (1-based) on every row — the same 1-based value
+// every GET/PUT/DELETE /api/config/nodes/:nodeNumber route expects.
+// `node_number` (0-based) is a SEPARATE field, not an alias for it — do not
+// derive one from the other. client.ts's getNodeConfigs() doc comment has
+// the incident (deleting the wrong node) this distinction fixes.
 export interface NodeConfigRow {
-  id: number; // === node_number
+  id: number;
   node_number: number;
   node_start?: string;
   priority?: number;
