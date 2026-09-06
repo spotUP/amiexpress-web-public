@@ -48,6 +48,13 @@ typedef struct {
      * variants paint bg 0); this is where the C side keeps it.
      */
     int cell_backgrounds;
+    /**
+     * Mark a selected row with a caret rather than a bar.
+     *
+     * True at 40 columns, where a full-width bar costs the whole row and
+     * the TypeScript doors use ">>" instead.
+     */
+    int caret_selection;
 } ui_profile;
 
 /** The tier for a width. Always pass the LIVE width, never a constant. */

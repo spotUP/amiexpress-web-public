@@ -118,9 +118,14 @@ function petsciiScreen(ansi: string): { rows: string[]; painted: number } {
   return { rows: out, painted };
 }
 
+/**
+ * The NAMES, not the ids: the door lists what a caller reads, the same as
+ * the TypeScript picker (buildThemeItems). Upper case because that is what
+ * a C64 screen shows.
+ */
 const THEMES = [
-  'CLASSIC', 'SLATE-SLASH', 'SLATE-MUTED', 'UPROUGH-NEON',
-  'NEON-MUTED', 'QUIET-PHOSPHOR', 'PHOSPHOR-MUTED',
+  'CLASSIC', 'SLATE & SLASH', 'SLATE & SLASH (MUTED)', 'UPROUGH NEON',
+  'UPROUGH NEON (MUTED)', 'QUIET PHOSPHOR', 'QUIET PHOSPHOR (MUTED)',
 ];
 
 describe('THEMEC opens on a 40-column caller', () => {
@@ -153,8 +158,13 @@ describe('THEMEC opens on a 40-column caller', () => {
       expect(Number(m[2])).toBeLessThanOrEqual(40);
     }
 
-    // The masthead is on row 1 - not scrolled off by a border that overflowed.
-    expect(rows[0]).toContain('THEME');
+    // NO masthead at 40. The 40-column tier collapses chrome, and the
+    // TypeScript picker shows no bar there either - the two doors were put
+    // side by side on 2026-09-06 and this is one of the differences that
+    // closed. A full-width bar costs a row a C64 has not got.
+    expect(rows[0]).not.toContain('THEME');
+    // The list starts at the top instead, with the cursor's caret on it.
+    expect(rows.join('\n')).toContain('>>');
 
     // Every theme is on the glass, one per row, none eaten by the row below.
     const rowOf = (id: string) => rows.findIndex((r) => r.includes(`[ ] ${id}`) || r.includes(`[*] ${id}`));
@@ -173,13 +183,16 @@ describe('THEMEC opens on a 40-column caller', () => {
     // answers AEW_THEME since 2026-09-06, so the note this board produces is
     // "APPLIES THE NEXT TIME A DOOR DRAWS." - which does not contain the word
     // at all, and the finder that looked for it returned undefined.
-    const NOTES = /^(THIS BOARD CANNOT KEEP A THEME\.|APPLIES THE NEXT TIME A DOOR DRAWS\.)$/;
+    // The 40-column sentence is buildNote's own since 2026-09-06 - the two
+    // doors say the same thing in the same words at the same width.
+    const NOTES = /^(THIS BOARD CANNOT KEEP A THEME\.|APPLIES ON NEXT DOOR DRAW\.)$/;
     const note = rows.find((r) => NOTES.test(r.trim()));
     expect(note).toBeDefined();
     expect(note!.trim()).toMatch(NOTES);
 
-    // And the way out is on the glass.
-    expect(rows.join('\n')).toContain('Q=LEAVE');
+    // And the way out is on the glass, in the abbreviated form the
+    // TypeScript uses at this width (buildFooterHints: Q: Bye).
+    expect(rows.join('\n')).toContain('Q: BYE');
 
     // Nothing the transducer could not map. `?` is what an unmapped glyph
     // prints, and no part of this screen is meant to be one.
@@ -189,6 +202,19 @@ describe('THEMEC opens on a 40-column caller', () => {
   it('an 80-column caller sees the door byte-for-byte as it was before the 40-column work', async () => {
     const ansi = await drive(80);
     const before = fs.readFileSync(EIGHTY_BEFORE, 'latin1');
-    expect(ansi).toBe(before);
+
+    // The FIRST screen, not the whole session. Since 2026-09-06 the masthead
+    // slides while the door waits for a key (ui_key.h's idle hook), so the
+    // capture carries however many frames the wait happened to fit - a
+    // number that depends on the machine, not on the door. The screen the
+    // caller is handed is what this pin is about; that the rail moves is
+    // pinned in sdk/c/tests/test_ui_chrome.c, where it can be measured
+    // rather than timed.
+    const firstScreen = (out: string) => {
+      const second = out.indexOf('\x1b[1;1H', out.indexOf('\x1b[1;1H') + 1);
+      const tail = out.indexOf('\x1b[1;1H', second + 1);
+      return tail === -1 ? out : out.slice(0, tail);
+    };
+    expect(firstScreen(ansi)).toBe(firstScreen(before));
   });
 });

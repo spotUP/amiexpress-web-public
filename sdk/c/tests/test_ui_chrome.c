@@ -154,9 +154,61 @@ static void a_crowded_status_drops_the_right_rather_than_colliding(void)
     printf("  [OK] a crowded status drops the right side rather than colliding\n");
 }
 
+/**
+ * The rail stream is the TypeScript's, byte for byte.
+ *
+ * Every string below came OUT of sdk/engines/ui/theme/chrome.ts's
+ * railStream() - captured 2026-09-06, printed from the module itself, not
+ * typed from reading it. A C door's masthead and a TypeScript door's are
+ * the same branding or they are two brandings; the sysop asked for 1:1.
+ *
+ * If this fails after a change to chrome.ts, the two have parted: re-capture
+ * and decide which one is right, rather than editing the expectation.
+ */
+static void the_rail_stream_matches_the_typescript(void)
+{
+    char out[128];
+
+    ui_rail_stream("/", 24, 0, 1UL, out, sizeof(out));
+    assert(strcmp(out, "///  /////   //  ///////") == 0);
+
+    ui_rail_stream("/", 24, 1, 1UL, out, sizeof(out));
+    assert(strcmp(out, "//  /////   //  /////// ") == 0);
+
+    ui_rail_stream("/", 24, 7, 1UL, out, sizeof(out));
+    assert(strcmp(out, "///   //  ///////  //  /") == 0);
+
+    ui_rail_stream("///", 30, 0, 1UL, out, sizeof(out));
+    assert(strcmp(out, "/////////  ///////////////   /") == 0);
+
+    ui_rail_stream("//", 16, 3, 5UL, out, sizeof(out));
+    assert(strcmp(out, "///   //////   /") == 0);
+
+    ui_rail_stream("/", 40, 13, 3UL, out, sizeof(out));
+    assert(strcmp(out, "   ////   //////  //   ///   /////   ///") == 0);
+
+    printf("  [OK] the rail stream matches the TypeScript, byte for byte\n");
+}
+
+/** And it MOVES: consecutive offsets are different windows. */
+static void the_rail_travels(void)
+{
+    char a[64], b[64];
+
+    ui_rail_stream("///", 40, 0, 1UL, a, sizeof(a));
+    ui_rail_stream("///", 40, 1, 1UL, b, sizeof(b));
+    /* Tiling a run of identical marks would give the same string at every
+       offset - which is exactly what the first C version did, and why the
+       sysop saw slashes that never moved. */
+    assert(strcmp(a, b) != 0);
+    printf("  [OK] the rail travels rather than sitting still\n");
+}
+
 int main(void)
 {
     printf("ui_chrome\n");
+    the_rail_stream_matches_the_typescript();
+    the_rail_travels();
     a_wide_screen_shows_every_key();
     a_narrow_screen_never_drops_the_way_out();
     it_drops_in_priority_order();

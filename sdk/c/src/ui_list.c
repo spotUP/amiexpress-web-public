@@ -26,6 +26,7 @@ void ui_list_init(ui_list *list)
     list->ink = ANSI_WHITE;
     list->selected_fg = ANSI_WHITE;
     list->selected_bg = ANSI_BLUE;
+    list->caret = 0;
     list->borders = 1;
 }
 
@@ -142,7 +143,13 @@ void ui_list_draw(ui_list *list, ansi_buf *b)
         /* The selected row is a filled bar, not just coloured text: a
            highlight that stops at the end of the word leaves the eye
            hunting for where the selection is. */
-        if (chosen) {
+        if (chosen && list->caret) {
+            /* A caret, and the row in the selection's ink beside it. No
+               bar: the caret IS the mark. */
+            ansi_color(b, list->ink, ANSI_BLACK, 1);
+            ansi_text_raw(b, screen_row, inner_left, list->caret,
+                          (int) strlen(list->caret));
+        } else if (chosen) {
             /* Ink on a bar. On a screen whose cells cannot carry a
                background, ansi_color turns this into reverse video in the
                bar's colour - the widget does not need to know which kind of
@@ -155,8 +162,14 @@ void ui_list_draw(ui_list *list, ansi_buf *b)
         }
 
         /* ansi_text pads to the width, so a shorter row overwrites what was
-           under it without a clearing pass. */
-        ansi_text(b, screen_row, inner_left, text, inner_width);
+           under it without a clearing pass. A caret row starts after the
+           caret; every other row starts where the caret would have been, so
+           the list does not shuffle sideways as the cursor moves. */
+        {
+            int lead = list->caret ? (int) strlen(list->caret) : 0;
+            ansi_text(b, screen_row, inner_left + lead, text,
+                      inner_width - lead);
+        }
 
         if (scrolls) {
             int on_thumb = (row >= thumb_start) && (row < thumb_start + thumb_size);

@@ -93,12 +93,73 @@ void ui_bar_draw(ansi_buf *b, int row, int left, int cols,
     if (text && *text) ansi_text(b, row, left, text, cols);
 }
 
+/* The ring the window slides along. See ui_chrome.h: this is railStream()
+   from the TypeScript, same generator, same run and gap ranges. */
+void ui_rail_stream(const char *rail, int width, int offset,
+                    unsigned long seed, char *out, unsigned long cap)
+{
+    static char ring[512];
+    unsigned long state;
+    unsigned long rail_len;
+    unsigned long ring_len;
+    unsigned long want;
+    unsigned long start;
+    unsigned long i;
+
+    if (!out || cap == 0) return;
+    out[0] = '\0';
+    if (!rail || !*rail || width <= 0) return;
+    if ((unsigned long) width > cap - 1) width = (int) (cap - 1);
+
+    rail_len = (unsigned long) strlen(rail);
+    state = seed ? (seed & 0xffffffffUL) : 1UL;
+
+    /* Math.max(width * 2, 64), and never past the ring we have. */
+    want = (unsigned long) width * 2;
+    if (want < 64) want = 64;
+    if (want > sizeof(ring) / 2) want = sizeof(ring) / 2;
+
+    ring_len = 0;
+    while (ring_len < want) {
+        unsigned long marks;
+        unsigned long gap;
+        unsigned long r;
+
+        /* next(): state = (state * 1664525 + 1013904223) >>> 0, / 2^32.
+           Done in integers - a 68000 has no FPU and the ranges are small:
+           2 + floor(x * 7) is 2 + (state >> 8) * 7 >> 24 in fixed point. */
+        state = (state * 1664525UL + 1013904223UL) & 0xffffffffUL;
+        marks = 2 + (unsigned long) (((state >> 16) * 7UL) >> 16);
+        state = (state * 1664525UL + 1013904223UL) & 0xffffffffUL;
+        gap = 1 + (unsigned long) (((state >> 16) * 3UL) >> 16);
+
+        for (r = 0; r < marks && ring_len + rail_len < sizeof(ring); r++) {
+            memcpy(ring + ring_len, rail, rail_len);
+            ring_len += rail_len;
+        }
+        while (gap-- > 0 && ring_len < sizeof(ring)) ring[ring_len++] = ' ';
+    }
+
+    start = (unsigned long) ((offset % (int) ring_len + (int) ring_len)
+                             % (int) ring_len);
+    for (i = 0; i < (unsigned long) width; i++) {
+        out[i] = ring[(start + i) % ring_len];
+    }
+    out[width] = '\0';
+}
+
 void ui_masthead_draw(ansi_buf *b, int row, int left, int cols,
                       const char *title, const char *rail, int fg, int bg)
 {
+    ui_masthead_draw_tick(b, row, left, cols, title, rail, fg, bg, 0);
+}
+
+void ui_masthead_draw_tick(ansi_buf *b, int row, int left, int cols,
+                           const char *title, const char *rail,
+                           int fg, int bg, int tick)
+{
     char line[256];
     unsigned long title_len;
-    unsigned long rail_len;
     unsigned long pos;
     int budget = cols;
 
@@ -115,15 +176,15 @@ void ui_masthead_draw(ansi_buf *b, int row, int left, int cols,
     /* The rail is branding: it fills whatever the title left, and when there
        is nothing left it simply is not drawn. The title is never cut for it. */
     if (rail && *rail) {
-        rail_len = (unsigned long) strlen(rail);
         if (pos < (unsigned long) budget) {
+            char run[256];
+            unsigned long run_width = (unsigned long) budget - pos - 1;
+
             line[pos++] = ' ';
-            while (pos < (unsigned long) budget) {
-                unsigned long i;
-                for (i = 0; i < rail_len && pos < (unsigned long) budget; i++) {
-                    line[pos++] = rail[i];
-                }
-            }
+            if (run_width > sizeof(run) - 1) run_width = sizeof(run) - 1;
+            ui_rail_stream(rail, (int) run_width, tick, 1UL, run, sizeof(run));
+            memcpy(line + pos, run, strlen(run));
+            pos += strlen(run);
         }
     }
 

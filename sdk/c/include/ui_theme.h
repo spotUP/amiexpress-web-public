@@ -36,6 +36,17 @@ extern "C" {
  */
 typedef struct {
     const char *id;
+    /**
+     * What a caller is shown: "Slate & Slash", not "slate-slash".
+     *
+     * The TypeScript picker has listed themes by name since it was written
+     * (Doors/theme-picker/app.ts, buildThemeItems), and the C one listed
+     * ids because the table had nothing else in it - the sysop put the two
+     * screens side by side on 2026-09-06 and that was the first difference.
+     */
+    const char *name;
+    /** The one-line description beside the name at 80 columns. */
+    const char *blurb;
     unsigned char ground, ink, chrome, dim, bar, bar_ink;
     unsigned char accent, accent_alt, selection_bg, selection_ink;
     unsigned char ok, warn, alert;

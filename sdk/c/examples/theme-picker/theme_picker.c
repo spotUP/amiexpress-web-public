@@ -54,15 +54,25 @@ static const char *theme_row(void *context, int index)
 
     row[0] = '\0';
     strcat(row, mark);
-    strncat(row, t->id, sizeof(row) - strlen(row) - 2);
+    /* The NAME, like the TypeScript picker: "Slate & Slash", not
+       "slate-slash" (Doors/theme-picker/app.ts, buildThemeItems). */
+    strncat(row, t->name, sizeof(row) - strlen(row) - 2);
 
-    /* 40 columns: the id alone. A folded row eats the theme underneath it,
-       which is how the C64 lost a third of this list in the TypeScript. */
+    /* 40 columns: the name alone. A folded row eats the theme underneath
+       it, which is how the C64 lost a third of this list in the TypeScript.
+       At 80 the name is padded to sixteen and the blurb follows, which is
+       what buildThemeItems does - the two doors are one screen. */
     if (wide) {
         unsigned long pad = strlen(row);
-        while (pad < 24 && pad < sizeof(row) - 2) row[pad++] = ' ';
+        unsigned long want = 4 + 16;       /* "[*] " + the name column */
+        while (pad < want && pad < sizeof(row) - 2) row[pad++] = ' ';
+        /* And ALWAYS one space: padEnd(16) does not truncate, so a name
+           longer than the column still gets its gap - without this,
+           "Slate & Slash (muted)" ran straight into its own blurb. */
+        if (pad < sizeof(row) - 2) row[pad++] = ' ';
         row[pad] = '\0';
-        strncat(row, t->rail[0] ? t->rail : "-", sizeof(row) - strlen(row) - 2);
+        strncat(row, t->blurb[0] ? t->blurb : (t->rail[0] ? t->rail : "-"),
+                sizeof(row) - strlen(row) - 2);
     }
     return row;
 }
@@ -78,6 +88,39 @@ static int door_pending(void *ctx)
 {
     (void)ctx;
     return ae_input_pending();
+}
+
+/**
+ * The masthead's slide, and the state it needs.
+ *
+ * A 68K door has one thread and blocks in ae_key(), so there is no timer to
+ * hang an animation on: the rail moves in the idle hook (ui_key.h), which
+ * ui_key_read calls while nothing is typed. Each frame is one XIM message
+ * of about 45ms, so this ticks four times a second rather than the twenty
+ * the browser-side chrome runs at - a slash rail reads as motion either way.
+ *
+ * Set up only where decorative motion is allowed. At 40 columns it is not
+ * (ui_effects_allowed), and the idle hook is left NULL, so the door blocks
+ * in ae_key() exactly as it always did and costs the board nothing.
+ */
+typedef struct {
+    ui_screen *screen;
+    const ui_theme **theme;
+    int *tick;
+} rail_anim;
+
+static void door_idle(void *ctx)
+{
+    rail_anim *a = (rail_anim *)ctx;
+
+    if (!a) return;
+    (*a->tick)++;
+    ui_masthead_draw_tick(&a->screen->buf, 1, 1, a->screen->cols, "THEME",
+                          (*a->theme)->rail, (*a->theme)->ground,
+                          (*a->theme)->accent, *a->tick);
+    ui_screen_flush(a->screen);
+    /* Ten ticks is a fifth of a second on a PAL Amiga. */
+    ae_delay_ticks(10);
 }
 
 static void door_settle(void *ctx)
@@ -101,6 +144,8 @@ int main(int argc, char **argv)
     int wide;
     int running = 1;
     int saved = 0;
+    int rail_tick = 0;
+    rail_anim anim;
 
     if (ae_start(node) != 0) return 20;
     if (ae_open_bbs(&session, session_storage, (long)sizeof(session_storage), node) != 0) {
@@ -119,6 +164,7 @@ int main(int argc, char **argv)
     keys.next = door_key;
     keys.pending = door_pending;
     keys.settle = door_settle;
+    keys.idle = 0;
     keys.ctx = 0;
 
     ui_list_init(&list);
@@ -131,6 +177,19 @@ int main(int argc, char **argv)
     list.context = &wide;
     list.label = " THEMES ";
     list.borders = screen.profile.borders;
+    /* ">>" where a bar will not fit, which is what the TypeScript picker
+       shows on a C64. */
+    list.caret = screen.profile.caret_selection ? ">>" : 0;
+
+    /* The rail slides only where decorative motion is allowed - never on the
+       40-column tier, where a moving effect leaves stray glyphs mid-row. */
+    if (ui_effects_allowed(screen.cols)) {
+        anim.screen = &screen;
+        anim.theme = &theme;
+        anim.tick = &rail_tick;
+        keys.idle = door_idle;
+        keys.ctx = &anim;
+    }
     /* The primary colour carries the chrome, the same rule the TypeScript
        doors follow since 2026-09-03. */
     list.chrome = theme->accent;
@@ -152,8 +211,14 @@ int main(int argc, char **argv)
         const char *note;
 
         ansi_clear(&screen.buf);
-        ui_masthead_draw(&screen.buf, 1, 1, screen.cols, "THEME",
-                         theme->rail, theme->ground, theme->accent);
+        /* The masthead is CHROME, and the 40-column tier collapses chrome
+           (ui_profile.h) - the TypeScript picker shows no bar there either,
+           and a full-width one costs a row a C64 has not got. */
+        if (!screen.profile.collapse_chrome) {
+            ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, "THEME",
+                                  theme->rail, theme->ground, theme->accent,
+                                  rail_tick);
+        }
         ui_list_draw(&list, &screen.buf);
 
         /* Say what will happen, and say the truth about this board - in
@@ -168,8 +233,10 @@ int main(int argc, char **argv)
                 ? "A theme applies the next time a door draws."
                 : "This board cannot keep a theme - showing them only.";
         } else {
+            /* The same sentence the TypeScript picker uses at this width
+               (buildNote), so the two screens read alike. */
             note = (host->host == AE_HOST_WEB)
-                ? "Applies the next time a door draws."
+                ? "Applies on next door draw."
                 : "This board cannot keep a theme.";
         }
         ansi_color(&screen.buf, theme->dim, theme->ground, 0);
@@ -180,12 +247,28 @@ int main(int argc, char **argv)
             const char *optional[2];
             int n = 0;
 
-            if (host->host == AE_HOST_WEB) optional[n++] = "ENTER=Use it";
-            optional[n++] = "Up/Down=Choose";
+            /* Abbreviated at 40, in the TypeScript's own words
+               (buildFooterHints): the same three keys, shorter. */
+            /* Movement first, then the commitment, then the way out - the
+               order buildFooterHints lists them in. */
+            if (wide) {
+                optional[n++] = "Up/Down: Choose";
+                if (host->host == AE_HOST_WEB) optional[n++] = "Enter: Use it";
+            } else {
+                optional[n++] = "Up/Dn: Pick";
+                if (host->host == AE_HOST_WEB) optional[n++] = "Ent: Use";
+            }
             ui_footer_build(footer, sizeof(footer), screen.cols,
-                            "", optional, n, "Q=Leave");
-            ui_bar_draw(&screen.buf, screen.rows, 1, screen.cols,
-                        footer, theme->ground, theme->accent);
+                            "", optional, n, wide ? "Q: Leave" : "Q: Bye");
+            if (screen.profile.collapse_chrome) {
+                /* No bar: chrome is collapsed here, so the hints are a line
+                   of dim text like every other line on the screen. */
+                ansi_color(&screen.buf, theme->dim, ANSI_BLACK, 0);
+                ansi_text(&screen.buf, screen.rows, 2, footer, screen.cols - 3);
+            } else {
+                ui_bar_draw(&screen.buf, screen.rows, 1, screen.cols,
+                            footer, theme->ground, theme->accent);
+            }
         }
 
         ui_screen_flush(&screen);

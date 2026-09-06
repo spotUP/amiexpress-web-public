@@ -20,6 +20,8 @@
 static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
     {
         "classic",
+        "Classic",
+        "The board as it has always looked.",
         /* ground        */ ANSI_BLACK,    /* black -> 0 */
         /* ink           */ ANSI_WHITE,    /* white -> 7 */
         /* chrome        */ ANSI_CYAN,     /* cyan -> 6 */
@@ -38,6 +40,8 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
     },
     {
         "slate-slash",
+        "Slate & Slash",
+        "Quiet slate chrome, one magenta accent, room to breathe.",
         /* ground        */ ANSI_BLACK,    /* black -> 0 */
         /* ink           */ ANSI_WHITE,    /* #C9D4E8 -> 7 */
         /* chrome        */ ANSI_WHITE,    /* #48566E -> 7 */
@@ -56,6 +60,8 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
     },
     {
         "slate-muted",
+        "Slate & Slash (muted)",
+        "Near-monochrome. One accent, spent on the selection.",
         /* ground        */ ANSI_BLACK,    /* black -> 0 */
         /* ink           */ ANSI_WHITE,    /* #95A0B4 -> 7 */
         /* chrome        */ ANSI_WHITE,    /* #3A4354 -> 7 */
@@ -74,6 +80,8 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
     },
     {
         "uprough-neon",
+        "Uprough Neon",
+        "Demoscene magenta and cyan, double-ruled, masthead slashes.",
         /* ground        */ ANSI_BLACK,    /* black -> 0 */
         /* ink           */ ANSI_WHITE,    /* #E4ECFA -> 7 */
         /* chrome        */ ANSI_CYAN,     /* #4DE0F0 -> 6 */
@@ -92,6 +100,8 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
     },
     {
         "neon-muted",
+        "Uprough Neon (muted)",
+        "The neon frame, but the colour spent only where it counts.",
         /* ground        */ ANSI_BLACK,    /* black -> 0 */
         /* ink           */ ANSI_WHITE,    /* #A8B4C8 -> 7 */
         /* chrome        */ ANSI_CYAN,     /* #2E6E7A -> 6 */
@@ -110,6 +120,8 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
     },
     {
         "quiet-phosphor",
+        "Quiet Phosphor",
+        "One phosphor hue, no borders, hierarchy by brightness alone.",
         /* ground        */ ANSI_BLACK,    /* black -> 0 */
         /* ink           */ ANSI_GREEN,    /* #57E389 -> 2 */
         /* chrome        */ ANSI_WHITE,    /* #2E4A3C -> 7 */
@@ -128,6 +140,8 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
     },
     {
         "phosphor-muted",
+        "Quiet Phosphor (muted)",
+        "One hue and nothing else. Brightness alone carries the hierarchy.",
         /* ground        */ ANSI_BLACK,    /* black -> 0 */
         /* ink           */ ANSI_GREEN,    /* #57E389 -> 2 */
         /* chrome        */ ANSI_WHITE,    /* #1E3A28 -> 7 */

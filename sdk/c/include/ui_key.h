@@ -50,10 +50,31 @@ extern "C" {
 #define UI_KEY_ENTER 1006
 #define UI_KEY_ESC   1007
 
+/**
+ * Where a door's keys come from.
+ *
+ * SET EVERY FIELD. Callers build this on the stack and assign field by
+ * field, so a member left alone holds whatever was there - and this struct
+ * is all function pointers, which means calling one. `idle` was added on
+ * 2026-09-06 and segfaulted the SDK's own test suite the moment it landed,
+ * for exactly that reason. Anything optional takes 0.
+ */
 typedef struct ui_key_source {
     int  (*next)(void *ctx);     /* blocking read of one byte; < 0 = user gone */
     int  (*pending)(void *ctx);  /* non-zero if a byte is queued; must NOT consume */
     void (*settle)(void *ctx);   /* wait long enough for a sequence's tail to land; may be NULL */
+    /**
+     * Called over and over while no key is waiting; may be NULL.
+     *
+     * Where a door's animation lives. A 68K door has one thread and blocks
+     * in ae_key(), so a masthead that slides has to slide HERE - there is
+     * no timer to hang it on. The door decides how long each call takes and
+     * whether to draw at all, so a screen that bans decorative motion (the
+     * 40-column tier) simply does not pass one.
+     *
+     * Requires `pending`: without it there is no way to know when to stop.
+     */
+    void (*idle)(void *ctx);
     void *ctx;
 } ui_key_source;
 

@@ -39,6 +39,18 @@ typedef struct {
     const char *label;
     /** Draw the border at all. False at 40 columns (ui_profile.h). */
     int borders;
+    /**
+     * Mark the selected row with this instead of painting a bar.
+     *
+     * NULL for a bar, which is what a wide screen shows. At 40 columns the
+     * TypeScript picker marks the cursor with blessed's own ">>" and paints
+     * no bar at all, and the two doors are meant to be the same screen -
+     * the sysop put them side by side on 2026-09-06.
+     *
+     * The row is drawn in the selection's ink, so the caret is not the only
+     * thing that moves.
+     */
+    const char *caret;
     ui_list_row_fn row;
     void *context;
 } ui_list;

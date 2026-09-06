@@ -76,6 +76,13 @@ int ui_key_read(const ui_key_source *src, int *pushback)
         return c;
     }
 
+    /* Nothing typed yet: let the door do something with the wait. */
+    if (src->idle && src->pending) {
+        while (!src->pending(src->ctx)) {
+            src->idle(src->ctx);
+        }
+    }
+
     c = src->next(src->ctx);
     if (c < 0) return c;
 

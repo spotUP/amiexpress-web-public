@@ -40,6 +40,7 @@ static ui_key_source source_for(typist *t)
     src.next = typist_next;
     src.pending = typist_pending;
     src.settle = 0;                  /* nothing to wait for: the test is instant */
+    src.idle = 0;                    /* and nothing to animate */
     src.ctx = t;
     return src;
 }

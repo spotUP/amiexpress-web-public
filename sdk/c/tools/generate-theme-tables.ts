@@ -150,6 +150,8 @@ function render(themes: readonly Theme[]): string {
 
     return `    {
         "${theme.id}",
+        ${JSON.stringify(theme.name ?? theme.id)},
+        ${JSON.stringify(theme.blurb ?? '')},
 ${fields}
         ${border},
         ${rail}
