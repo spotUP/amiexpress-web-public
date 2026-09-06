@@ -497,6 +497,8 @@ console.log(`[ConferenceSetup] Updated ConfConfig.info: NCONFS=${Math.max(curren
     use_internetname: boolean;
     dlpaths: { [key: number]: string };
     ulpaths: { [key: number]: string };
+    /** STORAGEDRIVE.n - which drive each directory's files live on, 0 = local. */
+    storagedrives: { [key: number]: number };
   }>): Promise<void> {
     const confInfoPath = path.join(this.bbsRoot, `Conf${conferenceId}.info`);
 
@@ -530,6 +532,7 @@ console.log(`[ConferenceSetup] Updated ConfConfig.info: NCONFS=${Math.max(curren
       use_username: updates.use_username,
       use_realname: updates.use_realname,
       use_internetname: updates.use_internetname,
+      storagedrives: updates.storagedrives,
       dlpaths: updates.dlpaths,
       ulpaths: updates.ulpaths,
     });

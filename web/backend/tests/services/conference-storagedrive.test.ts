@@ -56,3 +56,45 @@ describe('a conference directory can name the drive it lives on', () => {
     expect((tools as never as { raw: Map<string, string> }).raw.has('STORAGEDRIVE.1')).toBe(false);
   });
 });
+
+/**
+ * The value has to survive every hop, and it did not.
+ *
+ * Reported 2026-09-07: picking a drive in the conference form appeared to do
+ * nothing. It was saved by the page, validated by the schema, mapped by the
+ * conference service - and then dropped, because
+ * `updateConferenceInfoFile` hands `applyConferenceFields` an object with its
+ * fields listed ONE BY ONE, and `storagedrives` was not among them. Every
+ * unit on the path was correct and the chain still lost the value.
+ *
+ * So this test drives the real writer against a real Conf<N>.info.
+ */
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { applyTooltypes, readTooltypeMap } from '../../src/utils/info-file.util';
+import { ConferenceSetupService } from '../../src/services/conference-setup.service';
+
+describe('picking a drive reaches Conf<N>.info', () => {
+  it('writes STORAGEDRIVE.n through the service the admin actually calls', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conf-storagedrive-'));
+    applyTooltypes(path.join(root, 'Conf1.info'), [
+      ['NDIRS', '1'],
+      ['DLPATH.1', 'BBS:Conf1/Files/'],
+    ]);
+
+    const service = new ConferenceSetupService(root);
+    await service.updateConferenceInfoFile(1, { storagedrives: { 1: 3 } });
+
+    const tools = readTooltypeMap(path.join(root, 'Conf1.info'));
+    expect(tools.get('STORAGEDRIVE.1')).toBe('3');
+    // The paths beside it are untouched.
+    expect(tools.get('DLPATH.1')).toBe('BBS:Conf1/Files/');
+
+    // And back to local disk removes it rather than writing a zero.
+    await service.updateConferenceInfoFile(1, { storagedrives: { 1: 0 } });
+    expect(readTooltypeMap(path.join(root, 'Conf1.info')).has('STORAGEDRIVE.1')).toBe(false);
+
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+});

@@ -40,12 +40,20 @@ export function ConferencesPage() {
    * drive that is in Drives.info - offering anything else would write a
    * STORAGEDRIVE.n that usableAreasFor drops, taking the file area with it.
    */
-  const { data: drives = [] } = useQuery<
-    Array<{ drive_number: number; drive_path: string; kind: 'local' | 's3' }>
-  >({
+  // The SAME queryKey as Drive Setup, so it must cache the SAME shape: the
+  // whole response, with the array picked out by `select`. Caching the bare
+  // array here instead made whichever page resolved last win, and Drive Setup
+  // then read `.data` off an array and reported "no drives configured".
+  const { data: drives = [] } = useQuery({
     queryKey: ['drives'],
-    queryFn: async () => ((await apiClient.getDrives()).data ?? []) as never,
+    queryFn: () => apiClient.getDrives(),
     staleTime: 60_000,
+    select: (response: { data?: unknown }) =>
+      (response?.data ?? []) as Array<{
+        drive_number: number;
+        drive_path: string;
+        kind: 'local' | 's3';
+      }>,
   });
   const [formData, setFormData] = useState<ConferenceFormData>({
     conference_id: 1,
@@ -196,6 +204,15 @@ export function ConferencesPage() {
 
   const handleEdit = (conf: ConferenceConfig) => {
     setFormData({
+      // Seed the per-directory drive choice from what the conference really
+      // has. Without this the buttons always read "This server" on open, so a
+      // saved STORAGEDRIVE looked like it had not been saved at all.
+      ...Object.fromEntries(
+        Array.from({ length: 16 }, (_, i) => [
+          `storagedrive_${i + 1}`,
+          (conf as never as Record<string, number>)[`storagedrive_${i + 1}`] ?? 0,
+        ])
+      ),
       conference_id: conf.conference_id,
       name: conf.name || '',
       ndirs: conf.ndirs,
