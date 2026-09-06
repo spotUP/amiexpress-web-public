@@ -9,7 +9,7 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { lockFlashChar } from './board-effects';
 import type { GameEngine } from '../core/game';
-import { blockCols, fitCell, pieceArt } from './block-width';
+import { blockCols, fitCell, pieceArt, cellsCanCarryBackground } from './block-width';
 
 /** Playfield columns, in BLOCKS. What they cost in characters is the screen's answer. */
 const BOARD_COLUMNS = 10;
@@ -1760,7 +1760,11 @@ export class VersusScreen {
           const charCol = x * 2;
           if (charCol >= startCol) {
             const chunk = text.slice(charCol - startCol, charCol - startCol + 2).padEnd(2, ' ');
-            char = `{yellow-bg}{black-fg}${chunk}{/black-fg}{/yellow-bg}`;
+            // Ink in the foreground where the screen has no background to
+            // put it on, or the banner is black on black.
+            char = cellsCanCarryBackground(this.screen)
+              ? `{yellow-bg}{black-fg}${chunk}{/black-fg}{/yellow-bg}`
+              : `{yellow-fg}${chunk}{/yellow-fg}`;
           }
         }
 
@@ -1887,11 +1891,19 @@ export class VersusScreen {
    * marker since it can never be collected or cleared.
    */
   private getItemCellChar(item: number, color: string | null): string {
+    // A screen with no per-cell background carries the colour in the INK, or
+    // every item cell is black on black and reads as a hole in the stack.
+    const flat = !cellsCanCarryBackground(this.screen);
+
     if (item === HARD_BLOCK_ITEM) {
-      return '{white-bg}{black-fg}##{/black-fg}{/white-bg}';
+      return flat
+        ? '{white-fg}##{/white-fg}'
+        : '{white-bg}{black-fg}##{/black-fg}{/white-bg}';
     }
     const bg = ITEM_CELL_COLORS[color ?? ''] ?? 'gray';
-    return `{${bg}-bg}{black-fg}◆◆{/black-fg}{/${bg}-bg}`;
+    return flat
+      ? `{${bg}-fg}◆◆{/${bg}-fg}`
+      : `{${bg}-bg}{black-fg}◆◆{/black-fg}{/${bg}-bg}`;
   }
 
   /**

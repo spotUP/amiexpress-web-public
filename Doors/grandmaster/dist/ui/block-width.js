@@ -23,6 +23,7 @@ exports.PIECE_CELLS = void 0;
 exports.blockCols = blockCols;
 exports.fitCell = fitCell;
 exports.pieceArt = pieceArt;
+exports.cellsCanCarryBackground = cellsCanCarryBackground;
 /** The tier test the rest of this door uses, and no second one. */
 function blockCols(screenWidth) {
     return screenWidth < 80 ? 1 : 2;
@@ -91,5 +92,21 @@ function pieceArt(type, cols, colour) {
         const drawn = [...row].map((c) => (c === 'X' ? '█'.repeat(cols) : ' '.repeat(cols))).join('');
         return `{${colour}-fg}${drawn}{/${colour}-fg}`;
     });
+}
+/**
+ * Whether a cell on this screen can carry its own BACKGROUND colour.
+ *
+ * PETSCII cannot: the C64 has one screen background and no per-cell one, so
+ * a `{x-bg}` tag is dropped on the way to the glass. Anything that put its
+ * ink in `{black-fg}` and its colour in the background therefore rendered
+ * black on black - invisible, while still occupying the cell. That is what
+ * ate the TetriNET specials and the item cells: "some random pieces
+ * disappeared when i played in petscii mode" (2026-09-06).
+ *
+ * The rule the C64 sprite sheets have followed since they were written -
+ * "never set a background other than 0" - as a question a screen can answer.
+ */
+function cellsCanCarryBackground(screen) {
+    return screen?.petscii !== true;
 }
 //# sourceMappingURL=block-width.js.map

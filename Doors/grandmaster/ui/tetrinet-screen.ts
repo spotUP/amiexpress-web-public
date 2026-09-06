@@ -15,6 +15,9 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { TetriNetEngine } from '../core/tetrinet/tetrinet-engine';
 import { blockCols, fitCell } from './block-width';
+
+/** Playfield columns, in BLOCKS. TetriNET's field is twelve wide, not ten. */
+const TETRINET_COLUMNS = 12;
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
 import type { AppState, GameAction } from '../core/types';
@@ -560,11 +563,18 @@ export class TetriNetScreen {
     this.screen.children.forEach(child => child.destroy());
 
     // Playfield
+    // The well is as wide as its blocks ARE: twelve columns at two characters
+    // is twenty-six with the border, at one character it is fourteen. It was
+    // written as 26 whatever a block cost, so a C64 board sat in a box twice
+    // its width - "the tetrinet playfield has the same issues like the
+    // gmaster ones, it looks wider than it is".
+    const wellCols = TETRINET_COLUMNS * blockCols(this.screen.width);
+
     this.boardBox = createBox({
       parent: this.screen,
       top: 0,
       left: 0,
-      width: 26,
+      width: wellCols + 2,
       height: 24,
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'white' } },
@@ -1361,6 +1371,19 @@ export class TetriNetScreen {
       left_gravity: { letter: 'L', color: 'blue' },
     };
     const spec = letters[special] ?? { letter: '?', color: 'gray' };
+
+    // A SCREEN WITH NO BACKGROUND NEEDS THE COLOUR IN THE FOREGROUND.
+    //
+    // PETSCII has no per-cell background at all: the `-bg` tag is dropped on
+    // the way to the glass, and a black letter then lands on black. Every
+    // special on a C64 board was therefore invisible - a hole in the stack
+    // that the player could not see and the engine still counted: "some
+    // random pieces disappeared when i played in petscii mode" (2026-09-06).
+    // Random, because which specials fall is.
+    if ((this.screen as any)?.petscii === true) {
+      return `{${spec.color}-fg}${spec.letter} {/${spec.color}-fg}`;
+    }
+
     // Two visible columns: the letter on a block, so it still reads as a
     // filled cell rather than a hole in the stack.
     return `{black-fg}{${spec.color}-bg}${spec.letter} {/${spec.color}-bg}{/black-fg}`;
