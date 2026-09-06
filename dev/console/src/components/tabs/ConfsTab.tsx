@@ -63,6 +63,11 @@ export function ConfsTab() {
   // reload mid-confirmation can't retarget the delete (same defect class
   // DoorsTab's delete fixed in wave 1).
   const [deleteTarget, setDeleteTarget] = useState<ConferenceConfig | null>(null);
+  // Set by the FIRST (non-destructive) dialog below and read by the SECOND
+  // (typed, destructive) one — see the [d] handler and both render blocks
+  // for why the files question has to come before the typed gate, not
+  // after it.
+  const [removeFilesChoice, setRemoveFilesChoice] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   // Orphan directories
@@ -268,7 +273,7 @@ export function ConfsTab() {
     }
 
     if (input === 'a') startCreate();
-    if (input === 'd' && selected) { setDeleteTarget(selected); setMode('confirm-delete'); }
+    if (input === 'd' && selected) { setDeleteTarget(selected); setRemoveFilesChoice(false); setMode('confirm-delete-files'); }
     if (input === 'o' && orphans.length > 0) { setOrphanIdx(0); setMode('orphans'); }
     if (input === 'r') { load(); loadOrphans(); }
   });
@@ -413,6 +418,33 @@ export function ConfsTab() {
         </Box>
       )}
 
+      {/*
+        Files question FIRST, deliberately non-destructive: nothing has
+        happened yet at this point, so both [y]es and [n]o/Escape are safe
+        — they only set removeFilesChoice and move to the typed gate below.
+        (The typed gate used to come first, with this dialog second and its
+        onCancel/Escape calling submitDelete(false) directly — a sysop
+        backing OUT of the delete with Escape here instead deleted the
+        conference anyway, just without its files. ConfirmDialog's y/n mode
+        cannot distinguish "no, keep files" from "abort", so the fix is
+        ordering: only the SECOND dialog's onConfirm is allowed to be
+        destructive, and its onCancel always fully aborts.)
+      */}
+      {mode === 'confirm-delete-files' && deleteTarget && (
+        <Box marginTop={1}>
+          <ConfirmDialog
+            message={
+              `Also delete conference ${deleteTarget.conference_id}'s files — every message posted and file ` +
+              'uploaded there? Left on disk otherwise, and the path is reported so you can remove them yourself.'
+            }
+            onConfirm={() => { setRemoveFilesChoice(true); setMode('confirm-delete'); }}
+            onCancel={() => { setRemoveFilesChoice(false); setMode('confirm-delete'); }}
+          />
+        </Box>
+      )}
+
+      {/* The only step that can actually delete anything. onCancel (n OR
+          Escape) always fully aborts back to the list — no side effects. */}
       {mode === 'confirm-delete' && deleteTarget && (
         <Box marginTop={1}>
           <ConfirmDialog
@@ -421,24 +453,12 @@ export function ConfsTab() {
               (deleteTarget.conference_id === confs.length
                 ? 'It comes off the end of the list, so no other conference moves.'
                 : `Conferences ${deleteTarget.conference_id + 1}-${confs.length} move down one, and every ` +
-                  'account\'s conference access moves with them.')
+                  'account\'s conference access moves with them.') +
+              (removeFilesChoice ? ' Its files will be deleted too.' : ' Its files are left on disk.')
             }
             requireTypedConfirmation={String(deleteTarget.conference_id)}
-            onConfirm={() => setMode('confirm-delete-files')}
+            onConfirm={() => submitDelete(removeFilesChoice)}
             onCancel={() => { setDeleteTarget(null); setMode('list'); }}
-          />
-        </Box>
-      )}
-
-      {mode === 'confirm-delete-files' && deleteTarget && (
-        <Box marginTop={1}>
-          <ConfirmDialog
-            message={
-              `Also delete conference ${deleteTarget.conference_id}'s files — every message posted and file ` +
-              'uploaded there? Left on disk otherwise, and the path is reported so you can remove them yourself.'
-            }
-            onConfirm={() => submitDelete(true)}
-            onCancel={() => submitDelete(false)}
           />
         </Box>
       )}
