@@ -1018,7 +1018,17 @@ debugLog(
       (command >= 637 && command <= 639) ||   // DT_INTERNETNAME, DT_TRANSLATOR, DT_HOST_LANGUAGE
       (command >= 700 && command <= 704) ||   // DT_HOSTNAME, DT_HOSTIP, DT_GEOGRAPHIC, DT_SIZEUPLOAD, DT_SIZEDOWNLOAD
       (command >= 900 && command <= 906) ||   // DT_CONFACCESS2, DT_CBYTESUPLOAD, DT_CBYTESDOWNLOAD, DT_CFILESUPLOAD, DT_CFILESDOWNLOAD, DT_CALLEDTODAY
-      (command >= 1000 && command <= 1002);   // DT_ADDBIT, DT_REMBIT, DT_QUERYBIT
+      (command >= 1000 && command <= 1002) || // DT_ADDBIT, DT_REMBIT, DT_QUERYBIT
+      // THIS BOARD'S OWN user fields, above express.e's MAX_CMD (1003).
+      //
+      // AEW_THEME reads and writes user.themePreference, which is what every
+      // DT_* case in data-query.ts does, so it is routed there. It was
+      // implemented in that handler and never added here, and this predicate
+      // is the only thing that reaches it: the C theme picker asked for the
+      // caller's theme on every open, got "UNHANDLED COMMAND: 10100" and an
+      // empty reply, and drew all seven themes in the classic palette with
+      // nothing marked (sysop, 2026-09-06: "themec is not using our themes").
+      command === XIMCommand.AEW_THEME;
     if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
 debugLog(
         `[XIMProtocol][DataCheckDebug] command=${command} inDQ=${inRange}`

@@ -65,6 +65,7 @@ void ansi_begin(ansi_buf *b, char *storage, long capacity)
     b->last_fg = -1;
     b->last_bg = -1;
     b->last_bold = -1;
+    b->last_reverse = -1;
 }
 
 void ansi_flush(ansi_buf *b, ansi_sink_fn sink, void *context)
@@ -96,6 +97,7 @@ void ansi_clear(ansi_buf *b)
     b->last_fg = -1;
     b->last_bg = -1;
     b->last_bold = -1;
+    b->last_reverse = -1;
 }
 
 void ansi_goto(ansi_buf *b, int row, int col)
@@ -130,6 +132,14 @@ void ansi_color(ansi_buf *b, int fg, int bg, int bold)
     put_char(b, 'm');
 }
 
+void ansi_reverse(ansi_buf *b, int on)
+{
+    if (!b) return;
+    if (b->last_reverse == (on ? 1 : 0)) return;
+    b->last_reverse = on ? 1 : 0;
+    put_str(b, on ? "\033[7m" : "\033[27m");
+}
+
 void ansi_reset(ansi_buf *b)
 {
     put_str(b, "\033[0m");
@@ -138,6 +148,7 @@ void ansi_reset(ansi_buf *b)
     b->last_fg = -1;
     b->last_bg = -1;
     b->last_bold = -1;
+    b->last_reverse = -1;
 }
 
 void ansi_cursor(ansi_buf *b, int visible)

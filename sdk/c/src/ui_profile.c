@@ -29,6 +29,7 @@ ui_profile ui_profile_for(int width)
     p.collapse_chrome = xxs;
     p.gap = xxs ? UI_MOBILE_GAP : UI_DEFAULT_GAP;
     p.padding = xxs ? UI_MOBILE_PADDING : UI_DEFAULT_PADDING;
+    p.cell_backgrounds = !xxs;
     return p;
 }
 

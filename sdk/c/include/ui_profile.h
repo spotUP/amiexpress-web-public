@@ -33,6 +33,21 @@ typedef struct {
     int gap;
     /** Cells inside a frame. */
     int padding;
+    /**
+     * A cell may carry its own background colour.
+     *
+     * False at the 40-column tier, because that tier is a C64: the VIC-II
+     * has ONE screen background and per-cell background is dropped on the
+     * way out (sdk/petscii/ansi-to-petscii.ts, "Per-cell background has no
+     * C64 equivalent and is dropped"). A door that marks a selected row
+     * with a background bar therefore marks nothing at all there - the
+     * sysop, 2026-09-06: "i see no selected line". Reverse video is what a
+     * C64 has instead, and it survives the transducer as $12/$92.
+     *
+     * The TypeScript side states the same rule per door (the C64 sprite
+     * variants paint bg 0); this is where the C side keeps it.
+     */
+    int cell_backgrounds;
 } ui_profile;
 
 /** The tier for a width. Always pass the LIVE width, never a constant. */

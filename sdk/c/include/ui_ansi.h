@@ -67,6 +67,8 @@ typedef struct {
     int last_fg;
     int last_bg;
     int last_bold;
+    /** Reverse video as last emitted; -1 after a reset, so it re-emits. */
+    int last_reverse;
 } ansi_buf;
 
 /* Binds a buffer to caller storage and empties it. */
@@ -92,6 +94,14 @@ void ansi_color(ansi_buf *b, int fg, int bg, int bold);
 /* Restores the terminal's default attributes. Always emit this before
  * handing control back to the BBS. */
 void ansi_reset(ansi_buf *b);
+
+/* Reverse video on or off (SGR 7 / 27).
+ *
+ * The highlight a C64 has. Per-cell BACKGROUND is dropped on the way to a
+ * PETSCII caller - the VIC-II has one screen background - so a selected row
+ * painted as a coloured bar arrives with nothing marking it at all. These
+ * two reach the caller as $12 and $92 (sdk/petscii/ansi-to-petscii.ts). */
+void ansi_reverse(ansi_buf *b, int on);
 
 /* Hides/shows the hardware cursor. */
 void ansi_cursor(ansi_buf *b, int visible);

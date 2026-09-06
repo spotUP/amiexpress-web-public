@@ -8,6 +8,7 @@
  */
 
 #include "../include/ui_list.h"
+#include "../include/ui_profile.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -208,6 +209,64 @@ static void the_selected_row_is_a_filled_bar(void)
     printf("  [OK] the selected row is a filled bar\n");
 }
 
+/**
+ * The C64's highlight, on the tier that is a C64.
+ *
+ * The sysop, 2026-09-06, on THEMEC over PETSCII: "i see no selected line".
+ * The bar was there in the bytes and painted as a BACKGROUND, and per-cell
+ * background has no C64 equivalent - sdk/petscii/ansi-to-petscii.ts drops
+ * it. So the marked row arrived in exactly the colours of its neighbours.
+ *
+ * Where a cell cannot carry its own background the row is marked with
+ * reverse video, which the same transducer turns into $12/$92.
+ */
+static void a_screen_without_backgrounds_marks_the_row_in_reverse(void)
+{
+    ui_list list = a_list(50, 10);
+    const char *out;
+
+    list.cell_backgrounds = 0;
+    list.selected_bg = ANSI_BLUE;
+    ui_list_select(&list, 0);
+    out = drawn(&list);
+
+    /* SGR 7 on, and it is turned off again before the door draws anything
+       else - a frame that leaves reverse latched paints the rest of the
+       screen inside out. */
+    assert(strstr(out, "\033[7m") != 0);
+    assert(strstr(out, "\033[27m") != 0);
+    /* And NO background is asked for, because asking is what gets dropped. */
+    assert(strstr(out, ";44m") == 0);
+    printf("  [OK] a screen with no cell backgrounds marks the row in reverse\n");
+}
+
+/**
+ * The 80-column tier is untouched: it keeps the filled bar it always had,
+ * and never emits reverse video.
+ */
+static void a_screen_with_backgrounds_keeps_the_filled_bar(void)
+{
+    ui_list list = a_list(50, 10);
+    const char *out;
+
+    list.cell_backgrounds = 1;
+    list.selected_bg = ANSI_BLUE;
+    ui_list_select(&list, 0);
+    out = drawn(&list);
+
+    assert(strstr(out, "44m") != 0);
+    assert(strstr(out, "\033[7m") == 0);
+    printf("  [OK] a screen with cell backgrounds keeps the filled bar\n");
+}
+
+/** The profile is where the rule lives, and 40 columns is a C64. */
+static void the_profile_says_which_screens_have_backgrounds(void)
+{
+    assert(ui_profile_for(40).cell_backgrounds == 0);
+    assert(ui_profile_for(80).cell_backgrounds == 1);
+    printf("  [OK] the profile says which screens have cell backgrounds\n");
+}
+
 int main(void)
 {
     printf("ui_list\n");
@@ -221,6 +280,9 @@ int main(void)
     the_scroll_bar_appears_only_when_it_can_move();
     the_thumb_moves_with_the_window();
     the_selected_row_is_a_filled_bar();
+    a_screen_without_backgrounds_marks_the_row_in_reverse();
+    a_screen_with_backgrounds_keeps_the_filled_bar();
+    the_profile_says_which_screens_have_backgrounds();
     printf("ui_list: all passed\n");
     return 0;
 }

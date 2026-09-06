@@ -39,6 +39,16 @@ typedef struct {
     const char *label;
     /** Draw the border at all. False at 40 columns (ui_profile.h). */
     int borders;
+    /**
+     * A cell here may carry its own background (ui_profile.cell_backgrounds).
+     *
+     * When it cannot - the 40-column tier, which is a C64 - the selected row
+     * is marked with REVERSE VIDEO instead of a coloured bar, because
+     * per-cell background is dropped on the way to a PETSCII caller and a
+     * bar drawn that way marks nothing. Defaults to 1: a door that says
+     * nothing gets the 80-column behaviour it always had.
+     */
+    int cell_backgrounds;
     ui_list_row_fn row;
     void *context;
 } ui_list;
