@@ -1,5 +1,5 @@
 /**
- * THE RULING TABLE - 242 event names, each with a written reason.
+ * THE RULING TABLE - 246 event names, each with a written reason.
  *
  * Split out of `server/transport-adapter.ts` for the repo's 2000-line ceiling
  * (`.husky` pre-commit size check): the adapter is BEHAVIOUR, this file is the
@@ -54,6 +54,24 @@
  *     arm does not descend into. The backend emits it too, so A still sees it.
  * Only the arms' split moved; the union is what proves nothing is unruled, and
  * the suite asserts that by name.
+ *
+ * RE-RUN 2026-09-06, and this time the union DID move: A is 154, B is still 99,
+ * the UNION IS 246. Four names were added to the tree after the census was
+ * taken and none was ruled, which is what the pin's guard is for. All four are
+ * grep A's - backend emits - and each is ruled below with its evidence:
+ *   - `cursor-visibility` (utils/terminal-utils.ts:39), a browser-canvas
+ *     concern - and one whose only emit site sits in a function nothing calls.
+ *   - `operator:active-chats` (handlers/operator-chat.handler.ts:148), the
+ *     request/response sibling of operator:pending-pages.
+ *   - `operator:paging-dot` (:434), a `sysops` ROOM emit. The paging caller's
+ *     own dot is a separate ansi-output write on the line above, so no byte
+ *     caller loses a dot to this ruling.
+ *   - `operator:bot-activated` (:1182), a server-wide socket.io broadcast to
+ *     the sysop console.
+ * Their inbound counterpart `operator:get-active-chats` (:132) is a
+ * `socket.on` and is out of the census's scope by construction: this table
+ * rules what the server EMITS. It is registered inside io.on('connection'),
+ * so no byte transport can send it either.
  *
  * NO `any` crosses this module's boundary, and it imports nothing at all.
  */
@@ -788,11 +806,18 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
   "cursor-visibility": {
     kind: "web-only",
     note:
-    "PETSCII text cursor visibility - the backend sends cursor-visibility " +
-    "to hide the PETSCII canvas cursor when the caller is not in a prompt " +
-    "or input context (matching ANSI mode's ?25h/?25l behavior). The " +
-    "PetsciiCanvas reads this prop to blink or hide the cursor block. " +
-    "In ANSI mode the escape is handled by xterm natively.",
+    "PETSCII canvas cursor visibility. Its consumer is a browser one - " +
+    "packages/terminal/src/components/BBSTerminal.tsx feeds it to " +
+    "PetsciiCanvas's `cursorVisible` prop - and a byte-transport C64 has no " +
+    "canvas: over telnet the PETSCII bytes go to the real machine, whose own " +
+    "screen editor owns the cursor. web-only is therefore the class. THE " +
+    "SENDER, HOWEVER, DOES NOT EXIST: the only emit site is " +
+    "utils/terminal-utils.ts:39 inside setCursorVisible(), and grepping the " +
+    "tree for that name returns one hit, its own definition. The note the " +
+    "ruling landed with (\"the backend sends cursor-visibility\") asserted " +
+    "behaviour no code performs; this entry records the class the name would " +
+    "carry and the fact that nothing emits it, and the dead helper is removed " +
+    "in the commit that follows.",
   },
   "data": {
     kind: "not-transport",
@@ -1097,6 +1122,34 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "handlers/transfer/olm.handler.ts:397 - `io.emit(...)`, a broadcast to " +
     "every socket.io client, not a session socket.",
   },
+  "operator:active-chats": {
+    kind: "web-only",
+    note:
+    "The bot-controlled chat list, emitted at " +
+    "handlers/operator-chat.handler.ts:148 in reply to the sysop console's " +
+    "`operator:get-active-chats`. Exactly the request/response sibling of " +
+    "operator:pending-pages (:129) and ruled with it: browser consumer " +
+    "web/config-app/src/pages/OperatorChatPage.tsx:197, and the reply is a " +
+    "structured array of chat descriptors a byte terminal cannot render. The " +
+    "listener that produces it is registered inside initOperatorChatHandler's " +
+    "io.on('connection') (:77) and gated on secLevel >= 100, so the emit site " +
+    "is not reachable from a byte transport in the first place.",
+  },
+  "operator:bot-activated": {
+    kind: "not-transport",
+    owner: "socket.io server broadcast (io.emit)",
+    note:
+    "handlers/operator-chat.handler.ts:1182 - `io.emit(...)`, a socket.io " +
+    "namespace broadcast, not a write to any one caller's session socket. A " +
+    "telnet/SSH caller is reached through a connection emitter that socket.io " +
+    "has never seen, so this name cannot arrive at this adapter at all. Its " +
+    "audience is the sysop console (web/config-app/src/pages/OperatorChatPage.tsx:202), " +
+    "which uses it to offer taking over a chat GrumpyBot answered. The " +
+    "CALLER-facing half of that same moment is the setup screen acceptPage " +
+    "pushes at :753, room-addressed to `user:<id>` - and THAT is the operator " +
+    "chat gap a byte caller has, recorded on every operator:* ruling here and " +
+    "left to TP-10. It is not this name.",
+  },
   "operator:chat-accepted": {
     kind: "web-only",
     note:
@@ -1172,6 +1225,23 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "web/config-app/src/realtime/RealtimeProvider.tsx. A byte terminal cannot " +
     "render the structured payload; the operator page a telnet caller must " +
     "actually SEE is an ansi-output push and is TP-10's work.",
+  },
+  "operator:paging-dot": {
+    kind: "not-transport",
+    owner: "socket.io room (sysops)",
+    note:
+    "handlers/operator-chat.handler.ts:434 - `io.to('sysops').emit(...)`, one " +
+    "tick of the page animation addressed to a socket.io ROOM. The room is " +
+    "joined at :82, inside initOperatorChatHandler's io.on('connection'), by " +
+    "socket.io sockets whose session carries secLevel >= 100; a byte " +
+    "transport has no socket.io id and joins no room, so this never addresses " +
+    "one. IT IS NOT A DROPPED DOT: the paging caller's own dot is the line " +
+    "immediately above it at :433 - an ansi-output emit of a space and a full " +
+    "stop, on the very emitter this adapter serves. handlePageSysop is called from " +
+    "handlers/command-handler/page-sysop-command.ts:36 with the session's own " +
+    "socket, the connection emitter on telnet and SSH. Web and byte callers " +
+    "both watch the dots; only the sysop console's beep " +
+    "(web/config-app/src/components/PagingBeep.tsx:32) rides this name.",
   },
   "operator:pending-pages": {
     kind: "web-only",

@@ -51,7 +51,7 @@ const SDK_DIR = path.join(REPO_ROOT, 'sdk');
 const DOORS_DIR = path.join(REPO_ROOT, 'Doors');
 
 /**
- * THE PIN. 242 names, produced by greps A and B of the census documented at the
+ * THE PIN. 246 names, produced by greps A and B of the census documented at the
  * top of `src/server/transport-adapter.ts` and committed here. Case 2 re-runs
  * both greps and fails, BY NAME, on any difference.
  */
@@ -110,6 +110,7 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'complete',
   'connection',
   'cursor-style',
+  'cursor-visibility',
   'data',
   'disconnect',
   'door-active',
@@ -187,6 +188,8 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'modem-speed',
   'network-pong',
   'olm-quiet-status',
+  'operator:active-chats',
+  'operator:bot-activated',
   'operator:chat-accepted',
   'operator:chat-ended',
   'operator:chat-started',
@@ -195,6 +198,7 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'operator:message-history',
   'operator:page',
   'operator:page-accepted',
+  'operator:paging-dot',
   'operator:pending-pages',
   'operator:status-updated',
   'operator:typing-status',
@@ -548,7 +552,7 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     expect({ invented }).toEqual({ invented: [] });
 
     expect(ruled).toEqual(pinned);
-    expect(ruled.length).toBe(242);
+    expect(ruled.length).toBe(246);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -570,13 +574,21 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // is a CSS mouse-pointer name (doors/BBSApi.ts:532-538, set on
     // terminalRef.current.style.cursor by BBSTerminal.tsx:2289-2292), not a
     // DECSCUSR text-cursor shape, and a byte terminal has no pointer to shape.
-    // render 6 -> 5, web-only 113 -> 114; the total is still 242.
+    // render 6 -> 5, web-only 113 -> 114; the total was still 242.
+    //
+    // 2026-09-06, the census re-run below moved for the first time: four
+    // backend emits landed after it was taken and none was ruled.
+    // `cursor-visibility` and `operator:active-chats` are web-only (a browser
+    // canvas concern; the sysop console's reply to its own request), so
+    // web-only 114 -> 116; `operator:paging-dot` (a `sysops` socket.io room)
+    // and `operator:bot-activated` (a server-wide io broadcast) never address
+    // a session socket at all, so not-transport 102 -> 104. Total 242 -> 246.
     expect(counts).toEqual({
       render: 5,
       translate: 11,
       dead: 10,
-      'web-only': 114,
-      'not-transport': 102,
+      'web-only': 116,
+      'not-transport': 104,
     });
   });
 
@@ -598,7 +610,14 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // census (and already ruled) from grep B, so the union below is unchanged
     // and it is only this arm's count that moved. The union, not the arm, is
     // what proves nothing is unruled.
-    expect(fromA.length).toBe(150);
+    //
+    // 154 as of 2026-09-06, and this time the UNION moved too: four real new
+    // backend emit sites, all in arm A - `cursor-visibility`
+    // (utils/terminal-utils.ts:39) and the three operator names
+    // `operator:active-chats` (handlers/operator-chat.handler.ts:148),
+    // `operator:paging-dot` (:434) and `operator:bot-activated` (:1182). Each
+    // is ruled in EVENT_RULINGS with the receiver that earns its class.
+    expect(fromA.length).toBe(154);
     // 86 from sdk/, 14 from Doors/, `ansi-output` in both. The plan records the
     // Doors arm as 0; that was a zsh `nomatch` artefact and the module header
     // records the correction.
