@@ -89,7 +89,17 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  * that mode - its 80-column TGM and TETRINET screens are hidden rather than
  * squeezed. See tests/doors/compact-40/tetris-attack.test.ts.
  */
-const ADAPTED = ['THEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER'];
+/*
+ * THEMEC is the one 68K binary on this list, added 2026-09-06. It earns
+ * MIN_COLUMNS rather than C64_ADAPT because it lays ITSELF out at 40: it asks
+ * the board for the caller's width (BB_SCRWIDTH, express.e:3865) and folds
+ * through the C SDK's own tier, `ui_profile_for()`, the twin of the
+ * TypeScript `getCompactProfile()`. Its 40-column screen is proven on a real
+ * PetsciiMachine in tests/doors/compact-40/themec-40.test.ts. Marking it
+ * C64_ADAPT would put the frame adapter on a screen that is already forty
+ * columns wide and crop it again.
+ */
+const ADAPTED = ['THEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC'];
 
 const UNROUTED = 'unrouted-gate-test-type' as unknown as Door['type'];
 

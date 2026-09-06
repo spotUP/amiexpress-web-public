@@ -18,6 +18,9 @@
 export const C64_COLUMNS = 40;
 export const DEFAULT_DOOR_COLUMNS = 80;
 
+/** A C64 screen is 25 rows, the way it is 40 columns: by definition. */
+export const C64_ROWS = 25;
+
 export interface ScreenWidthSource {
   petsciiMode?: boolean;
   screenWidth?: number;
@@ -30,6 +33,43 @@ export function doorScreenWidth(
   if (!session || session.petsciiMode !== true) return fallback;
   const width = session.screenWidth;
   return typeof width === 'number' && width > 0 && width < DEFAULT_DOOR_COLUMNS ? width : C64_COLUMNS;
+}
+
+export interface ScreenHeightSource extends ScreenWidthSource {
+  screenHeight?: number;
+}
+
+/**
+ * The ONE answer to "how many rows does this caller's screen have?" for 68K
+ * doors - the twin of doorScreenWidth() above, and read by BB_SCRHEIGHT
+ * (express.e:3867-3868, `msg.data:=screen.height`).
+ *
+ * It exists because the two halves of a door's geometry came from different
+ * places: the width had an authority and the height did not, so BB_SCRHEIGHT
+ * answered with the caller's PAUSE COUNT (`pauseLines`, which defaults to 22
+ * at XIMProtocol.ts) - a number that has nothing to do with how tall the
+ * screen is. A C door that asked for both drew a 40-column layout into a
+ * 22-row window on a 25-row C64, leaving the footer floating three rows off
+ * the bottom.
+ *
+ * PETSCII session: 25, always. A C64 has no other height.
+ *
+ * Any other session: the height the client actually reported
+ * (socket-handlers.ts 'terminal-size', or NAWS), when it is a sane one. A
+ * session that has reported nothing keeps TODAY'S answer, byte for byte -
+ * `fallback` is the caller's existing pauseLines chain, so nothing about an
+ * unreporting caller changes.
+ */
+export function doorScreenHeight(
+  session: ScreenHeightSource | null | undefined,
+  fallback: number,
+): number {
+  if (session?.petsciiMode === true) return C64_ROWS;
+  const reported = session?.screenHeight;
+  if (typeof reported === 'number' && Number.isInteger(reported) && reported >= 10 && reported <= 200) {
+    return reported;
+  }
+  return fallback;
 }
 
 export interface MutableGeometry extends ScreenWidthSource {

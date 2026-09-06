@@ -4432,12 +4432,20 @@ console.warn(`[initializeDoors] installed-door scan unavailable for MIN_COLUMNS 
     if (declared !== null) {
       door.minColumns = declared;
       // MIN_COLUMNS is a claim about the door's OWN layout, and the gate is
-      // type-blind: a 68K binary marked MIN_COLUMNS=40 is let straight in and
-      // then serves its raw 80-column bytes to a C64. The BBS cannot detect
-      // the lie, so it says so out loud at registration - C64_ADAPT is the
-      // tooltype that means "reaches forty through the adapter".
+      // type-blind: a 68K binary marked MIN_COLUMNS=40 is let straight in, so
+      // if the claim is false the caller gets raw 80-column bytes. The BBS
+      // cannot check it, so it says so out loud at registration.
+      //
+      // It is a CAUTION, not a verdict. A 68K door CAN narrow its own output:
+      // BB_SCRWIDTH answers 40 for a PETSCII caller (xim/screen-width.util.ts)
+      // and the C SDK's ae_screen_cols() reads it, which is how THEMEC
+      // (sdk/c/examples/theme-picker) draws a real 40-column screen. Saying
+      // flatly that a 68K door "cannot" was the older, wrong premise, and it
+      // set a trap: the next reader would have "fixed" THEMEC's mark to
+      // C64_ADAPT and had the frame adapter crop a screen that was already 40
+      // columns wide.
       if (declared < DEFAULT_MIN_COLUMNS && ADAPTED_DOOR_TYPES.has(String(door.type ?? '').toUpperCase())) {
-        console.warn(`[initializeDoors] WARN: door ${door.command} is TYPE=${door.type} and declares MIN_COLUMNS=${declared} - a 68K door cannot narrow its own output, so it will serve raw 80-column bytes to a 40-column caller. Use C64_ADAPT=${declared} instead.`);
+        console.warn(`[initializeDoors] NOTE: door ${door.command} is TYPE=${door.type} and declares MIN_COLUMNS=${declared} - the BBS cannot verify that a 68K binary lays itself out that narrow. It is true only if the door reads BB_SCRWIDTH (the C SDK's ae_screen_cols() does). If it does not, use C64_ADAPT=${declared} instead so the frame adapter reduces its output.`);
       }
     }
 

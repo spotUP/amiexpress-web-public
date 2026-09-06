@@ -156,10 +156,22 @@ int main(int argc, char **argv)
                          theme->rail, theme->ground, theme->accent);
         ui_list_draw(&list, &screen.buf);
 
-        /* Say what will happen, and say the truth about this board. */
-        note = (host->host == AE_HOST_WEB)
-            ? "A theme applies the next time a door draws."
-            : "This board cannot keep a theme - showing them only.";
+        /* Say what will happen, and say the truth about this board - in
+           words that FIT. ansi_text() clips at cols-3, which is 37 cells on
+           a C64, and both of the wide sentences are longer than that: the
+           caller was reading "THIS BOARD CANNOT KEEP A THEME - SHOW", cut
+           mid-word. A shorter sentence is the door saying the same thing in
+           its own words, which is what a 40-column screen is owed; clipping
+           is the door saying half of one. */
+        if (wide) {
+            note = (host->host == AE_HOST_WEB)
+                ? "A theme applies the next time a door draws."
+                : "This board cannot keep a theme - showing them only.";
+        } else {
+            note = (host->host == AE_HOST_WEB)
+                ? "Applies the next time a door draws."
+                : "This board cannot keep a theme.";
+        }
         ansi_color(&screen.buf, theme->dim, theme->ground, 0);
         ansi_text(&screen.buf, screen.rows - 1, 2, note, screen.cols - 3);
 

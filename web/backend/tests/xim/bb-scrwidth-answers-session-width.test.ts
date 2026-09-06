@@ -48,3 +48,36 @@ describe('BB_SCRWIDTH answers the session width', () => {
     expect(b.execLibrary.replyMsg).toHaveBeenCalled();
   });
 });
+
+/**
+ * BB_SCRHEIGHT (express.e:3867-3868 msg.data:=screen.height), the other half
+ * of a door's geometry.
+ *
+ * It used to answer with `pauseLines`, which is a PAUSE COUNT and defaults to
+ * 22 (XIMProtocol.ts) - so a C door that asked for its caller's screen was
+ * told a 25-row C64 had 22 rows and hung its footer three rows off the
+ * bottom. doorScreenHeight() is now the one answer, the twin of
+ * doorScreenWidth().
+ */
+describe('BB_SCRHEIGHT answers the session height', () => {
+  it('tells a PETSCII session it has 25 rows, whatever pauseLines says', () => {
+    expect(build({ nodeId: 1, petsciiMode: true, screenWidth: 40 }).ask(XIMCommand.BB_SCRHEIGHT)).toBe(25);
+  });
+
+  it('tells a terminal that reported its size that size', () => {
+    expect(build({ nodeId: 1, screenHeight: 25 } as any).ask(XIMCommand.BB_SCRHEIGHT)).toBe(25);
+    expect(build({ nodeId: 1, screenHeight: 50 } as any).ask(XIMCommand.BB_SCRHEIGHT)).toBe(50);
+  });
+
+  // The identity case: a caller that has reported nothing keeps the answer it
+  // has always been given, byte for byte.
+  it('a session that reported no height keeps the historic pauseLines answer', () => {
+    expect(build({ nodeId: 1 }).ask(XIMCommand.BB_SCRHEIGHT)).toBe(24);
+  });
+
+  it('ignores a nonsense reported height and falls back the same way', () => {
+    expect(build({ nodeId: 1, screenHeight: 0 } as any).ask(XIMCommand.BB_SCRHEIGHT)).toBe(24);
+    expect(build({ nodeId: 1, screenHeight: 9 } as any).ask(XIMCommand.BB_SCRHEIGHT)).toBe(24);
+    expect(build({ nodeId: 1, screenHeight: 900 } as any).ask(XIMCommand.BB_SCRHEIGHT)).toBe(24);
+  });
+});

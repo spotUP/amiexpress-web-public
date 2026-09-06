@@ -24,7 +24,7 @@ import { ximLogger } from '../../utils/XIMLogger';
 // Debug log path - uses BBS_DATA_DIR env var or falls back to cwd
 const BB_DEBUG_LOG_PATH = path.join(process.env.BBS_DATA_DIR || process.cwd(), 'logs', 'bb-conflocal-debug.log');
 import { debugLog } from '../../utils/debug-log';
-import { doorScreenWidth } from './screen-width.util';
+import { doorScreenWidth, doorScreenHeight } from './screen-width.util';
 
 export class XIMBBSInfoHandler {
   private emulator: MoiraEmulator;
@@ -381,12 +381,16 @@ debugLog(`  BB_SCRWIDTH: ${value}`);
         break;
 
       case XIMCommand.BB_SCRHEIGHT:
-        // express.e:3867-3868: msg.data:=screen.height
-        // Return user's configured screen height (lines per screen)
-        value = this.state.pauseLines ||
-                (this.bbsSession as any)?.user?.linesPerScreen ||
-                (this.bbsSession as any)?.user?.pageLength ||
-                24;
+        // express.e:3867-3868: msg.data:=screen.height. 25 for a C64, the
+        // reported height for a terminal that reported one, and the historic
+        // pauseLines chain (byte-for-byte) for one that did not.
+        value = doorScreenHeight(
+          this.bbsSession,
+          this.state.pauseLines ||
+            (this.bbsSession as any)?.user?.linesPerScreen ||
+            (this.bbsSession as any)?.user?.pageLength ||
+            24,
+        );
 debugLog(`  BB_SCRHEIGHT: ${value}`);
         break;
 

@@ -10,7 +10,7 @@ import { Socket } from "socket.io";
 import { ExecLibrary } from "../api/ExecLibrary.js";
 import { XIMProtocol, XIMCommand } from "../XIMProtocol.js";
 import { DoorConfig, DoorConstants, AEDoorCommand } from "../DoorTypes.js";
-import { doorScreenWidth } from "../xim/screen-width.util";
+import { doorScreenWidth, doorScreenHeight } from "../xim/screen-width.util";
 import { logDoorMessage } from "../../utils/door-logging.util";
 import { checkSecurity } from "../../utils/acs.util.js";
 import { ACSPermission } from "../../constants/acs-permissions.js";
@@ -2075,10 +2075,16 @@ debugLog(`[DoorMessageHandler]   BB_SCRWIDTH: ${screenWidth}`);
         // express.e:3867-3868: msg.data:=screen.height
         // Return user's configured screen height (lines per screen)
         {
-          const screenHeight = this.config.bbsSession?.pauseLines ||
-                               (this.config.bbsSession as any)?.user?.linesPerScreen ||
-                               (this.config.bbsSession as any)?.user?.pageLength ||
-                               24;
+          // The same answer as xim/bbs-info.ts: 25 for a C64, the reported
+          // height for a terminal that reported one, the historic chain
+          // (byte-for-byte) for one that did not.
+          const screenHeight = doorScreenHeight(
+            this.config.bbsSession,
+            this.config.bbsSession?.pauseLines ||
+              (this.config.bbsSession as any)?.user?.linesPerScreen ||
+              (this.config.bbsSession as any)?.user?.pageLength ||
+              24,
+          );
 debugLog(`[DoorMessageHandler]   BB_SCRHEIGHT: ${screenHeight}`);
           this.emulator.writeMemory32(msgAddr + DoorConstants.MESSAGE_DATA_OFFSET, screenHeight);
         }
