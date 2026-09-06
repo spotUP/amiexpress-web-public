@@ -169,7 +169,7 @@ export function ScreenFilesPage() {
   // pass, reported per file — matches web's repairAllScreens(dryRun) two-step
   // and the reasoning in screens-routes.ts:414-426 ("the decision is still
   // the sysop's").
-  const [repairAllMode, setRepairAllMode] = useState<'idle' | 'confirm' | 'running' | 'result'>('idle');
+  const [repairAllMode, setRepairAllMode] = useState<'idle' | 'dry-run-loading' | 'confirm' | 'running' | 'result'>('idle');
   const [repairAllDamaged, setRepairAllDamaged] = useState<string[]>([]);
   const [repairAllResult, setRepairAllResult] = useState<RepairAllResult | null>(null);
 
@@ -354,11 +354,28 @@ export function ScreenFilesPage() {
   };
 
   const runRepairAllDryRun = () => {
-    setRepairAllMode('confirm');
+    // The confirm dialog must not render until the dry run actually
+    // answers - it used to flip straight to 'confirm' with
+    // repairAllDamaged still [], so a sysop fast enough to confirm before
+    // the fetch resolved saw (and could accept) "Repair 0 file(s)?" and
+    // then ran the REAL pass against whatever the server-side damaged set
+    // actually was - the confirmation text and the action it triggered
+    // could disagree.
+    setRepairAllMode('dry-run-loading');
     setRepairAllDamaged([]);
     repairAllScreens(true)
-      .then((res) => setRepairAllDamaged(res.damaged ?? []))
-      .catch((e: unknown) => setOperationResult(`Repair-all failed: ${e instanceof Error ? e.message : 'Unknown error'}`));
+      .then((res) => { setRepairAllDamaged(res.damaged ?? []); setRepairAllMode('confirm'); })
+      .catch((e: unknown) => {
+        setOperationResult(`Repair-all failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+        // Back to idle on failure too - otherwise repairAllMode stays
+        // stuck at 'dry-run-loading' forever (it matches none of the
+        // render branches below, so operationResult's own view still
+        // shows correctly) and the useInput guard further down
+        // (`if (repairAllMode !== 'idle') return`) would swallow every
+        // keypress site-wide once the sysop dismisses that error - [R]
+        // included - with nothing on screen to explain why.
+        setRepairAllMode('idle');
+      });
   };
 
   const runRepairAllReal = () => {
@@ -454,12 +471,21 @@ export function ScreenFilesPage() {
 
   // Bulk repair — dry run names the damaged files and asks for confirmation
   // before anything is written; the real pass reports each file's outcome.
+  //
+  // The confirm dialog (below) only ever renders once the dry run has
+  // actually answered - never while repairAllDamaged is still its initial
+  // [], which would show (and let a fast sysop confirm) "Repair 0 file(s)?"
+  // before the real count was known.
+  if (repairAllMode === 'dry-run-loading') {
+    return <Box><BlessedSpinner/><Text> Checking for damaged screens...</Text></Box>;
+  }
+
   if (repairAllMode === 'confirm') {
     return (
       <Box flexDirection="column" padding={1}>
         <BlessedText variant="accent" bold>REPAIR ALL — dry run</BlessedText>
         {repairAllDamaged.length === 0 ? (
-          <Text dimColor>No damaged screens found (or still loading).</Text>
+          <Text dimColor>No damaged screens found.</Text>
         ) : (
           <>
             <Text>{repairAllDamaged.length} file{repairAllDamaged.length === 1 ? '' : 's'} would be repaired:</Text>
