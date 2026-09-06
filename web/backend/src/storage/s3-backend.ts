@@ -6,15 +6,43 @@
  * board needs no per-provider code. The client is injected because a test that
  * needs the network is a test nobody runs.
  */
-import {
-  DeleteObjectCommand,
-  GetObjectCommand,
-  HeadObjectCommand,
-  ListObjectsV2Command,
-  PutObjectCommand,
-  S3Client,
+import type {
+  DeleteObjectCommand as DeleteObjectCommandType,
+  GetObjectCommand as GetObjectCommandType,
+  HeadObjectCommand as HeadObjectCommandType,
+  ListObjectsV2Command as ListObjectsV2CommandType,
+  PutObjectCommand as PutObjectCommandType,
+  S3Client as S3ClientType,
 } from '@aws-sdk/client-s3';
-import { NodeHttpHandler } from '@smithy/node-http-handler';
+
+/**
+ * The AWS SDK is loaded ON FIRST USE, not on import.
+ *
+ * `@aws-sdk/client-s3` plus its `@smithy` runtime is 41 MB across 7,217
+ * files, costs 800ms to require and 27 MB of RSS. A statically imported
+ * module pays all of that at boot on EVERY board - and a board with no
+ * `s3://` volume in Drives.info never constructs an S3 client at all, which
+ * is every board that has not opted into pooled storage.
+ *
+ * Both call sites (`VolumeSet.fromBoard` and `DriveConfigService`) take
+ * `createS3Backend` as a default parameter - a reference, never invoked at
+ * import time - so nothing here runs until a pooled volume is really opened.
+ */
+type S3Sdk = typeof import('@aws-sdk/client-s3');
+type SmithyHandler = typeof import('@smithy/node-http-handler');
+
+let s3Sdk: S3Sdk | null = null;
+let smithy: SmithyHandler | null = null;
+
+function loadS3Sdk(): S3Sdk {
+  // require, not await import: this keeps createS3Backend synchronous, so no
+  // caller has to become async for a lazy load.
+  return (s3Sdk ??= require('@aws-sdk/client-s3') as S3Sdk);
+}
+
+function loadSmithy(): SmithyHandler {
+  return (smithy ??= require('@smithy/node-http-handler') as SmithyHandler);
+}
 import type { StorageVolume } from './volume-config';
 import type { ObjectHead, StorageBackend } from './storage-backend';
 import { StorageUnavailableError } from './storage-backend';
@@ -267,7 +295,7 @@ export class S3Backend implements StorageBackend {
   async head(key: string): Promise<ObjectHead | null> {
     try {
       const out = (await this.client.send(
-        new HeadObjectCommand({ Bucket: this.bucket, Key: key })
+        new (loadS3Sdk().HeadObjectCommand)({ Bucket: this.bucket, Key: key })
       )) as { ContentLength?: number; LastModified?: Date };
       return { key, size: out.ContentLength ?? 0, mtime: out.LastModified ?? new Date(0) };
     } catch (error) {
@@ -289,7 +317,7 @@ export class S3Backend implements StorageBackend {
     let out: { Body?: { transformToByteArray(): Promise<Uint8Array> } };
     try {
       out = (await this.client.send(
-        new GetObjectCommand({ Bucket: this.bucket, Key: key })
+        new (loadS3Sdk().GetObjectCommand)({ Bucket: this.bucket, Key: key })
       )) as typeof out;
     } catch (error) {
       if (isTransient(error)) this.unavailable(error);
@@ -315,7 +343,7 @@ export class S3Backend implements StorageBackend {
       );
     }
     try {
-      await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body }));
+      await this.client.send(new (loadS3Sdk().PutObjectCommand)({ Bucket: this.bucket, Key: key, Body: body }));
     } catch (error) {
       this.unavailable(error);
     }
@@ -323,7 +351,7 @@ export class S3Backend implements StorageBackend {
 
   async delete(key: string): Promise<void> {
     try {
-      await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+      await this.client.send(new (loadS3Sdk().DeleteObjectCommand)({ Bucket: this.bucket, Key: key }));
     } catch (error) {
       if (isTransient(error)) this.unavailable(error);
       // Deleting an object that is already gone is not an error - it is the
@@ -361,7 +389,7 @@ export class S3Backend implements StorageBackend {
       };
       try {
         page = (await this.client.send(
-          new ListObjectsV2Command({ Bucket: this.bucket, Prefix: prefix, ContinuationToken: token })
+          new (loadS3Sdk().ListObjectsV2Command)({ Bucket: this.bucket, Prefix: prefix, ContinuationToken: token })
         )) as typeof page;
       } catch (error) {
         this.unavailable(error);
@@ -410,7 +438,7 @@ export function createS3Backend(volume: StorageVolume, secret: string): S3Backen
         's3://bucket is supported, s3://bucket/prefix is not'
     );
   }
-  const client = new S3Client({
+  const client = new (loadS3Sdk().S3Client)({
     endpoint: volume.endpoint,
     region: volume.region ?? 'auto',
     forcePathStyle: true, // MinIO and several free tiers require it; AWS tolerates it.
@@ -418,7 +446,7 @@ export function createS3Backend(volume: StorageVolume, secret: string): S3Backen
     // See the CONNECTION_TIMEOUT_MS/REQUEST_TIMEOUT_MS note above this
     // function - no caller-facing path may inherit an unbounded wait on a
     // dead or blackholed endpoint.
-    requestHandler: new NodeHttpHandler({
+    requestHandler: new (loadSmithy().NodeHttpHandler)({
       connectionTimeout: CONNECTION_TIMEOUT_MS,
       requestTimeout: REQUEST_TIMEOUT_MS,
     }),
