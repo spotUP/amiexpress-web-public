@@ -1,6 +1,13 @@
 # `sdk/c` — the AmiExpress C door SDK
 
-**Status: phase 0.** Two things exist, and they are the two the plan said had
+**Status: phases 0-4 built, phase 5 (the proof door) outstanding.** The
+session, the geometry, the widgets, the input decoder, the dialogs, the theme
+and the settings reader all exist with tests; `ui_doc` was the last dialog the
+plan named and landed 2026-09-07. What is left is the plan's phase 5: one real
+door ported end to end, and the binary-size and repaint measurements written
+down.
+
+The two things below came first, and they are the two the plan said had
 to come first
 (`thoughts/shared/plans/2026-09-02-amiga-c-door-sdk.md`).
 

@@ -44,7 +44,7 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_theme build/test_ui_settings
+test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_theme build/test_ui_settings build/test_ui_doc
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
@@ -53,6 +53,7 @@ test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_
 	./build/test_ui_input
 	./build/test_ui_theme
 	./build/test_ui_settings
+	./build/test_ui_doc
 
 build/test_ae_host: src/ae_host.c tests/test_ae_host.c include/ae_host.h
 	@mkdir -p build
@@ -77,6 +78,10 @@ build/test_ui_chrome: src/ui_ansi.c src/ui_chrome.c tests/test_ui_chrome.c inclu
 build/test_ui_input: src/ui_ansi.c src/ui_key.c src/ui_input.c tests/test_ui_input.c include/ui_input.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ui_ansi.c src/ui_key.c src/ui_input.c tests/test_ui_input.c -o $@
+
+build/test_ui_doc: src/ui_ansi.c src/ui_key.c src/ui_doc.c tests/test_ui_doc.c include/ui_doc.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) src/ui_ansi.c src/ui_key.c src/ui_doc.c tests/test_ui_doc.c -o $@
 
 build/test_ui_theme: src/ui_theme.c tests/test_ui_theme.c include/ui_theme.h include/theme_tables.h
 	@mkdir -p build
