@@ -8,6 +8,7 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { isCompactWidth } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { AppState } from '../core/types';
+import { clearScreen } from './clear-screen';
 import type { SoundEngine } from '../audio/sounds';
 
 export type MenuSelection =
@@ -138,7 +139,7 @@ export class MenuScreen {
       const offsetY = () => Math.max(0, Math.floor((this.screen.height - MENU_ROWS) / 2));
 
       this.sounds.playMusic('menu', true);
-      this.screen.children.forEach(child => child.destroy());
+      clearScreen(this.screen as any);
 
       const background = createBox({
         border: undefined,

@@ -37,6 +37,7 @@ import { GameEngine } from './core/game';
 import { softDropIntervalMs } from './core/soft-drop';
 import type { PracticeGoal } from './core/practice-goal';
 import { MenuScreen } from './ui/menu';
+import { clearScreen } from './ui/clear-screen';
 import { GameScreen } from './ui/game-screen';
 import { SettingsScreen } from './ui/settings-screen';
 import { LobbyScreen } from './ui/lobby-screen';
@@ -2078,7 +2079,7 @@ export class GrandmasterApp {
     this.inputManager.suspend();  // Disable grabKeys so List widgets can receive input
 
     // Clear screen and add background
-    this.screen.children.forEach(child => child.destroy());
+    clearScreen(this.screen as any);
     const background = createBox({
       // A ground, not a frame: createBox draws a line border when no
       // border key is given (Panel's default), which outlines the whole

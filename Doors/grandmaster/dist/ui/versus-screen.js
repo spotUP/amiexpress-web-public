@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.VersusScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const board_effects_1 = require("./board-effects");
+const clear_screen_1 = require("./clear-screen");
 const block_width_1 = require("./block-width");
 /** Playfield columns, in BLOCKS. What they cost in characters is the screen's answer. */
 const BOARD_COLUMNS = 10;
@@ -277,7 +278,7 @@ class VersusScreen {
      */
     setupUI() {
         // Clear screen
-        this.screen.children.forEach(child => child.destroy());
+        (0, clear_screen_1.clearScreen)(this.screen);
         this.opponentBoards = [];
         this.drawnBoards = [];
         this.lastLayoutKey = '';

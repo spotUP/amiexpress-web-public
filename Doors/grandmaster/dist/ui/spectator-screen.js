@@ -16,6 +16,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SpectatorScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const clear_screen_1 = require("./clear-screen");
 const opponent_boards_1 = require("./tetrinet/opponent-boards");
 const FIELD_EVENT = 'game:tnet_field';
 const MAX_CHAT_LINES = 3;
@@ -36,7 +37,7 @@ class SpectatorScreen {
      * 80x24: header, a grid of up to six fields, and the last few chat lines.
      */
     setupUI() {
-        this.screen.children.forEach(child => child.destroy());
+        (0, clear_screen_1.clearScreen)(this.screen);
         this.headerBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 0,

@@ -14,6 +14,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TetriNetScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const clear_screen_1 = require("./clear-screen");
 const block_width_1 = require("./block-width");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 /** Playfield columns, in BLOCKS. TetriNET's field is twelve wide, not ten. */
@@ -427,7 +428,7 @@ class TetriNetScreen {
      */
     setupUI() {
         // Clear screen
-        this.screen.children.forEach(child => child.destroy());
+        (0, clear_screen_1.clearScreen)(this.screen);
         // Playfield
         // The well is as wide as its blocks ARE: twelve columns at two characters
         // is twenty-six with the border, at one character it is fourteen. It was

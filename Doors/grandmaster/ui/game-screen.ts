@@ -14,6 +14,7 @@ import {
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { GamepadActionMapper } from '@amiexpress/bbs-door-sdk';
 import type { GameEngine } from '../core/game';
+import { clearScreen } from './clear-screen';
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
 import type { AppState, GameAction, Piece, PieceType } from '../core/types';
@@ -508,7 +509,7 @@ export class GameScreen {
    */
   private setupUI(): void {
     // Clear screen
-    this.screen.children.forEach(child => child.destroy());
+    clearScreen(this.screen as any);
 
     const compact = isCompactWidth(this.screen.width);
 

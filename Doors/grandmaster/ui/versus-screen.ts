@@ -8,6 +8,7 @@
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { lockFlashChar } from './board-effects';
+import { clearScreen } from './clear-screen';
 import type { GameEngine } from '../core/game';
 import { blockCols, fitCell, pieceArt, cellsCanCarryBackground } from './block-width';
 
@@ -356,7 +357,7 @@ export class VersusScreen {
    */
   private setupUI(): void {
     // Clear screen
-    this.screen.children.forEach(child => child.destroy());
+    clearScreen(this.screen as any);
     this.opponentBoards = [];
     this.drawnBoards = [];
     this.lastLayoutKey = '';

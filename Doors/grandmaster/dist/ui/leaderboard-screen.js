@@ -7,6 +7,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LeaderboardScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const clear_screen_1 = require("./clear-screen");
 /**
  * Leaderboard screen
  */
@@ -82,7 +83,7 @@ class LeaderboardScreen {
      */
     render() {
         // Clear screen
-        this.screen.children.forEach(child => child.destroy());
+        (0, clear_screen_1.clearScreen)(this.screen);
         // The composition is drawn from the terminal's CURRENT size.
         //
         // Every box here used to carry the numbers of an 80x24 screen - width 70

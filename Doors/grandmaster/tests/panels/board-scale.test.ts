@@ -228,3 +228,49 @@ export async function aTerminalKeepsItsFrameAndItsIncomingRow(): Promise<void> {
   const layout = panelsLayout(80, 25, 12, rows, CELL_ASPECT.terminal);
   assert.strictEqual(layout.border, true, '80 columns still frames the board');
 }
+
+/**
+ * The board is the ONLY thing on the screen it opens on.
+ *
+ * Every other screen in this door clears the previous one first; this one did
+ * not, so TETRIS ATTACK painted over whatever the player came from - a
+ * TetriNET Stats panel and half a NEXT box, still at the columns an
+ * 80-column layout had put them. What that looks like is a broken 40-column
+ * layout: "tetris attack looks like it's 80 columns? layout broken"
+ * (2026-09-06). The leftovers were another screen's.
+ */
+export async function theBoardOpensOnACleanScreen(): Promise<void> {
+  const { Screen } = require('@amiexpress/bbs-door-sdk/engines/ui/blessed');
+  const { createBox } = require('@amiexpress/bbs-door-sdk/utils/blessed-helpers');
+  const { PanelsScreen } = require('../../ui/panels-screen');
+  const { loadSpriteSheet } = require('@amiexpress/bbs-door-sdk/engines/graphics/cell-art');
+  const path = require('path');
+
+  const screen: any = new Screen({ title: 'clean', width: 40, height: 25, responsive: true });
+
+  // What the player came from: another screen's furniture, at its columns.
+  createBox({ parent: screen, top: 17, left: 26, width: 26, height: 4, label: ' Stats ' });
+  createBox({ parent: screen, top: 0, left: 26, width: 13, height: 6, label: ' Next ' });
+  const before = screen.children.length;
+  assert.ok(before >= 2, 'the fixture put something on the screen to leave behind');
+
+  const panels: any = new PanelsScreen({
+    screen,
+    stack: stackOf(),
+    sheet: loadSpriteSheet(path.join(__dirname, '..', '..', 'sprites')),
+    sounds: { playSfx() {}, playMusic() {}, stop() {}, stopMusic() {} },
+    readInput: () => ({}),
+    variant: 'c64',
+  });
+  panels.setupUI();
+
+  const labels = screen.children
+    .map((child: any) => String(child.options?.label ?? ''))
+    .filter(Boolean);
+  assert.ok(
+    !labels.some((label: string) => /Stats|Next/.test(label)),
+    `another screen's panels are still on the glass: ${labels.join(', ')}`,
+  );
+
+  screen.destroy();
+}

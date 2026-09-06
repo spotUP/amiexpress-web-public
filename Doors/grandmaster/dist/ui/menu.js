@@ -9,6 +9,7 @@ exports.MenuScreen = exports.MENU_SELECTIONS = exports.MENU_ITEMS = void 0;
 exports.menuRowsFor = menuRowsFor;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const clear_screen_1 = require("./clear-screen");
 /**
  * The menu's selections, index-aligned with the `items` array that renders them
  * and with the descriptions beside it. Three parallel arrays, so a row added to
@@ -106,7 +107,7 @@ class MenuScreen {
             const offsetX = () => Math.max(0, Math.floor((this.screen.width - MENU_COLS) / 2));
             const offsetY = () => Math.max(0, Math.floor((this.screen.height - MENU_ROWS) / 2));
             this.sounds.playMusic('menu', true);
-            this.screen.children.forEach(child => child.destroy());
+            (0, clear_screen_1.clearScreen)(this.screen);
             const background = (0, blessed_helpers_1.createBox)({
                 border: undefined,
                 parent: this.screen,

@@ -16,6 +16,7 @@ const HIDDEN_LABELS = {
     FASTEST: '100 FRAMES',
 };
 const versus_goal_1 = require("../core/versus-goal");
+const clear_screen_1 = require("./clear-screen");
 /** The reference's own names for the three win types (gamestart.c:12756-12764). */
 const VERSUS_WIN_LABELS = {
     survival: 'SURVIVAL',
@@ -109,7 +110,7 @@ class SettingsScreen {
         this.screen.program.enableMouse();
         return new Promise((resolve) => {
             // Clear screen
-            this.screen.children.forEach(child => child.destroy());
+            (0, clear_screen_1.clearScreen)(this.screen);
             // Title box
             const title = (0, blessed_helpers_1.createBox)({
                 parent: this.screen,

@@ -23,6 +23,7 @@ exports.INPUT_CHARS = exports.PanelsScreen = void 0;
 exports.noInput = noInput;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
+const clear_screen_1 = require("./clear-screen");
 const board_view_1 = require("./panels/board-view");
 const layout_1 = require("./panels/layout");
 const input_codec_1 = require("../core/panels/input-codec");
@@ -75,6 +76,15 @@ class PanelsScreen {
     }
     /** Lay the board and HUD out, centred in whatever room there is. */
     setupUI() {
+        // THE SCREEN IS CLEARED FIRST, like every other screen in this door.
+        //
+        // This one did not, so TETRIS ATTACK painted on top of whatever the
+        // player came from: a TetriNET Stats panel and half a NEXT box sat over
+        // the board, at the columns an 80-column layout had put them - which is
+        // exactly why it read as "tetris attack looks like it's 80 columns?
+        // layout broken" (2026-09-06). The leftovers were another screen's, not
+        // this one's geometry.
+        (0, clear_screen_1.clearScreen)(this.screen);
         const { cols, rows } = (0, board_view_1.boardSize)(this.stack, this.boardOptions());
         // Geometry comes from the live screen width, never from a constant.
         // A PETSCII cell is square; an xterm cell is half as wide as it is tall.

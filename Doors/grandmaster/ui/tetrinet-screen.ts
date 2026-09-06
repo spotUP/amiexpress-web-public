@@ -14,6 +14,7 @@
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { TetriNetEngine } from '../core/tetrinet/tetrinet-engine';
+import { clearScreen } from './clear-screen';
 import { blockCols, fitCell, cellsCanCarryBackground } from './block-width';
 import { isCompactWidth } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
@@ -561,7 +562,7 @@ export class TetriNetScreen {
    */
   private setupUI(): void {
     // Clear screen
-    this.screen.children.forEach(child => child.destroy());
+    clearScreen(this.screen as any);
 
     // Playfield
     // The well is as wide as its blocks ARE: twelve columns at two characters

@@ -7,6 +7,7 @@
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { HighScoreManager, HighScoreEntry } from '../core/high-scores';
+import { clearScreen } from './clear-screen';
 import type { SoundEngine } from '../audio/sounds';
 import type { GameMode } from '../core/types';
 
@@ -100,7 +101,7 @@ export class LeaderboardScreen {
    */
   private render(): void {
     // Clear screen
-    this.screen.children.forEach(child => child.destroy());
+    clearScreen(this.screen as any);
 
     // The composition is drawn from the terminal's CURRENT size.
     //

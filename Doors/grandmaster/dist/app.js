@@ -52,6 +52,7 @@ const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const game_1 = require("./core/game");
 const soft_drop_1 = require("./core/soft-drop");
 const menu_1 = require("./ui/menu");
+const clear_screen_1 = require("./ui/clear-screen");
 const game_screen_1 = require("./ui/game-screen");
 const settings_screen_1 = require("./ui/settings-screen");
 const lobby_screen_1 = require("./ui/lobby-screen");
@@ -1828,7 +1829,7 @@ class GrandmasterApp {
         this.inputHandler.setEnabled(false);
         this.inputManager.suspend(); // Disable grabKeys so List widgets can receive input
         // Clear screen and add background
-        this.screen.children.forEach(child => child.destroy());
+        (0, clear_screen_1.clearScreen)(this.screen);
         const background = (0, blessed_helpers_1.createBox)({
             // A ground, not a frame: createBox draws a line border when no
             // border key is given (Panel's default), which outlines the whole

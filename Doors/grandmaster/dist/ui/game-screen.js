@@ -4,6 +4,7 @@ exports.GameScreen = void 0;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const board_effects_1 = require("./board-effects");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const clear_screen_1 = require("./clear-screen");
 const pieces_1 = require("../core/pieces");
 const board_1 = require("../core/board");
 const block_width_1 = require("./block-width");
@@ -429,7 +430,7 @@ class GameScreen {
      */
     setupUI() {
         // Clear screen
-        this.screen.children.forEach(child => child.destroy());
+        (0, clear_screen_1.clearScreen)(this.screen);
         const compact = (0, blessed_1.isCompactWidth)(this.screen.width);
         // Outer frame wrapping the entire game area (consistency with main menu)
         this.outerFrame = (0, blessed_helpers_1.createBox)({

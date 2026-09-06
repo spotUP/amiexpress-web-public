@@ -20,6 +20,7 @@ const HIDDEN_LABELS: Record<HiddenMode, string> = {
   FASTEST: '100 FRAMES',
 };
 import { DEFAULT_VERSUS_GOAL, type VersusWinType } from '../core/versus-goal';
+import { clearScreen } from './clear-screen';
 
 /** The reference's own names for the three win types (gamestart.c:12756-12764). */
 const VERSUS_WIN_LABELS: Record<VersusWinType, string> = {
@@ -134,7 +135,7 @@ export class SettingsScreen {
 
     return new Promise((resolve) => {
       // Clear screen
-      this.screen.children.forEach(child => child.destroy());
+      clearScreen(this.screen as any);
 
       // Title box
       const title = createBox({

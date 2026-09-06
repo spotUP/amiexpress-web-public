@@ -16,6 +16,7 @@
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { GrandmasterNetworkManager } from '../network/network-manager';
+import { clearScreen } from './clear-screen';
 import type { SoundEngine } from '../audio/sounds';
 import { OpponentBoards, type OpponentBoardData } from './tetrinet/opponent-boards';
 
@@ -67,7 +68,7 @@ export class SpectatorScreen {
    * 80x24: header, a grid of up to six fields, and the last few chat lines.
    */
   private setupUI(): void {
-    this.screen.children.forEach(child => child.destroy());
+    clearScreen(this.screen as any);
 
     this.headerBox = createBox({
       parent: this.screen,

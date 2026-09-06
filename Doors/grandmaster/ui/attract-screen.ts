@@ -8,6 +8,7 @@
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { GameEngine } from '../core/game';
+import { clearScreen } from './clear-screen';
 import type { SoundEngine } from '../audio/sounds';
 import type { AppState, PieceType } from '../core/types';
 import { BotPlayer } from '../ai/bot-player';
@@ -137,7 +138,7 @@ export class AttractScreen {
    */
   private setupUI(): void {
     // Clear screen - both widgets AND buffer
-    this.screen.children.forEach(child => child.destroy());
+    clearScreen(this.screen as any);
 
     // Clear the entire terminal with ANSI escape codes (more aggressive)
     this.screen.program.write('\x1b[2J');  // Clear entire screen

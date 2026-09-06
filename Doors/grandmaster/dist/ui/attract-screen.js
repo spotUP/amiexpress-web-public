@@ -10,6 +10,7 @@ exports.AttractScreen = void 0;
 exports.attractModeFor = attractModeFor;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const game_1 = require("../core/game");
+const clear_screen_1 = require("./clear-screen");
 const bot_player_1 = require("../ai/bot-player");
 const game_screen_1 = require("./game-screen");
 const pieces_1 = require("../core/pieces");
@@ -87,7 +88,7 @@ class AttractScreen {
      */
     setupUI() {
         // Clear screen - both widgets AND buffer
-        this.screen.children.forEach(child => child.destroy());
+        (0, clear_screen_1.clearScreen)(this.screen);
         // Clear the entire terminal with ANSI escape codes (more aggressive)
         this.screen.program.write('\x1b[2J'); // Clear entire screen
         this.screen.program.write('\x1b[H'); // Move cursor to home (0,0)
