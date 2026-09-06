@@ -161,6 +161,8 @@ const SIGNATURES: Record<string, Signature> = {
   gwall: { door: 'Right on, great door archive!' },
   // Conftop-II's record line: the byte count the `stat` rung exists to keep whole.
   ctop: { door: '2,020,282,473' },
+  // The label the narrow rung used to eat, with its own number beside it.
+  conftop: { door: 'Total Uploaded Bytes' },
 };
 
 // ---------------------------------------------------------------- sessions

@@ -481,6 +481,9 @@ const EXPECTED_ROWS: Record<string, number> = {
   // to `record`; the door paints 28 of the 31, so the adapter's window shows the
   // table and pages once. Nothing is truncated anywhere on the screen.
   ctop: 31,
+  // `conftop` at 32: the 020 build of the same table, six `stat` rows and three
+  // `record` rows. 29 of the 32 are painted.
+  conftop: 32,
 };
 
 function lastFrameOf(id: string): Frame {
