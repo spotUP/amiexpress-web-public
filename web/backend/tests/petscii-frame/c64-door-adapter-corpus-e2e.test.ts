@@ -49,6 +49,7 @@ import {
   isBlank,
   isRuleRow,
   rowText,
+  TRUNCATION_MARK,
   type Cell,
   type Frame,
 } from '@amiexpress/bbs-door-sdk/petscii/frame';
@@ -442,9 +443,15 @@ function ruleViolations(frame: Frame): Array<Record<string, unknown>> {
       if (!isRuleRow(src) && glyphs.length > 1) bad.push({ ...where, why: 'more than one glyph cropped', glyphs });
       if (dropped.some((c) => c.rvs)) bad.push({ ...where, why: 'reverse video cropped' });
     } else if (rule === 'gutter' || rule === 'split') {
+      // 2026-09-06: `split` may ADD the truncation mark, and only that - a word
+      // wider than the screen has no row it fits on, so the break is marked
+      // rather than folded silently. Everything else must still be there.
+      const mark = (t: string[]) => t.filter((ch) => ch !== TRUNCATION_MARK);
       const got = multiset(joined);
       const want = multiset(src);
-      if (got.join('') !== want.join('')) bad.push({ ...where, why: 'non-space multiset changed' });
+      if (mark(got).join('') !== mark(want).join('')) bad.push({ ...where, why: 'non-space multiset changed' });
+      const added = got.length - want.length;
+      if (added < 0 || added > 1) bad.push({ ...where, why: 'split added something other than one mark', added });
     } else if (rule === 'deindent') {
       if (out.length !== 1) bad.push({ ...where, why: 'deindent produced more than one row' });
       if (cellText(joined).trimEnd() !== cellText(src).trim()) bad.push({ ...where, why: 'deindent lost more than leading blanks' });
@@ -466,7 +473,18 @@ function ruleViolations(frame: Frame): Array<Record<string, unknown>> {
       if (parts.length === 0) bad.push({ ...where, why: 'narrow on a row with no columns' });
       if (!narrowKeepsColumns(parts, cellText(joined).trimEnd())) bad.push({ ...where, why: 'narrow dropped more than a tail', parts });
     } else {
-      if (squeeze(cellText(joined)) !== squeeze(cellText(src))) bad.push({ ...where, why: 'reflow lost or reordered characters' });
+      // `record` drops ONE thing besides the blanks, and only since 2026-09-06:
+      // the pair of '|' cells enclosing a BOXED record (`|message -handle|`),
+      // the same border `narrow`, `stat` and `prose` have always dropped.
+      // Keeping it was the sysop's "the blue pipes are cut off in gwall" - the
+      // closing pipe rode the right-hand field and the opening pipe rode the
+      // message, so a wrapped comment came out with half a box. Recognised from
+      // the row, not by importing the rung's predicate: first and last non-blank
+      // cells both '|', with no '|' between them.
+      const bare = squeeze(cellText(src));
+      const boxed = rule === 'record' && /^\|[^|]*\|$/.test(bare) && bare.length > 2;
+      const want = boxed ? bare.slice(1, -1) : bare;
+      if (squeeze(cellText(joined)) !== want) bad.push({ ...where, why: 'reflow lost or reordered characters' });
     }
   }
   return bad;

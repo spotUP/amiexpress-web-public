@@ -389,20 +389,40 @@ describe('narrowRow', () => {
 });
 
 describe('splitRow', () => {
-  it('yields plain halves, keeps every cell, drops an all-blank second half', () => {
+  // RE-PINNED 2026-09-06. Both of these tests were RECORDING THE BUG. `ART`'s
+  // fortieth column falls between the 'b' and the 'Y' of `bY sHADOW mAN`, and
+  // the two pins asserted exactly that: halves at `ART.slice(0, 40)` /
+  // `ART.slice(40)`, and `rows[0][39] === 'b'` with `rows[1][0] === 'Y'`. A
+  // word cut in half at the right-hand edge is indistinguishable from a
+  // terminal folding a row it could not hold, which is what the sysop reported
+  // on 2026-09-06 as "line wrap issues" and "rows fold". The break now moves
+  // back to the start of the word.
+  it('keeps every cell and never cuts through a word', () => {
     const r = splitRow(row(ART), 40);
-    expect(r.rows.length).toBe(2);
-    expect(r.rows.map(str)).toEqual([ART.slice(0, 40).replace(/ +$/, ''), ART.slice(40).replace(/ +$/, '')]);
+    expect(r.rows.map(str)).toEqual([
+      '|__|_____|_____|__| cOLORWALL v1.3 (w)',        // breaks BEFORE `bY`, not inside it
+      'bY sHADOW mAN/aFL `94 |__|_____|_____|__',
+      '|',
+    ]);
     expect(r.rows.flatMap(multiset).sort()).toEqual(multiset(row(ART)));
     expect(splitRow(row('x'.repeat(40)), 40).rows.length).toBe(1);
-    expect(r.map(45)).toEqual({ row: 1, x: 5 });
+    expect(r.map(45)).toEqual({ row: 1, x: 6 });
     expect(r.applied).toBe('split');
   });
 
-  it('carries no continuation glyph at column 39 - the halves are plain', () => {
+  it('marks a word too wide for any row instead of folding it silently', () => {
+    // The one case moving the break cannot solve: a 41-character word has no
+    // row it fits on. The house rule is that such a row degrades VISIBLY, so
+    // the break carries the mark and the word continues - no character is lost.
+    const r = splitRow(row('a'.repeat(41)), 40);
+    expect(r.rows.map(str)).toEqual(['a'.repeat(39) + TRUNCATION_MARK, 'aa']);
+    expect(str(r.rows[0]) + str(r.rows[1])).toContain('a'.repeat(39));
+  });
+
+  it('places no continuation glyph where the break is clean', () => {
     const r = splitRow(row(ART), 40);
-    expect(r.rows[0][39].ch).toBe(ART[39]);
-    expect(r.rows[1][0].ch).toBe(ART[40]);
+    expect(r.rows[0].map((c) => c.ch).join('')).not.toContain(TRUNCATION_MARK);
+    expect(r.rows[1][0].ch).toBe('b');
   });
 });
 
@@ -452,8 +472,20 @@ describe('rule invariants over a synthetic row corpus', () => {
 
   it.each(corpus)('gutter and split preserve the non-space multiset of %p; reflow preserves character order', (line) => {
     const src = row(line);
-    expect(gutterRow(src, 40).rows.flatMap(multiset).sort()).toEqual(multiset(src));
-    expect(splitRow(src, 40).rows.flatMap(multiset).sort()).toEqual(multiset(src));
+    // RE-PINNED 2026-09-06: `split` - and `gutter`, which falls through to it -
+    // may now add the truncation mark, and only that. It does so for exactly
+    // one row of this corpus, the 41-character word no 40-column row can hold,
+    // and the pin is that everything else is still there: the mark is an
+    // ADDITION, never a substitution for a character that was dropped.
+    const marks = (out: string[]) => out.filter((ch) => ch === TRUNCATION_MARK).length;
+    // A mark is spent only where a WORD - a run of alphanumerics, which is the
+    // predicate the rung itself uses - is too wide for any row. A 74-dash rule
+    // is not a word and is still cut wherever it falls.
+    const unmarkable = /[A-Za-z0-9]{41,}/.test(line) ? 1 : 0;
+    for (const produced of [gutterRow(src, 40).rows.flatMap(multiset).sort(), splitRow(src, 40).rows.flatMap(multiset).sort()]) {
+      expect(produced.filter((ch) => ch !== TRUNCATION_MARK)).toEqual(multiset(src).filter((ch) => ch !== TRUNCATION_MARK));
+      expect(marks(produced)).toBe(marks(multiset(src)) + unmarkable);
+    }
     // Reflow deletes the whitespace it breaks on and hard-breaks an over-long
     // word, so the pinned invariant is the non-space character SEQUENCE:
     // nothing dropped, nothing reordered.
@@ -707,12 +739,17 @@ describe('record', () => {
     const entry = row('|Right on, great door archive!'.padEnd(59, ' ') + '-Karyn Roberts\u00a6TAU|');
     expect(chooseRule(entry, 40)).toBe('record');
     const out = applyRule('record', entry, 40);
+    // RE-PINNED 2026-09-06: the wall's box is DROPPED. This pin used to hold
+    // `|Right on...` on the first row and `...\u00a6TAU|` on the second, which is
+    // the sysop's "the blue pipes are cut off in gwall": half a box on every
+    // wrapped comment, a left pipe with no right and then a right with no left.
     expect(out.rows.map(str)).toEqual([
-      '|Right on, great door archive!',
-      '                     -Karyn Roberts\u00a6TAU|',
+      'Right on, great door archive!',
+      '                      -Karyn Roberts\u00a6TAU',
     ]);
     // the handle survives whole, flush against column 40
-    expect(str(out.rows[out.rows.length - 1]).endsWith('-Karyn Roberts\u00a6TAU|')).toBe(true);
+    expect(str(out.rows[out.rows.length - 1]).endsWith('-Karyn Roberts\u00a6TAU')).toBe(true);
+    expect(out.rows[out.rows.length - 1][39].ch).toBe('U');
     // ...and a one-word handle on the same wall is unchanged by the relaxation
     expect(chooseRule(row('|dS!'.padEnd(65, ' ') + '-orlingo\u00a6M\u0009|'), 40)).toBe('record');
   });

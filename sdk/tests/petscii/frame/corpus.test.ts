@@ -14,7 +14,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { FrameReconstructor } from '../../../petscii/frame/ansi-screen';
-import { adaptRows, adaptFrame, applyRule, chooseRule, recordFields } from '../../../petscii/frame/adapt';
+import { adaptRows, adaptFrame, applyRule, chooseRule, recordFields, TRUNCATION_MARK, type AdaptRule } from '../../../petscii/frame/adapt';
 import { renderDiff } from '../../../petscii/frame/frame-render';
 import { Cell, Cursor, Frame, isBlank } from '../../../petscii/frame/types';
 import { columnParts, contentWidth, isRuleRow } from '../../../petscii/frame/classify';
@@ -63,6 +63,15 @@ interface ManifestEntry {
    * survive only as fixtures.
    */
   installed?: string | string[];
+  /**
+   * A fixture whose door WAS marked and is not any more, with the reason. The
+   * capture stays - it is still a real 68K screen and still measures the
+   * ladder - but `Commands/BBSCmd/<CMD>.info` must NOT carry C64_ADAPT, which
+   * is asserted below against the real bytes exactly as a mark is. Without
+   * this the two states a registration can be in would not both be pinned, and
+   * a withdrawn mark could quietly come back.
+   */
+  withdrawn?: { command: string; reason: string };
   /**
    * Golden fixtures (`<id>.txt`) only. A door-corpus integration golden is
    * 8-bit door output with the ESC sequences already stripped, so it is read
@@ -228,6 +237,15 @@ for (const [id, entry] of Object.entries(manifest)) {
         expect(entry.harness).toContain('--doortype ');
         expect(entry.harness).toContain(`--command ${installedOf(entry)[0]}`);
         expect(entry.cwd).toEqual('web/backend');
+      } else if (entry.withdrawn) {
+        // A WITHDRAWN mark: still a real harness capture of a door that is
+        // still on the board, so the same shape checks apply - but nothing
+        // here claims a registration, and the withdrawal itself is pinned by
+        // the test below.
+        expect(entry.harness).toContain('run-amiga-door.ts');
+        expect(entry.harness).toContain('--doortype ');
+        expect(entry.cwd).toEqual('web/backend');
+        expect(entry.withdrawn.reason.length).toBeGreaterThan(40);
       } else {
         expect(entry.harness).toContain('--doortype XIM');
         expect(entry.harness).toContain('--timeout 25');
@@ -264,6 +282,25 @@ for (const [id, entry] of Object.entries(manifest)) {
       },
     );
 
+    /**
+     * The other half of the same invariant: a WITHDRAWN mark is withdrawn in
+     * the real bytes. `Olm` was marked on 2026-09-06 and unmarked the same day
+     * once the sysop had driven it - see the entry's `withdrawn` text for why -
+     * and a fixture that says so must not sit beside an .info that still opens
+     * the door at 40 columns.
+     */
+    (entry.withdrawn ? it : it.skip)('has no C64_ADAPT left in the registration it withdrew', () => {
+      const repo = path.resolve(__dirname, '../../../..');
+      const command = (entry.withdrawn as { command: string }).command;
+      const infoPath = path.join(repo, 'Commands/BBSCmd', `${command}.info`);
+      expect({ id, command, exists: fs.existsSync(infoPath) }).toEqual({ id, command, exists: true });
+      const infoBytes = fs.readFileSync(infoPath).toString('latin1');
+      expect({ id, command, marked: /C64_ADAPT/.test(infoBytes) }).toEqual({ id, command, marked: false });
+      // the door itself is still installed - the withdrawal is of the MARK,
+      // not of the door
+      expect({ id, binary: fs.existsSync(path.join(repo, entry.binary)) }).toEqual({ id, binary: true });
+    });
+
     it('is a real capture: raw ANSI with content', () => {
       expect(ansi.length).toBeGreaterThan(150);
       // A harness capture is raw ANSI; a door-corpus golden has its ESC
@@ -276,6 +313,85 @@ for (const [id, entry] of Object.entries(manifest)) {
     it('every adapted row of every frame is exactly 40 cells', () => {
       for (const f of frames) for (const r of adaptRows(f).rows) {
         expect({ source: r.source, rule: r.rule, cells: r.cells.length }).toEqual({ source: r.source, rule: r.rule, cells: COLS });
+      }
+    });
+
+    /**
+     * THE WIDTH INVARIANT, over every frame and every rule.
+     *
+     * "No row a C64 caller sees is wider than the screen." The test above says
+     * a row is exactly `COLS` CELLS; this one says its printable content never
+     * runs past the last of them, and - the part that guards the future - it
+     * says so for EVERY rule applied to EVERY source row, not only the rule
+     * `chooseRule` happened to pick. `applyRule` is the one choke point every
+     * rung's output passes through (`fitRow`), so a rung added tomorrow that
+     * builds a row wider than the screen is caught here whether or not any
+     * fixture routes to it today.
+     *
+     * The row that reaches the caller is measured too, through `adaptFrame`,
+     * because that - and not `adaptRows` - is what the emitter renders.
+     */
+    it('no row a C64 caller sees is wider than the screen, under any rule', () => {
+      const rules: AdaptRule[] = ['crop', 'deindent', 'gutter', 'narrow', 'prose', 'record', 'repeat', 'reflow', 'split', 'stat'];
+      for (const f of frames) {
+        for (const r of adaptRows(f).rows) {
+          expect({ source: r.source, rule: r.rule, width: contentWidth(r.cells) <= COLS })
+            .toEqual({ source: r.source, rule: r.rule, width: true });
+        }
+        for (const r of adaptFrame(f, { cols: COLS, rows: ROWS }).cells) {
+          expect(contentWidth(r)).toBeLessThanOrEqual(COLS);
+        }
+        for (let y = 0; y < f.rows; y++) {
+          for (const rule of rules) {
+            for (const out of applyRule(rule, f.cells[y], COLS).rows) {
+              expect({ y, rule, cells: out.length, width: contentWidth(out) <= COLS })
+                .toEqual({ y, rule, cells: COLS, width: true });
+            }
+          }
+        }
+      }
+    });
+
+    /**
+     * THE FOLD INVARIANT, over every frame.
+     *
+     * "No word a C64 caller reads is cut in half by the edge of the screen."
+     * This is the sysop's 2026-09-06 report stated as a property. A row
+     * boundary the adapter created FOLDS when the last column of one row and
+     * the first column of the next carry two alphanumerics that were adjacent
+     * in the source row - which is exactly what a terminal wrapping an
+     * over-wide row looks like, and exactly what `splitRow`'s blind cut at
+     * every multiple of 40 was doing: 103 such boundaries over 7 distinct
+     * source rows before the fix, including `WarOLM`'s `.-(·LOCATIO` / `N·)`.
+     *
+     * The one break the invariant permits is a MARKED one: a word wider than
+     * the screen has no row it fits on, so the break carries `TRUNCATION_MARK`
+     * and the reader is told. Visible degradation is the house rule; a silent
+     * fold is the defect.
+     */
+    it('no word a C64 caller reads is cut in half by the edge of the screen', () => {
+      const alnum = (ch: string) => /[A-Za-z0-9]/.test(ch);
+      for (const f of frames) {
+        const rows = adaptRows(f).rows;
+        for (let i = 0; i + 1 < rows.length; i++) {
+          const here = rows[i];
+          const next = rows[i + 1];
+          if (next.source !== here.source) continue;
+          const end = contentWidth(here.cells);
+          if (end !== COLS) continue;
+          const last = here.cells[COLS - 1].ch;
+          if (last === TRUNCATION_MARK) continue;              // marked, so not silent
+          const startAt = next.cells.findIndex((c) => !isBlank(c));
+          if (startAt !== 0) continue;
+          const first = next.cells[0].ch;
+          if (!alnum(last) || !alnum(first)) continue;
+          // Adjacent in the SOURCE row is what makes it a fold rather than a
+          // wrap: a word wrapper consumes the blank it broke on, so the two
+          // glyphs it leaves either side of the break were never neighbours.
+          const source = text(f.cells[here.source]);
+          expect({ rule: here.rule, source: here.source, fold: `${last}|${first}`, adjacent: source.includes(last + first) })
+            .toEqual({ rule: here.rule, source: here.source, fold: `${last}|${first}`, adjacent: false });
+        }
       }
     });
 
@@ -370,13 +486,33 @@ for (const [id, entry] of Object.entries(manifest)) {
               expect({ ...where, contentCut, unspent }).toEqual({ ...where, contentCut, unspent: [] });
             }
           } else {
-            // reflow: no character lost or reordered, whatever the wrap did
-            // with the whitespace it broke on.
-            expect({ ...where, chars: squeeze(text(joined)) }).toEqual({ ...where, chars: squeeze(text(src)) });
+            // reflow/record/split/gutter: no character lost or reordered,
+            // whatever the wrap did with the whitespace it broke on.
+            //
+            // `record` drops ONE thing besides the blanks, and only since
+            // 2026-09-06: the pair of '|' cells enclosing a BOXED record
+            // (`|message ... -handle|`). That is the same border `narrow`,
+            // `stat` and `prose` have always dropped, and keeping it was the
+            // sysop's "the blue pipes are cut off in gwall" - the closing pipe
+            // rode the right-hand field onto whichever row carried the field
+            // and the opening pipe rode the message, so a wrapped comment came
+            // out with half a box. The border is recognised here the way the
+            // rung recognises it, from the row itself and not by importing the
+            // rung's own predicate: first and last non-blank cells both '|',
+            // with no '|' between them.
+            const bare = squeeze(text(src));
+            const boxed = rule === 'record' && /^\|[^|]*\|$/.test(bare) && bare.length > 2;
+            const expected = boxed ? bare.slice(1, -1) : bare;
+            expect({ ...where, chars: squeeze(text(joined)) }).toEqual({ ...where, chars: expected });
             // ...and when no source word is wider than the screen (nothing was
             // hard-split), the word LIST across the produced rows is identical.
             if (words(text(src)).every((w) => w.length <= COLS)) {
-              expect({ ...where, words: words(rowsText(out)) }).toEqual({ ...where, words: words(text(src)) });
+              // The dropped border is a word of its own when the door padded it
+              // away from the text (`| Upload Activities ... |`) and part of
+              // the first/last word when it did not (`|This site ... ¦WWW|`).
+              const srcWords = words(boxed ? text(src).replace(/\|/g, ' ') : text(src));
+              const wanted = srcWords;
+              expect({ ...where, words: words(rowsText(out)) }).toEqual({ ...where, words: wanted });
             }
           }
         }
@@ -538,8 +674,69 @@ const EXPECTED_ROWS: Record<string, number> = {
   // credits row and the '=' placeholder runs of the two node-00 variants - the
   // marks land on decoration, not on a node. 23 of the 29 are painted, so the
   // whole door fits one page.
-  olm: 29,
+  //
+  // RE-PINNED 29 -> 30 on 2026-09-06, and the extra row is the point of the
+  // change rather than a cost of it. `olm`'s node-table header,
+  // `÷----.-(·USER·)----------.-(·LOCATION·)------------.-(·ACTION·)-------÷`,
+  // was being cut at column 40 - between the 'O' and the 'N' of LOCATION - and
+  // the sysop read that as "the header box is broken". `splitRow` now moves
+  // the break to the start of the word, which costs the row. Rows are the
+  // currency the ladder spends on content; a word cut in half is not content.
+  olm: 30,
 };
+
+/**
+ * GWALL, named the way the sysop names it: "the global wall's BBS tag does not
+ * push the row off the edge."
+ *
+ * Every comment on the Global Thermonuclear Wall is
+ * `|<what someone wrote>   -<handle>\u00a6<BBS>|` - a border, a message, and TWO
+ * right-hand fields, the handle and the three-letter board acronym. The tag is
+ * the field that made this worth a test of its own: it is the last thing on the
+ * row, so anything the ladder fails to fit falls off THERE, and his screenshot
+ * of 2026-09-06 showed exactly that - `-stR//tOS!\u00a6MtI|` hard against the edge
+ * with the closing pipe clipped, and the opening pipe missing from the rows
+ * below it.
+ *
+ * What is asserted, over every frame the capture passes through: the handle AND
+ * the tag reach the caller WHOLE and TOGETHER, ending flush against the last
+ * column, and no row carries half a box.
+ */
+describe("the global wall's BBS tag does not push the row off the edge", () => {
+  const frames = framesOf(fixtureText('gwall', manifest.gwall));
+  /** `-<handle>\u00a6<BBS>` at the end of a wall comment, inside the box. */
+  const TAGGED = /-[^|\u00a6]+\u00a6[^|\u00a6]+$/;
+
+  it('keeps every handle and its board acronym whole, flush against column 40', () => {
+    let checked = 0;
+    frames.forEach((f, fi) => {
+      const rows = adaptRows(f, { cols: COLS }).rows;
+      for (let y = 0; y < f.rows; y++) {
+        const src = text(f.cells[y]).trimEnd();
+        if (!src.startsWith('|') || !src.endsWith('|')) continue;
+        const inner = src.slice(1, -1);
+        const tag = inner.match(TAGGED);
+        if (!tag) continue;
+        checked++;
+        const out = rows.filter((r) => r.source === y);
+        const last = out[out.length - 1];
+        const painted = text(last.cells).trimEnd();
+        // whole, together, and the last character of the row
+        expect({ fi, y, tail: painted.slice(-tag[0].length) }).toEqual({ fi, y, tail: tag[0] });
+        expect({ fi, y, flush: contentWidth(last.cells) }).toEqual({ fi, y, flush: COLS });
+        // no half a box: the wall's border is decoration and is dropped from
+        // EVERY row of the record, not from some of them.
+        for (const r of out) {
+          const line = text(r.cells).trimEnd();
+          expect({ fi, y, border: line.startsWith('|') || line.endsWith('|') }).toEqual({ fi, y, border: false });
+        }
+      }
+    });
+    // the capture really does carry wall comments - a regex that matched
+    // nothing would make every assertion above vacuous
+    expect(checked).toBeGreaterThan(20);
+  });
+});
 
 function lastFrameOf(id: string): Frame {
   const frames = framesOf(fixtureText(id, manifest[id]));

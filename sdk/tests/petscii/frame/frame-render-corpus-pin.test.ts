@@ -86,6 +86,46 @@ interface Pin {
  * (`Kickstart.......: 3>`, `Sysop Name...: Sys>`, `Directory 2: > 650450 Bytes
  * >`); each is now two complete rows. The other 20 hashes are untouched.
  *
+ * THREE were RE-MEASURED for the second half of the same report, "the blue
+ * pipes are cut off in gwall": `recordFields` now drops the pair of '|' cells
+ * enclosing a BOXED record, the same border `narrow`, `stat` and `prose` have
+ * always dropped. Named by measurement before a hash was touched - `gwall`,
+ * `six_status` and `what` are the only fixtures with such a row - and each
+ * loses exactly two glyphs of decoration per record row while GAINING two
+ * columns for the caller's own words: `gwall`'s longest comment, `Thanks to Up
+ * Rough for creating the repo`, now fits one row where it needed two. No
+ * fixture's adapted row count changes. The guard against reading a multi-cell
+ * box row this way (`kd_confstats`, `ulist`) is measured in `recordFields`.
+ *
+ * EIGHT were RE-MEASURED for the sysop's 2026-09-06 folding report, and the
+ * eight were named by measurement before a single hash was touched.
+ *
+ * TWO of them - `ctop` and `kd_confstats` - are the ladder asking `stat` before
+ * `record` (adapt.ts `chooseRule`). Every row of every frame of all 29 fixtures
+ * was run through `chooseRule` before and after: exactly two source rows change
+ * rung, and both are rows where `record` had chosen a run of blanks INSIDE a
+ * bracketed value as its separator and reflowed the label across the row
+ * boundary. `ctop` reads `Total Uploaded Files: [ 0 ]` / `Total Uploaded Bytes:
+ * [ 0 ]` where it read `... ]   Total` / `Uploaded Bytes: [        0 ]`;
+ * `kd_confstats` reads `Board Name...: AmiExpress-Web` / `Task Priority...:
+ * ________` where the second row began with a stranded `          | `. Both
+ * fixtures lose bytes because a squeezed row is shorter, not because a
+ * character was dropped.
+ *
+ * SIX are `splitRow` no longer cutting through a word: `olm`, `ratiorep`,
+ * `six_status`, `super_stats`, `ustats` and `who`. Named the same way - the
+ * whole corpus was walked for row boundaries that put an alphanumeric at
+ * column 39 and its own successor at column 0 of the next row, which found 103
+ * such boundaries over 7 distinct source rows, and after the change it finds
+ * none. Every changed row keeps every character: `who` reads `GfX by Byteandi`
+ * where it read `G` / `fX by Byteandi`, `ratiorep` `Captain Caveman` where it
+ * read `Cap` / `tain Caveman`, `super_stats` `[Unregistered!]`, `ustats`
+ * `BOHEMiaN/FTU` and its phone number, and `olm` `.-(·LOCATION·)` where the
+ * sysop saw `.-(·LOCATIO` / `N·)` - his "the header box is broken". `olm`
+ * spends one adapted row on that (29 -> 30) and so shows one fewer masthead
+ * row, which is why its byte count falls; `ratiorep` gains bytes. The other 21
+ * hashes are untouched.
+ *
  * `wall` and `dtagwall` were RE-MEASURED on 2026-09-06, and this is the one
  * kind of re-measurement the rule above allows: the ladder gained a rung
  * (`record`, adapt.ts), so the FRAMES changed by design and renderDiff faithfully
@@ -100,16 +140,16 @@ interface Pin {
  */
 const PINS: Record<string, Pin> = {
   aehelp: { renders: 21, bytes: 11883, sha256: 'af1abce9f143fff0ac3f81bab2f8ace2e3185fa24c2a417bf5c1b2ff3204d659' },
-  six_status: { renders: 23, bytes: 18434, sha256: 'ea04de48389e1bd1f2975bcc2bf7d0153b458f765c8e4f3811cd5774a593896e' },
-  kd_confstats: { renders: 29, bytes: 24370, sha256: '5d8b1a4fc896e45b965eeea390e1adf1f7c8c67b61294e0fc846148a9ae8d930' },
+  six_status: { renders: 23, bytes: 18176, sha256: '61af6dafacf0aba411707dc7cbbc9131878a59b3a6d01dc6fea40342a41280b5' },
+  kd_confstats: { renders: 29, bytes: 24221, sha256: '5dd38a08afccbc632cfe41cd92e10fd2244a0892a482e4d81b40603007ac695a' },
   color_wall: { renders: 30, bytes: 9786, sha256: '4195cfcc3c36fcd345696af0f021d283381a047db502d7f0980932ac65bd5b28' },
-  who: { renders: 6, bytes: 906, sha256: '49802e5fc0cae0a1723e418fa4197b82665e23e1bb2e16875b54580837d90cc8' },
-  ratiorep: { renders: 10, bytes: 2910, sha256: '53db616b0045b7afdfe5ecb247ccfd64663b1ca600c54548d49c524c498a0cc8' },
-  super_stats: { renders: 21, bytes: 10385, sha256: '0b3788be627f7a435680d9decfd434011b8367b2dbb5e7d7f687cbd04660ebd6' },
+  who: { renders: 6, bytes: 875, sha256: '0dd4a5c3c4df233caa23321afa048833fab577bd9dd914735b5f0fbbf6457643' },
+  ratiorep: { renders: 10, bytes: 2930, sha256: '23532d3965f685894e081c83854ac1668c99d7f43282bcfae8d9165f452a31e8' },
+  super_stats: { renders: 21, bytes: 10315, sha256: '3369da21e831138c23dedfe41665ea642cdc6aa4197ee50bffca22f3742f2eef' },
   hststat: { renders: 12, bytes: 2484, sha256: '0746281e3871a50468228989d86b0ca69dbea5b7c3c9faaa90bb9d4a60485b2c' },
   rtw: { renders: 69, bytes: 143975, sha256: '3cb53e6eeaf2ebca2ddfa1150cce30bee1e0b7235a3e4cba6aa577b8af629ed9' },
-  ustats: { renders: 217, bytes: 289249, sha256: 'b949a6d27a116714e7f0d9de40d025f0fbe7df10a701629cea416d45a23df28a' },
-  what: { renders: 13, bytes: 3736, sha256: '845215cdb700a0de47901f4dacbd3985a286432f9f3e007a8fa04b7940e54237' },
+  ustats: { renders: 217, bytes: 287701, sha256: '5a084d2f207ff792fc329a472d287f958a1b5074930d27a155eae14a4115a60a' },
+  what: { renders: 13, bytes: 3581, sha256: '51c81e728a9d1304aed398510fad03bca0079497188882ff7977242f2251cdee' },
   b: { renders: 17, bytes: 10269, sha256: '1914422b391657000fde0ad5e71e69d37b7d89704c92e2b88d73834d26ff5eeb' },
   j: { renders: 39, bytes: 7195, sha256: 'aa3db3f50277a2eb56a0cfc3a230847c9ae9eefd679bcda0cc4ab8dba5772bd8' },
   doorrepo: { renders: 22, bytes: 12062, sha256: '5b563469b13ca9e76856a621d5aca463e4f5e7217db4da94049a864db4d7375a' },
@@ -122,13 +162,13 @@ const PINS: Record<string, Pin> = {
   dtagwall: { renders: 26, bytes: 6112, sha256: 'cf637615bc8d5935c8a9a56a3a9e1251c1c164bc20c836c105589f6265183a34' },
   avhbc: { renders: 6, bytes: 373, sha256: 'f83aad48906dfa640bfe4372866394b973c5ce94bab6cec9d7815865423ea0c6' },
   // First measurement of a new input, frozen from here on under the rule above.
-  gwall: { renders: 22, bytes: 9832, sha256: '7d1f1cb1d7c6f8e96f1054a620d5b887864695afe77a66ee89f6e75a3039c5b4' },
+  gwall: { renders: 22, bytes: 8921, sha256: '39c384ff1bf1e4338df8824c76aca9afa3f9e167b994a701e30e99ddb484c8dc' },
   hackcheck: { renders: 12, bytes: 1624, sha256: 'aa25e1dfa09db75b8b854410bc0e0831f89741e4c777805ac0f64e264cdecc3a' },
-  ctop: { renders: 25, bytes: 8983, sha256: 'bbadac75ff602ada72dc70f0469afbeafb521a88dcb64620372ad4b67b784223' },
+  ctop: { renders: 25, bytes: 8496, sha256: 'd0132c864ed0360f25d549dda45f2991936b7fe715093c5fed239005150d8dd8' },
   conftop: { renders: 22, bytes: 9137, sha256: 'a87497003d9779c8031cf2fb4bbb609bd83cae277e64bac5805f37713f2ba171' },
   sysinfo: { renders: 22, bytes: 5732, sha256: 'b52efd325c043e34026c5728d930cf40b5ac8d956758959a502cafadd003b7a0' },
   games: { renders: 21, bytes: 18770, sha256: 'bc8ebf20627f33003f02090eace28e87af4f10c782fc71cd941804aa3510715f' },
-  olm: { renders: 32, bytes: 10419, sha256: 'e762151bf15e60b3059f6676870e2f68dcc6721660d66df95222fe0c45cbc8fe' },
+  olm: { renders: 32, bytes: 9782, sha256: 'c2c4df72eee434d44a16df1144235f50594811384a3e952e58e5a29f7dacccf0' },
 };
 
 function renderChain(id: string): Pin {

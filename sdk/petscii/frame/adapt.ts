@@ -16,8 +16,10 @@
  *   reflow    word wrap, attributes travel with their cell
  *   split     plain halves, blank second half dropped
  *
- * Ladder order: crop -> deindent -> record -> repeat -> stat -> prose -> narrow ->
- * reflow/split. `narrow` exists
+ * Ladder order: crop -> deindent -> repeat -> stat -> record -> prose -> narrow ->
+ * reflow/split, and then EVERY rung's output through `fitRow` - the gate that
+ * makes "no row is wider than the caller's screen" a property of the adapter
+ * rather than one each rung has to remember. `narrow` exists
  * because splitting a TABLE in half puts its right-hand columns on a row of
  * their own with no header: that is how a 25-row door screen came out 34-46
  * rows and lost its title to tail-paging (rtw 46, ustats 35, what 34 before
@@ -73,7 +75,12 @@
  * `reflowRow == wrapLineToWidth` is pinned in
  * sdk/tests/petscii/frame/adapt.test.ts.
  *
- * Split halves are plain: no continuation glyph at column 39. A glyph there
+ * Split halves never cut through a word: the break moves back to the start of
+ * the word it would have severed, and a word too wide for any row is marked
+ * with '>' instead. That blind cut was the "folding" of the sysop's
+ * 2026-09-06 report - see `splitRow`.
+ *
+ * Split halves are otherwise plain: no continuation glyph at column 39. A glyph there
  * either displaces cell 39 onto a third row or drops a character, and both
  * break the invariants the corpus pins (every row <= cols, split keeps every
  * cell). A pack-level marker is Phase 4's call.
@@ -197,6 +204,33 @@ function classifiedRule(cells: Row): AdaptRule {
 export function chooseRule(cells: Row, cols: number): AdaptRule {
   if (isCroppable(cells, cols) || isCroppableRule(cells, cols)) return 'crop';
   if (contentWidth(cells) - indentOf(cells) <= cols) return 'deindent';
+  // BEFORE narrow, and only ever instead of it: a row of identical columns is
+  // decoration, and narrow would shorten every copy.
+  if (repeatRow(cells, cols) !== null) return 'repeat';
+  // BEFORE narrow, and only ever instead of it: on a `Label: value` row the
+  // widest column is the VALUE, so narrow shortens exactly the thing that
+  // cannot survive being shortened. See `statRow`.
+  //
+  // BEFORE `record` since 2026-09-06, which is the sysop's `ctop`/`conftop`
+  // report ("line wrap issues"). `recordFields` takes the LAST run of two or
+  // more blanks as the separator, and on
+  //   `Total Uploaded Files: [     0 ]   Total Uploaded Bytes: [       0 ]`
+  // that run is the padding INSIDE the second bracket - so the "field" it
+  // right-aligned was `0 ]`, the tail of the left field's own value, and the
+  // label `Total Uploaded Bytes:` was reflowed across the row boundary. The
+  // caller read `... ]   Total` / `Uploaded Bytes: [        0 ]`, which is a
+  // fold in everything but name.
+  //
+  // The order is the fix rather than a new guard inside `recordFields`
+  // because the two rungs really do both match this row, and the ladder's
+  // ORDER is where that is decided. `repeat` and `stat` NEVER split a unit
+  // across a row boundary (stat places whole columns or none); `record`
+  // reflows its left field and may break it mid-sentence. Where both match,
+  // the rung that cannot sever wins. Measured over every frame of all 29
+  // fixtures: exactly two source rows change rung, `ctop`/`conftop`'s totals
+  // row and `kd_confstats`' `Board Name...` row, both strictly better, and
+  // the adapted row count of every fixture is unchanged.
+  if (statRow(cells, cols) !== null) return 'stat';
   // BEFORE narrow since 2026-09-06. `narrowRow` matches any row with two or
   // more gutters, and a wall comment with two spaces in it has two gutters plus
   // the author's, so narrow used to answer first and shorten the caller's own
@@ -206,38 +240,96 @@ export function chooseRule(cells: Row, cols: number): AdaptRule {
   // this from eating real tables: a table's last column is prose (it contains a
   // blank) or decoration (no alphanumeric), and neither is a field.
   if (recordRow(cells, cols) !== null) return 'record';
-  // BEFORE narrow, and only ever instead of it: a row of identical columns is
-  // decoration, and narrow would shorten every copy.
-  if (repeatRow(cells, cols) !== null) return 'repeat';
-  // BEFORE narrow, and only ever instead of it: on a `Label: value` row the
-  // widest column is the VALUE, so narrow shortens exactly the thing that
-  // cannot survive being shortened. See `statRow`.
-  if (statRow(cells, cols) !== null) return 'stat';
   if (proseRow(cells, cols) !== null) return 'prose';
   if (narrowRow(cells, cols) !== null) return 'narrow';
   return classifiedRule(cells);
 }
 
+/**
+ * The cut is written out rather than left to `padRow`, which also cuts: this
+ * is the ONE rung whose contract is to drop a tail, and `fitRow` - the gate
+ * every rung's output passes through - must be able to tell that intended cut
+ * from a rung that accidentally built a row wider than the screen. After this
+ * slice no rung hands the gate an over-wide row, so the gate's truncation mark
+ * is spent only on a real defect.
+ */
 export function cropRow(cells: Row, cols: number): RuleResult {
   return {
-    rows: [padRow(cells, cols)],
+    rows: [padRow(cells.slice(0, cols), cols)],
     applied: 'crop',
     map: (x) => ({ row: 0, x: clampCol(cols, x) }),
   };
 }
 
+/**
+ * Plain halves - but NEVER through the middle of a word.
+ *
+ * This rung used to cut at every multiple of `cols` and nothing else, and that
+ * blind cut IS the "folding" of the sysop's 2026-09-06 report. Measured over
+ * every frame of all 29 fixtures, it severed a word at 103 row boundaries
+ * across 7 distinct source rows - `WarOLM`'s node-table header
+ * (`.-(·LOCATIO` / `N·)`, which is his "the header box is broken"), `who`'s
+ * credit line (`G` / `fX`), `ratiorep`'s (`Cap` / `tain`), `super_stats`'
+ * `[Unregiste` / `red!]`, `ustats`' `BOHEMia` / `N` and its board's phone
+ * number. A reader cannot tell such a break from a terminal wrapping a row it
+ * could not hold, which is exactly why it reads as a fault.
+ *
+ * A cut SEVERS when the characters either side of it are both alphanumeric.
+ * That predicate and not "both non-blank" is what keeps the rung off
+ * DECORATION: a rule of dashes, a run of box glyphs and a `... ) - © 1994`
+ * boundary carry no word to break, and backing away from them would spend a
+ * row and shear the picture (measured: it cost `doorrepo` its title row and
+ * `ulist` a user record, which is content, and rows are only ever spent on
+ * content).
+ *
+ * When the cut would sever, the break moves back to the START of the word,
+ * which is the smallest move that keeps the word whole. The one case that
+ * cannot be solved by moving is a word LONGER than the screen: there is no
+ * row it fits on, so the break is marked with `TRUNCATION_MARK` at the last
+ * column and the word continues on the next row. That is the house rule -
+ * a row that cannot fit degrades VISIBLY - and it costs no row: the character
+ * the mark stands in front of is carried over, not dropped.
+ */
 export function splitRow(cells: Row, cols: number): RuleResult {
+  const width = contentWidth(cells);
+  const alnum = (c: Readonly<Cell>) => /[A-Za-z0-9]/.test(c.ch);
+  const severs = (k: number) => k > 0 && k < width && alnum(cells[k - 1]) && alnum(cells[k]);
   const rows: Cell[][] = [];
-  for (let start = 0; start < cells.length; start += cols) rows.push(padRow(cells.slice(start, start + cols), cols));
+  const where: Array<RuleCursor | undefined> = new Array(cells.length);
+  let start = 0;
+  while (start < width) {
+    let end = Math.min(width, start + cols);
+    let marked = false;
+    if (severs(end)) {
+      let wordStart = end;
+      while (wordStart > start && alnum(cells[wordStart - 1])) wordStart--;
+      let wordEnd = end;
+      while (wordEnd < width && alnum(cells[wordEnd])) wordEnd++;
+      // Move back to the word, but only when the word can live on a row of its
+      // own; a word wider than the screen has no such row and is marked.
+      if (wordStart > start && wordEnd - wordStart <= cols) end = wordStart;
+      else { end = start + cols - 1; marked = true; }
+    }
+    const chunk = cells.slice(start, end).map(cloneCell);
+    for (let x = start; x < end; x++) where[x] = { row: rows.length, x: x - start };
+    if (marked) chunk.push({ ...cloneCell(cells[end]), ch: TRUNCATION_MARK });
+    rows.push(padRow(chunk, cols));
+    start = end;
+  }
   if (rows.length === 0) rows.push(padRow([], cols));
   while (rows.length > 1 && rows[rows.length - 1].every(isBlank)) rows.pop();
+  // Total map over 0..cells.length-1: a source column the trailing-blank drop
+  // took away answers with the last position a kept column reached.
+  let previous: RuleCursor = { row: 0, x: 0 };
+  for (let k = 0; k < where.length; k++) {
+    const at = where[k];
+    if (at && at.row < rows.length) previous = at;
+    where[k] = previous;
+  }
   return {
     rows,
     applied: 'split',
-    map: (x) => {
-      const i = clampIndex(cells, x);
-      return { row: Math.min(rows.length - 1, Math.floor(i / cols)), x: i % cols };
-    },
+    map: (x) => where[clampIndex(cells, x)] as RuleCursor,
   };
 }
 
@@ -556,9 +648,32 @@ const hasBlank = (cells: Row, [a, b]: [number, number]) => {
  *   agrees with, instead of on a tuned constant.
  */
 export function recordFields(cells: Row, cols: number): RecordFields | null {
-  const width = contentWidth(cells);
-  if (width === 0) return null;
-  const indent = indentOf(cells);
+  const full = contentWidth(cells);
+  if (full === 0) return null;
+  const lead = indentOf(cells);
+  // A BOXED record: `|message ... -handle|`. The border is DECORATION and the
+  // rung must drop it, the way `narrow`, `stat` and `prose` already drop the
+  // border of a bordered row (`columnSpans`). Keeping it was the sysop's
+  // 2026-09-06 GWALL report, "the blue pipes are cut off": the closing pipe
+  // travelled with the right-hand field, so it landed flush at column 40 on
+  // the row that carried the field and NOWHERE on the rows above, while the
+  // opening pipe rode the message and so appeared on the first row only. Every
+  // wrapped comment came out with half a box - a left pipe with no right, then
+  // a right pipe with no left. Dropping it is also two more columns for the
+  // caller's own words, which is the trade the house rule asks for.
+  //
+  // Only when the border encloses ONE cell. A row with an interior '|' is a
+  // multi-cell box row (`kd_confstats`' `| User...: Sysop | Files Up..: 0 |`,
+  // `ulist`'s two-option footer), and reading it as one message plus a field
+  // reflows a column boundary into the middle of a sentence - measured, and it
+  // took `kd_confstats` from 32 adapted rows to 38 of nonsense. With the guard,
+  // exactly three fixtures change and no fixture changes row count.
+  let interior = false;
+  for (let x = lead + 1; x < full - 1; x++) if (cells[x].ch === '|') { interior = true; break; }
+  const bordered = cells[lead].ch === '|' && cells[full - 1].ch === '|' && lead < full - 1 && !interior;
+  const indent = bordered ? lead + 1 : lead;
+  const width = bordered ? full - 1 : full;
+  if (width <= indent) return null;
   const runs: Array<[number, number]> = [];
   for (let x = indent; x < width; x++) {
     if (!isBlank(cells[x])) continue;
@@ -920,7 +1035,42 @@ export function proseRow(cells: Row, cols: number): RuleResult | null {
   };
 }
 
+/**
+ * THE GATE. Every rung's output passes through here on its way to `adaptRows`,
+ * `adaptFrame` and the emitter's paged window, so no path can skip it and no
+ * future rung can reintroduce the failure it guards.
+ *
+ * WHAT IT GUARANTEES: no row the adapter emits is wider than the caller's
+ * screen. A row that arrives wider is cut to `cols` with `TRUNCATION_MARK` in
+ * the last column - VISIBLE degradation, never a silent fold and never the
+ * silent cut the shared `padRow` was performing on eleven separate call sites.
+ *
+ * WHAT IT IS NOT: the fix for the sysop's 2026-09-06 report. That was measured
+ * first, and the bytes refused the theory: over every frame of all 29 corpus
+ * fixtures the ONLY rows any rung built wider than 40 columns were `crop`'s,
+ * whose contract is to drop the tail, and `cropRow` now performs that cut
+ * itself. This gate therefore fires on nothing today. It exists because the
+ * guarantee was previously spread across eleven `padRow` calls - a property
+ * every rung had to remember rather than one the adapter has - and because a
+ * rung that forgets it hands the caller a row the C64 terminal folds, with
+ * nothing in the pipeline to say so. `corpus.test.ts` asserts the property
+ * over every frame of every fixture; this makes it structural as well.
+ */
+export function fitRow(cells: Cell[], cols: number): Cell[] {
+  if (cells.length <= cols) return cells;
+  const out = cells.slice(0, cols);
+  out[cols - 1] = { ...cloneCell(cells[cols - 1]), ch: TRUNCATION_MARK };
+  return out;
+}
+
 export function applyRule(rule: AdaptRule, cells: Row, cols: number): RuleResult {
+  const result = applyRuleUnfitted(rule, cells, cols);
+  return result.rows.every((r) => r.length <= cols)
+    ? result
+    : { ...result, rows: result.rows.map((r) => fitRow(r, cols)) };
+}
+
+function applyRuleUnfitted(rule: AdaptRule, cells: Row, cols: number): RuleResult {
   switch (rule) {
     case 'crop': return cropRow(cells, cols);
     case 'deindent': return deindentRow(cells, cols);
