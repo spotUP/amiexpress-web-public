@@ -56,6 +56,9 @@ const ENV_DIR = '/tmp/ram/ENV';
 const ENV_COPY = path.join(ENV_DIR, 'GWall.cfg');
 const ARCHIVE = path.join(REPO_ROOT, 'System', 'Prefs', 'Env-Archive');
 const ARCHIVE_COPY = path.join(ARCHIVE, 'GWall.cfg');
+/** The door's own directory, and the server config that belongs in it. */
+const DOOR_DIR = path.join(REPO_ROOT, 'Doors', 'GWall');
+const DOOR_CONFIG = path.join(DOOR_DIR, 'GWALL.cfg');
 /** What the archive write used to become. Must never come back. */
 const STRAY = path.join(REPO_ROOT, 'gwall.cfg');
 const STRAY_CASED = path.join(REPO_ROOT, 'GWall.cfg');
@@ -68,8 +71,20 @@ const runnable =
   fs.existsSync(GWALL) && fs.existsSync(GLCVIEWER) && fs.existsSync(HARNESS) && fs.existsSync(TSX);
 const describeMaybe = runnable ? describe : describe.skip;
 
-/** One door, one emulator, serial. */
-function runDoor(binary: string, command: string, timeoutS: number): string {
+/**
+ * One door, one emulator, serial.
+ *
+ * stderr matters as much as stdout here: the harness sends every console.*
+ * there, so the emulator's own path resolution and bsdsocket logs are the
+ * record of which file the door opened and which host, port and timeout it
+ * then used. Asserting on those is the difference between reading a config
+ * file and proving the door read it.
+ */
+function runDoorCapturingBoth(
+  binary: string,
+  command: string,
+  timeoutS: number,
+): { stdout: string; stderr: string } {
   const result = spawnSync(
     TSX,
     [HARNESS, binary, '1', '--doortype', 'XIM', '--command', command, '--timeout', String(timeoutS)],
@@ -82,7 +97,11 @@ function runDoor(binary: string, command: string, timeoutS: number): string {
       maxBuffer: 32 * 1024 * 1024,
     },
   );
-  return result.stdout || '';
+  return { stdout: result.stdout || '', stderr: result.stderr || '' };
+}
+
+function runDoor(binary: string, command: string, timeoutS: number): string {
+  return runDoorCapturingBoth(binary, command, timeoutS).stdout;
 }
 
 const read = (p: string): string | null => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null);
@@ -116,6 +135,87 @@ describeMaybe('GWall and the BBS acronym', () => {
       fs.rmSync(ARCHIVE, { recursive: true, force: true });
     }
   });
+
+  /**
+   * THE SECOND HALF OF THE SAME BUG, repaired as data on 2026-09-06.
+   *
+   * The emulated filesystem resolves case-insensitively, so the settings blob
+   * the broken fallback dropped as "gwall.cfg" was ALSO what
+   * `parseConfigFile('PROGDIR:GWALL.cfg')` (gwall.e:212) opened. GWall's real
+   * server config was gone, and parseConfigFile ignores every line without an
+   * "=", so the door silently fell back to its compiled defaults: measured
+   * before the repair, `WaitSelect(nfds=1, timeout=10000ms)` from
+   * `DEF timeout=10` (gwall.e:73) instead of the config's TIMEOUT=5.
+   *
+   * The repair: GWALL.cfg restored byte-for-byte from
+   * `Documentation/7-Reference Sources/AmiXDoors-master/Global Wall/GWALL.cfg`,
+   * the acronym the stray held moved to the ENVARC: file the door reads back,
+   * and the stray deleted.
+   */
+  it('keeps the server config beside the door, with no settings file wearing its name', () => {
+    // readdirSync, not existsSync: the Mac this repo is edited on has a
+    // case-insensitive filesystem, where existsSync('gwall.cfg') answers TRUE
+    // for GWALL.cfg. Exact names are the only honest question, and two files
+    // differing only in case is how this went wrong the first time.
+    const names = fs.readdirSync(DOOR_DIR);
+    expect(names).toContain('GWALL.cfg');
+    expect(names).not.toContain('gwall.cfg');
+
+    const cfg = fs.readFileSync(DOOR_CONFIG, 'latin1');
+    expect(cfg).toContain('SERVERHOST=scenewall.bbs.io');
+    expect(cfg).toContain('SERVERPORT=1541');
+    expect(cfg).toContain('TIMEOUT=5');
+    // Not the door's own saved settings, whose first line is the style number.
+    expect(cfg).not.toMatch(/^\d+\n/);
+  });
+
+  it('comes back from the committed env archive after a deploy wipes ENV:', () => {
+    // The archive is TRACKED, so a container that has just thrown away its
+    // writable layer still has it before the door runs for the first time.
+    // savedArchive is those bytes, read in beforeAll ahead of any case.
+    expect(savedArchive).not.toBeNull();
+    expect(savedArchive).toContain('UPT');
+    fs.mkdirSync(ARCHIVE, { recursive: true });
+    fs.writeFileSync(ARCHIVE_COPY, savedArchive as string);
+
+    wipe(ENV_COPY); // the deploy
+    const out = runDoor(GWALL, 'GWALL', 25);
+
+    expect(out).not.toMatch(SETUP_PROMPT);
+    expect(read(ENV_COPY)).toContain('UPT');
+    expect(read(ENV_COPY)).not.toContain(UNCONFIGURED);
+  }, 120000);
+
+  it('dials the host, port and timeout from the restored config, not its compiled defaults', () => {
+    // Reaching the wall needs a board that is already configured, but the
+    // acronym is not this case's subject - the case above owns it. Supply one
+    // in the door's own three-line format (gwall.e:1704) so this case fails
+    // for exactly one reason: the server config the door read.
+    fs.mkdirSync(ARCHIVE, { recursive: true });
+    fs.writeFileSync(ARCHIVE_COPY, '4\nUPT\n42626717772363\n');
+    wipe(ENV_COPY);
+
+    const { stderr } = runDoorCapturingBoth(GWALL, 'GWALL', 25);
+
+    // The emulator's own resolution log names the file the door opened.
+    expect(stderr).toContain(`"PROGDIR:GWALL.cfg" => "${DOOR_CONFIG}"`);
+
+    // The one value the restored file changes, and therefore the one that
+    // proves it was parsed rather than merely opened. gwall.e:73 compiles in
+    // 10 seconds; the config says 5. This assertion holds with or without a
+    // network - offline the door never reaches WaitSelect at all.
+    expect(stderr).not.toContain('WaitSelect(nfds=1, timeout=10000ms)');
+
+    // With DNS, the whole dial is on the record. Guarded, because a run with
+    // no route to the internet stops at gethostbyname and the assertions
+    // below would then be testing the network, not the config.
+    const dialled = stderr.match(/gethostbyname\("([^"]+)"\)/);
+    if (dialled) {
+      expect(dialled[1]).toBe('scenewall.bbs.io');
+      expect(stderr).toMatch(/connect\(fd=\d+, [\d.]+:1541\)/);
+      expect(stderr).toContain('WaitSelect(nfds=1, timeout=5000ms)');
+    }
+  }, 120000);
 
   it('asks for the BBS acronym once, not on every start', () => {
     // A board that has never been configured.

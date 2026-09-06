@@ -842,6 +842,21 @@ EOF
         rm -rf "$BBS_DATA_DIR/Doors/Gwall"
         echo "[Entrypoint]   Removed the duplicate Doors/Gwall (the board runs Doors/GWall)"
     fi
+    # The env-archive bug's output. Before ENVARC: was an assign, GWall's
+    # "ENVARC:GWall.cfg" write fell through the volume fallback and landed as a
+    # lowercased "gwall.cfg" - and the emulated filesystem is case-insensitive,
+    # so that three-line settings blob was ALSO what the door opened for
+    # "PROGDIR:GWALL.cfg". Its real server config was masked and it ran on
+    # compiled defaults. The image now ships GWALL.cfg; this removes the blob,
+    # which the add-only volume sync would otherwise keep beside it for ever.
+    #
+    # By CONTENT, not by name: on a case-insensitive volume "gwall.cfg" and
+    # "GWALL.cfg" are one file and a blind rm would take the real config with it.
+    stray_cfg="$BBS_DATA_DIR/Doors/GWall/gwall.cfg"
+    if [ -f "$stray_cfg" ] && ! grep -qi 'SERVERHOST' "$stray_cfg"; then
+        rm -f "$stray_cfg"
+        echo "[Entrypoint]   Removed the stray Doors/GWall/gwall.cfg (saved settings, not config)"
+    fi
     for orphan in "${ORPHANS[@]}"; do
         if [ -e "$orphan" ]; then
             rm -f "$orphan"
