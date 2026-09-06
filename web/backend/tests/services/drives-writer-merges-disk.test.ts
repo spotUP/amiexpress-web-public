@@ -41,7 +41,17 @@ function emptyRepo() {
 }
 
 function makeService(repo: ReturnType<typeof emptyRepo>): DriveConfigService {
-  const database = { getConfigRepository: () => repo } as never;
+  // `usedBytesByVolume` is the catalog's bytes-per-drive figure. `getAllDrives`
+  // reads it for the "used" column and `refreshLiveStorage` passes it to
+  // `initStorage` as the seed for every volume's counter, so a database stub
+  // without it is not a database as far as this service is concerned - it was
+  // missing here, and this whole suite had been red since the seeding fix
+  // added the call. Empty: these tests are about what the Drives.info WRITER
+  // does, and no drive in them holds any bytes.
+  const database = {
+    getConfigRepository: () => repo,
+    usedBytesByVolume: () => new Map<number, number>(),
+  } as never;
   return new DriveConfigService(database);
 }
 
