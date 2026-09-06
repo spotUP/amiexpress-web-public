@@ -92,9 +92,18 @@ describe('a hybrid door over telnet', () => {
     const { join } = require('path');
     const source = readFileSync(join(__dirname, '..', 'src', 'handlers', 'door.handler.ts'), 'utf8');
 
-    expect(source).toContain("doorManifest.runtime === 'hybrid' && hasBrowserClient(session)");
+    // The question is the same one; it is asked through the transport's
+    // capability record now (transport-adapter.ts's transportCapabilities)
+    // rather than hasBrowserClient directly, so the door handler asks ONE
+    // object about the caller instead of one predicate per question.
+    const { transportCapabilities } = require('../src/server/transport-adapter');
+    expect(transportCapabilities({ connectionType: 'web' } as any).browser).toBe(true);
+    expect(transportCapabilities({ connectionType: 'telnet' } as any).browser).toBe(false);
+    expect(transportCapabilities({ connectionType: 'ssh' } as any).browser).toBe(false);
+
+    expect(source).toContain("doorManifest.runtime === 'hybrid' && callerCapabilities.browser");
     // And a browser-only door says so rather than hanging.
-    expect(source).toContain('if (!hasBrowserClient(session)) {');
+    expect(source).toContain('doorNeedsBrowser(door, doorManifest) && !callerCapabilities.browser');
   });
 
   it('leaves the telnet path free to reach the door input handler', () => {

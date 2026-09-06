@@ -99,13 +99,16 @@ describe('AuthHandler', () => {
       expect(res.status).toHaveBeenCalledWith(401);
     });
 
-    it('returns 403 for non-sysop user', async () => {
+    it('returns 403 for a user below the admin floor', async () => {
       const userId = await db.createUser({
         username: `auth_regular_${Date.now()}`,
         passwordHash: await db.hashPassword('TestPass123'),
         realname: 'Regular User',
         location: '', phone: '', email: '',
-        secLevel: 10,
+        // Below the floor. The floor is 10, not 255: an ANSI artist with
+        // level 10 is let in for the screens page (auth.handler.ts, and
+        // navItemsForLevel decides what they then see).
+        secLevel: 5,
         uploads: 0, downloads: 0, bytesUpload: 0, bytesDownload: 0,
         ratio: 0, ratioType: 0, timeTotal: 3600, timeLimit: 3600, timeUsed: 0,
         chatLimit: 60, chatUsed: 0, lastLogin: null, firstLogin: new Date(),
@@ -120,6 +123,36 @@ describe('AuthHandler', () => {
       const res = makeRes();
       await handler.login(makeReq({ username: user.username, password: 'TestPass123' }), res);
       expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    it('lets a level 10 user in - the floor is 10, not sysop', async () => {
+      // The relaxation is the feature, so it is pinned: before 2026-09-04
+      // this same user got a 403 and the admin UI was sysop-only.
+      const pw = 'ArtistPass123';
+      const userId = await db.createUser({
+        username: `auth_artist_${Date.now()}`,
+        passwordHash: await db.hashPassword(pw),
+        realname: 'ANSI Artist',
+        location: '', phone: '', email: '',
+        secLevel: 10,
+        uploads: 0, downloads: 0, bytesUpload: 0, bytesDownload: 0,
+        ratio: 0, ratioType: 0, timeTotal: 3600, timeLimit: 3600, timeUsed: 0,
+        chatLimit: 60, chatUsed: 0, lastLogin: null, firstLogin: new Date(),
+        calls: 0, callsToday: 0, newUser: false, expert: 'N', ansi: true,
+        linesPerScreen: 24, computer: 'Amiga', screenType: 'Amiga Ansi',
+        protocol: 'Z', editor: 'L', zoomType: 'QWK', availableForChat: false,
+        quietNode: false, autoRejoin: 1, confAccess: '', areaName: '',
+        uuCP: false, topUploadCPS: 0, topDownloadCPS: 0, byteLimit: 0, baud: 0,
+      });
+      const user = await db.getUserById(userId);
+
+      const res = makeRes();
+      await handler.login(makeReq({ username: user.username, password: pw }), res);
+
+      expect(res.status).not.toHaveBeenCalledWith(403);
+      const jsonCall = res.json.mock.calls[0][0];
+      expect(jsonCall).toHaveProperty('accessToken');
+      expect(jsonCall.user.secLevel).toBe(10);
     });
 
     it('returns 200 with tokens for valid sysop credentials', async () => {

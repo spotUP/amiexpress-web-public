@@ -35,9 +35,20 @@ describe('Message pointers parity', () => {
       downloads: 0
     };
     const validated = validatePointers(base, mailStat);
-    // lastMsgReadConf bumped up to lowestNotDel (2), lastNewReadConf reset to 0 because > high
+    // lastMsgReadConf bumped up to lowestNotDel (2). The overflow lands on
+    // lowestKey (1), not 0.
+    //
+    // express.e does it in two steps and this port does it in one. There,
+    // the conference-join validation writes 0 (express.e:5044,5048) and
+    // searchNewMail turns a pointer of 0 into lowestKey before it scans
+    // ("IF msgNum<=0 THEN lastNewReadConf:=msgNum:=mailStat.lowestKey",
+    // express.e:11684, beside its own overflow clamp to lowestKey at
+    // :11666). This backend has no read-time conversion, so a stored 0 would
+    // be scanned as 0 and every message in the base would read as new -
+    // which is the bug e15c4aed2 was fixing. Storing lowestKey here is the
+    // same end state the Amiga reaches.
     expect(validated.lastMsgReadConf).toBe(2);
-    expect(validated.lastNewReadConf).toBe(0);
+    expect(validated.lastNewReadConf).toBe(mailStat.lowestKey);
   });
 
   test('updateScanPointer advances lastNewReadConf to mailStat high', async () => {

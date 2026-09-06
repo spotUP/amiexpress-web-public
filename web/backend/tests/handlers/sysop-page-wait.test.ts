@@ -35,6 +35,17 @@ jest.mock("../../src/services/webhook.service", () => ({
   WebhookTrigger: { SYSOP_PAGED: "sysop_paged" },
 }));
 
+// How long the dots run is the sysop's setting now, not a constant: the
+// pager reads operator chat's `pageTimeout` (chat.handler.ts, 2026-09-04)
+// and prints one dot a second for that many seconds. The window under test
+// is still the classic 30, so the config says 30 - and a board with no
+// operator-chat row falls back the same way the handler's catch does.
+jest.mock("../../src/database", () => ({
+  db: {
+    getOperatorChatRepository: () => ({ getConfig: () => ({ pageTimeout: 30 }) }),
+  },
+}));
+
 import { ChatHandler, setHelpers } from "../../src/handlers/chat/chat.handler";
 import { ChatSessionUseCase } from "../../src/services/use-cases/chat-session.use-case";
 import { LoggedOnSubState } from "../../src/constants/bbs-states";

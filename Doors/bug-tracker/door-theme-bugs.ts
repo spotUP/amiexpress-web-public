@@ -35,7 +35,11 @@ export let THEME: Theme = themeById('classic');
 export function applyTheme(source: unknown): void {
   const theme = resolveTheme(source);
   if (!theme) return;
-  CURRENT = theme;
+  // THEME is the name this module declares and app.ts imports. It was
+  // written as CURRENT here - livechat's name for the same binding - which
+  // is an assignment to an undeclared name, and a module is strict mode, so
+  // theming the door threw a ReferenceError instead of colouring it.
+  THEME = theme;
   T = theme.tokens;
   S = themeStyles(theme);
 }

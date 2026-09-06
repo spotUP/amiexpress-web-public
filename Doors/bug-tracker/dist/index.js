@@ -24,7 +24,7 @@ var THEME = themeById("classic");
 function applyTheme(source) {
   const theme = resolveTheme(source);
   if (!theme) return;
-  CURRENT = theme;
+  THEME = theme;
   T = theme.tokens;
   S = themeStyles(theme);
 }
