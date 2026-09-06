@@ -352,4 +352,17 @@ describe('createS3Backend', () => {
       /DRIVE\.2.*bucket/i
     );
   });
+
+  it('review finding 1: gives the underlying S3Client explicit connection and request timeouts, never an unbounded wait', async () => {
+    const backend = createS3Backend(baseVolume(), 'secret') as unknown as {
+      client: { config: { requestHandler: { configProvider: Promise<{ connectionTimeout?: number; requestTimeout?: number }> } } };
+    };
+    const resolved = await backend.client.config.requestHandler.configProvider;
+
+    // Both must be finite and positive - `NodeHttpHandler`'s own default for
+    // requestTimeout is 0, which means NO timeout at all, exactly the
+    // blackholed-endpoint hazard this finding named.
+    expect(resolved.connectionTimeout).toBeGreaterThan(0);
+    expect(resolved.requestTimeout).toBeGreaterThan(0);
+  });
 });

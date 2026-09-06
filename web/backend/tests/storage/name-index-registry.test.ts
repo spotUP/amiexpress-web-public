@@ -149,4 +149,36 @@ describe('NameIndexRegistry', () => {
     const registry = new NameIndexRegistry(new VolumeSet([]));
     expect(() => registry.forArea(9, 'Files/')).toThrow(/drive 9/);
   });
+
+  it('review finding 6: charges requestsThisMonth for the listing NameIndex makes, not just for uploads and downloads', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    await backend.put('Files/FILE.LHA', Buffer.from('x'));
+    const state = s3State(2, backend);
+    const volumes = new VolumeSet([state]);
+    const registry = new NameIndexRegistry(volumes);
+
+    expect(state.requestsThisMonth).toBe(0);
+
+    await registry.forArea(2, 'Files/').resolve('file.lha');
+
+    // One real backend.list() happened (the first resolve on a cold index);
+    // the meter must show it, the same way writeBack/ensureLocal already
+    // charge their own direct calls against state.backend.
+    expect(backend.lists).toBe(1);
+    expect(state.requestsThisMonth).toBe(1);
+  });
+
+  it('review finding 6: a second caller sharing the memoised index causes no second charge, matching the one real listing', async () => {
+    const backend = new FakeBackend({ driveNumber: 2 });
+    await backend.put('Files/FILE.LHA', Buffer.from('x'));
+    const state = s3State(2, backend);
+    const volumes = new VolumeSet([state]);
+    const registry = new NameIndexRegistry(volumes);
+
+    await registry.forArea(2, 'Files/').resolve('file.lha');
+    await registry.forArea(2, 'Files/').resolve('file.lha');
+
+    expect(backend.lists).toBe(1);
+    expect(state.requestsThisMonth).toBe(1);
+  });
 });

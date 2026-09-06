@@ -14,9 +14,29 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import type { StorageVolume } from './volume-config';
 import type { ObjectHead, StorageBackend } from './storage-backend';
 import { StorageUnavailableError } from './storage-backend';
+
+/**
+ * Task 12 review, finding 1: with no timeout configured, `NodeHttpHandler`
+ * defaults `requestTimeout` to 0 - no timeout at all - and a socket that
+ * never gets a TCP handshake back (a blackholed endpoint, a security group
+ * dropping the packet on the floor) hangs on the OS's own TCP timeout,
+ * typically well past a minute, multiplied by the SDK's own retry count.
+ * `flushPending()` (file-cache.ts) awaits this per pending entry, serially,
+ * with no timeout of its own - fifty staged uploads against a dead endpoint
+ * would have meant the board never accepting a caller, silently, with a
+ * green process and nothing in the log. `refreshStorageContext`
+ * (storage/index.ts) now refuses to let that block anything it runs after,
+ * but the client itself should still not be capable of hanging a single
+ * request this long - a caller-facing fetch (`ensureLocalSync`,
+ * `writeBackSync`) has its OWN 30s budget (`DEFAULT_SYNC_TIMEOUT_MS`) that a
+ * single unbounded HTTP attempt could blow through on its own.
+ */
+const CONNECTION_TIMEOUT_MS = 5_000;
+const REQUEST_TIMEOUT_MS = 15_000;
 
 export interface S3ClientLike {
   send(command: unknown): Promise<unknown>;
@@ -376,6 +396,13 @@ export function createS3Backend(volume: StorageVolume, secret: string): S3Backen
     region: volume.region ?? 'auto',
     forcePathStyle: true, // MinIO and several free tiers require it; AWS tolerates it.
     credentials: { accessKeyId: volume.keyId, secretAccessKey: secret },
+    // See the CONNECTION_TIMEOUT_MS/REQUEST_TIMEOUT_MS note above this
+    // function - no caller-facing path may inherit an unbounded wait on a
+    // dead or blackholed endpoint.
+    requestHandler: new NodeHttpHandler({
+      connectionTimeout: CONNECTION_TIMEOUT_MS,
+      requestTimeout: REQUEST_TIMEOUT_MS,
+    }),
   });
   return new S3Backend(volume.driveNumber, volume.path, client as unknown as S3ClientLike);
 }

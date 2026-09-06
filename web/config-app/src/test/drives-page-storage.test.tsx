@@ -46,6 +46,7 @@ const EMPTY_POOL_STATUS = {
   evictionDisabled: false,
   parkedFiles: [] as unknown[],
   brokenAreas: [] as unknown[],
+  bootError: null as string | null,
 };
 
 const getDrives = vi.fn();
@@ -232,6 +233,19 @@ describe('DrivesPage - pool status', () => {
     renderPage();
 
     expect(await screen.findByText(/storage cache is not active/i)).toBeInTheDocument();
+  });
+
+  it('says the pool failed to build, and why, rather than reading identically to "not configured"', async () => {
+    getDrives.mockResolvedValue({ success: true, data: [s3Drive()] });
+    getDrivePoolStatus.mockResolvedValue({
+      success: true,
+      data: { ...EMPTY_POOL_STATUS, bootError: 'DRIVE.2.QUOTA: Unreadable quota "garbage"' },
+    });
+    renderPage();
+
+    expect(await screen.findByText(/failed to build/i)).toBeInTheDocument();
+    expect(screen.getByText(/Unreadable quota/)).toBeInTheDocument();
+    expect(screen.queryByText(/storage cache is not active/i)).not.toBeInTheDocument();
   });
 });
 

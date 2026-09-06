@@ -562,4 +562,55 @@ describe('Drive Setup storage routes', () => {
       }
     });
   });
+
+  describe('review finding 4 - a Drives.info write takes effect on the live pool, no restart', () => {
+    it('a drive with no secret joins the live pool the moment POST /secret gives it one', async () => {
+      applyTooltypes(path.join(root, 'Drives.info'), [
+        ['DRIVE.3', 's3://third-bucket'],
+        ['DRIVE.3.ENDPOINT', 'https://s3.example.com'],
+        ['DRIVE.3.KEYID', 'keyid-3'],
+        // Deliberately no secret yet.
+      ]);
+
+      const before = await request(app).get('/api/config/drives');
+      const driveBefore = before.body.data.find((d: any) => d.drive_number === 3);
+      expect(driveBefore.secretConfigured).toBe(false);
+      // No write has happened yet in this test, so no live context exists at
+      // all - `inPool` is the third state, undefined, not false.
+      expect(driveBefore.inPool).toBeUndefined();
+
+      const secretRes = await request(app).post('/api/config/drives/3/secret').send({ secret: 'now-i-have-one' });
+      expect(secretRes.status).toBe(200);
+
+      const after = await request(app).get('/api/config/drives');
+      const driveAfter = after.body.data.find((d: any) => d.drive_number === 3);
+      expect(driveAfter.secretConfigured).toBe(true);
+      // No restart happened between the two GETs - the same process, the
+      // same app instance. Before Task 12 review finding 4 was fixed, this
+      // stayed false until the process was restarted.
+      expect(driveAfter.inPool).toBe(true);
+    });
+
+    it('a local drive turned s3 through PUT /drives/:id is live immediately, not just listed', async () => {
+      // Drive 1 starts local ("DH1:") - edit only its path, not its number,
+      // through the same PUT route the "ordinary path edit" tests above
+      // already exercise successfully for an s3 drive.
+      const updateRes = await request(app).put('/api/config/drives/1').send({ drive_path: 's3://first-bucket' });
+      expect(updateRes.status).toBe(200);
+
+      applyTooltypes(path.join(root, 'Drives.info'), [
+        ['DRIVE.1.ENDPOINT', 'https://s3.example.com'],
+        ['DRIVE.1.KEYID', 'keyid-1'],
+      ]);
+      const secretRes = await request(app).post('/api/config/drives/1/secret').send({ secret: 'sekrit-1' });
+      expect(secretRes.status).toBe(200);
+
+      const res = await request(app).get('/api/config/drives');
+      const drive1 = res.body.data.find((d: any) => d.drive_number === 1);
+      expect(drive1.kind).toBe('s3');
+      // No restart happened between the PUT, the secret POST and this GET -
+      // the same process, the same app instance throughout.
+      expect(drive1.inPool).toBe(true);
+    });
+  });
 });

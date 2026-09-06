@@ -48,8 +48,14 @@ export class VolumeSet {
   /**
    * `parseVolumes` itself is left to throw uncaught: a malformed line (a bad
    * QUOTA or RETENTION unit) is a list-wide problem with Drives.info, not one
-   * drive's problem, and Task 1 chose deliberately to stop the board on a
-   * Drives.info it cannot parse rather than boot with an ambiguous pool.
+   * drive's problem, and this is deliberately not caught HERE - a
+   * Drives.info the board cannot parse must not be misread as an ambiguous,
+   * partially-built pool. It no longer stops the BOARD, though: Task 12's
+   * boot wiring (`storage/index.ts#refreshStorageContext`) wraps every call
+   * into this subsystem and runs with no pool rather than refusing to start,
+   * the same way every other subsystem in `initializeData` degrades. The
+   * throw still stops the POOL from building ambiguously; it does not stop
+   * the board from serving local files and accepting callers.
    *
    * Constructing any ONE volume's backend is different: a missing KEYID, a
    * missing ENDPOINT, or an `s3://bucket/prefix` target are all the same

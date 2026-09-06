@@ -33,10 +33,52 @@
  */
 import { BackendRetryGate, NameIndex } from './name-index';
 import type { BackendRetryGateOptions } from './name-index';
-import type { VolumeSet } from './volume-set';
+import type { VolumeState, VolumeSet } from './volume-set';
+import type { StorageBackend } from './storage-backend';
 
 function cacheKey(driveNumber: number, prefix: string): string {
   return `${driveNumber}:${prefix}`;
+}
+
+/**
+ * `state.backend`, wrapped so every call it makes charges `requestsThisMonth`
+ * - Task 12 review finding 6. `FileCache.ensureLocal`/`writeBack` already
+ * charge the meter themselves for the calls THEY make directly against
+ * `state.backend`; this wraps the copy handed to `NameIndex` so the listing
+ * call `NameIndex.refresh()` makes (`name-index.ts:358`) is counted too,
+ * without double-charging the direct callers, since they never see this
+ * wrapper.
+ *
+ * All five methods are wrapped, not just `list` - `NameIndex` only calls
+ * `list` today, but a half-wrapped backend would silently stop counting the
+ * day that changes, which is exactly the kind of gap this finding exists to
+ * close.
+ */
+function countingBackend(state: VolumeState): StorageBackend {
+  const real = state.backend;
+  return {
+    driveNumber: real.driveNumber,
+    head: (key) => {
+      state.requestsThisMonth++;
+      return real.head(key);
+    },
+    get: (key) => {
+      state.requestsThisMonth++;
+      return real.get(key);
+    },
+    put: (key, body) => {
+      state.requestsThisMonth++;
+      return real.put(key, body);
+    },
+    delete: (key) => {
+      state.requestsThisMonth++;
+      return real.delete(key);
+    },
+    list: (prefix) => {
+      state.requestsThisMonth++;
+      return real.list(prefix);
+    },
+  };
 }
 
 export class NameIndexRegistry {
@@ -80,7 +122,7 @@ export class NameIndexRegistry {
       throw new Error(`NameIndexRegistry: no volume configured for drive ${driveNumber}`);
     }
 
-    const index = new NameIndex(state.backend, prefix, { retryGate: this.gateFor(driveNumber) });
+    const index = new NameIndex(countingBackend(state), prefix, { retryGate: this.gateFor(driveNumber) });
     this.indexes.set(key, index);
     return index;
   }

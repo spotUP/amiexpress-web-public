@@ -242,8 +242,8 @@ them, the same way it ignores any tooltype it doesn't know.
 | `DRIVE.n.REGION` | The provider's region string. Some providers (R2, some MinIO setups) accept `auto`. |
 | `DRIVE.n.KEYID` | The access key ID. Not secret by itself — the secret half is never written here (see below). |
 | `DRIVE.n.QUOTA` | A size with an optional `K`/`M`/`G`/`T` suffix (`10G`, `500G`). Omit for "unbounded" — do not write an empty `DRIVE.n.QUOTA=` line, which is treated as a configuration error, not as unbounded. |
-| `DRIVE.n.CLASS` | `FREE` or `PAID`. Free-tier volumes fill before paid ones when the board picks a destination for a new object. Defaults to `PAID` if omitted — an unmarked bucket is assumed to cost money. |
-| `DRIVE.n.EGRESS` | `FREE`, `METERED`, or `3X` (egress costs roughly triple ingress — some providers price it that way). Defaults to `METERED` — again, guessing "free" is the guess that shows up on an invoice. |
+| `DRIVE.n.CLASS` | `FREE` or `PAID`. Informational only today — see "A pooled area is pinned to one drive" below. Defaults to `PAID` if omitted — an unmarked bucket is assumed to cost money. |
+| `DRIVE.n.EGRESS` | `FREE`, `METERED`, or `3X` (egress costs roughly triple ingress — some providers price it that way). Informational only today, same as `CLASS`. Defaults to `METERED` — again, guessing "free" is the guess that shows up on an invoice. |
 | `DRIVE.n.RETENTION` | Whole days, optional `D`/`DAYS` suffix (`90`, `90D`). `0` means "delete on the sweep"; omit the key entirely to keep files forever — the two are not the same thing. |
 | `DRIVE.n.REQUESTS` | A monthly request ceiling, if the provider publishes one. Oracle's free tier, for example, caps at 50,000 requests/month well before its 10 GB fills. Omit if the provider has no such cap. |
 
@@ -251,6 +251,18 @@ them, the same way it ignores any tooltype it doesn't know.
 stops at the first gap, exactly like express.e's `freeDiskSpace()`. If your
 board's first drive is local and your bucket is drive 2, that's fine; a gap
 *before* the bucket (no `DRIVE.1` at all) is not.
+
+**A pooled area is pinned to one drive — there is no spillover.** `CLASS` and
+`EGRESS` read like the board picks a destination for a new upload out of
+several candidate buckets, free tiers first. It does not: a file area's
+`STORAGEDRIVE` (below) names exactly one drive, and every upload to that area
+goes there and nowhere else, because that is the only drive the download side
+ever looks on for that area's files. Practically, this means: when a pooled
+area's own drive runs out of `QUOTA`, or spends its monthly `REQUESTS`
+budget, uploads to THAT area fail — they do not quietly land on a healthy
+sibling bucket, however generously that sibling is configured. If you want a
+free tier to take the load and a paid bucket to be the overflow, put them on
+different file areas yourself; the board will not do it for you today.
 
 **Worked example — a free-tier volume:**
 
@@ -329,6 +341,25 @@ the later area back to local disk, logging which two directories collided,
 rather than silently letting their objects overwrite each other in the
 bucket.
 
+**What takes effect live, and what still needs a restart.** A change made
+*through the admin pages* — adding, editing or removing a drive in Drive
+Setup, writing a drive's secret, or editing a conference's `STORAGEDRIVE` in
+the conference admin page — reaches the running pool immediately: no
+restart, no dropped connections. Each of those writes rebuilds the storage
+subsystem from disk as its last step, the same rebuild the board runs at
+boot, so the board's own view of the pool and the file on disk never
+disagree for longer than that one request takes.
+
+What still needs a restart (or an admin no-op save through the relevant
+page, which re-triggers the same rebuild) is hand-editing `Drives.info` or a
+`Conf<N>.info` directly on disk, outside the admin pages — nothing watches
+either file for out-of-band edits, so a change made with a text editor is
+invisible to the running board until something asks it to look again. Two
+settings are read once, from the process environment, at the moment a node
+claims its identity, and a running board never re-reads them:
+`BBS_STORAGE_NODE_ID` and `BBS_STORAGE_CACHE_MAX_BYTES` (below) — changing
+either always needs a restart.
+
 ### What happens when a volume is unreachable
 
 A pooled volume that stops answering — network trouble, a bad key that
@@ -349,6 +380,13 @@ board — is marked *degraded*, not treated as empty. A degraded volume:
   lookup, a warning is logged naming the conference and directory, and the
   admin's Drive Setup page lists it under broken areas so you don't have to
   find it in the log.
+- If the pool itself failed to BUILD at boot (a malformed `Drives.info`
+  line, a volume that cannot be constructed) the board still starts and
+  still serves local files — it just runs with no pool at all, the same as
+  a board that was never configured to have one. The one difference: Drive
+  Setup's pool status shows *why* the pool is inactive in this case, rather
+  than the ordinary "not configured" state, so a broken build never reads
+  as a board that was simply never asked to pool anything.
 
 ### One copy is one copy
 
@@ -375,15 +413,23 @@ settings, both optional:
   silent.
 - `BBS_STORAGE_NODE_ID` — identifies this process if you ever run more than
   one backend against the same board root (a container orchestrator
-  restarting the board on a new host, or a deliberate second instance).
-  Each node gets its **own** cache directory, keyed by this value, falling
-  back to `HOSTNAME` (which Docker and most orchestrators already set to a
-  per-container value) and finally to the process id if neither is set.
-  This matters because the cache's crash-recovery bookkeeping — replaying
-  an upload a previous run staged but never finished — identifies a stale
-  attempt by process id, and a process id is meaningless once it can belong
-  to a different container than the one that wrote it. Two nodes must never
-  share a cache directory.
+  restarting the board on a new host, or a deliberate second instance). Set
+  it and the board trusts it outright as this node's cache directory name;
+  you are taking responsibility for uniqueness, which is what setting it
+  deliberately means.
+
+  Leave it unset and the board claims a small integer slot for itself under
+  `Storage/nodes/` instead of guessing from `HOSTNAME` or a bare process id.
+  A restart reclaims the SAME slot — its former holder's process is gone, so
+  the slot is free — which is what makes the crash-recovery bookkeeping work
+  at all: replaying an upload a previous run staged but never finished only
+  works if the restarted process looks in the same cache directory the
+  crashed one used. A second process starting while the first is still
+  alive finds that slot held and claims the next one instead, so two
+  instances against the same board root never share a directory even with
+  no operator action — the one guarantee this section has always stated and
+  a plain `HOSTNAME`/pid guess could not keep on a bare host running more
+  than one instance.
 
 ### "Requests This Month" is a lower bound, not a meter
 
@@ -391,14 +437,17 @@ The Drive Setup admin page shows a running request count per volume. Read
 it as a **floor**, not an exact figure:
 
 - It is an in-process counter, incremented when a download or upload
-  actually reaches the volume, and by the page's own "Test" connectivity
-  probe. It is not read from the provider and is not persisted, so it
-  resets to zero on every restart and undercounts any month that spans one.
-- It does **not** yet count the listing call the pool's name index makes
-  the first time (or first time after a write it didn't originate) it
-  resolves names in a given area against the bucket. On a board with many
-  pooled areas this can be a meaningful fraction of real request volume
-  that the figure on the page does not include.
+  actually reaches the volume, when the pool's name index lists the bucket
+  to resolve a name against it, and by the page's own "Test" connectivity
+  probe — **clicking Test spends one real request against the volume it
+  tests**, win or lose; it is not a free, side-effect-less check. It is not
+  read from the provider and is not persisted, so it resets to zero on
+  every restart and undercounts any month that spans one.
+- A single high-level operation can still cost more than one real request
+  behind the scenes without the counter knowing: a large listing that the
+  provider paginates, or a retried call after a transient failure, each
+  count as ONE against this figure while spending more than one against
+  your actual bill.
 
 If you're tracking a provider's monthly request ceiling closely (Oracle's
 free-tier 50,000, for instance), treat the board's own figure as "at least

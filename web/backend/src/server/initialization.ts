@@ -14,8 +14,7 @@ import {
   ensureConferenceStructure,
   ensureRootScreens
 } from '../services/file-areas-loader';
-import { initStorage } from '../storage';
-import { setStorageContext } from '../storage/storage-context';
+import { refreshStorageContext } from '../storage';
 import { remoteAreaFromDisk } from '../storage/remote-areas';
 import { Door, DoorSession, ChatState } from '../types';
 import { LoggedOnSubState } from '../constants/bbs-states';
@@ -487,43 +486,36 @@ export async function initializeData(io?: SocketIOServer) {
     // restart, silently, which is the original rename bug wearing a new hat.
     onConferencesChanged(async () => {
       await refreshConferencesFromDisk(bbsRoot);
+      // Task 12 review, finding 4: a STORAGEDRIVE edit or a conference
+      // rename used to reach `fileAreas` (just above) and every OTHER
+      // handler via `setFileAreas`, but never the storage context - the pool
+      // kept serving the boot-time area list until a restart. Rebuilding
+      // here, through the same `refreshStorageContext` boot uses, means a
+      // live change reaches the pool exactly when it reaches everything
+      // else, with no restart in between.
+      await refreshStorageContext(bbsRoot, fileAreas.map(remoteAreaFromDisk));
     });
 
     await refreshConferencesFromDisk(bbsRoot);
     await ensureRootScreens(bbsRoot);
 
     // Task 12: build the pooled-storage subsystem from Drives.info and make
-    // every branch Tasks 8, 9 and 11 built reachable. `initStorage` answers
-    // null on a board with no `s3` volume - which is every board this
-    // feature has not been asked to touch - and `setStorageContext(null)`
-    // is exactly the value `getStorageContext()` already defaults to, so a
-    // board with no bucket configured is untouched by this block. `areas`
-    // is `fileAreas` (just loaded above by refreshConferencesFromDisk, which
+    // every branch Tasks 8, 9 and 11 built reachable. `refreshStorageContext`
+    // sets the context to null on a board with no `s3` volume - which is
+    // every board this feature has not been asked to touch - and that is
+    // exactly the value `getStorageContext()` already defaults to, so a
+    // board with no bucket configured is untouched by this block. `areas` is
+    // `fileAreas` (just loaded above by refreshConferencesFromDisk, which
     // also called `setFileAreas(fileAreas)`) mapped to the pool's own shape -
     // the SAME list every other handler was just given, not a second,
     // independently-loaded one that could disagree with it.
-    try {
-      const storage = await initStorage(bbsRoot, {
-        areas: fileAreas.map(remoteAreaFromDisk),
-      });
-      // Replay uploads a previous run of THIS node staged but never
-      // finished - a crash or restart between the staged write and the
-      // put leaves a marker in `.pending/` that only a flush replays.
-      await storage?.cache.flushPending();
-      setStorageContext(storage);
-      console.log(
-        storage
-          ? `[Storage] Pool active - ${storage.volumes.states.filter(s => s.volume.kind === 's3').length} bucket(s) configured`
-          : '[Storage] No pooled bucket configured (Drives.info has no DRIVE.n=s3://... entry) - local disk only'
-      );
-    } catch (error) {
-      // Same posture as every other subsystem in this function: surfaced
-      // loudly, board keeps booting. A board that cannot build its storage
-      // pool still needs to serve local files and accept callers.
-      setStorageContext(null);
-      const detail = error instanceof Error ? (error.stack || error.message) : String(error);
-      console.error(`[Storage] Failed to initialize the storage subsystem - running with no pool:\n${detail}`);
-    }
+    //
+    // This call sets the context - and, on failure, stashes why
+    // (`getStorageBootError`) - before it does anything else, and it never
+    // awaits its own pending-upload replay; see `refreshStorageContext`'s
+    // doc for why a hanging bucket must not be able to delay `setDatabase`,
+    // dependency injection or `server.listen` below.
+    await refreshStorageContext(bbsRoot, fileAreas.map(remoteAreaFromDisk));
 
     setDatabase(db);
     setHelpers({ callersLog, loadFlagged, loadHistory });

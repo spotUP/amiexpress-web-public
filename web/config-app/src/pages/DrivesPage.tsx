@@ -74,6 +74,8 @@ interface PoolStatus {
   parkedFiles: ParkedFileRow[];
   /** Every complaint the board's own usableRemoteAreasFor would emit, verbatim. */
   brokenAreas: string[];
+  /** Non-null when the pool failed to build - never set merely because no bucket is configured. */
+  bootError: string | null;
 }
 
 interface DriveFormData {
@@ -538,7 +540,19 @@ export function DrivesPage() {
       <div className="space-y-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-content-muted">Pool Status</h2>
 
-        {!poolStatusQuery.isLoading && poolStatus && !poolStatus.cacheActive && (
+        {!poolStatusQuery.isLoading && poolStatus && !poolStatus.cacheActive && poolStatus.bootError && (
+          <div className="space-y-2 rounded border border-status-danger/40 bg-status-danger/10 p-3">
+            <div className="flex items-center gap-2 text-status-danger">
+              <AlertTriangle size={16} aria-hidden="true" />
+              <span className="text-sm font-medium">The storage pool failed to build</span>
+            </div>
+            <pre className="whitespace-pre-wrap break-words font-mono text-xs text-content-secondary">
+              {poolStatus.bootError}
+            </pre>
+          </div>
+        )}
+
+        {!poolStatusQuery.isLoading && poolStatus && !poolStatus.cacheActive && !poolStatus.bootError && (
           <p className="text-sm text-content-muted">
             The storage cache is not active on this process. Parked-file and eviction status will appear here once it is.
           </p>

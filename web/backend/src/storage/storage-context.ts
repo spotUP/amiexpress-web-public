@@ -40,3 +40,28 @@ export function setStorageContext(context: StorageContext | null): void {
 export function getStorageContext(): StorageContext | null {
   return current;
 }
+
+/**
+ * Non-null exactly when the LAST attempt to build the storage subsystem
+ * threw - never merely because no bucket is configured, which is the
+ * ordinary, silent, null-context case.
+ *
+ * Without this, `getStorageContext()` returning null reads identically
+ * whether the board never had a pool to begin with, or Drives.info is
+ * broken and the pool that should exist could not be built. A caller on the
+ * download path already tells the two apart correctly (a boot failure must
+ * never present as "file not found"), but the admin page's `PoolStatus` had
+ * no way to ask the question at all - `cacheActive: false` looked exactly
+ * like "not configured" either way. This is that missing signal.
+ */
+let bootError: string | null = null;
+
+/** Set by `initStorage`'s caller on a failed build; cleared on the next successful one. */
+export function setStorageBootError(message: string | null): void {
+  bootError = message;
+}
+
+/** The detail behind a failed build, or null when nothing has failed. */
+export function getStorageBootError(): string | null {
+  return bootError;
+}

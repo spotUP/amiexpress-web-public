@@ -29,7 +29,7 @@ import {
   type StorageVolume,
   type VolumeClass,
 } from '../../storage/volume-config';
-import { getStorageContext } from '../../storage/storage-context';
+import { getStorageContext, getStorageBootError } from '../../storage/storage-context';
 import type { StorageBackend } from '../../storage/storage-backend';
 import { LocalBackend } from '../../storage/local-backend';
 import { createS3Backend } from '../../storage/s3-backend';
@@ -37,6 +37,7 @@ import { remoteAreaFromDisk, usableRemoteAreasFor } from '../../storage/remote-a
 import { loadFileAreasFromDisk } from '../file-areas-loader';
 import { loadConfConfig } from '../conf-config.service';
 import { VolumeSet } from '../../storage/volume-set';
+import { refreshStorageContext } from '../../storage';
 
 /** `GET /api/config/drives` - a drive, decorated with the pool facts the page shows. */
 export interface DriveConfigView extends DriveConfig {
@@ -111,6 +112,17 @@ export interface PoolStatus {
    * `getPoolStatus`.
    */
   brokenAreas: string[];
+  /**
+   * Task 12 review, finding 5. `cacheActive: false` alone reads identically
+   * whether this board was never asked to pool anything, or Drives.info is
+   * broken and the pool that SHOULD exist could not be built - the one
+   * outcome this whole design exists to keep from looking like "not
+   * configured" or "file not found". Non-null exactly when the last build
+   * attempt threw; the page uses this to tell a sysop the pool failed to
+   * build, and what broke, rather than showing the same blank state a board
+   * with no bucket at all shows.
+   */
+  bootError: string | null;
 }
 
 export class DriveConfigService {
@@ -425,9 +437,32 @@ console.error(`[DriveConfigService] Mirror update failed for drive ${id} (disk w
       });
 
 console.log(`[DriveConfigService] Wrote ${drivesInfoPath} with ${merged.length} drives`);
+      await this.refreshLiveStorage(bbsRoot);
     } catch (error) {
 console.error(`[DriveConfigService] Failed to write ${drivesInfoPath}:`, error);
     }
+  }
+
+  /**
+   * Task 12 review, finding 4: a Drives.info write - a new drive, a changed
+   * quota, a drive removed - used to reach only the on-disk file. The live
+   * process kept running the VolumeSet it booted with until a restart, so
+   * the page's own "Test" button could report a bucket reachable from a
+   * fresh `buildBackendFor` while the running board still could not see it
+   * at all. Rebuilding through the SAME `refreshStorageContext` boot and the
+   * conference-change bus both use means a Drives.info write takes effect
+   * for every caller at once, not just the next one to read disk.
+   *
+   * The area list is reloaded from disk here rather than reused from
+   * whatever context happens to be live, for the same reason
+   * `getPoolStatus` reloads it (below): this call must be correct even on
+   * the very first bucket a board ever configures, when no live context
+   * exists yet to read a list back from.
+   */
+  private async refreshLiveStorage(bbsRoot: string): Promise<void> {
+    const conferences = this.conferencesForAreaScan(bbsRoot);
+    const areas = loadFileAreasFromDisk(bbsRoot, conferences).map(remoteAreaFromDisk);
+    await refreshStorageContext(bbsRoot, areas);
   }
 
   // ------------------------------------------------------------- the secret
@@ -439,6 +474,11 @@ console.error(`[DriveConfigService] Failed to write ${drivesInfoPath}:`, error);
    * NEVER written into Drives.info - that file sits under the board root
    * where every door and every backup can read it, which is why
    * `volume-config.ts` keeps SECRET out of it in the first place.
+   *
+   * Refreshes the live storage context afterwards for the same reason
+   * `writeDrivesInfoFile` does: a volume that was disabled for want of a
+   * secret (`VolumeSet.fromBoard` warns and skips it) must not need a
+   * restart to join the pool once the sysop supplies one.
    */
   async writeDriveSecret(driveNumber: number, secret: string): Promise<void> {
     const bbsRoot = appConfig.get('dataDir');
@@ -451,6 +491,7 @@ console.error(`[DriveConfigService] Failed to write ${drivesInfoPath}:`, error);
       // A filesystem without POSIX modes (a FAT-mounted volume, some Windows
       // setups) cannot narrow this; the board still runs.
     }
+    await this.refreshLiveStorage(bbsRoot);
   }
 
   // --------------------------------------------------------------- testing
@@ -624,7 +665,14 @@ console.error(`[DriveConfigService] Failed to write ${drivesInfoPath}:`, error);
     }
 
     if (!live) {
-      return { cacheActive: false, overBudgetBytes: 0, evictionDisabled: false, parkedFiles: [], brokenAreas };
+      return {
+        cacheActive: false,
+        overBudgetBytes: 0,
+        evictionDisabled: false,
+        parkedFiles: [],
+        brokenAreas,
+        bootError: getStorageBootError(),
+      };
     }
 
     const parkedFiles: ParkedFileView[] = live.cache.parkedFiles().map(f => ({
@@ -640,6 +688,7 @@ console.error(`[DriveConfigService] Failed to write ${drivesInfoPath}:`, error);
       evictionDisabled: live.cache.isEvictionDisabled(),
       parkedFiles,
       brokenAreas,
+      bootError: null,
     };
   }
 

@@ -1169,7 +1169,7 @@ function isPendingEntry(value: unknown): value is PendingEntry {
  * ESRCH means gone. Used so a sweep never removes another live node's
  * in-flight download temp.
  */
-function isProcessAlive(pid: number): boolean {
+export function isProcessAlive(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
