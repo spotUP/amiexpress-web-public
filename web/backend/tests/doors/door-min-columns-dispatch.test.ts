@@ -422,6 +422,20 @@ describe('a C64_ADAPT door reached through the real Enter dispatch', () => {
  */
 describe('the marked doors open for a C64 from their real .info bytes', () => {
   const BBSCMD = path.resolve(__dirname, '../../../../Commands/BBSCmd');
+
+  /**
+   * The real icon for a command, resolved the way the board's loader does.
+   *
+   * This tree came off a case-insensitive filesystem: CHAT's icon is
+   * `chat.info`, ULIST's is `ulist.info`, WALL's is `wall.info`. A literal
+   * join finds them on a Mac and finds nothing on the Linux runner, which
+   * is why ten cases here were red in CI and green everywhere else.
+   */
+  function realInfoPath(command: string): string {
+    const amigafs = require('../../src/utils/amigafs');
+    return amigafs.resolvePath(path.join(BBSCMD, `${command}.info`))
+      ?? path.join(BBSCMD, `${command}.info`);
+  }
   /**
    * The marked doors, and the binary each one launches.
    *
@@ -472,14 +486,7 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
 
   function definitionFromDisk(command: string) {
     const { loadCommandFromInfo } = require('../../src/utils/amiga-command-parser.util');
-    const amigafs = require('../../src/utils/amigafs');
-    // amigafs, not path.join: this tree came off a case-insensitive
-    // filesystem and holds `chat.info` for CHAT, `ulist.info` for ULIST and
-    // `wall.info` for WALL. The literal join finds them on a Mac and finds
-    // nothing on the Linux runner.
-    const infoPath = amigafs.resolvePath(path.join(BBSCMD, `${command}.info`))
-      ?? path.join(BBSCMD, `${command}.info`);
-    const def = loadCommandFromInfo(infoPath);
+    const def = loadCommandFromInfo(realInfoPath(command));
     if (!def) throw new Error(`Commands/BBSCmd/${command}.info did not parse`);
     return def;
   }
@@ -503,7 +510,10 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
     fs.rmSync(cmdDir, { recursive: true, force: true });
     fs.mkdirSync(cmdDir, { recursive: true });
     for (const c of commands) {
-      fs.copyFileSync(path.join(BBSCMD, `${c}.info`), path.join(cmdDir, `${c}.info`));
+      // Read by the board's spelling, written by the command's: the copy
+      // under the temp root is what loadCommands() will look for as
+      // `${c}.info`, and the source may be `chat.info` on disk.
+      fs.copyFileSync(realInfoPath(c), path.join(cmdDir, `${c}.info`));
       // The executable executeAmigaDoor refuses to launch without. Amiga hunk
       // magic, so the native-GCC branch is not taken either.
       const full = path.join(root, ...definitionFromDisk(c).location.split('/'));
