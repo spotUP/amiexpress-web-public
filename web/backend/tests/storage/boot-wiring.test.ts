@@ -91,7 +91,7 @@ describe('storage at boot', () => {
   it('is null on a board with no s3 drive, so nothing changes for it', async () => {
     const root = boardWithDrivesInfo(['DRIVE.1=DH1:Files']);
 
-    const storage = await initStorage(root, { areas: [] });
+    const storage = await initStorage(root, { areas: [], usedBytesByVolume: 'assume-empty' });
 
     expect(storage).toBeNull();
     // No S3 client, no cache directory - a board with only local drives is
@@ -102,7 +102,7 @@ describe('storage at boot', () => {
   it('is null on a board with no Drives.info at all', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'boot-wiring-empty-'));
 
-    expect(await initStorage(root, { areas: [] })).toBeNull();
+    expect(await initStorage(root, { areas: [], usedBytesByVolume: 'assume-empty' })).toBeNull();
   });
 
   it('builds the pool, with the registry and the caller-supplied area list carried on the context', async () => {
@@ -111,7 +111,7 @@ describe('storage at boot', () => {
     const fake = new FakeBackend({ driveNumber: 2 });
     const areas = [{ id: 1, conferenceId: 1, dirNumber: 1, path: 'BBS:Conf1/Files/', storageVolume: 2 }];
 
-    const storage = await initStorage(root, { backendFactory: () => fake, areas });
+    const storage = await initStorage(root, { backendFactory: () => fake, areas, usedBytesByVolume: 'assume-empty' });
 
     expect(storage).not.toBeNull();
     expect(storage!.volumes.hasPool()).toBe(true);
@@ -148,7 +148,7 @@ describe('storage at boot', () => {
     expect(fake.puts).toBe(0); // staged, not yet uploaded - the crash this test models
 
     // The next boot of node-a: same cache directory, a fresh FileCache.
-    const storage = await initStorage(root, { backendFactory: () => fake, cacheDir, areas: [] });
+    const storage = await initStorage(root, { backendFactory: () => fake, cacheDir, areas: [], usedBytesByVolume: 'assume-empty' });
     expect(storage).not.toBeNull();
 
     await storage!.cache.flushPending();
@@ -161,8 +161,8 @@ describe('storage at boot', () => {
     writeSecret(root, 1, 'sekrit');
     const backendFactory = () => new FakeBackend({ driveNumber: 1 });
 
-    const a = await initStorage(root, { backendFactory, nodeId: 'node-a', areas: [] });
-    const b = await initStorage(root, { backendFactory, nodeId: 'node-b', areas: [] });
+    const a = await initStorage(root, { backendFactory, nodeId: 'node-a', areas: [], usedBytesByVolume: 'assume-empty' });
+    const b = await initStorage(root, { backendFactory, nodeId: 'node-b', areas: [], usedBytesByVolume: 'assume-empty' });
 
     expect(a).not.toBeNull();
     expect(b).not.toBeNull();
@@ -175,7 +175,7 @@ describe('storage at boot', () => {
     writeSecret(root, 1, 'sekrit');
     process.env.BBS_STORAGE_NODE_ID = 'edge-1';
     try {
-      const storage = await initStorage(root, { backendFactory: () => new FakeBackend({ driveNumber: 1 }), areas: [] });
+      const storage = await initStorage(root, { backendFactory: () => new FakeBackend({ driveNumber: 1 }), areas: [], usedBytesByVolume: 'assume-empty' });
       expect(storage).not.toBeNull();
       expect(fs.existsSync(path.join(root, 'Storage', 'cache', 'edge-1'))).toBe(true);
     } finally {
@@ -191,6 +191,7 @@ describe('storage at boot', () => {
       backendFactory: () => new FakeBackend({ driveNumber: 1 }),
       nodeId: '../../etc',
       areas: [],
+      usedBytesByVolume: 'assume-empty',
     });
 
     expect(storage).not.toBeNull();
@@ -216,7 +217,7 @@ describe('storage at boot', () => {
     fs.mkdirSync(lockDir, { recursive: true });
     fs.writeFileSync(path.join(lockDir, '1.pid'), String(process.pid));
 
-    const storage = await initStorage(root, { backendFactory: () => new FakeBackend({ driveNumber: 1 }), areas: [] });
+    const storage = await initStorage(root, { backendFactory: () => new FakeBackend({ driveNumber: 1 }), areas: [], usedBytesByVolume: 'assume-empty' });
 
     expect(storage).not.toBeNull();
     const dirs = fs.readdirSync(path.join(root, 'Storage', 'cache'));
@@ -228,7 +229,7 @@ describe('storage at boot', () => {
     writeSecret(root, 1, 'sekrit');
     process.env.HOSTNAME = 'container-a';
 
-    const storage = await initStorage(root, { backendFactory: () => new FakeBackend({ driveNumber: 1 }), areas: [] });
+    const storage = await initStorage(root, { backendFactory: () => new FakeBackend({ driveNumber: 1 }), areas: [], usedBytesByVolume: 'assume-empty' });
 
     expect(storage).not.toBeNull();
     expect(fs.existsSync(path.join(root, 'Storage', 'cache', 'container-a'))).toBe(true);
@@ -274,7 +275,7 @@ describe('refreshStorageContext', () => {
     priorCache.markDirty(1, 'Conf1/Files/DEMO.LHA', staged);
 
     const start = Date.now();
-    await refreshStorageContext(root, [], { backendFactory: () => hanging, cacheDir });
+    await refreshStorageContext(root, [], { backendFactory: () => hanging, cacheDir, usedBytesByVolume: 'assume-empty' });
     const elapsed = Date.now() - start;
 
     // Generous relative to a hang that would otherwise be unbounded (OS TCP
@@ -289,11 +290,11 @@ describe('refreshStorageContext', () => {
     writeSecret(root, 1, 'sekrit');
     const fake = new FakeBackend({ driveNumber: 1 });
 
-    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume: 'assume-empty' });
     expect(getStorageContext()!.areas).toEqual([]);
 
     const areas = [{ id: 1, conferenceId: 1, dirNumber: 1, path: 'BBS:Conf1/Files/', storageVolume: 1 }];
-    await refreshStorageContext(root, areas, { backendFactory: () => fake });
+    await refreshStorageContext(root, areas, { backendFactory: () => fake, usedBytesByVolume: 'assume-empty' });
 
     expect(getStorageContext()!.areas).toBe(areas);
   });
@@ -301,7 +302,7 @@ describe('refreshStorageContext', () => {
   it('finding 4: a later call picks up a bucket added to Drives.info after boot, with no restart', async () => {
     const root = boardWithDrivesInfo(['DRIVE.1=DH1:Files']);
 
-    await refreshStorageContext(root, []);
+    await refreshStorageContext(root, [], { usedBytesByVolume: 'assume-empty' });
     expect(getStorageContext()).toBeNull();
 
     // The sysop adds a bucket through Drive Setup - Drives.info now names one.
@@ -311,7 +312,7 @@ describe('refreshStorageContext', () => {
     ]);
     writeSecret(root, 2, 'sekrit');
 
-    await refreshStorageContext(root, [], { backendFactory: () => new FakeBackend({ driveNumber: 2 }) });
+    await refreshStorageContext(root, [], { backendFactory: () => new FakeBackend({ driveNumber: 2 }), usedBytesByVolume: 'assume-empty' });
 
     expect(getStorageContext()).not.toBeNull();
     expect(getStorageContext()!.volumes.hasPool()).toBe(true);
@@ -320,7 +321,7 @@ describe('refreshStorageContext', () => {
   it('finding 5: stashes the boot error on a failed build, distinct from "no bucket configured"', async () => {
     const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.QUOTA=garbage']);
 
-    await refreshStorageContext(root, []);
+    await refreshStorageContext(root, [], { usedBytesByVolume: 'assume-empty' });
 
     expect(getStorageContext()).toBeNull();
     expect(getStorageBootError()).toMatch(/QUOTA/);
@@ -328,12 +329,12 @@ describe('refreshStorageContext', () => {
 
   it('finding 5: clears the boot error on the next successful build', async () => {
     const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.QUOTA=garbage']);
-    await refreshStorageContext(root, []);
+    await refreshStorageContext(root, [], { usedBytesByVolume: 'assume-empty' });
     expect(getStorageBootError()).not.toBeNull();
 
     applyTooltypes(path.join(root, 'Drives.info'), [['DRIVE.1.QUOTA', '10G']]);
     writeSecret(root, 1, 'sekrit');
-    await refreshStorageContext(root, [], { backendFactory: () => new FakeBackend({ driveNumber: 1 }) });
+    await refreshStorageContext(root, [], { backendFactory: () => new FakeBackend({ driveNumber: 1 }), usedBytesByVolume: 'assume-empty' });
 
     expect(getStorageBootError()).toBeNull();
     expect(getStorageContext()).not.toBeNull();
@@ -344,11 +345,11 @@ describe('refreshStorageContext', () => {
     writeSecret(root, 1, 'sekrit');
     const fake = new FakeBackend({ driveNumber: 1 });
 
-    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume: 'assume-empty' });
     // A second refresh - what an admin save, a conference change, or a
     // second Drives.info write all trigger via the SAME function.
     const areas = [{ id: 1, conferenceId: 1, dirNumber: 1, path: 'BBS:Conf1/Files/', storageVolume: 1 }];
-    await refreshStorageContext(root, areas, { backendFactory: () => fake });
+    await refreshStorageContext(root, areas, { backendFactory: () => fake, usedBytesByVolume: 'assume-empty' });
 
     const dirs = fs.readdirSync(path.join(root, 'Storage', 'cache'));
     expect(dirs).toHaveLength(1);
@@ -359,7 +360,7 @@ describe('refreshStorageContext', () => {
     writeSecret(root, 1, 'sekrit');
     const fake = new FakeBackend({ driveNumber: 1 });
 
-    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume: 'assume-empty' });
     const firstCacheDir = getStorageContext()!.cache.cacheDir;
     // Let boot's own (empty - nothing staged yet) scheduled flush settle
     // before staging anything, so what follows models a door writing a
@@ -380,7 +381,7 @@ describe('refreshStorageContext', () => {
     // ever takes (nothing outside this module calls `flushPending`
     // directly), so this waits for the automatic one instead of adding a
     // second attempt.
-    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume: 'assume-empty' });
 
     // Same directory - before this fix, the rebuild would have claimed a
     // NEW slot and this marker would now sit somewhere nothing scans.
@@ -394,13 +395,13 @@ describe('refreshStorageContext', () => {
     writeSecret(root, 1, 'sekrit');
     const fake = new FakeBackend({ driveNumber: 1 });
 
-    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume: 'assume-empty' });
     const healthy = getStorageContext();
     expect(healthy).not.toBeNull();
 
     // A hand-edited Drives.info now has a QUOTA typo between admin saves.
     applyTooltypes(path.join(root, 'Drives.info'), [['DRIVE.1.QUOTA', 'garbage']]);
-    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume: 'assume-empty' });
 
     // The exact same context object is still live - not torn down, not
     // replaced with null, which would have made every download read as
@@ -418,7 +419,7 @@ describe('refreshStorageContext', () => {
     writeSecret(root, 1, 'sekrit');
     const fake = new FakeBackend({ driveNumber: 1 });
 
-    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume: 'assume-empty' });
     const state = getStorageContext()!.volumes.byNumber(1)!;
     state.degraded = true;
     state.requestsThisMonth = 42;
@@ -428,7 +429,7 @@ describe('refreshStorageContext', () => {
     state.usedBytes = 12345;
 
     // An unrelated admin save (a conference rename, say) triggers a rebuild.
-    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume: 'assume-empty' });
 
     const rebuilt = getStorageContext()!.volumes.byNumber(1)!;
     expect(rebuilt.degraded).toBe(true);
@@ -546,14 +547,14 @@ describe('refreshStorageContext', () => {
     writeSecret(root, 1, 'sekrit');
     const fake = new FakeBackend({ driveNumber: 1 });
 
-    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume: 'assume-empty' });
     const before = getStorageContext()!.volumes.byNumber(1)!;
     before.degraded = true;
     before.requestsThisMonth = 42;
 
     // Drive 1 now points at a genuinely different bucket.
     applyTooltypes(path.join(root, 'Drives.info'), [['DRIVE.1', 's3://bucket-b']]);
-    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume: 'assume-empty' });
 
     const rebuilt = getStorageContext()!.volumes.byNumber(1)!;
     expect(rebuilt.degraded).toBe(false);
@@ -566,12 +567,12 @@ describe('refreshStorageContext', () => {
     const fake = new FakeBackend({ driveNumber: 1 });
     await fake.put('Conf1/Files/FILE.LHA', Buffer.from('x'));
 
-    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume: 'assume-empty' });
     await getStorageContext()!.names.forArea(1, 'Conf1/Files/').resolve('file.lha');
     expect(fake.lists).toBe(1);
 
     // An unrelated admin save rebuilds the pool.
-    await refreshStorageContext(root, [], { backendFactory: () => fake });
+    await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume: 'assume-empty' });
     await getStorageContext()!.names.forArea(1, 'Conf1/Files/').resolve('file.lha');
 
     // Still 1 - the cached listing survived the rebuild, so this did not
@@ -598,7 +599,7 @@ describe('refreshStorageContext', () => {
 
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     try {
-      await refreshStorageContext(root, [], { backendFactory: () => fake });
+      await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume: 'assume-empty' });
       const messages = errorSpy.mock.calls.map((call) => String(call[0]));
       const message = messages.find((m) => m.includes('orphan-node') && m.includes('1 pending upload'));
       expect(message).toBeDefined();
@@ -636,7 +637,7 @@ describe('refreshStorageContext', () => {
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     try {
       // This process claims slot 2 (slot 1 is held by its own, live pid).
-      await refreshStorageContext(root, [], { backendFactory: () => fake });
+      await refreshStorageContext(root, [], { backendFactory: () => fake, usedBytesByVolume: 'assume-empty' });
       const messages = errorSpy.mock.calls.map((call) => String(call[0]));
       expect(messages.some((m) => m.includes('pending upload'))).toBe(false);
     } finally {
@@ -670,6 +671,7 @@ describe('refreshStorageContext', () => {
       await refreshStorageContext(root, [], {
         backendFactory: () => fake,
         cacheDir: path.join(root, 'Storage', 'cache', 'this-run'),
+        usedBytesByVolume: 'assume-empty',
       });
       const messages = errorSpy.mock.calls.map((call) => String(call[0]));
       const message = messages.find((m) => m.includes('1 pending upload') && m.includes(path.join('cache', '1')));
@@ -704,7 +706,7 @@ describe('refreshStorageContext', () => {
 
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     try {
-      await refreshStorageContext(root, []);
+      await refreshStorageContext(root, [], { usedBytesByVolume: 'assume-empty' });
       expect(getStorageContext()).toBeNull();
       const messages = errorSpy.mock.calls.map((call) => String(call[0]));
       expect(messages.some((m) => m.includes('stray') && m.includes('1 pending upload'))).toBe(true);
@@ -736,7 +738,7 @@ describe('refreshStorageContext', () => {
 
     const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
     try {
-      await refreshStorageContext(root, [], { backendFactory: () => fake, cacheDir });
+      await refreshStorageContext(root, [], { backendFactory: () => fake, cacheDir, usedBytesByVolume: 'assume-empty' });
       // The non-blocking flush is chained (scheduleFlush) - give it a turn
       // to run and log before asserting.
       await new Promise((resolve) => setImmediate(resolve));
@@ -798,13 +800,13 @@ describe('refreshStorageContext', () => {
     priorCache.markDirty(1, 'Conf1/Files/DEMO.LHA', staged);
 
     // First refresh starts a flush that is now stuck mid-put.
-    await refreshStorageContext(root, [], { backendFactory: () => backend, cacheDir });
+    await refreshStorageContext(root, [], { backendFactory: () => backend, cacheDir, usedBytesByVolume: 'assume-empty' });
     await new Promise((resolve) => setImmediate(resolve));
     expect(putCount).toBe(1);
 
     // A second admin save rebuilds while that put is still outstanding -
     // its own flush must queue behind the first, not race it.
-    await refreshStorageContext(root, [], { backendFactory: () => backend, cacheDir });
+    await refreshStorageContext(root, [], { backendFactory: () => backend, cacheDir, usedBytesByVolume: 'assume-empty' });
     await new Promise((resolve) => setImmediate(resolve));
     expect(putCount).toBe(1);
 
@@ -812,5 +814,85 @@ describe('refreshStorageContext', () => {
     for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));
 
     expect(maxInFlight).toBe(1);
+  });
+});
+
+/**
+ * Gate 2, blocker 1: the seeding above works, and every test that exercises
+ * it INJECTS its own `usedBytesByVolume`. Nothing observed that PRODUCTION
+ * supplies one. Deleting `usedBytesByVolume:` from `server/initialization.ts`
+ * (both call sites) and `DriveConfigService.refreshLiveStorage` left the
+ * whole storage suite green while `usedBytes` went back to 0 on every boot -
+ * the exact CRITICAL the seeding fix was written to close, silently
+ * reopened. That is the same defect class as the seven the first gate found,
+ * so it gets the same two answers the suite already uses elsewhere:
+ *
+ *   1. a REQUIRED option, so the deletion is a compile error rather than an
+ *      omission nothing can see (`InitStorageOptions.usedBytesByVolume`);
+ *   2. a structural pin on each production call site, the pattern
+ *      `file-cache.test.ts`'s "blockOn is actually wired to blockOutcome"
+ *      and `download-command-remote.test.ts`'s `rematerialise` pin use, so
+ *      the deletion is ALSO a red test and not merely a red build.
+ */
+describe('production actually supplies the catalog seeder', () => {
+  const backendSrc = (...parts: string[]): string =>
+    fs.readFileSync(path.resolve(__dirname, '..', '..', 'src', ...parts), 'utf8');
+
+  it('server/initialization.ts passes it on BOTH refreshStorageContext calls - boot and the conference bus', () => {
+    const source = backendSrc('server', 'initialization.ts');
+    const calls = source.match(/await refreshStorageContext\([\s\S]*?\}\);/g) ?? [];
+    expect(calls).toHaveLength(2);
+    for (const call of calls) {
+      expect(call).toMatch(/usedBytesByVolume:\s*\(\)\s*=>\s*db\.usedBytesByVolume\(\)/);
+    }
+  });
+
+  it('DriveConfigService.refreshLiveStorage passes it, so a Drives.info write reseeds too', () => {
+    const source = backendSrc('services', 'config-services', 'drive-config.service.ts');
+    const method = source.match(/private async refreshLiveStorage\([\s\S]*?\n  \}/);
+    expect(method).not.toBeNull();
+    expect(method![0]).toMatch(/usedBytesByVolume:\s*\(\)\s*=>\s*this\.database\.usedBytesByVolume\(\)/);
+  });
+
+  it('says out loud what an omitted seeder costs, for the untyped callers a compile error cannot reach', async () => {
+    const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.QUOTA=10G', 'DRIVE.1.KEYID=k']);
+    writeSecret(root, 1, 'sekrit');
+    const fake = new FakeBackend({ driveNumber: 1 });
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      // The shape a JavaScript caller - or a future refactor that drops the
+      // field - actually produces. TypeScript refuses it; the runtime must
+      // not accept it in silence.
+      const opts = { backendFactory: () => fake, areas: [] } as unknown as Parameters<typeof initStorage>[1];
+      const storage = await initStorage(root, opts);
+
+      expect(storage).not.toBeNull();
+      expect(storage!.volumes.byNumber(1)!.usedBytes).toBe(0);
+      const said = warnSpy.mock.calls.map((call) => String(call[0])).join('\n');
+      expect(said).toMatch(/usedBytesByVolume/);
+      expect(said).toMatch(/QUOTA is not enforced/);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("stays quiet when a caller says 'assume-empty' on purpose", async () => {
+    const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.KEYID=k']);
+    writeSecret(root, 1, 'sekrit');
+    const fake = new FakeBackend({ driveNumber: 1 });
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const storage = await initStorage(root, {
+        backendFactory: () => fake,
+        areas: [],
+        usedBytesByVolume: 'assume-empty',
+      });
+
+      expect(storage).not.toBeNull();
+      const said = warnSpy.mock.calls.map((call) => String(call[0])).join('\n');
+      expect(said).not.toMatch(/usedBytesByVolume/);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

@@ -129,15 +129,35 @@ export interface InitStorageOptions {
    * (`file-repository.ts#usedBytesByVolume`), whose own doc explains why it,
    * and not an in-process counter, is the number that can be trusted.
    *
-   * Production (`server/initialization.ts`, `DriveConfigService`) always
-   * passes `() => db.usedBytesByVolume()`. Left undefined here - rather than
-   * defaulting to that call directly - so a test that builds a `VolumeSet`
-   * with no real SQLite database behind it (most of `tests/storage/`) keeps
-   * getting `usedBytes: 0`, exactly as before this finding was fixed: this
-   * function must never reach for the live database on its own.
+   * REQUIRED, and required for the same reason `areas` above is. It was
+   * optional for exactly one round, and that round's gate found the defect
+   * class this whole branch keeps producing: `usedBytes` seeding was
+   * correct, well tested, and pinned by NOTHING to the fact that production
+   * supplies the seeder at all. Deleting `usedBytesByVolume:` from
+   * `server/initialization.ts` and `DriveConfigService` left every volume at
+   * 0 used bytes on every boot - QUOTA silently unenforced - with the whole
+   * storage suite green, because an omitted optional argument is
+   * indistinguishable from a deliberate one. It is not optional now, so that
+   * deletion is a compile error.
+   *
+   *   - production passes `() => db.usedBytesByVolume()`
+   *   - a caller with no real SQLite database behind it (most of
+   *     `tests/storage/`) says `'assume-empty'` OUT LOUD, which means the
+   *     same thing the old omission meant - every volume starts at 0 - but
+   *     says it on purpose rather than by accident.
+   *
+   * `initStorage` never reaches for the live database on its own; the seam
+   * is always the caller's to supply.
    */
-  usedBytesByVolume?: () => ReadonlyMap<number, number>;
+  usedBytesByVolume: UsedBytesSeeder;
 }
+
+/**
+ * Either the catalog seeder itself, or the explicit statement that this
+ * caller has none and wants every volume to start at 0. See
+ * `InitStorageOptions.usedBytesByVolume`.
+ */
+export type UsedBytesSeeder = (() => ReadonlyMap<number, number>) | 'assume-empty';
 
 /**
  * Builds the board's storage subsystem, or answers `null` when there is
@@ -170,9 +190,24 @@ export async function initStorage(
   // up at all - see `usedBytesByVolume`'s own doc) must not take the whole
   // pool down with it. Leaving the counter at 0 on failure is the same
   // under-count this finding fixes, not a new failure mode.
-  if (opts.usedBytesByVolume) {
+  //
+  // The absence of a seeder is LOUD, not silent - see
+  // `InitStorageOptions.usedBytesByVolume`. TypeScript makes omission a
+  // compile error, but this module is reachable from untyped callers too, so
+  // the runtime says what the omission costs rather than quietly starting
+  // every volume at 0 the way it did before this was pinned.
+  if (opts.usedBytesByVolume === undefined) {
+    console.warn(
+      `[storage] a pool is configured but initStorage was given no usedBytesByVolume seeder, so every ` +
+        `volume starts this process at 0 used bytes and DRIVE.n QUOTA is not enforced. This is a wiring ` +
+        `bug: production passes () => db.usedBytesByVolume(); a caller that genuinely wants zero passes ` +
+        `'assume-empty'.`
+    );
+  }
+  if (typeof opts.usedBytesByVolume === 'function') {
+    const seeder = opts.usedBytesByVolume;
     try {
-      const usedByVolume = opts.usedBytesByVolume();
+      const usedByVolume = seeder();
       for (const state of volumes.states) {
         if (state.volume.kind !== 's3') continue;
         state.usedBytes = usedByVolume.get(state.volume.driveNumber) ?? 0;
@@ -480,7 +515,10 @@ function countPendingMarkers(pendingDir: string): number {
 export async function refreshStorageContext(
   bbsRoot: string,
   areas: readonly RemoteArea[],
-  opts: Omit<InitStorageOptions, 'areas'> = {}
+  // No default: `usedBytesByVolume` is required, and a `= {}` default here
+  // would hand every caller a silent way back to the omission this branch's
+  // gate caught. See `InitStorageOptions.usedBytesByVolume`.
+  opts: Omit<InitStorageOptions, 'areas'>
 ): Promise<void> {
   const previous = getStorageContext();
   try {
