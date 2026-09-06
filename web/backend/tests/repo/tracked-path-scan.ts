@@ -601,6 +601,9 @@ export function trackedPaths(repoRoot: string): Set<string> | null {
     const out = execFileSync('git', ['-C', repoRoot, 'ls-files', '-z'], {
       encoding: 'utf8',
       maxBuffer: 256 * 1024 * 1024,
+      // A `git archive` extraction is not a work tree, and git says so on
+      // stderr. That is an expected answer here, not a failure to print.
+      stdio: ['ignore', 'pipe', 'ignore'],
     });
     const set = new Set(out.split(String.fromCharCode(0)).filter(Boolean));
     return set.size > 0 ? set : null;
