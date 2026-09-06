@@ -224,3 +224,42 @@ export async function aLoneOpponentIsDrawnFullSize(): Promise<void> {
     screen.destroy();
   }
 }
+
+/**
+ * EVERY glyph this door can put on a C64 screen exists in the character ROM.
+ *
+ * PETSCII has no diamond: U+25C6 reaches the glass as '?', and an item piece
+ * landing turned into a row of them - "one block turned into ??? when it
+ * landed" (2026-09-06). The transducer is the only authority on what maps, so
+ * this asks it rather than trusting a table by eye.
+ */
+export async function noCellReachesAC64AsAQuestionMark(): Promise<void> {
+  const { AnsiToPetsciiTransducer } = require('@amiexpress/bbs-door-sdk/petscii');
+  const { itemCellChar, blockChar } = require('../ui/versus-cells');
+  const { fitCell } = require('../ui/block-width');
+  const flat = petsciiScreen();
+
+  const cells: string[] = [
+    blockChar('I'), blockChar('T'), blockChar(''),
+    itemCellChar(25, null, flat),
+    itemCellChar(1, 'cyan', flat),
+    itemCellChar(7, 'red', flat),
+    // What the opponent panel paints for a filled cell on a flat screen.
+    '{cyan-fg}█{/cyan-fg}',
+    '{gray-fg}░░{/gray-fg}',
+    '{white-fg}##{/white-fg}',
+  ];
+
+  for (const cell of cells) {
+    for (const width of [1, 2]) {
+      const t = new AnsiToPetsciiTransducer();
+      t.transduce('\x1b[2J\x1b[H' + fitCell(cell, width).replace(/\{[^}]*\}/g, ''));
+      const codes = [...t.machine.state.screen.slice(0, 8)].map((b: number) => b & 0x7f);
+      assert.ok(
+        !codes.includes(0x3f),
+        `${JSON.stringify(cell)} at ${width} character(s) reaches a C64 as '?' - `
+        + 'pick a glyph the character ROM has',
+      );
+    }
+  }
+}

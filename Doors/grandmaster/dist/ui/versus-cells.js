@@ -43,8 +43,12 @@ function itemCellChar(item, color, screen) {
             : '{white-bg}{black-fg}##{/black-fg}{/white-bg}';
     }
     const bg = ITEM_CELL_COLORS[color ?? ''] ?? 'gray';
+    // PETSCII HAS NO DIAMOND. U+25C6 is not in the character ROM and reaches
+    // the glass as '?', which is what a caller saw when an item piece landed:
+    // "one block turned into ???". A shaded block is a glyph it does have
+    // ($66) and still reads as "not an ordinary block".
     return flat
-        ? `{${bg}-fg}◆◆{/${bg}-fg}`
+        ? `{${bg}-fg}▒▒{/${bg}-fg}`
         : `{${bg}-bg}{black-fg}◆◆{/black-fg}{/${bg}-bg}`;
 }
 //# sourceMappingURL=versus-cells.js.map

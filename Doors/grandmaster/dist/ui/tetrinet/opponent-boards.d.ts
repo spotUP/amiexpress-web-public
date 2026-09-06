@@ -81,6 +81,8 @@ export declare class OpponentBoards {
     private cellWidth;
     /** Does this panel draw its own frame? */
     private framed;
+    /** True where a cell cannot carry its own background - PETSCII. */
+    private flatCells;
     private boardWidth;
     private boardHeight;
     private perRow;

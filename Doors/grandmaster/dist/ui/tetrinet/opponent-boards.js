@@ -11,6 +11,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpponentBoards = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const block_width_1 = require("../block-width");
 /**
  * A field drawn at FULL size, as the player's own board is drawn.
  *
@@ -42,6 +43,8 @@ class OpponentBoards {
         this.cellWidth = CELL_WIDTH;
         /** Does this panel draw its own frame? */
         this.framed = true;
+        /** True where a cell cannot carry its own background - PETSCII. */
+        this.flatCells = false;
         // 6 scaled columns + 2 borders, and 8 scaled rows + name + 2 borders.
         // Five of these tile a 28x24 panel: three across (3 * 9 = 27 <= 26 inner
         // plus the last board's own width) and two down.
@@ -64,6 +67,7 @@ class OpponentBoards {
         this.maxOpponents = options.maxOpponents || 5;
         this.cellWidth = options.cellWidth ?? CELL_WIDTH;
         this.framed = options.frame !== false;
+        this.flatCells = !(0, block_width_1.cellsCanCarryBackground)(options.parent);
         // The spectator view has the whole screen and lays six fields out in a
         // single row; the in-game panel is a narrow column and keeps its 3x2.
         if (options.boardWidth)
@@ -392,7 +396,14 @@ class OpponentBoards {
                     const color = this.getCellColor(hit);
                     // At full size the cell is a solid block, as the played board draws
                     // it; a minimap keeps one character so six fields still fit.
-                    line += `{${color}-bg}{${color}-fg}${'#'.repeat(pad)}{/}`;
+                    //
+                    // The block is a BACKGROUND on a screen that has one - '#' under a
+                    // matching bg reads as solid - and a foreground block where there
+                    // is none. PETSCII drops the bg, so the C64 was shown a field of
+                    // bare hashes: "the tetrinet ai player rendering is broken".
+                    line += this.flatCells
+                        ? `{${color}-fg}${'█'.repeat(pad)}{/${color}-fg}`
+                        : `{${color}-bg}{${color}-fg}${'#'.repeat(pad)}{/}`;
                 }
                 else {
                     line += ' '.repeat(pad);
