@@ -97,6 +97,15 @@ export interface FileCacheOptions {
 /** Matches `BsdSocketLibrary.recv()` and `AmiSSLLibrary`, which both use 30 s. */
 export const DEFAULT_SYNC_TIMEOUT_MS = 30_000;
 
+/**
+ * How much traffic `evictTo()` waits for between automatic sweeps, as a
+ * fraction of `maxBytes` - see `maybeSweep`. Scales with the budget itself
+ * rather than pinning an absolute number of bytes or calls: a 10 GiB cache
+ * does not need a walk after every few-KB download, and a board configured
+ * with a small budget still gets swept promptly relative to it.
+ */
+const SWEEP_TRIGGER_FRACTION = 0.05;
+
 export type BlockOutcome = 'value' | 'failure' | 'timeout';
 
 /**
@@ -211,6 +220,14 @@ export class FileCache {
    * refuses uploads to a bucket with room.
    */
   private readonly uploadedSizes = new Map<string, number>();
+
+  /**
+   * Bytes moved through `fetch`/`writeBack` since the last automatic
+   * `evictTo()` sweep - see `maybeSweep`. Never reset on construction to a
+   * value that would force an immediate sweep of a freshly-recovered cache;
+   * it only grows from real traffic.
+   */
+  private bytesSinceSweep = 0;
 
   private shortfallBytes = 0;
   private warnedShortfall = false;
@@ -839,6 +856,9 @@ export class FileCache {
     state.requestsThisMonth++;
     state.egressBytesThisMonth += body.length;
     this.lastUsed.set(path.resolve(local), Date.now());
+    // After the rename and the accounting, never before: a sweep must never
+    // see this download as anything but a complete, materialised file.
+    this.maybeSweep(body.length);
     return local;
   }
 
@@ -1007,6 +1027,9 @@ export class FileCache {
     // The bytes are in the pool now, so unpinning is safe.
     this.dirty.delete(id);
     this.removeMarker(driveNumber, key);
+    // After the pin clears, never before: a sweep during this call must
+    // never be able to see this file as both dirty and evictable.
+    this.maybeSweep(body.length);
   }
 
   /**
@@ -1105,6 +1128,27 @@ export class FileCache {
    * so a second node's in-flight download is never pulled out from under its
    * own rename.
    */
+  /**
+   * The wiring `evictTo()` needs to ever run outside a test: called after a
+   * `fetch()` lands and after a `writeBack()` clears a pin, so the cache
+   * actually shrinks back toward its budget as traffic moves through it,
+   * rather than growing without bound on the same volume the file areas it
+   * is caching for live on.
+   *
+   * Gated on bytes moved, not on every call: a full tree walk on every
+   * single download would make `evictTo`'s own cost scale with request rate
+   * instead of with how much has actually changed since the last sweep. The
+   * threshold is a fraction of `maxBytes` (`SWEEP_TRIGGER_FRACTION`) so it
+   * scales with the configured budget rather than an arbitrary constant.
+   */
+  private maybeSweep(bytesMoved: number): void {
+    this.bytesSinceSweep += bytesMoved;
+    const threshold = Math.max(1, Math.floor(this.maxBytes * SWEEP_TRIGGER_FRACTION));
+    if (this.bytesSinceSweep < threshold) return;
+    this.bytesSinceSweep = 0;
+    this.evictTo();
+  }
+
   evictTo(maxBytes: number = this.maxBytes): void {
     const { files, pinKnown } = this.scanForEviction();
     let total = files.reduce((sum, f) => sum + f.size, 0);
