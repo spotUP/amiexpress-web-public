@@ -468,25 +468,47 @@ export async function deleteFileChecker(id: number) {
   return request<{ success: boolean }>(`/api/config/file-checkers/${id}`, { method: 'DELETE' });
 }
 
-// Security
-export async function getSecurity(level: number) {
-  return requestList<import('./types.js').SecurityRow>(`/api/config/security/${level}`);
+// Security levels — Access/ACS.<level>.info, the files express.e actually
+// reads through utils/acs-access-loader. This TUI used to point at
+// /api/config/security/:level, which is CRUD over a SQLite table
+// (security_level_access) the BBS never consults — see
+// web/backend/src/services/config-services/acs-level-file.service.ts:4-9 for
+// the incident that forced the web admin off that table. Match it here.
+export interface AcsLevelsInfo {
+  levels: number[];
+  inUse: Array<{ level: number; users: number; servedBy: number | null }>;
+  permissions: string[];
 }
 
-export async function createSecurity(row: Partial<import('./types.js').SecurityRow>) {
-  return request<{ success: boolean; data: import('./types.js').SecurityRow }>('/api/config/security', {
-    method: 'POST', body: JSON.stringify(row),
+export interface AcsLevelFlags {
+  level: number;
+  file: string;
+  flags: Record<string, boolean>;
+  ambiguous: string[];
+}
+
+export async function getAcsLevels() {
+  const res = await request<{ success: boolean; data: AcsLevelsInfo }>('/api/config/security/levels');
+  return res.data;
+}
+
+export async function getAcsLevelFlags(level: number) {
+  const res = await request<{ success: boolean; data: AcsLevelFlags }>(`/api/config/security/levels/${level}`);
+  return res.data;
+}
+
+export async function saveAcsLevelFlags(level: number, flags: Record<string, boolean>) {
+  return request<{ success: boolean; data: { level: number; file: string; backupPath: string } }>(
+    `/api/config/security/levels/${level}`,
+    { method: 'PUT', body: JSON.stringify({ flags }) }
+  );
+}
+
+export async function createAcsLevel(level: number, copyFrom?: number) {
+  return request<{ success: boolean; message?: string }>(`/api/config/security/levels/${level}`, {
+    method: 'POST',
+    body: JSON.stringify(copyFrom !== undefined ? { copyFrom } : {}),
   });
-}
-
-export async function updateSecurity(id: number, patch: Partial<import('./types.js').SecurityRow>) {
-  return request<{ success: boolean; data: import('./types.js').SecurityRow }>(`/api/config/security/${id}`, {
-    method: 'PUT', body: JSON.stringify(patch),
-  });
-}
-
-export async function deleteSecurity(id: number) {
-  return request<{ success: boolean }>(`/api/config/security/${id}`, { method: 'DELETE' });
 }
 
 // ───── Phase D: Door install, Import/Export, Batch editor, Global wall ──

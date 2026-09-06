@@ -156,10 +156,3 @@ export interface FileCheckerRow {
   script_path?: string;
   enabled: boolean;
 }
-export interface SecurityRow {
-  id: number;
-  security_level: number;
-  acs_flag: string;
-  enabled: boolean;
-  description?: string;
-}
