@@ -103,6 +103,16 @@ export function App({ username }: Props) {
       // F2 raw sequences: xterm/tmux ESC-O-Q, vt220 ESC-[12~, linux ESC-[[B.
       // Use includes() so a chunk that bundles other bytes still matches.
       if (s.includes('OQ') || s.includes('[12~') || s.includes('[[B')) {
+        // Same lock the useInput handler below checks for 'q'/'?': showRestart
+        // swaps in RestartDialog exactly like showHelp swaps in HelpOverlay,
+        // unmounting whatever page (and its open form) was active. This
+        // listener is a separate raw-stdin path outside Ink's useInput, so it
+        // needed its own check - F2 mid-password-reset discarded the form the
+        // same way 'q' and '?' did before the lock covered them. Once
+        // showRestart is actually true the lock is already false (the page
+        // that held it has unmounted), so this only ever blocks OPENING the
+        // dialog while a form is up, never closing it.
+        if (isTextEntryActive()) return;
         setShowRestart(prev => !prev);
       }
     };
