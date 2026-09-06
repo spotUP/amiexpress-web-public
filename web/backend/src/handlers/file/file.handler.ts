@@ -50,7 +50,19 @@ export function setGetUserStats(fn: typeof getUserStats) {
   getUserStats = fn;
 }
 
-export function setFileMaintenanceDependencies(deps: {
+/**
+ * The search + CRUD functions the file-search and legacy maintenance screens
+ * in THIS module call.
+ *
+ * Called `setFileMaintenanceDependencies` until the name collided, exactly,
+ * with `file-maintenance.handler.ts`'s own setter (which injects db/config/
+ * callersLog for the real `FM` command). Boot imported this one, called it,
+ * and read the tick as "FM is wired" - so the FM module never got its
+ * `config` and `_config.get('dataDir')` threw on the first line of every
+ * `FM` on every board. One name, one thing: this setter injects the file
+ * SEARCH dependencies and says so.
+ */
+export function setFileSearchDependencies(deps: {
   searchFilesByName: any;
   searchFilesAdvanced: any;
   getFileEntry: any;

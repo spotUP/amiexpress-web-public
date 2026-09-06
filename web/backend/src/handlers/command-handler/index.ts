@@ -91,7 +91,23 @@ export function isModularMode(): boolean {
   return true; // Always true now
 }
 
-// Handler registration function - maintains compatibility with existing code
+/**
+ * DEAD CODE - nothing in this repository calls it. Grep before you trust it.
+ *
+ * The board's ONE wiring path is `server/initialization.ts#initializeData`,
+ * which index.ts's start-up runs; every setter this function reaches for is
+ * called there directly, against the real `db`/`config`, and that is where a
+ * new dependency belongs.
+ *
+ * It is left in place rather than deleted because deleting an exported entry
+ * point is a separate change with its own blast radius, but it must not be
+ * mistaken for live wiring: it reads its dependencies off an untyped
+ * `doorSystem` object that no caller constructs, so every `if (doorSystem.
+ * setX)` below is a branch that has never run. Its
+ * `setFileMaintenanceDependencies` block was, until 2026-09-06, the ONLY
+ * call anywhere to `file-maintenance.handler.ts`'s setter - which is exactly
+ * how the FM command shipped unwired for every board.
+ */
 export function registerCommandHandlers(doorSystem: any) {
   // Set all dependencies from the door system
   const deps = {

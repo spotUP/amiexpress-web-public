@@ -81,11 +81,17 @@ import {
   setDatabase as setDatabaseForFileHandler,
   setCallersLog,
   setGetUserStats,
-  setFileMaintenanceDependencies,
+  setFileSearchDependencies,
   displayUploadInterface,
   displayDownloadInterface,
   displayNewFiles
 } from '../handlers/file/file.handler';
+// The FM command lives in its OWN module and has its OWN setter (db/config/
+// callersLog). It used to share a name with file.handler's search-function
+// setter above, so boot called that one, ticked the box, and left every
+// sysop's `FM` throwing on `_config.get('dataDir')`. Imported here under the
+// name it actually has, from the module that actually serves FM.
+import { setFileMaintenanceDependencies } from '../handlers/file/file-maintenance.handler';
 import { setMessageEntryDependencies } from '../handlers/message/message-entry.handler';
 import { setMessageForwardDependencies } from '../handlers/message/message-forward.handler';
 import { displayAccountEditingMenu, setDatabase as setDatabaseForAccountHandler } from '../handlers/user/account.handler';
@@ -490,8 +496,8 @@ export async function initializeData(io?: SocketIOServer) {
     setCallersLog(callersLog);
     setGetUserStats(getUserStats);
 
-    // Inject file maintenance dependencies
-    setFileMaintenanceDependencies({
+    // Inject file search dependencies (file.handler.ts)
+    setFileSearchDependencies({
       searchFilesByName,
       searchFilesAdvanced,
       getFileEntry,
@@ -499,6 +505,17 @@ export async function initializeData(io?: SocketIOServer) {
       moveFileEntry,
       updateFileDescription,
       getFileAreas
+    });
+
+    // Inject the FM command's own dependencies (file-maintenance.handler.ts).
+    // All three dispatchers - command.handler.ts, command-execution.ts and
+    // internal-commands.ts - route `FM` to THAT module, and its very first
+    // statement after the ACS check is `_config.get('dataDir')`. Without this
+    // call it is undefined and FM throws for every sysop on every board.
+    setFileMaintenanceDependencies({
+      db,
+      config,
+      callersLog
     });
 
     // Inject message entry dependencies

@@ -193,7 +193,7 @@ import {
   setDatabase as setDatabaseForFileHandler,
   setCallersLog,
   setGetUserStats,
-  setFileMaintenanceDependencies,
+  setFileSearchDependencies,
 } from "./handlers/file/file.handler";
 import { setMessageEntryDependencies } from "./handlers/message/message-entry.handler";
 import {

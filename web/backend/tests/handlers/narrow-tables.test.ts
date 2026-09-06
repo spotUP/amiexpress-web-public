@@ -129,7 +129,7 @@ const SEARCH_FILE = {
 describe('5a file search listing (file.handler.ts handleFileSearch)', () => {
   function driveSearch(driver: Driver) {
     const fileHandler = require('../../src/handlers/file/file.handler');
-    fileHandler.setFileMaintenanceDependencies({
+    fileHandler.setFileSearchDependencies({
       searchFilesByName: jest.fn(),
       searchFilesAdvanced: jest.fn().mockResolvedValue([SEARCH_FILE]),
       getFileEntry: jest.fn(),
