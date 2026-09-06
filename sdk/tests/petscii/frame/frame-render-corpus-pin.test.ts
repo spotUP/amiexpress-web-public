@@ -128,6 +128,7 @@ const PINS: Record<string, Pin> = {
   conftop: { renders: 22, bytes: 9137, sha256: 'a87497003d9779c8031cf2fb4bbb609bd83cae277e64bac5805f37713f2ba171' },
   sysinfo: { renders: 22, bytes: 5732, sha256: 'b52efd325c043e34026c5728d930cf40b5ac8d956758959a502cafadd003b7a0' },
   games: { renders: 21, bytes: 18770, sha256: 'bc8ebf20627f33003f02090eace28e87af4f10c782fc71cd941804aa3510715f' },
+  olm: { renders: 32, bytes: 10419, sha256: 'e762151bf15e60b3059f6676870e2f68dcc6721660d66df95222fe0c45cbc8fe' },
 };
 
 function renderChain(id: string): Pin {

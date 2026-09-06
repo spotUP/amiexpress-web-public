@@ -422,5 +422,20 @@
     "cwd": "web/backend",
     "installed": "games",
     "notes": "5D-AdiMenu V1.0 by tHE aDDiCT/5D!, the board's games command: a header, the BBSLINK online-games menu shown through JH_SF, and a footer. All THIRTY [CODE] Name entries reach a 40-column caller, with ZERO narrow marks and zero unmapped glyphs - the record rung places each entry's right-hand code flush against column 40 instead of spending a second row on it, which is what took the menu from 33 painted rows to 24 and let it fit one page with its title. The door sends JH_SF with data 0, so it does NOT force non-stop and the board's pause is free to arm; it simply is not needed for this menu any more. Marked C64_ADAPT=40 on 2026-09-06."
+  },
+  "olm": {
+    "binary": "Doors/!!!WAR!!!/WAROLM/WAROLM",
+    "command": "Olm",
+    "script": [
+      "4000 \\r",
+      "8000 \\r",
+      "12000 q\\r"
+    ],
+    "bytes": 1433,
+    "sha256": "d69996388fe464ecd58eb03ab0911869d5cd6ea0b0f1e186a965f7ba16d5c54a",
+    "harness": "printf '%s\\n' '4000 \\r' '8000 \\r' '12000 q\\r' | env BBS_DATA_DIR=$REPO npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/!!!WAR!!!/WAROLM/WAROLM 1 --doortype XIM --command Olm --timeout 25 > olm.ans",
+    "cwd": "web/backend",
+    "installed": "Olm",
+    "notes": "WarOLM V0.3 by Wardancer/Vanity, the board's Olm command: a four-row node table inside a box, with a cursor-key help line under it. Zero unmapped glyphs at 40 and every node record whole - number, user, location and action. THREE narrow marks remain and none of them is on data: the door's own title/credits row, and the '=' runs that pad an absent node's empty USER and LOCATION cells on the two node-00 variants (plain and selected). Those two rows are the ones that forced narrowRow to spend decoration before content: widest-first put the truncation mark inside the ACTION field and the caller read 'No Node Present' as 'No Node Pre>'. The help line is the prose rung's - 'Use Cursor Keys To Choose, <-' Enter To>' no longer says how to quit. Marked C64_ADAPT=40 on 2026-09-06."
   }
 }

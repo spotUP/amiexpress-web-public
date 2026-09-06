@@ -533,6 +533,12 @@ const EXPECTED_ROWS: Record<string, number> = {
   // `record` - each two-column '[CODE] Name  [CODE] Name' entry - and 26 are
   // painted, the extra one over the screen being the door's own footer.
   games: 32,
+  // `olm` at 29: WarOLM's node table. Two rows go to `prose` (the help line and
+  // the sign-off), two to `record`, and the five that still narrow are the
+  // credits row and the '=' placeholder runs of the two node-00 variants - the
+  // marks land on decoration, not on a node. 23 of the 29 are painted, so the
+  // whole door fits one page.
+  olm: 29,
 };
 
 function lastFrameOf(id: string): Frame {

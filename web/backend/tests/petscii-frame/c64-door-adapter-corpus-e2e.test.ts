@@ -168,6 +168,9 @@ const SIGNATURES: Record<string, Signature> = {
   // The last entry in the menu: if it is on the screen, the window did not drop
   // the tail, and its code is the one that used to be paged away.
   games: { door: 'Usurper' },
+  // The ACTION field of the absent node - the row that forced narrowRow to spend
+  // its decoration columns first.
+  olm: { door: 'No Node Present' },
 };
 
 // ---------------------------------------------------------------- sessions
