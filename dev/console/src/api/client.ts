@@ -707,6 +707,28 @@ export async function deleteFileChecker(id: number) {
   return request<{ success: boolean }>(`/api/config/file-checkers/${id}`, { method: 'DELETE' });
 }
 
+// File checker error patterns — the specific strings a file-validation
+// command should treat as "archive is bad" (config.schemas.ts's
+// FileCheckerErrorSchema: file_checker_id, error_number, error_pattern).
+// GET/POST nest under the checker; DELETE is its own top-level resource
+// (config-routes.ts:1578-1626), matching
+// web/config-app/src/api/client.ts:779-794 exactly — including the
+// asymmetric path (create nests, delete doesn't).
+export async function getFileCheckerErrors(checkerId: number) {
+  return requestList<import('./types.js').FileCheckerErrorRow>(`/api/config/file-checkers/${checkerId}/errors`);
+}
+
+export async function createFileCheckerError(checkerId: number, row: Partial<import('./types.js').FileCheckerErrorRow>) {
+  return request<{ success: boolean; data: import('./types.js').FileCheckerErrorRow; message?: string }>(
+    `/api/config/file-checkers/${checkerId}/errors`,
+    { method: 'POST', body: JSON.stringify(row) }
+  );
+}
+
+export async function deleteFileCheckerError(id: number) {
+  return request<{ success: boolean; message?: string }>(`/api/config/file-checker-errors/${id}`, { method: 'DELETE' });
+}
+
 // Security levels — Access/ACS.<level>.info, the files express.e actually
 // reads through utils/acs-access-loader. This TUI used to point at
 // /api/config/security/:level, which is CRUD over a SQLite table

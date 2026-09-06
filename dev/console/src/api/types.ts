@@ -198,3 +198,11 @@ export interface FileCheckerRow {
   script_path?: string;
   enabled: boolean;
 }
+
+// Mirrors config.schemas.ts's FileCheckerErrorSchema.
+export interface FileCheckerErrorRow {
+  id: number;
+  file_checker_id: number;
+  error_number: number;
+  error_pattern: string;
+}

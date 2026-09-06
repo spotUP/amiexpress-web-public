@@ -43,6 +43,9 @@ import {
   updateNodeConfig,
   deleteNodeConfig,
   getAuditLog,
+  getFileCheckerErrors,
+  createFileCheckerError,
+  deleteFileCheckerError,
 } from './client.js';
 
 const BASE_URL = process.env['AMIEXPRESS_URL'] ?? 'http://localhost:3001';
@@ -374,6 +377,31 @@ test('getAuditLog omits params that were not supplied', async () => {
   await getAuditLog({});
 
   assert.equal(calls[0].url, `${BASE_URL}/api/config/audit`);
+});
+
+test('getFileCheckerErrors GETs the nested /file-checkers/:id/errors route', async () => {
+  stubFetch({ success: true, data: [{ id: 1, file_checker_id: 2, error_number: 1, error_pattern: 'CRC failed' }] });
+  const rows = await getFileCheckerErrors(2);
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/file-checkers/2/errors`);
+  assert.equal(rows[0].error_pattern, 'CRC failed');
+});
+
+test('createFileCheckerError POSTs to the nested route', async () => {
+  stubFetch({ success: true, data: { id: 3, file_checker_id: 2, error_number: 2, error_pattern: 'bad archive' } });
+  await createFileCheckerError(2, { error_number: 2, error_pattern: 'bad archive' });
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/file-checkers/2/errors`);
+  assert.equal(calls[0].method, 'POST');
+  assert.deepEqual(calls[0].body, { error_number: 2, error_pattern: 'bad archive' });
+});
+
+test('deleteFileCheckerError DELETEs the flat /file-checker-errors/:id route, not nested', async () => {
+  stubFetch({ success: true, message: 'File checker error deleted' });
+  await deleteFileCheckerError(3);
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/file-checker-errors/3`);
+  assert.equal(calls[0].method, 'DELETE');
 });
 
 // The incident this whole page exists to fix: the OLD Security page wrote

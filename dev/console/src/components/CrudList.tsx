@@ -21,6 +21,15 @@ export interface EditField {
   type: 'string' | 'number' | 'bool';
 }
 
+export interface ExtraAction<T> {
+  /** Single-character hotkey, active on the selected row while mode === 'list'. */
+  key: string;
+  /** Shown nowhere by this component — the page using it documents the key
+   * in its own registry.ts footerHint/helpKeys, same as every other key. */
+  label: string;
+  onSelect: (row: T) => void;
+}
+
 export interface CrudListProps<T extends { id: number }> {
   title: string;
   columns: ColumnDef<T>[];
@@ -29,6 +38,13 @@ export interface CrudListProps<T extends { id: number }> {
   create?: (row: Partial<T>) => Promise<unknown>;
   update?: (id: number, patch: Partial<T>) => Promise<unknown>;
   remove?: (id: number) => Promise<unknown>;
+  /**
+   * Extra single-key actions on the selected row, on top of the built-in
+   * e/n/d/// r — e.g. FileCheckersPage's "manage this checker's error
+   * patterns" drill-down. Reserve letters not already used above
+   * ('e','n','d','/','r').
+   */
+  extraActions?: ExtraAction<T>[];
 }
 
 type Mode = 'list' | 'edit' | 'new' | 'confirm-delete';
@@ -41,6 +57,7 @@ export function CrudList<T extends { id: number }>({
   create,
   update,
   remove,
+  extraActions,
 }: CrudListProps<T>) {
   const [items, setItems] = useState<T[]>([]);
   const [filtered, setFiltered] = useState<T[]>([]);
@@ -199,6 +216,10 @@ export function CrudList<T extends { id: number }>({
       if (input === 'd' && selected) startDelete();
       if (input === '/') { setSearching(true); setSearchText(''); }
       if (input === 'r') loadItems();
+      if (selected) {
+        const action = extraActions?.find(a => a.key === input);
+        if (action) action.onSelect(selected);
+      }
     } else if (mode === 'edit' || mode === 'new') {
       const field = editFields[editFieldIdx];
       if (key.escape) { setMode('list'); return; }
