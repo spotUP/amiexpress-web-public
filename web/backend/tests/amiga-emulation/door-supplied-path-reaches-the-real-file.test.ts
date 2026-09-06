@@ -364,11 +364,18 @@ describe('a door-supplied path reaches the real file on a case-sensitive host', 
         replyPort: 0,
       });
 
-      expect(shim.writeFileSync).toHaveBeenCalledWith(
-        path.join(root, 'screens/userdump.json'),
-        expect.stringContaining('SYSOP'),
-        'utf8'
-      );
+      // The path the shim is HANDED differs by host - on a case-insensitive
+      // filesystem `screens/` already exists so amigafs hands it straight
+      // back, and on Linux it comes back corrected to `Screens/`. Neither is
+      // the thing under test: what matters is that one write happened, with
+      // the dump in it, into the real directory. Asserting the literal
+      // argument passed on a Mac and failed on the runner.
+      expect(shim.writeFileSync).toHaveBeenCalledTimes(1);
+      const [writtenPath, written, encoding] = shim.writeFileSync.mock.calls[0];
+      expect(String(writtenPath).toLowerCase())
+        .toBe(path.join(root, 'screens/userdump.json').toLowerCase());
+      expect(String(written)).toContain('SYSOP');
+      expect(encoding).toBe('utf8');
       expect(fs.readdirSync(screensDir)).toContain('userdump.json');
       expect(fs.readdirSync(root)).toEqual(['Screens']);
     });

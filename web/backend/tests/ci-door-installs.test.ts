@@ -7,9 +7,16 @@
  * for the 40-column suites, then ncurses-pong and phreakwars the day they
  * arrived. The doors were fine; the list was out of date.
  *
- * The workflow now DERIVES that list. This test is the guard on the rule
- * rather than on a name: it works out which doors the backend's sources and
- * tests reach, and fails if the workflow could not install one of them.
+ * The workflow DERIVED that list from the `Doors/<name>/` paths the backend's
+ * sources and tests spell out - and a third page of TS2307 arrived anyway on
+ * 2026-09-06, from eight arcade doors that tests/transport reaches through a
+ * template literal (`../../../../Doors/${arcade.door}/index`). A name that is
+ * assembled at runtime is not in the text to be grepped.
+ *
+ * So the rule stopped being a derivation from source text: CI installs EVERY
+ * door whose package.json depends on the SDK. It is a superset of anything
+ * the backend can reach, by any spelling, and it cannot go stale. This test
+ * guards that rule.
  */
 
 import { describe, it, expect } from '@jest/globals';
@@ -49,31 +56,38 @@ function doorsNeedingInstall(): string[] {
 }
 
 describe('the backend-tests workflow', () => {
-  it('derives the doors it installs instead of listing them', () => {
+  it('installs by the rule, never from a list of names', () => {
     const text = fs.readFileSync(workflow, 'utf8');
 
-    // The derivation, not a name: it must read both the sources and the
-    // tests, because tsconfig.tests.json reaches further than the imports do.
-    expect(text).toContain('web/backend/src web/backend/tests');
-    expect(text).toContain('npm install --prefix "Doors/$door"');
+    // Every Doors/*/package.json that names the SDK, and nothing about which
+    // doors the backend happens to mention.
+    expect(text).toContain('for pkg in Doors/*/package.json; do');
+    expect(text).toContain('grep -q "bbs-door-sdk" "$pkg"');
+    expect(text).toContain('npm install --prefix "$door"');
   });
 
   it('installs every door the backend reaches that needs the SDK', () => {
     const needed = doorsNeedingInstall();
     expect(needed.length).toBeGreaterThan(5);
 
-    // Run the workflow's own rule here, against this checkout, and require
-    // it to produce every door that needs one. A rule that quietly stopped
-    // matching (a renamed directory, a changed grep) fails here rather than
-    // on main.
-    const derived = execSync(
-      `grep -rhoE "Doors/[a-zA-Z0-9._-]+/" web/backend/src web/backend/tests --include='*.ts' `
-      + `| cut -d/ -f2 | sort -u`,
-      { cwd: repoRoot, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 },
+    // Run the workflow's own loop here, against this checkout, and require
+    // its output to cover every door the backend reaches - including the
+    // ones it reaches by a name it builds at runtime, which is what the
+    // old grep-the-sources rule missed.
+    const installed = execSync(
+      `for pkg in Doors/*/package.json; do grep -q "bbs-door-sdk" "$pkg" && dirname "$pkg"; done | cut -d/ -f2 | sort -u`,
+      { cwd: repoRoot, encoding: 'utf8', shell: '/bin/bash', maxBuffer: 8 * 1024 * 1024 },
     ).split('\n').map((line) => line.trim()).filter(Boolean);
 
-    const missed = needed.filter((door) => !derived.includes(door));
+    const missed = needed.filter((door) => !installed.includes(door));
     expect(missed).toEqual([]);
+
+    // The eight arcade doors tests/transport imports by template literal:
+    // named here because they are the case that broke the old rule.
+    for (const arcade of ['donkey-kong', 'frogger', 'galaga', 'joust',
+                          'pengo', 'pipe-dream', 'super-qix', 'zoo-keeper']) {
+      expect(installed).toContain(arcade);
+    }
   });
 
   it('names the doors that broke main, so the guard is not vacuous', () => {

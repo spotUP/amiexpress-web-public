@@ -89,15 +89,13 @@ jobs:
       # has a package.json depending on the SDK, gets installed. That covers
       # every door the two type-check steps below can reach, and it is a
       # superset of the six names that used to be here.
-      - name: Install door deps (SDK symlinks, derived from what the backend uses)
+      - name: Install door deps (every door that depends on the SDK)
         run: |
-          doors=$(grep -rhoE "Doors/[a-zA-Z0-9._-]+/" web/backend/src web/backend/tests \
-            --include='*.ts' | cut -d/ -f2 | sort -u)
-          for door in $doors; do
-            [ -f "Doors/$door/package.json" ] || continue
-            grep -q "bbs-door-sdk" "Doors/$door/package.json" || continue
-            echo "  installing Doors/$door"
-            npm install --prefix "Doors/$door" --ignore-scripts --no-audit --no-fund
+          for pkg in Doors/*/package.json; do
+            grep -q "bbs-door-sdk" "$pkg" || continue
+            door=$(dirname "$pkg")
+            echo "  installing $door"
+            npm install --prefix "$door" --ignore-scripts --no-audit --no-fund
           done
 
       - name: Type-check

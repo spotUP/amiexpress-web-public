@@ -66,6 +66,7 @@ import { executeDoor, setHelpers } from '../../../src/handlers/door.handler';
 import { doorDropFileManager } from '../../../src/services/DoorDropFileManager';
 import { parseInfoFile } from '../../../src/utils/info-file.util';
 import { loadCommandFromInfo } from '../../../src/utils/amiga-command-parser.util';
+import * as amigafs from '../../../src/utils/amigafs';
 import { ADAPTED_DOOR_TYPES } from '../../../src/utils/door-min-columns.util';
 import { config } from '../../../src/config';
 import { LoggedOnSubState } from '../../../src/constants/bbs-states';
@@ -192,7 +193,13 @@ describe('C64_ADAPT doors are marked on disk and open through the DOORS-menu rou
 
   /** The door's registration as the real parser reads it, straight off disk. */
   function definitionFromDisk(command: string) {
-    const def = loadCommandFromInfo(path.join(BBSCMD, `${command}.info`));
+    // Through amigafs, because the board's own loader does: this tree came
+    // off a case-insensitive filesystem and carries `chat.info`, `ulist.info`
+    // and `wall.info` for the commands CHAT, ULIST and WALL. A plain join
+    // finds them on a Mac and finds nothing on the Linux runner, which is
+    // why CI failed here on three doors that are correctly marked.
+    const resolved = amigafs.resolvePath(path.join(BBSCMD, `${command}.info`));
+    const def = resolved ? loadCommandFromInfo(resolved) : null;
     if (!def) throw new Error(`Commands/BBSCmd/${command}.info did not parse`);
     return def;
   }
