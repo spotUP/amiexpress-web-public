@@ -18,6 +18,13 @@
  * themes and says plainly that this board cannot keep one.
  */
 
+#include <stdio.h>          /* sprintf: a varargs call with no prototype in
+                             scope is undefined behaviour on 68K, not a
+                             warning to live with */
+
+#include "aedoor.h"        /* ae_start, ae_shutdown, ae_put, ae_delay_ticks -
+                             implicitly declared until 2026-09-07, which on
+                             this target means "returns int" */
 #include "ae_host.h"
 #include "ae_session.h"
 #include "ui_ansi.h"

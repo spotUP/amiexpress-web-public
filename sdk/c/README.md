@@ -78,3 +78,30 @@ Everything else. Phase 0 is the host query and the linking proof; widgets,
 theme, layout, settings and the AEDoor transport are phases 1 and up, and
 `examples/doorrepo-c/` remains the working reference for how a real C door
 talks to this board today.
+
+## What a door costs
+
+Measured with `make measure` on 2026-09-07, vbcc 0.9hp3, `+aos68k`. These are
+the numbers the plan's Risk 2 asked for and nobody had:
+
+| Binary | Bytes | What it carries |
+|---|---:|---|
+| `hello` | 5,048 | the whole library linked, no widget called |
+| `hello_box` | 5,508 | one `ae_box` |
+| `hello_list` | 8,736 | a bordered list with a scroll bar |
+| `theme-picker` | 24,084 | the proof door: list, chrome, input, theme, settings |
+
+So the box widget costs 460 bytes, the list and its ANSI layer 3,688, and a
+REAL door 24 KB - **4% of the 500 KB door region**. The plan feared the
+library alone might cost 40 KB and push tight doors over the edge; it does
+not. DoorRepo's 464 KB is its own data, not an SDK tax.
+
+Two of those numbers are checked, not just printed: `make measure` fails if
+the smallest door crosses 8 KB or the proof door crosses 64 KB, and it fails
+if `hello` is found carrying `ae_box` symbols - which would mean the library
+is being linked whole and the granular link is a fiction.
+
+**Still unmeasured: repaint latency.** `handoff.md` says ~45 ms per 198-byte
+XIM message and a full 80x24 coloured frame is 20-30 messages; the plan's
+Risk 1 turns on whether that holds. It needs a door driven through the real
+emulator, not a link, so it is not in `make measure`.

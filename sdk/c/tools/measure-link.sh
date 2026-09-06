@@ -51,4 +51,31 @@ if [ "$size_hello" -gt 8192 ]; then
   exit 1
 fi
 
+# THE PROOF DOOR, against the 500 KB region.
+#
+# The plan's Risk 2 is the one nobody had measured: "Nobody has measured what
+# a C SDK adds per door. If the library costs 40 KB of code plus static frame
+# buffers, some existing doors stop loading." DoorRepo already needs 464 KB of
+# the 500 KB available, and a door that overruns fails as DoorTooLargeError on
+# this board - or, on a real Amiga with no assertDoorSegmentsFit, as silent
+# BSS corruption of ExecBase.
+#
+# So the real door is measured too, not just the hello variants, and the
+# number is checked rather than admired.
+door=build/amiga/theme-picker
+if [ -f "$door" ]; then
+  size_door=$(wc -c < "$door" | tr -d ' ')
+  region=512000
+  echo "theme-picker (the proof door, widgets + theme + settings): $size_door bytes"
+  echo "  that is $((size_door * 100 / region))% of the 500 KB door region"
+
+  # 64 KB: eight times what the door costs today, and still an eighth of the
+  # region. A real door crossing it means the SDK's per-door cost has changed
+  # character, and the catalogue's tightest doors need re-measuring.
+  if [ "$size_door" -gt 65536 ]; then
+    echo "[ERROR] the proof door now costs $size_door bytes, over the 65536 ceiling"
+    exit 1
+  fi
+fi
+
 echo "[OK] a door links only what it calls"
