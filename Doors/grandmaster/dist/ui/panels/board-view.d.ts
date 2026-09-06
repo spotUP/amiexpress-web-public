@@ -18,8 +18,21 @@
 import { CellBuffer, Sprite } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import type { Panel } from '../../core/panels/panel';
 import type { Stack } from '../../core/panels/stack';
-/** Characters per panel. Fixed by the sprite sheets. */
+/** Characters per panel on a terminal, where a cell is half as wide as tall. */
 export declare const PANEL_COLS = 2;
+/**
+ * Characters per panel on the screen being drawn.
+ *
+ * A panel is meant to look SQUARE, and how many characters that takes depends
+ * on the shape of a character. An xterm cell is about half as wide as it is
+ * tall, so two of them make a square; a PETSCII cell is a square already (a
+ * real C64 stretches it slightly taller than wide, which is nearer square
+ * still than a doubled one), so two of them make a 2:1 smear. Every tetris
+ * board this door draws was built on the terminal's answer and carried it onto
+ * the C64: "the petscii modes in gmaster etc still look stretched
+ * horizontally" (2026-09-06).
+ */
+export declare function panelCols(variant: BoardVariant): number;
 /** Which sheet to draw from. */
 export type BoardVariant = 'wide' | 'c64';
 /** Characters and rows per panel; 1x1 is the classic 2x1-character panel. */
@@ -95,5 +108,5 @@ export declare function buildBoard(stack: Stack, sheet: Record<string, Sprite>, 
  * have to stay readable, since choosing a swap means reading what is under the
  * cursor. Each cell keeps its own colours; only the glyph changes.
  */
-export declare function drawCursor(board: CellBuffer, stack: Stack, scale?: BoardScale): void;
+export declare function drawCursor(board: CellBuffer, stack: Stack, scale?: BoardScale, variant?: BoardVariant): void;
 //# sourceMappingURL=board-view.d.ts.map

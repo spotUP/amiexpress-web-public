@@ -108,7 +108,7 @@ export class PanelsVersusScreen {
   }
 
   private setupUI(): void {
-    const { cols, rows } = boardSize(this.player);
+    const { cols, rows } = boardSize(this.player, { variant: this.variant });
     const layout = versusLayout(this.screen.width, this.screen.height, cols, rows);
     this.layout = layout;
 

@@ -52,7 +52,7 @@ class PanelsVersusScreen {
         return this.opponent instanceof stack_1.Stack;
     }
     setupUI() {
-        const { cols, rows } = (0, board_view_1.boardSize)(this.player);
+        const { cols, rows } = (0, board_view_1.boardSize)(this.player, { variant: this.variant });
         const layout = (0, versus_layout_1.versusLayout)(this.screen.width, this.screen.height, cols, rows);
         this.layout = layout;
         const box = (slot) => (0, bbs_door_sdk_1.createBox)({

@@ -6,6 +6,9 @@ const board_effects_1 = require("./board-effects");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const pieces_1 = require("../core/pieces");
 const board_1 = require("../core/board");
+const block_width_1 = require("./block-width");
+/** Playfield columns, in BLOCKS. The characters they take is the screen's answer. */
+const BOARD_COLUMNS = 10;
 const screen_shake_1 = require("../effects/screen-shake");
 const particles_1 = require("../effects/particles");
 const transitions_1 = require("../effects/transitions");
@@ -39,6 +42,13 @@ class GameScreen {
         this.stoppedEarly = false; // True if stopped externally (not gameover)
         this.cleanedUp = false; // Prevent double cleanup
         this.escHandler = null;
+        /**
+         * Where the well sits. The board is as wide as ten blocks ARE on this
+         * screen - twenty characters on a terminal, ten on a square-celled one - so
+         * the box is sized to its content and centred rather than stretched to the
+         * screen, which would leave the stack hugging the left edge.
+         */
+        this.boardLeft = 2;
         // Board overlay compositor: effects rendered inline in board content
         // Each cell is a blessed-tagged 2-char string or null (no overlay)
         this.boardOverlay = [];
@@ -434,11 +444,15 @@ class GameScreen {
             mouse: false,
             clickable: false,
         });
+        const wellCols = BOARD_COLUMNS * (0, block_width_1.blockCols)(this.screen.width);
+        this.boardLeft = compact
+            ? Math.max(1, Math.floor((this.screen.width - (wellCols + 2)) / 2))
+            : 2;
         this.boardBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
             top: 1,
-            left: compact ? 1 : 2,
-            width: compact ? this.screen.width - 2 : 22,
+            left: this.boardLeft,
+            width: wellCols + 2,
             height: 22,
             border: { type: 'line' },
             style: { bg: 'black', border: { fg: 'white' } },
@@ -705,15 +719,14 @@ class GameScreen {
             isShaking,
         })) {
             // Apply shake offset
-            const compact = (0, blessed_1.isCompactWidth)(this.screen.width);
             if (isShaking) {
                 const offset = this.shaker.getOffset();
                 this.boardBox.top = 1 + offset.y;
-                this.boardBox.left = (compact ? 1 : 2) + offset.x;
+                this.boardBox.left = this.boardLeft + offset.x;
             }
             else {
                 this.boardBox.top = 1;
-                this.boardBox.left = compact ? 1 : 2;
+                this.boardBox.left = this.boardLeft;
             }
             this.renderBoard(state);
             this.lastBoardHash = boardHash;
@@ -1064,7 +1077,9 @@ class GameScreen {
             // Strip blessed tags to get plain text length for centering
             const plainText = line.replace(/\{[^}]*\}/g, '');
             const boardWidth = 10; // cells
-            const textCellWidth = Math.ceil(plainText.length / 2); // Each cell is 2 chars
+            // Each cell is as many characters as a block is on this screen.
+            const perCell = (0, block_width_1.blockCols)(this.screen.width);
+            const textCellWidth = Math.ceil(plainText.length / perCell);
             const startCell = Math.floor((boardWidth - textCellWidth) / 2);
             const boardY = 4 + visibleRow + lineIdx;
             // Build cells from the tagged text
@@ -1088,11 +1103,12 @@ class GameScreen {
             // Re-extract the tag prefix and suffix from the line
             const tagPrefix = line.match(/^(\{[^}]*\})+/)?.[0] || '';
             const tagSuffix = line.match(/(\{\/[^}]*\})+$/)?.[0] || '';
-            for (let ci = 0; ci < cellChars.length; ci += 2) {
-                const c1 = cellChars[ci] || ' ';
-                const c2 = cellChars[ci + 1] || ' ';
-                const cellX = startCell + Math.floor(ci / 2);
-                setCell(cellX, boardY, `${tagPrefix}${c1}${c2}${tagSuffix}`);
+            for (let ci = 0; ci < cellChars.length; ci += perCell) {
+                let text = '';
+                for (let k = 0; k < perCell; k++)
+                    text += cellChars[ci + k] || ' ';
+                const cellX = startCell + Math.floor(ci / perCell);
+                setCell(cellX, boardY, `${tagPrefix}${text}${tagSuffix}`);
             }
         }
     }
@@ -1273,7 +1289,12 @@ class GameScreen {
         const invisibleManager = this.engine.invisiblePieceManager;
         const isMasterRoll = state.creditRollActive;
         // Update connected blocks cache if enabled
-        if (this.state.settings.connectedBlocks) {
+        // One character per block on a square-celled screen, two on a terminal.
+        const cols = (0, block_width_1.blockCols)(this.screen.width);
+        // Connected blocks join two glyphs into one box-drawing run, so they are
+        // the one producer a halved cell would corrupt rather than shrink - off
+        // where a block is a single character, the way effects already are.
+        if (this.state.settings.connectedBlocks && cols === 2) {
             this.connectedBlocks.updateCache(board);
         }
         let content = '';
@@ -1373,7 +1394,7 @@ class GameScreen {
                     else if (!isMasterRoll) {
                         // Get base character (connected blocks or simple blocks)
                         const pieceColor = this.getPieceColorName(cell.color);
-                        if (this.state.settings.connectedBlocks) {
+                        if (this.state.settings.connectedBlocks && cols === 2) {
                             char = this.connectedBlocks.getConnectedChar(x, y, pieceColor);
                         }
                         else {
@@ -1422,7 +1443,7 @@ class GameScreen {
                         }
                     }
                 }
-                content += char;
+                content += (0, block_width_1.fitCell)(char, cols);
             }
         }
         this.boardBox.setContent(content);

@@ -27,6 +27,13 @@ export declare class GameScreen {
     private outerFrame;
     private escHandler;
     private boardBox;
+    /**
+     * Where the well sits. The board is as wide as ten blocks ARE on this
+     * screen - twenty characters on a terminal, ten on a square-celled one - so
+     * the box is sized to its content and centred rather than stretched to the
+     * screen, which would leave the stack hugging the left edge.
+     */
+    private boardLeft;
     private nextBox;
     private holdBox;
     private statsBox;

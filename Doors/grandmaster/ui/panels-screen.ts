@@ -24,7 +24,7 @@ import {
   Sprite, bufferToTags,
 } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { Stack } from '../core/panels/stack';
-import { buildBoard, boardSize, engineRowFor, PANEL_COLS, BoardVariant } from './panels/board-view';
+import { buildBoard, boardSize, engineRowFor, panelCols, BoardVariant } from './panels/board-view';
 import { panelsLayout, hudLines, CELL_ASPECT, PanelsLayout } from './panels/layout';
 import type { PuzzleGame, PuzzleOutcome } from '../core/panels/puzzle';
 import { encodeInput, inputStateToMask, INPUT_CHARS } from '../core/panels/input-codec';
@@ -167,7 +167,7 @@ export class PanelsScreen {
 
   /** Lay the board and HUD out, centred in whatever room there is. */
   private setupUI(): void {
-    const { cols, rows } = boardSize(this.stack);
+    const { cols, rows } = boardSize(this.stack, { variant: this.variant });
     // Geometry comes from the live screen width, never from a constant.
     // A PETSCII cell is square; an xterm cell is half as wide as it is tall.
     // The layout has to know which, because it decides what a square TILE is.
@@ -218,7 +218,7 @@ export class PanelsScreen {
     this.boardBox.on('click', (data: { x: number; y: number }) => {
       const relX = data.x - layout.board.left;
       const relY = data.y - layout.board.top;
-      const col = Math.floor(relX / PANEL_COLS) + 1;
+      const col = Math.floor(relX / panelCols(this.variant)) + 1;
       const row = engineRowFor(this.stack, Math.floor(relY));
 
       // A swap needs a panel to its right, and the dimmed incoming row below

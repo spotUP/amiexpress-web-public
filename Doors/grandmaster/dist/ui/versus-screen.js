@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.VersusScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const board_effects_1 = require("./board-effects");
+const block_width_1 = require("./block-width");
 const minimap_1 = require("./minimap");
 const versus_layout_1 = require("./versus-layout");
 const bot_player_1 = require("../ai/bot-player");
@@ -1561,7 +1562,7 @@ class VersusScreen {
                         }
                     }
                 }
-                content += char;
+                content += (0, block_width_1.fitCell)(char, (0, block_width_1.blockCols)(this.screen.width));
             }
         }
         this.boardBox.setContent(content);

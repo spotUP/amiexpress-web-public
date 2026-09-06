@@ -75,7 +75,7 @@ class PanelsScreen {
     }
     /** Lay the board and HUD out, centred in whatever room there is. */
     setupUI() {
-        const { cols, rows } = (0, board_view_1.boardSize)(this.stack);
+        const { cols, rows } = (0, board_view_1.boardSize)(this.stack, { variant: this.variant });
         // Geometry comes from the live screen width, never from a constant.
         // A PETSCII cell is square; an xterm cell is half as wide as it is tall.
         // The layout has to know which, because it decides what a square TILE is.
@@ -120,7 +120,7 @@ class PanelsScreen {
         this.boardBox.on('click', (data) => {
             const relX = data.x - layout.board.left;
             const relY = data.y - layout.board.top;
-            const col = Math.floor(relX / board_view_1.PANEL_COLS) + 1;
+            const col = Math.floor(relX / (0, board_view_1.panelCols)(this.variant)) + 1;
             const row = (0, board_view_1.engineRowFor)(this.stack, Math.floor(relY));
             // A swap needs a panel to its right, and the dimmed incoming row below
             // the floor is not in play.

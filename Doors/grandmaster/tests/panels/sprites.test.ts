@@ -47,13 +47,28 @@ export async function everyPanelColourHasBothVariants(): Promise<void> {
 }
 
 /**
- * A panel is two characters wide and one row tall, and that is forced: twelve
- * panel rows must leave room for a HUD in twenty-five terminal rows, and a
- * character cell is about twice as tall as it is wide, so 2x1 reads square.
+ * A panel is SQUARE ON THE GLASS, which is a different number of characters on
+ * each screen.
+ *
+ * An xterm cell is about twice as tall as it is wide, so two of them make a
+ * square: the 80-column sheet is 2x1. A PETSCII cell is square already (a real
+ * C64 stretches it slightly taller than wide, which is nearer square still),
+ * so two of them make a 2:1 smear - which is exactly what a C64 caller saw
+ * once the door started drawing panels: "its just the tetris games that have
+ * stretched blocks" (2026-09-06). The C64 sheet is 1x1.
+ *
+ * Both are one row tall, because twelve panel rows must leave room for a HUD
+ * in twenty-five terminal rows.
  */
-export async function everyPanelIsTwoByOne(): Promise<void> {
+export async function everyPanelIsSquareOnItsOwnScreen(): Promise<void> {
   for (const [name, sprite] of Object.entries(sheet())) {
-    assert.strictEqual(sprite.cellW, 2, `${name} is not two columns wide`);
+    const c64 = name.endsWith('-c64');
+    assert.strictEqual(
+      sprite.cellW, c64 ? 1 : 2,
+      c64
+        ? `${name} must be ONE column - two is a 2:1 smear on a square PETSCII cell`
+        : `${name} must be two columns - one is half a tile on a terminal cell`,
+    );
     assert.strictEqual(sprite.cellH, 1, `${name} is not one row tall`);
   }
 }
@@ -275,4 +290,28 @@ export async function everyWidePanelIsFourSquarePixels(): Promise<void> {
       }
     }
   }
+}
+
+/**
+ * And the board is built from that width, not from the terminal's.
+ *
+ * `boardSize` used to multiply by a fixed two, so even with a one-character
+ * C64 sprite the buffer would have been twice as wide as the panels drawn into
+ * it - a half-empty board with the stack squeezed into the left of it.
+ */
+export async function theC64BoardIsAsWideAsItsPanels(): Promise<void> {
+  const { boardSize, panelCols } = require('../../ui/panels/board-view');
+  const stack: any = { width: 6, height: 12 };
+
+  assert.strictEqual(panelCols('c64'), 1, 'a PETSCII panel is one character');
+  assert.strictEqual(panelCols('wide'), 2, 'a terminal panel is two');
+
+  assert.strictEqual(
+    boardSize(stack, { variant: 'c64' }).cols, 6,
+    'six panels at one character each',
+  );
+  assert.strictEqual(
+    boardSize(stack, { variant: 'wide' }).cols, 12,
+    'six panels at two characters each',
+  );
 }

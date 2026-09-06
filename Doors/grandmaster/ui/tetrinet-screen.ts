@@ -14,6 +14,7 @@
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { TetriNetEngine } from '../core/tetrinet/tetrinet-engine';
+import { blockCols, fitCell } from './block-width';
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
 import type { AppState, GameAction } from '../core/types';
@@ -1211,7 +1212,7 @@ export class TetriNetScreen {
           char = trailCharAt(this.hardDropTrails, x, y, now) ?? char;
         }
 
-        content += char;
+        content += fitCell(char, blockCols(this.screen.width));
       }
     }
 

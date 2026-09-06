@@ -9,6 +9,7 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { lockFlashChar } from './board-effects';
 import type { GameEngine } from '../core/game';
+import { blockCols, fitCell } from './block-width';
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
 import type { AppState, PieceType } from '../core/types';
@@ -1736,7 +1737,7 @@ export class VersusScreen {
           }
         }
 
-        content += char;
+        content += fitCell(char, blockCols(this.screen.width));
       }
     }
 

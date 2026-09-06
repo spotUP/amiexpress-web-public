@@ -18,6 +18,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PANEL_COLS = void 0;
+exports.panelCols = panelCols;
 exports.bufferRowFor = bufferRowFor;
 exports.engineRowFor = engineRowFor;
 exports.boardSize = boardSize;
@@ -26,8 +27,23 @@ exports.scaleBuffer = scaleBuffer;
 exports.buildBoard = buildBoard;
 exports.drawCursor = drawCursor;
 const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art");
-/** Characters per panel. Fixed by the sprite sheets. */
+/** Characters per panel on a terminal, where a cell is half as wide as tall. */
 exports.PANEL_COLS = 2;
+/**
+ * Characters per panel on the screen being drawn.
+ *
+ * A panel is meant to look SQUARE, and how many characters that takes depends
+ * on the shape of a character. An xterm cell is about half as wide as it is
+ * tall, so two of them make a square; a PETSCII cell is a square already (a
+ * real C64 stretches it slightly taller than wide, which is nearer square
+ * still than a doubled one), so two of them make a 2:1 smear. Every tetris
+ * board this door draws was built on the terminal's answer and carried it onto
+ * the C64: "the petscii modes in gmaster etc still look stretched
+ * horizontally" (2026-09-06).
+ */
+function panelCols(variant) {
+    return variant === 'c64' ? 1 : exports.PANEL_COLS;
+}
 /**
  * The empty well: blank.
  *
@@ -80,7 +96,7 @@ function engineRowFor(stack, bufferRow) {
 function boardSize(stack, options = {}) {
     const showIncoming = options.showIncomingRow !== false;
     return {
-        cols: stack.width * exports.PANEL_COLS,
+        cols: stack.width * panelCols(options.variant ?? 'wide'),
         rows: stack.height + (showIncoming ? 1 : 0),
     };
 }
@@ -222,7 +238,7 @@ function buildBoard(stack, sheet, tick, options = {}) {
     // instead of drawing one cursor around a bigger pair of panels.
     const scaled = scaleBuffer(board, options.scale ?? { x: 1, y: 1 });
     if (options.showCursor !== false) {
-        drawCursor(scaled, stack, options.scale ?? { x: 1, y: 1 });
+        drawCursor(scaled, stack, options.scale ?? { x: 1, y: 1 }, variant);
     }
     return scaled;
 }
@@ -233,12 +249,13 @@ function buildBoard(stack, sheet, tick, options = {}) {
  * have to stay readable, since choosing a swap means reading what is under the
  * cursor. Each cell keeps its own colours; only the glyph changes.
  */
-function drawCursor(board, stack, scale = { x: 1, y: 1 }) {
+function drawCursor(board, stack, scale = { x: 1, y: 1 }, variant = 'wide') {
     const top = bufferRowFor(stack, stack.curRow) * scale.y;
     if (top < 0 || top >= board.length)
         return;
-    const left = (stack.curCol - 1) * exports.PANEL_COLS * scale.x;
-    const right = left + exports.PANEL_COLS * 2 * scale.x - 1;
+    const cols = panelCols(variant);
+    const left = (stack.curCol - 1) * cols * scale.x;
+    const right = left + cols * 2 * scale.x - 1;
     // A taller tile gets a taller cursor, so the pair it holds stays framed.
     for (let row = top; row < Math.min(board.length, top + scale.y); row++) {
         markCursorCell(board, row, left, '[');

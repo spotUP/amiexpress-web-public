@@ -19,6 +19,10 @@ import type { SoundEngine } from '../audio/sounds';
 import type { AppState, GameAction, Piece, PieceType } from '../core/types';
 import { PIECE_COLORS, ARS_COLORS } from '../core/pieces';
 import { getGhostY } from '../core/board';
+import { blockCols, fitCell } from './block-width';
+
+/** Playfield columns, in BLOCKS. The characters they take is the screen's answer. */
+const BOARD_COLUMNS = 10;
 import { ScreenShaker } from '../effects/screen-shake';
 import { ParticleSystem } from '../effects/particles';
 import { TransitionManager } from '../effects/transitions';
@@ -40,6 +44,13 @@ export class GameScreen {
   private outerFrame: any;
   private escHandler: ((ch: string | undefined, key: any) => void) | null = null;
   private boardBox: any;
+  /**
+   * Where the well sits. The board is as wide as ten blocks ARE on this
+   * screen - twenty characters on a terminal, ten on a square-celled one - so
+   * the box is sized to its content and centred rather than stretched to the
+   * screen, which would leave the stack hugging the left edge.
+   */
+  private boardLeft = 2;
   private nextBox: any;
   private holdBox: any;
   private statsBox: any;
@@ -515,11 +526,16 @@ export class GameScreen {
       clickable: false,
     });
 
+    const wellCols = BOARD_COLUMNS * blockCols(this.screen.width);
+    this.boardLeft = compact
+      ? Math.max(1, Math.floor((this.screen.width - (wellCols + 2)) / 2))
+      : 2;
+
     this.boardBox = createBox({
       parent: this.screen,
       top: 1,
-      left: compact ? 1 : 2,
-      width: compact ? this.screen.width - 2 : 22,
+      left: this.boardLeft,
+      width: wellCols + 2,
       height: 22,
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'white' } },
@@ -805,14 +821,13 @@ export class GameScreen {
       isShaking,
     })) {
       // Apply shake offset
-      const compact = isCompactWidth(this.screen.width);
       if (isShaking) {
         const offset = this.shaker.getOffset();
         this.boardBox.top = 1 + offset.y;
-        this.boardBox.left = (compact ? 1 : 2) + offset.x;
+        this.boardBox.left = this.boardLeft + offset.x;
       } else {
         this.boardBox.top = 1;
-        this.boardBox.left = compact ? 1 : 2;
+        this.boardBox.left = this.boardLeft;
       }
 
       this.renderBoard(state);
@@ -1190,7 +1205,9 @@ export class GameScreen {
       // Strip blessed tags to get plain text length for centering
       const plainText = line.replace(/\{[^}]*\}/g, '');
       const boardWidth = 10; // cells
-      const textCellWidth = Math.ceil(plainText.length / 2); // Each cell is 2 chars
+      // Each cell is as many characters as a block is on this screen.
+      const perCell = blockCols(this.screen.width);
+      const textCellWidth = Math.ceil(plainText.length / perCell);
       const startCell = Math.floor((boardWidth - textCellWidth) / 2);
       const boardY = 4 + visibleRow + lineIdx;
 
@@ -1218,11 +1235,11 @@ export class GameScreen {
       const tagPrefix = line.match(/^(\{[^}]*\})+/)?.[0] || '';
       const tagSuffix = line.match(/(\{\/[^}]*\})+$/)?.[0] || '';
 
-      for (let ci = 0; ci < cellChars.length; ci += 2) {
-        const c1 = cellChars[ci] || ' ';
-        const c2 = cellChars[ci + 1] || ' ';
-        const cellX = startCell + Math.floor(ci / 2);
-        setCell(cellX, boardY, `${tagPrefix}${c1}${c2}${tagSuffix}`);
+      for (let ci = 0; ci < cellChars.length; ci += perCell) {
+        let text = '';
+        for (let k = 0; k < perCell; k++) text += cellChars[ci + k] || ' ';
+        const cellX = startCell + Math.floor(ci / perCell);
+        setCell(cellX, boardY, `${tagPrefix}${text}${tagSuffix}`);
       }
     }
   }
@@ -1412,7 +1429,13 @@ export class GameScreen {
     const isMasterRoll = state.creditRollActive;
 
     // Update connected blocks cache if enabled
-    if (this.state.settings.connectedBlocks) {
+    // One character per block on a square-celled screen, two on a terminal.
+    const cols = blockCols(this.screen.width);
+
+    // Connected blocks join two glyphs into one box-drawing run, so they are
+    // the one producer a halved cell would corrupt rather than shrink - off
+    // where a block is a single character, the way effects already are.
+    if (this.state.settings.connectedBlocks && cols === 2) {
       this.connectedBlocks.updateCache(board);
     }
     
@@ -1515,7 +1538,7 @@ export class GameScreen {
             // Get base character (connected blocks or simple blocks)
             const pieceColor = this.getPieceColorName(cell.color as PieceType);
 
-            if (this.state.settings.connectedBlocks) {
+            if (this.state.settings.connectedBlocks && cols === 2) {
               char = this.connectedBlocks.getConnectedChar(x, y, pieceColor);
             } else {
               char = this.getBlockChar(cell.color as PieceType, rotationSystem);
@@ -1575,7 +1598,7 @@ export class GameScreen {
           }
         }
 
-        content += char;
+        content += fitCell(char, cols);
       }
     }
 

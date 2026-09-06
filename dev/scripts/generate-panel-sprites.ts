@@ -55,6 +55,8 @@ interface RawSprite {
 }
 
 const CELL_W = 2;
+/** A PETSCII cell is square, so one of them IS the square tile. */
+const C64_CELL_W = 1;
 const CELL_H = 1;
 
 /**
@@ -141,12 +143,27 @@ const PANELS: PanelDef[] = [
 ];
 
 /** One 2x1 frame from its two cells. */
-function frame(left: RawCell, right: RawCell): RawFrame {
-  return [[left, right]];
+/**
+ * One frame: a row of cells, however many characters this variant's panel is.
+ *
+ * A panel has to look SQUARE, and how many characters that takes depends on
+ * the shape of a character. An xterm cell is about half as wide as it is tall,
+ * so two make a square; a PETSCII cell is square already, so two make a 2:1
+ * smear - which is what a C64 caller saw.
+ */
+type PanelRow = ReadonlyArray<RawCell | null>;
+
+function frame(cells: PanelRow): RawFrame {
+  return [[...cells]];
 }
 
-function still(left: RawCell, right: RawCell): RawAnimation {
-  return { ticksPerFrame: 1, loop: false, frames: [frame(left, right)] };
+function still(cells: PanelRow): RawAnimation {
+  return { ticksPerFrame: 1, loop: false, frames: [frame(cells)] };
+}
+
+/** The same row with every cell blank - what popping ends on. */
+function blankLike(cells: PanelRow): PanelRow {
+  return cells.map(() => null);
 }
 
 /**
@@ -157,37 +174,33 @@ function still(left: RawCell, right: RawCell): RawAnimation {
  * match the names panel-attack's own sprite-sheet manifests use.
  */
 function animationsFor(
-  left: RawCell,
-  right: RawCell,
-  flashLeft: RawCell,
-  flashRight: RawCell,
-  faceLeft: RawCell,
-  faceRight: RawCell,
-  dimLeft: RawCell,
-  dimRight: RawCell,
+  body: PanelRow,
+  flash: PanelRow,
+  face: PanelRow,
+  dim: PanelRow,
 ): Record<string, RawAnimation> {
   return {
     // Sitting there.
-    normal: still(left, right),
+    normal: still(body),
     // Mid-swap and falling look like a normal panel; the renderer moves them.
-    swapping: still(left, right),
-    falling: still(left, right),
-    hovering: still(left, right),
+    swapping: still(body),
+    falling: still(body),
+    hovering: still(body),
     // Matched: flashing, then holding the face until the pop timers start.
-    flash: { ticksPerFrame: 2, loop: true, frames: [frame(left, right), frame(flashLeft, flashRight)] },
-    face: still(faceLeft, faceRight),
+    flash: { ticksPerFrame: 2, loop: true, frames: [frame(body), frame(flash)] },
+    face: still(face),
     // Popping brightens out. The engine decides WHEN; this is only the look.
     popping: {
       ticksPerFrame: 1,
       loop: false,
-      frames: [frame(faceLeft, faceRight), frame(flashLeft, flashRight), frame(null, null)],
+      frames: [frame(face), frame(flash), frame(blankLike(body))],
     },
     // The row below the floor, waiting to come into play.
-    dimmed: still(dimLeft, dimRight),
+    dimmed: still(dim),
     // A short squash as it settles.
-    landing: { ticksPerFrame: 1, loop: false, frames: [frame(flashLeft, flashRight), frame(left, right)] },
+    landing: { ticksPerFrame: 1, loop: false, frames: [frame(flash), frame(body)] },
     // Near the top: pulses so the danger is visible without colour alone.
-    danger: { ticksPerFrame: 2, loop: true, frames: [frame(left, right), frame(faceLeft, faceRight)] },
+    danger: { ticksPerFrame: 2, loop: true, frames: [frame(body), frame(face)] },
   };
 }
 
@@ -219,7 +232,7 @@ function wideSprite(def: PanelDef): RawSprite {
     cellW: CELL_W,
     cellH: CELL_H,
     animations: animationsFor(
-      body, filler, flash, flashFill, face, faceFill, dim, dimFill,
+      [body, filler], [flash, flashFill], [face, faceFill], [dim, dimFill],
     ),
   };
 }
@@ -231,22 +244,27 @@ function wideSprite(def: PanelDef): RawSprite {
  * silently dropped and the two variants would disagree about what a panel is.
  */
 function c64Sprite(def: PanelDef): RawSprite {
-  const left: RawCell = [def.c64Left, def.c64Fg, C.black];
-  const right: RawCell = [def.c64Right, def.c64Fg, C.black];
+  // ONE character, because a PETSCII cell is already square (a real C64
+  // stretches it slightly taller than wide, which is nearer square than a
+  // doubled one). Two characters made every panel a 2:1 smear on the C64
+  // while looking right on a terminal, where a cell is half as wide as tall:
+  // "its just the tetris games that have stretched blocks" (2026-09-06).
+  //
+  // The two-glyph pairs the sheet used to carry (c64Left/c64Right) collapse to
+  // the left one; each is a whole-cell pattern in its own right, so a panel
+  // keeps its shape and only loses the repeat.
+  const body: RawCell = [def.c64Left, def.c64Fg, C.black];
   // Flashing swaps to white, which every VIC-II colour contrasts with.
-  const flashL: RawCell = [def.c64Left, C.lightwhite, C.black];
-  const flashR: RawCell = [def.c64Right, C.lightwhite, C.black];
+  const flash: RawCell = [def.c64Left, C.lightwhite, C.black];
   // The face is a lighter shade of the same shape, so it reads as the same panel.
-  const faceL: RawCell = ['▒', def.c64Fg, C.black];
-  const faceR: RawCell = ['▒', def.c64Fg, C.black];
-  const dimL: RawCell = [def.c64Left, C.gray, C.black];
-  const dimR: RawCell = [def.c64Right, C.gray, C.black];
+  const face: RawCell = ['\u2592', def.c64Fg, C.black];
+  const dim: RawCell = [def.c64Left, C.gray, C.black];
 
   return {
     name: `panel-${def.name}-c64`,
-    cellW: CELL_W,
+    cellW: C64_CELL_W,
     cellH: CELL_H,
-    animations: animationsFor(left, right, flashL, flashR, faceL, faceR, dimL, dimR),
+    animations: animationsFor([body], [flash], [face], [dim]),
   };
 }
 

@@ -22,8 +22,24 @@ import {
 import type { Panel } from '../../core/panels/panel';
 import type { Stack } from '../../core/panels/stack';
 
-/** Characters per panel. Fixed by the sprite sheets. */
+/** Characters per panel on a terminal, where a cell is half as wide as tall. */
 export const PANEL_COLS = 2;
+
+/**
+ * Characters per panel on the screen being drawn.
+ *
+ * A panel is meant to look SQUARE, and how many characters that takes depends
+ * on the shape of a character. An xterm cell is about half as wide as it is
+ * tall, so two of them make a square; a PETSCII cell is a square already (a
+ * real C64 stretches it slightly taller than wide, which is nearer square
+ * still than a doubled one), so two of them make a 2:1 smear. Every tetris
+ * board this door draws was built on the terminal's answer and carried it onto
+ * the C64: "the petscii modes in gmaster etc still look stretched
+ * horizontally" (2026-09-06).
+ */
+export function panelCols(variant: BoardVariant): number {
+  return variant === 'c64' ? 1 : PANEL_COLS;
+}
 
 /** Which sheet to draw from. */
 export type BoardVariant = 'wide' | 'c64';
@@ -110,7 +126,7 @@ export function boardSize(
 ): { cols: number; rows: number } {
   const showIncoming = options.showIncomingRow !== false;
   return {
-    cols: stack.width * PANEL_COLS,
+    cols: stack.width * panelCols(options.variant ?? 'wide'),
     rows: stack.height + (showIncoming ? 1 : 0),
   };
 }
@@ -265,7 +281,7 @@ export function buildBoard(
   // instead of drawing one cursor around a bigger pair of panels.
   const scaled = scaleBuffer(board, options.scale ?? { x: 1, y: 1 });
   if (options.showCursor !== false) {
-    drawCursor(scaled, stack, options.scale ?? { x: 1, y: 1 });
+    drawCursor(scaled, stack, options.scale ?? { x: 1, y: 1 }, variant);
   }
 
   return scaled;
@@ -280,12 +296,14 @@ export function buildBoard(
  */
 export function drawCursor(
   board: CellBuffer, stack: Stack, scale: BoardScale = { x: 1, y: 1 },
+  variant: BoardVariant = 'wide',
 ): void {
   const top = bufferRowFor(stack, stack.curRow) * scale.y;
   if (top < 0 || top >= board.length) return;
 
-  const left = (stack.curCol - 1) * PANEL_COLS * scale.x;
-  const right = left + PANEL_COLS * 2 * scale.x - 1;
+  const cols = panelCols(variant);
+  const left = (stack.curCol - 1) * cols * scale.x;
+  const right = left + cols * 2 * scale.x - 1;
 
   // A taller tile gets a taller cursor, so the pair it holds stays framed.
   for (let row = top; row < Math.min(board.length, top + scale.y); row++) {

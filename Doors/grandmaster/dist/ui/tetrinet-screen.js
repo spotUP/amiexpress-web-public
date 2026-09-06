@@ -14,6 +14,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TetriNetScreen = void 0;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const block_width_1 = require("./block-width");
 const input_hints_1 = require("./input-hints");
 const inventory_panel_1 = require("./tetrinet/inventory-panel");
 const target_selector_1 = require("./tetrinet/target-selector");
@@ -1015,7 +1016,7 @@ class TetriNetScreen {
                 if (char === '  ' && !cell?.filled) {
                     char = (0, board_effects_1.trailCharAt)(this.hardDropTrails, x, y, now) ?? char;
                 }
-                content += char;
+                content += (0, block_width_1.fitCell)(char, (0, block_width_1.blockCols)(this.screen.width));
             }
         }
         this.boardBox.setContent(content);
