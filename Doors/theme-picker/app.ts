@@ -234,6 +234,9 @@ export async function createApp(session: DoorSession): Promise<void> {
     // masthead or the hints would read as the door being broken.
     glitch: list,
     glitchOptions: { tickMs: 400 },
+    // This is the screen people judge a theme from: it moves at every
+    // width, C64 included (chrome.ts, showcase).
+    showcase: true,
     styles: s,
     render: () => screen.render(),
   };
@@ -306,7 +309,12 @@ export async function createApp(session: DoorSession): Promise<void> {
       // light green field after leaving quiet-phosphor (2026-09-07). SGR 0
       // is the whole of the fix - attributes off, colours default - and the
       // cursor is put back with it because a door may have hidden it.
-      try { bbs.write('\x1b[0m\x1b[?25h'); } catch { /* leaving anyway */ }
+      // A CLEAR under default SGR, not just SGR 0: a C64 has one screen
+      // background and it is committed at the last clear, so a reset alone
+      // leaves whatever colour the last clear was done under - the sysop's
+      // board came back on a white field (2026-09-07). The board repaints
+      // its menu after a door regardless, so the clear costs nothing.
+      try { bbs.write('\x1b[0m\x1b[2J\x1b[H\x1b[?25h'); } catch { /* leaving anyway */ }
       resolve();
     };
 

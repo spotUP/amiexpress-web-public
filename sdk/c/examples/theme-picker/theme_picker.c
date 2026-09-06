@@ -227,13 +227,16 @@ int main(int argc, char **argv)
 
     /* The rail slides only where decorative motion is allowed - never on the
        40-column tier, where a moving effect leaves stray glyphs mid-row. */
-    if (ui_effects_allowed(screen.cols)) {
-        anim.screen = &screen;
-        anim.theme = &theme;
-        anim.tick = &rail_tick;
-        keys.idle = door_idle;
-        keys.ctx = &anim;
-    }
+    /* At EVERY width, this door: it is the showcase, and a still rail on a
+       C64 shows a caller the wrong thing. The tier rule stands for every
+       other door (ui_effects_allowed); the blessed picker sets `showcase`
+       for the same reason. Ten ticks a frame keeps a C64 caller to five XIM
+       messages a second. */
+    anim.screen = &screen;
+    anim.theme = &theme;
+    anim.tick = &rail_tick;
+    keys.idle = door_idle;
+    keys.ctx = &anim;
     /* The primary colour carries the chrome, the same rule the TypeScript
        doors follow since 2026-09-03. */
     list.chrome = UI_TOKEN(UI_T_ACCENT);

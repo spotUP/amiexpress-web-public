@@ -79,7 +79,7 @@ describe('theme-picker compact (40-column) layout', () => {
 
   // The effect gate. A rail repainting its row twenty times a second is
   // ~4KB/s of PETSCII for one row of decoration; at XXS no timer is started.
-  it('40 columns: the chrome does not animate; 80 columns: it does', async () => {
+  it('the chrome animates at BOTH widths - this door is the showcase', async () => {
     const { createApp } = require('../../../../../Doors/theme-picker/app');
     // The door asks the SDK for its whole chrome in one call; the spy passes
     // through so the real handle can be stopped and no timer outlives the
@@ -96,7 +96,11 @@ describe('theme-picker compact (40-column) layout', () => {
     // Screens are created by createScreen inside the door; grabbing them back
     // is not needed - the spy records the call (or its absence) either way.
     try {
-      for (const [width, expected] of [[40, 0], [80, 1]] as Array<[number, number]>) {
+      // 1 at 40 as well as 80. The tier rule (no decorative motion on a
+      // C64) stands for every other door; the picker passes `showcase` and
+      // moves everywhere, because a still rail shows a caller the wrong
+      // theme (sysop, 2026-09-07).
+      for (const [width, expected] of [[40, 1], [80, 1]] as Array<[number, number]>) {
         spy.mockClear();
         const bbs: any = {
           write: () => undefined,

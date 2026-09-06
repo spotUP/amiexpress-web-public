@@ -70,7 +70,12 @@ void ui_screen_close(ui_screen *sc)
 {
     if (!sc) return;
 
+    /* Reset, THEN clear: a C64 has one screen background, committed at the
+       last clear, so a door that leaves without one hands the board its
+       last background. ansi_clear writes SGR 0 before the clear, which is
+       the transducer's own rule for "back to black". */
     ansi_reset(&sc->buf);
+    ansi_clear(&sc->buf);
     ansi_cursor(&sc->buf, 1);
     ui_screen_flush(sc);
 }

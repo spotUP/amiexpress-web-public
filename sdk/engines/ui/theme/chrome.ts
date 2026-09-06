@@ -493,6 +493,13 @@ export type GlitchSource =
 
 export interface DoorChromeOptions {
   /**
+   * Animate regardless of width. For a door whose purpose is to show a
+   * theme moving - the pickers - and nothing else; the 40-column tier bans
+   * decorative motion for every other door because a moving effect on a
+   * C64 canvas costs an XIM message a frame.
+   */
+  showcase?: boolean;
+  /**
    * The LIVE screen width - `screen.width`, never a constant. Everything
    * that moves is gated on this through `effectsAllowed()`.
    */
@@ -604,7 +611,12 @@ export function attachDoorChrome(
   } = options;
 
   const s = options.styles ?? themeStyles(theme);
-  const animated = effectsAllowed(width);
+  // The one gate - unless the door is a SHOWCASE. The theme pickers exist to
+  // show what a theme does, and a picker that shows a still rail on a C64 is
+  // showing the wrong thing: "none of the theme doors display the animated
+  // slashes and glitches, they should showcase the themes live" (sysop,
+  // 2026-09-07). Every other door keeps the tier rule.
+  const animated = options.showcase === true || effectsAllowed(width);
   const compact = getCompactProfile(width);
 
   let hints: readonly FooterHint[] =
