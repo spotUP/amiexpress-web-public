@@ -10,6 +10,12 @@ export function getToken(): string | null {
   return _token;
 }
 
+// A non-responding backend must not freeze a caller forever: password reset
+// and user creation both have a form with no way out while their submit
+// promise is pending, and this is what makes it eventually settle even if
+// the sysop's own Escape handling didn't already release it.
+const REQUEST_TIMEOUT_MS = 15_000;
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -17,10 +23,35 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
   if (_token) headers['Authorization'] = `Bearer ${_token}`;
 
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, { ...options, headers, signal: controller.signal });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s: ${path}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
-    throw Object.assign(new Error(`HTTP ${res.status}: ${text}`), { status: res.status });
+    // These are read under time pressure - `HTTP 400: {"success":false,
+    // "message":"..."}` buries the one line that matters inside JSON the
+    // sysop has to parse by eye. Pull `message`/`error` out when the body
+    // is shaped that way; anything else falls back to the raw text.
+    let detail = text;
+    try {
+      const parsed = JSON.parse(text) as { message?: unknown; error?: unknown };
+      if (typeof parsed.message === 'string' && parsed.message) detail = parsed.message;
+      else if (typeof parsed.error === 'string' && parsed.error) detail = parsed.error;
+    } catch {
+      // Not JSON - the raw text is already the best we have.
+    }
+    throw Object.assign(new Error(`HTTP ${res.status}: ${detail}`), { status: res.status });
   }
   return res.json() as Promise<T>;
 }
@@ -544,7 +575,7 @@ export async function createAcsLevel(level: number, copyFrom?: number) {
   });
 }
 
-// ───── Phase D: Door install, Import/Export, Batch editor, Global wall ──
+// ───── Phase D: Door install, Import/Export, Batch editor ──────────────
 
 export async function installDoorArchive(archive: { filename?: string; path?: string }) {
   return request<{ success: boolean; message?: string }>('/api/config/doors/install-archive', {
