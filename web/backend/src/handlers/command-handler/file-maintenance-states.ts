@@ -77,7 +77,14 @@ export async function handleFileMaintInput(
   if (data === '\r' || data === '\n') {
     const input = session.inputBuffer;
     session.inputBuffer = '';
-    await handler(socket, session, input);
+    // `.call` and not `handler(...)`: every entry in FM_HANDLERS is a STATIC
+    // method of FileMaintenanceHandler, and pulling one out of the Map drops
+    // its receiver. The handlers reach for `this.parseList`, `this.
+    // searchAndMaintainFiles`, `this.canAccessHold` and 38 other siblings, so
+    // a bare call threw "Cannot read properties of undefined (reading
+    // 'parseList')" the moment a sysop pressed Enter at FM's first prompt -
+    // every FM step past the prompt was unreachable.
+    await handler.call(FileMaintenanceHandler, socket, session, input);
     return true;
   }
 
