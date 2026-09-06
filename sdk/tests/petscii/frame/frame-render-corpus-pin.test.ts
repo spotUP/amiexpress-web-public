@@ -111,6 +111,7 @@ const PINS: Record<string, Pin> = {
   // First measurement of a new input, frozen from here on under the rule above.
   gwall: { renders: 22, bytes: 9861, sha256: 'ae048300a9c9ca568e8ede698bee2da27b0b28797ff3524370953332829132bc' },
   hackcheck: { renders: 12, bytes: 1624, sha256: 'aa25e1dfa09db75b8b854410bc0e0831f89741e4c777805ac0f64e264cdecc3a' },
+  ctop: { renders: 25, bytes: 8983, sha256: 'bbadac75ff602ada72dc70f0469afbeafb521a88dcb64620372ad4b67b784223' },
 };
 
 function renderChain(id: string): Pin {

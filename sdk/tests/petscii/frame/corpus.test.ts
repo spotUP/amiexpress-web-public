@@ -477,6 +477,10 @@ const EXPECTED_ROWS: Record<string, number> = {
   // rows are painted, so the adapter's window shows the wall and pages once for
   // the door's own exit line.
   gwall: 30,
+  // `ctop` at 31: Conftop-II's uploader table. Four rows go to `stat` and five
+  // to `record`; the door paints 28 of the 31, so the adapter's window shows the
+  // table and pages once. Nothing is truncated anywhere on the screen.
+  ctop: 31,
 };
 
 function lastFrameOf(id: string): Frame {

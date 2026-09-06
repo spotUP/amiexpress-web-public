@@ -159,6 +159,8 @@ const SIGNATURES: Record<string, Signature> = {
   // part of the screen the mark is a promise about, and the exact pair the
   // `record` rung's relaxed right-field guard exists for.
   gwall: { door: 'Right on, great door archive!' },
+  // Conftop-II's record line: the byte count the `stat` rung exists to keep whole.
+  ctop: { door: '2,020,282,473' },
 };
 
 // ---------------------------------------------------------------- sessions
@@ -360,23 +362,13 @@ const multiset = (cells: ReadonlyArray<Cell>) => cells.map((c) => c.ch).filter((
 const squeeze = (s: string) => s.replace(/\s+/g, '');
 
 /**
- * `narrow`'s invariant, checked without re-implementing the rule: the output
- * row is the source columns in order, joined by exactly one space, each either
- * whole or a non-empty prefix followed by '>'. The walk BACKTRACKS because a
- * column can hold single spaces and '>' of its own.
- *
- * Same walker as sdk/tests/petscii/frame/corpus.test.ts - copied rather than
- * imported because that file is a test module (importing it would re-run its
- * 60-odd cases inside this suite).
- */
-/**
  * `stat`'s invariant, checked without re-implementing the rule: the produced
  * rows are the source columns, in order, whole, joined by exactly one space,
  * and NO column is split across a row boundary. Each column's own internal runs
  * of blanks collapse to one - the same squeeze `narrow` and `gutter` apply.
  *
  * Same walker as sdk/tests/petscii/frame/corpus.test.ts, copied for the same
- * reason as `narrowKeepsColumns` below it.
+ * reason as `narrowKeepsColumns` beside it.
  */
 function statKeepsColumns(parts: string[], lines: string[]): boolean {
   let i = 0;
@@ -393,6 +385,16 @@ function statKeepsColumns(parts: string[], lines: string[]): boolean {
   return i === parts.length;
 }
 
+/**
+ * `narrow`'s invariant, checked without re-implementing the rule: the output
+ * row is the source columns in order, joined by exactly one space, each either
+ * whole or a non-empty prefix followed by '>'. The walk BACKTRACKS because a
+ * column can hold single spaces and '>' of its own.
+ *
+ * Same walker as sdk/tests/petscii/frame/corpus.test.ts - copied rather than
+ * imported because that file is a test module (importing it would re-run its
+ * 60-odd cases inside this suite).
+ */
 function narrowKeepsColumns(parts: string[], out: string): boolean {
   const walk = (i: number, s: string): boolean => {
     if (i === parts.length) return s.length === 0;

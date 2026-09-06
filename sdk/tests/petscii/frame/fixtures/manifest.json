@@ -364,5 +364,20 @@
     "cwd": "web/backend",
     "installed": "GWALL",
     "notes": "Global Thermonuclear Wall: eleven comments, each a message in a 61-column field with the author and the board's acronym at column 61. Every comment and every author survives at 40, two-word handles (-Karyn Roberts, -David Bowman) included; the ONE narrow mark is the footer rule, which carries the door's credits and the [K sHOWS bBS kEY] legend. Zero unmapped glyphs on the KERNAL oracle. Marked C64_ADAPT=40 on 2026-09-06."
+  },
+  "ctop": {
+    "binary": "Doors/CONFTOP/ctop",
+    "command": "ctop",
+    "script": [
+      "4000 \\r",
+      "8000 \\r",
+      "12000 q\\r"
+    ],
+    "bytes": 1349,
+    "sha256": "6a89543d98604b05165d8ee4036ebe255a5f8a7710f1f27c02b9a673763cf287",
+    "harness": "printf '%s\\n' '4000 \\r' '8000 \\r' '12000 q\\r' | env BBS_DATA_DIR=$REPO npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/CONFTOP/ctop 1 --doortype XIM --command ctop --timeout 25 > ctop.ans",
+    "cwd": "web/backend",
+    "installed": "ctop",
+    "notes": "Conftop-II by REbEL/QTX, the board's ctop command. A ten-row uploader table with a totals block underneath. ZERO narrow marks and zero unmapped glyphs at 40: the two 'Top Uploader' rows and the 'Total Uploaded' row are the reason the stat rung exists - narrow used to hand the caller 'Bytes: 2,020,282>', which is not a shortened number but a different one. Marked C64_ADAPT=40 on 2026-09-06."
   }
 }
