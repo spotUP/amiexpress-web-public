@@ -9,6 +9,13 @@ export interface NodeStatus {
   connectionType?: string;
   lastActivity?: string;
   timeRemaining?: number;
+  /**
+   * Username this node is reserved for, or null. Driven by
+   * node-reservation.service (audit A-3, express.e:7649-7656) and surfaced
+   * on GET /api/nodes/status (node-control-routes.ts:33-49) so this can show
+   * a badge without a per-node round trip.
+   */
+  reservedFor?: string | null;
 }
 
 export interface UserRecord {

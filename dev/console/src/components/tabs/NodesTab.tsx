@@ -4,13 +4,13 @@ import Spinner from 'ink-spinner';
 import { useNodes } from '../../hooks/useNodes.js';
 import { T } from '../../theme/blessed-theme.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
-import { kickNode, chatNode } from '../../api/client.js';
+import { kickNode, reserveNode } from '../../api/client.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
 import type { NodeStatus } from '../../api/types.js';
 
 const ITEMS_START_ROW = 7;
 
-type Mode = 'list' | 'confirm-kick' | 'chat-input';
+type Mode = 'list' | 'confirm-kick' | 'reserve-input';
 
 function formatDuration(lastActivity?: string): string {
   if (!lastActivity) return '—';
@@ -33,7 +33,10 @@ function NodeRow({ node, selected }: { node: NodeStatus; selected: boolean }) {
       </Text>
       <Text dimColor={!selected} bold={selected} inverse={selected}>{(node.location ?? '—').padEnd(20)}</Text>
       <Text dimColor={!selected} bold={selected} inverse={selected}>{(node.currentActivity ?? node.state ?? '—').padEnd(20)}</Text>
-      <Text dimColor={!selected} bold={selected} inverse={selected}>{formatDuration(node.lastActivity)}</Text>
+      <Text dimColor={!selected} bold={selected} inverse={selected}>{formatDuration(node.lastActivity).padEnd(6)}</Text>
+      <Text color={node.reservedFor ? T.warn : (selected ? undefined : T.dim)} bold={selected} inverse={selected}>
+        {node.reservedFor ? `reserved: ${node.reservedFor}` : ''}
+      </Text>
     </Box>
   );
 }
@@ -42,36 +45,47 @@ export function NodesTab() {
   const { nodes, error } = useNodes();
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [mode, setMode] = useState<Mode>('list');
-  const [chatText, setChatText] = useState('');
+  const [reserveText, setReserveText] = useState('');
   const [status, setStatus] = useState<string | null>(null);
 
-  const onlineNodes = nodes.filter(n => n.online);
-  const selected = onlineNodes[selectedIdx];
+  // Selection spans ALL nodes, online or not: reserving an offline node for
+  // an expected caller (express.e's F4 / SV_RESERVE) is the point of this
+  // control, so it cannot require the node to be online. Kick still checks
+  // `selected.online` below — there is nothing to disconnect otherwise.
+  const selected = nodes[selectedIdx];
 
-  // Click a node row to select it. Rows render in `nodes` order (online+offline);
-  // clicks on offline rows are ignored. Only active in list mode.
   useRowClick(nodes.length, ITEMS_START_ROW, (idx) => {
-    const node = nodes[idx];
-    if (!node || !node.online) return;
-    const onlineIdx = onlineNodes.findIndex(n => n.nodeId === node.nodeId);
-    if (onlineIdx >= 0) setSelectedIdx(onlineIdx);
+    setSelectedIdx(idx);
   }, mode === 'list');
 
   useInput((input, key) => {
     if (mode === 'list') {
       if (key.upArrow) setSelectedIdx(i => Math.max(0, i - 1));
-      if (key.downArrow) setSelectedIdx(i => Math.min(onlineNodes.length - 1, i + 1));
-      if (input === 'k' && selected) setMode('confirm-kick');
-      if (input === 'c' && selected) { setChatText(''); setMode('chat-input'); }
-    } else if (mode === 'chat-input') {
-      if (key.escape) { setMode('list'); setChatText(''); }
-      if (key.return && chatText && selected) {
-        chatNode(selected.nodeId, chatText)
-          .then(() => { setStatus(`Sent to N${selected.nodeId}`); setMode('list'); setChatText(''); })
+      if (key.downArrow) setSelectedIdx(i => Math.min(nodes.length - 1, i + 1));
+      if (input === 'k' && selected?.online) setMode('confirm-kick');
+      if (input === 'v' && selected) {
+        if (selected.reservedFor) {
+          // Mirrors the web admin's "Clear Reservation" button: clearing an
+          // existing reservation is a toggle, not a new destructive action,
+          // so it fires immediately rather than opening the text prompt.
+          reserveNode(selected.nodeId)
+            .then(() => setStatus(`Reservation cleared on N${selected.nodeId}`))
+            .catch((e: Error) => setStatus(`Error: ${e.message}`));
+        } else {
+          setReserveText('');
+          setMode('reserve-input');
+        }
+      }
+    } else if (mode === 'reserve-input') {
+      if (key.escape) { setMode('list'); setReserveText(''); }
+      if (key.return && reserveText.trim() && selected) {
+        const username = reserveText.trim();
+        reserveNode(selected.nodeId, username)
+          .then(() => { setStatus(`N${selected.nodeId} reserved for ${username}`); setMode('list'); setReserveText(''); })
           .catch((e: Error) => { setStatus(`Error: ${e.message}`); setMode('list'); });
       }
-      if (key.backspace || key.delete) setChatText(t => t.slice(0, -1));
-      else if (input && !key.ctrl && !key.meta) setChatText(t => t + input);
+      if (key.backspace || key.delete) setReserveText(t => t.slice(0, -1));
+      else if (input && !key.ctrl && !key.meta) setReserveText(t => t + input);
     }
   });
 
@@ -81,7 +95,7 @@ export function NodesTab() {
     <Box flexDirection="column">
       <Box marginBottom={1}>
         <Text bold color={T.accent}>
-          {'  NODE'.padEnd(6)}{'USER'.padEnd(14)}{'LOCATION'.padEnd(20)}{'ACTIVITY'.padEnd(20)}{'SINCE'}
+          {'  NODE'.padEnd(6)}{'USER'.padEnd(14)}{'LOCATION'.padEnd(20)}{'ACTIVITY'.padEnd(20)}{'SINCE'.padEnd(6)}{'STATUS'}
         </Text>
       </Box>
 
@@ -91,8 +105,8 @@ export function NodesTab() {
           <Text> Connecting...</Text>
         </Box>
       ) : (
-        nodes.map((node) => (
-          <NodeRow key={node.nodeId} node={node} selected={selected?.nodeId === node.nodeId} />
+        nodes.map((node, i) => (
+          <NodeRow key={node.nodeId} node={node} selected={i === selectedIdx} />
         ))
       )}
 
@@ -117,14 +131,22 @@ export function NodesTab() {
         </Box>
       )}
 
-      {mode === 'chat-input' && selected && (
+      {mode === 'reserve-input' && selected && (
         <Box marginTop={1} flexDirection="column">
-          <Text color={T.accent}>Chat to N{selected.nodeId} ({selected.username}):</Text>
+          <Text color={T.accent}>Reserve N{selected.nodeId} for username:</Text>
           <Box>
             <Text>{'> '}</Text>
-            <Text>{chatText}█</Text>
+            <Text>{reserveText}█</Text>
           </Box>
-          <Text dimColor>[enter] send  [esc] cancel</Text>
+          <Text dimColor>[enter] reserve  [esc] cancel</Text>
+        </Box>
+      )}
+
+      {mode === 'list' && (
+        <Box marginTop={1}>
+          <Text dimColor>
+            [k]ick  [v] reserve/clear  [↑↓] select
+          </Text>
         </Box>
       )}
     </Box>

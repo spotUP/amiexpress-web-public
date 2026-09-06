@@ -38,11 +38,11 @@ export const PAGES: PageMeta[] = [
     id: 'nodes',
     label: 'Nodes',
     category: 'Live',
-    footerHint: '[k]ick  [c]hat  [↑↓] select',
+    footerHint: '[k]ick  [v]reserve  [↑↓] select',
     helpKeys: [
       ['↑↓', 'Select a node'],
       ['k',  'Kick the selected user'],
-      ['c',  'Open chat to selected node'],
+      ['v',  'Reserve the selected node for an expected caller'],
       ['click', 'Click a row to select it'],
     ],
     implemented: true,

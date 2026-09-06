@@ -60,19 +60,22 @@ export async function kickNode(nodeId: number) {
   return request<{ success: boolean }>(`/api/nodes/${nodeId}/kick`, { method: 'POST' });
 }
 
-export async function chatNode(nodeId: number, message: string) {
-  return request<{ success: boolean }>(`/api/nodes/${nodeId}/chat`, {
-    method: 'POST',
-    body: JSON.stringify({ message }),
-  });
-}
-
 export async function getUsers() {
   const res = await request<{ success: boolean; data: import('./types.js').UserRecord[] }>('/api/config/users');
   return res.data ?? [];
 }
 
-export async function updateUser(id: string, updates: Partial<import('./types.js').UserRecord>) {
+// `password` is not part of UserRecord (GET /users strips passwordHash from
+// every response — config-routes.ts:1663-1667) but PUT accepts it: the
+// backend destructures `{ password, ...updates }` and, when present, hashes
+// it into BOTH the disk record and the database row that login checks
+// (config-routes.ts:1798-1948). Leaving it out of the body keeps the
+// account's current password, matching the web admin's "leave blank to keep
+// current password" field (UsersPage.tsx:404).
+export async function updateUser(
+  id: string,
+  updates: Partial<import('./types.js').UserRecord> & { password?: string },
+) {
   return request<{ success: boolean }>(`/api/config/users/${id}`, {
     method: 'PUT',
     body: JSON.stringify(updates),
@@ -177,8 +180,15 @@ export async function exitNode(nodeId: number) {
   return request<{ success: boolean }>(`/api/nodes/${nodeId}/exit`, { method: 'POST' });
 }
 
-export async function reserveNode(nodeId: number) {
-  return request<{ success: boolean }>(`/api/nodes/${nodeId}/reserve`, { method: 'POST' });
+// Body must carry { username } to reserve, or {} to clear an existing
+// reservation (backend toggle/clear path — node-control-routes.ts:150-197).
+// The prior signature took no username at all, so it could only ever hit the
+// clear branch or 400 — it could not actually reserve a node.
+export async function reserveNode(nodeId: number, username?: string) {
+  return request<{ success: boolean; message?: string; reservedFor: string | null }>(
+    `/api/nodes/${nodeId}/reserve`,
+    { method: 'POST', body: JSON.stringify(username ? { username } : {}) }
+  );
 }
 
 export async function sysopLoginNode(nodeId: number) {
