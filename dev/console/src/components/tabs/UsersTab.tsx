@@ -5,6 +5,7 @@ import { getUsers, updateUser, deleteUser, createUser } from '../../api/client.j
 import { T } from '../../theme/blessed-theme.js';
 import { ToggleSwitch } from '../shared/InlineEdit.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
+import { useTextEntryLock } from '../../hooks/useTextEntryLock.js';
 import { ConfirmDialog } from '../shared/ConfirmDialog.js';
 import type { UserRecord } from '../../api/types.js';
 
@@ -93,6 +94,12 @@ export function UsersTab() {
   useRowClick(visibleUsers.length, ITEMS_START_ROW, (idx) => {
     setSelectedIdx(idx);
   }, mode === 'list' && !searching);
+
+  // Any state past idle row-browsing owns the keyboard: a search box, the
+  // security-level field, and above all the password/create forms, where
+  // 'q' in a real password or arrow-key field navigation must not also quit
+  // the console or hand the sidebar the up/down keys and unmount the form.
+  useTextEntryLock(mode !== 'list' || searching);
 
   const startPasswordReset = () => {
     if (!selected) return;
@@ -192,10 +199,15 @@ export function UsersTab() {
     }
 
     if (mode === 'password-form' || mode === 'create-form') {
+      // Escape must work even mid-submit: a backend that never answers must
+      // not leave the only way out of this form being to kill the console.
+      // (client.ts's request() also carries its own timeout, so a hung
+      // request resolves on its own either way - this is the immediate
+      // escape hatch on top of that.)
+      if (key.escape) { cancelForm(); return; }
       if (submitting) return;
       const fields = mode === 'password-form' ? PASSWORD_FIELDS : CREATE_FIELDS;
       const field = fields[formFieldIdx];
-      if (key.escape) { cancelForm(); return; }
       if (field.type === 'bool') {
         if (input === ' ') {
           setFormValues(v => ({ ...v, [field.key]: v[field.key] === 'true' ? 'false' : 'true' }));
