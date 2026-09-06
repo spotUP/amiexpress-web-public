@@ -9,15 +9,19 @@ import { T } from '../../theme/blessed-theme.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
 import { stripAnsi } from '../../utils/strip-ansi.js';
 
-// The stats panel (when present) is a title box + a stats line, each with
-// its own marginBottom - two extra rendered rows above the session list.
-// A fixed 8 split the difference and was wrong either way: with stats it
-// under-shot by one, with stats absent (still loading, or the stats fetch
-// failed) it over-shot by one - either way a click landed one row off and
+// Content area starts at row 5 (see useRowClick.ts). This page renders
+// THREE marginBottom={1} boxes above the list before any items appear:
+// title box, optional stats box, and the column-header box - each box's
+// content row plus its margin spacer row is 2 rendered rows. So:
+//   without stats: title (5-6) + header (7-8)            -> items at 9
+//   with stats:    title (5-6) + stats (7-8) + header (9-10) -> items at 11
+// A previous fix (7/9) counted the title and stats boxes but missed the
+// column-header box that's always present, so it under-shot by 2 in both
+// cases - every click landed two rows above the row a caller clicked and
 // opened the WRONG session's log immediately (useRowClick fires on any
 // click within the content area, not just on an actual row).
-const ITEMS_START_ROW_BASE = 7;
-const ITEMS_START_ROW_WITH_STATS = 9;
+const ITEMS_START_ROW_BASE = 9;
+const ITEMS_START_ROW_WITH_STATS = 11;
 
 export function SessionLogsPage() {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
