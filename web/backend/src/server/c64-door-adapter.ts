@@ -4,7 +4,7 @@
  * A 68K door paints an 80-column screen; a PETSCII caller has 40x25. Rather
  * than rewrite the byte stream, this replays the door's ANSI onto a virtual
  * 80x25 grid (FrameReconstructor), reduces each finished FRAME with the rule
- * ladder (adaptFrame), and emits the minimal ANSI that repaints it (renderDiff)
+ * ladder (adaptRows), and emits the minimal ANSI that repaints it (renderDiff)
  * - which the existing downstream carries unchanged: connection-emitter.ts's
  * AnsiToPetsciiTransducer for telnet/SSH, or the browser's transducer in
  * BBSTerminal. The canvas side needs no change.
@@ -66,13 +66,16 @@
  * `{ silent: true }` / disposeSilently().
  *
  * PAGING (backlog 11.3). The rule ladder can make a screen TALLER than it
- * started, and `adaptFrame` resolves that by showing the LAST 25 adapted rows -
- * so a menu that reflows into 33 rows loses its head to a caller who never saw
- * it. When that happens the adapter anchors its window at the TOP instead and
- * xim/io.ts walks it down a page at a time behind the express.e pause prompt;
- * see the block on `pageTop`. The walk is armed only by that pause owner, so a
- * frame that fits - every frame the corpus and identity pins measure - takes
- * the unchanged adaptFrame path.
+ * started - a menu that reflows into 33 rows cannot be shown to a 25-row
+ * caller at once - so the adapter keeps ONE window over the adapted rows and
+ * `windowTop()` is the only place it is anchored. With no walk in progress it
+ * sits at the bottom of the PAINTED content, which keeps the door's prompt and
+ * cursor on screen; when the pause owner arms a walk (xim/io.ts, the only
+ * thing that can hold the emulator and read the caller's key) it is `pageTop`
+ * and walks DOWN a page at a time behind the express.e pause prompt. See the
+ * block on `pageTop` and the one on `windowTop`. A frame whose painted rows
+ * fit - every frame the corpus and identity pins measure - is shown from its
+ * first row, which is the window at offset zero.
  *
  * NOT INSTALLED for a non-PETSCII session: install() returns null and `emit` is
  * not replaced, so 80-column output is byte-for-byte what it was. Non-string
@@ -84,7 +87,6 @@
  */
 import {
   FrameReconstructor,
-  adaptFrame,
   adaptRows,
   blankCell,
   isBlank,
@@ -185,18 +187,21 @@ export class C64DoorFrameAdapter {
   /**
    * ADAPTED-FRAME PAGING (backlog 11.3). The rule ladder can make a screen
    * TALLER than it started: `games` (5D-AdiMenu) paints 19 source rows that
-   * reflow into 33 adapted ones, and `adaptFrame` shows the LAST `rows` of
-   * them - so the title and nine games leave the top having never been on the
+   * reflow into 33 adapted ones, and a window that shows the LAST `rows` of
+   * them leaves the title and nine games off the top having never been on the
    * caller's screen. Measured on the real file: painted rows start falling off
    * at source line 4, which is why no threshold on the SOURCE line counter can
    * fix this (a 25-row grid's blank tail is adapted too, so the total is over
    * 25 before the door has printed its second entry).
    *
-   * The window is therefore anchored at `pageTop` and walked DOWN a page at a
-   * time by whoever owns the pause - xim/io.ts, which is the only thing that
-   * can hold the emulator and read the caller's key. Until that owner arms it
-   * (`showPause`), `paging` is false and flush() takes the historic
-   * `adaptFrame` path unchanged, which is what every existing pin measures.
+   * The window is therefore walked DOWN a page at a time by whoever owns the
+   * pause - xim/io.ts, which is the only thing that can hold the emulator and
+   * read the caller's key. While a walk is in progress (`paging`) the window
+   * sits at `pageTop`; the rest of the time `windowTop()` anchors it at the
+   * bottom of the PAINTED content. INVARIANT: `paging === false` implies
+   * `pageTop === 0` - settleWindow() and dropBaseline() are the only ways out
+   * of a walk and both reset it - so `unseenRows()` reads the same window
+   * either way.
    */
   private pageTop = 0;
   private paging = false;
@@ -242,14 +247,7 @@ export class C64DoorFrameAdapter {
     if (!this.dirty) return;
     this.dirty = false;
     this.settleWindow();
-    if (this.paging) {
-      this.paint(null);
-      return;
-    }
-    const next = adaptFrame(this.screen.snapshot(), { cols: this.cols, rows: ROWS });
-    const ansi = renderDiff(this.prev, next, this.cols, ROWS);
-    this.prev = next;
-    this.downstream('ansi-output', ansi);
+    this.paint(null);
   }
 
   // ---- adapted-frame paging -------------------------------------------
@@ -265,8 +263,16 @@ export class C64DoorFrameAdapter {
 
   /**
    * Adapted rows the caller's screen cannot hold from the current window.
-   * Zero for every frame that fits - which is every frame the corpus and the
-   * identity pins measure, so they never enter the paged path.
+   *
+   * With no walk in progress `pageTop` is 0 (see the invariant above), so this
+   * is `contentEnd - 25` - and because `windowTop()` anchors the un-walked
+   * window on the painted height too, that is EXACTLY the number of painted
+   * rows that window pushes off the top. The measurement and the paint agree;
+   * they did not while the window counted the grid's blank tail, and 18 of the
+   * 29 corpus fixtures lost rows this reported as zero.
+   *
+   * Zero for every frame whose painted rows fit, so those never enter the
+   * paged path.
    */
   unseenRows(): number {
     this.settleWindow();
@@ -296,7 +302,18 @@ export class C64DoorFrameAdapter {
     return this.unseenRows();
   }
 
-  /** Repaint the current page with no prompt - the last page of a walk. */
+  /**
+   * Repaint the current page with no prompt - the last page of a walk.
+   *
+   * The walk is NOT ended here, and that is deliberate. `pageTop` is the
+   * high-water mark of what the caller has been shown: leaving it in place is
+   * what makes `unseenRows()` answer zero for the rows he has already read, so
+   * the door runs on instead of being held again on the next message. Dropping
+   * back to the un-walked anchor here would report the top rows unseen a
+   * second time and prompt for them again, for ever. settleWindow() releases
+   * the walk as soon as the door's screen fits again or it paints past
+   * `pageTop`, and dropBaseline() releases it on a raw-PETSCII repaint.
+   */
   showPage(): void {
     this.paint(null);
   }
@@ -334,18 +351,51 @@ export class C64DoorFrameAdapter {
     return view;
   }
 
-  /** Render window [pageTop, pageTop+height) plus an optional prompt row. */
+  /**
+   * The first adapted row of the window the caller is shown - the ONE place
+   * the window is anchored, so `unseenRows()` and the paint cannot disagree.
+   *
+   * THE BUG THIS REPLACES. `adaptFrame` anchors at `total - 25`, and `total`
+   * counts the BLANK TAIL of the 80x25 grid the door painted on: every unused
+   * source row costs an adapted row, and each one shoves a PAINTED row off the
+   * top. Measured over the 29 corpus fixtures, 22 lost painted rows that way -
+   * gwall 5, olm 4, `b` 4, ratiorep 4, super_stats 4, ulist 3, six_status 9 -
+   * and 18 of them (olm, `b`, ratiorep, ulist, super_stats, ...) had painted
+   * content that FITS a 25-row screen and lost the top of it anyway, purely to
+   * blank rows. `unseenRows()` measured `contentEnd` and so reported 0 for all
+   * of those: the two ends did not agree, and the caller lost the difference.
+   *
+   * Anchoring on the PAINTED height instead makes them agree by construction -
+   * the rows this window pushes off the top are exactly
+   * `contentEnd - 25`, which is what `unseenRows()` returns. Content that fits
+   * is shown from its first row and needs no pause at all; content that does
+   * not is walked from the top by the pause owner (see `pageTop`).
+   *
+   * It is still anchored at the BOTTOM of the painted content when there is no
+   * walk, which is what keeps a door's prompt and cursor - the last thing it
+   * painted - on the caller's screen. Only the blank tail left the measurement.
+   */
+  private windowTop(height: number): number {
+    if (this.paging) return this.pageTop;
+    return Math.max(0, this.adapted().contentEnd - height);
+  }
+
+  /** Render window [windowTop, windowTop+height) plus an optional prompt row. */
   private paint(prompt: string | null): void {
     this.clearTimers();
     this.dirty = false;
     const { rows, cursor } = this.adapted();
     const height = prompt === null ? ROWS : ROWS - 1;
+    const top = this.windowTop(height);
     const visible: Cell[][] = rows
-      .slice(this.pageTop, this.pageTop + height)
+      .slice(top, top + height)
       .map((r) => r.cells.map((c) => ({ ...c })));
     let where: Cursor;
     if (prompt === null) {
-      where = { x: cursor.x, y: Math.max(0, Math.min(ROWS - 1, cursor.y - this.pageTop)) };
+      where = {
+        x: Math.max(0, Math.min(this.cols - 1, cursor.x)),
+        y: Math.max(0, Math.min(ROWS - 1, cursor.y - top)),
+      };
     } else {
       while (visible.length < ROWS - 1) visible.push([]);
       visible.push(Array.from(prompt).map((ch) => ({ ...blankCell(), ch })));

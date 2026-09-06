@@ -8,7 +8,7 @@
  *     -> emitter.emit('ansi-output', chunk)          (what a door does)
  *     -> installC64DoorAdapter's patched emit        (FrameReconstructor)
  *     -> quiet-gap tick on REAL timers               (frame boundary)
- *     -> adaptFrame + renderDiff                     (40x25 ANSI)
+ *     -> adaptRows + the adapter's window + renderDiff  (40x25 ANSI)
  *     -> buildConnectionEmitter                      (the LIVE telnet/SSH transport)
  *     -> AnsiToPetsciiTransducer                     (inside that emitter)
  *     -> connection.write                            (the wire)
@@ -41,13 +41,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
   FrameReconstructor,
-  adaptFrame,
   adaptRows,
   applyRule,
   chooseRule,
   columnParts,
   isBlank,
   isRuleRow,
+  makeFrame,
   rowText,
   TRUNCATION_MARK,
   type Cell,
@@ -490,6 +490,33 @@ function ruleViolations(frame: Frame): Array<Record<string, unknown>> {
   return bad;
 }
 
+/**
+ * The 40x25 frame the caller must END on: the adapter's window over the adapted
+ * rows when no page walk is in progress - the last 25 rows of PAINTED content.
+ *
+ * This used to be `adaptFrame`, which anchors at `rows.length - 25` and so
+ * counts the 80x25 grid's BLANK TAIL. Every unused source row costs an adapted
+ * row and shoves a painted one off the top: measured across these 29 fixtures
+ * 22 lost painted rows that way (gwall 5, six_status 9, olm/`b`/ratiorep/
+ * super_stats 4 each), and this suite pinned the loss. `adaptFrame` itself is
+ * unchanged and still pinned by sdk/tests/petscii/frame/adapt.test.ts; the
+ * ADAPTER stopped calling it (C64DoorFrameAdapter.windowTop).
+ */
+function windowStart(rows: ReadonlyArray<{ cells: Cell[] }>): number {
+  let contentEnd = rows.length;
+  while (contentEnd > 0 && rows[contentEnd - 1].cells.every(isBlank)) contentEnd--;
+  return Math.max(0, contentEnd - ROWS);
+}
+
+function shownFrame(source: Frame): Frame {
+  const { rows, cursor } = adaptRows(source, { cols: COLS });
+  const top = windowStart(rows);
+  return makeFrame(COLS, ROWS, rows.slice(top, top + ROWS).map((r) => r.cells), {
+    x: Math.max(0, Math.min(COLS - 1, cursor.x)),
+    y: Math.max(0, Math.min(ROWS - 1, cursor.y - top)),
+  });
+}
+
 /** The 80x25 screen the adapter's own FrameReconstructor holds when the door stops, chunked identically. */
 function reconstruct(text: string): Frame {
   const screen = new FrameReconstructor({ cols: SOURCE_COLS, rows: ROWS });
@@ -502,7 +529,7 @@ function reconstruct(text: string): Frame {
 describe.each(Object.keys(manifest))('fixture %s end to end', (id) => {
   const text = fixtureText(id);
   const source = reconstruct(text);
-  const adapted = adaptFrame(source, { cols: COLS, rows: ROWS });
+  const adapted = shownFrame(source);
 
   let c64: Wire;
   let ansiWith: Wire;
@@ -564,11 +591,13 @@ describe.each(Object.keys(manifest))('fixture %s end to end', (id) => {
     expect([machine.state.cursorX, machine.state.cursorY]).toEqual([adapted.cursor.x, adapted.cursor.y]);
   });
 
-  it('every non-blank row of the adapted tail is on the caller\'s screen', () => {
+  it('every non-blank row of the window the caller ends on is on his screen', () => {
     // A row whose text contains a glyph PETSCII has no code for cannot be
     // asserted through the oracle as a run; the cell-for-cell check above
     // already covers every mappable cell of it.
-    const tail = adaptRows(source, { cols: COLS }).rows.slice(-ROWS);
+    const all = adaptRows(source, { cols: COLS }).rows;
+    const top = windowStart(all);
+    const tail = all.slice(top, top + ROWS);
     const assertable = tail
       .map((row) => rowText(row.cells).trimEnd())
       .filter((t) => t.trim().length > 0)

@@ -694,7 +694,10 @@ debugLog(`[XIMIOHandler] JH_SM DEBUG: msg.string="${msg.string}" msg.stringPtr=0
 debugLog(`[XIMIOHandler] JH_SM: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data}, len=${text.length})`);
 
     // express.e:3406-3411: IF msg.data THEN aePuts('\b\n'); checkForPause()
-    this.emitText(text, shouldAddNewline, true, this.state.autoPauseEnabled, msg);
+    // express.e pauses HERE unconditionally; `autoPauseEnabled` is this board's
+    // PAGINATION tooltype throttling the line counter, and it must not also
+    // silence the adapted-frame pause - hence the explicit `pauseSite`.
+    this.emitText(text, shouldAddNewline, true, this.state.autoPauseEnabled, msg, true);
 
     this.reply(msg, 1);
   }
@@ -720,7 +723,9 @@ debugLog(`[XIMIOHandler] JH_SM: "${text.substring(0, 40)}${text.length > 40 ? '.
 debugLog(`[XIMIOHandler] JH_SMPTR: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data})`);
 
     // express.e:3412-3417: IF msg.data THEN aePuts('\b\n'); checkForPause()
-    this.emitText(text, shouldAddNewline, true, this.state.autoPauseEnabled, msg);
+    // Same split as JH_SM above: PAGINATION gates the line counter, never the
+    // adapted-frame window.
+    this.emitText(text, shouldAddNewline, true, this.state.autoPauseEnabled, msg, true);
 
     this.reply(msg, 1);
   }
@@ -1397,6 +1402,29 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
 
   /**
    * Emit text to the terminal with optional wrapping and pagination.
+   *
+   * TWO PAUSE GATES, and they are not the same question.
+   *
+   * `autoPause` is the LINE-COUNT pause - express.e:5181 checkForPause, whose
+   * unit is a source row. On this board it is armed per door by the local
+   * `PAGINATION` tooltype (door.handler.ts), which express.e has no equivalent
+   * of: express.e calls checkForPause unconditionally from JH_SM/JH_SMPTR
+   * (3406-3417) and gates only on nonStopDisplayFlag and userLineLen. That
+   * tooltype is what keeps an 80-column caller's wire byte-identical, so it
+   * stays exactly where it is.
+   *
+   * `pauseSite` is the ADAPTED-FRAME pause and asks a different question:
+   * "is this one of express.e's checkForPause sites?" - a property of the
+   * MESSAGE TYPE, not of the door. It has to be separate because the overflow
+   * it guards against is created by ADAPTATION, downstream of the door: a door
+   * with no PAGINATION tooltype is saying "I paginate my own 80x25 screen",
+   * which is true and irrelevant to a caller whose 40-column screen the rule
+   * ladder just made 30 rows tall. GWALL, ctop, `I`, `games` and Olm all
+   * declare no PAGINATION, and all of them overflow at 40.
+   *
+   * It defaults to `autoPause` so every existing call site keeps its meaning;
+   * only JH_SM and JH_SMPTR pass it explicitly.
+   *
    * Returns the number of characters sent (approximate).
    */
   private emitText(
@@ -1404,7 +1432,8 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
     addNewline: boolean,
     trackLines: boolean,
     autoPause: boolean = false,
-    pendingMsg?: XIMMessage
+    pendingMsg?: XIMMessage,
+    pauseSite: boolean = autoPause
   ): number {
     // Convert raw Amiga output text to web-terminal-safe ANSI (see io-ansi-util.ts).
     const rawResult = processRawText(text, this.ansiBuffer, this.state.nonStopText, !!pendingMsg);
@@ -1521,7 +1550,7 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
     // nothing - where the per-line pause above returns early and drops the rest
     // of the message, which for a one-call file display is most of the file.
     if (
-      autoPause &&
+      pauseSite &&
       pendingMsg &&
       !this.waitingForPause &&
       !this.state.nonStopText
