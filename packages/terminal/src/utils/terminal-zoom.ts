@@ -185,6 +185,33 @@ export function wheelZoom(fraction: number, deltaY: number): number {
 }
 
 /**
+ * The fraction a two-finger pinch leads to.
+ *
+ * `ratio` is the finger distance now over the distance when the pinch began,
+ * so it is 1:1 with the gesture: spread your fingers to twice the distance and
+ * the screen doubles, up to the fit.
+ *
+ * This exists because the BROWSER's pinch is the wrong tool on a phone. Its
+ * zoom scales the whole page, and the on-screen keyboard is `position: fixed`
+ * - anchored to the LAYOUT viewport - so a pinch slides it off the screen
+ * entirely ("zooming on phones zooms the keyboard away", 2026-09-06). The
+ * terminal has its own zoom, which is a font size and touches nothing else;
+ * routing the pinch here is what lets the screen grow while the keys stay put.
+ */
+export function pinchZoom(startFraction: number, ratio: number): number {
+  if (!Number.isFinite(ratio) || ratio <= 0) return clampFraction(startFraction);
+  return clampFraction(startFraction * ratio);
+}
+
+/** Distance between two touch points, for a pinch. */
+export function pinchDistance(
+  a: { clientX: number; clientY: number },
+  b: { clientX: number; clientY: number },
+): number {
+  return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+}
+
+/**
  * The next step down the preset ladder, wrapping home to fit-to-window.
  *
  * "Next" is the first preset strictly below the current fraction, so a viewer

@@ -247,8 +247,19 @@ const EIGHTY_COL_GRID: string[] = [
   "|      ENTER=Run Upload Info Files Del View doc E=Dis Strip Tab=Repo Quit      |",
   "`------------------------------------------------------------------------------'",
 ];
-/** sha256 over { text, attrs } of the same capture - the SGR half of the pin. */
-const EIGHTY_COL_HASH = '4b52a2367429e4b92385c5ec553abb2ce2a5e5a1235aaab536aa037f3df96180';
+/**
+ * sha256 over { text, attrs } of the same capture - the SGR half of the pin.
+ *
+ * RE-BASELINED 2026-09-06, and only the colours moved. The glyph grid above is
+ * byte-identical, so the LAYOUT this test exists to protect is untouched; what
+ * changed is which colour the borders and bars are painted in, deliberately,
+ * when the theme work landed ("the primary colour carries the bars and every
+ * border"). The pin did its job by catching it.
+ *
+ * Re-baseline this only when the text grid above is unchanged. If both halves
+ * move, the layout moved, and that is the thing this file is here to refuse.
+ */
+const EIGHTY_COL_HASH = '421e34a877597866c3422b7b276f8672adb81c73caaa8809029a880d1192141d';
 
 /** The fixed screen both captures paint: nothing here depends on a live BBS. */
 const ROWS = [
