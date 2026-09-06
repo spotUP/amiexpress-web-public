@@ -17,6 +17,7 @@
  * and a second ladder here would eventually disagree with it.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.CELL_ASPECT = void 0;
 exports.panelScale = panelScale;
 exports.panelsLayout = panelsLayout;
 exports.hudLines = hudLines;
@@ -38,7 +39,31 @@ const FRAME_COLS = 2;
  * drawn at; and capped, because a board that fills a 200-column terminal in
  * six enormous tiles is not more readable, it is just bigger.
  */
-function panelScale(screenWidth, screenHeight, boardCols, boardRows, stacked) {
+/**
+ * How wide a character cell is relative to its height, per screen.
+ *
+ * This is the fact the first version of the scaling missed, and it is not a
+ * detail: it decides what "square" MEANS. An xterm cell is about twice as tall
+ * as it is wide, so a 2x1-character panel reads square there. A PETSCII cell
+ * is SQUARE, so the same panel is a 2:1 rectangle - which is why the C64 board
+ * looked wrong before any scaling existed.
+ */
+exports.CELL_ASPECT = {
+    /** xterm, and every ANSI terminal on this board. */
+    terminal: 0.5,
+    /** PETSCII on a C64: 8x8 pixels, square. */
+    petscii: 1,
+};
+/**
+ * The widest a tile may LOOK, however much room there is.
+ *
+ * Bounding the scale is not the same as bounding the shape, and confusing the
+ * two is how a C64 ended up with tiles six characters wide and one row tall:
+ * a scale of 3 is harmless on a terminal whose cells are tall, and a smear on
+ * a screen whose cells are square. The cap is on what reaches the eye.
+ */
+const MAX_TILE_ASPECT = 2;
+function panelScale(screenWidth, screenHeight, boardCols, boardRows, stacked, cellAspect = exports.CELL_ASPECT.terminal) {
     // Beside the board, the HUD's columns are not the board's to grow into.
     const usableCols = Math.max(1, stacked ? screenWidth - FRAME_COLS : screenWidth - FRAME_COLS - GAP - HUD_WIDE);
     const usableRows = Math.max(1, screenHeight - FRAME_ROWS - (stacked ? STACKED_HUD_ROWS : 0));
@@ -55,14 +80,18 @@ function panelScale(screenWidth, screenHeight, boardCols, boardRows, stacked) {
         const uniform = Math.min(fitX, fitY);
         return { x: uniform, y: uniform };
     }
-    // Stacked, the board is the screen and filling the width is the point - a
-    // C64 has 25 rows, so height caps at 1x while width has room for three, and
-    // a wide tile that fills the screen was the trade chosen over a square tile
-    // in a corner of it. Still bounded, so the stretch stays legible.
-    return { x: Math.min(fitX, fitY + MAX_STRETCH), y: fitY };
+    // Stacked, the board owns the width and filling it is the point - but only
+    // as far as the tile still reads as a tile. A panel is 2 characters wide and
+    // `y` rows tall, so on screen it is (2 * x * cellAspect) by y; the widest
+    // stretch allowed is whatever keeps that under MAX_TILE_ASPECT.
+    //
+    // On a terminal that is generous: cells are half as wide as they are tall,
+    // so x may reach twice y. On a C64 it is not, because the cells are square -
+    // a 2x1 panel is already at the limit there, and stretching it further is
+    // what produced the six-to-one smear a caller photographed.
+    const widestForShape = Math.max(1, Math.floor((MAX_TILE_ASPECT * fitY) / (2 * cellAspect)));
+    return { x: Math.min(fitX, widestForShape), y: fitY };
 }
-/** How much wider than tall a tile may be stretched when it owns the width. */
-const MAX_STRETCH = 2;
 /** Beyond this a bigger tile stops helping and starts wasting the screen. */
 const MAX_SCALE = 4;
 /**
@@ -73,7 +102,7 @@ const MAX_SCALE = 4;
  * with a single column of margin, because centring a 12-wide board on a 40-wide
  * screen wastes the space the HUD needs.
  */
-function panelsLayout(screenWidth, screenHeight, boardCols, boardRows) {
+function panelsLayout(screenWidth, screenHeight, boardCols, boardRows, cellAspect = exports.CELL_ASPECT.terminal) {
     const compact = (0, blessed_1.isCompactWidth)(screenWidth);
     const profile = (0, blessed_1.getCompactProfile)(screenWidth);
     // THE HUD GOES UNDER THE BOARD when there is not room for it beside one.
@@ -93,7 +122,7 @@ function panelsLayout(screenWidth, screenHeight, boardCols, boardRows) {
     const portrait = screenHeight > screenWidth;
     const stacked = compact || portrait || screenWidth < boardCols + GAP + HUD_WIDE + 2;
     const hudWidth = stacked ? screenWidth - FRAME_COLS : HUD_WIDE;
-    const scale = panelScale(screenWidth, screenHeight, boardCols, boardRows, stacked);
+    const scale = panelScale(screenWidth, screenHeight, boardCols, boardRows, stacked, cellAspect);
     const width = boardCols * scale.x;
     const height = boardRows * scale.y;
     const totalWidth = stacked ? width : width + GAP + hudWidth;

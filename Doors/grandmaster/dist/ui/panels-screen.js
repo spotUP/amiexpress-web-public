@@ -77,7 +77,9 @@ class PanelsScreen {
     setupUI() {
         const { cols, rows } = (0, board_view_1.boardSize)(this.stack);
         // Geometry comes from the live screen width, never from a constant.
-        const layout = (0, layout_1.panelsLayout)(this.screen.width, this.screen.height, cols, rows);
+        // A PETSCII cell is square; an xterm cell is half as wide as it is tall.
+        // The layout has to know which, because it decides what a square TILE is.
+        const layout = (0, layout_1.panelsLayout)(this.screen.width, this.screen.height, cols, rows, this.variant === 'c64' ? layout_1.CELL_ASPECT.petscii : layout_1.CELL_ASPECT.terminal);
         this.layout = layout;
         // The well gets a frame where there is room for one. The layout has always
         // said whether to draw it - `border`, from the compact profile - and

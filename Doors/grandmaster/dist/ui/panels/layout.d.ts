@@ -46,7 +46,22 @@ export interface PanelScale {
  * drawn at; and capped, because a board that fills a 200-column terminal in
  * six enormous tiles is not more readable, it is just bigger.
  */
-export declare function panelScale(screenWidth: number, screenHeight: number, boardCols: number, boardRows: number, stacked: boolean): PanelScale;
+/**
+ * How wide a character cell is relative to its height, per screen.
+ *
+ * This is the fact the first version of the scaling missed, and it is not a
+ * detail: it decides what "square" MEANS. An xterm cell is about twice as tall
+ * as it is wide, so a 2x1-character panel reads square there. A PETSCII cell
+ * is SQUARE, so the same panel is a 2:1 rectangle - which is why the C64 board
+ * looked wrong before any scaling existed.
+ */
+export declare const CELL_ASPECT: {
+    /** xterm, and every ANSI terminal on this board. */
+    readonly terminal: 0.5;
+    /** PETSCII on a C64: 8x8 pixels, square. */
+    readonly petscii: 1;
+};
+export declare function panelScale(screenWidth: number, screenHeight: number, boardCols: number, boardRows: number, stacked: boolean, cellAspect?: number): PanelScale;
 export interface PanelsLayout {
     /** True at 40 columns: no labels, no chrome, no effects. */
     compact: boolean;
@@ -81,7 +96,7 @@ export interface PanelsLayout {
  * with a single column of margin, because centring a 12-wide board on a 40-wide
  * screen wastes the space the HUD needs.
  */
-export declare function panelsLayout(screenWidth: number, screenHeight: number, boardCols: number, boardRows: number): PanelsLayout;
+export declare function panelsLayout(screenWidth: number, screenHeight: number, boardCols: number, boardRows: number, cellAspect?: number): PanelsLayout;
 /**
  * The HUD's lines.
  *

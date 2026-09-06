@@ -15,7 +15,7 @@
  */
 
 import assert from 'assert';
-import { panelsLayout, panelScale } from '../../ui/panels/layout';
+import { panelsLayout, panelScale, CELL_ASPECT } from '../../ui/panels/layout';
 import { buildBoard, scaleBuffer } from '../../ui/panels/board-view';
 import { Stack } from '../../core/panels/stack';
 import { GeneratorSource } from '../../core/panels/generator-source';
@@ -54,16 +54,54 @@ export async function theEightyColumnBoardIsUnchanged(): Promise<void> {
 }
 
 /**
- * A C64 fills its width. The tile stretches rather than staying square,
- * because square would mean a six-column board on a screen with 25 rows.
+ * A PETSCII CELL IS SQUARE, and that changes what a tile may be.
+ *
+ * The first version of this scaling bounded the SCALE and not the SHAPE, which
+ * is not the same thing: a scale of 3 is harmless on a terminal whose cells
+ * are twice as tall as they are wide, and on a C64 it produced tiles six
+ * characters wide and one row tall. A caller photographed the smear.
+ *
+ * On 40x25 the rows are already spent - twelve playfield rows plus the
+ * incoming row - so height cannot grow to match, and the widest a tile may go
+ * is the 2x1 it was drawn as. That leaves the board narrower than the screen,
+ * which is the honest answer: on a square-celled screen with 25 rows there is
+ * no tile that is both square and large.
  */
-export async function theC64BoardFillsTheScreen(): Promise<void> {
-  const layout = panelsLayout(40, 25, COLS, ROWS);
+export async function aPetsciiTileIsNeverStretchedIntoASmear(): Promise<void> {
+  const layout = panelsLayout(40, 25, COLS, ROWS, CELL_ASPECT.petscii);
 
   assert.strictEqual(layout.stacked, true, 'the HUD goes under it');
-  assert.ok(layout.board.width >= 30, `only ${layout.board.width} of 40 columns used`);
   assert.strictEqual(layout.scale.y, 1, 'the rows are already spent by the playfield');
+
+  const looksLike = (2 * layout.scale.x * CELL_ASPECT.petscii) / layout.scale.y;
+  assert.ok(looksLike <= 2, `a tile ${looksLike}:1 wide is a smear, not a panel`);
   assert.ok(fitsOn(40, 25));
+}
+
+/** Give PETSCII the rows and it grows, still without smearing. */
+export async function aTallPetsciiScreenGrowsTheBoard(): Promise<void> {
+  const layout = panelsLayout(40, 50, COLS, ROWS, CELL_ASPECT.petscii);
+
+  assert.ok(layout.scale.y > 1, 'rows to spare are spent on the board');
+  const looksLike = (2 * layout.scale.x * CELL_ASPECT.petscii) / layout.scale.y;
+  assert.ok(looksLike <= 2, `${looksLike}:1`);
+  assert.ok(fitsOn(40, 50));
+}
+
+/** Whatever the screen and whatever its cells, a tile stays a tile. */
+export async function noScreenProducesASmear(): Promise<void> {
+  for (const aspect of [CELL_ASPECT.terminal, CELL_ASPECT.petscii]) {
+    for (let w = 30; w <= 160; w += 7) {
+      for (let h = 20; h <= 60; h += 6) {
+        const { scale } = panelsLayout(w, h, COLS, ROWS, aspect);
+        const looksLike = (2 * scale.x * aspect) / scale.y;
+        assert.ok(
+          looksLike <= 2,
+          `${w}x${h} at cell aspect ${aspect}: tile is ${looksLike}:1`,
+        );
+      }
+    }
+  }
 }
 
 /** A phone held upright gives the board the width AND the height. */
@@ -108,7 +146,7 @@ export async function theStretchIsBounded(): Promise<void> {
   for (let w = 30; w <= 200; w += 5) {
     const scale = panelScale(w, 60, COLS, ROWS, true);
     assert.ok(
-      scale.x <= scale.y + 2,
+      scale.x <= scale.y * 2,
       `${w} columns gave ${scale.x}x${scale.y}, which is a dash rather than a tile`,
     );
   }

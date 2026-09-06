@@ -25,7 +25,7 @@ import {
 } from '@amiexpress/bbs-door-sdk/engines/graphics/cell-art';
 import { Stack } from '../core/panels/stack';
 import { buildBoard, boardSize, engineRowFor, PANEL_COLS, BoardVariant } from './panels/board-view';
-import { panelsLayout, hudLines, PanelsLayout } from './panels/layout';
+import { panelsLayout, hudLines, CELL_ASPECT, PanelsLayout } from './panels/layout';
 import type { PuzzleGame, PuzzleOutcome } from '../core/panels/puzzle';
 import { encodeInput, inputStateToMask, INPUT_CHARS } from '../core/panels/input-codec';
 import type { SoundEngine } from '../audio/sounds';
@@ -169,7 +169,12 @@ export class PanelsScreen {
   private setupUI(): void {
     const { cols, rows } = boardSize(this.stack);
     // Geometry comes from the live screen width, never from a constant.
-    const layout = panelsLayout(this.screen.width, this.screen.height, cols, rows);
+    // A PETSCII cell is square; an xterm cell is half as wide as it is tall.
+    // The layout has to know which, because it decides what a square TILE is.
+    const layout = panelsLayout(
+      this.screen.width, this.screen.height, cols, rows,
+      this.variant === 'c64' ? CELL_ASPECT.petscii : CELL_ASPECT.terminal,
+    );
     this.layout = layout;
 
     // The well gets a frame where there is room for one. The layout has always
