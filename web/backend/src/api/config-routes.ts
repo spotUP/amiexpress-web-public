@@ -33,6 +33,7 @@ import * as path from 'path';
 import { config } from '../config';
 import { getSystemTime } from '../utils/date-time.util';
 import { messageIndexManager, MsgHeader, MsgStatus } from '../services/MessageIndexManager';
+import { repairConferenceHeaders } from '../services/message-header-repair';
 import { conferenceDir } from '../conferences/conference-paths';
 import { isSensitiveField, MASKED_VALUE } from '../utils/secrets-encryption.util';
 
@@ -2404,10 +2405,16 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
   // ===== Message Repair =====
 
   /**
-   * POST /api/config/messages/repair-headers?conf=
-   * Rebuild the disk HeaderFile from the database for a conference.
-   * Fixes the "same messages appear new on every login" bug when the
-   * disk headers and DB get out of sync.
+   * POST /api/config/messages/repair-headers?conf=[&dryRun=true]
+   *
+   * Re-derive a conference's MailStats from the headers ALREADY ON DISK.
+   *
+   * It used to rebuild the HeaderFile from the DATABASE, renumbering from 1.
+   * Conf1 holds 328 disk records numbered to 318 against ~158 rows in SQL, so
+   * one press would have replaced the index with 158 records and made ~170
+   * messages unreachable - and crossed the surviving metadata onto the wrong
+   * bodies. services/message-header-repair.ts holds the rule and the hard stop;
+   * this route is glue.
    */
   router.post('/messages/repair-headers', async (req: any, res: Response) => {
     try {
@@ -2422,60 +2429,65 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
         return handleError(res, new Error(`Conference ${confId} directory not found`));
       }
 
-      // Get all message bases for this conference
-      const msgBases = await database.getMessageBases(confId);
-      if (!msgBases || msgBases.length === 0) {
-        return sendResponse(res, { rebuilt: 0 }, 'No message bases for this conference.');
-      }
+      const dryRun = String(req.query.dryRun || req.body?.dryRun || '') === 'true';
 
-      let totalHeaders = 0;
-      for (const msgBase of msgBases) {
-        const messages = await database.getMessages(confId, msgBase.id, { limit: 99999 });
-        if (!messages || messages.length === 0) continue;
+      const result = await repairConferenceHeaders({
+        conferenceId: confId,
+        index: messageIndexManager,
+        dryRun,
+        // Consulted ONLY when the disk holds no headers at all - see
+        // message-header-repair.ts. A conference with a HeaderFile is repaired
+        // from that file and never from the mirror.
+        databaseHeaders: async () => {
+          const msgBases = await database.getMessageBases(confId);
+          if (!msgBases || msgBases.length === 0) return [];
 
-        const msgBaseDir = path.join(confPath, 'MsgBase');
-        if (!fs.existsSync(msgBaseDir)) fs.mkdirSync(msgBaseDir, { recursive: true });
+          const msgBaseDir = path.join(confPath, 'MsgBase');
+          if (!fs.existsSync(msgBaseDir)) fs.mkdirSync(msgBaseDir, { recursive: true });
 
-        const headers: MsgHeader[] = [];
-        let nextMsgNum = 1;
-
-        for (const msg of messages) {
-          const msgNum = nextMsgNum;
-          const bodyPath = path.join(msgBaseDir, String(msgNum));
-          if (!fs.existsSync(bodyPath)) {
-            try {
-              fs.writeFileSync(bodyPath, msg.body || '', 'latin1');
-            } catch (writeErr) {
-              console.error(`[Repair] Failed to write body for msg ${msgNum}:`, writeErr);
-              continue;
+          const headers: MsgHeader[] = [];
+          let nextMsgNum = 1;
+          for (const msgBase of msgBases) {
+            const messages = await database.getMessages(confId, msgBase.id, { limit: 99999 });
+            for (const msg of messages || []) {
+              const msgNum = nextMsgNum;
+              const bodyPath = path.join(msgBaseDir, String(msgNum));
+              if (!fs.existsSync(bodyPath)) {
+                try {
+                  fs.writeFileSync(bodyPath, msg.body || '', 'latin1');
+                } catch (writeErr) {
+                  console.error(`[Repair] Failed to write body for msg ${msgNum}:`, writeErr);
+                  continue;
+                }
+              }
+              headers.push({
+                status: msg.isPrivate ? MsgStatus.PRIVATE : MsgStatus.NORMAL,
+                msgNumb: msgNum,
+                toName: msg.toUser || 'ALL',
+                fromName: msg.author,
+                subject: msg.subject || '(no subject)',
+                msgDate: Math.floor(msg.timestamp.getTime() / 1000),
+                recv: 0,
+                extMsgNum: -1,
+              });
+              nextMsgNum = msgNum + 1;
             }
           }
+          return headers;
+        },
+      });
 
-          headers.push({
-            status: msg.isPrivate ? MsgStatus.PRIVATE : MsgStatus.NORMAL,
-            msgNumb: msgNum,
-            toName: msg.toUser || 'ALL',
-            fromName: msg.author,
-            subject: msg.subject || '(no subject)',
-            msgDate: Math.floor(msg.timestamp.getTime() / 1000),
-            recv: 0,
-            extMsgNum: -1,
-          });
-          nextMsgNum = msgNum + 1;
-        }
-
-        if (headers.length > 0) {
-          messageIndexManager.rebuildHeaders(confId, headers);
-          totalHeaders += headers.length;
-        }
-      }
-
-      console.log(`[Repair] Rebuilt ${totalHeaders} headers for conference ${confId}`);
-      return sendResponse(
-        res,
-        { rebuilt: totalHeaders, conference: confId },
-        `Rebuilt ${totalHeaders} message headers for conference ${confId}`
-      );
+      console.log(`[Repair] ${result.message}`);
+      return sendResponse(res, {
+        rebuilt: result.rebuilt,
+        conference: result.conference,
+        source: result.source,
+        dryRun: result.dryRun,
+        headersBefore: result.headersBefore,
+        headersAfter: result.headersAfter,
+        mailStatBefore: result.mailStatBefore,
+        mailStatAfter: result.mailStatAfter,
+      }, result.message);
     } catch (error) {
       handleError(res, error);
     }
