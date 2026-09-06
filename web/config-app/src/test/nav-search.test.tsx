@@ -25,9 +25,14 @@ import {
   filterNavGroups,
   navItemMatchesQuery,
 } from '../components/AppShell/nav-config';
+import { LEGACY_ROUTES } from '../routes/legacy-routes';
 
 function labelsOf(groups: ReturnType<typeof filterNavGroups>): string[] {
   return groups.flatMap((group) => group.items.map((item) => item.label));
+}
+
+function pathsOf(groups: ReturnType<typeof filterNavGroups>): string[] {
+  return groups.flatMap((group) => group.items.map((item) => item.path));
 }
 
 describe('filterNavGroups', () => {
@@ -91,6 +96,43 @@ describe('filterNavGroups', () => {
   it('restores the original groups on an empty query', () => {
     expect(filterNavGroups(NAV_GROUPS, '')).toEqual(NAV_GROUPS);
     expect(filterNavGroups(NAV_GROUPS, '   ')).toEqual(NAV_GROUPS);
+  });
+
+  it('finds Health by "deployment", the page it absorbed', () => {
+    expect(labelsOf(filterNavGroups(NAV_GROUPS, 'deployment'))).toContain('Health and Deployment');
+  });
+
+  it('finds Operator Chat by "operator chat settings", the page it absorbed', () => {
+    expect(labelsOf(filterNavGroups(NAV_GROUPS, 'operator chat settings'))).toEqual(['Operator Chat']);
+  });
+
+  it('finds Doors by "global wall", the page it absorbed', () => {
+    expect(labelsOf(filterNavGroups(NAV_GROUPS, 'global wall'))).toEqual(['Doors']);
+  });
+});
+
+describe('legacy paths stay searchable by their old name', () => {
+  // "globalwall" concatenates two words with no separator; a sysop types "Global Wall" (already a Doors keyword, tested above), never the raw slug - excluded rather than requiring a match nobody would type.
+  const NOT_MATCHABLE_BY_RAW_SLUG = new Set(['globalwall']);
+
+  it('matches the destination of every legacy route when its old path is typed as words', () => {
+    // This is the rule that keeps nav-config.ts and legacy-routes.ts in step:
+    // every fold recorded there must stay findable by the name it replaced,
+    // or a sysop who knows the board by its old vocabulary gets nothing and
+    // reads that as "this destination does not exist."
+    const unreachable = LEGACY_ROUTES
+      .filter((route) => !NOT_MATCHABLE_BY_RAW_SLUG.has(route.from))
+      .filter((route) => {
+        const oldName = route.from.replace(/-/g, ' ');
+        const target = route.to.split('?')[0];
+        return !pathsOf(filterNavGroups(NAV_GROUPS, oldName)).includes(target);
+      })
+      .map((route) => `"${route.from}" -> ${route.to}`);
+
+    expect(
+      unreachable,
+      `Legacy paths whose old name no longer finds their destination: ${unreachable.join(', ')}`
+    ).toEqual([]);
   });
 });
 
