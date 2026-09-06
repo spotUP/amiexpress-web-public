@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput, useStdout } from 'ink';
 import { T } from '../theme/blessed-theme.js';
 import { loadLogo, logoFits, LOGO_WIDTH } from '../theme/logo.js';
+import { probeBackend, backendUrl } from '../api/client.js';
 
 interface Props {
   error: string | null;
@@ -16,6 +17,7 @@ export function LoginPrompt({ error, loading, onLogin }: Props) {
   const dots = useDots();
   const { stdout } = useStdout();
   const logo = useLogo(stdout?.columns);
+  const ready = useBackendReady();
 
   useInput((input, key) => {
     if (loading) return;
@@ -23,7 +25,9 @@ export function LoginPrompt({ error, loading, onLogin }: Props) {
     if (key.return) {
       if (field === 'username') {
         setField('password');
-      } else if (username && password) {
+      } else if (username && password && ready) {
+        // Submitting before the backend answers can only produce a failure,
+        // so Enter holds here until it does.
         onLogin(username, password);
       }
       return;
@@ -84,14 +88,23 @@ export function LoginPrompt({ error, loading, onLogin }: Props) {
             <Text color={T.alert}>{error}</Text>
           </Box>
         )}
-        {loading && (
+        {!ready && (
+          <Box marginTop={1}>
+            <Text color={T.dim}>Waiting for the backend at {backendUrl}{dots}</Text>
+          </Box>
+        )}
+        {ready && loading && (
           <Box marginTop={1}>
             <Text color={T.accent}>Authenticating{dots}</Text>
           </Box>
         )}
 
         <Box marginTop={1}>
-          <Text color={T.dim}>[tab] switch field  [enter] next/login</Text>
+          <Text color={T.dim}>
+            {ready
+              ? '[tab] switch field  [enter] next/login'
+              : '[tab] switch field  -  login opens once the backend answers'}
+          </Text>
         </Box>
       </Box>
     </Box>
@@ -105,6 +118,28 @@ export function LoginPrompt({ error, loading, onLogin }: Props) {
 function useLogo(columns: number | undefined): string[] {
   const [logo] = useState<string[]>(() => (logoFits(columns) ? loadLogo() : []));
   return logo;
+}
+
+/**
+ * The console starts alongside the servers and regularly wins the race, so
+ * poll until the backend answers rather than letting a sysop type a password
+ * into a socket that is not listening yet.
+ */
+function useBackendReady(): boolean {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let live = true;
+    let timer: NodeJS.Timeout;
+    const tick = async () => {
+      const up = await probeBackend();
+      if (!live) return;
+      if (up) { setReady(true); return; }
+      timer = setTimeout(tick, 1000);
+    };
+    void tick();
+    return () => { live = false; clearTimeout(timer); };
+  }, []);
+  return ready;
 }
 
 function useDots(): string {

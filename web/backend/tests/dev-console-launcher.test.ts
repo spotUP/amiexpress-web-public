@@ -104,6 +104,19 @@ describe('dev console launcher', () => {
     });
   });
 
+  /**
+   * Reported 2026-09-06: the login fields accepted a username and password
+   * before the backend was listening, then failed with undici's bare
+   * "fetch failed". The console now polls the backend and holds the login
+   * until it answers, so the launcher must not also guess with a fixed sleep.
+   */
+  it('starts the console straight away, leaving readiness to the console', () => {
+    const body = launcherBody();
+    const pane = body.slice(body.indexOf('dev/console/dist/src/index.js') - 400);
+
+    expect(pane).not.toMatch(/sleep \d+ && if \[ -f dev\/console/);
+  });
+
   it('attaches with the console pane focused, not the server-log pane', () => {
     const body = launcherBody();
 

@@ -149,11 +149,14 @@ launch_tmux_session() {
   tmux new-session -d -s "$session" -n amiexpress \
     "cd '$root' && bash '$0' --bbs-only; bash"
 
-  # Pane 1: console TUI (right side, waits for backend)
+  # Pane 1: console TUI (right side). The console polls the backend itself
+  # and shows a waiting line until it answers, so there is no fixed sleep to
+  # guess here - it comes up immediately and opens the login when the backend
+  # is actually reachable.
   # Guarded: an unbuilt or uninstalled console prints what to run rather than
   # a module-resolution stack trace.
   tmux split-window -h -p 45 -t "${session}:amiexpress.0" \
-    "cd '$root' && sleep 8 && if [ -f dev/console/dist/src/index.js ] && [ -d dev/console/node_modules ]; then node dev/console/dist/src/index.js; else echo '[console] unavailable - run: (cd dev/console && npm install && npm run build)'; fi; bash"
+    "cd '$root' && if [ -f dev/console/dist/src/index.js ] && [ -d dev/console/node_modules ]; then node dev/console/dist/src/index.js; else echo '[console] unavailable - run: (cd dev/console && npm install && npm run build)'; fi; bash"
 
   # Pane 2: live backend log tail (bottom-left). `tail -F` follows the file
   # across rotation; we wait for the file to appear so tail doesn't error

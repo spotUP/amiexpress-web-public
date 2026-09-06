@@ -1,5 +1,8 @@
 const BASE_URL = process.env['AMIEXPRESS_URL'] ?? 'http://localhost:3001';
 
+/** The address every request goes to, so errors and waiting states can name it. */
+export const backendUrl = BASE_URL;
+
 let _token: string | null = process.env['AMIEXPRESS_CONSOLE_TOKEN'] ?? null;
 
 export function setToken(token: string): void {
@@ -55,7 +58,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     if (err instanceof Error && err.name === 'AbortError') {
       throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s: ${path}`);
     }
-    throw err;
+    // undici reports a refused connection as a bare "fetch failed", which
+    // tells a sysop nothing. Name the address that could not be reached.
+    throw Object.assign(
+      new Error(`Cannot reach the backend at ${BASE_URL} - is it running?`),
+      { cause: err, offline: true }
+    );
   } finally {
     clearTimeout(timer);
   }
@@ -1151,4 +1159,22 @@ export async function updateOperatorChatConfig(config: Record<string, unknown>) 
     method: 'PUT',
     body: JSON.stringify(config),
   });
+}
+
+/**
+ * Is the backend answering yet? The console starts alongside the servers, so
+ * it can come up first; the login screen waits on this instead of offering a
+ * prompt that can only fail.
+ */
+export async function probeBackend(timeoutMs = 2000): Promise<boolean> {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${BASE_URL}/health`, { signal: abort.signal });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
 }
