@@ -689,6 +689,10 @@ class ApiClient {
     });
   }
 
+  async getStorageProviders() {
+    return this.request<ApiResponse>(`${API_BASE}/config/storage-providers`);
+  }
+
   async getDrivePoolStatus() {
     return this.request<ApiResponse>(`${API_BASE}/config/drives/pool/status`);
   }

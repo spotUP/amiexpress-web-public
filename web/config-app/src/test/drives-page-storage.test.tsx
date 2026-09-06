@@ -58,6 +58,7 @@ const discardParkedFile = vi.fn();
 const createDrive = vi.fn();
 const updateDrive = vi.fn();
 const deleteDrive = vi.fn();
+const getStorageProviders = vi.fn();
 
 vi.mock('../api/client', () => ({
   apiClient: {
@@ -70,8 +71,37 @@ vi.mock('../api/client', () => ({
     createDrive: (...args: unknown[]) => createDrive(...args),
     updateDrive: (...args: unknown[]) => updateDrive(...args),
     deleteDrive: (...args: unknown[]) => deleteDrive(...args),
+    getStorageProviders: (...args: unknown[]) => getStorageProviders(...args),
   },
 }));
+
+/** The catalogue the page fetches, trimmed to what these tests decide on. */
+const PROVIDERS = [
+  {
+    id: 'r2',
+    label: 'Cloudflare R2',
+    endpointTemplate: 'https://{}.r2.cloudflarestorage.com',
+    endpointFieldLabel: 'Account ID',
+    defaultRegion: 'auto',
+    volumeClass: 'FREE',
+    freeQuotaBytes: 10 * 1024 * 1024 * 1024,
+    egress: 'FREE',
+    minimumRetentionDays: 0,
+    note: 'Zero egress cost.',
+  },
+  {
+    id: 'wasabi',
+    label: 'Wasabi',
+    endpointTemplate: 'https://s3.{}.wasabisys.com',
+    endpointFieldLabel: 'Region',
+    defaultRegion: 'eu-central-1',
+    volumeClass: 'PAID',
+    freeQuotaBytes: 0,
+    egress: 'FREE',
+    minimumRetentionDays: 90,
+    note: 'Egress included.',
+  },
+];
 
 const confirmMock = vi.fn(async () => true);
 vi.mock('../contexts/NotificationContext', () => ({
@@ -98,6 +128,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   confirmMock.mockResolvedValue(true);
   getDrivePoolStatus.mockResolvedValue({ success: true, data: EMPTY_POOL_STATUS });
+  getStorageProviders.mockResolvedValue({ success: true, data: PROVIDERS });
   getDriveContents.mockResolvedValue({ success: true, data: [] });
 });
 
@@ -230,6 +261,7 @@ describe('DrivesPage - pool status', () => {
   it('says the cache is not active rather than reporting zero parked files as a fact', async () => {
     getDrives.mockResolvedValue({ success: true, data: [s3Drive()] });
     getDrivePoolStatus.mockResolvedValue({ success: true, data: EMPTY_POOL_STATUS });
+  getStorageProviders.mockResolvedValue({ success: true, data: PROVIDERS });
     renderPage();
 
     expect(await screen.findByText(/storage cache is not active/i)).toBeInTheDocument();
@@ -415,5 +447,77 @@ describe('DrivesPage - the Edit form cannot silently strand or delete a mapping'
 
     await userEvent.click(await screen.findByRole('button', { name: /add drive/i }));
     expect(await screen.findByText('Enabled')).toBeInTheDocument();
+  });
+});
+
+/**
+ * Adding a bucket used to mean editing Drives.info on the server: the form
+ * offered a drive number, a path and a description, and the save schema
+ * declared only those. A sysop could SEE a pooled volume's terms in the admin
+ * and never create one there.
+ *
+ * These cover the selection-driven flow: pick a provider, type the few things
+ * only the sysop knows, and let the catalogue supply the rest.
+ */
+describe('adding a bucket by picking a provider', () => {
+  it('offers the next contiguous drive number, never 0', async () => {
+    getDrives.mockResolvedValue({ success: true, data: [s3Drive()] });
+    renderPage();
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /add drive/i }));
+
+    // parseVolumes stops at the first gap, so the number must follow on from
+    // what disk already has. 0 was offered before and the schema rejects it.
+    const number = (await screen.findByLabelText(/drive number/i)) as HTMLInputElement;
+    expect(number.value).toBe(String(s3Drive().drive_number + 1));
+  });
+
+  it('sends the provider terms with the drive, and the secret separately', async () => {
+    getDrives.mockResolvedValue({ success: true, data: [s3Drive()] });
+    createDrive.mockResolvedValue({ success: true, data: {} });
+    writeDriveSecret.mockResolvedValue({ success: true });
+    renderPage();
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /add drive/i }));
+    await user.click(await screen.findByRole('button', { name: /Cloudflare R2/ }));
+
+    await user.type(await screen.findByLabelText(/bucket name/i), 'my-bbs-files');
+    await user.type(await screen.findByLabelText(/account id/i), 'acct123');
+    await user.type(await screen.findByLabelText(/access key id/i), 'AKIAEXAMPLE');
+    await user.type(await screen.findByLabelText(/secret access key/i), 'super-secret');
+
+    await user.click(screen.getByRole('button', { name: /create drive/i }));
+
+    await waitFor(() => expect(createDrive).toHaveBeenCalled());
+    const payload = createDrive.mock.calls[0]![0] as Record<string, unknown>;
+
+    expect(payload.drive_path).toBe('s3://my-bbs-files');
+    // The endpoint is BUILT from the account id - the sysop never types a URL.
+    expect(payload.endpoint).toBe('https://acct123.r2.cloudflarestorage.com');
+    expect(payload.region).toBe('auto');
+    expect(payload.keyId).toBe('AKIAEXAMPLE');
+    expect(payload.volumeClass).toBe('FREE');
+    expect(payload.egress).toBe('FREE');
+    expect(payload.quotaBytes).toBe(10 * 1024 * 1024 * 1024);
+
+    // The secret must never travel to Drives.info with the rest.
+    expect(payload.secret).toBeUndefined();
+    await waitFor(() =>
+      expect(writeDriveSecret).toHaveBeenCalledWith(s3Drive().drive_number + 1, 'super-secret')
+    );
+  });
+
+  it('warns about a minimum retention that bills for deleted files', async () => {
+    getDrives.mockResolvedValue({ success: true, data: [s3Drive()] });
+    renderPage();
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /add drive/i }));
+    await user.click(await screen.findByRole('button', { name: /Wasabi/ }));
+
+    expect(await screen.findByText(/still bills/i)).toBeTruthy();
+    expect(screen.getByText(/90 days/i)).toBeTruthy();
   });
 });
