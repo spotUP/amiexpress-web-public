@@ -179,6 +179,23 @@ test('a differently-cased request still finds the same revision the canonical ca
   expect(list.body.data.revisions).toHaveLength(1);
 });
 
+// The HTTP-level case test passes on ANY host, including one with a
+// case-sensitive filesystem, because revDirFor() itself now normalises the
+// key - but it would ALSO pass on a case-insensitive host (macOS) even
+// without that fix, because the host filesystem folds two differently-cased
+// directory names into the same inode regardless of what string this code
+// produces. That made the HTTP test blind to the real bug on the exact
+// platform most of this project's development happens on. This test
+// bypasses the filesystem entirely and asserts the STRING revDirFor()
+// produces is identical for two differently-cased paths - the actual
+// invariant PUT (canonical/resolved casing) and GET/POST /restore (raw
+// request casing) both depend on to ever look at the same revisions
+// directory in production (case-sensitive Linux containers).
+test('revDirFor keys two differently-cased paths to the identical directory string', () => {
+  const { revDirFor } = require('../../src/screens/screen-revisions');
+  expect(revDirFor('node1/bbstitle.txt')).toBe(revDirFor('Node1/BBSTITLE.txt'));
+});
+
 test('GET /revisions reports a valid, recent timestamp, not a raw filename fallback', async () => {
   await request(app).put('/api/screens/file')
     .query({ path: 'Node1/BBSTITLE.txt' })

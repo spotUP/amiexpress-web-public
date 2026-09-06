@@ -531,10 +531,10 @@ screensRouter.delete('/file', (req: Request, res: Response) => {
  * GET /api/screens/revisions?path=...
  *
  * Every snapshot PUT /file has kept for this screen, newest first. `path`
- * must be the exact string the caller also uses for GET/PUT/DELETE /file -
- * screen-revisions.ts keys a revision directory off that raw string, not a
- * re-resolved canonical form, so passing a different casing here than what
- * was written with finds nothing.
+ * identifies the same screen as GET/PUT/DELETE /file - screen-revisions.ts's
+ * revDirFor() lowercases the raw request string before keying a revision
+ * directory off it, so a differently-cased `path` here than the one PUT was
+ * called with still finds the same revisions.
  */
 screensRouter.get('/revisions', (req: Request, res: Response) => {
   const rel = String(req.query.path || '');

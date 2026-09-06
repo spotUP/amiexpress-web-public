@@ -23,10 +23,35 @@ function isContained(full: string, root: string): boolean {
   return full === root || full.startsWith(root + path.sep);
 }
 
-/** Relative path of a screen file → its revisions directory. */
-function revDirFor(relPath: string): string {
+/**
+ * Relative path of a screen file → its revisions directory.
+ *
+ * Lowercased before sanitising so every call site keys the SAME screen's
+ * revisions to the SAME directory regardless of request casing. Only
+ * saveRevision() is ever called with a resolved, on-disk-cased path (from
+ * the PUT handler); listRevisions(), readRevision() and restoreRevision()'s
+ * own internal saveRevision() call are all reached with the RAW request
+ * string. Without normalising here, a save and a later list/read/restore
+ * that disagree on case sanitise to two different directory names - names
+ * that happen to collide back into one directory on a case-insensitive
+ * host filesystem (macOS) but stay genuinely separate, and silently
+ * invisible to each other, on a case-sensitive one (Linux, this board's
+ * production containers). Lowercasing cannot merge two DIFFERENT screens:
+ * this whole board already treats paths differing only by case as the same
+ * screen (amigafs.resolvePath's case-insensitive lookup is what every read
+ * goes through), so nothing genuinely distinct collides here that wasn't
+ * already unreachable as a distinct file.
+ *
+ * Exported only so a test can assert the produced STRING is identical for
+ * two differently-cased inputs - a black-box HTTP test can't tell "the key
+ * is genuinely the same" apart from "the host filesystem folded two
+ * different directory names together", and this board's production
+ * containers run a case-SENSITIVE filesystem where that folding never
+ * happens.
+ */
+export function revDirFor(relPath: string): string {
   // Sanitise: replace separators with a safe char so the path stays flat
-  const safe = relPath.replace(/[\\/]/g, '_').replace(/[^a-zA-Z0-9_.-]/g, '_');
+  const safe = relPath.toLowerCase().replace(/[\\/]/g, '_').replace(/[^a-zA-Z0-9_.-]/g, '_');
   return path.join(revisionsRoot(), safe);
 }
 
