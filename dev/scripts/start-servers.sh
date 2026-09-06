@@ -226,8 +226,12 @@ launch_tmux_session() {
   tmux set-hook -t "$session" session-closed \
     "unbind-key -n F1; unbind-key -n F2; unbind-key -n F3; unbind-key -n F4; unbind-key -n F5; unbind-key -n F10"
 
-  # Focus the server log pane
-  tmux select-pane -t "${session}:amiexpress.0"
+  # Focus the console TUI pane. It opens on a login prompt, so the first
+  # thing a sysop types has to land there - focusing the server-log pane
+  # instead left the Username field drawn active while every keystroke went
+  # to that pane's bash prompt. Targeted by direction for the same reason as
+  # the F2 binding above: pane indices reshuffle when splits move.
+  tmux select-pane -t "${session}:amiexpress.{right}"
 
   exec tmux attach -t "$session"
 }

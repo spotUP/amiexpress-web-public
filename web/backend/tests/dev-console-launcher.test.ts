@@ -59,4 +59,24 @@ describe('dev console launcher', () => {
     expect(body).toMatch(/if \[ -f dev\/console\/dist\/src\/index\.js \]/);
     expect(body).toMatch(/\[console\] unavailable/);
   });
+
+  /**
+   * Reported 2026-09-06: "the username input field is not focused".
+   *
+   * The console opens on a login prompt. The launcher attached with the
+   * server-log pane selected, so the Username field rendered as the active
+   * field - accent label, cursor - while every keystroke went to that pane's
+   * bash prompt instead. Nothing was wrong with the prompt: it was never the
+   * focused pane.
+   */
+  it('attaches with the console pane focused, not the server-log pane', () => {
+    const body = launcherBody();
+
+    const selects = [...body.matchAll(/tmux select-pane -t "\$\{session\}:amiexpress\.([^"]+)"/g)];
+    expect(selects).toHaveLength(1);
+
+    // The console lives in the right column; pane 0 is the startup/log pane.
+    expect(selects[0][1]).toBe('{right}');
+    expect(selects[0][1]).not.toBe('0');
+  });
 });
