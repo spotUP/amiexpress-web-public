@@ -23,7 +23,8 @@ import { SimulatedStack } from '../core/panels/simulated-stack';
 import { PanelMatch } from '../core/panels/match';
 import { PanelAi } from '../ai/panel-ai';
 import { buildBoard, boardSize, BoardVariant } from './panels/board-view';
-import { versusLayout, versusCentreLines, dangerBarRows, VersusPanelLayout } from './panels/versus-layout';
+import { CELL_ASPECT } from './panels/layout';
+import { versusLayout, versusCentreLines, dangerBarRows, VersusPanelLayout, versusScale, CENTRE_WIDE } from './panels/versus-layout';
 import { encodeInput, inputStateToMask } from '../core/panels/input-codec';
 import type { HeldInput } from './panels-screen';
 import type { SoundEngine } from '../audio/sounds';
@@ -78,6 +79,8 @@ export class PanelsVersusScreen {
   private readonly isOver?: () => boolean;
 
   private layout?: VersusPanelLayout;
+  /** Characters and rows per panel, the same on both boards. */
+  private scale: { x: number; y: number } = { x: 1, y: 1 };
   private playerBox?: ReturnType<typeof createBox>;
   private centreBox?: ReturnType<typeof createBox>;
   private opponentBox?: ReturnType<typeof createBox>;
@@ -108,8 +111,25 @@ export class PanelsVersusScreen {
   }
 
   private setupUI(): void {
-    const { cols, rows } = boardSize(this.player, { variant: this.variant });
-    const layout = versusLayout(this.screen.width, this.screen.height, cols, rows);
+    // The C64 does not draw the incoming row here either - the same trade the
+    // solo board makes, and for the same twenty-five rows.
+    const options = {
+      variant: this.variant,
+      showIncomingRow: this.variant !== 'c64',
+    };
+    const { cols, rows } = boardSize(this.player, options);
+
+    // Scale the tiles to the room, then lay out the SCALED boards. The view
+    // used to lay out unscaled ones: two 6-column boards and a strip of
+    // initials in a 40-column screen, with half of it black.
+    const aspect = this.variant === 'c64' ? CELL_ASPECT.petscii : CELL_ASPECT.terminal;
+    this.scale = versusScale(
+      this.screen.width, this.screen.height, cols, rows, aspect, CENTRE_WIDE,
+    );
+    const layout = versusLayout(
+      this.screen.width, this.screen.height,
+      cols * this.scale.x, rows * this.scale.y,
+    );
     this.layout = layout;
 
     const box = (slot: { top: number; left: number; width: number; height: number }) =>
@@ -135,6 +155,8 @@ export class PanelsVersusScreen {
     if (this.opponentHasBoard) {
       const board = buildBoard(this.opponent as Stack, this.sheet, this.player.clock, {
         variant: this.variant,
+        showIncomingRow: this.variant !== 'c64',
+        scale: this.scale,
         // Never draw a cursor on someone else's board.
         showCursor: false,
       });
@@ -153,6 +175,8 @@ export class PanelsVersusScreen {
     if (this.playerBox) {
       const board = buildBoard(this.player, this.sheet, this.player.clock, {
         variant: this.variant,
+        showIncomingRow: this.variant !== 'c64',
+        scale: this.scale,
       });
       this.playerBox.setContent(bufferToTags(board).join('\n'));
     }

@@ -14,6 +14,8 @@
  * An opponent WITHOUT a board - Challenge Mode's health model - takes the same
  * slot and draws a danger bar in it instead, so the two modes share one layout.
  */
+/** Characters the centre column needs when it can spell things out. */
+export declare const CENTRE_WIDE = 14;
 export interface VersusPanelLayout {
     compact: boolean;
     effects: boolean;
@@ -35,9 +37,25 @@ export interface VersusPanelLayout {
         width: number;
         height: number;
     };
+    /** True when the centre column spells its labels out. */
+    spelledOut: boolean;
     /** True when there is not room for both boards and the centre column. */
     cramped: boolean;
 }
+/**
+ * How big a tile the two boards and the centre column can afford.
+ *
+ * The versus view never scaled at all: at forty columns it drew two 6-column
+ * boards and an 8-column strip of initials, using half the screen and leaving
+ * the rest black - "this is also weirdly minumal why????? rework all views
+ * give them proper huds again" (2026-09-06). Same arithmetic as the solo
+ * board: fit what the room allows, and keep the tile square on the glass -
+ * a PETSCII cell is square, so x may not exceed y there.
+ */
+export declare function versusScale(screenWidth: number, screenHeight: number, boardCols: number, boardRows: number, cellAspect: number, centreWidth: number): {
+    x: number;
+    y: number;
+};
 export declare function versusLayout(screenWidth: number, screenHeight: number, boardCols: number, boardRows: number): VersusPanelLayout;
 /**
  * The centre column.

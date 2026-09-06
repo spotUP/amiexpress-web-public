@@ -214,7 +214,37 @@ export function panelsLayout(
   // upright, and that is exactly the case where the HUD beside the board costs
   // it most of the width it could be using.
   const portrait = screenHeight > screenWidth;
-  const stacked = compact || portrait || screenWidth < boardCols + GAP + HUD_WIDE + 2;
+
+  // ASK WHICH LAYOUT GIVES THE BIGGER BOARD, do not decide by tier.
+  //
+  // Stacking every "compact" screen put a one-line HUD under a board twelve
+  // columns wide with twenty-eight columns of black beside it: "why a minimal
+  // hud there in tetris attack? there is plenty of room?" (2026-09-06). But
+  // simply preferring the HUD beside the board takes a PHONE's playfield from
+  // 36 columns down to 12, because there the HUD's sixteen columns are most
+  // of the screen.
+  //
+  // So compare them. A HUD beside the board is the better shape - it has room
+  // for labels rather than initials - and it wins ties; stacking only earns
+  // its place by making the board materially bigger, which is exactly the
+  // phone. Above the compact tier nothing changes: an 80-column screen has
+  // always put the HUD beside and its layout is pinned byte for byte.
+  const square = cellAspect >= CELL_ASPECT.petscii;
+  const chromeFor = (isStacked: boolean): PanelChrome => (square
+    ? { frameRows: 0, frameCols: 0, hudRows: isStacked ? 1 : 0 }
+    : DEFAULT_CHROME);
+  const area = (isStacked: boolean): number => {
+    const s = panelScale(
+      screenWidth, screenHeight, boardCols, boardRows, isStacked, cellAspect,
+      chromeFor(isStacked),
+    );
+    return boardCols * s.x * boardRows * s.y;
+  };
+
+  const tooNarrowForHud = screenWidth < boardCols + GAP + HUD_WIDE + 2;
+  const stacked = portrait
+    || tooNarrowForHud
+    || (isCompactWidth(screenWidth) && area(true) > area(false));
   const hudWidth = stacked ? screenWidth - (compact ? 0 : FRAME_COLS) : HUD_WIDE;
 
   // A SQUARE-CELLED SCREEN SPENDS ITS CHROME ON THE TILE.
@@ -226,10 +256,7 @@ export function panelsLayout(
   // sysop asked for the bigger tile: "can we make the pieces bigger in tetris
   // attack in petscii mode?" (2026-09-06). Elsewhere there are rows to spare
   // and the frame is worth its space.
-  const square = cellAspect >= CELL_ASPECT.petscii;
-  const chrome: PanelChrome = square && stacked
-    ? { frameRows: 0, frameCols: 0, hudRows: 1 }
-    : DEFAULT_CHROME;
+  const chrome: PanelChrome = chromeFor(stacked);
 
   const scale = panelScale(
     screenWidth, screenHeight, boardCols, boardRows, stacked, cellAspect, chrome,
@@ -294,11 +321,11 @@ export function hudLines(
   const clip = (text: string) => (text.length > width ? text.slice(0, width) : text);
   const tag = (colour: string, text: string) => `{${colour}-fg}${clip(text)}{/${colour}-fg}`;
 
-  if (layout.compact) {
+  if (layout.stacked) {
     // ONE LINE ACROSS, not a column of seven.
     //
-    // The compact HUD sits UNDER the board and is as wide as the screen, so a
-    // vertical list was the wrong shape for it even when it had two rows -
+    // A HUD UNDER the board is as wide as the screen and one or two rows
+    // tall, so a vertical list was the wrong shape for it -
     // and once the C64 board took the height it needed, only the first line
     // had anywhere to be: "size is good but... no hud?" showed a lone `P0`
     // where the score, level, time and chain should all have been

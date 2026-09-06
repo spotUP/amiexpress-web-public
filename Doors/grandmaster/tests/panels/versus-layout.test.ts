@@ -39,16 +39,34 @@ export async function theBoardsAreCentredAtEightyColumns(): Promise<void> {
   assert.ok(layout.opponent.left + layout.opponent.width <= 80);
 }
 
-export async function theCentreColumnDropsItsLabelsAtForty(): Promise<void> {
+/**
+ * The centre column spells its labels out wherever there is ROOM for them.
+ *
+ * It used to drop them on any 40-column screen, tier by tier - so a C64
+ * versus match showed two small boards and a strip of initials with the rest
+ * of the screen black: "this is also weirdly minumal why?????" (2026-09-06).
+ * A C64 board is six panels; two of those at 2x2 is twenty-four columns, and
+ * fourteen more fit beside them.
+ */
+export async function theCentreColumnSpellsOutWhereItFits(): Promise<void> {
   const values = {
     score: 1234, speed: 7, timeText: "1'05", chain: 0, stopped: false, incoming: 0,
   };
-  const compact = versusCentreLines(versusLayout(40, 25, BOARD_COLS, BOARD_ROWS), values);
-  const wide = versusCentreLines(versusLayout(80, 25, BOARD_COLS, BOARD_ROWS), values);
 
-  assert.ok(!compact.join('').includes('POINT'));
-  assert.ok(compact.join('').includes('1234'), 'but keeps the number');
-  assert.ok(wide.join('').includes('POINT'));
+  // A C64 board, scaled: 6 panels x 2 = 12 characters each.
+  const c64 = versusLayout(40, 25, 12, 24);
+  assert.strictEqual(c64.spelledOut, true, 'fourteen columns fit beside two 12-wide boards');
+  assert.ok(versusCentreLines(c64, values).join('').includes('POINT'));
+
+  // A board so wide there is no room left: initials, and the number survives.
+  const cramped = versusLayout(40, 25, 16, 24);
+  assert.strictEqual(cramped.spelledOut, false);
+  const lines = versusCentreLines(cramped, values).join('');
+  assert.ok(!lines.includes('POINT'));
+  assert.ok(lines.includes('1234'), 'but keeps the number');
+
+  assert.ok(versusCentreLines(versusLayout(80, 25, BOARD_COLS, BOARD_ROWS), values)
+    .join('').includes('POINT'));
 }
 
 export async function everyCentreLineFitsItsColumn(): Promise<void> {
@@ -110,4 +128,40 @@ export async function theDangerBarNeverOverflowsItsSlot(): Promise<void> {
       assert.ok(printable(row) <= layout.opponent.width);
     }
   }
+}
+
+/**
+ * A C64 versus match uses the screen it has.
+ *
+ * The view never scaled: two 6-column boards and an 8-column strip of
+ * initials, half the screen black - "this is also weirdly minumal why?????
+ * rework all views give them proper huds again" (2026-09-06). Two boards at
+ * 2x2 are twelve characters each, and fourteen more fit between them for a
+ * HUD that spells its labels out.
+ */
+export async function aC64VersusMatchFillsTheScreen(): Promise<void> {
+  const { versusScale, CENTRE_WIDE } = require('../../ui/panels/versus-layout');
+  const { CELL_ASPECT } = require('../../ui/panels/layout');
+
+  const scale = versusScale(40, 25, 6, 12, CELL_ASPECT.petscii, CENTRE_WIDE);
+  assert.deepStrictEqual(scale, { x: 2, y: 2 }, 'a 2x2 tile, square on a square cell');
+
+  const layout = versusLayout(40, 25, 6 * scale.x, 12 * scale.y);
+  assert.strictEqual(layout.player.width, 12);
+  assert.strictEqual(layout.opponent.width, 12);
+  assert.strictEqual(layout.player.height, 24, 'and the full height of the field');
+  assert.strictEqual(layout.spelledOut, true, 'with room for a HUD that says POINT');
+  assert.ok(
+    layout.opponent.left + layout.opponent.width <= 40,
+    `the second board runs off the screen: ${layout.opponent.left} + ${layout.opponent.width}`,
+  );
+}
+
+/** And 80 columns keeps the board it has always drawn. */
+export async function eightyColumnVersusIsUnchanged(): Promise<void> {
+  const { versusScale, CENTRE_WIDE } = require('../../ui/panels/versus-layout');
+  const { CELL_ASPECT } = require('../../ui/panels/layout');
+
+  const scale = versusScale(80, 25, 12, 13, CELL_ASPECT.terminal, CENTRE_WIDE);
+  assert.deepStrictEqual(scale, { x: 1, y: 1 }, '80x25 has no rows to spare, so nothing grows');
 }

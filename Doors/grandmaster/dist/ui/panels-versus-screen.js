@@ -22,6 +22,7 @@ const cell_art_1 = require("@amiexpress/bbs-door-sdk/engines/graphics/cell-art")
 const stack_1 = require("../core/panels/stack");
 const match_1 = require("../core/panels/match");
 const board_view_1 = require("./panels/board-view");
+const layout_1 = require("./panels/layout");
 const versus_layout_1 = require("./panels/versus-layout");
 const input_codec_1 = require("../core/panels/input-codec");
 const FRAME_TIME = 1000 / 60;
@@ -30,6 +31,8 @@ const RENDER_INTERVAL = 50;
 const TICK_INTERVAL = 16;
 class PanelsVersusScreen {
     constructor(options) {
+        /** Characters and rows per panel, the same on both boards. */
+        this.scale = { x: 1, y: 1 };
         this.lastTick = 0;
         this.frameAccumulator = 0;
         this.lastRender = 0;
@@ -52,8 +55,19 @@ class PanelsVersusScreen {
         return this.opponent instanceof stack_1.Stack;
     }
     setupUI() {
-        const { cols, rows } = (0, board_view_1.boardSize)(this.player, { variant: this.variant });
-        const layout = (0, versus_layout_1.versusLayout)(this.screen.width, this.screen.height, cols, rows);
+        // The C64 does not draw the incoming row here either - the same trade the
+        // solo board makes, and for the same twenty-five rows.
+        const options = {
+            variant: this.variant,
+            showIncomingRow: this.variant !== 'c64',
+        };
+        const { cols, rows } = (0, board_view_1.boardSize)(this.player, options);
+        // Scale the tiles to the room, then lay out the SCALED boards. The view
+        // used to lay out unscaled ones: two 6-column boards and a strip of
+        // initials in a 40-column screen, with half of it black.
+        const aspect = this.variant === 'c64' ? layout_1.CELL_ASPECT.petscii : layout_1.CELL_ASPECT.terminal;
+        this.scale = (0, versus_layout_1.versusScale)(this.screen.width, this.screen.height, cols, rows, aspect, versus_layout_1.CENTRE_WIDE);
+        const layout = (0, versus_layout_1.versusLayout)(this.screen.width, this.screen.height, cols * this.scale.x, rows * this.scale.y);
         this.layout = layout;
         const box = (slot) => (0, bbs_door_sdk_1.createBox)({
             parent: this.screen,
@@ -75,6 +89,8 @@ class PanelsVersusScreen {
         if (this.opponentHasBoard) {
             const board = (0, board_view_1.buildBoard)(this.opponent, this.sheet, this.player.clock, {
                 variant: this.variant,
+                showIncomingRow: this.variant !== 'c64',
+                scale: this.scale,
                 // Never draw a cursor on someone else's board.
                 showCursor: false,
             });
@@ -91,6 +107,8 @@ class PanelsVersusScreen {
         if (this.playerBox) {
             const board = (0, board_view_1.buildBoard)(this.player, this.sheet, this.player.clock, {
                 variant: this.variant,
+                showIncomingRow: this.variant !== 'c64',
+                scale: this.scale,
             });
             this.playerBox.setContent((0, cell_art_1.bufferToTags)(board).join('\n'));
         }

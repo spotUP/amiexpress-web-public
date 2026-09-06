@@ -64,6 +64,8 @@ export declare class PanelsVersusScreen {
     private readonly stepper?;
     private readonly isOver?;
     private layout?;
+    /** Characters and rows per panel, the same on both boards. */
+    private scale;
     private playerBox?;
     private centreBox?;
     private opponentBox?;

@@ -70,9 +70,9 @@ export async function theEightyColumnBoardIsUnchanged(): Promise<void> {
 export async function aPetsciiTileIsNeverStretchedIntoASmear(): Promise<void> {
   const layout = panelsLayout(40, 25, COLS, ROWS, CELL_ASPECT.petscii);
 
-  assert.strictEqual(layout.stacked, true, 'the HUD goes under it');
-  assert.strictEqual(layout.scale.y, 1, 'the rows are already spent by the playfield');
-
+  // WHERE the HUD goes is decided by which layout gives the bigger board, and
+  // it changes as the board's own size does - what this test is about is the
+  // SHAPE of a tile, which no layout may stretch.
   const looksLike = (2 * layout.scale.x * CELL_ASPECT.petscii) / layout.scale.y;
   assert.ok(looksLike <= 2, `a tile ${looksLike}:1 wide is a smear, not a panel`);
   assert.ok(fitsOn(40, 25));
@@ -213,10 +213,16 @@ export async function theC64TileIsAsBigAsTwentyFiveRowsAllow(): Promise<void> {
   assert.strictEqual(layout.board.width, 12);
   assert.strictEqual(layout.board.height, 24);
   assert.strictEqual(layout.border, false, 'there is no room for a frame as well');
-  assert.strictEqual(layout.hud.height, 1, 'and the HUD gives up one of its two rows');
-  assert.strictEqual(
-    layout.board.top + layout.board.height + layout.hud.height, 25,
-    'board and HUD fill the screen exactly - a row more would not fit',
+
+  // AND THE HUD SITS BESIDE IT. Twelve columns of board leave twenty-eight,
+  // which is room for a column of labels - stacking it there wasted them:
+  // "why a minimal hud there in tetris attack? there is plenty of room?"
+  assert.strictEqual(layout.stacked, false, 'the HUD goes beside the board, not under it');
+  assert.ok(layout.hud.width >= 12, `a HUD ${layout.hud.width} wide cannot spell anything out`);
+  assert.ok(layout.hud.height >= 20, 'and it has the height to list the numbers');
+  assert.ok(
+    layout.hud.left + layout.hud.width <= 40,
+    `the HUD runs past the screen: ${layout.hud.left} + ${layout.hud.width}`,
   );
 }
 
@@ -284,8 +290,12 @@ export async function theBoardOpensOnACleanScreen(): Promise<void> {
  * the screen showed a lone `P0`: "size is good but... no hud?" (2026-09-06).
  */
 export async function theCompactHudFitsItsOneRow(): Promise<void> {
-  const layout = panelsLayout(40, 25, 6, 12, CELL_ASPECT.petscii);
-  assert.strictEqual(layout.hud.height, 1, 'the C64 HUD has exactly one row');
+  // A STACKED hud - a phone in portrait, where the board takes the width and
+  // the numbers get a row under it. (A C64 puts its HUD beside the board and
+  // spells the labels out; see theC64TileIsAsBigAsTwentyFiveRowsAllow.)
+  const layout = panelsLayout(40, 60, 12, 13, CELL_ASPECT.terminal);
+  assert.strictEqual(layout.stacked, true, 'this is the stacked case');
+  assert.ok(layout.hud.height <= 2, 'a stacked HUD is one or two rows');
 
   const quiet = hudLines(layout, {
     score: 0, speed: 1, timeText: "0'00", chain: 0, stopped: false,
@@ -314,7 +324,7 @@ export async function theCompactHudFitsItsOneRow(): Promise<void> {
 
 /** A number is never cut in half; a whole field goes instead. */
 export async function theCompactHudDropsFieldsRatherThanDigits(): Promise<void> {
-  const layout = panelsLayout(40, 25, 6, 12, CELL_ASPECT.petscii);
+  const layout = panelsLayout(40, 60, 12, 13, CELL_ASPECT.terminal);
   const [line] = hudLines(layout, {
     score: 999999999, speed: 99, timeText: "99'59", chain: 9, stopped: true,
     movesLeft: 99, canUndo: true,
