@@ -203,6 +203,69 @@
                 exit 1
               fi
 
+              # A COLLISION MUST NOT REACH THE IMAGE.
+              #
+              # This checkout is Linux/ext4 and CASE-SENSITIVE; the sysop's is
+              # macOS/APFS and CASE-INSENSITIVE. Git tracks a path as bytes, so
+              # it will carry BOTH `Doors/GWall/GWALL.cfg` and `gwall.cfg`. On
+              # the mac only one of them exists, so the collision is invisible
+              # there - and it is right here, after `git reset --hard`, that
+              # both files become real for the first time. `COPY Doors ./Doors`
+              # then puts both in the image, the entrypoint's tar sync (which
+              # only ever ADDS) puts both on the volume where they live for
+              # ever, and `findCaseInsensitive` in amigafs hands the door
+              # whichever one readdir returns first - arbitrary, and it can
+              # flip when an unrelated file is added to the directory.
+              #
+              # The position matters: this is AFTER the SHA is pinned and
+              # BEFORE the image is built or the container recreated, so a bad
+              # commit costs a red workflow and no downtime at all. The same
+              # rule runs as `dev/scripts/check-case-collisions.cjs` in the
+              # pre-commit hook and in `web/backend/tests/repo/
+              # case-collisions.test.ts`; this copy exists because
+              # backend-tests.yml is a SEPARATE push-triggered workflow with no
+              # `needs:` on it and main has no branch protection, so a red test
+              # suite does not stop a deploy. Shell rather than node: nothing
+              # guarantees a node on the host outside the container.
+              #
+              # LC_ALL=C on purpose - the repo carries Amiga filenames with
+              # high-bit bytes and a UTF-8 locale makes awk choke on them. No
+              # `| head` either: head closing the pipe under `set -o pipefail`
+              # fails the deploy with exit 141.
+              echo "== case-collision check =="
+              COLLISIONS=$(git ls-files | LC_ALL=C awk '
+                {
+                  n = split($0, part, "/")
+                  p = ""
+                  for (i = 1; i <= n; i++) {
+                    p = (i == 1) ? part[i] : p "/" part[i]
+                    k = tolower(p)
+                    if (k in seen) {
+                      if (seen[k] != p && !((k SUBSEP p) in done)) {
+                        print "  " seen[k] "\n  == " p
+                        done[k SUBSEP p] = 1
+                      }
+                    } else {
+                      seen[k] = p
+                    }
+                  }
+                }')
+              if [ -n "$COLLISIONS" ]; then
+                echo "ERROR: refusing to deploy - two tracked paths differ only in case:" >&2
+                printf '%b\n' "$COLLISIONS" >&2
+                echo "" >&2
+                echo "Both spellings exist in this Linux checkout and would both be baked" >&2
+                echo "into the image; on the sysop's mac only one is visible, which is why" >&2
+                echo "this was committed without anyone seeing it. The volume sync never" >&2
+                echo "deletes, so once both land on /app/data they stay there for ever." >&2
+                echo "Fix it on main: keep the spelling the BOARD opens (check the .info" >&2
+                echo "LOCATION and \`strings -a Doors/<door>/<binary>\`), then" >&2
+                echo "\`git rm --cached\` the other. If the two files have DIFFERENT" >&2
+                echo "content they are two different files, not a duplicate - stop and ask." >&2
+                exit 1
+              fi
+              echo "== no case collisions among $(git ls-files | wc -l | tr -d ' ') tracked paths =="
+
               # Build FIRST, separately from the recreate. Recreating the
               # container drops every connected session, so the people using
               # the BBS get a countdown between the two steps — and because
