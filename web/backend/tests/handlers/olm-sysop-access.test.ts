@@ -31,6 +31,13 @@
  *
  * The fixtures are the board's OWN `Access/*.info` bytes, copied to a temp
  * board and edited there. Nothing under the live `Access/` is written.
+ *
+ * The answer this file records: the grant is MISSING DATA, not a bug. No
+ * `Access/ACS.<level>.info` on this board carries `ACS.OLM` at any level -
+ * 10, 20, 50, 60 or 255 - so the internal OLM command refuses every caller,
+ * the level-255 account included. `ACS.QUIET_NODE` ships commented out at
+ * 10/20/50/60 and absent at 255, so `Q` is refused the same way. Adding the
+ * grants is the sysop's call and was deliberately NOT made here.
  */
 
 import * as fs from 'fs';
