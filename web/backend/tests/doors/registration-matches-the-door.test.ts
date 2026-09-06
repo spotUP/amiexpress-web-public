@@ -134,7 +134,9 @@ describe('door registrations', () => {
   // /app/data/bbs/Doors/mail-composer".
   //
   // Not a general rule: a registration may point at a door installed on the
-  // board and absent from git - Doors/tic-tac-toe (TTT), BestConf, scan.x.
+  // board and absent from git - Doors/tic-tac-toe (TTT), BestConf. (scan.x
+  // was the third example until L.info, its only registration, was retired on
+  // 2026-09-06 for naming a binary that has never existed.)
   // This pins the one pair that has already been broken once.
   // GWWALL, found by the sysop on 2026-09-01: the admin showed it BBSLink's
   // system code, auth code and scheme code.
