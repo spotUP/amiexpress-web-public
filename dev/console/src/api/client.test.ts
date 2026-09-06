@@ -24,6 +24,10 @@ import {
   reserveNode,
   getAdminPermissions,
   setAdminPermissions,
+  createConference,
+  deleteConference,
+  getOrphanConferenceDirs,
+  removeOrphanConferenceDir,
 } from './client.js';
 
 const BASE_URL = process.env['AMIEXPRESS_URL'] ?? 'http://localhost:3001';
@@ -160,6 +164,49 @@ test('setAdminPermissions PUTs { perms } to /api/admin-permissions', async () =>
   assert.equal(calls[0].url, `${BASE_URL}/api/admin-permissions`);
   assert.equal(calls[0].method, 'PUT');
   assert.deepEqual(calls[0].body, { perms: { users: 100 } });
+});
+
+test('createConference POSTs to /api/config/conferences', async () => {
+  stubFetch({ success: true, data: { id: 1, conference_id: 4, name: 'New', ndirs: 1 } });
+  await createConference({ conference_id: 4, name: 'New' });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/conferences`);
+  assert.equal(calls[0].method, 'POST');
+  assert.deepEqual(calls[0].body, { conference_id: 4, name: 'New' });
+});
+
+test('deleteConference DELETEs /api/config/conferences/:id with removeFiles as a query flag', async () => {
+  stubFetch({ success: true, message: 'Conference removed' });
+  await deleteConference(4, true);
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/conferences/4?removeFiles=true`);
+  assert.equal(calls[0].method, 'DELETE');
+});
+
+test('deleteConference omits the query flag when removeFiles is not requested', async () => {
+  stubFetch({ success: true });
+  await deleteConference(4);
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/conferences/4`);
+});
+
+test('getOrphanConferenceDirs GETs the orphan-directories route, before /:conferenceId can shadow it', async () => {
+  stubFetch({ success: true, data: { orphans: [{ dir: 'Conf9', files: 3, bytes: 1024 }], bytes: 1024 } });
+  const result = await getOrphanConferenceDirs();
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/conferences/orphan-directories`);
+  assert.deepEqual(result.orphans, [{ dir: 'Conf9', files: 3, bytes: 1024 }]);
+});
+
+test('removeOrphanConferenceDir DELETEs the named directory, URL-encoded', async () => {
+  stubFetch({ success: true, message: 'Conf 9 removed' });
+  await removeOrphanConferenceDir('Conf 9');
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/conferences/orphan-directories/${encodeURIComponent('Conf 9')}`);
+  assert.equal(calls[0].method, 'DELETE');
 });
 
 // The incident this whole page exists to fix: the OLD Security page wrote

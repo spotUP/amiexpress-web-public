@@ -169,6 +169,56 @@ export async function updateConference(id: number, updates: Record<string, unkno
   });
 }
 
+// The id is NOT the caller's to choose — NCONFS is a count, so the backend
+// only accepts conference_id === current-count+1 and rejects anything else
+// (conference-config.service.ts:194-215). The caller computes that count
+// itself (existing conferences' length + 1), matching web's handleAdd()
+// (ConferencesPage.tsx).
+export async function createConference(config: Record<string, unknown>) {
+  return request<{ success: boolean; data: import('./types.js').ConferenceConfig; message?: string }>(
+    '/api/config/conferences',
+    { method: 'POST', body: JSON.stringify(config) }
+  );
+}
+
+// removeFiles is opt-in and sent as a query string flag (not a body field —
+// DELETE bodies are easy to drop in transit), matching
+// web/config-app/src/api/client.ts:508-513 and the backend's own check at
+// config-routes.ts:384-385 (`req.query.removeFiles === 'true'`).
+export async function deleteConference(confNumber: number, removeFiles = false) {
+  const query = removeFiles ? '?removeFiles=true' : '';
+  return request<{
+    success: boolean;
+    message?: string;
+    data?: { deleted: boolean; renumbered: boolean; usersMigrated: number; filesRemoved: string | null; keptOnDisk: string | null };
+  }>(`/api/config/conferences/${confNumber}${query}`, { method: 'DELETE' });
+}
+
+export interface OrphanConferenceDir {
+  dir: string;
+  files: number;
+  bytes: number;
+}
+
+// Conf<n> directories no conference reads any more — LOCATION.n points
+// elsewhere, but the directory (and everything ever posted or uploaded to
+// it) is still on disk. config-routes.ts:284-295, registered BEFORE
+// /conferences/:conferenceId so Express doesn't parse "orphan-directories"
+// as a conference id.
+export async function getOrphanConferenceDirs() {
+  const res = await request<{ success: boolean; data: { orphans: OrphanConferenceDir[]; bytes: number } }>(
+    '/api/config/conferences/orphan-directories'
+  );
+  return res.data ?? { orphans: [], bytes: 0 };
+}
+
+export async function removeOrphanConferenceDir(dir: string) {
+  return request<{ success: boolean; message?: string }>(
+    `/api/config/conferences/orphan-directories/${encodeURIComponent(dir)}`,
+    { method: 'DELETE' }
+  );
+}
+
 export async function getConferenceHealth(id: number) {
   const res = await request<{ success: boolean; data: import('./types.js').ConferenceHealth }>(`/api/config/conferences/${id}/health`);
   return res.data;
