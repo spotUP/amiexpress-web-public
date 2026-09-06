@@ -94,8 +94,18 @@ jobs:
           for pkg in Doors/*/package.json; do
             grep -q "bbs-door-sdk" "$pkg" || continue
             door=$(dirname "$pkg")
-            echo "  installing $door"
-            npm install --prefix "$door" --ignore-scripts --no-audit --no-fund
+            # --ignore-scripts everywhere except where a NATIVE module has to
+            # land its binary: GRANDMASTER and DOPEWARS use better-sqlite3,
+            # and with scripts off prebuild-install never runs, so the suites
+            # that drive those doors die on "Could not locate the bindings
+            # file" - a failure that looks like the door and is the install.
+            if grep -qE '"(better-sqlite3|node-pty|canvas|sharp|bcrypt)"' "$pkg"; then
+              echo "  installing $door (native deps, scripts allowed)"
+              npm install --prefix "$door" --no-audit --no-fund
+            else
+              echo "  installing $door"
+              npm install --prefix "$door" --ignore-scripts --no-audit --no-fund
+            fi
           done
 
       - name: Type-check

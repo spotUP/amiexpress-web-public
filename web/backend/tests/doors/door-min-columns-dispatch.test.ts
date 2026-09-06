@@ -472,7 +472,14 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
 
   function definitionFromDisk(command: string) {
     const { loadCommandFromInfo } = require('../../src/utils/amiga-command-parser.util');
-    const def = loadCommandFromInfo(path.join(BBSCMD, `${command}.info`));
+    const amigafs = require('../../src/utils/amigafs');
+    // amigafs, not path.join: this tree came off a case-insensitive
+    // filesystem and holds `chat.info` for CHAT, `ulist.info` for ULIST and
+    // `wall.info` for WALL. The literal join finds them on a Mac and finds
+    // nothing on the Linux runner.
+    const infoPath = amigafs.resolvePath(path.join(BBSCMD, `${command}.info`))
+      ?? path.join(BBSCMD, `${command}.info`);
+    const def = loadCommandFromInfo(infoPath);
     if (!def) throw new Error(`Commands/BBSCmd/${command}.info did not parse`);
     return def;
   }

@@ -93,8 +93,21 @@ const ADAPTED = ['THEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GM
 
 const UNROUTED = 'unrouted-gate-test-type' as unknown as Door['type'];
 
+/**
+ * The icon for a command, by the name the board would use.
+ *
+ * Through amigafs, because this tree came off a case-insensitive filesystem
+ * and holds `chat.info`, `ulist.info` and `wall.info` for CHAT, ULIST and
+ * WALL. path.join finds those on a Mac and finds nothing on the Linux
+ * runner, so three correctly-marked doors read as unmarked in CI only.
+ */
+function infoPathFor(command: string): string {
+  return amigafs.resolvePath(path.join(BBSCMD, `${command}.info`))
+    ?? path.join(BBSCMD, `${command}.info`);
+}
+
 function toolTypesFromDisk(command: string): Record<string, string> {
-  const info = parseInfoFile(path.join(BBSCMD, `${command}.info`));
+  const info = parseInfoFile(infoPathFor(command));
   const map: Record<string, string> = {};
   for (const tt of info.tooltypes) map[tt.key] = tt.value ?? '';
   return map;
@@ -123,7 +136,7 @@ describe('Task 6 adapted doors are 40-ok on disk and launch on a C64', () => {
   beforeEach(() => (doorDropFileManager.createAllDropFiles as jest.Mock).mockClear());
 
   it.each(ADAPTED)('%s.info exists and carries MIN_COLUMNS=40', (command) => {
-    expect(fs.existsSync(path.join(BBSCMD, `${command}.info`))).toBe(true);
+    expect(fs.existsSync(infoPathFor(command))).toBe(true);
     expect(toolTypesFromDisk(command).MIN_COLUMNS).toBe('40');
   });
 
@@ -198,8 +211,7 @@ describe('C64_ADAPT doors are marked on disk and open through the DOORS-menu rou
     // and `wall.info` for the commands CHAT, ULIST and WALL. A plain join
     // finds them on a Mac and finds nothing on the Linux runner, which is
     // why CI failed here on three doors that are correctly marked.
-    const resolved = amigafs.resolvePath(path.join(BBSCMD, `${command}.info`));
-    const def = resolved ? loadCommandFromInfo(resolved) : null;
+    const def = loadCommandFromInfo(infoPathFor(command));
     if (!def) throw new Error(`Commands/BBSCmd/${command}.info did not parse`);
     return def;
   }
@@ -223,7 +235,7 @@ describe('C64_ADAPT doors are marked on disk and open through the DOORS-menu rou
   }
 
   it.each(C64_MARKED)('%s.info carries C64_ADAPT=40 and an adapter-eligible type', (command) => {
-    expect(fs.existsSync(path.join(BBSCMD, `${command}.info`))).toBe(true);
+    expect(fs.existsSync(infoPathFor(command))).toBe(true);
     expect(toolTypesFromDisk(command).C64_ADAPT).toBe('40');
     // A TS door paints its own blessed screen and never crosses the adapter's
     // seam, so the claim is only meaningful on a 68K type.

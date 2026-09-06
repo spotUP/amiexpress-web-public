@@ -90,6 +90,25 @@ describe('the backend-tests workflow', () => {
     }
   });
 
+  it('lets the native-dep doors run their install scripts', () => {
+    // --ignore-scripts is right for a door whose only dependency is the SDK,
+    // and wrong for one with a native module: better-sqlite3's binary is
+    // fetched by an install script, and without it GRANDMASTER's own suites
+    // fail on "Could not locate the bindings file".
+    const text = fs.readFileSync(workflow, 'utf8');
+    expect(text).toMatch(/better-sqlite3\|node-pty/);
+    expect(text).toContain('npm install --prefix "$door" --no-audit --no-fund');
+
+    const native = fs.readdirSync(path.join(repoRoot, 'Doors'))
+      .filter((door) => {
+        const pkg = path.join(repoRoot, 'Doors', door, 'package.json');
+        return fs.existsSync(pkg)
+          && /"(better-sqlite3|node-pty|canvas|sharp|bcrypt)"/.test(fs.readFileSync(pkg, 'utf8'));
+      });
+    // If this ever empties, the branch above is dead and should go with it.
+    expect(native).toContain('grandmaster');
+  });
+
   it('names the doors that broke main, so the guard is not vacuous', () => {
     // If either of these stops being reached by the backend, this test has
     // stopped covering the case it was written for and should be updated
