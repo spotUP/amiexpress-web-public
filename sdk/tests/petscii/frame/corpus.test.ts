@@ -488,6 +488,10 @@ const EXPECTED_ROWS: Record<string, number> = {
   // `prose`; what still crops is the box rule around them, which is decoration.
   // 23 of the 29 are painted, so the whole screen fits one page.
   sysinfo: 29,
+  // `games` at 32: 5D-AdiMenu's BBSLINK menu. Twenty of the 32 rows are
+  // `record` - each two-column '[CODE] Name  [CODE] Name' entry - and 26 are
+  // painted, the extra one over the screen being the door's own footer.
+  games: 32,
 };
 
 function lastFrameOf(id: string): Frame {

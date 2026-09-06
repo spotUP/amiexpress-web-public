@@ -3,9 +3,15 @@
  * caller is shown ADAPTED ones.
  *
  * THE DEFECT, measured on the real door file (`Doors/5D-ADIMENU/Text/games`,
- * the `games` command's menu). 19 source rows; the C64 rule ladder reflows the
- * two-column entries and the frame becomes 33 painted adapted rows on a 25-row
- * screen. `adaptFrame` resolves an overflow by showing the LAST 25 adapted
+ * the `games` command's menu) AS THE LADDER STOOD ON 2026-09-06 MORNING. 19
+ * source rows; the C64 rule ladder reflowed the two-column entries and the
+ * frame became 33 painted adapted rows on a 25-row screen.
+ *
+ * (Later the same day the `record` rung learned to place a right-hand field
+ * flush against column 40, and that file became 24 painted rows - it fits, and
+ * the suite asserts that it fits. The paging itself is proved on the same
+ * door's rows repeated, `tallFile` below. The numbers in this header are the
+ * measurement that motivated the window, not a claim about the file today.) `adaptFrame` resolves an overflow by showing the LAST 25 adapted
  * rows, so the title and nine games left the top having never been on the
  * caller's screen - and the source-row pause never fired, because 19 is under
  * any threshold.
@@ -62,6 +68,26 @@ const GAMES_SOURCE = path.resolve(__dirname, '../../../../Doors/5D-ADIMENU/Text/
 
 let tmpDir = '';
 let gamesFile = '';
+/**
+ * The door's menu with its three WIDEST entry rows duplicated, so the adapted
+ * frame is taller than the screen again.
+ *
+ * The real `games` file no longer overflows: on 2026-09-06 the ladder's
+ * `record` rung learned to place a right-hand field flush against column 40,
+ * and the menu's two-column entries stopped costing two rows each - 33 painted
+ * adapted rows became 24, which fits a 25-row screen with the title on it. That
+ * is the better outcome for that door and it is asserted below as such, but it
+ * would have left the PAGING itself - the window, the prompt, the second page -
+ * with no test at all.
+ *
+ * The extra rows are the door's OWN rows (the LORD, LORD2 and OOII lines, whose
+ * right-hand names are long enough that `record` still spends a second row on
+ * each), and only three of them: the SOURCE frame is 80x25, so a file with more
+ * than 25 lines scrolls the title off the source screen before the ladder ever
+ * sees it, and the suite would then be measuring the reconstructor rather than
+ * the window.
+ */
+let tallFile = '';
 /** Every `[CODE]` the door's menu offers, read off the door's own file. */
 let entryCodes: string[] = [];
 
@@ -71,6 +97,13 @@ beforeAll(() => {
   gamesFile = path.join(tmpDir, 'games.txt');
   fs.writeFileSync(gamesFile, raw.replace(/~f/g, '\x1b[2J\x1b[H'), 'binary');
   entryCodes = Array.from(raw.matchAll(/\[\x1b\[37m([A-Z0-9]+)\x1b\[31m\]/g)).map((m) => m[1]);
+
+  const lines = raw.replace(/~f/g, '\x1b[2J\x1b[H').split('\n');
+  const widest = ['LORD', 'LORD2', 'OOII'];
+  const tall = lines.flatMap((line) =>
+    widest.some((code) => line.includes(`[\x1b[37m${code}\x1b[31m]`)) ? [line, line] : [line]);
+  tallFile = path.join(tmpDir, 'games-tall.txt');
+  fs.writeFileSync(tallFile, tall.join('\n'), 'binary');
 });
 
 afterAll(() => {
@@ -176,7 +209,40 @@ const petsciiSession = () => ({ terminalType: 'c64', petsciiMode: true, screenWi
 const ansiSession = () => ({ terminalType: 'modern', petsciiMode: false, screenWidth: 80, screenHeight: 24 });
 
 describe('a 40-column caller sees every game in the list, not the last 25 rows of it', () => {
-  it('pauses part-way down, and the page after the pause carries the rows that were next', async () => {
+  it('the whole menu is on ONE page now, title and all thirty games', async () => {
+    // What the door itself does today. The `record` rung places the right-hand
+    // `[CODE] Name` of each two-column entry flush against column 40 instead of
+    // spending a second row on it, so the menu is 24 painted adapted rows - it
+    // FITS, with the title on the same screen, and no pause is needed. The
+    // window is what makes that true: the frame is still 32 adapted rows
+    // because the source grid's blank tail adapts too, and the old behaviour
+    // (show the LAST 25) would still have dropped the title.
+    const session = petsciiSession();
+    const rig = buildRig(session, 25);
+    const adapter = installC64DoorAdapter(rig.socket, session as any, { tickMs: 60_000, maxFrameMs: 60_000 });
+    expect(adapter).not.toBeNull();
+
+    const screen = new Screen(rig.wire);
+    await rig.handler.handleShowFile(showFileMsg(gamesFile));
+
+    // NO PAUSE, and nothing left over: the whole menu is inside one page.
+    expect(rig.paused()).toBe(0);
+    expect(adapter!.unseenRows()).toBe(0);
+    expect(adapter!.pageOffset()).toBe(0);
+
+    // ...and that page, painted, is the menu with its title on it. The paint is
+    // asked for explicitly because the 60-second tick above is what keeps every
+    // other case here off the clock; `showPage` is the same repaint the pause
+    // owner ends a walk with.
+    adapter!.showPage();
+    const rows = screen.rows();
+    expect(rows.join('\n')).toContain('ONLINE GAMES FROM BBSLINK.NET');
+    expect(entryCodes.length).toBeGreaterThan(25);
+    expect(entryCodes.filter((code) => !rows.join('\n').includes(`[${code}]`))).toEqual([]);
+    uninstallC64DoorAdapter(rig.socket);
+  });
+
+  it('a menu too tall for the screen pauses part-way down, and the page after carries the rows that were next', async () => {
     const session = petsciiSession();
     const rig = buildRig(session, 25);
     const adapter = installC64DoorAdapter(rig.socket, session as any, {
@@ -186,7 +252,7 @@ describe('a 40-column caller sees every game in the list, not the last 25 rows o
     expect(adapter).not.toBeNull();
 
     const screen = new Screen(rig.wire);
-    await rig.handler.handleShowFile(showFileMsg(gamesFile));
+    await rig.handler.handleShowFile(showFileMsg(tallFile));
 
     // FIRST PAGE. The pause fired, the door is held, and the caller is looking
     // at the TOP of the menu - the thing that used to be scrolled away.
@@ -221,7 +287,7 @@ describe('a 40-column caller sees every game in the list, not the last 25 rows o
     const session = petsciiSession();
     const rig = buildRig(session, 25);
     installC64DoorAdapter(rig.socket, session as any, { tickMs: 60_000, maxFrameMs: 60_000 });
-    await rig.handler.handleShowFile(showFileMsg(gamesFile));
+    await rig.handler.handleShowFile(showFileMsg(tallFile));
     const rows = new Screen(rig.wire).rows();
     expect(PAUSE_PROMPT).toBe('(Pause)...More(y/n/ns)? ');
     expect(rows[24]).toBe(PAUSE_ROW);

@@ -407,5 +407,20 @@
     "cwd": "web/backend",
     "installed": "I",
     "notes": "SysInfo v2.3 by WHiZ/eQUiNOX, the board's I command. Boxed system information over four panes. ZERO narrow marks and zero unmapped glyphs at 40. Its node row is what the stat rung was written for - 'Init Baud is: 115200 Baud' and 'Sysop Status: Busy at the Moment!' used to reach a caller as 'Init Baud is: >' and 'Sysop Status: B>' - and its three single-column panes are what the prose rung was written for ('Software Running: Kickstart 40.68 Workb>' lost the Workbench version). The capture answers the first pause with n, so the LAST frame is the door's own information screen rather than its exit line. Marked C64_ADAPT=40 on 2026-09-06."
+  },
+  "games": {
+    "binary": "Doors/5D-AdiMenu/5D-AdiMenu",
+    "command": "games",
+    "script": [
+      "4000 \\r",
+      "8000 \\r",
+      "12000 q\\r"
+    ],
+    "bytes": 1853,
+    "sha256": "414ccf900fa22a91b400301d8612a0702832f72aac93a53475dd2e695554f13a",
+    "harness": "printf '%s\\n' '4000 \\r' '8000 \\r' '12000 q\\r' | env BBS_DATA_DIR=$REPO npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/5D-AdiMenu/5D-AdiMenu 1 --doortype XIM --command games --timeout 25 > games.ans",
+    "cwd": "web/backend",
+    "installed": "games",
+    "notes": "5D-AdiMenu V1.0 by tHE aDDiCT/5D!, the board's games command: a header, the BBSLINK online-games menu shown through JH_SF, and a footer. All THIRTY [CODE] Name entries reach a 40-column caller, with ZERO narrow marks and zero unmapped glyphs - the record rung places each entry's right-hand code flush against column 40 instead of spending a second row on it, which is what took the menu from 33 painted rows to 24 and let it fit one page with its title. The door sends JH_SF with data 0, so it does NOT force non-stop and the board's pause is free to arm; it simply is not needed for this menu any more. Marked C64_ADAPT=40 on 2026-09-06."
   }
 }

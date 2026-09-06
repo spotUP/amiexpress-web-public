@@ -165,6 +165,9 @@ const SIGNATURES: Record<string, Signature> = {
   conftop: { door: 'Total Uploaded Bytes' },
   // The two values the stat rung keeps whole on SysInfo's node row.
   sysinfo: { door: 'Busy at the Moment!' },
+  // The last entry in the menu: if it is on the screen, the window did not drop
+  // the tail, and its code is the one that used to be paged away.
+  games: { door: 'Usurper' },
 };
 
 // ---------------------------------------------------------------- sessions
