@@ -14,7 +14,7 @@
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { TetriNetEngine } from '../core/tetrinet/tetrinet-engine';
-import { blockCols, fitCell } from './block-width';
+import { blockCols, fitCell, cellsCanCarryBackground } from './block-width';
 
 /** Playfield columns, in BLOCKS. TetriNET's field is twelve wide, not ten. */
 const TETRINET_COLUMNS = 12;
@@ -1380,7 +1380,7 @@ export class TetriNetScreen {
     // that the player could not see and the engine still counted: "some
     // random pieces disappeared when i played in petscii mode" (2026-09-06).
     // Random, because which specials fall is.
-    if ((this.screen as any)?.petscii === true) {
+    if (!cellsCanCarryBackground(this.screen)) {
       return `{${spec.color}-fg}${spec.letter} {/${spec.color}-fg}`;
     }
 

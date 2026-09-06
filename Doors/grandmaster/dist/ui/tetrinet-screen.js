@@ -1162,7 +1162,7 @@ class TetriNetScreen {
         // that the player could not see and the engine still counted: "some
         // random pieces disappeared when i played in petscii mode" (2026-09-06).
         // Random, because which specials fall is.
-        if (this.screen?.petscii === true) {
+        if (!(0, block_width_1.cellsCanCarryBackground)(this.screen)) {
             return `{${spec.color}-fg}${spec.letter} {/${spec.color}-fg}`;
         }
         // Two visible columns: the letter on a block, so it still reads as a
