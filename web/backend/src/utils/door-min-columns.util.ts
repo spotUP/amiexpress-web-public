@@ -38,6 +38,26 @@ import { doorScreenWidth, C64_COLUMNS } from '../amiga-emulation/xim/screen-widt
  *  (same rule as ANSI_GRAPHICS_PROMPT, login-connect.service.ts:57). */
 export const DOOR_NEEDS_80_NOTICE = '\r\nTHIS DOOR NEEDS AN 80 COLUMN SCREEN\r\n';
 
+/**
+ * The second half of a refusal that has nothing behind it.
+ *
+ * Emitted only when the DISPATCHER armed 'NO_EQUIVALENT' - i.e. a command was
+ * typed at the menu, a door won it, the width gate refused it, and
+ * INTERNAL_COMMAND_NAMES has no case for that name. Every other route into the
+ * gate (the DOORS menu, a ~CC_ screen command, login-post) has no tier below
+ * and gets DOOR_NEEDS_80_NOTICE alone, byte for byte as before.
+ *
+ * `columns` comes from `sessionColumns()` - the ONE width the gate itself
+ * compared against - so the two sentences can never quote different numbers.
+ * Uppercase ASCII and both lines under 40 characters, the same rule
+ * DOOR_NEEDS_80_NOTICE follows: legible on a power-on C64.
+ */
+export function noWidthEquivalentNotice(command: string, columns: number): string {
+  const name = String(command || '').trim().toUpperCase();
+  const subject = name ? `${columns} COLUMN ${name}` : `${columns} COLUMN VERSION`;
+  return `THE BOARD HAS NO ${subject}.\r\nUSE '?' FOR THE COMMAND LIST.\r\n`;
+}
+
 /** The browser cousin of the notice above, same rule and same shape: uppercase
  *  ASCII only, so a power-on C64 on the PETSCII telnet port can read it. */
 export const DOOR_NEEDS_BROWSER_NOTICE = '\r\nTHIS DOOR NEEDS A WEB BROWSER\r\n';
@@ -69,8 +89,35 @@ export const DEFAULT_MIN_COLUMNS = 80;
  * and widening all of them would hand a case to call sites that cannot act on
  * it. The arm is read-and-cleared by the gate on EVERY launch so a door that
  * launches another door can never inherit it.
+ *
+ * A THIRD state, 'NO_EQUIVALENT', is the same report in the other direction:
+ * the dispatcher looked for a tier below and there is none. It exists because
+ * the notice alone cannot tell those two cases apart, and the sysop read the
+ * wrong one out of it - "nsu says it needs an 80 column screen still", the day
+ * after the fall-through landed, meaning "the fix missed NSU". It had not.
+ *
+ * NSU, CS and SCAN are `Doors:AquaScan/AquaScan.000` under three names
+ * (`Commands/BBSCmd/{nsu,cs,scan}.info`), and AquaScan's own help calls all
+ * three "Scan all confs since day of last call". express.e has no such
+ * internal command: `processInternalCommand` (express.e:28285-28398) is a
+ * closed list whose file commands are F, FR, FM, FS, N and Z, and a real /X
+ * board without AquaScan answers NSU with "No such command!!". express.e has
+ * the BEHAVIOUR, but only as a loop inside `confScan()` (express.e:28066-28114)
+ * - per conference, `checkFileConfScan()` then `currentConf:=conf;
+ * runSysCommand('N','S U')`, which is where the name comes from - and this
+ * port already runs exactly that at logon (message-scan.handler.ts). Wiring
+ * NSU to it on demand was rejected on evidence: that loop's `N` is
+ * displayNewFiles, which reads the SQL `file_entries` mirror, and that mirror
+ * is written only by database/file-repository.ts on a web upload. Nothing
+ * imports the DIR files, so conferences whose DIR files are full of records
+ * hold zero rows, and an internal NSU would answer "No new files found" for
+ * them. A listing that omits the files is the same lie as a listing that
+ * truncates their names.
+ *
+ * So the refusal stands and says so, in express.e's own words for a name the
+ * board cannot answer ("Use '?' for command list.", express.e:28397).
  */
-export type WidthGateFallThrough = 'ARMED' | 'REFUSED';
+export type WidthGateFallThrough = 'ARMED' | 'REFUSED' | 'NO_EQUIVALENT';
 
 export interface MinColumnsDoorShape {
   command?: string;

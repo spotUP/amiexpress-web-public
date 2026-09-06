@@ -24,7 +24,7 @@ import { BBSState } from '../index';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.util';
-import { resolveDoorMinColumns, declaredMinColumns, resolveDoorAdaptColumns, doorOpensForC64, doorShowsC64Mark, doorNeedsBrowser, type MinColumnsDoorShape, ADAPTED_DOOR_TYPES, DEFAULT_MIN_COLUMNS, sessionColumns, DOOR_NEEDS_80_NOTICE, DOOR_NEEDS_BROWSER_NOTICE, DOOR_NEEDS_BROWSER_MARK } from '../utils/door-min-columns.util';
+import { resolveDoorMinColumns, declaredMinColumns, resolveDoorAdaptColumns, doorOpensForC64, doorShowsC64Mark, doorNeedsBrowser, type MinColumnsDoorShape, ADAPTED_DOOR_TYPES, DEFAULT_MIN_COLUMNS, sessionColumns, DOOR_NEEDS_80_NOTICE, noWidthEquivalentNotice, DOOR_NEEDS_BROWSER_NOTICE, DOOR_NEEDS_BROWSER_MARK } from '../utils/door-min-columns.util';
 import { transportCapabilities } from '../server/transport-adapter';
 import { installC64DoorAdapter, uninstallC64DoorAdapter } from '../server/c64-door-adapter';
 import { isNarrow, NARROW_WIDTH, narrowClip } from '../utils/table-format.util';
@@ -1799,8 +1799,14 @@ console.log('Executing door:', door.name);
   // Read-and-cleared for EVERY launch, refused or not: an arm covers the one
   // launch the dispatcher started, and must never be inherited by a door that
   // goes on to launch another door.
+  //
+  // 'NO_EQUIVALENT' is the other half of the same report and is read the same
+  // way: the dispatcher found no internal command of this name, so the notice
+  // is followed by a line SAYING that. It is consumed on read for the same
+  // reason 'ARMED' is - it describes one launch, not the session.
   const widthFallThroughArmed = session.widthGateFallThrough === 'ARMED';
-  if (widthFallThroughArmed) session.widthGateFallThrough = undefined;
+  const widthHasNoEquivalent = session.widthGateFallThrough === 'NO_EQUIVALENT';
+  if (widthFallThroughArmed || widthHasNoEquivalent) session.widthGateFallThrough = undefined;
 
   if (
     sessionColumns(session) < resolveDoorMinColumns(door as any) &&
@@ -1813,6 +1819,17 @@ console.log('Executing door:', door.name);
     // emitPrompt is emitText(..., immediate): the notice must reach the
     // caller before the menu repaints over it.
     emitPrompt(socket, DOOR_NEEDS_80_NOTICE);
+    // "nsu says it needs an 80 column screen still" - the notice above cannot
+    // distinguish "refused, and the board answered instead" from "refused, and
+    // nothing did". When the dispatcher has already told us it is the second,
+    // the caller is told too, and told what to type to find what the board
+    // DOES answer.
+    if (widthHasNoEquivalent) {
+      emitPrompt(
+        socket,
+        noWidthEquivalentNotice(door.command || door.id || '', sessionColumns(session))
+      );
+    }
     // Same return shape launchAmigaDoor() uses when the executable is
     // missing: straight back to the menu, no pause.
     session.menuPause = false;

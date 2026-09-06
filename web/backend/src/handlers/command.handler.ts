@@ -4464,7 +4464,14 @@ console.log(`[CommandPriority] J with numeric param "${trimmedParams}" - using i
     return 'SUCCESS';
   };
 
-  if (hasInternalEquivalent) session.widthGateFallThrough = 'ARMED';
+  // Both answers are armed, because the gate cannot work either out for
+  // itself: 'ARMED' says "there is a tier below, report instead of printing",
+  // 'NO_EQUIVALENT' says "there is not, so say so as well as printing". A
+  // route into executeDoor that is not a typed command (the DOORS menu, a
+  // ~CC_ screen command, login-post) arms neither and refuses exactly as it
+  // always did. Which of the two a name gets is INTERNAL_COMMAND_NAMES'
+  // answer, the same list the switch below is re-parsed into.
+  session.widthGateFallThrough = hasInternalEquivalent ? 'ARMED' : 'NO_EQUIVALENT';
 
   try {
     // Try SysCommand first — only when allowSyscmd=TRUE (express.e:28249)
