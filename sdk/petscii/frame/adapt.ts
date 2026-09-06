@@ -6,6 +6,8 @@
  *             the whole row is a horizontal rule - truncating one leaves one)
  *   deindent  drop the leading blanks when the row then fits (lossless)
  *   repeat    a row of IDENTICAL columns: as many whole copies as fit, rest dropped
+ *   stat      a `Label: value` row: its columns PACK onto as many rows as they
+ *             need, never split, so no value is shortened
  *   narrow    one row, columns preserved, over-wide cells truncated with '>'
  *   record    a two-field row (message + a right-hand author/tag): the left
  *             field reflows, the field stays flush against the right margin
@@ -13,7 +15,7 @@
  *   reflow    word wrap, attributes travel with their cell
  *   split     plain halves, blank second half dropped
  *
- * Ladder order: crop -> deindent -> record -> repeat -> narrow -> reflow/split. `narrow` exists
+ * Ladder order: crop -> deindent -> record -> repeat -> stat -> narrow -> reflow/split. `narrow` exists
  * because splitting a TABLE in half puts its right-hand columns on a row of
  * their own with no header: that is how a 25-row door screen came out 34-46
  * rows and lost its title to tail-paging (rtw 46, ustats 35, what 34 before
@@ -80,7 +82,7 @@ import { wrapLineToWidth } from '../wrap';
 import { classifyRow, columnSpans, contentWidth, hasTabularGutters, isRuleRow, looksLikeAsciiArt, rowText } from './classify';
 import { Cell, Cursor, Frame, blankCell, cloneCell, isBlank, makeFrame, padRow } from './types';
 
-export type AdaptRule = 'crop' | 'deindent' | 'gutter' | 'narrow' | 'record' | 'repeat' | 'reflow' | 'split';
+export type AdaptRule = 'crop' | 'deindent' | 'gutter' | 'narrow' | 'record' | 'repeat' | 'reflow' | 'split' | 'stat';
 export type RegionRule = AdaptRule | 'auto';
 
 export interface RegionPin {
@@ -205,6 +207,10 @@ export function chooseRule(cells: Row, cols: number): AdaptRule {
   // BEFORE narrow, and only ever instead of it: a row of identical columns is
   // decoration, and narrow would shorten every copy.
   if (repeatRow(cells, cols) !== null) return 'repeat';
+  // BEFORE narrow, and only ever instead of it: on a `Label: value` row the
+  // widest column is the VALUE, so narrow shortens exactly the thing that
+  // cannot survive being shortened. See `statRow`.
+  if (statRow(cells, cols) !== null) return 'stat';
   if (narrowRow(cells, cols) !== null) return 'narrow';
   return classifiedRule(cells);
 }
@@ -652,6 +658,156 @@ export function repeatRow(cells: Row, cols: number): RuleResult | null {
   };
 }
 
+/**
+ * A span is a LABEL when it carries a colon with an alphanumeric before it, in
+ * the same column: `Bytes:`, `Init Baud is:`, `Top Uploader Last Period:`. The
+ * bare `:` that `ctop` leaves in a column of its own after
+ * `Top Uploader Record     : DeaTure` is deliberately NOT one - it is a
+ * separator the door padded away from its label, and one of those alone is not
+ * evidence that the row is a stat row.
+ */
+/** The span's last non-blank character is a colon: a label with its value padded into the NEXT column. */
+function danglingLabel(cells: Row, [a, b]: [number, number]): boolean {
+  for (let x = b - 1; x >= a; x--) if (!isBlank(cells[x])) return cells[x].ch === ':';
+  return false;
+}
+
+/** Width of a bound group of columns, one blank between each. */
+const unitWidth = (unit: number[], widths: number[]) =>
+  unit.reduce((n, i) => n + widths[i], 0) + (unit.length - 1);
+
+function isLabelSpan(cells: Row, [a, b]: [number, number]): boolean {
+  let alnum = false;
+  for (let x = a; x < b; x++) {
+    if (/[A-Za-z0-9]/.test(cells[x].ch)) { alnum = true; continue; }
+    if (cells[x].ch === ':' && alnum) return true;
+  }
+  return false;
+}
+
+/**
+ * LOSSLESS, as many rows as it takes: the rung for a `Label: value` row.
+ *
+ * `narrow` shrinks the WIDEST column until the row fits. On a table of small
+ * fixed columns that is right - it costs a description its tail and keeps the
+ * table one row tall. On a label/value row it is exactly wrong, because the
+ * widest column is the one carrying the VALUE:
+ *
+ *   ctop     `Bytes:   2,020,282,473`   narrowed to   `Bytes: 2,020,282>`
+ *   ctop     `Top Uploader Last Period: NONE`   narrowed to   `Top Uploader Last Per>`
+ *   SysInfo  `Init Baud is: 115200 Baud`  narrowed to  `Init Baud is: >`
+ *   SysInfo  `Sysop Status: Busy at the Moment!`  narrowed to  `Sysop Status: B>`
+ *
+ * `2,020,282>` is not a shortened number, it is a DIFFERENT number, and the
+ * others are values deleted outright. An abbreviated label is still readable; a
+ * truncated value is simply wrong. So this rung never shortens anything: it
+ * PACKS the row's columns onto as many 40-column rows as they need, one blank
+ * between columns, and never splits a column across a row boundary. A column's
+ * own internal padding collapses to one blank, which is the same thing `narrow`
+ * and `gutter` already do and the only thing this rung drops.
+ *
+ * WHY PACKING RATHER THAN ABBREVIATING THE LABEL IN PLACE: the label of
+ * `2,020,282,473 Files:` is `Files:` and it sits AFTER its own number, while
+ * the label of `Top Uploader Last Period: NONE` sits before it, and `ctop`
+ * paints both shapes in the same row. Deciding which side of a column is the
+ * label needs the door's intent; deciding that a column must not be cut in half
+ * needs only its boundaries, which `columnSpans` already knows. The weaker
+ * decision is the one that always holds, so it is the one the rung is built on.
+ *
+ * A column that is NOTHING BUT A LABEL (`Bytes:`) is bound to the column after
+ * it, because on its own it says nothing: `ctop` pads `Bytes:` and its number
+ * into separate columns and packing them separately stranded `Bytes:` at the
+ * end of one row with its `0` at the start of the next. The binding is dropped
+ * the moment the bound group would not fit a row, so it can never create a
+ * group the rung then has to cut.
+ *
+ * DECLINES (returns null), and the caller falls through to `narrow`, when:
+ *
+ * - the columns joined by single blanks already FIT. `narrow` then shortens
+ *   nothing and keeps the row one row tall, which is strictly better.
+ * - there are fewer than two columns. One column is not a row of fields; it is
+ *   prose or a banner, and `reflow`/`deindent` own it.
+ * - NO column is a label (`isLabelSpan`). This is the guard that keeps the
+ *   rung off tables: `ulist`'s ten user rows, `who`'s node rows and `ustats`'
+ *   file listings carry no colon-labelled column, and a table packed
+ *   column-by-column stops being a table - its rows stop lining up, which is
+ *   the whole reason `narrow` exists.
+ * - ONE COLUMN IS WIDER THAN THE SCREEN. This is the honest-degradation case:
+ *   the rung cannot place that column without cutting it, and cutting it
+ *   silently is the defect it exists to remove. It declines instead, `narrow`
+ *   takes the row, and the reader sees the truncation mark '>' - a visible
+ *   statement that something was cut, in the one case where nothing else is
+ *   possible at 40 columns.
+ */
+export function statRow(cells: Row, cols: number): RuleResult | null {
+  const spans = columnSpans(cells);
+  if (spans.length < 2) return null;
+  // Each column as the source indices it KEEPS: a run of blanks inside a
+  // column collapses to its first cell, the same squeeze `gutter` applies.
+  const kept = spans.map(([a, b]) => {
+    const keep: number[] = [];
+    for (let x = a; x < b; x++) {
+      if (isBlank(cells[x]) && x > a && isBlank(cells[x - 1])) continue;
+      keep.push(x);
+    }
+    return keep;
+  });
+  const widths = kept.map((k) => k.length);
+  if (widths.reduce((n, w) => n + w, 0) + (widths.length - 1) <= cols) return null;
+  if (!spans.some((span) => isLabelSpan(cells, span))) return null;
+  if (widths.some((w) => w > cols)) return null;
+
+  // A column that is NOTHING BUT A LABEL means nothing on its own, so it is
+  // bound to the column after it and the two are placed together or not at
+  // all. `ctop` pads `Bytes:` and its number into separate columns, and
+  // packing them separately stranded `Bytes:` at the end of one row with its
+  // `0` at the start of the next. Binding stops as soon as the bound group
+  // would not fit a row, so no group is ever wider than the screen.
+  const units: number[][] = [];
+  for (let i = 0; i < spans.length; i++) {
+    const last = units[units.length - 1];
+    const bound = last !== undefined
+      && danglingLabel(cells, spans[last[last.length - 1]])
+      && unitWidth(last, widths) + 1 + widths[i] <= cols;
+    if (bound) last.push(i);
+    else units.push([i]);
+  }
+
+  const rows: Cell[][] = [];
+  const where: Array<RuleCursor | undefined> = new Array(cells.length);
+  let line: Cell[] = [];
+  for (const unit of units) {
+    if (line.length > 0 && line.length + 1 + unitWidth(unit, widths) > cols) { rows.push(line); line = []; }
+    for (const i of unit) {
+      if (line.length > 0) line.push(blankCell());
+      let x = spans[i][0];
+      for (const source of kept[i]) {
+        const at: RuleCursor = { row: rows.length, x: clampCol(cols, line.length) };
+        // every source cell up to and including this one - i.e. the blanks a
+        // collapsed run dropped - answers with the cell that stands for them
+        for (; x <= source; x++) where[x] = at;
+        line.push(cloneCell(cells[source]));
+      }
+    }
+  }
+  if (line.length > 0) rows.push(line);
+
+  // Total map over 0..cells.length-1: the indent, the gutters and the trailing
+  // blanks land at the last position a real column reached (or at the very
+  // start, before the first one).
+  let previous: RuleCursor = { row: 0, x: 0 };
+  for (let k = 0; k < where.length; k++) {
+    if (where[k]) previous = where[k] as RuleCursor;
+    else where[k] = previous;
+  }
+
+  return {
+    rows: rows.map((r) => padRow(r, cols)),
+    applied: 'stat',
+    map: (x) => where[clampIndex(cells, x)] as RuleCursor,
+  };
+}
+
 export function applyRule(rule: AdaptRule, cells: Row, cols: number): RuleResult {
   switch (rule) {
     case 'crop': return cropRow(cells, cols);
@@ -665,6 +821,9 @@ export function applyRule(rule: AdaptRule, cells: Row, cols: number): RuleResult
     // A pinned 'record' on a row that is not one falls through to the rule the
     // row would have had without the pin.
     case 'record': return recordRow(cells, cols) ?? applyRule(classifiedRule(cells), cells, cols);
+    // A pinned 'stat' on a row it declines falls through to the rung that owns
+    // columnar rows, exactly as a pinned 'repeat' does.
+    case 'stat': return statRow(cells, cols) ?? applyRule('narrow', cells, cols);
     case 'gutter': return gutterRow(cells, cols);
     case 'reflow': return reflowRow(cells, cols);
     case 'split': return splitRow(cells, cols);

@@ -156,6 +156,32 @@ function narrowKeepsColumns(parts: string[], out: string): boolean {
   return walk(0, out);
 }
 
+/**
+ * `stat`'s invariant, checked without re-implementing the rule: the produced
+ * rows are the source columns, in order, whole, joined by exactly one space,
+ * and NO column is split across a row boundary. Each column's own internal runs
+ * of blanks collapse to one - the same squeeze `narrow` and `gutter` apply, and
+ * the only thing this rung drops.
+ *
+ * The walk is greedy and needs no backtracking: a row is a maximal run of whole
+ * columns, so the first column that does not fit the row's remaining text is
+ * the first column of the next row.
+ */
+function statKeepsColumns(parts: string[], lines: string[]): boolean {
+  let i = 0;
+  for (const line of lines) {
+    let built = '';
+    while (i < parts.length) {
+      const next = built.length === 0 ? parts[i] : `${built} ${parts[i]}`;
+      if (next.length > line.length) break;
+      built = next;
+      i++;
+    }
+    if (built !== line) return false;
+  }
+  return i === parts.length;
+}
+
 for (const [id, entry] of Object.entries(manifest)) {
   describe(`fixture ${id} (${entry.binary})`, () => {
     const raw = fs.readFileSync(fixtureFile(id, entry));
@@ -271,6 +297,16 @@ for (const [id, entry] of Object.entries(manifest)) {
             // Lossless: one row, and only LEADING blanks are gone.
             expect({ ...where, rows: out.length }).toEqual({ ...where, rows: 1 });
             expect({ ...where, kept: text(joined).trimEnd() }).toEqual({ ...where, kept: text(src).trim() });
+          } else if (rule === 'stat') {
+            // Every column whole, in order, none split across a row boundary.
+            // `stat` reaches `columnSpans` the same way `narrow` does, so like
+            // narrow it drops a bordered row's outer '|' cells and each
+            // column's internal padding - and NOTHING else, which is the whole
+            // reason the rung exists.
+            const parts = columnParts(src).map((p) => text(p as ReadonlyArray<Cell>).replace(/ {2,}/g, ' '));
+            expect({ ...where, columns: parts.length >= 2 }).toEqual({ ...where, columns: true });
+            expect({ ...where, kept: statKeepsColumns(parts, out.map((r) => text(r.cells).trimEnd())) })
+              .toEqual({ ...where, kept: true });
           } else if (rule === 'narrow') {
             // One row; every column still there, in order; each output column
             // is its source column's trimmed text, or a non-empty prefix of it
@@ -385,7 +421,14 @@ const EXPECTED_ROWS: Record<string, number> = {
   // (`mrcstat1` and `chat` need no reduction at all); the three that come out
   // over 25 do so by REFLOW, not by losing anything - `wall`'s comment stream
   // simply occupies more rows at 40 than at 80.
-  size: 26,
+  // `size` 26 -> 28 on 2026-09-06 with the `stat` rung. Its two Directory rows
+  // are `Label: value` rows and `narrow` was shortening the values on them -
+  // `Directory 2: > 650450 Bytes > 104 Files.` had lost the word `in` and
+  // `Directory 1: Loa>` most of its progress text. Each row is now two rows and
+  // complete. The door paints 11 rows at 40 columns, so the 17 blank rows in
+  // this count never reach a caller: the adapter's window is measured against
+  // the PAINTED height (c64-door-adapter.ts `adapted()`), and 11 < 25.
+  size: 28,
   ulist: 26,
   // RE-PINNED 2026-09-06 with the `record` rung, DOWNWARDS, and that direction
   // is the point: `wall` 40 -> 33 and `dtagwall` 29 -> 25. Both doors write a

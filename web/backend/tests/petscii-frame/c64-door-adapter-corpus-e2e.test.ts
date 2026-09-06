@@ -365,6 +365,30 @@ const squeeze = (s: string) => s.replace(/\s+/g, '');
  * imported because that file is a test module (importing it would re-run its
  * 60-odd cases inside this suite).
  */
+/**
+ * `stat`'s invariant, checked without re-implementing the rule: the produced
+ * rows are the source columns, in order, whole, joined by exactly one space,
+ * and NO column is split across a row boundary. Each column's own internal runs
+ * of blanks collapse to one - the same squeeze `narrow` and `gutter` apply.
+ *
+ * Same walker as sdk/tests/petscii/frame/corpus.test.ts, copied for the same
+ * reason as `narrowKeepsColumns` below it.
+ */
+function statKeepsColumns(parts: string[], lines: string[]): boolean {
+  let i = 0;
+  for (const line of lines) {
+    let built = '';
+    while (i < parts.length) {
+      const next = built.length === 0 ? parts[i] : `${built} ${parts[i]}`;
+      if (next.length > line.length) break;
+      built = next;
+      i++;
+    }
+    if (built !== line) return false;
+  }
+  return i === parts.length;
+}
+
 function narrowKeepsColumns(parts: string[], out: string): boolean {
   const walk = (i: number, s: string): boolean => {
     if (i === parts.length) return s.length === 0;
@@ -408,6 +432,12 @@ function ruleViolations(frame: Frame): Array<Record<string, unknown>> {
     } else if (rule === 'deindent') {
       if (out.length !== 1) bad.push({ ...where, why: 'deindent produced more than one row' });
       if (cellText(joined).trimEnd() !== cellText(src).trim()) bad.push({ ...where, why: 'deindent lost more than leading blanks' });
+    } else if (rule === 'stat') {
+      const parts = columnParts(src).map((p) => cellText(p as ReadonlyArray<Cell>).replace(/ {2,}/g, ' '));
+      if (parts.length < 2) bad.push({ ...where, why: 'stat on a row with fewer than two columns' });
+      if (!statKeepsColumns(parts, out.map((r) => cellText(r.cells).trimEnd()))) {
+        bad.push({ ...where, why: 'stat split or dropped a column', parts });
+      }
     } else if (rule === 'narrow') {
       if (out.length !== 1) bad.push({ ...where, why: 'narrow produced more than one row' });
       const parts = columnParts(src).map((p) => cellText(p as ReadonlyArray<Cell>));

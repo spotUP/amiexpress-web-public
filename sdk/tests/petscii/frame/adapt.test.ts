@@ -1,4 +1,4 @@
-import { adaptFrame, adaptRows, chooseRule, cropRow, gutterRow, reflowRow, splitRow, deindentRow, narrowRow, repeatRow, recordFields, isCroppable, applyRule, TRUNCATION_MARK, AdaptRule } from '../../../petscii/frame/adapt';
+import { adaptFrame, adaptRows, chooseRule, cropRow, gutterRow, reflowRow, splitRow, deindentRow, narrowRow, repeatRow, recordFields, statRow, isCroppable, applyRule, TRUNCATION_MARK, AdaptRule } from '../../../petscii/frame/adapt';
 import { textToFrame, makeFrame, frameText, Cell } from '../../../petscii/frame/types';
 import { contentWidth, columnParts } from '../../../petscii/frame/classify';
 import { wrapLineToWidth } from '../../../petscii/wrap';
@@ -739,6 +739,85 @@ describe('record', () => {
  * Named after the sysop's second report (2026-09-06), where dRE!WAll's STYLE.1
  * reached a C64 as `Dre> Dre!> Dre!> Dre!> Dre!> Dre!> Dre!>`.
  */
+describe('stat', () => {
+  it('a byte count is not truncated into a wrong number', () => {
+    // ctop's record row, its own bytes: `Top Uploader Record` and `: DeaTure`
+    // and `Bytes:` and `2,020,282,473 Files:` and `61`, five columns the door
+    // padded apart. `narrow` shrank the widest of them until the row fit and
+    // the caller read `Top Uplo> : DeaTure Bytes: 2,020,282> 61`.
+    // `2,020,282>` is not a shortened number. It is a DIFFERENT number.
+    const stat = row('Top Uploader Record     : DeaTure          Bytes:   2,020,282,473 Files:   61');
+    expect(chooseRule(stat, 40)).toBe('stat');
+    expect(applyRule('stat', stat, 40).rows.map(str)).toEqual([
+      'Top Uploader Record : DeaTure',
+      'Bytes: 2,020,282,473 Files: 61',
+    ]);
+  });
+
+  it('a value is never shortened, only the row is made taller', () => {
+    // SysInfo's node row, inside its box: three fields across 78 columns.
+    // `narrow` reached the caller as `Port #0 Init Baud is: > Sysop Status: B>`
+    // - the baud rate deleted outright and the status cut to one letter.
+    const node = row('| Port #0  || Init Baud is: 115200 Baud || Sysop Status: Busy at the Moment! ||');
+    expect(chooseRule(node, 40)).toBe('stat');
+    expect(applyRule('stat', node, 40).rows.map(str)).toEqual([
+      'Port #0 Init Baud is: 115200 Baud',
+      'Sysop Status: Busy at the Moment!',
+    ]);
+  });
+
+  it('a label with its value in the next column travels with it', () => {
+    // ctop pads `Bytes:` and its number into separate columns. Packed
+    // separately, `Bytes:` was stranded at the end of one row with its `0` at
+    // the start of the next.
+    const totals = row('Top Uploader Last Period: NONE             Bytes:               0 Files:    0');
+    const out = applyRule('stat', totals, 40).rows.map(str);
+    expect(out).toEqual(['Top Uploader Last Period: NONE', 'Bytes: 0 Files: 0']);
+    expect(out.some((line) => line.endsWith('Bytes:'))).toBe(false);
+  });
+
+  it('a table has no labels, so it stays with narrow and stays a table', () => {
+    // `who`'s data row shape: columns of atoms, no colon anywhere. Packing a
+    // table column by column stops it lining up with the header above it,
+    // which is the whole reason `narrow` exists.
+    const table = row('  12/34       SomeUser              +44 1234 567890        Uploading a file');
+    expect(statRow(table, 40)).toBeNull();
+    expect(chooseRule(table, 40)).toBe('narrow');
+  });
+
+  it('a row that narrow can fit without shortening anything stays one row', () => {
+    // Two columns of 15 and a wide gutter: `narrow` joins them with one space,
+    // truncates nothing, and one row beats two.
+    const roomy = row('Sysop Name...: X'.padEnd(50, ' ') + 'Chat Flag: OFF');
+    expect(statRow(roomy, 40)).toBeNull();
+    expect(chooseRule(roomy, 40)).not.toBe('stat');
+  });
+
+  it('a column wider than the screen makes the rung decline, and the caller sees the truncation mark', () => {
+    // The honest-degradation case. The rung cannot place a 45-column field on a
+    // 40-column row without cutting it, and cutting it silently is the defect
+    // it exists to remove - so it declines, `narrow` takes the row, and '>'
+    // tells the reader that something was cut.
+    const huge = row('Status: ' + 'x'.repeat(45) + '   Node: 1   Line: 2');
+    expect(statRow(huge, 40)).toBeNull();
+    expect(chooseRule(huge, 40)).toBe('narrow');
+    expect(str(applyRule('narrow', huge, 40).rows[0])).toContain(TRUNCATION_MARK);
+  });
+
+  it('a pinned stat on a row it declines falls through to narrow', () => {
+    expect(applyRule('stat', row(PROSE), 40).applied).not.toBe('stat');
+  });
+
+  it('the cursor follows its source column onto the row its column landed on', () => {
+    const node = row('| Port #0  || Init Baud is: 115200 Baud || Sysop Status: Busy at the Moment! ||');
+    const out = applyRule('stat', node, 40);
+    // the 'B' of "Busy" must land on the SECOND row, after its own label
+    const b = str(node).indexOf('Busy');
+    expect(node[b].ch).toBe('B');
+    expect(out.map(b)).toEqual({ row: 1, x: 'Sysop Status: '.length });
+  });
+});
+
 describe('repeat', () => {
   const TAGS = '| Dre!Wall | Dre!Wall | Dre!Wall | Dre!Wall | Dre!Wall | Dre!Wall | Dre!Wall |';
 

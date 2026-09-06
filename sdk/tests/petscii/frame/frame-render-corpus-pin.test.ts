@@ -60,6 +60,13 @@ interface Pin {
  * characters, never lose them (`what` keeps its byte count, `kd_confstats`
  * keeps `AmiExpress-Web` instead of `Ami>`). The other 16 hashes are untouched.
  *
+ * THREE were re-measured again with the `stat` rung (also 2026-09-06):
+ * `kd_confstats`, `super_stats` and `size`. Same rule, same order - measured
+ * first, and exactly these three have a row that changes rule. Every changed
+ * row is a `Label: value` row whose VALUE `narrow` was shortening
+ * (`Kickstart.......: 3>`, `Sysop Name...: Sys>`, `Directory 2: > 650450 Bytes
+ * >`); each is now two complete rows. The other 20 hashes are untouched.
+ *
  * `wall` and `dtagwall` were RE-MEASURED on 2026-09-06, and this is the one
  * kind of re-measurement the rule above allows: the ladder gained a rung
  * (`record`, adapt.ts), so the FRAMES changed by design and renderDiff faithfully
@@ -75,11 +82,11 @@ interface Pin {
 const PINS: Record<string, Pin> = {
   aehelp: { renders: 21, bytes: 11883, sha256: 'af1abce9f143fff0ac3f81bab2f8ace2e3185fa24c2a417bf5c1b2ff3204d659' },
   six_status: { renders: 23, bytes: 18434, sha256: 'ea04de48389e1bd1f2975bcc2bf7d0153b458f765c8e4f3811cd5774a593896e' },
-  kd_confstats: { renders: 29, bytes: 16549, sha256: '0c0288199c99c149bfceaf91384f1344b8280850b5c02f9e8a21d17fc8bbca6f' },
+  kd_confstats: { renders: 29, bytes: 22316, sha256: '2a60c0a460f823a945c8ebf5fd24365393fa1208b35347ce5e100351db9b996a' },
   color_wall: { renders: 30, bytes: 9794, sha256: '5b27f9935589cdb32a342773deeea015bc24028ca9d02e9d3fc689277982322c' },
   who: { renders: 6, bytes: 906, sha256: '49802e5fc0cae0a1723e418fa4197b82665e23e1bb2e16875b54580837d90cc8' },
   ratiorep: { renders: 10, bytes: 2910, sha256: '53db616b0045b7afdfe5ecb247ccfd64663b1ca600c54548d49c524c498a0cc8' },
-  super_stats: { renders: 21, bytes: 7076, sha256: '4537ebb7b949ce0b9517bfa1465a4d6b47756725dc4c137c0b9bcf5e92e5b6ef' },
+  super_stats: { renders: 21, bytes: 10337, sha256: 'b3368ae37580cbbeafa51b64b6d8f2685c13a295aaaed3afc4e2c56c4a71915e' },
   hststat: { renders: 12, bytes: 2484, sha256: '0746281e3871a50468228989d86b0ca69dbea5b7c3c9faaa90bb9d4a60485b2c' },
   rtw: { renders: 69, bytes: 142674, sha256: '39f110f486baab98efc7d167259390520dcd730f4fbe5a7f26b645d61014071c' },
   ustats: { renders: 217, bytes: 289249, sha256: 'b949a6d27a116714e7f0d9de40d025f0fbe7df10a701629cea416d45a23df28a' },
@@ -87,7 +94,7 @@ const PINS: Record<string, Pin> = {
   b: { renders: 17, bytes: 10269, sha256: '1914422b391657000fde0ad5e71e69d37b7d89704c92e2b88d73834d26ff5eeb' },
   j: { renders: 39, bytes: 7195, sha256: 'aa3db3f50277a2eb56a0cfc3a230847c9ae9eefd679bcda0cc4ab8dba5772bd8' },
   doorrepo: { renders: 22, bytes: 12062, sha256: '5b563469b13ca9e76856a621d5aca463e4f5e7217db4da94049a864db4d7375a' },
-  size: { renders: 9, bytes: 1837, sha256: '48b7306611e685a35602657f982250fe6386cd1ae7cd4fd5c8d8a1fdae854313' },
+  size: { renders: 9, bytes: 2743, sha256: '5ffebb7e61299e0d9fb9f4a393ffd1265ea3f5ccd5c377f6ede9600cd47f91a0' },
   ulist: { renders: 22, bytes: 6297, sha256: '509706f398c52cefa712d390ef03b4002318a798e475e098f150e40213c39eb1' },
   wall: { renders: 3, bytes: 4782, sha256: '9d880fb46142bd6d40283592e90836b25ef3caa679174c54fcf12cd36a0f0624' },
   chat: { renders: 49, bytes: 37701, sha256: '94ce198cd0f6fc7edf28d9e78610e631b9583e4620a5220a3ee932ddd7892bea' },
