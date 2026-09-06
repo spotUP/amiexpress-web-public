@@ -359,6 +359,16 @@ export interface BBSSession {
   // tight loop between input prompts can still be killed by the user.
   scriptAbortHandler?: (() => void) | null;
   clientDoorActive?: boolean; // Client (browser) door session active; suppress command handler input
+  /**
+   * WHICH client door is running, so a reconnect can be told.
+   *
+   * A phone that locks its screen drops the socket; the session survives the
+   * grace period and the door keeps running, but the browser clears the door
+   * it thought was up and nothing ever tells it again - the player is left on
+   * the generic BBS keyboard for the rest of the door. The restore path
+   * re-announces this (`door:active-client`).
+   */
+  clientDoorId?: string;
   doorKeyStateHandler?:
     | ((data: {
         key: string;

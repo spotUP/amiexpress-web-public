@@ -222,6 +222,22 @@ console.error('[Session Restore] Failed to load command history:', err);
         const ansiBuffer = getAnsiBuffer(socket);
         ansiBuffer.setFlushDelay(userBaud > 0 ? 0 : 16);
 
+        // The door the browser was in, if it is still running.
+        //
+        // A phone that locks its screen drops the socket, and the session
+        // survives the 3 s grace period with its door intact - but the
+        // browser clears the door it thought was up the moment it reconnects
+        // (BBSTerminal, 'socket connected'), and door:load-client never comes
+        // again because the bundle is already loaded. Without this the player
+        // is left on the generic BBS keyboard, with no pad and no gestures,
+        // for the rest of the door. Re-announcing the id costs no bundle
+        // fetch and no second client instance.
+        if ((existingSession as any).clientDoorActive && (existingSession as any).clientDoorId) {
+          socket.emit('door:active-client', {
+            doorId: (existingSession as any).clientDoorId,
+          });
+        }
+
         // Notify client of successful restoration
         socket.emit('session-restored', {
           user: {

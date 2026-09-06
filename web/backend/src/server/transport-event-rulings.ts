@@ -903,6 +903,18 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "connection (transportState.inputMode), the same field set-input-mode " +
     "writes - one question, one answer. TP-8's input pipeline reads it.",
   },
+  "door:active-client": {
+    kind: "web-only",
+    note:
+    "WHICH client door is already running, re-announced to a browser that " +
+    "reconnected into a restored session. Emitted at " +
+    "server/auth-socket-handlers.ts (restore-session); consumer " +
+    "packages/terminal/src/components/BBSTerminal.tsx. It carries no bundle " +
+    "URL and starts nothing - door:load-client did that before the drop - so " +
+    "a byte transport losing it loses only the browser's on-screen controls, " +
+    "which that caller does not have. The browser needs it because it clears " +
+    "its active door on every connect and the load event never repeats.",
+  },
   "door:load-client": {
     kind: "web-only",
     note:

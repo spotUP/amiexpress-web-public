@@ -506,6 +506,7 @@ console.log(`[ClientDoorBridge] Ending session ${sessionId}`);
     // Clear BBS session flag and reset menu input mode
     delete session.bbsSession.inDoorManager;
     delete session.bbsSession.clientDoorActive;
+    delete session.bbsSession.clientDoorId;
     delete session.bbsSession.doorInputHandler;
     // Disable mouse events when door exits
     session.bbsSession.mouseEventsEnabled = false;

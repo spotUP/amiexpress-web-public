@@ -2617,6 +2617,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     };
     window.addEventListener('mousemove', gameWindowMouseMove);
 
+    // A reconnect into a restored session: the door never stopped, but this
+    // client cleared its id when the socket came up. No bundle, no second
+    // instance - just the id back, so the pad and the gestures return.
+    socket.on('door:active-client', (data: { doorId?: string }) => {
+      if (data?.doorId) setActiveClientDoor(data.doorId, 'session restored');
+    });
+
     socket.on('game-mode', (enabled: boolean) => {
       gameMode.current = enabled;
       if (!enabled) {

@@ -120,6 +120,7 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'door:exit',
   'door:input',
   'door:input-mode',
+  'door:active-client',
   'door:load-client',
   'door:output',
   'door:password-mode',
@@ -551,7 +552,11 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     expect({ invented }).toEqual({ invented: [] });
 
     expect(ruled).toEqual(pinned);
-    expect(ruled.length).toBe(245);
+    // 246: `door:active-client` joined on 2026-09-06 - the restore path
+    // re-announcing the running client door to a browser that reconnected,
+    // because door:load-client never repeats and the browser clears its
+    // active door on every connect.
+    expect(ruled.length).toBe(246);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -586,11 +591,14 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // Then `cursor-visibility` went away again with the helper that was its
     // only emit site (utils/terminal-utils.ts setCursorVisible, which nothing
     // called): web-only 116 -> 115, total 246 -> 245.
+    // web-only 116 again: `door:active-client` (2026-09-06), the reconnect's
+    // re-announcement of the running client door - a browser-only concern by
+    // construction, since a byte caller has no on-screen controls to restore.
     expect(counts).toEqual({
       render: 5,
       translate: 11,
       dead: 10,
-      'web-only': 115,
+      'web-only': 116,
       'not-transport': 104,
     });
   });
@@ -625,7 +633,7 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // only site that emitted it and nothing in the tree called setCursorVisible
     // - so the helper was deleted rather than left asserting behaviour no code
     // performs, and the name left arm A with it. Union 246 -> 245.
-    expect(fromA.length).toBe(153);
+    expect(fromA.length).toBe(154);
     // 86 from sdk/, 14 from Doors/, `ansi-output` in both. The plan records the
     // Doors arm as 0; that was a zsh `nomatch` artefact and the module header
     // records the correction.

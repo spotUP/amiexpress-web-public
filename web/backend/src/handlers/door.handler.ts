@@ -2488,6 +2488,7 @@ console.log(`[executeTypeScriptDoor] Door completed successfully`);
     session.inDoorManager = false;
     session.mouseEventsEnabled = false; // Reset mouse events when door exits
     session.clientDoorActive = false; // Reset for hybrid doors (set by executeClientDoor)
+    delete session.clientDoorId;
     delete session.doorInputHandler;
     delete session.bbsApi;
     // CRITICAL: Reset subState IMMEDIATELY - this prevents input from being swallowed
@@ -2608,6 +2609,7 @@ console.warn('[executeTypeScriptDoor] Failed to wait for key after error:', err)
     session.inDoorManager = false;
     session.mouseEventsEnabled = false;
     session.clientDoorActive = false; // Reset for hybrid doors
+    delete session.clientDoorId;
     delete session.doorInputHandler;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     session.menuPause = false;
@@ -4551,6 +4553,7 @@ console.log(`[executeClientDoor] Starting client door: ${door.name}`);
     session.inDoorManager = true;
 console.log(`[executeClientDoor] Set inDoorManager=true for session`);
     session.clientDoorActive = true;
+    session.clientDoorId = door.id;
 
     // Disable modem speed throttling for client doors (they need full speed)
     const { getModemEmulator: getClientModemEmulator } = require('../utils/modem-emulator.util');
