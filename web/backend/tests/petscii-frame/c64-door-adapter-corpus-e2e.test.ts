@@ -155,6 +155,10 @@ const SIGNATURES: Record<string, Signature> = {
   dtagwall: { door: 'What color do you want on your line?' },
   avhbc: { door: 'Van Helsing' },
   hackcheck: { door: 'Digits:' },
+  // Marked 2026-09-06. The signature is a wall COMMENT and its AUTHOR - the
+  // part of the screen the mark is a promise about, and the exact pair the
+  // `record` rung's relaxed right-field guard exists for.
+  gwall: { door: 'Right on, great door archive!' },
 };
 
 // ---------------------------------------------------------------- sessions

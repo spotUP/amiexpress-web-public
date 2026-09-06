@@ -349,5 +349,20 @@
     "cwd": "web/backend",
     "installed": "HACKCHECK",
     "notes": "DD HaCkChecK: reverse-video rules, a centred title and a 52-column question that reflows over two rows. Zero cropped cells, zero truncations. It spells ENTER and FOUR with the registered-trademark glyph, which used to reach a C64 as '?'; since the Topaz fold table (2026-09-06) it folds to 'R', which is what the door author was typing. Marked C64_ADAPT=40 on 2026-09-03."
+  },
+  "gwall": {
+    "binary": "Doors/GWall/GWall",
+    "command": "GWALL",
+    "script": [
+      "4000 \\r",
+      "8000 \\r",
+      "12000 q\\r"
+    ],
+    "bytes": 1840,
+    "sha256": "085cd26c25fdcda85e1e5e3b38dcb6bacea47d6a256e9ad233dd8ba87a2ccfd8",
+    "harness": "printf '%s\\n' '4000 \\r' '8000 \\r' '12000 q\\r' | env BBS_DATA_DIR=$REPO npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/GWall/GWall 1 --doortype XIM --command GWALL --timeout 25 > gwall.ans",
+    "cwd": "web/backend",
+    "installed": "GWALL",
+    "notes": "Global Thermonuclear Wall: eleven comments, each a message in a 61-column field with the author and the board's acronym at column 61. Every comment and every author survives at 40, two-word handles (-Karyn Roberts, -David Bowman) included; the ONE narrow mark is the footer rule, which carries the door's credits and the [K sHOWS bBS kEY] legend. Zero unmapped glyphs on the KERNAL oracle. Marked C64_ADAPT=40 on 2026-09-06."
   }
 }

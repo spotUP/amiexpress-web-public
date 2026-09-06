@@ -108,6 +108,8 @@ const PINS: Record<string, Pin> = {
   pager5d: { renders: 18, bytes: 1417, sha256: '7ed6b3f50c15a12f54cf79540cb718ac54286baa7664b576cc23e7ec3de0e92e' },
   dtagwall: { renders: 26, bytes: 6112, sha256: 'cf637615bc8d5935c8a9a56a3a9e1251c1c164bc20c836c105589f6265183a34' },
   avhbc: { renders: 6, bytes: 373, sha256: 'f83aad48906dfa640bfe4372866394b973c5ce94bab6cec9d7815865423ea0c6' },
+  // First measurement of a new input, frozen from here on under the rule above.
+  gwall: { renders: 22, bytes: 9861, sha256: 'ae048300a9c9ca568e8ede698bee2da27b0b28797ff3524370953332829132bc' },
   hackcheck: { renders: 12, bytes: 1624, sha256: 'aa25e1dfa09db75b8b854410bc0e0831f89741e4c777805ac0f64e264cdecc3a' },
 };
 

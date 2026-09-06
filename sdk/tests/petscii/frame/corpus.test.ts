@@ -467,6 +467,16 @@ const EXPECTED_ROWS: Record<string, number> = {
   dtagwall: 25,
   avhbc: 25,
   hackcheck: 26,
+  // Marked 2026-09-06, after the `record`, `stat` and `prose` rungs.
+  //
+  // `gwall` at 30: eleven wall comments, each a message padded into a
+  // 61-column field with `-<handle>|<bbs>` behind it. Every comment and every
+  // author reaches a 40-column caller - the two-word handles `-Karyn Roberts`
+  // and `-David Bowman` are the reason the `record` rung's right-field guard
+  // came off - and the three long comments cost a second row each. 26 of the 30
+  // rows are painted, so the adapter's window shows the wall and pages once for
+  // the door's own exit line.
+  gwall: 30,
 };
 
 function lastFrameOf(id: string): Frame {
