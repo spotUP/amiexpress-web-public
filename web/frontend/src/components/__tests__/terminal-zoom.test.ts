@@ -18,6 +18,8 @@ import {
   ZOOM_PRESETS,
   ZOOM_STORAGE_KEY,
   clampFraction,
+  pinchZoom,
+  pinchDistance,
   cornerAt,
   cursorForCorner,
   dragZoom,
@@ -334,5 +336,43 @@ describe('a P session keeps its override', () => {
     expect(() => writeStoredZoom(0.5)).not.toThrow();
     getItem.mockRestore();
     setItem.mockRestore();
+  });
+});
+
+/**
+ * A PINCH ZOOMS THE TERMINAL, NOT THE PAGE.
+ *
+ * The browser's own pinch scales everything, and the on-screen keyboard is
+ * `position: fixed` - anchored to the LAYOUT viewport - so a pinch slides the
+ * keys off the screen entirely ("zooming on phones zooms the keyboard away",
+ * 2026-09-06). The terminal's zoom is a font size and touches nothing else, so
+ * the gesture drives that instead and the keyboard cannot move.
+ */
+describe('pinch zoom', () => {
+  it('is 1:1 with the fingers', () => {
+    // Fingers half as far apart: half the screen.
+    expect(pinchZoom(FIT_TO_WINDOW, 0.5)).toBeCloseTo(0.5, 5);
+    // A quarter of the way apart, from an already reduced screen.
+    expect(pinchZoom(0.8, 0.5)).toBeCloseTo(0.4, 5);
+  });
+
+  it('spreads back towards the fit and stops there', () => {
+    expect(pinchZoom(0.5, 4)).toBe(MAX_ZOOM_FRACTION);
+    expect(pinchZoom(FIT_TO_WINDOW, 2)).toBe(FIT_TO_WINDOW);
+  });
+
+  it('never shrinks past the floor', () => {
+    expect(pinchZoom(FIT_TO_WINDOW, 0.001)).toBe(MIN_ZOOM_FRACTION);
+  });
+
+  it('survives a nonsense ratio without moving the screen', () => {
+    expect(pinchZoom(0.75, 0)).toBeCloseTo(0.75, 5);
+    expect(pinchZoom(0.75, -1)).toBeCloseTo(0.75, 5);
+    expect(pinchZoom(0.75, Number.NaN)).toBeCloseTo(0.75, 5);
+  });
+
+  it('measures the distance between two fingers', () => {
+    expect(pinchDistance({ clientX: 0, clientY: 0 }, { clientX: 3, clientY: 4 })).toBe(5);
+    expect(pinchDistance({ clientX: 10, clientY: 10 }, { clientX: 10, clientY: 10 })).toBe(0);
   });
 });

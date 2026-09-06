@@ -14,6 +14,7 @@ import { describe, it, expect } from 'vitest';
 import {
   fitFontSize,
   visibleHeight,
+  visibleTop,
   visibleWidth,
   BBS_COLS,
   BBS_ROWS,
@@ -148,6 +149,52 @@ describe('the height the terminal may use', () => {
     const view = { innerHeight: 844, innerWidth: 390, visualViewport: { height: 420, width: 390 } };
 
     expect(visibleHeight(view)).toBe(420);
+  });
+
+  /**
+   * A browser that OVERLAYS its chrome pushes the visible band down instead of
+   * shrinking it. Content drawn from the top of the layout viewport then sits
+   * underneath the bar - which is why one Android tester lost the top of the
+   * screen on 2026-09-06 while others, on different browsers, did not.
+   */
+  it('reports where the visible band starts when the browser overlays its chrome', () => {
+    const view = {
+      innerHeight: 844,
+      innerWidth: 390,
+      visualViewport: { height: 750, width: 390, offsetTop: 94 },
+    };
+
+    expect(visibleTop(view)).toBe(94);
+  });
+
+  it('is zero on a browser that insets its chrome, so those phones do not move', () => {
+    const inset = {
+      innerHeight: 844, innerWidth: 390,
+      visualViewport: { height: 750, width: 390, offsetTop: 0 },
+    };
+    const unsupported = { innerHeight: 844, innerWidth: 390, visualViewport: null };
+    const missing = {
+      innerHeight: 844, innerWidth: 390,
+      visualViewport: { height: 750, width: 390 },
+    };
+
+    expect(visibleTop(inset)).toBe(0);
+    expect(visibleTop(unsupported)).toBe(0);
+    expect(visibleTop(missing)).toBe(0);
+  });
+
+  it('never takes away more than the screen', () => {
+    const nonsense = {
+      innerHeight: 844, innerWidth: 390,
+      visualViewport: { height: 750, width: 390, offsetTop: 5000 },
+    };
+    const negative = {
+      innerHeight: 844, innerWidth: 390,
+      visualViewport: { height: 750, width: 390, offsetTop: -20 },
+    };
+
+    expect(visibleTop(nonsense)).toBe(844);
+    expect(visibleTop(negative)).toBe(0);
   });
 
   it('falls back to the layout viewport where visualViewport is unsupported', () => {

@@ -11,6 +11,12 @@ import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
 import { getSystemTime } from '../../utils/date-time.util';
 
 import type { BBSSession } from '../../index';
+import {
+  emitterForSession,
+  emitterForUserId,
+  socketIoSocketFor,
+  type SessionEmitter,
+} from '../../server/session-emitter-registry';
 // Session type
 
 // Dependencies (injected)
@@ -181,8 +187,12 @@ console.log('✅ [CHAT] Confirmation displayed in initiator terminal');
     // Send invite to target user via terminal output
 console.log('📤 [CHAT] Sending invite to target:', targetSocketId);
 
-    // Display invitation in recipient's terminal with Y/n prompt
-    io.to(targetSocketId!).emit('ansi-output',
+    // Display invitation in recipient's terminal with Y/n prompt.
+    // TP-10: through the ONE session-emitter registry. `io.to(<id>)` addressed
+    // a socket.io room, so a telnet or SSH recipient was never invited - and
+    // the id here is the `sessions` map KEY, which is the nodeId, so the room
+    // was empty for a web recipient too.
+    emitterForSession(targetSession, io)?.emit('ansi-output',
       '\r\n\r\n' +
       '\x1b[36m' + session.user.username + '\x1b[0m wants to chat with you, accept (Y/n)? '
     );
@@ -223,7 +233,8 @@ console.log('✅ [CHAT] Invite displayed in target terminal');
         });
 
         // Notify recipient via terminal (cancel invite)
-        io.to(targetSocketId!).emit('ansi-output',
+        // TP-10: the same registry the invite went out through.
+        emitterForSession(targetSession, io)?.emit('ansi-output',
           '\r\n\x1b[33m✗ Chat request from ' + session.user.username + ' has expired.\x1b[0m\r\n'
         );
         io.to(targetSocketId!).emit('chat:invite-cancelled', {
@@ -328,7 +339,11 @@ console.log('🏠 [CHAT ACCEPT] Initiator socket:', initiatorSocketId);
     socket.join(roomName);
 console.log('✅ [CHAT ACCEPT] Recipient joined room');
 
-    const initiatorSocket = io.sockets.sockets.get(initiatorSocketId!);
+    // TP-10: room membership is a socket.io concept a byte transport is never
+    // part of, so this asks the registry for the REAL socket and gets null for
+    // a telnet/SSH initiator - who needs no room, because the pushes below
+    // address the session, not the room.
+    const initiatorSocket = socketIoSocketFor(initiatorSession, io);
     if (initiatorSocket) {
       initiatorSocket.join(roomName);
 console.log('✅ [CHAT ACCEPT] Initiator joined room');
@@ -389,7 +404,9 @@ console.log('📤 [CHAT ACCEPT] Emitting chat:started to room:', roomName);
       '\x1b[36m─────────────────────────────────────────────────────────────────\x1b[0m' +
       '\x1b[24;1H'; // Move to line 24 for input
 
-    io.to(initiatorSocketId!).emit('ansi-output', setupScreen);
+    // TP-10: addressed to the session, so a telnet initiator sees the chat
+    // layout instead of nothing.
+    emitterForSession(initiatorSession, io)?.emit('ansi-output', setupScreen);
 
     // Set up fixed chat layout for recipient
     // Also set cursor color to recipient's username color
@@ -442,8 +459,11 @@ export async function handleChatDecline(socket: Socket, session: BBSSession, dat
     // Update session status to declined
     await db.updateChatSessionStatus(sessionId, 'declined');
 
-    // Notify initiator via terminal
-    io.to(chatSession.initiatorSocket).emit('ansi-output',
+    // Notify initiator via terminal.
+    // TP-10: the initiator is found by user id through the registry; the
+    // stored `initiatorSocket` is a socket.io id, which a telnet caller has no
+    // equivalent of.
+    emitterForUserId(chatSession.initiatorId, io)?.emitter.emit('ansi-output',
       '\r\n\x1b[31m✗ Chat request declined\x1b[0m\r\n' +
       `${chatSession.recipientUsername} has declined your chat request.\r\n`
     );
@@ -552,8 +572,12 @@ export async function handleChatKeystroke(socket: Socket, session: BBSSession, d
         : '') +
       '\x1b8'; // Restore partner's cursor position (preserves column position at line 24)
 
-    // Send typing preview to partner
-    io.to(partnerSocketId).emit('ansi-output', typingPreview);
+    // Send typing preview to partner.
+    // TP-10: `partnerSocketId` is the `sessions` map key - the nodeId - so
+    // this room was empty on EVERY transport. The registry resolves the
+    // partner's own sink from the session it was found on.
+    const partnerEmitter: SessionEmitter | null = emitterForSession(partnerSession, io);
+    partnerEmitter?.emit('ansi-output', typingPreview);
 
     // Start blink timer after 500ms of no typing
     if (partnerSession.partnerTypingBuffer.length > 0) {
@@ -568,7 +592,7 @@ export async function handleChatKeystroke(socket: Socket, session: BBSSession, d
             '\x1b[K' +
             `\x1b[90m\x1b[${userColor}m${session.user!.username}:\x1b[0m ${partnerSession.partnerTypingBuffer}${showCursor ? `\x1b[${userColor}m█\x1b[0m` : ' '}` +
             '\x1b8'; // Restore partner's cursor position
-          io.to(partnerSocketId).emit('ansi-output', blinkPreview);
+          partnerEmitter?.emit('ansi-output', blinkPreview);
         } else if (partnerSession.typingBlinkTimer) {
           // Typing again or buffer cleared - stop blinking
           clearInterval(partnerSession.typingBlinkTimer);
@@ -799,7 +823,8 @@ console.log(`🧹 [CHAT END] Cleaning up initiating user: ${session.user?.userna
 
 console.log(`🧹 [CHAT END] Attempting partner cleanup: partnerSession=${!!partnerSession}, partnerSocketId=${partnerSocketId}`);
     if (partnerSession && partnerSocketId) {
-      const partnerSocket = io.sockets.sockets.get(partnerSocketId);
+      // TP-10: the partner's sink, whichever transport it is.
+      const partnerSocket = emitterForSession(partnerSession, io);
 console.log(`🧹 [CHAT END] Partner socket found: ${!!partnerSocket}`);
       if (partnerSocket) {
 console.log(`🧹 [CHAT END] Cleaning up partner user: ${partnerSession.user?.username}`);
@@ -815,8 +840,12 @@ console.log(`❌ [CHAT END] Partner session or socketId is NULL`);
 
     // Leave Socket.io room
     socket.leave(roomName);
-    if (partnerSocketId) {
-      io.sockets.sockets.get(partnerSocketId)?.leave(roomName);
+    if (partnerSession) {
+      // TP-10: room membership needs the real socket.io socket, and there is
+      // none for a byte transport - `socketIoSocketFor` returns null and the
+      // optional call skips, exactly as this line always did for a partner it
+      // could not find.
+      socketIoSocketFor(partnerSession, io)?.leave(roomName);
     }
 
   } catch (error) {
@@ -870,13 +899,17 @@ export async function handleChatDisconnect(socket: Socket, session: BBSSession) 
         username: session.user!.username
       });
 
-      io.to(partnerSession.socketId!).emit('ansi-output',
+      // TP-10: both of these resolve the partner through the ONE registry, so
+      // a telnet partner is told the chat ended and is cleaned up instead of
+      // being left in CHAT with a dead counterpart.
+      const partnerEmitter = emitterForSession(partnerSession, io);
+      partnerEmitter?.emit('ansi-output',
         '\x1b]12;#ff0000\x07' + // Reset cursor color to red
         `\r\n\x1b[33m${session.user!.username} has disconnected. Chat ended.\x1b[0m\r\n`
       );
 
       // Clean up partner session
-      const partnerSocket = io.sockets.sockets.get(partnerSession.socketId!);
+      const partnerSocket = partnerEmitter;
       if (partnerSocket) {
         await cleanupChatSession(partnerSocket, partnerSession);
       }
@@ -893,8 +926,14 @@ console.error('[INTERNODE CHAT] Error handling chat disconnect:', error);
 
 /**
  * Cleanup chat session - Restore user to previous state
+ *
+ * TP-10: takes a `SessionEmitter` rather than a socket.io `Socket` - the
+ * surface a real Socket and a telnet/SSH connection emitter both satisfy, and
+ * all this function ever needed. Its two partner call sites resolve through
+ * `emitterForSession`, so a byte-transport partner is restored to the menu
+ * instead of being left in CHAT for ever.
  */
-async function cleanupChatSession(socket: Socket, session: BBSSession) {
+async function cleanupChatSession(socket: SessionEmitter, session: BBSSession) {
 console.log(`🧹 [CLEANUP CHAT] Starting cleanup for user: ${session.user?.username}`);
 console.log(`  Current subState: ${session.subState}`);
 console.log(`  Previous subState: ${session.previousSubState}`);

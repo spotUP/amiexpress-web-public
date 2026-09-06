@@ -18,7 +18,8 @@ import { ParamsUtil } from '../../utils/params.util';
 import { normalizeForComparison } from '../../utils/input-normalizer.util';
 import { getDatabase } from '../command-handler/dependency-injection';
 import { getSystemTime } from '../../utils/date-time.util';
-import { getActivityFromSubState, getSocketIdByNodeId, getSession } from '../../server/session-manager';
+import { getActivityFromSubState } from '../../server/session-manager';
+import { emitterForNodeId } from '../../server/session-emitter-registry';
 import { EnvStat, ENV_NAMES } from '../../constants/env-codes';
 
 import type { BBSSession } from '../../index';
@@ -586,26 +587,28 @@ export function handleNMConfirm(socket: any, session: BBSSession, input: string)
 
       case 'kick':
         // Disconnect user - express.e:25354-25362
-        const targetSocketId = getSocketIdByNodeId(nodeNum);
-        if (targetSocketId && _io) {
-          const targetSocket = _io.sockets.sockets.get(targetSocketId);
-          if (targetSocket) {
-            // Mark target session as sysop-kicked to skip grace period
-            // Use getSession(socketId) to get the same session object the disconnect handler uses
-            const targetSession = getSession(targetSocketId);
-            if (targetSession) {
-              targetSession.sysopKicked = true;
-console.log(`[NM KICK] Set sysopKicked=true on session for socket ${targetSocketId}, nodeId=${targetSession.nodeId}`);
-            }
-            // Notify user and disconnect
-            targetSocket.emit('ansi-output', '\r\n\x1b[31m*** Disconnected by SYSOP ***\x1b[0m\r\n');
-            setTimeout(() => {
-              targetSocket.disconnect(true);
-            }, 500);
-            emitText(socket, `User on node ${nodeNum} has been disconnected.\r\n`);
-          } else {
-            emitText(socket, `Could not find socket for node ${nodeNum}.\r\n`);
-          }
+        //
+        // TP-10: resolved through the ONE session-emitter registry, which
+        // knows a telnet/SSH caller's connection emitter as well as a web
+        // caller's live socket. This used to be
+        // an io-namespace lookup on getSocketIdByNodeId(nodeNum), a map that
+        // holds socket.io sockets and nothing else - so a telnet caller could
+        // not be kicked at all: the sysop was told "Could not find socket for
+        // node N" and the caller stayed online.
+        const kickTarget = emitterForNodeId(nodeNum, _io);
+        if (kickTarget) {
+          // Mark target session as sysop-kicked to skip grace period. The
+          // registry returns the session it resolved the emitter from, which
+          // IS the object the disconnect handler holds - the same guarantee
+          // the old getSession(socketId) lookup was making.
+          kickTarget.session.sysopKicked = true;
+console.log(`[NM KICK] Set sysopKicked=true on session for node ${nodeNum}, nodeId=${kickTarget.session.nodeId}`);
+          // Notify user and disconnect
+          kickTarget.emitter.emit('ansi-output', '\r\n\x1b[31m*** Disconnected by SYSOP ***\x1b[0m\r\n');
+          setTimeout(() => {
+            kickTarget.emitter.disconnect(true);
+          }, 500);
+          emitText(socket, `User on node ${nodeNum} has been disconnected.\r\n`);
         } else {
           emitText(socket, `Could not disconnect node ${nodeNum} - no active connection.\r\n`);
         }

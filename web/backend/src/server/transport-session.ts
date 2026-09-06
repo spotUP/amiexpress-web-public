@@ -24,6 +24,10 @@
 import type { Server as IOServer } from "socket.io";
 import { BBSState, LoggedOnSubState } from "../constants/bbs-states";
 import { buildConnectionEmitter, flushPendingPetscii } from "./connection-emitter";
+import {
+  registerConnectionEmitter,
+  unregisterConnectionEmitter,
+} from "./session-emitter-registry";
 import { sessionWantsPetscii } from "../utils/petscii-session-model";
 import { routeDoorInput } from "../services/door-input-routing";
 import { classifyFirstKeypress } from "../utils/c64-detect.util";
@@ -112,6 +116,15 @@ console.log(
   const attachTransferSender = () => {
     if (connection.session) {
       connection.session.connectionType = type;
+      // TP-10: bind the session to the emitter that reaches it, so a
+      // cross-session push (the sysop's kick, an operator page, an internode
+      // invite, an OLM at the command prompt) can find a telnet/SSH caller at
+      // all. `io.sockets.sockets` never held one. Registered HERE rather than
+      // beside the `buildConnectionEmitter` call above because that is where
+      // `connection.session` is guaranteed to exist - this closure runs
+      // immediately AND again on 'ready', for a connection whose session is
+      // attached late. Re-registering the same pair is idempotent.
+      registerConnectionEmitter(connection.session, emitter);
       // For telnet, TelnetConnection.write (telnet-server.ts:433)
       // already doubles IAC (0xFF) bytes per RFC 854. Adding a SECOND
       // doubling layer here turned each input 0xFF into 0xFF 0xFF 0xFF
@@ -333,6 +346,11 @@ console.log(
     );
     // Cleanup session
     if (connection.session) {
+      // TP-10: the emitter dies with the connection. A push that resolves a
+      // stale emitter would write into a closed socket and, worse, would look
+      // to the sysop like it had been delivered. TP-13b moves this call into
+      // `endTransportSession` with the rest of the teardown.
+      unregisterConnectionEmitter(connection.session);
       deps.sessions.delete(connection.sessionId);
     }
     // Release node back to available pool

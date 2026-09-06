@@ -117,7 +117,13 @@ beforeEach(() => {
   harness.pressGameKey.mockReset();
   harness.releaseGameKey.mockReset();
   harness.sendMouse.mockReset();
+  // These exercise the BUTTON pad, so they ask for it. A phone that has never
+  // been told otherwise now swipes - see readTouchScheme - and the two tests
+  // below were reading the old default rather than stating a preference.
+  window.localStorage.setItem('bbs_touch_scheme', 'buttons');
 });
+
+afterEach(() => window.localStorage.removeItem('bbs_touch_scheme'));
 
 afterEach(cleanup);
 
@@ -187,10 +193,14 @@ describe('TerminalPage on a phone', () => {
 });
 
 describe('TerminalPage ARKANOID trackpad', () => {
-  it('moves the paddle relative to the thumb, geared so a short sweep crosses the board', () => {
-    // Changed deliberately on 2026-08-25: the mapping used to be absolute
-    // across a full-width strip, so crossing the board meant sweeping the
-    // whole phone. A spinner is relative and geared.
+  it('moves the paddle exactly as far as the thumb travelled', () => {
+    // This has been wrong in both directions. Absolute at first, so the
+    // paddle teleported to the thumb and a full traverse meant a full-width
+    // reach (2026-08-25). Then geared to 2.2, so a short sweep crossed the
+    // board - and a beta on real iPhones and Androids found that unplayable
+    // (2026-09-06): a paddle that outruns your thumb by more than double
+    // gives the hand nothing to aim with. It is 1:1 now, and still relative,
+    // so lifting and re-planting continues the stroke.
     render(<TerminalPage />);
     startDoor('arkanoid');
     const pad = strip();
@@ -200,15 +210,22 @@ describe('TerminalPage ARKANOID trackpad', () => {
     fireTouch(pad, 'touchstart', [{ identifier: 1, clientX: STRIP_LEFT }]);
     expect(harness.sendMouse).toHaveBeenLastCalledWith('mouse-click', { x: 40, y: PADDLE_ROW });
 
-    // A quarter of the strip to the right moves further than a quarter of
-    // the board, because of the gearing.
+    // A quarter of the strip to the right moves the paddle a quarter of the
+    // board. Not more.
     fireTouch(pad, 'touchmove', [{ identifier: 1, clientX: STRIP_LEFT + STRIP_WIDTH / 4 }]);
     const afterQuarter = harness.sendMouse.mock.calls[harness.sendMouse.mock.calls.length - 1]?.[1] as { x: number };
-    expect(afterQuarter.x).toBeGreaterThan(40 + 79 / 4);
+    expect(Math.abs(afterQuarter.x - (40 + 79 / 4))).toBeLessThanOrEqual(1);
 
-    // ...and it never runs off the end.
+    // ...and a full sweep reaches the far edge without running off it.
+    //
+    // Lifting the thumb is what proves it: a drag is throttled to the newest
+    // position every SPINNER_SEND_MS, so the move above may still be pending,
+    // but the END of a stroke is sent at once - "a stroke must end where the
+    // thumb left it". The old geared mapping hid this, because 2.2 gain
+    // clamped to the edge on the first move.
     fireTouch(pad, 'touchmove', [{ identifier: 1, clientX: STRIP_LEFT + STRIP_WIDTH }]);
-    expect(harness.sendMouse).toHaveBeenLastCalledWith('mouse-drag', { x: 79, y: PADDLE_ROW });
+    fireTouch(pad, 'touchend', [{ identifier: 1, clientX: STRIP_LEFT + STRIP_WIDTH }]);
+    expect(harness.sendMouse).toHaveBeenLastCalledWith('mouse-up', { x: 79, y: PADDLE_ROW });
 
     // Never the key path: arrow keys would nudge the paddle stepwise.
     expect(harness.pressGameKey).not.toHaveBeenCalled();

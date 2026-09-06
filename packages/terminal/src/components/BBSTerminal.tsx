@@ -18,6 +18,8 @@ import {
   nextPreset,
   readStoredZoom,
   wheelZoom,
+  pinchZoom,
+  pinchDistance,
   writeStoredZoom,
   type ZoomCorner,
   type ZoomRect,
@@ -3015,6 +3017,53 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     };
     box.addEventListener('wheel', onWheel, { capture: true, passive: false });
 
+    // --- 1b. two-finger pinch (phones) ------------------------------------
+    //
+    // The browser's own pinch is the wrong tool here: it zooms the whole PAGE,
+    // and the on-screen keyboard is `position: fixed` - anchored to the layout
+    // viewport - so a pinch slides the keys off the screen ("zooming on phones
+    // zooms the keyboard away"). The terminal's zoom is a font size and
+    // touches nothing else, so the pinch drives that instead and the keyboard
+    // cannot move. preventDefault is what stops the browser doing its own.
+    let pinchStartDistance = 0;
+    let pinchStartFraction = FIT_TO_WINDOW;
+    let pinchFrame: number | null = null;
+    let pinchLatest = 0;
+
+    const onTouchStart = (ev: TouchEvent) => {
+      if (ev.touches.length !== 2) return;
+      ev.preventDefault();
+      pinchStartDistance = pinchDistance(ev.touches[0], ev.touches[1]);
+      pinchStartFraction = zoomFractionRef.current;
+    };
+
+    const onTouchMove = (ev: TouchEvent) => {
+      if (ev.touches.length !== 2 || pinchStartDistance <= 0) return;
+      ev.preventDefault();
+      pinchLatest = pinchDistance(ev.touches[0], ev.touches[1]);
+      if (pinchFrame !== null) return;
+      pinchFrame = requestAnimationFrame(() => {
+        pinchFrame = null;
+        commit(pinchZoom(pinchStartFraction, pinchLatest / pinchStartDistance));
+      });
+    };
+
+    const onTouchEnd = (ev: TouchEvent) => {
+      if (ev.touches.length < 2) pinchStartDistance = 0;
+    };
+
+    box.addEventListener('touchstart', onTouchStart, { capture: true, passive: false });
+    box.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
+    box.addEventListener('touchend', onTouchEnd, { capture: true, passive: true });
+    box.addEventListener('touchcancel', onTouchEnd, { capture: true, passive: true });
+
+    // Safari zooms the page on its own gesture events, which no amount of
+    // touch handling prevents. They only exist on Apple's browsers.
+    const stopSafariGesture = (ev: Event) => ev.preventDefault();
+    document.addEventListener('gesturestart', stopSafariGesture, { passive: false });
+    document.addEventListener('gesturechange', stopSafariGesture, { passive: false });
+    document.addEventListener('gestureend', stopSafariGesture, { passive: false });
+
     // --- 2. corner drag ---------------------------------------------------
     let dragging = false;
     let dragFrame: number | null = null;
@@ -3117,6 +3166,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (wheelFrame !== null) cancelAnimationFrame(wheelFrame);
       endDrag(null);
       box.removeEventListener('wheel', onWheel, { capture: true } as EventListenerOptions);
+      box.removeEventListener('touchstart', onTouchStart, { capture: true } as EventListenerOptions);
+      box.removeEventListener('touchmove', onTouchMove, { capture: true } as EventListenerOptions);
+      box.removeEventListener('touchend', onTouchEnd, { capture: true } as EventListenerOptions);
+      box.removeEventListener('touchcancel', onTouchEnd, { capture: true } as EventListenerOptions);
+      document.removeEventListener('gesturestart', stopSafariGesture);
+      document.removeEventListener('gesturechange', stopSafariGesture);
+      document.removeEventListener('gestureend', stopSafariGesture);
+      if (pinchFrame !== null) cancelAnimationFrame(pinchFrame);
       box.removeEventListener('pointerdown', onPointerDown, true);
       box.removeEventListener('pointerenter', onHoverEnter);
       box.removeEventListener('pointermove', onHoverMove);

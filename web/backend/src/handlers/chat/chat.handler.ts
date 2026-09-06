@@ -84,14 +84,22 @@ console.log('[ChatHandler] Initialized with DI');
   ): { socket: any; session: BBSSession } | null {
     if (!userId) return null;
     try {
+      // TP-10: ONE registry answers "which emitter reaches this session". The
+      // three lookups this replaced - userSessions, getSocketIdByUserId and
+      // the io namespace's socket map - could only ever resolve a WEB
+      // counterpart, so a sysop chat with a telnet caller went one way. The
+      // registry returns that caller's connection emitter instead, and the
+      // `join?.()` / `leave?.()` calls at this method's two call sites already
+      // skip when the sink is not a socket.io socket (a byte transport is in
+      // no room). Still required lazily: this module is constructed from
+      // index.ts's DI container and a static import would close the cycle at
+      // module-init time.
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { userSessions, getSocketIdByUserId } = require('../../server/session-manager');
-      const targetSession = userSessions.get(userId);
-      const targetSocketId = getSocketIdByUserId(userId);
+      const { emitterForUserId } = require('../../server/session-emitter-registry');
       const io = socket?.nsp?.server;
-      const targetSocket = targetSocketId && io ? io.sockets?.sockets?.get(targetSocketId) : null;
-      if (targetSession && targetSocket) {
-        return { socket: targetSocket, session: targetSession };
+      const resolved = emitterForUserId(userId, io);
+      if (resolved) {
+        return { socket: resolved.emitter, session: resolved.session };
       }
     } catch (err) {
 console.warn('[ChatHandler] resolveCounterpartSocket failed:', (err as Error)?.message ?? err);

@@ -27,6 +27,10 @@ import {
 import { OperatorChatRepository } from '../database/operator-chat.repository';
 import { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
+import {
+  emitterForUserId,
+  socketIoSocketFor,
+} from '../server/session-emitter-registry';
 import { getGrumpySysopResponse, getGrumpyBotIntroMessage, type AIProviderConfig, DEFAULT_AI_CONFIG } from './grumpy-sysop-bot.handler';
 import {
   renderPicker,
@@ -231,7 +235,10 @@ console.log(`[Operator Chat] Sysop ${session.user.username} set status to ${data
                   : '') +
                 '\x1b8'; // Restore BBS user's cursor position
       
-              io.to(`user:${page.userId}`).emit('ansi-output', typingPreview);
+              // TP-10: the paged user is resolved through the ONE registry,
+              // so a telnet caller sees the sysop typing. The `user:<id>`
+              // room holds web sockets only.
+              emitterForUserId(page.userId, io)?.emitter.emit('ansi-output', typingPreview);
             }
       
             // Update typing indicator
@@ -694,7 +701,12 @@ console.log(`[Operator Chat] Sysop taking over bot-controlled page ${pageId}`);
 
   stopPagingDots(pageId);
 
-  const sysopSocket = io.sockets?.sockets?.get(sysopSessionId);
+  // Add sysop socket to page room for chat fan-out
+  // TP-10: room membership needs a real socket.io socket, and this one is
+  // the SYSOP's admin-app socket, addressed by socket id - so it goes
+  // through the registry's socket accessor rather than a second reach into
+  // the io namespace. The registry is the only module that holds that map.
+  const sysopSocket = socketIoSocketFor(sysopSessionId, io);
   if (sysopSocket) {
     try {
       sysopSocket.join(`page:${pageId}`);
@@ -752,7 +764,11 @@ console.error(`[Operator Chat] Failed to join sysop socket to page room ${pageId
   userSetupScreen += '\x1b[24;1H';
 
   const targetRoom = `user:${page.userId}`;
-  io.to(targetRoom).emit('ansi-output', userSetupScreen);
+  // TP-10: the terminal half of an accepted page goes to the SESSION, so a
+  // telnet caller gets the chat layout; the structured `operator:*` events
+  // beside it are web-only (transport adapter, TP-3) and keep addressing the
+  // room, which is also how a second browser tab still sees them.
+  emitterForUserId(page.userId, io)?.emitter.emit('ansi-output', userSetupScreen);
 
   io.to(targetRoom).emit('operator:chat-accepted', {
     pageId,
@@ -806,7 +822,6 @@ async function sendBotMessageWithTyping(
   if (!chatSession) return;
 
   const thinkTime = aiConfig?.botThinkTime ?? 1000;
-  const userRoom = `user:${page.userId}`;
 
   // Save to DB + emit to admin socket immediately
   const saved = repository.addChatMessage({
@@ -840,7 +855,11 @@ async function sendBotMessageWithTyping(
     output += `\x1b[${color}m${line}\x1b[0m\r\n`;
   }
   output += '\x1b[24;1H\x1b[2K';
-  io.to(userRoom).emit('ansi-output', output);
+  // TP-10: the bot's reply is the operator chat's terminal half, exactly as
+  // the sysop's own message is, so it goes through the ONE registry too. The
+  // `user:<id>` room holds web sockets only, and a telnet caller paged into a
+  // bot-answered chat would otherwise watch a scroll region nothing wrote to.
+  emitterForUserId(page.userId, io)?.emitter.emit('ansi-output', output);
 }
 
 /**
@@ -1028,7 +1047,8 @@ console.error('[Operator Chat] Bot response error:', err);
       if (!(chatSession as any).userPendingAnsi) (chatSession as any).userPendingAnsi = [];
       (chatSession as any).userPendingAnsi.push({ userId: page.userId, ansi: output });
     } else {
-      io.to(`user:${page.userId}`).emit('ansi-output', output);
+      // TP-10: the message itself reaches the caller on every transport.
+      emitterForUserId(page.userId, io)?.emitter.emit('ansi-output', output);
     }
   }
 }
@@ -1038,7 +1058,9 @@ function flushPendingUserAnsi(chatSession: any, io: any): void {
   const pending = chatSession.userPendingAnsi || [];
   chatSession.userPendingAnsi = [];
   for (const item of pending) {
-    io.to(`user:${item.userId}`).emit('ansi-output', item.ansi);
+    // TP-10: a queued message reaches the caller on every transport, exactly
+    // as the un-queued one above does.
+    emitterForUserId(item.userId, io)?.emitter.emit('ansi-output', item.ansi);
   }
 }
 
@@ -1072,7 +1094,9 @@ async function endChat(io: any, repository: OperatorChatRepository, pageId: stri
       '\x1b[32mPress any key to continue...\x1b[0m' +
       '\x1b[?25h';
 
-    io.to(`user:${page.userId}`).emit('ansi-output', endMessage);
+    // TP-10: and so does the end-of-chat notice, which otherwise left a
+    // telnet caller sitting in a scroll region nothing would clear.
+    emitterForUserId(page.userId, io)?.emitter.emit('ansi-output', endMessage);
   }
 
   io.to(`page:${pageId}`).emit('operator:chat-ended', { pageId });
@@ -1151,8 +1175,9 @@ console.log(`[Operator Chat] Page ${page.id} timed out - activating grumpy bot`)
       if (!userSession) {
 console.log(`[Operator Chat] Direct session lookup failed for userId ${page.userId}, trying socket rooms`);
         const userSocketsFromRoom = Array.from(io.sockets.adapter.rooms.get(`user:${page.userId}`) || []);
-        for (const socketId of userSocketsFromRoom) {
-          const sock = io.sockets.sockets.get(socketId);
+        for (const socketId of userSocketsFromRoom as string[]) {
+          // TP-10: the one module that holds the io namespace's socket map.
+          const sock = socketIoSocketFor(socketId, io);
           if (sock && (sock as any).session) {
             userSession = (sock as any).session;
             break;
