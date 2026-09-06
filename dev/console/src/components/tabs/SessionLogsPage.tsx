@@ -9,7 +9,15 @@ import { T } from '../../theme/blessed-theme.js';
 import { useRowClick } from '../../hooks/useRowClick.js';
 import { stripAnsi } from '../../utils/strip-ansi.js';
 
-const ITEMS_START_ROW = 8;
+// The stats panel (when present) is a title box + a stats line, each with
+// its own marginBottom - two extra rendered rows above the session list.
+// A fixed 8 split the difference and was wrong either way: with stats it
+// under-shot by one, with stats absent (still loading, or the stats fetch
+// failed) it over-shot by one - either way a click landed one row off and
+// opened the WRONG session's log immediately (useRowClick fires on any
+// click within the content area, not just on an actual row).
+const ITEMS_START_ROW_BASE = 7;
+const ITEMS_START_ROW_WITH_STATS = 9;
 
 export function SessionLogsPage() {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
@@ -47,7 +55,9 @@ export function SessionLogsPage() {
 
   useEffect(() => { load(); loadStats(); }, [load, loadStats]);
 
-  useRowClick(sessions.length, ITEMS_START_ROW, (idx) => {
+  const itemsStartRow = stats ? ITEMS_START_ROW_WITH_STATS : ITEMS_START_ROW_BASE;
+
+  useRowClick(sessions.length, itemsStartRow, (idx) => {
     setSelectedIdx(idx);
     const s = sessions[idx];
     if (s) viewLog(s.id);
