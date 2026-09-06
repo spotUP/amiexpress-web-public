@@ -15,7 +15,8 @@
  * The download filename prompt already had this right and this is its
  * logic, lifted so there is one copy rather than one per prompt.
  */
-import { emitText } from './output.util';
+import { emitText, flushOutput } from './output.util';
+import { LoggedOnSubState } from '../constants/bbs-states';
 
 /** Enough of a session for line collection; keeps this usable from tests. */
 export interface LineInputSession {
@@ -59,6 +60,11 @@ export async function collectLine(
     if (options.echoNewline) {
       emitText(socket, '\r\n');
     }
+    // express.e's lineInput has put every echoed character on the wire before
+    // it returns. emitText is 16ms-buffered and most prompt handlers answer
+    // with a direct socket.emit, so without this the answer can overtake the
+    // echo of what was typed and the line appears AFTER the reply to it.
+    flushOutput(socket);
     await onLine(line);
     return true;
   }
@@ -80,3 +86,47 @@ export async function collectLine(
 
   return false;
 }
+
+/**
+ * The prompts express.e reads with `lineInput()`.
+ *
+ * WHY A TABLE AND NOT A HABIT. `handleCommand` dispatches on `subState`, and
+ * every prompt's branch decides for itself how much input it consumes. A
+ * branch written as `handler(socket, session, data.trim())` looks like a line
+ * prompt and is not one: the transport delivers ONE KEYSTROKE per call
+ * (server/socket-handlers.ts:818 iterates the string character by character),
+ * so the handler runs on the first key pressed and the prompt is gone.
+ *
+ * That is the sysop's 2026-09-06 report, "z takes a hotkey instead of a
+ * string": at the Z prompt his `C` became the whole search string, his `H`
+ * became the whole directory span, and `ASE` was then typed at the menu. The
+ * Z command only started reaching this code that day - 6c021d85e made a door
+ * refused for width fall through to the internal command - but the branch had
+ * been a per-keystroke branch all along.
+ *
+ * Registering a sub-state here is the ONE declaration needed. `handleCommand`
+ * consults this table before any branch runs, buffers the keystrokes itself,
+ * and calls the branch once with the completed line - so a prompt cannot lose
+ * its line-ness by being written in the shorter shape.
+ *
+ * Membership rule: the sub-state answers a prompt express.e reads with
+ * `lineInput()`. A `readChar()` / `yesNo()` prompt - one key, no Enter - must
+ * NOT be listed, or the caller would have to press Return after Y.
+ *
+ * Not listed, deliberately: FILE_LIST_DIR_INPUT. It has the same shape and
+ * the same fault, but nothing in the tree assigns it, so there is no path
+ * that could prove an entry for it right. Give it a setter and add it here in
+ * the same change.
+ */
+export const LINE_PROMPT_SUBSTATES: ReadonlyMap<string, LineInputOptions> = new Map<string, LineInputOptions>([
+  // express.e:26151 - lineInput('','',78,...) "Enter string to search for: ".
+  // echoNewline is off: handleSearchInput emits express.e:26154's own \b\n.
+  [LoggedOnSubState.ZIPPY_SEARCH_INPUT, {}],
+  // express.e:26869 - lineInput('','',8,...) inside getDirSpan(). Answers are
+  // spans ("1-3"), not single keys, and handleDirSpanInput emits its own
+  // newline on both the cancel and the search path.
+  [LoggedOnSubState.ZIPPY_DIR_SPAN_INPUT, {}],
+  // express.e:20414 - lineInput('','',40,...) "Enter filename of file to view?"
+  // handleFilenameInput emits express.e:20418's newline when the line is empty.
+  [LoggedOnSubState.VIEW_FILE_INPUT, {}],
+]);

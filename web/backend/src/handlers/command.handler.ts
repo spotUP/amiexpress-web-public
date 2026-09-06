@@ -194,6 +194,7 @@ import {
   handleCommandPasswordInput
 } from './command-execution.handler';
 import { getConferenceToolFlags } from '../utils/conference-tooltypes.util';
+import type { LineInputOptions } from '../utils/line-input.util';
 
 // Import security/ACS system
 import { ACSCode } from '../constants/acs-codes';
@@ -1107,6 +1108,49 @@ console.log('session.subState:', session.subState);
     // and let the character be processed normally.
     session.menuPause = false;
     // NO 'await displayMainMenu(socket, session);' here - it would redraw the prompt.
+  }
+
+  // A PROMPT express.e READS WITH lineInput() IS HANDED A LINE, NOT A KEYSTROKE.
+  //
+  // The transport gives this function one character per call
+  // (server/socket-handlers.ts:818 iterates the input string), so a branch
+  // that answers with `handler(socket, session, data.trim())` runs its handler
+  // on the FIRST key pressed. The sysop's report, 2026-09-06: "z takes a
+  // hotkey instead of a string" - at the Z prompt `C` became the whole search
+  // string, `H` became the whole directory span, and `ASE` was then typed at
+  // the menu. 6c021d85e is what made Z reach this code (a door refused for
+  // width now falls through to the internal command); the branch had always
+  // read one key.
+  //
+  // The fix is not per-branch. `LINE_PROMPT_SUBSTATES` (utils/line-input.util)
+  // is the ONE declaration of which sub-states are line prompts, and this is
+  // the ONE place that acts on it: keystrokes are collected here - echoed,
+  // backspace honoured, Enter ending the line - and the branch below is then
+  // entered exactly once with the completed line in `data`. A branch cannot
+  // lose its line-ness by being written in the shorter shape, and a new prompt
+  // needs no input code at all, only an entry in that table.
+  //
+  // Not applied to an EMPTY tick: advanceDisplayFlow, BBSApi and the post-pause
+  // resume all call handleCommand with '' to nudge the state machine, and those
+  // are not the caller typing.
+  const { LINE_PROMPT_SUBSTATES, collectLine } = require('../utils/line-input.util');
+  const linePrompt: LineInputOptions | undefined =
+    data !== '' && !session.executingScreenCommand
+      ? LINE_PROMPT_SUBSTATES.get(session.subState as string)
+      : undefined;
+  if (linePrompt) {
+    let completedLine: string | undefined;
+    const lineIsComplete = await collectLine(
+      socket,
+      session,
+      data,
+      (line: string) => { completedLine = line; },
+      linePrompt
+    );
+    // Still being typed - the keystroke has been echoed and buffered, and must
+    // not reach any branch below.
+    if (!lineIsComplete) return;
+    data = completedLine ?? '';
   }
 
   const trimmedScreenCommand = (data || '').trim();

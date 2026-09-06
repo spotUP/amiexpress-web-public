@@ -234,6 +234,37 @@ describe('a 40-column caller who types Z reaches the zippy search', () => {
     expect(out).not.toContain('THIS DOOR NEEDS AN 80 COLUMN SCREEN');
     expect(out).toContain('Enter string to search for:');
   });
+
+  /**
+   * A command that prompts keeps its prompt after a door is refused for width.
+   *
+   * The sysop's follow-up the same day: "z takes a hotkey instead of a string."
+   * The fall-through above is what first brought him to this prompt, and the
+   * prompt then consumed a single keypress - his C was the whole search string.
+   * The fall-through hands the internal handler the command and nothing else:
+   * the sub-state it sets is the caller's to answer, one LINE at a time
+   * (utils/line-input.util LINE_PROMPT_SUBSTATES, express.e:26151).
+   */
+  it('lets me type a whole search string at that prompt, not one key', async () => {
+    await register(doorOver('Z'));
+    const socket = makeSocket();
+    const session = c64Session('Z');
+    await handleCommand(socket as any, session, '');
+
+    for (const ch of 'CHASE') {
+      await handleCommand(socket as any, session, ch);
+      // Every letter of it is still the search string being typed.
+      expect(session.subState).toBe(LoggedOnSubState.ZIPPY_SEARCH_INPUT);
+    }
+    await handleCommand(socket as any, session, '\r');
+    for (const ch of '1\r') {
+      await handleCommand(socket as any, session, ch);
+    }
+
+    const out = allOutput(socket);
+    expect(out).toContain('Enter string to search for: CHASE');
+    expect(out).toContain('CHASE.LHA');
+  });
 });
 
 describe('a command with no internal equivalent still refuses', () => {
