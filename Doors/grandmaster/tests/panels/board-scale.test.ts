@@ -431,6 +431,18 @@ export async function theWellHasRailsAndTheHudHasAFrame(): Promise<void> {
     );
   }
 
+  // THE WELL HAS A LID. A full frame needs two rows and the board plus its
+  // HUD row fill all twenty-five, so the one spare row - above the board -
+  // carries a top rule and the floor is the bottom of the screen: "no top and
+  // bottom border on the playfield" (2026-09-07).
+  const lid = rows[layout.board.top - 1] ?? '';
+  assert.ok(lid.indexOf('\u250c') >= 0, `no lid above the well: "${lid.trim()}"`);
+  assert.ok(lid.indexOf('\u2510') >= 0, 'and it is closed at both corners');
+  assert.ok(
+    lid.indexOf('\u2500') > lid.indexOf('\u250c'),
+    'with a rule between them',
+  );
+
   // And the HUD is framed, with its labels inside the frame.
   assert.ok(panels.hudBox.border, 'the HUD beside the board has a frame');
   const hudText = rows.slice(layout.hud.top, layout.hud.top + layout.hud.height).join('\n');

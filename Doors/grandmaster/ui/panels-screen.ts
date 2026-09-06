@@ -204,6 +204,31 @@ export class PanelsScreen {
     // Columns are not scarce, though, so the well gets vertical rails: the
     // same edge, drawn in the space that exists.
     if (!layout.border) {
+      // A LID WHERE THERE IS A ROW FOR ONE.
+      //
+      // A full frame needs two rows and the board plus its HUD row already
+      // fill all twenty-five, so the well had rails and open ends: "no top
+      // and bottom border on the playfield" (2026-09-07). There is exactly
+      // one spare row, above the board - so the well gets a lid, and its
+      // floor is the bottom of the screen, which is where a stack rests
+      // anyway. A bottom rule would need a twenty-sixth row that does not
+      // exist; the alternative is halving the tile, which the sysop already
+      // rejected.
+      if (layout.board.top >= 1) {
+        const lid = '\u250c' + '\u2500'.repeat(Math.max(0, layout.board.width)) + '\u2510';
+        this.railBoxes.push(createBox({
+          parent: this.screen,
+          top: layout.board.top - 1,
+          left: Math.max(0, layout.board.left - 1),
+          width: Math.min(this.screen.width - Math.max(0, layout.board.left - 1), lid.length),
+          height: 1,
+          border: undefined,
+          tags: true,
+          style: { fg: 'magenta', bg: 'black' },
+          content: lid,
+        }));
+      }
+
       for (const [column, glyph] of [
         [layout.board.left - 1, '\u2502'],
         [layout.board.left + layout.board.width, '\u2502'],
