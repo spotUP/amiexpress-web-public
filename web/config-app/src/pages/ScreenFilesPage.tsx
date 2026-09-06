@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileImage, AlertTriangle, Download, Share2, Upload, Trash2, Pencil, History } from 'lucide-react';
+import { FileImage, AlertTriangle, Download, Share2, Upload, Trash2, Pencil } from 'lucide-react';
 import { apiClient, type ApiError } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import { fanOutOptions, type FanOutOption } from './screen-write-plan';
@@ -11,21 +11,31 @@ import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { TabbedWorkspace, type TabDefinition } from '../components/ui/Tabs';
 import { ScreenArt } from '../components/ScreenArt';
 import { ScreenGallery, type GalleryItem } from '../components/ScreenGallery';
+import { ScreenThumbnail } from '../components/ScreenThumbnail';
 import { formatBytes } from '../lib/format';
 import { ScreenEditor } from '../components/ScreenEditor';
+import { CodeChip } from '../components/CodeChip';
 import { Modal } from '../components/ui/Modal';
-import { ScreenRevisionsPanel } from './ScreenRevisionsPanel';
 import { screenToCanvas } from './screen-bytes';
 import { createSurface, type EditorSurface } from './screen-editor-state';
+import {
+  groupMciCodes, filterMciCodes, describeMciUsage, describeCarry,
+  type MciCodeShape, type MciFamilyShape, type CarryVerdict,
+} from './screen-mci';
+import {
+  duplicateGroups, describeGroup, type DuplicateGroup,
+} from './screen-duplicates';
 import {
   toScreenRows, filterScreenRows,
   type ScreenIndexShape, type ScreenRow, type ScreenIndexEntryShape,
   type ScopeResolutionShape, type ConferenceShape, type ScreenReaderShape,
-  type MciReferenceShape, type ScreenFileShape, describeReader, describeProblem,
+  type MciReferenceShape, type ScreenFileShape, describeReader, describeProblem, isArt,
 } from './screen-index-view';
 
 /** Stable fallback: a fresh array each render invalidates the row model. */
 const EMPTY_ROWS: ScreenRow[] = [];
+const EMPTY_MCI: MciCodeShape[] = [];
+const EMPTY_FAMILIES: MciFamilyShape[] = [];
 
 /**
  * What a scope is called, in the board's own words.
@@ -34,6 +44,30 @@ const EMPTY_ROWS: ScreenRow[] = [];
  * conference 1 lives in Conf2 here. The conference's NAME is what a sysop
  * recognises - "Amiga Demoscene" - so it leads, with the number behind it.
  */
+/**
+ * The conference a file sits in, named the way a sysop knows it.
+ *
+ * The DIRECTORY number is not the conference number - express.e reads
+ * `LOCATION.n` from ConfConfig.info, and on this board conference 1 lives in
+ * `Conf2` - so this matches the directory against what each conference
+ * declares rather than parsing the digits out of the path.
+ */
+export function conferenceOfPath(
+  relPath: string | null,
+  conferences?: ConferenceShape[],
+): string | null {
+  if (!relPath) return null;
+
+  const dir = relPath.split(/[\\/]/)[0];
+  if (!/^Conf\d+$/i.test(dir)) return null;
+
+  const named = (conferences ?? []).find(c => c.dir?.toLowerCase() === dir.toLowerCase());
+  if (named) return `${named.name} (conference ${named.id})`;
+
+  // The board did not say - name the directory rather than invent a number.
+  return dir;
+}
+
 function scopeName(scope: string, id: number | null, conferences?: ConferenceShape[]): string {
   if (scope === 'node') return `Node ${id}`;
   if (scope === 'conf') {
@@ -58,6 +92,16 @@ export function ScreenFilesPage() {
   const [openScreen, setOpenScreen] = useState<string | null>(null);
   const [openFile, setOpenFile] = useState<string | null>(null);
   const [pendingUpload, setPendingUpload] = useState<{ bytes: string; name: string } | null>(null);
+  /**
+   * What replacing this file would do to its MCI codes, from the board's own
+   * dry run - and what the sysop chose to do about it.
+   *
+   * A screen is a program, and an ANSI editor writes no `~CC_`. Replacing a
+   * file used to drop every code in it without a word: the menu still painted
+   * and the keys stopped working.
+   */
+  const [carryVerdict, setCarryVerdict] = useState<CarryVerdict | null>(null);
+  const [carryCodes, setCarryCodes] = useState<'none' | 'above' | 'below'>('above');
   const uploadInput = useRef<HTMLInputElement>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const [shareSummary, setShareSummary] = useState<ShareSummary | null>(null);
@@ -107,12 +151,25 @@ export function ScreenFilesPage() {
    */
   const [pendingEdit, setPendingEdit] = useState<string | null>(null);
   const detailRef = useRef<HTMLElement>(null);
-  const [showRevisions, setShowRevisions] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['screen-index'],
     // The routes answer `{ success, data, ... }`; every admin page reads `.data`.
     queryFn: async () => (await apiClient.getScreenIndex()).data as ScreenIndexShape,
+  });
+
+  /**
+   * The MCI codes. Loaded with the page rather than on the tab, because the
+   * count beside each code comes from the same index the tables are drawn
+   * from and the answer is cached either way.
+   */
+  const { data: mci } = useQuery({
+    queryKey: ['mci-catalog'],
+    queryFn: async () => (await apiClient.getMciCatalog()).data as {
+      families: MciFamilyShape[];
+      codes: MciCodeShape[];
+      enablingTilde: { uses: number; files: number };
+    },
   });
 
   const { data: sharedDirs } = useQuery({
@@ -177,8 +234,18 @@ export function ScreenFilesPage() {
 
   const entry: ScreenIndexEntryShape | undefined = data?.screens.find(s => s.screen === openScreen);
 
+  /**
+   * The fan-out choices for whatever file is open.
+   *
+   * `openScreen` is set by a row in the tables and NOT by the gallery, and the
+   * gallery is how a designer reaches a screen. Without a screen name there
+   * were no options at all, so a replacement picked from the gallery had
+   * nothing to click: the file was chosen and the write could not be applied.
+   * `fanOutOptions` always offers "this file only", so the name is passed as
+   * empty rather than the whole list being skipped.
+   */
   const options: FanOutOption[] = useMemo(
-    () => (data && openScreen && openFile ? fanOutOptions(data, openScreen, openFile) : []),
+    () => (data && openFile ? fanOutOptions(data, openScreen ?? '', openFile) : []),
     [data, openScreen, openFile],
   );
 
@@ -191,6 +258,29 @@ export function ScreenFilesPage() {
       reader.readAsDataURL(chosen);
     });
 
+  /**
+   * Ask the board what replacing this file would do to its codes.
+   *
+   * A dry run: it answers 200 with the verdict and writes nothing, so it is
+   * safe to run the moment a file is picked and before anything is chosen.
+   * The verdict is for the file being replaced; every other target of a
+   * fan-out keeps its OWN codes, which is the board's rule and not this
+   * page's.
+   */
+  const previewCarry = async (filePath: string, bytes: string) => {
+    try {
+      const res = await apiClient.putScreenFile(filePath, bytes, [filePath], {
+        carryCodes: 'above',
+        dryRun: true,
+      });
+      setCarryVerdict((res.data?.targets ?? [])[0] ?? null);
+    } catch {
+      // A verdict is an aid, not a gate. If the board cannot answer, the
+      // replace still works exactly as it did before this existed.
+      setCarryVerdict(null);
+    }
+  };
+
   const applyWrite = async (option: FanOutOption) => {
     if (!pendingUpload || !openFile) return;
     try {
@@ -201,9 +291,12 @@ export function ScreenFilesPage() {
         await apiClient.shareScreens(nodes, sharedDir);
       }
       const targets = option.choice === 'share-then-write' ? [openFile] : option.targets;
-      await apiClient.putScreenFile(openFile, pendingUpload.bytes, targets);
+      // Per target: node 1's copy names Node1 and node 7's names Node7, so the
+      // board reads each target's own file rather than one plan for all.
+      await apiClient.putScreenFile(openFile, pendingUpload.bytes, targets, { carryCodes });
       showSuccess(`Wrote ${targets.length} file${targets.length === 1 ? '' : 's'}`);
       setPendingUpload(null);
+      setCarryVerdict(null);
       queryClient.invalidateQueries({ queryKey: ['screen-index'] });
       queryClient.invalidateQueries({ queryKey: ['screen-file', openFile] });
     } catch (error) {
@@ -306,6 +399,66 @@ export function ScreenFilesPage() {
     queryClient.invalidateQueries({ queryKey: ['screen-index'] });
   };
 
+  /**
+   * Every damaged screen in one pass, after saying which ones and asking.
+   *
+   * 41 of this board's 47 are copies of one NODE_BULL.TXT, so one at a time is
+   * forty clicks for a single decision - but it is still a write to forty
+   * files, so the names come first and the sysop confirms them.
+   */
+  const repairAll = async () => {
+    setFileError(null);
+
+    try {
+      const preview = await apiClient.repairAllScreens(true);
+      const damaged: string[] = preview.data?.damaged ?? [];
+      if (!damaged.length) {
+        showSuccess('No screen on this board has colour codes missing their escape byte.');
+        return;
+      }
+
+      const ok = await confirm({
+        title: `Repair ${damaged.length} screen${damaged.length === 1 ? '' : 's'}?`,
+        message: `${damaged.slice(0, 12).join(', ')}${damaged.length > 12 ? `, and ${damaged.length - 12} more` : ''}. Each is backed up beside itself first.`,
+        confirmText: 'Repair them',
+      });
+      if (!ok) return;
+
+      const res = await apiClient.repairAllScreens(false);
+      const refused: { path: string; reason: string }[] = res.data?.refused ?? [];
+      showSuccess(res.message ?? 'Repaired');
+      if (refused.length) {
+        setFileError(`Refused: ${refused.map(r => `${r.path} (${r.reason})`).join('; ')}`);
+      }
+      queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+      // Every thumbnail as well as the index: the gallery draws each card from
+      // ['screen-file', path], and a repaired screen that still LOOKS broken
+      // is the bug being fixed.
+      queryClient.invalidateQueries({ queryKey: ['screen-file'] });
+    } catch (error) {
+      setFileError((error as Error).message);
+      showError((error as Error).message);
+    }
+  };
+
+  /**
+   * What the sysop says a file IS, over what the manager guessed.
+   *
+   * The classification is a heuristic - by name, and by the signature of the
+   * tool that writes a file - and this board has been told once already that
+   * its live screens were read by nothing.
+   */
+  const flagFile = async (target: string, flag: 'backup' | 'runtime' | 'art' | null) => {
+    try {
+      const res = await apiClient.flagScreen(target, flag);
+      showSuccess(res.message ?? 'Marked');
+      queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+      queryClient.invalidateQueries({ queryKey: ['screen-file', target] });
+    } catch (error) {
+      showError((error as Error).message);
+    }
+  };
+
   const repairFile = async (target: string) => {
     setFileError(null);
 
@@ -351,7 +504,124 @@ export function ScreenFilesPage() {
     }
   };
 
+  /**
+   * The code list, in the catalog's family order and filtered by the same
+   * search box as everything else on this page.
+   */
+  const mciSections = useMemo(
+    () => groupMciCodes(filterMciCodes(mci?.codes ?? EMPTY_MCI, query), mci?.families ?? EMPTY_FAMILIES),
+    [mci, query],
+  );
+
+  const mciColumns: DataTableColumn<MciCodeShape>[] = [
+    {
+      id: 'code',
+      header: 'Code',
+      value: row => row.code,
+      sortable: true,
+      mono: true,
+      // The tilde and the terminator ARE part of the answer: `~CL.` written as
+      // `~CL|` prints the letters "CL" at the caller.
+      cell: (row: MciCodeShape) =>
+        `${row.takesWidth ? '~[width]' : '~'}${row.code}`
+        + (row.argument.kind === 'none' ? '' : `<${row.argument.label ?? row.argument.kind}>`)
+        + row.terminator,
+    },
+    { id: 'summary', header: 'What it does', value: row => row.summary, sortable: true },
+    {
+      id: 'uses',
+      header: 'On this board',
+      value: row => row.uses,
+      align: 'right',
+      sortable: true,
+      cell: (row: MciCodeShape) => describeMciUsage(row),
+    },
+    {
+      // Where the code comes from, NOT the line it is implemented on: the
+      // admin is a sysop's tool, and a file:line citation on screen was
+      // reported once as comments left on the page.
+      id: 'source',
+      header: 'Comes from',
+      value: row => (row.aliasOf ? `alias ${row.aliasOf}` : row.source === 'web' ? 'web' : 'amiexpress'),
+      sortable: true,
+      cell: (row: MciCodeShape) =>
+        row.aliasOf
+          ? `Another way to write ~${row.aliasOf}`
+          : row.source === 'web' ? 'This board only' : 'AmiExpress',
+    },
+  ];
+
+  /**
+   * The board as pieces of art rather than as files.
+   *
+   * 1,155 screen files here and 34 of them unique. Original AmiExpress
+   * addressed 32 nodes; this port addresses 255, which turns a per-node copy
+   * from an annoyance into 800 files nobody can maintain by hand.
+   */
+  const duplicates = useMemo(() => (data ? duplicateGroups(data) : []), [data]);
+
+  const duplicateColumns: DataTableColumn<DuplicateGroup>[] = [
+    { id: 'name', header: 'Screen', value: row => row.name, sortable: true, mono: true },
+    {
+      id: 'copies', header: 'Copies', value: row => row.fileCount, align: 'right', sortable: true,
+    },
+    {
+      id: 'versions',
+      header: 'Versions',
+      value: row => row.versions.length,
+      align: 'right',
+      sortable: true,
+      // More than one version of the same screen means somebody edited a few
+      // copies and the rest drifted - which is the thing worth seeing.
+      cell: (row: DuplicateGroup) => describeGroup(row),
+    },
+    {
+      id: 'read',
+      header: 'Who sees it',
+      value: row => row.versions[0]?.readership ?? '',
+      sortable: true,
+      cell: (row: DuplicateGroup) => row.versions
+        .map(v => `${v.readership}${row.uniform ? '' : ` (${v.paths.length})`}`)
+        .join('; '),
+    },
+    {
+      id: 'edit',
+      header: '',
+      cell: (row: DuplicateGroup) => row.versions[0]?.editPath ?? '',
+      mono: true,
+    },
+  ];
+
   const columns: DataTableColumn<ScreenRow>[] = [
+    {
+      /*
+       * The picture first, in every tab.
+       *
+       * Asked for directly: "it would be nice with thumbnails for all screen
+       * files in all the tabs". A designer recognises the art and never the
+       * path, and that was true of the gallery long before it was true of
+       * these tables - the tables listed BBSTITLE, MENU, CONF_BULL and left a
+       * person to guess which picture each one is.
+       *
+       * Affordable now: a thumbnail draws at thumbnail size and gives its
+       * pixels back when it scrolls away, so a table of 872 rows costs what
+       * is on screen rather than everything ever scrolled past.
+       */
+      id: 'art',
+      header: 'Art',
+      value: row => row.previewPath ?? '',
+      cell: row => (
+        row.previewPath
+          ? (
+            <div className="h-16 w-28 overflow-hidden bg-black">
+              <ScreenThumbnail path={row.previewPath} scale={0.14} className="h-full" />
+            </div>
+          )
+          // A screen that resolves nowhere has nothing to draw, and saying so
+          // is the row's most important fact.
+          : <span className="text-xs text-content-muted">nothing to draw</span>
+      ),
+    },
     {
       id: 'screen',
       header: 'Screen',
@@ -359,7 +629,7 @@ export function ScreenFilesPage() {
       sortable: true,
       cell: row => (
         <span>
-          <span className="font-topaz text-content-primary">{row.screen}</span>
+          <span className="font-mono text-content-primary">{row.screen}</span>
           {/* The name is what the board calls the file; this is what the sysop
               was looking for. "I can't see the screen files that are shown when
               i join a conference" - they were CONF_BULL and MENU. */}
@@ -426,7 +696,7 @@ export function ScreenFilesPage() {
       header: 'Reads',
       value: res => res.dir,
       cell: res => (
-        <span className="font-topaz">
+        <span className="font-mono">
           {res.dir}
           {res.dirIsShared && <span className="text-content-muted"> (shared)</span>}
         </span>
@@ -437,7 +707,7 @@ export function ScreenFilesPage() {
       header: 'File',
       value: res => res.file ?? '',
       cell: res => (res.file ? (
-        <span className="font-topaz underline">{res.file}</span>
+        <span className="font-mono underline">{res.file}</span>
       ) : (
         <span className="text-status-warn">nothing resolves</span>
       )),
@@ -446,7 +716,7 @@ export function ScreenFilesPage() {
       id: 'variants',
       header: 'Variants',
       value: res => res.variants.join(' '),
-      cell: res => <span className="font-topaz">{res.variants.join(' ')}</span>,
+      cell: res => <span className="font-mono">{res.variants.join(' ')}</span>,
     },
   ];
 
@@ -457,7 +727,7 @@ export function ScreenFilesPage() {
       header: 'File',
       sortable: true,
       value: item => item.relPath,
-      cell: item => <span className="font-topaz underline">{item.relPath}</span>,
+      cell: item => <span className="font-mono underline">{item.relPath}</span>,
     },
     { id: 'format', header: 'Format', sortable: true, value: item => item.format },
     { id: 'bytes', header: 'Size', align: 'right', sortable: true, value: item => item.bytes,
@@ -491,7 +761,12 @@ export function ScreenFilesPage() {
   const screenTable = (rows: ScreenRow[]) => (
     <DataTable
       columns={columns}
-      rows={rows}
+      /*
+       * The same rule the gallery uses, so a screen cannot be art in one tab
+       * and plumbing in the next. Asked for directly: "so the ansi artists
+       * only see the screens they should touch".
+       */
+      rows={showGenerated ? rows : rows.filter(row => row.hasArt)}
       getRowId={row => row.screen}
       isLoading={isLoading}
       error={error as Error | null}
@@ -515,7 +790,7 @@ export function ScreenFilesPage() {
 
     const drawable = Object.values(data.files)
       .filter(file => file.format === 'ansi' || file.format === 'text')
-      .filter(file => showGenerated || !file.generated);
+      .filter(file => showGenerated || isArt(file));   // drawable-only is applied above
 
     /**
      * One card per piece of ART, not per file.
@@ -612,6 +887,72 @@ export function ScreenFilesPage() {
       render: () => screenTable(byScope.global),
     },
     {
+      id: 'codes',
+      label: `Codes ${mci?.codes?.length ?? 0}`,
+      render: () => (
+        <div className="space-y-3 text-sm">
+          <p className="text-content-secondary">
+            A screen file is a program: these are every code it can carry. The
+            board runs all of them - the count beside each one says how many of
+            YOUR files use it, and most of this list has never been tried here.
+          </p>
+          <p className="text-content-secondary">
+            None of them run unless the file's FIRST line starts with a tilde.
+            {' '}
+            {mci?.enablingTilde ? `${mci.enablingTilde.files} of this board's files carry it.` : ''}
+          </p>
+          {mciSections.length === 0 && (
+            <p className="text-content-secondary">No code matches that.</p>
+          )}
+          {mciSections.map(section => (
+            <section key={section.family} className="space-y-1">
+              <h3 className="text-content-primary">{section.label}</h3>
+              <DataTable
+                columns={mciColumns}
+                rows={section.codes}
+                getRowId={item => item.code}
+                emptyMessage="No code matches that."
+              />
+            </section>
+          ))}
+        </div>
+      ),
+    },
+    {
+      id: 'duplicates',
+      label: `Duplicates ${duplicates.length}`,
+      render: () => (
+        <div className="space-y-2 text-sm">
+          <p className="text-content-secondary">
+            One row per screen NAME, not per file: this board holds{' '}
+            {data ? Object.keys(data.files).length : 0} screen files and most of
+            them are copies of each other. A row that says "all the same" can be
+            edited once and written to every copy; a row that says versions
+            differ is one somebody edited a few copies of.
+          </p>
+          <p className="text-content-secondary">
+            Click a row to open the copy that callers actually see.
+          </p>
+          <DataTable
+            columns={duplicateColumns}
+            rows={duplicates.filter(g =>
+              !query.trim() || g.name.toLowerCase().includes(query.trim().toLowerCase()))}
+            getRowId={item => item.name}
+            initialSort={[{ id: 'copies', desc: true }]}
+            emptyMessage="Every screen on this board exists exactly once."
+            onRowClick={item => {
+              // Both: the file is what opens, and the SCREEN is what makes the
+              // fan-out able to offer sharing - pointing every node at one
+              // directory, which is the fix that makes the next edit one file
+              // instead of eighty.
+              setOpenFile(item.versions[0]?.editPath ?? null);
+              setOpenScreen(item.screen ?? null);
+            }}
+          />
+        </div>
+      ),
+    },
+    {
       id: 'unused',
       // Files nothing resolves to. Not a screen list: these are files on the
       // volume that no screen, node or conference reads.
@@ -650,13 +991,29 @@ export function ScreenFilesPage() {
         )}
       </header>
 
-      <input
-        type="text"
-        value={query}
-        onChange={e => setQuery(e.target.value)}
-        placeholder="Search screens"
-        className="input-field w-full max-w-sm"
-      />
+      <div className="flex flex-wrap items-center gap-4">
+        <input
+          type="text"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Search screens"
+          className="input-field w-full max-w-sm"
+        />
+        {/*
+          Page-wide, not per tab. The filter applies to the gallery AND the
+          three screen tables, so a control that lived in the gallery left a
+          sysop on the Node tab with rows hidden and no way to say otherwise.
+        */}
+        <label className="flex items-center gap-2 text-sm text-content-secondary">
+          <input
+            type="checkbox"
+            checked={showGenerated}
+            onChange={e => setShowGenerated(e.target.checked)}
+          />
+          Show plumbing: screens that are only codes, leftovers, and files the
+          board writes
+        </label>
+      </div>
 
       <div className="flex items-center gap-4 text-sm">
         <a className="inline-flex items-center gap-1 underline" href="/api/screens/export?scope=all">
@@ -675,6 +1032,9 @@ export function ScreenFilesPage() {
         />
         <button className="inline-flex items-center gap-1 underline" onClick={() => importInput.current?.click()}>
           <Upload size={14} /> Import an archive
+        </button>
+        <button className="inline-flex items-center gap-1 underline" onClick={repairAll}>
+          <AlertTriangle size={14} /> Repair every damaged screen
         </button>
       </div>
 
@@ -700,7 +1060,7 @@ export function ScreenFilesPage() {
       {entry && (
         <section className="space-y-2" ref={detailRef} data-testid="screen-detail">
           <h2 className="text-lg text-content-primary">
-            <span className="font-topaz">{entry.screen}</span>
+            <span className="font-mono">{entry.screen}</span>
             {describeScreen(entry.screen) && (
               <span className="ml-3 text-sm text-content-secondary">
                 {describeScreen(entry.screen)}
@@ -842,7 +1202,7 @@ export function ScreenFilesPage() {
         {editorWrite && pendingUpload && (
           <div className="space-y-2 p-4">
             <p className="text-sm text-content-primary">
-              Write <span className="font-topaz">{openFile}</span> where?
+              Write <span className="font-mono">{openFile}</span> where?
             </p>
             {options.map(option => (
               <button
@@ -891,6 +1251,18 @@ export function ScreenFilesPage() {
                 That did not work: {fileError}
               </p>
             )}
+            {/*
+              Which conference this file belongs to, by NAME.
+              `Conf3/bull20.txt` says nothing about which board section a
+              designer is about to replace - and the directory number is not
+              the conference number: on this board conference 1 lives in
+              Conf2. The name is the only thing a sysop recognises.
+            */}
+            {conferenceOfPath(openFile, data?.conferences) && (
+              <p className="text-sm text-content-primary">
+                {conferenceOfPath(openFile, data?.conferences)}
+              </p>
+            )}
             <p className="text-sm text-content-secondary">
               {file.bytes} bytes, {file.format}
               {file.sauce?.width && file.sauce?.height
@@ -900,7 +1272,7 @@ export function ScreenFilesPage() {
 
             {/* The artist signed it; the manager should say so. */}
             {file.sauce && (file.sauce.title || file.sauce.author) && (
-              <p className="text-sm text-content-primary font-topaz">
+              <p className="text-sm text-content-primary">
                 {file.sauce.title || 'Untitled'}
                 {file.sauce.author && ` by ${file.sauce.author}`}
                 {file.sauce.group && ` of ${file.sauce.group}`}
@@ -936,11 +1308,15 @@ export function ScreenFilesPage() {
               <input
                 ref={uploadInput}
                 type="file"
+                data-testid="screen-upload"
                 className="hidden"
                 onChange={async e => {
                   const chosen = e.target.files?.[0];
                   if (!chosen) return;
-                  setPendingUpload({ bytes: await readAsBase64(chosen), name: chosen.name });
+                  const bytes = await readAsBase64(chosen);
+                  setPendingUpload({ bytes, name: chosen.name });
+                  setCarryCodes('above');
+                  if (openFile) await previewCarry(openFile, bytes);
                   e.target.value = '';
                 }}
               />
@@ -966,12 +1342,6 @@ export function ScreenFilesPage() {
                 <Download size={14} /> Download
               </a>
               <button
-                className="inline-flex items-center gap-1 underline"
-                onClick={() => setShowRevisions(v => !v)}
-              >
-                <History size={14} /> Revisions
-              </button>
-              <button
                 className="inline-flex items-center gap-1 underline text-status-danger"
                 onClick={() => removeFile(openFile)}
               >
@@ -980,30 +1350,112 @@ export function ScreenFilesPage() {
             </div>
 
             {pendingUpload && !editorWrite && (
-              <div className="border border-border p-3 space-y-2 text-sm">
-                <p className="text-content-primary">
-                  Replace <span className="font-topaz">{openFile}</span> with{' '}
-                  <span className="font-topaz">{pendingUpload.name}</span>
-                </p>
-                {options.map(option => (
+              <div className="card space-y-4 text-sm">
+                <div>
+                  <h4 className="text-base text-content-primary">Replace this screen</h4>
+                  <p className="text-content-secondary">
+                    <span className="font-mono">{openFile}</span> becomes{' '}
+                    <span className="font-mono">{pendingUpload.name}</span>
+                  </p>
+                </div>
+
+                {/*
+                  A screen is a program and an ANSI editor writes no ~CC_. What
+                  a replace would cost is said BEFORE the fan-out is chosen,
+                  because the cost is the same whichever fan-out it is.
+                */}
+                {carryVerdict && (carryVerdict.carried.length > 0 || carryVerdict.lost.length > 0) && (
+                  <div className="space-y-2">
+                    <p className={carryVerdict.lost.length ? 'text-status-warn' : 'text-content-secondary'}>
+                      {describeCarry(carryVerdict)}
+                    </p>
+                    {carryVerdict.carried.length > 0 && (
+                      <ul className="space-y-1 border-l-2 border-border pl-3">
+                        {carryVerdict.carried.map(line => (
+                          <li key={line}><CodeChip>{line}</CodeChip></li>
+                        ))}
+                      </ul>
+                    )}
+                    <div>
+                      <label className="label" htmlFor="carry-placement">Keep these codes</label>
+                      <select
+                        id="carry-placement"
+                        className="input-field"
+                        value={carryCodes}
+                        onChange={e => setCarryCodes(e.target.value as 'none' | 'above' | 'below')}
+                      >
+                        <option value="above">where they were, around the art</option>
+                        <option value="below">all together, after the art</option>
+                        <option value="none">do not keep them</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/*
+                  Buttons, not links: one of these writes to the board and one
+                  throws the upload away, and as underlined text they looked
+                  identical. The suggested fan-out is the primary action.
+                */}
+                <div>
+                  <span className="label">Write it to</span>
+                  <div className="flex flex-wrap gap-2">
+                    {options.map(option => (
+                      <button
+                        key={option.choice}
+                        type="button"
+                        className={option.suggested ? 'btn-primary' : 'btn-secondary'}
+                        onClick={() => applyWrite(option)}
+                      >
+                        {option.label}
+                        {option.choice === 'all-copies' && ` (${option.targets.length} backups)`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 border-t border-border pt-3">
                   <button
-                    key={option.choice}
-                    className="block text-left underline"
-                    onClick={() => applyWrite(option)}
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => { setPendingUpload(null); setCarryVerdict(null); }}
                   >
-                    {option.label}
-                    {option.choice === 'all-copies' && ` - ${option.targets.length} backups`}
-                    {option.suggested && <span className="text-content-secondary"> (suggested)</span>}
+                    Cancel
                   </button>
-                ))}
-                <button
-                  className="block text-left text-content-secondary underline"
-                  onClick={() => setPendingUpload(null)}
-                >
-                  cancel
-                </button>
+                  <span className="text-content-muted">
+                    Every file written is backed up beside itself first.
+                  </span>
+                </div>
               </div>
             )}
+
+            {/*
+              The manager's classification is a guess, and the sysop is the one
+              who knows. `art` says the guess is wrong and a designer does edit
+              this file - which is the case the gallery hides by default.
+            */}
+            <div className="flex flex-wrap items-end gap-2 text-sm">
+              <div>
+                <label className="label" htmlFor="screen-kind">This file is</label>
+                <select
+                  id="screen-kind"
+                  className="input-field"
+                  value={file.generated ?? 'art'}
+                  onChange={e => flagFile(openFile, e.target.value as 'backup' | 'runtime' | 'art')}
+                >
+                  <option value="art">art a designer edits</option>
+                  <option value="runtime">written by the board</option>
+                  <option value="backup">an old copy kept beside the real one</option>
+                </select>
+              </div>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => flagFile(openFile, null)}
+              >
+                Use the manager's guess
+              </button>
+            </div>
 
             {file.problems && file.problems.length > 0 && (
               <div className="text-sm space-y-1">
@@ -1029,7 +1481,20 @@ export function ScreenFilesPage() {
             {file.format === 'ansi' || file.format === 'text' ? (
               // The editor's own renderer, so the view and the edit cannot
               // disagree about what the file looks like.
-              <ScreenArt content={file.content} />
+              // Tall art scrolls inside its own viewport rather than pushing
+              // everything below it off the page - the same treatment the
+              // editor's canvas gets.
+              <ScreenArt
+                content={file.content}
+                className="max-h-[60vh]"
+                /*
+                 * Tall art scrolls; a 3,019-line changelog is not art. Without
+                 * a ceiling this canvas is 96,608 pixels high, past what any
+                 * browser will allocate, and the page freezes. 200 rows is
+                 * eight screenfuls - more than any real piece on this board.
+                 */
+                maxRows={200}
+              />
             ) : (
               <p className="text-sm text-status-warn">
                 {file.format === 'rip'
@@ -1044,22 +1509,23 @@ export function ScreenFilesPage() {
                   This screen runs things - {file.mci.length} MCI reference
                   {file.mci.length === 1 ? '' : 's'}
                 </h4>
-                <ul className="font-topaz text-base">
+                <ul className="mt-1 space-y-1">
                   {file.mci.map((ref: MciReferenceShape, i: number) => (
-                    <li key={i} className={ref.resolves ? 'text-content-primary' : 'text-status-danger'}>
-                      ~{ref.code}_{ref.target}
+                    <li key={i} className="flex flex-wrap items-baseline gap-2">
+                      <CodeChip dead={!ref.resolves}>
+                        ~{ref.code}{ref.target ? `_${ref.target}` : ''}
+                      </CodeChip>
                       {ref.targetName && (
-                        <span className="text-content-secondary"> - {ref.targetName}</span>
+                        <span className="text-content-secondary">{ref.targetName}</span>
                       )}
-                      {ref.resolves ? '' : ' - points at nothing'}
+                      {!ref.resolves && (
+                        <span className="text-status-danger">points at nothing</span>
+                      )}
                     </li>
                   ))}
                 </ul>
               </div>
             )}
-
-            {/* Revisions panel */}
-            {showRevisions && <ScreenRevisionsPanel path={openFile} onClose={() => setShowRevisions(false)} />}
           </div>
         )}
       </Modal>
