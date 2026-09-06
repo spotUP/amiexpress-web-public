@@ -749,10 +749,36 @@ console.log('[FM] Starting file maintenance');
           `${filename} was not found on local disk, so it could not be filed into DRIVE.${destArea.storageVolume}`
         );
       }
+      let location;
       try {
-        await putUploadIntoPool(source, filename, destArea, storage);
+        location = await putUploadIntoPool(source, filename, destArea, storage);
       } catch (error) {
         throw new Error(storageFailureText(error));
+      }
+      // Tell the catalog where the bytes landed. This is the HOLD/PRIVATE
+      // release path (srcDir -1 is the HOLD listing) - the row for this file
+      // was already inserted with `areaid = destArea.id` at upload time
+      // (status 'hold'), so this UPDATE finds it by the exact
+      // (filename, areaId) pair recordLocation matches on. Without this,
+      // routes-setup.ts's by-id download route reads a NULL storage_volume
+      // for a file that IS in the bucket and 404s it, usedBytesByVolume
+      // under-counts this drive, and entriesOnVolume omits it from the
+      // per-volume contents report.
+      //
+      // Best-effort, deliberately: the bytes are already safely in the pool
+      // (putUploadIntoPool succeeded above), and an ordinary re-move between
+      // two already-active areas can legitimately have no matching
+      // (filename, destArea.id) row yet - the catalog sync for that path is
+      // its own pre-existing gap (see the commented-out moveDbEntry below),
+      // not one this fix should turn into a failed move that leaves the
+      // object orphaned in the bucket with the sysop told it failed.
+      try {
+        _db?.recordLocation?.(filename, destArea.id, location.driveNumber, location.key);
+      } catch (err) {
+        console.error(
+          `[FileMaintenance] moved ${filename} into DRIVE.${location.driveNumber} but could not record its ` +
+            `catalog location: ${err instanceof Error ? err.message : String(err)}`
+        );
       }
       // Only once the object is really there.
       await fsp.unlink(source);

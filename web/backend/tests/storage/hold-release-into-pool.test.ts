@@ -24,7 +24,7 @@ import { NameIndexRegistry } from '../../src/storage/name-index-registry';
 import { VolumeSet, type VolumeState } from '../../src/storage/volume-set';
 import { setStorageContext, type StorageContext } from '../../src/storage/storage-context';
 import type { RemoteArea } from '../../src/storage/remote-areas';
-import { locateRemoteFile } from '../../src/storage/remote-download';
+import { locateRemoteFile, materialiseCatalogEntry } from '../../src/storage/remote-download';
 import { FakeBackend } from './fake-backend';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -42,6 +42,7 @@ interface Harness {
   dataDir: string;
   heldFile: string;
   written: () => string;
+  recordLocation: jest.Mock;
 }
 
 /**
@@ -70,6 +71,7 @@ function harness(opts: { storageVolume?: number } = {}): Harness {
     },
   };
 
+  const recordLocation = jest.fn();
   setFileMaintenanceDependencies({
     db: {
       // getUploadBase reads ULPATH.n out of system_config; without it the
@@ -79,6 +81,7 @@ function harness(opts: { storageVolume?: number } = {}): Harness {
         String(params?.[0]) === 'ULPATH'
           ? { rows: [{ value: path.join(dataDir, 'Conf1', 'Files') }] }
           : { rows: [] },
+      recordLocation,
     },
     config: { get: (key: string) => (key === 'dataDir' ? dataDir : undefined) },
   });
@@ -122,6 +125,7 @@ function harness(opts: { storageVolume?: number } = {}): Harness {
     dataDir,
     heldFile,
     written: () => out.join(''),
+    recordLocation,
   };
 }
 
@@ -187,5 +191,50 @@ describe('releasing a HOLD file into a pooled area', () => {
     expect(h.backend.puts).toBe(0);
     expect(fs.existsSync(h.heldFile)).toBe(false);
     expect(fs.readFileSync(path.join(h.dataDir, 'Conf1', 'DIR1'), 'utf-8')).toContain('DEMO.ZIP');
+  });
+
+  describe('finding 4: the catalog learns where the release put the object', () => {
+    it('calls recordLocation with the drive and key the object actually landed at', async () => {
+      const h = harness({ storageVolume: 2 });
+
+      await performMove(h, 1);
+
+      expect(h.recordLocation).toHaveBeenCalledWith('DEMO.ZIP', 1, 2, 'Conf1/Files/DEMO.ZIP');
+    });
+
+    it('makes the released file reachable by the SAME function the by-id download route calls, end to end', async () => {
+      // routes-setup.ts's `/api/download/:fileId` resolves a pooled catalog
+      // row through materialiseCatalogEntry - never a local disk walk. This
+      // proves the chain performMove -> recordLocation -> a catalog row ->
+      // materialiseCatalogEntry actually connects, the exact path that used
+      // to read a NULL storage_volume and 404 a file sitting in the bucket.
+      const h = harness({ storageVolume: 2 });
+
+      await performMove(h, 1);
+
+      const [, , driveNumber, objectKey] = h.recordLocation.mock.calls[0];
+      const catalogRow = { storageVolume: driveNumber, objectKey };
+
+      const remote = await materialiseCatalogEntry(catalogRow, h.storage);
+      expect(remote).not.toBeNull();
+      expect(fs.readFileSync(remote!.fullPath, 'utf8')).toBe('held payload');
+    });
+
+    it('does not fail the move when recordLocation cannot find a matching row - the bytes already landed', async () => {
+      const h = harness({ storageVolume: 2 });
+      h.recordLocation.mockImplementation(() => {
+        throw new Error('recordLocation: no file_entries row for filename "DEMO.ZIP" in area 1');
+      });
+
+      await performMove(h, 1);
+
+      // The object is still safely in the pool and the move still reports
+      // success - only the catalog's cross-reference is missing, which is a
+      // pre-existing, separate gap (see the file's own comment), not a
+      // reason to strand a file that DID reach the bucket.
+      expect((await h.backend.get('Conf1/Files/DEMO.ZIP')).toString()).toBe('held payload');
+      expect(fs.existsSync(h.heldFile)).toBe(false);
+      expect(h.written()).toContain('Move operation successful');
+    });
   });
 });
