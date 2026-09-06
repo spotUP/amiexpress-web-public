@@ -817,12 +817,14 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
     session.tempData = undefined;
   };
 
-  // A drive the board believes is DOWN has no room by roomOn's reckoning, and
-  // "not enough free space" would send the caller off to delete files that
-  // were never the problem. It is an outage; say so, in the subsystem's own
-  // one sentence, and name the drive for the sysop reading the screenshot.
-  if (pool?.degraded) {
-    refuse(storageFailureText(new StorageUnavailableError(pool.driveNumber, 'volume is degraded')));
+  // A drive the board believes is DOWN, or one that has spent its monthly
+  // request budget, has no room by roomOn's reckoning, and "not enough free
+  // space" would send the caller off to delete files that were never the
+  // problem. Both are outages; say so, in the subsystem's own one sentence,
+  // and name the drive for the sysop reading the screenshot.
+  if (pool?.degraded || pool?.outOfRequests) {
+    const reason = pool.degraded ? 'volume is degraded' : 'volume is out of requests';
+    refuse(storageFailureText(new StorageUnavailableError(pool.driveNumber, reason)));
     return;
   }
 

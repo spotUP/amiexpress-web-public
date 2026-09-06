@@ -250,6 +250,27 @@ describe('the upload gate', () => {
     expect(h.session.tempData).toBeUndefined();
   });
 
+  it('calls a drive that is out of requests an outage, not a full disk', () => {
+    // A volume that has spent its monthly request budget (Oracle's free tier:
+    // 50,000/month) reports 0 room by roomOn's reckoning exactly like a
+    // degraded drive, but `degraded` itself stays false - it is reachable,
+    // just refusing calls until the meter resets. Before this fix the gate
+    // only checked `pool.degraded` and told the caller "Not enough free
+    // space for uploading!", sending them off to delete files that were
+    // never the problem.
+    const states = [volume(2, 's3', 10 * 1024 ** 3)];
+    states[0].requestBudget = 50000;
+    states[0].requestsThisMonth = 50000;
+    const h = harness({ states, storageVolume: 2 });
+
+    displayUploadInterface(h.socket, h.session, '');
+
+    expect(h.written()).toContain('DRIVE.2 is unavailable - try again later');
+    expect(h.written()).not.toContain('Not enough free space for uploading!');
+    expect(h.session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+    expect(h.session.tempData).toBeUndefined();
+  });
+
   it('measures the node playpen, not the area directory', () => {
     // express.e:18991 measures Node<N>/Playpen (or ramPen); rz never writes
     // into the area's own directory, and on a pooled area that directory has

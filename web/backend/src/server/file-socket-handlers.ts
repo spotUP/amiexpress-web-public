@@ -476,6 +476,11 @@ console.error(`[testFile] Error:`, error);
     // Where the bytes ended up when this area lives in the pool. Null for a
     // local area, which is every area on every board without a bucket.
     let poolLocation: RemoteLocation | null = null;
+    // Set true only when the pooled put failed AND the fallback quarantine
+    // move into HOLD also failed. In that case the file is still sitting in
+    // the playpen - not in the pool, not in HOLD - so neither the catalog
+    // row nor the DIR listing may claim it lives in HOLD.
+    let quarantineFailed = false;
     if (data.path) {
       const storage = getStorageContext();
       // HOLD and LCFILES are sysop-review directories on local disk, not areas
@@ -547,7 +552,11 @@ console.error(`[Upload] Error moving file: ${error.message}`);
 console.log(`[Upload] ${currentFile.filename} held at ${heldAt}`);
           } catch (holdError: any) {
             // The playpen copy is still there, which is the one thing that
-            // must stay true; cleanPlayPen sweeps it into PartUpload.
+            // must stay true; cleanPlayPen sweeps it into PartUpload. The
+            // file is not in HOLD, so quarantineFailed must suppress the
+            // catalog row and DIR entry below - both would otherwise claim
+            // a location the file never reached.
+            quarantineFailed = true;
 console.error(`[Upload] Could not move ${currentFile.filename} to HOLD: ${holdError.message}`);
           }
         }
@@ -555,8 +564,13 @@ console.error(`[Upload] Could not move ${currentFile.filename} to HOLD: ${holdEr
     }
 
     // Save file to database (express.e:19356-19377)
-    // Skip database insert for duplicates - file already exists in database
-    if (!foundDupe) {
+    // Skip database insert for duplicates - file already exists in database.
+    // Also skip when the pooled put AND the fallback HOLD quarantine both
+    // failed: the file is still in the playpen, and a catalog row claiming
+    // status 'hold' would point the sysop at a file that isn't there. A file
+    // left in the playpen is recoverable (resumeStuff can offer it back); a
+    // catalog entry pointing at nothing is not.
+    if (!foundDupe && !quarantineFailed) {
       const fileEntry = {
         filename: currentFile.filename,
         description: finalDescription, // Use DIZ if found, otherwise batch description
@@ -580,6 +594,8 @@ console.error(`[Upload] Could not move ${currentFile.filename} to HOLD: ${holdEr
       };
 
       await db.createFileEntry(fileEntry as any);
+    } else if (quarantineFailed) {
+console.error(`[Upload] Skipping database insert for ${currentFile.filename}: pooled put and HOLD quarantine both failed, file remains in playpen`);
     } else {
       // Duplicate file - skip database insert but still write to DIR file in HOLD.
       // It cannot be in the pool: the check above ran BEFORE the move and set
@@ -594,6 +610,14 @@ console.log(`[Upload] Skipping database insert for duplicate file: ${currentFile
     // express.e reads NDIRS from ConfConfig.info (set at install time, typically 1).
     // Using getDirFiles().length was wrong: it grew with every upload and caused
     // each file to land in a new DIR instead of the upload area.
+    //
+    // Skipped entirely when quarantineFailed: the file is still in the
+    // playpen, not in HOLD, so a DIR/FILES.BBS entry naming HOLD's fileStatus
+    // would list a download nobody can fetch - exactly what this invariant
+    // forbids.
+    if (quarantineFailed) {
+console.error(`[Upload] Skipping DIR file entry for ${currentFile.filename}: pooled put and HOLD quarantine both failed, file remains in playpen`);
+    } else {
     try {
       const conferencePath = getConferenceDir(
         session.currentConf,
@@ -662,6 +686,7 @@ console.error(`[Conftop] Error updating ctop.data: ${ctopErr.message}`);
     } catch (error: any) {
 console.error(`[Upload] Error writing DIR file: ${error.message}`);
       // Don't fail upload on DIR write error
+    }
     }
 
     // Update user stats in users table (express.e:19379-19384)

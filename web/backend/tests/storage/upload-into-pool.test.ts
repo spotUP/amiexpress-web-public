@@ -55,6 +55,23 @@ jest.mock('../../src/database', () => ({
 jest.mock('../../src/server/database-helpers', () => ({ callersLog: jest.fn(async () => undefined) }));
 jest.mock('../../src/services/post-upload.service', () => ({ runPostUpload: jest.fn(async () => undefined) }));
 
+// Same deferred-lookup trick as __uploadMockDb above, for one test that needs
+// the fallback HOLD quarantine move (called from the pooled-put failure
+// catch block) to fail on its own. `null` means "use the real
+// implementation" - every other test in this file exercises the genuine
+// move.
+(globalThis as any).__moveUploadedFileOverride = null;
+jest.mock('../../src/utils/file-hold.util', () => {
+  const actual = jest.requireActual('../../src/utils/file-hold.util');
+  return {
+    ...actual,
+    moveUploadedFile: (...args: unknown[]) => {
+      const override = (globalThis as any).__moveUploadedFileOverride;
+      return (override ?? actual.moveUploadedFile)(...args);
+    },
+  };
+});
+
 import { processBatchFile } from '../../src/server/file-socket-handlers';
 import { FileCache } from '../../src/storage/file-cache';
 import { NameIndexRegistry } from '../../src/storage/name-index-registry';
@@ -194,6 +211,7 @@ afterEach(() => {
   setStorageContext(null);
   restoreConfig?.();
   restoreConfig = null;
+  (globalThis as any).__moveUploadedFileOverride = null;
 });
 
 afterAll(() => {
@@ -286,6 +304,33 @@ describe('an upload into a pooled area', () => {
     // And it is not advertised as a file of this area: status hold, so the
     // entry goes to HELD rather than into the area's DIR listing.
     expect(createdEntries[0]?.status).toBe('hold');
+    expect(fs.existsSync(path.join(h.dataDir, 'Conf1', 'DIR1'))).toBe(false);
+  });
+
+  it('leaves the file in the playpen, and writes no listing at all, when the HOLD quarantine also fails', async () => {
+    // The put failed (backend.down), and the fallback quarantine move into
+    // HOLD fails too - the review that found this defect: the pooled-put
+    // failure handler called moveUploadedFile in its own catch block, that
+    // call's error was only console.error'd, and execution fell through
+    // UNCONDITIONALLY to db.createFileEntry({status: 'hold'}) and
+    // writeUploadToDirFile(..., 'hold', ...) - writing a HOLD catalog row and
+    // a HOLD DIR entry for a file that never reached HOLD and is still
+    // sitting in the playpen.
+    const h = harness({ storageVolume: 2 });
+    h.backend.down = true;
+    (globalThis as any).__moveUploadedFileOverride = async () => {
+      throw new Error('HOLD directory disk full');
+    };
+
+    await processBatchFile(h.socket, h.session, h.data, config);
+
+    // The one thing that must stay true: the caller's only copy is still in
+    // the playpen. resumeStuff can offer it back; nothing else can.
+    expect(fs.existsSync(h.playpenFile)).toBe(true);
+    expect(fs.existsSync(path.join(h.dataDir, 'Conf1', 'HOLD', 'DEMO.ZIP'))).toBe(false);
+    // No catalog row claiming the file is in HOLD...
+    expect(createdEntries).toHaveLength(0);
+    // ...and no DIR entry pointing at a HOLD file that isn't there.
     expect(fs.existsSync(path.join(h.dataDir, 'Conf1', 'DIR1'))).toBe(false);
   });
 

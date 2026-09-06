@@ -69,10 +69,11 @@ export function pooledUploadArea(area: UploadAreaRef, storage: StorageContext | 
  *               sum-based gate, let the caller send the whole file over
  *               Zmodem, and fail at the put.
  *
- * `degraded` is carried separately because a drive the board believes is DOWN
- * has 0 room by `roomOn`'s reckoning, and telling a caller "not enough free
- * space" for an outage sends them away to delete files that were never the
- * problem. It is an outage, and it is worded as one.
+ * `degraded` and `outOfRequests` are carried separately because a drive the
+ * board believes is DOWN, or one that has spent its monthly request budget,
+ * both have 0 room by `roomOn`'s reckoning, and telling a caller "not enough
+ * free space" for either sends them away to delete files that were never the
+ * problem. Both are outages, and both are worded as one.
  *
  * Null, not a zeroed record, for every board without a bucket:
  * `VolumeSet.freeBytes()` counts only s3 volumes, so a board whose Drives.info
@@ -89,6 +90,8 @@ export interface PoolSpace {
   driveFree: number;
   driveNumber: number;
   degraded: boolean;
+  /** This drive has spent its monthly request budget - an outage, not a full disk. */
+  outOfRequests: boolean;
 }
 
 export function poolSpaceFor(area: UploadAreaRef, storage: StorageContext | null): PoolSpace | null {
@@ -102,6 +105,7 @@ export function poolSpaceFor(area: UploadAreaRef, storage: StorageContext | null
     driveFree: storage.volumes.freeBytesOn(pooled.storageVolume),
     driveNumber: pooled.storageVolume,
     degraded: state.degraded,
+    outOfRequests: storage.volumes.isOutOfRequests(pooled.storageVolume),
   };
 }
 

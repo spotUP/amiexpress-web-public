@@ -94,6 +94,20 @@ export class VolumeSet {
     return state.requestBudget !== undefined && state.requestsThisMonth >= state.requestBudget;
   }
 
+  /**
+   * Whether this drive has spent its monthly request budget - an outage by a
+   * different meter than `degraded`, but the same kind of fact: the volume is
+   * there and reachable, it is simply refusing calls until the meter resets.
+   * A caller of `roomOn`/`freeBytesOn` alone cannot tell this apart from "the
+   * volume is genuinely full", which is why callers that need to word the
+   * refusal correctly (the upload gate) ask this directly, the way they
+   * already ask `byNumber(...)?.degraded`.
+   */
+  isOutOfRequests(driveNumber: number): boolean {
+    const state = this.byNumber(driveNumber);
+    return state !== undefined && this.outOfRequests(state);
+  }
+
   markDegraded(driveNumber: number, degraded: boolean): void {
     const state = this.byNumber(driveNumber);
     if (state) state.degraded = degraded;
