@@ -31,6 +31,9 @@ import {
   getLogs,
   getDoorLogFiles,
   clearLogs,
+  getSessionLog,
+  saveSessionLog,
+  getSessionStats,
 } from './client.js';
 
 const BASE_URL = process.env['AMIEXPRESS_URL'] ?? 'http://localhost:3001';
@@ -243,6 +246,37 @@ test('clearLogs DELETEs /api/config/logs with type and an optional doorLog', asy
 
   assert.equal(calls[0].url, `${BASE_URL}/api/config/logs?type=door68k&doorLog=door-68k-trivia.log`);
   assert.equal(calls[0].method, 'DELETE');
+});
+
+test('getSessionLog reads the bare {log} response, not {success,data}', async () => {
+  stubFetch({ log: { sessionId: 's1', username: 'newguy', output: ['hello\r\n'] } });
+  const log = await getSessionLog('s1');
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/sessions/s1/log`);
+  assert.deepEqual(log?.output, ['hello\r\n']);
+});
+
+test('getSessionLog returns null when the backend answers no log', async () => {
+  stubFetch({});
+  const log = await getSessionLog('missing');
+  assert.equal(log, null);
+});
+
+test('saveSessionLog POSTs /api/sessions/:id/save and returns the bare filePath', async () => {
+  stubFetch({ filePath: '/var/logs/sessions/s1.log' });
+  const res = await saveSessionLog('s1');
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/sessions/s1/save`);
+  assert.equal(calls[0].method, 'POST');
+  assert.equal(res.filePath, '/var/logs/sessions/s1.log');
+});
+
+test('getSessionStats reads the bare {stats} response', async () => {
+  stubFetch({ stats: { totalSessions: 3, totalLines: 500 } });
+  const stats = await getSessionStats();
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/sessions/stats`);
+  assert.equal(stats.totalSessions, 3);
 });
 
 // The incident this whole page exists to fix: the OLD Security page wrote

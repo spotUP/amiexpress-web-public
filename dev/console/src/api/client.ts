@@ -466,13 +466,57 @@ export async function getSessions() {
   }));
 }
 
+export interface SessionLog {
+  sessionId: string;
+  userId?: string;
+  username?: string;
+  nodeId?: number;
+  startTime?: string;
+  lastActivity?: string;
+  /** Raw terminal output chunks, ANSI codes and all — SessionLogManager.ts:162-185. */
+  output: string[];
+}
+
+// GET /api/sessions/:id/log answers { log } — NOT the { success, data }
+// envelope most /api/config/* routes use (session-logs.handler.ts:36-60 is a
+// bare res.json({ log }), no ApiResponse wrapper at all). The previous
+// version here checked for `.data`, which this response never has, so it
+// always fell through to returning the raw { log: {...} } object — the page
+// then read `.lines`/`.entries` off THAT, neither of which exist; the real
+// content sits one level down at `.log.output`. Matches
+// web/config-app/src/pages/SessionLogsPage.tsx:77's `(logData as any)?.log`.
 export async function getSessionLog(sessionId: string) {
-  // Backend returns either { success, data: {...} } or the bare object — accept both.
-  const res = await request<{ success?: boolean; data?: unknown; lines?: string[]; entries?: unknown[]; [k: string]: unknown }>(`/api/sessions/${sessionId}/log`);
-  if (res && typeof res === 'object' && 'data' in res && res.data && typeof res.data === 'object') {
-    return res.data as { lines?: string[]; entries?: unknown[]; [k: string]: unknown };
-  }
-  return res as { lines?: string[]; entries?: unknown[]; [k: string]: unknown };
+  const res = await request<{ log?: SessionLog }>(`/api/sessions/${sessionId}/log`);
+  return res.log ?? null;
+}
+
+// GET /api/sessions/:id/log/raw returns text/plain, not JSON — request()
+// always calls res.json(), so this bypasses it the same way web's
+// getSessionLogRaw does (web/config-app/src/api/client.ts:933-941).
+export async function getSessionLogRaw(sessionId: string): Promise<string> {
+  const headers: Record<string, string> = {};
+  if (_token) headers['Authorization'] = `Bearer ${_token}`;
+  const res = await fetch(`${BASE_URL}/api/sessions/${sessionId}/log/raw`, { headers });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch raw log`);
+  return res.text();
+}
+
+// POST /api/sessions/:id/save — writes the session's log to disk and
+// answers the path (session-logs.handler.ts:115-136), bare { filePath }.
+export async function saveSessionLog(sessionId: string) {
+  return request<{ filePath?: string }>(`/api/sessions/${sessionId}/save`, { method: 'POST' });
+}
+
+export interface SessionStats {
+  totalSessions: number;
+  totalLines: number;
+  oldestSession?: string;
+}
+
+// GET /api/sessions/stats — bare { stats }, same as getSessionLog above.
+export async function getSessionStats() {
+  const res = await request<{ stats?: SessionStats }>('/api/sessions/stats');
+  return res.stats ?? { totalSessions: 0, totalLines: 0 };
 }
 
 export interface OperatorChatConfig {
