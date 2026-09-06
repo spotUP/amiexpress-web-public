@@ -355,8 +355,28 @@ export class LobbyBroker {
     // open, public, with room. The OLDEST such lobby wins, so two players
     // searching at the same moment converge on one rather than picking
     // different ones.
+    // Why a lobby was passed over, for the next time somebody reports landing
+    // alone in a room that should have been shared. "Creating new lobby" on
+    // its own does not say whether there was nothing to join or something
+    // that was rejected, and those are different bugs (2026-09-06: four
+    // testers, four battle royale rooms, and the container that would have
+    // known why was replaced before it could be asked).
+    const passedOver: string[] = [];
+
     let targetLobby: Lobby | null = null;
     for (const lobby of this.lobbies.values()) {
+      const why: string[] = [];
+      if (lobby.state !== 'waiting' && lobby.state !== 'countdown') why.push(`state=${lobby.state}`);
+      if (lobby.isPrivate) why.push('private');
+      if (lobby.players.length >= lobby.maxPlayers) {
+        why.push(`full ${lobby.players.length}/${lobby.maxPlayers}`);
+      }
+      if (lobby.settings?.mode !== data.mode) {
+        why.push(`mode=${String(lobby.settings?.mode)} wanted=${String(data.mode)}`);
+      }
+      if (this.clientLobbies.get(clientId) === lobby.id) why.push('already in it');
+      if (why.length > 0) passedOver.push(`${lobby.id} (${why.join(', ')})`);
+
       if (
         // 'countdown' counts as joinable, not just 'waiting'. A host alone
         // in a 1v1 lobby can start a countdown - one player is enough, so a
@@ -385,7 +405,11 @@ export class LobbyBroker {
       this.handleJoinLobby(clientId, { lobbyId: targetLobby.id }, callback);
     } else {
       // Create new matchmaking lobby
-      console.log(`[LobbyBroker] Matchmaking: player ${client.playerName} creating new lobby`);
+      console.log(
+        `[LobbyBroker] Matchmaking: player ${client.playerName} creating new lobby`
+        + ` (mode=${String(data.mode)}, ${this.lobbies.size} lobby/lobbies existed`
+        + (passedOver.length > 0 ? `, passed over: ${passedOver.join('; ')})` : ')'),
+      );
       const config: LobbyConfig = {
         ...data.config,
         settings: {
