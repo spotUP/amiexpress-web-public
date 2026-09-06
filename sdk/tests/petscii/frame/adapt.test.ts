@@ -1,4 +1,4 @@
-import { adaptFrame, adaptRows, chooseRule, cropRow, gutterRow, reflowRow, splitRow, deindentRow, narrowRow, isCroppable, applyRule, AdaptRule } from '../../../petscii/frame/adapt';
+import { adaptFrame, adaptRows, chooseRule, cropRow, gutterRow, reflowRow, splitRow, deindentRow, narrowRow, repeatRow, recordFields, isCroppable, applyRule, TRUNCATION_MARK, AdaptRule } from '../../../petscii/frame/adapt';
 import { textToFrame, makeFrame, frameText, Cell } from '../../../petscii/frame/types';
 import { contentWidth, columnParts } from '../../../petscii/frame/classify';
 import { wrapLineToWidth } from '../../../petscii/wrap';
@@ -45,12 +45,21 @@ describe('chooseRule', () => {
    * `gutter` when there are gutters to squeeze, `split` otherwise.
    */
   it('a row narrow cannot fit falls back to gutter (or split), never to a dropped column', () => {
-    const MANY = 'abc  '.repeat(15).trimEnd();
+    // The columns are DISTINCT, and that is load-bearing: this case is about a
+    // row with too many columns to shrink, and the guarantee is that no column
+    // is silently dropped because the reader could not tell which one went.
+    // The fixture used to be 'abc' repeated, which since the `repeat` rung
+    // (2026-09-06) exercises a different rung entirely - identical columns are
+    // decoration, and there the reader CAN tell what is missing. That case is
+    // asserted on its own below; this one keeps the original guarantee.
+    const MANY = Array.from({ length: 15 }, (_, i) => `a${i}b`).join('  ');
     expect(narrowRow(row(MANY), 40)).toBeNull();
+    expect(repeatRow(row(MANY), 40)).toBeNull();
     expect(chooseRule(row(MANY), 40)).toBe('gutter');
     expect(applyRule('narrow', row(MANY), 40).applied).toBe('split');   // a PINNED narrow falls back too
-    const bordered = '|' + 'ab|'.repeat(18);
+    const bordered = '|' + Array.from({ length: 18 }, (_, i) => `${i}|`).join('');
     expect(narrowRow(row(bordered), 40)).toBeNull();
+    expect(repeatRow(row(bordered), 40)).toBeNull();
     expect(chooseRule(row(bordered), 40)).toBe('split');
   });
 
@@ -597,6 +606,43 @@ describe('record', () => {
 
   // ---- not a record --------------------------------------------------------
 
+  it("a message with its own double spaces still wraps: it is typing, not structure", () => {
+    // The sysop's line, 2026-09-06. Two runs of blanks inside the message plus
+    // the author's gutter gave the row four columns, `narrowRow` matched, and
+    // narrow answered first: `yeah! dre!wal> 40 col petscii> now sysop`.
+    const cells = wall('yeah! dre!wall is  40 col petscii ok  now', 'sysop');
+    expect(narrowRow(cells, 40)).not.toBeNull();     // narrow still MATCHES the row
+    expect(chooseRule(cells, 40)).toBe('record');    // record is asked first and wins
+    const out = applyRule('record', cells, 40);
+    expect(out.rows.map(str).join('')).not.toContain(TRUNCATION_MARK);
+    expect(str(out.rows[out.rows.length - 1]).slice(40 - 5)).toBe('sysop');
+    // every character of the message survives, in order
+    expect(out.rows.map(str).join(' ').replace(/\s+/g, ' ').trim())
+      .toBe('yeah! dre!wall is 40 col petscii ok now sysop');
+  });
+
+  it("the row the caller is typing into is not a record: its last gap is typing, not padding", () => {
+    // dRE!WAll's prompt row as the echo grows. `now` is the last blank-free
+    // token past column 40, so without the padding-gutter guard it was read as
+    // an author and right-aligned to column 40 - jumping there as he typed.
+    // A record's field is reached by PADDING and is strictly wider than the
+    // spacing inside the message; here every gap is two blanks.
+    const echo = row('Enter your Line: yeah! dre!wall is  40 col petscii ok  now');
+    expect(recordFields(echo, 40)).toBeNull();
+    expect(chooseRule(echo, 40)).not.toBe('record');
+    // and the padded entry row of the SAME text still is a record
+    expect(chooseRule(wall('yeah! dre!wall is  40 col petscii ok  now', 'sysop'), 40)).toBe('record');
+  });
+
+  it("a table of atoms stays with narrow: a header belongs over its columns", () => {
+    // `who`'s header. Every column is blank-free, so it is column labels and
+    // not a message beside a name - the one row in the corpus where the two
+    // rungs really compete.
+    const header = row('  ND#/Calls    User/PhoneNumber                Location/Action');
+    expect(recordFields(header, 40)).toBeNull();
+    expect(chooseRule(header, 40)).toBe('narrow');
+  });
+
   it('a two-column stat row is NOT a record: its right half is prose, not an atom', () => {
     // six_status, ratiorep, super_stats all paint this shape.
     const stat = row('Byte Limit..........: 0'.padEnd(49, ' ') + 'Slot Number...........: 0');
@@ -627,5 +673,45 @@ describe('record', () => {
     expect(out.map(5)).toEqual({ row: 0, x: 5 });
     expect(out.map(61)).toEqual({ row: 0, x: 36 });     // first cell of the author
     expect(out.map(64)).toEqual({ row: 0, x: 39 });     // last cell of the author
+  });
+});
+
+/**
+ * The `repeat` rung: a row of IDENTICAL columns is decoration, so whole copies
+ * are kept and the rest dropped, rather than every copy being shortened.
+ * Named after the sysop's second report (2026-09-06), where dRE!WAll's STYLE.1
+ * reached a C64 as `Dre> Dre!> Dre!> Dre!> Dre!> Dre!> Dre!>`.
+ */
+describe('repeat', () => {
+  const TAGS = '| Dre!Wall | Dre!Wall | Dre!Wall | Dre!Wall | Dre!Wall | Dre!Wall | Dre!Wall |';
+
+  it('keeps whole copies of a repeated tag instead of shortening every one', () => {
+    expect(chooseRule(row(TAGS), 40)).toBe('repeat');
+    const out = applyRule('repeat', row(TAGS), 40);
+    expect(out.rows).toHaveLength(1);
+    expect(str(out.rows[0])).toBe('Dre!Wall Dre!Wall Dre!Wall Dre!Wall');
+    expect(str(out.rows[0])).not.toContain(TRUNCATION_MARK);
+  });
+
+  it('declines when the columns differ, so a real table still narrows', () => {
+    expect(repeatRow(row(TABLE), 40)).toBeNull();
+    expect(chooseRule(row(TABLE), 40)).toBe('narrow');
+    expect(repeatRow(row(WIDE_TABLE), 40)).toBeNull();
+  });
+
+  it('declines when every copy already fits, because narrow then loses nothing', () => {
+    const three = '| ab | ab | ab |'.padEnd(45, ' ') + '|';
+    expect(repeatRow(row(three), 40)).toBeNull();
+  });
+
+  it('a pinned repeat on a row whose columns differ falls through to narrow', () => {
+    expect(applyRule('repeat', row(TABLE), 40).applied).toBe('narrow');
+  });
+
+  it('the cursor follows its source column into a kept copy', () => {
+    const cells = row(TAGS);
+    const out = applyRule('repeat', cells, 40);
+    expect(out.map(2)).toEqual({ row: 0, x: 0 });    // first cell of the first tag
+    expect(out.map(13)).toEqual({ row: 0, x: 9 });   // first cell of the second tag
   });
 });

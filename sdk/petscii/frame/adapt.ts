@@ -5,6 +5,7 @@
  *   crop      columns 0..39 (right half blank, one repeated border glyph, or
  *             the whole row is a horizontal rule - truncating one leaves one)
  *   deindent  drop the leading blanks when the row then fits (lossless)
+ *   repeat    a row of IDENTICAL columns: as many whole copies as fit, rest dropped
  *   narrow    one row, columns preserved, over-wide cells truncated with '>'
  *   record    a two-field row (message + a right-hand author/tag): the left
  *             field reflows, the field stays flush against the right margin
@@ -12,7 +13,7 @@
  *   reflow    word wrap, attributes travel with their cell
  *   split     plain halves, blank second half dropped
  *
- * Ladder order: crop -> deindent -> narrow -> record -> reflow/split. `narrow` exists
+ * Ladder order: crop -> deindent -> record -> repeat -> narrow -> reflow/split. `narrow` exists
  * because splitting a TABLE in half puts its right-hand columns on a row of
  * their own with no header: that is how a 25-row door screen came out 34-46
  * rows and lost its title to tail-paging (rtw 46, ustats 35, what 34 before
@@ -79,7 +80,7 @@ import { wrapLineToWidth } from '../wrap';
 import { classifyRow, columnSpans, contentWidth, hasTabularGutters, isRuleRow, looksLikeAsciiArt, rowText } from './classify';
 import { Cell, Cursor, Frame, blankCell, cloneCell, isBlank, makeFrame, padRow } from './types';
 
-export type AdaptRule = 'crop' | 'deindent' | 'gutter' | 'narrow' | 'record' | 'reflow' | 'split';
+export type AdaptRule = 'crop' | 'deindent' | 'gutter' | 'narrow' | 'record' | 'repeat' | 'reflow' | 'split';
 export type RegionRule = AdaptRule | 'auto';
 
 export interface RegionPin {
@@ -192,12 +193,19 @@ function classifiedRule(cells: Row): AdaptRule {
 export function chooseRule(cells: Row, cols: number): AdaptRule {
   if (isCroppable(cells, cols) || isCroppableRule(cells, cols)) return 'crop';
   if (contentWidth(cells) - indentOf(cells) <= cols) return 'deindent';
-  if (narrowRow(cells, cols) !== null) return 'narrow';
-  // AFTER narrow, so a row with real table structure is never read as a
-  // record: `recordFields` needs exactly one gutter and narrow owns two or
-  // more, but a BORDERED row has one gutter and columns both, and narrow must
-  // keep it a box.
+  // BEFORE narrow since 2026-09-06. `narrowRow` matches any row with two or
+  // more gutters, and a wall comment with two spaces in it has two gutters plus
+  // the author's, so narrow used to answer first and shorten the caller's own
+  // words with '>'. The two rungs shorten and wrap respectively, and losing
+  // characters is worse than losing column alignment, so where both match the
+  // one that keeps every character wins. `recordFields`' guards are what stop
+  // this from eating real tables: a table's last column is prose (it contains a
+  // blank) or decoration (no alphanumeric), and neither is a field.
   if (recordRow(cells, cols) !== null) return 'record';
+  // BEFORE narrow, and only ever instead of it: a row of identical columns is
+  // decoration, and narrow would shorten every copy.
+  if (repeatRow(cells, cols) !== null) return 'repeat';
+  if (narrowRow(cells, cols) !== null) return 'narrow';
   return classifiedRule(cells);
 }
 
@@ -413,16 +421,30 @@ const hasAlnum = (cells: Row, [a, b]: [number, number]) => {
   return false;
 };
 
+/** A span with a blank in it is not an ATOM: it is prose, or two columns read as one. */
+const hasBlank = (cells: Row, [a, b]: [number, number]) => {
+  for (let x = a; x < b; x++) if (isBlank(cells[x])) return true;
+  return false;
+};
+
 /**
- * The row is a RECORD: a left field, ONE run of blanks, and a right-hand field
- * that is a single atom - a username, a handle, a tag.
+ * The row is a RECORD: a message, a run of blanks, and a right-hand field that
+ * is a single atom - a username, a handle, a tag.
  *
- * Every condition below is a guard against reading a sentence as a record, and
- * each was checked against the whole 23-fixture 68K corpus (the rows it must
- * NOT take are named):
+ * The separator is the LAST run of two or more blanks, and everything left of
+ * it is the message, its own spacing included. It was the ONLY run until
+ * 2026-09-06, and that was wrong: a caller who types "yeah! dre!wall is  40 col
+ * petscii ok  now" into dRE!WAll writes a message with two runs of its own, the
+ * row then had four columns rather than two, `narrowRow` - consulted first -
+ * matched, and the sysop got `yeah! dre!wal> 40 col petscii> now sysop`, with
+ * his own words shortened away. A message's internal spacing is typing, not
+ * structure; only the last gutter is the record's own. (This is also why the
+ * ladder now asks `record` BEFORE `narrow`: see `chooseRule`.)
  *
- * - EXACTLY ONE interior run of two or more blanks. Two or more runs is a
- *   table, and `narrowRow` - which the ladder consults first - already owns it.
+ * Every condition below is a guard against reading a sentence, or a table, as a
+ * record, and each was checked against every frame of the whole 23-fixture 68K
+ * corpus (the rows it must NOT take are named):
+ *
  * - The right field starts at or after `cols`. It is the fact that the field
  *   sits in the half of the row a 40-column screen cannot show that makes it a
  *   field rather than a word after a wide space.
@@ -436,6 +458,25 @@ const hasAlnum = (cells: Row, [a, b]: [number, number]) => {
  *   `super_stats` row 18 ends in a lone '.', `j` rows 8-12 in a lone '|'.
  * - The field plus one character of content fits in `cols`. A field that fills
  *   the screen on its own is not a field any more.
+ * - The separator is STRICTLY WIDER than every gutter inside the message. A
+ *   record's field is reached by PADDING - dRE!WAll pads its message into 61
+ *   columns - and padding is by construction wider than the spacing inside a
+ *   sentence, while prose has no such gutter at all. This is what keeps the
+ *   rung off the row the caller is TYPING INTO: the door's prompt row grows
+ *   into "Enter your Line: yeah! dre!wall is  40 col petscii ok  now", whose
+ *   last gap is the caller's own double space and no wider than the ones before
+ *   it, so `now` is a word and not an author. Without this guard that word was
+ *   right-aligned to column 40 and jumped there as he typed, which is the
+ *   "input line wrapped weirdly" of the second report.
+ * - The row is not a TABLE OF ATOMS. When `columnSpans` sees two or more
+ *   columns and EVERY one of them is blank-free, the row is a table of column
+ *   labels - `who`'s header, "ND#/Calls    User/PhoneNumber    Location/Action",
+ *   is exactly this - and `narrow` keeps it one row tall over its data rows,
+ *   which is what a header is for. A record cannot be that: two or more columns
+ *   means the message carries an internal gutter of its own, so the message is
+ *   never an atom. This is the ONE place the two rungs really compete, and it
+ *   is decided on structure - a table's cells are atoms, a sentence broken by a
+ *   double space is not - rather than on a width threshold.
  * - The LEFT field is not ART by the board's own frozen detector. A record's
  *   left field is a MESSAGE, and reflowing it is the whole point; a left field
  *   made of decoration means the row is art and `split` already owns it. This
@@ -456,15 +497,23 @@ export function recordFields(cells: Row, cols: number): RecordFields | null {
     while (x < width && isBlank(cells[x])) x++;
     if (x < width && x - start >= 2) runs.push([start, x]);   // interior only
   }
-  if (runs.length !== 1) return null;
+  if (runs.length === 0) return null;
 
-  const left: [number, number] = [indent, runs[0][0]];
-  const right: [number, number] = [runs[0][1], width];
+  const gutter = runs[runs.length - 1];                        // the LAST run separates the field
+  const left: [number, number] = [indent, gutter[0]];
+  const right: [number, number] = [gutter[1], width];
   if (left[1] <= left[0] || right[1] <= right[0]) return null;
   if (right[0] < cols) return null;
   if (right[1] - right[0] + 2 > cols) return null;
   for (let x = right[0]; x < right[1]; x++) if (isBlank(cells[x])) return null;
   if (!hasAlnum(cells, left) || !hasAlnum(cells, right)) return null;
+  const widest = Math.max(...runs.map(([a, b]) => b - a));
+  if (gutter[1] - gutter[0] < widest) return null;
+  if (runs.length > 1 && gutter[1] - gutter[0] === widest
+      && runs.slice(0, -1).some(([a, b]) => b - a === widest)) return null;
+
+  const columns = columnSpans(cells);
+  if (columns.length >= 2 && columns.every(([a, b]) => !hasBlank(cells, [a, b]))) return null;
   if (looksLikeAsciiArt(rowText(cells.slice(left[0], left[1])))) return null;
   return { left, right };
 }
@@ -515,6 +564,76 @@ export function recordRow(cells: Row, cols: number): RuleResult | null {
   return { rows, applied: 'record', map: (x) => where[clampIndex(cells, x)] };
 }
 
+/**
+ * A row of IDENTICAL columns - decoration, not data: as many WHOLE copies as
+ * fit, joined by one blank, and the rest dropped.
+ *
+ * dRE!WAll's STYLE.1 is `| Dre!Wall | Dre!Wall | ... |`, seven times. It has
+ * column structure, so `narrow` owned it and shrank the widest column over and
+ * over until the row fit, which at 40 columns reached the sysop as
+ * `Dre> Dre!> Dre!> Dre!> Dre!> Dre!> Dre!>` - every copy mangled and not one
+ * of them readable.
+ *
+ * `narrow`'s reason for never dropping a column is written into its own doc:
+ * "a table with a column missing is worse than a table cut in half - the reader
+ * cannot tell which column is gone". That reason is CONDITIONED on the columns
+ * differing. When they are the same token the reader can tell exactly what is
+ * missing - more of the same - so the trade inverts: dropping copies costs
+ * redundancy, shortening every copy costs the content of all of them. This is
+ * the alphanumeric case of a rule `isCroppable` already applies to a repeated
+ * non-alphanumeric GLYPH (a rule of '=' truncated at 40 is still a rule, and it
+ * carries no mark either).
+ *
+ * Measured over every frame of all 23 corpus fixtures: exactly two rows have
+ * all-identical columns (`color_wall`'s "_____" x6 and `ulist`'s "." x7) and
+ * both already reach `crop` first, so this rung moves no corpus row. It exists
+ * for the style rows the harness capture cannot reach.
+ *
+ * DECLINES when there are fewer than two columns, when they are not all the
+ * same, when one copy cannot fit `cols`, or when every copy fits anyway - in
+ * that last case `narrow` produces the row without shortening anything and is
+ * the better answer.
+ */
+export function repeatRow(cells: Row, cols: number): RuleResult | null {
+  const spans = columnSpans(cells);
+  if (spans.length < 2) return null;
+  const textOf = ([a, b]: [number, number]) => cells.slice(a, b).map((c) => c.ch).join('');
+  const first = textOf(spans[0]);
+  if (!spans.every((span) => textOf(span) === first)) return null;
+
+  const width = spans[0][1] - spans[0][0];
+  if (width > cols) return null;
+  let keep = 1;
+  while (keep < spans.length && (keep + 1) * width + keep <= cols) keep++;
+  if (keep >= spans.length) return null;          // it all fits: narrow loses nothing
+
+  const out: Cell[] = [];
+  const base: number[] = [];
+  for (let i = 0; i < keep; i++) {
+    if (i > 0) out.push(blankCell());
+    base.push(out.length);
+    for (let x = spans[i][0]; x < spans[i][1]; x++) out.push(cloneCell(cells[x]));
+  }
+
+  // Total map: a column inside a kept copy lands on its own cell; a border, a
+  // gutter, a dropped copy or the trailing blanks land on the last cell kept.
+  const last = out.length - 1;
+  const where: number[] = new Array(cells.length);
+  for (let x = 0; x < cells.length; x++) {
+    let at = last;
+    for (let i = 0; i < keep; i++) {
+      if (x >= spans[i][0] && x < spans[i][1]) { at = base[i] + (x - spans[i][0]); break; }
+    }
+    where[x] = clampCol(cols, at);
+  }
+
+  return {
+    rows: [padRow(out, cols)],
+    applied: 'repeat',
+    map: (x) => ({ row: 0, x: where[clampIndex(cells, x)] }),
+  };
+}
+
 export function applyRule(rule: AdaptRule, cells: Row, cols: number): RuleResult {
   switch (rule) {
     case 'crop': return cropRow(cells, cols);
@@ -522,6 +641,9 @@ export function applyRule(rule: AdaptRule, cells: Row, cols: number): RuleResult
     // A pinned 'narrow' on a row `narrowRow` declines falls through to the
     // rule it would have had before the ladder grew: plain halves.
     case 'narrow': return narrowRow(cells, cols) ?? splitRow(cells, cols);
+    // A pinned 'repeat' on a row whose columns are not all the same falls
+    // through to the rung that owns columnar rows.
+    case 'repeat': return repeatRow(cells, cols) ?? applyRule('narrow', cells, cols);
     // A pinned 'record' on a row that is not one falls through to the rule the
     // row would have had without the pin.
     case 'record': return recordRow(cells, cols) ?? applyRule(classifiedRule(cells), cells, cols);

@@ -56,16 +56,28 @@ const REPO = path.resolve(__dirname, '../../../..');
 const realSetTimeout = global.setTimeout;
 const wait = (ms: number) => new Promise((resolve) => realSetTimeout(resolve, ms));
 
-/** The capture, with the door's own STYLE.2 block in the two gaps it leaves. */
-function liveWallCapture(): string {
+/**
+ * The capture, with the door's own STYLE.<n> block in the two gaps it leaves,
+ * and optionally one more entry row painted last.
+ *
+ * `entry` is written the way the door writes every row of its wall, which the
+ * capture itself shows verbatim: `ESC[<row>;0H`, the message in a 61-column
+ * field, the author in a 17-column one. Painting it at row 18 - the row the
+ * door's own last entry occupies - is a repaint, and the frame model takes the
+ * last write, exactly as a terminal does.
+ */
+function liveWallCapture(style: 1 | 2 = 2, entry?: { message: string; author: string }): string {
   const capture = fs.readFileSync(path.join(REPO, 'sdk/tests/petscii/frame/fixtures/wall.ans')).toString('utf8');
-  const style = fs.readFileSync(path.join(REPO, 'Doors/dRE/dRE!WAll/dRE!WAll.StYlE.2')).toString('latin1');
-  const rows = style.split('\n').slice(0, 3);
+  const styleFile = fs.readFileSync(path.join(REPO, `Doors/dRE/dRE!WAll/dRE!WAll.StYlE.${style}`)).toString('latin1');
+  const rows = styleFile.split('\n').slice(0, 3);
   expect(rows).toHaveLength(3);
   const block = (top: number) => rows.map((r, i) => `\x1b[${top + i};0H${r}`).join('');
   const head = '\x1b[2J\x1b[H\r\n\r';
   expect(capture.startsWith(head)).toBe(true);
-  return head + block(1) + block(19) + capture.slice(head.length);
+  const tail = entry
+    ? `\x1b[18;0H\x1b[0m${entry.message.padEnd(61, ' ')}${entry.author.padEnd(17, ' ')}`
+    : '';
+  return head + block(1) + block(19) + capture.slice(head.length) + tail;
 }
 
 /** One capture through the real emitter, the real adapter and the real transport. */
@@ -203,5 +215,63 @@ describe("the sysop's dRE!WAll report, on the glass of a real 40-column C64", ()
     // the bar reads bottom-rule, ticks, top-rule, and the ticks are between them
     expect(lower).toBeLessThan(upper);
     expect(upper - lower).toBe(2);
+  });
+});
+
+/**
+ * THE SECOND REPORT, 2026-09-06, after the `record` rung shipped as 0c38c0522.
+ * The sysop re-tested on his dev board and found two things still wrong.
+ *
+ * His long comment came back as ONE row reading, literally:
+ *
+ *   yeah! dre!wal> 40 col petscii> now sysop
+ *
+ * The author was right where the rung put it and the MESSAGE had been eaten.
+ * The message below is the exact reconstruction: any message of the shape
+ * `<part>  <part>  now` in dRE!WAll's 61-column field renders to that string
+ * character for character, which is how the cause was identified. The row has
+ * two runs of blanks of its own plus the author's, so `columnSpans` saw four
+ * columns, `narrowRow` matched, and the ladder asked `narrow` BEFORE `record`.
+ * The rung was never reached - it did not fall through and it did not narrow
+ * the left field.
+ *
+ * And STYLE.1's row of repeated tags came back as
+ * `Dre> Dre!> Dre!> Dre!> Dre!> Dre!> Dre!>`, which is `narrow` shortening
+ * seven identical columns, and reaches `narrow` by its own path with no
+ * involvement from `record` at all.
+ */
+describe("the sysop's second dRE!WAll report", () => {
+  /** Renders to `yeah! dre!wal> 40 col petscii> now sysop` under the shipped ladder. */
+  const LONG = 'yeah! dre!wall is  40 col petscii ok  now';
+
+  it('a long wall comment wraps instead of losing its tail', async () => {
+    const machine = await glass(liveWallCapture(2, { message: LONG, author: 'sysop' }));
+    const rows = screenText(machine);
+
+    // not one character of what he typed is missing, and nothing is marked as
+    // shortened
+    const tail = rows.findIndex((t) => t.endsWith('sysop') && t.includes('now'));
+    expect(tail).toBeGreaterThan(0);
+    const joined = `${rows[tail - 1]} ${rows[tail].slice(0, COLS - 'sysop'.length)}`;
+    expect(joined.replace(/\s+/g, ' ').trim()).toBe(LONG.replace(/\s+/g, ' ').trim());
+    expect(joined).not.toContain('>');
+
+    // and the author is still where the first report put it
+    expect(rows[tail].length).toBe(COLS);
+    expect(rowText(machine, tail).slice(COLS - 'sysop'.length)).toBe('sysop');
+    // the continuation row carries no author
+    expect(rows[tail - 1].endsWith('sysop')).toBe(false);
+  });
+
+  it('the repeated tag row keeps whole tags instead of Dre>', async () => {
+    const machine = await glass(liveWallCapture(1));
+    const rows = screenText(machine);
+    const tagRow = rows.findIndex((t) => t.includes('Dre!Wall'));
+    expect(tagRow).toBeGreaterThanOrEqual(0);
+    // every tag on the row is whole, and none is marked as shortened
+    expect(rows[tagRow]).not.toContain('>');
+    expect(rows[tagRow].trim().split(/\s+/).every((t) => t === 'Dre!Wall')).toBe(true);
+    // as many whole copies as 40 columns hold
+    expect(rows[tagRow].trim().split(/\s+/).length).toBe(4);
   });
 });
