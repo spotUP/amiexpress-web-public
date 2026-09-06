@@ -49,6 +49,36 @@ export interface CrudListProps<T extends { id: number }> {
 
 type Mode = 'list' | 'edit' | 'new' | 'confirm-delete';
 
+/**
+ * `editValues` accumulates 'number' fields as STRINGS while a field is
+ * being typed (the number-editing key handler below does
+ * `String(v[field.key] ?? '') + input`, appending digits onto whatever was
+ * already there) — so a field that started at 0 (startNew's default)
+ * becomes "02" after one keypress, never converted back to an actual number
+ * before being sent. Every backend Zod schema this feeds
+ * (FileCheckerErrorSchema, NodeConfigSchema, ...) does `z.number()` and
+ * rejects a string outright — so create/update for any REQUIRED numeric
+ * field 400s every time. Coerce right before the request goes out, using
+ * each field's own declared type (editFields already carries it) rather
+ * than guessing from the runtime value. Exported as a standalone function
+ * (not a closure over component state) so it has a regression test that
+ * doesn't need an Ink render harness.
+ */
+export function coerceEditValuesForSubmit(
+  editFields: EditField[],
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...values };
+  for (const f of editFields) {
+    if (f.type !== 'number') continue;
+    const raw = out[f.key];
+    if (typeof raw === 'number') continue;
+    const n = parseInt(String(raw ?? ''), 10);
+    out[f.key] = Number.isFinite(n) ? n : 0;
+  }
+  return out;
+}
+
 export function CrudList<T extends { id: number }>({
   title,
   columns,
@@ -115,6 +145,9 @@ export function CrudList<T extends { id: number }>({
     return columns.map(col => col.render(row).padEnd(col.width)).join('');
   };
 
+  const coerceForSubmit = (values: Record<string, unknown>): Partial<T> =>
+    coerceEditValuesForSubmit(editFields, values) as Partial<T>;
+
   const startEdit = () => {
     if (!selected) return;
     setEditFieldIdx(0);
@@ -139,7 +172,7 @@ export function CrudList<T extends { id: number }>({
   const saveEdit = async () => {
     if (!selected || !update) return;
     try {
-      await update(selected.id, editValues as Partial<T>);
+      await update(selected.id, coerceForSubmit(editValues));
       setStatus(`Row ${selected.id} updated`);
       await loadItems();
       setMode('list');
@@ -151,7 +184,7 @@ export function CrudList<T extends { id: number }>({
   const saveNew = async () => {
     if (!create) return;
     try {
-      await create(editValues as Partial<T>);
+      await create(coerceForSubmit(editValues));
       setStatus('New row created');
       await loadItems();
       setMode('list');
