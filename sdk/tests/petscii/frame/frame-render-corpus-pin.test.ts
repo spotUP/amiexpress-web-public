@@ -49,6 +49,17 @@ interface Pin {
  * not a re-measurement of old ones, and they are frozen from here on under the
  * same rule.
  *
+ * SEVEN more were RE-MEASURED later on 2026-09-06, under the same rule and for
+ * the same reason: `recordFields` dropped its "the right field contains no
+ * blank" guard, because that guard cost `GWALL` its two-word handles and cost
+ * `what` the whole of `Total bytes: [ 0 ]`. Which fixtures were allowed to move
+ * was decided by measurement first: every row of every frame of every fixture
+ * was run through `chooseRule` before and after, exactly these seven change -
+ * `six_status`, `kd_confstats`, `ratiorep`, `super_stats`, `what`, `b`, `j` -
+ * and every changed row was read as 40-column cells and confirmed to gain
+ * characters, never lose them (`what` keeps its byte count, `kd_confstats`
+ * keeps `AmiExpress-Web` instead of `Ami>`). The other 16 hashes are untouched.
+ *
  * `wall` and `dtagwall` were RE-MEASURED on 2026-09-06, and this is the one
  * kind of re-measurement the rule above allows: the ladder gained a rung
  * (`record`, adapt.ts), so the FRAMES changed by design and renderDiff faithfully
@@ -63,18 +74,18 @@ interface Pin {
  */
 const PINS: Record<string, Pin> = {
   aehelp: { renders: 21, bytes: 11883, sha256: 'af1abce9f143fff0ac3f81bab2f8ace2e3185fa24c2a417bf5c1b2ff3204d659' },
-  six_status: { renders: 23, bytes: 15421, sha256: '2c489896be4561cdb50bdc8f4091b749fd38bf590c395698f8015b934a97e8bd' },
-  kd_confstats: { renders: 29, bytes: 16339, sha256: '5509a4d347add4bb513395d530b0982e474be31af0350359610daf4a2af8fc40' },
+  six_status: { renders: 23, bytes: 18434, sha256: 'ea04de48389e1bd1f2975bcc2bf7d0153b458f765c8e4f3811cd5774a593896e' },
+  kd_confstats: { renders: 29, bytes: 16549, sha256: '0c0288199c99c149bfceaf91384f1344b8280850b5c02f9e8a21d17fc8bbca6f' },
   color_wall: { renders: 30, bytes: 9794, sha256: '5b27f9935589cdb32a342773deeea015bc24028ca9d02e9d3fc689277982322c' },
   who: { renders: 6, bytes: 906, sha256: '49802e5fc0cae0a1723e418fa4197b82665e23e1bb2e16875b54580837d90cc8' },
-  ratiorep: { renders: 10, bytes: 3308, sha256: '2477a43e3a6b2632436d3780a75a32939c80bdaa3ab7949da5d7d245950da39e' },
-  super_stats: { renders: 21, bytes: 10022, sha256: '3c2f62f6a51aefbe585c84022c719a9c8834973168bf2d6f34b2e2ee0df9f81d' },
+  ratiorep: { renders: 10, bytes: 2910, sha256: '53db616b0045b7afdfe5ecb247ccfd64663b1ca600c54548d49c524c498a0cc8' },
+  super_stats: { renders: 21, bytes: 7076, sha256: '4537ebb7b949ce0b9517bfa1465a4d6b47756725dc4c137c0b9bcf5e92e5b6ef' },
   hststat: { renders: 12, bytes: 2484, sha256: '0746281e3871a50468228989d86b0ca69dbea5b7c3c9faaa90bb9d4a60485b2c' },
   rtw: { renders: 69, bytes: 142674, sha256: '39f110f486baab98efc7d167259390520dcd730f4fbe5a7f26b645d61014071c' },
   ustats: { renders: 217, bytes: 289249, sha256: 'b949a6d27a116714e7f0d9de40d025f0fbe7df10a701629cea416d45a23df28a' },
-  what: { renders: 13, bytes: 1679, sha256: '5be96bf9b4b4bd8477aa3d0b6a6da486169042ac1d7c3b78b87e3030f7ee9467' },
-  b: { renders: 17, bytes: 9737, sha256: '2e337396ac8fe2a5a07470c4fdf67b7ec038e8d091d90630582d5299dc89d575' },
-  j: { renders: 39, bytes: 7249, sha256: '9d527cb2615b2bb54d24f90c13e0b609c4a35b3b0885fcbedbe7c06601c37aba' },
+  what: { renders: 13, bytes: 3534, sha256: 'c30bed914bdf9ba54613bc8df831787cc2d616f7929e65bf196a702e4ac3d885' },
+  b: { renders: 17, bytes: 10269, sha256: '1914422b391657000fde0ad5e71e69d37b7d89704c92e2b88d73834d26ff5eeb' },
+  j: { renders: 39, bytes: 7195, sha256: 'aa3db3f50277a2eb56a0cfc3a230847c9ae9eefd679bcda0cc4ab8dba5772bd8' },
   doorrepo: { renders: 22, bytes: 12062, sha256: '5b563469b13ca9e76856a621d5aca463e4f5e7217db4da94049a864db4d7375a' },
   size: { renders: 9, bytes: 1837, sha256: '48b7306611e685a35602657f982250fe6386cd1ae7cd4fd5c8d8a1fdae854313' },
   ulist: { renders: 22, bytes: 6297, sha256: '509706f398c52cefa712d390ef03b4002318a798e475e098f150e40213c39eb1' },

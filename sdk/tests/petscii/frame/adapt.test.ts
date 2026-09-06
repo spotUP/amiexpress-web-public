@@ -643,10 +643,67 @@ describe('record', () => {
     expect(chooseRule(header, 40)).toBe('narrow');
   });
 
-  it('a two-column stat row is NOT a record: its right half is prose, not an atom', () => {
-    // six_status, ratiorep, super_stats all paint this shape.
+  it('a global wall comment keeps a two-word handle', () => {
+    // GWall's own bytes, from a 2026-09-06 harness capture of the door: the
+    // comment at column 1, thirty columns of padding, then `-Karyn Roberts`,
+    // the board separator and the acronym, inside the wall's box.
+    //
+    // BEFORE the guard was relaxed the space inside `Karyn Roberts` made the
+    // right field "not an atom", `record` declined, `narrow` took the row -
+    // one bordered column, so it truncated - and the caller read
+    // `Right on, great door archive!          >` with NO AUTHOR AT ALL. The
+    // author is the data; the extra row is the price.
+    const entry = row('|Right on, great door archive!'.padEnd(59, ' ') + '-Karyn Roberts\u00a6TAU|');
+    expect(chooseRule(entry, 40)).toBe('record');
+    const out = applyRule('record', entry, 40);
+    expect(out.rows.map(str)).toEqual([
+      '|Right on, great door archive!',
+      '                     -Karyn Roberts\u00a6TAU|',
+    ]);
+    // the handle survives whole, flush against column 40
+    expect(str(out.rows[out.rows.length - 1]).endsWith('-Karyn Roberts\u00a6TAU|')).toBe(true);
+    // ...and a one-word handle on the same wall is unchanged by the relaxation
+    expect(chooseRule(row('|dS!'.padEnd(65, ' ') + '-orlingo\u00a6M\u0009|'), 40)).toBe('record');
+  });
+
+  it("a two-column stat row IS a record now, and that is how its right half survives", () => {
+    // six_status, ratiorep, super_stats all paint this shape, and until
+    // 2026-09-06 this test asserted the OPPOSITE: the right half was called
+    // "prose, not an atom" and the row fell to `split`, which cut it at column
+    // 40 and left the second label hanging at whatever offset it landed on.
+    //
+    // It flipped because the measurement said so, not because it went red.
+    // `Slot Number...........: 0` has ONE blank in it, no run of two, so it is
+    // one field; reading it as one is what puts it flush against column 40 with
+    // every character of both halves intact. Measured over every frame of every
+    // fixture, the shape costs rows and loses nothing: `six_status` 33 -> 35,
+    // `ratiorep` 31 -> 30, `super_stats` 31 -> 28.
     const stat = row('Byte Limit..........: 0'.padEnd(49, ' ') + 'Slot Number...........: 0');
-    expect(chooseRule(stat, 40)).not.toBe('record');
+    expect(chooseRule(stat, 40)).toBe('record');
+    expect(applyRule('record', stat, 40).rows.map(str)).toEqual([
+      'Byte Limit..........: 0',
+      '               Slot Number...........: 0',
+    ]);
+  });
+
+  it('the field never carries the door\'s own padding, whatever blanks are in it', () => {
+    // What the deleted "no blank at all" guard was FOR, stated as the property
+    // the SEPARATOR RULE already guarantees: the separator is the LAST run of
+    // two or more blanks, so no such run can be left inside the field. A single
+    // space (a two-word handle) is fine; a padded second column is not, and it
+    // cannot occur.
+    //
+    // A row that looks like a padded right half therefore resolves the other
+    // way round: the narrow run INSIDE it becomes the separator, and the guard
+    // that says the separator must be strictly the widest run then declines the
+    // row outright.
+    const twoColumns = row('Byte Limit..........: 0'.padEnd(49, ' ') + 'Slot Number:  0');
+    expect(recordFields(twoColumns, 40)).toBeNull();
+    // ...and where the row IS a record, the field has no run of blanks in it.
+    const fields = recordFields(wall('a comment', 'Karyn Roberts'), 40);
+    expect(fields).not.toBeNull();
+    const [a, b] = (fields as { right: [number, number] }).right;
+    expect(/ {2,}/.test(str(wall('a comment', 'Karyn Roberts').slice(a, b)))).toBe(false);
   });
 
   it('an art left field is NOT a record: the row is decoration and split owns it', () => {

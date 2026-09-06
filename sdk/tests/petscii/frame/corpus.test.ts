@@ -14,7 +14,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { FrameReconstructor } from '../../../petscii/frame/ansi-screen';
-import { adaptRows, adaptFrame, applyRule, chooseRule } from '../../../petscii/frame/adapt';
+import { adaptRows, adaptFrame, applyRule, chooseRule, recordFields } from '../../../petscii/frame/adapt';
 import { renderDiff } from '../../../petscii/frame/frame-render';
 import { Cell, Cursor, Frame, isBlank } from '../../../petscii/frame/types';
 import { columnParts, contentWidth, isRuleRow } from '../../../petscii/frame/classify';
@@ -295,6 +295,27 @@ for (const [id, entry] of Object.entries(manifest)) {
       });
     });
 
+    /**
+     * The property that let `recordFields` drop its "the field contains no
+     * blank" guard on 2026-09-06 (that guard cost `GWALL` its two-word
+     * handles). The guard's PURPOSE - the field must not be a second column the
+     * door padded in - is guaranteed by the separator rule instead: the
+     * separator is the LAST run of two or more blanks, so no such run can be
+     * left inside the field. Asserted here, over every record row of every
+     * frame of every fixture, rather than as a branch in `recordFields` that no
+     * row can reach.
+     */
+    it('a record field never carries a run of blanks, in any frame', () => {
+      frames.forEach((f, fi) => {
+        for (let y = 0; y < f.rows; y++) {
+          const fields = recordFields(f.cells[y], COLS);
+          if (!fields) continue;
+          const field = text(f.cells[y].slice(fields.right[0], fields.right[1]));
+          expect({ fi, y, field, padded: / {2,}/.test(field) }).toEqual({ fi, y, field, padded: false });
+        }
+      });
+    });
+
     it('puts the cursor where the source row\'s own rule maps it, in every frame', () => {
       frames.forEach((f, fi) => {
         const got = adaptFrame(f).cursor;
@@ -329,7 +350,12 @@ for (const [id, entry] of Object.entries(manifest)) {
  * `containsBbsMenu` in the manifest records.
  */
 const EXPECTED_ROWS: Record<string, number> = {
-  what: 25,
+  // `what` 25 -> 27 on 2026-09-06, and UPWARDS is the right direction here: its
+  // two "Activities" rows used to narrow to
+  // `Upload   Activities -> Total files: [  >`, which stops mid-number and
+  // never reaches "Total bytes" at all. As records they cost a second row each
+  // and keep `Total bytes: [               0 ]`. Two rows for two numbers.
+  what: 27,
   rtw: 26,
   ustats: 26,
   // The three doors marked on 2026-09-03. These are HARNESS captures, so the
@@ -344,8 +370,16 @@ const EXPECTED_ROWS: Record<string, number> = {
   // conference list, the CURRENT CONFERENCE line and the prompt remain.
   // `doorrepo` at 26: one row over, and DoorRepo's whole payload lives in the
   // left 28 columns, so the crop drops only the empty right-hand pane.
-  b: 30,
-  j: 27,
+  //
+  // RE-PINNED 2026-09-06 with the `record` rung's right-field guard relaxed
+  // (it used to decline any field with a blank in it, which cost `GWALL` its
+  // two-word handles). Each of these moved because ONE row stopped truncating:
+  // `b` 30 -> 29 - the "[Bulls 2.2 - EMPiRE]" footer, which reflow used to
+  //   break across THREE rows with "[Bulls" stranded at the end of the second,
+  //   now costs two with the tag whole and flush right.
+  // `j` 27 -> 26 - the same shape, "[JoinCnf 4.0 - EMPiRE]", three rows to two.
+  b: 29,
+  j: 26,
   doorrepo: 26,
   // Batch 2, 2026-09-03. Five of these fit a C64 screen with rows to spare
   // (`mrcstat1` and `chat` need no reduction at all); the three that come out

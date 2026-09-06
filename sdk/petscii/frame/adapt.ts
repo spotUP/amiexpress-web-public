@@ -448,12 +448,31 @@ const hasBlank = (cells: Row, [a, b]: [number, number]) => {
  * - The right field starts at or after `cols`. It is the fact that the field
  *   sits in the half of the row a 40-column screen cannot show that makes it a
  *   field rather than a word after a wide space.
- * - The right field contains NO blank. This is the discriminator that keeps the
- *   two-column stat rows out: `six_status` "Byte Limit..: 0 | Slot Number..: 0",
- *   `ratiorep`, `super_stats`, `b`'s bulletin menu and `j`'s and `b`'s
- *   "[JoinCnf 4.0 - EMPiRE]" footers all have a multi-word right-hand half,
- *   which is prose to be reflowed and not an atom to be right-aligned. A field
- *   can only be moved as a unit if it IS a unit.
+ * - (GONE, 2026-09-06: the right field had to contain NO BLANK AT ALL.) It cost
+ *   DATA. `GWALL`'s wall carries two-word handles, and
+ *   `|Right on, great door archive!  ...  -Karyn Roberts¦TAU|` declined on the
+ *   single space inside the handle, fell through to `narrow` - which sees one
+ *   bordered column and truncates it - and reached the caller as
+ *   `Right on, great door archive!          >` with the author GONE. A handle
+ *   with a space in it is still one thing and still moves as one thing.
+ *
+ *   What the guard was FOR - keeping the door's own padding out of the field,
+ *   so a two-column right half is not right-aligned as if it were a name - the
+ *   SEPARATOR RULE already guarantees: the separator is the LAST run of two or
+ *   more blanks, so no such run can survive inside the field. That property is
+ *   asserted over every row of every fixture in corpus.test.ts rather than
+ *   re-tested here, because a second copy of it in this function would be a
+ *   branch no row can reach. The guards that actually carry the load are the
+ *   five below.
+ *
+ *   The price was measured over every frame of every fixture and it is paid in
+ *   ROWS, never in characters: `what` 25->27, `b` 30->29, `j` 27->26,
+ *   `six_status` 33->35, `ratiorep` 31->30, `super_stats` 31->28,
+ *   `kd_confstats` 25->25. Every one of those rows is LOSSLESS where `narrow`
+ *   or `split` had been lossy or misaligned - `what` keeps `Total bytes:
+ *   [ 0 ]` instead of stopping at `Total files: [ >`, `kd_confstats` keeps
+ *   `AmiExpress-Web` instead of `Ami>`. Rows are the currency this rung spends;
+ *   data is not.
  * - Both fields contain at least one alphanumeric. Keeps decoration out:
  *   `super_stats` row 18 ends in a lone '.', `j` rows 8-12 in a lone '|'.
  * - The field plus one character of content fits in `cols`. A field that fills
@@ -505,7 +524,6 @@ export function recordFields(cells: Row, cols: number): RecordFields | null {
   if (left[1] <= left[0] || right[1] <= right[0]) return null;
   if (right[0] < cols) return null;
   if (right[1] - right[0] + 2 > cols) return null;
-  for (let x = right[0]; x < right[1]; x++) if (isBlank(cells[x])) return null;
   if (!hasAlnum(cells, left) || !hasAlnum(cells, right)) return null;
   const widest = Math.max(...runs.map(([a, b]) => b - a));
   if (gutter[1] - gutter[0] < widest) return null;
