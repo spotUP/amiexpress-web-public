@@ -271,8 +271,10 @@ describe('doors name a role, not a colour', () => {
     const s = themeStyles(CLASSIC);
     expect(s.panel.style.fg).toBe('white');
     expect(s.panel.style.bg).toBe('black');
-    expect(s.panel.style.border!.fg).toBe('cyan');
-    expect(s.bar.style.bg).toBe('blue');
+    // Since b19f9fd45 the theme's PRIMARY colour carries every border, so
+    // classic's frames are its yellow, not the old cyan chrome.
+    expect(s.panel.style.border!.fg).toBe('yellow');
+    expect(s.bar.style.bg).toBe('yellow');
   });
 
   it('closes every tag it opens', () => {
@@ -296,13 +298,16 @@ describe('doors name a role, not a colour', () => {
     }
   });
 
-  it('marks the focused panel with the accent', () => {
-    // Which panel has the keyboard is information, and it is the one thing
-    // the accent is reliably worth spending on.
+  it('marks the focused panel by brightening its border to the ink', () => {
+    // Which panel has the keyboard is information, and it still has to be
+    // visible - but every RESTING border is the accent now (b19f9fd45), so
+    // the accent can no longer be the mark. The focused frame goes to the
+    // ink, which is the one colour a resting border never wears.
     for (const theme of THEMES) {
       const s = themeStyles(theme);
       expect({ theme: theme.id, focus: s.panel.style.focus!.border!.fg })
-        .toEqual({ theme: theme.id, focus: theme.tokens.accent });
+        .toEqual({ theme: theme.id, focus: theme.tokens.ink });
+      expect(s.panel.style.focus!.border!.fg).not.toBe(s.panel.style.border!.fg);
     }
   });
 
@@ -333,7 +338,10 @@ describe('a migrated door renders identically on classic', () => {
 
   it('gives the same structural styles the door used to pass', () => {
     const s = themeStyles(CLASSIC);
-    expect(s.bar.style).toEqual({ fg: 'white', bg: 'blue' });
+    // The bar IS the theme's colour with the ground on top of it
+    // (b19f9fd45); on classic that reads yellow-on-black, not the old
+    // white-on-blue.
+    expect(s.bar.style).toEqual({ fg: 'black', bg: 'yellow' });
     expect(s.list.style.selected!.bg).toBe('blue');
     expect(s.list.style.selected!.fg).toBe('white');
   });
@@ -1128,7 +1136,9 @@ describe('the frame role stays visible', () => {
       // decorative box into the ground. Losing that would delete the look
       // the themes were liked for.
       const s = themeStyles(theme);
-      const expected = theme.border === 'none' ? theme.tokens.ground : theme.tokens.chrome;
+      // A drawn panel border is the accent since b19f9fd45; only a theme
+      // that asks for no border sinks it into the ground.
+      const expected = theme.border === 'none' ? theme.tokens.ground : theme.tokens.accent;
       expect(s.panel.style.border?.fg).toBe(expected);
     });
   }
