@@ -628,7 +628,7 @@ export class VersusScreen {
       board.top = slot.top;
       board.width = slot.width;
       board.height = slot.height;
-      if (layout.fullBoards + layout.minimaps > 0) board.show();
+      if (this.opponentTracker.getAliveOpponents().length > 0) board.show();
       else board.hide();
 
       this.opponentInfoBox?.hide();
@@ -1448,8 +1448,20 @@ export class VersusScreen {
     const byRank = (a: OpponentState, b: OpponentState): number =>
       (a.rank ?? 99) - (b.rank ?? 99);
     const ordered = [...humans.sort(byRank), ...bots.sort(byRank)];
-    const onBoards = ordered.slice(0, layout.fullBoards);
-    const onGrid = ordered.slice(layout.fullBoards, layout.fullBoards + layout.minimaps);
+
+    // A NARROW SCREEN HAS ONE BOARD SLOT, whatever versusLayout says.
+    //
+    // versusLayout counts full boards from LEFT_PANEL_COLS, which is off a
+    // C64's right edge, so it answers "none" and puts everyone in the grid -
+    // the grid this screen hides at 40 columns. The result was a CPU panel
+    // with a name and nothing in it: "i see no cpu pieces" (2026-09-06). The
+    // compact geometry already reserved the columns; this is the slot that
+    // goes with them.
+    const boardSlots = this.compactOpponent ? 1 : layout.fullBoards;
+    const onBoards = ordered.slice(0, boardSlots);
+    const onGrid = this.compactOpponent
+      ? []
+      : ordered.slice(layout.fullBoards, layout.fullBoards + layout.minimaps);
     const onList = layout.listed > 0
       ? ordered.slice(layout.fullBoards + layout.minimaps)
       : [];
@@ -1861,10 +1873,19 @@ export class VersusScreen {
    */
   private renderGarbage(pending: number): void {
     if (!this.garbageIndicator) return;
+
+    // AN EMPTY STRIP IS A QUESTION, not information.
+    //
+    // With nothing pending this drew a bordered box with nothing in it, and
+    // on a 40-column screen it sits between the player and the CPU where it
+    // reads as a broken panel: "what is the empty brown square supposed to
+    // be?" (2026-09-06). Garbage is news; no garbage is not.
     if (pending <= 0) {
       this.garbageIndicator.setContent('');
+      this.garbageIndicator.hide();
       return;
     }
+    this.garbageIndicator.show();
     const capped = Math.min(pending, 18);
     const bars = '{red-fg}' + ('█\n').repeat(capped).trim() + '{/red-fg}';
     this.garbageIndicator.setContent(`{red-fg}${pending}{/red-fg}\n${bars}`);

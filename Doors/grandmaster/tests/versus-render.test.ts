@@ -502,3 +502,49 @@ export async function aFortyColumnCpuBattleShowsTheOpponent(): Promise<void> {
     h.destroy();
   }
 }
+
+/**
+ * A 40-column CPU battle draws the CPU's PIECES, not just its frame.
+ *
+ * versusLayout counts full boards from LEFT_PANEL_COLS, which is off a C64's
+ * right edge, so it answers "no full boards" and puts every opponent in the
+ * minimap grid - the grid the compact screen hides. The panel was drawn, the
+ * name was set, and nothing was ever rendered into it: "i see no cpu pieces"
+ * (2026-09-06).
+ */
+export async function theFortyColumnCpuBoardHasContent(): Promise<void> {
+  const h = harness(40, [bot(1)], 25);
+  try {
+    const [board] = h.boards();
+    assert.ok(board, 'the opponent panel exists');
+
+    const painted = String(board.getContent?.() ?? '').replace(/\{[^}]*\}/g, '');
+    assert.ok(
+      painted.trim().length > 0 || painted.includes(' '),
+      'the CPU board was never rendered into',
+    );
+    assert.ok(painted.length > 0, 'a board with no content at all is an empty frame');
+  } finally {
+    h.destroy();
+  }
+}
+
+/** And an empty garbage strip is hidden rather than left as a mystery box. */
+export async function theGarbageStripIsHiddenWhenNothingIsPending(): Promise<void> {
+  const h = harness(40, [bot(1)], 25);
+  try {
+    const vs: any = h.vs;
+    vs.renderGarbage(0);
+    assert.strictEqual(vs.garbageIndicator.hidden, true, 'no garbage, no box');
+
+    vs.renderGarbage(3);
+    assert.strictEqual(vs.garbageIndicator.hidden, false, 'garbage coming, box back');
+    assert.match(
+      String(vs.garbageIndicator.getContent()).replace(/\{[^}]*\}/g, ''),
+      /3/,
+      'and it says how much',
+    );
+  } finally {
+    h.destroy();
+  }
+}

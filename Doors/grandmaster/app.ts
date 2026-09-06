@@ -18,7 +18,7 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import {
   createTerminalModeSwitch, TERMINAL_MODE_MENU_LABEL, type TerminalModeSwitch,
 } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
-import { MultiplayerLobby, type LobbyEntryMode } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { MultiplayerLobby, type LobbyEntryMode , calculateDialogWidth } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
 /**
  * Door session interface
@@ -336,6 +336,19 @@ export class GrandmasterApp {
    * terminal kept its default of 'game': tapping the main menu rotated a
    * piece that was not there (reported 2026-08-26).
    */
+  /**
+   * A dialog's width, capped to the screen it opens on.
+   *
+   * Fourteen dialogs in this door asked for 50 or 60 columns and centred
+   * themselves. On a C64 that puts the left edge at -5 and the screen eats
+   * the first characters of every row: "Select Bot Difficulty" arrived as
+   * "lect Bot Difficulty" (2026-09-06). The SDK has answered this question
+   * since the compact tier existed; the door simply never asked it.
+   */
+  private dialogWidth(preferred: number): number {
+    return Math.min(preferred, calculateDialogWidth(this.screen.width));
+  }
+
   private announceInputMode(mode?: 'game' | 'menu'): void {
     try {
       const announced = mode ?? (this._currentScreen === 'game' ? 'game' : 'menu');
@@ -668,7 +681,7 @@ export class GrandmasterApp {
       parent: this.screen,
       top: 'center',
       left: 'center',
-      width: 60,
+      width: this.dialogWidth(60),
       height: 15,
       content: '',
       style: {
@@ -1051,7 +1064,7 @@ export class GrandmasterApp {
         parent: this.screen,
         top: 'center',
         left: 'center',
-        width: 60,
+        width: this.dialogWidth(60),
         height: 8,
         border: { type: 'line' },
         style: { bg: 'black', border: { fg: 'red' } },
@@ -1077,7 +1090,7 @@ export class GrandmasterApp {
       parent: this.screen,
       top: 'center',
       left: 'center',
-      width: 50,
+      width: this.dialogWidth(50),
       height: 12,
       border: { type: 'line' },
       label: ' Select Mode ',
@@ -1089,7 +1102,7 @@ export class GrandmasterApp {
       parent: modePanel,
       top: 1,
       left: 1,
-      width: 48,
+      width: '100%-2',
       height: 10,
       style: {
         selected: { bg: 'blue', fg: 'white' },
@@ -1149,7 +1162,7 @@ export class GrandmasterApp {
           parent: this.screen,
           top: 'center',
           left: 'center',
-          width: 50,
+          width: this.dialogWidth(50),
           height: 12,
           border: { type: 'line' },
           label: ' Change Mode ',
@@ -1160,7 +1173,7 @@ export class GrandmasterApp {
           parent: rePanel,
           top: 1,
           left: 1,
-          width: 48,
+          width: '100%-2',
           height: 10,
           style: { selected: { bg: 'blue', fg: 'white' } },
           keys: true,
@@ -2098,7 +2111,7 @@ export class GrandmasterApp {
       parent: this.screen,
       top: 'center',
       left: 'center',
-      width: 40,
+      width: this.dialogWidth(40),
       height: 12,
       border: { type: 'line' },
       label: ' TetriNET Mode ',
@@ -2110,7 +2123,7 @@ export class GrandmasterApp {
       parent: modePanel,
       top: 0,
       left: 1,
-      width: 36,
+      width: '100%-2',
       height: 8,
       style: {
         selected: { bg: 'blue', fg: 'white' },
@@ -2627,7 +2640,7 @@ export class GrandmasterApp {
       parent: this.screen,
       top: 'center',
       left: 'center',
-      width: 60,
+      width: this.dialogWidth(60),
       height: 16,
       border: { type: 'line' },
       label: ' WATCH A GAME ',
@@ -2645,7 +2658,7 @@ export class GrandmasterApp {
       parent: panel,
       top: 1,
       left: 1,
-      width: 56,
+      width: '100%-2',
       height: 12,
       items: [...items, '{gray-fg}Back{/gray-fg}'],
       keys: true,
@@ -2736,7 +2749,7 @@ export class GrandmasterApp {
       parent: this.screen,
       top: 'center',
       left: 'center',
-      width: 50,
+      width: this.dialogWidth(50),
       height: Math.min(predefinedServers.length + 10, 20),
       border: { type: 'line' },
       label: ' Select TetriNET Server ',
@@ -2748,7 +2761,7 @@ export class GrandmasterApp {
       parent: serverPanel,
       top: 1,
       left: 1,
-      width: 48,
+      width: '100%-2',
       height: Math.min(predefinedServers.length + 8, 18),
       style: {
         selected: { bg: 'blue', fg: 'white' },
@@ -2822,7 +2835,7 @@ export class GrandmasterApp {
         parent: this.screen,
         top: 'center',
         left: 'center',
-        width: 55,
+        width: this.dialogWidth(55),
         height: 10,
         border: { type: 'line' },
         label: ' Enter Server Address ',
@@ -2840,7 +2853,7 @@ export class GrandmasterApp {
         parent: customDialog,
         top: 1,
         left: 2,
-        width: 20,
+        width: '100%-2',
         height: 1,
         content: '{bold}Server:{/bold}',
       });
@@ -2867,7 +2880,7 @@ export class GrandmasterApp {
         parent: customDialog,
         top: 4,
         left: 2,
-        width: 20,
+        width: '100%-2',
         height: 1,
         content: '{bold}Port:{/bold}',
       });
@@ -2895,7 +2908,7 @@ export class GrandmasterApp {
         parent: customDialog,
         top: 7,
         left: 2,
-        width: 50,
+        width: '100%-2',
         height: 1,
         content: '{gray-fg}Tab to switch, Enter to continue, ESC to cancel{/gray-fg}',
       });
@@ -2969,7 +2982,7 @@ export class GrandmasterApp {
       parent: this.screen,
       top: 'center',
       left: 'center',
-      width: 34,
+      width: this.dialogWidth(34),
       height: 7,
       border: { type: 'line' },
       label: ' Mode ',
@@ -2981,7 +2994,7 @@ export class GrandmasterApp {
       parent: modePanel,
       top: 1,
       left: 1,
-      width: 32,
+      width: '100%-2',
       height: 5,
       style: {
         selected: { bg: 'blue', fg: 'white' },
@@ -3024,7 +3037,7 @@ export class GrandmasterApp {
       parent: this.screen,
       top: 'center',
       left: 'center',
-      width: 50,
+      width: this.dialogWidth(50),
       height: 8,
       border: { type: 'line' },
       label: ` Connecting to ${selectedServer} `,
@@ -3043,7 +3056,7 @@ export class GrandmasterApp {
       parent: nickDialog,
       top: 1,
       left: 2,
-      width: 20,
+      width: '100%-2',
       height: 1,
       border: { type: 'none' },
       content: '{bold}Nickname:{/bold}',
@@ -3069,7 +3082,7 @@ export class GrandmasterApp {
       parent: nickDialog,
       top: 4,
       left: 2,
-      width: 45,
+      width: '100%-2',
       height: 1,
       border: { type: 'none' },
       content: '{gray-fg}Enter your nickname (max 15 chars), ESC to cancel{/gray-fg}',
@@ -3111,7 +3124,7 @@ export class GrandmasterApp {
         parent: this.screen,
         top: 'center',
         left: 'center',
-        width: 50,
+        width: this.dialogWidth(50),
         height: 8,
         border: { type: 'line' },
         label: ' TSpec Password ',
@@ -3129,7 +3142,7 @@ export class GrandmasterApp {
         parent: passwordDialog,
         top: 1,
         left: 2,
-        width: 20,
+        width: '100%-2',
         height: 1,
         content: '{bold}Password:{/bold}',
       });
@@ -3156,7 +3169,7 @@ export class GrandmasterApp {
         parent: passwordDialog,
         top: 4,
         left: 2,
-        width: 45,
+        width: '100%-2',
         height: 1,
         content: '{gray-fg}Enter TSpec password (ESC to cancel){/gray-fg}',
       });
@@ -3206,7 +3219,7 @@ export class GrandmasterApp {
       parent: this.screen,
       top: 'center',
       left: 'center',
-      width: 50,
+      width: this.dialogWidth(50),
       height: 7,
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'cyan' } },
@@ -3772,7 +3785,7 @@ export class GrandmasterApp {
       parent: this.screen,
       top: 'center',
       left: 'center',
-      width: 50,
+      width: this.dialogWidth(50),
       height: 15,
       border: { type: 'line' },
       label: ' Select Bot Difficulty ',
@@ -3784,7 +3797,7 @@ export class GrandmasterApp {
       parent: difficultyPanel,
       top: 1,
       left: 1,
-      width: 48,
+      width: '100%-2',
       height: 13,
       style: {
         selected: { bg: 'blue', fg: 'white' },
@@ -3928,7 +3941,7 @@ export class GrandmasterApp {
       parent: this.screen,
       top: 'center',
       left: 'center',
-      width: 50,
+      width: this.dialogWidth(50),
       height: 7,
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'cyan' } },
@@ -4282,7 +4295,7 @@ export class GrandmasterApp {
       parent: this.screen,
       top: 'center',
       left: 'center',
-      width: 50,
+      width: this.dialogWidth(50),
       height: 12,
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'cyan' } },
@@ -4312,7 +4325,7 @@ export class GrandmasterApp {
       parent: this.screen,
       top: 'center',
       left: 'center',
-      width: 50,
+      width: this.dialogWidth(50),
       height: 10,
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'yellow' } },

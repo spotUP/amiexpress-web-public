@@ -87,6 +87,16 @@ export declare class GrandmasterApp {
      * terminal kept its default of 'game': tapping the main menu rotated a
      * piece that was not there (reported 2026-08-26).
      */
+    /**
+     * A dialog's width, capped to the screen it opens on.
+     *
+     * Fourteen dialogs in this door asked for 50 or 60 columns and centred
+     * themselves. On a C64 that puts the left edge at -5 and the screen eats
+     * the first characters of every row: "Select Bot Difficulty" arrived as
+     * "lect Bot Difficulty" (2026-09-06). The SDK has answered this question
+     * since the compact tier existed; the door simply never asked it.
+     */
+    private dialogWidth;
     private announceInputMode;
     /**
      * Run a dialog that is a MENU even though the navigation state says 'game'.

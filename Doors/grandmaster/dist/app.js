@@ -299,6 +299,18 @@ class GrandmasterApp {
      * terminal kept its default of 'game': tapping the main menu rotated a
      * piece that was not there (reported 2026-08-26).
      */
+    /**
+     * A dialog's width, capped to the screen it opens on.
+     *
+     * Fourteen dialogs in this door asked for 50 or 60 columns and centred
+     * themselves. On a C64 that puts the left edge at -5 and the screen eats
+     * the first characters of every row: "Select Bot Difficulty" arrived as
+     * "lect Bot Difficulty" (2026-09-06). The SDK has answered this question
+     * since the compact tier existed; the door simply never asked it.
+     */
+    dialogWidth(preferred) {
+        return Math.min(preferred, (0, blessed_1.calculateDialogWidth)(this.screen.width));
+    }
     announceInputMode(mode) {
         try {
             const announced = mode ?? (this._currentScreen === 'game' ? 'game' : 'menu');
@@ -615,7 +627,7 @@ class GrandmasterApp {
             parent: this.screen,
             top: 'center',
             left: 'center',
-            width: 60,
+            width: this.dialogWidth(60),
             height: 15,
             content: '',
             style: {
@@ -933,7 +945,7 @@ class GrandmasterApp {
                 parent: this.screen,
                 top: 'center',
                 left: 'center',
-                width: 60,
+                width: this.dialogWidth(60),
                 height: 8,
                 border: { type: 'line' },
                 style: { bg: 'black', border: { fg: 'red' } },
@@ -958,7 +970,7 @@ class GrandmasterApp {
             parent: this.screen,
             top: 'center',
             left: 'center',
-            width: 50,
+            width: this.dialogWidth(50),
             height: 12,
             border: { type: 'line' },
             label: ' Select Mode ',
@@ -969,7 +981,7 @@ class GrandmasterApp {
             parent: modePanel,
             top: 1,
             left: 1,
-            width: 48,
+            width: '100%-2',
             height: 10,
             style: {
                 selected: { bg: 'blue', fg: 'white' },
@@ -1022,7 +1034,7 @@ class GrandmasterApp {
                     parent: this.screen,
                     top: 'center',
                     left: 'center',
-                    width: 50,
+                    width: this.dialogWidth(50),
                     height: 12,
                     border: { type: 'line' },
                     label: ' Change Mode ',
@@ -1033,7 +1045,7 @@ class GrandmasterApp {
                     parent: rePanel,
                     top: 1,
                     left: 1,
-                    width: 48,
+                    width: '100%-2',
                     height: 10,
                     style: { selected: { bg: 'blue', fg: 'white' } },
                     keys: true,
@@ -1847,7 +1859,7 @@ class GrandmasterApp {
             parent: this.screen,
             top: 'center',
             left: 'center',
-            width: 40,
+            width: this.dialogWidth(40),
             height: 12,
             border: { type: 'line' },
             label: ' TetriNET Mode ',
@@ -1858,7 +1870,7 @@ class GrandmasterApp {
             parent: modePanel,
             top: 0,
             left: 1,
-            width: 36,
+            width: '100%-2',
             height: 8,
             style: {
                 selected: { bg: 'blue', fg: 'white' },
@@ -2294,7 +2306,7 @@ class GrandmasterApp {
             parent: this.screen,
             top: 'center',
             left: 'center',
-            width: 60,
+            width: this.dialogWidth(60),
             height: 16,
             border: { type: 'line' },
             label: ' WATCH A GAME ',
@@ -2309,7 +2321,7 @@ class GrandmasterApp {
             parent: panel,
             top: 1,
             left: 1,
-            width: 56,
+            width: '100%-2',
             height: 12,
             items: [...items, '{gray-fg}Back{/gray-fg}'],
             keys: true,
@@ -2390,7 +2402,7 @@ class GrandmasterApp {
             parent: this.screen,
             top: 'center',
             left: 'center',
-            width: 50,
+            width: this.dialogWidth(50),
             height: Math.min(predefinedServers.length + 10, 20),
             border: { type: 'line' },
             label: ' Select TetriNET Server ',
@@ -2401,7 +2413,7 @@ class GrandmasterApp {
             parent: serverPanel,
             top: 1,
             left: 1,
-            width: 48,
+            width: '100%-2',
             height: Math.min(predefinedServers.length + 8, 18),
             style: {
                 selected: { bg: 'blue', fg: 'white' },
@@ -2466,7 +2478,7 @@ class GrandmasterApp {
                 parent: this.screen,
                 top: 'center',
                 left: 'center',
-                width: 55,
+                width: this.dialogWidth(55),
                 height: 10,
                 border: { type: 'line' },
                 label: ' Enter Server Address ',
@@ -2483,7 +2495,7 @@ class GrandmasterApp {
                 parent: customDialog,
                 top: 1,
                 left: 2,
-                width: 20,
+                width: '100%-2',
                 height: 1,
                 content: '{bold}Server:{/bold}',
             });
@@ -2508,7 +2520,7 @@ class GrandmasterApp {
                 parent: customDialog,
                 top: 4,
                 left: 2,
-                width: 20,
+                width: '100%-2',
                 height: 1,
                 content: '{bold}Port:{/bold}',
             });
@@ -2534,7 +2546,7 @@ class GrandmasterApp {
                 parent: customDialog,
                 top: 7,
                 left: 2,
-                width: 50,
+                width: '100%-2',
                 height: 1,
                 content: '{gray-fg}Tab to switch, Enter to continue, ESC to cancel{/gray-fg}',
             });
@@ -2595,7 +2607,7 @@ class GrandmasterApp {
             parent: this.screen,
             top: 'center',
             left: 'center',
-            width: 34,
+            width: this.dialogWidth(34),
             height: 7,
             border: { type: 'line' },
             label: ' Mode ',
@@ -2606,7 +2618,7 @@ class GrandmasterApp {
             parent: modePanel,
             top: 1,
             left: 1,
-            width: 32,
+            width: '100%-2',
             height: 5,
             style: {
                 selected: { bg: 'blue', fg: 'white' },
@@ -2646,7 +2658,7 @@ class GrandmasterApp {
             parent: this.screen,
             top: 'center',
             left: 'center',
-            width: 50,
+            width: this.dialogWidth(50),
             height: 8,
             border: { type: 'line' },
             label: ` Connecting to ${selectedServer} `,
@@ -2664,7 +2676,7 @@ class GrandmasterApp {
             parent: nickDialog,
             top: 1,
             left: 2,
-            width: 20,
+            width: '100%-2',
             height: 1,
             border: { type: 'none' },
             content: '{bold}Nickname:{/bold}',
@@ -2688,7 +2700,7 @@ class GrandmasterApp {
             parent: nickDialog,
             top: 4,
             left: 2,
-            width: 45,
+            width: '100%-2',
             height: 1,
             border: { type: 'none' },
             content: '{gray-fg}Enter your nickname (max 15 chars), ESC to cancel{/gray-fg}',
@@ -2722,7 +2734,7 @@ class GrandmasterApp {
                 parent: this.screen,
                 top: 'center',
                 left: 'center',
-                width: 50,
+                width: this.dialogWidth(50),
                 height: 8,
                 border: { type: 'line' },
                 label: ' TSpec Password ',
@@ -2739,7 +2751,7 @@ class GrandmasterApp {
                 parent: passwordDialog,
                 top: 1,
                 left: 2,
-                width: 20,
+                width: '100%-2',
                 height: 1,
                 content: '{bold}Password:{/bold}',
             });
@@ -2764,7 +2776,7 @@ class GrandmasterApp {
                 parent: passwordDialog,
                 top: 4,
                 left: 2,
-                width: 45,
+                width: '100%-2',
                 height: 1,
                 content: '{gray-fg}Enter TSpec password (ESC to cancel){/gray-fg}',
             });
@@ -2805,7 +2817,7 @@ class GrandmasterApp {
             parent: this.screen,
             top: 'center',
             left: 'center',
-            width: 50,
+            width: this.dialogWidth(50),
             height: 7,
             border: { type: 'line' },
             style: { bg: 'black', border: { fg: 'cyan' } },
@@ -3316,7 +3328,7 @@ class GrandmasterApp {
             parent: this.screen,
             top: 'center',
             left: 'center',
-            width: 50,
+            width: this.dialogWidth(50),
             height: 15,
             border: { type: 'line' },
             label: ' Select Bot Difficulty ',
@@ -3327,7 +3339,7 @@ class GrandmasterApp {
             parent: difficultyPanel,
             top: 1,
             left: 1,
-            width: 48,
+            width: '100%-2',
             height: 13,
             style: {
                 selected: { bg: 'blue', fg: 'white' },
@@ -3441,7 +3453,7 @@ class GrandmasterApp {
             parent: this.screen,
             top: 'center',
             left: 'center',
-            width: 50,
+            width: this.dialogWidth(50),
             height: 7,
             border: { type: 'line' },
             style: { bg: 'black', border: { fg: 'cyan' } },
@@ -3732,7 +3744,7 @@ class GrandmasterApp {
             parent: this.screen,
             top: 'center',
             left: 'center',
-            width: 50,
+            width: this.dialogWidth(50),
             height: 12,
             border: { type: 'line' },
             style: { bg: 'black', border: { fg: 'cyan' } },
@@ -3762,7 +3774,7 @@ class GrandmasterApp {
             parent: this.screen,
             top: 'center',
             left: 'center',
-            width: 50,
+            width: this.dialogWidth(50),
             height: 10,
             border: { type: 'line' },
             style: { bg: 'black', border: { fg: 'yellow' } },
