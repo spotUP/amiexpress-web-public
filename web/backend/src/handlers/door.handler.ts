@@ -1779,10 +1779,37 @@ console.log('Executing door:', door.name);
   // genuinely usable at 40 even though its own output is not. doorOpensForC64
   // is the SAME predicate executeAmigaDoor asks before installing the adapter
   // - a door let in here is therefore always a door that then runs adapted.
+  //
+  // FALL-THROUGH (open backlog 11.1, sysop-decided 2026-09-06). A refusal
+  // used to END the command: a 40-column caller who typed FR got the notice
+  // and the menu, because AquaScan is registered over F/FR/N/Z and BBSCMD is
+  // asked before the internal switch - while the board's own 40-column file
+  // listing sat one tier below, unreachable for three days.
+  //
+  // What is refused has not changed, and neither has who decides. This clause
+  // stays the ONE predicate for "too narrow" and the ONE emitter of the
+  // notice; it does not run internal commands, because executeDoor is also
+  // reached from the DOORS menu, a ~CC_ screen command and login-post's
+  // chat-only launch, where firing an unrelated internal handler would be
+  // wrong. Instead the DISPATCHER arms `session.widthGateFallThrough` before
+  // the launch it initiated and this clause REPORTS to it: no notice, no menu
+  // reset, the outcome is the dispatcher's. Nothing armed it -> the refusal
+  // below is byte-for-byte what it always was.
+  //
+  // Read-and-cleared for EVERY launch, refused or not: an arm covers the one
+  // launch the dispatcher started, and must never be inherited by a door that
+  // goes on to launch another door.
+  const widthFallThroughArmed = session.widthGateFallThrough === 'ARMED';
+  if (widthFallThroughArmed) session.widthGateFallThrough = undefined;
+
   if (
     sessionColumns(session) < resolveDoorMinColumns(door as any) &&
     !doorOpensForC64(door as any, session)
   ) {
+    if (widthFallThroughArmed) {
+      session.widthGateFallThrough = 'REFUSED';
+      return;
+    }
     // emitPrompt is emitText(..., immediate): the notice must reach the
     // caller before the menu repaints over it.
     emitPrompt(socket, DOOR_NEEDS_80_NOTICE);

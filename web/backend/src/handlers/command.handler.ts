@@ -23,6 +23,7 @@ import { displayScreen, doPause } from './screen.handler';
 import { displayConferenceBulletins, joinConference, FORCE_MAILSCAN_SKIP } from './operations/conference.handler';
 import { displayMainMenu as menuDisplayMainMenu, displayMenuPrompt as menuDisplayMenuPrompt } from './command-handler/menu';
 import { routeStateInput, isRoutedState } from './command-handler/state-router';
+import { INTERNAL_COMMAND_NAMES } from './command-handler/internal-command-names';
 import { displayDoorMenu, executeDoor } from './door.handler';
 import { startSysopPage } from './chat/chat.handler';
 import {
@@ -4379,36 +4380,90 @@ console.log(`[CommandPriority] J with numeric param "${trimmedParams}" - using i
     return 'SUCCESS';
   }
 
-  // Try SysCommand first — only when allowSyscmd=TRUE (express.e:28249)
-  // Interactive user menu input always uses allowSyscmd=FALSE (express.e:28229 default)
-  if (allowSyscmd) {
-    const sysResult = await runSysCommand(socket, session, command, params);
-    if (sysResult === 'SUCCESS') {
+  // WIDTH-GATE FALL-THROUGH (open backlog 11.1, sysop-decided 2026-09-06).
+  //
+  // The bug: `Commands/BBSCmd/f.info`, `fr.info` and `scan.info` register the
+  // 68K door AquaScan over F/FR/N/Z, BBSCMD is asked before the internal
+  // switch (express.e:28228), and executeDoor's MIN_COLUMNS gate then refuses
+  // the door to a 40-column PETSCII caller. The command ENDED there - notice,
+  // menu - even though this board renders those listings at 40 columns one
+  // tier below. Three days of "I cannot list files on my C64".
+  //
+  // Where the decision lives, and why here. Not at the gate: executeDoor is
+  // also entered from the DOORS menu, a ~CC_ screen command and login-post,
+  // and firing an internal handler from inside a door launcher would change
+  // all of those too. Not inside `runBbsCommand`'s numeric contract either:
+  // that signature is shared with SYSCMD, PWFAIL and a door's RETURNCOMMAND,
+  // which have no next tier to fall to. It belongs HERE, in the one function
+  // that owns express.e's SYSCMD -> BBSCMD -> internal priority: a door the
+  // width gate refused simply did not execute the command, so priority falls
+  // through to the tier below, exactly as a missing registration would.
+  //
+  // The predicate is not re-derived. `executeDoor`'s gate stays the only
+  // answer to "is this door too narrow"; it reports through
+  // session.widthGateFallThrough, which is armed only for the launch this
+  // dispatcher initiates.
+  //
+  // NO internal equivalent -> nothing is armed -> the gate prints
+  // THIS DOOR NEEDS AN 80 COLUMN SCREEN and returns to the menu, byte for
+  // byte as before. A refusal never becomes silence. The membership test is
+  // INTERNAL_COMMAND_NAMES, which `tests/handlers/prompt-completion.test.ts`
+  // re-parses out of processBBSCommand's own switch below, so this is the
+  // switch answering for itself rather than a second list to keep in step.
+  const hasInternalEquivalent = INTERNAL_COMMAND_NAMES.includes(
+    String(command || '').toUpperCase()
+  );
+  const widthGateRefused = () => session.widthGateFallThrough === 'REFUSED';
+  const runInternalTier = async (): Promise<string> => {
+    reportCommand();
+    await processBBSCommand(socket, session, command, params);
+    return 'SUCCESS';
+  };
+
+  if (hasInternalEquivalent) session.widthGateFallThrough = 'ARMED';
+
+  try {
+    // Try SysCommand first — only when allowSyscmd=TRUE (express.e:28249)
+    // Interactive user menu input always uses allowSyscmd=FALSE (express.e:28229 default)
+    if (allowSyscmd) {
+      const sysResult = await runSysCommand(socket, session, command, params);
+      if (widthGateRefused()) {
+console.log('[CommandPriority] SysCommand door refused by the width gate - falling through to InternalCommand');
+        return await runInternalTier();
+      }
+      if (sysResult === 'SUCCESS') {
 console.log('[CommandPriority] Executed as SysCommand');
+        return 'SUCCESS';
+      }
+      if (sysResult === 'NOT_ALLOWED') {
+console.log('[CommandPriority] SysCommand denied by permissions');
+        return 'NOT_ALLOWED';
+      }
+    }
+
+    // Try BbsCommand second
+    const bbsResult = await runBbsCommand(socket, session, command, params);
+    if (widthGateRefused()) {
+console.log('[CommandPriority] BbsCommand door refused by the width gate - falling through to InternalCommand');
+      return await runInternalTier();
+    }
+    if (bbsResult === 'SUCCESS') {
+console.log('[CommandPriority] Executed as BbsCommand');
       return 'SUCCESS';
     }
-    if (sysResult === 'NOT_ALLOWED') {
-console.log('[CommandPriority] SysCommand denied by permissions');
+    if (bbsResult === 'NOT_ALLOWED') {
+console.log('[CommandPriority] BbsCommand denied by permissions');
       return 'NOT_ALLOWED';
     }
-  }
 
-  // Try BbsCommand second
-  const bbsResult = await runBbsCommand(socket, session, command, params);
-  if (bbsResult === 'SUCCESS') {
-console.log('[CommandPriority] Executed as BbsCommand');
-    return 'SUCCESS';
-  }
-  if (bbsResult === 'NOT_ALLOWED') {
-console.log('[CommandPriority] BbsCommand denied by permissions');
-    return 'NOT_ALLOWED';
-  }
-
-  // Try InternalCommand last
+    // Try InternalCommand last
 console.log('[CommandPriority] Trying as InternalCommand');
-  reportCommand();
-  await processBBSCommand(socket, session, command, params);
-  return 'SUCCESS';
+    return await runInternalTier();
+  } finally {
+    // The arm belongs to this dispatch and nothing else: a command that never
+    // reached a door must not leave it set for the next launch on this session.
+    session.widthGateFallThrough = undefined;
+  }
 }
 
 // Process BBS commands (processInternalCommand equivalent)

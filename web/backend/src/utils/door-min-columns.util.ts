@@ -44,6 +44,34 @@ export const DOOR_NEEDS_BROWSER_NOTICE = '\r\nTHIS DOOR NEEDS A WEB BROWSER\r\n'
 
 export const DEFAULT_MIN_COLUMNS = 80;
 
+/**
+ * The width gate's fall-through channel (open backlog 11.1, sysop-decided
+ * 2026-09-06).
+ *
+ * The bug: `Commands/BBSCmd/f.info`, `fr.info`, `scan.info` and `Z.info`
+ * register 68K doors over commands the BBS also answers itself, and dispatch
+ * asks BBSCMD before the internal switch (`command.handler.ts` processCommand,
+ * express.e:28228). So a 40-column caller who typed FR was refused a door and
+ * dropped back at the menu, while the board's own 40-column file listing sat
+ * one tier below, unreachable. Three days of "I cannot list files on my C64".
+ *
+ * The fix is a REPORT, not a decision. `executeDoor`'s gate stays the single
+ * predicate for "too narrow" and the single emitter of the notice; the
+ * dispatcher - the only caller that has a next tier to fall to - ARMS this
+ * field before the launch it initiates, and the gate answers REFUSED instead
+ * of printing. Every other route into `executeDoor` (the DOORS menu, a ~CC_
+ * screen command, login-post's chat-only launch) arms nothing and therefore
+ * refuses exactly as it always did.
+ *
+ * Deliberately a session field rather than a fourth outcome threaded through
+ * `runBbsCommand` -> `execBbsCommand` -> `runCommand` -> `executeDoor`: those
+ * four signatures are shared with SYSCMD, PWFAIL and a door's RETURNCOMMAND,
+ * and widening all of them would hand a case to call sites that cannot act on
+ * it. The arm is read-and-cleared by the gate on EVERY launch so a door that
+ * launches another door can never inherit it.
+ */
+export type WidthGateFallThrough = 'ARMED' | 'REFUSED';
+
 export interface MinColumnsDoorShape {
   command?: string;
   id?: string;

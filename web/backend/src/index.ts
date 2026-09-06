@@ -1,6 +1,7 @@
 import "reflect-metadata"; // Must be first import for tsyringe decorators
 // Type-only (erased at runtime, so it cannot displace reflect-metadata).
 import type { PetsciiRenderCtx, PetsciiSpan } from './handlers/petscii-screen.render';
+import type { WidthGateFallThrough } from './utils/door-min-columns.util';
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { createServer } from "http";
@@ -560,6 +561,12 @@ export interface BBSSession {
   quickFlag?: boolean; // Quick logon flag (express.e:116) - skip bulletins when 'Q' entered at ANSI prompt
 
   // Screen-triggered command execution
+  // Width-gate fall-through (open backlog 11.1). Set to 'ARMED' by
+  // processCommand before a door launch it can fall through from, answered
+  // 'REFUSED' by executeDoor's MIN_COLUMNS gate instead of printing the
+  // 80-column notice. See utils/door-min-columns.util.ts.
+  widthGateFallThrough?: WidthGateFallThrough;
+
   executingScreenCommand?: boolean; // True while ~CC/~XI command is running
   pendingScreenCommand?: Promise<void>; // Resolves when screen-initiated commands complete
   screenCommandResolver?: (() => void) | null;
