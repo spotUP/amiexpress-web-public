@@ -65,6 +65,15 @@
  * a stale frame on top of the menu the caller is looking at now. That is
  * `{ silent: true }` / disposeSilently().
  *
+ * PAGING (backlog 11.3). The rule ladder can make a screen TALLER than it
+ * started, and `adaptFrame` resolves that by showing the LAST 25 adapted rows -
+ * so a menu that reflows into 33 rows loses its head to a caller who never saw
+ * it. When that happens the adapter anchors its window at the TOP instead and
+ * xim/io.ts walks it down a page at a time behind the express.e pause prompt;
+ * see the block on `pageTop`. The walk is armed only by that pause owner, so a
+ * frame that fits - every frame the corpus and identity pins measure - takes
+ * the unchanged adaptFrame path.
+ *
  * NOT INSTALLED for a non-PETSCII session: install() returns null and `emit` is
  * not replaced, so 80-column output is byte-for-byte what it was. Non-string
  * payloads (ZMODEM buffers) and every non-'ansi-output' event pass through
@@ -76,7 +85,14 @@
 import {
   FrameReconstructor,
   adaptFrame,
+  adaptRows,
+  blankCell,
+  isBlank,
+  makeFrame,
   renderDiff,
+  type AdaptedRow,
+  type Cell,
+  type Cursor,
   type Frame,
 } from '@amiexpress/bbs-door-sdk/petscii/frame';
 import { doorScreenWidth, C64_COLUMNS } from '../amiga-emulation/xim/screen-width.util';
@@ -112,6 +128,14 @@ export interface AdapterSession {
 export interface C64AdapterOptions {
   tickMs?: number;
   maxFrameMs?: number;
+}
+
+/** The rule ladder's output for the frame as it stands, plus where the painted rows end. */
+interface AdaptedView {
+  seq: number;
+  rows: AdaptedRow[];
+  cursor: Cursor;
+  contentEnd: number;
 }
 
 /**
@@ -158,6 +182,27 @@ export class C64DoorFrameAdapter {
   private capTimer: NodeJS.Timeout | null = null;
   private dirty = false;
   private disposed = false;
+  /**
+   * ADAPTED-FRAME PAGING (backlog 11.3). The rule ladder can make a screen
+   * TALLER than it started: `games` (5D-AdiMenu) paints 19 source rows that
+   * reflow into 33 adapted ones, and `adaptFrame` shows the LAST `rows` of
+   * them - so the title and nine games leave the top having never been on the
+   * caller's screen. Measured on the real file: painted rows start falling off
+   * at source line 4, which is why no threshold on the SOURCE line counter can
+   * fix this (a 25-row grid's blank tail is adapted too, so the total is over
+   * 25 before the door has printed its second entry).
+   *
+   * The window is therefore anchored at `pageTop` and walked DOWN a page at a
+   * time by whoever owns the pause - xim/io.ts, which is the only thing that
+   * can hold the emulator and read the caller's key. Until that owner arms it
+   * (`showPause`), `paging` is false and flush() takes the historic
+   * `adaptFrame` path unchanged, which is what every existing pin measures.
+   */
+  private pageTop = 0;
+  private paging = false;
+  /** Bumped by every write, so the adapted view can be memoised between calls in the same frame. */
+  private writeSeq = 0;
+  private adaptedCache: AdaptedView | null = null;
   /** The object whose emit was patched, and the emit to put back. */
   target: any = null;
   original: ((event: string, ...args: any[]) => any) | null = null;
@@ -184,6 +229,7 @@ export class C64DoorFrameAdapter {
   write(text: string): void {
     this.screen.write(text);
     this.dirty = true;
+    this.writeSeq += 1;
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => this.flush(), this.tickMs);
     if (!this.capTimer) this.capTimer = setTimeout(() => this.flush(), this.maxFrameMs);
@@ -195,7 +241,117 @@ export class C64DoorFrameAdapter {
     // empty string: never emit one.
     if (!this.dirty) return;
     this.dirty = false;
+    this.settleWindow();
+    if (this.paging) {
+      this.paint(null);
+      return;
+    }
     const next = adaptFrame(this.screen.snapshot(), { cols: this.cols, rows: ROWS });
+    const ansi = renderDiff(this.prev, next, this.cols, ROWS);
+    this.prev = next;
+    this.downstream('ansi-output', ansi);
+  }
+
+  // ---- adapted-frame paging -------------------------------------------
+  //
+  // The three questions the pause owner asks. All of them are answered from
+  // the adapter's OWN FrameReconstructor, never from the chunk that happened
+  // to arrive: a source row can be built from any number of emit() calls, and
+  // `games` resolves its two columns with ESC[nC and CR rather than spaces, so
+  // a measurement taken on a chunk's text would be wrong even when the chunk
+  // happens to hold a whole row. The reconstructor has already absorbed every
+  // chunk and resolved every cursor move, so there is nothing a chunk boundary
+  // can double-count or lose.
+
+  /**
+   * Adapted rows the caller's screen cannot hold from the current window.
+   * Zero for every frame that fits - which is every frame the corpus and the
+   * identity pins measure, so they never enter the paged path.
+   */
+  unseenRows(): number {
+    this.settleWindow();
+    return Math.max(0, this.adapted().contentEnd - (this.pageTop + ROWS));
+  }
+
+  /**
+   * Show the current page with `prompt` on its bottom row and arm paging. The
+   * prompt is painted HERE rather than emitted into the reconstructor because
+   * the door's cursor sits at the end of the source screen, which on an
+   * overflowing frame adapts to a row below the window - the caller would
+   * never see it. Same bytes as express.e:5193, a different row.
+   */
+  showPause(prompt: string): void {
+    this.paging = true;
+    this.paint(prompt);
+  }
+
+  /**
+   * Release the next page. Returns the rows still unseen after it, so the
+   * pause owner knows whether to prompt again or let the door go.
+   * A page is ROWS-1 rows: the row the prompt occupies is not skipped, it is
+   * the first row of the page that follows.
+   */
+  nextPage(): number {
+    if (this.unseenRows() > 0) this.pageTop += ROWS - 1;
+    return this.unseenRows();
+  }
+
+  /** Repaint the current page with no prompt - the last page of a walk. */
+  showPage(): void {
+    this.paint(null);
+  }
+
+  /** The window this adapter is showing, for tests and for the pause owner's logs. */
+  pageOffset(): number {
+    return this.pageTop;
+  }
+
+  /**
+   * A frame that fits again ends the walk: the door cleared its screen, or
+   * printed something short. Without this a `pageTop` left over from the last
+   * walk would window a fresh 20-row screen off the bottom and show blanks.
+   */
+  private settleWindow(): void {
+    if (!this.paging) return;
+    const { contentEnd } = this.adapted();
+    if (contentEnd <= ROWS || this.pageTop >= contentEnd) {
+      this.pageTop = 0;
+      this.paging = false;
+    }
+  }
+
+  /** The adapted rows of the frame as it stands, memoised until the next write. */
+  private adapted(): AdaptedView {
+    if (this.adaptedCache && this.adaptedCache.seq === this.writeSeq) return this.adaptedCache;
+    const { rows, cursor } = adaptRows(this.screen.snapshot(), { cols: this.cols });
+    // The blank tail of a 25-row grid is not content. It still costs adapted
+    // rows, which is exactly how adaptFrame comes to push painted rows off the
+    // top, so the window is measured against the PAINTED height instead.
+    let contentEnd = rows.length;
+    while (contentEnd > 0 && rows[contentEnd - 1].cells.every(isBlank)) contentEnd--;
+    const view: AdaptedView = { seq: this.writeSeq, rows, cursor, contentEnd };
+    this.adaptedCache = view;
+    return view;
+  }
+
+  /** Render window [pageTop, pageTop+height) plus an optional prompt row. */
+  private paint(prompt: string | null): void {
+    this.clearTimers();
+    this.dirty = false;
+    const { rows, cursor } = this.adapted();
+    const height = prompt === null ? ROWS : ROWS - 1;
+    const visible: Cell[][] = rows
+      .slice(this.pageTop, this.pageTop + height)
+      .map((r) => r.cells.map((c) => ({ ...c })));
+    let where: Cursor;
+    if (prompt === null) {
+      where = { x: cursor.x, y: Math.max(0, Math.min(ROWS - 1, cursor.y - this.pageTop)) };
+    } else {
+      while (visible.length < ROWS - 1) visible.push([]);
+      visible.push(Array.from(prompt).map((ch) => ({ ...blankCell(), ch })));
+      where = { x: Math.min(this.cols - 1, prompt.length), y: ROWS - 1 };
+    }
+    const next = makeFrame(this.cols, ROWS, visible, where);
     const ansi = renderDiff(this.prev, next, this.cols, ROWS);
     this.prev = next;
     this.downstream('ansi-output', ansi);
@@ -204,6 +360,8 @@ export class C64DoorFrameAdapter {
   /** The caller's screen was repainted outside this model: the next frame is a full paint. */
   dropBaseline(): void {
     this.prev = null;
+    this.pageTop = 0;
+    this.paging = false;
   }
 
   dispose(): void {

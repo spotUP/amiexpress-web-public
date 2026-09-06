@@ -15,6 +15,7 @@ import { XIMMessage } from './types';
 import { BBSPaths } from '../../utils/bbs-paths.util';
 import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 import { buildGFileCandidates } from './user-info-handlers';
+import { c64AdapterFor } from '../../server/c64-door-adapter';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const iconv = require('iconv-lite');
 
@@ -136,7 +137,18 @@ async function displayResolvedFile(
   if (!hasMciCodes) {
     const newlineCount = (content.match(/\n/g) ?? []).length;
     const pauseLines = self.state.pauseLines || 24;
-    const shouldAutoPause = !forceNonStop && newlineCount > pauseLines;
+    // A 40-column caller is shown ADAPTED rows, and the C64 rule ladder can
+    // make a row two rows tall - `games` is 19 source rows and 33 adapted ones.
+    // This newline count therefore understates what he will be sent, and there
+    // is nothing in the FILE that would tell us better: the adapted height is a
+    // property of the frame the adapter reconstructs, after cursor moves are
+    // resolved. So for a frame-adapted caller the gate is simply armed and
+    // emitText's end-of-message check - which asks the adapter - decides.
+    // Content that really does fit reports zero unseen rows and nothing pauses.
+    // An 80-column caller has no adapter and keeps this newline gate byte for
+    // byte, which is what the identity suites pin.
+    const frameAdapted = !!c64AdapterFor(self.socket);
+    const shouldAutoPause = !forceNonStop && (frameAdapted || newlineCount > pauseLines);
     self.emitText(content, false, shouldAutoPause, shouldAutoPause, msg);
     if (!self.waitingForPause) {
       self.reply(msg, 1);

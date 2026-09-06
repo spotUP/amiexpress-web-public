@@ -33,6 +33,14 @@ import {
   handleDisplayFileNonStop as handleDisplayFileNonStopFn,
   handleCheckToDisplay as handleCheckToDisplayFn,
 } from './io-file-display';
+import { c64AdapterFor, type C64DoorFrameAdapter } from '../../server/c64-door-adapter';
+
+/**
+ * express.e:5193's pause prompt, byte for byte. Named because the adapted-frame
+ * pause paints the SAME string on the bottom row of a page instead of after the
+ * last line printed - the bytes are pinned, the row is not.
+ */
+const PAUSE_PROMPT = '(Pause)...More(y/n/ns)? ';
 
 export class XIMIOHandler {
   private emulator: MoiraEmulator;
@@ -80,6 +88,12 @@ export class XIMIOHandler {
   private pauseReply: { msg: XIMMessage; data: number } | null = null;
   private pauseInputBuffer: string = '';
   private readUserKeysPending: boolean = false;
+  /**
+   * The C64 frame adapter this pause is walking, when the pause is an
+   * ADAPTED-FRAME page break rather than a line-count pause. Non-null only
+   * between showPause() and the last page.
+   */
+  private adaptedPause: C64DoorFrameAdapter | null = null;
 
   // ANSI sequence buffer for handling split escape sequences across JH_SM calls
   // RTW and other doors may split ANSI sequences like ESC[34m across multiple messages
@@ -1492,7 +1506,50 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
       // Don't return bytesSent here - let the caller handle the pause state
     }
 
+    // ADAPTED-FRAME PAUSE (backlog 11.3). A 40-column caller is not shown the
+    // rows counted above: the C64 frame adapter's rule ladder reflows a
+    // two-column 80-column row into two, so `games` (5D-AdiMenu) paints 19
+    // source rows and 33 adapted ones onto a 25-row screen and adaptFrame drops
+    // the head. No threshold on the source-row counter can catch that - measured
+    // on the real file, painted rows begin falling off at source line 4, because
+    // the blank tail of a 25-row grid is adapted too. So the pause moves to
+    // AFTER adaptation and its unit is the adapted row, which only the adapter's
+    // own FrameReconstructor knows.
+    //
+    // It fires at the END of the message, not per line. The reconstructor
+    // already holds every row this message painted, so holding the WINDOW loses
+    // nothing - where the per-line pause above returns early and drops the rest
+    // of the message, which for a one-call file display is most of the file.
+    if (
+      autoPause &&
+      pendingMsg &&
+      !this.waitingForPause &&
+      !this.state.nonStopText
+    ) {
+      const adapter = c64AdapterFor(this.socket);
+      if (adapter && !adapter.isDisposed() && adapter.unseenRows() > 0) {
+        this.beginAdaptedPause(adapter, pendingMsg);
+      }
+    }
+
     return bytesSent;
+  }
+
+  /**
+   * Hold the door on a page of an ADAPTED frame. Same machinery as the
+   * line-count pause - the reply is deferred, the emulator stops, queueInput
+   * routes the caller's key to completePauseInput - but the prompt is painted
+   * by the adapter on the bottom row of the page, because the door's cursor
+   * adapts to a row below the window and the caller would never see it there.
+   */
+  private beginAdaptedPause(adapter: C64DoorFrameAdapter, pendingMsg: XIMMessage): void {
+    debugLog(`[XIMIOHandler] Adapted-frame pause (unseen=${adapter.unseenRows()}, page=${adapter.pageOffset()})`);
+    this.waitingForPause = true;
+    this.adaptedPause = adapter;
+    this.pauseReply = { msg: pendingMsg, data: 1 };
+    this.pauseInputBuffer = '';
+    adapter.showPause(PAUSE_PROMPT);
+    this.emulator.pause();
   }
 
   /**
@@ -1538,6 +1595,15 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
       return false;
     }
 
+    // A frame-adapted caller pauses on the ADAPTED frame at the end of the
+    // message (see emitText). Letting the source-row counter fire here as well
+    // would pause on the wrong unit AND truncate: this returns true, emitText
+    // returns, and the rest of the message is never emitted - which for `games`
+    // would throw away the five entries the caller was pausing to read.
+    if (c64AdapterFor(this.socket)) {
+      return false;
+    }
+
     if (this.state.lineCount >= this.state.pauseLines) {
 debugLog(`[XIMIOHandler] Pause triggered (lineCount=${this.state.lineCount})`);
       this.waitingForPause = true;
@@ -1545,7 +1611,7 @@ debugLog(`[XIMIOHandler] Pause triggered (lineCount=${this.state.lineCount})`);
       this.pauseInputBuffer = '';
       
       // Notify user - Match express.e:5192 exactly
-      this.directEmit('ansi-output', '(Pause)...More(y/n/ns)? ');
+      this.directEmit('ansi-output', PAUSE_PROMPT);
       
       // Pause emulator while waiting for user to acknowledge pause
       this.emulator.pause();
@@ -1565,6 +1631,29 @@ debugLog(`[XIMIOHandler] Pause triggered (lineCount=${this.state.lineCount})`);
     debugLog('[XIMIOHandler] completePauseInput - sending reply and resuming emulator');
 debugLog('[XIMIOHandler] Pause acknowledged, resuming');
     
+    // An ADAPTED-FRAME pause is a page break, not a message break: the rows the
+    // caller has not seen are already in the adapter's frame, so releasing it
+    // shows the NEXT page and only the last page releases the door. 'ns' means
+    // "stop pausing", which for a frame that cannot fit means the tail - the
+    // same thing a caller with pausing turned off gets today.
+    if (this.adaptedPause) {
+      const adapter = this.adaptedPause;
+      if (this.pauseInputBuffer.toLowerCase().includes('ns')) {
+        this.state.nonStopText = true;
+      }
+      this.pauseInputBuffer = '';
+      if (this.state.nonStopText) {
+        // No more prompts: run the window to the end of the frame in one go.
+        while (adapter.nextPage() > 0) { /* walk to the last page */ }
+      } else if (adapter.nextPage() > 0) {
+        debugLog(`[XIMIOHandler] Adapted-frame page released, ${adapter.unseenRows()} rows still unseen`);
+        adapter.showPause(PAUSE_PROMPT);
+        return;
+      }
+      adapter.showPage();
+      this.adaptedPause = null;
+    }
+
     const { msg, data } = this.pauseReply;
     this.waitingForPause = false;
     this.pauseReply = null;
@@ -1687,6 +1776,7 @@ debugLog(`  Data: ${data}`);
       this.reply(this.pauseReply.msg, -1);
       this.waitingForPause = false;
       this.pauseReply = null;
+      this.adaptedPause = null;
     }
   }
 
@@ -1765,6 +1855,7 @@ debugLog('[XIMIOHandler] Aborting pending pause');
       this.waitingForPause = false;
       this.pauseInputBuffer = '';
       this.pauseReply = null;
+      this.adaptedPause = null;
     }
 
 debugLog(`[XIMIOHandler] Cleared ${queueSize} queued inputs`);
