@@ -82,6 +82,38 @@ export class FileRepository extends BaseRepository<any> {
   }
 
   /**
+   * The exact inverse of `recordLocation`: this row's object is gone from the
+   * pool, so the row stops naming a place in it.
+   *
+   * Gate 2, blocker 3. `usedBytesByVolume` below is
+   * `SUM(size) ... WHERE storage_volume IS NOT NULL GROUP BY storage_volume`,
+   * and `storage_volume` is what this clears - so a deleted object stops
+   * being counted, which is the whole point. Without it the only writes to
+   * `usedBytes` anywhere are `+=` (FileCache.writeBack) and the boot seed
+   * that reads this very SUM, so a QUOTA'd drive's `roomOn`
+   * (`quota - usedBytes`) is monotonically non-decreasing across deletes and
+   * delete-and-reupload churn walks it to "full" while the bucket has room.
+   *
+   * The row itself SURVIVES - this is not `deleteDbEntries`. The file's
+   * catalog identity (its description, uploader, area, download count) is a
+   * wider concern with its own gap; what is removed here is only the claim
+   * that these bytes occupy that drive, because that claim is what
+   * `usedBytesByVolume` sums and `entriesOnVolume` lists.
+   *
+   * Returns whether a row actually matched. Unlike `recordLocation` this does
+   * NOT throw on a miss: a delete whose bytes are already gone from the pool
+   * has nothing left to correct, and turning that into an exception would
+   * make a successful delete report failure.
+   */
+  clearLocation(filename: string, areaId: number): boolean {
+    const result = this.run(
+      'UPDATE file_entries SET storage_volume = NULL, object_key = NULL WHERE filename = ? AND areaid = ?',
+      [filename, areaId]
+    );
+    return result.changes > 0;
+  }
+
+  /**
    * The admin's "what is on this volume" report. Returns every entry on the
    * drive - not a page of them - since this is the whole mitigation a sysop
    * gets when a provider closes their account.

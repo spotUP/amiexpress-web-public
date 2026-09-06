@@ -2543,6 +2543,10 @@ console.error(`[Database] Failed to update disk misc for slot ${slotNumber}:`, e
     this.fileRepo!.recordLocation(...args);
   }
 
+  clearLocation(...args: Parameters<FileRepository['clearLocation']>): boolean {
+    return this.fileRepo!.clearLocation(...args);
+  }
+
   entriesOnVolume(...args: Parameters<FileRepository['entriesOnVolume']>) {
     return this.fileRepo!.entriesOnVolume(...args);
   }

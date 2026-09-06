@@ -773,10 +773,15 @@ console.log('[FM] Starting file maintenance');
         );
       }
       const state = storage.volumes.byNumber(driveNumber);
+      // Read before the delete and before `forget`, which drops it: the size
+      // the listing gave this key is what the quota credit below is worth.
+      const sizeBytes = index.sizeOf(key) ?? 0;
 
+      let objectDeleted = false;
       if (state) {
         try {
           await state.backend.delete(key);
+          objectDeleted = true;
         } catch (error) {
           console.error(
             `[FileMaintenance] could not delete ${filename} (DRIVE.${driveNumber}:${key}) from the pool: ` +
@@ -785,6 +790,34 @@ console.log('[FM] Starting file maintenance');
         }
       }
       index.forget(key);
+
+      // Gate 2, blocker 3: a pooled delete has to give the quota back, in
+      // BOTH places that hold it, or the two disagree at the next rebuild.
+      //
+      //   - the CATALOG's location record, because `usedBytesByVolume` is
+      //     `SUM(size) WHERE storage_volume IS NOT NULL` and the boot seed
+      //     reads exactly that. Leave the record and the next rebuild
+      //     re-seeds `usedBytes` with the deleted object's bytes all over
+      //     again, undoing the in-process decrement below.
+      //   - the IN-PROCESS counter, because nothing re-reads the catalog
+      //     until that rebuild, and `roomOn` (`quota - usedBytes`) is what
+      //     the upload gate asks in the meantime.
+      //
+      // Only on a delete that actually happened. A failed DeleteObject means
+      // the bytes are still there and still occupy the drive, and crediting
+      // them back would be the same lie in the opposite direction.
+      if (objectDeleted) {
+        storage.cache.creditDeleted(driveNumber, key, sizeBytes);
+        try {
+          _db?.clearLocation?.(filename, pooledArea.id);
+        } catch (err) {
+          console.error(
+            `[FileMaintenance] deleted ${filename} from DRIVE.${driveNumber} but could not clear its catalog ` +
+              `location, so the next rebuild will re-seed those bytes: ` +
+              `${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+      }
 
       // A staged, un-uploaded copy is the only copy of something the pool
       // does not have yet - never delete a dirty local file, budget or no

@@ -1036,6 +1036,38 @@ export class FileCache {
   }
 
   /**
+   * Credits a deleted object's bytes back to its volume - the inverse of the
+   * `usedBytes +=` in `writeBack` above, and the other half of gate 2's
+   * blocker 3.
+   *
+   * Before this the ONLY writes to `usedBytes` anywhere were that `+=` and
+   * the boot seed from the catalog, so nothing ever subtracted: a QUOTA'd
+   * drive's room (`VolumeSet#roomOn`, `quota - usedBytes`) was monotonically
+   * non-decreasing across deletes, and delete-and-reupload churn walked it to
+   * "full" while the bucket itself had room.
+   *
+   * The `uploadedSizes` entry goes too, and that is not tidying. That map is
+   * writeBack's overwrite-delta correction ("credit back the size I last
+   * put"), so leaving a stale entry behind would make the NEXT upload of the
+   * same key charge `new - old` against a counter the delete already
+   * decremented by `old` - the same bytes credited twice, a permanent
+   * under-count. Where the map has an entry it is also the better number:
+   * it is what this process actually put, whereas `sizeBytes` is whatever
+   * the caller could learn from the listing.
+   *
+   * Deliberately clamped at 0. A miscount must never make a drive report
+   * negative used bytes and therefore infinite room, which is the one
+   * direction of error the upload gate cannot survive.
+   */
+  creditDeleted(driveNumber: number, key: string, sizeBytes: number): void {
+    const id = this.id(driveNumber, key);
+    const bytes = this.uploadedSizes.get(id) ?? sizeBytes;
+    this.uploadedSizes.delete(id);
+    const state = this.volumes.byNumber(driveNumber);
+    if (state) state.usedBytes = Math.max(0, state.usedBytes - bytes);
+  }
+
+  /**
    * `writeBack` for the emulator thread, blocking the same way
    * `ensureLocalSync` does and carrying BOTH of its restrictions: emulator
    * thread only, and macrotask only. Read that note before calling this.
