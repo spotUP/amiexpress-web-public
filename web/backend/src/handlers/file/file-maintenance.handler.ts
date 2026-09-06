@@ -719,6 +719,21 @@ console.log('[FM] Starting file maintenance');
    * any local cache copy is dropped too so a stale hit does not go on
    * serving it until the next eviction sweep happens to reclaim it.
    *
+   * THE KEY IS RESOLVED, NOT RECONSTRUCTED - gate 2, blocker 4.
+   * `uploadObjectKey` concatenates the area prefix with the filename AS THE
+   * DIR LINE SPELLS IT, but the name index `D` reads through resolves
+   * case-insensitively (`byLowerName`). For an object whose real key differs
+   * in case from its DIR line - a hand-edited DIR file, a bucket migrated in
+   * from elsewhere - the reconstructed key names nothing: `backend.delete`
+   * no-ops (an S3 DELETE of a missing key succeeds), `forget` matches
+   * nothing, the DIR line goes, and the sysop is told the delete is complete
+   * while `D` goes on serving the file through that same case-insensitive
+   * index. So this asks the index the same question `D` asks
+   * (`locateRemoteFile`: `resolve(filename)`, then `sizeOf(key)`) and deletes
+   * what it answers. A volume that cannot answer falls back to the
+   * reconstructed key rather than treating the file as absent - the
+   * unavailable/missing distinction the whole subsystem rests on.
+   *
    * Returns a warning to show the sysop when this drive is RETENTION-bound:
    * `DeleteObject` on a bucket with object-lock/versioning or a lifecycle
    * retention policy can leave the bytes recoverable (or simply retained)
@@ -743,7 +758,20 @@ console.log('[FM] Starting file maintenance');
     if (pooledArea && storage && pooledArea.storageVolume !== undefined) {
       const driveNumber = pooledArea.storageVolume;
       const prefix = objectPrefixFor(pooledArea);
-      const key = uploadObjectKey(pooledArea, filename);
+      const index = storage.names.forArea(driveNumber, prefix);
+      let key = uploadObjectKey(pooledArea, filename);
+      try {
+        const resolved = await index.resolve(filename);
+        if (resolved !== null) key = resolved;
+      } catch (error) {
+        // The volume could not answer. That is NOT "no such object": keep
+        // the reconstructed key and let the delete below report its own
+        // failure, rather than silently deciding there is nothing to remove.
+        console.error(
+          `[FileMaintenance] could not resolve ${filename} on DRIVE.${driveNumber} before deleting it, ` +
+            `falling back to ${key}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
       const state = storage.volumes.byNumber(driveNumber);
 
       if (state) {
@@ -756,7 +784,7 @@ console.log('[FM] Starting file maintenance');
           );
         }
       }
-      storage.names.forArea(driveNumber, prefix).forget(key);
+      index.forget(key);
 
       // A staged, un-uploaded copy is the only copy of something the pool
       // does not have yet - never delete a dirty local file, budget or no

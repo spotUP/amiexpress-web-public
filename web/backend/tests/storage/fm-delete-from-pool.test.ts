@@ -233,3 +233,58 @@ describe('deleting a file from a pooled area', () => {
     expect(out.join('')).toContain('Delete operation complete');
   });
 });
+
+/**
+ * Gate 2, blocker 4: `uploadObjectKey` rebuilds the key from the DIR line's
+ * spelling, but the name index `D` reads through matches case-insensitively
+ * (`byLowerName`). For an object whose real key differs in case from its DIR
+ * line - a hand-edited DIR file, a bucket migrated in from elsewhere - the
+ * reconstructed key names nothing: the S3 DELETE of a missing key succeeds,
+ * `forget` matches nothing, the DIR line goes, and the sysop is told
+ * "Delete operation complete" while `D` still serves the file. Finding 5's
+ * bug, back on a narrower trigger.
+ */
+describe('an object whose key does not match the DIR line letter for letter', () => {
+  it('is really deleted - the key is resolved the way D resolves it, not rebuilt', async () => {
+    const h = harness();
+    // The DIR line says DEMO.LHA; the bucket holds demo.lha.
+    await h.backend.put('Conf1/Files/demo.lha', Buffer.from('payload'));
+
+    await performDelete(h);
+
+    await expect(h.backend.get('Conf1/Files/demo.lha')).rejects.toThrow();
+  });
+
+  it('stops being findable through D, which is the index that found it in the first place', async () => {
+    const h = harness();
+    await h.backend.put('Conf1/Files/demo.lha', Buffer.from('payload'));
+    const before = await locateRemoteFile('DEMO.LHA', 1, h.storage);
+    expect(before.files).toHaveLength(1);
+
+    await performDelete(h);
+
+    const after = await locateRemoteFile('DEMO.LHA', 1, h.storage);
+    expect(after.files).toHaveLength(0);
+  });
+
+  it('falls back to the rebuilt key when the volume cannot answer - an outage is not an absence', async () => {
+    const h = harness();
+    await h.backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
+    // Prime nothing; the first resolve() this delete attempts will fail.
+    h.backend.down = true;
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await performDelete(h);
+      const said = errorSpy.mock.calls.map((call) => String(call[0])).join('\n');
+      expect(said).toMatch(/could not resolve DEMO\.LHA/);
+      // It still ATTEMPTED the delete rather than concluding there was
+      // nothing to remove - the object is untouched only because the volume
+      // is down, and the failure was reported.
+      expect(said).toMatch(/could not delete DEMO\.LHA/);
+    } finally {
+      errorSpy.mockRestore();
+    }
+    h.backend.down = false;
+    await expect(h.backend.get('Conf1/Files/DEMO.LHA')).resolves.toBeDefined();
+  });
+});
