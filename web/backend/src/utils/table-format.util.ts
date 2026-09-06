@@ -35,6 +35,7 @@
  */
 import { sessionColumns } from './door-min-columns.util';
 import { printableLength, wrapLineToWidth } from './wrap-for-session.util';
+import { looksLikeAsciiArt } from './ascii-art.util';
 
 /** Columns a C64 screen has, and the width of a full CRLF-terminated row. */
 export const NARROW_WIDTH = 40;
@@ -85,6 +86,151 @@ export function narrowFileLines(row: NarrowFileRow): string[] {
     }
   }
   return lines;
+}
+
+/**
+ * THE DIR-FILE ENTRY AT FORTY COLUMNS - `F` / `FR` / `N`.
+ *
+ * A DIR file is written at EIGHTY columns and says so in its own geometry
+ * (`utils/dir-file.util.ts`, express.e:19447-19509): columns 0-32 carry the
+ * filename, status marker, size and date, the description starts at column
+ * 33, and every continuation row is written with exactly that many leading
+ * spaces. A FILE_ID.DIZ pasted into one is therefore a 45-column picture
+ * sitting at column 33 - a row 78 columns wide.
+ *
+ * THE BUG (sysop, live, 2026-09-06: "fr seems to overflow in 40 cols?").
+ * `handlers/file/file-listing.handler.ts` emitted those raw rows straight to
+ * the wire, and a C64 screen did the only thing it can with a 78-column row:
+ * it FOLDED it. 33 of the caller's 40 columns went on the indent, seven
+ * characters of art landed on the first screen row and the remaining 38 on
+ * the next, on top of where the next art row was about to go. The picture was
+ * destroyed and the prose broke mid-word ("Inv" / "itation for Deadline
+ * 2026, Berlin"); `Sent by: sLASH` arrived as "Sent by" and ": sLASH".
+ *
+ * WHY THE FIX IS HERE AND NOT AT THE WRAP CHOKE. The listing does not reach
+ * `wrapForSession` at all - it emits through `socket.emit` rather than
+ * `emitText` - and it must not be made to: the choke word-wraps PROSE, and a
+ * folded picture is exactly what it would produce, one column later. The
+ * indent is not prose either; it is EIGHTY-COLUMN LAYOUT baked into the file.
+ * Re-laying a record out for a narrower screen is a layout decision, and the
+ * narrow layouts live here (see this file's header). The choke stays the
+ * safety net it is documented to be, and never sees these rows.
+ *
+ * WHAT A NARROW CALLER GETS, and it is the sysop's own ruling from
+ * `docs/superpowers/specs/2026-09-03-c64-file-view-design.md` (settled
+ * decisions 14 and 15 - "art wider than 40 loses its right edge, and that is
+ * accepted"; "i guess we will have to live with them being cut off on the
+ * right side"):
+ *
+ *  - the record's FIELDS on their own row (columns 0-32, right-trimmed - they
+ *    are 33 columns and fit a C64 screen with room to spare),
+ *  - the description DE-INDENTED to column 0, which is the only rung that
+ *    recovers real columns here: the 33 spaces are the DIR format's, not the
+ *    picture's,
+ *  - then, per row, the SHARED classifier's answer. `looksLikeAsciiArt` is
+ *    the one the C64 frame ladder asks about the same rows
+ *    (`sdk/petscii/frame/classify.ts`, re-exported by `utils/ascii-art.util`);
+ *    there is deliberately no second heuristic. ART is CROPPED, so the box
+ *    keeps its shape and loses its right edge. PROSE is WRAPPED, so a
+ *    description someone typed stays readable.
+ *
+ * The classifier is asked about the DE-INDENTED row, and the order matters:
+ * its first rule is `leadingIndent >= 33 -> art`, so a raw DIR row would come
+ * back "art" whatever it holds, and every typed description would be cropped
+ * instead of wrapped.
+ *
+ * At 80 columns (and at any width >= 80 - `isNarrow` is the PETSCII switch and
+ * nothing else) this returns the caller's own array, so the express.e bytes
+ * are not merely equal, they are the same strings.
+ */
+
+/**
+ * Column a CONTINUATION row's description starts at - express.e:19500 writes
+ * exactly 33 spaces in front of every one.
+ */
+export const DIR_DESCRIPTION_COLUMN = 33;
+
+/**
+ * The RECORD row's own field run, whose width is not always 33.
+ *
+ * express.e:19447-19452 writes `filename(13) + ' ' + size(7) + '  ' + date +
+ * '  '`, and the date is EIGHT characters on the boards that write `MM-DD-YY`
+ * and NINE on the ones that write `DD-Mon-YY` (`utils/file-upload.util.ts`'s
+ * `formatUploadDate`). Both shapes sit in `Conf2/Dir1` on this board. So a
+ * record's description begins at column 33 or 34 while its continuations
+ * always begin at 33, and taking the constant for both leaves a 45-column
+ * picture's top border one column right of its sides. Measuring the run
+ * instead removes the format's chrome from each row on that row's own terms,
+ * which is what puts the box back together.
+ *
+ * This is the SAME field split `utils/dir-file-reader.util.ts` makes when it
+ * parses an entry (`filename, size, date, ...description`) - expressed by
+ * position rather than by `split(/\s+/)`, because the art's own spacing is
+ * the thing being preserved and a whitespace split destroys it.
+ */
+const DIR_RECORD_FIELDS = /^.{13}[PFND].{7} {2}\S+ {2}/;
+
+/**
+ * Clip to `columns` PRINTABLE columns. `narrowClip` above is a raw
+ * `substring` and says so; a DIR row may carry SGR (`Conf1/Dir2` holds
+ * several), and cutting one of those by character count both mis-measures the
+ * row and can sever an escape sequence mid-flight.
+ *
+ * Escapes past the cut are KEPT rather than dropped: the last thing a
+ * coloured art row does is reset, and a reset thrown away with the text it
+ * followed bleeds that colour onto every row after it.
+ */
+function clipToPrintableWidth(line: string, columns: number): string {
+  if (printableLength(line) <= columns) return line;
+  let out = '';
+  let used = 0;
+  for (const token of line.split(/(\x1b\[[0-9;?]*[A-Za-z])/)) {
+    if (!token) continue;
+    if (token.startsWith('\x1b')) { out += token; continue; }
+    if (used >= columns) continue;
+    out += token.slice(0, columns - used);
+    used = Math.min(columns, used + token.length);
+  }
+  return out;
+}
+
+/**
+ * One DIR-file entry's raw rows, laid out for THIS caller's screen.
+ *
+ * `sessionColumns()` is the only width consulted, through `isNarrow` and
+ * once directly - there is no second predicate and no literal 40.
+ */
+export function dirEntryRows(
+  session: { screenWidth?: number; petsciiMode?: boolean } | null | undefined,
+  rawLines: string[]
+): string[] {
+  if (!isNarrow(session)) return rawLines;
+  const columns = sessionColumns(session ?? {});
+  const rows: string[] = [];
+
+  for (const raw of rawLines) {
+    // The split is by RAW POSITION because that is how the format defines
+    // itself - `utils/dir-file-reader.util.ts` and the listing's own
+    // continuation test read the same columns.
+    const isContinuation = raw.substring(0, DIR_DESCRIPTION_COLUMN).trim().length === 0;
+    const fieldsWidth = isContinuation
+      ? DIR_DESCRIPTION_COLUMN
+      : (DIR_RECORD_FIELDS.exec(raw)?.[0].length ?? DIR_DESCRIPTION_COLUMN);
+    const description = raw.substring(fieldsWidth);
+
+    if (!isContinuation) {
+      rows.push(clipToPrintableWidth(raw.substring(0, fieldsWidth).replace(/\s+$/, ''), columns));
+    }
+    if (description.length === 0) continue;
+
+    if (looksLikeAsciiArt(description)) {
+      rows.push(clipToPrintableWidth(description, columns));
+    } else {
+      rows.push(...wrapLineToWidth(description, columns));
+    }
+  }
+
+  return rows;
 }
 
 /**

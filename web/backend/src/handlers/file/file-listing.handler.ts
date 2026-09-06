@@ -22,6 +22,7 @@ import { config } from '../../config';
 import { getConferenceDir } from '../../utils/file-hold.util';
 import { flagPause, initPauseState, setNonStopMode } from '../../utils/flag-pause.util';
 import { getMaxDirs, getDirFiles, DirFileInfo } from '../../utils/max-dirs.util';
+import { dirEntryRows } from '../../utils/table-format.util';
 
 /**
  * Display file list for a conference
@@ -246,7 +247,14 @@ console.log(`[FileList] Could not read ${dirFilePath}: ${error.message}`);
         }
 
         for (const entry of displayEntries) {
-          const displayLines = this.getDisplayLines(entry);
+          // The entry's own rows, then laid out for THIS caller's screen.
+          // At >= 80 columns `dirEntryRows` hands the same array straight
+          // back, so the express.e bytes are the same strings; below 80 the
+          // DIR file's 33-column indent is removed and each description row
+          // is CROPPED if it is art and WRAPPED if it is prose, instead of
+          // being folded by the C64 terminal (sysop, 2026-09-06: "fr seems
+          // to overflow in 40 cols?"). See utils/table-format.util.ts.
+          const displayLines = dirEntryRows(session, this.getDisplayLines(entry));
 
           // Display file entry and allow the pause handler to decide when to stop
           const shouldContinueEntry = await this.displayFileEntry(socket, session, displayLines);
