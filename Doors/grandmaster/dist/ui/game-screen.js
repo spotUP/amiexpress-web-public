@@ -855,6 +855,12 @@ class GameScreen {
         return `\n  {${color}-fg}TIME: ${m}:${s}{/${color}-fg}`;
     }
     renderStats(state) {
+        // Null at 40 columns - the compact layout has no side panels. Guarded here
+        // rather than at the call sites, the way renderZone already is: showReadyGo
+        // and the render loop both reach these, and only one of the two used to
+        // check.
+        if (!this.statsBox)
+            return;
         const comboDisplay = this.getAnimatedComboDisplay(state.combo);
         let gravDisplay;
         if (state.gravity >= 20) {
@@ -1228,6 +1234,8 @@ class GameScreen {
      * Render section information
      */
     renderSectionInfo(state) {
+        if (!this.sectionBox)
+            return;
         // COOL targets (seconds) - from TGM3 Master mode
         const COOL_TARGETS = {
             0: 52, 1: 48, 2: 46, 3: 44, 4: 36,
@@ -1473,6 +1481,8 @@ class GameScreen {
      * Render next queue
      */
     renderNext(queue) {
+        if (!this.nextBox)
+            return;
         let content = '\n';
         const rotationSystem = this.state.settings.rotationSystem;
         for (let i = 0; i < Math.min(3, queue.length); i++) {
@@ -1486,6 +1496,8 @@ class GameScreen {
      * Render hold piece
      */
     renderHold(piece) {
+        if (!this.holdBox)
+            return;
         if (!piece) {
             this.holdBox.setContent('\n   {gray-fg}---{/gray-fg}');
             return;

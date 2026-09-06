@@ -276,8 +276,13 @@ export class MenuScreen {
         background.destroy();
         title.destroy();
         menuPanel.destroy();  // Also destroys menu as a child
-        descBox.destroy();
-        info.destroy();
+        // Null at 40 columns - the compact menu never builds the description
+        // or player panes. Tearing them down unconditionally threw a TypeError
+        // inside this listener, the SDK emitter swallowed it, and the promise
+        // below was never settled: the C64 caller was left looking at a
+        // half-torn-down screen with nothing on it but the instruction row.
+        descBox?.destroy();
+        info?.destroy();
         instructions.destroy();
         this.screen.render();
 
