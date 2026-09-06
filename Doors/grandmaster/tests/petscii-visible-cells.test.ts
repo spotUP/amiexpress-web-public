@@ -115,3 +115,65 @@ export async function theTetrinetWellFitsItsBlocks(): Promise<void> {
     screen.destroy();
   }
 }
+
+/**
+ * TWO FULL FIELDS at forty columns, and nothing over the edge.
+ *
+ * A TetriNET field is twelve blocks; at one character each that is fourteen
+ * columns with its frame, so the player's and one opponent's both fit in
+ * twenty-eight and leave twelve for the numbers. Before this the opponents
+ * had a five-row strip - a name with no room for a board under it - and a
+ * caller saw exactly that: "i see no opponent here sure we can fit two full
+ * size playfields?" (2026-09-06).
+ */
+export async function fortyColumnsHoldsTwoFullFields(): Promise<void> {
+  const screen: any = new Screen({ title: 'tn40', width: 40, height: 25, responsive: true } as any);
+  const tn: any = Object.create(TetriNetScreen.prototype);
+  tn.screen = screen;
+  tn.engine = { isHoldEnabled: () => true };
+  tn.state = { settings: {} };
+  tn.setupUI();
+
+  assert.strictEqual(tn.boardBox.left, 0, 'the player is hard left');
+  assert.strictEqual(tn.boardBox.width, 14, 'twelve blocks and a frame');
+
+  const opponents = tn.opponentBoards.container;
+  assert.strictEqual(opponents.left, 14, 'the opponent starts where the player ends');
+  assert.strictEqual(opponents.width, 14, 'and is the SAME size - not a minimap beside a board');
+  assert.strictEqual(opponents.height, 24, 'with the rows a full field needs');
+
+  // Everything drawn stays on the screen.
+  for (const [name, box] of [
+    ['well', tn.boardBox], ['next', tn.previewBox], ['stats', tn.statsBox],
+    ['notice', tn.noticeBox], ['opponents', opponents],
+  ] as Array<[string, any]>) {
+    if (!box) continue;
+    assert.ok(
+      box.left + box.width <= 40,
+      `${name} runs past the right edge: ${box.left} + ${box.width}`,
+    );
+  }
+
+  assert.ok(!tn.holdBox, 'twelve columns hold the next piece or the held one, not both');
+  screen.destroy();
+}
+
+/** And the 80-column screen keeps its own shape, edge to edge. */
+export async function eightyColumnsIsUnchangedAndFits(): Promise<void> {
+  const screen: any = new Screen({ title: 'tn80', width: 80, height: 25 } as any);
+  const tn: any = Object.create(TetriNetScreen.prototype);
+  tn.screen = screen;
+  tn.engine = { isHoldEnabled: () => true };
+  tn.state = { settings: {} };
+  tn.setupUI();
+
+  assert.strictEqual(tn.boardBox.width, 26, 'twelve blocks at two characters, plus a frame');
+  assert.ok(tn.holdBox, 'the hold box is drawn where there is room for it');
+
+  const opponents = tn.opponentBoards.container;
+  assert.strictEqual(
+    opponents.left + opponents.width, 80,
+    'the opponents panel ends ON the edge, not past it',
+  );
+  screen.destroy();
+}

@@ -445,8 +445,19 @@ class TetriNetScreen {
         // tetrinet petscii" (2026-09-06).
         const holdEnabled = this.engine.isHoldEnabled();
         const compact = (0, blessed_1.isCompactWidth)(this.screen.width);
-        const sideLeft = wellCols + 2 + (compact ? 1 : 0);
-        const sideWidth = Math.max(12, this.screen.width - sideLeft - (compact ? 0 : 28));
+        // TWO FULL FIELDS, SIDE BY SIDE, at forty columns.
+        //
+        // A field is twelve blocks; at one character each that is fourteen
+        // columns with its frame, so the player's and one opponent's both fit in
+        // twenty-eight and leave twelve for the numbers - "sure we can fit two
+        // full size playfields?" (2026-09-06). The alternative was a stack of
+        // labelled boxes and an opponent strip too short to draw a field in,
+        // which is what a caller photographed: a name and no board.
+        const wellBox = wellCols + 2;
+        const opponentLeft = compact ? wellBox : 0;
+        const opponentWidth = compact ? wellBox : 28;
+        const sideLeft = compact ? wellBox * 2 : wellCols + 2;
+        const sideWidth = Math.max(10, this.screen.width - sideLeft - (compact ? 0 : 28));
         const holdWidth = holdEnabled ? Math.floor((sideWidth - 1) / 2) : sideWidth;
         this.boardBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
@@ -463,7 +474,7 @@ class TetriNetScreen {
             parent: this.screen,
             top: 0,
             left: sideLeft,
-            width: holdWidth,
+            width: compact ? sideWidth : holdWidth,
             height: 6,
             border: { type: 'line' },
             style: { border: { fg: 'cyan' } },
@@ -473,7 +484,9 @@ class TetriNetScreen {
             mouse: false,
             clickable: false,
         });
-        if (holdEnabled) {
+        // Twelve columns hold the next piece OR the held one, not both. The
+        // next queue is the one a player cannot do without.
+        if (holdEnabled && !compact) {
             this.holdBox = (0, blessed_helpers_1.createBox)({
                 parent: this.screen,
                 top: 0,
@@ -563,11 +576,15 @@ class TetriNetScreen {
         // see is the whole complaint.
         this.opponentBoards = new opponent_boards_1.OpponentBoards({
             parent: this.screen,
-            top: compact ? 19 : 0,
-            left: compact ? sideLeft : sideLeft + sideWidth + 1,
-            width: compact ? sideWidth : 28,
-            height: compact ? 5 : 24,
-            maxOpponents: 5,
+            top: 0,
+            left: compact ? opponentLeft : sideLeft + sideWidth,
+            width: opponentWidth,
+            height: 24,
+            // One field at forty columns, and it is drawn FULL SIZE - a scaled
+            // minimap beside a full board says the opponent is the small one.
+            maxOpponents: compact ? 1 : 5,
+            maxFullBoards: 1,
+            cellWidth: (0, block_width_1.blockCols)(this.screen.width),
         });
         // A BBS terminal is 24 OR 25 rows (Screen clamps to 25). The layout is
         // built for 24, so on a 25-row terminal the last row was left unpainted

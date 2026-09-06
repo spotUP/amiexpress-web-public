@@ -41,6 +41,8 @@ export interface OpponentBoardsOptions {
   boardHeight?: number;
   /** Tiles per row. Defaults to three, as the side panel uses. */
   perRow?: number;
+  /** Characters per cell at full size. One on a square-celled screen, two on a terminal. */
+  cellWidth?: number;
   /**
    * How many fields may be drawn at FULL size, side by side.
    *
@@ -79,9 +81,10 @@ interface MiniBoardWidget {
  */
 const CELL_WIDTH = 2;
 
+
 /** How many full-size fields fit side by side in the panel. */
-function fullBoardsThatFit(innerWidth: number, boardCols: number): number {
-  const each = boardCols * CELL_WIDTH + 2;   // + its own frame
+function fullBoardsThatFit(innerWidth: number, boardCols: number, cellWidth = CELL_WIDTH): number {
+  const each = boardCols * cellWidth + 2;   // + its own frame
   return Math.max(0, Math.floor(innerWidth / each));
 }
 
@@ -92,6 +95,15 @@ export class OpponentBoards {
   private container: any;
   private miniBoards: Map<string, MiniBoardWidget> = new Map();
   private maxOpponents: number;
+  /**
+   * Characters per cell at full size, which is the SCREEN's answer.
+   *
+   * Two read square on a terminal and are a 2:1 smear on a C64, exactly as on
+   * the played board. At one character a full opponent field is fourteen
+   * columns with its frame, so two fit side by side in forty: "sure we can
+   * fit two full size playfields?" (2026-09-06).
+   */
+  private cellWidth: number = CELL_WIDTH;
   // 6 scaled columns + 2 borders, and 8 scaled rows + name + 2 borders.
   // Five of these tile a 28x24 panel: three across (3 * 9 = 27 <= 26 inner
   // plus the last board's own width) and two down.
@@ -118,6 +130,7 @@ export class OpponentBoards {
 
   constructor(options: OpponentBoardsOptions) {
     this.maxOpponents = options.maxOpponents || 5;
+    this.cellWidth = options.cellWidth ?? CELL_WIDTH;
     // The spectator view has the whole screen and lays six fields out in a
     // single row; the in-game panel is a narrow column and keeps its 3x2.
     if (options.boardWidth) this.boardWidth = options.boardWidth;
@@ -186,7 +199,7 @@ export class OpponentBoards {
     // Beyond that the focused one is drawn full and the rest as minimaps.
     const cols = opponents[0]?.board?.width ?? 10;
     const fits = Math.min(
-      fullBoardsThatFit(this.innerSize().width, cols),
+      fullBoardsThatFit(this.innerSize().width, cols, this.cellWidth),
       this.maxFullBoards
     );
     // All of them, or none - except a panel that allows several full boards,
@@ -330,7 +343,7 @@ export class OpponentBoards {
     const inner = this.innerSize();
     const cols = boardCols;
     const rows = inner.height;
-    const boxWidth = cols * CELL_WIDTH + 2;
+    const boxWidth = cols * this.cellWidth + 2;
 
     // Side by side, in the order the fields arrive, so a board does not jump
     // about as other players top out.
@@ -351,7 +364,7 @@ export class OpponentBoards {
       parent: container,
       top: 0,
       left: 0,
-      width: cols * CELL_WIDTH,
+      width: cols * this.cellWidth,
       height: rows,
       content: '',
       border: { type: 'none' },
@@ -376,7 +389,7 @@ export class OpponentBoards {
       clickable: false,
     });
 
-    return { container, boardBox, nameLabel, cols, rows, cellWidth: CELL_WIDTH };
+    return { container, boardBox, nameLabel, cols, rows, cellWidth: this.cellWidth };
   }
 
   /** Usable space inside the panel's border. */

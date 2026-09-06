@@ -21,8 +21,8 @@ const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helper
  */
 const CELL_WIDTH = 2;
 /** How many full-size fields fit side by side in the panel. */
-function fullBoardsThatFit(innerWidth, boardCols) {
-    const each = boardCols * CELL_WIDTH + 2; // + its own frame
+function fullBoardsThatFit(innerWidth, boardCols, cellWidth = CELL_WIDTH) {
+    const each = boardCols * cellWidth + 2; // + its own frame
     return Math.max(0, Math.floor(innerWidth / each));
 }
 /**
@@ -31,6 +31,15 @@ function fullBoardsThatFit(innerWidth, boardCols) {
 class OpponentBoards {
     constructor(options) {
         this.miniBoards = new Map();
+        /**
+         * Characters per cell at full size, which is the SCREEN's answer.
+         *
+         * Two read square on a terminal and are a 2:1 smear on a C64, exactly as on
+         * the played board. At one character a full opponent field is fourteen
+         * columns with its frame, so two fit side by side in forty: "sure we can
+         * fit two full size playfields?" (2026-09-06).
+         */
+        this.cellWidth = CELL_WIDTH;
         // 6 scaled columns + 2 borders, and 8 scaled rows + name + 2 borders.
         // Five of these tile a 28x24 panel: three across (3 * 9 = 27 <= 26 inner
         // plus the last board's own width) and two down.
@@ -51,6 +60,7 @@ class OpponentBoards {
         /** The ceiling on full-size boards for this panel. */
         this.maxFullBoards = 1;
         this.maxOpponents = options.maxOpponents || 5;
+        this.cellWidth = options.cellWidth ?? CELL_WIDTH;
         // The spectator view has the whole screen and lays six fields out in a
         // single row; the in-game panel is a narrow column and keeps its 3x2.
         if (options.boardWidth)
@@ -118,7 +128,7 @@ class OpponentBoards {
         // frame; three of them come to 66 of the panel's 78, so up to three fit.
         // Beyond that the focused one is drawn full and the rest as minimaps.
         const cols = opponents[0]?.board?.width ?? 10;
-        const fits = Math.min(fullBoardsThatFit(this.innerSize().width, cols), this.maxFullBoards);
+        const fits = Math.min(fullBoardsThatFit(this.innerSize().width, cols, this.cellWidth), this.maxFullBoards);
         // All of them, or none - except a panel that allows several full boards,
         // which falls back to showing the FOCUSED one full with the rest as
         // minimaps. The in-game side panel has room for one, so it goes straight
@@ -247,7 +257,7 @@ class OpponentBoards {
         const inner = this.innerSize();
         const cols = boardCols;
         const rows = inner.height;
-        const boxWidth = cols * CELL_WIDTH + 2;
+        const boxWidth = cols * this.cellWidth + 2;
         // Side by side, in the order the fields arrive, so a board does not jump
         // about as other players top out.
         const container = (0, blessed_helpers_1.createBox)({
@@ -266,7 +276,7 @@ class OpponentBoards {
             parent: container,
             top: 0,
             left: 0,
-            width: cols * CELL_WIDTH,
+            width: cols * this.cellWidth,
             height: rows,
             content: '',
             border: { type: 'none' },
@@ -289,7 +299,7 @@ class OpponentBoards {
             mouse: false,
             clickable: false,
         });
-        return { container, boardBox, nameLabel, cols, rows, cellWidth: CELL_WIDTH };
+        return { container, boardBox, nameLabel, cols, rows, cellWidth: this.cellWidth };
     }
     /** Usable space inside the panel's border. */
     innerSize() {

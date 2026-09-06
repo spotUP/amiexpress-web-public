@@ -37,6 +37,8 @@ export interface OpponentBoardsOptions {
     boardHeight?: number;
     /** Tiles per row. Defaults to three, as the side panel uses. */
     perRow?: number;
+    /** Characters per cell at full size. One on a square-celled screen, two on a terminal. */
+    cellWidth?: number;
     /**
      * How many fields may be drawn at FULL size, side by side.
      *
@@ -57,6 +59,15 @@ export declare class OpponentBoards {
     private container;
     private miniBoards;
     private maxOpponents;
+    /**
+     * Characters per cell at full size, which is the SCREEN's answer.
+     *
+     * Two read square on a terminal and are a 2:1 smear on a C64, exactly as on
+     * the played board. At one character a full opponent field is fourteen
+     * columns with its frame, so two fit side by side in forty: "sure we can
+     * fit two full size playfields?" (2026-09-06).
+     */
+    private cellWidth;
     private boardWidth;
     private boardHeight;
     private perRow;

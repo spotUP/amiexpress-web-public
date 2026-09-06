@@ -295,15 +295,33 @@ export function hudLines(
   const tag = (colour: string, text: string) => `{${colour}-fg}${clip(text)}{/${colour}-fg}`;
 
   if (layout.compact) {
-    return [
-      clip(`P${values.score}`),
-      clip(`L${values.speed}`),
-      clip(values.timeText),
-      values.chain > 1 ? clip(`x${values.chain}`) : '',
-      values.stopped ? clip('STOP') : '',
-      values.movesLeft != null ? clip(`M${values.movesLeft}`) : '',
-      values.canUndo ? clip('X UNDO') : '',
-    ];
+    // ONE LINE ACROSS, not a column of seven.
+    //
+    // The compact HUD sits UNDER the board and is as wide as the screen, so a
+    // vertical list was the wrong shape for it even when it had two rows -
+    // and once the C64 board took the height it needed, only the first line
+    // had anywhere to be: "size is good but... no hud?" showed a lone `P0`
+    // where the score, level, time and chain should all have been
+    // (2026-09-06).
+    //
+    // Ordered by what a player reads mid-game: the chain and the stop clock
+    // first when they are live, because they decide the next swap, then the
+    // running numbers.
+    const parts = [
+      values.chain > 1 ? `x${values.chain}` : '',
+      values.stopped ? 'STOP' : '',
+      values.movesLeft != null ? `M${values.movesLeft}` : '',
+      values.canUndo ? 'X=UNDO' : '',
+      `P${values.score}`,
+      `L${values.speed}`,
+      values.timeText,
+    ].filter(Boolean);
+
+    // Drop whole fields from the RIGHT until the line fits, rather than
+    // slicing a number in half - `P123` cut to `P12` is a lie, a missing
+    // field is only missing.
+    while (parts.length > 1 && parts.join(' ').length > width) parts.pop();
+    return [clip(parts.join(' '))];
   }
 
   return [

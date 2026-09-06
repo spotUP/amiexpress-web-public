@@ -15,7 +15,7 @@
  */
 
 import assert from 'assert';
-import { panelsLayout, panelScale, CELL_ASPECT } from '../../ui/panels/layout';
+import { panelsLayout, panelScale, hudLines, CELL_ASPECT } from '../../ui/panels/layout';
 import { buildBoard, scaleBuffer, boardSize } from '../../ui/panels/board-view';
 import { Stack } from '../../core/panels/stack';
 import { GeneratorSource } from '../../core/panels/generator-source';
@@ -273,4 +273,56 @@ export async function theBoardOpensOnACleanScreen(): Promise<void> {
   );
 
   screen.destroy();
+}
+
+/**
+ * The compact HUD is ONE LINE, and it says more than the score.
+ *
+ * It returned seven lines to be stacked in a column - the shape of a HUD that
+ * sits BESIDE the board, not under it. With two rows a player saw two of
+ * them; once the C64 board took the height it needed there was one row, and
+ * the screen showed a lone `P0`: "size is good but... no hud?" (2026-09-06).
+ */
+export async function theCompactHudFitsItsOneRow(): Promise<void> {
+  const layout = panelsLayout(40, 25, 6, 12, CELL_ASPECT.petscii);
+  assert.strictEqual(layout.hud.height, 1, 'the C64 HUD has exactly one row');
+
+  const quiet = hudLines(layout, {
+    score: 0, speed: 1, timeText: "0'00", chain: 0, stopped: false,
+  });
+  assert.strictEqual(quiet.length, 1, 'one row means one line');
+  assert.match(quiet[0], /P0/, 'the score is on it');
+  assert.match(quiet[0], /L1/, 'and the level');
+  assert.match(quiet[0], /0'00/, 'and the clock');
+
+  // What a player reads mid-game comes first: the chain and the stop clock
+  // decide the next swap.
+  const busy = hudLines(layout, {
+    score: 12480, speed: 7, timeText: "3'42", chain: 5, stopped: true,
+  });
+  assert.strictEqual(busy.length, 1);
+  assert.ok(busy[0].indexOf('x5') < busy[0].indexOf('P12480'), 'the chain leads');
+  assert.ok(busy[0].includes('STOP'));
+
+  for (const line of [...quiet, ...busy]) {
+    assert.ok(
+      line.replace(/\{[^}]*\}/g, '').length <= layout.hud.width,
+      `the HUD line does not fit its box: "${line}"`,
+    );
+  }
+}
+
+/** A number is never cut in half; a whole field goes instead. */
+export async function theCompactHudDropsFieldsRatherThanDigits(): Promise<void> {
+  const layout = panelsLayout(40, 25, 6, 12, CELL_ASPECT.petscii);
+  const [line] = hudLines(layout, {
+    score: 999999999, speed: 99, timeText: "99'59", chain: 9, stopped: true,
+    movesLeft: 99, canUndo: true,
+  });
+
+  assert.ok(line.length <= layout.hud.width, 'it fits');
+  assert.ok(
+    !/P9999999[^9]|P99999999$/.test(line) || line.includes('P999999999'),
+    `the score was sliced mid-number: "${line}"`,
+  );
 }
