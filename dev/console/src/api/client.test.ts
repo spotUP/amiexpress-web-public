@@ -28,6 +28,9 @@ import {
   deleteConference,
   getOrphanConferenceDirs,
   removeOrphanConferenceDir,
+  getLogs,
+  getDoorLogFiles,
+  clearLogs,
 } from './client.js';
 
 const BASE_URL = process.env['AMIEXPRESS_URL'] ?? 'http://localhost:3001';
@@ -206,6 +209,39 @@ test('removeOrphanConferenceDir DELETEs the named directory, URL-encoded', async
   await removeOrphanConferenceDir('Conf 9');
 
   assert.equal(calls[0].url, `${BASE_URL}/api/config/conferences/orphan-directories/${encodeURIComponent('Conf 9')}`);
+  assert.equal(calls[0].method, 'DELETE');
+});
+
+test('getLogs unwraps the {success,data} envelope and sends a server-side search term', async () => {
+  stubFetch({ success: true, data: { lines: ['a', 'b'], totalLines: 2 } });
+  const result = await getLogs('backend', 500, 'timeout', undefined);
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/logs?type=backend&lines=500&search=timeout`);
+  assert.deepEqual(result.lines, ['a', 'b']);
+  assert.equal(result.totalLines, 2);
+});
+
+test('getLogs falls back to an empty array when data is missing, rather than undefined', async () => {
+  stubFetch({ success: true, data: { totalLines: 0 } });
+  const result = await getLogs('backend');
+  assert.deepEqual(result.lines, []);
+});
+
+test('getDoorLogFiles GETs /api/config/logs/door-68k and unwraps data.files', async () => {
+  stubFetch({ success: true, data: { files: [{ file: 'door-68k-trivia.log', label: 'trivia', size: 10, modifiedAt: null }] } });
+  const files = await getDoorLogFiles();
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/logs/door-68k`);
+  assert.equal(files.length, 1);
+  assert.equal(files[0].file, 'door-68k-trivia.log');
+});
+
+test('clearLogs DELETEs /api/config/logs with type and an optional doorLog', async () => {
+  stubFetch({ success: true, message: 'backend log cleared' });
+  await clearLogs('door68k', 'door-68k-trivia.log');
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/config/logs?type=door68k&doorLog=door-68k-trivia.log`);
   assert.equal(calls[0].method, 'DELETE');
 });
 

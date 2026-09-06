@@ -155,11 +155,47 @@ export async function getSystemStats() {
   return res.data;
 }
 
-export async function getLogs(type: 'backend' | 'frontend' | 'door68k', lines = 200, doorLog?: string) {
+// GET /api/config/logs wraps its answer in the usual { success, data }
+// envelope (config-routes.ts:2159-2303's sendResponse), but this used to
+// declare its own return type as the bare { lines, totalLines } and hand
+// that straight back — every call actually read `res.data`, which the
+// declared type doesn't have, so `.lines` was always undefined and the log
+// view rendered permanently empty rows. Also adds the server-side `search`
+// term (matches web's getLogs(type, lines, search, doorLog) —
+// web/config-app/src/api/client.ts:864-872) — the TUI previously only had a
+// client-side substring filter over whatever page was already loaded.
+export async function getLogs(type: 'backend' | 'frontend' | 'door68k', lines = 200, search = '', doorLog?: string) {
   const params = new URLSearchParams({ type, lines: String(lines) });
+  if (search) params.set('search', search);
   if (doorLog) params.set('doorLog', doorLog);
-  const res = await request<{ lines: string[]; totalLines: number }>(`/api/config/logs?${params}`);
-  return res;
+  const res = await request<{ success?: boolean; data?: { lines?: string[]; totalLines?: number; message?: string } }>(`/api/config/logs?${params}`);
+  const d = res.data ?? {};
+  return { lines: d.lines ?? [], totalLines: d.totalLines ?? 0, message: d.message };
+}
+
+export interface DoorLogFile {
+  file: string;
+  label: string;
+  size: number;
+  modifiedAt: string | null;
+}
+
+// GET /api/config/logs/door-68k — every door-68k-*.log file on disk, so a
+// sysop can pick one instead of always seeing the legacy combined
+// door-68k.log. Must be registered BEFORE GET /logs in the backend router
+// (it is: config-routes.ts:2100 precedes :2159), same reasoning as the
+// conference orphan-directories route.
+export async function getDoorLogFiles() {
+  const res = await request<{ success?: boolean; data?: { files?: DoorLogFile[] } }>('/api/config/logs/door-68k');
+  return res.data?.files ?? [];
+}
+
+// DELETE /api/config/logs?type=&doorLog= — truncates the file to empty.
+// Matches web/config-app/src/api/client.ts:878-886.
+export async function clearLogs(type: 'backend' | 'frontend' | 'door68k', doorLog?: string) {
+  const params = new URLSearchParams({ type });
+  if (doorLog) params.set('doorLog', doorLog);
+  return request<{ success: boolean; message?: string }>(`/api/config/logs?${params}`, { method: 'DELETE' });
 }
 
 export async function updateConference(id: number, updates: Record<string, unknown>) {
