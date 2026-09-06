@@ -261,42 +261,6 @@ export function usableRemoteAreasFor(
   return usable;
 }
 
-/** A pooled area whose STORAGEDRIVE names a drive the board does not have. */
-export interface BrokenRemoteArea {
-  conferenceId: number;
-  dirNumber: number;
-  path: string;
-  driveNumber: number;
-}
-
-/**
- * Pooled areas naming a drive Drives.info does not have - the admin-page twin
- * of the warning `usableRemoteAreasFor` logs and drops.
- *
- * `usableRemoteAreasFor` treats this case as "fall back to local disk" for
- * the live download path, which is the right thing for a caller trying to
- * SERVE a file - but it does that by dropping the area and writing one
- * throttled `console.warn`, so a sysop who is not tailing the log never
- * learns that dir 4's files have quietly gone missing from every listing.
- * This is the same rule with the complaint kept instead of thrown away, so
- * Task 11's admin page can name the area and the drive rather than repeat the
- * throttled stdout line.
- */
-export function brokenRemoteAreas(
-  areas: readonly RemoteArea[],
-  isConfiguredDrive: (driveNumber: number) => boolean
-): BrokenRemoteArea[] {
-  return areas
-    .filter(isRemoteArea)
-    .filter((area) => !isConfiguredDrive(area.storageVolume as number))
-    .map((area) => ({
-      conferenceId: area.conferenceId,
-      dirNumber: area.dirNumber,
-      path: area.path,
-      driveNumber: area.storageVolume as number,
-    }));
-}
-
 /**
  * True when `child` is a file INSIDE `root` - a path question, not a string
  * one. `<root>Files2/X` starts with `<root>Files`, and answering yes to that

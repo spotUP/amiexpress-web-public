@@ -133,6 +133,72 @@ describe('Drive Setup storage routes', () => {
       expect(local.quotaBytes).toBeUndefined();
     });
 
+    it('reports secretConfigured true for an s3 drive with a working secret', async () => {
+      const res = await request(app).get('/api/config/drives');
+      const s3Drive = res.body.data.find((d: any) => d.drive_number === 2);
+      expect(s3Drive.secretConfigured).toBe(true);
+    });
+
+    it('reports secretConfigured false for an s3 drive with no secret at all - this drive is unreachable', async () => {
+      const noSecretRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-routes-nosec-'));
+      applyTooltypes(path.join(noSecretRoot, 'Drives.info'), [
+        ['DRIVE.1', 's3://cold'],
+        ['DRIVE.1.ENDPOINT', 'https://s3.example.com'],
+        ['DRIVE.1.KEYID', 'keyid-1'],
+      ]);
+      process.env.BBS_DATA_DIR = noSecretRoot;
+      jest.resetModules();
+      const { createConfigRouter: createRouter2 } = require('../../src/api/config-routes');
+      const app2 = express();
+      app2.use(express.json());
+      app2.use('/api/config', createRouter2(db));
+
+      try {
+        const res = await request(app2).get('/api/config/drives');
+        expect(res.body.data[0].secretConfigured).toBe(false);
+      } finally {
+        fs.rmSync(noSecretRoot, { recursive: true, force: true });
+      }
+    });
+
+    it('reports inPool as undefined - a third state, never false - with no live process context', async () => {
+      const res = await request(app).get('/api/config/drives');
+      const s3Drive = res.body.data.find((d: any) => d.drive_number === 2);
+      expect(s3Drive.inPool).toBeUndefined();
+    });
+
+    it('reports inPool true when the live VolumeSet actually holds the drive, false when it does not', async () => {
+      const { setStorageContext } = require('../../src/storage/storage-context');
+      const { VolumeSet } = require('../../src/storage/volume-set');
+      const { FakeBackend } = require('../storage/fake-backend');
+
+      const volumes = new VolumeSet([
+        {
+          volume: { driveNumber: 2, kind: 's3', path: 'b', egress: 'FREE', volumeClass: 'FREE' },
+          backend: new FakeBackend({ driveNumber: 2 }),
+          usedBytes: 0,
+          requestsThisMonth: 0,
+          egressBytesThisMonth: 0,
+          degraded: false,
+        },
+        // Drive 1 is deliberately left out of this hand-built VolumeSet, so
+        // it stands in for whatever `byNumber()` cannot find - the exact
+        // signal `inPool` reports, regardless of why a real VolumeSet would
+        // ever be missing an entry.
+      ]);
+      setStorageContext({ volumes, cache: {} as any, names: {} as any, areas: [] });
+
+      try {
+        const res = await request(app).get('/api/config/drives');
+        const s3Drive = res.body.data.find((d: any) => d.drive_number === 2);
+        const local = res.body.data.find((d: any) => d.drive_number === 1);
+        expect(s3Drive.inPool).toBe(true);
+        expect(local.inPool).toBe(false);
+      } finally {
+        setStorageContext(null);
+      }
+    });
+
     it('surfaces a DRIVE.n.REQUESTS budget', async () => {
       const withRequests = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-routes-req-'));
       applyTooltypes(path.join(withRequests, 'Drives.info'), [
@@ -176,6 +242,18 @@ describe('Drive Setup storage routes', () => {
       const res = await request(app).post('/api/config/drives/2/secret').send({ secret: '' });
       expect(res.status).toBeGreaterThanOrEqual(400);
     });
+
+    it('refuses a non-numeric drive segment rather than writing Storage/NaN.key', async () => {
+      const res = await request(app).post('/api/config/drives/not-a-number/secret').send({ secret: 'x' });
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(fs.existsSync(path.join(root, 'Storage', 'NaN.key'))).toBe(false);
+    });
+
+    it('refuses a drive number parseVolumes does not know', async () => {
+      const res = await request(app).post('/api/config/drives/99/secret').send({ secret: 'x' });
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(fs.existsSync(path.join(root, 'Storage', '99.key'))).toBe(false);
+    });
   });
 
   describe('POST /api/config/drives/:n/test', () => {
@@ -208,6 +286,16 @@ describe('Drive Setup storage routes', () => {
         fs.rmSync(noSecret, { recursive: true, force: true });
       }
     });
+
+    it('refuses a drive number parseVolumes does not know', async () => {
+      const res = await request(app).post('/api/config/drives/99/test');
+      expect(res.status).toBeGreaterThanOrEqual(400);
+    });
+
+    it('refuses a non-integer drive segment', async () => {
+      const res = await request(app).post('/api/config/drives/1.5/test');
+      expect(res.status).toBeGreaterThanOrEqual(400);
+    });
   });
 
   describe('GET /api/config/drives/:n/contents', () => {
@@ -225,6 +313,32 @@ describe('Drive Setup storage routes', () => {
       const res = await request(app).get('/api/config/drives/1/contents');
       expect(res.status).toBe(200);
       expect(res.body.data).toEqual([]);
+    });
+
+    it('refuses a drive number parseVolumes does not know', async () => {
+      const res = await request(app).get('/api/config/drives/99/contents');
+      expect(res.status).toBeGreaterThanOrEqual(400);
+    });
+  });
+
+  describe('PUT /api/config/drives/:id - renumbering an s3 drive', () => {
+    it('refuses to renumber an s3 drive - it would strand DRIVE.n.QUOTA/KEYID/ENDPOINT and its credentials', async () => {
+      const res = await request(app).put('/api/config/drives/2').send({ drive_number: 5 });
+      expect(res.status).toBeGreaterThanOrEqual(400);
+
+      const info = fs.readFileSync(path.join(root, 'Drives.info'), 'latin1');
+      expect(info).toContain('DRIVE.2=');
+      expect(info).not.toContain('DRIVE.5=');
+    });
+
+    it('still allows renumbering a local drive, which has no sub-keys to strand', async () => {
+      const res = await request(app).put('/api/config/drives/1').send({ drive_number: 7 });
+      expect(res.status).toBe(200);
+    });
+
+    it('still allows an ordinary path edit on an s3 drive - only the NUMBER is refused', async () => {
+      const res = await request(app).put('/api/config/drives/2').send({ drive_path: 's3://uprough-cold-renamed' });
+      expect(res.status).toBe(200);
     });
   });
 
@@ -257,9 +371,65 @@ describe('Drive Setup storage routes', () => {
 
       const res = await request(app).get('/api/config/drives/pool/status');
       expect(res.status).toBe(200);
-      expect(res.body.data.brokenAreas).toEqual([
-        { conferenceId: 1, dirNumber: 1, path: 'BBS:Conf1/Files/', driveNumber: 9 },
+      expect(res.body.data.brokenAreas).toHaveLength(1);
+      expect(res.body.data.brokenAreas[0]).toMatch(/DRIVE\.9/);
+      expect(res.body.data.brokenAreas[0]).toMatch(/Conf1 dir 1/);
+    });
+
+    it('reports an area broken when its drive IS in Drives.info but has no usable secret - the case "listed" used to miss', async () => {
+      // Drive 2 already exists (from the outer beforeEach) with a secret; add
+      // a THIRD s3 drive that has none, and point an area's STORAGEDRIVE at
+      // it. The old rule ("is this drive number listed in Drives.info?")
+      // would call drive 3 configured; VolumeSet.fromBoard drops it, so the
+      // board itself already treats this area as local disk. This is the
+      // regression the review named directly: the missing-secret case is the
+      // likeliest way a listed drive never makes it into the pool.
+      applyTooltypes(path.join(root, 'Drives.info'), [
+        ['DRIVE.3', 's3://no-secret-bucket'],
+        ['DRIVE.3.ENDPOINT', 'https://s3.example.com'],
+        ['DRIVE.3.KEYID', 'keyid-3'],
+        // Deliberately no DRIVE.3 secret file and no BBS_STORAGE_3_SECRET.
       ]);
+
+      const confPath = path.join(root, 'ConfConfig.info');
+      applyTooltypes(confPath, [
+        ['NCONFS', '1'],
+        ['NAME.1', 'General'],
+        ['LOCATION.1', 'BBS:Conf1/'],
+      ]);
+      applyTooltypes(path.join(root, 'Conf1.info'), [
+        ['NDIRS', '1'],
+        ['DLPATH.1', 'BBS:Conf1/Files/'],
+        ['ULPATH.1', 'BBS:Conf1/Upload/'],
+        ['STORAGEDRIVE.1', '3'],
+      ]);
+
+      const res = await request(app).get('/api/config/drives/pool/status');
+      expect(res.status).toBe(200);
+      expect(res.body.data.brokenAreas).toHaveLength(1);
+      expect(res.body.data.brokenAreas[0]).toMatch(/DRIVE\.3/);
+    });
+
+    it('surfaces a prefix collision, not only a mis-numbered drive', async () => {
+      const confPath = path.join(root, 'ConfConfig.info');
+      applyTooltypes(confPath, [
+        ['NCONFS', '1'],
+        ['NAME.1', 'General'],
+        ['LOCATION.1', 'BBS:Conf1/'],
+      ]);
+      applyTooltypes(path.join(root, 'Conf1.info'), [
+        ['NDIRS', '2'],
+        ['DLPATH.1', 'BBS:Conf1/Files/'],
+        ['ULPATH.1', 'BBS:Conf1/Upload/'],
+        ['STORAGEDRIVE.1', '2'],
+        ['DLPATH.2', 'DH1:Archive/Files/'],
+        ['ULPATH.2', 'DH1:Archive/Upload/'],
+        ['STORAGEDRIVE.2', '2'],
+      ]);
+
+      const res = await request(app).get('/api/config/drives/pool/status');
+      expect(res.status).toBe(200);
+      expect(res.body.data.brokenAreas.some((m: string) => /same object prefix/.test(m))).toBe(true);
     });
 
     it('reports parked files, overBudgetBytes and evictionDisabled once the cache is live, and discards by localPath', async () => {
@@ -336,6 +506,56 @@ describe('Drive Setup storage routes', () => {
           .send({ localPath: outside });
         expect(res.status).toBeGreaterThanOrEqual(400);
         expect(fs.existsSync(outside)).toBe(true);
+      } finally {
+        setStorageContext(null);
+        fs.rmSync(cacheDir, { recursive: true, force: true });
+      }
+    });
+
+    it('with a live context, uses pool membership - not "listed in Drives.info" - as the broken-area rule', async () => {
+      // DRIVE.3 has a real secret on disk, so the disk-only check the old
+      // code used ("is this number in Drives.info?") would call it fine. The
+      // LIVE VolumeSet nonetheless does not include it - modelling a drive
+      // VolumeSet.fromBoard dropped for some other construction reason (bad
+      // KEYID, bad ENDPOINT) despite the secret being present. The area must
+      // still come back broken, because that is what the running board does.
+      applyTooltypes(path.join(root, 'Drives.info'), [
+        ['DRIVE.3', 's3://has-a-secret-but-dropped'],
+        ['DRIVE.3.ENDPOINT', 'https://s3.example.com'],
+        ['DRIVE.3.KEYID', 'keyid-3'],
+      ]);
+      const { writeFileSync, mkdirSync } = require('fs');
+      mkdirSync(path.join(root, 'Storage'), { recursive: true });
+      writeFileSync(path.join(root, 'Storage', '3.key'), 'a-real-secret\n');
+
+      applyTooltypes(path.join(root, 'ConfConfig.info'), [
+        ['NCONFS', '1'],
+        ['NAME.1', 'General'],
+        ['LOCATION.1', 'BBS:Conf1/'],
+      ]);
+      applyTooltypes(path.join(root, 'Conf1.info'), [
+        ['NDIRS', '1'],
+        ['DLPATH.1', 'BBS:Conf1/Files/'],
+        ['ULPATH.1', 'BBS:Conf1/Upload/'],
+        ['STORAGEDRIVE.1', '3'],
+      ]);
+
+      const { setStorageContext } = require('../../src/storage/storage-context');
+      const { FileCache } = require('../../src/storage/file-cache');
+      const { VolumeSet } = require('../../src/storage/volume-set');
+
+      const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-routes-cache3-'));
+      // Deliberately empty: drive 3 is NOT in the live pool, secret or not.
+      const volumes = new VolumeSet([]);
+      const cache = new FileCache({ cacheDir, volumes, maxBytes: 1024 });
+      setStorageContext({ volumes, cache, names: {} as any, areas: [] });
+
+      try {
+        const res = await request(app).get('/api/config/drives/pool/status');
+        expect(res.status).toBe(200);
+        expect(res.body.data.cacheActive).toBe(true);
+        expect(res.body.data.brokenAreas).toHaveLength(1);
+        expect(res.body.data.brokenAreas[0]).toMatch(/DRIVE\.3/);
       } finally {
         setStorageContext(null);
         fs.rmSync(cacheDir, { recursive: true, force: true });

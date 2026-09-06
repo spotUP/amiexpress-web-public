@@ -27,9 +27,10 @@ import { getStorageContext } from '../../storage/storage-context';
 import type { StorageBackend } from '../../storage/storage-backend';
 import { LocalBackend } from '../../storage/local-backend';
 import { createS3Backend } from '../../storage/s3-backend';
-import { brokenRemoteAreas, remoteAreaFromDisk, type BrokenRemoteArea } from '../../storage/remote-areas';
+import { remoteAreaFromDisk, usableRemoteAreasFor } from '../../storage/remote-areas';
 import { loadFileAreasFromDisk } from '../file-areas-loader';
 import { loadConfConfig } from '../conf-config.service';
+import { VolumeSet } from '../../storage/volume-set';
 
 /** `GET /api/config/drives` - a drive, decorated with the pool facts the page shows. */
 export interface DriveConfigView extends DriveConfig {
@@ -43,7 +44,31 @@ export interface DriveConfigView extends DriveConfig {
   keyId?: string;
   requestBudget?: number;
   requestsThisMonth?: number;
-  /** Only known when the storage subsystem is live in this process (Task 12). */
+  /**
+   * Whether `Storage/<n>.key` (or `BBS_STORAGE_<n>_SECRET`) resolves to a
+   * non-empty secret. False for a `local` drive is meaningless - only an s3
+   * drive is ever gated on this - but the field is always populated so a
+   * caller never has to special-case `kind` to read it safely.
+   */
+  secretConfigured: boolean;
+  /**
+   * Whether this drive is actually IN the running board's VolumeSet, not
+   * merely listed in Drives.info. `VolumeSet.fromBoard` (volume-set.ts:59-70)
+   * silently drops a volume with no secret, no KEYID, no ENDPOINT, or a
+   * malformed target - Drives.info still names it, but no read or write path
+   * can reach it. `undefined` means no live context exists to ask (Task 12
+   * has not booted one yet) - that is a THIRD state, never collapsed into
+   * true or false.
+   */
+  inPool?: boolean;
+  /**
+   * Only known when the storage subsystem is live in this process (Task 12).
+   * Both default to `false` when there is no live context - NOT because the
+   * drive is healthy, but because nothing has looked. A caller that needs to
+   * tell "healthy" apart from "unknown" reads `inPool` alongside these, the
+   * same way `hasPool()`/`byNumber()` keep VolumeSet's own 0s from being
+   * misread (volume-set.ts:174-182).
+   */
   degraded: boolean;
   outOfRequests: boolean;
 }
@@ -63,7 +88,13 @@ export interface PoolStatus {
   overBudgetBytes: number;
   evictionDisabled: boolean;
   parkedFiles: ParkedFileView[];
-  brokenAreas: BrokenRemoteArea[];
+  /**
+   * Every complaint `usableRemoteAreasFor` (Task 8) would emit for the live
+   * download path - a mis-numbered STORAGEDRIVE or a prefix collision - kept
+   * verbatim rather than re-derived into a narrower, structured subset. See
+   * `getPoolStatus`.
+   */
+  brokenAreas: string[];
 }
 
 export class DriveConfigService {
@@ -109,6 +140,10 @@ export class DriveConfigService {
         keyId: volume.keyId,
         requestBudget: volume.requestBudget,
         requestsThisMonth: liveState?.requestsThisMonth,
+        // A local drive has no secret concept; reporting true keeps every
+        // consumer from having to special-case `kind` before trusting this.
+        secretConfigured: volume.kind === 'local' || readVolumeSecret(bbsRoot, volume.driveNumber) !== null,
+        inPool: live ? liveState !== undefined : undefined,
         degraded: liveState?.degraded ?? false,
         outOfRequests: live?.volumes.isOutOfRequests(volume.driveNumber) ?? false,
       };
@@ -128,6 +163,8 @@ export class DriveConfigService {
       keyId: undefined,
       requestBudget: undefined,
       requestsThisMonth: undefined,
+      secretConfigured: true, // 'local' default - see the field's own comment.
+      inPool: undefined,
       degraded: false,
       outOfRequests: false,
     };
@@ -221,6 +258,24 @@ export class DriveConfigService {
       const existing = await this.getDriveByNumber(validated.drive_number);
       if (existing) {
         throw new Error(`Drive number ${validated.drive_number} already exists`);
+      }
+
+      // `writeDrivesInfoFile` renames only `DRIVE.n` itself - its removeKeys
+      // regex `/^DRIVE\.\d+$/` deliberately spares DRIVE.n.QUOTA/KEYID/ENDPOINT
+      // so an ordinary path edit does not strand them. A NUMBER change is the
+      // one edit that regex cannot make safe: it would write DRIVE.<new> with
+      // no credentials while DRIVE.<old>.KEYID/.ENDPOINT/etc sit dead under a
+      // number nothing reads any more, and every area whose STORAGEDRIVE
+      // named the old number breaks. Moving the sub-keys automatically is the
+      // alternative; refusing is the one that cannot silently drop a working
+      // bucket's credentials, which is why it wins here.
+      if (oldDrive.kind === 's3') {
+        throw new Error(
+          `Drive ${oldDrive.drive_number} is an s3 volume - renumbering it would strand its ` +
+            `QUOTA/KEYID/ENDPOINT/etc sub-keys under the old number and leave the new number with no ` +
+            `credentials. Delete this drive and add it again under the new number instead, or renumber ` +
+            `DRIVE.${oldDrive.drive_number}.* by hand in Drives.info before changing this.`
+        );
       }
     }
 
@@ -476,27 +531,57 @@ console.error(`[DriveConfigService] Failed to write ${drivesInfoPath}:`, error);
   /**
    * Pool-wide facts nothing else surfaces: quarantined files with their
    * sizes, bytes the cache could not evict, whether eviction itself has
-   * stopped because it cannot read its pin record, and pooled areas a
-   * mis-numbered STORAGEDRIVE has silently broken.
+   * stopped because it cannot read its pin record, and pooled areas
+   * `usableRemoteAreasFor` (Task 8) has silently dropped.
    *
-   * `brokenAreas` is disk-only and answers even before Task 12 wires the
-   * subsystem into the running board - a mis-numbered drive is a fact about
-   * Drives.info and Conf*.info, not about the live process. The rest needs a
-   * live `FileCache`, which does not exist until Task 12 boots one;
-   * `cacheActive: false` says so rather than reporting zeroes that would read
-   * as "nothing parked" when the true answer is "nobody has looked yet".
+   * `brokenAreas` runs the REAL rule, not a second approximation of it -
+   * every complaint `usableRemoteAreasFor` would emit for the live download
+   * path, verbatim, for every conference. Re-deriving "is this drive
+   * configured" from Drives.info alone was wrong: `VolumeSet.fromBoard`
+   * (volume-set.ts:51-74) silently drops a volume with no secret, no KEYID,
+   * no ENDPOINT or a malformed target, so a drive can be LISTED in
+   * Drives.info and still be absent from the pool the board actually reads
+   * through - the missing-secret case being the likeliest one in practice.
+   * Answering "configured" for that drive made this page report
+   * `brokenAreas: []` for an area the board had already silently fallen back
+   * to local disk for.
+   *
+   * With a live context, the predicate is the SAME `byNumber(...) !==
+   * undefined` `usable-areas.ts#usableAreasFor` uses, so page and board
+   * cannot disagree. With no live context yet (Task 12 has not booted one),
+   * a throwaway `VolumeSet.fromBoard` stands in - the actual construction
+   * rule, not a partial copy of it, at the cost of repeating its
+   * `console.warn` on every poll of this page, same tradeoff already
+   * accepted for the per-request Conf-info re-read below.
+   *
+   * This answers even before Task 12 wires the subsystem into the running
+   * board - a broken area is a fact about Drives.info and Conf*.info, not
+   * about the live process. The rest needs a live `FileCache`, which does
+   * not exist until Task 12 boots one; `cacheActive: false` says so rather
+   * than reporting zeroes that would read as "nothing parked" when the true
+   * answer is "nobody has looked yet".
    */
   async getPoolStatus(): Promise<PoolStatus> {
     const bbsRoot = appConfig.get('dataDir');
-    const volumes = parseVolumes(bbsRoot);
-    const isConfiguredDrive = (driveNumber: number): boolean =>
-      volumes.some(v => v.driveNumber === driveNumber);
+    const live = getStorageContext();
+    const isConfiguredDrive: (driveNumber: number) => boolean = live
+      ? (driveNumber) => live.volumes.byNumber(driveNumber) !== undefined
+      : ((): ((driveNumber: number) => boolean) => {
+          const standalone = VolumeSet.fromBoard(bbsRoot);
+          return (driveNumber) => standalone.byNumber(driveNumber) !== undefined;
+        })();
 
     const conferences = this.conferencesForAreaScan(bbsRoot);
     const areas = loadFileAreasFromDisk(bbsRoot, conferences).map(remoteAreaFromDisk);
-    const brokenAreas = brokenRemoteAreas(areas, isConfiguredDrive);
 
-    const live = getStorageContext();
+    const brokenAreas: string[] = [];
+    const collect = (message: string): void => {
+      brokenAreas.push(message);
+    };
+    for (const conferenceId of new Set(areas.map((a) => a.conferenceId))) {
+      usableRemoteAreasFor(conferenceId, areas, isConfiguredDrive, collect);
+    }
+
     if (!live) {
       return { cacheActive: false, overBudgetBytes: 0, evictionDisabled: false, parkedFiles: [], brokenAreas };
     }

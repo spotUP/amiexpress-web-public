@@ -32,6 +32,8 @@ function s3Drive(overrides: Record<string, unknown> = {}) {
     keyId: 'keyid-2',
     requestBudget: undefined,
     requestsThisMonth: undefined,
+    secretConfigured: true,
+    inPool: true,
     degraded: false,
     outOfRequests: false,
     ...overrides,
@@ -169,19 +171,22 @@ describe('DrivesPage - the secret is write-only', () => {
 });
 
 describe('DrivesPage - pool status', () => {
-  it('names a broken area - a mis-numbered STORAGEDRIVE - rather than hiding it', async () => {
+  it('renders every broken-area complaint verbatim, the same messages the board itself would emit', async () => {
     getDrives.mockResolvedValue({ success: true, data: [s3Drive()] });
     getDrivePoolStatus.mockResolvedValue({
       success: true,
       data: {
         ...EMPTY_POOL_STATUS,
-        brokenAreas: [{ conferenceId: 1, dirNumber: 3, path: 'BBS:Conf1/Warez/', driveNumber: 9 }],
+        brokenAreas: [
+          '[Storage] Conf1 dir 3 names DRIVE.9, which is not in Drives.info - the area is treated as local disk.',
+          '[Storage] Conf1 dir 2 ("DH1:Archive/Files/") would use the same object prefix "Conf1/Files/" as dir 1 ("BBS:Conf1/Files/") - the later area is treated as local disk. Give them different directory names.',
+        ],
       },
     });
     renderPage();
 
     expect(await screen.findByText(/DRIVE\.9/)).toBeInTheDocument();
-    expect(screen.getByText(/Conf1 dir 3/)).toBeInTheDocument();
+    expect(screen.getByText(/same object prefix/)).toBeInTheDocument();
   });
 
   it('lists parked files with their sizes and discards one by its localPath, not its label', async () => {
@@ -244,5 +249,130 @@ describe('DrivesPage - contents and retention', () => {
     expect(await screen.findByText(/90 days/)).toBeInTheDocument();
     expect(await screen.findByText('DEMO.LHA')).toBeInTheDocument();
     expect(getDriveContents).toHaveBeenCalledWith(2);
+  });
+});
+
+describe('DrivesPage - status honesty (a drive VolumeSet dropped must never read OK)', () => {
+  it('badges a drive with no usable secret as danger, not OK, even though degraded/outOfRequests are both false', async () => {
+    getDrives.mockResolvedValue({
+      success: true,
+      data: [s3Drive({ secretConfigured: false, inPool: false, degraded: false, outOfRequests: false })],
+    });
+    renderPage();
+
+    expect(await screen.findByText('No secret')).toBeInTheDocument();
+    expect(screen.queryByText('OK')).not.toBeInTheDocument();
+  });
+
+  it('badges a drive with a secret that VolumeSet still dropped (bad KEYID/ENDPOINT) as misconfigured', async () => {
+    getDrives.mockResolvedValue({
+      success: true,
+      data: [s3Drive({ secretConfigured: true, inPool: false, degraded: false, outOfRequests: false })],
+    });
+    renderPage();
+
+    expect(await screen.findByText('Disabled (misconfigured)')).toBeInTheDocument();
+    expect(screen.queryByText('OK')).not.toBeInTheDocument();
+  });
+
+  it('shows unknown, not OK, when no live context exists to ask at all', async () => {
+    getDrives.mockResolvedValue({
+      success: true,
+      data: [s3Drive({ secretConfigured: true, inPool: undefined, degraded: false, outOfRequests: false })],
+    });
+    renderPage();
+
+    expect(await screen.findByText('Unknown')).toBeInTheDocument();
+    expect(screen.queryByText('OK')).not.toBeInTheDocument();
+  });
+
+  it('only shows OK for a drive with a secret that IS in the live pool and healthy', async () => {
+    getDrives.mockResolvedValue({
+      success: true,
+      data: [s3Drive({ secretConfigured: true, inPool: true, degraded: false, outOfRequests: false })],
+    });
+    renderPage();
+
+    expect(await screen.findByText('OK')).toBeInTheDocument();
+  });
+});
+
+describe('DrivesPage - delete and edit say what they orphan', () => {
+  it('interpolates the file count and bytes into the delete confirmation', async () => {
+    getDrives.mockResolvedValue({ success: true, data: [s3Drive({ usedBytes: 5 * 1024 ** 3 })] });
+    getDriveContents.mockResolvedValue({
+      success: true,
+      data: Array.from({ length: 412 }, (_, i) => ({ id: i, filename: `F${i}.LHA`, size: 1, uploader: 'sysop', downloads: 0 })),
+    });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: /delete drive 2/i }));
+
+    await waitFor(() => expect(confirmMock).toHaveBeenCalled());
+    const call = confirmMock.mock.calls[0][0];
+    expect(call.message).toMatch(/412 files/);
+    expect(call.message).toMatch(/5 GB/);
+  });
+
+  it('warns before changing an s3 drive path, naming what it orphans', async () => {
+    getDrives.mockResolvedValue({ success: true, data: [s3Drive({ drive_path: 's3://old-bucket' })] });
+    getDriveContents.mockResolvedValue({
+      success: true,
+      data: [{ id: 1, filename: 'DEMO.LHA', size: 1024, uploader: 'sysop', downloads: 0 }],
+    });
+    updateDrive.mockResolvedValue({ success: true, data: {} });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: /edit drive 2/i }));
+    const pathInput = await screen.findByLabelText(/drive path/i);
+    await userEvent.clear(pathInput);
+    await userEvent.type(pathInput, 's3://new-bucket');
+    await userEvent.click(screen.getByRole('button', { name: /update drive/i }));
+
+    await waitFor(() => expect(confirmMock).toHaveBeenCalled());
+    expect(confirmMock.mock.calls[0][0].message).toMatch(/unreachable/);
+    expect(updateDrive).toHaveBeenCalled();
+  });
+
+  it('does not warn when editing a field other than path on an s3 drive', async () => {
+    getDrives.mockResolvedValue({ success: true, data: [s3Drive()] });
+    updateDrive.mockResolvedValue({ success: true, data: {} });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: /edit drive 2/i }));
+    const descriptionInput = await screen.findByLabelText(/description/i);
+    await userEvent.type(descriptionInput, 'a note');
+    await userEvent.click(screen.getByRole('button', { name: /update drive/i }));
+
+    await waitFor(() => expect(updateDrive).toHaveBeenCalled());
+    expect(confirmMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('DrivesPage - the Edit form cannot silently strand or delete a mapping', () => {
+  it('disables the drive number field for an s3 drive being edited', async () => {
+    getDrives.mockResolvedValue({ success: true, data: [s3Drive()] });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: /edit drive 2/i }));
+    expect(await screen.findByLabelText(/drive number/i)).toBeDisabled();
+  });
+
+  it('renders no Enabled checkbox on the edit form - removal only happens through Delete', async () => {
+    getDrives.mockResolvedValue({ success: true, data: [s3Drive()] });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: /edit drive 2/i }));
+    await screen.findByLabelText(/drive path/i);
+    expect(screen.queryByText('Enabled')).not.toBeInTheDocument();
+    expect(screen.getByText(/use Delete instead/i)).toBeInTheDocument();
+  });
+
+  it('keeps the Enabled checkbox on the Add form, where nothing can yet be orphaned', async () => {
+    getDrives.mockResolvedValue({ success: true, data: [] });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: /add drive/i }));
+    expect(await screen.findByText('Enabled')).toBeInTheDocument();
   });
 });

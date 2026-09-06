@@ -43,6 +43,10 @@ interface DriveConfig {
   keyId?: string;
   requestBudget?: number;
   requestsThisMonth?: number;
+  /** False means no usable secret is on file - the drive is unreachable regardless of `degraded`. */
+  secretConfigured: boolean;
+  /** Undefined when no live process context exists yet to ask (Task 12). */
+  inPool?: boolean;
   degraded: boolean;
   outOfRequests: boolean;
 }
@@ -63,19 +67,13 @@ interface ParkedFileRow {
   sizeBytes: number;
 }
 
-interface BrokenAreaRow {
-  conferenceId: number;
-  dirNumber: number;
-  path: string;
-  driveNumber: number;
-}
-
 interface PoolStatus {
   cacheActive: boolean;
   overBudgetBytes: number;
   evictionDisabled: boolean;
   parkedFiles: ParkedFileRow[];
-  brokenAreas: BrokenAreaRow[];
+  /** Every complaint the board's own usableRemoteAreasFor would emit, verbatim. */
+  brokenAreas: string[];
 }
 
 interface DriveFormData {
@@ -86,7 +84,7 @@ interface DriveFormData {
 }
 
 const EMPTY_PARKED: ParkedFileRow[] = [];
-const EMPTY_BROKEN: BrokenAreaRow[] = [];
+const EMPTY_BROKEN: string[] = [];
 
 export function DrivesPage() {
   const queryClient = useQueryClient();
@@ -230,9 +228,47 @@ export function DrivesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  /**
+   * A confirm-dialog message naming what an action actually orphans, using
+   * the row's own `usedBytes` plus a live file count from `/contents` - the
+   * same two numbers the page already fetches for the Contents modal. Falls
+   * back to the plain `whatHappens` sentence for a local drive (nothing
+   * pooled to orphan) or if the contents fetch itself fails - a failed
+   * warning must never block the confirm dialog from appearing at all.
+   */
+  const orphanImpactMessage = async (drive: DriveConfig, whatHappens: string): Promise<string> => {
+    if (drive.kind !== 's3') return whatHappens;
+    try {
+      const res = await apiClient.getDriveContents(drive.drive_number);
+      const files = (res?.data ?? []) as FileEntryRow[];
+      if (files.length === 0) return whatHappens;
+      return (
+        `Drive ${drive.drive_number} holds ${files.length} file${files.length === 1 ? '' : 's'} ` +
+        `(${formatBytes(drive.usedBytes)}). ${whatHappens}`
+      );
+    } catch {
+      return whatHappens;
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingDrive) {
+      if (editingDrive.kind === 's3' && formData.drive_path !== editingDrive.drive_path) {
+        const message = await orphanImpactMessage(
+          editingDrive,
+          `Changing this drive's path points every read and write at a different bucket - the files ` +
+            `already there become unreachable through this drive until you point it back.`
+        );
+        const confirmed = await confirm({
+          title: 'Change Drive Path',
+          message,
+          confirmText: 'Change Path',
+          cancelText: 'Cancel',
+          type: 'danger',
+        });
+        if (!confirmed) return;
+      }
       updateMutation.mutate({ id: editingDrive.id, updates: formData });
     } else {
       createMutation.mutate(formData);
@@ -240,9 +276,14 @@ export function DrivesPage() {
   };
 
   const handleDelete = async (drive: DriveConfig) => {
+    const message = await orphanImpactMessage(
+      drive,
+      `Deleting drive ${drive.drive_number} (${drive.drive_path}) makes every one of them unreachable ` +
+        `until you re-add the drive.`
+    );
     const confirmed = await confirm({
       title: 'Delete Drive',
-      message: `Are you sure you want to delete drive ${drive.drive_number} (${drive.drive_path})?`,
+      message,
       confirmText: 'Delete',
       cancelText: 'Cancel',
       type: 'danger'
@@ -281,13 +322,40 @@ export function DrivesPage() {
     {
       id: 'status',
       header: 'Status',
-      value: (drive) => (drive.degraded ? 2 : drive.outOfRequests ? 1 : 0),
-      width: '10rem',
+      // Ordered worst-first so a sort brings the drive that needs attention
+      // to the top. A missing secret or a drive VolumeSet dropped at
+      // construction ranks above `degraded`/`outOfRequests`, which can only
+      // ever be true for a drive that made it INTO the pool in the first
+      // place - `secretConfigured`/`inPool` are the checks that catch the
+      // drive neither of those two flags can see at all.
+      value: (drive) => {
+        if (drive.kind !== 's3') return 0;
+        if (!drive.secretConfigured) return 5;
+        if (drive.inPool === false) return 4;
+        if (drive.degraded) return 4;
+        if (drive.outOfRequests) return 3;
+        if (drive.inPool === undefined) return 1;
+        return 0;
+      },
+      width: '11rem',
       cell: (drive) => {
+        if (drive.kind !== 's3') return <StatusDot tone="neutral" label="Local" />;
+        // A missing secret is a disk fact, true with or without a live
+        // process - the drive is unreachable regardless of what `degraded`
+        // says, because `degraded`/`outOfRequests` only exist on a
+        // VolumeState this drive was never admitted into.
+        if (!drive.secretConfigured) return <StatusDot tone="danger" label="No secret" />;
+        // Has a secret but VolumeSet.fromBoard still dropped it (bad KEYID,
+        // bad ENDPOINT, an s3://bucket/prefix target) - a live context is the
+        // only way to know this, and it says so plainly rather than the
+        // silent "OK" a drive left out of the pool used to render.
+        if (drive.inPool === false) return <StatusDot tone="danger" label="Disabled (misconfigured)" />;
         if (drive.degraded) return <StatusDot tone="danger" label="Degraded" />;
         if (drive.outOfRequests) return <StatusDot tone="warn" label="Out of requests" />;
-        if (drive.kind === 's3') return <StatusDot tone="ok" label="OK" />;
-        return <StatusDot tone="neutral" label="Local" />;
+        // No live context to ask at all (Task 12 has not booted one yet) -
+        // hollow reads as "unknown", never as "healthy".
+        if (drive.inPool === undefined) return <StatusDot tone="hollow" label="Unknown" />;
+        return <StatusDot tone="ok" label="OK" />;
       },
     },
     {
@@ -497,13 +565,13 @@ export function DrivesPage() {
             <div className="flex items-center gap-2 text-status-danger">
               <AlertTriangle size={16} aria-hidden="true" />
               <span className="text-sm font-medium">
-                {brokenAreas.length} area{brokenAreas.length === 1 ? '' : 's'} broken - STORAGEDRIVE names a drive Drives.info does not have
+                {brokenAreas.length} area{brokenAreas.length === 1 ? '' : 's'} broken - treated as local disk until fixed
               </span>
             </div>
             <div className="divide-y divide-border">
-              {brokenAreas.map((a) => (
-                <div key={`${a.conferenceId}-${a.dirNumber}`} className="py-1.5 text-sm text-content-secondary">
-                  Conf{a.conferenceId} dir {a.dirNumber} ({a.path}) names DRIVE.{a.driveNumber} - treated as local disk until fixed.
+              {brokenAreas.map((message) => (
+                <div key={message} className="py-1.5 text-sm text-content-secondary">
+                  {message}
                 </div>
               ))}
             </div>
@@ -572,7 +640,14 @@ export function DrivesPage() {
                   onChange={(e) => setFormData({ ...formData, drive_number: parseInt(e.target.value) })}
                   className="input-field w-full"
                   required
+                  disabled={editingDrive?.kind === 's3'}
                 />
+                {editingDrive?.kind === 's3' && (
+                  <p className="mt-1 text-xs text-content-muted">
+                    Renumbering a pooled drive would strand its QUOTA/KEYID/ENDPOINT sub-keys under the old
+                    number and leave the new number with no credentials. Delete and re-add it instead.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -600,17 +675,29 @@ export function DrivesPage() {
                 />
               </div>
 
-              <div>
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.enabled}
-                    onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-                    className="form-checkbox h-5 w-5 text-accent"
-                  />
-                  <span className="text-content-primary">Enabled</span>
-                </label>
-              </div>
+              {editingDrive ? (
+                // No checkbox here. Unchecking it used to write `enabled: false`,
+                // which made writeDrivesInfoFile OMIT the DRIVE.n line entirely -
+                // a full removal from Drives.info, silently, with no confirmation
+                // and no impact message. Removing a drive is what Delete is for;
+                // it now says what that orphans (see handleDelete).
+                <p className="text-xs text-content-muted">
+                  To remove this drive, close this dialog and use Delete instead - it will tell you what that
+                  orphans.
+                </p>
+              ) : (
+                <div>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.enabled}
+                      onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
+                      className="form-checkbox h-5 w-5 text-accent"
+                    />
+                    <span className="text-content-primary">Enabled</span>
+                  </label>
+                </div>
+              )}
 
               <p className="text-xs text-content-muted">
                 Quota, class, egress, retention, key id and request budget are read from the DRIVE.n.* sub-keys

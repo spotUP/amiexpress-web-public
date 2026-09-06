@@ -1244,6 +1244,33 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
     }
   });
 
+  /**
+   * A `:n` drive-number route param, validated against what Drives.info
+   * actually has - or `null`, having already answered the response.
+   *
+   * `parseInt('abc', 10)` is `NaN`, and `NaN` reaching `writeDriveSecret`
+   * wrote `Storage/NaN.key` and answered "Secret saved" for a route segment
+   * that named no drive at all. `Number(raw)` plus `Number.isInteger` rejects
+   * that outright, and the drive-list check on top of it rejects a syntactically
+   * fine integer that simply is not a drive `parseVolumes` knows - drive 99 on
+   * a three-drive board should 404, not silently create Storage/99.key for a
+   * drive nobody configured.
+   */
+  const resolveDriveNumberParam = async (req: Request, res: Response): Promise<number | null> => {
+    const raw = req.params.n;
+    const driveNumber = Number(raw);
+    if (!Number.isInteger(driveNumber) || driveNumber < 1) {
+      handleError(res, new Error(`"${raw}" is not a valid drive number`));
+      return null;
+    }
+    const drives = await configService.getAllDrives();
+    if (!drives.some((d) => d.drive_number === driveNumber)) {
+      handleError(res, new Error(`Drive ${driveNumber} not found`));
+      return null;
+    }
+    return driveNumber;
+  };
+
   // ===== Drives (TOOLTYPE_DRIVES) =====
 
   /**
@@ -1367,7 +1394,8 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
    */
   router.post('/drives/:n/secret', async (req: any, res: Response) => {
     try {
-      const driveNumber = parseInt(req.params.n, 10);
+      const driveNumber = await resolveDriveNumberParam(req, res);
+      if (driveNumber === null) return;
       const { secret } = req.body ?? {};
       if (!secret || typeof secret !== 'string' || secret.trim() === '') {
         return handleError(res, new Error('secret must be a non-empty string'));
@@ -1386,7 +1414,8 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
    */
   router.post('/drives/:n/test', async (req: Request, res: Response) => {
     try {
-      const driveNumber = parseInt(req.params.n, 10);
+      const driveNumber = await resolveDriveNumberParam(req, res);
+      if (driveNumber === null) return;
       const result = await configService.testVolume(driveNumber);
       sendResponse(res, result);
     } catch (error) {
@@ -1400,7 +1429,8 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
    */
   router.get('/drives/:n/contents', async (req: Request, res: Response) => {
     try {
-      const driveNumber = parseInt(req.params.n, 10);
+      const driveNumber = await resolveDriveNumberParam(req, res);
+      if (driveNumber === null) return;
       const entries = await configService.contentsOfDrive(driveNumber);
       sendResponse(res, entries);
     } catch (error) {

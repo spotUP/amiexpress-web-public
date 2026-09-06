@@ -8,7 +8,6 @@
  */
 import * as path from 'path';
 import {
-  brokenRemoteAreas,
   isRemoteArea,
   locateByRealPath,
   objectPrefixFor,
@@ -195,34 +194,6 @@ describe('usableRemoteAreasFor', () => {
       area({ id: 2, dirNumber: 2, path: 'BBS:Conf1/Extra/' }),
     ];
     expect(usableRemoteAreasFor(1, areas, configured, collect().warn).map(a => a.id)).toEqual([1, 2]);
-  });
-});
-
-describe('brokenRemoteAreas', () => {
-  const configured = (n: number) => n === 2;
-
-  it('is empty when every pooled area names a configured drive', () => {
-    expect(brokenRemoteAreas([area({ storageVolume: 2 })], configured)).toEqual([]);
-  });
-
-  it('is empty for a local area - it has no drive to be wrong about', () => {
-    expect(brokenRemoteAreas([area({ storageVolume: undefined })], configured)).toEqual([]);
-  });
-
-  it('names the area and the drive for a mis-numbered STORAGEDRIVE', () => {
-    const broken = brokenRemoteAreas(
-      [area({ conferenceId: 1, dirNumber: 3, path: 'BBS:Conf1/Warez/', storageVolume: 9 })],
-      configured
-    );
-    expect(broken).toEqual([{ conferenceId: 1, dirNumber: 3, path: 'BBS:Conf1/Warez/', driveNumber: 9 }]);
-  });
-
-  it('reports every broken area, not just the first', () => {
-    const broken = brokenRemoteAreas(
-      [area({ dirNumber: 1, storageVolume: 9 }), area({ dirNumber: 2, storageVolume: 2 }), area({ dirNumber: 3, storageVolume: 7 })],
-      configured
-    );
-    expect(broken.map((b) => b.dirNumber)).toEqual([1, 3]);
   });
 });
 
