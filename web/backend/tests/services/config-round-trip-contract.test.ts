@@ -88,6 +88,35 @@ const NOT_WRITTEN_BACK: Record<string, string[]> = {
   // a data migration, not a text box. Renumbering, which is the only thing that
   // legitimately changes it, is conference-removal.service.ts's job.
   Conferences: ['file_areas', 'message_bases', 'location'],
+  // Read out of Drives.info, never written back by this service: its writer
+  // manages the `DRIVE.n` line itself and deliberately spares the
+  // `DRIVE.n.QUOTA/CLASS/EGRESS/RETENTION/KEYID/REQUESTS` sub-keys, which a
+  // sysop edits in the file. The admin serves them so the Drive Setup page can
+  // SHOW a pooled volume's terms, and its form offers no input for any of them
+  // (only drive_number, drive_path and description are editable).
+  //
+  // `usedBytes`, `requestsThisMonth` and `secretConfigured` are measured, not
+  // configured: bytes counted from the catalog, requests counted this month,
+  // and whether a secret was found outside Drives.info.
+  Drives: [
+    'kind',
+    'quotaBytes',
+    'usedBytes',
+    'volumeClass',
+    'egress',
+    'retentionDays',
+    'keyId',
+    'requestBudget',
+    'requestsThisMonth',
+    'secretConfigured',
+    // Live state, read from the running storage context rather than any file:
+    // whether this volume is in the active pool, whether it is currently
+    // degraded (its backend could not answer), and whether it has spent its
+    // REQUESTS budget. Nothing to save - they describe the board right now.
+    'inPool',
+    'degraded',
+    'outOfRequests',
+  ],
 };
 
 function exempt(domain: string, field: string): boolean {

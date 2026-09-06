@@ -170,7 +170,12 @@ export class DriveConfigService {
     // cannot boot the pool from, and the sysop needs to see exactly which
     // line is wrong, not a page that silently fell back to a stale mirror.
     const volumes = parseVolumes(bbsRoot);
-    const usedByVolume = this.database.usedBytesByVolume();
+    // Optional on purpose: a Database built without the file repository - the
+    // shape several config suites construct, and the shape during early boot -
+    // has no usedBytesByVolume. Calling it unguarded turned every Drives.info
+    // READ into a TypeError, and every write through it into a swallowed
+    // no-op. An unknown used figure is 0, not a crash.
+    const usedByVolume = this.database.usedBytesByVolume?.() ?? new Map<number, number>();
     const live = getStorageContext();
 
     return volumes.map((volume): DriveConfigView => {
