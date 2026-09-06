@@ -183,15 +183,39 @@ console.log(`[MessageIndexManager] Created MailLock for Conf${confNumber}`);
       padded.copy(buffer, at);
     };
 
+    /*
+     * UNSIGNED for the three LONGs, because that is how they are READ.
+     *
+     * amiga-msgheader.ts reads msgNumb, msgDate and recv with readUInt32BE,
+     * and this method wrote them back with writeInt32BE - so a record whose
+     * value has the top bit set came out of the file fine and threw on the way
+     * back in:
+     *
+     *   RangeError: The value of "value" is out of range. It must be
+     *   >= -2147483648 and <= 2147483647. Received 2404384768
+     *
+     * This board's Conf1 holds such a record, so deleting or editing ANY
+     * message in that conference threw - rewriteHeaderFile re-serializes every
+     * header in the file, not only the one that changed, and one bad
+     * neighbour took the whole write down. The same asymmetry is already
+     * called out for extMsgNum below: read one way and written the other, a
+     * value cannot survive the round trip.
+     *
+     * `>>> 0` keeps the conversion TOTAL. A caller handing in a negative -
+     * nothing in src does today - lands on the same four bytes writeInt32BE
+     * would have written, rather than trading one RangeError for another.
+     */
     buffer.writeUInt8(header.status, 0);
     // 1 is the pad that aligns msgNumb.
-    buffer.writeInt32BE(header.msgNumb, 2);
+    buffer.writeUInt32BE(header.msgNumb >>> 0, 2);
     field(header.toName, 6);
     field(header.fromName, 37);
     field(header.subject, 68);
     // 99 is the pad that aligns msgDate.
-    buffer.writeInt32BE(header.msgDate, 100);
-    buffer.writeInt32BE(header.recv, 104);
+    buffer.writeUInt32BE(header.msgDate >>> 0, 100);
+    buffer.writeUInt32BE(header.recv >>> 0, 104);
+    // SIGNED: axobjects.e:188 declares extMsgNum an Amiga E INT, and
+    // amiga-msgheader.ts reads it with readInt16BE to match.
     buffer.writeInt16BE(header.extMsgNum, 108);
 
     return buffer;
