@@ -5,7 +5,12 @@ import { CATEGORIES, CATEGORY_COLLAPSED, PAGES, type CategoryName, type PageMeta
 import { T, CURRENT_THEME, BORDER_STYLE } from '../theme/blessed-theme.js';
 import { isTextEntryActive } from '../state/text-entry-lock.js';
 
-export const SIDEBAR_WIDTH = 22;
+// Wide enough for the longest page label plus its chrome: 2 border columns,
+// paddingX of 1 either side, and the 2-column active/hover marker. At 22 the
+// longest labels ('Health and Deployment', 'Configuration Files') wrapped onto
+// a second line. dev-console-launcher.test.ts pins this against the registry.
+export const SIDEBAR_CHROME = 6;
+export const SIDEBAR_WIDTH = 28;
 const SIDEBAR_FIRST_ROW = 4;
 
 interface RenderedRow {

@@ -117,6 +117,35 @@ describe('dev console launcher', () => {
     expect(pane).not.toMatch(/sleep \d+ && if \[ -f dev\/console/);
   });
 
+  /**
+   * Reported 2026-09-06 with a screenshot: 'Health and Deployment' and
+   * 'Configuration Files' wrapped onto a second line in the sidebar. The
+   * sidebar is a fixed width, so a pane resize cannot fix it - the constant
+   * has to clear the longest label the registry actually declares.
+   */
+  it('gives the sidebar room for the longest page label it declares', () => {
+    const sidebar = readFileSync(
+      join(__dirname, '..', '..', '..', 'dev', 'console', 'src', 'components', 'Sidebar.tsx'),
+      'utf8'
+    );
+    const registry = readFileSync(
+      join(__dirname, '..', '..', '..', 'dev', 'console', 'src', 'pages', 'registry.ts'),
+      'utf8'
+    );
+
+    const width = Number(/SIDEBAR_WIDTH = (\d+)/.exec(sidebar)?.[1]);
+    const chrome = Number(/SIDEBAR_CHROME = (\d+)/.exec(sidebar)?.[1]);
+    expect(width).toBeGreaterThan(0);
+    expect(chrome).toBeGreaterThan(0);
+
+    // Every declared label, not a hardcoded list, so a new long page fails here.
+    const labels = [...registry.matchAll(/label:\s*'([^']+)'/g)].map(m => m[1]);
+    expect(labels.length).toBeGreaterThan(5);
+    const longest = labels.reduce((a, b) => (b.length > a.length ? b : a));
+
+    expect(width - chrome).toBeGreaterThanOrEqual(longest.length);
+  });
+
   it('attaches with the console pane focused, not the server-log pane', () => {
     const body = launcherBody();
 

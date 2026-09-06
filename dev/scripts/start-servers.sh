@@ -155,7 +155,9 @@ launch_tmux_session() {
   # is actually reachable.
   # Guarded: an unbuilt or uninstalled console prints what to run rather than
   # a module-resolution stack trace.
-  tmux split-window -h -p 45 -t "${session}:amiexpress.0" \
+  # 55%, not 45%: the console draws a 28-column sidebar beside a 79-column
+  # logo, and at 45% the header and the stat cards wrapped.
+  tmux split-window -h -p 55 -t "${session}:amiexpress.0" \
     "cd '$root' && if [ -f dev/console/dist/src/index.js ] && [ -d dev/console/node_modules ]; then node dev/console/dist/src/index.js; else echo '[console] unavailable - run: (cd dev/console && npm install && npm run build)'; fi; bash"
 
   # Pane 2: live backend log tail (bottom-left). `tail -F` follows the file
