@@ -105,4 +105,31 @@ describe('VolumeSet.fromBoard', () => {
       delete process.env.BBS_STORAGE_2_SECRET;
     }
   });
+
+  it('wires DRIVE.n.REQUESTS into the volume state, so the ceiling is enforceable with no caller of setRequestBudget', () => {
+    const root = boardWith([
+      'DRIVE.1=s3://oracle-cold',
+      'DRIVE.1.ENDPOINT=https://s3.example.com',
+      'DRIVE.1.KEYID=keyid-1',
+      'DRIVE.1.REQUESTS=50000',
+    ]);
+    process.env.BBS_STORAGE_1_SECRET = 'sekrit';
+    try {
+      const set = VolumeSet.fromBoard(root);
+      const state = set.byNumber(1);
+      expect(state?.requestBudget).toBe(50000);
+      expect(set.isOutOfRequests(1)).toBe(false);
+
+      state!.requestsThisMonth = 50000;
+      expect(set.isOutOfRequests(1)).toBe(true);
+    } finally {
+      delete process.env.BBS_STORAGE_1_SECRET;
+    }
+  });
+
+  it('leaves requestBudget undefined for a volume with no declared ceiling', () => {
+    const root = boardWith(['DRIVE.1=DH1:']);
+    const set = VolumeSet.fromBoard(root);
+    expect(set.byNumber(1)?.requestBudget).toBeUndefined();
+  });
 });

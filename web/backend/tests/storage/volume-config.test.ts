@@ -110,6 +110,21 @@ describe('parseVolumes', () => {
     const root = boardWith(['DRIVE.1=s3://cold', 'DRIVE.1.RETENTION=90D']);
     expect(parseVolumes(root)[0].retentionDays).toBe(90);
   });
+
+  it('reads a monthly request budget from DRIVE.n.REQUESTS', () => {
+    const root = boardWith(['DRIVE.1=s3://oracle', 'DRIVE.1.REQUESTS=50000']);
+    expect(parseVolumes(root)[0].requestBudget).toBe(50000);
+  });
+
+  it('leaves the request budget undefined when the key is absent', () => {
+    const root = boardWith(['DRIVE.1=s3://oracle']);
+    expect(parseVolumes(root)[0].requestBudget).toBeUndefined();
+  });
+
+  it('refuses an unreadable REQUESTS instead of leaving the ceiling unenforced', () => {
+    const root = boardWith(['DRIVE.1=s3://oracle', 'DRIVE.1.REQUESTS=lots']);
+    expect(() => parseVolumes(root)).toThrow(/DRIVE\.1\.REQUESTS/);
+  });
 });
 
 describe('readVolumeSecret', () => {

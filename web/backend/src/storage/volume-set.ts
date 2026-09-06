@@ -74,7 +74,18 @@ export class VolumeSet {
   }
 
   private static blank(volume: StorageVolume, backend: StorageBackend): VolumeState {
-    return { volume, backend, usedBytes: 0, requestsThisMonth: 0, egressBytesThisMonth: 0, degraded: false };
+    return {
+      volume,
+      backend,
+      usedBytes: 0,
+      requestsThisMonth: 0,
+      // From DRIVE.n.REQUESTS, when the sysop wrote one (volume-config.ts).
+      // This is the only path that ever sets it at construction; a caller can
+      // still override it later through `setRequestBudget`.
+      requestBudget: volume.requestBudget,
+      egressBytesThisMonth: 0,
+      degraded: false,
+    };
   }
 
   byNumber(driveNumber: number): VolumeState | undefined {
@@ -84,6 +95,12 @@ export class VolumeSet {
   /**
    * Oracle's free tier allows 50,000 requests a MONTH, which binds long before
    * its 10 GB does. A volume at its ceiling is not a place to put a new file.
+   *
+   * `fromBoard` already wires this for every volume that declares
+   * `DRIVE.n.REQUESTS` (volume-config.ts) - `blank()` carries the parsed
+   * budget straight into the state at construction. This setter remains for a
+   * caller that needs to change the budget after construction - a test, or a
+   * future admin action - without rebuilding the whole pool.
    */
   setRequestBudget(driveNumber: number, budget: number): void {
     const state = this.byNumber(driveNumber);

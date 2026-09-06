@@ -2547,6 +2547,10 @@ console.error(`[Database] Failed to update disk misc for slot ${slotNumber}:`, e
     return this.fileRepo!.entriesOnVolume(...args);
   }
 
+  usedBytesByVolume(...args: Parameters<FileRepository['usedBytesByVolume']>) {
+    return this.fileRepo!.usedBytesByVolume(...args);
+  }
+
   // Session management methods - delegate to SessionRepository
   async createSession(...args: Parameters<SessionRepository['createSession']>) {
     return this.sessionRepo!.createSession(...args);

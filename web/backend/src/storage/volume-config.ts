@@ -24,6 +24,13 @@ export interface StorageVolume {
   volumeClass: VolumeClass;
   retentionDays?: number;
   keyId?: string;
+  /**
+   * The provider's monthly request ceiling, from DRIVE.n.REQUESTS - Oracle's
+   * free tier caps at 50,000/month, well before its 10 GB does. Undefined
+   * means the provider publishes no such cap, which VolumeSet already
+   * distinguishes from "has a budget and is over it" (see `isOutOfRequests`).
+   */
+  requestBudget?: number;
 }
 
 const UNITS: Record<string, number> = { K: 1024, M: 1024 ** 2, G: 1024 ** 3, T: 1024 ** 4 };
@@ -80,6 +87,20 @@ function parseDriveRetentionDays(driveNumber: number, text: string): number {
   return Number(match[1]);
 }
 
+/**
+ * `DRIVE.n.REQUESTS`, a whole number of API calls per month. Same posture as
+ * QUOTA and RETENTION: present-but-unreadable throws naming the line, rather
+ * than silently leaving the ceiling unenforced.
+ */
+function parseDriveRequestBudget(driveNumber: number, text: string): number {
+  const key = `DRIVE.${driveNumber}.REQUESTS`;
+  const match = /^(\d+)$/.exec(text.trim());
+  if (!match) {
+    throw new Error(`${key} is unreadable ("${text}") - write a whole number of requests per month, such as 50000`);
+  }
+  return Number(match[1]);
+}
+
 export function parseVolumes(bbsRoot: string): StorageVolume[] {
   const drivesInfo = path.join(bbsRoot, 'Drives.info');
   if (!fs.existsSync(drivesInfo)) return [];
@@ -96,6 +117,7 @@ export function parseVolumes(bbsRoot: string): StorageVolume[] {
     const egress = tools.get(`DRIVE.${n}.EGRESS`)?.toUpperCase();
     const cls = tools.get(`DRIVE.${n}.CLASS`)?.toUpperCase();
     const retention = tools.get(`DRIVE.${n}.RETENTION`);
+    const requests = tools.get(`DRIVE.${n}.REQUESTS`);
 
     volumes.push({
       driveNumber: n,
@@ -110,6 +132,7 @@ export function parseVolumes(bbsRoot: string): StorageVolume[] {
       volumeClass: cls === 'FREE' ? 'FREE' : 'PAID',
       retentionDays: retention === undefined ? undefined : parseDriveRetentionDays(n, retention),
       keyId: tools.get(`DRIVE.${n}.KEYID`),
+      requestBudget: requests === undefined ? undefined : parseDriveRequestBudget(n, requests),
     });
   }
 

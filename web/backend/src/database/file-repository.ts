@@ -91,6 +91,24 @@ export class FileRepository extends BaseRepository<any> {
     return rows.map(row => this.mapFileEntryRow(row));
   }
 
+  /**
+   * Bytes each pooled volume actually holds, from the CATALOG - not
+   * `VolumeState.usedBytes`, the in-process counter that starts at 0 on every
+   * boot and is only ever incremented by `FileCache.writeBack`. Nothing
+   * reconciles that counter against reality, so it under-reports at boot and
+   * only ever drifts further from the truth; the catalog is what the pool
+   * actually contains, whether this process wrote every byte of it or not.
+   * This is the number Task 11's admin page shows as "used".
+   */
+  usedBytesByVolume(): Map<number, number> {
+    const rows = this.all<{ storage_volume: number; total: number | null }>(
+      'SELECT storage_volume, SUM(size) as total FROM file_entries WHERE storage_volume IS NOT NULL GROUP BY storage_volume'
+    );
+    const byVolume = new Map<number, number>();
+    for (const row of rows) byVolume.set(row.storage_volume, row.total ?? 0);
+    return byVolume;
+  }
+
   async createFileEntry(file: Omit<FileEntry, 'id'>): Promise<number> {
 
     const stmt = this.prepare(`

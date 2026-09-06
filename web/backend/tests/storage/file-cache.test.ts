@@ -600,6 +600,93 @@ describe('FileCache parking is a move, not a flag', () => {
   });
 });
 
+describe('FileCache.discardParked', () => {
+  async function parkOne(): Promise<{ cache: FileCache; localPath: string; dir: string }> {
+    const { cache, backend, dir, volumes } = setup();
+    const local = cache.localPathFor(2, 'Files/DOOR.DAT');
+    fs.mkdirSync(path.dirname(local), { recursive: true });
+    fs.writeFileSync(local, Buffer.alloc(400, 9));
+    backend.down = true;
+    await expect(cache.writeBack(2, 'Files/DOOR.DAT', local)).rejects.toThrow();
+    fs.writeFileSync(local, Buffer.alloc(120, 9)); // truncated on "restart"
+
+    const reborn = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+    await reborn.flushPending(); // parks it - backend is still down
+    const [parked] = reborn.parkedFiles();
+    return { cache: reborn, localPath: parked.localPath, dir };
+  }
+
+  it('deletes the file at the exact localPath parkedFiles() reported', async () => {
+    const { cache, localPath } = await parkOne();
+    expect(fs.existsSync(localPath)).toBe(true);
+
+    cache.discardParked(localPath);
+
+    expect(fs.existsSync(localPath)).toBe(false);
+    expect(cache.parkedFiles()).toEqual([]);
+  });
+
+  it('refuses a path outside the parked directory - it must never touch payload or pending', async () => {
+    const { cache, dir } = await parkOne();
+    const outside = path.join(dir, 'Files', 'DOOR.DAT');
+    fs.mkdirSync(path.dirname(outside), { recursive: true });
+    fs.writeFileSync(outside, 'do not delete me');
+
+    expect(() => cache.discardParked(outside)).toThrow(/parked directory/);
+    expect(fs.existsSync(outside)).toBe(true);
+  });
+
+  it('refuses a traversal that resolves outside the parked directory', async () => {
+    const { cache, dir } = await parkOne();
+    const escape = path.join(dir, '.parked', '..', '..', 'escaped');
+    expect(() => cache.discardParked(escape)).toThrow(/parked directory/);
+  });
+});
+
+describe('FileCache.isEvictionDisabled', () => {
+  it('is false when the pin record has never had a problem', () => {
+    const { cache } = setup();
+    cache.evictTo(0);
+    expect(cache.isEvictionDisabled()).toBe(false);
+  });
+
+  it('turns true the moment the pin record cannot be listed', async () => {
+    const { cache, backend, dir, volumes } = setup();
+    const local = cache.localPathFor(2, 'Files/DOOR.DAT');
+    fs.mkdirSync(path.dirname(local), { recursive: true });
+    fs.writeFileSync(local, Buffer.alloc(400, 9));
+    backend.down = true;
+    await expect(cache.writeBack(2, 'Files/DOOR.DAT', local)).rejects.toThrow();
+
+    fs.rmSync(path.join(dir, '.pending'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.pending'), ''); // a file where a directory belongs: unreadable, not absent
+
+    const reborn = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+    reborn.evictTo(0);
+    expect(reborn.isEvictionDisabled()).toBe(true);
+  });
+
+  it('re-arms false the moment the record reads again - it is not a sticky latch', async () => {
+    const { cache, backend, dir, volumes } = setup();
+    const local = cache.localPathFor(2, 'Files/DOOR.DAT');
+    fs.mkdirSync(path.dirname(local), { recursive: true });
+    fs.writeFileSync(local, Buffer.alloc(400, 9));
+    backend.down = true;
+    await expect(cache.writeBack(2, 'Files/DOOR.DAT', local)).rejects.toThrow();
+
+    fs.rmSync(path.join(dir, '.pending'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.pending'), '');
+
+    const reborn = new FileCache({ cacheDir: dir, volumes, maxBytes: 1024 });
+    reborn.evictTo(0);
+    expect(reborn.isEvictionDisabled()).toBe(true);
+
+    fs.unlinkSync(path.join(dir, '.pending'));
+    reborn.evictTo(0);
+    expect(reborn.isEvictionDisabled()).toBe(false);
+  });
+});
+
 describe('FileCache marker write failures', () => {
   it('warns but keeps evicting - a full disk must not switch off the remedy', async () => {
     const { cache, backend, dir } = setup();

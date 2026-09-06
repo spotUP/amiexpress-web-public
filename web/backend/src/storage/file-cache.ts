@@ -651,6 +651,32 @@ export class FileCache {
     return found;
   }
 
+  /**
+   * Permanently discards one quarantined file, identified by the exact
+   * `localPath` a `parkedFiles()` call reported for it - NEVER by
+   * `(driveNumber, key)`. The `key` on a `CachedFile` from `parkedFiles()` is a
+   * DISPLAY LABEL, not the pool object's real name (see the module header and
+   * `park()`): a second park of the same key produces a label like
+   * `Files/DOOR.DAT.2`, disjoint from any object in the bucket. Resolving by
+   * that label would either hit the wrong file after a third park, or - if
+   * fed to a pool write instead of a local unlink - create a bogus object at
+   * a name nobody asked for. `localPath` is the one identity a parked file
+   * actually has: the real, unique location `linkIntoParked` gave it.
+   *
+   * There is no promotion path. Parked bytes are a person's call, and this
+   * cache does not guess which pool key, if any, they belong at - that
+   * decision stays manual: recover the file at `localPath` and re-upload it
+   * through the normal path, or discard it here.
+   */
+  discardParked(localPath: string): void {
+    const resolved = path.resolve(localPath);
+    const rel = path.relative(this.parkedRoot, resolved);
+    if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
+      throw new Error(`refusing to discard ${localPath}: it is not inside the parked directory ${this.parkedRoot}`);
+    }
+    fs.unlinkSync(resolved);
+  }
+
   // ------------------------------------------------------------------ status
 
   isDirty(driveNumber: number, key: string): boolean {
@@ -660,6 +686,19 @@ export class FileCache {
   /** Bytes the last `evictTo` could not reclaim because everything left is pinned. */
   overBudgetBytes(): number {
     return this.shortfallBytes;
+  }
+
+  /**
+   * Whether eviction is currently refusing to run because `.pending/` could
+   * not be listed - see `evictTo`'s `pinKnown` branch. `warnedPinRecordUnreadable`
+   * doubles as this flag deliberately: it is set the instant a scan finds the
+   * record unreadable and cleared the instant one reads cleanly again, which
+   * is exactly "disabled right now", not "was ever disabled". A cache that has
+   * stopped evicting for this reason will fill its disk silently unless
+   * something reads this - Task 11's admin page does.
+   */
+  isEvictionDisabled(): boolean {
+    return this.warnedPinRecordUnreadable;
   }
 
   // ------------------------------------------------------------- read paths
