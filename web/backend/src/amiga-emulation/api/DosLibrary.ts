@@ -9,6 +9,7 @@ import { ximDebugLogger } from "../xim/debug-logger";
 import { EnvironmentManager } from "../session/EnvironmentManager";
 import { convertAmigaBytesToAscii } from "../utils/character-conversion";
 import { initializeENVFiles } from "../utils/env-initializer";
+import { AMIGA_ENV_DIR, amigaEnvArchiveDir } from "../utils/env-paths";
 import { getSystemTime, dateTimeToDateStamp } from '../../utils/date-time.util';
 import { debugLog } from "../../utils/debug-log";
 
@@ -294,11 +295,14 @@ console.error('[DosLibrary] EnvironmentManager not initialized');
     // Initialize ENV: device files (Lock/Open/Read access)
     // This creates files like ENV:JC_PWFAIL.*, ENV:STATS@*, etc.
     // that many Amiga doors expect to find on disk
-    initializeENVFiles('/tmp/ram/ENV', {
+    initializeENVFiles(AMIGA_ENV_DIR, {
       nodeId,
       totalNodes: 8,
       bbsName: 'AmiExpress Web BBS',
       sysop: 'Sysop',
+      // ENVARC: -> ENV: at "boot", so a door's archived setting survives a
+      // container restart the way it survives a reboot on a real Amiga.
+      envArcPath: amigaEnvArchiveDir(this.rootPath),
       // The same answer GetVar gives, for a door that reads ENV: as files.
       host: facts,
     });
@@ -338,7 +342,11 @@ debugLog(`[DosLibrary] Environment variables initialized for node ${nodeId}`);
     this.pathResolver.setBasePaths(rootPath);
 
     this.pathResolver.ensureDirectory(this.bbsDataPath);
-    this.pathResolver.ensureDirectory("/tmp/ram/ENV");
+    this.pathResolver.ensureDirectory(AMIGA_ENV_DIR);
+    // ENVARC: is the persistent half of the environment. Open(..., NEWFILE)
+    // fails outright when the parent directory is missing, so a door's
+    // archive write needs the directory to exist before it runs.
+    this.pathResolver.ensureDirectory(amigaEnvArchiveDir(this.rootPath));
     // RAM:T is the Amiga convention for volatile temp scratch (zOOsTAT writes
     // ZOOSTAT.TMP here, ACP and many doors use it). On a real Amiga the
     // startup-sequence pre-creates it with `makedir RAM:T`; mirror that here

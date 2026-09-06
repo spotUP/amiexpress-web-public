@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
 import { resolvePath as resolveCaseInsensitivePath } from '../../utils/amigafs';
+import { AMIGA_ENV_DIR, amigaEnvArchiveDir } from '../utils/env-paths';
 
 export class PathManager {
   /** Map of AmigaDOS logical devices (assigns) to system paths */
@@ -72,7 +73,13 @@ export class PathManager {
     this.assigns.set('s:', this.normalizeAssignPath(path.join(this.baseDir, 'S/')));
     this.assigns.set('work:', this.normalizeAssignPath(this.baseDir));
     this.assigns.set('sami:', this.normalizeAssignPath(path.join(this.baseDir, 'S/')));
-    this.assigns.set('env:', this.normalizeAssignPath(path.join('/tmp/ram', 'ENV/')));
+    this.assigns.set('env:', this.normalizeAssignPath(AMIGA_ENV_DIR));
+    // ENVARC: is the on-disk half of the AmigaOS environment (see
+    // utils/env-paths.ts). Without it, a door's archive write - the one that
+    // is supposed to outlive a reboot - fell through the unknown-volume
+    // fallback below and landed loose in the BBS root, never to be read
+    // again. GWall lost its BBS acronym that way on every restart.
+    this.assigns.set('envarc:', this.normalizeAssignPath(amigaEnvArchiveDir(this.baseDir)));
     this.assigns.set('progdir:', this.normalizeAssignPath(this.baseDir));
 
     // Standard AmigaDOS assigns
@@ -186,15 +193,28 @@ console.log(`[PathManager] Absolute POSIX path: "${amiPath}" => "${normalized}"`
     if (volumeMatch) {
       const volName = volumeMatch[1] + ':';
       if (!this.assigns.has(volName)) {
-        const rest = volumeMatch[2] || '';
+        // Take the remainder off the ORIGINAL path, not the lowercased copy
+        // the volume name was matched on. Reading it off `lowerPath` renamed
+        // every file written through this fallback: "ENVARC:GWall.cfg"
+        // created "<bbsRoot>/gwall.cfg". AmigaOS compares case-insensitively
+        // but PRESERVES the case it was given, and on a case-sensitive host
+        // filesystem the difference is two separate files.
+        const rest = amiPath.substring(volumeMatch[1].length + 1);
         const normalizedComponents = this.normalizeComponents(rest);
         if (normalizedComponents.length === 0) {
           console.log(`[PathManager] Volume fallback (root): "${amiPath}" => "${this.baseDir}"`);
           return this.baseDir;
         }
         const fullPath = path.join(this.baseDir, ...normalizedComponents);
-        const caseInsensitivePath = resolveCaseInsensitivePath(fullPath);
-        const final = caseInsensitivePath || fullPath;
+        // AmigaDOS looks a name up case-INSENSITIVELY but creates it
+        // case-PRESERVINGLY. resolveExistingAncestors() gives both: the part
+        // that exists comes back spelled the way the disk spells it (so
+        // "DayDream:Configs/TagWall.DAT" still finds "<root>/configs/
+        // tagwall.dat" on a case-sensitive filesystem, and a create lands in
+        // that existing directory rather than minting a "Configs/" twin
+        // beside it), while the leaf that does not exist yet keeps the case
+        // the door asked for.
+        const final = amigafs.resolveExistingAncestors(fullPath);
         console.log(`[PathManager] Volume fallback: "${amiPath}" => "${final}"`);
         return final;
       }

@@ -11,6 +11,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as amigafs from '../../utils/amigafs';
 import {
   hostVars,
   AE_HOST_VAR,
@@ -23,6 +24,13 @@ import {
 
 export interface ENVConfig {
   nodeId: number;
+  /**
+   * ENVARC: - the on-disk archive half of the environment
+   * (`amigaEnvArchiveDir(bbsRoot)`). Its contents are copied into ENV: for
+   * names ENV: does not already hold, the way the Startup-Sequence's
+   * `Copy ENVARC: ENV: ALL` does at boot. Omit it and no seeding happens.
+   */
+  envArcPath?: string;
   totalNodes?: number;
   bbsName?: string;
   sysop?: string;
@@ -45,6 +53,13 @@ export function initializeENVFiles(envPath: string, config: ENVConfig): void {
   // Ensure ENV directory exists
   if (!fs.existsSync(envPath)) {
     fs.mkdirSync(envPath, { recursive: true });
+  }
+
+  // The boot step first: whatever the archive holds becomes visible in ENV:
+  // before anything else writes there. Must run BEFORE the standard vars
+  // below, which deliberately overwrite their own names every session.
+  if (config.envArcPath) {
+    seedEnvFromArchive(envPath, config.envArcPath);
   }
 
   const { nodeId, totalNodes = 8, bbsName = 'AmiExpress Web', sysop = 'Sysop' } = config;
@@ -117,6 +132,71 @@ export function initializeENVFiles(envPath: string, config: ENVConfig): void {
   createENVFile(envPath, 'DOOR_COUNT', '0');
 
   console.log(`[ENV Initializer] Created ENV files in ${envPath}`);
+}
+
+/**
+ * `Copy ENVARC: ENV: ALL` - the Startup-Sequence step that makes an archived
+ * environment variable visible again after a reboot.
+ *
+ * A name already present in ENV: WINS: on a real Amiga the copy happens once,
+ * at boot, before anything writes to ENV:, so nothing live is ever clobbered
+ * by the archive. Our ENV: directory outlives a single door session, so
+ * "already there" is the same guarantee - a door that wrote ENV: five minutes
+ * ago keeps its value, and only a wiped /tmp (a container restart) falls back
+ * to the archive.
+ *
+ * Directories are copied through, because ENVARC: is a tree on a real Amiga
+ * (Sys/, Wanderer/, ...) and `ALL` recurses.
+ *
+ * The archive directory is CREATED when missing: a door's
+ * `Open('ENVARC:x', MODE_NEWFILE)` fails outright if the parent is not there,
+ * which is how the persistent half went missing in the first place.
+ */
+function seedEnvFromArchive(envPath: string, envArcPath: string): void {
+  try {
+    if (!amigafs.existsSync(envArcPath)) {
+      amigafs.mkdirSync(envArcPath, { recursive: true });
+      return; // nothing archived yet
+    }
+  } catch (error) {
+    console.error(`[ENV Initializer] Failed to create ENVARC: at ${envArcPath}:`, error);
+    return;
+  }
+
+  let copied = 0;
+  const walk = (fromDir: string, toDir: string): void => {
+    let entries: string[];
+    try {
+      entries = amigafs.readdirSync(fromDir);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const from = path.join(fromDir, entry);
+      const to = path.join(toDir, entry);
+      try {
+        if (amigafs.statSync(from).isDirectory()) {
+          if (!amigafs.existsSync(to)) {
+            amigafs.mkdirSync(to, { recursive: true });
+          }
+          walk(from, to);
+          continue;
+        }
+        // amigafs.existsSync is case-insensitive, matching AmigaOS: an
+        // archived "GWall.cfg" must not overwrite a live "gwall.cfg".
+        if (amigafs.existsSync(to)) continue;
+        amigafs.copyFileSync(from, to);
+        copied += 1;
+      } catch (error) {
+        console.error(`[ENV Initializer] Failed to copy ENVARC:${entry} into ENV::`, error);
+      }
+    }
+  };
+  walk(envArcPath, envPath);
+
+  if (copied > 0) {
+    console.log(`[ENV Initializer] Copied ${copied} archived variable(s) from ENVARC: (${envArcPath}) into ENV:`);
+  }
 }
 
 /**

@@ -2,7 +2,7 @@
  * dos-path-resolver.ts - Amiga path resolution for dos.library
  *
  * Handles translation between AmigaDOS paths and native filesystem paths.
- * Supports PROGDIR:, BBS:, Doors:, S:, ENV: and other Amiga device paths.
+ * Supports PROGDIR:, BBS:, Doors:, S:, ENV:, ENVARC: and other Amiga device paths.
  *
  * @module dos-path-resolver
  */
@@ -12,6 +12,7 @@ import * as amigafs from '../../../utils/amigafs';
 import { debugLog } from '../../../utils/debug-log';
 import { PathManager } from '../PathManager';
 import { FileManager } from '../FileManager';
+import { AMIGA_ENV_DIR, amigaEnvArchiveDir } from '../../utils/env-paths';
 
 /**
  * Configuration for path resolver
@@ -37,7 +38,8 @@ export interface PathResolverConfig {
  * - BBS: -> BBS data path
  * - Doors: -> Doors directory root
  * - S: -> Amiga system scripts (BBS root /S)
- * - ENV: -> Environment variables (/tmp/ram/ENV)
+ * - ENV: -> Environment variables, volatile (/tmp/ram/ENV)
+ * - ENVARC: -> Environment archive, on disk (<bbsRoot>/System/Prefs/Env-Archive)
  * - RAM: -> RAM disk (/tmp/ram)
  * - T: -> Temporary directory (/tmp/ram/T)
  * - Relative paths -> Current directory
@@ -217,10 +219,22 @@ export class DosPathResolver {
       return resolved;
     }
 
+    // Handle ENVARC: device - the on-disk archive half of the environment.
+    // Must be tested BEFORE ENV: only in spirit (the prefixes don't overlap),
+    // but it must exist at all: without it an archive write fell through to
+    // resolveRelative() and landed loose in the BBS root. See
+    // amiga-emulation/utils/env-paths.ts.
+    if (upperPath.startsWith('ENVARC:')) {
+      const relativePath = amigaPath.substring(7);
+      const resolved = path.join(amigaEnvArchiveDir(this.rootPath), relativePath);
+      debugLog(`[DosPathResolver] ENVARC: -> ${resolved}`);
+      return resolved;
+    }
+
     // Handle ENV: device - environment variables
     if (upperPath.startsWith('ENV:')) {
       const relativePath = amigaPath.substring(4);
-      const resolved = path.join('/tmp/ram/ENV', relativePath);
+      const resolved = path.join(AMIGA_ENV_DIR, relativePath);
       debugLog(`[DosPathResolver] ENV: -> ${resolved}`);
       return resolved;
     }
