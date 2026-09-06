@@ -54,9 +54,16 @@
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const fs: typeof import('fs') = require('fs');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const os: typeof import('os') = require('os');
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const path: typeof import('path') = require('path');
+
+/*
+ * The run-scoped scratch directory this worker is allowed to use, and the
+ * `TMPDIR` redirect that keeps every OTHER `os.tmpdir()` caller in the suite
+ * inside it. `require`, like the modules above, so this file stays loadable
+ * before the test framework is up.
+ */
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { testBoardDir, useRunDirAsTmp } = require('./temp-run-dir') as typeof import('./temp-run-dir');
 
 /** `web/backend/tests` -> the checkout root that holds the live board. */
 export const REPO_ROOT = path.resolve(__dirname, '../../..');
@@ -331,10 +338,18 @@ function pinBoardEnvironment(): void {
 
   if (process.env.BBS_ROOT && process.env.BBS_DATA_DIR) return;
 
-  // One board per WORKER PROCESS, not per test file: setupFiles runs for
-  // every file, and re-seeding 1.7 MB 683 times would cost more than the
-  // whole suite. Keyed by pid so a second run never inherits a dirty board.
-  const scratch = path.join(os.tmpdir(), `amiexpress-testboard-${process.pid}`);
+  // One board per WORKER, not per test file: setupFiles runs for every file,
+  // and re-seeding ~39 MB 693 times would cost more than the whole suite.
+  //
+  // It used to be keyed by pid, straight in `${TMPDIR}`, and nothing ever
+  // removed it - seven boards per run, kept for ever, 12 GB by the evening of
+  // 2026-09-06. It is now keyed by JEST_WORKER_ID inside this run's own
+  // directory (`temp-run-dir.ts`), which bounds it to `maxWorkers` boards and
+  // hands the whole set to `globalTeardown` and the startup sweep. A board
+  // still belongs to exactly one worker process at a time, so nothing about
+  // the isolation changed; and it is still seeded fresh, because the run
+  // directory it lives in did not exist a moment ago.
+  const scratch = testBoardDir();
   if (!fs.existsSync(scratch)) {
     fs.mkdirSync(scratch, { recursive: true });
     seedBoard(scratch);
@@ -343,6 +358,9 @@ function pinBoardEnvironment(): void {
   process.env.BBS_DATA_DIR ??= scratch;
 }
 
+// Before the board is created, so a fallback board and every test-authored
+// `mkdtemp` land in the same run-scoped directory.
+useRunDirAsTmp();
 pinBoardEnvironment();
 installGuard();
 

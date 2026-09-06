@@ -24,7 +24,19 @@ module.exports = {
   // Runs before the test framework and before every module under test, so
   // the BBS_ROOT/BBS_DATA_DIR fallbacks in src/ cannot resolve to the live
   // board and every destructive fs call into it throws. See the file header.
-  setupFiles: ['<rootDir>/tests/live-data-guard.ts'],
+  setupFiles: [
+    '<rootDir>/tests/live-data-guard.ts',
+    // Drops `console.log`/`info`/`debug` (2,967 call sites in `src/`, five
+    // printed lines each) and keeps `warn`/`error`. `TEST_VERBOSE=1` brings
+    // everything back. See the file header for what this cost.
+    '<rootDir>/tests/quiet-console.ts',
+  ],
+  // Opens one directory per RUN under the host's temp dir, repoints TMPDIR
+  // into it, and sweeps the leftovers of runs whose process is gone; the
+  // teardown removes this run's directory whole. Without them every run left
+  // ~270 MB of seeded boards behind for ever. See tests/temp-run-dir.ts.
+  globalSetup: '<rootDir>/tests/global-setup.ts',
+  globalTeardown: '<rootDir>/tests/global-teardown.ts',
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   testTimeout: 10000,
   // ESM-style relative imports use `.js` suffixes that swc/jest preserves.

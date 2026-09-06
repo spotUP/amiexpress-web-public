@@ -10,9 +10,9 @@
 // every OTHER test file too, without hunting down each transitive import.
 import 'reflect-metadata';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { Database } from '../src/database';
+import { testTmpDir } from './temp-run-dir';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -26,7 +26,13 @@ beforeAll(async () => {
     return;
   }
 
-  tempDbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amiexpress-tests-'));
+  // Inside THIS RUN's directory, not straight in `${TMPDIR}`. The `afterAll`
+  // below removes it on a clean exit, but a suite that calls `process.exit(1)`
+  // - several here do - never reaches it, and 620 of these initialised SQLite
+  // boards were left on the disk on 2026-09-06. Under the run directory they
+  // are removed wholesale by `global-teardown.ts`, or by the startup sweep
+  // after a kill. See `temp-run-dir.ts`.
+  tempDbDir = fs.mkdtempSync(path.join(testTmpDir(), 'amiexpress-tests-'));
   process.env.DATABASE_DIR = tempDbDir;
   process.env.DATABASE_FILE = 'test.db';
 
