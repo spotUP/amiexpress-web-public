@@ -11,6 +11,7 @@ import { config } from '../../config';
 import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { checkSecurity } from '../../utils/acs.util';
+import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../../constants/command-results';
 import { ACSPermission } from '../../constants/acs-permissions';
 import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
@@ -34,12 +35,19 @@ export class ViewFileHandler {
     socket: Socket,
     session: BBSSession,
     params: string = ''
-  ): Promise<void> {
-    // Check security - express.e:25676
+  ): Promise<InternalCommandResult> {
+    // express.e:25676 - `IF checkSecurity(ACS_VIEW_A_FILE)=FALSE THEN RETURN
+    // RESULT_NOT_ALLOWED`. A bare return: nothing is printed here. The
+    // dispatcher says "Command requires higher access." once
+    // (express.e:28400). "Permission denied." was invented by this port.
     if (!checkSecurity(session.user, ACSPermission.VIEW_A_FILE)) {
-      socket.emit('ansi-output', '\x1b[31mPermission denied.\x1b[0m\r\n');
+      console.warn(
+        `[V] RESULT_NOT_ALLOWED: ${session.user?.username ?? '<none>'} ` +
+        `(level ${session.user?.secLevel ?? '?'}) lacks ACS.VIEW_A_FILE. ` +
+        'Grant it in Access/ACS.<level>.info.'
+      );
       session.subState = LoggedOnSubState.DISPLAY_MENU;
-      return;
+      return RESULT_NOT_ALLOWED;
     }
 
     // setEnvStat(ENV_VIEWING) - express.e:25678

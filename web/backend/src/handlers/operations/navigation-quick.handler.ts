@@ -1,5 +1,16 @@
 /**
  * Quick Navigation Commands Handler
+ *
+ * UNREFERENCED as of 2026-09-07. Nothing in `src/` or `tests/` imports this
+ * file: the LIVE `<` and `>` are `commands/navigation-commands.handler.ts`
+ * handlePreviousConferenceCommand / handleNextConferenceCommand, which is
+ * what `command.handler.ts`'s switch calls. Found while sweeping the invented
+ * "Permission denied." strings - the sweep's own test caught it, because
+ * converting THIS file changed nothing a caller could see.
+ *
+ * Converted to the RESULT_NOT_ALLOWED shape anyway, so whichever copy
+ * survives is right. Deleting it is the real fix and is the sysop's call.
+ *
  * Port from express.e:24529-24592
  *
  * Implements:
@@ -11,6 +22,7 @@
 
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { checkSecurity } from '../../utils/acs.util';
+import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../../constants/command-results';
 import { ACSPermission } from '../../constants/acs-permissions';
 
 import type { BBSSession } from '../../index';
@@ -46,12 +58,18 @@ export function setNavigationQuickDependencies(deps: {
 export async function handlePreviousConferenceCommand(
   socket: any,
   session: BBSSession
-): Promise<void> {
-  // Check security - express.e:24531
+): Promise<InternalCommandResult> {
+  // express.e:24531 - `IF checkSecurity(ACS_JOIN_CONFERENCE)=FALSE THEN
+  // RETURN RESULT_NOT_ALLOWED`. A bare return; the dispatcher speaks
+  // (express.e:28400). "Permission denied." was invented by this port.
   if (!checkSecurity(session.user, ACSPermission.JOIN_CONFERENCE)) {
-    socket.emit('ansi-output', '\r\n\x1b[31mPermission denied.\x1b[0m\r\n');
+    console.warn(
+      `[<] RESULT_NOT_ALLOWED: ${session.user?.username ?? '<none>'} ` +
+      `(level ${session.user?.secLevel ?? '?'}) lacks ACS.JOIN_CONFERENCE. ` +
+      'Grant it in Access/ACS.<level>.info.'
+    );
     session.subState = LoggedOnSubState.DISPLAY_MENU;
-    return;
+    return RESULT_NOT_ALLOWED;
   }
 
   // Save current message pointers - express.e:24532
@@ -84,12 +102,19 @@ console.log('[ENV] Join');
 export async function handleNextConferenceCommand(
   socket: any,
   session: BBSSession
-): Promise<void> {
-  // Check security - express.e:24550
+): Promise<InternalCommandResult> {
+  // express.e:24550 - `IF checkSecurity(ACS_JOIN_CONFERENCE)=FALSE THEN
+  // RETURN RESULT_NOT_ALLOWED`. Same bare return as internalCommandLT.
+  // (internalCommandLT2/GT2 - the message-base < and > at express.e:24566
+  // and 24580 - have NO security check at all, and this port matches that.)
   if (!checkSecurity(session.user, ACSPermission.JOIN_CONFERENCE)) {
-    socket.emit('ansi-output', '\r\n\x1b[31mPermission denied.\x1b[0m\r\n');
+    console.warn(
+      `[>] RESULT_NOT_ALLOWED: ${session.user?.username ?? '<none>'} ` +
+      `(level ${session.user?.secLevel ?? '?'}) lacks ACS.JOIN_CONFERENCE. ` +
+      'Grant it in Access/ACS.<level>.info.'
+    );
     session.subState = LoggedOnSubState.DISPLAY_MENU;
-    return;
+    return RESULT_NOT_ALLOWED;
   }
 
   // Save current message pointers - express.e:24551

@@ -14,6 +14,7 @@ import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
+import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../../constants/command-results';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { getSystemTime } from '../../utils/date-time.util';
@@ -202,13 +203,24 @@ function formatFileSize(bytes: number): string {
  * Handle < command - Previous Conference
  * 1:1 port from express.e:24529-24546 internalCommandLT()
  */
-export async function handlePreviousConferenceCommand(socket: any, session: BBSSession): Promise<void> {
-  // express.e:24530 - Check ACS_JOIN_CONFERENCE permission
+export async function handlePreviousConferenceCommand(
+  socket: any,
+  session: BBSSession
+): Promise<InternalCommandResult> {
+  // express.e:24531 - `IF checkSecurity(ACS_JOIN_CONFERENCE)=FALSE THEN
+  // RETURN RESULT_NOT_ALLOWED`. A bare return: internalCommandLT prints
+  // nothing. The caller still hears "Command requires higher access." - the
+  // same bytes ErrorHandler.permissionDenied used to send from here - but
+  // now from the dispatcher (express.e:28400, processBBSCommand), once,
+  // through the one path every other refused command uses.
   if (!checkSecurity(session.user, ACSPermission.JOIN_CONFERENCE)) {
-    ErrorHandler.permissionDenied(socket, 'join conference', {
-      nextState: LoggedOnSubState.DISPLAY_MENU
-    });
-    return;
+    console.warn(
+      `[<] RESULT_NOT_ALLOWED: ${session.user?.username ?? '<none>'} ` +
+      `(level ${session.user?.secLevel ?? '?'}) lacks ACS.JOIN_CONFERENCE. ` +
+      'Grant it in Access/ACS.<level>.info.'
+    );
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return RESULT_NOT_ALLOWED;
   }
 
   // express.e:24531 - saveMsgPointers(currentConf, currentMsgBase)
@@ -244,13 +256,22 @@ console.log('[ENV] Join - Previous Conference');
  * Handle > command - Next Conference
  * 1:1 port from express.e:24548-24564 internalCommandGT()
  */
-export async function handleNextConferenceCommand(socket: any, session: BBSSession): Promise<void> {
-  // express.e:24549 - Check ACS_JOIN_CONFERENCE permission
+export async function handleNextConferenceCommand(
+  socket: any,
+  session: BBSSession
+): Promise<InternalCommandResult> {
+  // express.e:24550 - `IF checkSecurity(ACS_JOIN_CONFERENCE)=FALSE THEN
+  // RETURN RESULT_NOT_ALLOWED`, same bare return as internalCommandLT.
+  // (internalCommandLT2/GT2 - the message-base << and >> at express.e:24566
+  // and 24580 - have NO security check at all, and this port matches that.)
   if (!checkSecurity(session.user, ACSPermission.JOIN_CONFERENCE)) {
-    ErrorHandler.permissionDenied(socket, 'join conference', {
-      nextState: LoggedOnSubState.DISPLAY_MENU
-    });
-    return;
+    console.warn(
+      `[>] RESULT_NOT_ALLOWED: ${session.user?.username ?? '<none>'} ` +
+      `(level ${session.user?.secLevel ?? '?'}) lacks ACS.JOIN_CONFERENCE. ` +
+      'Grant it in Access/ACS.<level>.info.'
+    );
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return RESULT_NOT_ALLOWED;
   }
 
   // express.e:24550 - saveMsgPointers(currentConf, currentMsgBase)

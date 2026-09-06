@@ -16,6 +16,7 @@ import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity, UserFlags } from '../../utils/acs.util';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
+import { InternalCommandResult } from '../../constants/command-results';
 import { ParamsUtil } from '../../utils/params.util';
 import path from 'path';
 import fs from 'fs';
@@ -291,10 +292,17 @@ const formatDate = formatDateSlash;
  * Allows users to flag files for download.
  * Interactive flag management system.
  */
-export async function handleAlterFlagsCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
-  // Use the new AlterFlagsHandler
+export async function handleAlterFlagsCommand(
+  socket: any,
+  session: BBSSession,
+  params: string = ''
+): Promise<InternalCommandResult> {
+  // Use the new AlterFlagsHandler. The result is RETURNED, not swallowed:
+  // express.e:24602's RESULT_NOT_ALLOWED has to reach processBBSCommand
+  // (express.e:28400) or the refusal is silent. This wrapper dropping it is
+  // exactly how the A command lost its refusal the first time.
   const { AlterFlagsHandler } = require('../operations/alter-flags.handler');
-  await AlterFlagsHandler.handleAlterFlagsCommand(socket, session, params);
+  return await AlterFlagsHandler.handleAlterFlagsCommand(socket, session, params);
 }
 
 /**

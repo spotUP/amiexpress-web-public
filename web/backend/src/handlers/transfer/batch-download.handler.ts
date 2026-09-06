@@ -10,6 +10,7 @@ import { config } from '../../config';
 import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { checkSecurity, getACSConfig, ToggleFlags } from '../../utils/acs.util';
+import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../../constants/command-results';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkDownloadRatios, updateDownloadStats as applyDownloadStats, creditAccountTrackDownloads } from '../../utils/download-ratios.util';
 import { ConferenceRepository } from '../../database/conference-repository';
@@ -150,12 +151,27 @@ export class BatchDownloadHandler {
   static async handleBatchDownload(
     socket: Socket,
     session: BBSSession
-  ): Promise<void> {
-    // Check security - express.e:15598-15602
+  ): Promise<InternalCommandResult> {
+    // DB HAS NO express.e ORIGINAL. There is no internalCommandDB in the
+    // dispatcher (express.e:28288-28395); downloading everything flagged in
+    // one go is this port's own command. `downloadFiles` (express.e:15571),
+    // which the rest of this handler ports, carries no ACS_DOWNLOAD gate at
+    // all - 15598 is `IF fileList.count()=0 THEN RETURN 0`, and its one
+    // access check (15602, ACS_LOCAL_DOWNLOADS) is a LOCAL-console rule that
+    // prints a different sentence, "Not supported locally...".
+    //
+    // So this gate is ours to shape, and it is shaped after the express.e
+    // command it stands in for: internalCommandD (24854), the same
+    // ACS_DOWNLOAD check, a bare RETURN RESULT_NOT_ALLOWED, nothing printed.
+    // A caller refused DB now hears exactly what a caller refused D hears.
     if (!checkSecurity(session.user, ACSPermission.DOWNLOAD)) {
-      socket.emit('ansi-output', '\x1b[31mPermission denied.\x1b[0m\r\n');
+      console.warn(
+        `[DB] RESULT_NOT_ALLOWED: ${session.user?.username ?? '<none>'} ` +
+        `(level ${session.user?.secLevel ?? '?'}) lacks ACS.DOWNLOAD. ` +
+        'Grant it in Access/ACS.<level>.info.'
+      );
       session.subState = LoggedOnSubState.DISPLAY_MENU;
-      return;
+      return RESULT_NOT_ALLOWED;
     }
 
     // Get flagged files - express.e:15595-15597

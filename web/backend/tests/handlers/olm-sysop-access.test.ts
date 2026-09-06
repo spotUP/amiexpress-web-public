@@ -15,8 +15,16 @@
  *      `checkSecurity(ACS_OLM)`, which resolves through `Access/ACS.<level>.info`.
  *      Failing THAT used to print "Access denied." - the string he saw. That
  *      string was invented by this port; express.e:25416 returns
- *      RESULT_NOT_ALLOWED and prints nothing at all, so it is gone and a
- *      refused caller now sees NOTHING from the handler.
+ *      RESULT_NOT_ALLOWED and prints nothing at all, so it is gone and the
+ *      HANDLER now emits nothing.
+ *
+ *      The caller is NOT left in silence, though: the handler returns
+ *      RESULT_NOT_ALLOWED and `processBBSCommand` prints
+ *      "Command requires higher access." for it, once, exactly as
+ *      express.e:28400 does - so gates 1 and 2 end up saying the same
+ *      sentence, which is what a real AmiExpress does. That end of the path
+ *      is pinned in `tests/handlers/higher-access-dispatch.test.ts` (see the
+ *      note at the foot of this file for why it cannot live here).
  *
  * So the denial was gate 2, and gate 2 reads the board's ACS tooltype files.
  * The cause was MISSING DATA, not a bug: no `Access/ACS.<level>.info` carried
@@ -44,14 +52,19 @@
  * and no test asserts "level 20 has OLM" - board policy is the sysop's to
  * change without failing a build.
  *
- * THE TRAP IN A SILENT REFUSAL
+ * THE TRAP IN A SILENT HANDLER
  *
- * A refused caller now sees nothing. So "allowed" and "refused" can no longer
- * be told apart by looking for a denial string, and `not.toContain('Access
+ * A refused HANDLER emits nothing, so "allowed" and "refused" can no longer be
+ * told apart by looking for a denial string, and `not.toContain('Access
  * denied')` passes on a refusal too. Every allowed case below asserts POSITIVE
  * evidence that the command ran - the OLM banner and node prompt, the Quiet
  * Mode line, the toggled flag - and every refused case asserts an entirely
- * empty transcript.
+ * empty transcript PLUS the RESULT_NOT_ALLOWED the handler must hand back.
+ *
+ * That last part matters: an empty transcript alone is also what a handler
+ * that quietly does nothing produces. The result code is the difference
+ * between "refused, and the dispatcher will say so" and "refused, and nobody
+ * will".
  */
 
 import * as fs from 'fs';
@@ -77,6 +90,7 @@ import {
   handleQuietCommand,
   setOlmDependencies,
 } from '../../src/handlers/transfer/olm.handler';
+import { RESULT_NOT_ALLOWED } from '../../src/constants/command-results';
 
 /** The tracked `Access/` directory. Read only, and only ever copied. */
 const BOARD_ROOT = path.resolve(__dirname, '../../../..');
@@ -360,11 +374,17 @@ describe.each([
 
     const cap = captureSocket();
     const session: any = { user: makeUser(level), nodeId: 1, subState: LoggedOnSubState.DISPLAY_MENU };
-    await handleOlmCommand(cap.socket, session, '');
+    const res = await handleOlmCommand(cap.socket, session, '');
 
     // express.e:25416 - RETURN RESULT_NOT_ALLOWED, and internalCommandOLM
     // prints nothing on the way out. Not "Access denied." (this port invented
     // that), not a banner, not a prompt.
+    //
+    // The result code is the half that was missing. Without it the refusal
+    // stopped here and the caller heard nothing at all - the silence the
+    // sysop reported. With it the dispatcher speaks (express.e:28400); the
+    // last describe block in this file drives that end.
+    expect(res).toBe(RESULT_NOT_ALLOWED);
     expect(cap.text()).toBe('');
     expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
   });
@@ -407,9 +427,11 @@ describe.each([
       subState: LoggedOnSubState.DISPLAY_MENU,
       blockOLM: false,
     };
-    await handleQuietCommand(cap.socket, session);
+    const res = await handleQuietCommand(cap.socket, session);
 
     // express.e:25513-25514 - the ELSE arm is a bare RETURN RESULT_NOT_ALLOWED.
+    // Silent handler, result code out, dispatcher speaks.
+    expect(res).toBe(RESULT_NOT_ALLOWED);
     expect(cap.text()).toBe('');
     expect(session.blockOLM).toBe(false);
     expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
@@ -466,3 +488,19 @@ describe('OLM and Q are gated by their own separate permissions', () => {
     expect(olmSession.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
   });
 });
+
+/*
+ * WHY THE DISPATCHER END IS NOT PINNED IN THIS FILE
+ *
+ * It was, for one run. `require('../../src/handlers/command.handler')` pulls
+ * in `src/index`, which boots the real server, fails init and calls
+ * `process.exit(1)` - jest dies mid-run with no summary line, which reads as
+ * a clean pass if you only look for FAILs. So the caller-facing half lives in
+ * `tests/handlers/higher-access-dispatch.test.ts`, which mocks `src/index`
+ * and drives `handleCommand` end to end for OLM, Q and the seven other
+ * commands converted with them.
+ *
+ * This file keeps the ACS half: which bytes in `Access/ACS.<level>.info` make
+ * the gate say no, and that saying no means returning RESULT_NOT_ALLOWED
+ * without printing. Those are the two halves of the same refusal.
+ */

@@ -12,6 +12,7 @@ import { config } from '../../config';
 import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { checkSecurity } from '../../utils/acs.util';
+import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../../constants/command-results';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { FileFlagManager, getFlagFilesPrompt, getClearFlagsPrompt, getShowFlagsMessage } from '../../utils/file-flag.util';
 
@@ -45,12 +46,18 @@ export class AlterFlagsHandler {
     socket: Socket,
     session: BBSSession,
     params: string = ''
-  ): Promise<void> {
-    // Check security - express.e:24602
+  ): Promise<InternalCommandResult> {
+    // express.e:24602 - `IF checkSecurity(ACS_DOWNLOAD)=FALSE THEN RETURN
+    // RESULT_NOT_ALLOWED`. A bare return; the dispatcher speaks
+    // (express.e:28400). "Permission denied." was invented by this port.
     if (!checkSecurity(session.user, ACSPermission.DOWNLOAD)) {
-      socket.emit('ansi-output', '\x1b[31mPermission denied.\x1b[0m\r\n');
+      console.warn(
+        `[A] RESULT_NOT_ALLOWED: ${session.user?.username ?? '<none>'} ` +
+        `(level ${session.user?.secLevel ?? '?'}) lacks ACS.DOWNLOAD. ` +
+        'Grant it in Access/ACS.<level>.info.'
+      );
       session.subState = LoggedOnSubState.DISPLAY_MENU;
-      return;
+      return RESULT_NOT_ALLOWED;
     }
 
     // setEnvStat(ENV_FILES) - express.e:24603

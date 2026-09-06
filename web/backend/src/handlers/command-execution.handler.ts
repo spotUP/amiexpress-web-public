@@ -18,15 +18,14 @@ import {
 import { checkSecurity } from '../utils/acs.util';
 import { ACSPermission } from '../constants/acs-permissions';
 import { AnsiUtil } from '../utils/ansi.util';
-import { ErrorHandler } from '../utils/error-handling.util';
+import { ErrorHandler, higherAccess } from '../utils/error-handling.util';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { BBSSession } from '../index';
 
-// Result codes from express.e
-const RESULT_SUCCESS = 0;
-const RESULT_FAILURE = -1;
-const RESULT_NOT_ALLOWED = -2;
+// Result codes from express.e - one definition, shared with the internal
+// command tier (src/constants/command-results.ts).
+import { RESULT_SUCCESS, RESULT_FAILURE, RESULT_NOT_ALLOWED } from '../constants/command-results';
 
 /**
  * Debug log helper - logs to console AND sysop terminal/session log
@@ -419,12 +418,18 @@ async function runCommand(
       { userSecLevel, requiredAccess, username: session.user?.username },
       DebugSeverity.WARNING
     );
-    // Only show error message if NOT a screen-initiated command
-    // Screen commands (from ~CC_, ~XC_, ~XI MCI codes) should fail silently
-    // because the user didn't explicitly type them
-    // express.e:3037-3039 higherAccess() — exact string match
+    // express.e:4705 - `IF privcmd=FALSE THEN higherAccess()`, then
+    // `RETURN RESULT_NOT_ALLOWED`. This is the door tiers' half of the
+    // refusal message; the internal tier's half is express.e:28400, in
+    // `command.handler.ts` processBBSCommand. Two express.e call sites, two
+    // here, and the caller hears it exactly once whichever tier refused -
+    // nothing above this re-announces a NOT_ALLOWED result.
+    //
+    // `executingScreenCommand` IS express.e's privcmd here: screen commands
+    // (~CC_, ~XC_, ~XI MCI codes) were not typed by the user, so they fail
+    // silently exactly as a privcmd invocation does.
     if (!session.executingScreenCommand) {
-      socket.emit('ansi-output', '\r\nCommand requires higher access.\r\n');
+      higherAccess(socket);
     }
     return RESULT_NOT_ALLOWED;
   }

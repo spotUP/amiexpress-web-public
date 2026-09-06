@@ -16,6 +16,7 @@ import { LoggedOnSubState } from '../../constants/bbs-states';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { EnvStat } from '../../constants/env-codes';
 import { checkSecurity } from '../../utils/acs.util';
+import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../../constants/command-results';
 import { getSocketIdByNodeId } from '../../server/session-manager';
 import { emitterForSession } from '../../server/session-emitter-registry';
 
@@ -47,7 +48,11 @@ export function setOlmDependencies(deps: {
  * OLM command handler
  * express.e:25406-25503 - PROC internalCommandOLM(params)
  */
-export async function handleOlmCommand(socket: Socket, session: BBSSession, params: string = '') {
+export async function handleOlmCommand(
+  socket: Socket,
+  session: BBSSession,
+  params: string = ''
+): Promise<InternalCommandResult> {
 console.log('[OLM] handleOlmCommand called with params:', params);
 
   // Guard against missing user - prevent crash
@@ -60,17 +65,19 @@ console.log('[OLM] handleOlmCommand called with params:', params);
   // express.e:25416 - Check security ACS_OLM and multinode enabled
   // IF((checkSecurity(ACS_OLM))=FALSE) OR (sopt.toggles[TOGGLES_MULTICOM]=FALSE) THEN RETURN RESULT_NOT_ALLOWED
   //
-  // Nothing is printed. express.e:25416 is a bare RETURN: the refusal travels
-  // out as RESULT_NOT_ALLOWED and internalCommandOLM emits not one byte. The
-  // "Access denied." this port used to send here was invented, and it is the
-  // string the sysop reported seeing. A refused caller now sees nothing.
+  // THIS HANDLER PRINTS NOTHING. express.e:25416 is a bare RETURN and
+  // internalCommandOLM emits not one byte on the way out; the caller's
+  // "Command requires higher access." comes from the dispatcher
+  // (express.e:28400 -> processBBSCommand). The "Access denied." this port
+  // used to send from here was invented, and it is the string the sysop
+  // reported seeing.
   if (!checkSecurity(session.user, ACSPermission.OLM)) {
     console.warn(
       `[OLM] RESULT_NOT_ALLOWED: ${session.user.username} (level ${session.user.secLevel}) ` +
       'lacks ACS.OLM. Grant it in Access/ACS.<level>.info.'
     );
     session.subState = LoggedOnSubState.DISPLAY_MENU;
-    return;
+    return RESULT_NOT_ALLOWED;
   }
 
   // Check if OLM is enabled (sopt.toggles[TOGGLES_MULTICOM])
@@ -429,12 +436,15 @@ console.error('[OLM] Error updating blockOLM in database:', err);
  * Q Command - Toggle Quiet Mode (block OLMs)
  * express.e:25505-25515 - PROC internalCommandQ
  */
-export async function handleQuietCommand(socket: Socket, session: BBSSession) {
+export async function handleQuietCommand(
+  socket: Socket,
+  session: BBSSession
+): Promise<InternalCommandResult> {
 console.log('🔇 [OLM] handleQuietCommand called');
 
   // express.e:25505/25513-25514 - IF checkSecurity(ACS_QUIET_NODE) ... ELSE
-  // RETURN RESULT_NOT_ALLOWED. The ELSE arm prints nothing, same as OLM, so
-  // the invented "Access denied." is gone from here too.
+  // RETURN RESULT_NOT_ALLOWED. The ELSE arm prints nothing, same as OLM: the
+  // refusal travels out as a result code and the dispatcher speaks.
   if (!checkSecurity(session.user, ACSPermission.QUIET_NODE)) {
     console.warn(
       `[OLM] RESULT_NOT_ALLOWED: ${session.user?.username ?? '<none>'} ` +
@@ -442,7 +452,7 @@ console.log('🔇 [OLM] handleQuietCommand called');
       'Grant it in Access/ACS.<level>.info.'
     );
     session.subState = LoggedOnSubState.DISPLAY_MENU;
-    return;
+    return RESULT_NOT_ALLOWED;
   }
 
   // express.e:25507 - Toggle quiet flag

@@ -7,6 +7,8 @@
 
 import { BBSSession } from '../index';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
+import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../constants/command-results';
+import { higherAccess } from '../utils/error-handling.util';
 import { EnvStat } from '../constants/env-codes';
 import { validateFilename, checkForFile } from '../utils/file-upload.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
@@ -4212,13 +4214,18 @@ console.log(' In PROCESS_COMMAND state, executing command:', session.commandText
         // Express.e:28244-28256 - Command priority: SysCommand  BbsCommand  InternalCommand
         const result = await processCommand(socket, session, command, params);
         if (result === 'NOT_ALLOWED') {
-          // express.e:28644-28648: higherAccess() emits the message THEN
-          // the main loop sets menuPause:=TRUE and subState:=DISPLAY_MENU.
+          // express.e:28647-28648 - menuPause:=TRUE, subState:=DISPLAY_MENU.
           // Audit B-4 flagged the previous shape (DISPLAY_CONF_BULL with
           // menuPause=false) — that dropped the user back at the
           // conference bulletin instead of the menu, and skipped the
           // menu pause that prevents prompt clobber.
-          socket.emit('ansi-output', '\r\nCommand requires higher access.\r\n');
+          //
+          // NO MESSAGE HERE. express.e's main loop (28646) discards
+          // processCommand's result and prints nothing; higherAccess() is
+          // called by whichever tier refused - express.e:4705 for a
+          // SYSCMD/BBSCMD door, express.e:28400 for an internal command.
+          // This line used to emit it as well, so a refused door said
+          // "Command requires higher access." twice: once per tier.
           session.menuPause = true;
           session.subState = LoggedOnSubState.DISPLAY_MENU;
           return;
@@ -4372,7 +4379,7 @@ export async function runBbsCommand(socket: any, session: BBSSession, command: s
 // allowSyscmd=FALSE matches express.e default: SYSCMD is never searched for interactive
 // user menu input. Pass allowSyscmd=TRUE only for internal BBS system calls (batch
 // scripts, AREXX, door callbacks, ~CC_ MCI codes) — express.e:28249.
-export async function processCommand(socket: any, session: BBSSession, command: string, params: string, allowSyscmd: boolean = false): Promise<string> {
+export async function processCommand(socket: any, session: BBSSession, command: string, params: string, allowSyscmd: boolean = false, privcmd: boolean = false): Promise<string> {
   // Ignore command processing if no longer logged on (e.g., after logoff)
   if (session.state !== BBSState.LOGGEDON) {
     return 'IGNORED';
@@ -4460,8 +4467,13 @@ console.log(`[CommandPriority] J with numeric param "${trimmedParams}" - using i
   const widthGateRefused = () => session.widthGateFallThrough === 'REFUSED';
   const runInternalTier = async (): Promise<string> => {
     reportCommand();
-    await processBBSCommand(socket, session, command, params);
-    return 'SUCCESS';
+    // express.e:28256 - `ENDPROC processInternalCommand(cmdcode,cmdparams)`:
+    // processCommand hands the internal tier's result straight back to its
+    // caller. RESULT_NOT_ALLOWED has already spoken for itself inside
+    // processBBSCommand (express.e:28400); this only carries the outcome so
+    // the PROCESS_COMMAND loop can pause the menu.
+    const res = await processBBSCommand(socket, session, command, params, privcmd);
+    return res === RESULT_NOT_ALLOWED ? 'NOT_ALLOWED' : 'SUCCESS';
   };
 
   // Both answers are armed, because the gate cannot work either out for
@@ -4517,8 +4529,59 @@ console.log('[CommandPriority] Trying as InternalCommand');
   }
 }
 
-// Process BBS commands (processInternalCommand equivalent)
-export async function processBBSCommand(socket: any, session: BBSSession, command: string, params: string = '') {
+/**
+ * The internal command tier - express.e:28285-28402 processInternalCommand().
+ *
+ * express.e splits this into a body and a tail, and so does this port:
+ *
+ *   PROC processInternalCommand(cmdcode,cmdparams,privcmd=FALSE)
+ *     ...res := internalCommandXXX(...)...          <- dispatchInternalCommand
+ *     IF ((res=RESULT_NOT_ALLOWED) AND (privcmd=FALSE)) THEN higherAccess()
+ *   ENDPROC res                                     <- express.e:28400
+ *
+ * The tail is the whole point. Not one internalCommandXXX prints anything
+ * when it refuses - they are all a bare
+ * `IF checkSecurity(...)=FALSE THEN RETURN RESULT_NOT_ALLOWED` - so the
+ * caller's "Command requires higher access." comes from here, once, whichever
+ * internal command was refused. Before this existed the switch returned
+ * `void`, RESULT_NOT_ALLOWED had nowhere to go, and eight handlers invented
+ * their own "Permission denied." / "Access denied." instead.
+ *
+ * `privcmd` is express.e's suppression flag: TRUE when the command was NOT
+ * typed by the user. `session.executingScreenCommand` (a ~CC_ / ~XC_ / ~XI
+ * screen command) is the same condition and is folded in, which is also what
+ * gates express.e:28397's "No such command!!" at the bottom of the switch.
+ * It matters beyond tidiness: a hidden sysop command fired from a screen or a
+ * door must not answer an ordinary caller with "Command requires higher
+ * access.", because that answer tells him the command exists.
+ *
+ * @returns RESULT_NOT_ALLOWED if the command refused the caller, else void.
+ */
+export async function processBBSCommand(
+  socket: any,
+  session: BBSSession,
+  command: string,
+  params: string = '',
+  privcmd: boolean = false
+): Promise<InternalCommandResult> {
+  const res = await dispatchInternalCommand(socket, session, command, params);
+
+  // express.e:28400. The message and nothing else: `menuPause` and the return
+  // to DISPLAY_MENU stay in the PROCESS_COMMAND loop (express.e:28647-28648),
+  // which runs for every command however it ended.
+  if (res === RESULT_NOT_ALLOWED && !(privcmd || session.executingScreenCommand)) {
+    higherAccess(socket);
+  }
+
+  return res;
+}
+
+async function dispatchInternalCommand(
+  socket: any,
+  session: BBSSession,
+  command: string,
+  params: string = ''
+): Promise<InternalCommandResult> {
   // Real AmiExpress prints command responses inline (no clear-between-commands).
   // We previously emitted a 30-line "soft clear" here so prior content scrolled
   // into xterm.js scrollback before the next response — but that left a column
@@ -4539,8 +4602,9 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
     case 'DB': // Download Batch - Download all flagged files
       const { BatchDownloadHandler } = require('./transfer/batch-download.handler');
-      await BatchDownloadHandler.handleBatchDownload(socket, session);
-      return;
+      // express.e's `res:=internalCommandXXX(...)` - the refusal travels out
+      // as a result code and processBBSCommand prints it once (28400).
+      return await BatchDownloadHandler.handleBatchDownload(socket, session);
 
     case 'U': // Upload File(s) (internalCommandU) - express.e:25646-25658
       handleUploadCommand(socket, session);
@@ -4584,8 +4648,8 @@ export async function processBBSCommand(socket: any, session: BBSSession, comman
 
     case 'OLM': // Online Message (internalCommandOLM) - express.e:25406-25503
       const { handleOlmCommand: handleOlm } = require('./transfer/olm.handler');
-      await handleOlm(socket, session, params);
-      return;
+      // express.e:28359 - `res:=internalCommandOLM(cmdparams)`
+      return await handleOlm(socket, session, params);
 
     case 'LIVECHAT': // Modern Real-Time Internode Chat (Enhancement)
 console.log(' BEFORE calling handleLiveChatCommand, params:', params);
@@ -4605,8 +4669,8 @@ console.error(' ERROR in handleLiveChatCommand:', error);
 
     case 'Q': // Quiet Mode / Block OLM (internalCommandQ) - express.e:25505-25515
       const { handleQuietCommand } = require('./transfer/olm.handler');
-      await handleQuietCommand(socket, session);
-      return;
+      // express.e:28361 - `res:=internalCommandQ()`
+      return await handleQuietCommand(socket, session);
 
     case 'RL': // RELOGON (internalCommandRL) - express.e:25534-25539
       handleRelogonCommand(socket, session, params);
@@ -4622,13 +4686,13 @@ console.error(' ERROR in handleLiveChatCommand:', error);
 
     case 'V': // View a Text File (internalCommandV) - express.e:25675-25687
       const { ViewFileHandler } = require('./content/view-file.handler');
-      await ViewFileHandler.handleViewFileCommand(socket, session, params);
-      return;
+      // express.e:28373 - `res:=internalCommandV(cmdcode,cmdparams)`
+      return await ViewFileHandler.handleViewFileCommand(socket, session, params);
 
     case 'VS': // View Statistics - Same as V command (internalCommandV) - express.e:28376
       const { ViewFileHandler: ViewFileHandler2 } = require('./content/view-file.handler');
-      await ViewFileHandler2.handleViewFileCommand(socket, session, params);
-      return;
+      // express.e:28377 - `res:=internalCommandV(cmdcode,cmdparams)`
+      return await ViewFileHandler2.handleViewFileCommand(socket, session, params);
 
     case 'VO': // Voting Booth (internalCommandVO) - express.e:25700-25710
       await handleVotingBoothCommand(socket, session);
@@ -4658,8 +4722,8 @@ console.error(' ERROR in handleLiveChatCommand:', error);
 
     case 'Z': // Zippy Text Search (internalCommandZ) - express.e:26123-26213
       const { ZippySearchHandler } = require('./content/zippy-search.handler');
-      await ZippySearchHandler.handleZippySearchCommand(socket, session, params);
-      return;
+      // express.e:28389 - `res:=internalCommandZ(cmdparams)`
+      return await ZippySearchHandler.handleZippySearchCommand(socket, session, params);
 
     case 'ZOOM': // Zoo Mail (internalCommandZOOM) - express.e:26215-26240
       await handleZoomCommand(socket, session);
@@ -4670,8 +4734,8 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       return;
 
     case 'A': // Alter Flags (file flagging) (internalCommandA) - express.e:24601-24605
-      await handleAlterFlagsCommand(socket, session, params);
-      return;
+      // express.e:28333 - `res:=internalCommandA(cmdparams)`
+      return await handleAlterFlagsCommand(socket, session, params);
 
     case 'E': // Enter Message (internalCommandE) - express.e:24860-24872
       handleEnterMessageFullCommand(socket, session, params);
@@ -4682,12 +4746,12 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       return;
 
     case '<': // Previous Conference (internalCommandLT) - express.e:24529-24546
-      await handlePreviousConferenceCommand(socket, session);
-      return;
+      // express.e:28323 - `res:=internalCommandLT()`
+      return await handlePreviousConferenceCommand(socket, session);
 
     case '>': // Next Conference (internalCommandGT) - express.e:24548-24564
-      await handleNextConferenceCommand(socket, session);
-      return;
+      // express.e:28327 - `res:=internalCommandGT()`
+      return await handleNextConferenceCommand(socket, session);
 
     case '<<': // Previous Message Base (internalCommandLT2) - express.e:24566-24578
       await handlePreviousMessageBaseCommand(socket, session);
