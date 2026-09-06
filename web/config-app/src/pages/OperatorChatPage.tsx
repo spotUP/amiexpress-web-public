@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { MessageSquare, Clock, User, Hash, Terminal } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { OperatorChatTerminal } from '../components/OperatorChatTerminal';

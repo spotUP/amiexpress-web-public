@@ -36,6 +36,12 @@ interface OperatorChatConfig {
   groqApiKey: string;
   geminiApiKey: string;
   openRouterApiKey: string;
+  pushoverUserKey: string;
+  pushoverAppToken: string;
+  gotifyUrl: string;
+  gotifyAppToken: string;
+  ntfyTopic: string;
+  ntfyUrl: string;
   botTypingSpeed: number;
   botTypoProbability: number;
   botThinkTime: number;

@@ -998,7 +998,10 @@ class ApiClient {
 
   // Admin Permissions
   async getAdminPermissions() {
-    return this.request<{ perms: Record<string, number>; sections: Array<{ key: string; label: string }> }>(
+    return this.request<{
+      perms: Record<string, number>;
+      sections: Array<{ key: string; label: string; defaultMinLevel: number }>;
+    }>(
       `${API_BASE}/admin-permissions`
     );
   }

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '../contexts/AuthContext';
 import { apiClient } from '../api/client';
 import { SkeletonRows } from '../components/ui/states';
 
@@ -10,7 +9,6 @@ interface SectionInfo {
 }
 
 export function AdminRolesPage() {
-  const { secLevel } = useAuth();
   const [perms, setPerms] = useState<Record<string, number> | null>(null);
   const [sections, setSections] = useState<SectionInfo[]>([]);
   const [loading, setLoading] = useState(true);
