@@ -59,8 +59,16 @@ console.log('[OLM] handleOlmCommand called with params:', params);
 
   // express.e:25416 - Check security ACS_OLM and multinode enabled
   // IF((checkSecurity(ACS_OLM))=FALSE) OR (sopt.toggles[TOGGLES_MULTICOM]=FALSE) THEN RETURN RESULT_NOT_ALLOWED
+  //
+  // Nothing is printed. express.e:25416 is a bare RETURN: the refusal travels
+  // out as RESULT_NOT_ALLOWED and internalCommandOLM emits not one byte. The
+  // "Access denied." this port used to send here was invented, and it is the
+  // string the sysop reported seeing. A refused caller now sees nothing.
   if (!checkSecurity(session.user, ACSPermission.OLM)) {
-    socket.emit('ansi-output', '\r\n\x1b[31mAccess denied.\x1b[0m\r\n');
+    console.warn(
+      `[OLM] RESULT_NOT_ALLOWED: ${session.user.username} (level ${session.user.secLevel}) ` +
+      'lacks ACS.OLM. Grant it in Access/ACS.<level>.info.'
+    );
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
@@ -424,9 +432,15 @@ console.error('[OLM] Error updating blockOLM in database:', err);
 export async function handleQuietCommand(socket: Socket, session: BBSSession) {
 console.log('🔇 [OLM] handleQuietCommand called');
 
-  // express.e:25506 - Check security
+  // express.e:25505/25513-25514 - IF checkSecurity(ACS_QUIET_NODE) ... ELSE
+  // RETURN RESULT_NOT_ALLOWED. The ELSE arm prints nothing, same as OLM, so
+  // the invented "Access denied." is gone from here too.
   if (!checkSecurity(session.user, ACSPermission.QUIET_NODE)) {
-    socket.emit('ansi-output', '\r\n\x1b[31mAccess denied.\x1b[0m\r\n');
+    console.warn(
+      `[OLM] RESULT_NOT_ALLOWED: ${session.user?.username ?? '<none>'} ` +
+      `(level ${session.user?.secLevel ?? '?'}) lacks ACS.QUIET_NODE. ` +
+      'Grant it in Access/ACS.<level>.info.'
+    );
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }

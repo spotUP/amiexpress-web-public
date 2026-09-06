@@ -11,9 +11,12 @@
  *      tier's gate (`command-execution.handler.ts` runCommand, express.e:4700)
  *      and it compares the user's secLevel against 20. Failing it prints
  *      "Command requires higher access." - a DIFFERENT string.
- *   2. `handleOlmCommand` (olm.handler.ts:63, express.e:25416) gates on
+ *   2. `handleOlmCommand` (olm.handler.ts, express.e:25416) gates on
  *      `checkSecurity(ACS_OLM)`, which resolves through `Access/ACS.<level>.info`.
- *      Failing THAT prints "Access denied." - the string he saw.
+ *      Failing THAT used to print "Access denied." - the string he saw. That
+ *      string was invented by this port; express.e:25416 returns
+ *      RESULT_NOT_ALLOWED and the handler prints nothing at all, so it is gone
+ *      and a refused caller now sees NOTHING from the handler.
  *
  * So the denial is gate 2, and gate 2 reads the board's ACS tooltype files.
  * These tests pin that mechanism from both ends so the next person does not
@@ -32,12 +35,22 @@
  * The fixtures are the board's OWN `Access/*.info` bytes, copied to a temp
  * board and edited there. Nothing under the live `Access/` is written.
  *
- * The answer this file records: the grant is MISSING DATA, not a bug. No
- * `Access/ACS.<level>.info` on this board carries `ACS.OLM` at any level -
- * 10, 20, 50, 60 or 255 - so the internal OLM command refuses every caller,
- * the level-255 account included. `ACS.QUIET_NODE` ships commented out at
- * 10/20/50/60 and absent at 255, so `Q` is refused the same way. Adding the
- * grants is the sysop's call and was deliberately NOT made here.
+ * The answer this file records: the grant was MISSING DATA, not a bug. No
+ * `Access/ACS.<level>.info` on this board carried `ACS.OLM` at any level -
+ * 10, 20, 50, 60 or 255 - so the internal OLM command refused every caller,
+ * the level-255 account included. `ACS.QUIET_NODE` shipped commented out at
+ * 10/20/50/60 and absent at 255, so `Q` was refused the same way.
+ *
+ * The sysop has since granted both at HIS two levels only - 20 (`spot`) and
+ * 255 (`sysop`) - and the last describe block pins that against the LIVE
+ * `Access/` bytes, including the deliberate absence at 10, 50 and 60.
+ *
+ * A refusal is now SILENT, which means "allowed" and "refused" can no longer
+ * be told apart by looking for a denial string. Every test below therefore
+ * asserts the positive evidence of the command having RUN (the OLM banner and
+ * node prompt, the Quiet Mode line, the toggled flag) or the complete absence
+ * of output. Never `not.toContain('Access denied')` on its own - that passes
+ * on a refusal too.
  */
 
 import * as fs from 'fs';
@@ -257,7 +270,6 @@ describe('the sysop can open OLM', () => {
     const session: any = { user: makeUser(top), nodeId: 1, subState: LoggedOnSubState.DISPLAY_MENU };
     await handleOlmCommand(cap.socket, session, '');
 
-    expect(cap.text()).not.toContain('Access denied');
     expect(cap.text()).toContain('OLM MESSAGE SYSTEM');
     expect(cap.text()).toContain('OLM to Which Node?');
     expect(session.subState).toBe(LoggedOnSubState.OLM_NODE_INPUT);
@@ -284,9 +296,10 @@ describe('the sysop can open OLM', () => {
     const session: any = { user: makeUser(top), nodeId: 1, subState: LoggedOnSubState.DISPLAY_MENU };
     await handleOlmCommand(cap.socket, session, '');
 
-    // express.e:25416 RESULT_NOT_ALLOWED. This is the string the sysop saw.
-    expect(cap.text()).toContain('Access denied');
-    expect(cap.text()).not.toContain('OLM MESSAGE SYSTEM');
+    // express.e:25416 - RETURN RESULT_NOT_ALLOWED, and internalCommandOLM
+    // prints nothing on the way out. The refused caller sees NOTHING: not
+    // "Access denied." (this port invented that), not a banner, not a prompt.
+    expect(cap.text()).toBe('');
     expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
   });
 
@@ -311,8 +324,11 @@ describe('the sysop can open OLM', () => {
     const denied = captureSocket();
     const deniedSession: any = { user: makeUser(top), nodeId: 1, subState: LoggedOnSubState.DISPLAY_MENU, blockOLM: false };
     await handleQuietCommand(denied.socket, deniedSession);
-    expect(denied.text()).toContain('Access denied');
+    // express.e:25513-25514 - the ELSE arm of internalCommandQ is a bare
+    // RETURN RESULT_NOT_ALLOWED. Silent, exactly like OLM.
+    expect(denied.text()).toBe('');
     expect(deniedSession.blockOLM).toBe(false);
+    expect(deniedSession.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
 
     // Granted - uncommenting the same line is the whole data change.
     info = parseInfoFile(acsFile);
@@ -325,8 +341,109 @@ describe('the sysop can open OLM', () => {
     const allowed = captureSocket();
     const allowedSession: any = { user: makeUser(top), nodeId: 1, subState: LoggedOnSubState.DISPLAY_MENU, blockOLM: false };
     await handleQuietCommand(allowed.socket, allowedSession);
-    expect(allowed.text()).not.toContain('Access denied');
     expect(allowed.text()).toContain('Quiet Mode On');
     expect(allowedSession.blockOLM).toBe(true);
+  });
+});
+
+/**
+ * The grant itself, proven against the LIVE `Access/` directory.
+ *
+ * `Access/ACS.20.info` and `Access/ACS.255.info` were edited through
+ * `applyTooltypes` so the sysop's two accounts (`spot` at 20, `sysop` at 255)
+ * carry `ACS.OLM` and `ACS.QUIET_NODE`. On 20 the QUIET_NODE entry existed but
+ * was PARENTHESISED, which reads as a denial, so uncommenting it was a real
+ * edit rather than a no-op.
+ *
+ * Levels 10, 50 and 60 were deliberately left alone: whether ordinary callers
+ * may send online messages is board policy, not a bug fix. That absence is
+ * pinned here too, because "grant it for the sysop" is only correct if it did
+ * NOT leak to everybody.
+ *
+ * These read the real files, never a temp copy - a grant proven by re-reading
+ * the file the test just wrote proves nothing about the board.
+ */
+describe("the sysop's own two levels carry the OLM grants", () => {
+  beforeEach(() => {
+    resetAcsLoader();
+    setACSConfig({ overrideDefaultAccess: false, userSpecificAccess: false });
+    setOlmDependencies({
+      db: null,
+      sessions: new Map(),
+      io: null,
+      setEnvStat: () => { /* no STATS@ file from a test */ },
+      config: { get: (k: string) => (k === 'olmEnabled' ? true : undefined) },
+    });
+    loadAcsAccessFiles(BOARD_ROOT);
+  });
+
+  afterAll(() => resetAcsLoader());
+
+  it.each([20, 255])('grants ACS.OLM and ACS.QUIET_NODE at level %i', level => {
+    const bytes = readTooltypesFromBytes(path.join(LIVE_ACCESS, `ACS.${level}.info`));
+
+    // Independent byte read first: the tooltypes are present AND live, not
+    // parenthesised and not `=NO`.
+    expect(grantedInBytes(bytes, 'ACS.OLM')).toBe(true);
+    expect(grantedInBytes(bytes, 'ACS.QUIET_NODE')).toBe(true);
+
+    // Then the production lookup, through findAcsLevel, must agree.
+    expect(findAcsLevel(level)).toBe(level);
+    expect(checkSecurity(makeUser(level), ACSPermission.OLM)).toBe(true);
+    expect(checkSecurity(makeUser(level), ACSPermission.QUIET_NODE)).toBe(true);
+  });
+
+  it.each([10, 50, 60])('leaves level %i without either permission', level => {
+    const bytes = readTooltypesFromBytes(path.join(LIVE_ACCESS, `ACS.${level}.info`));
+    expect(grantedInBytes(bytes, 'ACS.OLM')).toBe(false);
+    expect(grantedInBytes(bytes, 'ACS.QUIET_NODE')).toBe(false);
+    expect(checkSecurity(makeUser(level), ACSPermission.OLM)).toBe(false);
+    expect(checkSecurity(makeUser(level), ACSPermission.QUIET_NODE)).toBe(false);
+  });
+
+  it.each([20, 255])('opens the OLM node prompt for a level-%i caller', async level => {
+    const cap = captureSocket();
+    const session: any = { user: makeUser(level), nodeId: 1, subState: LoggedOnSubState.DISPLAY_MENU };
+    await handleOlmCommand(cap.socket, session, '');
+
+    // Positive evidence that the command RAN. A refusal is silent now, so an
+    // absent denial string would prove nothing.
+    expect(cap.text()).toContain('OLM MESSAGE SYSTEM');
+    expect(cap.text()).toContain('OLM to Which Node?');
+    expect(session.subState).toBe(LoggedOnSubState.OLM_NODE_INPUT);
+  });
+
+  it.each([20, 255])('toggles quiet mode for a level-%i caller', async level => {
+    const cap = captureSocket();
+    const session: any = {
+      user: makeUser(level),
+      nodeId: 1,
+      subState: LoggedOnSubState.DISPLAY_MENU,
+      blockOLM: false,
+    };
+    await handleQuietCommand(cap.socket, session);
+
+    expect(cap.text()).toContain('Quiet Mode On');
+    expect(session.blockOLM).toBe(true);
+    expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+  });
+
+  it.each([10, 50, 60])('still refuses a level-%i caller, and does it in silence', async level => {
+    const olm = captureSocket();
+    const olmSession: any = { user: makeUser(level), nodeId: 1, subState: LoggedOnSubState.DISPLAY_MENU };
+    await handleOlmCommand(olm.socket, olmSession, '');
+    expect(olm.text()).toBe('');
+    expect(olmSession.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+
+    const quiet = captureSocket();
+    const quietSession: any = {
+      user: makeUser(level),
+      nodeId: 1,
+      subState: LoggedOnSubState.DISPLAY_MENU,
+      blockOLM: false,
+    };
+    await handleQuietCommand(quiet.socket, quietSession);
+    expect(quiet.text()).toBe('');
+    expect(quietSession.blockOLM).toBe(false);
   });
 });
