@@ -3247,6 +3247,34 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // only way to type on a canvas session, in any orientation.
   useEffect(() => { onSurfaceChange?.(surface); }, [surface, onSurfaceChange]);
 
+  /**
+   * TAB BELONGS TO THE BOARD, not to the browser's focus ring.
+   *
+   * A C64 keyboard has no Tab, so the canvas keymap never emitted one and the
+   * browser was free to move focus to the address bar. It emits one now - a
+   * lobby's panes are walked with it - but the canvas only sees the key while
+   * it HOLDS focus, and a door's own lobby turns game mode off (which is what
+   * otherwise swallows the key at the window). One click anywhere and Tab
+   * left the session: "tab switches to the browser url line it doesnt seem to
+   * be trapped by petscii mode at all".
+   *
+   * Capture phase, on window, for the life of the canvas surface: refuse the
+   * browser's default and put the byte on the wire ourselves. Modified
+   * chords (Ctrl+Tab, Alt+Tab, Cmd+Tab) are the OS's and are left alone.
+   */
+  useEffect(() => {
+    if (surface !== 'canvas') return;
+    const trapTab = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      event.preventDefault();
+      event.stopPropagation();
+      processInputKeyRef.current('\t');
+    };
+    window.addEventListener('keydown', trapTab, true);
+    return () => window.removeEventListener('keydown', trapTab, true);
+  }, [surface]);
+
   const wasCanvasRef = useRef<boolean>(false);
   useEffect(() => {
     if (surface === 'canvas') { wasCanvasRef.current = true; return; }

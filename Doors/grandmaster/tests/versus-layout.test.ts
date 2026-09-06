@@ -13,7 +13,7 @@
 import assert from 'assert';
 import {
   versusLayout, boardLeft, boardPosition, widthForFullBoards,
-  LEFT_PANEL_COLS, OPPONENT_BOARD_COLS, OPPONENT_BOARD_ROWS, VS_INFO_COLS,
+  LEFT_PANEL_COLS, OPPONENT_BOARD_COLS, OPPONENT_BOARD_ROWS, VS_INFO_COLS, MINIMAP_MIN_COLS,
 } from '../ui/versus-layout';
 
 export async function eightyColumnsShowsABoardAndTheStandings(): Promise<void> {
@@ -69,16 +69,28 @@ export async function humansGetTheBoardsWhileTheFieldIsSmall(): Promise<void> {
   assert.strictEqual(veryWide.fullBoards, 8);
   assert.strictEqual(veryWide.minimaps, 0);
 
-  // A genuinely small field keeps the old all-or-nothing rule: five
-  // opponents at 80 columns are five tiles, not one board and four tiles.
+  // A genuinely small field with PEOPLE in it keeps the all-or-nothing rule:
+  // five opponents at 80 columns are five tiles, not one board and four
+  // tiles, because a full board would read as "this is the threat". A field
+  // of bots takes the board instead - see aCpuBattleFillsTheRoomItHas.
   const small = versusLayout(80, 2, 3);
   assert.strictEqual(small.fullBoards, 0);
   assert.strictEqual(small.minimaps, 5);
 }
 
-export async function anAllBotMatchStillBehavesAsItDidAtEighty(): Promise<void> {
-  // CPU Battle: no humans among the opponents at all.
-  assert.strictEqual(versusLayout(80, 0, 3).fullBoards, 0);
+/**
+ * A CPU battle no longer waits for room for EVERY board.
+ *
+ * This asserted `fullBoards === 0` at 80 columns - the all-or-nothing rule
+ * applied to bots as well as people. The sysop asked for the opposite once
+ * they saw it: "we have room for one full cpu playfield in ansimode for the
+ * cpu battle, add it and keep the remaining ones as minimaps" (2026-09-06).
+ * The rule still holds for humans, where a full board says "this is the
+ * threat"; a bot field carries no such reading.
+ */
+export async function aCpuBattleFillsTheRoomItHas(): Promise<void> {
+  assert.strictEqual(versusLayout(80, 0, 3).fullBoards, 1, 'the one board that fits is drawn');
+  assert.strictEqual(versusLayout(80, 0, 3).minimaps, 2, 'the rest are miniatures beside it');
   assert.strictEqual(versusLayout(103, 0, 3).fullBoards, 3, 'room means boards, human or not');
 }
 
@@ -205,12 +217,13 @@ export async function eightyColumnsPutsTheStandingsBesideOneBoard(): Promise<voi
 }
 
 export async function aSmallFieldIsNeverCascaded(): Promise<void> {
-  // Three opponents at 102 columns is the all-or-nothing case, and it stays
-  // that way: two boards and a miniature would read as "these two are the
-  // threats". The cascade is for a field nobody could draw in full.
+  // Three BOTS at 102 columns now take the two boards that fit and miniature
+  // the third (2026-09-06); what this test is about is that the CASCADE does
+  // not fire for a field this small - no standings list, whatever the boards
+  // do. Three PEOPLE still get all-or-nothing, asserted in itIsAllOrNothing.
   const three = versusLayout(102, 0, 3);
-  assert.strictEqual(three.fullBoards, 0);
-  assert.strictEqual(three.listed, 0);
+  assert.strictEqual(three.listed, 0, 'a field of three is never cascaded');
+  assert.strictEqual(versusLayout(102, 3).fullBoards, 0, 'and humans keep all-or-nothing');
 
   const five = versusLayout(160, 0, 5);
   assert.strictEqual(five.fullBoards, 5, 'five still fit as boards at 160');
@@ -275,4 +288,53 @@ export async function aShortWindowIsExactlyWhatItWas(): Promise<void> {
   assert.strictEqual(classic.boardRows, 1);
   assert.strictEqual(classic.fullBoards, 1);
   assert.strictEqual(classic.panelHeight, OPPONENT_BOARD_ROWS);
+}
+
+/**
+ * A CPU battle spends the room it has: boards first, miniatures for the rest.
+ *
+ * The all-or-nothing rule this file opens with is about HUMANS - two people
+ * full and a third in miniature says something false about who the threats
+ * are. A field of bots has no such reading, and refusing the one board that
+ * DID fit left forty columns of black beside three miniature bars on an
+ * ordinary 80-column screen: "we have room for one full cpu playfield in
+ * ansimode for the cpu battle, add it and keep the remaining ones as
+ * minimaps" (2026-09-06).
+ */
+export async function aCpuBattleShowsTheBoardThatFitsAndMiniaturesTheRest(): Promise<void> {
+  const l = versusLayout(80, 0, 3);
+
+  assert.strictEqual(l.fullBoards, 1, 'one full board fits beside the player panel at 80 columns');
+  assert.strictEqual(l.minimaps, 2, 'and the other two are miniatures');
+  assert.strictEqual(l.minimapLeft, LEFT_PANEL_COLS + OPPONENT_BOARD_COLS,
+    'the miniatures start where the board ends');
+  assert.strictEqual(l.minimapLeft + l.minimapWidth, 80,
+    'and they use the rest of the screen rather than leaving it black');
+}
+
+/** Wider screens take more boards; the miniatures shrink to what is left. */
+export async function aWiderScreenTakesMoreCpuBoards(): Promise<void> {
+  assert.strictEqual(versusLayout(132, 0, 3).fullBoards, 3, 'all three fit at 132');
+  assert.strictEqual(versusLayout(132, 0, 3).minimaps, 0);
+
+  const middle = versusLayout(100, 0, 3);
+  assert.strictEqual(middle.fullBoards, 2, 'two boards fit at 100');
+  assert.strictEqual(middle.minimaps, 1);
+  assert.ok(middle.minimapWidth >= MINIMAP_MIN_COLS, 'the miniature has room to be drawn');
+}
+
+/** A screen too narrow for any board still gets the miniature grid it had. */
+export async function aNarrowScreenStillMiniaturesEveryone(): Promise<void> {
+  const l = versusLayout(40, 0, 3);
+  assert.strictEqual(l.fullBoards, 0);
+  assert.strictEqual(l.minimaps, 3);
+}
+
+/**
+ * And a battle royale is still the cascade's. One board beside ninety-nine
+ * bars is the shape the cascade exists to replace.
+ */
+export async function aLargeBotFieldIsStillTheCascade(): Promise<void> {
+  const royale = versusLayout(80, 0, 12);
+  assert.strictEqual(royale.minimaps, 0, 'the cascade decides a field this size, not the board rule');
 }

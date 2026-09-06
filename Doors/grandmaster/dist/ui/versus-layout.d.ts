@@ -18,6 +18,14 @@ export declare const OPPONENT_BOARD_COLS = 22;
 /** The 1v1 VS/attack panel beside a single opponent. */
 export declare const VS_INFO_COLS = 21;
 /**
+ * The narrowest a miniature grid can be and still say anything.
+ *
+ * A CPU battle fills the room with boards and leaves the rest in miniature;
+ * below this there is nowhere to draw the miniatures, so the last board is
+ * given back instead.
+ */
+export declare const MINIMAP_MIN_COLS = 8;
+/**
  * The cascade: boards, then bars, then a leaderboard.
  *
  * A 99-player battle royale can never be all boards - 98 of them is 2,156

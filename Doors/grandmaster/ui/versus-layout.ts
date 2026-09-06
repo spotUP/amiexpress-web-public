@@ -22,6 +22,15 @@ export const OPPONENT_BOARD_COLS = 22;
 export const VS_INFO_COLS = 21;
 
 /**
+ * The narrowest a miniature grid can be and still say anything.
+ *
+ * A CPU battle fills the room with boards and leaves the rest in miniature;
+ * below this there is nowhere to draw the miniatures, so the last board is
+ * given back instead.
+ */
+export const MINIMAP_MIN_COLS = 8;
+
+/**
  * The cascade: boards, then bars, then a leaderboard.
  *
  * A 99-player battle royale can never be all boards - 98 of them is 2,156
@@ -159,6 +168,29 @@ export function versusLayout(
 
   if (fits(total)) {
     return grid(total, total === 1 && available >= OPPONENT_BOARD_COLS + VS_INFO_COLS);
+  }
+
+  // A FIELD OF BOTS TAKES WHAT FITS: boards first, miniatures for the rest.
+  //
+  // The all-or-nothing rule above is about HUMANS - two people full and a
+  // third in miniature says something false about who the threats are. A CPU
+  // battle has no such reading, and refusing the one board that does fit left
+  // forty columns of black beside three miniature bars on an 80-column
+  // screen: "we have room for one full cpu playfield in ansimode for the cpu
+  // battle, add it and keep the remaining ones as minimaps" (2026-09-06).
+  //
+  // The last board is given up if taking it would leave the miniatures no
+  // room to be drawn in - a board and an invisible remainder is worse than a
+  // board fewer and a legible one.
+  // Past the cascade's threshold the cascade decides: a hundred bots is what
+  // it was written for, and one board beside ninety-nine bars is the shape it
+  // exists to replace.
+  if (humanCount === 0 && total < CASCADE_MIN_OPPONENTS && fits(1)) {
+    let boards = Math.min(total, Math.floor(available / OPPONENT_BOARD_COLS));
+    const roomLeft = (n: number) => screenWidth - (LEFT_PANEL_COLS + n * OPPONENT_BOARD_COLS);
+    while (boards > 1 && total - boards > 0 && roomLeft(boards) < MINIMAP_MIN_COLS) boards -= 1;
+    if (total - boards > 0 && roomLeft(boards) < MINIMAP_MIN_COLS) boards = Math.max(0, boards - 1);
+    if (boards > 0) return grid(boards, total === 1 && available >= OPPONENT_BOARD_COLS + VS_INFO_COLS);
   }
 
   // Humans before bots, but only while the field is small enough for the

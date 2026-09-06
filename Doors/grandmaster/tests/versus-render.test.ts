@@ -96,17 +96,34 @@ export async function eightyColumnsStillDrawsTheClassicBoardAndVsPanel(): Promis
   } finally { h.destroy(); }
 }
 
-export async function eightyColumnsStillSendsACpuBattleToTheGrid(): Promise<void> {
-  // Three bots do not fit as boards in 43 columns, and no human opponent
-  // outranks them - exactly what the screen did by counting.
+/**
+ * A CPU battle at 80 columns: ONE full board, the rest in miniature.
+ *
+ * This asserted "nobody gets a board" - three bots do not all fit in the 43
+ * columns beside the player, so none of them was drawn and the room went
+ * black. The sysop asked for the board that does fit: "we have room for one
+ * full cpu playfield in ansimode for the cpu battle, add it and keep the
+ * remaining ones as minimaps" (2026-09-06). Painted, not merely computed:
+ * the layout said one board before this test did, and the screen still drew
+ * none.
+ */
+export async function eightyColumnsGivesACpuBattleOneBoardAndMiniatures(): Promise<void> {
   const h = harness(80, [bot(1), bot(2), bot(3)]);
   try {
-    assert.strictEqual(h.boards().length, 0, 'nobody gets a board');
-    assert.strictEqual(h.minimap.hidden, false);
-    assert.strictEqual(h.minimap.left, LEFT_PANEL_COLS);
-    assert.strictEqual(h.minimap.width, 80 - LEFT_PANEL_COLS);
+    const boards = h.boards();
+    assert.strictEqual(boards.length, 1, 'the one board that fits is drawn');
+    assert.strictEqual(boards[0].left, LEFT_PANEL_COLS);
+    assert.strictEqual(boards[0].width, OPPONENT_BOARD_COLS);
+
+    assert.strictEqual(h.minimap.hidden, false, 'and the other two are beside it');
+    assert.strictEqual(h.minimap.left, LEFT_PANEL_COLS + OPPONENT_BOARD_COLS);
+    assert.strictEqual(
+      h.minimap.left + h.minimap.width, 80,
+      'the miniatures use the rest of the screen rather than leaving it black',
+    );
     assert.strictEqual(h.info.hidden, true);
-    for (const name of ['BT1', 'BT2', 'BT3']) {
+
+    for (const name of ['BT2', 'BT3']) {
       assert.ok(h.grid().includes(name), `${name} is in the grid`);
     }
   } finally { h.destroy(); }

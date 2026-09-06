@@ -13,7 +13,7 @@
  * widgets and timers, and the interesting decision here is arithmetic.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CASCADE_MIN_OPPONENTS = exports.MIN_LIST_ROWS = exports.MAX_BUCKETS = exports.MIN_LIST_COLS = exports.LIST_COLUMN_COLS = exports.MIN_BUCKETS_COLS = exports.BUCKET_SLOT_COLS = exports.STATS_ROWS = exports.BOARD_TOP = exports.OPPONENT_BOARD_ROWS = exports.CASCADE_MAX_BOARDS = exports.VS_INFO_COLS = exports.OPPONENT_BOARD_COLS = exports.LEFT_PANEL_COLS = void 0;
+exports.CASCADE_MIN_OPPONENTS = exports.MIN_LIST_ROWS = exports.MAX_BUCKETS = exports.MIN_LIST_COLS = exports.LIST_COLUMN_COLS = exports.MIN_BUCKETS_COLS = exports.BUCKET_SLOT_COLS = exports.STATS_ROWS = exports.BOARD_TOP = exports.OPPONENT_BOARD_ROWS = exports.CASCADE_MAX_BOARDS = exports.MINIMAP_MIN_COLS = exports.VS_INFO_COLS = exports.OPPONENT_BOARD_COLS = exports.LEFT_PANEL_COLS = void 0;
 exports.versusLayout = versusLayout;
 exports.boardLeft = boardLeft;
 exports.boardPosition = boardPosition;
@@ -24,6 +24,14 @@ exports.LEFT_PANEL_COLS = 37;
 exports.OPPONENT_BOARD_COLS = 22;
 /** The 1v1 VS/attack panel beside a single opponent. */
 exports.VS_INFO_COLS = 21;
+/**
+ * The narrowest a miniature grid can be and still say anything.
+ *
+ * A CPU battle fills the room with boards and leaves the rest in miniature;
+ * below this there is nowhere to draw the miniatures, so the last board is
+ * given back instead.
+ */
+exports.MINIMAP_MIN_COLS = 8;
 /**
  * The cascade: boards, then bars, then a leaderboard.
  *
@@ -120,6 +128,31 @@ function versusLayout(screenWidth, humanCount, botCount = 0, screenHeight = 25) 
     };
     if (fits(total)) {
         return grid(total, total === 1 && available >= exports.OPPONENT_BOARD_COLS + exports.VS_INFO_COLS);
+    }
+    // A FIELD OF BOTS TAKES WHAT FITS: boards first, miniatures for the rest.
+    //
+    // The all-or-nothing rule above is about HUMANS - two people full and a
+    // third in miniature says something false about who the threats are. A CPU
+    // battle has no such reading, and refusing the one board that does fit left
+    // forty columns of black beside three miniature bars on an 80-column
+    // screen: "we have room for one full cpu playfield in ansimode for the cpu
+    // battle, add it and keep the remaining ones as minimaps" (2026-09-06).
+    //
+    // The last board is given up if taking it would leave the miniatures no
+    // room to be drawn in - a board and an invisible remainder is worse than a
+    // board fewer and a legible one.
+    // Past the cascade's threshold the cascade decides: a hundred bots is what
+    // it was written for, and one board beside ninety-nine bars is the shape it
+    // exists to replace.
+    if (humanCount === 0 && total < exports.CASCADE_MIN_OPPONENTS && fits(1)) {
+        let boards = Math.min(total, Math.floor(available / exports.OPPONENT_BOARD_COLS));
+        const roomLeft = (n) => screenWidth - (exports.LEFT_PANEL_COLS + n * exports.OPPONENT_BOARD_COLS);
+        while (boards > 1 && total - boards > 0 && roomLeft(boards) < exports.MINIMAP_MIN_COLS)
+            boards -= 1;
+        if (total - boards > 0 && roomLeft(boards) < exports.MINIMAP_MIN_COLS)
+            boards = Math.max(0, boards - 1);
+        if (boards > 0)
+            return grid(boards, total === 1 && available >= exports.OPPONENT_BOARD_COLS + exports.VS_INFO_COLS);
     }
     // Humans before bots, but only while the field is small enough for the
     // rest to be miniatures. With one human and a lobby of bots this branch
