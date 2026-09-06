@@ -112,3 +112,90 @@ describe('the cache actually evicts, through a real caller', () => {
     expect(fs.existsSync(oldLocal)).toBe(false);
   });
 });
+
+/**
+ * Gate 2, blocker 2: a file bigger than the cache budget was evicted by its
+ * own fetch. `fetch` stamps `lastUsed` before sweeping, so the new file
+ * normally sorts last and survives - but with a single file over `maxBytes`
+ * the `total <= maxBytes` break never fires, the loop walks the whole list,
+ * and `ensureLocal` returns a path to a file it has just deleted.
+ * `materialise` (remote-download.ts) then statSyncs it and throws ENOENT, so
+ * the file is permanently undownloadable and costs a bucket GET plus egress
+ * on every attempt. Driven through `ensureLocal` and `materialiseRemoteFile`
+ * - the real callers - so reverting `protectPath` in `file-cache.ts` is what
+ * turns these red.
+ */
+describe('a file larger than the whole cache budget', () => {
+  function poolWithBudget(maxBytes: number): { storage: StorageContext; backend: FakeBackend; dir: string } {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cache-oversize-'));
+    const backend = new FakeBackend({ driveNumber: 2 });
+    const volumes = new VolumeSet([volumeState(backend)]);
+    const areas: RemoteArea[] = [
+      { id: 1, conferenceId: 1, dirNumber: 1, path: 'BBS:Conf1/Files/', storageVolume: 2 },
+    ];
+    const cache = new FileCache({ cacheDir: dir, volumes, maxBytes });
+    return { storage: { volumes, cache, names: new NameIndexRegistry(volumes), areas }, backend, dir };
+  }
+
+  it('is still there when ensureLocal hands its path back', async () => {
+    const { storage, backend } = poolWithBudget(1000);
+    await backend.put('Conf1/Files/BIG.LHA', Buffer.alloc(5000, 7));
+
+    const local = await storage.cache.ensureLocal(2, 'Conf1/Files/BIG.LHA');
+
+    expect(fs.existsSync(local)).toBe(true);
+    expect(fs.readFileSync(local).length).toBe(5000);
+  });
+
+  it('survives the whole D-command path, which statSyncs what it is handed', async () => {
+    const { storage, backend } = poolWithBudget(1000);
+    await backend.put('Conf1/Files/BIG.LHA', Buffer.alloc(5000, 7));
+
+    // Before the fix this threw ENOENT out of materialise's statSync.
+    const file = await materialiseRemoteFile('BIG.LHA', 1, storage);
+
+    expect(file).not.toBeNull();
+    expect(fs.existsSync(file!.fullPath)).toBe(true);
+    expect(file!.size).toBe(5000);
+  });
+
+  it('does not become a permanent re-download - the second request is a cache hit', async () => {
+    const { storage, backend } = poolWithBudget(1000);
+    await backend.put('Conf1/Files/BIG.LHA', Buffer.alloc(5000, 7));
+
+    await storage.cache.ensureLocal(2, 'Conf1/Files/BIG.LHA');
+    const getsAfterFirst = backend.gets;
+    await storage.cache.ensureLocal(2, 'Conf1/Files/BIG.LHA');
+
+    expect(backend.gets).toBe(getsAfterFirst);
+  });
+
+  it('still evicts everything ELSE the oversized fetch could reclaim', async () => {
+    const { storage, backend } = poolWithBudget(1000);
+    await backend.put('Conf1/Files/SMALL.LHA', Buffer.alloc(600, 1));
+    await backend.put('Conf1/Files/BIG.LHA', Buffer.alloc(5000, 7));
+
+    const small = await storage.cache.ensureLocal(2, 'Conf1/Files/SMALL.LHA');
+    expect(fs.existsSync(small)).toBe(true);
+    const big = await storage.cache.ensureLocal(2, 'Conf1/Files/BIG.LHA');
+
+    // The protection is scoped to the one file this fetch made, not a
+    // licence to stop sweeping.
+    expect(fs.existsSync(small)).toBe(false);
+    expect(fs.existsSync(big)).toBe(true);
+  });
+
+  it('names the budget, not phantom un-uploaded files, when it cannot shrink', async () => {
+    const { storage, backend } = poolWithBudget(1000);
+    await backend.put('Conf1/Files/BIG.LHA', Buffer.alloc(5000, 7));
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      await storage.cache.ensureLocal(2, 'Conf1/Files/BIG.LHA');
+      const said = warnSpy.mock.calls.map((call) => String(call[0])).join('\n');
+      expect(said).toMatch(/BBS_STORAGE_CACHE_MAX_BYTES/);
+      expect(said).not.toMatch(/have not been uploaded yet/);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+});

@@ -857,8 +857,11 @@ export class FileCache {
     state.egressBytesThisMonth += body.length;
     this.lastUsed.set(path.resolve(local), Date.now());
     // After the rename and the accounting, never before: a sweep must never
-    // see this download as anything but a complete, materialised file.
-    this.maybeSweep(body.length);
+    // see this download as anything but a complete, materialised file. And
+    // never the file this call just made: a single object larger than the
+    // whole budget would otherwise be deleted by its own fetch - see
+    // `evictTo`'s `protectPath`.
+    this.maybeSweep(body.length, local);
     return local;
   }
 
@@ -1141,15 +1144,40 @@ export class FileCache {
    * threshold is a fraction of `maxBytes` (`SWEEP_TRIGGER_FRACTION`) so it
    * scales with the configured budget rather than an arbitrary constant.
    */
-  private maybeSweep(bytesMoved: number): void {
+  private maybeSweep(bytesMoved: number, protectPath?: string): void {
     this.bytesSinceSweep += bytesMoved;
     const threshold = Math.max(1, Math.floor(this.maxBytes * SWEEP_TRIGGER_FRACTION));
     if (this.bytesSinceSweep < threshold) return;
     this.bytesSinceSweep = 0;
-    this.evictTo();
+    this.evictTo(this.maxBytes, protectPath);
   }
 
-  evictTo(maxBytes: number = this.maxBytes): void {
+  /**
+   * Gate 2, blocker 2: `protectPath` is the file the CURRENT fetch just
+   * materialised, and it is never evicted by that fetch's own sweep.
+   *
+   * `fetch` stamps `lastUsed = Date.now()` before it sweeps, so the new file
+   * normally sorts LAST in the ascending-by-`used` order and survives on
+   * recency alone. That collapses for exactly one input: a file bigger than
+   * `maxBytes`. `total <= maxBytes` can never become true, so the loop never
+   * breaks, walks the whole list and unlinks the download it was called to
+   * make room for - `ensureLocal` then hands back a path to a file it has
+   * just deleted, and `materialise` (remote-download.ts) statSyncs it and
+   * throws ENOENT. The file becomes permanently undownloadable and pays a
+   * bucket GET plus egress on every attempt. The trigger is precisely
+   * `filesize > BBS_STORAGE_CACHE_MAX_BYTES`, and a sysop tuning that budget
+   * down on a small VPS is the motivating case for the whole feature.
+   *
+   * Recency is not enough here, and neither is a pin: pins mean "the only
+   * copy of these bytes" (`dirty`), and a fetched object always has its copy
+   * in the bucket, so calling this one pinned would make it look like an
+   * un-uploaded write to every other reader of that record. It is a
+   * caller-scoped exclusion for the length of one sweep, nothing more.
+   *
+   * The over-budget warning below still fires, honestly: the cache really is
+   * over its budget, and now says which of the two reasons applies.
+   */
+  evictTo(maxBytes: number = this.maxBytes, protectPath?: string): void {
     const { files, pinKnown } = this.scanForEviction();
     let total = files.reduce((sum, f) => sum + f.size, 0);
 
@@ -1169,8 +1197,10 @@ export class FileCache {
     }
     this.warnedPinRecordUnreadable = false;
 
+    const protectedPath = protectPath === undefined ? null : path.resolve(protectPath);
     for (const file of files.filter((f) => f.evictable).sort((a, b) => a.used - b.used)) {
       if (total <= maxBytes) break;
+      if (protectedPath !== null && path.resolve(file.full) === protectedPath) continue;
       try {
         fs.unlinkSync(file.full);
       } catch {
@@ -1188,9 +1218,20 @@ export class FileCache {
     }
     if (this.warnedShortfall) return; // once per episode - a per-call warning is noise operators filter out
     this.warnedShortfall = true;
+    // Say which of the two causes it actually is. A single file larger than
+    // the whole budget is a CONFIGURATION problem with a specific remedy, and
+    // reporting it as un-uploaded pins would send a sysop looking for staged
+    // writes that are not there.
+    const oversizedFetch =
+      protectedPath !== null &&
+      (files.find((f) => path.resolve(f.full) === protectedPath)?.size ?? 0) > maxBytes;
+    const reason = oversizedFetch
+      ? `the file just fetched is itself larger than the budget - raise BBS_STORAGE_CACHE_MAX_BYTES past the ` +
+        `largest file this board serves, or it will be re-downloaded on every request`
+      : `${this.dirty.size} file(s) have not been uploaded yet and will not be deleted`;
     console.warn(
       `[storage] cache is ${this.shortfallBytes} bytes over its ${maxBytes} byte budget and cannot shrink further: ` +
-        `${this.dirty.size} file(s) have not been uploaded yet and will not be deleted`
+        reason
     );
   }
 
