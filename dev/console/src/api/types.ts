@@ -16,8 +16,12 @@ export interface UserRecord {
   username: string;
   realname?: string;
   location?: string;
+  phone?: string;
+  email?: string;
   secLevel?: number;
   seclevel?: number;
+  timeLimit?: number;
+  expert?: boolean | 'X' | 'N';
   calls?: number;
   lastOn?: string;
   lastLogin?: string;

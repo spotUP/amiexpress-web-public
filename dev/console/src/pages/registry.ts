@@ -89,10 +89,12 @@ export const PAGES: PageMeta[] = [
     id: 'users',
     label: 'Users',
     category: 'People',
-    footerHint: '[e]dit SL  [t]oggle ban  [b]an confirm  [d]el  [/]search  [↑↓] scroll',
+    footerHint: '[e]dit SL  [p]assword  [a]dd  [t]oggle ban  [d]el  [/]search  [↑↓] scroll',
     helpKeys: [
       ['↑↓', 'Scroll users'],
       ['e',  'Edit security level'],
+      ['p',  'Reset the selected user\'s password'],
+      ['a',  'Add a new user'],
       ['t',  'Toggle ban/unban (SL=0 ↔ SL=50)'],
       ['b',  'Confirm ban (set SL=0)'],
       ['d',  'Delete user'],

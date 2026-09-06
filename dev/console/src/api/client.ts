@@ -83,6 +83,19 @@ export async function deleteUser(id: string) {
   return request<{ success: boolean }>(`/api/config/users/${id}`, { method: 'DELETE' });
 }
 
+// POST /api/config/users (config-routes.ts:1699-1786): creates the account
+// AND appends it to user.data (database.appendUserToDisk) so it is visible
+// to express.e immediately, not just to the admin's own GET. `password` is
+// required by the backend for a new account.
+export async function createUser(
+  user: Partial<import('./types.js').UserRecord> & { username: string; password: string },
+) {
+  return request<{ success: boolean; data: import('./types.js').UserRecord; message?: string }>(
+    '/api/config/users',
+    { method: 'POST', body: JSON.stringify(user) }
+  );
+}
+
 export async function getConferences() {
   const res = await request<{ success: boolean; data: import('./types.js').ConferenceConfig[] }>('/api/config/conferences');
   return res.data ?? [];
