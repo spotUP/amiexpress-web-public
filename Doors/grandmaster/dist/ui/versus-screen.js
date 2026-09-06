@@ -11,13 +11,9 @@ const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helper
 const board_effects_1 = require("./board-effects");
 const clear_screen_1 = require("./clear-screen");
 const block_width_1 = require("./block-width");
+const versus_cells_1 = require("./versus-cells");
 /** Playfield columns, in BLOCKS. What they cost in characters is the screen's answer. */
 const BOARD_COLUMNS = 10;
-/** Preview colours, one table for the next queue and the hold box alike. */
-const PREVIEW_COLORS = {
-    I: 'cyan', O: 'yellow', T: 'magenta',
-    S: 'green', Z: 'red', J: 'blue', L: 'white',
-};
 const minimap_1 = require("./minimap");
 const versus_layout_1 = require("./versus-layout");
 const bot_player_1 = require("../ai/bot-player");
@@ -31,10 +27,6 @@ const items_1 = require("../core/items");
 const versus_goal_1 = require("../core/versus-goal");
 const up_key_lock_1 = require("../core/up-key-lock");
 const mission_run_1 = require("../core/mission-run");
-/** Background colour used to render a TGM item cell, keyed by piece type. */
-const ITEM_CELL_COLORS = {
-    I: 'cyan', O: 'yellow', T: 'magenta', S: 'green', Z: 'red', J: 'blue', L: 'white',
-};
 /**
  * Versus Screen
  *
@@ -55,6 +47,15 @@ class VersusScreen {
         /** What each opponent box currently shows, so an unchanged board is skipped. */
         this.drawnBoards = [];
         this.lastLayoutKey = ''; // suppresses widget churn between frames
+        /**
+         * Where the lone opponent goes on a narrow screen, or null on a wide one.
+         *
+         * versusLayout places opponents from LEFT_PANEL_COLS - the width of an
+         * 80-column player panel - which is off the right edge of a C64. The
+         * compact screen works out its own three columns instead: player, middle,
+         * opponent.
+         */
+        this.compactOpponent = null;
         /** Match outcome, readable after run() resolves. */
         this.victory = false;
         /** Lobby "Garbage Lines" setting; false disconnects the attack router. */
@@ -291,8 +292,24 @@ class VersusScreen {
         const cols = (0, block_width_1.blockCols)(this.screen.width);
         const wellCols = BOARD_COLUMNS * cols;
         const sideLeft = wellCols + 2;
-        const sideWidth = Math.max(6, Math.min(12, this.screen.width - sideLeft - 1));
         const compact = this.screen.width < 80;
+        // A CPU BATTLE SHOWS THE CPU, even at forty columns.
+        //
+        // Both wells are ten blocks; at one character each that is twelve columns
+        // with a frame, so the two of them and a middle column all fit - the
+        // middle just has to stop taking whatever is left over: "cpu battle has
+        // broken layout make the middle columns less wide and fit the full cpu
+        // playfield" (2026-09-06). Two characters for the garbage strip between
+        // the middle and the opponent, and it comes to 38 of the 40.
+        const opponentWidth = compact ? wellCols + 2 : versus_layout_1.OPPONENT_BOARD_COLS;
+        const garbageWidth = compact ? 2 : 3;
+        const sideWidth = compact
+            ? Math.max(8, this.screen.width - sideLeft - garbageWidth - opponentWidth)
+            : Math.max(6, Math.min(12, this.screen.width - sideLeft - 1));
+        const opponentLeft = sideLeft + sideWidth + garbageWidth;
+        this.compactOpponent = compact
+            ? { left: opponentLeft, width: opponentWidth, top: 1, height: 22 }
+            : null;
         // Player board
         this.boardBox = (0, blessed_helpers_1.createBox)({
             parent: this.screen,
@@ -339,7 +356,7 @@ class VersusScreen {
             parent: this.screen,
             top: 1,
             left: sideLeft + sideWidth,
-            width: 3,
+            width: garbageWidth,
             height: 22,
             border: { type: 'line' },
             style: { border: { fg: 'red' } },
@@ -501,9 +518,25 @@ class VersusScreen {
         // A CPU battle is playable without seeing the bot's well; a screen full of
         // stray borders is not. Deriving the origin instead would mean widening
         // versus-layout and the pins that hold it, which is its own change.
-        if (width < 80) {
-            for (const box of this.opponentBoards)
-                box.hide();
+        if (width < 80 && this.compactOpponent) {
+            // ONE opponent, at full size, in the columns setupUI reserved for it.
+            // Hiding them all was the previous answer and it showed a CPU battle
+            // with no CPU in it.
+            const slot = this.compactOpponent;
+            while (this.opponentBoards.length > 1)
+                this.opponentBoards.pop()?.destroy();
+            if (this.opponentBoards.length === 0) {
+                this.opponentBoards.push(this.createOpponentBoard(0));
+            }
+            const [board] = this.opponentBoards;
+            board.left = slot.left;
+            board.top = slot.top;
+            board.width = slot.width;
+            board.height = slot.height;
+            if (layout.fullBoards + layout.minimaps > 0)
+                board.show();
+            else
+                board.hide();
             this.opponentInfoBox?.hide();
             this.minimapPanel?.hide();
             this.listPanel?.hide();
@@ -1531,7 +1564,7 @@ class VersusScreen {
                     if (py >= 0 && py < pieceShape.length &&
                         px >= 0 && px < pieceShape[py].length &&
                         pieceShape[py][px]) {
-                        char = this.getBlockChar(currentPiece.type);
+                        char = (0, versus_cells_1.blockChar)(currentPiece.type);
                     }
                 }
                 // Ghost piece
@@ -1556,10 +1589,10 @@ class VersusScreen {
                     else if (cell.item) {
                         // TGM item cell: distinct from a normal locked piece at a
                         // glance (see getItemCellChar).
-                        char = this.getItemCellChar(cell.item, cell.color);
+                        char = (0, versus_cells_1.itemCellChar)(cell.item, cell.color, this.screen);
                     }
                     else {
-                        char = this.getBlockChar(cell.color);
+                        char = (0, versus_cells_1.blockChar)(cell.color);
                         // Block glow
                         const glowIntensity = this.glowManager.getGlowIntensity(x, y);
                         if (glowIntensity > 0) {
@@ -1617,7 +1650,7 @@ class VersusScreen {
         let content = '';
         const show = Math.min(queue.length, 5);
         for (let i = 0; i < show; i++) {
-            content += (0, block_width_1.pieceArt)(queue[i], cols, PREVIEW_COLORS[queue[i]] ?? 'white').join('\n');
+            content += (0, block_width_1.pieceArt)(queue[i], cols, versus_cells_1.PREVIEW_COLORS[queue[i]] ?? 'white').join('\n');
             content += i < show - 1 ? '\n\n' : '\n';
         }
         this.nextBox.setContent(content);
@@ -1634,7 +1667,7 @@ class VersusScreen {
         }
         const type = state.holdPiece;
         const canHold = state.canHold !== false;
-        const colour = canHold ? (PREVIEW_COLORS[type] ?? 'white') : 'gray';
+        const colour = canHold ? (versus_cells_1.PREVIEW_COLORS[type] ?? 'white') : 'gray';
         this.holdBox.setContent((0, block_width_1.pieceArt)(type, (0, block_width_1.blockCols)(this.screen.width), colour).join('\n'));
     }
     /**
@@ -1670,54 +1703,23 @@ class VersusScreen {
         for (let y = startY; y < board.height; y++) {
             if (y > startY)
                 content += '\n';
+            // The opponent's cells are the screen's width too - this sink was
+            // missed when the played board learned it, so a C64 opponent board
+            // would have been twice as wide as the player's.
+            const cols = (0, block_width_1.blockCols)(this.screen.width);
             for (let x = 0; x < board.width; x++) {
                 const fallingType = falling.get(`${x},${y}`);
                 if (fallingType) {
-                    content += this.getBlockChar(fallingType);
+                    content += (0, block_width_1.fitCell)((0, versus_cells_1.blockChar)(fallingType), cols);
                     continue;
                 }
                 const cell = board.grid[y]?.[x];
-                content += cell?.item
-                    ? this.getItemCellChar(cell.item, cell.color)
-                    : (cell?.filled ? this.getBlockChar(cell.color ?? '') : '  ');
+                content += (0, block_width_1.fitCell)(cell?.item
+                    ? (0, versus_cells_1.itemCellChar)(cell.item, cell.color, this.screen)
+                    : (cell?.filled ? (0, versus_cells_1.blockChar)(cell.color ?? '') : '  '), cols);
             }
         }
         box.setContent(content);
-    }
-    /**
-     * Get colored block character for piece type
-     */
-    getBlockChar(type) {
-        const colors = {
-            I: '{cyan-fg}██{/cyan-fg}',
-            O: '{yellow-fg}██{/yellow-fg}',
-            T: '{magenta-fg}██{/magenta-fg}',
-            S: '{green-fg}██{/green-fg}',
-            Z: '{red-fg}██{/red-fg}',
-            J: '{blue-fg}██{/blue-fg}',
-            L: '{white-fg}██{/white-fg}',
-        };
-        return colors[type] || '{gray-fg}██{/gray-fg}';
-    }
-    /**
-     * Render a TGM item cell (see core/items.ts) - inverse-video diamonds so a
-     * piece carrying an item is visually distinct from a normal locked piece.
-     * A hard block (item 25's target cell, HARD_BLOCK_ITEM) gets its own grey
-     * marker since it can never be collected or cleared.
-     */
-    getItemCellChar(item, color) {
-        // A screen with no per-cell background carries the colour in the INK, or
-        // every item cell is black on black and reads as a hole in the stack.
-        const flat = !(0, block_width_1.cellsCanCarryBackground)(this.screen);
-        if (item === items_1.HARD_BLOCK_ITEM) {
-            return flat
-                ? '{white-fg}##{/white-fg}'
-                : '{white-bg}{black-fg}##{/black-fg}{/white-bg}';
-        }
-        const bg = ITEM_CELL_COLORS[color ?? ''] ?? 'gray';
-        return flat
-            ? `{${bg}-fg}◆◆{/${bg}-fg}`
-            : `{${bg}-bg}{black-fg}◆◆{/black-fg}{/${bg}-bg}`;
     }
     /**
      * Apply glow effect to block character

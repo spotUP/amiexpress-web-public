@@ -437,9 +437,10 @@ export async function theCpuBattleFitsAFortyColumnScreen(): Promise<void> {
       );
     }
 
-    // The opponent furniture starts at column 37 and cannot fit; it must be
-    // HIDDEN rather than drawn off the edge as loose borders.
-    assert.strictEqual(h.boards().length, 0, 'no opponent board on a 40-column screen');
+    // The opponent's own board is placed by the compact geometry - see
+    // aFortyColumnCpuBattleShowsTheOpponent. What must stay hidden is the
+    // 80-column FURNITURE around it, which starts at column 37 and would be
+    // drawn off the edge as loose borders.
     assert.strictEqual(h.info.hidden, true, 'no VS panel');
     assert.strictEqual(h.minimap.hidden, true, 'no opponent grid');
     assert.strictEqual(h.list.hidden, true, 'no standings');
@@ -463,5 +464,41 @@ export async function thePreviewsFollowTheBlockWidth(): Promise<void> {
     } finally {
       h.destroy();
     }
+  }
+}
+
+/**
+ * A CPU battle at forty columns shows the CPU.
+ *
+ * The opponent panels start at LEFT_PANEL_COLS - the width of an 80-column
+ * player panel - which is off the right edge of a C64, so the first answer
+ * was to hide them: a CPU battle with no CPU in it. Both wells are ten
+ * blocks, which at one character each is twelve columns with a frame, so the
+ * player, a middle column and the opponent all fit if the middle stops taking
+ * whatever is left over: "cpu battle has broken layout make the middle
+ * columns less wide and fit the full cpu playfield" (2026-09-06).
+ */
+export async function aFortyColumnCpuBattleShowsTheOpponent(): Promise<void> {
+  const h = harness(40, [bot(1)], 25);
+  try {
+    const vs: any = h.vs;
+    const boards = h.boards();
+
+    assert.strictEqual(boards.length, 1, 'the opponent is drawn, not hidden');
+    assert.strictEqual(boards[0].width, vs.boardBox.width, 'at the same size as the player');
+    assert.ok(boards[0].height >= 20, 'and the full height of a field');
+    assert.ok(
+      boards[0].left >= vs.garbageIndicator.left + vs.garbageIndicator.width,
+      'to the right of the middle column',
+    );
+
+    for (const box of [vs.boardBox, vs.nextBox, vs.garbageIndicator, boards[0]]) {
+      assert.ok(
+        box.left + box.width <= 40,
+        `a panel runs past the right edge: ${box.left} + ${box.width}`,
+      );
+    }
+  } finally {
+    h.destroy();
   }
 }

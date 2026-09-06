@@ -83,14 +83,19 @@ export async function anAnsiScreenKeepsTheSpecialsItAlwaysHad(): Promise<void> {
 }
 
 export async function everyVersusItemCellIsVisibleOnAC64(): Promise<void> {
+  // The glyphs moved to ui/versus-cells.ts when versus-screen crossed the
+  // 2000-line ceiling; the RULE they answer to did not move.
+  const { itemCellChar } = require('../ui/versus-cells');
   const screen = petsciiScreen();
-  const vs: any = Object.create(VersusScreen.prototype);
-  vs.screen = screen;
 
   for (const [item, colour] of [[25, null], [1, 'cyan'], [7, 'red'], [3, null]] as Array<[number, string | null]>) {
-    const cell = vs.getItemCellChar(item, colour);
+    const cell = itemCellChar(item, colour, screen);
     assert.ok(!isInvisible(cell), `item ${item} is invisible on a C64: ${cell}`);
   }
+
+  // And an ANSI screen keeps the inverse-video cell it always had.
+  const ansi = itemCellChar(1, 'cyan', {});
+  assert.match(ansi, /-bg\}/, 'a screen with backgrounds still uses one');
 }
 
 /** And the well is as wide as the blocks in it, like every other board. */

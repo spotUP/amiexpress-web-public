@@ -48,6 +48,15 @@ export declare class VersusScreen {
     private garbageIndicator;
     private statsBox;
     private lastLayoutKey;
+    /**
+     * Where the lone opponent goes on a narrow screen, or null on a wide one.
+     *
+     * versusLayout places opponents from LEFT_PANEL_COLS - the width of an
+     * 80-column player panel - which is off the right edge of a C64. The
+     * compact screen works out its own three columns instead: player, middle,
+     * opponent.
+     */
+    private compactOpponent;
     /** Match outcome, readable after run() resolves. */
     victory: boolean;
     /** Lobby "Garbage Lines" setting; false disconnects the attack router. */
@@ -266,17 +275,6 @@ export declare class VersusScreen {
      * Render opponent board (full size)
      */
     private renderOpponentBoard;
-    /**
-     * Get colored block character for piece type
-     */
-    private getBlockChar;
-    /**
-     * Render a TGM item cell (see core/items.ts) - inverse-video diamonds so a
-     * piece carrying an item is visually distinct from a normal locked piece.
-     * A hard block (item 25's target cell, HARD_BLOCK_ITEM) gets its own grey
-     * marker since it can never be collected or cleared.
-     */
-    private getItemCellChar;
     /**
      * Apply glow effect to block character
      */
