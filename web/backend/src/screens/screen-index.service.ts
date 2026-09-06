@@ -21,6 +21,7 @@ import {
   ScreenDirType, SCREEN_DIR_MAP, getScreenDirType, getScreenFileName,
   resolveNodeScreenDir, screenSearchLocations,
 } from './screen-resolution';
+import { scanMciCodes } from './mci-catalog';
 import { parseMciReferences, type MciReference } from './mci-references';
 import { conferenceDir, conferenceNumbers } from '../conferences/conference-paths';
 import { loadConfConfig } from '../services/conf-config.service';
@@ -345,6 +346,35 @@ function classifyGenerated(relPath: string, buf: Buffer): 'backup' | 'runtime' |
   }
 
   return undefined;
+}
+
+/**
+ * Is there anything in this file but codes?
+ *
+ * Take out every MCI code, then every ANSI escape, then all whitespace and
+ * control bytes. What remains is what a caller would SEE drawn by this file
+ * itself - and for a screen that only pulls other screens in, that is nothing.
+ *
+ * Added by 7d6826966 ("the screens page shows art by default, plumbing on
+ * request") and lost again when 32d8118bc rewrote this file from a branch cut
+ * before it - the perf rewrite replaced the whole module, so nothing in git
+ * records a deletion and no commit shows up under `git log -S isCodesOnly`.
+ * tests/screens/codes-only-screens.test.ts survived the loss and is what
+ * caught it. The `codesOnly` FACT this used to put on ScreenFileFacts, and the
+ * config-app artist filter that read it, went the same way and are NOT
+ * restored here - see the report.
+ */
+export function isCodesOnly(text: string): boolean {
+  let rest = text;
+  // Back to front, so an earlier removal never shifts a later offset.
+  for (const code of scanMciCodes(text).sort((a, b) => b.at - a.at)) {
+    rest = rest.slice(0, code.at) + rest.slice(code.at + code.text.length);
+  }
+
+  return rest
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+    .replace(/[\s\x00-\x1f\x7f]/g, '')
+    .length === 0;
 }
 
 function fileProblems(buf: Buffer, format: ScreenFormat): ScreenProblem[] {
@@ -796,4 +826,13 @@ export function getScreenIndex(baseDir: string): ScreenIndex {
 /** Called by every write route: the next read rebuilds. */
 export function invalidateScreenIndex(): void {
   cached = null;
+  // factsCache too, and not only because it is stale bytes.
+  //
+  // A file's facts are keyed on ITS OWN mtime and size, but `resolves` on an
+  // MCI reference is a fact about a DIFFERENT file: `~CC_confrequest` resolves
+  // when Commands/BBSCmd/CONFREQUEST.info exists. Installing that door does
+  // not touch the screen that names it, so the entry stayed valid for ever and
+  // the health check went on telling the sysop the door was missing after they
+  // had installed it. The same holds for `~SS_`/`~SR_` and their targets.
+  factsCache.clear();
 }
