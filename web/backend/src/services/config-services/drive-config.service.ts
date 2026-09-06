@@ -412,8 +412,15 @@ console.error(`[DriveConfigService] Mirror update failed for drive ${id} (disk w
     this.configRepo.deleteDrive(id);
 
     // DISK-BASED: remove just this drive from what Drives.info already holds.
-    // This throws on failure, so reaching the next line means the drive is
-    // really gone from the file the board reads.
+    // This comment used to claim the call throws on failure. It did not:
+    // `writeDrivesInfoFile` wrapped its whole body in a catch that logged and
+    // returned, so a read-only filesystem, a full disk or a `parseVolumes`
+    // throw on a hand-edited Drives.info all ended here with `return true` -
+    // the mirror row already deleted, a DELETE written to the audit log that
+    // never happened, and the sysop told the drive was gone while the file
+    // the board and every door read still named it. The writer now
+    // propagates; reaching the next line means Drives.info really was
+    // rewritten without this drive.
     await this.writeDrivesInfoFile({ removeNumber: oldDrive.drive_number });
 
     // Gate 2, blocker 5: this used to `return deleted` - the MIRROR ROW's
@@ -457,6 +464,15 @@ console.error(`[DriveConfigService] Mirror update failed for drive ${id} (disk w
    *
    * `change` describes what the caller just did: the drive they added or
    * edited, and the number they removed.
+   *
+   * IT THROWS WHEN THE FILE IS NOT WRITTEN. It used to catch everything and
+   * return normally, which made all three callers - createDrive, updateDrive
+   * and deleteDrive - report success over a Drives.info that had not changed.
+   * Disk is the truth on this board, so a caller that cannot write disk has
+   * not done the thing it is about to tell the sysop it did. The live
+   * storage rebuild below is deliberately NOT part of that contract: the file
+   * is already correct by then, and a bucket that cannot be reached must not
+   * turn a completed write into a reported failure.
    */
   private async writeDrivesInfoFile(
     change: { entry?: DriveConfig; removeNumber?: number } = {}
@@ -464,40 +480,47 @@ console.error(`[DriveConfigService] Mirror update failed for drive ${id} (disk w
     const bbsRoot = appConfig.get('dataDir');
     const drivesInfoPath = path.join(bbsRoot, 'Drives.info');
 
-    try {
-      const onDisk = await this.getAllDrives();
-      // ONLY the caller's entry. Handing mergeForWrite the whole mirror let it
-      // overwrite and append as well as protect: a stale row rewrote an entry
-      // the sysop never touched, and a row disk had never heard of was added
-      // to the file. mergeForWrite exists to stop the mirror TRUNCATING disk,
-      // not to make it a second source.
-      const changed = change.entry ? [change.entry] : [];
+    const onDisk = await this.getAllDrives();
+    // ONLY the caller's entry. Handing mergeForWrite the whole mirror let it
+    // overwrite and append as well as protect: a stale row rewrote an entry
+    // the sysop never touched, and a row disk had never heard of was added
+    // to the file. mergeForWrite exists to stop the mirror TRUNCATING disk,
+    // not to make it a second source.
+    const changed = change.entry ? [change.entry] : [];
 
-      const merged = mergeForWrite(
-        onDisk,
-        changed,
-        (drive: DriveConfig) => String(drive.drive_number),
-        { remove: change.removeNumber !== undefined ? [String(change.removeNumber)] : [] }
-      );
+    const merged = mergeForWrite(
+      onDisk,
+      changed,
+      (drive: DriveConfig) => String(drive.drive_number),
+      { remove: change.removeNumber !== undefined ? [String(change.removeNumber)] : [] }
+    );
 
-      // Only the DRIVE.n series is this writer's; applyTooltypes keeps the
-      // icon and every other tooltype in the file, so there is nothing to
-      // read back and re-assert.
-      const toolTypes = new Map<string, string>();
-      for (const drive of merged) {
-        if (drive.enabled !== false) {
-          toolTypes.set(`DRIVE.${drive.drive_number}`, drive.drive_path);
-        }
+    // Only the DRIVE.n series is this writer's; applyTooltypes keeps the
+    // icon and every other tooltype in the file, so there is nothing to
+    // read back and re-assert.
+    const toolTypes = new Map<string, string>();
+    for (const drive of merged) {
+      if (drive.enabled !== false) {
+        toolTypes.set(`DRIVE.${drive.drive_number}`, drive.drive_path);
       }
+    }
 
-      applyTooltypes(drivesInfoPath, toolTypes, {
-        removeKeys: key => /^DRIVE\.\d+$/.test(key),
-      });
+    applyTooltypes(drivesInfoPath, toolTypes, {
+      removeKeys: key => /^DRIVE\.\d+$/.test(key),
+    });
 
 console.log(`[DriveConfigService] Wrote ${drivesInfoPath} with ${merged.length} drives`);
+
+    // Best-effort, and only after the file is on disk: the write is what the
+    // caller promised the sysop, and the next restart rebuilds the live pool
+    // from the same file regardless.
+    try {
       await this.refreshLiveStorage(bbsRoot);
     } catch (error) {
-console.error(`[DriveConfigService] Failed to write ${drivesInfoPath}:`, error);
+console.error(
+        `[DriveConfigService] ${drivesInfoPath} was written, but rebuilding the live storage context failed:`,
+        error
+      );
     }
   }
 
