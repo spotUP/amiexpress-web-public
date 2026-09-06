@@ -34,6 +34,10 @@ import {
   getSessionLog,
   saveSessionLog,
   getSessionStats,
+  getScreenRevisions,
+  getScreenRevision,
+  restoreScreenRevision,
+  repairAllScreens,
 } from './client.js';
 
 const BASE_URL = process.env['AMIEXPRESS_URL'] ?? 'http://localhost:3001';
@@ -277,6 +281,44 @@ test('getSessionStats reads the bare {stats} response', async () => {
 
   assert.equal(calls[0].url, `${BASE_URL}/api/sessions/stats`);
   assert.equal(stats.totalSessions, 3);
+});
+
+test('getScreenRevisions GETs /api/screens/revisions with the path URL-encoded', async () => {
+  stubFetch({ success: true, data: { revisions: [{ ts: '2026-09-06T00:00:00Z', file: 'a.bin', bytes: 10, sha256: 'x', source: 'Node1/BULL1.TXT' }] } });
+  const revs = await getScreenRevisions('Node1/BULL1.TXT');
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/screens/revisions?path=${encodeURIComponent('Node1/BULL1.TXT')}`);
+  assert.equal(revs.length, 1);
+});
+
+test('getScreenRevision GETs /api/screens/revision with path and file', async () => {
+  stubFetch({ success: true, data: { content: 'aGVsbG8=', bytes: 5 } });
+  const rev = await getScreenRevision('Node1/BULL1.TXT', 'a.bin');
+
+  assert.equal(
+    calls[0].url,
+    `${BASE_URL}/api/screens/revision?path=${encodeURIComponent('Node1/BULL1.TXT')}&file=${encodeURIComponent('a.bin')}`
+  );
+  assert.equal(rev?.bytes, 5);
+});
+
+test('restoreScreenRevision POSTs { path, file } to /api/screens/restore', async () => {
+  stubFetch({ success: true, message: 'Restored Node1/BULL1.TXT from a.bin' });
+  await restoreScreenRevision('Node1/BULL1.TXT', 'a.bin');
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/screens/restore`);
+  assert.equal(calls[0].method, 'POST');
+  assert.deepEqual(calls[0].body, { path: 'Node1/BULL1.TXT', file: 'a.bin' });
+});
+
+test('repairAllScreens POSTs { dryRun } to /api/screens/repair-all', async () => {
+  stubFetch({ success: true, data: { dryRun: true, damaged: ['a.txt', 'b.txt'] } });
+  const res = await repairAllScreens(true);
+
+  assert.equal(calls[0].url, `${BASE_URL}/api/screens/repair-all`);
+  assert.equal(calls[0].method, 'POST');
+  assert.deepEqual(calls[0].body, { dryRun: true });
+  assert.deepEqual(res.damaged, ['a.txt', 'b.txt']);
 });
 
 // The incident this whole page exists to fix: the OLD Security page wrote

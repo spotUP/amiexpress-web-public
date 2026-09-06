@@ -888,6 +888,61 @@ export async function repairScreenFile(path: string) {
   return res.data ?? { path: '', backup: '', repaired: 0 };
 }
 
+export interface ScreenRevisionMeta {
+  ts: string;
+  file: string;
+  bytes: number;
+  sha256: string;
+  source: string;
+}
+
+// GET /api/screens/revisions?path=... — every snapshot PUT /file has kept
+// for this screen, newest first. `path` must be the exact string used for
+// GET/PUT/DELETE /file (screen-revisions.ts keys a directory off that raw
+// string). These three plus the write-side hookup (saveRevision called from
+// PUT /file) were added alongside this TUI wiring — the storage engine and
+// the web's ScreenRevisionsPanel/client methods already existed, but no
+// backend route reached them and PUT /file never called the writer, so the
+// whole feature was unreachable from either client. See
+// web/config-app/src/api/client.ts:1047-1064 for the contract this matches.
+export async function getScreenRevisions(path: string) {
+  const res = await request<{ success: boolean; data?: { revisions?: ScreenRevisionMeta[] } }>(
+    `/api/screens/revisions?path=${encodeURIComponent(path)}`
+  );
+  return res.data?.revisions ?? [];
+}
+
+export async function getScreenRevision(path: string, file: string) {
+  const res = await request<{ success: boolean; data?: { content: string; bytes: number } }>(
+    `/api/screens/revision?path=${encodeURIComponent(path)}&file=${encodeURIComponent(file)}`
+  );
+  return res.data ?? null;
+}
+
+export async function restoreScreenRevision(path: string, file: string) {
+  return request<{ success: boolean; message?: string; data?: { restored: string } }>('/api/screens/restore', {
+    method: 'POST',
+    body: JSON.stringify({ path, file }),
+  });
+}
+
+export interface RepairAllResult {
+  dryRun?: boolean;
+  damaged?: string[];
+  repaired?: { path: string; codes: number }[];
+  refused?: { path: string; reason: string }[];
+}
+
+// POST /api/screens/repair-all — every screen the index flags as damaged,
+// repaired in one pass. dryRun=true names them and writes nothing.
+export async function repairAllScreens(dryRun = false) {
+  const res = await request<{ success: boolean; message?: string; data?: RepairAllResult }>('/api/screens/repair-all', {
+    method: 'POST',
+    body: JSON.stringify({ dryRun }),
+  });
+  return { ...(res.data ?? {}), message: res.message };
+}
+
 export async function getSharedScreenDirs() {
   const res = await request<{ success: boolean; data?: { directories?: Array<{ dir: string; files: string[] }> } }>('/api/screens/shared-directories');
   return res.data?.directories ?? [];

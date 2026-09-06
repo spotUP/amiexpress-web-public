@@ -323,6 +323,16 @@ screensRouter.put('/file', (req: Request, res: Response) => {
 
   const byTarget = new Map(plans.map(entry => [entry.path, entry.plan]));
 
+  // Snapshot whatever is there NOW, before it is overwritten. This is the
+  // only call site: screen-revisions.ts's own writer (saveRevision) existed
+  // with nothing calling it, so every earlier "revision" was recorded
+  // nowhere and GET /revisions always answered empty. Best-effort per target
+  // - a missing target has nothing to snapshot, which saveRevision already
+  // treats as a no-op.
+  for (const target of targets) {
+    try { saveRevision(target); } catch { /* best effort, matches saveRevision's own resilience */ }
+  }
+
   try {
     const written = writeToTargets(targets, target => {
       const plan = byTarget.get(target);
@@ -487,6 +497,63 @@ screensRouter.delete('/file', (req: Request, res: Response) => {
     backup: `${path.relative(baseDir, full)}.backup`,
     stopsResolving: resolutionsLost(baseDir, before),
   });
+});
+
+/**
+ * GET /api/screens/revisions?path=...
+ *
+ * Every snapshot PUT /file has kept for this screen, newest first. `path`
+ * must be the exact string the caller also uses for GET/PUT/DELETE /file -
+ * screen-revisions.ts keys a revision directory off that raw string, not a
+ * re-resolved canonical form, so passing a different casing here than what
+ * was written with finds nothing.
+ */
+screensRouter.get('/revisions', (req: Request, res: Response) => {
+  const rel = String(req.query.path || '');
+  if (!containedScreenPath(rel)) {
+    return res.status(400).json({ success: false, error: 'Path outside the board root' });
+  }
+  return sendOk(res, { revisions: listRevisions(rel) });
+});
+
+/**
+ * GET /api/screens/revision?path=...&file=...
+ *
+ * One snapshot's content, base64 - same encoding GET /file uses, so the same
+ * viewer decodes either.
+ */
+screensRouter.get('/revision', (req: Request, res: Response) => {
+  const rel = String(req.query.path || '');
+  const file = String(req.query.file || '');
+  if (!containedScreenPath(rel)) {
+    return res.status(400).json({ success: false, error: 'Path outside the board root' });
+  }
+  const buf = readRevision(rel, file);
+  if (!buf) {
+    return res.status(404).json({ success: false, error: `Revision ${file} not found for ${rel}` });
+  }
+  return sendOk(res, { content: buf.toString('base64'), bytes: buf.length });
+});
+
+/**
+ * POST /api/screens/restore   Body: { path, file }
+ *
+ * Copies one revision back over the live file, snapshotting the current
+ * content first - a bad restore is itself one revision away from undo.
+ */
+screensRouter.post('/restore', (req: Request, res: Response) => {
+  const rel = String(req.body?.path || '');
+  const file = String(req.body?.file || '');
+  if (!containedScreenPath(rel)) {
+    return res.status(400).json({ success: false, error: 'Path outside the board root' });
+  }
+  const ok = restoreRevision(rel, file);
+  if (!ok) {
+    return res.status(404).json({ success: false, error: `Revision ${file} not found for ${rel}` });
+  }
+  invalidateScreenIndex();
+  invalidateScreenFacts();
+  return sendOk(res, { restored: rel }, `Restored ${rel} from ${file}`);
 });
 
 /**

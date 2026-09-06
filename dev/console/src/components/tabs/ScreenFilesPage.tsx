@@ -2,10 +2,13 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import {
   getScreenIndex, getScreenFile, deleteScreenFile, repairScreenFile,
-  type ScreenFileFacts, type ScreenIndex,
+  getScreenRevisions, getScreenRevision, restoreScreenRevision, repairAllScreens,
+  type ScreenFileFacts, type ScreenIndex, type ScreenRevisionMeta, type RepairAllResult,
 } from '../../api/client.js';
 import { T, BlessedBox, BlessedText, BlessedSpinner } from '../../theme/blessed-theme.js';
 import { useMouse, useHover, type MouseEvent } from '../../hooks/useMouse.js';
+import { useTextEntryLock } from '../../hooks/useTextEntryLock.js';
+import { ConfirmDialog as SharedConfirmDialog } from '../shared/ConfirmDialog.js';
 
 type Tab = 'all' | 'node' | 'conf' | 'board' | 'unused' | 'bulletins';
 
@@ -31,6 +34,12 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}K`;
   return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
+}
+
+function formatRevisionTs(ts: string): string {
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return ts;
+  return d.toLocaleString();
 }
 
 function AnsiText({ text }: { text: string }) {
@@ -138,6 +147,31 @@ export function ScreenFilesPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [operationResult, setOperationResult] = useState<string | null>(null);
   const [hoveredTab, setHoveredTab] = useState<Tab | null>(null);
+
+  // Revision history — [h] from the detail view. `historyPath` is the
+  // screen's canonical path (the same string used for GET/PUT/DELETE
+  // /file), captured by value so a background refresh of `index` can't
+  // change which file this view is showing mid-browse.
+  const [historyPath, setHistoryPath] = useState<string | null>(null);
+  const [revisions, setRevisions] = useState<ScreenRevisionMeta[]>([]);
+  const [revisionsLoading, setRevisionsLoading] = useState(false);
+  const [revisionIdx, setRevisionIdx] = useState(0);
+  const [revisionPreview, setRevisionPreview] = useState<{ file: string; content: string } | null>(null);
+  // Captured by value the moment [r]estore is pressed — same reason
+  // DoorsTab's delete captures its target instead of re-deriving from an
+  // index that can shift under a confirmation dialog.
+  const [restoreTarget, setRestoreTarget] = useState<ScreenRevisionMeta | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  const [historyStatus, setHistoryStatus] = useState<string | null>(null);
+
+  // Bulk repair — [R] from the main list. Dry run first (names every
+  // damaged file, writes nothing), then a typed confirmation, then the real
+  // pass, reported per file — matches web's repairAllScreens(dryRun) two-step
+  // and the reasoning in screens-routes.ts:414-426 ("the decision is still
+  // the sysop's").
+  const [repairAllMode, setRepairAllMode] = useState<'idle' | 'confirm' | 'running' | 'result'>('idle');
+  const [repairAllDamaged, setRepairAllDamaged] = useState<string[]>([]);
+  const [repairAllResult, setRepairAllResult] = useState<RepairAllResult | null>(null);
 
   const TAB_ROW = 7;
   const TAB_RANGES: Array<{ from: number; to: number; key: Tab }> = [
@@ -270,6 +304,83 @@ export function ScreenFilesPage() {
     }
   };
 
+  const openHistory = (path: string) => {
+    setHistoryPath(path);
+    setRevisionIdx(0);
+    setRevisionPreview(null);
+    setHistoryStatus(null);
+    setRevisionsLoading(true);
+    getScreenRevisions(path)
+      .then(setRevisions)
+      .catch((e: unknown) => setHistoryStatus(`Failed to load revisions: ${e instanceof Error ? e.message : 'Unknown error'}`))
+      .finally(() => setRevisionsLoading(false));
+  };
+
+  const closeHistory = () => {
+    setHistoryPath(null);
+    setRevisions([]);
+    setRevisionPreview(null);
+    setHistoryStatus(null);
+  };
+
+  const openRevisionPreview = async (rev: ScreenRevisionMeta) => {
+    if (!historyPath) return;
+    try {
+      const data = await getScreenRevision(historyPath, rev.file);
+      if (data) {
+        const bytes = Uint8Array.from(atob(data.content), c => c.charCodeAt(0));
+        setRevisionPreview({ file: rev.file, content: new TextDecoder('latin1').decode(bytes) });
+      }
+    } catch (e: unknown) {
+      setHistoryStatus(`Preview failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    }
+  };
+
+  const doRestore = async (rev: ScreenRevisionMeta) => {
+    if (!historyPath) return;
+    setRestoring(true);
+    try {
+      const res = await restoreScreenRevision(historyPath, rev.file);
+      setHistoryStatus(res.message ?? `Restored from ${rev.file}`);
+      setRestoreTarget(null);
+      openHistory(historyPath); // the restore itself creates a new revision — refresh the list
+      load();
+    } catch (e: unknown) {
+      setHistoryStatus(`Restore failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      setRestoreTarget(null);
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  const runRepairAllDryRun = () => {
+    setRepairAllMode('confirm');
+    setRepairAllDamaged([]);
+    repairAllScreens(true)
+      .then((res) => setRepairAllDamaged(res.damaged ?? []))
+      .catch((e: unknown) => setOperationResult(`Repair-all failed: ${e instanceof Error ? e.message : 'Unknown error'}`));
+  };
+
+  const runRepairAllReal = () => {
+    setRepairAllMode('running');
+    repairAllScreens(false)
+      .then((res) => { setRepairAllResult(res); setRepairAllMode('result'); load(); })
+      .catch((e: unknown) => {
+        setOperationResult(`Repair-all failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+        setRepairAllMode('idle');
+      });
+  };
+
+  // The restore/repair-all confirmations, the typed target, and the history
+  // sub-view's own [esc]-to-back all own the keyboard while active — see
+  // dev/console/src/state/text-entry-lock.ts. (The plain y/n ConfirmDialog
+  // this page already had for single-file delete doesn't need it — nothing
+  // here collides with 'q'/'?'/arrows the way a typed field or a form
+  // does — but SharedConfirmDialog's typed-confirmation mode DOES accept
+  // arbitrary text, and repair-all's own dialog uses arrows, so both need
+  // the lock.)
+  useTextEntryLock(historyPath !== null || repairAllMode !== 'idle');
+
   useInput((input, key) => {
     if (confirmDelete) return; // confirmation dialog handles its own input
     if (operationResult) {
@@ -277,6 +388,30 @@ export function ScreenFilesPage() {
       return;
     }
     if (previewContent !== null || previewLoading) return;
+
+    if (repairAllMode !== 'idle') {
+      if (repairAllMode === 'confirm' || repairAllMode === 'result') {
+        if (repairAllMode === 'result' && (input === 'q' || key.escape)) {
+          setRepairAllMode('idle'); setRepairAllResult(null); return;
+        }
+        // 'confirm' mode's own y/n is handled by SharedConfirmDialog below.
+      }
+      return;
+    }
+
+    if (historyPath !== null) {
+      if (restoreTarget) return; // its own ConfirmDialog owns input
+      if (revisionPreview) {
+        if (input === 'q' || key.escape) { setRevisionPreview(null); }
+        return;
+      }
+      if (input === 'q' || key.escape) { closeHistory(); return; }
+      if (key.upArrow) setRevisionIdx(i => Math.max(0, i - 1));
+      if (key.downArrow) setRevisionIdx(i => Math.min(revisions.length - 1, i + 1));
+      if (input === 'v' && revisions[revisionIdx]) openRevisionPreview(revisions[revisionIdx]);
+      if (input === 'r' && revisions[revisionIdx] && !restoring) setRestoreTarget(revisions[revisionIdx]);
+      return;
+    }
 
     if (key.tab) {
       setTab(t => {
@@ -299,6 +434,8 @@ export function ScreenFilesPage() {
     }
     if (input === 'x' && selected && selected.path) { setConfirmDelete(selected.path); return; }
     if (input === 'p' && selected && selected.path) { handleRepair(selected.path); return; }
+    if (input === 'h' && detail) { openHistory(detail.path); return; }
+    if (input === 'R' && !detail) { runRepairAllDryRun(); return; }
     if (input === 'q' || input === 'escape') { setDetail(null); return; }
   });
 
@@ -314,6 +451,113 @@ export function ScreenFilesPage() {
   }
 
   if (!index) return null;
+
+  // Bulk repair — dry run names the damaged files and asks for confirmation
+  // before anything is written; the real pass reports each file's outcome.
+  if (repairAllMode === 'confirm') {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <BlessedText variant="accent" bold>REPAIR ALL — dry run</BlessedText>
+        {repairAllDamaged.length === 0 ? (
+          <Text dimColor>No damaged screens found (or still loading).</Text>
+        ) : (
+          <>
+            <Text>{repairAllDamaged.length} file{repairAllDamaged.length === 1 ? '' : 's'} would be repaired:</Text>
+            {repairAllDamaged.slice(0, 20).map((p, i) => <Text key={i}>  {p}</Text>)}
+            {repairAllDamaged.length > 20 && <BlessedText variant="dim">  ... and {repairAllDamaged.length - 20} more</BlessedText>}
+          </>
+        )}
+        <Box marginTop={1}>
+          <SharedConfirmDialog
+            message={`Repair ${repairAllDamaged.length} file(s)? Each gets a .backup copy first, same as a single-file [p]repair.`}
+            onConfirm={runRepairAllReal}
+            onCancel={() => setRepairAllMode('idle')}
+          />
+        </Box>
+      </Box>
+    );
+  }
+
+  if (repairAllMode === 'running') {
+    return <Box><BlessedSpinner/><Text> Repairing...</Text></Box>;
+  }
+
+  if (repairAllMode === 'result' && repairAllResult) {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <BlessedText variant="accent" bold>REPAIR ALL — done</BlessedText>
+        <Text>Repaired: {repairAllResult.repaired?.length ?? 0}</Text>
+        {(repairAllResult.repaired ?? []).map((r, i) => (
+          <Text key={i}>  [OK] {r.path} ({r.codes} code{r.codes === 1 ? '' : 's'})</Text>
+        ))}
+        {(repairAllResult.refused ?? []).length > 0 && (
+          <>
+            <BlessedText variant="alert" bold>Refused: {repairAllResult.refused!.length}</BlessedText>
+            {repairAllResult.refused!.map((r, i) => (
+              <Text key={i}>  [XX] {r.path} — {r.reason}</Text>
+            ))}
+          </>
+        )}
+        <Box marginTop={1}><BlessedText variant="dim">[q] Back</BlessedText></Box>
+      </Box>
+    );
+  }
+
+  // Revision history — [h] from the detail view.
+  if (historyPath) {
+    if (revisionPreview) {
+      return (
+        <AnsiPreview
+          content={revisionPreview.content}
+          path={`${historyPath} @ ${revisionPreview.file}`}
+          onClose={() => setRevisionPreview(null)}
+        />
+      );
+    }
+    const selectedRev = revisions[revisionIdx];
+    const restoreLabel = historyPath.split(/[\\/]/).pop() ?? historyPath;
+    return (
+      <Box flexDirection="column" padding={1}>
+        <Box flexDirection="row" gap={1} marginBottom={1}>
+          <BlessedText variant="accent" bold>HISTORY: {historyPath}</BlessedText>
+          {revisionsLoading && <BlessedSpinner/>}
+        </Box>
+        {revisions.length === 0 && !revisionsLoading && (
+          <Text dimColor>No revisions yet — a revision is created the next time this file is overwritten.</Text>
+        )}
+        {revisions.map((rev, i) => (
+          <Box key={rev.file}>
+            <Text
+              color={i === revisionIdx ? T.accent : T.ink}
+              bold={i === revisionIdx}
+              inverse={i === revisionIdx}
+            >
+              {i === revisionIdx ? '> ' : '  '}
+              {formatRevisionTs(rev.ts).padEnd(24)}
+              {formatSize(rev.bytes).padEnd(10)}
+              {rev.sha256.slice(0, 12)}
+            </Text>
+          </Box>
+        ))}
+        {restoreTarget && (
+          <Box marginTop={1}>
+            <SharedConfirmDialog
+              message={
+                `Restore ${restoreLabel} to the ${formatRevisionTs(restoreTarget.ts)} revision? ` +
+                'The current content is snapshotted first, so this is itself one revision away from undo.'
+              }
+              requireTypedConfirmation={restoreLabel}
+              onConfirm={() => doRestore(restoreTarget)}
+              onCancel={() => setRestoreTarget(null)}
+            />
+          </Box>
+        )}
+        {restoring && <Box marginTop={1}><BlessedSpinner/><Text> Restoring...</Text></Box>}
+        {historyStatus && <Box marginTop={1}><BlessedText variant={historyStatus.startsWith('Restored') ? 'accent' : 'alert'}>{historyStatus}</BlessedText></Box>}
+        <Box marginTop={1}><BlessedText variant="dim">[↑↓] select  [v] preview  [r]estore  [esc] back</BlessedText></Box>
+      </Box>
+    );
+  }
 
   // Operation result message
   if (operationResult) {
@@ -416,7 +660,7 @@ export function ScreenFilesPage() {
         )}
 
         <Box flexDirection="row" gap={1} marginTop={1}>
-          <BlessedText variant="dim">[q] Back  [v] View  [x] Delete  [p] Repair  [m] MCI all</BlessedText>
+          <BlessedText variant="dim">[q] Back  [v] View  [x] Delete  [p] Repair  [h]istory  [m] MCI all</BlessedText>
         </Box>
       </Box>
     );
@@ -482,7 +726,7 @@ export function ScreenFilesPage() {
 
       {/* Footer */}
       <Box flexDirection="row" gap={1} marginTop={1}>
-        <BlessedText variant="dim">[Tab] Tab  [↑↓] Scroll  [v] View  [d] Detail  [x] Delete  [p] Repair  [r] Refresh</BlessedText>
+        <BlessedText variant="dim">[Tab] Tab  [↑↓] Scroll  [v] View  [d] Detail  [x] Delete  [p] Repair  [R]epair all  [r] Refresh</BlessedText>
       </Box>
     </Box>
   );
