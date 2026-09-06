@@ -4,6 +4,7 @@ import { useMouse, useHover, type MouseEvent } from '../hooks/useMouse.js';
 import { CATEGORIES, CATEGORY_COLLAPSED, PAGES, type CategoryName, type PageMeta } from '../pages/registry.js';
 import { T, CURRENT_THEME, BORDER_STYLE } from '../theme/blessed-theme.js';
 import { isTextEntryActive } from '../state/text-entry-lock.js';
+import { paintAt, tinted } from '../theme/rail-animator.js';
 
 // Wide enough for the longest page label plus its chrome: 2 border columns,
 // paddingX of 1 either side, and the 2-column active/hover marker. At 22 the
@@ -11,6 +12,8 @@ import { isTextEntryActive } from '../state/text-entry-lock.js';
 // a second line. dev-console-launcher.test.ts pins this against the registry.
 export const SIDEBAR_CHROME = 6;
 export const SIDEBAR_WIDTH = 28;
+/** Column of a sidebar label: 1 border + paddingX of 1, so text starts at 3. */
+export const SIDEBAR_TEXT_COL = 3;
 // Screen row of the sidebar's first item. The header occupies rows 1-3 and
 // the sidebar's own top border is row 4, so items start at 5. Measured by
 // rendering Header + Sidebar in a sized pty: '[1] LIVE' lands on row 5 and
@@ -58,7 +61,10 @@ export function Sidebar({ activePageId, onSelect, focus }: Props) {
     }
     return expanded;
   });
-  const [hoveredPageId, setHoveredPageId] = useState<string | null>(null);
+  // Hover is painted directly, not stored in state. Ink renders the frame as
+  // one string, so a hover that changed state repainted the whole console
+  // every time the pointer crossed a row - the menu flickered under the mouse.
+  const hoveredRef = useRef<{ row: number; id: string } | null>(null);
 
   const rendered = useMemo(() => buildRenderedRows(expandedCats), [expandedCats]);
 
@@ -88,18 +94,35 @@ export function Sidebar({ activePageId, onSelect, focus }: Props) {
 
   useMouse(onClick);
 
+  /** Repaint one sidebar row in place, in its resting or hovered form. */
+  const paintRow = useCallback((row: number, page: PageMeta, hovered: boolean) => {
+    // The active row carries a background Ink owns; leave it to Ink.
+    if (page.id === activePageId) return;
+    const label = (hovered ? '> ' : '  ') + page.label;
+    const body = label.padEnd(SIDEBAR_WIDTH - SIDEBAR_CHROME + 2, ' ');
+    const colour = hovered ? T.accent : page.implemented ? T.ink : T.dim;
+    paintAt(row, SIDEBAR_TEXT_COL, tinted(body, colour, { bold: hovered, dim: !page.implemented }));
+  }, [activePageId]);
+
   const onHover = useCallback((e: { col: number; row: number }) => {
-    if (e.col < 1 || e.col > SIDEBAR_WIDTH) {
-      setHoveredPageId(null);
-      return;
+    const inside = e.col >= 1 && e.col <= SIDEBAR_WIDTH;
+    const hit = inside ? rendered.find(r => r.row === e.row) : undefined;
+    const next = hit && hit.kind === 'page' && hit.page
+      ? { row: hit.row, id: hit.page.id }
+      : null;
+    const prev = hoveredRef.current;
+    if (prev?.id === next?.id) return;
+
+    if (prev) {
+      const page = PAGES.find(p => p.id === prev.id);
+      if (page) paintRow(prev.row, page, false);
     }
-    const hit = rendered.find(r => r.row === e.row);
-    if (!hit || hit.kind !== 'page' || !hit.page) {
-      setHoveredPageId(null);
-      return;
+    if (next) {
+      const page = PAGES.find(p => p.id === next.id);
+      if (page) paintRow(next.row, page, true);
     }
-    setHoveredPageId(hit.page.id);
-  }, [rendered]);
+    hoveredRef.current = next;
+  }, [rendered, paintRow]);
   useHover(onHover);
 
   const implementedOrder = useMemo(
@@ -147,7 +170,7 @@ export function Sidebar({ activePageId, onSelect, focus }: Props) {
             </Box>
             {isExpanded && PAGES.filter(p => p.category === cat).map(p => {
               const isActive = p.id === activePageId;
-              const isHovered = p.id === hoveredPageId;
+              const isHovered = false;
               const isImplemented = p.implemented;
 
               let color: string;

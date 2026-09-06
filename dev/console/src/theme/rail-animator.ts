@@ -64,3 +64,27 @@ export function startRailAnimation(opts: {
     },
   };
 }
+
+/**
+ * Write a single line of text at an absolute cell, leaving the cursor where
+ * it was. The same trick the rail uses, for anything else that changes far
+ * more often than the frame it lives in.
+ *
+ * Ink owns the truth: its next render redraws whatever it believes is there,
+ * so only paint things Ink will also render correctly on its own.
+ */
+export function paintAt(row: number, col: number, body: string, stream: NodeJS.WriteStream = process.stdout): void {
+  if (!stream.isTTY) return;
+  stream.write(SAVE_CURSOR + ESC + '[' + row + ';' + col + 'H' + body + RESTORE_CURSOR);
+}
+
+/** Colour helper shared with the rail, so callers need not import chalk. */
+export function tinted(text: string, colour: string, opts: { bold?: boolean; dim?: boolean } = {}): string {
+  const tint = colour.startsWith('#')
+    ? chalk.hex(colour)
+    : (chalk as unknown as Record<string, ((s: string) => string) | undefined>)[colour];
+  let out = typeof tint === 'function' ? tint(text) : text;
+  if (opts.bold) out = chalk.bold(out);
+  if (opts.dim) out = chalk.dim(out);
+  return out;
+}
