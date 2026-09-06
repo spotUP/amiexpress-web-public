@@ -1274,6 +1274,23 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
   // ===== Drives (TOOLTYPE_DRIVES) =====
 
   /**
+   * GET /api/config/storage-providers
+   *
+   * The providers a sysop can pick from, with each one's endpoint shape and
+   * the terms of its free tier. Served rather than duplicated in the admin so
+   * the figures a sysop decides on - egress cost, minimum retention - have a
+   * single source.
+   */
+  router.get('/storage-providers', async (_req: Request, res: Response) => {
+    try {
+      const { STORAGE_PROVIDERS } = require('../storage/providers');
+      sendResponse(res, STORAGE_PROVIDERS);
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
    * GET /api/config/drives
    * Get all drives
    */

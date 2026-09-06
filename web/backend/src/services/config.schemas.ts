@@ -352,7 +352,28 @@ export const DriveConfigSchema = z.object({
   drive_number: z.number().int().min(1),
   drive_path: z.string().min(1).max(500),
   enabled: z.boolean().optional(),
-  description: z.string().max(500).optional()
+  description: z.string().max(500).optional(),
+
+  /**
+   * The DRIVE.n.* sub-keys of a pooled volume.
+   *
+   * Optional throughout: a local drive has none of them, and a sysop who has
+   * hand-written them into Drives.info must not have them erased by a save
+   * that only meant to change the path - the writer omits a key it was not
+   * given rather than clearing it.
+   *
+   * The secret is deliberately NOT here. It never goes in Drives.info; it is
+   * written to its own file by the existing secret endpoint.
+   */
+  provider: z.string().max(40).optional(),
+  endpoint: z.string().max(500).optional(),
+  region: z.string().max(60).optional(),
+  keyId: z.string().max(200).optional(),
+  quotaBytes: z.number().int().nonnegative().optional(),
+  volumeClass: z.enum(['FREE', 'PAID']).optional(),
+  egress: z.enum(['FREE', 'METERED', '3X']).optional(),
+  retentionDays: z.number().int().nonnegative().optional(),
+  requestBudget: z.number().int().nonnegative().optional()
 });
 
 // Computer Types (TOOLTYPE_COMPUTERLIST from express.e:31954-31965)

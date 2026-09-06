@@ -1,3 +1,4 @@
+import type { VolumeClass, EgressPosture } from '../storage/volume-config';
 import type { DoorType, DoorRuntimeEnv } from '../constants/door-types';
 /**
  * Database Type Definitions
@@ -699,6 +700,23 @@ export interface DriveConfig {
 
   // Description
   description?: string;
+
+  /**
+   * Pooled-volume settings, written to the DRIVE.n.* sub-keys of Drives.info.
+   *
+   * All optional: a local drive has none of them, and a save that omits one
+   * leaves whatever the sysop hand-wrote in the file alone. The SECRET is
+   * never here - it lives outside Drives.info, set by its own endpoint.
+   */
+  provider?: string;
+  endpoint?: string;
+  region?: string;
+  keyId?: string;
+  quotaBytes?: number;
+  volumeClass?: VolumeClass;
+  egress?: EgressPosture;
+  retentionDays?: number;
+  requestBudget?: number;
 
   // Metadata
   created_at: Date;

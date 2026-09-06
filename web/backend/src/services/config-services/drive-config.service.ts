@@ -504,14 +504,39 @@ console.error(`[DriveConfigService] Mirror update failed for drive ${id} (disk w
     // icon and every other tooltype in the file, so there is nothing to
     // read back and re-assert.
     const toolTypes = new Map<string, string>();
+    const managedSubKeys = new Set<string>();
     for (const drive of merged) {
-      if (drive.enabled !== false) {
-        toolTypes.set(`DRIVE.${drive.drive_number}`, drive.drive_path);
+      if (drive.enabled === false) continue;
+      toolTypes.set(`DRIVE.${drive.drive_number}`, drive.drive_path);
+
+      // A sub-key is written only when the caller supplied it. An absent one
+      // is left exactly as the sysop hand-wrote it: a save that changes a
+      // path must not silently clear an ENDPOINT or a QUOTA it never saw.
+      const subKeys: Array<[string, string | undefined]> = [
+        ['PROVIDER', drive.provider],
+        ['ENDPOINT', drive.endpoint],
+        ['REGION', drive.region],
+        ['KEYID', drive.keyId],
+        ['QUOTA', drive.quotaBytes !== undefined ? String(drive.quotaBytes) : undefined],
+        ['CLASS', drive.volumeClass],
+        ['EGRESS', drive.egress],
+        ['RETENTION', drive.retentionDays !== undefined ? String(drive.retentionDays) : undefined],
+        ['REQUESTS', drive.requestBudget !== undefined ? String(drive.requestBudget) : undefined],
+      ];
+      for (const [suffix, value] of subKeys) {
+        if (value === undefined || value === '') continue;
+        const key = `DRIVE.${drive.drive_number}.${suffix}`;
+        toolTypes.set(key, value);
+        managedSubKeys.add(key);
       }
     }
 
     applyTooltypes(drivesInfoPath, toolTypes, {
-      removeKeys: key => /^DRIVE\.\d+$/.test(key),
+      // DRIVE.n itself is wholly this writer's, so a removed drive's line
+      // goes. A sub-key is removed only when this write is REPLACING it -
+      // never merely because this write did not mention it, which would
+      // delete a sysop's hand-written ENDPOINT on an unrelated save.
+      removeKeys: key => /^DRIVE\.\d+$/.test(key) || managedSubKeys.has(key),
     });
 
 console.log(`[DriveConfigService] Wrote ${drivesInfoPath} with ${merged.length} drives`);
