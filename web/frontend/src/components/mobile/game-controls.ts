@@ -196,13 +196,25 @@ export function trackpadColumn(fraction: number, columns: number): number {
 /**
  * How far the paddle travels for a given thumb travel.
  *
- * A real spinner is relative and geared: a small twist crosses the whole
- * playfield. Mapping the strip absolutely meant a full-width sweep of the
- * thumb for a full-width sweep of the paddle, which is a long way to reach
- * on a phone (reported live 2026-08-25). Above 1 the paddle outruns the
- * thumb; 2 crosses the board in half a strip.
+ * ONE. The paddle moves exactly as far as the finger does, because the finger
+ * IS the control surface: move it a third of the way across the screen and the
+ * paddle goes a third of the way across the board.
+ *
+ * This has been wrong in both directions. It began as an ABSOLUTE mapping,
+ * where the paddle jumped to wherever the thumb landed and crossing the board
+ * meant sweeping the whole strip - a long reach on a phone, reported live
+ * 2026-08-25. The answer then was to gear it up to 2.2, so a short sweep
+ * crossed the board. A beta on real iPhones and Androids said that was far
+ * too fast to play (2026-09-06), and it is: at 2.2 the paddle outruns the
+ * thumb by more than double, so the hand has no idea where the paddle will
+ * stop.
+ *
+ * The reach problem the gearing solved does not come back, because the
+ * mapping is still RELATIVE: lift the thumb, plant it again, and the stroke
+ * continues from where the paddle is. A full traverse is two sweeps, not one
+ * long stretch - which is how a trackpad has always worked.
  */
-export const TRACKPAD_GAIN = 2.2;
+export const TRACKPAD_GAIN = 1;
 
 /**
  * Next paddle column for a thumb that moved from `fromFraction` to

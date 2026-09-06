@@ -248,17 +248,41 @@ describe('MobileGameControls', () => {
 });
 
 describe('trackpad gearing', () => {
-  // Reported live: the trackpad worked but was full-width and absolute, so
-  // crossing the board meant sweeping the whole strip - a long reach on a
-  // phone. A spinner is relative and geared instead.
-  it('crosses the board in well under a full sweep', () => {
+  /**
+   * THE PADDLE GOES EXACTLY AS FAR AS THE FINGER.
+   *
+   * This has been wrong in both directions. Absolute at first, so the paddle
+   * teleported to the thumb and a full traverse meant a full-width reach
+   * (2026-08-25). Then geared to 2.2, so a short sweep crossed the board - and
+   * a beta on real phones found that unplayable, because a paddle that outruns
+   * your thumb by more than double gives the hand nothing to aim with
+   * (2026-09-06).
+   *
+   * A third of the screen moves the paddle a third of the board. No more, no
+   * less, and no velocity curve on top.
+   */
+  it('moves the paddle exactly as far as the thumb travelled', () => {
     const cols = 80;
     const middle = trackpadColumn(0.5, cols);
 
     // A third of the strip, from the middle.
     const moved = trackpadStep(middle, 0.5, 0.5 + 1 / 3, cols);
 
-    expect(moved - middle).toBeGreaterThan((cols - 1) / 3);
+    // Exactly a third of the board, give or take the rounding to a column.
+    const expected = (cols - 1) / 3;
+    expect(Math.abs((moved - middle) - expected)).toBeLessThanOrEqual(1);
+  });
+
+  it('is 1:1 over any distance, in both directions', () => {
+    const cols = 80;
+    for (const travel of [0.05, 0.1, 0.25, 0.5]) {
+      const right = trackpadStep(10, 0.2, 0.2 + travel, cols) - 10;
+      const left = 70 - trackpadStep(70, 0.8, 0.8 - travel, cols);
+      const expected = travel * (cols - 1);
+
+      expect(Math.abs(right - expected)).toBeLessThanOrEqual(1);
+      expect(Math.abs(left - expected)).toBeLessThanOrEqual(1);
+    }
   });
 
   it('continues from where the paddle was, rather than teleporting', () => {

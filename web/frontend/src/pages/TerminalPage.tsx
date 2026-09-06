@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useCallback, type CSSProperties } from 'react';
 import { BBSTerminal, type BBSTerminalRef, type TerminalMouseEventType } from '@amiexpress/terminal';
 import { MobileBBSKeyboard } from '../components/mobile/MobileBBSKeyboard';
-import { visibleHeight } from '../components/mobile/terminal-fit';
+import { visibleHeight, visibleTop } from '../components/mobile/terminal-fit';
 import { MobileGameControls } from '../components/mobile/MobileGameControls';
 import { MobileGameGestures } from '../components/mobile/MobileGameGestures';
 import {
@@ -178,7 +178,11 @@ export function TerminalPage(): JSX.Element {
       if (!host) return;
       available = {
         width: host.clientWidth || window.innerWidth,
-        height: visibleHeight(window) - (isMobileRef.current ? ONSCREEN_INPUT_HEIGHT : 0),
+        // Minus the band the browser's own chrome sits over, where a
+        // browser overlays rather than insets - see visibleTop.
+        height: visibleHeight(window)
+          - visibleTop(window)
+          - (isMobileRef.current ? ONSCREEN_INPUT_HEIGHT : 0),
       };
     } else {
       // Desktop fit-to-window. The PAGE's content box, not the terminal's

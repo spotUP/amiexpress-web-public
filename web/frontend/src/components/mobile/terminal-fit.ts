@@ -129,7 +129,7 @@ export function fitFontSize(
 export interface ViewportLike {
   innerHeight: number;
   innerWidth: number;
-  visualViewport?: { height: number; width: number } | null;
+  visualViewport?: { height: number; width: number; offsetTop?: number } | null;
 }
 
 /**
@@ -152,6 +152,32 @@ export function visibleHeight(view: ViewportLike): number {
     return view.innerHeight;
   }
   return Math.min(visual, view.innerHeight);
+}
+
+/**
+ * How far down the screen the visible area STARTS.
+ *
+ * Two browsers can show the same page differently and both be right. One
+ * INSETS its chrome - the visual viewport shrinks, offsetTop stays 0, and
+ * content laid out from the top is fully visible. The other OVERLAYS it - the
+ * visual viewport is pushed down instead, offsetTop is positive, and anything
+ * drawn at the top of the layout viewport sits underneath the browser's own
+ * bar where nobody can read it.
+ *
+ * That is why a beta on 2026-09-06 had one Android user losing the top of the
+ * screen while others, on different browsers, did not. Sizing to the visible
+ * HEIGHT was already right; nothing accounted for where that visible band
+ * begins.
+ *
+ * Zero on every browser that insets, so honouring it cannot move the phones
+ * that already work.
+ */
+export function visibleTop(view: ViewportLike): number {
+  const offset = view.visualViewport?.offsetTop;
+  if (typeof offset !== 'number' || !Number.isFinite(offset) || offset <= 0) return 0;
+  // Never claim more than the viewport itself: a nonsense offset would
+  // otherwise take the whole screen away.
+  return Math.min(offset, view.innerHeight);
 }
 
 /** The same reasoning horizontally. */
