@@ -988,12 +988,24 @@ console.log('[FM] Starting file maintenance');
 
   private static async getUploadBase(confNum: number): Promise<string | null> {
     const dataDir = _config.get('dataDir');
+
     const paths = await this.getConfiguredPaths(['ULPATH']);
-    if (paths.length === 0) {
-      return null;
+    if (paths.length > 0) {
+      const base = paths[0];
+      return path.isAbsolute(base) ? base : path.join(dataDir, base);
     }
-    const base = paths[0];
-    return path.isAbsolute(base) ? base : path.join(dataDir, base);
+
+    // No ULPATH configured is the NORMAL case, not a reason to give up: the
+    // conference's own Upload directory is where AmiExpress files an upload,
+    // and it is what the rest of this codebase reaches for (routes-setup.ts,
+    // batch-download.handler.ts, file-areas-loader.ts all join 'Upload' onto
+    // the conference path).
+    //
+    // Returning null here meant a local FM move silently moved nothing. That
+    // was every move on every board, because getConfiguredPaths queried a
+    // column that does not exist and its throw was swallowed into an empty
+    // list - the failure was invisible from the outside.
+    return path.join(getConferenceDir(confNum, dataDir), 'Upload');
   }
 
   private static async deleteDbEntries(confNum: number, filename: string): Promise<void> {
