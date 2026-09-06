@@ -25,7 +25,6 @@ import { SecurityPage } from './components/tabs/SecurityPage.js';
 import { DoorInstallPage } from './components/tabs/DoorInstallPage.js';
 import { ImportExportPage } from './components/tabs/ImportExportPage.js';
 import { BatchEditorPage } from './components/tabs/BatchEditorPage.js';
-import { GlobalWallPage } from './components/tabs/GlobalWallPage.js';
 import { DeploymentPage } from './components/tabs/DeploymentPage.js';
 import { InfoFilesPage } from './components/tabs/InfoFilesPage.js';
 import { HelpOverlay } from './components/HelpOverlay.js';
@@ -60,7 +59,6 @@ const PAGE_COMPONENTS: Record<string, React.FC | undefined> = {
   conferences:    ConfsTab,
   doors:          DoorsTab,
   'door-install': DoorInstallPage,
-  'global-wall':  GlobalWallPage,
   'screen-files': ScreenFilesPage,
   // System
   configuration:  ConfigurationPage,

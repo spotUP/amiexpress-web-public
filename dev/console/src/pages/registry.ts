@@ -165,21 +165,6 @@ export const PAGES: PageMeta[] = [
     implemented: true,
   },
   {
-    id: 'global-wall',
-    label: 'Global Wall',
-    category: 'Content',
-    footerHint: '[n]ew  [e]dit  [d]el  [/]search  [r]efresh  [↑↓] scroll',
-    helpKeys: [
-      ['↑↓', 'Scroll comments'],
-      ['e', 'Edit the selected comment'],
-      ['d', 'Delete the selected comment (confirms)'],
-      ['/', 'Search by message text'],
-      ['r', 'Refresh from server'],
-      ['click', 'Click a row to select it'],
-    ],
-    implemented: true,
-  },
-  {
     id: 'screen-files',
     label: 'Screen Files',
     category: 'Content',

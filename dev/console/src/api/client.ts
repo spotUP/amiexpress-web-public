@@ -614,36 +614,6 @@ export async function validateBatch(name: string, content: string) {
   });
 }
 
-export interface GlobalWallComment {
-  id: string | number;
-  username?: string;       // canonical
-  userName?: string;       // backend uses this
-  message: string;         // canonical
-  comment?: string;        // backend uses this
-  timestamp?: string;      // canonical
-  createdDate?: string;    // backend uses this
-  source?: string;
-  bbsshortcode?: string;
-  hidden?: boolean;
-}
-
-export async function getGlobalWallComments(page = 1, limit = 50) {
-  // Backend returns a bare array for this endpoint, not { success, data }.
-  const res = await request<GlobalWallComment[] | { success: boolean; data: GlobalWallComment[] }>(`/api/globalwall/comments?page=${page}&limit=${limit}`);
-  return Array.isArray(res) ? res : (res.data ?? []);
-}
-
-export async function updateGlobalWallComment(id: string, patch: Partial<GlobalWallComment>) {
-  return request<{ success: boolean }>(`/api/globalwall/comments/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(patch),
-  });
-}
-
-export async function deleteGlobalWallComment(id: string) {
-  return request<{ success: boolean }>(`/api/globalwall/comments/${id}`, { method: 'DELETE' });
-}
-
 // ───── Phase F: Screens (full management) ────────────────────────────
 
 export interface ScopeResolution {
