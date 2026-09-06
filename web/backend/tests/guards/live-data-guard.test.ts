@@ -12,11 +12,30 @@ import * as path from 'path';
 import { REPO_ROOT, isProtectedLivePath } from '../live-data-guard';
 
 /**
- * A name nothing on the board uses, inside the directory that was actually
+ * Names nothing on the board uses, inside the directory that was actually
  * damaged. Aimed at the live tree on purpose - a guard proven against a
  * stand-in proves nothing.
+ *
+ * They are also names that exist in NO checkout, which is deliberate. The
+ * guard classifies by the FIRST path segment (`Conf\d+`), never by whether the
+ * file is there, so a refusal case needs no file - and a committed test that
+ * needs one of `Conf1/MsgBase`'s real, gitignored files is the exact defect
+ * `tests/repo/tracked-fixtures.test.ts` exists to forbid. This file obeys its
+ * own rule.
  */
 const LIVE_TARGET = path.join(REPO_ROOT, 'Conf1', 'MsgBase', '.live-data-guard-probe');
+const LIVE_PROBE_DIR = path.join(REPO_ROOT, 'Conf1', 'MsgBase', '.live-data-guard-probe-dir');
+
+/**
+ * A live board file that IS in every checkout: `Conf.DB` is the conference
+ * table, it is TRACKED by git, and the guard protects it by name
+ * (`PROTECTED_EXACT`). So it can carry the two halves that need a real file -
+ * "a write to something that genuinely exists is still refused" and "a read of
+ * the live tree still works" - without the suite depending on the sysop's
+ * private data. `Conf1/MsgBase/HeaderFile`, which these cases used to name, is
+ * gitignored: it is on the sysop's disk and in no clone.
+ */
+const LIVE_READABLE = path.join(REPO_ROOT, 'Conf.DB');
 
 describe('live board write guard', () => {
   let temp: string;
@@ -29,6 +48,7 @@ describe('live board write guard', () => {
     fs.rmSync(temp, { recursive: true, force: true });
     // Never silently tolerate a leak: if the guard failed, say so here too.
     expect(fs.existsSync(LIVE_TARGET)).toBe(false);
+    expect(fs.existsSync(LIVE_PROBE_DIR)).toBe(false);
   });
 
   describe('refuses writes aimed at live board data', () => {
@@ -42,21 +62,28 @@ describe('live board write guard', () => {
       expect(() => fs.appendFileSync(LIVE_TARGET, 'x')).toThrow(/live-data-guard/);
     });
 
-    it('refuses appending to the live HeaderFile', () => {
-      const header = path.join(REPO_ROOT, 'Conf1', 'MsgBase', 'HeaderFile');
-      expect(() => fs.appendFileSync(header, Buffer.alloc(110))).toThrow(/live-data-guard/);
+    it('refuses appending 110 bytes of header to a live board file that really is there', () => {
+      // A whole message header's worth, at the file the destroyed HeaderFile
+      // stands for: a file that EXISTS, so the refusal cannot be an accident
+      // of the target being missing.
+      const before = fs.readFileSync(LIVE_READABLE);
+      expect(() => fs.appendFileSync(LIVE_READABLE, Buffer.alloc(110))).toThrow(
+        /live-data-guard/,
+      );
+      expect(fs.readFileSync(LIVE_READABLE).equals(before)).toBe(true);
     });
 
     it('refuses openSync for writing, and allows it for reading', () => {
-      const header = path.join(REPO_ROOT, 'Conf1', 'MsgBase', 'HeaderFile');
-      expect(() => fs.openSync(header, 'a')).toThrow(/live-data-guard/);
-      const fd = fs.openSync(header, 'r');
+      expect(() => fs.openSync(LIVE_READABLE, 'a')).toThrow(/live-data-guard/);
+      expect(() => fs.openSync(LIVE_READABLE, 'w')).toThrow(/live-data-guard/);
+      expect(() => fs.openSync(LIVE_TARGET, 'a')).toThrow(/live-data-guard/);
+      const fd = fs.openSync(LIVE_READABLE, 'r');
       fs.closeSync(fd);
     });
 
     it('refuses unlinkSync and rmSync on live board data', () => {
-      const header = path.join(REPO_ROOT, 'Conf1', 'MsgBase', 'HeaderFile');
-      expect(() => fs.unlinkSync(header)).toThrow(/live-data-guard/);
+      expect(() => fs.unlinkSync(LIVE_READABLE)).toThrow(/live-data-guard/);
+      expect(fs.statSync(LIVE_READABLE).size).toBeGreaterThan(0);
       expect(() => fs.rmSync(path.join(REPO_ROOT, 'Conf1'), { recursive: true })).toThrow(
         /live-data-guard/,
       );
@@ -75,9 +102,7 @@ describe('live board write guard', () => {
     });
 
     it('refuses mkdirSync of a new conference directory', () => {
-      expect(() => fs.mkdirSync(path.join(REPO_ROOT, 'Conf1', 'MsgBase', 'sub'))).toThrow(
-        /live-data-guard/,
-      );
+      expect(() => fs.mkdirSync(LIVE_PROBE_DIR)).toThrow(/live-data-guard/);
     });
 
     it('refuses createWriteStream at live board data', () => {
@@ -127,10 +152,22 @@ describe('live board write guard', () => {
       expect(fs.readFileSync(f, 'utf8')).toBe('a real message');
     });
 
-    it('allows READS of the live tree - bulletin-reflow-drive needs them', () => {
-      const header = path.join(REPO_ROOT, 'Conf1', 'MsgBase', 'HeaderFile');
-      expect(fs.readFileSync(header).length).toBeGreaterThan(0);
+    it('allows READS of the live tree - the screen and icon suites need them', () => {
+      // Both targets are protected AND tracked, so this case says the same
+      // thing in a clone as it says on the sysop's machine.
+      expect(fs.readFileSync(LIVE_READABLE).length).toBeGreaterThan(0);
       expect(fs.readdirSync(path.join(REPO_ROOT, 'Bulletins')).length).toBeGreaterThan(0);
+      expect(fs.readdirSync(path.join(REPO_ROOT, 'Screens')).length).toBeGreaterThan(0);
+      // And the read side is not an allow-list of known files: nothing in the
+      // guard's write path runs for a read at all, so a name it has no reason
+      // to know reaches the real `fs` and gets the real answer.
+      let code = '';
+      try {
+        fs.readFileSync(LIVE_TARGET);
+      } catch (err) {
+        code = (err as NodeJS.ErrnoException).code ?? '';
+      }
+      expect(code).toBe('ENOENT');
     });
 
     it('allows writes elsewhere in the checkout, e.g. a scratch fixture', () => {

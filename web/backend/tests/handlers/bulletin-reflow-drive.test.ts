@@ -14,10 +14,22 @@
  *   handleReadBulletinCommand -> _displayBulletin -> _displayScreen
  *     (= screen.handler.displayScreen) -> petsciiTextScreenPlan -> wrapForSession
  *
- * over the board's own bulletin files, copied into a temp BBS root:
- *  - bull8.txt: 76-column prose, no ANSI -> reflowed, every row <= 40.
- *  - bull1.txt: an 80-column ANSI table -> the art-skip token, not a smear.
+ * over two bulletins copied into a temp BBS root:
+ *  - a 76-column prose bulletin, no ANSI -> reflowed, every row <= 40.
+ *  - the board's own bull1.txt, an 80-column ANSI table -> the art-skip
+ *    token, not a smear.
  *  - an ANSI session on the same two files -> byte-identical.
+ *
+ * The prose bulletin is BUILT HERE, not read from `Bulletins/`. It used to be
+ * `bull8.txt`, which git does not track: bulletins are MultiTop-II output,
+ * regenerated at every logoff, so they are board DATA and committing one to
+ * feed a test would be committing a generated file. Only bull1..bull6 are
+ * tracked, bull8 was not among them and is not even on the author's disk any
+ * more, so the whole file was red in every checkout. The prose is what the
+ * case is about - 76 columns, no ANSI - and the test can state it exactly.
+ * bull1.txt stays real because it IS tracked and because a hand-written ANSI
+ * table would not prove the art detector sees the board's own art.
+ * See `tests/repo/tracked-fixtures.test.ts`.
  */
 process.env.SKIP_DB_INIT = '1';
 
@@ -53,9 +65,31 @@ const REPO_ROOT = path.resolve(__dirname, '../../../..');
 let root: string;
 const realConfigGet = config.get.bind(config);
 
-/** Bulletin number -> the repo file whose bytes it is given. */
 const PROSE_BULLETIN = 8;
+/** Read from `Bulletins/bull1.txt`, which git tracks. */
 const TABLE_BULLETIN = 1;
+
+/**
+ * The prose bulletin, at the board's 76-column measure and in plain ASCII.
+ *
+ * Every property the three prose cases assert is here on purpose: rows longer
+ * than 40 columns so a PETSCII caller MUST see them folded, not one escape
+ * byte so the art detector has nothing to skip, and no word longer than 40
+ * characters so a correct wrap can never overflow.
+ */
+const PROSE_LINES = [
+  'This BBS is a PRIVATE SYSTEM. Only private citizens who are not employed',
+  'by any government agency, and who have read and accepted the terms set',
+  'out below, are granted an account here. Uploading is not a duty and',
+  'downloading is not a right; the decision on either one is the sysop\'s.',
+  '',
+  'Messages left in the conferences remain the property of the people who',
+  'wrote them. They are backed up nightly and are read by nobody but their',
+  'recipient. Post as though your mother were reading, so that the rules on',
+  'language, on warez and on plain personal abuse never have to be quoted at',
+  'you, and so that the privacies of everyone who calls here are not',
+  'violated.',
+];
 
 beforeAll(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'bulletin-drive-'));
@@ -63,12 +97,14 @@ beforeAll(() => {
   fs.mkdirSync(bullDir, { recursive: true });
   // BullHelp.txt must exist or the command reports "no bulletins" and returns.
   fs.writeFileSync(path.join(bullDir, 'BullHelp.txt'), Buffer.from('Bulletins\r\n', 'latin1'));
-  for (const n of [PROSE_BULLETIN, TABLE_BULLETIN]) {
-    fs.writeFileSync(
-      path.join(bullDir, `Bull${n}.txt`),
-      fs.readFileSync(path.join(REPO_ROOT, 'Bulletins', `bull${n}.txt`))
-    );
-  }
+  fs.writeFileSync(
+    path.join(bullDir, `Bull${PROSE_BULLETIN}.txt`),
+    Buffer.from(`${PROSE_LINES.join('\n')}\n`, 'latin1')
+  );
+  fs.writeFileSync(
+    path.join(bullDir, `Bull${TABLE_BULLETIN}.txt`),
+    fs.readFileSync(path.join(REPO_ROOT, 'Bulletins', 'bull1.txt'))
+  );
 
   jest.spyOn(config, 'get').mockImplementation((key: any) =>
     key === 'dataDir' ? root : realConfigGet(key)
@@ -136,7 +172,18 @@ function contentRows(out: string): string[] {
     .filter((l) => !l.includes('Which Bulletin'));
 }
 
-describe('handleReadBulletinCommand on a real Bulletins/bull*.txt', () => {
+describe('handleReadBulletinCommand on real bulletin bytes', () => {
+  it('the prose bulletin really is what the cases claim it is', () => {
+    // The fixture is the premise of the three cases below, so it is checked
+    // rather than trusted: over 40 columns, under 80, and no ANSI at all.
+    const longest = Math.max(...PROSE_LINES.map((l) => l.length));
+    expect(longest).toBeGreaterThan(40);
+    expect(longest).toBeLessThanOrEqual(76);
+    expect(PROSE_LINES.join('\n')).not.toMatch(/\x1b|\x9b/);
+    expect(Math.max(...PROSE_LINES.flatMap((l) => l.split(' ').map((w) => w.length))))
+      .toBeLessThanOrEqual(40);
+  });
+
   it('reflows a prose bulletin to 40 columns for a PETSCII caller', async () => {
     const out = await readBulletin(PROSE_BULLETIN, { petsciiMode: true, screenWidth: 40 });
 
