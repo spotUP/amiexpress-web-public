@@ -163,9 +163,12 @@ export function Sidebar({ activePageId, onSelect, focus }: Props) {
                 <Box key={p.id} paddingX={1}>
                   <Text
                     color={color}
+                    backgroundColor={isActive ? T.selectionBg : undefined}
                     bold={isBold || isActive}
-                    inverse={isActive}
-                    dimColor={!isImplemented}
+                    // `inverse` swapped the row's ink with the terminal
+                    // background, so the selected label came out dark on dark.
+                    // Set both colours instead, and never dim the selection.
+                    dimColor={!isImplemented && !isActive}
                   >
                     {isActive ? '* ' : isHovered ? '> ' : '  '}{p.label}
                   </Text>

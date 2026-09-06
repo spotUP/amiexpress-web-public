@@ -25,13 +25,10 @@ export function Header({ username, backendUp, previewUp, watchUp }: Props) {
   const uptime = useUptime();
   const { stdout } = useStdout();
   const termWidth = stdout?.columns ?? 80;
-  const [railFrame, setRailFrame] = useState(0);
-
-  // Animate slashes every 250ms
-  useEffect(() => {
-    const id = setInterval(() => setRailFrame(f => f + 1), 250);
-    return () => clearInterval(id);
-  }, []);
+  // The rail is drawn once. Ink renders the whole frame as a single string,
+  // so a state change anywhere repaints everything - animating this at 250ms
+  // made the entire console flicker four times a second for a decoration.
+  const railFrame = 0;
 
   return (
     <Box flexDirection="column" width={termWidth}>

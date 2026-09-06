@@ -18,10 +18,12 @@ export function LoginPrompt({ error, loading, onLogin }: Props) {
   const [field, setField] = useState<'username' | 'password'>('username');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const dots = useDots();
   const columns = useTerminalColumns();
   const logo = logoFits(columns) ? LOGIN_LOGO : [];
   const ready = useBackendReady();
+  // Only animate while something is actually pending: Ink repaints the whole
+  // frame on any state change, so a permanent ticker flickers the screen.
+  const dots = useDots(!ready || loading);
 
   useInput((input, key) => {
     if (loading) return;
@@ -137,11 +139,12 @@ function useBackendReady(): boolean {
   return ready;
 }
 
-function useDots(): string {
+function useDots(active: boolean): string {
   const [dots, setDots] = useState('');
   useEffect(() => {
+    if (!active) { setDots(''); return; }
     const id = setInterval(() => setDots(d => d.length >= 3 ? '' : d + '.'), 250);
     return () => clearInterval(id);
-  }, []);
-  return dots;
+  }, [active]);
+  return active ? dots : '';
 }
