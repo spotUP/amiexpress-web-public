@@ -194,6 +194,12 @@ export class DriveConfigService {
         egress: volume.egress,
         retentionDays: volume.retentionDays,
         keyId: volume.keyId,
+        // Served so Edit Drive can show what the bucket is actually pointed
+        // at. Without these the dialog could only offer a path and a
+        // description, and every other setting had to be read out of
+        // Drives.info by hand.
+        endpoint: volume.endpoint,
+        region: volume.region,
         requestBudget: volume.requestBudget,
         requestsThisMonth: liveState?.requestsThisMonth,
         // A local drive has no secret concept; reporting true keeps every

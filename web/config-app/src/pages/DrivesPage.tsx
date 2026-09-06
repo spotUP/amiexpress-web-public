@@ -41,6 +41,9 @@ interface DriveConfig {
   egress: EgressPosture;
   retentionDays?: number;
   keyId?: string;
+  /** Served for a pooled drive so Edit can show what it is pointed at. */
+  endpoint?: string;
+  region?: string;
   requestBudget?: number;
   requestsThisMonth?: number;
   /** False means no usable secret is on file - the drive is unreachable regardless of `degraded`. */
@@ -98,6 +101,11 @@ interface DriveFormData {
   keyId: string;
   secret: string;
   quotaBytes: number | '';
+  /** Edit mode shows the endpoint whole; Add builds it from a template. */
+  endpoint: string;
+  region: string;
+  volumeClass: 'FREE' | 'PAID';
+  egress: 'FREE' | 'METERED' | '3X';
 }
 
 /**
@@ -152,6 +160,10 @@ export function DrivesPage() {
     keyId: '',
     secret: '',
     quotaBytes: '',
+    endpoint: '',
+    region: '',
+    volumeClass: 'FREE',
+    egress: 'METERED',
   });
   const { data: providers = [] } = useQuery<StorageProvider[]>({
     queryKey: ['storage-providers'],
@@ -306,6 +318,10 @@ export function DrivesPage() {
     keyId: '',
     secret: '',
     quotaBytes: '',
+    endpoint: '',
+    region: '',
+    volumeClass: 'FREE',
+    egress: 'METERED',
   };
 
   const resetForm = () => setFormData(BLANK_FORM);
@@ -335,6 +351,15 @@ export function DrivesPage() {
       drive_path: drive.drive_path,
       description: drive.description || '',
       enabled: drive.enabled,
+      // A pooled drive's terms come with it, so Edit shows what is actually
+      // configured rather than three fields and a paragraph telling the sysop
+      // to go and edit Drives.info by hand.
+      endpoint: drive.endpoint ?? '',
+      region: drive.region ?? '',
+      keyId: drive.keyId ?? '',
+      quotaBytes: drive.quotaBytes ?? '',
+      volumeClass: drive.volumeClass ?? 'FREE',
+      egress: drive.egress ?? 'METERED',
     });
     setEditingDrive(drive);
     setIsModalOpen(true);
@@ -381,7 +406,30 @@ export function DrivesPage() {
         });
         if (!confirmed) return;
       }
-      updateMutation.mutate({ id: editingDrive.id, updates: formData });
+      // Send only what this dialog manages. A blank pooled field means "leave
+      // Drives.info as it is" - the writer omits a key it is not given - so
+      // an empty box must not travel as an empty string and clear it.
+      const updates: Record<string, unknown> = {
+        drive_number: formData.drive_number,
+        drive_path: formData.drive_path,
+        description: formData.description,
+        enabled: formData.enabled,
+      };
+      if (editingDrive.kind === 's3') {
+        if (formData.endpoint) updates.endpoint = formData.endpoint;
+        if (formData.region) updates.region = formData.region;
+        if (formData.keyId) updates.keyId = formData.keyId;
+        if (formData.quotaBytes !== '') updates.quotaBytes = formData.quotaBytes;
+        updates.volumeClass = formData.volumeClass;
+        updates.egress = formData.egress;
+      }
+
+      updateMutation.mutate({ id: editingDrive.id, updates: updates as Partial<DriveFormData> });
+
+      // The secret is its own write, and only when the sysop typed a new one.
+      if (editingDrive.kind === 's3' && formData.secret) {
+        await apiClient.writeDriveSecret(editingDrive.drive_number, formData.secret);
+      }
     } else {
       createMutation.mutate(formData);
     }
@@ -955,6 +1003,128 @@ export function DrivesPage() {
                   required
                 />
               </div>
+
+              {editingDrive?.kind === 's3' && (
+                <div className="space-y-4 rounded border border-border p-4">
+                  <p className="text-xs text-content-muted">
+                    Where this bucket lives and what it costs. Blank a field to leave whatever is already in
+                    Drives.info untouched.
+                  </p>
+
+                  <div>
+                    <label htmlFor="edit_endpoint" className="label">Endpoint</label>
+                    <input
+                      id="edit_endpoint"
+                      type="text"
+                      value={formData.endpoint}
+                      onChange={e => setFormData({ ...formData, endpoint: e.target.value })}
+                      className="input-field w-full font-mono"
+                      placeholder="https://<account>.r2.cloudflarestorage.com"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="edit_region" className="label">Region</label>
+                      <input
+                        id="edit_region"
+                        type="text"
+                        value={formData.region}
+                        onChange={e => setFormData({ ...formData, region: e.target.value })}
+                        className="input-field w-full font-mono"
+                        placeholder="auto"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="edit_keyid" className="label">Access key ID</label>
+                      <input
+                        id="edit_keyid"
+                        type="text"
+                        value={formData.keyId}
+                        onChange={e => setFormData({ ...formData, keyId: e.target.value })}
+                        className="input-field w-full font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="label">Quota</label>
+                    <div className="flex flex-wrap gap-2">
+                      {QUOTA_CHOICES.map(choice => (
+                        <button
+                          key={choice.label}
+                          type="button"
+                          onClick={() =>
+                            setFormData({ ...formData, quotaBytes: choice.bytes === 0 ? '' : choice.bytes })
+                          }
+                          className={`rounded border px-3 py-1 text-sm transition-colors ${
+                            (choice.bytes === 0 && formData.quotaBytes === '') ||
+                            formData.quotaBytes === choice.bytes
+                              ? 'border-accent bg-accent/10 text-accent'
+                              : 'border-border text-content-secondary hover:border-accent/50'
+                          }`}
+                        >
+                          {choice.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="label">Class</label>
+                      <div className="flex gap-2">
+                        {(['FREE', 'PAID'] as const).map(value => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, volumeClass: value })}
+                            className={`rounded border px-3 py-1 text-sm transition-colors ${
+                              formData.volumeClass === value
+                                ? 'border-accent bg-accent/10 text-accent'
+                                : 'border-border text-content-secondary hover:border-accent/50'
+                            }`}
+                          >
+                            {value}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="label">Downloads</label>
+                      <div className="flex gap-2">
+                        {(['FREE', '3X', 'METERED'] as const).map(value => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, egress: value })}
+                            className={`rounded border px-3 py-1 text-sm transition-colors ${
+                              formData.egress === value
+                                ? 'border-accent bg-accent/10 text-accent'
+                                : 'border-border text-content-secondary hover:border-accent/50'
+                            }`}
+                          >
+                            {value === '3X' ? '3x stored' : value === 'FREE' ? 'Free' : 'Metered'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="edit_secret" className="label">Replace secret</label>
+                    <input
+                      id="edit_secret"
+                      type="password"
+                      value={formData.secret}
+                      onChange={e => setFormData({ ...formData, secret: e.target.value })}
+                      className="input-field w-full font-mono"
+                      placeholder={editingDrive.secretConfigured ? 'A secret is on file - leave blank to keep it' : 'No secret on file'}
+                      autoComplete="new-password"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label htmlFor="description" className="label">Description</label>
