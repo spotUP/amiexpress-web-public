@@ -30,17 +30,44 @@ jest.mock('../../src/services/UserDatabaseManager', () => ({
   }
 }));
 
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
 import express from 'express';
 import request from 'supertest';
+import { config } from '../../src/config';
 import { infoEditorRouter } from '../../src/api/info-editor-routes';
 
 describe('the info editor response envelope', () => {
   let app: express.Application;
+  let boardRoot: string;
+  let previousDataDir: string;
 
   beforeAll(() => {
+    // The walk starts at config.get('dataDir'). It used to start at the
+    // repository, because that is what dataDir defaults to when BBS_DATA_DIR
+    // is unset - which is the same default that let other suites post into
+    // the sysop's Conf1. This suite builds the .info files it asserts on
+    // instead of borrowing the live board's.
+    boardRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'info-editor-envelope-'));
+    fs.writeFileSync(path.join(boardRoot, 'Conf1.info'), 'NDIRS=1\nCONF=1\n');
+    fs.mkdirSync(path.join(boardRoot, 'Commands', 'BBSCmd'), { recursive: true });
+    fs.writeFileSync(
+      path.join(boardRoot, 'Commands', 'BBSCmd', 'EXAMPLE.info'),
+      'TYPE=XIM\nLOCATION=BBS:Doors/Example\n',
+    );
+    previousDataDir = config.get('dataDir');
+    config.set('dataDir', boardRoot);
+
     app = express();
     app.use(express.json());
     app.use('/api/info-editor', infoEditorRouter);
+  });
+
+  afterAll(() => {
+    config.set('dataDir', previousDataDir);
+    fs.rmSync(boardRoot, { recursive: true, force: true });
   });
 
   it('wraps the file list the way the page unwraps it', async () => {
@@ -55,12 +82,15 @@ describe('the info editor response envelope', () => {
   }, 60000);
 
   it('finds the .info files the BBS actually has', async () => {
-    // The walk starts at the BBS root, which under test is the repository -
-    // it carries plenty of .info files. An empty list here means the walk is
-    // broken rather than the envelope.
+    // The walk starts at the BBS root - here, the temp board built above,
+    // which carries one .info at the top and one nested two levels down. An
+    // empty list means the walk is broken rather than the envelope.
     const res = await request(app).get('/api/info-editor/files');
 
-    expect(res.body.data.files.length).toBeGreaterThan(0);
+    const found = (res.body.data.files as Array<{ relativePath: string }>).map(
+      f => f.relativePath.split(path.sep).join('/'),
+    );
+    expect(found).toEqual(expect.arrayContaining(['Conf1.info', 'Commands/BBSCmd/EXAMPLE.info']));
     expect(res.body.data.files[0]).toHaveProperty('relativePath');
   }, 60000);
 

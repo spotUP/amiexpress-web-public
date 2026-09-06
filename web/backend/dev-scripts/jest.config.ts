@@ -21,6 +21,10 @@ module.exports = {
     }],
   },
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.d.ts'],
+  // Runs before the test framework and before every module under test, so
+  // the BBS_ROOT/BBS_DATA_DIR fallbacks in src/ cannot resolve to the live
+  // board and every destructive fs call into it throws. See the file header.
+  setupFiles: ['<rootDir>/tests/live-data-guard.ts'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   testTimeout: 10000,
   // ESM-style relative imports use `.js` suffixes that swc/jest preserves.

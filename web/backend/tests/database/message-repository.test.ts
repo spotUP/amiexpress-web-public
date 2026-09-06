@@ -1,5 +1,25 @@
 /**
  * Message Repository Tests
+ *
+ * CONTAINMENT - read before adding a case here.
+ *
+ * The two `jest.mock` calls below LOOK like they keep this suite off disk.
+ * They do not. `tests/setup.ts` is a setupFilesAfterEnv module, so it runs
+ * first and its `import { Database } from '../src/database'` pulls
+ * MessageFileManager, MessageIndexManager and message-repository into the
+ * registry holding the REAL singletons. By the time these factories are
+ * registered the references are already captured, and every `createMessage`
+ * below writes a real header and a real body to disk.
+ *
+ * That is how this file put 373 copies of `Test body text` into the sysop's
+ * `Conf1/MsgBase` and destroyed message 318: it wrote to whatever
+ * `BBS_ROOT` resolved to, and unset meant the repository root.
+ *
+ * What actually contains it is `tests/live-data-guard.ts`, a setupFiles
+ * module that runs before all of the above: it points BBS_ROOT/BBS_DATA_DIR
+ * at a per-worker temp board and makes any `fs` write into the live board
+ * throw. The first case below asserts that containment holds, so this suite
+ * fails loudly rather than posting mail if the guard is ever removed.
  */
 
 jest.mock('../../src/services/MessageFileManager', () => ({
@@ -14,7 +34,10 @@ jest.mock('../../src/services/MessageIndexManager', () => ({
   MsgStatus: { NORMAL: 0, PRIVATE: 1 },
 }));
 
+import * as nodePath from 'path';
+
 import { MessageRepository } from '../../src/database/message-repository';
+import { isProtectedLivePath } from '../live-data-guard';
 
 async function waitForTestDb(): Promise<any> {
   let attempts = 0;
@@ -48,6 +71,18 @@ function makeMessage(overrides: any = {}) {
 describe('MessageRepository', () => {
   let repo: MessageRepository;
   let rawDb: any;
+
+  // Deliberately first: this suite writes real message files, so prove where
+  // they land before writing any.
+  it('writes its message base somewhere that is not the live board', () => {
+    const root = process.env.BBS_ROOT as string;
+    expect(root).toBeTruthy();
+    expect(process.env.BBS_DATA_DIR).toBeTruthy();
+    expect(isProtectedLivePath(nodePath.join(root, 'Conf1', 'MsgBase', '1'))).toBe(false);
+    expect(
+      isProtectedLivePath(nodePath.join(process.env.BBS_DATA_DIR as string, 'Conf1')),
+    ).toBe(false);
+  });
 
   beforeAll(async () => {
     const db = await waitForTestDb();
