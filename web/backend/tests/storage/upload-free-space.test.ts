@@ -38,6 +38,8 @@ interface Harness {
   socket: any;
   session: any;
   written: () => string;
+  dataDir: string;
+  areaDir: string;
 }
 
 function volume(driveNumber: number, kind: 'local' | 's3', quotaBytes?: number): VolumeState {
@@ -60,11 +62,21 @@ function volume(driveNumber: number, kind: 'local' | 's3', quotaBytes?: number):
  * the test asked for. `storageVolume` undefined means the area is local, which
  * is what every area on a board without a bucket looks like.
  */
-function harness(opts: { states?: VolumeState[]; storageVolume?: number } = {}): Harness {
+function harness(
+  opts: {
+    states?: VolumeState[];
+    storageVolume?: number;
+    /** Leave the area's local ULPATH directory absent, as a pooled area's is. */
+    withoutAreaDir?: boolean;
+    /** Create Node1/Playpen, which only exists once a transfer has used it. */
+    withPlaypen?: boolean;
+  } = {}
+): Harness {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'upload-space-'));
   tempDirs.push(dataDir);
   const areaDir = path.join(dataDir, 'Conf1', 'Files');
-  fs.mkdirSync(areaDir, { recursive: true });
+  if (!opts.withoutAreaDir) fs.mkdirSync(areaDir, { recursive: true });
+  if (opts.withPlaypen) fs.mkdirSync(path.join(dataDir, 'Node1', 'Playpen'), { recursive: true });
 
   const original = config.get.bind(config);
   const spy = jest
@@ -124,6 +136,8 @@ function harness(opts: { states?: VolumeState[]; storageVolume?: number } = {}):
       flushOutput(socketRef);
       return out.join('');
     },
+    dataDir,
+    areaDir,
   };
 }
 
@@ -205,6 +219,71 @@ describe('the free-space figure a caller is shown', () => {
 });
 
 describe('the upload gate', () => {
+  it('gates on the area\'s OWN drive, not the pool sum', () => {
+    // DRIVE.2 is this area's drive and it is full; DRIVE.3 has 10 GB and can
+    // never hold this area's objects, because every read path resolves through
+    // DRIVE.2's name index. A sum-based gate would let the caller send the
+    // whole file and fail at the put.
+    const h = harness({
+      states: [volume(2, 's3', 1024), volume(3, 's3', 10 * 1024 ** 3)],
+      storageVolume: 2,
+    });
+
+    displayUploadInterface(h.socket, h.session, '');
+
+    expect(h.written()).toContain('Not enough free space for uploading!');
+    expect(h.session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+    // express.e:19012 still prints freeDiskSpace() - the sum across drives.
+    expect(h.written()).toContain('10.0 GB available for uploading.');
+  });
+
+  it('calls a degraded drive an outage, not a full disk', () => {
+    const states = [volume(2, 's3', 10 * 1024 ** 3)];
+    states[0].degraded = true;
+    const h = harness({ states, storageVolume: 2 });
+
+    displayUploadInterface(h.socket, h.session, '');
+
+    expect(h.written()).toContain('DRIVE.2 is unavailable - try again later');
+    expect(h.written()).not.toContain('Not enough free space for uploading!');
+    expect(h.session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+    expect(h.session.tempData).toBeUndefined();
+  });
+
+  it('measures the node playpen, not the area directory', () => {
+    // express.e:18991 measures Node<N>/Playpen (or ramPen); rz never writes
+    // into the area's own directory, and on a pooled area that directory has
+    // no reason to exist.
+    const h = harness({ states: [volume(2, 's3')], storageVolume: 2, withPlaypen: true });
+    // The handler reaches fs through require(), and the wildcard import above
+    // is a copied namespace under this transform - spy on the same object it
+    // actually calls.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const statfs = jest.spyOn(require('fs'), 'statfsSync');
+
+    displayUploadInterface(h.socket, h.session, '');
+
+    const probed = statfs.mock.calls.map((call) => String(call[0]));
+    statfs.mockRestore();
+    expect(probed).toContain(path.join(h.dataDir, 'Node1', 'Playpen'));
+    expect(probed).not.toContain(h.areaDir);
+    expect(h.written()).not.toContain('Not enough free space for uploading!');
+    expect(h.session.subState).toBe(LoggedOnSubState.UPLOAD_FILENAME_INPUT);
+  });
+
+  it('does not refuse a pooled area just because no local directory exists yet', () => {
+    // A pooled area has no reason to have a local ULPATH directory, and a
+    // quiet node has no playpen until a transfer makes one. Both absent used
+    // to statfs-fail to 0 and refuse every upload.
+    const h = harness({ states: [volume(2, 's3')], storageVolume: 2, withoutAreaDir: true });
+
+    displayUploadInterface(h.socket, h.session, '');
+
+    expect(h.written()).not.toContain('Not enough free space for uploading!');
+    expect(h.written()).not.toContain('0.0 MB at one time.');
+    expect(h.session.subState).toBe(LoggedOnSubState.UPLOAD_FILENAME_INPUT);
+  });
+
   it('refuses before the transfer starts when the pool has no room left', () => {
     const h = harness({ states: [volume(2, 's3', 1024), volume(3, 's3', 1024)], storageVolume: 2 });
 

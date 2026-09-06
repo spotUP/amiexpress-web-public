@@ -66,7 +66,14 @@ export interface RemoteArea {
   path: string;
   /** The drive this area's files live on. Undefined means local disk. */
   storageVolume?: number;
-  /** Which class of pooled volume new files here prefer. Task 9 reads it. */
+  /**
+   * Which class of pooled volume new files here would prefer.
+   *
+   * Carried, not consumed - see `VolumeSet.place`. An upload goes to
+   * `storageVolume` and nowhere else, because that is the only drive the read
+   * side looks on, so a preference between drives has nothing to choose
+   * between yet. Task 11 owns the surface that would give it one.
+   */
   volumeClassPref?: 'FREE' | 'PAID';
 }
 
@@ -78,6 +85,7 @@ export interface DiskFileArea {
   dlPath: string;
   ulPath: string;
   storageVolume?: number;
+  /** See `RemoteArea.volumeClassPref` - carried, not yet consumed. */
   volumeClassPref?: 'FREE' | 'PAID';
 }
 

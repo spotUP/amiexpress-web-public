@@ -20,7 +20,10 @@ import { formatLongDate } from '../../utils/date-time.util';
 import { isNarrow, narrowFileLines } from '../../utils/table-format.util';
 import { storeUploadContext } from '../../server/upload-session-store';
 import { getStorageContext } from '../../storage/storage-context';
-import { poolFreeBytesFor } from '../../storage/remote-upload';
+import { poolSpaceFor } from '../../storage/remote-upload';
+import { storageFailureText } from '../../storage/remote-download';
+import { StorageUnavailableError } from '../../storage/storage-backend';
+import { getPlaypenDir } from '../../utils/bbs-paths.util';
 
 // Dependencies (injected)
 let fileAreas: any[] = [];
@@ -777,47 +780,67 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
 
   // express.e:19012-19014: formatSpaceValue(tFShi,tFSlo) and formatSpaceValue(fSUploadingHi,fSUploadingLo)
   // tFShi/tFSlo = freeDiskSpace() — total free across configured drives
-  // fSUploadingHi/fSUploadingLo = rFreeSpace(nodePlaypen) — space at upload path
+  // fSUploadingHi/fSUploadingLo = rFreeSpace(nodePlaypen) — space at the PLAYPEN
   //
-  // On a board with no pool the two are the same disk, which is why they were
-  // one statfs here. A POOLED area splits them again, exactly as express.e had
-  // them: the first number is the pool total — freeDiskSpace() by its original
-  // meaning, a real sum across drives rather than a stat of one filesystem —
-  // while the second is still the local playpen, because Zmodem writes there
-  // first and it is the local disk a truncated transfer runs out of.
-  // poolFreeBytesFor returns null for every local area and every board without
-  // a bucket, which keeps that case byte-for-byte as it was.
-  const ulPath = uploadArea.ulPath || process.cwd();
-  const playpenFreeBytes = readFreeBytes(ulPath);
-  const poolFreeBytes = poolFreeBytesFor(uploadArea, getStorageContext());
-  const spaceStr = formatSpaceBytes(poolFreeBytes ?? playpenFreeBytes);
+  // On a board with no pool those are the same disk, which is why this was one
+  // statfs. A POOLED area splits them exactly as express.e had them:
+  //
+  //   the first number  the pool total — freeDiskSpace() by its original
+  //                     meaning, a real sum across drives again
+  //   the second        the node playpen, express.e:18991, which is where rz
+  //                     writes and where a full local disk truncates a transfer
+  //
+  // The playpen is measured at Node<N>/Playpen and NOT at the area's ULPATH:
+  // rz never writes into the area directory, and on a pooled area that local
+  // directory has no reason to exist at all — probing it would answer 0 and
+  // refuse every upload, under a line saying the pool has terabytes.
+  // poolSpaceFor returns null for every local area and every board without a
+  // bucket, which keeps that case byte-for-byte as it was.
+  const playpenFreeBytes = readFreeBytes(getPlaypenDir(session.nodeId || 0, config.get('dataDir')));
+  const pool = poolSpaceFor(uploadArea, getStorageContext());
+  const spaceStr = formatSpaceBytes(pool ? pool.total : playpenFreeBytes);
   const atOnceStr = formatSpaceBytes(playpenFreeBytes);
   emitText(socket, `${spaceStr} available for uploading.  ${atOnceStr} at one time.\r\n`);
 
-  // express.e:18989-19001 — refuse to start if the upload area can't hold
-  // the express.e minimum-playpen budget (2 MB). Without this check the
-  // upload "succeeds" up to the first ENOSPC write and rz silently aborts
-  // with a partial file in playpen — same UX as the disk-full incident
-  // 2026-05-20.
+  // express.e:18989-19001 — refuse to start if there isn't room for the
+  // express.e minimum-playpen budget (2 MB). Without this check the upload
+  // "succeeds" up to the first ENOSPC write and rz silently aborts with a
+  // partial file in playpen — same UX as the disk-full incident 2026-05-20.
   // express.e has a RAMWORK tooltype to override the floor with a ramdisk
   // path; web has no such concept (single filesystem), so we keep the
   // floor unconditional.
-  //
-  // The floor is the SMALLER of the two: express.e:18995 gates on the playpen
-  // (rz still truncates against a full local disk, pool or no pool), and a
-  // pooled area adds a second way to run out — the bucket — which has to be
-  // refused here, at the prompt, rather than at the byte where the last volume
-  // filled. A bucket with no declared QUOTA answers Infinity: real room,
-  // unmeasured, so the comparison falls through to the playpen figure.
-  const MIN_PLAYPEN_BYTES = 2 * 1024 * 1024;
-  const freeBytes = Math.min(playpenFreeBytes, poolFreeBytes ?? Number.POSITIVE_INFINITY);
-  if (freeBytes < MIN_PLAYPEN_BYTES) {
-    // express.e:18996 — 'Not enough free space for uploading!\b\n'
-    emitText(socket, '\r\n\x1b[31mNot enough free space for uploading!\x1b[0m\r\n');
+  const refuse = (message: string): void => {
+    emitText(socket, `\r\n\x1b[31m${message}\x1b[0m\r\n`);
     emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     session.tempData = undefined;
+  };
+
+  // A drive the board believes is DOWN has no room by roomOn's reckoning, and
+  // "not enough free space" would send the caller off to delete files that
+  // were never the problem. It is an outage; say so, in the subsystem's own
+  // one sentence, and name the drive for the sysop reading the screenshot.
+  if (pool?.degraded) {
+    refuse(storageFailureText(new StorageUnavailableError(pool.driveNumber, 'volume is degraded')));
+    return;
+  }
+
+  // The floor is the SMALLER of the playpen and the area's OWN drive.
+  // express.e:18993 gates on rFreeSpace(playpen) and that still binds — rz
+  // truncates against a full local disk, pool or no pool. The pool adds a
+  // second way to run out, and it has to be refused here rather than at the
+  // byte where the volume filled. It is the area's drive and not the pool SUM
+  // because the object can only go to the drive this area's STORAGEDRIVE
+  // names: a full drive beside a healthy sibling bucket would pass a sum-based
+  // gate and fail at the put, after the whole file had been sent. A bucket
+  // with no declared QUOTA answers Infinity — real room, unmeasured — so the
+  // comparison falls through to the playpen figure.
+  const MIN_PLAYPEN_BYTES = 2 * 1024 * 1024;
+  const freeBytes = Math.min(playpenFreeBytes, pool ? pool.driveFree : Number.POSITIVE_INFINITY);
+  if (freeBytes < MIN_PLAYPEN_BYTES) {
+    // express.e:18996 — 'Not enough free space for uploading!\b\n'
+    refuse('Not enough free space for uploading!');
     return;
   }
 
@@ -846,7 +869,7 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
  * Read actual free bytes at path using fs.statfsSync (Node >= 18.8) or df(1) fallback.
  * Returns 0 if both probes fail. This is the LOCAL disk's answer - the playpen
  * half of the upload display, and the floor rz would truncate against. The
- * pool's half comes from `poolFreeBytesFor`.
+ * pool's half comes from `poolSpaceFor`.
  *
  * Amiga-style assigns (BBS:, NODE0:, DOORS:, etc.) are resolved to real
  * filesystem paths before probing — statfsSync fails on virtual paths.
@@ -862,6 +885,22 @@ function readFreeBytes(dirPath: string): number {
       resolvedPath = paths.resolveAmigaPath(dirPath);
     } catch { /* fall through to original path */ }
   }
+
+  // statfs answers for a filesystem, not for a directory entry, so a path that
+  // does not exist yet is not "0 bytes free" - it is the wrong question. The
+  // node playpen is created when a transfer starts, so on a quiet node it is
+  // routinely absent, and 0 here refuses every upload. Ask the nearest
+  // ancestor that does exist: same filesystem, real answer.
+  try {
+    const fsMod = require('fs');
+    let probe = resolvedPath;
+    for (let i = 0; i < 64 && !fsMod.existsSync(probe); i++) {
+      const parent = require('path').dirname(probe);
+      if (parent === probe) break;
+      probe = parent;
+    }
+    resolvedPath = probe;
+  } catch { /* probe the original path */ }
 
   let freeBytes = 0;
   try {

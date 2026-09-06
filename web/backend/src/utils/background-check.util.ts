@@ -21,7 +21,6 @@
 
 import { extractAndReadDiz } from './file-diz.util';
 import { testFile, TestResult } from './file-test.util';
-import { moveUploadedFile } from './file-hold.util';
 
 /**
  * Background check task

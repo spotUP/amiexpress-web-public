@@ -54,28 +54,55 @@ export function pooledUploadArea(area: UploadAreaRef, storage: StorageContext | 
 }
 
 /**
- * The pool's free space for uploads into this area, or null when the figure a
- * caller should be shown is still the local disk's.
+ * What the pool has for this area, or null when the figure a caller should be
+ * shown is still the local disk's.
  *
- * express.e:19012-19014 prints freeDiskSpace() - the total across every
- * configured drive - and with a pool that is once again a real sum rather than
- * a stat of one filesystem.
+ * TWO numbers, because they answer two questions and one of them was wrong.
  *
- * Null, not 0, for every board without a bucket: `VolumeSet.freeBytes()`
- * counts only s3 volumes, so a board whose Drives.info holds two LOCAL drives
- * - which is this board's own Drives.info - sums to 0, and a caller shown 0
- * free is a caller refused every upload. `hasPool()` is the question that
- * separates "no bucket configured" from "the bucket is full"; an area parked
- * on a local DRIVE.n gets the same treatment, since its room is that
- * filesystem's and not the pool's.
+ *   `total`     express.e:19012 formatSpaceValue(tFShi,tFSlo) - freeDiskSpace(),
+ *               the sum across every configured drive. This is the DISPLAY
+ *               number, and with a pool it is once again a real sum rather
+ *               than a stat of one filesystem.
+ *   `driveFree` room on the drive this area's objects actually go to. This is
+ *               the GATE number. An area whose own drive is full or degraded,
+ *               on a board with one healthy sibling bucket, would pass a
+ *               sum-based gate, let the caller send the whole file over
+ *               Zmodem, and fail at the put.
+ *
+ * `degraded` is carried separately because a drive the board believes is DOWN
+ * has 0 room by `roomOn`'s reckoning, and telling a caller "not enough free
+ * space" for an outage sends them away to delete files that were never the
+ * problem. It is an outage, and it is worded as one.
+ *
+ * Null, not a zeroed record, for every board without a bucket:
+ * `VolumeSet.freeBytes()` counts only s3 volumes, so a board whose Drives.info
+ * holds two LOCAL drives - which is this board's own Drives.info - sums to 0,
+ * and a caller shown 0 free is a caller refused every upload. `hasPool()` is
+ * the question that separates "no bucket configured" from "the bucket is
+ * full"; an area parked on a local DRIVE.n gets the same treatment, since its
+ * room is that filesystem's and not the pool's.
  */
-export function poolFreeBytesFor(area: UploadAreaRef, storage: StorageContext | null): number | null {
+export interface PoolSpace {
+  /** express.e freeDiskSpace(): the sum across the pool. For display. */
+  total: number;
+  /** Room on the area's own drive. For the gate. */
+  driveFree: number;
+  driveNumber: number;
+  degraded: boolean;
+}
+
+export function poolSpaceFor(area: UploadAreaRef, storage: StorageContext | null): PoolSpace | null {
   if (!storage || !storage.volumes.hasPool()) return null;
   const pooled = pooledUploadArea(area, storage);
   if (!pooled || pooled.storageVolume === undefined) return null;
   const state = storage.volumes.byNumber(pooled.storageVolume);
   if (!state || state.volume.kind !== 's3') return null;
-  return storage.volumes.freeBytes();
+  return {
+    total: storage.volumes.freeBytes(),
+    driveFree: storage.volumes.freeBytesOn(pooled.storageVolume),
+    driveNumber: pooled.storageVolume,
+    degraded: state.degraded,
+  };
 }
 
 /** The key a file uploaded into this area takes - the download prefix, always. */

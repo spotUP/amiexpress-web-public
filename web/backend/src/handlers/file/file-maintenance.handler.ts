@@ -28,6 +28,10 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import { getConferenceDir } from '../../utils/file-hold.util';
+import { getStorageContext } from '../../storage/storage-context';
+import { usableAreasFor } from '../../storage/usable-areas';
+import { putUploadIntoPool } from '../../storage/remote-upload';
+import { storageFailureText } from '../../storage/remote-download';
 
 import type { BBSSession } from '../../index';
 
@@ -650,6 +654,22 @@ console.log('[FM] Starting file maintenance');
     const destMeta = this.getDirMeta(conferencePath, destDir, ctx.maxDirs);
     const destPath = destMeta.path;
 
+    // The BYTES move first, then the listings follow them. A move into a
+    // pooled area can fail for a reason that has nothing to do with this board
+    // - the bucket is down - and rewriting both DIR files before finding that
+    // out leaves the file listed in an area that does not have it. This is
+    // also the path a sysop uses to RELEASE a HOLD or PRIVATE upload into an
+    // area (srcDir -1 is HOLD), so it carries real files, not just tidy-ups.
+    try {
+      await this.movePhysicalFile(session, currentFile.filename, ctx.dirNum, destDir);
+    } catch (error: any) {
+      socket.emit(
+        'ansi-output',
+        AnsiUtil.errorLine(`Could not move ${currentFile.filename}: ${error.message}`)
+      );
+      return;
+    }
+
     const srcLines = this.readDirFile(dirFilePath);
     const start = currentFile.lineNumber ?? 0;
     const end = start + (currentFile.rawLines?.length || 1);
@@ -665,8 +685,6 @@ console.log('[FM] Starting file maintenance');
     const merged = destLines.concat(entryLines);
     fs.mkdirSync(path.dirname(destPath), { recursive: true });
     this.writeDirFile(destPath, merged);
-
-    await this.movePhysicalFile(session, currentFile.filename, ctx.dirNum, destDir);
 
     // Database sync - optional, not required for BBS operation
     // Doors read from DIR files on disk, not from database
@@ -694,10 +712,53 @@ console.log('[FM] Starting file maintenance');
     }
   }
 
+  /**
+   * Moves the file itself into the destination directory.
+   *
+   * WHEN THE DESTINATION AREA LIVES IN THE POOL this is a put, not a rename,
+   * and the difference is not cosmetic: a rename leaves the bytes on local
+   * disk, where nothing Task 8 built will ever look for them - the area's
+   * files are resolved through that drive's name index over the area's object
+   * prefix. A "successful" local rename into a pooled area is an invisible
+   * file. This is also how a HOLD or PRIVATE upload is released into an area
+   * (srcDir -1 is the HOLD listing), which is the normal route for anything
+   * that failed testFile, so it is not an exotic path.
+   *
+   * A pooled move that cannot reach the pool THROWS, where the local branch
+   * still swallows and moves on. Silence is affordable for a rename that lost
+   * a race with another node; it is not affordable when the alternative is a
+   * sysop believing a released file is downloadable.
+   */
   private static async movePhysicalFile(session: BBSSession, filename: string, srcDir?: number, destDir?: number) {
     const confNum = session.currentConf || 1;
-    const dataDir = _config.get('dataDir');
     const candidates = await this.buildFileCandidates(confNum, filename, srcDir);
+
+    const storage = getStorageContext();
+    const destArea =
+      storage && destDir !== undefined
+        ? usableAreasFor(confNum, storage).find(area => area.dirNumber === destDir)
+        : undefined;
+
+    if (destArea && storage) {
+      const source = candidates.find(candidate => fs.existsSync(candidate));
+      if (!source) {
+        // Either the file is not on local disk at all, or it is already an
+        // object in some area - moving objects between prefixes is a
+        // copy-object this handler does not do yet. Either way, say so.
+        throw new Error(
+          `${filename} was not found on local disk, so it could not be filed into DRIVE.${destArea.storageVolume}`
+        );
+      }
+      try {
+        await putUploadIntoPool(source, filename, destArea, storage);
+      } catch (error) {
+        throw new Error(storageFailureText(error));
+      }
+      // Only once the object is really there.
+      await fsp.unlink(source);
+      return;
+    }
+
     const destBase = await this.getUploadBase(confNum);
     if (!destBase) {
       return;

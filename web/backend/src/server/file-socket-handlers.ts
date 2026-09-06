@@ -444,9 +444,35 @@ console.error(`[testFile] Error:`, error);
       checkedMarker = "N"; // Not tested
     }
 
+    // Check for duplicate file in this area (express.e:19356 checkForFile, 19371-19377)
+    //
+    // BEFORE the move, not after it. express.e checks first, and the move is
+    // what commits the bytes: on a pooled area a check that ran afterwards
+    // would already have paid a PUT, replaced the object every other node can
+    // see, and unlinked the playpen copy - leaving nothing local for the sysop
+    // to review when this same check then marks the file 'D' and sends it to
+    // HOLD. Checking first makes fileStatus 'hold' before the move reads it,
+    // so a duplicate goes to the sysop's directory on local disk exactly as
+    // express.e:19372-19376 says, and never into the area at all.
+    const existingFile = await db.query(
+      "SELECT id, filename FROM file_entries WHERE LOWER(filename) = $1 AND areaid = $2",
+      [normalizedFilename, fileArea.id]
+    );
+
+    let foundDupe = false;
+    if (existingFile.rows.length > 0) {
+      // Express.e:19372-19376 - Move duplicate to HOLD directory, don't abort
+      foundDupe = true;
+      socket.emit(
+        "ansi-output",
+        `\r\n\x1b[33mFile already exists, moving to ${config.get("sysopName")}'s private directory\x1b[0m\r\n`
+      );
+      fileStatus = "hold"; // Move to HOLD directory
+      checkedMarker = "D"; // Mark as duplicate (express.e uses 'D' marker)
+    }
+
     // Move file to appropriate directory (express.e:19403-19415)
     // Use file area's dlPath from Conf.info DLPATH.n tooltype
-    let finalFilePath = data.path || "";
     // Where the bytes ended up when this area lives in the pool. Null for a
     // local area, which is every area on every board without a bucket.
     let poolLocation: RemoteLocation | null = null;
@@ -468,10 +494,6 @@ console.error(`[testFile] Error:`, error);
             pooledArea,
             storage
           );
-          finalFilePath = storage.cache.localPathFor(
-            poolLocation.driveNumber,
-            poolLocation.key
-          );
           try {
             await fs.promises.unlink(data.path);
           } catch (unlinkError: any) {
@@ -483,7 +505,7 @@ console.log(
             `[Upload] ${currentFile.filename} stored as DRIVE.${poolLocation.driveNumber}:${poolLocation.key}`
           );
         } else {
-          finalFilePath = await moveUploadedFile(
+          const movedTo = await moveUploadedFile(
             data.path,
             currentFile.filename,
             fileStatus,
@@ -491,40 +513,45 @@ console.log(
             config.get("dataDir"),
             fileArea?.dlPath // Pass dlPath from file area config (express.e:15264)
           );
-console.log(`[Upload] File moved to: ${finalFilePath}`);
+console.log(`[Upload] File moved to: ${movedTo}`);
         }
       } catch (error: any) {
 console.error(`[Upload] Error moving file: ${error.message}`);
-        // Continue with original path on error
         if (pooledArea) {
-          // A pooled failure is not the same as a rename that lost a race: the
-          // file is still in the playpen and NOT in the area, and the caller
-          // is the only person who can decide to send it again. Name the drive
-          // so a sysop reading a screenshot knows which bucket to look at.
+          // A pooled failure must NOT share the local branch's
+          // continue-with-original-path: the bytes are in the playpen and the
+          // area does not have them, so listing the file as active would
+          // advertise a download nobody can fetch. Quarantine it the way a
+          // failed integrity test is quarantined (express.e:19364-19369) -
+          // status hold, moved to the sysop's directory on local disk, listed
+          // in HELD rather than in the area - and name the drive so a sysop
+          // reading the caller's screenshot knows which bucket to look at.
           socket.emit(
             "ansi-output",
             `\r\n\x1b[31mUpload could not be filed: ${storageFailureText(error)}\x1b[0m\r\n`
           );
+          socket.emit(
+            "ansi-output",
+            `\r\n\x1b[33mMoving to ${config.get("sysopName")}'s private Directory.\x1b[0m\r\n\r\n`
+          );
+          fileStatus = "hold";
+          try {
+            const heldAt = await moveUploadedFile(
+              data.path,
+              currentFile.filename,
+              fileStatus,
+              session.currentConf,
+              config.get("dataDir"),
+              fileArea?.dlPath
+            );
+console.log(`[Upload] ${currentFile.filename} held at ${heldAt}`);
+          } catch (holdError: any) {
+            // The playpen copy is still there, which is the one thing that
+            // must stay true; cleanPlayPen sweeps it into PartUpload.
+console.error(`[Upload] Could not move ${currentFile.filename} to HOLD: ${holdError.message}`);
+          }
         }
       }
-    }
-
-    // Check for duplicate file in this area (express.e:19356 checkForFile, 19371-19377)
-    const existingFile = await db.query(
-      "SELECT id, filename FROM file_entries WHERE LOWER(filename) = $1 AND areaid = $2",
-      [normalizedFilename, fileArea.id]
-    );
-
-    let foundDupe = false;
-    if (existingFile.rows.length > 0) {
-      // Express.e:19372-19376 - Move duplicate to HOLD directory, don't abort
-      foundDupe = true;
-      socket.emit(
-        "ansi-output",
-        `\r\n\x1b[33mFile already exists, moving to ${config.get("sysopName")}'s private directory\x1b[0m\r\n`
-      );
-      fileStatus = "hold"; // Move to HOLD directory
-      checkedMarker = "D"; // Mark as duplicate (express.e uses 'D' marker)
     }
 
     // Save file to database (express.e:19356-19377)
@@ -554,37 +581,12 @@ console.error(`[Upload] Error moving file: ${error.message}`);
 
       await db.createFileEntry(fileEntry as any);
     } else {
-      // Duplicate file - skip database insert but still write to DIR file in HOLD
+      // Duplicate file - skip database insert but still write to DIR file in HOLD.
+      // It cannot be in the pool: the check above ran BEFORE the move and set
+      // status hold, so the file went to the sysop's local directory and no
+      // object was put. That is also why recordLocation is not called here -
+      // there is no new location for the existing row to learn about.
 console.log(`[Upload] Skipping database insert for duplicate file: ${currentFile.filename}`);
-
-      if (poolLocation) {
-        // The put replaced the object this area holds under that name, so the
-        // row that already exists must point at it - otherwise a row written
-        // when the area was still local sends every download at a local path
-        // that no longer has the bytes.
-        try {
-          db.recordLocation(
-            currentFile.filename,
-            fileArea.id,
-            poolLocation.driveNumber,
-            poolLocation.key
-          );
-        } catch (error: any) {
-          // recordLocation throws when no row matched, and filename case is
-          // not canonical here - the duplicate was found with LOWER(filename),
-          // so the stored spelling may differ from the one just uploaded. The
-          // object is NOT lost by this: pooled downloads resolve through the
-          // name index over the bucket's own listing (remote-download.ts) and
-          // the listing a caller sees is the DIR file on disk, so an unmatched
-          // row is a stale mirror, not an unreachable file. Say so and carry
-          // on rather than failing an upload whose bytes are safely stored.
-console.warn(
-            `[Upload] ${currentFile.filename} is in the pool as ` +
-              `DRIVE.${poolLocation.driveNumber}:${poolLocation.key} but its catalog row could ` +
-              `not be updated (${error.message}). The file is reachable; the row is stale.`
-          );
-        }
-      }
     }
 
     // Write to DIR file (express.e:19473-19509)

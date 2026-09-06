@@ -258,17 +258,35 @@ describe('an upload into a pooled area', () => {
     expect(h.backend.lists).toBe(listsBefore);
   });
 
-  it('leaves the playpen copy and the catalog location alone when the volume refuses the put', async () => {
+  it('keeps the bytes and quarantines the file when the volume refuses the put', async () => {
     const h = harness({ storageVolume: 2 });
     h.backend.down = true;
 
     await processBatchFile(h.socket, h.session, h.data, config);
 
-    expect(fs.existsSync(h.playpenFile)).toBe(true);
+    // Nothing was put, and nothing was lost: the file is in the sysop's HOLD
+    // directory on local disk, which is where a failed integrity test puts one.
     expect(h.backend.puts).toBe(0);
+    const held = path.join(h.dataDir, 'Conf1', 'HOLD', 'DEMO.ZIP');
+    expect(fs.existsSync(held)).toBe(true);
+    expect(fs.statSync(held).size).toBe(h.data.size);
+    expect(h.written()).toContain('DRIVE.2');
+  });
+
+  it('does not list a file the pool refused as if it were in the area', async () => {
+    const h = harness({ storageVolume: 2 });
+    h.backend.down = true;
+
+    await processBatchFile(h.socket, h.session, h.data, config);
+
+    // The catalog row carries no location - a row pointing at an object that
+    // was never written sends every download at a key the bucket does not have.
     expect(createdEntries[0]?.storageVolume).toBeUndefined();
     expect(createdEntries[0]?.objectKey).toBeUndefined();
-    expect(h.written()).toContain('DRIVE.2');
+    // And it is not advertised as a file of this area: status hold, so the
+    // entry goes to HELD rather than into the area's DIR listing.
+    expect(createdEntries[0]?.status).toBe('hold');
+    expect(fs.existsSync(path.join(h.dataDir, 'Conf1', 'DIR1'))).toBe(false);
   });
 
   it('renames into the local area, untouched, when the area is not pooled', async () => {
@@ -282,28 +300,20 @@ describe('an upload into a pooled area', () => {
     expect(createdEntries[0]?.storageVolume).toBeUndefined();
   });
 
-  it('points an existing catalog row at the object when the upload is a duplicate', async () => {
+  it('sends a duplicate to the sysop on local disk instead of overwriting the object', async () => {
     const h = harness({ storageVolume: 2 });
     duplicateRows = [{ id: 7, filename: 'DEMO.ZIP' }];
 
     await processBatchFile(h.socket, h.session, h.data, config);
 
+    // express.e:19372-19376 - the duplicate goes to the sysop's private
+    // directory. It must never have been put: paying a PUT to replace a good
+    // object that every other node can already see, and then unlinking the
+    // playpen copy, leaves the sysop nothing to review.
+    expect(h.backend.puts).toBe(0);
+    expect(fs.existsSync(path.join(h.dataDir, 'Conf1', 'HOLD', 'DEMO.ZIP'))).toBe(true);
     expect(createdEntries).toHaveLength(0); // duplicates insert no row
-    expect(recordedLocations).toEqual([['DEMO.ZIP', 1, 2, 'Conf1/Files/DEMO.ZIP']]);
-  });
-
-  it('survives a catalog row that cannot be matched - the object is still in the pool', async () => {
-    const h = harness({ storageVolume: 2 });
-    // A row exists (so no INSERT happens) but its filename spelling differs,
-    // which is what makes recordLocation throw.
-    duplicateRows = [{ id: 7, filename: 'demo.zip' }];
-    mockDb.recordLocation.mockImplementationOnce(() => {
-      throw new Error('recordLocation: no file_entries row for filename "DEMO.ZIP" in area 1');
-    });
-
-    await processBatchFile(h.socket, h.session, h.data, config);
-
-    expect((await h.backend.get('Conf1/Files/DEMO.ZIP')).length).toBe(h.data.size);
-    expect(h.written()).not.toContain('Upload failed');
+    expect(recordedLocations).toEqual([]);
+    expect(h.written()).toContain('File already exists');
   });
 });

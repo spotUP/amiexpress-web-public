@@ -146,6 +146,38 @@ export class VolumeSet {
     return this.states.reduce((total, state) => total + this.roomOn(state), 0);
   }
 
+  /**
+   * Room on ONE drive - which is what an upload actually has, because a pooled
+   * area pins its objects to the drive its STORAGEDRIVE names (every read path
+   * resolves through that drive's name index).
+   *
+   * `freeBytes()` is the pool SUM: the right number to SHOW a caller, since
+   * that is express.e's freeDiskSpace(), and the wrong one to gate a single
+   * upload on. A full or degraded drive beside one healthy sibling bucket
+   * passes a sum-based gate, lets the caller send the whole file, and fails at
+   * the put - which is the one thing the gate exists to prevent.
+   *
+   * 0 for a drive that is not a placement candidate at all (local, degraded,
+   * out of requests) and for a drive number the pool does not have. As with
+   * `roomOn`, that 0 must not be read as "a candidate with no room" - ask
+   * `byNumber` and `hasPool` to tell those apart.
+   */
+  freeBytesOn(driveNumber: number): number {
+    const state = this.byNumber(driveNumber);
+    return state ? this.roomOn(state) : 0;
+  }
+
+  /**
+   * The volume a new object should go on, free tiers before paid ones.
+   *
+   * NOTHING CALLS THIS YET, deliberately. An upload cannot use it: a pooled
+   * area pins its objects to the drive its STORAGEDRIVE names, because every
+   * read path resolves them through that drive's name index over the area's
+   * prefix, so an object placed on a free-tier sibling would be invisible to
+   * the board that stored it. Free-before-paid placement needs a read side
+   * that searches the pool rather than one prefix; the surface that would use
+   * it is Task 11's. Kept, and kept honest, rather than deleted and rebuilt.
+   */
   place(sizeBytes: number, prefer?: VolumeClass): VolumeState {
     const candidates = this.states.filter((s) => this.isCandidate(s) && this.roomOn(s) >= sizeBytes);
     if (candidates.length === 0) {

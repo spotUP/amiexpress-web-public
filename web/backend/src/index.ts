@@ -50,7 +50,7 @@ import {
   getPlaypenDir,
 } from "./utils/file-diz.util";
 import { testFile, TestResult } from "./utils/file-test.util";
-import { moveUploadedFile, getConferenceDir } from "./utils/file-hold.util";
+import { getConferenceDir } from "./utils/file-hold.util";
 import { writeUploadToDirFile } from "./utils/dir-file.util";
 import {
   updateSysopUploadStats,
