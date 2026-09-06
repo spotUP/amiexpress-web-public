@@ -184,7 +184,10 @@ describe('the image and the entrypoint still carry the shared shape', () => {
 
   test('it runs after the node directories and icons are copied in', () => {
     const copyNodeDirs = dockerfile.lastIndexOf('COPY Node40 /app/default-data/Node40');
-    const copyNodeIcons = dockerfile.lastIndexOf('COPY Node0.info');
+    // The icons arrive by wildcard since 742db4e07 (`COPY *.info`), not by
+    // name. What matters is unchanged: whatever line carries Node<n>.info
+    // into the image has to run before the collapse writes SCREENS onto it.
+    const copyNodeIcons = dockerfile.lastIndexOf('COPY *.info');
     const collapse = dockerfile.indexOf('collapse-default-screens.ts');
 
     expect(copyNodeDirs).toBeGreaterThan(-1);

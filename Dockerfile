@@ -394,6 +394,15 @@ COPY data/amiga-roms/aros-ext.bin /app/default-data/amiga-roms/aros-ext.bin
 # Note: bbsConfig.info is gitignored (user-specific) - synced via deploy/sync-to-server.sh
 COPY Conf.DB /app/default-data/
 
+# Every root-level .info file, by wildcard so a rename cannot break the build.
+# These are binary Amiga icon files carrying tooltypes, and the node icons
+# among them (Node<n>.info) MUST be here before the collapse step below: the
+# collapse writes SCREENS onto each one, and an icon that is not in the image
+# yet cannot be written to. This COPY sat after the collapse from 742db4e07
+# until 2026-09-06, so the image shipped 41 screen copies and no tooltype.
+# tests/seed-shares-node-screens.test.ts pins the order.
+COPY *.info /app/default-data/
+
 # The template ships ONE copy of each node screen, not forty-one.
 #
 # The COPYs above take whole node directories, and this repo is a running
@@ -441,10 +450,6 @@ COPY Scripts /app/default-data/Scripts
 COPY System /app/default-data/System
 COPY AmiXnet /app/default-data/AmiXnet
 COPY Partdownload /app/default-data/Partdownload
-
-# Copy remaining root-level .info files (batch configs, system configs)
-# Use wildcard to avoid build failures when files are renamed
-COPY *.info /app/default-data/
 
 # Copy batch files (AmigaDOS maintenance scripts) and other root data files
 COPY batch0 batch1 batch2 batch3 batch4 batch5 batch6 batch000 /app/default-data/

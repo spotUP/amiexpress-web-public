@@ -1,0 +1,310 @@
+From: https://jetrix.sourceforge.net/dev-guide.php.html
+
+Architecture
+Jetrix is designed around the concept of independant threads communicating asynchronously with messages. The three main entities are :
+client - it listens for messages sent by the TetriNET client, it's coupled to a protocol that will translate incomming messages into server messages. The messages are then forwarded to the channel occupied by the client. There is one client thread for every client connected to the server.
+channel - this is a game channel accepting playing and non-playing (spectators) clients. Messages go through a set of filters that can transform, delete or add messages to customize the behaviour of the channel. After a processing the game message are sent back to the clients. Non game related messages are forwarded to the main server thread.
+server - it handles system commands such as shutdown and slash commands typed by clients (/who, /list, /join...)
+Architecture - Message Flow
+Protocols
+TetriNET 1.13
+External references:
+Description du protocole TetriNET par knarf2 (french)
+Tetrinet protocol on TSRV.COM (archived)
+TetriNET 1.14
+The version 1.14 of the TetriNET protocol is an extension introduced by Olivier Vidal in August 2003 allowing players to get the same sequence of blocks. This protocol was first integrated to a server in Jetrix 0.1.3. It works by adding an extra parameter at the end of the newgame command:
+newgame 0 1 2 1 2 1 18 <blocks frequency array> <specials frequency array> 1 1 2A1C21B6
+The parameter 2A1C21B6 is actually the hexadecimal representation of a 32 bits integer. It determines the seed of the random number generator used by TetriNET to generate the blocks (see bellow). The number must be zero padded to 8 digits and use the little endian format. For example 0x123 will be added as 00000123.
+TetriNET Pseudo Random Number Generator
+The original TetriNET client designed by St0rmCat uses the standard random function available in Delphi. It's basically a linear congruential generator, the recursive sequence is defined by:
+
+sn+1 = (a.sn + c) mod M
+with the following parameters:
+
+a = 0x08088405
+c = 1
+M = 232
+The seed s0 is determined by the last parameter of the newgame message. This sequence gives pseudo random integers between 0 and 232 - 1, but an integer in the [0, 100[ range is required for selecting the block, and an integer in the [0, 4[ range for the orientation of the block. So the result is multiplied by the length of the range and divided by 232:
+
+In = sn * L / 232
+Where L=100 to select the block and L=4 to select its orientation. The sequence sn is evaluated twice to determine each block, first for the block and then for its orientation.
+
+The following table defines the orientations for each type of block :
+
+Orientation 0 1 2 3
+Line  Line  Line  Line  Line
+Square  Square  Square  Square  Square
+Left L  Left L  Left L  Left L  Left L
+Right L Right L Right L Right L Right L
+Left Z  Left Z  Left Z  Left Z  Left Z
+Right Z Right Z Right Z Right Z Right Z
+Half Cross  Half Cross  Half Cross  Half Cross  Half Cross
+Examples
+Here are some examples of block sequences for different seed values. This might help client programmers to validate their random number generator. The frequencies for these examples are :
+
+Block Frequency
+1 Line  15 %
+2 Square  15 %
+3 Left L  14 %
+4 Right L 14 %
+5 Left Z  14 %
+6 Right Z 14 %
+7 Half Cross  14 %
+
+The corresponding frequency table is :
+F = [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 
+     2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+     3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+     4,4,4,4,4,4,4,4,4,4,4,4,4,4,
+     5,5,5,5,5,5,5,5,5,5,5,5,5,5,
+     6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+     7,7,7,7,7,7,7,7,7,7,7,7,7,7]
+For this example the value of the seed is 0.
+
+Blocks  Sequence  Index Result
+Block 1 s1 = 0x00000001 0 Line
+s2 = 0x08088406 0
+Block 2 s3 = 0xDC6DAC1F 86  Half Cross
+s4 = 0x33DC589C 0
+Block 3 s5 = 0x45DE2B0D 27  Square
+s6 = 0xABF18B42 2
+Block 4 s7 = 0x5195C04B 31  Left L
+s8 = 0x296B6D78 0
+Here are the 10 first blocks for different seed values:
+
+Seed  Sequence
+0x00000000  Line Half Cross Square Left L Left L Line Line Line Half Cross Left Z
+0xAABBCCDD  Right L Right L Left L Left L Square Right Z Square Right L Half Cross Right L
+0x12345678  Left Z Left Z Half Cross Right Z Left L Right Z Right Z Half Cross Line Right L
+TetriFast
+TetriFast is a modified TetriNET client that removes the delay between the block fall and the showing of next block. The TetriFast protocol is quite similar to the TetriNET protocol, it has just been slightly modified to prevent TetriFast clients to connect and cheat on regular TetriNET servers.
+Login
+TetriFast clients connect on the same port as TetriNET client, that's 31457. The only difference is the initialization string, a TetriFast client will use tetrifaster instead of tetrisstart.
+Messages
+The TetriFast protocol use two different messages :
+the message playernum has been changed to )#)(!@(*3
+the message newgame has been changed to *******
+TSpec
+Query
+Tetrix first introduced a query protocol to get easily a list of players and channels on TetriNET servers. This protocol consists in 4 commands : playerquery, listchan, listuser and version. These commands are sent through the standard tetrinet port 31457 (TCP) and must be terminated by the 0xFF character. The line terminator for the response is a line feed 0x0A.
+
+playerquery
+Returns the number of players connected to the server. The output format is :
+Number of players logged in: <playernum>
+
+listchan
+Returns the list of available channels on the server. The output format is :
+"<name>" "<description>" <playernum> <playermax> <priority> <status>
+name         the name of the channel (without the leading #)
+description  the description or topic of the channel
+playernum    the number of players in this channel
+playermax    the maximum number of players
+priority     the priority of the channel
+status       the game state (1: stopped, 2: started, 3: paused)
+The response is terminated by the string "+OK".
+
+
+listuser
+Returns the list of players connected to the server. The output format is :
+"<nick>" "<team>" "<version>" <slot> <state> <auth> "<chname>"
+nick         the name of the player
+team         the team name of the player
+version      the version of the client used, usually "1.13"
+slot         the slot used in the channel (1-6)
+state        the state of the player (0: not playing, 1: playing, 2: lost)
+auth         the authentication level (1: normal, 2: channel operator, 3: operator)
+channel      the name of the channel
+The response is terminated by the string "+OK".
+
+
+version
+Returns the version of the server. The response is terminated by the string "+OK".
+Customization
+Commands
+Jetrix has been designed to allow the addition of new commands like /who or /list easily. This section will show you the steps to follow in order to create a simple /hello command that will just display the message "Hello World!".
+Write the command
+Every command is represented by a Java class implementing the Command interface. Let's create our class, HelloCommand, it'll be based on the AbstractCommand class implementing part of the Command interface methods :
+
+import java.util.*;
+import net.jetrix.*;
+import net.jetrix.messages.channel.*;
+import net.jetrix.commands.*;
+
+public class HelloCommand extends AbstractCommand
+{
+
+}
+
+The Command interface defines the required methods that any command has to implements. We will look at these methods one by one. The first one is the getAliases() method, it returns an array of Strings containing the names used to invoke the command. For our command we will use two names, "hello" and "hi". The first alias in the array is the default name that will be displayed in the /help list.
+
+    public String[] getAliases()
+    {
+        return new String[] { "hello", "hi" };
+    }
+
+The next method is getUsage(Locale locale), it returns a String describing the usage of the command. It is used when displaying the list of commands available on the server with /help. You can ignore the Locale parameter for now, it's used for internationalization purposes. Our command has no parameter so it's pretty straight forward :
+
+    public String getUsage(Locale locale)
+    {
+        return "/hello";
+    }
+
+The getDescription(Locale locale) method is also used for the command listing, it returns a short description of the command :
+
+    public String getDescription(Locale locale)
+    {
+        return "Display 'Hello World!'";
+    }
+
+The getAccessLevel() defines the minimal access level required to use the command. To allow everyone to use the command it should return AccessLevel.PLAYER, to restrict it to operators only it would return AccessLevel.OPERATOR. The AbstractCommand class provides a default implementation for this method returning the player access level, so you don't have to worry about it. But I you want your command to be used only by an operator, change the access level in the constructor :
+
+    public  HelloCommand()
+    {
+        setAccessLevel(AccessLevel.OPERATOR);
+    }
+
+Now we reach the main part of the command, the execute(CommandMessage message) method. This method is called when the command is executed. The message parameter contains all the relevant information needed to process the command, that's the source of the message (i.e. the user that issued the command) and the list of parameters. Our Hello command will just create a text message and send it back to the user :
+
+    public void execute(CommandMessage message)
+    {
+        Message hello = new PlineMessage("Hello World!");
+        message.getSource().sendMessage(hello);
+    }
+
+Our command is complete, let's put all the pieces together :
+
+import java.util.*;
+import net.jetrix.*;
+import net.jetrix.messages.channel.*;
+import net.jetrix.commands.*;
+
+public class HelloCommand extends AbstractCommand
+{
+    public String[] getAliases()
+    {
+        return new String[] { "hello", "hi" };
+    }
+
+    public String getUsage(Locale locale)
+    {
+        return "/hello";
+    }
+
+    public String getDescription(Locale locale)
+    {
+        return "Display 'Hello World!'";
+    }
+
+    public void execute(CommandMessage message)
+    {
+        Message hello = new PlineMessage("Hello World!");
+        message.getSource().sendMessage(hello);
+    }
+}
+
+Compile the command
+Save the code above in a HelloCommand.java file and copy the jetrix.jar file in the same directory (this jar is in the jetrix/lib directory of the jetrix distribution). Then compile the command with :
+javac -classpath jetrix.jar HelloCommand.java
+Deploy the command
+To make your class available to Jetrix just copy it into the jetrix/lib directory. Starting with Jetrix 0.1.1 any .class or .jar file in this directory is automatically loaded at startup. Then you need to declare your command by editing the config.xml file, under the <commands> element just add this :
+
+    <command class="HelloCommand"/>
+
+Test the command !
+Now we are ready to try the command ! Start Jetrix and log into the server. On typing /help you'll notice that the new command is automatically listed :
+HelloCommand - command listing
+To use the command just type /hello or /hi, you can also use a partial name like /hel and mix upper and lower cases :
+HelloCommand - usage
+Congratulations ! You have completed your first custom command :) If you create a useful command feel free to submit it to the Jetrix project to make it available to all Jetrix users, just send the code to smanux@lfjr.net.
+Filters
+One feature of Jetrix is to make it easy to change the behaviour of the server by modifying its response to the messages sent by the clients. This is done by implementing filters. A filter is a small class that can watch and modify all messages sent to a channel. It can serve various purposes, like modifying the game, displaying additional informations at the end of the game, blocking a flood of messages from a player, or implementing a bot responding to the players.
+
+This guide will show you how to create a simple game modification using a filter. In this mod the first player to complete 7 tetris win.
+
+Write the filter
+Filters extend the base class MessageFilter, this class defines a process(Message m, List out) method that must be overridden to implement the behaviour of the filter. A higher level filter GenericFilter with process methods for all message types is provided, we will use it for our filter.
+
+Let's create our class :
+
+import java.util.*;
+import net.jetrix.*;
+import net.jetrix.messages.*;
+import net.jetrix.filter.*;
+
+public class TetrisFilter extends GenericFilter
+{
+
+}
+We have to count the number of tetris performed by each player during the game, we will put this in an array initialized when the game starts :
+
+    private int[] tetrisCount = new int[6];
+
+    public void onMessage(StartGameMessage m, List out)
+    {
+        Arrays.fill(tetrisCount, 0);
+        out.add(m);
+    }
+
+Every channel has a chain of filters, the messages go through the filters before reaching the channel. A filter has the responsability to decide what messages the next filter in the chain will get. The filter could simply eat the message and forward nothing to the next filter, pass the message unchanged, transform the message or generate several messages. This is determined by what is put in the out list of the process method.
+
+Our first onMessage method just put the message in the out list with out.add(m), this is mandatory or the game would never start.
+
+The next onMessage method will watch FourLinesAddedMessage messages, this is the message sent when a player performs a tetris. This method will increase the tetris count of the player and test if the limit of 7 tetris has been reached. If so the game is stopped and the winner is announced.
+
+
+    public void onMessage(FourLinesAddedMessage m, List out)
+    {
+        // get the slot number of the player
+        int from = m.getFromSlot();
+
+        // increase its tetris count
+        tetrisCount[from]++;
+
+        // pass the message unchanged
+        out.add(m);
+
+        // test the tetris limit
+        if (tetrisCount[from] >= 7)
+        {
+            // stop the game
+            out.add(new StopGameMessage());
+
+            // announce the winner
+            User winner = getChannel().getPlayer(from);
+            PlineMessage announce = new PlineMessage();
+            announce.setKey("channel.player_won",
+                            new Object[] { winner.getName() });
+            out.add(announce);
+        }
+    }
+
+Our filter is complete, now we have to compile and deploy it in the server.
+
+Compile the filter
+Save the code above in a TetrisFilter.java file and copy the jetrix.jar file in the same directory (this jar is in the jetrix/lib directory of the jetrix distribution). Then compile the command with :
+
+
+javac -classpath jetrix.jar TetrisFilter.java
+
+Deploy the filter
+To make the filter available to Jetrix just copy the TetrisFilter.class file into the jetrix/lib directory. Then you need to declare your filter by editing the config.xml file, under the <filter-definitions> element add this line:
+
+
+    <alias name="7tetris" class="TetrisFilter"/>
+
+Then the filter has to be associated to a channel, we will create a new channel dedicated to this mod :
+
+
+    <channel name="7tetris">
+      <description>7 tetris to win!</description>
+      <filters>
+        <filter name="7tetris"/>
+      </filters>
+    </channel>
+
+You can also declare a global filter under the default-filters element that will be applied to all channels.
+
+Test the filter !
+You can now try the game modification, start Jetrix, bring some friends, join the 7tetris channel and show who is the fastest ! This filter could be improved in many ways, for example it could announce who has taken the lead, how many tetris are left, it could send attacks such as a quakefield or a random clear to the leader, etc... The only limit is your imagination :)
+Winlists
+Valid XHTML 1.0! Valid CSS!
