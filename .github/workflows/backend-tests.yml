@@ -152,6 +152,40 @@ jobs:
         working-directory: web/config-app
         run: npx tsc --noEmit
 
+  # dev/console (the blessed sysop TUI) had NO CI coverage at all - it appears
+  # in no workflow, and the root `npm test` script didn't reach it either. Its
+  # test suite (added 2026-09-06) exists specifically to guard against a
+  # regression back to /api/config/security/:level, a SQLite-table mirror
+  # express.e never reads - the exact bug that made the TUI's old Access
+  # Levels page silently do nothing. A guard nothing runs is decoration, not
+  # coverage.
+  console-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: dev/console/package-lock.json
+
+      - name: Install console deps
+        working-directory: dev/console
+        run: npm ci --no-audit --no-fund
+
+      - name: Type-check
+        working-directory: dev/console
+        run: npx tsc --noEmit
+
+      - name: Test
+        working-directory: dev/console
+        run: npm test
+
   # The DoorRepo reference door is plain C89 with no dependencies beyond a
   # host compiler, so its suite costs seconds. It is the only thing guarding
   # the door's security predicates (shell-safety allowlist, archive-name
