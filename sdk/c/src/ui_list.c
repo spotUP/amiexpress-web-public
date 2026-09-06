@@ -166,7 +166,7 @@ void ui_list_draw(ui_list *list, ansi_buf *b)
            caret; every other row starts where the caret would have been, so
            the list does not shuffle sideways as the cursor moves. */
         {
-            int lead = list->caret ? (int) strlen(list->caret) : 0;
+            int lead = list->caret ? (int) ui_printable_len(list->caret) : 0;
             ansi_text(b, screen_row, inner_left + lead, text,
                       inner_width - lead);
         }

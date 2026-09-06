@@ -18,6 +18,7 @@ int ui_footer_build(char *out, unsigned long cap, int cols,
     unsigned long pos;
     unsigned long prefix_len;
     unsigned long suffix_len;
+    unsigned long used = 0;      /* columns written, for the cols budget */
     int i;
 
     if (out == (char *) 0 || cap == 0) return -1;
@@ -26,14 +27,20 @@ int ui_footer_build(char *out, unsigned long cap, int cols,
     if (optional == (const char *const *) 0) optional_count = 0;
     if (cols < 0) cols = 0;
 
-    prefix_len = (unsigned long) strlen(prefix);
-    suffix_len = (unsigned long) strlen(suffix);
+    /* TWO measurements, and mixing them up eats text: `_len` is COLUMNS,
+       for the width budget, and `_bytes` is what a memcpy moves. A coloured
+       string has more bytes than columns (ui_ansi.h's markers), so copying
+       `_len` of it cuts the tail off - which is how "Ent: Use" arrived on
+       screen as "ENT:" with nothing after it. */
+    prefix_len = ui_printable_len(prefix);
+    suffix_len = ui_printable_len(suffix);
     pos = 0;
 
     if (prefix_len > 0) {
-        if (prefix_len + 1 > cap) return -1;
-        memcpy(out, prefix, prefix_len);
-        pos = prefix_len;
+        unsigned long prefix_bytes = (unsigned long) strlen(prefix);
+        if (prefix_bytes + 1 > cap) return -1;
+        memcpy(out, prefix, prefix_bytes);
+        pos = prefix_bytes;
     }
 
     /* Optional parts, highest priority first. Each is tried against the
@@ -52,17 +59,22 @@ int ui_footer_build(char *out, unsigned long cap, int cols,
 
         if (part == (const char *) 0 || part[0] == '\0') continue;
 
-        part_len = (unsigned long) strlen(part);
+        unsigned long part_bytes = (unsigned long) strlen(part);
+
+        part_len = ui_printable_len(part);
         sep_len = (pos > 0) ? 2UL : 0UL;
         tail_len = (suffix_len > 0) ? 2UL + suffix_len : 0UL;
-        candidate = pos + sep_len + part_len + tail_len;
+        /* The budget is columns, and `pos` counts bytes - so what has been
+           written so far is measured the same way as what is being added. */
+        candidate = used + sep_len + part_len + tail_len;
 
         if (candidate > (unsigned long) cols) break;
-        if (pos + sep_len + part_len + 1 > cap) break;
+        if (pos + sep_len + part_bytes + 1 > cap) break;
 
-        if (sep_len > 0) { memcpy(out + pos, "  ", 2); pos += 2; }
-        memcpy(out + pos, part, part_len);
-        pos += part_len;
+        if (sep_len > 0) { memcpy(out + pos, "  ", 2); pos += 2; used += 2; }
+        memcpy(out + pos, part, part_bytes);
+        pos += part_bytes;
+        used += part_len;
     }
 
     /* Appended unconditionally from here - never gated on `cols`. The only
@@ -70,11 +82,12 @@ int ui_footer_build(char *out, unsigned long cap, int cols,
      * never a narrow screen. */
     if (suffix_len > 0) {
         unsigned long sep_len = (pos > 0) ? 2UL : 0UL;
+        unsigned long suffix_bytes = (unsigned long) strlen(suffix);
 
-        if (pos + sep_len + suffix_len + 1 > cap) return -1;
+        if (pos + sep_len + suffix_bytes + 1 > cap) return -1;
         if (sep_len > 0) { memcpy(out + pos, "  ", 2); pos += 2; }
-        memcpy(out + pos, suffix, suffix_len);
-        pos += suffix_len;
+        memcpy(out + pos, suffix, suffix_bytes);
+        pos += suffix_bytes;
     }
 
     out[pos] = '\0';
@@ -167,7 +180,7 @@ void ui_masthead_draw_tick(ansi_buf *b, int row, int left, int cols,
     if (budget > (int) sizeof(line) - 1) budget = (int) sizeof(line) - 1;
 
     if (!title) title = "";
-    title_len = (unsigned long) strlen(title);
+    title_len = ui_printable_len(title);
     if (title_len > (unsigned long) budget) title_len = (unsigned long) budget;
 
     memcpy(line, title, title_len);
@@ -203,8 +216,8 @@ void ui_status_draw(ansi_buf *b, int row, int left, int cols,
 
     if (!left_text) left_text = "";
     if (!right_text) right_text = "";
-    left_len = (unsigned long) strlen(left_text);
-    right_len = (unsigned long) strlen(right_text);
+    left_len = ui_printable_len(left_text);
+    right_len = ui_printable_len(right_text);
 
     ui_bar_draw(b, row, left, cols, left_text, fg, bg);
 

@@ -40,6 +40,9 @@ static char session_storage[AE_SESSION_MIN_STORAGE];
 /** The id in force when the door opened, so the list can mark it. */
 static char active_theme[32];
 
+/** The theme the rows are painted in; the door re-points this when it changes. */
+static const ui_theme *row_theme;
+
 /** One row: the mark, the name, and the blurb if the screen has room. */
 static const char *theme_row(void *context, int index)
 {
@@ -49,11 +52,23 @@ static const char *theme_row(void *context, int index)
     const char *mark;
 
     /* Marked, not highlighted: the highlight is where the cursor is, and
-       this is what is SAVED - the same distinction the TypeScript makes. */
+       this is what is SAVED - the same distinction the TypeScript makes.
+       And the mark carries the theme's ACCENT while the empty one is dim,
+       exactly as buildThemeItems paints them: `s.accent('[*]')` against
+       `s.dim('[ ]')`. Without this every theme but the green one drew a
+       screen of identical grey (sysop, 2026-09-06). */
     mark = (strcmp(t->id, active_theme) == 0) ? "[*] " : "[ ] ";
 
     row[0] = '\0';
-    strcat(row, mark);
+    {
+        char pen[3];
+        ui_ink(pen, (strcmp(t->id, active_theme) == 0)
+                    ? row_theme->accent : row_theme->dim);
+        strcat(row, pen);
+        strcat(row, mark);
+        ui_ink(pen, row_theme->ink);
+        strcat(row, pen);
+    }
     /* The NAME, like the TypeScript picker: "Slate & Slash", not
        "slate-slash" (Doors/theme-picker/app.ts, buildThemeItems). */
     strncat(row, t->name, sizeof(row) - strlen(row) - 2);
@@ -71,6 +86,11 @@ static const char *theme_row(void *context, int index)
            "Slate & Slash (muted)" ran straight into its own blurb. */
         if (pad < sizeof(row) - 2) row[pad++] = ' ';
         row[pad] = '\0';
+        {
+            char pen[3];
+            ui_ink(pen, row_theme->dim);
+            strcat(row, pen);
+        }
         strncat(row, t->blurb[0] ? t->blurb : (t->rail[0] ? t->rail : "-"),
                 sizeof(row) - strlen(row) - 2);
     }
@@ -160,6 +180,7 @@ int main(int argc, char **argv)
        itself an example of what you have. */
     ae_user_theme(&session, active_theme, (int)sizeof(active_theme));
     theme = ui_theme_by_id(active_theme);
+    row_theme = theme;
 
     keys.next = door_key;
     keys.pending = door_pending;
@@ -251,15 +272,26 @@ int main(int argc, char **argv)
                (buildFooterHints): the same three keys, shorter. */
             /* Movement first, then the commitment, then the way out - the
                order buildFooterHints lists them in. */
-            if (wide) {
-                optional[n++] = "Up/Down: Choose";
-                if (host->host == AE_HOST_WEB) optional[n++] = "Enter: Use it";
-            } else {
-                optional[n++] = "Up/Dn: Pick";
-                if (host->host == AE_HOST_WEB) optional[n++] = "Ent: Use";
+            /* `${key(h.key + ':')} ${dim(h.does)}` - the key carries the
+               theme's accent and the verb is dim, which is what footerHints
+               does and what makes a themed footer look themed. */
+            static char h1[40], h2[40], h3[40];
+            char keypen[3], dimpen[3];
+
+            ui_ink(keypen, theme->accent);
+            ui_ink(dimpen, theme->dim);
+
+            sprintf(h1, "%s%s %s%s", keypen, wide ? "Up/Down:" : "Up/Dn:",
+                    dimpen, wide ? "Choose" : "Pick");
+            optional[n++] = h1;
+            if (host->host == AE_HOST_WEB) {
+                sprintf(h2, "%s%s %s%s", keypen, wide ? "Enter:" : "Ent:",
+                        dimpen, wide ? "Use it" : "Use");
+                optional[n++] = h2;
             }
+            sprintf(h3, "%sQ: %s%s", keypen, dimpen, wide ? "Leave" : "Bye");
             ui_footer_build(footer, sizeof(footer), screen.cols,
-                            "", optional, n, wide ? "Q: Leave" : "Q: Bye");
+                            "", optional, n, h3);
             if (screen.profile.collapse_chrome) {
                 /* No bar: chrome is collapsed here, so the hints are a line
                    of dim text like every other line on the screen. */
@@ -296,6 +328,7 @@ int main(int argc, char **argv)
                        it is given, and that answer is the mark's truth. */
                     ae_user_theme(&session, active_theme, (int)sizeof(active_theme));
                     theme = ui_theme_by_id(active_theme);
+                    row_theme = theme;
                     list.chrome = theme->accent;
                     list.ink = theme->ink;
                     list.selected_fg = theme->selection_ink;

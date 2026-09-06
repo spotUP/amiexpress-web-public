@@ -62,8 +62,9 @@ function buildFooterHints(compact) {
 }
 async function createApp(session) {
     const { bbs } = session;
-    const theme = bbs?.getTheme ? bbs.getTheme() : (0, theme_1.themeById)('classic');
-    const s = (0, theme_1.themeStyles)(theme);
+    const opened = bbs?.getTheme ? bbs.getTheme() : (0, theme_1.themeById)('classic');
+    let theme = opened;
+    let s = (0, theme_1.themeStyles)(theme);
     const themes = bbs?.listThemes ? bbs.listThemes() : [];
     if (themes.length === 0) {
         bbs.write('\r\nNo themes are available on this board.\r\n');
@@ -104,7 +105,7 @@ async function createApp(session) {
         content: '',
         style: s.bar.style,
     });
-    const active = theme.id;
+    let active = theme.id; /* the SAVED one, which is what [*] marks */
     const list = (0, blessed_helpers_1.createList)({
         parent: screen,
         top: 2,
@@ -130,7 +131,7 @@ async function createApp(session) {
     // as a real footer. They used to float together mid-screen just below the
     // list, which read as stray text rather than as the screen's footer -
     // reported as "theme looks cool but it has no footer".
-    (0, blessed_helpers_1.createBox)({
+    const noteRow = (0, blessed_helpers_1.createBox)({
         parent: screen,
         top: listRows + 3,
         left: 0,
@@ -163,7 +164,7 @@ async function createApp(session) {
      * no glitches at all, so `uprough-neon` and `slate-slash` looked like
      * palettes rather than like themes.
      */
-    const chrome = (0, theme_1.attachDoorChrome)(theme, {
+    const chromeOptions = {
         width: screenWidth,
         title: 'DOOR THEME',
         masthead: mastheadRow,
@@ -178,7 +179,45 @@ async function createApp(session) {
         glitchOptions: { tickMs: 400 },
         styles: s,
         render: () => screen.render(),
-    });
+    };
+    let chrome = (0, theme_1.attachDoorChrome)(theme, chromeOptions);
+    /**
+     * Wear a theme, here, now.
+     *
+     * The door used to SAVE and LEAVE - "Open a door to see it" - which made
+     * the one screen built for judging themes the one screen that would not
+     * show you one (sysop, 2026-09-06: "theme exits instead of applies the
+     * theme directly in the door"). It is the same three steps the SDK's own
+     * in-door menu takes (widgets/theme-menu.ts): tell the SDK, re-tint what
+     * is already on the glass, and start the new theme's chrome.
+     */
+    const wear = (next) => {
+        if (next.id === theme.id)
+            return;
+        const previous = theme;
+        theme = next;
+        s = (0, theme_1.themeStyles)(next);
+        (0, theme_1.setActiveTheme)(next);
+        // Everything already built, re-coloured in place - the SDK walks the
+        // tree and swaps token for token, tags included.
+        (0, theme_1.retintTree)(screen, previous, next);
+        // What the tree cannot know: the list's own selected style, the rows
+        // (whose marks are painted with the theme's accent), the note, and the
+        // footer's ground.
+        list.style.selected = s.list.style.selected;
+        list.style.item = { fg: next.tokens.dim };
+        list.setItems(buildThemeItems(themes, active, s, compact, screenWidth));
+        noteRow.setContent(buildNote(s, compact));
+        noteRow.style = s.plain.style;
+        footer.style = (0, theme_1.footerStyle)(next);
+        // The rail and the glitches belong to the theme that is leaving.
+        try {
+            chrome.stop();
+        }
+        catch { /* it is going anyway */ }
+        chrome = (0, theme_1.attachDoorChrome)(next, { ...chromeOptions, styles: s });
+        screen.render();
+    };
     list.focus();
     screen.render();
     await new Promise((resolve) => {
@@ -202,6 +241,16 @@ async function createApp(session) {
             catch { /* leaving anyway */ }
             resolve();
         };
+        // MOVING THE CURSOR WEARS THE THEME. This is the screen people judge a
+        // theme from, and reading its name told them nothing about it. The SDK's
+        // in-door menu has previewed like this since it was written; the door
+        // whose whole job is choosing was the one place that did not.
+        list.on('select item', () => {
+            const index = list.selected ?? 0;
+            const next = themes[index];
+            if (next)
+                wear((0, theme_1.themeById)(next.id));
+        });
         list.on('select', async (_item, index) => {
             const chosen = themes[index];
             if (!chosen)
@@ -216,9 +265,15 @@ async function createApp(session) {
                     saved = active;
                 }
             }
+            // Saved, and the door STAYS in it. The mark moves to the new row -
+            // the highlight says where the cursor is, the mark says what the
+            // board will use - and the note says it took.
+            active = saved;
+            wear((0, theme_1.themeById)(saved));
+            list.setItems(buildThemeItems(themes, active, s, compact, screenWidth));
             const picked = themes.find(t => t.id === saved) ?? chosen;
-            done();
-            bbs.write(`\r\n${picked.name} it is. Open a door to see it.\r\n\r\n`);
+            noteRow.setContent(`  ${s.ok(`${picked.name} saved.`)} ${s.dim('Q when you are done.')}`);
+            screen.render();
         });
         screen.key(['q', 'Q', 'escape'], () => done());
     });

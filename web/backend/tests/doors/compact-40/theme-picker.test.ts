@@ -126,6 +126,98 @@ describe('theme-picker compact (40-column) layout', () => {
     }
   });
 
+  /**
+   * Choosing a theme wears it, here, without leaving.
+   *
+   * The door used to save and immediately tear its screen down - "Open a
+   * door to see it" - so the one screen built for judging themes was the
+   * one screen that never showed you one (sysop, 2026-09-06: "theme exits
+   * instead of applies the theme directly in the door").
+   *
+   * Driven through the real createApp: the promise it returns settles when
+   * the door closes, and the point of this case is that it does NOT settle
+   * on a selection.
+   */
+  it('picking a theme applies it and leaves the door open', async () => {
+    const { createApp } = require('../../../../../Doors/theme-picker/app');
+    const themeMod = require('../../../../../sdk/dist/engines/ui/theme');
+    // The door builds its screen through the SDK helper, so the helper is
+    // where a test can catch it - the same trick the chrome case above uses.
+    const helpers = require('../../../../../sdk/dist/utils/blessed-helpers');
+    const realScreen = helpers.createScreen;
+    const screens: any[] = [];
+    const screenSpy = jest.spyOn(helpers, 'createScreen')
+      .mockImplementation(((...args: unknown[]) => {
+        const scr = (realScreen as any)(...args);
+        screens.push(scr);
+        return scr;
+      }) as any);
+
+    // REAL ids, unlike the layout fixture above: this case follows the
+    // choice all the way into the SDK's active theme, and themeById() sends
+    // an id this board does not have back to classic - which would make the
+    // door's "already wearing it" check skip the whole thing.
+    const REAL = [
+      { id: 'classic', name: 'Classic', blurb: 'The board as it has always looked.' },
+      { id: 'uprough-neon', name: 'Uprough Neon', blurb: 'Demoscene magenta and cyan.' },
+    ];
+
+    let saved: string | null = null;
+    const bbs: any = {
+      write: () => undefined,
+      connectionType: 'web',
+      getTerminalSize: () => ({ width: 80, height: 24 }),
+      listThemes: () => REAL,
+      getTheme: () => themeMod.themeById('classic'),
+      setTheme: async (id: string) => { saved = id; return id; },
+      on: () => undefined,
+    };
+
+    let closed = false;
+    const run = createApp({ bbs, user: { username: 'SYSOP' } })
+      .then(() => { closed = true; })
+      .catch(() => { closed = true; });
+
+    try {
+      await new Promise((r) => setTimeout(r, 80));
+      const screen = screens[screens.length - 1];
+      expect(screen).toBeTruthy();
+
+      const findList = (node: any): any => {
+        if (!node) return null;
+        if (typeof node.select === 'function' && Array.isArray(node.items)) return node;
+        for (const child of node.children || []) {
+          const hit = findList(child);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const list = findList(screen);
+      expect(list).toBeTruthy();
+
+      list.select(1);
+      list.emit('select', null, 1);
+      await new Promise((r) => setTimeout(r, 60));
+
+      // Saved, and STILL OPEN - the assertion the old door failed, because
+      // it destroyed its screen the moment a theme was chosen.
+      expect(saved).toBe('uprough-neon');
+      expect(closed).toBe(false);
+
+      // And the door is WEARING it: the SDK's active theme is the new one,
+      // so everything built from here takes its colours.
+      expect(themeMod.activeTheme().id).toBe('uprough-neon');
+
+      // Leaving is not driven here: blessed delivers keys through its
+      // program, not screen.emit, and faking that would test the fake. The
+      // screen is destroyed in the finally, which settles the door.
+    } finally {
+      screenSpy.mockRestore();
+      for (const scr of screens) { try { scr.destroy(); } catch { /* leaving anyway */ } }
+      void run;
+    }
+  });
+
   it('the 80-column rows, note and hints are byte-identical to the pre-change door', () => {
     expect(buildThemeItems(THEMES, 'classic', plainStyles, wide)).toEqual([
       '[*] Classic          The original AmiExpress look and feel',

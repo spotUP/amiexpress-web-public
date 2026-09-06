@@ -214,28 +214,77 @@ void ansi_cursor(ansi_buf *b, int visible)
 
 static void write_text(ansi_buf *b, int row, int col, const char *text, int maxlen, int pad)
 {
-    int n;
+    int n;            /* columns written - markers do not count */
+    const char *at = text;
+    int base_fg = b->last_fg;
+    int base_bg = b->last_bg;
+    int base_bold = b->last_bold;
 
     if (maxlen <= 0) {
         return;
     }
     ansi_goto(b, row, col);
     n = 0;
-    while (text[n] != '\0' && n < maxlen) {
-        char c = text[n];
+    while (*at != '\0' && n < maxlen) {
+        char c = *at;
+
+        /* A pen change, and it costs the row no columns (ui_ansi.h). */
+        if (c == UI_INK && at[1] != '\0') {
+            char what = at[1];
+            if (what >= '0' && what <= '7') {
+                ansi_color(b, what - '0', base_bg, b->last_bold);
+            } else if (what == 'B') {
+                ansi_color(b, b->last_fg, base_bg, 1);
+            } else if (what == 'b') {
+                ansi_color(b, b->last_fg, base_bg, 0);
+            } else if (what == 'R') {
+                ansi_color(b, base_fg, base_bg, base_bold);
+            }
+            /* The colour moved the cursor nowhere, but ansi_color wrote an
+               escape into the stream - so the next glyph still lands where
+               it should. */
+            at += 2;
+            continue;
+        }
+
         /* Control bytes become spaces: high-bit Latin-1 art passes through
          * one byte per column, but a raw ESC or CR from the server would
          * move the cursor and corrupt the entire layout. A line-at-a-time
          * renderer can forward those; a cursor-addressed one cannot. */
         put_char(b, (c >= 0 && c < 32) ? ' ' : c);
         n++;
+        at++;
     }
     if (pad) {
+        /* Padding is the CALLER's colour, not whatever the last marker left
+           behind: a row that ends mid-accent would trail a coloured bar. */
+        ansi_color(b, base_fg, base_bg, base_bold);
         while (n < maxlen) {
             put_char(b, ' ');
             n++;
         }
     }
+}
+
+unsigned long ui_printable_len(const char *text)
+{
+    unsigned long n = 0;
+
+    if (!text) return 0;
+    while (*text) {
+        if (*text == UI_INK && text[1]) { text += 2; continue; }
+        n++;
+        text++;
+    }
+    return n;
+}
+
+void ui_ink(char *out, int colour)
+{
+    if (!out) return;
+    out[0] = UI_INK;
+    out[1] = (char) ('0' + (colour & 7));
+    out[2] = '\0';
 }
 
 void ansi_text(ansi_buf *b, int row, int col, const char *text, int maxlen)

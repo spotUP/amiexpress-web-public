@@ -86,6 +86,40 @@ typedef struct {
     int cell_backgrounds;
 } ansi_buf;
 
+/**
+ * INLINE COLOUR, the C SDK's answer to a blessed tag.
+ *
+ * A door's row is not one colour: the TypeScript writes
+ * `${s.accent('[*]')} ${s.ink(name)} ${s.dim(blurb)}` and the C wrote the
+ * whole line in one pen, so every theme but the green one came out grey
+ * (sysop, 2026-09-06, with a screenshot of six identical rows).
+ *
+ * A marker is UI_INK followed by ONE byte:
+ *   '0'-'7'  that ANSI colour becomes the pen
+ *   'B'/'b'  bold on / off
+ *   'R'      back to the colour the caller set before the text
+ *
+ * Markers cost NO columns: ansi_text pads and clips by what reaches the
+ * screen, so a row with four of them still fills its width exactly. Two
+ * bytes each, no parser, no allocation - which is what a 68K door can
+ * afford and a tag syntax is not.
+ */
+#define UI_INK '\001'
+
+/** The marker for one ANSI colour, into a caller's two-byte buffer. */
+void ui_ink(char *out, int colour);
+
+/**
+ * How many COLUMNS a string reaches the screen as: its length with the
+ * markers taken out.
+ *
+ * Anything laying text out has to measure with this rather than strlen, or
+ * a coloured string is charged for bytes nobody sees. ui_footer_build did
+ * exactly that the first time and dropped the "Ent: Use" hint off a
+ * 40-column screen that had room for it.
+ */
+unsigned long ui_printable_len(const char *text);
+
 /* Binds a buffer to caller storage and empties it. */
 void ansi_begin(ansi_buf *b, char *storage, long capacity);
 
