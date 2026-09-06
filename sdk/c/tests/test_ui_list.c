@@ -326,6 +326,53 @@ static void the_profile_says_which_screens_have_backgrounds(void)
     printf("  [OK] the profile says which screens have cell backgrounds\n");
 }
 
+/**
+ * A cursor move repaints two rows, not the box.
+ *
+ * Every byte is an XIM message on a 68K door, and the full draw of this
+ * fifty-row list is what THEMEC sent on every keypress - "its slow"
+ * (sysop, 2026-09-07). The changed-rows path must be a small fraction of
+ * it, and it must address exactly the row that was left and the row that
+ * was reached.
+ */
+static void a_cursor_move_repaints_two_rows(void)
+{
+    ui_list list = a_list(50, 10);
+    static ansi_buf b;
+    long full_len, delta_len;
+
+    ui_list_select(&list, 0);
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ui_list_draw(&list, &b);
+    full_len = b.len;
+
+    ui_list_move(&list, 1);           /* row 0 -> row 1, same window */
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ui_list_draw_changed(&list, &b, 0);
+    delta_len = b.len;
+    frame[b.len] = '\0';
+
+    assert(delta_len > 0);
+    assert(delta_len * 4 < full_len);           /* well under a quarter */
+    /* Row 0 (screen row top+1 under a border) and row 1, and nothing else
+       is addressed. */
+    assert(strstr(frame, "\033[2;") != 0);
+    assert(strstr(frame, "\033[3;") != 0);
+    assert(strstr(frame, "\033[4;") == 0);
+
+    /* Nothing moved: nothing is written. */
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ui_list_draw_changed(&list, &b, 0);
+    assert(b.len == 0);
+
+    /* A scroll is a full draw again. */
+    ui_list_select(&list, 40);
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ui_list_draw_changed(&list, &b, 0);
+    assert(b.len * 4 > full_len);
+    printf("  [OK] a cursor move repaints two rows, not the box\n");
+}
+
 int main(void)
 {
     printf("ui_list\n");
@@ -344,6 +391,7 @@ int main(void)
     a_black_selection_background_falls_back_to_the_ink();
     a_screen_with_backgrounds_keeps_the_filled_bar();
     the_profile_says_which_screens_have_backgrounds();
+    a_cursor_move_repaints_two_rows();
     printf("ui_list: all passed\n");
     return 0;
 }

@@ -27,6 +27,8 @@ void ui_list_init(ui_list *list)
     list->selected_fg = ANSI_WHITE;
     list->selected_bg = ANSI_BLUE;
     list->caret = 0;
+    list->drawn_selected = -1;
+    list->drawn_offset = -1;
     list->borders = 1;
 }
 
@@ -101,6 +103,63 @@ static void thumb_for(const ui_list *list, int visible, int *start, int *size)
     if (*start > visible - *size) *start = visible - *size;
 }
 
+/* One row of the box, exactly as the full draw paints it. */
+static void draw_row(ui_list *list, ansi_buf *b, int row, int inner_left,
+                     int inner_width, int scrolls, int thumb_start, int thumb_size)
+{
+        int index = list->offset + row;
+    int screen_row = (list->borders ? list->top + 1 : list->top) + row;
+    int chosen = (index == list->selected) && (list->count > 0);
+    const char *text = "";
+
+    if (index < list->count && list->row) {
+    text = list->row(list->context, index);
+        if (!text) text = "";
+    }
+
+    /* The selected row is a filled bar, not just coloured text: a
+       highlight that stops at the end of the word leaves the eye
+       hunting for where the selection is. */
+    if (chosen && list->caret) {
+    /* A caret, and the row in the selection's ink beside it. No
+           bar: the caret IS the mark. */
+        ansi_color(b, list->ink, -1, 1);
+        ansi_text_raw(b, screen_row, inner_left, list->caret,
+                      (int) strlen(list->caret));
+    } else if (chosen) {
+    /* Ink on a bar. On a screen whose cells cannot carry a
+           background, ansi_color turns this into reverse video in the
+           bar's colour - the widget does not need to know which kind of
+           screen it is on (ui_ansi.h, cell_backgrounds). */
+        ansi_fill(b, screen_row, inner_left, inner_width,
+                  list->selected_fg, list->selected_bg);
+        ansi_color(b, list->selected_fg, list->selected_bg, 1);
+    } else {
+    /* No background: a list row is text on whatever the screen is,
+           which is what blessed draws - `style.item` carries a colour
+           and no bg. Painting the ground explicitly made every row a
+           filled band in the C door and none in the TypeScript. */
+        ansi_color(b, list->ink, -1, 0);
+    }
+
+    /* ansi_text pads to the width, so a shorter row overwrites what was
+       under it without a clearing pass. A caret row starts after the
+       caret; every other row starts where the caret would have been, so
+       the list does not shuffle sideways as the cursor moves. */
+    {
+    int lead = list->caret ? (int) ui_printable_len(list->caret) : 0;
+        ansi_text(b, screen_row, inner_left + lead, text,
+                  inner_width - lead);
+    }
+
+    if (scrolls) {
+    int on_thumb = (row >= thumb_start) && (row < thumb_start + thumb_size);
+        ansi_color(b, list->chrome, ANSI_BLACK, 0);
+        ansi_text_raw(b, screen_row, inner_left + inner_width,
+                      on_thumb ? "#" : "|", 1);
+    }
+    }
+
 void ui_list_draw(ui_list *list, ansi_buf *b)
 {
     int visible, row, inner_left, inner_width;
@@ -130,58 +189,50 @@ void ui_list_draw(ui_list *list, ansi_buf *b)
     if (scrolls) thumb_for(list, visible, &thumb_start, &thumb_size);
 
     for (row = 0; row < visible; row++) {
-        int index = list->offset + row;
-        int screen_row = (list->borders ? list->top + 1 : list->top) + row;
-        int chosen = (index == list->selected) && (list->count > 0);
-        const char *text = "";
-
-        if (index < list->count && list->row) {
-            text = list->row(list->context, index);
-            if (!text) text = "";
-        }
-
-        /* The selected row is a filled bar, not just coloured text: a
-           highlight that stops at the end of the word leaves the eye
-           hunting for where the selection is. */
-        if (chosen && list->caret) {
-            /* A caret, and the row in the selection's ink beside it. No
-               bar: the caret IS the mark. */
-            ansi_color(b, list->ink, -1, 1);
-            ansi_text_raw(b, screen_row, inner_left, list->caret,
-                          (int) strlen(list->caret));
-        } else if (chosen) {
-            /* Ink on a bar. On a screen whose cells cannot carry a
-               background, ansi_color turns this into reverse video in the
-               bar's colour - the widget does not need to know which kind of
-               screen it is on (ui_ansi.h, cell_backgrounds). */
-            ansi_fill(b, screen_row, inner_left, inner_width,
-                      list->selected_fg, list->selected_bg);
-            ansi_color(b, list->selected_fg, list->selected_bg, 1);
-        } else {
-            /* No background: a list row is text on whatever the screen is,
-               which is what blessed draws - `style.item` carries a colour
-               and no bg. Painting the ground explicitly made every row a
-               filled band in the C door and none in the TypeScript. */
-            ansi_color(b, list->ink, -1, 0);
-        }
-
-        /* ansi_text pads to the width, so a shorter row overwrites what was
-           under it without a clearing pass. A caret row starts after the
-           caret; every other row starts where the caret would have been, so
-           the list does not shuffle sideways as the cursor moves. */
-        {
-            int lead = list->caret ? (int) ui_printable_len(list->caret) : 0;
-            ansi_text(b, screen_row, inner_left + lead, text,
-                      inner_width - lead);
-        }
-
-        if (scrolls) {
-            int on_thumb = (row >= thumb_start) && (row < thumb_start + thumb_size);
-            ansi_color(b, list->chrome, ANSI_BLACK, 0);
-            ansi_text_raw(b, screen_row, inner_left + inner_width,
-                          on_thumb ? "#" : "|", 1);
-        }
+        draw_row(list, b, row, inner_left, inner_width, scrolls, thumb_start, thumb_size);
     }
 
+    list->drawn_selected = list->selected;
+    list->drawn_offset = list->offset;
     ansi_color(b, list->ink, -1, 0);
+}
+
+void ui_list_draw_changed(ui_list *list, ansi_buf *b, int rows_changed)
+{
+    int visible;
+    int inner_left;
+    int inner_width;
+    int scrolls;
+    int thumb_start = 0, thumb_size = 0;
+    int was, now;
+
+    if (!list || !b) return;
+    visible = ui_list_visible_rows(list);
+
+    /* Never drawn, scrolled, or the rows themselves moved: the whole box. */
+    if (list->drawn_selected < 0 || rows_changed
+        || list->drawn_offset != list->offset) {
+        ui_list_draw(list, b);
+        return;
+    }
+    if (list->drawn_selected == list->selected) return;   /* nothing moved */
+
+    inner_left = list->borders ? list->left + 1 : list->left;
+    inner_width = list->borders ? list->width - 2 : list->width;
+    scrolls = list->count > visible;
+    if (scrolls) inner_width -= 1;
+    if (inner_width < 1) return;
+    if (scrolls) thumb_for(list, visible, &thumb_start, &thumb_size);
+
+    was = list->drawn_selected - list->offset;
+    now = list->selected - list->offset;
+    if (was >= 0 && was < visible) {
+        draw_row(list, b, was, inner_left, inner_width, scrolls, thumb_start, thumb_size);
+    }
+    if (now >= 0 && now < visible) {
+        draw_row(list, b, now, inner_left, inner_width, scrolls, thumb_start, thumb_size);
+    }
+    ansi_color(b, list->ink, -1, 0);
+
+    list->drawn_selected = list->selected;
 }

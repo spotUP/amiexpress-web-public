@@ -180,6 +180,9 @@ int main(int argc, char **argv)
     int saved = 0;
     int rail_tick = 0;
     rail_anim anim;
+    /* The whole screen on the first frame and after a theme change; a
+       cursor move repaints two rows (RULES.md, "Doors draw smart"). */
+    int full = 1;
 
     if (ae_start(node) != 0) return 20;
     if (ae_open_bbs(&session, session_storage, (long)sizeof(session_storage), node) != 0) {
@@ -257,6 +260,13 @@ int main(int argc, char **argv)
         int key;
         const char *note;
 
+        if (!full) {
+            ui_list_draw_changed(&list, &screen.buf, 0);
+            ui_screen_flush(&screen);
+            key = ui_key_read(&keys, &pushback);
+            if (key < 0) break;
+            goto handle_key;
+        }
         ansi_clear(&screen.buf);
         /* At EVERY width. The blessed door keeps its masthead row on a C64
            and loses only the RAIL - ui_masthead_draw_tick drops that on its
@@ -366,10 +376,12 @@ int main(int argc, char **argv)
         }
 
         ui_screen_flush(&screen);
+        full = 0;
 
         key = ui_key_read(&keys, &pushback);
         if (key < 0) break;
 
+handle_key:
         switch (key) {
             case UI_KEY_UP:   ui_list_move(&list, -1); break;
             case UI_KEY_DOWN: ui_list_move(&list, 1); break;
@@ -392,6 +404,7 @@ int main(int argc, char **argv)
                     theme = ui_theme_by_id(active_theme);
                     row_theme = theme;
                     ansi_set_palette(&screen.buf, theme->rgb, theme->idx, UI_TOKEN_COUNT);
+                    full = 1;
                     list.chrome = UI_TOKEN(UI_T_ACCENT);
                     list.ink = UI_TOKEN(UI_T_INK);
                     list.selected_fg = UI_TOKEN(UI_T_SELECTION_INK);

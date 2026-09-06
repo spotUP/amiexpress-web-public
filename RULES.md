@@ -592,3 +592,28 @@ Historical preservation of BBS culture and retro Amiga 68K. Educational, defensi
 Log timestamps are in UTC / server time. Verify "today" or "recent" by file mtime (`ls -la`), not calendar date.
 
 - **Three screens per door** - a new or changed TypeScript door is designed and proven for fixed Amiga ANSI 80x25, responsive Amiga ANSI, and C64 PETSCII 40x25: `.claude/skills/door-three-screens/SKILL.md`.
+
+
+## Doors draw smart
+
+A door repaints what changed, never the screen. This is a hard rule for
+68K doors and a strong one for TypeScript doors.
+
+Why: on a 68K door every 198 bytes is one XIM message costing ~45ms of
+emulation. A full repaint of a seven-row list is ~1,900 bytes - ten
+messages, half a second - and THEMEC did that on every keypress until
+2026-09-07 ("its slow"). Repainting the two rows the cursor touched is
+~150 bytes. The same rule keeps a 2400-baud caller usable.
+
+How:
+- First frame, and after anything that changes many rows (theme change,
+  resize, a saved mark moving): full draw.
+- On a keypress: repaint only the cells that changed. In the C SDK,
+  `ui_list_draw_changed()` does this for a list; a door with its own
+  widgets keeps `drawn_*` state the same way.
+- Animation ticks touch ONE row (the masthead), never the frame.
+- Never `ansi_clear()` / `screen.clearRegion()` between keypresses.
+- Measure it: capture the door's bytes for one keypress
+  (`web/backend/src/scripts/run-amiga-door.ts` or the door's own probe)
+  and count them. If a keypress costs more than a few hundred bytes, the
+  door is not drawing smart.

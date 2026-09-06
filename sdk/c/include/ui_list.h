@@ -53,6 +53,15 @@ typedef struct {
     const char *caret;
     ui_list_row_fn row;
     void *context;
+    /**
+     * What is on the glass right now, so a cursor move repaints two rows
+     * instead of the whole box. -1 until ui_list_draw() has run once.
+     * Every byte a 68K door writes is an XIM message: a full repaint of
+     * this list is ~1,900 bytes, ten messages, half a second - per
+     * keypress (sysop, 2026-09-07: "its slow"). Two rows is ~150.
+     */
+    int drawn_selected;
+    int drawn_offset;
 } ui_list;
 
 /**
@@ -77,6 +86,15 @@ void ui_list_select(ui_list *list, int index);
 
 /** Draw it. Composes into `b`; the caller flushes. */
 void ui_list_draw(ui_list *list, ansi_buf *b);
+
+/**
+ * Repaint only what changed since the last draw: the row the cursor left
+ * and the row it landed on. Falls back to a full ui_list_draw() when the
+ * window scrolled, the list has never been drawn, or the rows themselves
+ * may have changed (pass `rows_changed`). The smart path every door should
+ * take on a keypress - RULES.md, "Doors draw smart".
+ */
+void ui_list_draw_changed(ui_list *list, ansi_buf *b, int rows_changed);
 
 #ifdef __cplusplus
 }
