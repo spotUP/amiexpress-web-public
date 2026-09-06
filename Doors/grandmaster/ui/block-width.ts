@@ -58,3 +58,35 @@ export function fitCell(cell: string, cols: number): string {
   flush();
   return out;
 }
+
+/**
+ * The seven pieces, as CELLS - one character per cell, `X` where a block is.
+ *
+ * There were three copies of this art: one in the game screen and two in the
+ * versus screen (next and hold), each written as literal `██` pairs, which is
+ * both a duplicate and a 2-character assumption baked into a string. One
+ * table, drawn at whatever width the screen's block is.
+ */
+export const PIECE_CELLS: Record<string, readonly string[]> = {
+  I: ['XXXX'],
+  O: [' XX ', ' XX '],
+  T: ['XXX', ' X '],
+  S: [' XX', 'XX '],
+  Z: ['XX ', ' XX'],
+  J: ['X  ', 'XXX'],
+  L: ['  X', 'XXX'],
+};
+
+/**
+ * A piece preview, `cols` characters per cell, in one colour.
+ *
+ * The glyph is the same solid block the boards use; a gap is spaces, so the
+ * rows stay aligned with each other whatever the width.
+ */
+export function pieceArt(type: string, cols: number, colour: string): string[] {
+  const rows = PIECE_CELLS[type] ?? ['XX'];
+  return rows.map((row) => {
+    const drawn = [...row].map((c) => (c === 'X' ? '█'.repeat(cols) : ' '.repeat(cols))).join('');
+    return `{${colour}-fg}${drawn}{/${colour}-fg}`;
+  });
+}

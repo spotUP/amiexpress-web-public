@@ -29,4 +29,20 @@ export declare function blockCols(screenWidth: number): 1 | 2;
  * pattern needs: half of it, not a mangled pair.
  */
 export declare function fitCell(cell: string, cols: number): string;
+/**
+ * The seven pieces, as CELLS - one character per cell, `X` where a block is.
+ *
+ * There were three copies of this art: one in the game screen and two in the
+ * versus screen (next and hold), each written as literal `██` pairs, which is
+ * both a duplicate and a 2-character assumption baked into a string. One
+ * table, drawn at whatever width the screen's block is.
+ */
+export declare const PIECE_CELLS: Record<string, readonly string[]>;
+/**
+ * A piece preview, `cols` characters per cell, in one colour.
+ *
+ * The glyph is the same solid block the boards use; a gap is spaces, so the
+ * rows stay aligned with each other whatever the width.
+ */
+export declare function pieceArt(type: string, cols: number, colour: string): string[];
 //# sourceMappingURL=block-width.d.ts.map

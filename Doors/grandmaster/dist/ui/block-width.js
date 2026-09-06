@@ -19,8 +19,10 @@
  * eight copies of it that can drift.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.PIECE_CELLS = void 0;
 exports.blockCols = blockCols;
 exports.fitCell = fitCell;
+exports.pieceArt = pieceArt;
 /** The tier test the rest of this door uses, and no second one. */
 function blockCols(screenWidth) {
     return screenWidth < 80 ? 1 : 2;
@@ -59,5 +61,35 @@ function fitCell(cell, cols) {
     }
     flush();
     return out;
+}
+/**
+ * The seven pieces, as CELLS - one character per cell, `X` where a block is.
+ *
+ * There were three copies of this art: one in the game screen and two in the
+ * versus screen (next and hold), each written as literal `██` pairs, which is
+ * both a duplicate and a 2-character assumption baked into a string. One
+ * table, drawn at whatever width the screen's block is.
+ */
+exports.PIECE_CELLS = {
+    I: ['XXXX'],
+    O: [' XX ', ' XX '],
+    T: ['XXX', ' X '],
+    S: [' XX', 'XX '],
+    Z: ['XX ', ' XX'],
+    J: ['X  ', 'XXX'],
+    L: ['  X', 'XXX'],
+};
+/**
+ * A piece preview, `cols` characters per cell, in one colour.
+ *
+ * The glyph is the same solid block the boards use; a gap is spaces, so the
+ * rows stay aligned with each other whatever the width.
+ */
+function pieceArt(type, cols, colour) {
+    const rows = exports.PIECE_CELLS[type] ?? ['XX'];
+    return rows.map((row) => {
+        const drawn = [...row].map((c) => (c === 'X' ? '█'.repeat(cols) : ' '.repeat(cols))).join('');
+        return `{${colour}-fg}${drawn}{/${colour}-fg}`;
+    });
 }
 //# sourceMappingURL=block-width.js.map

@@ -393,3 +393,58 @@ export async function seedingIsHarmlessWithNoOpponents(): Promise<void> {
     assert.strictEqual(vs.opponentTracker.getAliveOpponents().length, 0);
   } finally { screen.destroy(); }
 }
+
+/**
+ * A CPU battle on a C64 screen.
+ *
+ * The versus screen was 80-column furniture with hardcoded columns: the well
+ * at 22 characters whatever a block cost, the next queue at column 22, the
+ * garbage strip at 34, and every opponent widget from LEFT_PANEL_COLS = 37
+ * onwards. On a 40-column screen that is a well twice as wide as the blocks
+ * in it and four panels drawn past the right edge, which is what a caller
+ * saw: "cpu battle has issues the playfield looks wider than it is and the
+ * next pieces are too wide" (2026-09-06).
+ */
+export async function theCpuBattleFitsAFortyColumnScreen(): Promise<void> {
+  const h = harness(40, [bot(1)], 25);
+  try {
+    const vs: any = h.vs;
+
+    assert.strictEqual(vs.boardBox.width, 12, 'ten one-character blocks plus a border');
+    assert.strictEqual(vs.nextBox.left, 12, 'the next queue starts where the well ends');
+
+    for (const box of [vs.boardBox, vs.nextBox, vs.holdBox, vs.garbageIndicator, vs.statsBox]) {
+      assert.ok(
+        box.left + box.width <= 40,
+        `a panel runs past the right edge: left ${box.left} + width ${box.width}`,
+      );
+    }
+
+    // The opponent furniture starts at column 37 and cannot fit; it must be
+    // HIDDEN rather than drawn off the edge as loose borders.
+    assert.strictEqual(h.boards().length, 0, 'no opponent board on a 40-column screen');
+    assert.strictEqual(h.info.hidden, true, 'no VS panel');
+    assert.strictEqual(h.minimap.hidden, true, 'no opponent grid');
+    assert.strictEqual(h.list.hidden, true, 'no standings');
+  } finally {
+    h.destroy();
+  }
+}
+
+/** The previews are drawn in the screen's own block width, from one table. */
+export async function thePreviewsFollowTheBlockWidth(): Promise<void> {
+  for (const [width, expected] of [[80, 8], [40, 4]] as Array<[number, number]>) {
+    const h = harness(width, [bot(1)], 25);
+    try {
+      const vs: any = h.vs;
+      vs.renderNextQueue(['I']);
+      const row = String(vs.nextBox.getContent()).split('\n')[0].replace(/\{[^}]*\}/g, '');
+      assert.strictEqual(
+        row.length, expected,
+        `an I piece is four blocks; at ${width} columns that is ${expected} characters, got ${row.length}`,
+      );
+    } finally {
+      h.destroy();
+    }
+  }
+}

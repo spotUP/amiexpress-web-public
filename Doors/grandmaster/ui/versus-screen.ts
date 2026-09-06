@@ -9,7 +9,16 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { lockFlashChar } from './board-effects';
 import type { GameEngine } from '../core/game';
-import { blockCols, fitCell } from './block-width';
+import { blockCols, fitCell, pieceArt } from './block-width';
+
+/** Playfield columns, in BLOCKS. What they cost in characters is the screen's answer. */
+const BOARD_COLUMNS = 10;
+
+/** Preview colours, one table for the next queue and the hold box alike. */
+const PREVIEW_COLORS: Record<string, string> = {
+  I: 'cyan', O: 'yellow', T: 'magenta',
+  S: 'green', Z: 'red', J: 'blue', L: 'white',
+};
 import type { InputHandler } from '../input/handler';
 import type { SoundEngine } from '../audio/sounds';
 import type { AppState, PieceType } from '../core/types';
@@ -352,12 +361,24 @@ export class VersusScreen {
     this.drawnBoards = [];
     this.lastLayoutKey = '';
 
+    // The well is as wide as its blocks ARE on this screen - twenty-two
+    // characters where a block is two, twelve where it is one - and the
+    // panels beside it follow, instead of being drawn at column 22 and 34
+    // regardless. On a 40-column screen those numbers put the next queue and
+    // the garbage strip off the right edge, which is what a C64 caller saw:
+    // "the playfield looks wider than it is and the next pieces are too wide".
+    const cols = blockCols(this.screen.width);
+    const wellCols = BOARD_COLUMNS * cols;
+    const sideLeft = wellCols + 2;
+    const sideWidth = Math.max(6, Math.min(12, this.screen.width - sideLeft - 1));
+    const compact = this.screen.width < 80;
+
     // Player board
     this.boardBox = createBox({
       parent: this.screen,
       top: 1,
       left: 0,
-      width: 22,
+      width: wellCols + 2,
       height: 22,
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'white' } },
@@ -368,8 +389,8 @@ export class VersusScreen {
     this.nextBox = createBox({
       parent: this.screen,
       top: 1,
-      left: 22,
-      width: 12,
+      left: sideLeft,
+      width: sideWidth,
       height: 12,
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'cyan' } },
@@ -384,8 +405,8 @@ export class VersusScreen {
     this.holdBox = createBox({
       parent: this.screen,
       top: 13,
-      left: 22,
-      width: 12,
+      left: sideLeft,
+      width: sideWidth,
       height: 10,
       border: { type: 'line' },
       style: { bg: 'black', border: { fg: 'magenta' } },
@@ -400,7 +421,7 @@ export class VersusScreen {
     this.garbageIndicator = createBox({
       parent: this.screen,
       top: 1,
-      left: 34,
+      left: sideLeft + sideWidth,
       width: 3,
       height: 22,
       border: { type: 'line' },
@@ -502,7 +523,7 @@ export class VersusScreen {
       parent: this.screen,
       top: 23,
       left: 0,
-      width: 59,
+      width: Math.max(20, this.screen.width - 1),
       height: 1,
       border: 'none' as any,
       content: '',
@@ -564,6 +585,23 @@ export class VersusScreen {
     const key = `${width}:${layout.fullBoards}:${layout.minimaps}:${layout.showInfo}`;
     if (key === this.lastLayoutKey) return;
     this.lastLayoutKey = key;
+
+    // A 40-column screen shows the PLAYER's game and nothing else.
+    //
+    // `versusLayout` starts the opponent area at LEFT_PANEL_COLS, which is 37 -
+    // the width of an 80-column player panel - so every opponent board,
+    // minimap and standings list lands past the right edge of a C64 screen and
+    // draws as loose vertical rules over the black ("cpu battle has issues").
+    // A CPU battle is playable without seeing the bot's well; a screen full of
+    // stray borders is not. Deriving the origin instead would mean widening
+    // versus-layout and the pins that hold it, which is its own change.
+    if (width < 80) {
+      for (const box of this.opponentBoards) box.hide();
+      this.opponentInfoBox?.hide();
+      this.minimapPanel?.hide();
+      this.listPanel?.hide();
+      return;
+    }
 
     while (this.opponentBoards.length > layout.fullBoards) {
       this.opponentBoards.pop()?.destroy();
@@ -1750,31 +1788,12 @@ export class VersusScreen {
   private renderNextQueue(queue: string[]): void {
     if (!this.nextBox) return;
 
-    const SHAPES: Record<string, string[]> = {
-      I: ['████████'],
-      O: ['████', '████'],
-      T: ['██████', ' ██  '],
-      S: [' ████', '████ '],
-      Z: ['████ ', ' ████'],
-      J: ['██   ', '██████'],
-      L: ['   ██', '██████'],
-    };
-
-    const COLORS: Record<string, string> = {
-      I: 'cyan', O: 'yellow', T: 'magenta',
-      S: 'green', Z: 'red', J: 'blue', L: 'white',
-    };
-
+    const cols = blockCols(this.screen.width);
     let content = '';
     const show = Math.min(queue.length, 5);
     for (let i = 0; i < show; i++) {
-      const type = queue[i];
-      const rows = SHAPES[type] ?? ['??'];
-      const color = COLORS[type] ?? 'white';
-      for (const row of rows) {
-        content += `{${color}-fg}${row}{/${color}-fg}\n`;
-      }
-      if (i < show - 1) content += '\n';
+      content += pieceArt(queue[i], cols, PREVIEW_COLORS[queue[i]] ?? 'white').join('\n');
+      content += i < show - 1 ? '\n\n' : '\n';
     }
 
     this.nextBox.setContent(content);
@@ -1791,28 +1810,12 @@ export class VersusScreen {
       return;
     }
 
-    const SHAPES: Record<string, string[]> = {
-      I: ['████████'],
-      O: ['████', '████'],
-      T: ['██████', ' ██  '],
-      S: [' ████', '████ '],
-      Z: ['████ ', ' ████'],
-      J: ['██   ', '██████'],
-      L: ['   ██', '██████'],
-    };
-
-    const COLORS: Record<string, string> = {
-      I: 'cyan', O: 'yellow', T: 'magenta',
-      S: 'green', Z: 'red', J: 'blue', L: 'white',
-    };
-
     const type = state.holdPiece;
-    const color = COLORS[type] ?? 'white';
     const canHold = state.canHold !== false;
-    const rows = SHAPES[type] ?? ['??'];
-    const fg = canHold ? color : 'gray';
-    const content = rows.map(r => `{${fg}-fg}${r}{/${fg}-fg}`).join('\n');
-    this.holdBox.setContent(content);
+    const colour = canHold ? (PREVIEW_COLORS[type] ?? 'white') : 'gray';
+    this.holdBox.setContent(
+      pieceArt(type, blockCols(this.screen.width), colour).join('\n'),
+    );
   }
 
   /**
