@@ -1,0 +1,154 @@
+/**
+ * SP2-6 - where an unlock is shown: the command-prompt boundary, and
+ * nowhere else. Driven through the real displayMainMenu (the menu suite's
+ * mocks around it) and the real emitter registry for the live case.
+ */
+jest.mock('../../src/index', () => {
+  const states = require('../../src/constants/bbs-states');
+  return { BBSState: states.BBSState, LoggedOnSubState: states.LoggedOnSubState, BBSSession: {} };
+});
+jest.mock('../../src/handlers/screen.handler', () => ({
+  displayScreen: jest.fn().mockResolvedValue(false),
+  doPause: jest.fn(),
+  hasKeysFile: jest.fn().mockReturnValue(false),
+  hasKeysFileForResolvedPath: jest.fn().mockReturnValue(false),
+}));
+jest.mock('../../src/handlers/command-handler/dependency-injection', () => ({
+  getConfig: jest.fn().mockReturnValue({ get: jest.fn((key: string) => (key === 'bbsName' ? 'TestBBS' : null)) }),
+  getMessageBases: jest.fn().mockReturnValue([]),
+  getProcessOlmMessageQueue: jest.fn().mockReturnValue(null),
+  getScreenMenu: jest.fn().mockReturnValue('MENU'),
+}));
+jest.mock('../../src/utils/conference-tooltypes.util', () => ({
+  getConferenceToolFlags: jest.fn().mockReturnValue({
+    forceMenus: false, noBulls: false, noConfBulls: false, forceNewscan: false, noNewscan: false, showNewFiles: false, noNewFiles: false,
+  }),
+}));
+jest.mock('../../src/utils/time-tracking.util', () => ({
+  updateTimeUsed: jest.fn(), checkTimeUsed: jest.fn().mockResolvedValue(false), getTimeRemainingMinutes: jest.fn().mockReturnValue(60),
+}));
+jest.mock('../../src/utils/output.util', () => ({ emitText: jest.fn(), emitPrompt: jest.fn() }));
+jest.mock('../../src/handlers/transfer/olm.handler', () => ({ processOlmQueue: jest.fn() }), { virtual: true });
+
+import { LoggedOnSubState } from '../../src/constants/bbs-states';
+import { displayMainMenu } from '../../src/handlers/command-handler/menu';
+import { defaultNoticeDeps, deliverNotice, drainAchievementNotices } from '../../src/achievements/notices';
+import { addUnlockNotice, noticeCount } from '../../src/achievements/outbox.repository';
+import { registerConnectionEmitter, unregisterConnectionEmitter } from '../../src/server/session-emitter-registry';
+import { userSessions } from '../../src/server/session-manager';
+import type { UnlockOut } from '../../src/achievements/contract';
+
+async function waitForTestDb(): Promise<any> {
+  let attempts = 0;
+  while (!(global as any).testDb && attempts < 30) {
+    await new Promise((r) => setTimeout(r, 500));
+    attempts++;
+  }
+  const db = (global as any).testDb;
+  if (!db) throw new Error('Test database not initialized');
+  return db;
+}
+
+let db: any;
+const unlock: UnlockOut = { id: 'msg.post.100', name: 'Century', tier: 'silver', points: 10, hidden: false, rarityPctTenths: 81, at: '2026-09-07T10:00:00Z' };
+
+function makeSession(overrides: Record<string, unknown> = {}): any {
+  return {
+    user: { id: 'u-caller', username: 'tester', email: 'caller@example.com', expert: 'N' },
+    subState: LoggedOnSubState.READ_COMMAND,
+    relConfNum: 1, currentConf: 1, currentConfName: 'General', currentMsgBase: 1, timeRemaining: 3600,
+    cmdShortcuts: false, shortcuts: new Map(), paginatedScreen: null, lastScreenHadPause: false, doorExpertMode: false,
+    screenWidth: 80, tempData: {},
+    ...overrides,
+  };
+}
+const socketOf = (): { emit: jest.Mock; connected: boolean } => ({ emit: jest.fn(), connected: true });
+const toasts = (socket: { emit: jest.Mock }): string[] =>
+  socket.emit.mock.calls.filter((c) => c[0] === 'ansi-output' && String(c[1]).includes('ACHIEVEMENT')).map((c) => String(c[1]));
+
+beforeAll(async () => {
+  db = (await waitForTestDb()).db;
+  defaultNoticeDeps.rawDb = () => db;
+}, 30000);
+
+beforeEach(() => {
+  db.exec('DELETE FROM achievement_pending_notices');
+  userSessions.clear();
+  jest.clearAllMocks();
+});
+
+describe('unlock notices', () => {
+  it('an unlock earned while the caller reads a message is shown at the next menu, not mid-read', async () => {
+    const session = makeSession({ subState: LoggedOnSubState.READ_MESSAGE ?? 'READ_MESSAGE' });
+    const emitter = { emit: jest.fn() };
+    registerConnectionEmitter(session, emitter as any);
+    userSessions.set('u-caller', session);
+    try {
+      expect(deliverNotice(null, 'u-caller', 'unlock', unlock)).toBe('kept');
+      expect(emitter.emit).not.toHaveBeenCalled();
+      expect(noticeCount(db, 'u-caller')).toBe(1);
+
+      const socket = socketOf();
+      await displayMainMenu(socket as any, session);
+      const shown = toasts(socket);
+      expect(shown).toHaveLength(1);
+      expect(shown[0]).toContain('Century');
+      expect(shown[0]).toContain('SILVER, 10 pts');
+      // Drawn before the prompt was armed, and not again.
+      expect(session.subState).toBe(LoggedOnSubState.READ_COMMAND);
+      expect(noticeCount(db, 'u-caller')).toBe(0);
+    } finally {
+      unregisterConnectionEmitter(session);
+    }
+  });
+
+  it('an unlock earned at the prompt is shown at once and not again at the next menu', async () => {
+    const session = makeSession({ subState: LoggedOnSubState.READ_COMMAND });
+    const emitter = { emit: jest.fn() };
+    registerConnectionEmitter(session, emitter as any);
+    userSessions.set('u-caller', session);
+    try {
+      expect(deliverNotice(null, 'u-caller', 'unlock', unlock)).toBe('shown');
+      expect(emitter.emit).toHaveBeenCalledTimes(1);
+      expect(String(emitter.emit.mock.calls[0][1])).toContain('Century');
+      expect(noticeCount(db, 'u-caller')).toBe(0);
+      const socket = socketOf();
+      await displayMainMenu(socket as any, session);
+      expect(toasts(socket)).toEqual([]);
+      // In a door, the prompt state means nothing: kept.
+      session.inDoorManager = true;
+      expect(deliverNotice(null, 'u-caller', 'unlock', unlock)).toBe('kept');
+    } finally {
+      unregisterConnectionEmitter(session);
+    }
+  });
+
+  it("a caller who is not online sees the notice at the next login's menu, sized for their terminal", async () => {
+    expect(deliverNotice(null, 'u-caller', 'unlock', unlock)).toBe('kept');
+    addUnlockNotice(db, 'u-caller', { ...unlock, name: 'Second' }, 1);
+    const socket = socketOf();
+    const c64 = makeSession({ screenWidth: 40, petsciiMode: true, terminalType: 'c64' });
+    await displayMainMenu(socket as any, c64);
+    const shown = toasts(socket);
+    expect(shown).toHaveLength(2);
+    for (const t of shown) {
+      expect(t).not.toContain('\x1b[');
+      for (const line of t.split('\r\n')) expect(line.length).toBeLessThanOrEqual(40);
+    }
+    expect(shown.map((t) => (t.includes('Century') ? 'Century' : 'Second'))).toEqual(['Century', 'Second']);
+  });
+
+  it('a not_linked refusal shows the link explanation once, not once per event', async () => {
+    expect(deliverNotice(null, 'u-caller', 'link', null)).toBe('kept');
+    expect(deliverNotice(null, 'u-caller', 'link', null)).toBe('kept');
+    expect(deliverNotice(null, 'u-caller', 'link', null)).toBe('kept');
+    expect(noticeCount(db, 'u-caller')).toBe(1);
+    const socket = socketOf();
+    await displayMainMenu(socket as any, makeSession());
+    const shown = toasts(socket);
+    expect(shown).toHaveLength(1);
+    expect(shown[0]).toContain('Type ACHIEVE at the prompt to link');
+    // A caller without a user id gets nothing and breaks nothing.
+    expect(drainAchievementNotices(socketOf(), { user: null })).toBe(0);
+  });
+});

@@ -21,6 +21,7 @@ import { updateTimeUsed, checkTimeUsed, getTimeRemainingMinutes } from '../../ut
 import { buildMenuPrompt } from '../../utils/menu-prompt.util';
 import { setEnvStat } from '../../utils/acs.util';
 import { EnvStat } from '../../constants/env-codes';
+import { drainAchievementNotices } from '../../achievements/notices';
 
 /**
  * Display main menu (express.e:28586)
@@ -158,6 +159,11 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
 
   // express.e:28596 - setEnvStat(ENV_IDLE) before menu prompt
   setEnvStat(session, EnvStat.IDLE);
+
+  // WEB_: achievements (SP2, S6). The one place an unlock or the link
+  // explanation is drawn - after the menu, before the prompt, never
+  // mid-door or between a prompt and its answer. Non-throwing.
+  drainAchievementNotices(socket, session as any);
 
   // Always show menu prompt (express.e calls displayMenuPrompt regardless of expert/menu display)
   displayMenuPrompt(socket, session);

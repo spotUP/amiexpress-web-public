@@ -33,6 +33,7 @@ import {
 } from './outbox.repository';
 import type { OutboxRow } from './outbox.repository';
 import type { EventIn, EventsResponse, UnlockOut } from './contract';
+import { deliverNotice } from './notices';
 
 export const FLUSH_INTERVAL_MS = 5_000;
 export const FLUSH_BATCH = 100;
@@ -53,6 +54,30 @@ export interface FlusherDeps {
 export function userIdForEmail(rawDb: Database.Database, email: string): string | null {
   const row = rawDb.prepare('SELECT id FROM users WHERE lower(email) = lower(?) LIMIT 1').get(email) as { id: string | number } | undefined;
   return row ? String(row.id) : null;
+}
+
+/**
+ * The production deps: unlocks and link refusals go through deliverNotice,
+ * which draws at once when the caller is at the prompt and keeps the
+ * notice for the next menu otherwise. `io` is the socket.io server the
+ * emitter registry resolves live sessions with.
+ */
+export function productionFlusherDeps(io: unknown): FlusherDeps {
+  return {
+    rawDb: () => (db as any).db as Database.Database | undefined,
+    settings: currentSettings,
+    fetch: (url, init) => fetch(url, init),
+    now: () => Date.now(),
+    log: (line) => console.log(line),
+    onUnlock: (rawDb, email, unlock, now) => {
+      const userId = userIdForEmail(rawDb, email);
+      if (userId) deliverNotice(io, userId, 'unlock', unlock, { rawDb: () => rawDb, now: () => now });
+    },
+    onNotLinked: (rawDb, email, now) => {
+      const userId = userIdForEmail(rawDb, email);
+      if (userId) deliverNotice(io, userId, 'link', null, { rawDb: () => rawDb, now: () => now });
+    },
+  };
 }
 
 export const defaultFlusherDeps: FlusherDeps = {

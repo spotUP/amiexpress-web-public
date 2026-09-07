@@ -1483,9 +1483,9 @@ console.log("[OK] Operator chat handler initialized");
     // Achievements (SP2): drain the outbox to the achievements server. The
     // timer is unref'd and does nothing while the board is not configured;
     // the reporter writes the outbox whether or not this runs.
-    const { startFlusher } = await import("./achievements/flusher");
+    const { startFlusher, productionFlusherDeps } = await import("./achievements/flusher");
     const { currentSettings: achievementsNow } = await import("./achievements/reporter");
-    startFlusher();
+    startFlusher(productionFlusherDeps(io));
 console.log(`[OK] Achievements flusher started (${achievementsNow().enabled ? "reporting to " + achievementsNow().serverUrl : "not configured, idle"})`);
 
     // Initialize web push notifications with database config

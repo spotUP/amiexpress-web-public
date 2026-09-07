@@ -91,6 +91,12 @@
       "require": "./dist/petscii/index.js",
       "default": "./dist/petscii/index.js"
     },
+    "./components/achievement-toast": {
+      "types": "./dist/components/achievement-toast.d.ts",
+      "import": "./dist-esm/components/achievement-toast.js",
+      "require": "./dist/components/achievement-toast.js",
+      "default": "./dist/components/achievement-toast.js"
+    },
     "./petscii/frame": {
       "types": "./dist/petscii/frame/index.d.ts",
       "import": "./dist-esm/petscii/frame/index.js",
