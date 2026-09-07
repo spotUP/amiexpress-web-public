@@ -37,7 +37,10 @@ describe('the graphics prompt', () => {
 
   it('both answers announce the mode with its shape, which is what mounts the canvas', () => {
     expect(eventsOf(run('P').emitted, 'petscii-mode')).toEqual([{ cols: 40, rows: 25, palette: 'vic' }]);
-    expect(eventsOf(run('P8').emitted, 'petscii-mode')).toEqual([{ cols: 80, rows: 25, palette: 'vic' }]);
+    // ...and the 80-column screen is a C128's, so its colours are the VDC's
+    // unless this caller has said otherwise (the preference is applied at
+    // login; nobody is logged in at the graphics prompt).
+    expect(eventsOf(run('P8').emitted, 'petscii-mode')).toEqual([{ cols: 80, rows: 25, palette: 'vdc' }]);
     // And the legacy geometry event is still sent for the 40-column caller,
     // because the browser has used that literal as the mount switch since
     // the canvas existed: a mid-deploy session must not lose its screen.

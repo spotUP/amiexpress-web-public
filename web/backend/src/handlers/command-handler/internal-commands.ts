@@ -264,34 +264,8 @@ console.error('[ERROR] in handleLiveChatCommand:', error);
 
     case 'COLOURS': // Which sixteen colours this caller's PETSCII screen uses
     case 'COLORS': {
-      /**
-       * The palette is only a CHOICE on the 80-column screen: a C64 is a
-       * VIC-II by construction, and a C128's 80-column screen has the VDC's
-       * own sixteen - which its KERNAL maps the PETSCII colour bytes onto,
-       * with four surprises in it (orange arrives as magenta). A caller who
-       * prefers the C64's colours on the wide screen says so here, and the
-       * board remembers it.
-       */
-      const { db: userDb } = require('../../database');
-      const wanted = String(params ?? '').trim().toUpperCase();
-      const current = session.user?.petsciiPalette === 'vic' ? 'vic' : 'vdc';
-      const next = wanted.startsWith('VIC') ? 'vic'
-        : wanted.startsWith('VDC') || wanted.startsWith('C128') ? 'vdc'
-        : current === 'vic' ? 'vdc' : 'vic';
-
-      if (session.user) {
-        try {
-          await userDb.updateUser(session.user.id, { petsciiPalette: next });
-          session.user.petsciiPalette = next;
-        } catch (error) {
-console.error('[COLOURS] could not save the palette preference:', error);
-        }
-      }
-      socket.emit('petscii-palette', { palette: next });
-      socket.emit('ansi-output', `\r\nPETSCII colours: ${next === 'vdc' ? 'C128 (VDC)' : 'C64 (VIC-II)'}\r\n`);
-      if (petsciiColumnsOf(session) !== 80) {
-        socket.emit('ansi-output', 'Only the 80-column screen has a choice; a C64 is always VIC-II.\r\n');
-      }
+      const { handlePetsciiPaletteCommand } = require('../commands/user-commands.handler');
+      await handlePetsciiPaletteCommand(socket, session, params);
       return RESULT_SUCCESS;
     }
 

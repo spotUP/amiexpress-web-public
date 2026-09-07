@@ -1123,6 +1123,48 @@ export async function handleJoinMsgBaseInput(socket: any, session: BBSSession, i
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
+/**
+ * COLOURS - which sixteen colours this caller's PETSCII screen is painted with.
+ *
+ * Only the 80-column screen has a choice: a C64 is a VIC-II by construction,
+ * and a C128's 80-column screen has the VDC's own sixteen, which its KERNAL
+ * maps the PETSCII colour bytes onto (sdk/petscii/c64-palette.ts). Bare, the
+ * command toggles; `COLOURS VIC` / `COLOURS VDC` say which.
+ *
+ * The same setting is row 21 of `W`, which is where a caller looks for it.
+ */
+export async function handlePetsciiPaletteCommand(
+  socket: any,
+  session: BBSSession,
+  params?: string,
+): Promise<void> {
+  const { db } = require('../../database');
+  const { petsciiColumnsOf } = require('../../amiga-emulation/xim/screen-width.util');
+
+  const asked = String(params ?? '').trim().toUpperCase();
+  const current = session.user?.petsciiPalette === 'vic' ? 'vic' : 'vdc';
+  const next = asked.startsWith('VIC') ? 'vic'
+    : asked.startsWith('VDC') || asked.startsWith('C128') ? 'vdc'
+    : current === 'vic' ? 'vdc' : 'vic';
+
+  if (session.user) {
+    try {
+      await db.updateUser(session.user.id, { petsciiPalette: next });
+      session.user.petsciiPalette = next;
+    } catch (error) {
+console.error('[COLOURS] could not save the palette preference:', error);
+    }
+  }
+
+  // The canvas repaints from the machine it already has, so this costs no
+  // session state and the change is visible at once.
+  socket.emit('petscii-palette', { palette: next });
+  socket.emit('ansi-output', `\r\nPETSCII colours: ${next === 'vdc' ? 'C128 (VDC)' : 'C64 (VIC-II)'}\r\n`);
+  if (petsciiColumnsOf(session) !== 80) {
+    socket.emit('ansi-output', 'Only the 80-column screen has a choice; a C64 is always VIC-II.\r\n');
+  }
+}
+
 export async function handleFontSelectionInput(socket: any, session: BBSSession, input: string): Promise<void> {
   const { db } = require('../../database');
 

@@ -4814,6 +4814,12 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       handleWhoDetailedCommand(socket, session);
       return;
 
+    case 'COLOURS': { // WEB_: which sixteen colours his PETSCII screen uses
+      const { handlePetsciiPaletteCommand } = require('./commands/user-commands.handler');
+      await handlePetsciiPaletteCommand(socket, session, params);
+      return;
+    }
+
     case 'X': // Expert Mode Toggle (internalCommandX) - express.e:26113-26122
       await handleExpertModeCommand(socket, session);
       return;
