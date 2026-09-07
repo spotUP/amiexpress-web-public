@@ -52,11 +52,11 @@ import {
   type Cell,
   type Frame,
 } from '@amiexpress/bbs-door-sdk/petscii/frame';
-import {
-  PetsciiMachine,
-  UNICODE_TO_PETSCII,
-  printablePetsciiToScreenCode,
-} from '@amiexpress/bbs-door-sdk/petscii';
+import { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
+// The screen-code oracle and the row search live beside this suite, shared
+// with the 80-column end-to-end test in tests/doors/petscii-80: one copy of
+// "what would a PETSCII terminal be showing", at either width.
+import { expectedScreenCode, screenShows } from './helpers/screen-oracle';
 import { buildConnectionEmitter } from '../../src/server/connection-emitter';
 import {
   installC64DoorAdapter,
@@ -292,25 +292,6 @@ async function drive(
 
 // ------------------------------------------------------------- the oracle
 
-/**
- * The screen code (bank 1, reverse bit clear) the transducer prints for `ch`,
- * or null where it has no mapping and substitutes. Same derivation as
- * sdk/tests/petscii/frame/frame-render-roundtrip.test.ts, from the SDK's own
- * `printablePetsciiToScreenCode` + `UNICODE_TO_PETSCII` rather than a
- * hand-rolled table - a reverse table in the test would be a second opinion
- * about the mapping, which is exactly what an oracle must not be.
- */
-function expectedScreenCode(ch: string): number | null {
-  const code = ch.codePointAt(0) as number;
-  if (code >= 0x61 && code <= 0x7a) return 0x01 + (code - 0x61);
-  if (code >= 0x41 && code <= 0x5a) return 0x41 + (code - 0x41);
-  if ((code >= 0x20 && code <= 0x3f) || code === 0x40 || code === 0x5b || code === 0x5d) {
-    return printablePetsciiToScreenCode(code);
-  }
-  const mapped = UNICODE_TO_PETSCII.get(ch);
-  return typeof mapped === 'number' ? printablePetsciiToScreenCode(mapped) : null;
-}
-
 /** What a real C64 is showing after eating these wire bytes. */
 function oracle(bytes: Buffer): PetsciiMachine {
   const machine = new PetsciiMachine();
@@ -346,21 +327,6 @@ function frameMismatches(machine: PetsciiMachine, frame: Frame): Array<Record<st
 const unmappable = (frame: Frame) =>
   frame.cells.reduce((n, row) => n + row.filter((c) => expectedScreenCode(c.ch) === null).length, 0);
 
-/** Is `text` on the machine's screen, on one row, as a contiguous run? */
-function screenShows(machine: PetsciiMachine, text: string): boolean {
-  const want = Array.from(text).map(expectedScreenCode);
-  if (want.some((c) => c === null)) throw new Error(`signature has an unmappable character: ${text}`);
-  for (let y = 0; y < ROWS; y++) {
-    const row: number[] = [];
-    for (let x = 0; x < COLS; x++) row.push(machine.state.screen[y * COLS + x] & 0x7f);
-    for (let start = 0; start + want.length <= row.length; start++) {
-      let hit = true;
-      for (let i = 0; i < want.length; i++) if (row[start + i] !== want[i]) { hit = false; break; }
-      if (hit) return true;
-    }
-  }
-  return false;
-}
 
 /** Did the caller's screen EVER show `text` during the run? (frame by frame, in order) */
 function everShowed(writes: ReadonlyArray<Buffer>, text: string): boolean {
