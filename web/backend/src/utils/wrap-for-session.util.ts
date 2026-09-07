@@ -42,7 +42,39 @@ export function wrapForSession(
   session: { screenWidth?: number; petsciiMode?: boolean } | undefined
 ): string {
   if (!session) return text;
-  if (session.petsciiMode !== true) return text;      // non-C64: never wrapped, at any width
+  if (session.petsciiMode !== true) {
+    /**
+     * A NON-PETSCII CALLER WIDER THAN THE BOARD'S SCREENS (2026-09-07).
+     *
+     * This board's screens are 80-column documents whose layout is defined by
+     * the terminal wrapping at column 80: rows 3 and 4 of Screens/MENU.TXT are
+     * 155 and 159 printable columns, and 623 screens in the tree carry a row
+     * past 80. On an 80-column terminal every one of them folds where the
+     * artist expected. The sysop's telnet window reported `NAWS: 200x66`, so
+     * nothing folded, and the menu's logo arrived strung out across the top of
+     * the screen with its last row apparently duplicated ("when the menu
+     * animation finishes it looks like this").
+     *
+     * The art is not the wrong level to fix that at - the art is what the
+     * artist drew - and neither is the terminal, which is doing exactly what
+     * it was asked. The board folds its own screens at 80, the way the
+     * 80-column terminal would have, deferred wrap and all (`foldAtColumn`).
+     *
+     * Only WIDER than 80. Exactly 80 stays byte-identical (the identity gate
+     * in tests/server/eighty-col-choke-identity.test.ts), and a narrower
+     * non-PETSCII caller is still left alone - a mobile browser's xterm never
+     * paid for width support and still does not. A door that owns the screen
+     * paints at its own width; a positioned screen does not depend on the
+     * wrap and is never touched.
+     */
+    const reported = session.screenWidth;
+    if (typeof reported === 'number' && reported > 80) {
+      if (doorOwnsTerminal(session as any)) return text;
+      if (positionsCursorAbsolutely(text)) return text;
+      return foldAtColumn(text, 80);
+    }
+    return text;                                       // 80 or narrower: never wrapped
+  }
   // doorScreenWidth() - the SAME authority BB_SCRWIDTH, the launch-time
   // lineWrap, BBSApi.getTerminalSize() and wrapDoorTextForSession already
   // use. A local `screenWidth || 80` read the stale 80 a PETSCII session
@@ -94,3 +126,60 @@ function wrapPassingArt(text: string, width: number): string {
     .map((l) => wrapLineToWidth(l, width).join('\r\n'))
     .join('\r\n');
 }
+
+/**
+ * The 80-column terminal's autowrap, done by the board.
+ *
+ * Walks the bytes the way a terminal reads them and inserts `\r\n` where a
+ * terminal `cols` wide would have wrapped: BEFORE the first printable
+ * character past the last column, never after the last one - xterm's deferred
+ * wrap, which is what keeps a row of exactly `cols` followed by a newline from
+ * gaining a blank row. Escape sequences cost no columns and are copied whole;
+ * CR and LF return to column 0; backspace steps back one; TAB advances to the
+ * next stop. Everything else is copied as it came.
+ *
+ * Pure and stateless: a column count starts at 0 for the text it is given, so
+ * a row split across two `emitText` calls is folded against each call's own
+ * count. Screens arrive whole, which is the case this exists for.
+ */
+export function foldAtColumn(text: string, cols: number): string {
+  if (cols <= 0) return text;
+  let out = '';
+  let col = 0;
+  let i = 0;
+  const n = text.length;
+  while (i < n) {
+    const ch = text[i];
+    if (ch === '\x1b') {
+      // CSI: ESC [ params final. Anything else: ESC + one byte.
+      let j = i + 1;
+      if (text[j] === '[') {
+        j++;
+        while (j < n && text.charCodeAt(j) >= 0x20 && text.charCodeAt(j) <= 0x3f) j++;
+        if (j < n) j++;
+      } else if (j < n) {
+        j++;
+      }
+      out += text.slice(i, j);
+      i = j;
+      continue;
+    }
+    const code = text.charCodeAt(i);
+    if (ch === '\r' || ch === '\n') { col = 0; out += ch; i++; continue; }
+    if (code === 0x08) { if (col > 0) col--; out += ch; i++; continue; }
+    if (ch === '\t') {
+      const next = (Math.floor(col / 8) + 1) * 8;
+      col = Math.min(cols, next);
+      out += ch; i++; continue;
+    }
+    if (code < 0x20 || code === 0x7f) { out += ch; i++; continue; }
+    // A printable character: the wrap is owed only now, and only if the row
+    // is already full.
+    if (col >= cols) { out += '\r\n'; col = 0; }
+    out += ch;
+    col++;
+    i++;
+  }
+  return out;
+}
+

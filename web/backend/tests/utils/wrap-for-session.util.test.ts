@@ -1,4 +1,4 @@
-import { printableLength, wrapLineToWidth, wrapForSession } from '../../src/utils/wrap-for-session.util';
+import { printableLength, wrapLineToWidth, wrapForSession, foldAtColumn } from '../../src/utils/wrap-for-session.util';
 
 describe('printableLength', () => {
   it('ignores ANSI escapes', () => {
@@ -90,3 +90,90 @@ describe('wrapForSession', () => {
     expect(wrapForSession(nextLine, c64)).toBe(nextLine);
   });
 });
+
+/**
+ * THE WIDE CALLER (sysop, 2026-09-07, telnet at 200 columns: "when the menu
+ * animation finishes it looks like this" - the logo's right half strung out
+ * across the top of the screen, the last row apparently duplicated).
+ *
+ * Nothing had regressed. This board's screens are 80-column DOCUMENTS whose
+ * layout is defined by the terminal wrapping at column 80: rows 3 and 4 of
+ * Screens/MENU.TXT are 155 and 159 printable columns, and 623 screens in the
+ * tree carry a row past 80. On an 80-column terminal every one of them folds
+ * where the artist expected; in a 200-column window nothing folds and the
+ * overflow keeps going right. So the board folds them itself - at 80, exactly
+ * as the 80-column terminal would have, deferred wrap included - and the art
+ * stays as the artist left it.
+ */
+describe('foldAtColumn - the 80-column terminal, emulated', () => {
+  it('breaks a long row before the 81st printable character', () => {
+    const row = 'a'.repeat(159);
+    const out = foldAtColumn(row, 80);
+    expect(out).toBe('a'.repeat(80) + '\r\n' + 'a'.repeat(79));
+  });
+
+  it('a row of exactly 80 followed by a newline does not gain a blank row (deferred wrap)', () => {
+    const text = 'b'.repeat(80) + '\r\n' + 'next';
+    expect(foldAtColumn(text, 80)).toBe(text);
+  });
+
+  it('ANSI sequences cost no columns and are never split', () => {
+    const row = '\x1b[1;36m' + 'c'.repeat(79) + '\x1b[0;34m' + 'd'.repeat(5) + '\x1b[0m';
+    const out = foldAtColumn(row, 80);
+    expect(out.split('\r\n').map(printableLength)).toEqual([80, 4]);
+    // The break landed AFTER the SGR that opened the 80th column's run, so the
+    // second row still opens in blue.
+    expect(out.split('\r\n')[1].startsWith('d')).toBe(true);
+    expect(out).toContain('\x1b[0;34m' + 'd' + '\r\n' + 'dddd');
+  });
+
+  it('a carriage return, a newline and a backspace move the column the way the terminal does', () => {
+    expect(foldAtColumn('e'.repeat(70) + '\rf'.repeat(1) + 'g'.repeat(30), 80))
+      .toBe('e'.repeat(70) + '\rf' + 'g'.repeat(30));
+    expect(foldAtColumn('h'.repeat(80) + '\b' + 'i'.repeat(2), 80))
+      .toBe('h'.repeat(80) + '\bi' + '\r\n' + 'i');
+  });
+
+  it('the repo menu logo rows fold exactly where an 80-column terminal folded them', () => {
+    // Rows 3 and 4 of Screens/MENU.TXT, frozen here (not read from the board,
+    // which may be redrawn): 155 and 159 printable columns.
+    const row3 = '  | | | Y | | | |   | | | | | \\ Y | |  | | | Y | | |__  | | \\ Y /   | | |  __| .'
+      + '. | | | | | | | | | | | | | | | | | |  | | | | | | |__| | | | | | | | | | |';
+    const row4 = '  | | | | | | | |   | | | | | | | | |. | | | | | | |__| | | | | | | | | | | _\\/_'
+      + ' .| | | | | | | | | | | | | | | | | | .| | | | | | |____| | | | | | | | | |  /\\';
+    expect(printableLength(row3)).toBe(155);
+    expect(printableLength(row4)).toBe(159);
+    const out = foldAtColumn(row3 + '\r\n' + row4 + '\r\n', 80);
+    expect(out.split('\r\n').map(printableLength)).toEqual([80, 75, 80, 79, 0]);
+  });
+});
+
+describe('wrapForSession - a caller wider than the board\'s screens', () => {
+  const wide = { screenWidth: 200, petsciiMode: false };
+
+  it('folds at 80 for a 200-column ANSI caller', () => {
+    const out = wrapForSession('x'.repeat(159), wide);
+    expect(out).toBe('x'.repeat(80) + '\r\n' + 'x'.repeat(79));
+  });
+
+  it('is still byte-identical at exactly 80', () => {
+    const text = 'y'.repeat(159);
+    expect(wrapForSession(text, { screenWidth: 80, petsciiMode: false })).toBe(text);
+  });
+
+  it('a positioned screen is never folded - it does not depend on the wrap', () => {
+    const positioned = '\x1b[3;1H' + 'z'.repeat(159);
+    expect(wrapForSession(positioned, wide)).toBe(positioned);
+  });
+
+  it('a door that owns the terminal paints at its own width, untouched', () => {
+    const text = 'w'.repeat(159);
+    expect(wrapForSession(text, { ...wide, doorInputHandler: () => {} } as any)).toBe(text);
+  });
+
+  it('a PETSCII caller keeps the 40-column reflow, whatever width he reports', () => {
+    const out = wrapForSession('word '.repeat(30).trim(), { screenWidth: 200, petsciiMode: true });
+    for (const l of out.split('\r\n')) expect(printableLength(l)).toBeLessThanOrEqual(40);
+  });
+});
+
