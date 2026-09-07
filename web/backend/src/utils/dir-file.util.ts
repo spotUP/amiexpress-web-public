@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { formatFileSize, formatUploadDate } from './file-upload.util';
 import { looksLikeAsciiArt } from './ascii-art.util';
+import { toAmigaText } from './amiga-text.util';
 
 const LINE_BREAK = '\n';
 
@@ -71,7 +72,14 @@ export function buildDirEntryLine(
 ): string {
   // Express.e:19447-19452 - Build format string
   const sizeStr = formatFileSize(fileSize);  // Raw bytes: "  89749" (7 chars, right-aligned)
-  const dateStr = formatUploadDate(uploadDate);  // "DD-Mon-YY"
+  const dateStr = formatUploadDate(uploadDate);
+
+  // THE DESCRIPTION BECOMES AMIGA BYTES HERE, so it is folded into the
+  // Amiga's repertoire here. A modern FILE_ID.DIZ is often UTF-8 and a web
+  // form always is; written into a latin1 DIR file, an en dash becomes three
+  // bytes none of which a C64 can draw, and the caller reads `?`. Measured on
+  // the live board's Conf2/DIR1 before this existed.
+  description = toAmigaText(description);
 
   let line: string;
 
