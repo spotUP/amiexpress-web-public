@@ -832,6 +832,14 @@ console.log('[+] Added sha256 column to door_catalog');
         const installsDdl = fs.readFileSync(
           path.join(__dirname, 'doors', 'door-installs.schema.sql'), 'utf-8');
         this.db.exec(installsDdl);
+
+      // Achievements (SP2): the outbox and the pending notices, read from
+      // beside their reader exactly as the door installs are.
+      const achievementsDdl = fs.readFileSync(
+        path.join(__dirname, 'achievements', 'achievements.schema.sql'),
+        'utf-8'
+      );
+      this.db.exec(achievementsDdl);
 console.log('[+] door_installs table ensured');
 
         // command needs COLLATE NOCASE (AmigaDOS commands are
