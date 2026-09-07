@@ -120,9 +120,17 @@ describe('DownloadHandler — flagged-file plumbing (regression for #10)', () =>
     jest.clearAllMocks();
     // Spy/replace the private static so we don't touch the filesystem.
     originalFindFiles = (DownloadHandler as any).findFilesInConference;
+    // The contract is `{ files, storageError }`, not a bare array: a pooled
+    // area can answer with files AND an error, and findFilesReporting reports
+    // the error before it uses the files. Returning an array here destructured
+    // to `files === undefined` and threw "found is not iterable" - the suite
+    // had been red on main since the pooled-storage change.
     (DownloadHandler as any).findFilesInConference = jest.fn(async (
       _dataDir: string, confNum: number, pattern: string
-    ) => [{ name: pattern, size: 100, confNum, dirNum: 1, fullPath: `/fake/${pattern}` }]);
+    ) => ({
+      files: [{ name: pattern, size: 100, confNum, dirNum: 1, fullPath: `/fake/${pattern}` }],
+      storageError: undefined,
+    }));
   });
 
   afterEach(() => {
