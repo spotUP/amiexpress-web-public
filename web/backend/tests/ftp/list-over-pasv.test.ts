@@ -230,6 +230,74 @@ describe('LIST over a passive connection', () => {
     control.destroy();
   });
 
+  /**
+   * The listing a modern client ACTUALLY asks for.
+   *
+   * The sysop's session stopped dead after PWD with no error he could read:
+   * `FEAT` advertised `MLST`, so Transmit sent `MLSD` and never sent `LIST` at
+   * all - and `MLSD` answered `502 not implemented yet`. A server must not
+   * advertise a listing it refuses.
+   */
+  it('answers MLSD, which is what FEAT promises', async () => {
+    const { control, lines } = await login();
+
+    control.write('PASV\r\n');
+    const data = net.createConnection({
+      port: portFromPasv(await lines.next()),
+      host: '127.0.0.1',
+    });
+    const received: Buffer[] = [];
+    data.on('data', (chunk) => received.push(chunk));
+    const closed = new Promise<void>((resolve) => data.once('close', () => resolve()));
+
+    control.write('MLSD\r\n');
+    expect(await lines.next()).toMatch(/^150 /);
+    await closed;
+    expect(await lines.next()).toBe('226 Transfer complete');
+
+    const rows = Buffer.concat(received).toString('latin1').split('\r\n').filter(Boolean);
+    expect(rows).toHaveLength(2);
+    // The facts FEAT names - type, size, modify, perm - then the name.
+    expect(rows[0]).toMatch(
+      /^type=dir;size=0;modify=\d{14};perm=el; 001-General$/
+    );
+    expect(rows[1]).toContain('002-Elite');
+
+    control.destroy();
+  });
+
+  it('promises nothing in FEAT that it will not answer', async () => {
+    const { control, lines } = await login();
+
+    control.write('FEAT\r\n');
+    const feature: string[] = [];
+    let line = await lines.next();
+    expect(line).toBe('211-Extensions supported:');
+    while (!(line = await lines.next()).startsWith('211 ')) feature.push(line.trim());
+
+    // Every advertised extension is a verb the server answers. MLST was the
+    // one that was not, and the client that believed it got nothing.
+    if (feature.some((f) => f.startsWith('MLST'))) {
+      control.write('MLST /\r\n');
+      expect(await lines.next()).toBe('250-Listing');
+      expect(await lines.next()).toMatch(/^ type=dir;/);
+      expect(await lines.next()).toBe('250 END');
+    }
+
+    control.destroy();
+  });
+
+  it('takes the OPTS a client sends before a machine listing', async () => {
+    // Transmit sends `OPTS MLST modify;` and read the 500 it used to get as
+    // "no machine listing here".
+    const { control, lines } = await login();
+
+    control.write('OPTS MLST modify;\r\n');
+    expect(await lines.next()).toBe('200 MLST OPTS type;size;modify;perm;');
+
+    control.destroy();
+  });
+
   it('refuses a LIST with no PASV before it, rather than hanging', async () => {
     // A client that gets no answer here waits for its own timeout; 425 tells
     // it what to do instead.

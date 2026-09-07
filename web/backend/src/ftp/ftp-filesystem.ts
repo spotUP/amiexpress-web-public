@@ -184,6 +184,37 @@ const MONTHS = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
+/** `YYYYMMDDHHMMSS` in UTC - the only time format RFC 3659 allows. */
+function machineTime(when: Date): string {
+  const pad = (value: number, width = 2) => String(value).padStart(width, '0');
+  return (
+    `${pad(when.getUTCFullYear(), 4)}${pad(when.getUTCMonth() + 1)}${pad(when.getUTCDate())}` +
+    `${pad(when.getUTCHours())}${pad(when.getUTCMinutes())}${pad(when.getUTCSeconds())}`
+  );
+}
+
+/**
+ * One row of `MLSD`: facts, then a space, then the name.
+ *
+ * This is the listing a modern client actually prefers - Transmit asks for
+ * `MLSD` as soon as `FEAT` advertises `MLST`, and ours advertised it while
+ * answering 502, so the client was told the board could do machine listings
+ * and then refused one. The facts are the ones named in that FEAT line:
+ * type, size, modify, perm.
+ *
+ * `perm` is deliberately narrow. `el` on a directory is enter + list; `r` on a
+ * file is retrieve, which is phase 4 - until then a file says nothing about
+ * being readable rather than promising something the server would refuse.
+ */
+export function machineListLine(entry: FtpEntry): string {
+  const type = entry.isDirectory ? 'dir' : 'file';
+  const perm = entry.isDirectory ? 'el' : '';
+  return (
+    `type=${type};size=${entry.size};modify=${machineTime(entry.modified)};perm=${perm}; ` +
+    entry.name
+  );
+}
+
 /**
  * One row of `LIST` in the Unix long format every client parses.
  *

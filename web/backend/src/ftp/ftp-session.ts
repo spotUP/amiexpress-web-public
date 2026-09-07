@@ -15,7 +15,12 @@
 import type { Duplex } from 'stream';
 
 import { PassiveChannel, passiveReplyAddress, type PassivePortRange } from './ftp-data-channel';
-import { FtpFilesystem, longListLine, resolvePath } from './ftp-filesystem';
+import {
+  FtpFilesystem,
+  longListLine,
+  machineListLine,
+  resolvePath,
+} from './ftp-filesystem';
 
 /** What the board tells us about the caller once the password checks out. */
 export interface FtpUser {
@@ -62,12 +67,13 @@ const PRE_LOGIN = new Set(['USER', 'PASS', 'QUIT', 'FEAT', 'NOOP', 'AUTH', 'SYST
  * set shrinks to nothing as phases 3-6 land.
  */
 const NOT_YET = new Set([
-  'MLSD', 'MLST', 'MODE', 'STRU', 'PORT', 'RETR', 'STOR', 'REST', 'SIZE', 'MDTM',
+  'MODE', 'STRU', 'PORT', 'RETR', 'STOR', 'REST', 'SIZE', 'MDTM',
 ]);
 
 /** Verbs this phase answers, but only for a caller who has logged in. */
 const AFTER_LOGIN = new Set([
   'PWD', 'XPWD', 'CWD', 'XCWD', 'CDUP', 'TYPE', 'PBSZ', 'PROT', 'PASV', 'LIST', 'NLST',
+  'MLSD', 'MLST', 'OPTS',
 ]);
 
 export function isLoopback(address: string | undefined): boolean {
@@ -228,6 +234,16 @@ export class FtpSession {
         return this.onList(arg, 'long');
       case 'NLST':
         return this.onList(arg, 'names');
+      case 'MLSD':
+        // What Transmit actually asks for: FEAT advertises MLST, so a modern
+        // client prefers the machine listing and never sends LIST at all.
+        // Advertising it and answering 502 is why the sysop's client stopped
+        // after PWD with no error a human could read.
+        return this.onList(arg, 'machine');
+      case 'MLST':
+        return this.onMlst(arg);
+      case 'OPTS':
+        return this.onOpts(arg);
       default:
         if (NOT_YET.has(verb)) return this.reply(502, `${verb} not implemented yet`);
         return this.reply(500, 'command not recognized');
@@ -239,6 +255,47 @@ export class FtpSession {
    * so the answer is 250 or 550 - never a path a later phase would have to
    * un-invent.
    */
+  /**
+   * `MLST`: the facts about ONE path, on the control connection.
+   *
+   * No data connection, which is the whole point of it - a client uses it to
+   * ask "what is this, and may I enter it" before deciding anything. The reply
+   * is a three-line block: 250, the fact line indented by one space, 250 END.
+   */
+  private async onMlst(arg: string): Promise<void> {
+    const tree = this.deps.filesystem;
+    if (!tree) return this.reply(550, 'No directories available');
+
+    const target = resolvePath(this.cwd, arg.trim() || '.');
+    if (target === null || !tree.exists(this.user, target)) {
+      return this.reply(550, `${arg.trim() || this.cwd}: no such directory`);
+    }
+
+    const fact = machineListLine({
+      name: target,
+      isDirectory: true,
+      size: 0,
+      modified: new Date(),
+    });
+    this.socket.write('250-Listing\r\n');
+    this.socket.write(` ${fact}\r\n`);
+    this.reply(250, 'END');
+  }
+
+  /**
+   * `OPTS MLST modify;size;...` - a client narrowing the facts it wants.
+   *
+   * Answered 200 and otherwise ignored: this server sends the same four facts
+   * either way, and a client that asked politely and got 500 back concludes
+   * the machine listing is unavailable.
+   */
+  private onOpts(arg: string): void {
+    const option = arg.trim().split(/\s+/)[0]?.toUpperCase() ?? '';
+    if (option === 'MLST') return this.reply(200, 'MLST OPTS type;size;modify;perm;');
+    if (option === 'UTF8') return this.reply(200, 'UTF8 set to on');
+    this.reply(501, `OPTS ${option || '(none)'} not understood`);
+  }
+
   private async onCwd(arg: string): Promise<void> {
     const fs = this.deps.filesystem;
     if (!fs) return this.reply(550, 'No directories available');
@@ -313,7 +370,7 @@ export class FtpSession {
    * 226. A 226 that arrives before the socket closes is read as a truncated
    * listing.
    */
-  private async onList(arg: string, format: 'long' | 'names'): Promise<void> {
+  private async onList(arg: string, format: 'long' | 'names' | 'machine'): Promise<void> {
     // The data connection is checked FIRST, and deliberately: a client that
     // forgot PASV gets the same 425 whatever the server would have listed,
     // and "use PASV first" is the answer that tells it what to do. A 550
@@ -367,10 +424,12 @@ export class FtpSession {
       return this.reply(425, 'Could not secure the data connection');
     }
 
-    const body = entries
-      .map((entry) => (format === 'long' ? longListLine(entry) : entry.name))
-      .map((line) => `${line}\r\n`)
-      .join('');
+    const render = (entry: (typeof entries)[number]): string => {
+      if (format === 'long') return longListLine(entry);
+      if (format === 'machine') return machineListLine(entry);
+      return entry.name;
+    };
+    const body = entries.map((entry) => `${render(entry)}\r\n`).join('');
 
     await new Promise<void>((resolve) => {
       data.end(body, () => resolve());
