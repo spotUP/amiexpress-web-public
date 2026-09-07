@@ -188,3 +188,47 @@ describe('the U command itself (express.e:25646-25658 -> 18981-18987)', () => {
   });
 });
 
+describe('the file-listing help screen (express.e:27646)', () => {
+  it('is shown for a bare F, and not when the caller named a directory', async () => {
+    write('Conf1/FileHelp.txt', 'HOW THE FILE LISTS WORK\r\n');
+    write('Conf1/DIR1', 'DEMO.LHA      1024  01-01-26  a file\r\n');
+    fs.writeFileSync(path.join(root, 'Conf1.info'), '');
+
+    const { FileListingHandler } = require('../../src/handlers/file/file-listing.handler');
+
+    const bare: Array<{ event: string; data: any }> = [];
+    await FileListingHandler.handleFileList(socket(bare), session(), '');
+    expect(painted(bare)).toContain('HOW THE FILE LISTS WORK');
+
+    // express.e shows it only on the branch with NO parameters: a caller who
+    // named a directory has already said what they want.
+    const named: Array<{ event: string; data: any }> = [];
+    await FileListingHandler.handleFileList(socket(named), session(), '1');
+    expect(painted(named)).not.toContain('HOW THE FILE LISTS WORK');
+  });
+});
+
+describe('the name-requirement screens (express.e:28169, 28199)', () => {
+  // The gate reads the conference's tooltypes; a real conference icon is the
+  // honest way to say "this one wants a real name", and it exercises the same
+  // reader the board uses.
+  it("shows the board's REALNAMES screen instead of the built-in sentence", async () => {
+    write('Screens/RealNames.txt', 'THIS BOARD WANTS YOUR REAL NAME\r\n');
+    const { applyTooltypes } = require('../../src/utils/info-file.util');
+    applyTooltypes(path.join(root, 'Conf1.info'), [['REALNAME', '1']]);
+
+    const { captureRealAndInternetNames } = require('../../src/handlers/message/message-entry.handler');
+    const emits: Array<{ event: string; data: any }> = [];
+    const s = session({ user: { id: 1, username: 'lamer', secLevel: 100, realName: '' } });
+
+    const ready = captureRealAndInternetNames(socket(emits), s, () => undefined);
+    expect(ready).toBe(false); // capture in progress, which is what express.e does
+    await new Promise(r => setTimeout(r, 60));
+
+    const out = painted(emits);
+    expect(out).toContain('THIS BOARD WANTS YOUR REAL NAME');
+    // express.e prints its own sentence ONLY when the screen is absent.
+    expect(out).not.toContain('Real Names are required for messages');
+    expect(out).toContain('Real Name (Alpha Numeric):');
+  });
+});

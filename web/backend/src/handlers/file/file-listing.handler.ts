@@ -66,6 +66,15 @@ console.log(`[FileList] handleFileList: currentConf=${session.currentConf} relCo
       // User specified directory in params
       dirSpan = parseDirSpan(parsedParams[0], maxDirs, this.canAccessHold(session));
     } else {
+      // express.e:27646 - a bare F shows the conference's FileHelp screen
+      // before the listing. Silent: a conference without the file is the
+      // normal case, and express.e treats a missing screen as a falsy return
+      // and carries on.
+      try {
+        const { displayScreen } = require('../screen.handler');
+        await displayScreen(socket, session, 'FILEHELP', true, true);
+      } catch { /* a screen the conference does not have is not an error */ }
+
       // Default to entire conference directories when no params provided
       dirSpan = {
         startDir: 1,

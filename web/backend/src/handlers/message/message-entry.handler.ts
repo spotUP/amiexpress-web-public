@@ -79,9 +79,17 @@ export function captureRealAndInternetNames(
     if (!session.tempData) session.tempData = {};
     session.tempData.captureResume = resume;
     emitText(socket, '\r\n');
-    emitText(socket, 'Real Names are required for messages in this conference/msgbase \r\n');
-    emitText(socket, '\r\n');
-    emitText(socket, 'Real Name (Alpha Numeric): ');
+    // express.e:28169-28173 - the sysop's REALNAMES screen if the board has
+    // one, and the bare sentence ONLY when it does not. This port always
+    // printed the sentence, so a board that had drawn the screen never showed
+    // it.
+    void showNameScreen(socket, session, 'REALNAMES').then(shown => {
+      if (!shown) {
+        emitText(socket, 'Real Names are required for messages in this conference/msgbase \r\n');
+      }
+      emitText(socket, '\r\n');
+      emitText(socket, 'Real Name (Alpha Numeric): ');
+    });
     session.subState = LoggedOnSubState.MSG_CAPTURE_REAL_NAME;
     return false;
   }
@@ -96,9 +104,14 @@ export function captureRealAndInternetNames(
     if (!session.tempData) session.tempData = {};
     session.tempData.captureResume = resume;
     emitText(socket, '\r\n');
-    emitText(socket, 'Internet Names are required for messages in this conference/msgbase\r\n');
-    emitText(socket, '\r\n');
-    emitText(socket, 'Internet Name (Alpha Numeric No Spaces): ');
+    // express.e:28199-28202 - same rule as REALNAMES above.
+    void showNameScreen(socket, session, 'INTERNETNAMES').then(shown => {
+      if (!shown) {
+        emitText(socket, 'Internet Names are required for messages in this conference/msgbase\r\n');
+      }
+      emitText(socket, '\r\n');
+      emitText(socket, 'Internet Name (Alpha Numeric No Spaces): ');
+    });
     session.subState = LoggedOnSubState.MSG_CAPTURE_INTERNET_NAME;
     return false;
   }
@@ -1841,4 +1854,21 @@ function displayFileInfo(socket: any, filename: string, stats: any): void {
   emitText(socket, ' ');
   emitText(socket, AnsiUtil.colorize(timeStr, 'cyan'));
   emitText(socket, '\r\n');
+}
+
+/**
+ * The screen a board may have drawn for a name requirement, or nothing.
+ *
+ * express.e prints its own sentence ONLY when the screen is absent
+ * (`IF displayScreen(...)=FALSE THEN aePuts(...)`), so a board that drew one
+ * gets the art and a board that did not gets the words. Silent, because not
+ * having the file is the ordinary case and not a fault to report.
+ */
+async function showNameScreen(socket: any, session: any, screen: string): Promise<boolean> {
+  try {
+    const { displayScreen } = require('../screen.handler');
+    return await displayScreen(socket, session, screen, true, true);
+  } catch {
+    return false;
+  }
 }
