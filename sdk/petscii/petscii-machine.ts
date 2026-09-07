@@ -37,7 +37,7 @@
 import { PETSCII_COLOR_TO_VIC } from './c64-palette';
 import { printablePetsciiToScreenCode } from './screen-codes';
 
-const COLS = 40, ROWS = 25, CELLS = COLS * ROWS;
+const COLS = 40, ROWS = 25;
 
 /**
  * The shape of the screen a model describes.

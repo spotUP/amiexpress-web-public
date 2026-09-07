@@ -21,8 +21,6 @@ import { C64_PALETTE_COLODORE, PETSCII_COLOR_TO_VIC, hexToRgb } from './c64-pale
 import { printablePetsciiToScreenCode, screenCodeToPetscii } from './screen-codes';
 import { asciiToPetsciiByte } from './ascii-to-petscii';
 
-const COLS = 40;
-const ROWS = 25;
 const ESC = '\x1b';
 /**
  * Longest OSC/DCS/APC/PM/SOS string held across chunks while waiting for a
