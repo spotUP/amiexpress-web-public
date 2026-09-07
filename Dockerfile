@@ -338,6 +338,14 @@ COPY Bulletins /app/default-data/Bulletins
 COPY Commands /app/default-data/Commands
 # The sysop-editable layout templates - see the entrypoint's Prompts block.
 COPY Prompts /app/default-data/Prompts
+# The screen THEMES the board ships, and the registry that names them.
+# `Themes.info` was already synced by the entrypoint, so the board offered
+# `tango` in the picker and then had no art to serve for it: the tree itself
+# never reached the image, and every caller saw the board's own screens
+# whichever theme he chose (sysop, live, 2026-09-07). The entrypoint's own
+# Themes block (docker-entrypoint.sh) walks what the image has, so this COPY
+# is what it walks.
+COPY Themes /app/default-data/Themes
 COPY Conf1 /app/default-data/Conf1
 COPY Conf2 /app/default-data/Conf2
 COPY Conf3 /app/default-data/Conf3
