@@ -46,6 +46,7 @@ import {
 import { handleCommand } from '../handlers/command.handler';
 import { sendChatMessage, acceptChat } from '../handlers/chat/chat.handler';
 import { handleChatModeInput } from '../utils/chat-mode-input.util';
+import { classifyTerminalInput, clearPauseHandler, commandPieces } from './terminal-input';
 import { initializeSecurity } from '../utils/security.util';
 import { triggerSamiLogRefresh, updateStoreFromCallersLog } from '../services/SamiLogService';
 import { BBSPaths } from '../utils/bbs-paths.util';
@@ -604,115 +605,37 @@ console.error('No session found for socket:', socket.id);
     // Capture user input for session log viewer
     sessionLogManager.captureInput(socket.id, data);
 
-    // If raw transfer mode is active, bypass normal command handling
-    if ((session as any).transferRawActive) {
-      const sink = (session as any).transferRawSink;
-      if (sink) {
-        sink(Buffer.from(data, 'latin1'));
+    // ONE INPUT PIPELINE (TP-8, server/terminal-input.ts). The branches that
+    // used to be written out here - the raw-transfer bypass, the two pause
+    // accumulators, chat mode, and the client-door and game-mode guards - are
+    // now a decision the TELNET handler asks for too. What stays here is what
+    // is genuinely web's: the door routing below (socket.io fires a door's own
+    // `command` listener in parallel, so this handler early-returns for a
+    // door, where telnet must emit the event itself) and the echo channel.
+    const decision = classifyTerminalInput(session, data, {
+      // Only a browser has the key-down/key-up channel game mode uses.
+      deliversKeyEvents: deliversKeyEvents(session),
+    });
+
+    if (decision.kind === 'transfer-sink') {
+      decision.sink(Buffer.from(data, 'latin1'));
+      return;
+    }
+
+    if (decision.kind === 'pause') {
+      if (decision.handler && decision.line !== null) {
+        decision.handler(decision.line);
+        clearPauseHandler(session, decision.which, decision.handler);
+      }
+      // Only echo when NOT in a door - doors handle their own echo.
+      if (decision.echo !== null && !session.inDoorManager) {
+        socket.emit('ansi-output', decision.echo);
       }
       return;
     }
 
-    // Intercept pause prompts (checkForPause) before any other handling
-console.log(`[socket-handlers] checkPauseHandler active: ${!!(session as any).checkPauseHandler}, flagPauseHandler active: ${!!(session as any).flagPauseHandler}`);
-    if ((session as any).checkPauseHandler) {
-      // Accumulate line input for pause prompts
-      if (!(session as any).checkPauseBuffer) {
-        (session as any).checkPauseBuffer = '';
-      }
-
-      // Treat CR/LF as submission
-      if (data === '\r' || data === '\n') {
-        const handler = (session as any).checkPauseHandler;
-        const buffer = (session as any).checkPauseBuffer;
-        // Clear buffer before invoking handler; handler may register a new one
-        (session as any).checkPauseBuffer = '';
-        // If handler persists, clear it after invocation
-        handler(buffer);
-        if ((session as any).checkPauseHandler === handler) {
-          (session as any).checkPauseHandler = undefined;
-        }
-        return;
-      }
-
-      // Handle backspace
-      if (data === '\x7f' || data === '\b') {
-        (session as any).checkPauseBuffer = ((session as any).checkPauseBuffer as string).slice(0, -1);
-        // Only echo back if NOT in a door (doors handle their own echo)
-        if (!session.inDoorManager) {
-          socket.emit('ansi-output', '\b \b');
-        }
-        return;
-      }
-
-      // Accumulate other characters
-      (session as any).checkPauseBuffer += data;
-      // Only echo back if NOT in a door (doors handle their own echo)
-      if (!session.inDoorManager) {
-        socket.emit('ansi-output', data);
-      }
-      return;
-    }
-
-    // Intercept pause prompts (flagPause) before any other handling
-    if ((session as any).flagPauseHandler) {
-      // Accumulate line input for pause prompts
-      if (!(session as any).flagPauseBuffer) {
-        (session as any).flagPauseBuffer = '';
-      }
-
-      // Treat CR/LF as submission
-      if (data === '\r' || data === '\n') {
-        const handler = (session as any).flagPauseHandler;
-        const buffer = (session as any).flagPauseBuffer;
-        // Clear buffer before invoking handler; handler may register a new one
-        (session as any).flagPauseBuffer = '';
-        // If handler persists, clear it after invocation
-        handler(buffer);
-        if ((session as any).flagPauseHandler === handler) {
-          (session as any).flagPauseHandler = undefined;
-        }
-        return;
-      }
-
-      // Handle backspace
-      if (data === '\x7f' || data === '\b') {
-        (session as any).flagPauseBuffer = ((session as any).flagPauseBuffer as string).slice(0, -1);
-        // Only echo back if NOT in a door (doors handle their own echo)
-        if (!session.inDoorManager) {
-          socket.emit('ansi-output', '\b \b');
-        }
-        return;
-      }
-
-      // Append printable characters
-      (session as any).flagPauseBuffer += data;
-      // Echo the character so the user sees input (only if not in door)
-      if (!session.inDoorManager) {
-        socket.emit('ansi-output', data);
-      }
-      return;
-    }
-
-console.log('Session state:', session.state, 'subState:', session.subState);
-console.log('Input buffer:', JSON.stringify(session.inputBuffer));
-
-    // Special debug for Enter key
-    if (data === '\r') {
-console.log('🎯 ENTER KEY DETECTED!');
-console.log('🎯 Current subState:', session.subState);
-console.log('🎯 Is POST_MESSAGE_SUBJECT?', session.subState === LoggedOnSubState.POST_MESSAGE_SUBJECT);
-console.log('🎯 Input buffer contents:', JSON.stringify(session.inputBuffer));
-    }
-
-    // Handle chat-mode keystrokes (F1 to exit, otherwise buffer/echo and
-    // flush to sendChatMessage on Enter) — extracted to
-    // chat-mode-input.util.ts (task 18, review round 3) so the F1-exit
-    // path and the buffering path are ONE routing function instead of two
-    // separate branches; see that file for why the split used to leak
-    // session.inputBuffer across chat entry/exit.
-    if (handleChatModeInput(socket, session, data)) {
-      return;
+    if (decision.kind === 'chat') {
+      if (handleChatModeInput(socket, session, data)) return;
     }
 
     // Out-of-band Ctrl+C abort for long-running script engines (AREXX).
@@ -732,7 +655,7 @@ console.log('🎯 Input buffer contents:', JSON.stringify(session.inputBuffer));
       try { session.scriptAbortHandler(); } catch { /* never throw out of socket handler */ }
     }
 
-    if (session.clientDoorActive) {
+    if (decision.kind === 'swallow' && decision.why === 'client-door') {
       // Exception: if a server-side blessed modal has installed a doorInputHandler
       // (e.g., chat-only login modal during hybrid-door startup), route input there.
       // The client bundle loads before the server onStart login modal shows, so
@@ -744,18 +667,7 @@ console.log('🎯 Input buffer contents:', JSON.stringify(session.inputBuffer));
       return;
     }
 
-    // Game mode means the CLIENT sends key-down/key-up events instead of
-    // characters, so the character path steps aside and lets them do the
-    // work. Only a browser has that channel.
-    //
-    // A telnet or SSH caller has nothing but characters, so returning here
-    // dropped every keystroke they made: a door in game mode drew perfectly
-    // over telnet and took no input at all - GRANDMASTER, confirmed by the
-    // sysop on a live session (2026-09-02), and the same for every other
-    // game-mode door. Those connections keep the character path below.
-    if (session.gameModeEnabled && deliversKeyEvents(session)) {
-      return;
-    }
+    if (decision.kind === 'swallow') return;   // game mode: the client sends key events instead
 
     // BBS-owned pause takes priority over door input routing.
     // When a display flow pause (doPause) is active while a ~CC_ door is finishing,
@@ -783,54 +695,28 @@ console.log(`[socket-handlers] BBS pause intercept: routing "${data}" to command
           return;
         }
         logDoorDebug(`CMD->door handler dispatch`);
-console.log(`[socket-handlers] ABOUT TO CALL doorInputHandler with: "${data}" (length=${data.length}, charCode=${data.charCodeAt(0)})`);
         session.doorInputHandler(data);
         return;
       } else {
-console.log('[socket-handlers] inDoorManager/DOOR_RUNNING but no doorInputHandler; sending raw to door:input anyway');
         logDoorDebug(`WARN missing handler while door active; emitting door:input fallback`);
         socket.emit('door:input', data);
         return;
       }
     }
-console.log('[socket-handlers] ✗ NOT in door or no handler - routing to BBS command handler');
-console.log('[socket-handlers]   inDoorManager:', session.inDoorManager);
-console.log('[socket-handlers]   handler exists:', !!session.doorInputHandler);
 
-    // Drop SGR mouse-reporting sequences when no door is consuming them.
-    // Why: xterm.js retains DEC mode 1006 across door exits / chat-only-login
-    // transitions; once enabled, every mouse move sends `\x1b[<btn;col;row;M`
-    // back over the 'command' channel. If that data falls through to handleCommand
-    // while subState=ANSI_PROMPT, the multi-char path at command.handler.ts:1020
-    // iterates each printable byte (skips ESC, echoes `[<35;X;Y;M`), leaking
-    // visible mouse-tracking text at the user's cursor. Doors that need mouse
-    // get the data via earlier routing branches; once we reach this fall-through,
-    // there is no valid consumer for SGR mouse and dropping is correct.
-    if (/^\x1b\[<\d+;\d+;\d+[Mm]/.test(data)) {
-      return;
-    }
-
-    // Preserve escape sequences (arrow keys, etc.) as single inputs for history/navigation
-    let input = data;
-    if (input.startsWith('\x1bO') && input.length >= 3) {
-      input = `\x1b[${input.slice(2)}`;
-    }
-    if (input.startsWith('\x1b[') && input.length >= 2) {
-      handleCommand(socket, session, input).catch((error: any) => {
+    // No door took it. `commandPieces` is the rule this handler has always
+    // used, now in one place: a stray SGR mouse report (xterm.js keeps DEC
+    // 1006 across a door exit, and reaching handleCommand with one echoes
+    // `[<35;X;Y;M` at the caller's cursor) is dropped, SS3 is folded to CSI so
+    // an arrow key in application-cursor mode is understood, an escape
+    // sequence is dispatched whole, and everything else a character at a time.
+    for (const piece of commandPieces(data)) {
+      handleCommand(socket, session, piece).catch((error: any) => {
 console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error);
 console.error('[COMMAND ERROR] Stack:', error.stack);
         socket.emit('ansi-output', '\r\n[ERROR] Command processing failed\r\n');
       });
-    } else {
-      for (const char of input) {
-        handleCommand(socket, session, char).catch((error: any) => {
-console.error('[COMMAND ERROR] Unhandled error in handleCommand:', error);
-console.error('[COMMAND ERROR] Stack:', error.stack);
-          socket.emit('ansi-output', '\r\n[ERROR] Command processing failed\r\n');
-        });
-      }
     }
-console.log('=== COMMAND PROCESSED ===\n');
   });
 
   // Binary transfer scaffold (upload/download via socket chunks)

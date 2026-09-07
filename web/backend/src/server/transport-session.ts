@@ -30,6 +30,8 @@ import {
 } from "./session-emitter-registry";
 import { sessionWantsPetscii } from "../utils/petscii-session-model";
 import { routeDoorInput } from "../services/door-input-routing";
+import { classifyTerminalInput, clearPauseHandler, commandPieces } from "./terminal-input";
+import { handleChatModeInput } from "../utils/chat-mode-input.util";
 import { classifyFirstKeypress } from "../utils/c64-detect.util";
 import { convertPetsciiInputToAscii } from "../utils/petscii.util";
 import {
@@ -231,14 +233,51 @@ console.log(
       input = input.replace(/\0/g, "");
     }
 
-    // Process through BBS command handler (same as Socket.IO)
-    // Must use SAME routing logic as socket-handlers.ts:641-656
+    // ONE INPUT PIPELINE (TP-8). Everything that can claim a keystroke before
+    // a door sees it - the two pause accumulators, chat mode, the client-door
+    // and game-mode guards - is decided in server/terminal-input.ts, which the
+    // web handler asks the same question of. Until this task a telnet caller
+    // had NONE of them, and the whole TCP segment went to handleCommand as one
+    // string.
     if (connection.session) {
       const session = connection.session;
+
+      const decision = classifyTerminalInput(session, input, {
+        // A browser sends key-down/key-up events in game mode; telnet and SSH
+        // have nothing but characters, so the game-mode guard must not fire
+        // here - it dropped every keystroke a game-mode door was sent.
+        deliversKeyEvents: false,
+      });
+
+      if (decision.kind === 'transfer-sink') {
+        decision.sink(Buffer.from(input, 'latin1'));
+        return;
+      }
+
+      if (decision.kind === 'pause') {
+        if (decision.handler && decision.line !== null) {
+          decision.handler(decision.line);
+          clearPauseHandler(session, decision.which, decision.handler);
+        }
+        // Doors echo their own input; the BBS's own prompt does not.
+        if (decision.echo !== null && !session.inDoorManager) {
+          emitter.emit('ansi-output', decision.echo);
+        }
+        return;
+      }
+
+      if (decision.kind === 'chat') {
+        // The emitter is what every BBS handler is written against, and chat's
+        // echo goes through it exactly as it does on web.
+        if (handleChatModeInput(emitter, session, input)) return;
+      }
 
       // Out-of-band Ctrl+C abort for long-running script engines (AREXX).
       // Mirrors the socket-handlers Ctrl+C interceptor so telnet users can
       // also break out of a tight AREXX loop with no input prompt active.
+      // Its PLACE is deliberate and matches web: a pause prompt and chat mode
+      // both consume the key and return above, so the abort is reached only
+      // when neither did.
       if (
         (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) &&
         session.scriptAbortHandler &&
@@ -247,6 +286,8 @@ console.log(
       ) {
         try { session.scriptAbortHandler(); } catch { /* never throw out of telnet handler */ }
       }
+
+      if (decision.kind === 'swallow') return;
 
       // Where a keystroke goes while a door runs is one decision, and both
       // transports ask for it (services/door-input-routing.ts). It used to be
@@ -278,8 +319,14 @@ console.log('[TELNET] Door active but nothing listening - emitting door:input');
       }
       if (!route.toBbs) return;
 
-      // No door active - route to BBS command handler
-      deps.handleCommand(emitter, session, input, deps.io);
+      // No door active - route to BBS command handler. `commandPieces` is the
+      // rule web has always used: an escape sequence whole, everything else a
+      // character at a time, SS3 folded to CSI, and a stray mouse report - one
+      // no door is left to consume - dropped rather than typed onto the
+      // caller's screen.
+      for (const piece of commandPieces(input)) {
+        deps.handleCommand(emitter, session, piece, deps.io);
+      }
     }
   });
 
