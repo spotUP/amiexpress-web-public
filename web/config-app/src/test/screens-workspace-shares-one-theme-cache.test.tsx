@@ -23,6 +23,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QUERY_DEFAULTS } from '../lib/query-client';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
@@ -81,7 +82,11 @@ function wrapper({ children }: { children: ReactNode }) {
 describe('the screens workspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // The APP's defaults, not a test's: at staleTime 0 a second mount
+    // refetches and hides the bug this file exists for.
+    client = new QueryClient({
+      defaultOptions: { ...QUERY_DEFAULTS, queries: { ...QUERY_DEFAULTS.queries, retry: false } },
+    });
   });
 
   it('caches ONE shape under ["screen-themes"] - the envelope both readers unwrap', async () => {
