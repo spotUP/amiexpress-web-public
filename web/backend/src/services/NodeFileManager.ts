@@ -186,6 +186,50 @@ console.error(`[NodeFileManager] Error reading ${filePath}:`, error);
   }
 
   /**
+   * Free every node: nobody is online, so no node holds a caller.
+   *
+   * `node<n>.user` is written at login and deleted at logoff, and it is what
+   * the board reads to answer "is this account already on another node?"
+   * (services/user-already-online.ts, express.e:29715 `checkUserOnLine`).
+   * A clean logoff removes it; a process that DIES - a deploy, a crash, a
+   * container restart - cannot, and the record outlives the session it
+   * describes.
+   *
+   * On 2026-09-07 that locked the sysop out of his own board: twenty-one
+   * stale records, sysop on nine nodes and spot on four, some from six days
+   * earlier, every one of them a caller the board had long since forgotten.
+   * A real Amiga has the same rule for the same reason - a node that has just
+   * booted has nobody on it - so the sweep belongs at startup, before the
+   * first caller can connect.
+   *
+   * Returns the node ids it freed, for the boot log.
+   */
+  releaseAllNodes(): number[] {
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(this.bbsRoot);
+    } catch {
+      return []; // no board directory yet: nothing to free
+    }
+
+    const freed: number[] = [];
+    for (const entry of entries) {
+      const match = /^node(\d+)\.user$/i.exec(entry);
+      if (!match) continue;
+      const nodeId = parseInt(match[1], 10);
+      if (!Number.isFinite(nodeId)) continue;
+      try {
+        this.deleteNodeFiles(nodeId);
+        freed.push(nodeId);
+      } catch {
+        // An unremovable record must not stop the board from booting; it
+        // costs that one node's account a login, not the whole board.
+      }
+    }
+    return freed.sort((a, b) => a - b);
+  }
+
+  /**
    * Delete node files on logoff
    */
   deleteNodeFiles(nodeId: number): void {

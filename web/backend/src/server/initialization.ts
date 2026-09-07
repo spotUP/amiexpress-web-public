@@ -140,6 +140,7 @@ import { getMailStatFile, loadMsgPointers, validatePointers, updateReadPointer }
 import { findSecurityScreen } from '../utils/screen-security.util';
 import { searchFileDescriptions } from './database-helpers';
 import { getBoardConfig } from '../services/bbs-config-file.service';
+import { nodeFileManager } from '../services/NodeFileManager';
 
 const AROS_ROM_FILES = ['aros-rom.bin', 'aros-ext.bin'];
 
@@ -467,6 +468,18 @@ export async function initializeData(io?: SocketIOServer) {
     // The BBS ALWAYS uses disk files, NOT the database, for conference configuration
     const bbsRoot = process.env.BBS_ROOT || config.get('dataDir');
     console.log(`[INIT] bbsRoot=${bbsRoot}`);
+
+    // NOBODY IS ONLINE YET, so no node may claim a caller. `node<n>.user` is
+    // written at login and deleted at logoff, and the board reads it to
+    // answer "is this account already on another node?" - but a process that
+    // DIES (a deploy, a crash, a container restart) never gets to delete it.
+    // Twenty-one such records, the oldest six days old, locked the sysop out
+    // of his own board on 2026-09-07. A booted Amiga has every node free, and
+    // so does this one.
+    const freedNodes = nodeFileManager.releaseAllNodes();
+    if (freedNodes.length > 0) {
+      console.log(`[INIT] Freed ${freedNodes.length} node(s) left claimed by a previous run: ${freedNodes.join(', ')}`);
+    }
 
     // Load bbsConfig.info tooltypes into ACS config toggles (express.e sopt.toggles)
     // Done once at startup so all handlers see consistent values via getACSConfig()
