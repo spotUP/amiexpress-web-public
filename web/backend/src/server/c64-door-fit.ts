@@ -154,6 +154,52 @@ export function collapseBlankRunsToFit(frame: Frame, opts: FitOptions): Frame {
  * `C64_DROP_OLDEST` gets here: on a table that is not a wall the first row is
  * simply the first, and dropping it would be a lie.
  */
+/**
+ * Drop entries from the BOTTOM of a ranked list until the screen fits.
+ *
+ * THE OTHER END, AND WHY IT IS A SEPARATE RULE. `dropOldestEntriesToFit`
+ * below takes the first entry under the list's header, which on a wall is the
+ * comment nobody minds losing. On ctop and conftop that same row is RANK ONE -
+ * the biggest uploader on the board - and the sysop's answer when it was put
+ * to him was the plain one: "we dont want to drop top uploaders, the ones at
+ * the bottom of the list could be dropped" (2026-09-07).
+ *
+ * So a ranked list sheds from its tail: the last entry of the block, then the
+ * one above it. The block ENDS where the table's own footer begins - ctop
+ * closes its rows with a second rule (`===-===...`) and prints its totals
+ * under it - so the search runs from the first rule to the next one and never
+ * touches what is below.
+ *
+ * Never the last entry standing: a top-uploaders table with no uploader in it
+ * says less than a page prompt does.
+ */
+export function dropLastEntriesToFit(frame: Frame, opts: FitOptions): Frame {
+  let current = frame;
+  for (let guard = 0; guard < frame.rows; guard += 1) {
+    if (adaptedHeight(current, opts.cols) <= opts.rows) return current;
+
+    const rules: number[] = [];
+    current.cells.forEach((row, y) => {
+      if (isRuleRow(row as Cell[])) rules.push(y);
+    });
+    if (rules.length === 0) return current;
+
+    // Between the header's rule and whatever closes the block: the next rule
+    // if there is one, else the end of the painted rows.
+    const from = rules[0];
+    const to = rules.length > 1 ? rules[1] : current.rows;
+
+    const entries: number[] = [];
+    for (let y = from + 1; y < to; y += 1) {
+      if (!current.cells[y].every(isBlank)) entries.push(y);
+    }
+    if (entries.length <= 1) return current;
+
+    current = withoutRow(current, entries[entries.length - 1]);
+  }
+  return current;
+}
+
 export function dropOldestEntriesToFit(frame: Frame, opts: FitOptions): Frame {
   let current = frame;
   for (let guard = 0; guard < frame.rows; guard += 1) {

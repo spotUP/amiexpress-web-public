@@ -102,7 +102,7 @@ import {
 } from '@amiexpress/bbs-door-sdk/petscii/frame';
 import { doorScreenWidth, C64_COLUMNS, DEFAULT_DOOR_COLUMNS } from '../amiga-emulation/xim/screen-width.util';
 import { stripNarrowNoise } from './c64-door-noise';
-import { collapseBlankRunsToFit, collapseLongBlankRuns, dropOldestEntriesToFit } from './c64-door-fit';
+import { collapseBlankRunsToFit, collapseLongBlankRuns, dropOldestEntriesToFit, dropLastEntriesToFit } from './c64-door-fit';
 
 /** Quiet gap after the last write that ends a frame. */
 export const C64_ADAPT_TICK_MS = 30;
@@ -137,6 +137,8 @@ export interface C64AdapterOptions {
   maxFrameMs?: number;
   /** The door declared C64_DROP_OLDEST: its list may lose its oldest entries to fit. */
   dropOldest?: boolean;
+  /** The door declared C64_DROP_LAST: its ranked list may lose its lowest ranks to fit. */
+  dropLast?: boolean;
 }
 
 /** The rule ladder's output for the frame as it stands, plus where the painted rows end. */
@@ -234,6 +236,8 @@ export class C64DoorFrameAdapter {
     private readonly maxFrameMs: number,
     /** C64_DROP_OLDEST: this door's list may lose its oldest entries to fit. */
     private readonly dropOldest: boolean = false,
+    /** C64_DROP_LAST: this door's ranked list may lose its lowest ranks to fit. */
+    private readonly dropLast: boolean = false,
   ) {}
 
   isDisposed(): boolean {
@@ -571,6 +575,7 @@ export function installC64DoorAdapter(
     opts.tickMs ?? C64_ADAPT_TICK_MS,
     opts.maxFrameMs ?? C64_ADAPT_MAX_FRAME_MS,
     opts.dropOldest === true,
+    opts.dropLast === true,
   );
   adapter.target = socket;
   adapter.original = hadOwnEmit ? socket.emit : null;

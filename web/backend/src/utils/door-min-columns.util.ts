@@ -271,6 +271,26 @@ export function doorDropsOldestAt40(door: MinColumnsDoorShape | null | undefined
 }
 
 /**
+ * Does this door say its list may lose its LOWEST-RANKED entries to fit 40
+ * columns?
+ *
+ * `C64_DROP_LAST=1`, read exactly where `C64_ADAPT` and `C64_DROP_OLDEST` are.
+ * The two drop flags are opposite ends of the same list and mean different
+ * things: a wall sheds its OLDEST comment, a ranked table sheds its LOWEST
+ * rank. ctop and conftop declare this one because the row `C64_DROP_OLDEST`
+ * would take from them is the top uploader on the board.
+ */
+export function doorDropsLastAt40(door: MinColumnsDoorShape | null | undefined): boolean {
+  if (!door) return false;
+  const raw =
+    (door as any).c64DropLast ??
+    door.toolTypes?.['C64_DROP_LAST'] ??
+    (door.doorInfo as any)?.c64DropLast ??
+    door.doorInfo?.toolTypes?.['C64_DROP_LAST'];
+  return /^(1|yes|true)$/i.test(String(raw ?? '').trim());
+}
+
+/**
  * THE predicate: may this session enter this door through the C64 adapter?
  *
  * ONE answer, two readers - executeDoor's gate clause asks it whether a door
