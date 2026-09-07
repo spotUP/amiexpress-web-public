@@ -83,7 +83,11 @@ export type MciHandler = (width: number) => string | undefined;
  * semantics. Models express.e's `StrCmp(cmd,'x',1)` family
  * (express.e:5478-5495, 5496-5562 SS_/SX_/SR_/CC_).
  */
-export type MciPrefixHandler = (suffix: string, width: number) => string | undefined;
+export type MciPrefixHandler = (
+  suffix: string,
+  width: number,
+  context?: MciPrefixContext,
+) => string | undefined;
 
 export interface MciDispatchMap {
   /**
@@ -95,6 +99,19 @@ export interface MciDispatchMap {
    * (express.e mostly truncates via aePuts2).
    */
   [code: string]: MciHandler;
+}
+
+/**
+ * What a prefix handler can know about the output it is being asked to add to.
+ *
+ * Only `~t` (the column tab) uses it: it pads forward to a target COLUMN, so
+ * it has to see how much of the row is already written. Every other handler
+ * ignores the argument, which is why it is optional and last - adding it
+ * changed no existing handler.
+ */
+export interface MciPrefixContext {
+  /** Everything emitted so far by this substitution pass. */
+  readonly outSoFar: string;
 }
 
 export interface MciPrefixDispatchMap {
@@ -266,7 +283,7 @@ export function processMci(
         if (cmd.startsWith(prefix)) {
           const suffix = rawCmd.slice(prefix.length);
           try {
-            result = prefixDispatch[prefix](suffix, width);
+            result = prefixDispatch[prefix](suffix, width, { outSoFar: out });
           } catch {
             result = '';
           }

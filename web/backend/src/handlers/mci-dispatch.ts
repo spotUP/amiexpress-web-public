@@ -22,6 +22,7 @@
  * express.e parity references are kept inline, unchanged, on each row.
  */
 import { db } from '../database';
+import { columnTabPadding } from '../utils/mci-column.util';
 import { flaggedFilesManager } from '../services/FlaggedFilesManager';
 import {
   applyMciWidth,
@@ -487,6 +488,25 @@ console.error('[parseMciCodes] Error getting message base name:', error);
       const n = parseInt(suffix, 10);
       if (!(Number.isFinite(n) && n >= 0)) return '';
       return petscii ? moveSentinel(0, n - 1) : `\x1b[${n};H`;
+    },
+    // ~t<nn>| - COLUMN TAB. Pad forward with spaces to the 0-based column
+    // `nn`, C*Base's `£t` (ml1.o.asm:1464-1490) expressed in our MCI. It is
+    // global rather than scoped to the file-view templates because a tab is
+    // useful in any screen a sysop writes - the C64 file-view design calls it
+    // "the single highest-value addition to our MCI set".
+    //
+    // FORWARD-ONLY, and SPACES rather than a cursor move. Two reasons, either
+    // sufficient: a move leaves the skipped cells holding whatever the last
+    // row put there, and the internal listing path has no machine to resolve a
+    // MOVE sentinel against - it builds plain strings. Spaces are the only
+    // form both paths can produce, and both paths must produce the same one.
+    //
+    // Emits nothing when the row is already at or past the column, and nothing
+    // when the target is off the row - padding to column 40 on a 40-column
+    // screen would wrap the row, which is the one thing a tab must not do.
+    t: (suffix, _width, context) => {
+      if (!/^\d{2}$/.test(suffix)) return '';
+      return columnTabPadding(context?.outSoFar ?? '', parseInt(suffix, 10), petscii);
     },
     // ~w<n>| - WEB-divergent form preserved (express.e only knows
     // `~<n>w|` width-prefix form; that one matches the exact 'w'
