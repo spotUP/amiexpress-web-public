@@ -31,7 +31,7 @@ import {
   emitterForUserId,
   socketIoSocketFor,
 } from '../server/session-emitter-registry';
-import { getGrumpySysopResponse, getGrumpyBotIntroMessage, type AIProviderConfig, DEFAULT_AI_CONFIG } from './grumpy-sysop-bot.handler';
+import { getGrumpySysopResponse, getGrumpyBotIntroMessage, planNaturalTyping, type AIProviderConfig, DEFAULT_AI_CONFIG } from './grumpy-sysop-bot.handler';
 import {
   renderPicker,
   handlePickerInput,
@@ -913,27 +913,64 @@ async function sendBotMessageWithTyping(
 
   if (thinkTime > 0) await new Promise(r => setTimeout(r, thinkTime));
 
-  const wrapped = wordWrapMessage(message, 78, 78);
-  const color = '36';
-
-  // Write the bot's message to the bottom of the scroll region (line 23)
-  // in one shot. \r\n after each line scrolls the region, pushing previous
-  // content up. No character-by-character typing preview — that writes to
-  // line 23 and overwrites the user's message before it scrolls.
-  let output = '\x1b[23;1H';
-  for (const line of wrapped) {
-    output += `\x1b[${color}m${line}\x1b[0m\r\n`;
-  }
-  output += '\x1b[24;1H\x1b[2K';
   // TP-10: the bot's reply is the operator chat's terminal half, exactly as
   // the sysop's own message is, so it goes through the ONE registry too. The
   // `user:<id>` room holds web sockets only, and a telnet caller paged into a
   // bot-answered chat would otherwise watch a scroll region nothing wrote to.
   const reach = emitterForUserId(page.userId, io);
-  if (reach) {
-    reach.emitter.emit('ansi-output', output);
-  } else {
+  if (!reach) {
 console.log(`[Operator Chat] Page ${pageId}: GrumpyBot's reply has NO EMITTER for user ${page.userId} - saved and shown to the admin, not to the caller`);
+    return;
+  }
+
+  // THE BOT TYPES, IN PLACE. The reply is typed a character at a time on
+  // line 23, the bottom of the scroll region, with the occasional neighbouring
+  // key hit and backspaced - the live typing the sysop asked for back
+  // (2026-09-07: "we have lost the live typing for the ai sysops").
+  //
+  // The first version of this (removed in 18229ceb5) redrew the WHOLE line
+  // on every character - `ESC[23;1H ESC[2K GrumpyBot: <buffer>` - and then
+  // cleared it and wrote the finished line again: a flicker per keystroke,
+  // and a line the caller's own message had just been committed to. This one
+  // appends each character where the cursor already is, corrects a typo with
+  // a real backspace, and when the line is done sends `\r\n` from line 23 so
+  // the region scrolls it up exactly as a committed line would. Nothing is
+  // ever cleared or redrawn, so there is nothing to flicker.
+  //
+  // The caller may be typing on line 24 all the while, so every chunk ends
+  // by putting the cursor back at the end of their input.
+  const wrapped = wordWrapMessage(message, 78, 78);
+  const color = '36';
+  const callerSession = userSessions.get(String(page.userId));
+  const callerCursor = () => `\x1b[24;${1 + (callerSession?.inputBuffer?.length ?? 0)}H`;
+  const emit = (ansi: string) => reach.emitter.emit('ansi-output', ansi);
+
+  // A long reply should not take half a minute to type. The plan's pauses
+  // are scaled so the whole message lands within the budget.
+  const MAX_TYPING_MS = 12_000;
+  const plans = wrapped.map((line) => planNaturalTyping(line, {
+    typingSpeed: aiConfig?.botTypingSpeed,
+    typoProbability: aiConfig?.botTypoProbability,
+  }));
+  const plannedMs = plans.flat().reduce((sum, e) => sum + (e.kind === 'pause' ? e.ms : 0), 0);
+  const scale = plannedMs > MAX_TYPING_MS ? MAX_TYPING_MS / plannedMs : 1;
+
+  for (const plan of plans) {
+    let col = 1;
+    for (const event of plan) {
+      if (event.kind === 'char') {
+        emit(`\x1b[23;${col}H\x1b[${color}m${event.ch}\x1b[0m${callerCursor()}`);
+        col++;
+      } else if (event.kind === 'backspace') {
+        col = Math.max(1, col - 1);
+        emit(`\x1b[23;${col}H ${callerCursor()}`);
+      } else if (event.ms * scale >= 1) {
+        await new Promise(r => setTimeout(r, event.ms * scale));
+      }
+    }
+    // The line is done: scroll it up from the bottom of the region, as a
+    // committed line is, and leave line 23 blank for the next one.
+    emit(`\x1b[23;1H\r\n${callerCursor()}`);
   }
 }
 

@@ -926,120 +926,68 @@ const TYPO_MAP: { [key: string]: string[] } = {
   'z': ['a', 'x', 's'],
 };
 
+/** One step of a bot "typing" a line: a character, a correction, or a wait. */
+export type TypingEvent =
+  | { kind: 'char'; ch: string }
+  | { kind: 'backspace' }
+  | { kind: 'pause'; ms: number };
+
 /**
- * Simulate natural typing with realistic typos and corrections
- * Sends character-by-character to user's terminal with ANSI control codes
- * Displays at line 22 (typing preview line in split-screen chat)
+ * The plan for typing `text` the way a person does: variable speed, a
+ * breath after punctuation, and now and then a neighbouring key hit and
+ * backspaced. PURE - it renders nothing and sleeps for nothing; the caller
+ * plays the events on whatever reaches the terminal (operator-chat.handler
+ * `sendBotMessageWithTyping`). `rng` is injectable so a test can force or
+ * forbid a typo.
+ *
+ * Applying the events in order yields `text` exactly: every typo is followed
+ * by its own backspace and the right character.
  */
-export async function simulateNaturalTyping(
-  io: any,
-  pageId: string,
-  message: string,
-  onComplete: () => void,
-  options?: {
-    typingSpeed?: number;
-    typoProbability?: number;
-    thinkTime?: number;
-  }
-): Promise<void> {
+export function planNaturalTyping(
+  text: string,
+  options?: { typingSpeed?: number; typoProbability?: number },
+  rng: () => number = Math.random
+): TypingEvent[] {
   const TYPO_PROBABILITY = options?.typoProbability ?? 0.04;
-  const MIN_TYPING_DELAY = options?.typingSpeed ?? 20;
+  const MIN_TYPING_DELAY = options?.typingSpeed ?? 40;
   const MAX_TYPING_DELAY = MIN_TYPING_DELAY * 3;
-  const PAUSE_AFTER_TYPO = 150; // ms (pause to "realize" mistake)
-  const BACKSPACE_DELAY = 40; // ms per backspace
+  const PAUSE_AFTER_TYPO = 150; // the bot "notices"
+  const BACKSPACE_DELAY = 40;
 
-  // Think time before starting
-  const thinkTime = options?.thinkTime ?? 0;
-  if (thinkTime > 0) {
-    await sleep(thinkTime);
-  }
-
-  let buffer = '';
-
-  // Helper to display typing buffer at line 23 (Sysop line in linear chat)
-  // IMPORTANT: Truncate to prevent overflow
-  const MAX_PREVIEW_WIDTH = 65; 
-  const displayTyping = (text: string) => {
-    let displayText = text;
-    if (text.length > MAX_PREVIEW_WIDTH) {
-      displayText = '...' + text.slice(-(MAX_PREVIEW_WIDTH - 3));
-    }
-
-    const ansiOutput =
-      '\x1b7' + // Save cursor position (user typing at line 24)
-      '\x1b[23;1H' + // Move to line 23
-      '\x1b[2K' + // Clear line
-      (displayText.length > 0
-        ? `\x1b[36mGrumpyBot:\x1b[0m ${displayText}`
-        : '') +
-      '\x1b8'; // Restore cursor position
-
-    io.to(`page:${pageId}`).emit('ansi-output', ansiOutput);
-  };
-
-  for (let i = 0; i < message.length; i++) {
-    const char = message[i];
+  const events: TypingEvent[] = [];
+  for (const char of text) {
     const isSpace = char === ' ';
     const isPunctuation = /[.,!?;:]/.test(char);
+    const canTypo = char.toLowerCase() in TYPO_MAP && !isSpace && !isPunctuation;
 
-    // Decide if we should make a typo
-    const shouldTypo = Math.random() < TYPO_PROBABILITY &&
-                       char.toLowerCase() in TYPO_MAP &&
-                       !isSpace &&
-                       !isPunctuation;
-
-    if (shouldTypo) {
-      // Make a typo - type wrong character
-      const possibleTypos = TYPO_MAP[char.toLowerCase()];
-      const typo = possibleTypos[Math.floor(Math.random() * possibleTypos.length)];
-      const typedChar = char === char.toUpperCase() ? typo.toUpperCase() : typo;
-
-      // Send the typo
-      buffer += typedChar;
-      displayTyping(buffer);
-
-      // Pause (bot "realizes" the mistake)
-      await sleep(PAUSE_AFTER_TYPO);
-
-      // Backspace to correct
-      buffer = buffer.slice(0, -1);
-      displayTyping(buffer);
-
-      await sleep(BACKSPACE_DELAY);
-
-      // Type the correct character
-      buffer += char;
-      displayTyping(buffer);
-
-      // Small delay after correction
-      await sleep(MIN_TYPING_DELAY);
-    } else {
-      // Normal character - no typo
-      buffer += char;
-      displayTyping(buffer);
-
-      // Variable typing speed - slower after punctuation or spaces
-      let delay = MIN_TYPING_DELAY + Math.random() * (MAX_TYPING_DELAY - MIN_TYPING_DELAY);
-      if (isPunctuation) {
-        delay += 100; // Brief pause after punctuation
-      } else if (isSpace) {
-        delay += 20; // Slightly longer for word boundaries
-      }
-
-      await sleep(delay);
+    if (canTypo && rng() < TYPO_PROBABILITY) {
+      const neighbours = TYPO_MAP[char.toLowerCase()];
+      const typo = neighbours[Math.floor(rng() * neighbours.length)] ?? neighbours[0];
+      events.push({ kind: 'char', ch: char === char.toUpperCase() ? typo.toUpperCase() : typo });
+      events.push({ kind: 'pause', ms: PAUSE_AFTER_TYPO });
+      events.push({ kind: 'backspace' });
+      events.push({ kind: 'pause', ms: BACKSPACE_DELAY });
+      events.push({ kind: 'char', ch: char });
+      events.push({ kind: 'pause', ms: MIN_TYPING_DELAY });
+      continue;
     }
+
+    events.push({ kind: 'char', ch: char });
+    let delay = MIN_TYPING_DELAY + rng() * (MAX_TYPING_DELAY - MIN_TYPING_DELAY);
+    if (isPunctuation) delay += 100;
+    else if (isSpace) delay += 20;
+    events.push({ kind: 'pause', ms: delay });
   }
-
-  // Typing complete - clear typing preview
-  // Note: We don't clear line 23 here, as sendChatMessage will overwrite it
-  // with the committed message immediately after.
-  
-  onComplete();
+  return events;
 }
 
-/**
- * Sleep utility
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+/** The text a plan leaves on the line once every event has been applied. */
+export function applyTypingPlan(events: TypingEvent[]): string {
+  let out = '';
+  for (const e of events) {
+    if (e.kind === 'char') out += e.ch;
+    else if (e.kind === 'backspace') out = out.slice(0, -1);
+  }
+  return out;
 }
+
