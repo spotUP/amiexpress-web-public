@@ -9,6 +9,10 @@
  * log in with a password the BBS rejects, or hold a node WHO cannot see, would
  * be a second board.
  */
+import * as fs from 'fs';
+import { promises as fsp } from 'fs';
+import * as path from 'path';
+
 import { config } from '../config';
 import { db } from '../database';
 import { checkConfAccess } from '../handlers/message/message-scan.handler';
@@ -17,6 +21,13 @@ import { checkSecurity, getACSConfig, ToggleFlags } from '../utils/acs.util';
 import { checkDownloadRatios, updateDownloadStats } from '../utils/download-ratios.util';
 import { resolveFile } from '../handlers/transfer/batch-download.handler';
 import { loadConfConfig } from '../services/conf-config.service';
+import { fileUploadedFile } from '../services/upload-filing.service';
+import { registerFtpCaller, releaseFtpCaller } from './ftp-presence';
+import { conferenceDir } from '../conferences/conference-paths';
+import { getNodeWorkDir, getPlaypenDir } from '../utils/bbs-paths.util';
+import { readTooltypeMap } from '../utils/info-file.util';
+import { testFile, TestResult } from '../utils/file-test.util';
+import { validateFilename } from '../utils/file-upload.util';
 import { FtpFilesystem } from './ftp-filesystem';
 import { nodeManager } from '../services/node-manager.service';
 import { writeToCallersLog } from '../utils/download-logging.util';
@@ -126,6 +137,106 @@ export function boardFtpDeps(): FtpDeps {
     async recordDownload(user: FtpUser, size: number) {
       await updateDownloadStats(user as unknown as Parameters<typeof updateDownloadStats>[0], size);
     },
+
+    /**
+     * Everything the board refuses BEFORE taking a byte.
+     *
+     * A caller told no after a ten-megabyte transfer has been told no
+     * expensively. `NO_FTP_UPLOADS` is the sysop's own switch, per conference,
+     * and `validateFilename` is express.e's name rule - the same one the
+     * socket upload applies.
+     */
+    async refuseUpload(_user: FtpUser, conferenceId: number, filename: string) {
+      if (!filename) return 'No filename';
+
+      const name = validateFilename(filename);
+      if (!name.valid) return name.error ?? 'That filename is not allowed';
+
+      const areas = await db.getFileAreas(conferenceId);
+      if (!areas || areas.length === 0) return 'This conference has no upload area';
+
+      // The tooltype is presence-semantics, like every other boolean on this
+      // board: NO_FTP_UPLOADS present means uploads are off here.
+      const confIcon = readTooltypeMap(
+        path.join(conferenceDir(config.get('dataDir'), conferenceId), 'Conf.info')
+      );
+      if (confIcon.has('NO_FTP_UPLOADS')) {
+        return confIcon.get('NO_FTP_UPLOADS')?.trim() || 'Uploads are not accepted in this conference';
+      }
+
+      return undefined;
+    },
+
+    /**
+     * Take the bytes into the node's playpen, test them, and hand them to the
+     * SAME filing the socket upload uses (`services/upload-filing.service`) -
+     * the duplicate rule, the quarantine and the DIR entry are one
+     * implementation, so an FTP upload and a menu upload cannot drift.
+     */
+    async acceptUpload(request, data) {
+      const dataDir = config.get('dataDir');
+      const playpen = getPlaypenDir(request.nodeId || 1, dataDir);
+      await fsp.mkdir(playpen, { recursive: true });
+      const playpenPath = path.join(playpen, request.filename);
+
+      const bytes = await new Promise<number>((resolve, reject) => {
+        let written = 0;
+        const out = fs.createWriteStream(playpenPath);
+        data.on('data', (chunk: Buffer | string) => {
+          written += typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length;
+        });
+        data.on('error', reject);
+        out.on('error', reject);
+        out.on('close', () => resolve(written));
+        data.pipe(out);
+      });
+
+      // express.e tests an upload before it files it, and a failure is a
+      // QUARANTINE rather than a rejection: the file goes to the sysop, and
+      // the caller is told where it went.
+      const nodeWorkDir = getNodeWorkDir(0, dataDir);
+      let marker: 'P' | 'F' | 'N' = 'N';
+      let initialStatus: 'active' | 'private' | 'hold' = 'active';
+      try {
+        const result = await testFile(playpenPath, nodeWorkDir);
+        if (result === TestResult.SUCCESS) marker = 'P';
+        else if (result === TestResult.FAILURE) {
+          marker = 'F';
+          initialStatus = 'hold';
+        }
+      } catch {
+        marker = 'N';
+      }
+
+      const areas = await db.getFileAreas(request.conferenceId);
+      const area = areas[0];
+      const nodeConfig = db.getConfigRepository().getNodeConfig(request.nodeId || 1);
+
+      const outcome = await fileUploadedFile({
+        playpenPath,
+        filename: request.filename,
+        size: bytes,
+        description: `Uploaded over FTP by ${request.user.username}`,
+        fileArea: area as never,
+        conferenceId: request.conferenceId,
+        nodeId: request.nodeId || 1,
+        uploader: {
+          username: request.user.username,
+          location: (request.user as unknown as { location?: string }).location,
+        },
+        initialStatus,
+        marker,
+        addSentBy: nodeConfig?.sentby_files ?? true,
+      });
+
+      const summary = outcome.orphaned
+        ? 'Transfer complete, but the board could not file it - a sysop has been told'
+        : outcome.status === 'hold'
+          ? 'Transfer complete - held for the sysop'
+          : 'Transfer complete';
+
+      return { bytes, summary, notices: outcome.notices.map((notice) => notice.text) };
+    },
     async authenticate(username: string, password: string): Promise<FtpUser | null> {
       const user = await db.authenticateUser(username, password);
       if (!user) return null;
@@ -135,6 +246,14 @@ export function boardFtpDeps(): FtpDeps {
     async reserveNode(sessionId: string, user: FtpUser): Promise<number | null> {
       try {
         const session = await nodeManager.assignSessionToNode(sessionId, `ftp:${sessionId}`, String(user.id));
+        // WHO reads the BBS session map, which an FTP caller is not in - he
+        // holds a node and would otherwise show as a node nobody can account
+        // for. See ftp-presence.ts.
+        registerFtpCaller(sessionId, {
+          nodeId: session.nodeId,
+          username: user.username,
+          location: (user as unknown as { location?: string }).location ?? '',
+        });
         return session.nodeId;
       } catch {
         // The one reason assignSessionToNode throws: every node is busy.
@@ -143,6 +262,7 @@ export function boardFtpDeps(): FtpDeps {
     },
 
     async releaseNode(sessionId: string): Promise<void> {
+      releaseFtpCaller(sessionId);
       try {
         await nodeManager.releaseSession(sessionId);
       } catch {

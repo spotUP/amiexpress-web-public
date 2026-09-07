@@ -77,11 +77,17 @@ describe('updateNdirsIfNeeded', () => {
 });
 
 describe('upload always targets DIR1', () => {
-  test('uploadDirNum is hardcoded to 1 in file-socket-handlers.ts', () => {
-    const src = fs.readFileSync(
+  test('uploadDirNum is hardcoded to 1 on the upload path', () => {
+    // The filing step moved to services/upload-filing.service.ts on
+    // 2026-09-07 so FTP and the menu file an upload the same way. Both files
+    // are read: the invariant belongs to the upload PATH, and a pin that
+    // names one file stops checking anything the day the code moves.
+    const src = [
       path.join(__dirname, '..', 'src', 'server', 'file-socket-handlers.ts'),
-      'utf8'
-    );
+      path.join(__dirname, '..', 'src', 'services', 'upload-filing.service.ts'),
+    ]
+      .map((file) => fs.readFileSync(file, 'utf8'))
+      .join('\n');
     // Must use the literal constant 1, not a dynamic getDirFiles/getMaxDirs count
     expect(src).toMatch(/const uploadDirNum = 1/);
     expect(src).not.toMatch(/getMaxDirs/);

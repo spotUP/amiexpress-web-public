@@ -419,11 +419,14 @@ describe('what the board will not do over FTP', () => {
     // stood here until phase 4 - now answers 425 without a data connection.
     const { control, lines } = await login();
 
-    control.write('STOR SOMETHING.LHA\r\n');
-    expect(await lines.next()).toBe('502 STOR not implemented yet');
     control.write('APPE SOMETHING.LHA\r\n');
     expect(await lines.next()).toBe('502 APPE not implemented yet');
+    control.write('STOU\r\n');
+    expect(await lines.next()).toBe('502 STOU not implemented yet');
+    // Built, and therefore asking for a data connection rather than saying no.
     control.write('RETR SOMETHING.LHA\r\n');
+    expect(await lines.next()).toBe('425 Use PASV first');
+    control.write('STOR SOMETHING.LHA\r\n');
     expect(await lines.next()).toBe('425 Use PASV first');
 
     control.destroy();

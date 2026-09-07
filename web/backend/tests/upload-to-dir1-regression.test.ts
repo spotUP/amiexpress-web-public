@@ -21,10 +21,20 @@ import * as os from 'os';
 // ─── 1. Static shape of file-socket-handlers.ts ──────────────────────────────
 
 describe('upload handler: static code invariants', () => {
-  const src = fs.readFileSync(
+  /**
+   * The filing step - the DIR entry included - moved out of
+   * `file-socket-handlers.ts` into `services/upload-filing.service.ts` on
+   * 2026-09-07, so that an upload over FTP is filed by the same code as one
+   * at the menu. Both files are read here: the invariant is about the UPLOAD
+   * PATH, wherever it lives, and a pin that names one file silently stops
+   * checking anything the day the code moves.
+   */
+  const src = [
     path.join(__dirname, '..', 'src', 'server', 'file-socket-handlers.ts'),
-    'utf8'
-  );
+    path.join(__dirname, '..', 'src', 'services', 'upload-filing.service.ts'),
+  ]
+    .map((file) => fs.readFileSync(file, 'utf8'))
+    .join('\n');
 
   test('uploadDirNum is the literal 1, not a dynamic expression', () => {
     expect(src).toMatch(/const uploadDirNum = 1;/);

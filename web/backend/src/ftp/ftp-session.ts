@@ -69,6 +69,20 @@ export interface FtpDeps {
   mayDownload?(user: FtpUser, size: number): Promise<{ allowed: boolean; message?: string }>;
   /** Charge the download once the bytes are actually gone. */
   recordDownload?(user: FtpUser, size: number): Promise<void>;
+  /**
+   * Why this upload is refused, BEFORE any bytes are taken - the conference's
+   * `NO_FTP_UPLOADS` text, a name the board will not accept, a caller without
+   * the access. Undefined means go ahead.
+   */
+  refuseUpload?(user: FtpUser, conferenceId: number, filename: string): Promise<string | undefined>;
+  /**
+   * Read the caller's bytes into the node's playpen and file them the way the
+   * board files every other upload. Returns what to tell him.
+   */
+  acceptUpload?(
+    request: { user: FtpUser; conferenceId: number; nodeId: number; filename: string },
+    data: Duplex
+  ): Promise<{ bytes: number; summary: string; notices: string[] }>;
 }
 
 /** Commands a caller may use before logging in. */
@@ -82,7 +96,7 @@ const PRE_LOGIN = new Set(['USER', 'PASS', 'QUIT', 'FEAT', 'NOOP', 'AUTH', 'SYST
  * set shrinks to nothing as phases 3-6 land.
  */
 const NOT_YET = new Set([
-  'MODE', 'STRU', 'PORT', 'STOR', 'STOU', 'APPE',
+  'MODE', 'STRU', 'PORT', 'STOU', 'APPE',
 ]);
 
 /**
@@ -107,7 +121,7 @@ const REFUSED: Record<string, string> = {
 /** Verbs this phase answers, but only for a caller who has logged in. */
 const AFTER_LOGIN = new Set([
   'PWD', 'XPWD', 'CWD', 'XCWD', 'CDUP', 'TYPE', 'PBSZ', 'PROT', 'PASV', 'LIST', 'NLST',
-  'MLSD', 'MLST', 'OPTS', 'EPSV', 'SIZE', 'MDTM', 'RETR', 'REST',
+  'MLSD', 'MLST', 'OPTS', 'EPSV', 'SIZE', 'MDTM', 'RETR', 'REST', 'STOR',
   ...Object.keys(REFUSED),
 ]);
 
@@ -295,6 +309,8 @@ export class FtpSession {
         return this.onRest(arg);
       case 'RETR':
         return this.onRetr(arg);
+      case 'STOR':
+        return this.onStor(arg);
       default:
         if (REFUSED[verb]) return this.reply(550, REFUSED[verb]);
         if (NOT_YET.has(verb)) return this.reply(502, `${verb} not implemented yet`);
@@ -449,6 +465,76 @@ export class FtpSession {
     if (!entry) return this.reply(550, `${arg.trim()}: no such file`);
     if (entry.isDirectory) return this.reply(550, `${arg.trim()}: not a plain file`);
     this.reply(213, machineTimestamp(entry.modified));
+  }
+
+  /**
+   * `STOR`: take the bytes, then hand them to the board's own filing.
+   *
+   * The bytes land in the node's PLAYPEN first and are filed afterwards -
+   * never written into an area directly. That is not ceremony: the duplicate
+   * check, the archive test and the quarantine all decide WHERE the file
+   * belongs, and a file already sitting in the area cannot be sent to HOLD
+   * without a second move that can fail on its own.
+   *
+   * A caller may only upload into a conference he is standing in, and the
+   * board may forbid it outright (`NO_FTP_UPLOADS`).
+   */
+  private async onStor(arg: string): Promise<void> {
+    const channel = this.passive;
+    if (!channel) return this.reply(425, 'Use PASV first');
+    this.passive = null;
+    this.restartAt = 0;
+
+    const tree = this.deps.filesystem;
+    if (!tree || !this.deps.acceptUpload || !this.user) {
+      channel.close();
+      return this.reply(550, 'Uploads are not available');
+    }
+
+    const name = arg.trim().split('/').pop() ?? '';
+    const conference = tree.conferenceAt(this.user, this.cwd);
+    if (!conference) {
+      channel.close();
+      return this.reply(550, 'Move into a conference before uploading');
+    }
+
+    // Everything the board would refuse BEFORE a byte is taken: a caller who
+    // is going to be told no should be told now, not after his transfer.
+    const refusal = await this.deps.refuseUpload?.(this.user, conference.conference_id, name);
+    if (refusal) {
+      channel.close();
+      return this.reply(550, refusal);
+    }
+
+    this.reply(150, `Opening ${this.binary ? 'BINARY' : 'ASCII'} mode data connection for ${name}`);
+
+    let data: Duplex;
+    try {
+      data = await channel.accept();
+      if (this.protectData && this.deps.secureData) data = await this.deps.secureData(data);
+    } catch (error) {
+      return this.reply(425, error instanceof Error ? error.message : 'No data connection');
+    }
+
+    try {
+      const outcome = await this.deps.acceptUpload(
+        { user: this.user, conferenceId: conference.conference_id, nodeId: this.nodeId, filename: name },
+        data
+      );
+      // The board's own words, on the control connection, before the 226 - a
+      // duplicate or a quarantine is the difference between "uploaded" and
+      // "uploaded and waiting for the sysop", and a caller must not have to
+      // guess which happened.
+      for (const notice of outcome.notices) this.socket.write(`226-${notice}\r\n`);
+      this.deps.log(this.user.username, `\tFTP Upload >: ${name} (${outcome.bytes} bytes)`, this.nodeId);
+      this.reply(226, outcome.summary);
+    } catch (error) {
+      data.destroy();
+      this.reply(
+        451,
+        `Upload failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 
   /** The one entry an argument names, relative to where the caller stands. */

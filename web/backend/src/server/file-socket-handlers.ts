@@ -35,6 +35,7 @@ import {
   normalizeForComparison,
   sanitizeInput,
 } from "../utils/input-normalizer.util";
+import { fileUploadedFile } from "../services/upload-filing.service";
 import { getSessionBySocketId } from "./session-manager";
 import { callersLog } from "./database-helpers";
 import { SysopDebugUtil } from "../utils/sysop-debug.util";
@@ -448,265 +449,47 @@ console.error(`[testFile] Error:`, error);
       checkedMarker = "N"; // Not tested
     }
 
-    // Check for duplicate file in this area (express.e:19356 checkForFile, 19371-19377)
+    // FILED BY THE SHARED SERVICE.
     //
-    // BEFORE the move, not after it. express.e checks first, and the move is
-    // what commits the bytes: on a pooled area a check that ran afterwards
-    // would already have paid a PUT, replaced the object every other node can
-    // see, and unlinked the playpen copy - leaving nothing local for the sysop
-    // to review when this same check then marks the file 'D' and sends it to
-    // HOLD. Checking first makes fileStatus 'hold' before the move reads it,
-    // so a duplicate goes to the sysop's directory on local disk exactly as
-    // express.e:19372-19376 says, and never into the area at all.
-    const existingFile = await db.query(
-      "SELECT id, filename FROM file_entries WHERE LOWER(filename) = $1 AND areaid = $2",
-      [normalizedFilename, fileArea.id]
-    );
-
-    let foundDupe = false;
-    if (existingFile.rows.length > 0) {
-      // Express.e:19372-19376 - Move duplicate to HOLD directory, don't abort
-      foundDupe = true;
-      socket.emit(
-        "ansi-output",
-        `\r\n\x1b[33mFile already exists, moving to ${config.get("sysopName")}'s private directory\x1b[0m\r\n`
-      );
-      fileStatus = "hold"; // Move to HOLD directory
-      checkedMarker = "D"; // Mark as duplicate (express.e uses 'D' marker)
-    }
-
-    // Move file to appropriate directory (express.e:19403-19415)
-    // Use file area's dlPath from Conf.info DLPATH.n tooltype
-    // Where the bytes ended up when this area lives in the pool. Null for a
-    // local area, which is every area on every board without a bucket.
-    let poolLocation: RemoteLocation | null = null;
-    // Set true only when the pooled put failed AND the fallback quarantine
-    // move into HOLD also failed. In that case the file is still sitting in
-    // the playpen - not in the pool, not in HOLD - so neither the catalog
-    // row nor the DIR listing may claim it lives in HOLD.
-    let quarantineFailed = false;
-    if (data.path) {
-      const storage = getStorageContext();
-      // HOLD and LCFILES are sysop-review directories on local disk, not areas
-      // a caller downloads from, so a file bound for one never goes to the
-      // pool - it has no key in the area's prefix and no listing to appear in.
-      const pooledArea =
-        fileArea && fileStatus === "active" ? pooledUploadArea(fileArea, storage) : null;
-      try {
-        if (pooledArea && storage) {
-          // The playpen copy is the only copy until the put has succeeded, so
-          // it is unlinked AFTER, never before: a failed put must leave the
-          // caller's file where resumeStuff can still offer it back.
-          poolLocation = await putUploadIntoPool(
-            data.path,
-            currentFile.filename,
-            pooledArea,
-            storage
-          );
-          try {
-            await fs.promises.unlink(data.path);
-          } catch (unlinkError: any) {
-            // The bytes are in the pool, so this leftover is not the only
-            // copy - but cleanPlayPen (utils/clean-playpen.util.ts) is
-            // exported and called from nowhere in this backend, so nothing
-            // sweeps it today. It sits in the node playpen until a sysop
-            // clears it by hand. Not worth failing the upload over, since
-            // the real bytes are already safe in the pool.
-console.warn(`[Upload] Could not remove playpen copy ${data.path}: ${unlinkError.message}`);
-          }
-console.log(
-            `[Upload] ${currentFile.filename} stored as DRIVE.${poolLocation.driveNumber}:${poolLocation.key}`
-          );
-        } else {
-          const movedTo = await moveUploadedFile(
-            data.path,
-            currentFile.filename,
-            fileStatus,
-            session.currentConf,
-            config.get("dataDir"),
-            fileArea?.dlPath // Pass dlPath from file area config (express.e:15264)
-          );
-console.log(`[Upload] File moved to: ${movedTo}`);
-        }
-      } catch (error: any) {
-console.error(`[Upload] Error moving file: ${error.message}`);
-        if (pooledArea) {
-          // A pooled failure must NOT share the local branch's
-          // continue-with-original-path: the bytes are in the playpen and the
-          // area does not have them, so listing the file as active would
-          // advertise a download nobody can fetch. Quarantine it the way a
-          // failed integrity test is quarantined (express.e:19364-19369) -
-          // status hold, moved to the sysop's directory on local disk, listed
-          // in HELD rather than in the area - and name the drive so a sysop
-          // reading the caller's screenshot knows which bucket to look at.
-          socket.emit(
-            "ansi-output",
-            `\r\n\x1b[31mUpload could not be filed: ${storageFailureText(error)}\x1b[0m\r\n`
-          );
-          socket.emit(
-            "ansi-output",
-            `\r\n\x1b[33mMoving to ${config.get("sysopName")}'s private Directory.\x1b[0m\r\n\r\n`
-          );
-          fileStatus = "hold";
-          try {
-            const heldAt = await moveUploadedFile(
-              data.path,
-              currentFile.filename,
-              fileStatus,
-              session.currentConf,
-              config.get("dataDir"),
-              fileArea?.dlPath
-            );
-console.log(`[Upload] ${currentFile.filename} held at ${heldAt}`);
-          } catch (holdError: any) {
-            // The playpen copy is still there, which is the one thing that
-            // must stay true - but nothing sweeps it from here today.
-            // cleanPlayPen (utils/clean-playpen.util.ts) is exported and
-            // called from nowhere in this backend, and resumeStuff only
-            // scans <confDir>/PartUpload/, never the raw node playpen. So
-            // this file is orphaned in the playpen, full stop, until a
-            // sysop finds it by hand. Wiring cleanPlayPen into a teardown
-            // path is its own follow-up - deliberately not done here, on a
-            // path already being patched for a different defect.
-            // quarantineFailed must still suppress the catalog row and DIR
-            // entry below - both would otherwise claim a location the file
-            // never reached.
-            quarantineFailed = true;
-console.error(`[Upload] Could not move ${currentFile.filename} to HOLD: ${holdError.message}`);
-console.error(
-              `[Upload] ORPHANED: node ${session.nodeId} left ${currentFile.filename} sitting in the playpen at ${data.path} - not in the pool, not in HOLD, not catalogued, not swept by anything; needs a sysop`
-            );
-          }
-        }
-      }
-    }
-
-    // Save file to database (express.e:19356-19377)
-    // Skip database insert for duplicates - file already exists in database.
-    // Also skip when the pooled put AND the fallback HOLD quarantine both
-    // failed: the file is still in the playpen, and a catalog row claiming
-    // status 'hold' would point the sysop at a file that isn't there. Nothing
-    // sweeps or reconciles that playpen file today - see the ORPHANED log in
-    // the holdError catch above - but a stray file a sysop can still find on
-    // disk beats a catalog entry pointing at nothing.
-    if (!foundDupe && !quarantineFailed) {
-      const fileEntry = {
-        filename: currentFile.filename,
-        description: finalDescription, // Use DIZ if found, otherwise batch description
-        size: data.size,
-        uploader: session.user!.username,
-        uploadDate: getSystemTime(),
-        downloads: 0,
-        areaId: fileArea.id,
-        fileIdDiz: finalDescription, // Store DIZ text if extracted
-        rating: undefined,
-        votes: undefined,
-        status: fileStatus, // active, private, or hold based on test result
-        checked: checkedMarker, // P/F/N/D status marker
-        comment: undefined, // Optional sysop comment
-        // Written in the SAME insert rather than through a follow-up
-        // recordLocation: the row and its location are one fact, and a second
-        // statement matching on the filename would have to get this codebase's
-        // non-canonical filename case right to find the row it had just made.
-        storageVolume: poolLocation?.driveNumber,
-        objectKey: poolLocation?.key,
-      };
-
-      await db.createFileEntry(fileEntry as any);
-    } else if (quarantineFailed) {
-console.error(`[Upload] Skipping database insert for ${currentFile.filename}: pooled put and HOLD quarantine both failed, file remains in playpen`);
-    } else {
-      // Duplicate file - skip database insert but still write to DIR file in HOLD.
-      // It cannot be in the pool: the check above ran BEFORE the move and set
-      // status hold, so the file went to the sysop's local directory and no
-      // object was put. That is also why recordLocation is not called here -
-      // there is no new location for the existing row to learn about.
-console.log(`[Upload] Skipping database insert for duplicate file: ${currentFile.filename}`);
-    }
-
-    // Write to DIR file (express.e:19473-19509)
-    // Uploads always go to DIR1 — the sysop-configured upload area.
-    // express.e reads NDIRS from ConfConfig.info (set at install time, typically 1).
-    // Using getDirFiles().length was wrong: it grew with every upload and caused
-    // each file to land in a new DIR instead of the upload area.
+    // The duplicate rule, the pooled put, the HOLD quarantine, the catalogue
+    // row, the DIR entry, FILES.BBS and ctop.data all moved to
+    // `services/upload-filing.service.ts`, because FTP needs every one of
+    // them and none of this front end's socket, upload context or substates.
+    // Two implementations of "file an upload" would drift, and the caller who
+    // uploaded the other way would get different duplicate handling.
     //
-    // Skipped entirely when quarantineFailed: the file is still in the
-    // playpen, not in HOLD, so a DIR/FILES.BBS entry naming HOLD's fileStatus
-    // would list a download nobody can fetch - exactly what this invariant
-    // forbids.
-    if (quarantineFailed) {
-console.error(`[Upload] Skipping DIR file entry for ${currentFile.filename}: pooled put and HOLD quarantine both failed, file remains in playpen`);
-    } else {
-    try {
-      const conferencePath = getConferenceDir(
-        session.currentConf,
-        config.get("dataDir")
-      );
-      const uploadDirNum = 1; // DIR1 is the upload area (express.e:19475-19478)
+    // What stays here is what is genuinely this front end's: saying on the
+    // caller's screen what happened to his file.
+    const nodeConfigForFiling = (db as any)
+      .getConfigRepository()
+      .getNodeConfig(session.nodeId || 1);
 
-      // Get SENTBY_FILES setting from node config (express.e:19506)
-      // checkToolTypeExists(TOOLTYPE_NODE, node, 'SENTBY_FILES')
-      const configRepo = (db as any).getConfigRepository();
-      const nodeConfig = configRepo.getNodeConfig(session.nodeId || 1);
-      const addSentBy = nodeConfig?.sentby_files ?? true; // Default to true if not configured
+    const filing = await fileUploadedFile({
+      playpenPath: data.path,
+      filename: currentFile.filename,
+      size: data.size,
+      description: finalDescription,
+      fileArea: fileArea as any,
+      conferenceId: session.currentConf,
+      nodeId: session.nodeId || 1,
+      uploader: {
+        username: session.user!.username,
+        location: (session.user as any).location || '',
+      },
+      initialStatus: fileStatus,
+      marker: checkedMarker as 'P' | 'F' | 'N',
+      addSentBy: nodeConfigForFiling?.sentby_files ?? true,
+    });
 
-      await writeUploadToDirFile(
-        currentFile.filename,
-        data.size,
-        getSystemTime(),
-        finalDescription,
-        checkedMarker,
-        session.user!.username, // express.e:19507 uses loggedOnUser.name which is the BBS handle
-        conferencePath,
-        fileStatus,
-        uploadDirNum,
-        addSentBy // SENTBY_FILES from node config
-      );
-console.log(
-        `[Upload] Wrote DIR entry for ${currentFile.filename} to DIR${uploadDirNum}`
-      );
-
-      // Write to FILES.BBS for third-party door compatibility (e.g., AquaScan)
-      // FILES.BBS uses the same format as DIR files but is always in the Upload directory
-      // This allows doors like AquaScan to read file listings without parsing DIR files
-      if (fileStatus === "active") {
-        try {
-          const { writeToFilesBBS } = await import("../utils/files-bbs.util");
-          await writeToFilesBBS(
-            conferencePath,
-            currentFile.filename,
-            data.size,
-            getSystemTime(),
-            finalDescription,
-            checkedMarker,
-            session.user!.username,
-            addSentBy,
-            "Upload" // Standard upload subdirectory name
-          );
-        } catch (filesBBSError: any) {
-console.error(
-            `[Upload] Error writing FILES.BBS: ${filesBBSError.message}`
-          );
-          // Don't fail upload on FILES.BBS write error - it's supplementary
-        }
-      }
-
-      // Update Conftop-II ctop.data — mirrors express.e calling the Conftop door
-      // with the uploaded filename after a successful non-duplicate active upload.
-      if (!foundDupe && fileStatus === 'active') {
-        try {
-          const { appendCtopRecord } = await import('../utils/ctop-updater.util');
-          const userLocation = (session.user as any).location || '';
-          await appendCtopRecord(conferencePath, session.user!.username, userLocation, data.size);
-        } catch (ctopErr: any) {
-console.error(`[Conftop] Error updating ctop.data: ${ctopErr.message}`);
-        }
-      }
-    } catch (error: any) {
-console.error(`[Upload] Error writing DIR file: ${error.message}`);
-      // Don't fail upload on DIR write error
+    for (const notice of filing.notices) {
+      const colour = notice.kind === 'storage-failure' ? '31' : '33';
+      socket.emit('ansi-output', `\r\n\x1b[${colour}m${notice.text}\x1b[0m\r\n`);
     }
-    }
+
+    const foundDupe = filing.duplicate;
+    const quarantineFailed = filing.orphaned;
+    fileStatus = filing.status;
+    checkedMarker = filing.marker;
 
     // Update user stats in users table (express.e:19379-19384)
     // Express.e: Stats ONLY updated when status=RESULT_SUCCESS (not for duplicates/failures)
