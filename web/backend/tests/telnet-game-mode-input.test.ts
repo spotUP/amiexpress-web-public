@@ -82,28 +82,45 @@ describe('a hybrid door over telnet', () => {
     expect(hasBrowserClient({ connectionType: 'ssh' })).toBe(false);
   });
 
-  it('is what door.handler.ts gates the client half on', () => {
-    // The bug this pins: executeClientDoor ran for every hybrid door whatever
-    // the transport. On telnet that registers a 'command' listener which the
-    // telnet input path prefers over session.doorInputHandler - so every
-    // keystroke went to a browser client that was never there, and GRANDMASTER
-    // and CARD LOBBY took no input at all (sysop, 2026-09-02, live).
-    const { readFileSync } = require('fs');
-    const { join } = require('path');
-    const source = readFileSync(join(__dirname, '..', 'src', 'handlers', 'door.handler.ts'), 'utf8');
+  it('gives door.handler.ts the same answer its own gate asks for', () => {
+    // The bug behind all this: executeClientDoor ran for every hybrid door
+    // whatever the transport. On telnet that registers a 'command' listener
+    // which the telnet input path prefers over session.doorInputHandler - so
+    // every keystroke went to a browser client that was never there, and
+    // GRANDMASTER and CARD LOBBY took no input at all (sysop, 2026-09-02).
+    //
+    // This case used to pin two SPELLINGS out of door.handler.ts:
+    //
+    //   "doorManifest.runtime === 'hybrid' && hasBrowserClient(session)"
+    //   "if (!hasBrowserClient(session)) {"
+    //
+    // Both went red without the RULE having moved: the gate now reads ONE
+    // shared answer for the whole transport question,
+    // `transportCapabilities(session).browser` (server/transport-adapter.ts),
+    // and asks it twice - once to refuse a browser-only door, once to decide
+    // whether a hybrid starts its client half.
+    //
+    // What those pins stood in for is proved through the REAL `executeDoor`
+    // over a real TelnetConnection in tests/transport/browser-door-gate.test.ts
+    // ('a client-only door refuses a telnet caller' and 'a hybrid door runs its
+    // server half on telnet instead of returning at the client half', both with
+    // reachability sentinels). So what is left for this file - which owns the
+    // browser question itself - is the thing that refactor could silently
+    // break: the two answers the codebase now gives must agree, for every
+    // transport it actually has.
+    const { transportCapabilities } = require('../src/server/transport-adapter');
 
     // The question is the same one; it is asked through the transport's
     // capability record now (transport-adapter.ts's transportCapabilities)
     // rather than hasBrowserClient directly, so the door handler asks ONE
-    // object about the caller instead of one predicate per question.
-    const { transportCapabilities } = require('../src/server/transport-adapter');
-    expect(transportCapabilities({ connectionType: 'web' } as any).browser).toBe(true);
-    expect(transportCapabilities({ connectionType: 'telnet' } as any).browser).toBe(false);
-    expect(transportCapabilities({ connectionType: 'ssh' } as any).browser).toBe(false);
-
-    expect(source).toContain("doorManifest.runtime === 'hybrid' && callerCapabilities.browser");
-    // And a browser-only door says so rather than hanging.
-    expect(source).toContain('doorNeedsBrowser(door, doorManifest) && !callerCapabilities.browser');
+    // object about the caller instead of one predicate per question. Assert
+    // the two answers AGREE for every transport, rather than pinning the
+    // spelling of the call site - a rename of either side is not a defect,
+    // and a disagreement between them is.
+    for (const connectionType of ['web', 'telnet', 'ssh'] as const) {
+      expect(transportCapabilities({ connectionType } as any).browser)
+        .toBe(hasBrowserClient({ connectionType }));
+    }
   });
 
   it('leaves the telnet path free to reach the door input handler', () => {
