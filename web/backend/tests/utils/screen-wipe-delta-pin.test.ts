@@ -22,7 +22,7 @@
  * with no regression anywhere - which is exactly what happened on
  * 2026-09-07 (Conf1/Menu.txt's blocks wipe went 12,633 -> 14,369 bytes
  * because the art changed). The three screens are copied byte for byte into
- * tests/fixtures/wipe-screens/ and read from there; the differ is now the
+ * tests/fixtures/board-screens/ and read from there; the differ is now the
  * only thing that can move a hash.
  *
  * The fixtures are named `screens-menu.txt` / `conf1-menu.txt` rather than
@@ -41,7 +41,7 @@ import { readAmigaTextFileWithTransforms } from '../../src/utils/amiga-text-deco
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
 
 /** Frozen copies of the board's three real menus. See the header. */
-const FIXTURES = path.join(__dirname, '..', 'fixtures', 'wipe-screens');
+const FIXTURES = path.join(__dirname, '..', 'fixtures', 'board-screens');
 const REAL_SCREENS = ['screens-menu.txt', 'screens-menu250.txt', 'conf1-menu.txt'];
 
 const WIPES: WipeType[] = [

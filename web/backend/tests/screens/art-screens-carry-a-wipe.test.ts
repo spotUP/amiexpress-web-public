@@ -27,6 +27,7 @@
 process.env.SKIP_DB_INIT = '1';
 process.env.SCREEN_DEBUG = '0';
 
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { isAnsiArtScreen } from '../../src/utils/ansi-art-detect.util';
@@ -124,34 +125,34 @@ const EXEMPTIONS: Exemption[] = [
   },
 ];
 
-function walk(dir: string, out: string[] = []): string[] {
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return out;
-  }
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (!SKIP_DIR_RE.test(entry.name)) walk(full, out);
-    } else if (entry.isFile()) {
-      out.push(full);
-    }
-  }
-  return out;
-}
+/** Where a screen can live: `Screens/`, `Bulletins/`, and any `ConfN`/`NodeN`. */
+const SCREEN_ROOT_RE = /^(Screens|Bulletins|Conf\d+|Node\d+)\//;
 
-/** Every ANSI text screen the loader can serve, repo-relative, sorted. */
+/**
+ * Every ANSI text screen the board SHIPS, repo-relative, sorted.
+ *
+ * Asked of git, not of the disk. This checkout is the live board: doors write
+ * into `NodeN/`, a test run leaves a directory behind, the sysop's admin
+ * uploads land next to the tracked art - and every one of those would enter
+ * the set and be held to a rule the artist never saw. What the board ships is
+ * what is committed, so `git ls-files` is the enumeration (RULES.md, "The
+ * board is not a fixture"). A tracked path that is not on disk right now is
+ * dropped: `git ls-files` still lists a file deleted in the working tree.
+ */
 function servableScreens(): string[] {
-  const roots = [path.join(REPO_ROOT, 'Screens'), path.join(REPO_ROOT, 'Bulletins')];
-  for (const name of fs.readdirSync(REPO_ROOT)) {
-    if (/^(Conf|Node)\d+$/.test(name)) roots.push(path.join(REPO_ROOT, name));
-  }
-  return roots
-    .flatMap((root) => walk(root))
-    .map((abs) => path.relative(REPO_ROOT, abs))
+  const listed = execFileSync('git', ['ls-files', '-z'], {
+    cwd: REPO_ROOT,
+    encoding: 'buffer',
+    maxBuffer: 64 * 1024 * 1024,
+  })
+    .toString('utf8')
+    .split('\0')
+    .filter((rel) => rel.length > 0);
+  return listed
+    .filter((rel) => SCREEN_ROOT_RE.test(rel))
+    .filter((rel) => !rel.split('/').some((seg) => SKIP_DIR_RE.test(seg)))
     .filter((rel) => SERVABLE_RE.test(rel) && !SIBLING_RE.test(rel))
+    .filter((rel) => fs.existsSync(path.join(REPO_ROOT, rel)))
     .sort();
 }
 

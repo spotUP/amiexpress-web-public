@@ -24,7 +24,25 @@ import {
 } from '../../src/utils/ansi-art-detect.util';
 import { looksLikeAsciiArt } from '../../src/utils/ascii-art.util';
 
-const REPO_ROOT = path.resolve(__dirname, '../../../..');
+/**
+ * FROZEN copies of the board's own screens. Every case below says what the
+ * classifier makes of a SPECIFIC screen, and every one of those screens is
+ * the sysop's to edit through the admin editor - the art-row floor case had
+ * already gone red once for exactly that reason, and was relaxed rather than
+ * frozen. The bytes are now tracked, so only the classifier can move a
+ * result. (RULES.md, "The board is not a fixture".)
+ */
+const FIXTURES = path.join(__dirname, '..', 'fixtures', 'board-screens');
+/** Board path -> the frozen copy. Named for content: MENU.TXT and Conf1/Menu.txt are one name on a case-folding disk. */
+const FROZEN: Record<string, string> = {
+  'Screens/PRIVACY.TXT': 'screens-privacy.txt',
+  'Screens/MENU.TXT': 'screens-menu.txt',
+  'Screens/MENU250.TXT': 'screens-menu250.txt',
+  'Screens/Logon24hrs.txt': 'screens-logon24hrs.txt',
+  'Screens/uprough.txt': 'screens-uprough.txt',
+};
+const frozen = (rel: string): string =>
+  fs.readFileSync(path.join(FIXTURES, FROZEN[rel]), 'latin1');
 
 const PROSE =
   'Welcome to the board!\r\n' +
@@ -186,8 +204,7 @@ describe('isAnsiArtScreen', () => {
    * the rule every time the art changed.
    */
   it('the art-row floor stays under the board\'s thinnest art screen (Logon24hrs)', () => {
-    const rows = fs
-      .readFileSync(path.join(REPO_ROOT, 'Screens/Logon24hrs.txt'), 'latin1')
+    const rows = frozen('Screens/Logon24hrs.txt')
       .split(/\r\n|\r|\n/)
       .map((l) => l.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ''))
       .filter((l) => l.trim().length > 0);
@@ -197,11 +214,11 @@ describe('isAnsiArtScreen', () => {
        the board; the assertion under this one is what proves it, because a
        floor raised past this screen's count would stop detecting it as art. */
     expect(rows.filter((l) => looksLikeAsciiArt(l)).length).toBeGreaterThanOrEqual(MIN_ART_ROWS);
-    expect(isAnsiArtScreen(fs.readFileSync(path.join(REPO_ROOT, 'Screens/Logon24hrs.txt'), 'latin1'))).toBe(true);
+    expect(isAnsiArtScreen(frozen('Screens/Logon24hrs.txt'))).toBe(true);
   });
 
   describe('the board\'s own screens', () => {
-    const read = (rel: string) => fs.readFileSync(path.join(REPO_ROOT, rel), 'latin1');
+    const read = frozen;
 
     it('Screens/PRIVACY.TXT is prose a C64 caller must be able to read', () => {
       expect(isAnsiArtScreen(read('Screens/PRIVACY.TXT'))).toBe(false);
@@ -271,8 +288,8 @@ describe('petsciiTextScreenPlan', () => {
    * is not (strategy plan Phase 2.4).
    */
   it('menus always reflow, even when they score as art', () => {
-    const menu = fs.readFileSync(path.join(REPO_ROOT, 'Screens/MENU.TXT'), 'latin1');
-    const menu250 = fs.readFileSync(path.join(REPO_ROOT, 'Screens/MENU250.TXT'), 'latin1');
+    const menu = frozen('Screens/MENU.TXT');
+    const menu250 = frozen('Screens/MENU250.TXT');
 
     expect(isAnsiArtScreen(menu)).toBe(true);                       // it IS art...
     expect(isAnsiArtScreen(menu250)).toBe(true);

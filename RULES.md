@@ -641,7 +641,7 @@ The distinction, both from the same directory:
   the last frame's delay is 0, the first frame clears. Editing the art cannot
   break it, and reading real art is what makes it worth running.
 - `screen-wipe-delta-pin.test.ts` needs exact bytes, so its input is FROZEN:
-  the three screens are copied into `tests/fixtures/wipe-screens/` and read
+  the three screens are copied into `tests/fixtures/board-screens/` and read
   from there. The differ is then the only thing that can move a hash.
 
 So:

@@ -52,7 +52,14 @@ const UNICODE_BLOCKS = String.fromCharCode(0x2588, 0x2584, 0x2580);
 /** The six glyphs of one source row, in order, as they reach the wire. */
 const UNICODE_BLOCK_RUN = String.fromCharCode(0x2588, 0x2584, 0x2580, 0x2591, 0x2592, 0x2593);
 
-const REPO_ROOT = path.resolve(__dirname, '../../../..');
+/**
+ * The board's real menu, FROZEN. The live `Screens/MENU250.TXT` is the
+ * sysop's to edit through the admin screen editor, and every assertion below
+ * rides its bytes - so the input is a tracked copy and only the code under
+ * test can move a result. (RULES.md, "The board is not a fixture".)
+ */
+const FIXTURES = path.join(__dirname, '..', 'fixtures', 'board-screens');
+const REAL_MENU = path.join(FIXTURES, 'screens-menu250.txt');
 
 let tmpDir: string;
 let prosePath: string;
@@ -73,7 +80,7 @@ beforeAll(() => {
   // getWipeFrames and never pass through wrapForSession, so an 80-column
   // noise frame would drown the assertion this test is making. Everything
   // that matters - the ASCII masthead and the command list - is unchanged.
-  const realMenu = fs.readFileSync(path.join(REPO_ROOT, 'Screens/MENU250.TXT'), 'latin1');
+  const realMenu = fs.readFileSync(REAL_MENU, 'latin1');
   fs.writeFileSync(menuPath, Buffer.from(realMenu.split(/\r?\n/).slice(1).join('\r\n'), 'latin1'));
 });
 

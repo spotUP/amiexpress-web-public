@@ -8,7 +8,8 @@
  * printable characters, at the CALLER's baud, and it is downstream: it
  * decides what the caller actually sees.
  *
- * Measured on `Screens/flt.txt` (10,963 B, 1,190 printable characters,
+ * Measured on `Screens/flt.txt` (10,963 B, frozen as
+ * `tests/fixtures/board-screens/screens-flt.txt`, 1,190 printable characters,
  * ledger .superpowers/sdd/2026-09-03-wipe-client-pacing/progress.md):
  *
  *   server-forced 14400 alone ....... 826 ms   (the intent)
@@ -29,7 +30,16 @@ process.env.SKIP_DB_INIT = '1';
 
 import { displayScreen } from '../../src/handlers/screen.handler';
 
-const REPO_ROOT = path.resolve(__dirname, '../../../..');
+/**
+ * FROZEN INPUTS. Both screens are the board's own, copied byte for byte into
+ * `tests/fixtures/board-screens/`. Everything below turns on what they ARE -
+ * `flt.txt` has to stay cursor-dense enough for `isAnsiAnimation`, and
+ * `MENU250.TXT` has to stay plain enough not to be one - and both are the
+ * sysop's to edit through the admin screen editor. Reading them live made
+ * this suite a report on today's art. (RULES.md, "The board is not a
+ * fixture".)
+ */
+const FIXTURES = path.join(__dirname, '..', 'fixtures', 'board-screens');
 
 let tmpDir: string;
 let logoPath: string;
@@ -39,9 +49,9 @@ beforeAll(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'anim-speed-'));
   logoPath = path.join(tmpDir, 'FLT.TXT');
   // Byte copy: the logo's high bits are art, never to be re-encoded.
-  fs.copyFileSync(path.join(REPO_ROOT, 'Screens/flt.txt'), logoPath);
+  fs.copyFileSync(path.join(FIXTURES, 'screens-flt.txt'), logoPath);
   plainPath = path.join(tmpDir, 'PLAIN.TXT');
-  fs.copyFileSync(path.join(REPO_ROOT, 'Screens/MENU250.TXT'), plainPath);
+  fs.copyFileSync(path.join(FIXTURES, 'screens-menu250.txt'), plainPath);
 });
 
 afterAll(() => {

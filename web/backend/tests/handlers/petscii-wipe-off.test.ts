@@ -43,7 +43,14 @@ import { displayScreen } from '../../src/handlers/screen.handler';
 import { getWipeFrames } from '../../src/utils/screen-wipe.util';
 import { printableLength } from '../../src/utils/wrap-for-session.util';
 
-const REPO_ROOT = path.resolve(__dirname, '../../../..');
+/**
+ * The board's real menu, FROZEN. The live `Screens/MENU250.TXT` is the
+ * sysop's to edit through the admin screen editor, and every assertion below
+ * rides its bytes - so the input is a tracked copy and only the code under
+ * test can move a result. (RULES.md, "The board is not a fixture".)
+ */
+const FIXTURES = path.join(__dirname, '..', 'fixtures', 'board-screens');
+const REAL_MENU = path.join(FIXTURES, 'screens-menu250.txt');
 
 let tmpDir: string;
 let menuPath: string;
@@ -53,7 +60,7 @@ beforeAll(() => {
   // The board's real menu, wipe directive and all, under its real name so
   // the menu branch of the art gate sees it.
   menuPath = path.join(tmpDir, 'MENU250.TXT');
-  fs.copyFileSync(path.join(REPO_ROOT, 'Screens/MENU250.TXT'), menuPath);
+  fs.copyFileSync(REAL_MENU, menuPath);
 });
 
 afterAll(() => {

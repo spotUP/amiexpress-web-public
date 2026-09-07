@@ -133,8 +133,41 @@ describe('the shipped 003.logoff.seq stays inside 40 columns at any call count',
       const returns = out.filter((b) => b === PETSCII_RETURN).length;
       expect(ctx.machine.state.cursorY).toBe(returns);
       expect(ctx.machine.state.cursorX).toBe(0);
-      // And the number that reached the screen is the masked one.
-      expect(out.toString('latin1')).toContain(`CALLED ${timesCalled & 0xffff} TIMES`);
+      // And the number that reached the screen is the masked one. Found by
+      // its DIGITS, not by the phrase around them: the wording is the
+      // sysop's screen, and pinning it makes an edit to `003.logoff.seq`
+      // read as a regression in the renderer (RULES.md, "The board is not a
+      // fixture"). What the renderer owes is the masked value and nothing
+      // wider than 40 columns; the sentence it sits in is the board's.
+      const masked = String(timesCalled & 0xffff);
+      expect(out.toString('latin1')).toContain(masked);
+      if (String(timesCalled) !== masked) {
+        expect(out.toString('latin1')).not.toContain(String(timesCalled));
+      }
     },
   );
+
+  /**
+   * The wording pin above is replaced by this: two call counts through the
+   * same screen may differ ONLY where the digits are. It holds whatever the
+   * sysop writes around `~TC`, and it is strictly stronger than a phrase
+   * match - a renderer that dropped the row, or moved it, or padded it
+   * differently, changes the skeleton and is caught.
+   */
+  it('changes nothing on the screen but the digits themselves', async () => {
+    const render = async (timesCalled: number): Promise<string> => {
+      const s = session(timesCalled);
+      disposePetsciiSessionModel(s);
+      const ctx = await petsciiRenderCtxFor(s, { inlineMode: false });
+      return (await renderPetsciiScreen(fs.readFileSync(LOGOFF_003), s, ctx)).toString('latin1');
+    };
+    const skeleton = (text: string) => text.replace(/[0-9]+/g, '#');
+
+    const few = await render(42);
+    const many = await render(65535);
+
+    expect(skeleton(few)).toBe(skeleton(many));
+    expect(few).toContain('42');
+    expect(many).toContain('65535');
+  });
 });

@@ -1,0 +1,21 @@
+[0;33m============================================================================[0m
+[1;37m                         PRIVACY NOTICE (v1.0)[0m
+[0;33m============================================================================[0m
+Collected: handle, password (hashed), and optionally real name, group
+affiliation, phone, email. Session metadata: IP, time, node. Your posts,
+uploads, chat logs, and preference flags.
+
+Purpose: run your account and keep the BBS abuse-free. Legal basis: your
+consent plus legitimate interest in operating the BBS.
+
+Retention: logs/call records 90 days (rotating). Profile+posts until you
+delete your account or we shut down.
+
+Shared with: the sysop, Hetzner (Germany, hosting), and if the sysop
+enables webhooks, Discord/Slack (anonymised by default).
+
+Rights: run W and pick "View my data" or "Delete my account (GDPR)".
+Otherwise contact the sysop: [1;36m$SYSOP_EMAIL$[0m.
+Not intended for users under 16 (EU) / 18 (US).
+
+[0;33m============================================================================[0m

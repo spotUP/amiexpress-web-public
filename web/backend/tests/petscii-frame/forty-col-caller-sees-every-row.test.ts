@@ -64,7 +64,17 @@ const PAUSE_PROMPT = '(Pause)...More(y/n/ns)? ';
  */
 const PAUSE_ROW = PAUSE_PROMPT.toUpperCase().replace(/ +$/, '');
 
-const GAMES_SOURCE = path.resolve(__dirname, '../../../../Doors/5D-ADIMENU/Text/games');
+/**
+ * The door's own menu, FROZEN. Every assertion below names something IN it -
+ * the title row, `ARCL` on the first page, `USRP` on the second, the three
+ * rows duplicated to make a tall file - and `Doors/5D-ADIMENU/Text/games` is
+ * a text file the sysop edits. Read live, this suite reported on the games
+ * list; frozen, it reports on the window and the pause, which is what it is
+ * for (RULES.md, "The board is not a fixture").
+ */
+const GAMES_SOURCE = path.resolve(
+  __dirname, '..', 'fixtures', 'board-screens', 'doors-adimenu-games.txt',
+);
 
 let tmpDir = '';
 let gamesFile = '';
@@ -99,7 +109,17 @@ beforeAll(() => {
   entryCodes = Array.from(raw.matchAll(/\[\x1b\[37m([A-Z0-9]+)\x1b\[31m\]/g)).map((m) => m[1]);
 
   const lines = raw.replace(/~f/g, '\x1b[2J\x1b[H').split('\n');
-  const widest = ['LORD', 'LORD2', 'OOII'];
+  // The three entry rows with the longest right-hand names - the ones
+  // `record` still spends a second row on. Measured off the file rather than
+  // named, so the duplication follows the menu instead of a list to maintain.
+  const entryLine = (code: string) => `[\x1b[37m${code}\x1b[31m]`;
+  const widest = [...entryCodes]
+    .sort((a, b) => {
+      const len = (code: string) =>
+        (lines.find((l) => l.includes(entryLine(code))) ?? '').replace(/\x1b\[[0-9;]*m/g, '').trimEnd().length;
+      return len(b) - len(a);
+    })
+    .slice(0, 3);
   const tall = lines.flatMap((line) =>
     widest.some((code) => line.includes(`[\x1b[37m${code}\x1b[31m]`)) ? [line, line] : [line]);
   tallFile = path.join(tmpDir, 'games-tall.txt');

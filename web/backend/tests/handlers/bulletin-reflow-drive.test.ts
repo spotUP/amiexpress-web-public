@@ -60,7 +60,13 @@ import { displayScreen } from '../../src/handlers/screen.handler';
 import { findSecurityScreen } from '../../src/utils/screen-security.util';
 import { flushOutput } from '../../src/utils/output.util';
 
-const REPO_ROOT = path.resolve(__dirname, '../../../..');
+/**
+ * The board's own bull1 - the top-callers TABLE - FROZEN. `Bulletins/bull*.txt`
+ * are MultiTop's output and are rewritten at every logoff, so reading the live
+ * one made the art-skip cases below a report on last night's callers.
+ * (RULES.md, "The board is not a fixture".)
+ */
+const TABLE_FIXTURE = path.join(__dirname, '..', 'fixtures', 'board-screens', 'bulletins-bull1.txt');
 
 let root: string;
 const realConfigGet = config.get.bind(config);
@@ -103,7 +109,7 @@ beforeAll(() => {
   );
   fs.writeFileSync(
     path.join(bullDir, `Bull${TABLE_BULLETIN}.txt`),
-    fs.readFileSync(path.join(REPO_ROOT, 'Bulletins', 'bull1.txt'))
+    fs.readFileSync(TABLE_FIXTURE)
   );
 
   jest.spyOn(config, 'get').mockImplementation((key: any) =>
