@@ -111,7 +111,7 @@ import {
   type WireCharset,
 } from '../../src/utils/wire-encoding.util';
 import { PRE_PACED, fromCharset, pacedFromCharset } from '../../src/utils/output-pacing';
-import { readAmigaTextFile } from '../../src/utils/amiga-text-decode.util';
+import { readAmigaTextFile, stripSauceMetadata } from '../../src/utils/amiga-text-decode.util';
 import * as outputUtil from '../../src/utils/output.util';
 import type { BBSSession } from '../../src/index';
 
@@ -297,7 +297,13 @@ describe('TP-5 - the wire encoder, and the charset a payload came from', () => {
         `The controller's pin needs the real screen: ${BBSTITLE} is absent from this checkout.`,
       );
     }
-    const fileBytes = fs.readFileSync(BBSTITLE);
+    // The file's TEXT bytes, which is what reaches the wire: BBSTITLE now
+    // carries a 129-byte SAUCE record (the Moebius record restored in
+    // 9f0bac1c0 - iCE colours, 80 columns), and `readAmigaTextFile` strips it
+    // exactly as `stripSauceMetadata` does here. Comparing the wire against
+    // the RAW file failed the moment the record went back on: the wire is the
+    // 13894 text bytes, the raw file is 14023 with the record.
+    const fileBytes = stripSauceMetadata(fs.readFileSync(BBSTITLE));
     const decoded = readAmigaTextFile(BBSTITLE);
     expect(decoded.encoding).toBe('iso-8859-1');
 
@@ -307,7 +313,8 @@ describe('TP-5 - the wire encoder, and the charset a payload came from', () => {
 
     // The emitter normalises bare LF to CRLF before the encode, as it always
     // has; the file has 68 bare LFs and no CR at all. Undo exactly that and
-    // the file's own 13894 bytes must come back, byte for byte.
+    // the file's own 13894 text bytes (SAUCE stripped) must come back, byte
+    // for byte.
     const restored = Buffer.from(wire.toString('latin1').replace(/\r\n/g, '\n'), 'latin1');
     expect(restored.length).toBe(13894);
     expect(Buffer.compare(restored, fileBytes)).toBe(0);
