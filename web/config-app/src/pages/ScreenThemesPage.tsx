@@ -294,8 +294,12 @@ export function ScreenThemesPage() {
 
   return (
     <div>
-      <header className="flex items-center justify-between mb-4">
-        <div>
+      <header className="mb-4 flex items-start justify-between gap-4">
+        {/* min-w-0 so the paragraph WRAPS instead of pushing the button; a flex
+            child defaults to min-width:auto and refuses to shrink below its
+            content, which squeezed the button until its own label broke over
+            two lines. */}
+        <div className="min-w-0">
           <h1 className="flex items-center gap-2 text-xl font-semibold text-content-primary"><Palette size={20} /> Screen Themes</h1>
           <p className="mt-1 text-sm text-content-secondary">
             A theme is a whole set of the board&apos;s art. A caller wears one; every screen it does
@@ -306,7 +310,7 @@ export function ScreenThemesPage() {
           <button
             type="button"
             onClick={() => setIsCreateOpen(true)}
-            className="btn-primary flex items-center space-x-2"
+            className="btn-primary flex shrink-0 items-center space-x-2 whitespace-nowrap"
           >
             <Plus size={16} />
             <span>New theme</span>
