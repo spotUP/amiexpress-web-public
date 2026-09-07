@@ -1681,6 +1681,35 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
   }
 
   /**
+   * Achievements (SP3): the server, through the board. The door gets the
+   * answers; the board key stays here. See achievements/door-api.ts.
+   */
+  achievements(): import('../achievements/door-api').DoorAchievementsApi {
+    const { doorAchievementsApi } = require('../achievements/door-api');
+    return doorAchievementsApi();
+  }
+
+  /**
+   * Achievements (SP3, S1): a caller with no address is not a player, and
+   * the ACHIEVE door is where one is asked for. Stored on the user record
+   * and on the live session, so the reporter sees it from now on. Returns
+   * false (and changes nothing) for anything that is not shaped like an
+   * address.
+   */
+  async setUserEmail(email: string): Promise<boolean> {
+    const trimmed = String(email ?? '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed) || trimmed.length > 254 || !this.session.user?.id) return false;
+    try {
+      await db.updateUser(this.session.user.id, { email: trimmed } as any);
+      this.session.user.email = trimmed;
+      return true;
+    } catch (error) {
+      console.warn(`[WARN] achievements: could not store the address: ${(error as Error).message}`);
+      return false;
+    }
+  }
+
+  /**
    * Request the user to upload a door archive via the browser file picker.
    * Resolves with the local path once upload completes; rejects after 5 min or on cancel.
    */

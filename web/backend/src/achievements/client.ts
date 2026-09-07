@@ -55,3 +55,58 @@ export async function postEvents(settings: AchievementsSettings, events: EventIn
     clearTimeout(timer);
   }
 }
+
+// ---------------------------------------------------------------------------
+// The rest of the API, for the ACHIEVE door (SP3). The door never holds the
+// board key: BBSApi.achievements() calls these on its behalf.
+// ---------------------------------------------------------------------------
+
+export interface ApiResult<T = unknown> {
+  status: number;
+  body: T | null;
+  /** The server's error code on a refusal, or a transport description. */
+  error?: string;
+  detail?: string;
+}
+
+export async function apiRequest<T = unknown>(
+  settings: AchievementsSettings,
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT',
+  path: string,
+  body?: unknown,
+  fetchImpl: FetchLike = fetch
+): Promise<ApiResult<T>> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetchImpl(`${settings.serverUrl}/achievements/v1${path}`, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Board ${settings.boardKey}`,
+        Accept: 'application/json',
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    let parsed: unknown = null;
+    try {
+      parsed = text ? JSON.parse(text) : null;
+    } catch {
+      parsed = null;
+    }
+    if (res.status === 200 && parsed === null && text.length > 0) {
+      return { status: 502, body: null, error: 'not_json', detail: 'the server answered something that is not the API (is its achievements surface on?)' };
+    }
+    if (res.status >= 400) {
+      const e = (parsed ?? {}) as { error?: string; detail?: string };
+      return { status: res.status, body: null, error: e.error ?? String(res.status), detail: e.detail };
+    }
+    return { status: res.status, body: parsed as T };
+  } catch (err) {
+    return { status: 0, body: null, error: (err as Error).name === 'AbortError' ? 'timeout' : 'unreachable', detail: (err as Error).message };
+  } finally {
+    clearTimeout(timer);
+  }
+}
