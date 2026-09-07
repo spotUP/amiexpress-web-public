@@ -68,4 +68,5 @@ export const INTERNAL_COMMAND_NAMES: readonly string[] = [
   'CF',
   '?',
   'DOORS',
+  'COLOURS',
 ];

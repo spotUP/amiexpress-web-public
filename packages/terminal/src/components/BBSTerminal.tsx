@@ -39,7 +39,7 @@ import { classifyKey } from '../utils/key-overrides';
 import { toggleFullscreen } from '../utils/fullscreen';
 import { GamepadManager } from '../utils/gamepad-manager';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
-import { WideScreenMachine, PetsciiMachine, AnsiToPetsciiTransducer, petsciiInputToAscii } from '@amiexpress/bbs-door-sdk/petscii';
+import { WideScreenMachine, PetsciiMachine, AnsiToPetsciiTransducer, petsciiInputToAscii, petsciiPaletteFor } from '@amiexpress/bbs-door-sdk/petscii';
 import { PetsciiCanvas, type PetsciiCanvasHandle } from '../petscii/PetsciiCanvas';
 import { petsciiSurfaceReducer, initialPetsciiSurface, type PetsciiSurface } from '../petscii/surface-state';
 
@@ -372,6 +372,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // The same instance as petsciiMachineRef, held in state so the render
   // reads it from state instead of a ref (a ref read during render is not
   // safe under concurrent rendering). Written next to the ref, always.
+  /** Which sixteen colours the PETSCII canvas paints with: a C64's, or a C128's. */
+  const [petsciiPalette, setPetsciiPalette] = useState<'vic' | 'vdc'>('vic');
   const [petsciiMachine, setPetsciiMachine] = useState<PetsciiMachine | null>(null);
   const petsciiTransducerRef = useRef<AnsiToPetsciiTransducer | null>(null);
   const petsciiCanvasRef = useRef<PetsciiCanvasHandle | null>(null);
@@ -2318,8 +2320,18 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
      * carries the shape, and the resize below stays exactly as it was so a
      * session that started before this deploy keeps its screen.
      */
+    socket.on('petscii-palette', (data: { palette?: string }) => {
+      // The caller's own choice, applied live: the canvas repaints from the
+      // machine it already has, so a palette change costs no session state.
+      console.log('[Terminal] PETSCII palette:', data?.palette);
+      setPetsciiPalette(data?.palette === 'vic' ? 'vic' : 'vdc');
+    });
+
     socket.on('petscii-mode', (shape: { cols: number; rows: number; palette?: string }) => {
-      console.log('[Terminal] PETSCII mode:', shape.cols, 'x', shape.rows);
+      console.log('[Terminal] PETSCII mode:', shape.cols, 'x', shape.rows, shape.palette ?? '');
+      // The colours travel with the shape: a C64 is a VIC-II, and the wide
+      // screen is a C128's VDC unless the caller has said otherwise.
+      setPetsciiPalette(shape.palette === 'vic' ? 'vic' : shape.cols === 80 ? 'vdc' : 'vic');
       ensurePetsciiSession(shape.cols === 80 ? 80 : 40);
     });
 
@@ -2464,6 +2476,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
        */
 
       socket.emit('get-font-preference');
+      // ...and the palette he reads PETSCII with, for the same reason: it is
+      // a stored preference, and until login there is nobody to have one.
+      socket.emit('get-petscii-palette');
       focusSurface();
     });
 
@@ -2486,6 +2501,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // same way login-success does. Without this the restore ran the whole
       // session in whatever font the terminal was constructed with.
       socket.emit('get-font-preference');
+      socket.emit('get-petscii-palette');
       focusSurface();
     });
 
@@ -3657,6 +3673,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
           <PetsciiCanvas
             ref={petsciiCanvasRef}
             machine={petsciiMachine}
+            palette={petsciiPaletteFor(petsciiPalette)}
             cursorVisible={doorOwnsScreen ? false : undefined}
             focusable
             focusOnMount

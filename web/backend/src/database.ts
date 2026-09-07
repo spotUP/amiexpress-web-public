@@ -386,6 +386,15 @@ console.log('✓ Added autorejoin column');
 console.log('✓ Added fontpreference column');
       }
 
+      if (!columnNames.includes('petsciipalette')) {
+        // Which sixteen colours this caller's PETSCII screen is painted with.
+        // Only the 80-column screen has a choice - a C64 is a VIC-II - and a
+        // C128's 80-column screen is the VDC's own colours, so that is the
+        // default. Web-only, and deliberately not in user.data.
+        this.db.exec('ALTER TABLE users ADD COLUMN petsciipalette TEXT DEFAULT \'vdc\'');
+console.log('✓ Added petsciipalette column');
+      }
+
       if (!columnNames.includes('themepreference')) {
         // Web-only, and deliberately NOT in user.data: that file's layout has
         // to stay byte-compatible with real AmiExpress, and a door theme is

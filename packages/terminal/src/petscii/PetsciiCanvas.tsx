@@ -1,12 +1,20 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
-import { C64_PALETTE_COLODORE } from '@amiexpress/bbs-door-sdk/petscii';
+import { C64_PALETTE_COLODORE, C128_VDC_PALETTE } from '@amiexpress/bbs-door-sdk/petscii';
 import { buildGlyphAtlas, glyphCellIndex, TintedAtlasCache } from './glyph-atlas';
 import { keyEventToPetscii } from './keymap';
 
 export interface PetsciiCanvasProps {
   machine: PetsciiMachine;
-  /** VIC-II color palette, indexed 0-15. Defaults to Colodore. */
+  /**
+   * The sixteen colours, indexed by VIC colour number.
+   *
+   * Left out, the canvas paints with the palette the SCREEN it was handed
+   * implies: a C64's own colours at 40 columns, and what a C128 shows on its
+   * 80-column screen at 80 (`C128_VDC_PALETTE` - not a nearest match, the
+   * KERNAL's own table). A caller who has chosen otherwise is passed his
+   * choice here and it wins.
+   */
   palette?: readonly string[];
   /**
    * Upper bound on the integer render scale fed to the canvas's backing
@@ -111,7 +119,7 @@ export const PETSCII_UNIT_FOOTPRINT = {
  */
 export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>(({
   machine,
-  palette = C64_PALETTE_COLODORE,
+  palette,
   scale: maxScale = 4,
   onData,
   cursorVisible,
@@ -137,6 +145,13 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
   // canvas draws whichever it is handed.
   const cols = machine.state.cols || DEFAULT_COLS;
   const rows = machine.state.rows || DEFAULT_ROWS;
+  // THE COLOURS THE SCREEN IMPLIES, unless the caller chose otherwise. A C64
+  // is VIC-II; a C128's 80-column screen is the VDC's sixteen, which its
+  // KERNAL maps the PETSCII colour bytes onto - orange arrives as magenta
+  // there, and dark grey as cyan, which no nearest-colour search would ever
+  // produce (sdk/petscii/c64-palette.ts).
+  const colours = palette
+    ?? (cols > DEFAULT_COLS ? C128_VDC_PALETTE : C64_PALETTE_COLODORE);
   const unitW = unitWidthFor(cols);
   const unitH = unitHeightFor(rows, cols);
 
@@ -219,11 +234,11 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
     const destH = cellH;
 
     // Border.
-    ctx.fillStyle = palette[s.border & 0x0F];
+    ctx.fillStyle = colours[s.border & 0x0F];
     ctx.fillRect(0, 0, width, height);
 
     // Screen background.
-    ctx.fillStyle = palette[s.background & 0x0F];
+    ctx.fillStyle = colours[s.background & 0x0F];
     ctx.fillRect(border, border, cols * destW, rows * destH);
 
     for (let y = 0; y < rows; y++) {
@@ -231,7 +246,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
         const idx = y * cols + x;
         const screenCode = s.screen[idx];
         if (isBlankScreenCode(screenCode)) continue; // background fill above is already correct - draw nothing
-        const color = palette[s.colorRam[idx] & 0x0F];
+        const color = colours[s.colorRam[idx] & 0x0F];
         const tinted = atlasCache.get(color);
         const sx = glyphCellIndex(s.charsetBank, screenCode) * ATLAS_PX_SIZE;
         const dx = border + x * destW;
@@ -255,14 +270,14 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
     const effectiveCursorOn = s.cursorShown === false ? false : (cursorVisible ?? cursorOn);
     if (effectiveCursorOn) {
       const cursorIdx = s.cursorY * cols + s.cursorX;
-      ctx.fillStyle = palette[s.colorRam[cursorIdx] & 0x0F];
+      ctx.fillStyle = colours[s.colorRam[cursorIdx] & 0x0F];
       ctx.fillRect(border + s.cursorX * destW, border + s.cursorY * destH, destW, destH);
     }
     // `cursorVisible` belongs in this list: without it a change to the
     // override kept the STALE closure - the repaint effects below re-run on
     // `draw`'s identity, so a prop the memo does not watch cannot reach the
     // glass until something else happens to change.
-  }, [machine, palette, scale, cursorOn, cursorVisible, width, height, border, cellW, cellH, cols, rows]);
+  }, [machine, colours, scale, cursorOn, cursorVisible, width, height, border, cellW, cellH, cols, rows]);
 
   // Keep a ref to the latest draw() so the onUpdate subscription below
   // doesn't need to be torn down and rebuilt every cursor blink.

@@ -15,6 +15,38 @@ import { getSessionBySocketId } from './session-manager';
  * Session checks should be done INSIDE each handler, not before registration.
  */
 export function registerPreferenceHandlers(socket: Socket) {
+  /**
+   * The PETSCII palette this caller reads with.
+   *
+   * Only the 80-column screen has a choice - a C64 is a VIC-II by
+   * construction - and a C128's 80-column screen has the VDC's own sixteen
+   * colours, mapped from the PETSCII colour bytes by a KERNAL table with four
+   * surprises in it (orange arrives as magenta). That is the default; a caller
+   * who prefers the C64's colours on the wide screen says so here.
+   */
+  socket.on('get-petscii-palette', async () => {
+    const session = getSessionBySocketId(socket.id);
+    const palette = session?.user?.petsciiPalette === 'vic' ? 'vic' : 'vdc';
+    socket.emit('petscii-palette', { palette });
+  });
+
+  socket.on('set-petscii-palette', async (data: { palette: string }) => {
+    const session = getSessionBySocketId(socket.id);
+    const palette = data?.palette === 'vic' ? 'vic' : 'vdc';
+    if (!session?.user) {
+      // Nobody to remember it for; the screen still changes for this session.
+      socket.emit('petscii-palette', { palette });
+      return;
+    }
+    try {
+      await db.updateUser(session.user.id, { petsciiPalette: palette });
+      session.user.petsciiPalette = palette;
+      socket.emit('petscii-palette', { palette });
+    } catch (error) {
+console.error('[Preference] Error updating PETSCII palette:', error);
+    }
+  });
+
   // Get user's font preference
   socket.on('get-font-preference', async () => {
 console.log('[Preference] Received get-font-preference request');

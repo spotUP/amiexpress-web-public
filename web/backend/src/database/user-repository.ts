@@ -234,6 +234,11 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
       byteLimit: safeNumber(user.bytelimit, 0),
       userFlags: safeNumber(user.userflags, 0),
       fontPreference: user.fontpreference || 'TopazPlus_a1200',  // Web font preference
+      // Which sixteen colours his PETSCII screen is painted with. Only the
+      // 80-column screen has a choice: a C64 is a VIC-II by construction, and
+      // a C128's 80-column screen is the VDC's own colours, which is why that
+      // is the default (sdk/petscii/c64-palette.ts).
+      petsciiPalette: user.petsciipalette === 'vic' ? 'vic' : 'vdc',
       themePreference: user.themepreference || 'classic',        // Door theme; classic is today's look
       // SCREEN theme - which set of board art this caller wears. Empty is
       // "no preference", which resolves to the board default and then to the

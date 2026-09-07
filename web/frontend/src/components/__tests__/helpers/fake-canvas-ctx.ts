@@ -20,6 +20,13 @@ export interface FakeCtx {
 
 const RECORDED_METHODS = ['fillRect', 'drawImage', 'fillText', 'save', 'restore', 'beginPath', 'rect', 'clip'] as const;
 
+/**
+ * Property WRITES worth recording, in order, beside the calls: a colour is
+ * set on the context and only then painted with, so a test that asks "what
+ * colour was the border" has to see the assignment. Recorded as `fillStyle=`.
+ */
+const RECORDED_PROPERTIES = ['fillStyle', 'strokeStyle'] as const;
+
 export function makeFakeCtx(): FakeCtx {
   const calls: RecordedCall[] = [];
   const props: Record<string, unknown> = {};
@@ -34,7 +41,12 @@ export function makeFakeCtx(): FakeCtx {
       return undefined;
     },
     set(_t, p, v) {
-      if (typeof p === 'string') props[p] = v;
+      if (typeof p === 'string') {
+        props[p] = v;
+        if ((RECORDED_PROPERTIES as readonly string[]).includes(p)) {
+          calls.push({ method: `${p}=`, args: [v] });
+        }
+      }
       return true;
     },
   }) as unknown as FakeCtx;

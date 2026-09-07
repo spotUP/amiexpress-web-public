@@ -12,6 +12,10 @@ export { type PetsciiScreenModel } from './screen-model';
 export {
   C64_PALETTE_COLODORE,
   C64_PALETTE_PEPTO,
+  C128_VDC_PALETTE,
+  PETSCII_PALETTES,
+  petsciiPaletteFor,
+  type PetsciiPaletteName,
   PETSCII_COLOR_TO_VIC,
   vicToSgrForeground,
   vicToSgrBackground,

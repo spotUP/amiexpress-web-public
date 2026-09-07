@@ -176,7 +176,16 @@ console.log(`[PETSCII] PETSCII mode enabled - setting terminal to ${session.pets
     // `petscii-mode` is the MODE, and carries the shape with it - which is
     // what an 80-column caller is mounted on.
     socket.emit('terminal-resize', { cols: session.petsciiColumns, rows: 25 });
-    socket.emit('petscii-mode', { cols: session.petsciiColumns, rows: 25, palette: 'vic' });
+    // The COLOURS, with the shape. A C64 is a VIC-II by construction; the
+    // 80-column screen is a C128's, whose VDC has its own sixteen - and that
+    // is a caller preference, applied at login (handlers/commands/
+    // user-commands.handler.ts). Nobody is logged in at the graphics prompt,
+    // so what goes out here is the default for the screen.
+    socket.emit('petscii-mode', {
+      cols: session.petsciiColumns,
+      rows: 25,
+      palette: session.petsciiColumns === 80 ? 'vdc' : 'vic',
+    });
   } else if (hasR && transportCapabilities(session).rip) {
     // express.e:29545 - RIP mode: .rip screens served first, framed by
     // displayScreen with \x1b[1!..\x1b[2! for the web terminal's canvas.
