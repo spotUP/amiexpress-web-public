@@ -7,6 +7,7 @@ import { readLine } from './prompt';
 import { displayMainMenu, displayPhreakingMenu, displayProgrammingMenu, displayTradingMenu, displayRomanceMenu, displayMultiplayerMenu, displayUpgradesMenu, displayBBSExploration, displayStats, displayHelp, say, } from './ui';
 import { startTextMinigame } from './minigames';
 import { checkDailyLimit, deletePlayer, displayDailyLimits } from './player';
+import { award } from './achievements';
 /** Length caps the SDK line reader enforces as the player types. */
 const HANDLE_MIN = 3;
 const HANDLE_MAX = 15;
@@ -93,6 +94,11 @@ export function handleMainMenu(socket, gameState, input) {
             displayHelp(socket, gameState);
             break;
         case 'Q':
+            // Achievements (SP3): the empire as the player leaves it. A bucket key
+            // rather than a raw amount, because the rule operators count events and
+            // sum them - they do not threshold one event's value.
+            if (gameState.player.money >= 10000)
+                award('door.phreakwars.wealth', { key: '10k' });
             say(socket, gameState, '\r\n\x1b[33mThanks for playing Phreak Wars!\x1b[0m\r\n');
             say(socket, gameState, '\x1b[36m"2600 Hz is the key to the kingdom..."\x1b[0m\r\n\r\n');
             say(socket, gameState, '\x1b[32mPress any key to exit...\x1b[0m');

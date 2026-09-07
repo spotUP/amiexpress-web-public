@@ -8,6 +8,7 @@ import { Socket } from 'socket.io';
 import { say } from './ui';
 import { PhreakWarsGameState, MinigameType } from './types';
 import { updateSkillLevel } from './player';
+import { award } from './achievements';
 
 /**
  * Start a text-based minigame for the player
@@ -128,6 +129,7 @@ function handleRedBoxMinigame(socket: Socket, gameState: PhreakWarsGameState, in
   }
 
   if (success) {
+    award('door.phreakwars.minigame', { key: gameState.minigameType });
     gameState.player.skills.phreaking = Math.min(100, gameState.player.skills.phreaking + 5);
     gameState.player.money += 25;
     say(socket, gameState, '\x1b[32mSUCCESS!\x1b[0m\r\n');
@@ -204,6 +206,7 @@ function handleBlueBoxMinigame(socket: Socket, gameState: PhreakWarsGameState, i
   }
 
   if (success) {
+    award('door.phreakwars.minigame', { key: gameState.minigameType });
     gameState.player.skills.phreaking = Math.min(100, gameState.player.skills.phreaking + 10);
     gameState.player.money += 50;
     say(socket, gameState, '\x1b[32mSUCCESS!\x1b[0m\r\n');
@@ -267,6 +270,7 @@ function handleToneGenMinigame(socket: Socket, gameState: PhreakWarsGameState, i
   const success = input === correctChoice;
 
   if (success) {
+    award('door.phreakwars.minigame', { key: gameState.minigameType });
     gameState.player.skills.phreaking = Math.min(100, gameState.player.skills.phreaking + 3);
     say(socket, gameState, '\r\n\x1b[32mCORRECT!\x1b[0m\r\n');
     say(socket, gameState, '\x1b[32mMF tone generated successfully! Phreaking skill improved!\x1b[0m\r\n');
@@ -353,6 +357,7 @@ function handleHackMinigame(socket: Socket, gameState: PhreakWarsGameState, inpu
   }
 
   if (success) {
+    award('door.phreakwars.minigame', { key: gameState.minigameType });
     gameState.player.skills.hacking = Math.min(100, gameState.player.skills.hacking + 8);
     gameState.player.money += 100;
     say(socket, gameState, '\x1b[32mSUCCESS!\x1b[0m\r\n');
@@ -412,6 +417,7 @@ function handleProgramMinigame(socket: Socket, gameState: PhreakWarsGameState, i
   const success = input === correctChoice;
 
   if (success) {
+    award('door.phreakwars.minigame', { key: gameState.minigameType });
     gameState.player.skills.programming = Math.min(100, gameState.player.skills.programming + 10);
     say(socket, gameState, '\r\n\x1b[32mSUCCESS!\x1b[0m\r\n');
     say(socket, gameState, '\x1b[32mProgram compiled and ran successfully! Programming skill greatly improved!\x1b[0m\r\n');
@@ -489,6 +495,7 @@ function handleBBSHackMinigame(socket: Socket, gameState: PhreakWarsGameState, i
   }
 
   if (success) {
+    award('door.phreakwars.minigame', { key: gameState.minigameType });
     const reward = securityLevel * 50 + 100;
     gameState.player.skills.hacking = Math.min(100, gameState.player.skills.hacking + 3);
     gameState.player.money += reward;

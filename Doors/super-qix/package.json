@@ -29,5 +29,67 @@
     "@types/node": "^20.0.0",
     "esbuild": "^0.19.0",
     "typescript": "^5.2.2"
+  },
+  "amiexpress": {
+    "command": "superqix",
+    "achievements": [
+      {
+        "id": "door.superqix.first_game",
+        "name": "First Claim",
+        "description": "Play a game of SUPERQIX",
+        "family": "door.superqix",
+        "tier": "bronze",
+        "points": 5,
+        "hidden": false,
+        "rule": {
+          "op": "first",
+          "type": "door.superqix.game"
+        }
+      },
+      {
+        "id": "door.superqix.games_50",
+        "name": "Field Worker",
+        "description": "Play fifty games of SUPERQIX",
+        "family": "door.superqix",
+        "tier": "silver",
+        "points": 10,
+        "hidden": false,
+        "rule": {
+          "op": "count",
+          "type": "door.superqix.game",
+          "n": 50
+        }
+      },
+      {
+        "id": "door.superqix.level_4",
+        "name": "Four Squares",
+        "description": "Reach level four in SUPERQIX",
+        "family": "door.superqix",
+        "tier": "silver",
+        "points": 10,
+        "hidden": false,
+        "rule": {
+          "op": "count",
+          "type": "door.superqix.level",
+          "key": "4",
+          "n": 1
+        }
+      },
+      {
+        "id": "door.superqix.level_10",
+        "name": "Ten Deep",
+        "description": "Reach level ten in SUPERQIX",
+        "family": "door.superqix",
+        "tier": "gold",
+        "points": 25,
+        "hidden": false,
+        "rule": {
+          "op": "count",
+          "type": "door.superqix.level",
+          "key": "10",
+          "n": 1
+        }
+      }
+    ]
   }
 }

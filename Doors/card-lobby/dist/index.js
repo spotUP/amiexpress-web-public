@@ -1439,13 +1439,41 @@ class CardLobbyApp {
         }
         this.updateAllPanels();
     }
+    /**
+     * The lobby's OWN awards, and the board's.
+     *
+     * These are two systems on purpose (achievements SP3): the chips and the
+     * notice are this door's, scoped to the table; `door.cardlobby.unlock` is
+     * the global one, reported through the board so a player's card play counts
+     * beside everything else he does. The lobby award is the trigger, not the
+     * payload - the key is which one, so the global rules can ask for variety
+     * rather than duplicating the local thresholds.
+     */
     handleAchievementUnlocks(profile) {
         for (const unlocked of (0, achievements_1.unlockAchievements)(profile)) {
             this.pushNotice(`Achievement unlocked: ${unlocked.name} (+${unlocked.reward})`);
+            this.reportAchievement('door.cardlobby.unlock', { key: unlocked.id });
         }
     }
     updateStatsAfterHand(profile, delta, pot) {
         (0, achievements_1.recordHandResult)(profile, delta, pot);
+        this.reportAchievement('door.cardlobby.hand');
+        if (delta > 0)
+            this.reportAchievement('door.cardlobby.win', { value: delta });
+    }
+    /**
+     * One event to the board. Optional on the context (an older SDK, or a board
+     * with no achievements server), never throws, and a false answer is the
+     * normal case for a caller who is not a player.
+     */
+    reportAchievement(type, opts) {
+        try {
+            this.session
+                .achievement?.(type, opts);
+        }
+        catch {
+            /* a hand is not worth a crash */
+        }
     }
     // Game state delegation methods
     async finalizeHoldemHand(table, engine, beforeStacks) {

@@ -20,6 +20,7 @@ import { gameStates, createNewGameState, checkAndResetDailyLimits } from './lib/
 import { displayMainMenu, titleBox, stateWidth, say } from './lib/ui';
 import { handleMainMenu, askForHandle, handlePhreaking, handleBBSExploration, handleProgramming, handleTrading, handleRomance, handleMultiplayer, handleUpgrades, handleMessageChoice, handleWaiting, handleStatsMenu, handleDeleteConfirmation } from './lib/handlers';
 import { handleTextMinigame } from './lib/minigames';
+import { setAchievementReporter, award } from './lib/achievements';
 /**
  * Main door class
  */
@@ -37,6 +38,11 @@ door.onStart(async (ctx) => {
     }
     // Check and reset daily limits if needed
     checkAndResetDailyLimits(gameState);
+    // Achievements (SP3). The handlers never see the DoorContext, so the
+    // reporter is parked where they can reach it, and the session itself is the
+    // door's first event - `first` on it is what "played PhreakWars" means.
+    setAchievementReporter(ctx.achievement);
+    award('door.phreakwars.session');
     // The caller's REAL width, recorded on the per-user state (gameStates is
     // shared across nodes, so this cannot be a module-level value). Cast:
     // the SDK's BBSApi interface does not declare getTerminalSize, though the

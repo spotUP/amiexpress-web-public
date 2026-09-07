@@ -610,7 +610,42 @@ function startGame(): void {
         game?.advanceLevel();
       }
     }
+    reportArcadeProgress();
   }, GAME_TICK_MS);
+}
+
+/**
+ * Achievements (SP3): what the board is told about a run of FROGGER.
+ *
+ * The EDGE, not the state. This runs every `GAME_TICK_MS`, and the game-over
+ * board keeps painting until a key is pressed, so reporting on the state
+ * itself would send the same event dozens of times a second. The level is
+ * reported the same way - when it goes UP, once.
+ *
+ * `ctx.achievement` is optional and never throws; false, for a caller who is
+ * not a player, is the normal answer.
+ */
+let reportedState: string | null = null;
+let reportedLevel = 0;
+
+function reportArcadeProgress(): void {
+  if (!gameData) return;
+  try {
+    const report = (doorContext as { achievement?: (t: string, o?: { value?: number; key?: string }) => boolean })
+      ?.achievement;
+    if (typeof report !== 'function') return;
+    if (gameData.state === 'gameover' && reportedState !== 'gameover') {
+      report('door.frogger.game', { value: gameData.score });
+    }
+    if (gameData.level > reportedLevel) {
+      reportedLevel = gameData.level;
+      report('door.frogger.level', { key: String(gameData.level) });
+    }
+  } catch {
+    /* an arcade game is not worth a crash */
+  } finally {
+    reportedState = gameData.state;
+  }
 }
 
 /**

@@ -30,5 +30,67 @@
     "@types/node": "^20.0.0",
     "esbuild": "^0.19.0",
     "typescript": "^5.2.2"
+  },
+  "amiexpress": {
+    "command": "pengo",
+    "achievements": [
+      {
+        "id": "door.pengo.first_game",
+        "name": "Cold Open",
+        "description": "Play a game of PENGO",
+        "family": "door.pengo",
+        "tier": "bronze",
+        "points": 5,
+        "hidden": false,
+        "rule": {
+          "op": "first",
+          "type": "door.pengo.game"
+        }
+      },
+      {
+        "id": "door.pengo.games_50",
+        "name": "Rink Regular",
+        "description": "Play fifty games of PENGO",
+        "family": "door.pengo",
+        "tier": "silver",
+        "points": 10,
+        "hidden": false,
+        "rule": {
+          "op": "count",
+          "type": "door.pengo.game",
+          "n": 50
+        }
+      },
+      {
+        "id": "door.pengo.level_5",
+        "name": "Fifth Floe",
+        "description": "Reach level five in PENGO",
+        "family": "door.pengo",
+        "tier": "silver",
+        "points": 10,
+        "hidden": false,
+        "rule": {
+          "op": "count",
+          "type": "door.pengo.level",
+          "key": "5",
+          "n": 1
+        }
+      },
+      {
+        "id": "door.pengo.level_10",
+        "name": "Deep Freeze",
+        "description": "Reach level ten in PENGO",
+        "family": "door.pengo",
+        "tier": "gold",
+        "points": 25,
+        "hidden": false,
+        "rule": {
+          "op": "count",
+          "type": "door.pengo.level",
+          "key": "10",
+          "n": 1
+        }
+      }
+    ]
   }
 }

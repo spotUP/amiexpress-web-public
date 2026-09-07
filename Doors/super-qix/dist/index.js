@@ -660,7 +660,45 @@ async function startGame() {
                 void applyLevelBackground(nextLevel).then(() => engine?.advanceLevel());
             }
         }
+        reportArcadeProgress();
     }, GAME_TICK_MS);
+}
+/**
+ * Achievements (SP3): what the board is told about a run of SUPERQIX.
+ *
+ * The EDGE, not the state: this runs every `GAME_TICK_MS` and the game-over
+ * board keeps painting until a key is pressed, so reporting the state itself
+ * would send the same event dozens of times a second. The level is reported
+ * when it goes UP, once - and it is the level WITHIN the lap, which is what a
+ * player reads off the screen.
+ *
+ * `ctx.achievement` is optional and never throws; false, for a caller who is
+ * not a player, is the normal answer.
+ */
+let reportedState = null;
+let reportedLevel = 0;
+function reportArcadeProgress() {
+    if (!gameData)
+        return;
+    try {
+        const report = doorContext
+            ?.achievement;
+        if (typeof report !== 'function')
+            return;
+        if (gameData.state === 'gameover' && reportedState !== 'gameover') {
+            report('door.superqix.game', { value: gameData.score });
+        }
+        if (gameData.level > reportedLevel) {
+            reportedLevel = gameData.level;
+            report('door.superqix.level', { key: String(gameData.level) });
+        }
+    }
+    catch {
+        /* an arcade game is not worth a crash */
+    }
+    finally {
+        reportedState = gameData.state;
+    }
 }
 /**
  * Handle input

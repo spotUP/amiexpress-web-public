@@ -30,5 +30,80 @@
   "devDependencies": {
     "@types/node": "^22.5.0",
     "typescript": "^5.5.4"
+  },
+  "amiexpress": {
+    "command": "phreakwars",
+    "achievements": [
+      {
+        "id": "door.phreakwars.first_call",
+        "name": "Off Hook",
+        "description": "Play a session of Phreak Wars",
+        "family": "door.phreakwars",
+        "tier": "bronze",
+        "points": 5,
+        "hidden": false,
+        "rule": {
+          "op": "first",
+          "type": "door.phreakwars.session"
+        }
+      },
+      {
+        "id": "door.phreakwars.sessions_25",
+        "name": "Night Owl",
+        "description": "Play twenty-five sessions of Phreak Wars",
+        "family": "door.phreakwars",
+        "tier": "silver",
+        "points": 10,
+        "hidden": false,
+        "rule": {
+          "op": "count",
+          "type": "door.phreakwars.session",
+          "n": 25
+        }
+      },
+      {
+        "id": "door.phreakwars.first_box",
+        "name": "Tone Deaf No More",
+        "description": "Win a Phreak Wars minigame",
+        "family": "door.phreakwars",
+        "tier": "bronze",
+        "points": 5,
+        "hidden": false,
+        "rule": {
+          "op": "first",
+          "type": "door.phreakwars.minigame"
+        }
+      },
+      {
+        "id": "door.phreakwars.every_box",
+        "name": "Full Toolkit",
+        "description": "Win all six kinds of Phreak Wars minigame",
+        "family": "door.phreakwars",
+        "tier": "gold",
+        "points": 25,
+        "hidden": false,
+        "rule": {
+          "op": "distinct",
+          "type": "door.phreakwars.minigame",
+          "dim": "key",
+          "n": 6
+        }
+      },
+      {
+        "id": "door.phreakwars.wealth_10k",
+        "name": "Ten Grand",
+        "description": "Leave Phreak Wars with ten thousand dollars",
+        "family": "door.phreakwars",
+        "tier": "silver",
+        "points": 10,
+        "hidden": false,
+        "rule": {
+          "op": "count",
+          "type": "door.phreakwars.wealth",
+          "key": "10k",
+          "n": 1
+        }
+      }
+    ]
   }
 }

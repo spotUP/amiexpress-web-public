@@ -291,9 +291,46 @@ function startGame(): void {
     // The state can change inside update() - a wave finished, a last life
     // lost - and those paths return before the game repaints. Draining here
     // as well means the sound still lands on the tick it happened on.
+    reportArcadeProgress();
     if (sfx && game) sfx.flush(game.cues);
     syncMusicState();
   }, GAME_TICK_MS);
+}
+
+/**
+ * Achievements (SP3): what the board is told about a run of PENGO.
+ *
+ * The engine already announces both moments - it flips `state` to 'gameover'
+ * and it counts `level` - so this reads the state machine rather than adding
+ * hooks to it. The EDGE is what is reported, not the state: the loop runs at
+ * `GAME_TICK_MS` and a game-over screen sits there until a key is pressed, so
+ * reporting on the level would send the same event dozens of times a second.
+ *
+ * `ctx.achievement` is optional (an older SDK, or a board with no
+ * achievements server) and never throws; a false answer, for a caller who is
+ * not a player, is the normal case.
+ */
+let reportedState: string | null = null;
+let reportedLevel = 0;
+
+function reportArcadeProgress(): void {
+  if (!gameData) return;
+  try {
+    const report = (doorContext as { achievement?: (t: string, o?: { value?: number; key?: string }) => boolean })
+      ?.achievement;
+    if (typeof report !== 'function') return;
+    if (gameData.state === 'gameover' && reportedState !== 'gameover') {
+      report('door.pengo.game', { value: gameData.score });
+    }
+    if (gameData.level > reportedLevel) {
+      reportedLevel = gameData.level;
+      report('door.pengo.level', { key: String(gameData.level) });
+    }
+  } catch {
+    /* an arcade game is not worth a crash */
+  } finally {
+    reportedState = gameData.state;
+  }
 }
 
 /**
