@@ -23,6 +23,7 @@
  * (task OC-2).
  */
 import { AnsiToPetsciiTransducer } from '@amiexpress/bbs-door-sdk/petscii';
+import { petsciiColumnsOf } from '../amiga-emulation/xim/screen-width.util';
 
 /**
  * The ONE predicate. Was duplicated in connection-emitter.ts, screen.handler.ts
@@ -40,9 +41,22 @@ export function sessionWantsPetscii(session: any): boolean {
   return !!session?.petsciiMode || session?.terminalType === 'c64';
 }
 
-/** The session's model, created on first use. */
+/**
+ * The session's model, created on first use AT THE CALLER'S WIDTH.
+ *
+ * The width is chosen at the graphics prompt and never changes afterwards
+ * (`P` is 40, `P8` is 80), so one model per session is safe - but it must be
+ * built knowing which screen it describes, because the wrap latch, the
+ * clamps and the erases are all written around the last cell. A session that
+ * somehow changed width mid-flight would keep a stale model, which is what
+ * disposePetsciiSessionModel() below exists for.
+ */
 export function petsciiTerminalModelFor(session: any): AnsiToPetsciiTransducer {
-  if (!session.petsciiTransducer) session.petsciiTransducer = new AnsiToPetsciiTransducer();
+  if (!session.petsciiTransducer) {
+    session.petsciiTransducer = new AnsiToPetsciiTransducer({
+      columns: petsciiColumnsOf(session) === 80 ? 80 : 40,
+    });
+  }
   return session.petsciiTransducer;
 }
 
@@ -136,7 +150,18 @@ export function flushPetsciiModel(session: any): Uint8Array {
  * encoded for.
  */
 export function resetPetsciiModel(session: any): void {
-  if (session?.petsciiTransducer) session.petsciiTransducer.reset();
+  if (!session?.petsciiTransducer) return;
+  // The flip sites call this the moment a caller ANSWERS the prompt, which
+  // is also the moment the width is known. A model built before the answer
+  // is 40 columns wide; keeping it would model the wrong screen for a `P8`
+  // caller, so a width that no longer matches is a new model rather than a
+  // reset one.
+  const want = petsciiColumnsOf(session) === 80 ? 80 : 40;
+  if (session.petsciiTransducer.columns !== want) {
+    session.petsciiTransducer = new AnsiToPetsciiTransducer({ columns: want });
+    return;
+  }
+  session.petsciiTransducer.reset();
 }
 
 /** Final teardown, with the parked segments that are only valid against this model. */

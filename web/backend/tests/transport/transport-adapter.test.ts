@@ -51,7 +51,7 @@ const SDK_DIR = path.join(REPO_ROOT, 'sdk');
 const DOORS_DIR = path.join(REPO_ROOT, 'Doors');
 
 /**
- * THE PIN. 245 names, produced by greps A and B of the census documented at the
+ * THE PIN. 246 names, produced by greps A and B of the census documented at the
  * top of `src/server/transport-adapter.ts` and committed here. Case 2 re-runs
  * both greps and fails, BY NAME, on any difference.
  */
@@ -209,6 +209,7 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'party:leave',
   'password-mode',
   'petscii-bytes',
+  'petscii-mode',
   'petscii-output',
   'ping',
   'pong-test',
@@ -552,11 +553,13 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     expect({ invented }).toEqual({ invented: [] });
 
     expect(ruled).toEqual(pinned);
+    // 247: `petscii-mode` joined on 2026-09-07 - the SHAPE of a PETSCII
+    // screen, which an 80-column caller is mounted on (petscii80 phase 3).
     // 246: `door:active-client` joined on 2026-09-06 - the restore path
     // re-announcing the running client door to a browser that reconnected,
     // because door:load-client never repeats and the browser clears its
     // active door on every connect.
-    expect(ruled.length).toBe(246);
+    expect(ruled.length).toBe(247);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -594,11 +597,13 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // web-only 116 again: `door:active-client` (2026-09-06), the reconnect's
     // re-announcement of the running client door - a browser-only concern by
     // construction, since a byte caller has no on-screen controls to restore.
+    // web-only 117 (2026-09-07): `petscii-mode`, the shape a PETSCII caller's
+    // canvas is mounted at. A byte caller IS the screen and needs no shape.
     expect(counts).toEqual({
       render: 5,
       translate: 11,
       dead: 10,
-      'web-only': 116,
+      'web-only': 117,
       'not-transport': 104,
     });
   });
@@ -622,7 +627,9 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // and it is only this arm's count that moved. The union, not the arm, is
     // what proves nothing is unruled.
     //
-    // 154 as of 2026-09-06, and this time the UNION moved too: four real new
+    // 155 as of 2026-09-07: `petscii-mode` joined it, the shape event an
+    // 80-column PETSCII caller is mounted on (petscii80 phase 3).
+    // 154 as of 2026-09-06, and that time the UNION moved too: four real new
     // backend emit sites, all in arm A - `cursor-visibility`
     // (utils/terminal-utils.ts:39) and the three operator names
     // `operator:active-chats` (handlers/operator-chat.handler.ts:148),
@@ -633,7 +640,7 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // only site that emitted it and nothing in the tree called setCursorVisible
     // - so the helper was deleted rather than left asserting behaviour no code
     // performs, and the name left arm A with it. Union 246 -> 245.
-    expect(fromA.length).toBe(154);
+    expect(fromA.length).toBe(155);
     // 86 from sdk/, 14 from Doors/, `ansi-output` in both. The plan records the
     // Doors arm as 0; that was a zsh `nomatch` artefact and the module header
     // records the correction.

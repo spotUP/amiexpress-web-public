@@ -1291,6 +1291,19 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "session.maskInput, the same field mask-input writes and the same one both " +
     "of those emit sites already set beside their emit.",
   },
+  "petscii-mode": {
+    kind: "web-only",
+    note:
+    "The PETSCII screen's SHAPE, emitted once when a caller answers the " +
+    "graphics prompt (handlers/command-handler/pre-login.ts). Browser " +
+    "consumer: packages/terminal/src/components/BBSTerminal.tsx, which mounts " +
+    "the PETSCII canvas on it. It exists because the MODE signal used to BE " +
+    "the geometry - the browser read `terminal-resize {cols:40,rows:25}` as " +
+    "\"mount the canvas\" - and an 80-column PETSCII screen has to be " +
+    "mountable without pretending to be 40 wide. A byte transport has no " +
+    "canvas to mount and needs no shape: a real C64 IS the screen, and its " +
+    "width is settled by the port it called.",
+  },
   "petscii-bytes": {
     kind: "render",
     note:

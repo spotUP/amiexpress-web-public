@@ -144,6 +144,14 @@ export function applyGraphicsAnswer(socket: any, session: BBSSession, answer: st
   const hasN = answer.includes('N'); // No graphics
   const hasR = answer.includes('R'); // RIP mode
   const hasP = answer.includes('P'); // PETSCII mode
+  // `P8` is the WIDE PETSCII screen: the same Commodore glyphs and the same
+  // byte transport, on this board's 80-column canvas. The mode is CHOSEN
+  // here and never detected - nothing on the wire tells a C128-at-80 from a
+  // C64-at-40 - and plain `P` is unchanged in every respect.
+  // ...and only where there is a canvas to mount it on. A telnet or SSH
+  // caller's terminal IS the screen: 40 columns of PETSCII is what a C64
+  // has, and answering P8 down a byte transport cannot change that.
+  const wantsWide = hasP && /P\s*8/.test(answer) && session.connectionType === 'web';
   const hasQ = answer.includes('Q'); // Quick logon
 
   if (hasP) {
@@ -151,16 +159,24 @@ export function applyGraphicsAnswer(socket: any, session: BBSSession, answer: st
     session.petsciiMode = true;
     session.ripMode = false;
     session.ansiEnabled = true; // PETSCII still needs ANSI color codes
-    session.screenWidth = 40;
+    session.petsciiColumns = wantsWide ? 80 : 40;
+    session.screenWidth = session.petsciiColumns;
     session.screenHeight = 25;
-console.log('[PETSCII] PETSCII mode enabled - setting terminal to 40x25');
+console.log(`[PETSCII] PETSCII mode enabled - setting terminal to ${session.petsciiColumns}x25`);
     // The flip for a web/SSH caller who ANSWERED the graphics prompt. Before
     // this line sessionWantsPetscii was false and the session had no model at
     // all; the reset fixes the ORIGIN everything after is modelled from - the
     // terminal-resize below, the SIMULATING banner
     // (`handlers/command.handler.ts`) and the first screen. Task OC-5.
     resetPetsciiModel(session);
-    socket.emit('terminal-resize', { cols: 40, rows: 25 });
+    // TWO events, and the difference matters. `terminal-resize` is geometry
+    // and stays exactly what it was for a 40-column caller, because the
+    // browser has used that literal 40x25 as the canvas-mount switch since
+    // the canvas existed and a mid-deploy session must not lose its screen.
+    // `petscii-mode` is the MODE, and carries the shape with it - which is
+    // what an 80-column caller is mounted on.
+    socket.emit('terminal-resize', { cols: session.petsciiColumns, rows: 25 });
+    socket.emit('petscii-mode', { cols: session.petsciiColumns, rows: 25, palette: 'vic' });
   } else if (hasR && transportCapabilities(session).rip) {
     // express.e:29545 - RIP mode: .rip screens served first, framed by
     // displayScreen with \x1b[1!..\x1b[2! for the web terminal's canvas.

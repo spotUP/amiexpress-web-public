@@ -70,8 +70,16 @@ export interface PreLoginConnectResult {
 // own line, but the graphics question and the A/R/P/N prompt are merged
 // onto one line. The question comes last with a trailing space so the
 // input cursor sits right after it.
+/**
+ * P8 (2026-09-07) is PETSCII on this board's WIDE screen - 80 columns of
+ * Commodore glyphs on the web terminal's canvas. It is offered to everyone
+ * because there is one prompt and one board; a caller on a byte transport
+ * who types it gets the C64's 40-column screen, which is the honest answer:
+ * their terminal IS the screen, and no byte on the wire could make it 80
+ * columns wide.
+ */
 export const ANSI_GRAPHICS_PROMPT =
-  "\r\nCOMMODORE 64: PRESS <DEL>\r\nANSI, RIP, PETSCII OR NO GRAPHICS (A/R/P/N) [Q=SKIP BULLETINS]? ";
+  "\r\nCOMMODORE 64: PRESS <DEL>\r\nANSI, RIP, PETSCII OR NO GRAPHICS (A/R/P/P8/N) [Q=SKIP BULLETINS]? ";
 
 export async function runPreLoginConnect(
   emitter: LoginEmitter,
