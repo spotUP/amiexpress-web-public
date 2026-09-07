@@ -12,6 +12,7 @@ import * as tls from 'tls';
 import { EventEmitter } from 'events';
 import type { Duplex } from 'stream';
 
+import type { PassivePortRange } from './ftp-data-channel';
 import { FtpSession, type FtpDeps } from './ftp-session';
 
 export interface FtpServerOptions {
@@ -33,6 +34,13 @@ export interface FtpServerOptions {
    * sets `FTP_ALLOW_PLAINTEXT=1` - see `FtpSession.mustUpgradeFirst`.
    */
   allowPlaintext?: boolean;
+  /** The published port range a `PASV` listener may bind inside. */
+  passivePorts?: PassivePortRange | null;
+  /**
+   * The address `PASV` advertises. Must be the PUBLIC one: this server runs in
+   * a container, and its own address is on a bridge no caller can reach.
+   */
+  passiveAddress?: string | null;
 }
 
 export class FtpServer extends EventEmitter {
@@ -84,9 +92,22 @@ export class FtpServer extends EventEmitter {
   }
 
   private onConnection(socket: net.Socket): void {
-    const deps: FtpDeps = this.secureContext
-      ? { ...this.deps, startTls: raw => this.upgrade(raw) }
-      : { ...this.deps, startTls: undefined };
+    const secure = this.secureContext
+      ? {
+          startTls: (raw: Duplex) => this.upgrade(raw),
+          // The data connection is upgraded the same way, but only after
+          // `PROT P`: a client may protect the control channel and leave the
+          // data one clear, and that is its choice to make.
+          secureData: (raw: Duplex) => this.upgrade(raw),
+        }
+      : { startTls: undefined, secureData: undefined };
+
+    const deps: FtpDeps = {
+      ...this.deps,
+      ...secure,
+      passivePorts: () => this.options.passivePorts ?? null,
+      passiveAddress: () => this.options.passiveAddress ?? null,
+    };
 
     const session = new FtpSession(socket, deps, socket.remoteAddress, {
       allowPlaintext: this.options.allowPlaintext,

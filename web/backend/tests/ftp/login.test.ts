@@ -183,9 +183,14 @@ test('a command the phase has not built yet says so, instead of pretending', asy
   await client.send('USER sysop');
   await client.send('PASS correct-horse');
 
-  // 502, never 500: a client told LIST does not exist concludes this is not
+  // 502, never 500: a client told RETR does not exist concludes this is not
   // an FTP server at all.
-  expect(await client.send('LIST')).toBe('502 LIST not implemented yet');
+  //
+  // The verb here used to be LIST. Phase 3 implemented it, so the boundary
+  // moved to the transfer verbs - and LIST now answers 425 (`Use PASV
+  // first`), which is what `tests/ftp/list-over-pasv.test.ts` drives.
+  expect(await client.send('RETR SOMETHING.LHA')).toBe('502 RETR not implemented yet');
+  expect(await client.send('LIST')).toBe('425 Use PASV first');
   client.close();
 });
 

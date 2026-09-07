@@ -1,0 +1,263 @@
+/**
+ * A listing, end to end: PASV, a second socket, rows, 226.
+ *
+ * The sysop's report that this closes: Transmit logged in, asked for `/`, and
+ * got `502 CWD not implemented yet` - a login with nothing behind it. What is
+ * driven here is the real command loop over a real socket pair, with a real
+ * passive listener and a real second connection, because every part of this
+ * that goes wrong goes wrong in the ORDER of the replies rather than in any
+ * one of them:
+ *
+ *   150 before the data connection is used, rows, close, THEN 226.
+ *
+ * A 226 that arrives before the data socket closes is read by clients as a
+ * truncated listing, and a server that opens the listener after answering 227
+ * is a race a fast client wins.
+ */
+import * as net from 'net';
+import type { AddressInfo } from 'net';
+
+import { FtpSession, type FtpDeps, type FtpUser } from '../../src/ftp/ftp-session';
+import { FtpFilesystem } from '../../src/ftp/ftp-filesystem';
+import { parsePortRange, passiveReplyAddress } from '../../src/ftp/ftp-data-channel';
+
+const SYSOP: FtpUser = { id: 1, username: 'sysop' };
+
+/** Two conferences, no DIR files: the ROOT listing is what this file drives. */
+const filesystem = new FtpFilesystem({
+  conferences: () => [
+    { conference_id: 1, name: 'General' },
+    { conference_id: 2, name: 'Elite' },
+    { conference_id: 3, name: 'Hidden', exclude_ftp: true },
+  ],
+  canAccess: () => true,
+  bbsRoot: '/nonexistent-board',
+});
+
+function deps(): FtpDeps {
+  return {
+    authenticate: async (u, p) => (u === 'sysop' && p === 'correct-horse' ? SYSOP : null),
+    reserveNode: async () => 3,
+    releaseNode: async () => undefined,
+    log: () => undefined,
+    timeRemainingMinutes: () => 42,
+    filesystem,
+    // The whole ephemeral range would be wrong: the point of the setting is
+    // that only a published range is reachable. A small one also proves the
+    // "no free port" path is not hit for a single transfer.
+    passivePorts: () => ({ first: 34_101, last: 34_110 }),
+    passiveAddress: () => '127.0.0.1',
+  };
+}
+
+/** Reads whole lines and keeps the remainder - a reply can arrive in one packet. */
+class Lines {
+  private buffer = '';
+  private waiting: ((line: string) => void) | null = null;
+
+  constructor(stream: NodeJS.ReadableStream) {
+    stream.on('data', (chunk: Buffer | string) => {
+      this.buffer += chunk.toString('latin1' as BufferEncoding);
+      this.drain();
+    });
+  }
+
+  private drain(): void {
+    if (!this.waiting) return;
+    const i = this.buffer.indexOf('\n');
+    if (i < 0) return;
+    const line = this.buffer.slice(0, i).replace(/\r$/, '');
+    this.buffer = this.buffer.slice(i + 1);
+    const resolve = this.waiting;
+    this.waiting = null;
+    resolve(line);
+  }
+
+  next(): Promise<string> {
+    return new Promise((resolve) => {
+      this.waiting = resolve;
+      this.drain();
+    });
+  }
+}
+
+let server: net.Server;
+let port: number;
+
+beforeAll(async () => {
+  server = net.createServer((socket) => {
+    // Loopback, so the plaintext policy lets the login through without TLS -
+    // what is under test here is the listing, not the policy.
+    new FtpSession(socket, deps(), socket.remoteAddress).start();
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  port = (server.address() as AddressInfo).port;
+});
+
+afterAll(async () => {
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+});
+
+/** A logged-in control connection. */
+async function login() {
+  const control = net.createConnection({ port, host: '127.0.0.1' });
+  const lines = new Lines(control);
+  expect(await lines.next()).toBe('220 Welcome to Ami-Express FTP server.');
+
+  control.write('USER sysop\r\n');
+  expect(await lines.next()).toBe('331 Password required');
+  control.write('PASS correct-horse\r\n');
+  expect(await lines.next()).toMatch(/^230 /);
+
+  return { control, lines };
+}
+
+/** `227 Entering Passive Mode (h1,h2,h3,h4,p1,p2)` -> the port to dial. */
+function portFromPasv(reply: string): number {
+  const numbers = reply.match(/\((\d+(?:,\d+){5})\)/);
+  expect(numbers).not.toBeNull();
+  const parts = numbers![1].split(',').map(Number);
+  return parts[4] * 256 + parts[5];
+}
+
+describe('a caller who has just logged in', () => {
+  it('is told where he is, instead of 502', async () => {
+    const { control, lines } = await login();
+
+    control.write('PWD\r\n');
+    expect(await lines.next()).toBe('257 "/" is current directory.');
+
+    control.destroy();
+  });
+
+  it('can enter a conference and come back out', async () => {
+    const { control, lines } = await login();
+
+    control.write('CWD 001-General\r\n');
+    expect(await lines.next()).toBe('250 Directory changed to /001-General');
+    control.write('PWD\r\n');
+    expect(await lines.next()).toBe('257 "/001-General" is current directory.');
+    control.write('CDUP\r\n');
+    expect(await lines.next()).toBe('250 Directory changed to /');
+
+    control.destroy();
+  });
+
+  it('is refused a conference that is not his, by name', async () => {
+    const { control, lines } = await login();
+
+    control.write('CWD 003-Hidden\r\n');
+    expect(await lines.next()).toBe('550 003-Hidden: no such conference');
+
+    control.destroy();
+  });
+
+  it('is answered 200 for PBSZ, which a client sends before it will transfer', async () => {
+    // It answered 500 - "command not recognized" - and Transmit read that as
+    // "this server cannot protect data" and gave up on the connection.
+    const { control, lines } = await login();
+
+    control.write('PBSZ 0\r\n');
+    expect(await lines.next()).toBe('200 PBSZ=0');
+
+    control.destroy();
+  });
+
+  it('takes TYPE A and TYPE I, and refuses the rest', async () => {
+    const { control, lines } = await login();
+
+    control.write('TYPE I\r\n');
+    expect(await lines.next()).toBe('200 Type set to I');
+    control.write('TYPE A\r\n');
+    expect(await lines.next()).toBe('200 Type set to A');
+    control.write('TYPE Q\r\n');
+    expect(await lines.next()).toBe('504 TYPE Q not supported');
+
+    control.destroy();
+  });
+});
+
+describe('LIST over a passive connection', () => {
+  it('delivers the caller\'s conferences, in the order 150 - rows - 226', async () => {
+    const { control, lines } = await login();
+
+    control.write('PASV\r\n');
+    const pasv = await lines.next();
+    expect(pasv).toMatch(/^227 Entering Passive Mode \(127,0,0,1,\d+,\d+\)$/);
+
+    const data = net.createConnection({ port: portFromPasv(pasv), host: '127.0.0.1' });
+    const received: Buffer[] = [];
+    data.on('data', (chunk) => received.push(chunk));
+    const closed = new Promise<void>((resolve) => data.once('close', () => resolve()));
+
+    control.write('LIST\r\n');
+    expect(await lines.next()).toBe('150 Opening ASCII mode data connection for file list');
+
+    await closed;
+    expect(await lines.next()).toBe('226 Transfer complete');
+
+    const body = Buffer.concat(received).toString('latin1');
+    const rows = body.split('\r\n').filter((row) => row.length > 0);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatch(/^drwxr-xr-x/);
+    expect(body).toContain('001-General');
+    expect(body).toContain('002-Elite');
+    // EXCLUDE_FTP is honoured through the whole path, not only in the unit.
+    expect(body).not.toContain('Hidden');
+
+    control.destroy();
+  });
+
+  it('gives NLST the same rows as bare names', async () => {
+    const { control, lines } = await login();
+
+    control.write('PASV\r\n');
+    const data = net.createConnection({
+      port: portFromPasv(await lines.next()),
+      host: '127.0.0.1',
+    });
+    const received: Buffer[] = [];
+    data.on('data', (chunk) => received.push(chunk));
+    const closed = new Promise<void>((resolve) => data.once('close', () => resolve()));
+
+    control.write('NLST\r\n');
+    expect(await lines.next()).toMatch(/^150 /);
+    await closed;
+    expect(await lines.next()).toBe('226 Transfer complete');
+
+    expect(Buffer.concat(received).toString('latin1')).toBe('001-General\r\n002-Elite\r\n');
+
+    control.destroy();
+  });
+
+  it('refuses a LIST with no PASV before it, rather than hanging', async () => {
+    // A client that gets no answer here waits for its own timeout; 425 tells
+    // it what to do instead.
+    const { control, lines } = await login();
+
+    control.write('LIST\r\n');
+    expect(await lines.next()).toBe('425 Use PASV first');
+
+    control.destroy();
+  });
+});
+
+describe('the passive settings', () => {
+  it('reads the range shapes the board writes', () => {
+    expect(parsePortRange('50101-50107')).toEqual({ first: 50101, last: 50107 });
+    expect(parsePortRange('50101,50102,50103')).toEqual({ first: 50101, last: 50103 });
+    expect(parsePortRange('50101')).toEqual({ first: 50101, last: 50101 });
+    expect(parsePortRange('')).toBeNull();
+    expect(parsePortRange(null)).toBeNull();
+    expect(parsePortRange('nonsense')).toBeNull();
+  });
+
+  it('encodes the address the way PASV requires', () => {
+    expect(passiveReplyAddress('203.0.113.10', 50101)).toBe('89,167,21,154,195,181');
+    expect(195 * 256 + 181).toBe(50101);
+  });
+
+  it('refuses an address it cannot encode, instead of advertising nonsense', () => {
+    expect(() => passiveReplyAddress('bbs.uprough.net', 50101)).toThrow(/IPv4/);
+  });
+});

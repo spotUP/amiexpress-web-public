@@ -14,6 +14,9 @@
  */
 import type { Duplex } from 'stream';
 
+import { PassiveChannel, passiveReplyAddress, type PassivePortRange } from './ftp-data-channel';
+import { FtpFilesystem, longListLine, resolvePath } from './ftp-filesystem';
+
 /** What the board tells us about the caller once the password checks out. */
 export interface FtpUser {
   id: number;
@@ -34,6 +37,18 @@ export interface FtpDeps {
    * the board has no certificate, which is what makes `AUTH` answer 431.
    */
   startTls?(socket: Duplex): Promise<Duplex>;
+  /**
+   * The same, for a DATA connection after `PROT P`. Separate from `startTls`
+   * because a client may secure the control connection and leave the data one
+   * clear, which is `PROT C` and legal.
+   */
+  secureData?(socket: Duplex): Promise<Duplex>;
+  /** What the caller may browse. Absent means every directory command is 550. */
+  filesystem?: FtpFilesystem;
+  /** The published range a passive listener may bind inside. */
+  passivePorts?(): PassivePortRange | null;
+  /** The PUBLIC address `PASV` advertises - never the container's own. */
+  passiveAddress?(): string | null;
 }
 
 /** Commands a caller may use before logging in. */
@@ -47,8 +62,12 @@ const PRE_LOGIN = new Set(['USER', 'PASS', 'QUIT', 'FEAT', 'NOOP', 'AUTH', 'SYST
  * set shrinks to nothing as phases 3-6 land.
  */
 const NOT_YET = new Set([
-  'LIST', 'NLST', 'MLSD', 'MLST', 'PWD', 'XPWD', 'CWD', 'XCWD', 'CDUP',
-  'TYPE', 'MODE', 'STRU', 'PORT', 'PASV', 'RETR', 'STOR', 'REST', 'SIZE', 'MDTM',
+  'MLSD', 'MLST', 'MODE', 'STRU', 'PORT', 'RETR', 'STOR', 'REST', 'SIZE', 'MDTM',
+]);
+
+/** Verbs this phase answers, but only for a caller who has logged in. */
+const AFTER_LOGIN = new Set([
+  'PWD', 'XPWD', 'CWD', 'XCWD', 'CDUP', 'TYPE', 'PBSZ', 'PROT', 'PASV', 'LIST', 'NLST',
 ]);
 
 export function isLoopback(address: string | undefined): boolean {
@@ -72,6 +91,11 @@ export class FtpSession {
   private secure: boolean;
   private readonly allowPlaintext: boolean;
   private closed = false;
+  /** Where the caller is standing. `/` is the list of his conferences. */
+  private cwd = '/';
+  private binary = true;
+  private protectData = false;
+  private passive: PassiveChannel | null = null;
 
   constructor(
     socket: Duplex,
@@ -155,7 +179,12 @@ export class FtpSession {
       `\tFTP Command >: ${verb === 'PASS' ? 'PASS ****' : line}`, this.nodeId);
 
     if (!this.user && !PRE_LOGIN.has(verb)) {
-      if (NOT_YET.has(verb)) return this.reply(530, 'Please login with USER and PASS.');
+      // A verb the server HAS is refused for want of a login; one it does not
+      // have is unknown. Telling a client "command not recognized" about PWD
+      // makes it conclude the server cannot browse at all.
+      if (NOT_YET.has(verb) || AFTER_LOGIN.has(verb)) {
+        return this.reply(530, 'Please login with USER and PASS.');
+      }
       return this.reply(500, 'command not recognized');
     }
 
@@ -176,10 +205,177 @@ export class FtpSession {
         return this.onUser(arg);
       case 'PASS':
         return this.onPass(arg);
+      case 'PWD':
+      case 'XPWD':
+        return this.reply(257, `"${this.cwd}" is current directory.`);
+      case 'CWD':
+      case 'XCWD':
+        return this.onCwd(arg);
+      case 'CDUP':
+        return this.onCwd('..');
+      case 'TYPE':
+        return this.onType(arg);
+      case 'PBSZ':
+        // RFC 4217: only 0 is meaningful over TLS, and a client sends it
+        // before PROT. Answering 500 - which this did - makes a client
+        // conclude data protection is impossible and give up on the transfer.
+        return this.reply(200, 'PBSZ=0');
+      case 'PROT':
+        return this.onProt(arg);
+      case 'PASV':
+        return this.onPasv();
+      case 'LIST':
+        return this.onList(arg, 'long');
+      case 'NLST':
+        return this.onList(arg, 'names');
       default:
         if (NOT_YET.has(verb)) return this.reply(502, `${verb} not implemented yet`);
         return this.reply(500, 'command not recognized');
     }
+  }
+
+  /**
+   * `CWD`. A conference is one level under the root and nothing is deeper yet,
+   * so the answer is 250 or 550 - never a path a later phase would have to
+   * un-invent.
+   */
+  private async onCwd(arg: string): Promise<void> {
+    const fs = this.deps.filesystem;
+    if (!fs) return this.reply(550, 'No directories available');
+
+    const target = resolvePath(this.cwd, arg.trim() || '/');
+    if (target === null) return this.reply(550, 'Cannot go above the root');
+    if (!fs.exists(this.user, target)) {
+      return this.reply(550, `${arg.trim()}: no such conference`);
+    }
+    this.cwd = target;
+    return this.reply(250, `Directory changed to ${target}`);
+  }
+
+  /**
+   * `TYPE`. Both modes are accepted and the flag is remembered; what it
+   * changes is line endings on the way out, which only matters once files
+   * move. A refusal here stops a client before it ever asks for a listing.
+   */
+  private onType(arg: string): void {
+    const mode = arg.trim().toUpperCase().charAt(0);
+    if (mode !== 'A' && mode !== 'I' && mode !== 'L') {
+      return this.reply(504, `TYPE ${arg.trim()} not supported`);
+    }
+    this.binary = mode !== 'A';
+    this.reply(200, `Type set to ${this.binary ? 'I' : 'A'}`);
+  }
+
+  /** `PROT`: C (clear) always, P (private) only when the board has TLS. */
+  private onProt(arg: string): void {
+    const level = arg.trim().toUpperCase();
+    if (level === 'C') {
+      this.protectData = false;
+      return this.reply(200, 'Protection level set to C');
+    }
+    if (level !== 'P') return this.reply(504, `Protection level ${level} not supported`);
+    if (!this.deps.secureData) return this.reply(431, 'No TLS certificate configured');
+    this.protectData = true;
+    this.reply(200, 'Protection level set to P');
+  }
+
+  /**
+   * `PASV`. The listener binds inside the published range and the reply names
+   * the PUBLIC address - the container's own is not reachable from anywhere a
+   * caller is standing.
+   */
+  private async onPasv(): Promise<void> {
+    const range = this.deps.passivePorts?.();
+    const address = this.deps.passiveAddress?.();
+    if (!range || !address) return this.reply(425, 'Passive mode is not configured');
+
+    this.passive?.close();
+    this.passive = null;
+
+    const channel = await PassiveChannel.open(range, '0.0.0.0');
+    if (!channel) return this.reply(425, 'No free data port');
+
+    this.passive = channel;
+    try {
+      this.reply(227, `Entering Passive Mode (${passiveReplyAddress(address, channel.port())})`);
+    } catch (error) {
+      channel.close();
+      this.passive = null;
+      this.reply(425, error instanceof Error ? error.message : 'Passive mode failed');
+    }
+  }
+
+  /**
+   * `LIST` and `NLST`, which differ only in what a row looks like.
+   *
+   * The order matters and is the part clients are unforgiving about: 150
+   * BEFORE the data connection is used, the rows, the close, and only then
+   * 226. A 226 that arrives before the socket closes is read as a truncated
+   * listing.
+   */
+  private async onList(arg: string, format: 'long' | 'names'): Promise<void> {
+    // The data connection is checked FIRST, and deliberately: a client that
+    // forgot PASV gets the same 425 whatever the server would have listed,
+    // and "use PASV first" is the answer that tells it what to do. A 550
+    // here would read as "that directory does not exist".
+    const channel = this.passive;
+    if (!channel) return this.reply(425, 'Use PASV first');
+    this.passive = null;
+
+    const fs = this.deps.filesystem;
+    if (!fs) {
+      channel.close();
+      return this.reply(550, 'No directories available');
+    }
+
+    // A client passes flags here (`LIST -al`), which are not a path.
+    const requested = arg
+      .split(' ')
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0 && !part.startsWith('-'))
+      .join(' ');
+    const target = resolvePath(this.cwd, requested || '.');
+    if (target === null || !fs.exists(this.user, target)) {
+      channel.close();
+      return this.reply(550, `${requested || this.cwd}: no such directory`);
+    }
+
+    let entries;
+    try {
+      entries = await fs.list(this.user, target);
+    } catch (error) {
+      channel.close();
+      return this.reply(
+        451,
+        `Could not read the directory: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
+    this.reply(150, 'Opening ASCII mode data connection for file list');
+
+    let data: Duplex;
+    try {
+      data = await channel.accept();
+    } catch (error) {
+      return this.reply(425, error instanceof Error ? error.message : 'No data connection');
+    }
+
+    try {
+      if (this.protectData && this.deps.secureData) data = await this.deps.secureData(data);
+    } catch {
+      data.destroy();
+      return this.reply(425, 'Could not secure the data connection');
+    }
+
+    const body = entries
+      .map((entry) => (format === 'long' ? longListLine(entry) : entry.name))
+      .map((line) => `${line}\r\n`)
+      .join('');
+
+    await new Promise<void>((resolve) => {
+      data.end(body, () => resolve());
+    });
+    this.reply(226, 'Transfer complete');
   }
 
   private sendFeatures(): void {

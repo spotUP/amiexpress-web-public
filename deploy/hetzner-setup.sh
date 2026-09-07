@@ -107,8 +107,10 @@ if command -v ufw &> /dev/null; then
                         #   64128:64128 so this rule must match)
   ufw allow 31337/tcp   # BBS SSH (matches SSH_PORT default)
   ufw allow 1541/tcp    # FTP control (matches FTP_PORT and the compose
-                        # mapping; the passive range is not open yet because
-                        # PASV is not implemented)
+                        # mapping). The passive range below carries the
+                        # data connections a listing needs.
+  ufw allow 50101:50107/tcp  # FTP passive data (FTPDATAPORT); a listing
+                        # opens a SECOND socket to one of these
   ufw --force enable
   echo "  Firewall configured"
 else

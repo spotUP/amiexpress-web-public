@@ -52,11 +52,17 @@ services:
                         # container edge, which is what "Not connected"
                         # looked like from Transmit on 2026-09-07.
                         #
-                        # The PASSIVE range (FTPDATAPORT, 50101-50107) is
-                        # deliberately NOT published yet: PASV, LIST, RETR
-                        # and STOR still answer 502, so nothing would ever
-                        # listen on those ports. Publish them in the same
-                        # commit that implements PASV.
+      - "50101-50107:50101-50107"
+                        # FTP passive data (FTPDATAPORT in bbsConfig.info, and
+                        # FTP_PASSIVE_PORTS below - they must agree). A
+                        # listing does not come back on the control
+                        # connection: the client is told a port and opens a
+                        # second socket to it, so an unpublished range means
+                        # every LIST hangs.
+                        #
+                        # These must be open in the Hetzner CLOUD firewall as
+                        # well - it drops before the packet reaches the host,
+                        # which is what made 1541 look closed for an hour.
     volumes:
       # Persistent data volume - survives container rebuilds
       - bbs-data:/app/data
@@ -130,6 +136,12 @@ services:
       # which is what the deploy stages and how Caddy names them.
       - FTP_TLS_DIR=/certs
       - FTP_TLS_HOSTS=uptown.uprough.net,bbs.uprough.net
+      # PASV. The range must match the `ports:` mapping above, and the address
+      # is the PUBLIC one: the container's own is on a docker bridge, and a
+      # caller told to dial that one dials his own network and hangs. There is
+      # no sensible default, so PASV answers 425 rather than guessing.
+      - FTP_PASSIVE_PORTS=${FTP_PASSIVE_PORTS:-50101-50107}
+      - FTP_PASSIVE_ADDRESS=${FTP_PASSIVE_ADDRESS:-203.0.113.10}
       # OFF again, 2026-09-07, and it should stay off. It was set for one
       # afternoon because the certificate was unreadable and no client could
       # get in; with the certificate staged and readable, Transmit logged in

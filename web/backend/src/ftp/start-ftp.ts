@@ -9,6 +9,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { parsePortRange } from './ftp-data-channel';
 import { FtpServer } from './ftp-server';
 import type { FtpDeps } from './ftp-session';
 
@@ -34,6 +35,13 @@ export interface FtpEnv {
    */
   FTP_TLS_DIR?: string;
   FTP_TLS_HOSTS?: string;
+  /**
+   * The passive data range Docker publishes, and the PUBLIC address a caller
+   * is told to dial back on. Without the address PASV answers 425: a container
+   * that advertised its own bridge address would send every client nowhere.
+   */
+  FTP_PASSIVE_PORTS?: string;
+  FTP_PASSIVE_ADDRESS?: string;
   /**
    * `1` lets a caller off the box log in without `AUTH TLS`. Off by default,
    * and it should stay off wherever the clients can manage explicit FTPS.
@@ -163,6 +171,21 @@ export async function startFtpServer(
     console.log(`[FTP] TLS certificates loaded for ${named.join(', ')} (default ${named[0]})`);
   }
 
+  // PASV needs two things the container cannot work out for itself: a port
+  // range Docker publishes, and the PUBLIC address to send the caller back to.
+  // The range comes from the sysop's own FTPDATAPORT unless the environment
+  // overrides it; the address has no default worth guessing, and without it
+  // PASV refuses with 425 rather than advertising a bridge address nobody can
+  // reach.
+  const passivePorts = parsePortRange(env.FTP_PASSIVE_PORTS ?? config?.ftp_data_ports ?? null);
+  const passiveAddress = (env.FTP_PASSIVE_ADDRESS ?? '').trim() || null;
+  if (passivePorts && !passiveAddress) {
+    console.warn(
+      '[FTP] FTP_PASSIVE_ADDRESS is not set, so PASV cannot advertise a reachable ' +
+        'address and directory listings will answer 425. Set it to the public IP.'
+    );
+  }
+
   const server = new FtpServer(
     {
       port,
@@ -170,6 +193,8 @@ export async function startFtpServer(
       tls: defaultCert,
       tlsHosts: hostCerts,
       allowPlaintext,
+      passivePorts,
+      passiveAddress,
     },
     deps
   );
