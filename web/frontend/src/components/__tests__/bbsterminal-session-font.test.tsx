@@ -117,6 +117,10 @@ beforeEach(() => {
   socket = new FakeSocket();
   rec.socket = socket;
   window.localStorage.clear();
+  // The cookie tier too: the font cache is localStorage AND a cookie
+  // (session-font.ts:19-25), and clearing one leaves the other holding the
+  // previous test's pick - which is what a "cold load" test must not find.
+  document.cookie = 'bbs_font=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
   if (!(window as any).ResizeObserver) {
     (window as any).ResizeObserver = class {
       observe() {} unobserve() {} disconnect() {}

@@ -23,7 +23,18 @@ import {
   applyFont,
 } from '../../../../../packages/terminal/src/utils/session-font';
 
-beforeEach(() => window.localStorage.clear());
+/**
+ * BOTH TIERS. The cache is two-tier - localStorage for speed, a cookie for a
+ * cold or private-browsing load (session-font.ts:19-25) - and clearing only
+ * the first left the cookie holding whatever the previous test wrote. Three
+ * tests then read that value where they expected null, and the one that
+ * proves the code survives localStorage being unavailable was reading the
+ * very fallback it was meant to be without.
+ */
+beforeEach(() => {
+  window.localStorage.clear();
+  document.cookie = 'bbs_font=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+});
 afterEach(() => vi.restoreAllMocks());
 
 describe('session font defaults', () => {
@@ -76,8 +87,19 @@ describe('the pre-login font cache', () => {
     vi.spyOn(window.localStorage.__proto__, 'setItem').mockImplementation(() => {
       throw new Error('storage disabled');
     });
+    // Nothing in either tier, so the answer is null rather than a throw.
     expect(readCachedFont()).toBeNull();
     expect(() => writeCachedFont(DEFAULT_BBS_FONT)).not.toThrow();
+  });
+
+  it('falls back to the cookie when localStorage is unavailable', () => {
+    // The reason the cookie tier exists: a private-browsing load has no
+    // localStorage, and the caller should still get the board in his own font.
+    writeCachedFont('P0T-NOoDLE');
+    vi.spyOn(window.localStorage.__proto__, 'getItem').mockImplementation(() => {
+      throw new Error('storage disabled');
+    });
+    expect(readCachedFont()).toBe('P0T-NOoDLE');
   });
 });
 
