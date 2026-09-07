@@ -407,7 +407,18 @@ export interface BBSSession {
     | null; // Backend key repeat for 68K doors
   mouseEventsEnabled?: boolean; // Whether mouse events should be sent to door (for ANSI editor, etc.)
   ansiEnabled?: boolean; // Whether ANSI is enabled for this session
-  petsciiMode?: boolean; // Whether PETSCII mode is enabled (40x25, .seq files)
+  petsciiMode?: boolean; // Whether PETSCII mode is enabled (PETSCII bytes on the wire)
+  /**
+   * How wide the PETSCII screen is: 40 (a C64) or 80 (the web terminal's
+   * C128-style screen). Absent means 40.
+   *
+   * SEPARATE from petsciiMode on purpose. That one boolean was doing two
+   * jobs - "send PETSCII bytes" and "the screen is 40x25" - across 87 call
+   * sites, and only the handful that actually decide a WIDTH read this
+   * field. Renaming the rest would buy nothing and risk everything.
+   * petsciiMode still means bytes; this means geometry.
+   */
+  petsciiColumns?: 40 | 80;
   /** Per-session ANSI->PETSCII transducer for real C64 callers (connection-emitter.ts). Lazily created; shared by every emitter built for the connection so cursor/charset/reverse state never forks. */
   petsciiTransducer?: import("@amiexpress/bbs-door-sdk/petscii").AnsiToPetsciiTransducer;
   ripMode?: boolean; // Whether RIP graphics mode is enabled (640x350, .rip files)

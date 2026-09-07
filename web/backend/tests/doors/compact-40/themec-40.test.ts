@@ -229,6 +229,15 @@ describe('THEMEC opens on a 40-column caller', () => {
     expect(rows.join('')).not.toContain('?');
   });
 
+  /**
+   * REFRESHED 2026-09-07. The pin's subject is "the 40-column work did not
+   * disturb the 80-column screen", and it held until two commits changed the
+   * caret rule at BOTH widths on purpose - 28fcf7a5e ("the row the cursor
+   * leaves loses its caret") and 4b0a44d84 ("the row under the cursor wears
+   * its own theme"). Neither refreshed this fixture, so it had been red on
+   * main since. The bytes below are the door as of the caret rule; any LATER
+   * 40-column work still cannot move them, which is what the pin is for.
+   */
   it('an 80-column caller sees the door byte-for-byte as it was before the 40-column work', async () => {
     const ansi = await drive(80);
     const before = fs.readFileSync(EIGHTY_BEFORE, 'latin1');

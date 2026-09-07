@@ -16,6 +16,7 @@ import { BBSPaths } from '../../utils/bbs-paths.util';
 import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 import { buildGFileCandidates } from './user-info-handlers';
 import { c64AdapterFor } from '../../server/c64-door-adapter';
+import { C64_COLUMNS } from './screen-width.util';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const iconv = require('iconv-lite');
 
@@ -61,7 +62,12 @@ export function narrowVariants(candidate: string): string[] {
  * entitled to.
  */
 export function widthAwareCandidates(self: any, candidates: string[]): string[] {
-  if (!c64AdapterFor(self?.socket)) return candidates;
+  // Art named for the C64's screen is 40 columns wide. The adapter existing
+  // is not the question - an 80-column PETSCII caller has one too, and
+  // serving him a variant the sysop hand-drew for 40 columns is the same
+  // mistake as folding .seq art onto his screen. He gets the door's own file.
+  const adapter = c64AdapterFor(self?.socket);
+  if (!adapter || adapter.columns > C64_COLUMNS) return candidates;
   const seen = new Set<string>();
   const out: string[] = [];
   const add = (p: string) => {

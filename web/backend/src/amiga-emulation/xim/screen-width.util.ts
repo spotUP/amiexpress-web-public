@@ -24,6 +24,23 @@ export const C64_ROWS = 25;
 export interface ScreenWidthSource {
   petsciiMode?: boolean;
   screenWidth?: number;
+  /** 40 (a C64) or 80 (the web terminal's wide PETSCII screen). Absent = 40. */
+  petsciiColumns?: number;
+}
+
+/** The width of a PETSCII screen: what the caller chose, or the C64's 40. */
+export const PETSCII_COLUMN_CHOICES = [C64_COLUMNS, DEFAULT_DOOR_COLUMNS] as const;
+
+/**
+ * How wide THIS PETSCII session's screen is.
+ *
+ * The one place the 40-or-80 question is answered, so a caller cannot be 40
+ * to one part of the board and 80 to another. Anything that is not one of
+ * the two choices is the C64's 40 - a screen width is chosen at the
+ * graphics prompt, never inferred from a browser.
+ */
+export function petsciiColumnsOf(session: ScreenWidthSource | null | undefined): number {
+  return session?.petsciiColumns === DEFAULT_DOOR_COLUMNS ? DEFAULT_DOOR_COLUMNS : C64_COLUMNS;
 }
 
 export function doorScreenWidth(
@@ -31,8 +48,12 @@ export function doorScreenWidth(
   fallback: number = DEFAULT_DOOR_COLUMNS,
 ): number {
   if (!session || session.petsciiMode !== true) return fallback;
-  const width = session.screenWidth;
-  return typeof width === 'number' && width > 0 && width < DEFAULT_DOOR_COLUMNS ? width : C64_COLUMNS;
+  // A PETSCII screen's width is the MODE's, not the browser's: 40 for a C64,
+  // 80 for the web terminal's wide screen, and nothing else. The reported
+  // width used to be consulted here, which is how a `P` answer could inherit
+  // the xterm's geometry; the mode is chosen at the graphics prompt and the
+  // browser has no say in it.
+  return petsciiColumnsOf(session);
 }
 
 export interface ScreenHeightSource extends ScreenWidthSource {

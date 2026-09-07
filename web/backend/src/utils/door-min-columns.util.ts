@@ -201,7 +201,7 @@ export function resolveDoorMinColumns(door: MinColumnsDoorShape): number {
  *    A real 132-column xterm opens a MIN_COLUMNS=132 door; an 80-column one
  *    is refused, which is the honest answer rather than a garbled screen.
  */
-export function sessionColumns(session: { screenWidth?: number; petsciiMode?: boolean } | null | undefined): number {
+export function sessionColumns(session: { screenWidth?: number; petsciiMode?: boolean; petsciiColumns?: number } | null | undefined): number {
   if (session?.petsciiMode === true) return doorScreenWidth(session, DEFAULT_MIN_COLUMNS);
   const reported = validColumns(session?.screenWidth);
   return reported === null ? DEFAULT_MIN_COLUMNS : Math.max(DEFAULT_MIN_COLUMNS, reported);
@@ -324,9 +324,15 @@ function adaptClaimFor(door: MinColumnsDoorShape | null | undefined): number | n
  * adapter never sees a blessed screen) and any door tagged C64_ADAPT=64 (a
  * claim a 40-column caller cannot meet) were both marked and both bounced.
  */
-export function doorShowsC64Mark(door: MinColumnsDoorShape | null | undefined): boolean {
+export function doorShowsC64Mark(
+  door: MinColumnsDoorShape | null | undefined,
+  columns: number = C64_COLUMNS,
+): boolean {
   const claim = adaptClaimFor(door);
-  return claim !== null && claim <= C64_COLUMNS;
+  // The claim is a NARROWEST width the door survives, so a wider screen
+  // satisfies it: a C64_ADAPT=40 door opens for an 80-column PETSCII caller
+  // too, and the list must not tell one of the two widths otherwise.
+  return claim !== null && claim <= columns;
 }
 
 /**

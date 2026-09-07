@@ -56,12 +56,12 @@ describe('JH_SF picks the 40-column variant for an adapted caller', () => {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* noop */ }
   });
 
-  function buildHandler(adapted: boolean): { handler: XIMIOHandler; socket: any } {
+  function buildHandler(adapted: boolean, columns: 40 | 80 = 40): { handler: XIMIOHandler; socket: any } {
     const socket: any = { emit: () => true };
     if (adapted) {
       // petsciiMode is what `c64AdapterDrives` reads; the adapter it installs
       // is what `c64AdapterFor` finds inside the handler.
-      socket.session = { petsciiMode: true };
+      socket.session = { petsciiMode: true, ...(columns === 80 ? { petsciiColumns: 80 } : {}) };
       installC64DoorAdapter(socket, socket.session);
     }
 
@@ -119,8 +119,8 @@ describe('JH_SF picks the 40-column variant for an adapted caller', () => {
    * it here reads the bytes the caller would have received - past the
    * adapter's own PETSCII conversion, which is not what this test is about.
    */
-  async function textShownFor(name: string, adapted: boolean): Promise<string> {
-    const { handler, socket } = buildHandler(adapted);
+  async function textShownFor(name: string, adapted: boolean, columns: 40 | 80 = 40): Promise<string> {
+    const { handler, socket } = buildHandler(adapted, columns);
     const shown: string[] = [];
     (handler as any).emitText = (text: string) => { shown.push(text); };
     try {
@@ -138,6 +138,18 @@ describe('JH_SF picks the 40-column variant for an adapted caller', () => {
 
   test('NAME.ext: an 80-column caller is shown the door\'s own file', async () => {
     expect(await textShownFor('games.txt', false)).toContain(WIDE);
+  });
+
+  /**
+   * The gate the wide screen needs (2026-09-07). `_C64` names art the sysop
+   * drew for the C64's forty columns; an 80-column PETSCII caller has an
+   * adapter too, and serving him that art is the same mistake as folding
+   * .seq onto his screen. One sentence for both: art named for the C64's
+   * screen is 40 columns wide, and the wide caller gets the door's own file.
+   */
+  test("an 80-column PETSCII caller is shown the door's own file, not the _C64 art", async () => {
+    expect(await textShownFor('games.txt', true, 80)).toContain(WIDE);
+    expect(await textShownFor('wall.StYlE.1', true, 80)).toContain(WIDE);
   });
 
   test('a numbered style file: the adapted caller is shown NAME.1_C64', async () => {

@@ -35,7 +35,7 @@ const realSetTimeout = global.setTimeout;
 const wait = (ms: number) => new Promise((resolve) => realSetTimeout(resolve, ms));
 
 /** Everything the door's output put on the wire, across every frame of the run. */
-async function wireTextFor(adapted: boolean): Promise<string> {
+async function wireTextFor(adapted: boolean, columns: 40 | 80 = 40): Promise<string> {
   const seen: string[] = [];
   const socket: any = {
     emit: (_event: string, payload: any) => {
@@ -44,7 +44,7 @@ async function wireTextFor(adapted: boolean): Promise<string> {
     },
   };
   const session = adapted
-    ? { terminalType: 'c64', petsciiMode: true, screenWidth: 40, screenHeight: 25 }
+    ? { terminalType: 'c64', petsciiMode: true, screenWidth: 40, screenHeight: 25, ...(columns === 80 ? { petsciiColumns: 80 } : {}) }
     : { terminalType: 'modern', petsciiMode: false, screenWidth: 80, screenHeight: 24 };
   if (adapted) socket.session = session;
   const installed = adapted ? installC64DoorAdapter(socket, session) : null;
@@ -99,5 +99,29 @@ describe('ctop at 40 columns: the empty-conference notice is not spent on rows',
     const frame = makeFrame(80, 1, [row], { x: 0, y: 0 });
     // Same object back: nothing matched, so nothing was rebuilt.
     expect(stripNarrowNoise(frame)).toBe(frame);
+  });
+
+  /**
+   * The gate, from the other side (80-column PETSCII, 2026-09-07).
+   *
+   * stripNarrowNoise is a rule that matches TEXT, and every phrase it blanks
+   * was removed because it cost a FORTY-column caller rows he did not have.
+   * An 80-column PETSCII caller has the room the 80-column ANSI caller has,
+   * so he sees what that caller sees - which is the assertion above,
+   * inverted, and the proof the gate went in the right place.
+   */
+  it('an 80-column PETSCII caller sees the notice, exactly as the ANSI caller does', async () => {
+    const wide = await wireTextFor(true, 80);
+    expect(wide).toContain(SIGNATURE);
+    // The adapter addresses each word of a row it repaints, so the notice
+    // reaches the wire as words with cursor moves and colours between them.
+    // What the caller SEES is the measure, so the screen is rebuilt and the
+    // row read back - which is also why the 40-column case above can ask the
+    // wire directly: there, the phrase is not on it at all.
+    const { FrameReconstructor } = require('../../../../sdk/petscii/frame/ansi-screen');
+    const fr = new FrameReconstructor({ cols: 80, rows: 25 });
+    fr.write(wide);
+    const screen = fr.snapshot().cells.map((row: any[]) => row.map((c) => c.ch).join(''));
+    expect(screen.some((row: string) => row.includes(NOTICE))).toBe(true);
   });
 });

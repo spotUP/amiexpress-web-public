@@ -97,7 +97,7 @@ import {
   type Cursor,
   type Frame,
 } from '@amiexpress/bbs-door-sdk/petscii/frame';
-import { doorScreenWidth, C64_COLUMNS } from '../amiga-emulation/xim/screen-width.util';
+import { doorScreenWidth, C64_COLUMNS, DEFAULT_DOOR_COLUMNS } from '../amiga-emulation/xim/screen-width.util';
 import { stripNarrowNoise } from './c64-door-noise';
 import { collapseBlankRunsToFit, collapseLongBlankRuns, dropOldestEntriesToFit } from './c64-door-fit';
 
@@ -343,6 +343,26 @@ export class C64DoorFrameAdapter {
     }
   }
 
+  /**
+   * How wide this caller's PETSCII screen is: 40 for a C64, 80 for the web
+   * terminal's wide screen. Read by anything that must ask "is this caller
+   * 40 columns?" rather than "does this caller have an adapter?" - the two
+   * were the same question until the wide screen existed.
+   */
+  get columns(): number {
+    return this.cols;
+  }
+
+  /**
+   * The adapted view, for a test that wants what the caller SEES rather than
+   * a re-derivation of the pipeline. The corpus end-to-end suite rebuilt
+   * these stages by hand and broke twice in one day when a stage was added;
+   * asking is one call and cannot drift.
+   */
+  adaptedView(): AdaptedView {
+    return this.adapted();
+  }
+
   /** The adapted rows of the frame as it stands, memoised until the next write. */
   private adapted(): AdaptedView {
     if (this.adaptedCache && this.adaptedCache.seq === this.writeSeq) return this.adaptedCache;
@@ -355,8 +375,16 @@ export class C64DoorFrameAdapter {
     // only where the door declared it - drop the oldest entries of its list.
     // See c64-door-noise.ts and c64-door-fit.ts for what each one may touch.
     const fit = { cols: this.cols, rows: ROWS };
+    // A rule that matches TEXT needs a width gate; a reducer that MEASURES
+    // does not. stripNarrowNoise blanks what a door writes into slots nobody
+    // filled in - and every one of those was removed because it cost a
+    // 40-column caller ROWS he did not have. An 80-column caller has the
+    // room the 80-column ANSI caller has and sees what that caller sees.
+    // The two fit reducers beside it stay ungated: they ask how tall the
+    // screen came out and do nothing while it fits.
+    const snapshot = this.screen.snapshot();
     const stripped = collapseBlankRunsToFit(
-      collapseLongBlankRuns(stripNarrowNoise(this.screen.snapshot())),
+      collapseLongBlankRuns(this.cols <= C64_COLUMNS ? stripNarrowNoise(snapshot) : snapshot),
       fit,
     );
     const source = this.dropOldest ? dropOldestEntriesToFit(stripped, fit) : stripped;
@@ -479,7 +507,9 @@ export function installC64DoorAdapter(
   if (existing) return existing;
   const holder = holderOf(socket);
   if (!c64AdapterDrives(session)) return null; // the 80-column non-negotiable
-  const cols = Math.min(C64_COLUMNS, doorScreenWidth(session, C64_COLUMNS));
+  // The caller's own PETSCII width - 40 for a C64, 80 for the wide screen.
+  // At 80 the 80-to-N fold is the identity and nothing is reduced.
+  const cols = Math.min(DEFAULT_DOOR_COLUMNS, doorScreenWidth(session, C64_COLUMNS));
   // `emit` is an own property on a connection-emitter object literal and a
   // PROTOTYPE method on a socket.io Socket. Uninstall has to put back what was
   // there, which for the prototype case means removing our own property, not

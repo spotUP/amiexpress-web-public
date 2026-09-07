@@ -86,4 +86,42 @@ describe('dRE!WAll at 40 columns fits, so the caller is never paused', () => {
   test('every real line the wall carries is still on the screen', () => {
     expect([...COMMENT_WORDS, ...PROMPT_WORDS].filter((w) => !wire.includes(w))).toEqual([]);
   });
+
+  /**
+   * The same wall at 80 columns (2026-09-07). The placeholder slots are a
+   * TEXT rule - stripNarrowNoise blanks them because they cost a 40-column
+   * caller rows - and an 80-column PETSCII caller has the rows the 80-column
+   * ANSI caller has, so he keeps them. He still needs no pause, for the
+   * other reason: at 80 the ladder makes nothing taller, so nothing is
+   * unseen. Two different reasons, one screen; both are asserted.
+   */
+  test('an 80-column PETSCII caller keeps the slots, and still never pages', async () => {
+    const seen: string[] = [];
+    const socket: any = {
+      emit: (_event: string, payload: any) => {
+        if (typeof payload === 'string') seen.push(payload);
+        return true;
+      },
+    };
+    socket.session = { terminalType: 'c64', petsciiMode: true, petsciiColumns: 80, screenWidth: 40, screenHeight: 25 };
+    const adapter = installC64DoorAdapter(socket, socket.session);
+    expect(adapter).not.toBeNull();
+    expect(adapter!.columns).toBe(80);
+    const text = fs.readFileSync(FIXTURE, 'latin1');
+    for (let i = 0; i < text.length; i += 64) {
+      socket.emit('ansi-output', text.slice(i, i + 64));
+      if (i % 512 === 0) await wait(12);
+    }
+    await wait(60);
+    const wide = seen.join('');
+    const unseenAt80 = adapter!.unseenRows();
+    uninstallC64DoorAdapter(socket);
+
+    expect(unseenAt80).toBe(0);
+    const { FrameReconstructor } = require('../../../../sdk/petscii/frame/ansi-screen');
+    const fr = new FrameReconstructor({ cols: 80, rows: 25 });
+    fr.write(wide);
+    const screen = fr.snapshot().cells.map((row: any[]) => row.map((c: any) => c.ch).join(''));
+    expect(screen.some((row: string) => row.includes(PLACEHOLDER))).toBe(true);
+  });
 });

@@ -32,7 +32,7 @@ import { applyInstallMetadata, buildDoorList, DoorListEntry } from './door-list'
 import { deleteDoorAndRefresh } from './door-delete';
 import './ami-stripper.lib'; // ensure module is in require cache for DOORMAN
 
-import { doorScreenWidth } from '../amiga-emulation/xim/screen-width.util';
+import { doorScreenHeight, doorScreenWidth } from '../amiga-emulation/xim/screen-width.util';
 import { wrapDoorTextForSession } from '../utils/wrap-for-session.util';
 import { getBoardConfig } from '../services/bbs-config-file.service';
 import { config as appConfig } from '../config';
@@ -255,10 +255,13 @@ export class BBSApi {
     const floored = Math.max(80, reported && reported > 0 ? reported : 80);
     return {
       width: doorScreenWidth(this.session, floored),
-      // Same rule for the other axis: a C64 text screen is 25 rows BY
-      // DEFINITION, so a stale 24 reported by a browser terminal before the
-      // caller answered `P` must not shrink a PETSCII door's canvas.
-      height: this.session?.petsciiMode === true ? 25 : (this.session?.screenHeight || 25)
+      // Same rule for the other axis, through the SAME authority the 68K
+      // side reads (doorScreenHeight): a PETSCII text screen is 25 rows BY
+      // DEFINITION at both widths, so a stale 24 reported by a browser
+      // terminal before the caller answered `P` must not shrink a PETSCII
+      // door's canvas. Two answers to one question is how the width came to
+      // disagree with itself before it had an authority.
+      height: doorScreenHeight(this.session, this.session?.screenHeight || 25)
     };
   }
 
