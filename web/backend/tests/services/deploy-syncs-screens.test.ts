@@ -31,9 +31,9 @@ const ENTRYPOINT = path.join(__dirname, '..', '..', '..', '..', 'docker-entrypoi
 function extractFunctions(): string {
   const source = fs.readFileSync(ENTRYPOINT, 'utf8');
   const start = source.indexOf('DEPLOY_MANIFEST="$BBS_DATA_DIR/.deployed-manifest"');
-  const end = source.indexOf('sync_image_owned() {');
+  const end = source.indexOf('# --- end of the deploy sync helpers');
   if (start === -1 || end === -1 || end < start) {
-    throw new Error('sync_tracked and its helpers were not found in docker-entrypoint.sh');
+    throw new Error('the deploy sync helpers were not found in docker-entrypoint.sh');
   }
   return source.slice(start, end);
 }
@@ -47,7 +47,10 @@ function deploy(root: string): string {
     ${extractFunctions()}
     TRACKED_CREATED=0; TRACKED_UPDATED=0; TRACKED_KEPT=0; TRACKED_ADOPTED=0; TRACKED_FAILED=0
     rm -f "$DEPLOY_MANIFEST_NEXT"
-    for rel in $(cd "$DEFAULT_DATA_DIR" && find Screens -type f | sed 's|^\\./||'); do
+    # The entrypoint's own list. Deciding here which files to sync is how the
+    # conference-root menu stayed stale with every test in this file green.
+    list_tracked_screens | while IFS= read -r rel; do
+      [ -n "$rel" ] || continue
       sync_tracked_case_aware "$rel"
     done
     [ -f "$DEPLOY_MANIFEST_NEXT" ] && mv "$DEPLOY_MANIFEST_NEXT" "$DEPLOY_MANIFEST"
@@ -194,4 +197,63 @@ test('a screen this board has never had arrives', () => {
   deploy(root);
 
   expect(read(volumeScreens(), 'NEWSCREEN.TXT')).toBe('hello\n');
+});
+
+/**
+ * The screen the sysop was actually looking at.
+ *
+ * MENU is a CONFERENCE screen and the resolver searches the conference's own
+ * directory FIRST, `Conf<n>/Screens` second
+ * (web/backend/src/screens/screen-resolution.ts:138-144), with
+ * `findSecurityScreen` choosing `MENU250.TXT` for a level-250 caller. So this
+ * board's main menu is `Conf1/MENU250.TXT` - a conference-ROOT file. Syncing
+ * the Screens directories alone never touched it, and the root `Screens/MENU*`
+ * that WAS synced is never reached, because the conference directory wins.
+ *
+ * The wipe was in the repo, the deploy fix was live, and the menu still did not
+ * wipe.
+ */
+describe('the conference-root screens the resolver reads first', () => {
+  const confDir = (side: 'image' | 'volume') => path.join(root, side, 'Conf1');
+
+  beforeEach(() => {
+    fs.mkdirSync(confDir('image'), { recursive: true });
+    fs.mkdirSync(confDir('volume'), { recursive: true });
+  });
+
+  it("takes the repo's menu to a board that already has one", () => {
+    write(confDir('image'), 'MENU250.TXT', '~WXMain Menu\n');
+    write(confDir('volume'), 'MENU250.TXT', 'Main Menu\n');
+
+    deploy(root);
+    deploy(root);
+
+    expect(read(confDir('volume'), 'MENU250.TXT')).toBe('~WXMain Menu\n');
+  });
+
+  it('leaves the conference DATA alone - a DIR listing is not a screen', () => {
+    fs.mkdirSync(path.join(confDir('image'), 'MsgBase'), { recursive: true });
+    write(path.join(confDir('image'), 'MsgBase'), 'HighMsgNum.txt', 'from the image\n');
+    write(confDir('image'), 'DIR1', 'DEMO.LHA      1024  01-01-26  a file\n');
+
+    fs.mkdirSync(path.join(confDir('volume'), 'MsgBase'), { recursive: true });
+    write(path.join(confDir('volume'), 'MsgBase'), 'HighMsgNum.txt', 'the board\'s own\n');
+    write(confDir('volume'), 'DIR1', 'REAL.LHA      2048  02-02-26  the board\'s own listing\n');
+
+    deploy(root);
+    deploy(root);
+
+    // A conference root is mostly not screens. Sweeping it wholesale would
+    // overwrite the board's message base pointers and its file listings.
+    expect(read(path.join(confDir('volume'), 'MsgBase'), 'HighMsgNum.txt')).toBe("the board's own\n");
+    expect(read(confDir('volume'), 'DIR1')).toBe("REAL.LHA      2048  02-02-26  the board's own listing\n");
+  });
+
+  it('carries the .GR variant a graphics caller is served', () => {
+    write(confDir('image'), 'menu250.txt.GR', '~WXgraphics menu\n');
+
+    deploy(root);
+
+    expect(read(confDir('volume'), 'menu250.txt.GR')).toBe('~WXgraphics menu\n');
+  });
 });

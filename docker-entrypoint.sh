@@ -203,10 +203,21 @@ file_hash() {
 # screens loop switches on is a flag a test driving the real function does not
 # know to set, and the rule would then be live but unproven.
 records_its_edits() {
-    case "$1" in
-        Screens/*|Conf[0-9]*/Screens/*) return 0 ;;
-        *) return 1 ;;
+    local lower rest
+    lower=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
+
+    case "$lower" in
+        screens/*|conf[0-9]*/screens/*) return 0 ;;
+        conf[0-9]*/*.txt|conf[0-9]*/*.ans|conf[0-9]*/*.seq|conf[0-9]*/*.rip|conf[0-9]*/*.gr)
+            # A screen at the CONFERENCE ROOT - where the resolver looks first
+            # for MENU and friends - but only at depth 1. Deeper is the
+            # conference's data: MsgBase, the DIR listings, uploads.
+            rest="${lower#conf*/}"
+            case "$rest" in */*) return 1 ;; esac
+            return 0
+            ;;
     esac
+    return 1
 }
 
 sysop_edited_screen() {
@@ -511,6 +522,45 @@ sync_volume_owned() {
     fi
 }
 
+# The screen files a deploy tracks - the paths the SCREEN RESOLVER searches,
+# which is not the same thing as "the Screens directories".
+#
+# MENU is a CONFERENCE screen, and the resolver looks in the conference's own
+# directory FIRST and `Conf<n>/Screens` second
+# (web/backend/src/screens/screen-resolution.ts:138-144), with
+# `findSecurityScreen` picking `MENU250.TXT` for a level-250 caller. This
+# board's main menu is therefore `Conf1/MENU250.TXT`, a conference-ROOT file -
+# and syncing only the Screens directories left exactly the screen the sysop
+# was looking at untouched, with every test passing.
+#
+# A conference root holds much more than screens (DIR listings, MsgBase,
+# uploads), so only files with a SCREEN extension, only at depth 1, and only
+# for a conference the board still has.
+list_tracked_screens() {
+    local dir conf
+
+    for dir in Screens Conf1/Screens Conf2/Screens Conf3/Screens Conf4/Screens \
+               Conf5/Screens Conf6/Screens Conf7/Screens Conf8/Screens Conf9/Screens \
+               Conf10/Screens Conf11/Screens Conf12/Screens Conf13/Screens Conf14/Screens; do
+        [ -d "$DEFAULT_DATA_DIR/$dir" ] || continue
+        case "$dir" in
+            Conf[0-9]*) conference_still_exists "${dir%%/*}" || continue ;;
+        esac
+        (cd "$DEFAULT_DATA_DIR" && find "$dir" -type f -print)
+    done
+
+    for conf in Conf1 Conf2 Conf3 Conf4 Conf5 Conf6 Conf7 Conf8 Conf9 Conf10 \
+                Conf11 Conf12 Conf13 Conf14; do
+        [ -d "$DEFAULT_DATA_DIR/$conf" ] || continue
+        conference_still_exists "$conf" || continue
+        (cd "$DEFAULT_DATA_DIR" && find "$conf" -maxdepth 1 -type f \
+            \( -iname '*.txt' -o -iname '*.ans' -o -iname '*.seq' \
+               -o -iname '*.rip' -o -iname '*.gr' \) -print)
+    done
+}
+
+# --- end of the deploy sync helpers; the tests extract everything above ---
+
 for f in $IMAGE_OWNED_INFO; do sync_image_owned "$f"; done
 for f in $VOLUME_OWNED_INFO; do sync_volume_owned "$f"; done
 
@@ -751,23 +801,9 @@ else
     # board stays deleted - so screens simply join the tracked set. The
     # conference Screens directories come too: they are seeded the same way
     # and were stale for the same reason.
-    echo "[Entrypoint] Syncing Screens (tracked)..."
+    echo "[Entrypoint] Syncing screens (tracked)..."
     SCREENS_LIST=$(mktemp)
-    : > "$SCREENS_LIST"
-    for screens_dir in Screens Conf1/Screens Conf2/Screens Conf3/Screens Conf4/Screens \
-                       Conf5/Screens Conf6/Screens Conf7/Screens Conf8/Screens Conf9/Screens \
-                       Conf10/Screens Conf11/Screens Conf12/Screens Conf13/Screens Conf14/Screens; do
-        [ -d "$DEFAULT_DATA_DIR/$screens_dir" ] || continue
-        case "$screens_dir" in
-            Conf[0-9]*)
-                # A conference the board no longer has does not get its
-                # screens re-created, exactly as sync_volume_owned refuses to
-                # re-create its icon.
-                conference_still_exists "${screens_dir%%/*}" || continue
-                ;;
-        esac
-        (cd "$DEFAULT_DATA_DIR" && find "$screens_dir" -type f -print) >> "$SCREENS_LIST"
-    done
+    list_tracked_screens > "$SCREENS_LIST"
     while IFS= read -r rel; do
         [ -n "$rel" ] || continue
         sync_tracked_case_aware "$rel"
