@@ -93,6 +93,13 @@ COPY web/backend/src/services/config-services ./web/backend/src/services/config-
 # @amiexpress/terminal". The copy lands before `npm ci` so the file: dependency
 # resolves.
 COPY --from=terminal-builder /app/packages/terminal ./packages/terminal
+# ...and the SDK the terminal package itself imports. `packages/terminal`'s
+# own entry pulls `@amiexpress/bbs-door-sdk/petscii` (the PETSCII machine the
+# canvas draws from), and its node_modules link points at /app/sdk, so the
+# bundler needs the SDK here too or it stops at "Rollup failed to resolve
+# import @amiexpress/bbs-door-sdk/petscii". Built, from the SDK stage, exactly
+# as the frontend stage takes it.
+COPY --from=sdk-builder /app/sdk ./sdk
 
 WORKDIR /app/web/config-app
 
