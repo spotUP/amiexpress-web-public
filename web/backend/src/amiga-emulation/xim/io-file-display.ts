@@ -191,8 +191,10 @@ async function displayResolvedFile(
     // resolved. So for a frame-adapted caller the gate is simply armed and
     // emitText's end-of-message check - which asks the adapter - decides.
     // Content that really does fit reports zero unseen rows and nothing pauses.
-    // An 80-column caller has no adapter and keeps this newline gate byte for
-    // byte, which is what the identity suites pin.
+    // An 80-column caller - ANSI or PETSCII - has no adapter and keeps this
+    // newline gate byte for byte, which is what the identity suites pin. The
+    // adapter is installed for a FORTY-column PETSCII caller and nobody else
+    // (server/c64-door-adapter.ts c64AdapterDrives).
     const frameAdapted = !!c64AdapterFor(self.socket);
     const shouldAutoPause = !forceNonStop && (frameAdapted || newlineCount > pauseLines);
     self.emitText(content, false, shouldAutoPause, shouldAutoPause, msg);

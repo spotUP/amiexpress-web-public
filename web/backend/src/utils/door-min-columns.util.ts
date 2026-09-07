@@ -310,9 +310,14 @@ export function doorDropsLastAt40(door: MinColumnsDoorShape | null | undefined):
  */
 export function doorOpensForC64(
   door: MinColumnsDoorShape | null | undefined,
-  session: { screenWidth?: number; petsciiMode?: boolean } | null | undefined,
+  session: { screenWidth?: number; petsciiMode?: boolean; petsciiColumns?: number } | null | undefined,
 ): boolean {
+  // The CALLER half is forty columns, not PETSCII - the same clause
+  // c64AdapterDrives() asks, because the launch gate and the install site have
+  // to answer as one. An 80-column PETSCII caller is not adapted at all: he
+  // reads the door's own 80-column screen, like the ANSI caller beside him.
   if (session?.petsciiMode !== true) return false;
+  if (sessionColumns(session) > C64_COLUMNS) return false;
   const claim = adaptClaimFor(door);
   return claim !== null && sessionColumns(session) >= claim;
 }

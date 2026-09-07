@@ -91,9 +91,10 @@ describe('dRE!WAll at 40 columns fits, so the caller is never paused', () => {
    * The same wall at 80 columns (2026-09-07). The placeholder slots are a
    * TEXT rule - stripNarrowNoise blanks them because they cost a 40-column
    * caller rows - and an 80-column PETSCII caller has the rows the 80-column
-   * ANSI caller has, so he keeps them. He still needs no pause, for the
-   * other reason: at 80 the ladder makes nothing taller, so nothing is
-   * unseen. Two different reasons, one screen; both are asserted.
+   * ANSI caller has, so he keeps them.
+   *
+   * As of the adapter's own width gate he keeps them for a plainer reason:
+   * he is not adapted at all, so nothing was in a position to blank them.
    */
   test('an 80-column PETSCII caller keeps the slots, and still never pages', async () => {
     const seen: string[] = [];
@@ -104,9 +105,11 @@ describe('dRE!WAll at 40 columns fits, so the caller is never paused', () => {
       },
     };
     socket.session = { terminalType: 'c64', petsciiMode: true, petsciiColumns: 80, screenWidth: 40, screenHeight: 25 };
+    // NOT ADAPTED AT ALL, since 2026-09-07: the adapter is for forty columns.
+    // This caller has the columns the door drew for, so his bytes are the
+    // door's own and the slots survive because nothing removed them.
     const adapter = installC64DoorAdapter(socket, socket.session);
-    expect(adapter).not.toBeNull();
-    expect(adapter!.columns).toBe(80);
+    expect(adapter).toBeNull();
     const text = fs.readFileSync(FIXTURE, 'latin1');
     for (let i = 0; i < text.length; i += 64) {
       socket.emit('ansi-output', text.slice(i, i + 64));
@@ -114,10 +117,10 @@ describe('dRE!WAll at 40 columns fits, so the caller is never paused', () => {
     }
     await wait(60);
     const wide = seen.join('');
-    const unseenAt80 = adapter!.unseenRows();
     uninstallC64DoorAdapter(socket);
 
-    expect(unseenAt80).toBe(0);
+    // No adapter, so nothing can hold the door on an adapted frame: the pause
+    // question is the ordinary line-count one every 80-column caller gets.
     const { FrameReconstructor } = require('../../../../sdk/petscii/frame/ansi-screen');
     const fr = new FrameReconstructor({ cols: 80, rows: 25 });
     fr.write(wide);

@@ -100,7 +100,7 @@ import {
   type Cursor,
   type Frame,
 } from '@amiexpress/bbs-door-sdk/petscii/frame';
-import { doorScreenWidth, C64_COLUMNS, DEFAULT_DOOR_COLUMNS } from '../amiga-emulation/xim/screen-width.util';
+import { doorScreenWidth, petsciiColumnsOf, C64_COLUMNS, DEFAULT_DOOR_COLUMNS } from '../amiga-emulation/xim/screen-width.util';
 import { stripNarrowNoise } from './c64-door-noise';
 import { collapseBlankRunsToFit, collapseLongBlankRuns, dropOldestEntriesToFit, dropLastEntriesToFit } from './c64-door-fit';
 
@@ -130,6 +130,8 @@ const SOCKET_MARK = '_c64DoorAdapterOnSocket';
 export interface AdapterSession {
   petsciiMode?: boolean;
   screenWidth?: number;
+  /** 40 (a C64) or 80 (the web terminal's wide PETSCII screen). Absent = 40. */
+  petsciiColumns?: number;
 }
 
 export interface C64AdapterOptions {
@@ -157,7 +159,26 @@ export interface AdaptedView {
  * been adapted and verified never arms this even for a C64 caller.
  */
 export function c64AdapterDrives(session: AdapterSession | null | undefined): boolean {
-  return session?.petsciiMode === true;
+  // FORTY COLUMNS, not PETSCII. This asked "is this caller PETSCII?" while it
+  // meant "is this caller a C64?", and the two stopped being the same question
+  // when the web terminal's 80-column PETSCII screen arrived.
+  //
+  // At 80 the ladder's fold IS the identity, so installing looked harmless. It
+  // is not: the caller's door output is still round-tripped through a 25-row
+  // FrameReconstructor and repainted by renderDiff, which drops the escape
+  // sequences that reconstructor does not model; `collapseLongBlankRuns`
+  // squeezes his blank rows whatever his width; the file-record rung re-renders
+  // a door's DIR rows through the FORTY-column FILEVIEW layout; and - worst -
+  // the per-line pause stands down for an adapted caller (xim/io.ts:1632) in
+  // favour of an adapted pause that can never fire at 80, because unseenRows()
+  // is zero when nothing was folded. An 80-column caller was reading door
+  // output with no pause at all, and whatever scrolled past 25 rows was never
+  // sent to him.
+  //
+  // "80 column petscii dont need any special petscii rules it can use the
+  // normal /X doors for everything and normal file lists etc" (sysop,
+  // 2026-09-07). This is that sentence, in the one place that decides it.
+  return session?.petsciiMode === true && petsciiColumnsOf(session) === C64_COLUMNS;
 }
 
 /**

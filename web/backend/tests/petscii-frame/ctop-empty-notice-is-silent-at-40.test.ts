@@ -48,7 +48,10 @@ async function wireTextFor(adapted: boolean, columns: 40 | 80 = 40): Promise<str
     : { terminalType: 'modern', petsciiMode: false, screenWidth: 80, screenHeight: 24 };
   if (adapted) socket.session = session;
   const installed = adapted ? installC64DoorAdapter(socket, session) : null;
-  if (adapted) expect(installed).not.toBeNull();
+  // A FORTY-column PETSCII caller is adapted. An 80-column one is not adapted
+  // at all any more - he has the columns the door drew for - so `installed` is
+  // null for him and his bytes are the door's own.
+  if (adapted) expect(installed === null).toBe(columns === 80);
 
   const text = fs.readFileSync(FIXTURE, 'latin1');
   for (let i = 0; i < text.length; i += 64) {
@@ -107,8 +110,11 @@ describe('ctop at 40 columns: the empty-conference notice is not spent on rows',
    * stripNarrowNoise is a rule that matches TEXT, and every phrase it blanks
    * was removed because it cost a FORTY-column caller rows he did not have.
    * An 80-column PETSCII caller has the room the 80-column ANSI caller has,
-   * so he sees what that caller sees - which is the assertion above,
-   * inverted, and the proof the gate went in the right place.
+   * so he sees what that caller sees.
+   *
+   * He now sees it for a stronger reason than a gated rule: nothing adapts him
+   * at all. `c64AdapterDrives` asks for forty columns, so the door's bytes
+   * reach him through the transducer and nothing else.
    */
   it('an 80-column PETSCII caller sees the notice, exactly as the ANSI caller does', async () => {
     const wide = await wireTextFor(true, 80);

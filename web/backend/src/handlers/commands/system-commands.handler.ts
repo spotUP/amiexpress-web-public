@@ -10,6 +10,7 @@
  */
 
 import { checkSecurity } from '../../utils/acs.util';
+import { servesPetsciiArt } from '../screen.handler';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
@@ -274,7 +275,7 @@ export function handleHelpCommand(socket: any, session: BBSSession, params: stri
   // initialization.ts) - this was never live PETSCII logic, just a no-op
   // (".true" was never a real extension). Fixed to call the real,
   // petsciiMode-aware findSecurityScreen (screen-security.util.ts).
-  const helpScreenPath = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, null, session.ripMode, false, session.petsciiMode);
+  const helpScreenPath = _findSecurityScreen(helpBasePath, session.user?.secLevel || 0, null, session.ripMode, false, servesPetsciiArt(session));
 
   if (helpScreenPath) {
     // express.e:25085 - displayFile(screen)

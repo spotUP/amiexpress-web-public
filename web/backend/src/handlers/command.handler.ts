@@ -6,6 +6,7 @@
  */
 
 import { BBSSession } from '../index';
+import { petsciiColumnsOf } from '../amiga-emulation/xim/screen-width.util';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
 import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../constants/command-results';
 import { higherAccess } from '../utils/error-handling.util';
@@ -1577,7 +1578,11 @@ console.log(' Graphics prompt response:', answer || '(empty = ANSI)');
         // their very first keypress, so this line is web/modern-terminal
         // only by construction — it must never fire for a genuine C64.
         if (session.petsciiMode && session.terminalType !== 'c64') {
-          emitText(socket, 'PETSCII: SIMULATING C64 DISPLAY (40X25)\r\n');
+          // ...and say which screen. `P8` is a C128's 80-column screen, not a
+          // C64's, and telling that caller he is being simulated at 40x25 was
+          // simply untrue.
+          const columns = petsciiColumnsOf(session);
+          emitText(socket, `PETSCII: SIMULATING ${columns === 80 ? 'C128 DISPLAY (80X25)' : 'C64 DISPLAY (40X25)'}\r\n`);
         }
 
 console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.ripMode ? 'RIP' : session.ansiEnabled ? 'ANSI' : 'None');

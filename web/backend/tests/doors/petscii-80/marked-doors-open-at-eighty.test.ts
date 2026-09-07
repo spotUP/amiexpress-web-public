@@ -1,33 +1,26 @@
 /**
- * Phase 5 of the 80-column PETSCII plan: a `C64_ADAPT=40` door opens for a
- * caller whose PETSCII screen is EIGHTY columns wide, and what he gets is his
- * own screen rather than a folded one.
+ * A `C64_ADAPT=40` door opens for a caller whose PETSCII screen is EIGHTY
+ * columns wide, and what he gets is the door's OWN screen - not a folded one,
+ * and not an adapted one.
  *
- * The claim is "for free": at 80 the frame adapter's fold is the identity, so
- * nothing had to be re-marked and no door had to be told about the wide
- * screen. That is only worth asserting end to end, so this drives the REAL
- * `executeDoor` gate with a Door built from the .info bytes on disk, replays
- * the door's REAL captured output from inside the run (the point where the
- * adapter is installed on the socket - constructing one proves nothing), and
- * reads the bytes that reached the CONNECTION, past the ANSI-to-PETSCII
- * transducer, which is what a C64 or the web canvas actually receives.
+ * "80 column petscii dont need any special petscii rules it can use the normal
+ * /X doors for everything and normal file lists etc" (sysop, 2026-09-07). The
+ * first pass at this phase installed the frame adapter for him and argued that
+ * its fold is the identity at 80. The fold is - and the rest of the adapter is
+ * not: the output is round-tripped through a 25-row reconstructor that drops
+ * the escapes it does not model, blank runs are squeezed whatever the width,
+ * a door's DIR rows are re-rendered through the FORTY-column file layout, and
+ * the per-line pause stands down for an adapted caller in favour of an adapted
+ * pause that can never fire at 80. He was reading door output with no pause at
+ * all, losing whatever scrolled past 25 rows.
  *
- * Three things are asserted about those bytes, and each one is the opposite
- * of what a 40-column caller gets - which is what proves the width gates went
- * in the right place rather than merely existing:
+ * So the assertion is now the plain one: no adapter, and the bytes on the wire
+ * are the door's own, transduced to PETSCII and nothing else.
  *
- *  - dRE!WAll keeps its `VIRGIN LINE` slots. At 40 they are blanked, because
- *    each costs a caller with 25 rows two of them
- *    (tests/petscii-frame/the-wall-fits-without-a-pause.test.ts).
- *  - ctop keeps `- NO UPLOADERS ARE AVAILABLE IN THIS CONFERENCE -`. At 40 it
- *    never reaches the wire
- *    (tests/petscii-frame/ctop-empty-notice-is-silent-at-40.test.ts).
- *  - Neither door is asked to page: `unseenRows()` is zero, which is the exact
- *    question the pause in xim/io.ts asks before it holds a door.
- *
- * And two things about the shape of the stream itself: no ESC byte survives to
- * the connection (a PETSCII caller has no ANSI parser), and the screen those
- * bytes build is 80x25 with every row 80 cells.
+ * Driven through the REAL `executeDoor` gate with a Door built from the .info
+ * bytes on disk, replaying the door's REAL captured output from inside the
+ * run, and reading what reached the CONNECTION past the ANSI-to-PETSCII
+ * transducer - which is what the web canvas actually receives.
  */
 import 'reflect-metadata';
 import * as fs from 'fs';
@@ -201,18 +194,25 @@ describe('a C64_ADAPT door opens for an 80-column PETSCII caller', () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it('WALL: the gate lets him in, the adapter runs at 80, and no ESC reaches him', async () => {
+  it('WALL: the gate lets him in, NO adapter runs, and no ESC reaches him', async () => {
     replay.text = fs.readFileSync(path.join(FIXTURES, 'wall.ans'), 'latin1');
     const run = await open('WALL', wideSession(), root);
 
     expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(1);
-    // Captured from inside the run: the adapter was on the socket, at 80.
-    expect(run.adapter).not.toBeNull();
-    expect(run.adapter.columns).toBe(80);
-    // A PETSCII terminal has no ANSI parser. Nothing the adapter emitted may
-    // survive the transducer as an escape.
+    // Captured from INSIDE the run: nothing adapted this caller's screen.
+    expect(run.adapter ?? null).toBeNull();
+    // A PETSCII terminal has no ANSI parser. The transducer is what removes
+    // the escapes - and it is now the only thing between door and caller.
     expect(run.bytes.includes(0x1b)).toBe(false);
     expect(run.bytes.length).toBeGreaterThan(0);
+  });
+
+  it('WALL: a 40-column caller IS adapted - the pair is what makes the rule a rule', async () => {
+    replay.text = fs.readFileSync(path.join(FIXTURES, 'wall.ans'), 'latin1');
+    const run = await open('WALL', narrowSession(), root);
+
+    expect(run.adapter).not.toBeNull();
+    expect(run.adapter.columns).toBe(40);
   });
 
   it('WALL: the screen is 80x25, every row 80 cells, and the empty slots are still on it', async () => {
@@ -225,8 +225,8 @@ describe('a C64_ADAPT door opens for an 80-column PETSCII caller', () => {
     // The placeholder rows are a TEXT rule, blanked only because they cost a
     // 40-column caller rows. This caller has the rows.
     expect(screenShows(glass, PLACEHOLDER)).toBe(true);
-    // ...and nothing was folded, so he is never asked to page.
-    expect(run.adapter.unseenRows()).toBe(0);
+    // ...because nothing folded them: there is no adapter on this caller.
+    expect(run.adapter ?? null).toBeNull();
   });
 
   it('WALL: the same door at 40 loses the slots - the pair is the proof', async () => {
@@ -235,6 +235,7 @@ describe('a C64_ADAPT door opens for an 80-column PETSCII caller', () => {
     const glass = glassOf(run.bytes, 40);
 
     expect(run.adapter.columns).toBe(40);
+    expect(run.adapter.unseenRows()).toBe(0);
     expect(glass.state.screen.length).toBe(1000);
     expect([glass.state.cols, glass.state.rows]).toEqual([40, 25]);
     expect(screenShows(glass, PLACEHOLDER)).toBe(false);
@@ -249,5 +250,65 @@ describe('a C64_ADAPT door opens for an 80-column PETSCII caller', () => {
 
     const narrow = glassOf((await open('ctop', narrowSession(), root)).bytes, 40);
     expect(screenShows(narrow, NOTICE)).toBe(false);
+  });
+});
+
+/**
+ * The claim the sysop actually made: at 80 columns this board has no special
+ * PETSCII rules left. So the caller's door output must be what the ANSI
+ * caller's is, byte for byte, once the transducer has turned it into PETSCII -
+ * and the two things the adapter used to do to it must not happen.
+ */
+describe('an 80-column PETSCII caller reads the door the ANSI caller reads', () => {
+  jest.setTimeout(60000);
+
+  let root: string;
+  const realConfigGet = config.get.bind(config);
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'petscii-80-parity-'));
+    mockRootRef.value = root;
+    jest.spyOn(config, 'get').mockImplementation((key: any) =>
+      key === 'dataDir' ? root : realConfigGet(key));
+    (doorDropFileManager.createAllDropFiles as jest.Mock).mockClear();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  /** The door's own bytes, as the ANSI caller receives them. */
+  function ansiSession(): any {
+    return { ...wideSession(), terminalType: 'modern', petsciiMode: false, petsciiColumns: undefined, screenWidth: 80 };
+  }
+
+  it('keeps the blank rows the door drew, which the 40-column squeeze removes', async () => {
+    // `collapseLongBlankRuns` squeezes any interior run of three or more blank
+    // rows to one, whatever the caller's width. gwall is 1,840 bytes of wall
+    // with spacing in it.
+    replay.text = fs.readFileSync(path.join(FIXTURES, 'gwall.ans'), 'latin1');
+
+    const wide = glassOf((await open('GWALL', wideSession(), root)).bytes, 80);
+    const ansi = (await open('GWALL', ansiSession(), root)).bytes.toString('latin1');
+
+    // Every row the ANSI caller was sent is a row this caller can be sent too:
+    // same width, no fold, so the same lines survive.
+    const ansiRows = ansi.split(/\r?\n/).map((r) => r.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').trimEnd());
+    const painted = ansiRows.filter((r) => r.trim().length > 0).slice(0, 12);
+    expect(painted.length).toBeGreaterThan(3);
+    for (const row of painted) {
+      const word = row.trim().split(/\s+/).find((w) => /^[A-Za-z]{4,}$/.test(w));
+      if (!word) continue;
+      expect({ word, shown: screenShows(wide, word) }).toEqual({ word, shown: true });
+    }
+  });
+
+  it('is never asked to page: the door is not held by an adapted frame', async () => {
+    replay.text = fs.readFileSync(path.join(FIXTURES, 'gwall.ans'), 'latin1');
+    const run = await open('GWALL', wideSession(), root);
+
+    expect(run.adapter ?? null).toBeNull();
+    expect(run.bytes.toString('latin1')).not.toContain('More(y/n/ns)');
   });
 });
