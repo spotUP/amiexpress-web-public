@@ -150,6 +150,16 @@ export interface ScreenFileFacts {
    * from screens the board resolves.
    */
   door?: string;
+
+  /**
+   * The theme this file belongs to, when it lives under a registered theme's
+   * directory. A theme's file is read by every caller WEARING the theme and
+   * by nobody else, so in the board's own index it has no reader and is not
+   * "read by nothing" either - the sysop opened Themes/tango/Board/BULL.TXT
+   * and was told "no screen on this board reads this file", which was false.
+   * Select the theme and the index built for it names the readers.
+   */
+  theme?: string;
 }
 
 export type ScreenProblem = 'empty' | 'colour-codes-without-escape';
@@ -888,7 +898,14 @@ function scopesFor(baseDir: string, dirType: ScreenDirType): { scope: ScopeResol
   return [{ scope: 'board' as const, id: null }];
 }
 
-export function buildScreenIndex(baseDir: string): ScreenIndex {
+/**
+ * `themeSlug` builds the index AS A CALLER WEARING THAT THEME sees it: every
+ * resolution walks the theme's directories before the board's, exactly as the
+ * loader does. Without it the index is the board's own - which is `default`.
+ * Asked for by the sysop: one selector on the screens page, and the gallery
+ * and the tables show what a caller in that theme is actually served.
+ */
+export function buildScreenIndex(baseDir: string, themeSlug?: string): ScreenIndex {
   const files: Record<string, ScreenFileFacts> = {};
   const factsFor = (abs: string): ScreenFileFacts => {
     const rel = path.relative(baseDir, abs);
@@ -939,6 +956,7 @@ export function buildScreenIndex(baseDir: string): ScreenIndex {
       const locations = screenSearchLocations(baseDir, screen, {
         nodeId: scope === 'node' ? (id ?? 0) : 1,
         confId: scope === 'conf' ? (id ?? undefined) : undefined,
+        themeSlug,
       });
       if (locations.length === 0) continue;
 
@@ -1080,6 +1098,29 @@ export function buildScreenIndex(baseDir: string): ScreenIndex {
     }
   }
 
+  // A theme's files. In the BOARD's index nothing resolves them, so every one
+  // landed in `unused` and the manager called it read by nothing. It is read
+  // by whoever wears the theme: tag it, and keep it out of the orphans unless
+  // this index IS that theme's - in which case a theme file nothing resolves
+  // is exactly the dangling file the tab exists to show.
+  const themeOf = (rel: string): string | undefined => {
+    for (const theme of readThemeRegistry(baseDir).themes) {
+      const root = themeDirectory(baseDir, theme);
+      if (!root) continue;
+      const themeRel = path.relative(baseDir, root);
+      if (rel === themeRel || rel.startsWith(themeRel + path.sep)) return theme.slug;
+    }
+    return undefined;
+  };
+  for (const facts of Object.values(files)) {
+    const slug = themeOf(facts.relPath);
+    if (slug) facts.theme = slug;
+  }
+  for (let i = unused.length - 1; i >= 0; i--) {
+    const slug = unused[i].theme;
+    if (slug && slug !== themeSlug) unused.splice(i, 1);
+  }
+
   // A door's own art. Tagged rather than mixed in: nothing here is resolved by
   // the board, so it must not appear beside screens that are.
   for (const { door, dir } of listDoorScreenDirectories(baseDir)) {
@@ -1116,19 +1157,25 @@ export function buildScreenIndex(baseDir: string): ScreenIndex {
   };
 }
 
-let cached: { key: string; index: ScreenIndex } | null = null;
+/** One entry per theme (the board itself is the empty slug), each on its own key. */
+const cachedByTheme = new Map<string, { key: string; index: ScreenIndex }>();
 
 /** The index, rebuilt when any screen directory's mtime moves. */
-export function getScreenIndex(baseDir: string): ScreenIndex {
+export function getScreenIndex(baseDir: string, themeSlug?: string): ScreenIndex {
   const key = listScreenDirectories(baseDir)
     .map(d => {
       try { return `${d}:${fs.statSync(d).mtimeMs}`; } catch { return `${d}:gone`; }
     })
     .join('|');
 
+  const slot = themeSlug ?? '';
+  const cached = cachedByTheme.get(slot);
   if (cached && cached.key === key) return cached.index;
-  const index = buildScreenIndex(baseDir);
-  cached = { key, index };
+  const index = buildScreenIndex(baseDir, themeSlug);
+  cachedByTheme.set(slot, { key, index });
+
+  // A themed view is a VIEW; the live-theme check below is about the board.
+  if (themeSlug) return index;
 
   /*
    * The board just changed, so every LIVE theme is checked against it again.
@@ -1159,7 +1206,7 @@ export function getScreenIndex(baseDir: string): ScreenIndex {
 
 /** Called by every write route: the next read rebuilds. */
 export function invalidateScreenIndex(): void {
-  cached = null;
+  cachedByTheme.clear();
   // factsCache too, and not only because it is stale bytes.
   //
   // A file's facts are keyed on ITS OWN mtime and size, but `resolves` on an
@@ -1182,5 +1229,5 @@ export function invalidateScreenIndex(): void {
  */
 export function invalidateScreenFacts(): void {
   factsCache.clear();
-  cached = null;
+  cachedByTheme.clear();
 }

@@ -10,6 +10,7 @@ import { summariseShare, type ShareSummary } from './screen-share-view';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { TabbedWorkspace, type TabDefinition } from '../components/ui/Tabs';
 import { ScreenArt } from '../components/ScreenArt';
+import { ScreenPreviewPanel } from '../components/ScreenPreviewPanel';
 import { ScreenGallery, type GalleryItem } from '../components/ScreenGallery';
 import { ScreenThumbnail } from '../components/ScreenThumbnail';
 import { formatBytes } from '../lib/format';
@@ -216,10 +217,28 @@ export function ScreenFilesPage() {
   const detailRef = useRef<HTMLElement>(null);
   const [showRevisions, setShowRevisions] = useState(false);
 
+  /**
+   * Which theme the page is looking through. `default` is the board's own
+   * screens; any other slug rebuilds the whole page - gallery, tables,
+   * duplicates, preview - as a caller wearing that theme is served. Asked for
+   * in these words: "a select button on the screen files page that lets the
+   * user select among his themes and the gallery etc updates".
+   */
+  const [theme, setTheme] = useState('default');
+  const { data: themeList } = useQuery({
+    queryKey: ['screen-themes'],
+    queryFn: async () => (await apiClient.getScreenThemes()).data as {
+      themes: { slug: string; title: string; status: string }[];
+    },
+  });
+  const themeTitle = theme === 'default'
+    ? 'the board itself'
+    : (themeList?.themes.find(t => t.slug === theme)?.title ?? theme);
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ['screen-index'],
+    queryKey: ['screen-index', theme],
     // The routes answer `{ success, data, ... }`; every admin page reads `.data`.
-    queryFn: async () => (await apiClient.getScreenIndex()).data as ScreenIndexShape,
+    queryFn: async () => (await apiClient.getScreenIndex(theme)).data as ScreenIndexShape,
   });
 
   /**
@@ -942,6 +961,9 @@ export function ScreenFilesPage() {
       // A door's art is the door's, and a door directory is full of .txt files
       // that are documentation, not art. It has its own tab.
       .filter(file => !isDoorArt(file))
+      // Another theme's files are another theme's view. Under `default` no
+      // theme file belongs here at all.
+      .filter(file => !file.theme || file.theme === theme)
       .filter(file => showGenerated || isArt(file));   // drawable-only is applied above
 
     /**
@@ -989,7 +1011,7 @@ export function ScreenFilesPage() {
         };
       })
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [data, showGenerated, showUnread]);
+  }, [data, showGenerated, showUnread, theme]);
 
   /**
    * The three kinds of file that are NOT a piece of the board's art, each
@@ -1048,6 +1070,17 @@ export function ScreenFilesPage() {
             onOpen={setOpenFile}
           />
         </div>
+      ),
+    },
+    {
+      id: 'preview',
+      label: 'Preview as a caller',
+      render: () => (
+        <ScreenPreviewPanel
+          theme={theme}
+          themeTitle={themeTitle}
+          screenNames={(data?.screens ?? []).map(entry => entry.screen)}
+        />
       ),
     },
     {
@@ -1241,6 +1274,18 @@ export function ScreenFilesPage() {
       <header className="flex items-center gap-2">
         <FileImage size={20} />
         <h1 className="text-xl text-content-primary">Screen Files</h1>
+        <label htmlFor="screen-theme-select" className="label ml-2">Viewing</label>
+        <select
+          id="screen-theme-select"
+          className="input-field"
+          value={theme}
+          onChange={e => { setTheme(e.target.value); setOpenScreen(null); setOpenFile(null); }}
+        >
+          <option value="default">The board (default)</option>
+          {(themeList?.themes ?? []).filter(t => t.slug !== 'default').map(t => (
+            <option key={t.slug} value={t.slug}>{t.title}{t.status !== 'live' ? ` (${t.status})` : ''}</option>
+          ))}
+        </select>
         {data && (
           <span className="text-sm text-content-secondary">
             {Object.keys(data.files).length} files, {data.unused.length} read by nothing
@@ -1597,10 +1642,18 @@ export function ScreenFilesPage() {
                 </ul>
               </div>
             ) : (
-              <p className="text-sm text-status-warn">
-                No screen on this board reads this file - at any security level,
-                in any screen type, and no other screen includes it.
-              </p>
+              file.theme && theme !== file.theme ? (
+                <p className="text-sm text-content-secondary">
+                  Belongs to the theme <span className="font-mono">{file.theme}</span> - shown to
+                  callers wearing it in place of the board&apos;s screen. Select that theme above to
+                  see exactly where it is served.
+                </p>
+              ) : (
+                <p className="text-sm text-status-warn">
+                  No screen on this board reads this file - at any security level,
+                  in any screen type, and no other screen includes it.
+                </p>
+              )
             )}
 
             <div className="flex items-center gap-3 text-sm">

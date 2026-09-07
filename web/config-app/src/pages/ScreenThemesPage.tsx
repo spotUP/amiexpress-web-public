@@ -5,8 +5,7 @@ import { Plus, Check, Send, Eye, Palette, Copy, Monitor, ShieldCheck, AlertTrian
 import { apiClient } from '../api/client';
 import { Modal } from '../components/ui/Modal';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
-import { ScreenPreview } from '../components/ScreenPreview';
-import { PetsciiScreenPreview } from '../components/PetsciiScreenPreview';
+import { ScreenPreviewPanel } from '../components/ScreenPreviewPanel';
 import { SkeletonRows } from '../components/ui/states';
 import { useNotification } from '../contexts/NotificationContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -68,26 +67,7 @@ interface ThemeValidation {
   coverage: { provided: number; total: number };
 }
 
-interface ScreenPreviewResult {
-  screen: string;
-  theme: string;
-  filePath: string;
-  isPetscii: boolean;
-  isRip: boolean;
-  secLevel: number;
-  content: string;
-  commands: string[];
-  searched: { dir: string; desc: string }[];
-}
-
 const EMPTY_THEMES: ScreenTheme[] = [];
-
-/** The widths a caller's terminal can be, and what each one is called. */
-const TERMINALS = [
-  { id: 'ansi' as const, label: 'Amiga ANSI, 80 columns' },
-  { id: 'c64' as const, label: 'C64 PETSCII, 40 columns' },
-  { id: 'rip' as const, label: 'RIPscrip' },
-];
 
 const STATUS_LABEL: Record<ScreenTheme['status'], string> = {
   draft: 'Draft',
@@ -128,16 +108,15 @@ export function ScreenThemesPage() {
     });
     setIsCreateOpen(true);
   };
-  /** The theme whose validation report is open. */
-  const [checking, setChecking] = useState<ScreenTheme | null>(null);
-  /** The theme being previewed, and the caller to preview it as. */
-  const [previewing, setPreviewing] = useState<ScreenTheme | null>(null);
-  const [asCaller, setAsCaller] = useState({ screen: 'BULL', node: 1, conf: 1, sec: 255, term: 'ansi' as 'ansi' | 'c64' | 'rip' });
-
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['screen-themes'],
     queryFn: () => apiClient.getScreenThemes(),
   });
+
+  /** The theme whose validation report is open. */
+  const [checking, setChecking] = useState<ScreenTheme | null>(null);
+  /** The theme being previewed; the caller to preview it as lives in the panel. */
+  const [previewing, setPreviewing] = useState<ScreenTheme | null>(null);
 
   const payload = (data as { data?: { themes?: ScreenTheme[]; defaultSlug?: string; canCreate?: boolean } } | undefined)?.data;
   const themes = payload?.themes ?? EMPTY_THEMES;
@@ -153,13 +132,6 @@ export function ScreenThemesPage() {
   });
   const report = (checkData as { data?: ThemeValidation } | undefined)?.data;
 
-  const { data: previewData, isLoading: isPreviewing, error: previewError } = useQuery({
-    queryKey: ['screen-preview', previewing?.slug, asCaller],
-    queryFn: () => apiClient.previewScreen({ ...asCaller, theme: previewing!.slug }),
-    enabled: previewing !== null && asCaller.screen.trim() !== '',
-    retry: false,
-  });
-  const shown = (previewData as { data?: ScreenPreviewResult } | undefined)?.data;
 
   /** The screens the board can display, for the preview's own picker. */
   const { data: indexData } = useQuery({
@@ -307,7 +279,7 @@ export function ScreenThemesPage() {
         <div className="flex gap-2 justify-end">
           <button
             type="button"
-            onClick={() => { setPreviewing(row); setAsCaller(caller => ({ ...caller, sec: 255 })); }}
+            onClick={() => setPreviewing(row)}
             title="Preview as a caller"
           >
             <Monitor size={16} />
@@ -438,109 +410,12 @@ export function ScreenThemesPage() {
         title={previewing ? `${previewing.title}, as a caller meets it` : 'Preview'}
         maxWidth="max-w-4xl"
       >
-        <p className="mt-1 text-sm text-content-secondary">
-          The board&apos;s own loader and MCI parser answer this, so what is drawn below is the
-          screen a caller would be served - not a rendering of it. Commands are named, never run.
-        </p>
-
-        <div className="flex flex-wrap gap-3 my-4">
-          <div>
-            <label htmlFor="preview-screen">Screen</label>
-            <select
-              id="preview-screen"
-              value={asCaller.screen}
-              onChange={event => setAsCaller({ ...asCaller, screen: event.target.value })}
-            >
-              {(screenNames.length ? screenNames : [asCaller.screen]).map(name => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="preview-term">Terminal</label>
-            <select
-              id="preview-term"
-              value={asCaller.term}
-              onChange={event => setAsCaller({ ...asCaller, term: event.target.value as 'ansi' | 'c64' | 'rip' })}
-            >
-              {TERMINALS.map(terminal => (
-                <option key={terminal.id} value={terminal.id}>{terminal.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="preview-sec">Security level</label>
-            <input
-              id="preview-sec"
-              type="number"
-              min={0}
-              max={255}
-              value={asCaller.sec}
-              onChange={event => setAsCaller({ ...asCaller, sec: Number(event.target.value) })}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="preview-node">Node</label>
-            <input
-              id="preview-node"
-              type="number"
-              min={0}
-              value={asCaller.node}
-              onChange={event => setAsCaller({ ...asCaller, node: Number(event.target.value) })}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="preview-conf">Conference</label>
-            <input
-              id="preview-conf"
-              type="number"
-              min={1}
-              value={asCaller.conf}
-              onChange={event => setAsCaller({ ...asCaller, conf: Number(event.target.value) })}
-            />
-          </div>
-        </div>
-
-        {isPreviewing && <SkeletonRows rows={6} />}
-        {previewError instanceof Error && (
-          <p className="text-sm text-status-danger">{previewError.message}</p>
-        )}
-
-        {shown && !isPreviewing && (
-          <div className="space-y-2">
-            {shown.isPetscii
-              ? <PetsciiScreenPreview content={shown.content} />
-              : <ScreenPreview content={atob(shown.content)} cols={asCaller.term === 'c64' ? 40 : 80} />}
-
-            <dl className="text-xs text-ink-muted">
-              <div>
-                <dt className="inline">Served from </dt>
-                <dd className="inline"><code>{shown.filePath}</code></dd>
-              </div>
-              <div>
-                <dt className="inline">Theme that answered </dt>
-                <dd className="inline">{shown.theme}</dd>
-              </div>
-              {shown.theme !== previewing?.slug && (
-                <div>
-                  <dd>
-                    This screen falls through to the board - {previewing?.title} does not carry it,
-                    or you may not wear it.
-                  </dd>
-                </div>
-              )}
-              {shown.commands.length > 0 && (
-                <div>
-                  <dt className="inline">Commands a caller would run </dt>
-                  <dd className="inline"><code>{shown.commands.join(', ')}</code></dd>
-                </div>
-              )}
-            </dl>
-          </div>
+        {previewing && (
+          <ScreenPreviewPanel
+            theme={previewing.slug}
+            themeTitle={previewing.title}
+            screenNames={screenNames}
+          />
         )}
 
         <div className="flex gap-2 justify-end mt-4">

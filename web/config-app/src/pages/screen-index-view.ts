@@ -61,6 +61,8 @@ export interface ScreenFileShape {
    * board. Set by the index; absent on every screen the board resolves.
    */
   door?: string;
+  /** The theme this file belongs to, when it lives under one - read by whoever wears it. */
+  theme?: string;
   /** Nothing but the codes the board runs - plumbing, not art. */
   codesOnly?: boolean;
   /** What is wrong with the bytes: 'empty', 'colour-codes-without-escape'. */

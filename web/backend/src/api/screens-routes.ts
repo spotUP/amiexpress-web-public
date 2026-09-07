@@ -28,6 +28,7 @@ import { config } from '../config';
 import { userFileManager } from '../services/UserFileManager';
 import { getSystemTime } from '../utils/date-time.util';
 import { screenSearchLocations } from '../screens/screen-resolution';
+import { findTheme } from '../screens/theme-registry';
 import { resolveCallerTheme } from '../screens/caller-theme';
 import { readThemeRegistry } from '../screens/theme-registry';
 import { themeOfPath, validateThemeFile, type ThemeFinding } from '../screens/theme-validation';
@@ -211,9 +212,13 @@ function sendOk<T>(res: Response, data: T, message?: string): void {
  * Every screen, where it resolves per scope, the duplicate groups and the
  * files nothing reads.
  */
-screensRouter.get('/', (_req: Request, res: Response) => {
+screensRouter.get('/', (req: Request, res: Response) => {
   const baseDir = config.get('dataDir');
-  const index = getScreenIndex(baseDir);
+  // ?theme=<slug>: the index as a caller wearing that theme sees it. `default`
+  // and anything that is not a registered theme mean the board's own.
+  const wanted = String(req.query.theme || '').trim().toLowerCase();
+  const themeSlug = wanted && wanted !== 'default' && findTheme(baseDir, wanted) ? wanted : undefined;
+  const index = getScreenIndex(baseDir, themeSlug);
 
   // How many accounts sit at each security level.
   //
