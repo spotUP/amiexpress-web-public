@@ -15,6 +15,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+
+import { DEFAULT_SLUG, findTheme, isValidSlug, themeDirectory } from './theme-registry';
 import { BBSPaths } from '../utils/bbs-paths.util';
 import { readTooltypeMap } from '../utils/info-file.util';
 import { conferenceDir } from '../conferences/conference-paths';
@@ -120,17 +122,63 @@ export function getScreenDirType(screenName: string): ScreenDirType | null {
  */
 export interface SearchLocation { dir: string; desc: string }
 
+/**
+ * The theme's mirror of one scope, when the theme has that directory.
+ *
+ * The tree is keyed on the SCOPE the loader computed, never on the directory
+ * the board happens to keep that scope in: a node's screen directory is
+ * whatever its SCREENS tooltype says and a conference's is what LOCATION.n
+ * names, so a theme mirroring those names would break the first time a board
+ * was renumbered or a node's icon was edited.
+ *
+ * A theme directory that does not exist is dropped, the way
+ * `listScreenDirectories` drops a missing directory. Only THEME entries are
+ * filtered - the board's own are returned unconditionally, exactly as before,
+ * because checking them would change what the no-theme case returns and the
+ * byte-identity pin forbids that.
+ */
+function themeLocation(
+  baseDir: string,
+  themeSlug: string | undefined,
+  scope: string,
+  desc: string,
+): SearchLocation | null {
+  if (!themeSlug || themeSlug === DEFAULT_SLUG) return null;
+  if (!isValidSlug(themeSlug)) return null;
+
+  const entry = findTheme(baseDir, themeSlug);
+  // A slug with no registry entry is not a theme. Resolving it against a
+  // directory anyway would let a query parameter name any directory on the
+  // volume as a screen source.
+  if (!entry) return null;
+
+  const root = themeDirectory(baseDir, entry);
+  // `default` has no directory by design, and any other entry with an empty
+  // DIR is refused by the registry reader before it reaches here.
+  if (!root) return null;
+
+  const dir = path.join(root, scope);
+  if (!fs.existsSync(dir)) return null;
+  return { dir, desc: `${entry.slug}: ${desc}` };
+}
+
 export function screenSearchLocations(
   baseDir: string,
   screenName: string,
-  opts: { nodeId: number; confId?: number },
+  opts: { nodeId: number; confId?: number; themeSlug?: string },
 ): SearchLocation[] {
   const locations: SearchLocation[] = [];
   const dirType = getScreenDirType(screenName);
+  const theme = (scope: string, desc: string) =>
+    themeLocation(baseDir, opts.themeSlug, scope, desc);
 
   if (dirType === ScreenDirType.NODE) {
     const nodeDir = path.join(baseDir, `Node${opts.nodeId}`);
     const screenDir = resolveNodeScreenDir(baseDir, opts.nodeId);
+    // One `Node/` for every node: 24 nodes on this board read the same art,
+    // and an artist redraws the board once, not once per node.
+    const themed = theme('Node', 'Node');
+    if (themed) locations.push(themed);
     locations.push({
       dir: screenDir,
       desc: screenDir === nodeDir ? `Node${opts.nodeId}` : `Node${opts.nodeId} SCREENS tooltype`,
@@ -140,9 +188,15 @@ export function screenSearchLocations(
     // `Conf<n>` from the number breaks the moment a board is renumbered, which
     // is how MENU went missing for the conference that moved into position 1.
     const confDir = conferenceDir(baseDir, opts.confId);
+    // Keyed on the conference NUMBER, which is what this function is given and
+    // what confIds() enumerates - not on the directory LOCATION.n names.
+    const themed = theme(path.join('Conf', String(opts.confId)), `Conf/${opts.confId}`);
+    if (themed) locations.push(themed);
     locations.push({ dir: confDir, desc: `Conf${opts.confId}` });
     locations.push({ dir: path.join(confDir, 'Screens'), desc: `Conf${opts.confId}/Screens` });
   } else if (dirType === ScreenDirType.GLOBAL) {
+    const themed = theme('Board', 'Board');
+    if (themed) locations.push(themed);
     locations.push({ dir: baseDir, desc: 'board root' });
     locations.push({ dir: path.join(baseDir, 'Screens'), desc: 'Screens' });
   }

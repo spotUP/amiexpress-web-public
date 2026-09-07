@@ -1,0 +1,131 @@
+{
+  "LOGON|node=1|conf=1": [
+    {
+      "dir": "<root>/Node1",
+      "desc": "Node1"
+    }
+  ],
+  "LOGON|node=7|conf=2": [
+    {
+      "dir": "<root>/Node7",
+      "desc": "Node7"
+    }
+  ],
+  "LOGON|node=0|conf=-": [
+    {
+      "dir": "<root>/Node0",
+      "desc": "Node0"
+    }
+  ],
+  "BULL|node=1|conf=1": [
+    {
+      "dir": "<root>",
+      "desc": "board root"
+    },
+    {
+      "dir": "<root>/Screens",
+      "desc": "Screens"
+    }
+  ],
+  "BULL|node=7|conf=2": [
+    {
+      "dir": "<root>",
+      "desc": "board root"
+    },
+    {
+      "dir": "<root>/Screens",
+      "desc": "Screens"
+    }
+  ],
+  "BULL|node=0|conf=-": [
+    {
+      "dir": "<root>",
+      "desc": "board root"
+    },
+    {
+      "dir": "<root>/Screens",
+      "desc": "Screens"
+    }
+  ],
+  "MENU|node=1|conf=1": [
+    {
+      "dir": "<root>/Conf1",
+      "desc": "Conf1"
+    },
+    {
+      "dir": "<root>/Conf1/Screens",
+      "desc": "Conf1/Screens"
+    }
+  ],
+  "MENU|node=7|conf=2": [
+    {
+      "dir": "<root>/Conf2",
+      "desc": "Conf2"
+    },
+    {
+      "dir": "<root>/Conf2/Screens",
+      "desc": "Conf2/Screens"
+    }
+  ],
+  "MENU|node=0|conf=-": [],
+  "CONF_BULL|node=1|conf=1": [
+    {
+      "dir": "<root>/Conf1",
+      "desc": "Conf1"
+    },
+    {
+      "dir": "<root>/Conf1/Screens",
+      "desc": "Conf1/Screens"
+    }
+  ],
+  "CONF_BULL|node=7|conf=2": [
+    {
+      "dir": "<root>/Conf2",
+      "desc": "Conf2"
+    },
+    {
+      "dir": "<root>/Conf2/Screens",
+      "desc": "Conf2/Screens"
+    }
+  ],
+  "CONF_BULL|node=0|conf=-": [],
+  "GOODBYE|node=1|conf=1": [],
+  "GOODBYE|node=7|conf=2": [],
+  "GOODBYE|node=0|conf=-": [],
+  "NODE_BULL|node=1|conf=1": [
+    {
+      "dir": "<root>/Node1",
+      "desc": "Node1"
+    }
+  ],
+  "NODE_BULL|node=7|conf=2": [
+    {
+      "dir": "<root>/Node7",
+      "desc": "Node7"
+    }
+  ],
+  "NODE_BULL|node=0|conf=-": [
+    {
+      "dir": "<root>/Node0",
+      "desc": "Node0"
+    }
+  ],
+  "AWAITSCREEN|node=1|conf=1": [
+    {
+      "dir": "<root>/Node1",
+      "desc": "Node1"
+    }
+  ],
+  "AWAITSCREEN|node=7|conf=2": [
+    {
+      "dir": "<root>/Node7",
+      "desc": "Node7"
+    }
+  ],
+  "AWAITSCREEN|node=0|conf=-": [
+    {
+      "dir": "<root>/Node0",
+      "desc": "Node0"
+    }
+  ]
+}
