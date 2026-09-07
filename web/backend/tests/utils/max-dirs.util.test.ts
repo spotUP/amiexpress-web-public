@@ -365,9 +365,18 @@ describe('Max Dirs Utility (Conference Directory Scanning)', () => {
 
       const result = await getDirFiles(1, testBbsPath);
 
-      // Both should be parsed as directory 1
-      expect(result).toHaveLength(2);
-      expect(result.every(d => d.index === 1)).toBe(true);
+      // ONE DIRECTORY PER NUMBER (2026-09-07). This used to expect both files
+      // back, and that is what made a scan announce "Scanning directory 1"
+      // twice and read it twice on the live board, where `Conf3/` holds both
+      // `DIR1` and `Dir1`. AmigaDOS cannot tell those apart, so a board has
+      // one directory 1 - and the file served is the one express.e would
+      // open, `DIR<n>` under whatever casing it is on disk.
+      expect(result).toHaveLength(1);
+      expect(result[0].index).toBe(1);
+      // There is no plain `DIR1` here, so the one padded file that does exist
+      // is served rather than nothing.
+      expect(fs.existsSync(result[0].path)).toBe(true);
+      expect(['dir01', 'dir001']).toContain(path.basename(result[0].path).toLowerCase());
     });
   });
 });

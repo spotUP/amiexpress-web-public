@@ -388,7 +388,14 @@ console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
       }
     }
 
+    // END THE WAY `F` DOES, and for the reason the sysop found: the board
+    // holds for a keypress after a listing, and without this prompt it holds
+    // in SILENCE. "it gets stuck there as well ... i can exit with enter"
+    // (2026-09-07, a PETSCII session that had just scanned an empty
+    // conference). Same three lines as handleFileList's ending.
+    (session as any).flagPauseHandler = undefined;
     socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
