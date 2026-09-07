@@ -187,3 +187,62 @@ describe('the backend image stage', () => {
     expect({ copied, importers }).toEqual({ copied: true, importers });
   });
 });
+
+/**
+ * The same rule, one level down: a package the stage COPIES may itself import
+ * something by name, and that import has to resolve too.
+ *
+ * `packages/terminal` arrives built, and its dist imports
+ * `@amiexpress/bbs-door-sdk/petscii` - the PETSCII machine the admin's preview
+ * renders through. The admin never names it, so the check above (which reads
+ * only the admin's own sources) passed, and the deploy died in the
+ * config-builder stage with
+ *
+ *   [vite]: Rollup failed to resolve import "@amiexpress/bbs-door-sdk/petscii"
+ *           from "/app/packages/terminal/dist/index.js"
+ *
+ * after a green local build - locally the SDK resolves through node_modules,
+ * which that stage does not have.
+ */
+describe('what the copied packages import, by name', () => {
+  const BARE = /from\s+['"](@amiexpress\/[^'"]+)['"]/g;
+
+  function bareImportsOf(dir: string): string[] {
+    const out = new Set<string>();
+    const walk = (d: string) => {
+      let entries: fs.Dirent[];
+      try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+      for (const e of entries) {
+        const full = path.join(d, e.name);
+        if (e.isDirectory()) { if (e.name !== 'node_modules') walk(full); continue; }
+        if (!/\.(js|mjs|ts)$/.test(e.name) || e.name.endsWith('.d.ts')) continue;
+        const text = fs.readFileSync(full, 'utf8');
+        for (const m of text.matchAll(BARE)) out.add(m[1]);
+      }
+    };
+    walk(dir);
+    return [...out];
+  }
+
+  it('is satisfied by a copy or an alias, for every package the stage copies', () => {
+    const copies = stageCopies();
+    const viteConfig = fs.readFileSync(
+      path.join(REPO, 'web', 'config-app', 'vite.config.ts'), 'utf8'
+    );
+
+    const terminalDist = path.join(REPO, 'packages', 'terminal', 'dist');
+    if (!fs.existsSync(terminalDist)) return; // not built here; CI builds it
+
+    const unresolved = bareImportsOf(terminalDist).filter(spec => {
+      if (spec.startsWith('@amiexpress/terminal')) return false;  // itself
+      const aliased = viteConfig.includes(`'${spec}'`);
+      // An alias points at a repo path; that path must ALSO be copied.
+      const target = /@amiexpress\/bbs-door-sdk\/(.+)/.exec(spec)?.[1];
+      const copied = target ? copies.some(c => c === `sdk/${target}` || c.startsWith(`sdk/${target}/`)) : false;
+      return !(aliased && copied);
+    });
+
+    expect(unresolved).toEqual([]);
+  });
+});
+

@@ -82,6 +82,12 @@ WORKDIR /app
 # exactly how this was found. tests/dockerfile-copies-admin-sources.test.ts
 # fails when an import escapes what is copied here.
 COPY sdk/engines/ui/ansi-editor ./sdk/engines/ui/ansi-editor
+# ...and the SDK's PETSCII machine, which the terminal package's dist imports
+# BY NAME (@amiexpress/bbs-door-sdk/petscii). The admin does not import it
+# directly, so the guard test only caught the admin's own escapes and this
+# one arrived through a package the stage copies. Pure TypeScript: no node
+# imports, which is why vite can compile it here from source.
+COPY sdk/petscii ./sdk/petscii
 COPY web/backend/src/screens ./web/backend/src/screens
 COPY web/backend/src/services/config-services ./web/backend/src/services/config-services
 # ...and the terminal package, BUILT, from its own stage - source for the two

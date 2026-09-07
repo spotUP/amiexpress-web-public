@@ -35,6 +35,11 @@ export default defineConfig({
       // would be a second answer to "what does this file look like", and the
       // vendored RIPtermJS is the one the board actually ships.
       '@amiexpress/terminal/rip': path.resolve(__dirname, '../../packages/terminal/src/rip'),
+      // Reached through packages/terminal's dist, not imported here directly:
+      // the PETSCII preview renders through PetsciiMachine. From SOURCE for
+      // the same two reasons as the editor above - sdk/dist is gitignored,
+      // and a stale dist hides a source edit.
+      '@amiexpress/bbs-door-sdk/petscii': path.resolve(__dirname, '../../sdk/petscii'),
       // The board's own MCI parser, from the backend source.
       //
       // A screen's ~CC_/~SS_/~SR_/~CL. codes are already parsed in exactly one
