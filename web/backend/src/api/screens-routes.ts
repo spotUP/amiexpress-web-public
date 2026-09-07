@@ -616,6 +616,17 @@ screensRouter.delete('/file', (req: Request, res: Response) => {
  */
 screensRouter.get('/revisions', (req: Request, res: Response) => {
   const rel = String(req.query.path || '');
+  /* ASKED FOR NOTHING IS NOT ASKED FOR EVERYTHING.
+   *
+   * Containment and presence are different questions, and only the first was
+   * asked: an empty path IS inside the board root, so a call with no `path`
+   * listed the revisions of `''` with a 200 rather than saying what was
+   * missing. Same reasoning for `file` on the two routes below - a request
+   * that names no revision is malformed (400), not a request for a revision
+   * that happens not to exist (404). */
+  if (!rel) {
+    return res.status(400).json({ success: false, error: 'path is required' });
+  }
   if (hasBackslash(rel) || !containedScreenPath(rel)) {
     return res.status(400).json({ success: false, error: 'Path outside the board root' });
   }
@@ -631,6 +642,9 @@ screensRouter.get('/revisions', (req: Request, res: Response) => {
 screensRouter.get('/revision', (req: Request, res: Response) => {
   const rel = String(req.query.path || '');
   const file = String(req.query.file || '');
+  if (!rel || !file) {
+    return res.status(400).json({ success: false, error: 'path and file are required' });
+  }
   if (hasBackslash(rel) || hasBackslash(file) || !containedScreenPath(rel)) {
     return res.status(400).json({ success: false, error: 'Path outside the board root' });
   }
@@ -650,6 +664,9 @@ screensRouter.get('/revision', (req: Request, res: Response) => {
 screensRouter.post('/restore', (req: Request, res: Response) => {
   const rel = String(req.body?.path || '');
   const file = String(req.body?.file || '');
+  if (!rel || !file) {
+    return res.status(400).json({ success: false, error: 'path and file are required' });
+  }
   if (hasBackslash(rel) || hasBackslash(file) || !containedScreenPath(rel)) {
     return res.status(400).json({ success: false, error: 'Path outside the board root' });
   }

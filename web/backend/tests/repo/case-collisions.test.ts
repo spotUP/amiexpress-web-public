@@ -255,12 +255,21 @@ describe('you cannot see a collision by looking, so there is a way to ask', () =
     ]);
   });
 
-  it("the one Olm.info that exists is the one today's 40-column mark landed in", () => {
-    // If the mark had gone into a second spelling the board does not read,
-    // OLM would not really be a 40-column door. One file, so it did.
+  it('the one Olm.info that exists is the one an edit lands in', () => {
+    // If an edit went into a second spelling the board does not read, the
+    // door would not really have been changed. One file, so it did.
+    //
+    // NOT the 40-column mark any more. This asserted `C64_ADAPT=40`, which was
+    // added to Olm on 2026-09-06 and WITHDRAWN the same day - WarOLM's header
+    // cannot be aligned with its table and the door has no external art file
+    // to draw a narrow one into (see
+    // thoughts/shared/research/2026-09-07_door-external-header-files.md). A
+    // test that pins a mark somebody deliberately removed fails for being
+    // right. What this suite is about is the FILE, so it asserts the door's
+    // own identity instead - the tooltypes that say which binary it runs.
     const info = fs.readFileSync(path.join(REPO_ROOT, 'Commands/BBSCmd/Olm.info'), 'latin1');
-    expect(info).toContain('C64_ADAPT=40');
     expect(info).toContain('TYPE=XIM');
+    expect(info).toContain('WAROLM');
   });
 });
 

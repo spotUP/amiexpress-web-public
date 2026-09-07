@@ -44,6 +44,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { messageIndexManager, MsgStatus, type MsgHeader } from '../../src/services/MessageIndexManager';
+import { config } from '../../src/config';
 import {
   repairConferenceHeaders,
   assertNoHeaderLoss,
@@ -52,6 +53,8 @@ import {
 const CONF = 1;
 /** The real Conf1 holds 328 records numbered to 318; the mirror holds ~158. */
 const ON_DISK = 318;
+/** What `highMsgNum` must say afterwards: the number the NEXT message takes. */
+const NEXT_NUMBER = ON_DISK + 1;
 const IN_MIRROR = 158;
 const AT_RISK = ON_DISK - IN_MIRROR;
 
@@ -80,6 +83,15 @@ function makeBoard(): void {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'repair-headers-'));
   process.env.BBS_ROOT = root;
   process.env.BBS_DATA_DIR = root;
+  /* THE ROUTE ASKS THE CONFIG, NOT THE ENVIRONMENT.
+   *
+   * `config` reads BBS_DATA_DIR once, when it is first imported - which has
+   * already happened by the time this runs - so setting the variable here
+   * moved nothing and the route resolved `conferenceDir()` against the real
+   * board, answering "Conference 1 directory not found" for a conference this
+   * test had just built in a temp directory. Same call every other test that
+   * builds a board makes (screens/screen-theme-api.test.ts:27). */
+  config.set('dataDir', root);
   messageIndexManager.setBbsRoot(root);
 
   const msgBase = path.join(root, `Conf${CONF}`, 'MsgBase');
@@ -171,9 +183,14 @@ describe('repairing a conference that has headers on disk', () => {
     });
 
     expect(result.source).toBe('disk');
-    expect(messageIndexManager.readMailStats(CONF)!.highMsgNum).toBe(ON_DISK);
+    /* NEXT_NUMBER, not the highest on disk. `highMsgNum` is what express.e
+       hands the next message (express.e:10688 takes it, :12418 bumps it), so
+       a base numbered to 318 reports 319 - and a rebuild that answered 318
+       put the next post on top of an existing one, which is what 4c2d0ead1
+       fixed. This test predates that fix and pinned the old meaning. */
+    expect(messageIndexManager.readMailStats(CONF)!.highMsgNum).toBe(NEXT_NUMBER);
     expect(result.mailStatBefore!.highMsgNum).toBe(STALE_HIGH);
-    expect(result.mailStatAfter!.highMsgNum).toBe(ON_DISK);
+    expect(result.mailStatAfter!.highMsgNum).toBe(NEXT_NUMBER);
   });
 
   it('a dry run reports the same numbers and writes nothing', async () => {
@@ -287,8 +304,8 @@ describe('pressing the button', () => {
     const res = await request(app).post('/api/config/messages/repair-headers').query({ conf: CONF });
 
     expect(res.body.data.mailStatBefore.highMsgNum).toBe(STALE_HIGH);
-    expect(res.body.data.mailStatAfter.highMsgNum).toBe(ON_DISK);
-    expect(messageIndexManager.readMailStats(CONF)!.highMsgNum).toBe(ON_DISK);
+    expect(res.body.data.mailStatAfter.highMsgNum).toBe(NEXT_NUMBER);
+    expect(messageIndexManager.readMailStats(CONF)!.highMsgNum).toBe(NEXT_NUMBER);
   });
 
   it('answers a dry run without writing', async () => {
