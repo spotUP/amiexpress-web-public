@@ -7,6 +7,7 @@
  * that never starts looks identical to one nobody has tried to use.
  */
 import * as fs from 'fs';
+import * as path from 'path';
 
 import { FtpServer } from './ftp-server';
 import type { FtpDeps } from './ftp-session';
@@ -25,6 +26,14 @@ export interface FtpEnv {
   /** PEM paths. Without them the server runs, and `AUTH TLS` answers 431. */
   FTP_TLS_CERT?: string;
   FTP_TLS_KEY?: string;
+  /**
+   * The board answers to more than one name, and a certificate is issued for
+   * ONE. `FTP_TLS_HOSTS` is the comma-separated list, in preference order
+   * (first is the default for a client that sends no SNI), each read as
+   * `<FTP_TLS_DIR>/<host>.crt` and `.key`.
+   */
+  FTP_TLS_DIR?: string;
+  FTP_TLS_HOSTS?: string;
   /**
    * `1` lets a caller off the box log in without `AUTH TLS`. Off by default,
    * and it should stay off wherever the clients can manage explicit FTPS.
@@ -82,6 +91,46 @@ function tlsMaterial(env: FtpEnv): { cert: Buffer; key: Buffer } | undefined {
 }
 
 /**
+ * A certificate per hostname the board answers to.
+ *
+ * One board, two names: `uptown.uprough.net` is the one the sysop gives out
+ * and `bbs.uprough.net` is the one everything internal uses. They resolve to
+ * the same address, but a TLS certificate is issued for a NAME - a client
+ * dialling uptown and served the bbs certificate rejects it, which is not a
+ * misconfiguration a caller can work around.
+ *
+ * So the server carries both and picks by SNI. `FTP_TLS_HOSTS` is the list, in
+ * preference order, and each entry `<host>` is read as `<FTP_TLS_DIR>/<host>.crt`
+ * and `.key` - the layout the deploy stages, and Caddy's own naming. The FIRST
+ * one that loads is also the default, for a client that sends no SNI at all.
+ *
+ * A name whose files are missing is skipped with a warning rather than taking
+ * the server down: one broken certificate must not cost the board the other.
+ */
+function tlsHostMaterial(env: FtpEnv): Record<string, { cert: Buffer; key: Buffer }> {
+  const dir = env.FTP_TLS_DIR;
+  const hosts = (env.FTP_TLS_HOSTS ?? '')
+    .split(',')
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0);
+  if (!dir || hosts.length === 0) return {};
+
+  const contexts: Record<string, { cert: Buffer; key: Buffer }> = {};
+  for (const host of hosts) {
+    try {
+      contexts[host] = {
+        cert: fs.readFileSync(path.join(dir, `${host}.crt`)),
+        key: fs.readFileSync(path.join(dir, `${host}.key`)),
+      };
+    } catch (error) {
+      console.warn(`[FTP] No usable certificate for ${host}, that name will not serve TLS: ${
+        error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return contexts;
+}
+
+/**
  * Start the server when the board wants one. Returns null when it does not,
  * which is not a failure and must not read like one.
  */
@@ -103,8 +152,25 @@ export async function startFtpServer(
         'clients can use AUTH TLS.'
     );
   }
+  // Per-name certificates first: the board answers to two names and a caller
+  // dialling either must be served the one his client will accept. The single
+  // FTP_TLS_CERT/KEY pair stays as the fallback and as the default context.
+  const hostCerts = tlsHostMaterial(env);
+  const named = Object.keys(hostCerts);
+  const fallback = tlsMaterial(env);
+  const defaultCert = named.length > 0 ? hostCerts[named[0]] : fallback;
+  if (named.length > 0) {
+    console.log(`[FTP] TLS certificates loaded for ${named.join(', ')} (default ${named[0]})`);
+  }
+
   const server = new FtpServer(
-    { port, host: env.FTP_HOST || '0.0.0.0', tls: tlsMaterial(env), allowPlaintext },
+    {
+      port,
+      host: env.FTP_HOST || '0.0.0.0',
+      tls: defaultCert,
+      tlsHosts: hostCerts,
+      allowPlaintext,
+    },
     deps
   );
   await server.start();

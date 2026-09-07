@@ -20,6 +20,15 @@ export interface FtpServerOptions {
   /** PEM certificate and key. Without them `AUTH TLS` answers 431. */
   tls?: { cert: Buffer; key: Buffer };
   /**
+   * A certificate per hostname, chosen by SNI at handshake time.
+   *
+   * The board answers to `uptown.uprough.net` and `bbs.uprough.net`; a
+   * certificate is issued for one name, and a client dialling the other
+   * rejects it. `tls` above stays the default, for a client that sends no
+   * server name.
+   */
+  tlsHosts?: Record<string, { cert: Buffer; key: Buffer }>;
+  /**
    * Let a caller off the box log in without `AUTH TLS`. Off unless the sysop
    * sets `FTP_ALLOW_PLAINTEXT=1` - see `FtpSession.mustUpgradeFirst`.
    */
@@ -32,12 +41,21 @@ export class FtpServer extends EventEmitter {
   private server: net.Server | null = null;
   private secureContext: tls.SecureContext | null = null;
 
+  /** One context per name in `tlsHosts`, built once - not per handshake. */
+  private readonly hostContexts = new Map<string, tls.SecureContext>();
+
   constructor(options: FtpServerOptions, deps: FtpDeps) {
     super();
     this.options = options;
     this.deps = deps;
     if (options.tls) {
       this.secureContext = tls.createSecureContext({ cert: options.tls.cert, key: options.tls.key });
+    }
+    for (const [host, material] of Object.entries(options.tlsHosts ?? {})) {
+      this.hostContexts.set(
+        host.toLowerCase(),
+        tls.createSecureContext({ cert: material.cert, key: material.key })
+      );
     }
   }
 
@@ -86,6 +104,14 @@ export class FtpServer extends EventEmitter {
       const secured = new tls.TLSSocket(raw as net.Socket, {
         isServer: true,
         secureContext: this.secureContext!,
+        // The name the client dialled decides the certificate. Unknown names
+        // and clients that send none fall through to `secureContext` above,
+        // which is the first configured host - better a certificate the
+        // client may not like than a handshake that fails outright.
+        SNICallback: (servername, callback) => {
+          const context = this.hostContexts.get(String(servername).toLowerCase());
+          callback(null, context ?? this.secureContext ?? undefined);
+        },
       });
       secured.once('secure', () => resolve(secured));
       secured.once('error', reject);

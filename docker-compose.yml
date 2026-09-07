@@ -117,17 +117,29 @@ services:
       # pointing at a socket nobody is listening on.
       - FTP_PORT=${FTP_PORT:-1541}
       # Read by start-ftp.ts. Both must be present or AUTH TLS answers 431.
+      # These are the FALLBACK pair, used for a client that sends no SNI and
+      # for a name not listed below.
       - FTP_TLS_CERT=/certs/bbs.uprough.net.crt
       - FTP_TLS_KEY=/certs/bbs.uprough.net.key
-      # TEMPORARY, and the sysop's own call (2026-09-07): let a caller off the
-      # box log in WITHOUT AUTH TLS, because the client on the sysop's Mac
-      # offers no explicit-FTPS mode and is otherwise refused at USER.
+      # The names this board answers to, in preference order - the FIRST is
+      # the default context. uptown is the address the sysop gives out; bbs is
+      # what everything internal uses. A certificate is issued for ONE name,
+      # so the server carries both and picks by SNI; without this, a caller
+      # dialling uptown is served the bbs certificate and his client rejects
+      # it. Each entry is read as /certs/<host>.crt and /certs/<host>.key,
+      # which is what the deploy stages and how Caddy names them.
+      - FTP_TLS_DIR=/certs
+      - FTP_TLS_HOSTS=uptown.uprough.net,bbs.uprough.net
+      # OFF again, 2026-09-07, and it should stay off. It was set for one
+      # afternoon because the certificate was unreadable and no client could
+      # get in; with the certificate staged and readable, Transmit logged in
+      # over explicit FTPS on the first try (`234 AUTH TLS successful`,
+      # `230 password accepted`), so there is nothing left to buy by allowing
+      # a password to cross the internet in clear text.
       #
-      # While this is `1`, an FTP password crosses the internet in clear text,
-      # and it is the caller's BBS password - the same one the admin takes.
-      # Set it to 0 (or delete the line) as soon as the clients can do AUTH
-      # TLS; the server logs a warning at every boot while it is on.
-      - FTP_ALLOW_PLAINTEXT=${FTP_ALLOW_PLAINTEXT:-1}
+      # Setting it to 1 lets a caller off the box log in without AUTH TLS. The
+      # password is his BBS password, which is also his admin password.
+      - FTP_ALLOW_PLAINTEXT=${FTP_ALLOW_PLAINTEXT:-0}
 
       # Security - MUST override in .env file
       - JWT_SECRET=${JWT_SECRET:-CHANGE_ME}

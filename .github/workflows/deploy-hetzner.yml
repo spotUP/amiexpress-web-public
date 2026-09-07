@@ -377,15 +377,21 @@
               # Re-copied on every deploy, which is also how a renewed
               # certificate reaches FTPS: Caddy renews in place, and the FTP
               # server reads the file once at boot.
-              CADDY_CERTS=/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/bbs.uprough.net
-              if [ -f "$CADDY_CERTS/bbs.uprough.net.crt" ]; then
-                echo "== staging FTPS certificate for the container =="
-                install -d -m 0750 -o 1001 -g 1001 /app/ftp-certs
-                install -m 0444 -o 1001 -g 1001 "$CADDY_CERTS/bbs.uprough.net.crt" /app/ftp-certs/
-                install -m 0400 -o 1001 -g 1001 "$CADDY_CERTS/bbs.uprough.net.key" /app/ftp-certs/
-              else
-                echo "== no Caddy certificate for the board; FTPS will answer 431 =="
-              fi
+              # Both names the board answers to: uptown is the address the
+              # sysop gives out, bbs is what everything internal uses. A
+              # certificate is issued for ONE name, so the FTP server carries
+              # both and picks by SNI (FTP_TLS_HOSTS in docker-compose.yml).
+              CADDY_CERTS=/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory
+              install -d -m 0750 -o 1001 -g 1001 /app/ftp-certs
+              for FTP_HOSTNAME in uptown.uprough.net bbs.uprough.net; do
+                if [ -f "$CADDY_CERTS/$FTP_HOSTNAME/$FTP_HOSTNAME.crt" ]; then
+                  echo "== staging FTPS certificate for $FTP_HOSTNAME =="
+                  install -m 0444 -o 1001 -g 1001 "$CADDY_CERTS/$FTP_HOSTNAME/$FTP_HOSTNAME.crt" /app/ftp-certs/
+                  install -m 0400 -o 1001 -g 1001 "$CADDY_CERTS/$FTP_HOSTNAME/$FTP_HOSTNAME.key" /app/ftp-certs/
+                else
+                  echo "== no Caddy certificate for $FTP_HOSTNAME; that name will not serve TLS =="
+                fi
+              done
 
               # `--force-recreate` is the critical bit: without it, docker
               # compose can decide the running container "matches" the spec
