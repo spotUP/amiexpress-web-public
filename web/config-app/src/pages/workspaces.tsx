@@ -25,6 +25,7 @@ import { ComputersPage } from './ComputersPage';
 import { ScreenTypesPage } from './ScreenTypesPage';
 import { ScreenFilesPage } from './ScreenFilesPage';
 import { ScreenThemesPage } from './ScreenThemesPage';
+import { QuestionnairePage } from './QuestionnairePage';
 import { LanguagesPage } from './LanguagesPage';
 import { ProtocolsPage } from './ProtocolsPage';
 import { FileCheckersPage } from './FileCheckersPage';
@@ -152,6 +153,7 @@ export function OperatorChatWorkspace() {
 const SCREEN_TABS: TabDefinition[] = [
   { id: 'files', label: 'Screen files', render: () => <ScreenFilesPage /> },
   { id: 'themes', label: 'Themes', render: () => <ScreenThemesPage /> },
+  { id: 'questionnaire', label: 'Questionnaire', render: () => <QuestionnairePage /> },
 ];
 
 export function ScreensWorkspace() {

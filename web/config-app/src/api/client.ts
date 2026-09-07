@@ -336,8 +336,9 @@ class ApiClient {
   //
   // Content crosses as base64 in both directions: a screen carries Amiga
   // high-bit bytes, and a UTF-8 round trip turns one into U+FFFD.
-  async getScreenIndex() {
-    return this.request<ApiResponse>(`${API_BASE}/screens`);
+  async getScreenIndex(theme?: string) {
+    const suffix = theme && theme !== 'default' ? `?theme=${encodeURIComponent(theme)}` : '';
+    return this.request<ApiResponse>(`${API_BASE}/screens${suffix}`);
   }
 
   /** Every MCI code, with how many times this board writes each one. */
@@ -585,6 +586,21 @@ class ApiClient {
   }
 
   // Languages
+  // ===== New-user questionnaire =====
+  async getQuestionnaire() {
+    return this.request<ApiResponse>(`${API_BASE}/questionnaire`);
+  }
+  async saveQuestionnaire(text: string) {
+    return this.request<ApiResponse>(`${API_BASE}/questionnaire`, {
+      method: 'PUT', body: JSON.stringify({ text }),
+    });
+  }
+  async setQuestionnaireEnabled(enabled: boolean) {
+    return this.request<ApiResponse>(`${API_BASE}/questionnaire/enabled`, {
+      method: 'POST', body: JSON.stringify({ enabled }),
+    });
+  }
+
   // ===== Screen themes =====
   // A theme is a full set of board art one artist owns. These four calls are
   // the whole surface: the server answers what THIS account may do with each

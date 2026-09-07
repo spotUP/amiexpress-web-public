@@ -196,6 +196,10 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // editor writes the files, and both enforce the same ownership rule.
   const { themesRouter } = require('../api/theme-routes');
   app.use('/api/themes', authenticateToken(db), requireLevel(100), themesRouter);
+  // The new-user questionnaire: read by any admin, written by a sysop (the
+  // router checks the level itself on every write).
+  const { questionnaireRouter } = require('../api/questionnaire-routes');
+  app.use('/api/questionnaire', authenticateToken(db), requireLevel(100), questionnaireRouter);
 
   // ===== Admin Permissions API - Sysop-only =====
   app.get('/api/admin-permissions', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
