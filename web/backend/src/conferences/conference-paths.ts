@@ -138,3 +138,53 @@ export function conferenceAmigaPath(bbsRoot: string, conferenceNumber: number, .
 
   return `${withoutTrailer}${suffix}/`;
 }
+
+/**
+ * The directories a conference's DOWNLOADS actually live in.
+ *
+ * `DLPATH.1..16` in the conference's own icon - `<root>/Conf2.info`, the
+ * SIBLING of the directory, which is AmiExpress's layout - and they routinely
+ * point somewhere other than `<confDir>/Files`. On the live board
+ * `Conf2.info` says `DLPATH.1=BBS:Conf3/Files` and `Conf3.info` says
+ * `BBS:Conf5/Files`.
+ *
+ * This exists because the two halves disagreed: `moveToFiles` writes an
+ * upload into DLPATH (express.e:15264), and `resolveFile` looked only in
+ * `<confDir>/Files` and `<confDir>/Upload`. On a board configured like this
+ * one, a file uploaded through the BBS could never be downloaded again - over
+ * FTP or at the `D` prompt.
+ *
+ * Returns the resolved host paths in tooltype order, deduplicated, with
+ * anything unreadable dropped: a sysop's typo in DLPATH.7 must not cost the
+ * caller DLPATH.1.
+ */
+export function conferenceDownloadDirs(bbsRoot: string, conferenceNumber: number): string[] {
+  const iconPath = `${conferenceDir(bbsRoot, conferenceNumber)}.info`;
+
+  let tooltypes: Map<string, string>;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { readTooltypeMap } = require('../utils/info-file.util') as typeof import('../utils/info-file.util');
+    tooltypes = readTooltypeMap(iconPath);
+  } catch {
+    // No icon, or one this reader cannot parse. The caller falls back to the
+    // conventional directories.
+    return [];
+  }
+
+  const resolved: string[] = [];
+  for (let index = 1; index <= 16; index++) {
+    const value = tooltypes.get(`DLPATH.${index}`)?.trim();
+    if (!value) continue;
+    try {
+      const host = value.includes(':')
+        ? new BBSPaths(bbsRoot).resolveAmigaPath(value.replace(/\/+$/, ''))
+        : path.resolve(bbsRoot, value.replace(/\/+$/, ''));
+      const settled = amigafs.resolveExistingAncestors(host);
+      if (settled && !resolved.includes(settled)) resolved.push(settled);
+    } catch {
+      // One bad tooltype does not spoil the rest.
+    }
+  }
+  return resolved;
+}

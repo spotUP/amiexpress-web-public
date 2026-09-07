@@ -215,7 +215,32 @@ export class FtpSession {
     while ((index = this.buffer.indexOf('\n')) >= 0) {
       const line = this.buffer.slice(0, index).replace(/\r$/, '');
       this.buffer = this.buffer.slice(index + 1);
-      void this.handleLine(line);
+      /*
+       * EVERY COMMAND ANSWERS SOMETHING.
+       *
+       * `handleLine` is async and was launched with a bare `void`, so anything
+       * it threw became an unhandled rejection and the caller got NO REPLY -
+       * his client then waits for its own timeout with a half-open data
+       * connection. That is exactly what a missing `Conf2.info` did to STOR on
+       * the live board (sysop, 2026-09-07): a one-line ENOENT presented as a
+       * hung upload.
+       *
+       * A thrown command is a 451: the board failed, the caller is told, and
+       * the session stays usable. This is the LAST line of defence - a
+       * command that can fail should still catch its own failure and say
+       * something specific.
+       */
+      void this.handleLine(line).catch((error) => {
+        console.error(
+          `[FTP] ${line.split(' ')[0]} failed: ${
+            error instanceof Error ? error.stack ?? error.message : String(error)}`
+        );
+        this.reply(
+          451,
+          `The board could not complete that: ${
+            error instanceof Error ? error.message : String(error)}`
+        );
+      });
     }
   }
 

@@ -22,6 +22,7 @@ import * as amigafs from '../../utils/amigafs';
 import { getConferenceDir } from '../../utils/file-hold.util';
 import { materialiseRemoteFile, storageFailureText } from '../../storage/remote-download';
 import { getStorageContext, type StorageContext } from '../../storage/storage-context';
+import { conferenceDownloadDirs } from '../../conferences/conference-paths';
 
 /** A file this handler is prepared to send: always a real path on local disk. */
 export interface ResolvedFile {
@@ -81,7 +82,17 @@ export async function resolveFile(
 
   // Files live in Files/ or Upload/ — Dir1..DirN are AmiExpress
   // metadata text files, not directories containing downloadable files.
+  //
+  // DLPATH FIRST, and this is not a nicety. `moveToFiles` writes an upload
+  // into the area's DLPATH (express.e:15264) while this searched only
+  // `<confDir>/Files` and `<confDir>/Upload` - so on a board whose DLPATH
+  // points elsewhere, a file uploaded through the BBS could never be
+  // downloaded again. The live board is exactly that: `Conf2.info` says
+  // `DLPATH.1=BBS:Conf3/Files`, `Conf3.info` says `BBS:Conf5/Files`.
+  // Reported over FTP on 2026-09-07 as "the board lists it, but its bytes are
+  // not here"; the `D` command had the same blind spot and said "not found".
   const searchDirs = [
+    ...conferenceDownloadDirs(dataDir, confNum),
     path.join(confPath, 'Files'),
     path.join(confPath, 'Upload'),
   ];

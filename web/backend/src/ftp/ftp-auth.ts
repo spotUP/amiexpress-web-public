@@ -157,11 +157,24 @@ export function boardFtpDeps(): FtpDeps {
 
       // The tooltype is presence-semantics, like every other boolean on this
       // board: NO_FTP_UPLOADS present means uploads are off here.
-      const confIcon = readTooltypeMap(
-        path.join(conferenceDir(config.get('dataDir'), conferenceId), 'Conf.info')
-      );
-      if (confIcon.has('NO_FTP_UPLOADS')) {
-        return confIcon.get('NO_FTP_UPLOADS')?.trim() || 'Uploads are not accepted in this conference';
+      //
+      // The icon is the directory's SIBLING - `<root>/Conf2.info`, not
+      // `<root>/Conf2/Conf.info`. That is AmiExpress's own layout, and reading
+      // the wrong path threw ENOENT on the live board, which escaped as an
+      // unhandled rejection and left the caller's STOR hanging with no reply
+      // at all (sysop, 2026-09-07).
+      //
+      // A conference with no icon has no tooltypes and therefore no refusal:
+      // absent is not the same as forbidden, and it must never be an error.
+      const iconPath = `${conferenceDir(config.get('dataDir'), conferenceId)}.info`;
+      try {
+        const confIcon = readTooltypeMap(iconPath);
+        if (confIcon.has('NO_FTP_UPLOADS')) {
+          return confIcon.get('NO_FTP_UPLOADS')?.trim() || 'Uploads are not accepted in this conference';
+        }
+      } catch {
+        // No icon, or one this reader cannot parse. Uploads are not switched
+        // off by a file that is not there.
       }
 
       return undefined;
