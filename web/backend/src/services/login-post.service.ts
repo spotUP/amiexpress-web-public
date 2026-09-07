@@ -299,36 +299,6 @@ export async function runPostAuthLogin(
   initializeSecurity(session);
   setEnvStat(session, EnvStat.IDLE);
 
-  // express.e:29715-29727 — checkUserOnLine(1): one account, one node.
-  //
-  // Before this, the same account could hold as many nodes as it could open
-  // connections. The check reads the node FILES, as express.e does: they are
-  // what a real AmiExpress and every door read, they survive a restart, and a
-  // check against the in-process session map would answer differently from
-  // what the board itself believes.
-  const alreadyOn = userAlreadyOnNode(appConfig.get('dataDir'), user.username, nodeId);
-  if (alreadyOn !== null) {
-    void writeToCallersLog(
-      user.username,
-      `User ${user.username} already on another node!`,
-      nodeId
-    );
-    // express.e:29722 - the board's own screen, and its sentence only when the
-    // board has not drawn one.
-    const shown = await displayScreen(emitter as any, session, 'ONENODE', true, /* silent */ true);
-    if (!shown) {
-      emitter.emit(
-        'ansi-output',
-        `\r\nYou are already logged into another node!\r\n`
-      );
-    }
-    beginLogoff(emitter as any, session, {
-      finalState: BBSState.AWAIT,
-      readDelayMs: 1500,
-    });
-    return { ok: false, terminated: "already-on-another-node" };
-  }
-
   // express.e:29768-29773 — secStatus <= 1 lockout.
   if (user.secLevel <= 1) {
     const lockScreen = user.secLevel === 0 ? "LOCKOUT0" : "LOCKOUT1";
