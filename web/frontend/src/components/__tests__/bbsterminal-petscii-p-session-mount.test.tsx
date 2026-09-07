@@ -264,3 +264,75 @@ describe('a PETSCII canvas session is framed and centred on a desktop like an xt
     });
   });
 });
+
+/**
+ * "P8" at the graphics prompt: PETSCII bytes on an 80-column screen.
+ *
+ * pre-login emits the geometry twice - `terminal-resize` for the xterm
+ * path's benefit and `petscii-mode` for the shape - and the second one is
+ * what decides how wide the machine and the canvas are. A 40-column
+ * `petscii-mode` must still give a C64's screen, so both are pinned here by
+ * the one number jsdom can see: the backing store's aspect, 672x232 wide
+ * against 352x232 narrow.
+ */
+describe("answering 'P8' at the graphics prompt", () => {
+  const shapeOf = async (container: HTMLElement) => {
+    const canvas = await waitFor(() => {
+      const c = container.querySelector('canvas');
+      expect(c).not.toBeNull();
+      return c as HTMLCanvasElement;
+    });
+    await waitFor(() => { expect(canvas.width).toBeGreaterThan(0); });
+    return canvas.width / canvas.height;
+  };
+
+  it('mounts an 80-column screen when the board says the screen is 80 wide', async () => {
+    const { container } = render(<BBSTerminal backendUrl="http://localhost:3001" />);
+    act(() => {
+      socket.fire('terminal-resize', { cols: 80, rows: 25 });
+      socket.fire('petscii-mode', { cols: 80, rows: 25, palette: 'vic' });
+    });
+    expect(await shapeOf(container)).toBeCloseTo(672 / 232, 5);
+    expect(escaped).toEqual([]);
+  });
+
+  it('still mounts a C64 screen when the board says 40', async () => {
+    const { container } = render(<BBSTerminal backendUrl="http://localhost:3001" />);
+    act(() => {
+      socket.fire('terminal-resize', { cols: 40, rows: 25 });
+      socket.fire('petscii-mode', { cols: 40, rows: 25, palette: 'vic' });
+    });
+    expect(await shapeOf(container)).toBeCloseTo(352 / 232, 5);
+    expect(escaped).toEqual([]);
+  });
+
+  it('feeds what the board sends next into the wide screen', async () => {
+    const { container } = render(<BBSTerminal backendUrl="http://localhost:3001" />);
+    act(() => {
+      socket.fire('terminal-resize', { cols: 80, rows: 25 });
+      socket.fire('petscii-mode', { cols: 80, rows: 25, palette: 'vic' });
+    });
+    const canvas = await waitFor(() => {
+      const c = container.querySelector('canvas');
+      expect(c).not.toBeNull();
+      return c as HTMLCanvasElement;
+    });
+    await waitFor(() => { expect(ctxByCanvas.get(canvas)).toBeTruthy(); });
+
+    await act(async () => {
+      // 74 characters: past a C64's 40 columns, inside this screen's 80.
+      socket.fire('ansi-output', '\x1b[2J\x1b[H' + 'UPROUGH'.repeat(10) + 'ABCD\r\n');
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    });
+
+    const ctx = ctxByCanvas.get(canvas)!;
+    const columnsTouched = new Set(
+      ctx.calls.filter((c) => c.method === 'drawImage').map((c) => String(c.args[5]))
+    );
+    // A 40-column machine would have wrapped this into two rows of at most
+    // 40 distinct x positions; 74 of them means one wide row.
+    expect(columnsTouched.size).toBe(74);
+    expect(escaped).toEqual([]);
+  });
+});

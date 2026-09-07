@@ -46,8 +46,11 @@ export interface PetsciiCanvasHandle {
   focus(): void;
 }
 
-const COLS = 40;
-const ROWS = 25;
+// The C64's screen, and the default this canvas has always drawn. The WIDE
+// PETSCII screen is 80x25 (petscii80); every number below is derived from
+// the machine's OWN shape rather than from these, so one canvas paints both.
+const DEFAULT_COLS = 40;
+const DEFAULT_ROWS = 25;
 // Screen codes that render as a blank space in BOTH charset banks (verified
 // against the PetMe64 glyph outlines: 0x20 and 0x60 are empty in bank 0 and
 // bank 1; their reverse-video counterparts, bit 7 set, are solid blocks and
@@ -63,8 +66,17 @@ const BORDER_PER_SCALE = 16; // px of border per axis, per unit of scale - match
 // Bordered screen footprint per unit of integer scale: 40*8 + 2*16 = 352
 // wide, 25*8 + 2*16 = 232 tall. Derived from the same constants `border`/
 // `width`/`height` use below so the two can never drift apart.
-const UNIT_W = COLS * CELL_PX + 2 * BORDER_PER_SCALE;
-const UNIT_H = ROWS * CELL_PX + 2 * BORDER_PER_SCALE;
+const unitWidthFor = (cols: number): number => cols * CELL_PX + 2 * BORDER_PER_SCALE;
+const unitHeightFor = (rows: number): number => rows * CELL_PX + 2 * BORDER_PER_SCALE;
+/**
+ * The footprint per unit of integer scale, for anything that needs to
+ * reserve room before a machine exists: 352x232 for a C64's screen, and
+ * 672x232 for the wide one (petscii80 phase 0 measured both).
+ */
+export const PETSCII_UNIT_FOOTPRINT = {
+  c64: { width: unitWidthFor(DEFAULT_COLS), height: unitHeightFor(DEFAULT_ROWS) },
+  wide: { width: unitWidthFor(80), height: unitHeightFor(DEFAULT_ROWS) },
+} as const;
 
 /**
  * Renders a `PetsciiMachine`'s screen/color-RAM state onto a `<canvas>` via a
@@ -98,6 +110,14 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
   // very first paint never overflows before the initial measurement runs.
   const [fitScale, setFitScale] = useState(1);
 
+  // THE SHAPE, from the machine itself. 40x25 for a C64, 80x25 for this
+  // board's wide PETSCII screen - and never a constant here, because the
+  // canvas draws whichever it is handed.
+  const cols = machine.state.cols || DEFAULT_COLS;
+  const rows = machine.state.rows || DEFAULT_ROWS;
+  const unitW = unitWidthFor(cols);
+  const unitH = unitHeightFor(rows);
+
   // Measure the parent container (ResizeObserver + an initial synchronous
   // measure) and recompute the continuous fit ratio. `maxScale` (the
   // `scale` prop) caps the render-resolution integer derived from this, not
@@ -109,7 +129,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
       const availW = el.clientWidth;
       const availH = el.clientHeight;
       if (availW <= 0 || availH <= 0) return;
-      const fit = Math.min(availW / UNIT_W, availH / UNIT_H);
+      const fit = Math.min(availW / unitW, availH / unitH);
       setFitScale(fit);
     };
     measure();
@@ -117,7 +137,10 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+    // The footprint is part of the measurement: an 80-column screen is
+    // 672x232 per unit of scale where a C64's is 352x232, so a mode change
+    // has to re-fit.
+  }, [unitW, unitH]);
 
   // Fill-fit policy (sysop live-screenshot review, final wave addendum): a
   // FLOORED integer scale wastes up to a whole tier of container space -
@@ -132,8 +155,8 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
   const scale = Math.max(1, Math.min(maxScale, Math.ceil(fitScale)));
 
   const border = 16 * scale;
-  const width = COLS * CELL_PX * scale + 2 * border;
-  const height = ROWS * CELL_PX * scale + 2 * border;
+  const width = cols * CELL_PX * scale + 2 * border;
+  const height = rows * CELL_PX * scale + 2 * border;
 
   // Build the glyph atlas once per mount.
   useEffect(() => {
@@ -174,11 +197,11 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
 
     // Screen background.
     ctx.fillStyle = palette[s.background & 0x0F];
-    ctx.fillRect(border, border, COLS * destCell, ROWS * destCell);
+    ctx.fillRect(border, border, cols * destCell, rows * destCell);
 
-    for (let y = 0; y < ROWS; y++) {
-      for (let x = 0; x < COLS; x++) {
-        const idx = y * COLS + x;
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const idx = y * cols + x;
         const screenCode = s.screen[idx];
         if (isBlankScreenCode(screenCode)) continue; // background fill above is already correct - draw nothing
         const color = palette[s.colorRam[idx] & 0x0F];
@@ -204,7 +227,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
     // cursor in game", 2026-09-06).
     const effectiveCursorOn = s.cursorShown === false ? false : (cursorVisible ?? cursorOn);
     if (effectiveCursorOn) {
-      const cursorIdx = s.cursorY * COLS + s.cursorX;
+      const cursorIdx = s.cursorY * cols + s.cursorX;
       ctx.fillStyle = palette[s.colorRam[cursorIdx] & 0x0F];
       ctx.fillRect(border + s.cursorX * destCell, border + s.cursorY * destCell, destCell, destCell);
     }

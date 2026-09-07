@@ -39,7 +39,7 @@ import { classifyKey } from '../utils/key-overrides';
 import { toggleFullscreen } from '../utils/fullscreen';
 import { GamepadManager } from '../utils/gamepad-manager';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
-import { PetsciiMachine, AnsiToPetsciiTransducer, petsciiInputToAscii } from '@amiexpress/bbs-door-sdk/petscii';
+import { WideScreenMachine, PetsciiMachine, AnsiToPetsciiTransducer, petsciiInputToAscii } from '@amiexpress/bbs-door-sdk/petscii';
 import { PetsciiCanvas, type PetsciiCanvasHandle } from '../petscii/PetsciiCanvas';
 import { petsciiSurfaceReducer, initialPetsciiSurface, type PetsciiSurface } from '../petscii/surface-state';
 import { processLoginKey, type LoginKeyContext } from '../utils/login-key-machine';
@@ -958,12 +958,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Canvas mode starts here and only here. The transducer and the display
     // machine both start from power-on state and see the same byte sequence
     // (transducer output + observed raw bytes), so they stay in lockstep.
-    const ensurePetsciiSession = () => {
+    const ensurePetsciiSession = (columns: 40 | 80 = 40) => {
       if (!petsciiMachineRef.current) {
-        petsciiMachineRef.current = new PetsciiMachine();
+        // The screen's SHAPE, from the server's petscii-mode event. 40 is a
+        // C64; 80 is this board's wide PETSCII screen (WideScreenMachine:
+        // no logical lines, and $02 is not a background prefix there).
+        petsciiMachineRef.current = columns === 80 ? new WideScreenMachine() : new PetsciiMachine();
         setPetsciiMachine(petsciiMachineRef.current);
       }
-      if (!petsciiTransducerRef.current) petsciiTransducerRef.current = new AnsiToPetsciiTransducer();
+      if (!petsciiTransducerRef.current) petsciiTransducerRef.current = new AnsiToPetsciiTransducer({ columns });
       if (surfaceRef.current !== 'canvas') {
         surfaceRef.current = 'canvas';
         dispatchSurface({ type: 'petscii-session-start' });
@@ -2301,6 +2304,20 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // Nothing to mirror for the canvas: the C64 surface is not paced
       // client-side at all (see enqueuePetscii). Its "modem feel" comes
       // from the server, which throttles the same bytes for both surfaces.
+    });
+
+    /**
+     * The PETSCII screen's SHAPE (petscii80 phase 3).
+     *
+     * The mode signal used to BE the geometry: the 40x25 in the resize
+     * below was what mounted the canvas, so an 80-column PETSCII screen
+     * could not be asked for without pretending to be 40 wide. This event
+     * carries the shape, and the resize below stays exactly as it was so a
+     * session that started before this deploy keeps its screen.
+     */
+    socket.on('petscii-mode', (shape: { cols: number; rows: number; palette?: string }) => {
+      console.log('[Terminal] PETSCII mode:', shape.cols, 'x', shape.rows);
+      ensurePetsciiSession(shape.cols === 80 ? 80 : 40);
     });
 
     // Terminal resize handler (PETSCII mode uses 40x25)
@@ -3678,12 +3695,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         <div
           style={{
             width: '100%',
-            // 352x232 = one bordered C64 screen (PetsciiCanvas UNIT_W/UNIT_H).
-            // The canvas fits ITSELF to this box on both axes (PetsciiCanvas
-            // measures its container and keeps the 352x232 aspect with
-            // max-width/max-height), so the box just hands it the space the
-            // fraction allows. A fixed aspect-ratio here would have fought
-            // that and re-introduced a gap on the other axis.
+            // The canvas fits ITSELF to this box on both axes: it measures
+            // the container and keeps its own screen's aspect with
+            // max-width/max-height, so the box just hands it the space the
+            // fraction allows. That aspect is 352x232 for a C64 screen and
+            // 672x232 for an 80-column one (PETSCII_UNIT_FOOTPRINT), which
+            // is why no aspect is named here - a fixed one would fight the
+            // canvas and re-introduce a gap on the other axis.
             height: '100%',
             backgroundColor: '#000',
           }}
