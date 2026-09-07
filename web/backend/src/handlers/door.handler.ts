@@ -24,7 +24,7 @@ import { BBSState } from '../index';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.util';
-import { resolveDoorMinColumns, declaredMinColumns, resolveDoorAdaptColumns, doorOpensForC64, doorShowsC64Mark, doorNeedsBrowser, type MinColumnsDoorShape, ADAPTED_DOOR_TYPES, DEFAULT_MIN_COLUMNS, sessionColumns, DOOR_NEEDS_80_NOTICE, noWidthEquivalentNotice, DOOR_NEEDS_BROWSER_NOTICE, DOOR_NEEDS_BROWSER_MARK } from '../utils/door-min-columns.util';
+import { resolveDoorMinColumns, declaredMinColumns, resolveDoorAdaptColumns, doorOpensForC64, doorDropsOldestAt40, doorShowsC64Mark, doorNeedsBrowser, type MinColumnsDoorShape, ADAPTED_DOOR_TYPES, DEFAULT_MIN_COLUMNS, sessionColumns, DOOR_NEEDS_80_NOTICE, noWidthEquivalentNotice, DOOR_NEEDS_BROWSER_NOTICE, DOOR_NEEDS_BROWSER_MARK } from '../utils/door-min-columns.util';
 import { transportCapabilities } from '../server/transport-adapter';
 import { installC64DoorAdapter, uninstallC64DoorAdapter } from '../server/c64-door-adapter';
 import { isNarrow, NARROW_WIDTH, narrowClip } from '../utils/table-format.util';
@@ -3197,7 +3197,12 @@ console.log(`[executeAmigaDoor] Detected GCC-compiled executable, running native
     // byte-for-byte what it was: installC64DoorAdapter returns null without
     // touching socket.emit.
     if (doorOpensForC64(door as any, session)) {
-      installC64DoorAdapter(socket, session as any);
+      // C64_DROP_OLDEST rides along with the install: it is a property of the
+      // DOOR, resolved once here, so the adapter never has to know which door
+      // it is driving.
+      installC64DoorAdapter(socket, session as any, {
+        dropOldest: doorDropsOldestAt40(door as any),
+      });
     }
 
     // Move to a fresh line before the door renders any output (prevents menu prompt overlap)

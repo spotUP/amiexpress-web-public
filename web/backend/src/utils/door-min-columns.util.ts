@@ -251,6 +251,26 @@ export function resolveDoorAdaptColumns(door: MinColumnsDoorShape): number | nul
 }
 
 /**
+ * Does this door say its list may lose its OLDEST entries to fit 40 columns?
+ *
+ * `C64_DROP_OLDEST=1`, declared exactly where `C64_ADAPT` is and read in the
+ * same source order. It is a separate declaration because it says something
+ * `C64_ADAPT` does not: "the top of my list is its oldest entry, and a caller
+ * who never sees it has lost nothing he would miss". True of a wall, false of
+ * every table whose first row is simply its first - which is why nothing here
+ * infers it from the shape of the screen.
+ */
+export function doorDropsOldestAt40(door: MinColumnsDoorShape | null | undefined): boolean {
+  if (!door) return false;
+  const raw =
+    (door as any).c64DropOldest ??
+    door.toolTypes?.['C64_DROP_OLDEST'] ??
+    (door.doorInfo as any)?.c64DropOldest ??
+    door.doorInfo?.toolTypes?.['C64_DROP_OLDEST'];
+  return /^(1|yes|true)$/i.test(String(raw ?? '').trim());
+}
+
+/**
  * THE predicate: may this session enter this door through the C64 adapter?
  *
  * ONE answer, two readers - executeDoor's gate clause asks it whether a door

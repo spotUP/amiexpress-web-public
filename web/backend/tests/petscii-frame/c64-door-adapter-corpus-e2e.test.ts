@@ -65,6 +65,7 @@ import {
   c64AdapterFor,
 } from '../../src/server/c64-door-adapter';
 import { stripNarrowNoise } from '../../src/server/c64-door-noise';
+import { collapseBlankRunsToFit } from '../../src/server/c64-door-fit';
 
 const COLS = 40;
 const ROWS = 25;
@@ -538,14 +539,19 @@ function reconstruct(text: string): Frame {
 
 describe.each(Object.keys(manifest))('fixture %s end to end', (id) => {
   const text = fixtureText(id);
-  // The SAME pre-pass the adapter runs before the ladder
-  // (C64DoorFrameAdapter.adapted -> stripNarrowNoise). This suite rebuilds the
+  // The SAME two pre-passes the adapter runs before the ladder
+  // (C64DoorFrameAdapter.adapted -> stripNarrowNoise -> collapseBlankRunsToFit;
+  // the third, dropOldestEntriesToFit, is per-door and off here because this
+  // suite installs the adapter without C64_DROP_OLDEST). This suite rebuilds the
   // adapter's pipeline stage by stage, so a stage added there has to be added
   // here too or the two copies disagree - which is exactly what happened when
   // the noise strip landed and ctop/conftop's oracle stopped matching. Applied
   // ONCE, to the reconstructed frame, because the strip is a pure function of
   // the frame: every adaptRows below then sees what the adapter sees.
-  const source = stripNarrowNoise(reconstruct(text));
+  const source = collapseBlankRunsToFit(stripNarrowNoise(reconstruct(text)), {
+    cols: COLS,
+    rows: ROWS,
+  });
   const adapted = shownFrame(source);
 
   let c64: Wire;

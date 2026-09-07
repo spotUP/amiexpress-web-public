@@ -1,0 +1,114 @@
+/**
+ * Making a door's screen FIT the 25 rows a C64 caller has, so xim/io.ts never
+ * has to open a pause on it.
+ *
+ * The rule ladder can only make a screen taller: an 80-column row that will not
+ * fit 40 becomes two. Measured over the corpus, `ctop` needs 27 rows where it
+ * used 22, `gwall` 28 where it used 23. Everything past 25 is a page the caller
+ * is prompted through, and the sysop asked for those prompts to stop
+ * (2026-09-07).
+ *
+ * Two reducers, in the order they are applied, each doing NOTHING while the
+ * screen already fits:
+ *
+ *   1. `collapseBlankRunsToFit` - vertical whitespace only. An empty
+ *      conference is eleven blank rows between ctop's ruled header and its
+ *      totals; at 40 columns a row is worth more than the gap.
+ *   2. `dropOldestEntriesToFit` - the OLDEST entries of a wall, and only for a
+ *      door that declares `C64_DROP_OLDEST`. Nothing infers this: a table's
+ *      first row is its oldest only where the door says so.
+ *
+ * Both work on the SOURCE frame and re-measure through the real ladder after
+ * every step, because how many rows a source row costs is the ladder's answer,
+ * not something this file may assume.
+ */
+import {
+  adaptRows,
+  blankCell,
+  isBlank,
+  isRuleRow,
+  makeFrame,
+  type Cell,
+  type Frame,
+} from '@amiexpress/bbs-door-sdk/petscii/frame';
+
+export interface FitOptions {
+  /** The caller's columns - what the ladder adapts to. */
+  cols: number;
+  /** The caller's rows - what has to fit. */
+  rows: number;
+}
+
+/** Painted height of `frame` once the ladder has had it: blank tail excluded. */
+export function adaptedHeight(frame: Frame, cols: number): number {
+  const { rows } = adaptRows(frame, { cols });
+  let end = rows.length;
+  while (end > 0 && rows[end - 1].cells.every(isBlank)) end--;
+  return end;
+}
+
+/** The same frame with source row `y` removed and everything below it moved up. */
+function withoutRow(frame: Frame, y: number): Frame {
+  const kept: Cell[][] = frame.cells
+    .filter((_, i) => i !== y)
+    .map((row) => row.map((c) => ({ ...c })));
+  kept.push(Array.from({ length: frame.cols }, () => blankCell()));
+  const cursorY = frame.cursor.y > y ? frame.cursor.y - 1 : frame.cursor.y;
+  return makeFrame(frame.cols, frame.rows, kept, { x: frame.cursor.x, y: cursorY });
+}
+
+/**
+ * Squeeze runs of blank rows until the screen fits.
+ *
+ * One row per pass, from the LONGEST run, so a screen two rows over loses two
+ * blanks out of eleven rather than a whole gap. A run of one is never touched:
+ * a single blank row is the space between a header and its table, and losing
+ * it reads as a bug.
+ */
+export function collapseBlankRunsToFit(frame: Frame, opts: FitOptions): Frame {
+  let current = frame;
+  for (let guard = 0; guard < frame.rows; guard += 1) {
+    if (adaptedHeight(current, opts.cols) <= opts.rows) return current;
+    const blanks = current.cells.map((row) => row.every(isBlank));
+    let best = -1;
+    let bestLen = 1;
+    for (let y = 0; y < blanks.length; ) {
+      if (!blanks[y]) { y += 1; continue; }
+      let end = y;
+      while (end < blanks.length && blanks[end]) end += 1;
+      if (end - y > bestLen) { bestLen = end - y; best = y; }
+      y = end;
+    }
+    if (best < 0) return current; // no run of two or more: nothing free left
+    current = withoutRow(current, best);
+  }
+  return current;
+}
+
+/**
+ * Drop the oldest entries of a list until the screen fits.
+ *
+ * "Oldest" is the first entry row BELOW the list's ruled header - `isRuleRow`
+ * is the ladder's own answer to what a rule is, so a door's logo, its column
+ * headings and its footer are never candidates. Only a door that declares
+ * `C64_DROP_OLDEST` gets here: on a table that is not a wall the first row is
+ * simply the first, and dropping it would be a lie.
+ */
+export function dropOldestEntriesToFit(frame: Frame, opts: FitOptions): Frame {
+  let current = frame;
+  for (let guard = 0; guard < frame.rows; guard += 1) {
+    if (adaptedHeight(current, opts.cols) <= opts.rows) return current;
+    const firstRule = current.cells.findIndex((row) => isRuleRow(row as Cell[]));
+    if (firstRule < 0) return current;
+    const oldest = current.cells.findIndex(
+      (row, y) => y > firstRule && !row.every(isBlank) && !isRuleRow(row as Cell[]),
+    );
+    // Never eat the last entry: a wall with nothing on it is worse than a page.
+    const remaining = current.cells.filter(
+      (row, y) => y > firstRule && !row.every(isBlank) && !isRuleRow(row as Cell[]),
+    ).length;
+    if (oldest < 0 || remaining <= 1) return current;
+    current = withoutRow(current, oldest);
+  }
+  return current;
+}

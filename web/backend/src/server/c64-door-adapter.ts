@@ -99,6 +99,7 @@ import {
 } from '@amiexpress/bbs-door-sdk/petscii/frame';
 import { doorScreenWidth, C64_COLUMNS } from '../amiga-emulation/xim/screen-width.util';
 import { stripNarrowNoise } from './c64-door-noise';
+import { collapseBlankRunsToFit, dropOldestEntriesToFit } from './c64-door-fit';
 
 /** Quiet gap after the last write that ends a frame. */
 export const C64_ADAPT_TICK_MS = 30;
@@ -131,6 +132,8 @@ export interface AdapterSession {
 export interface C64AdapterOptions {
   tickMs?: number;
   maxFrameMs?: number;
+  /** The door declared C64_DROP_OLDEST: its list may lose its oldest entries to fit. */
+  dropOldest?: boolean;
 }
 
 /** The rule ladder's output for the frame as it stands, plus where the painted rows end. */
@@ -226,6 +229,8 @@ export class C64DoorFrameAdapter {
     private readonly cols: number,
     private readonly tickMs: number,
     private readonly maxFrameMs: number,
+    /** C64_DROP_OLDEST: this door's list may lose its oldest entries to fit. */
+    private readonly dropOldest: boolean = false,
   ) {}
 
   isDisposed(): boolean {
@@ -345,7 +350,14 @@ export class C64DoorFrameAdapter {
     // a phrase blanked here costs the caller no rows at all, where blanking it
     // afterwards would leave the rows the ladder had already spent. See
     // c64-door-noise.ts for what qualifies and why it is not a ladder rung.
-    const { rows, cursor } = adaptRows(stripNarrowNoise(this.screen.snapshot()), { cols: this.cols });
+    // Three steps, each a no-op on a screen that already fits: blank what the
+    // door wrote into slots nobody filled, squeeze runs of blank rows, and -
+    // only where the door declared it - drop the oldest entries of its list.
+    // See c64-door-noise.ts and c64-door-fit.ts for what each one may touch.
+    const fit = { cols: this.cols, rows: ROWS };
+    const stripped = collapseBlankRunsToFit(stripNarrowNoise(this.screen.snapshot()), fit);
+    const source = this.dropOldest ? dropOldestEntriesToFit(stripped, fit) : stripped;
+    const { rows, cursor } = adaptRows(source, { cols: this.cols });
     // The blank tail of a 25-row grid is not content. It still costs adapted
     // rows, which is exactly how adaptFrame comes to push painted rows off the
     // top, so the window is measured against the PAINTED height instead.
@@ -480,6 +492,7 @@ export function installC64DoorAdapter(
     cols,
     opts.tickMs ?? C64_ADAPT_TICK_MS,
     opts.maxFrameMs ?? C64_ADAPT_MAX_FRAME_MS,
+    opts.dropOldest === true,
   );
   adapter.target = socket;
   adapter.original = hadOwnEmit ? socket.emit : null;

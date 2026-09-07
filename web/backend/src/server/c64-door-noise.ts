@@ -49,6 +49,12 @@ export const NARROW_NOISE: RegExp[] = [
  */
 export const NARROW_PLACEHOLDER_ROWS: RegExp[] = [
   /VIRGIN LINE\s+VIRGIN LINE/i,
+  // ctop and conftop number every slot of their table whether anyone has
+  // uploaded into it or not, so an empty conference is thirteen rows reading
+  // ` 1.` through `13.` and nothing else. Each costs the caller a row of the
+  // 25 he has. The whole row must be the number - an entry with an uploader on
+  // it has a username after the dot and never matches.
+  /^\s*\d{1,3}\.\s*$/,
 ];
 
 /** The row's text, exactly as wide as the row. */
