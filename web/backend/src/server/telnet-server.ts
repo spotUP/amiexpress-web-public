@@ -443,14 +443,26 @@ console.log(`[Telnet] Node ${this.nodeId} terminal type: "${terminalTypeString}"
     console.log(`[Telnet] Node ${this.nodeId} terminal "${terminalTypeString}" - ` +
                 `isAmiga: ${isAmiga}, isC64: ${isC64}, unicodeCapable: ${unicodeCapable}`);
 
-    // Emit terminal-type event for session configuration
+    // Emit terminal-type event for session configuration.
+    //
+    // THE GEOMETRY IS THE TERMINAL'S, NOT THIS FUNCTION'S. A TTYPE reply
+    // carries no size; this emit used to invent `80x24` for every non-C64
+    // terminal, and applyTerminalTypeReport writes the payload's size over the
+    // session with the same call NAWS uses - so a terminal that had already
+    // negotiated NAWS 200x66 was reset to 80 the moment it named itself, just
+    // before BBSTITLE drew, and nothing folded (sysop, 2026-09-07: "wide as
+    // ever", while the MENU a few seconds later was right because NAWS had
+    // been re-sent by then). `nawsWidth`/`nawsHeight` hold what the terminal
+    // negotiated and default to 80x24 until it does, so the fallback for a
+    // terminal that never sends NAWS is exactly what it was. A C64 stays 40x25
+    // whatever NAWS said: its screen is forty columns by definition.
     this.emit('terminal-type', {
       terminalType: terminalTypeString,
       isC64: isC64,
       isAmiga: isAmiga,
       unicodeCapable: unicodeCapable,
-      width: isC64 ? 40 : 80,
-      height: isC64 ? 25 : 24
+      width: isC64 ? 40 : (this.nawsWidth || 80),
+      height: isC64 ? 25 : (this.nawsHeight || 24)
     });
   }
 
