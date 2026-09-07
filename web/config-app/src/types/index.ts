@@ -89,6 +89,9 @@ export interface SystemConfig {
   smtp_port: number;
   smtp_username: string;
   smtp_password: string;
+  achievements_server_url?: string;
+  achievements_board_key?: string;
+  achievements_disabled?: boolean;
   smtp_ssl: boolean;
   smtp_from_email: string;
   sysop_email: string;

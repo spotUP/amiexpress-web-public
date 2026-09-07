@@ -37,6 +37,9 @@ export const SENSITIVE_FIELDS = [
   // read; nothing was encrypting it on the way in, because no substring rule
   // matched the name.
   'vapid_private_key',
+  // The achievements board key (SP2): 'key' alone matches no rule, and it
+  // is the credential every event this board reports is signed with.
+  'achievements_board_key',
 ] as const;
 
 export type SensitiveField = typeof SENSITIVE_FIELDS[number];
@@ -125,6 +128,11 @@ const DATABASE_ONLY_FIELDS = new Set<string>([
   // details. "webhook" in the name matched the secret rule; it is a boolean
   // about what a payload may contain, and it has a column of its own.
   'webhook_include_pii',
+
+  // Achievements (SP2): the server url and the negative switch are
+  // database-resident and not secret; express.e has no tooltype for them.
+  'achievements_server_url',
+  'achievements_disabled',
 ]);
 
 /**

@@ -705,6 +705,20 @@ console.log('✓ Added vapid_public_key column');
 console.log('✓ Added vapid_private_key column');
       }
 
+      // Achievements (SP2). The switch is stored as the NEGATIVE: a flag that
+      // defaulted to "on" would read as "off" on every board that predates
+      // the column, and the feature would ship dark.
+      for (const col of ['achievements_server_url', 'achievements_board_key']) {
+        if (!systemConfigColumns.includes(col)) {
+          this.db.exec(`ALTER TABLE system_config ADD COLUMN ${col} TEXT DEFAULT ''`);
+console.log(`[OK] Added ${col} column`);
+        }
+      }
+      if (!systemConfigColumns.includes('achievements_disabled')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN achievements_disabled INTEGER DEFAULT 0');
+console.log('[OK] Added achievements_disabled column');
+      }
+
       if (!systemConfigColumns.includes('vapid_contact_email')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN vapid_contact_email TEXT DEFAULT \'\'');
 console.log('[+] Added vapid_contact_email column');

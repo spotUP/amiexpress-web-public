@@ -77,7 +77,8 @@ export class ConfigRepository extends BaseRepository<any> {
         telnet_port, ssh_port,
         quiet_join, convert_to_mb,
         debug_mode, log_level, log_retention_days, sysop_debug_enabled,
-        vapid_public_key, vapid_private_key, vapid_contact_email
+        vapid_public_key, vapid_private_key, vapid_contact_email,
+        achievements_server_url, achievements_board_key, achievements_disabled
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?,
@@ -98,7 +99,8 @@ export class ConfigRepository extends BaseRepository<any> {
         ?, ?, ?, ?,
         ?, ?, ?,
         ?, ?, ?,
-        ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?,
+        ?, ?, ?
       )
     `);
 
@@ -170,7 +172,10 @@ export class ConfigRepository extends BaseRepository<any> {
       config.sysop_debug_enabled ? 1 : 0,
       config.vapid_public_key || '',
       config.vapid_private_key || '',
-      config.vapid_contact_email || ''
+      config.vapid_contact_email || '',
+      config.achievements_server_url || '',
+      config.achievements_board_key ? encryptSecret(config.achievements_board_key) : '',
+      config.achievements_disabled ? 1 : 0
     );
     const row = this.prepare(`
       SELECT * FROM system_config WHERE id = 1
@@ -1062,6 +1067,9 @@ export class ConfigRepository extends BaseRepository<any> {
       vapid_public_key: row.vapid_public_key || '',
       vapid_private_key: decryptSecret(row.vapid_private_key || ''),
       vapid_contact_email: row.vapid_contact_email || '',
+      achievements_server_url: row.achievements_server_url || '',
+      achievements_board_key: decryptSecret(row.achievements_board_key || ''),
+      achievements_disabled: Boolean(row.achievements_disabled),
       // Mail Notifications (MAIL_ON_* flags)
       mail_on_upload: Boolean(row.mail_on_upload),
       mail_on_sysop_comment: Boolean(row.mail_on_sysop_comment),

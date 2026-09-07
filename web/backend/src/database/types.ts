@@ -347,6 +347,13 @@ export interface SystemConfig {
   vapid_private_key: string;
   vapid_contact_email: string;
 
+  // Achievements (SP2): the door server this board reports to, its board
+  // key (encrypted at rest, like vapid_private_key), and the switch stored
+  // as the negative so an absent column reads as ON.
+  achievements_server_url?: string;
+  achievements_board_key?: string;
+  achievements_disabled?: boolean;
+
   // Mail Notifications (MAIL_ON_* flags from express.e:6694-6739, 24197, 29155)
   mail_on_upload: boolean;         // Email sysop when user uploads a file
   mail_on_sysop_comment: boolean;  // Email sysop when user sends comment

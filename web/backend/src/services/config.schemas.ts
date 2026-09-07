@@ -156,6 +156,10 @@ export const SystemConfigSchema = z.object({
   vapid_public_key: z.string().max(500).optional(),
   vapid_private_key: z.string().max(500).optional(),
   vapid_contact_email: z.string().email().max(200).optional().or(z.literal('')),
+  // Achievements (SP2)
+  achievements_server_url: z.string().max(500).optional(),
+  achievements_board_key: z.string().max(200).optional(),
+  achievements_disabled: z.boolean().optional(),
 
   // Mail notifications to the sysop. The form has offered these since it was
   // written; without them here zod stripped the keys before the writer saw

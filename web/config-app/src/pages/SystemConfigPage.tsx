@@ -57,6 +57,7 @@ export function SystemConfigPage() {
 
   // Password visibility and SMTP test state
   const [showSmtpPassword, setShowSmtpPassword] = useState(false);
+  const [showAchievementsKey, setShowAchievementsKey] = useState(false);
   const [smtpTestStatus, setSmtpTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [smtpTestMessage, setSmtpTestMessage] = useState<string>('');
 
@@ -70,7 +71,7 @@ export function SystemConfigPage() {
     const categoryMap: Record<string, string[]> = {
       'General': ['Basic Information', 'Display Settings', 'Language Settings'],
       'Security & Access': ['Security Settings', 'Session Settings', 'New User Defaults', 'Auto-Validation Settings', 'Password & Account Security'],
-      'Networking': ['Mail & SMTP Settings', 'Email Notification Events', 'FTP Server Settings', 'HTTP Server Settings', 'BBS Server Ports', 'SSH Key Management'],
+      'Networking': ['Mail & SMTP Settings', 'Achievements', 'Email Notification Events', 'FTP Server Settings', 'HTTP Server Settings', 'BBS Server Ports', 'SSH Key Management'],
       'System': ['System Limits', 'File Management', 'System Behavior', 'Logging Settings']
     };
 
@@ -247,6 +248,10 @@ export function SystemConfigPage() {
 
     // An empty password field means "leave it alone", not "clear it": the
     // server holds these encrypted and never sends them back.
+    // The board key is shown masked and kept when left empty, like the SMTP password.
+    if (!updates.achievements_board_key || updates.achievements_board_key === '') {
+      delete updates.achievements_board_key;
+    }
     if (!updates.smtp_password || updates.smtp_password === '') {
       delete updates.smtp_password;
     }
@@ -1357,6 +1362,72 @@ export function SystemConfigPage() {
         )}
 
         {/* Email Notification Events */}
+        {/* Achievements */}
+        {shouldShowSection('Achievements') && (
+        <div className="card">
+          <h2 className="text-xl font-semibold text-content-primary mb-2">Achievements</h2>
+          <p className="text-sm text-content-secondary mb-6">
+            This board reports callers' deeds to a global achievements server and shows the unlocks they earn.
+            The board key is minted on the door server (achievements-board.ts create) and shown there once.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="achievements_server_url" className="label">Achievements Server</label>
+              <input
+                id="achievements_server_url"
+                type="text"
+                {...register('achievements_server_url')}
+                className="input-field w-full"
+                placeholder="https://doors.uprough.net"
+              />
+              <p className="text-xs text-content-secondary mt-1">The door server's base address; /achievements/v1 is appended.</p>
+            </div>
+            <div>
+              <label htmlFor="achievements_board_key" className="label flex items-center gap-2">
+                Board Key
+                <span className="inline-flex items-center gap-1 text-xs text-status-ok font-normal">
+                  <Lock size={12} />
+                  Encrypted
+                </span>
+              </label>
+              <div className="relative">
+                <input
+                  id="achievements_board_key"
+                  type={showAchievementsKey ? 'text' : 'password'}
+                  {...register('achievements_board_key')}
+                  className="input-field w-full pr-10"
+                  placeholder="Enter new key or leave empty to keep existing"
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowAchievementsKey(!showAchievementsKey)}
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-content-secondary hover:text-content-primary transition-colors"
+                  title={showAchievementsKey ? 'Hide key' : 'Show key'}
+                >
+                  {showAchievementsKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p className="text-xs text-content-secondary mt-1">boardid.secret - the part before the dot is this board's id on the server.</p>
+            </div>
+            <div className="md:col-span-2">
+              <div className="flex items-center space-x-3">
+                <input
+                  id="achievements_disabled"
+                  type="checkbox"
+                  {...register('achievements_disabled')}
+                  className="w-4 h-4"
+                />
+                <label htmlFor="achievements_disabled" className="text-sm text-content-primary">
+                  Reporting Disabled
+                </label>
+              </div>
+              <p className="text-xs text-content-secondary mt-1">Keeps the key and the address; nothing is reported and no unlock is shown while this is on.</p>
+            </div>
+          </div>
+        </div>
+        )}
+
         {shouldShowSection('Email Notification Events') && (
         <div className="card">
           <h2 className="text-xl font-semibold text-content-primary mb-6">Email Notification Events</h2>
