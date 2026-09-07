@@ -1,4 +1,4 @@
-import { printableLength, wrapLineToWidth, wrapForSession, foldAtColumn } from '../../src/utils/wrap-for-session.util';
+import { printableLength, wrapLineToWidth, wrapForSession, foldAtColumn, foldForWire } from '../../src/utils/wrap-for-session.util';
 
 describe('printableLength', () => {
   it('ignores ANSI escapes', () => {
@@ -148,32 +148,47 @@ describe('foldAtColumn - the 80-column terminal, emulated', () => {
   });
 });
 
-describe('wrapForSession - a caller wider than the board\'s screens', () => {
-  const wide = { screenWidth: 200, petsciiMode: false };
+describe('foldForWire - the fold at the wire, for a caller wider than 80', () => {
+  const wide = () => ({ screenWidth: 200, petsciiMode: false } as any);
 
   it('folds at 80 for a 200-column ANSI caller', () => {
-    const out = wrapForSession('x'.repeat(159), wide);
-    expect(out).toBe('x'.repeat(80) + '\r\n' + 'x'.repeat(79));
+    expect(foldForWire('x'.repeat(159), wide())).toBe('x'.repeat(80) + '\r\n' + 'x'.repeat(79));
   });
 
-  it('is still byte-identical at exactly 80', () => {
+  it('carries the column across chunks - a screen does not arrive in one piece', () => {
+    const session = wide();
+    const first = foldForWire('a'.repeat(50), session);
+    const second = foldForWire('a'.repeat(50), session);
+    expect(first).toBe('a'.repeat(50));
+    expect(second).toBe('a'.repeat(30) + '\r\n' + 'a'.repeat(20));
+    expect(session.wireFoldColumn).toBe(20);
+  });
+
+  it('is byte-identical at exactly 80, and for a narrower browser', () => {
     const text = 'y'.repeat(159);
-    expect(wrapForSession(text, { screenWidth: 80, petsciiMode: false })).toBe(text);
+    expect(foldForWire(text, { screenWidth: 80, petsciiMode: false } as any)).toBe(text);
+    expect(foldForWire(text, { screenWidth: 40, petsciiMode: false } as any)).toBe(text);
   });
 
-  it('a positioned screen is never folded - it does not depend on the wrap', () => {
+  it('a positioned screen is never folded, and the column starts over after it', () => {
+    const session = wide();
     const positioned = '\x1b[3;1H' + 'z'.repeat(159);
-    expect(wrapForSession(positioned, wide)).toBe(positioned);
+    expect(foldForWire(positioned, session)).toBe(positioned);
+    expect(session.wireFoldColumn).toBe(0);
   });
 
   it('a door that owns the terminal paints at its own width, untouched', () => {
     const text = 'w'.repeat(159);
-    expect(wrapForSession(text, { ...wide, doorInputHandler: () => {} } as any)).toBe(text);
+    expect(foldForWire(text, { ...wide(), doorInputHandler: () => {} })).toBe(text);
   });
 
-  it('a PETSCII caller keeps the 40-column reflow, whatever width he reports', () => {
-    const out = wrapForSession('word '.repeat(30).trim(), { screenWidth: 200, petsciiMode: true });
-    for (const l of out.split('\r\n')) expect(printableLength(l)).toBeLessThanOrEqual(40);
+  it('a PETSCII caller is not touched here - he has his own reflow', () => {
+    const text = 'v'.repeat(159);
+    expect(foldForWire(text, { screenWidth: 200, petsciiMode: true } as any)).toBe(text);
+  });
+
+  it('wrapForSession itself is identity for a wide ANSI caller - the fold moved to the wire', () => {
+    const text = 'u'.repeat(159);
+    expect(wrapForSession(text, { screenWidth: 200, petsciiMode: false })).toBe(text);
   });
 });
-

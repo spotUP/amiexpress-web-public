@@ -27,6 +27,7 @@ import {
 import { applyTransportEvent } from "./transport-adapter";
 import { encodeForWire } from "../utils/wire-encoding.util";
 import type { OutputAttributes } from "../utils/output-pacing";
+import { foldForWire } from "../utils/wrap-for-session.util";
 
 /**
  * Flush the session's PETSCII transducer's held bytes straight to the wire
@@ -129,7 +130,12 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
             // string, exactly where it ran before. `encodeForWire` returns the
             // string unchanged for a UTF-8 caller (web, /ws/terminal, a telnet
             // client that negotiated UTF-8), so that path is a no-op diff.
-            connection.write(encodeForWire(session, data.replace(/\r?\n/g, "\r\n"), attrs));
+            // A caller WIDER than the board's 80-column screens gets them folded
+            // at 80 here, at the wire, stateful across chunks - see foldForWire
+            // for why this could not live in emitText (the MENU folded there
+            // and BBSTITLE, which leaves through the MCI parser's inline mode,
+            // did not).
+            connection.write(encodeForWire(session, foldForWire(data.replace(/\r?\n/g, "\r\n"), session), attrs));
           } else {
             connection.write(data);
           }

@@ -42,39 +42,7 @@ export function wrapForSession(
   session: { screenWidth?: number; petsciiMode?: boolean } | undefined
 ): string {
   if (!session) return text;
-  if (session.petsciiMode !== true) {
-    /**
-     * A NON-PETSCII CALLER WIDER THAN THE BOARD'S SCREENS (2026-09-07).
-     *
-     * This board's screens are 80-column documents whose layout is defined by
-     * the terminal wrapping at column 80: rows 3 and 4 of Screens/MENU.TXT are
-     * 155 and 159 printable columns, and 623 screens in the tree carry a row
-     * past 80. On an 80-column terminal every one of them folds where the
-     * artist expected. The sysop's telnet window reported `NAWS: 200x66`, so
-     * nothing folded, and the menu's logo arrived strung out across the top of
-     * the screen with its last row apparently duplicated ("when the menu
-     * animation finishes it looks like this").
-     *
-     * The art is not the wrong level to fix that at - the art is what the
-     * artist drew - and neither is the terminal, which is doing exactly what
-     * it was asked. The board folds its own screens at 80, the way the
-     * 80-column terminal would have, deferred wrap and all (`foldAtColumn`).
-     *
-     * Only WIDER than 80. Exactly 80 stays byte-identical (the identity gate
-     * in tests/server/eighty-col-choke-identity.test.ts), and a narrower
-     * non-PETSCII caller is still left alone - a mobile browser's xterm never
-     * paid for width support and still does not. A door that owns the screen
-     * paints at its own width; a positioned screen does not depend on the
-     * wrap and is never touched.
-     */
-    const reported = session.screenWidth;
-    if (typeof reported === 'number' && reported > 80) {
-      if (doorOwnsTerminal(session as any)) return text;
-      if (positionsCursorAbsolutely(text)) return text;
-      return foldAtColumn(text, 80);
-    }
-    return text;                                       // 80 or narrower: never wrapped
-  }
+  if (session.petsciiMode !== true) return text;      // non-C64: never wrapped here, at any width
   // doorScreenWidth() - the SAME authority BB_SCRWIDTH, the launch-time
   // lineWrap, BBSApi.getTerminalSize() and wrapDoorTextForSession already
   // use. A local `screenWidth || 80` read the stale 80 a PETSCII session
@@ -138,20 +106,18 @@ function wrapPassingArt(text: string, width: number): string {
  * CR and LF return to column 0; backspace steps back one; TAB advances to the
  * next stop. Everything else is copied as it came.
  *
- * Pure and stateless: a column count starts at 0 for the text it is given, so
- * a row split across two `emitText` calls is folded against each call's own
- * count. Screens arrive whole, which is the case this exists for.
+ * `startCol` is where the cursor already is, and the returned `col` is where
+ * it ends up - so the fold can carry across the chunks a screen arrives in.
  */
-export function foldAtColumn(text: string, cols: number): string {
-  if (cols <= 0) return text;
+export function foldFrom(text: string, cols: number, startCol: number): { out: string; col: number } {
+  if (cols <= 0) return { out: text, col: startCol };
   let out = '';
-  let col = 0;
+  let col = Math.max(0, startCol);
   let i = 0;
   const n = text.length;
   while (i < n) {
     const ch = text[i];
     if (ch === '\x1b') {
-      // CSI: ESC [ params final. Anything else: ESC + one byte.
       let j = i + 1;
       if (text[j] === '[') {
         j++;
@@ -167,19 +133,62 @@ export function foldAtColumn(text: string, cols: number): string {
     const code = text.charCodeAt(i);
     if (ch === '\r' || ch === '\n') { col = 0; out += ch; i++; continue; }
     if (code === 0x08) { if (col > 0) col--; out += ch; i++; continue; }
-    if (ch === '\t') {
-      const next = (Math.floor(col / 8) + 1) * 8;
-      col = Math.min(cols, next);
-      out += ch; i++; continue;
-    }
+    if (ch === '\t') { col = Math.min(cols, (Math.floor(col / 8) + 1) * 8); out += ch; i++; continue; }
     if (code < 0x20 || code === 0x7f) { out += ch; i++; continue; }
-    // A printable character: the wrap is owed only now, and only if the row
-    // is already full.
     if (col >= cols) { out += '\r\n'; col = 0; }
     out += ch;
     col++;
     i++;
   }
-  return out;
+  return { out, col };
 }
 
+/** One chunk, from column 0. The stateless form the unit tests read. */
+export function foldAtColumn(text: string, cols: number): string {
+  return foldFrom(text, cols, 0).out;
+}
+
+/** The column the wire fold has reached for this session - carried across chunks. */
+interface WireFoldState { wireFoldColumn?: number }
+
+/**
+ * THE BOARD'S SCREENS FOLDED AT 80 FOR A WIDER CALLER, at the wire.
+ *
+ * This board's screens are 80-column documents whose layout is defined by
+ * the terminal wrapping at column 80: rows 3 and 4 of Screens/MENU.TXT are
+ * 155 and 159 printable columns, and 623 screens in the tree carry a row past
+ * 80. A telnet window that negotiated NAWS 200x66 never wraps, and the art
+ * arrives strung out to the right (sysop, 2026-09-07, MENU and then BBSTITLE).
+ *
+ * WHERE IT LIVES, AND WHY NOT IN emitText. It sat in `wrapForSession` first,
+ * and the MENU folded while BBSTITLE stayed "wide as ever": a screen with a
+ * wipe code goes out through `emitText`, and one without a wipe code goes out
+ * through the MCI parser's INLINE mode, which writes to the socket itself -
+ * as do the wipe frames and half a dozen direct emits. `emitText` was the
+ * choke for prose reflow; it was never the choke for BYTES. The one place
+ * every screen string becomes bytes for a byte caller is the connection
+ * emitter's `ansi-output` branch, and that is where this is called from.
+ *
+ * STATEFUL, because a screen arrives in chunks and the terminal's column does
+ * not reset between them: `session.wireFoldColumn` is where the fold left the
+ * cursor. A chunk that positions the cursor absolutely is passed through
+ * untouched - it does not depend on the wrap - and the column is taken as 0
+ * after it, which is where every screen of this board's leaves it.
+ *
+ * Only a NON-PETSCII caller WIDER than 80. Exactly 80 stays byte-identical
+ * (tests/server/eighty-col-choke-identity.test.ts), a narrower browser is
+ * left alone, and a C64 has its own reflow.
+ */
+export function foldForWire(
+  text: string,
+  session: ({ screenWidth?: number; petsciiMode?: boolean } & WireFoldState) | null | undefined,
+): string {
+  if (!session || session.petsciiMode === true) return text;
+  const reported = session.screenWidth;
+  if (typeof reported !== 'number' || reported <= 80) return text;
+  if (doorOwnsTerminal(session as any)) { session.wireFoldColumn = 0; return text; }
+  if (positionsCursorAbsolutely(text)) { session.wireFoldColumn = 0; return text; }
+  const { out, col } = foldFrom(text, 80, session.wireFoldColumn ?? 0);
+  session.wireFoldColumn = col;
+  return out;
+}
