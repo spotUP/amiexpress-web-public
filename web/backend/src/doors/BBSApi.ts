@@ -750,6 +750,77 @@ console.log('[BBSApi] Mouse events disabled');
   }
 
   /**
+   * The SCREEN themes this caller may wear - the board's ART, not the door
+   * colours above.
+   *
+   * Answered by `selectableThemes`, the same function the loader consults, so
+   * a picker can never offer a theme the loader would then refuse.
+   */
+  listScreenThemes(): Array<{ slug: string; title: string; author: string; widths: number[]; status: string }> {
+    const { selectableThemes } = require('../screens/caller-theme');
+    const { config } = require('../config');
+    return selectableThemes(config.get('dataDir'), {
+      username: this.session.user?.username,
+      secLevel: this.session.user?.secLevel,
+      screenTheme: this.session.user?.screenTheme,
+    }).map((theme: { slug: string; title: string; author: string; widths: number[]; status: string }) => ({
+      slug: theme.slug, title: theme.title, author: theme.author,
+      widths: theme.widths, status: theme.status,
+    }));
+  }
+
+  /** The screen theme this caller is wearing right now. */
+  getScreenTheme(): string {
+    const { resolveCallerTheme } = require('../screens/caller-theme');
+    const { config } = require('../config');
+    return resolveCallerTheme(config.get('dataDir'), {
+      username: this.session.user?.username,
+      secLevel: this.session.user?.secLevel,
+      screenTheme: this.session.user?.screenTheme,
+    });
+  }
+
+  /**
+   * Wear a screen theme. Answers the slug that is actually in force.
+   *
+   * Refusing rather than storing an unwearable slug is the point: a stored
+   * preference the loader will not honour is a caller who sees the default
+   * board and a picker that says otherwise. A theme that names a companion
+   * DOOR theme applies it in the same action, through `setTheme` so an unknown
+   * id resolves to `classic` rather than a broken door - and never the reverse:
+   * picking a door theme leaves the board's art alone, because a door theme is
+   * the board's and a screen theme may be one artist's work.
+   */
+  async setScreenTheme(slug: string): Promise<string> {
+    const { canWearTheme, companionDoorTheme, resolveCallerTheme } = require('../screens/caller-theme');
+    const { findTheme, DEFAULT_SLUG } = require('../screens/theme-registry');
+    const { config } = require('../config');
+    const root = config.get('dataDir');
+
+    const caller = {
+      username: this.session.user?.username,
+      secLevel: this.session.user?.secLevel,
+      screenTheme: this.session.user?.screenTheme,
+    };
+
+    const wanted = (slug ?? '').trim().toLowerCase();
+    const entry = wanted === DEFAULT_SLUG ? null : findTheme(root, wanted);
+    const allowed = wanted === DEFAULT_SLUG || (entry && canWearTheme(caller, entry));
+    if (!allowed) return resolveCallerTheme(root, caller);
+
+    if (this.session.user) {
+      const { db } = require('../database');
+      await db.updateUser(this.session.user.id, { screenTheme: wanted });
+      this.session.user.screenTheme = wanted;
+    }
+
+    const companion = companionDoorTheme(root, wanted);
+    if (companion) await this.setTheme(companion);
+
+    return wanted;
+  }
+
+  /**
    * Get current user information
    * Equivalent to AEDoor GetDT() function with DT_NAME, DT_LOCATION, etc.
    */
