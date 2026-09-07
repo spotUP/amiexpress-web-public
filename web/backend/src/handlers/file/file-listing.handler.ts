@@ -20,7 +20,7 @@ import { ParamsUtil } from '../../utils/params.util';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { config } from '../../config';
 import { getConferenceDir } from '../../utils/file-hold.util';
-import { flagPause, initPauseState, setNonStopMode } from '../../utils/flag-pause.util';
+import { flagPause, checkForPause, initPauseState, setNonStopMode } from '../../utils/flag-pause.util';
 import { getMaxDirs, getDirFiles, DirFileInfo } from '../../utils/max-dirs.util';
 import { dirEntryRows } from '../../utils/table-format.util';
 
@@ -296,6 +296,101 @@ console.log(`[FileList] Could not read ${dirFilePath}: ${error.message}`);
       const content = line.substring(33);
       return content.trim().length > 0;
     });
+  }
+
+  /**
+   * The `N` scan - express.e:27906-28023 internalCommandNewFiles().
+   *
+   * WHY IT LIVES HERE AND NOT IN file.handler.ts: `N` answers the same
+   * question `F` does - "what is in this conference's DIR files" - and it used
+   * to answer it from somewhere else entirely. It read the SQL `file_entries`
+   * mirror, which is written only when a file is uploaded THROUGH THE WEB; no
+   * importer ever reads the DIR files into it. Measured on the live board
+   * (2026-09-07): conference 1's two areas hold 0 rows between them while the
+   * DIR files on disk carry records. So `N` told a caller "no new files" for a
+   * conference that is full, and `F` listed them a keystroke later.
+   *
+   * Uploads write BOTH the row and the DIR entry (see file-socket-handlers,
+   * "Write to DIR file"), so reading the disk loses nothing the mirror had.
+   *
+   * express.e's rule, and it is not "filter the entries by date": a DIR file
+   * is chronological, so it finds the FIRST entry at or after the date and
+   * then dumps THE REST OF THE FILE (`displayIt2(fp1)`, express.e:28007),
+   * descriptions and all. Filtering entry by entry would drop a file whose
+   * date column is malformed but which is newer than the one above it.
+   */
+  static async handleNewFileScan(
+    socket: Socket,
+    session: Session,
+    searchDate: Date,
+    hasNonStop: boolean
+  ): Promise<void> {
+    const bbsDataPath = config.get('dataDir');
+
+    initPauseState(session);
+    if (hasNonStop) {
+      setNonStopMode(session, true);
+    }
+    session.menuPause = false;
+
+    const dirFiles = await getDirFiles(session.currentConf, bbsDataPath);
+    if (dirFiles.length === 0) {
+      socket.emit('ansi-output', '\r\nNo Files are available.\r\n\r\n');
+      session.menuPause = true;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
+    // express.e compares y/m/d, not timestamps: a file uploaded earlier on the
+    // search date is still new.
+    const isAtOrAfter = (entry: DirFileEntry): boolean => {
+      const d = entry.uploadDate;
+      if (!d || Number.isNaN(d.getTime())) return false;
+      if (d.getFullYear() !== searchDate.getFullYear()) {
+        return d.getFullYear() > searchDate.getFullYear();
+      }
+      if (d.getMonth() !== searchDate.getMonth()) {
+        return d.getMonth() > searchDate.getMonth();
+      }
+      return d.getDate() >= searchDate.getDate();
+    };
+
+    for (const dirInfo of dirFiles) {
+      socket.emit('ansi-output', `Scanning directory ${dirInfo.index}\r\n`);
+
+      // express.e:27934-27938 - checkForPause during confScan, flagPause otherwise.
+      const beforeDir = session.newFilesPauseFlag
+        ? await checkForPause(socket, session)
+        : await flagPause(socket, session, 1);
+      if (!beforeDir) {
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        return;
+      }
+
+      let entries: DirFileEntry[];
+      try {
+        entries = await readDirFile(dirInfo.path);
+      } catch (error: any) {
+console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
+        continue;
+      }
+
+      const first = entries.findIndex(isAtOrAfter);
+      if (first < 0) continue;
+
+      for (const entry of entries.slice(first)) {
+        const displayLines = dirEntryRows(session, this.getDisplayLines(entry));
+        const shouldContinue = await this.displayFileEntry(socket, session, displayLines);
+        if (!shouldContinue) {
+          session.subState = LoggedOnSubState.DISPLAY_MENU;
+          return;
+        }
+      }
+    }
+
+    socket.emit('ansi-output', '\r\n');
+    session.menuPause = true;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
   }
 
   private static async displayFileEntry(

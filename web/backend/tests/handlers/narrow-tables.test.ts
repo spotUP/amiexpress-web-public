@@ -31,6 +31,11 @@ jest.mock('../../src/index', () => {
 jest.mock('../../src/utils/flag-pause.util', () => ({
   checkForPause: jest.fn().mockResolvedValue(true),
   flagPause: jest.fn().mockResolvedValue(true),
+  // The DIR walk arms the pause state before the first directory; without
+  // these the mock returns undefined and the handler throws into a catch that
+  // writes through the buffered choke, which reads as an empty screen.
+  initPauseState: jest.fn(),
+  setNonStopMode: jest.fn(),
 }));
 
 import { flushOutput } from '../../src/utils/output.util';
@@ -183,64 +188,81 @@ describe('5a file search listing (file.handler.ts handleFileSearch)', () => {
 });
 
 describe('5a new files listing (file.handler.ts displayNewFiles)', () => {
-  const NEW_FILE = {
-    id: 7,
-    filename: 'TESTFILE.LHA',
-    description: 'A brand new upload with a description long enough to matter here',
-    size: 40960,
-    uploader: 'SPOT',
-    uploaddate: Date.UTC(2026, 0, 2),
-    downloads: 0,
-  };
+  /**
+   * REPINNED 2026-09-07. These two used to pin a colorized row this port
+   * invented for the SQL mirror - green filename, cyan size, yellow date, and
+   * the description on its own indented line. `N` does not build rows any
+   * more: it reads the conference's DIR files and emits them through the same
+   * painter `F` uses (express.e:27906-28023, and express.e's `N` literally
+   * calls the same displayIt2). The mirror it used to read is written only by
+   * a web upload, so on the live board it answered "no new files" for a
+   * conference whose DIR files were full.
+   *
+   * What is pinned now is what express.e emits: the DIR row itself at 80
+   * columns, and the same row inside 40 at a C64's width.
+   */
+  const fs = require('fs');
+  const os = require('os');
+  const pathMod = require('path');
+  const { config } = require('../../src/config');
+
+  // A record as utils/dir-file.util.ts writes one, with a description that is
+  // long enough to need the narrow layout.
+  const DIR_ROW = 'TESTFILE.LHA P  40960  02-Jan-26  A brand new upload with a description long enough to matter';
+
+  let tmp = '';
+  let savedDataDir: any;
+  let savedBbsRoot: any;
+
+  beforeAll(() => {
+    savedDataDir = config.get('dataDir');
+    savedBbsRoot = config.get('bbsRoot');
+    tmp = fs.mkdtempSync(pathMod.join(os.tmpdir(), 'narrow-newfiles-'));
+    fs.mkdirSync(pathMod.join(tmp, 'Conf1'), { recursive: true });
+    fs.writeFileSync(pathMod.join(tmp, 'Conf1', 'Dir1'), DIR_ROW + '\n', 'binary');
+    config.set('dataDir', tmp);
+    config.set('bbsRoot', tmp);
+  });
+
+  afterAll(() => {
+    config.set('dataDir', savedDataDir);
+    config.set('bbsRoot', savedBbsRoot);
+    try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* noop */ }
+  });
 
   function driveNewFiles(driver: Driver) {
     const fileHandler = require('../../src/handlers/file/file.handler');
-    fileHandler.setDatabase({
-      getFileAreas: jest.fn().mockResolvedValue([
-        { id: 3, name: 'AMIGA/DEMOS', description: 'Demos area' },
-      ]),
-      query: jest.fn().mockResolvedValue({ rows: [NEW_FILE] }),
-    });
-    driver.session.user = { id: 'u1', username: 'SPOT', lastLogin: new Date(Date.UTC(2026, 0, 1)) };
+    driver.session.user = {
+      id: 'u1',
+      username: 'SPOT',
+      lastLogin: new Date(2026, 0, 1),
+      newSinceDate: new Date(2026, 0, 1),
+    };
     return fileHandler.displayNewFiles(driver.socket, driver.session, '');
   }
 
-  test('80-col PIN: the historical colorized row, byte-identical', async () => {
-    const { formatLongDate } = require('../../src/utils/date-time.util');
+  test('80-col PIN: the DIR row as express.e emits it, byte-identical', async () => {
     const driver = wide();
     await driveNewFiles(driver);
 
-    const uploadDate = formatLongDate(new Date(NEW_FILE.uploaddate));
-    const expected =
-      `\x1b[32m${'TESTFILE.LHA'.padEnd(20)}\x1b[0m ` +
-      `\x1b[36m${'40'.padStart(6)}KB\x1b[0m ` +
-      `\x1b[33m${uploadDate.padEnd(10)}\x1b[0m ` +
-      '\x1b[37mSPOT\x1b[0m\r\n' +
-      `  \x1b[37m${NEW_FILE.description}\x1b[0m\r\n`;
-    expect(driver.output()).toContain(expected);
+    // The row the DIR file holds, unchanged. At >= 80 columns dirEntryRows
+    // hands the entry's own lines straight back.
+    expect(driver.output()).toContain(DIR_ROW + '\r\n');
   });
 
-  test('40-col: two-line convention, nothing over 39 columns', async () => {
-    const { narrowFileLines } = require('../../src/utils/table-format.util');
+  test('40-col: the row is laid out for the screen, nothing over 39 columns', async () => {
     const driver = narrow();
     await driveNewFiles(driver);
 
     const out = driver.output();
-    // The "Searching for files newer than: <date>" banner is PROSE, not a
-    // table row: it reaches the emitText choke, which wraps at the session
-    // width of 40. Task 5 lays out TABLES; the banner is excluded here so
-    // this test fails for a table row and nothing else.
+    // The banner is PROSE and reaches the emitText choke; task 5 lays out
+    // TABLES, so it is excluded exactly as the other 40-column cases do.
     expectNarrowScreen(out, (l) => l.startsWith('Searching for files newer than'));
 
-    const [nameLine, ...descLines] = narrowFileLines({
-      filename: NEW_FILE.filename,
-      sizeKB: 40,
-      description: NEW_FILE.description,
-    });
-    const expected =
-      `\x1b[32m${nameLine}\x1b[0m\r\n` +
-      descLines.map((l: string) => `\x1b[37m${l}\x1b[0m\r\n`).join('');
-    expect(out).toContain(expected);
+    // The record is still there, and it is not the 80-column row folded: the
+    // filename and its description both survive.
+    expect(out).toContain('TESTFILE.LHA');
+    expect(out).toMatch(/A brand new upload/);
   });
 });
 

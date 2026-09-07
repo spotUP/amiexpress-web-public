@@ -106,13 +106,13 @@ export const DEFAULT_MIN_COLUMNS = 80;
  * - per conference, `checkFileConfScan()` then `currentConf:=conf;
  * runSysCommand('N','S U')`, which is where the name comes from - and this
  * port already runs exactly that at logon (message-scan.handler.ts). Wiring
- * NSU to it on demand was rejected on evidence: that loop's `N` is
- * displayNewFiles, which reads the SQL `file_entries` mirror, and that mirror
- * is written only by database/file-repository.ts on a web upload. Nothing
- * imports the DIR files, so conferences whose DIR files are full of records
- * hold zero rows, and an internal NSU would answer "No new files found" for
- * them. A listing that omits the files is the same lie as a listing that
- * truncates their names.
+ * NSU to it on demand was rejected because express.e's internal dispatch is a
+ * closed list that has no NSU in it - not because the loop's `N` could not
+ * answer. (It could not, when this was written: displayNewFiles read the SQL
+ * `file_entries` mirror, which only a web upload writes, so a conference whose
+ * DIR files were full held zero rows. That is fixed - `N` reads the DIR files
+ * now, handlers/file/file-listing.handler.ts handleNewFileScan - and the
+ * refusal stands on the dispatch list alone.)
  *
  * So the refusal stands and says so, in express.e's own words for a name the
  * board cannot answer ("Use '?' for command list.", express.e:28397).

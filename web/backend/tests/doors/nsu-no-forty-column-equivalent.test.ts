@@ -23,13 +23,14 @@
  * reach and `checkFileConfScan()` allows, it sets `currentConf` and runs
  * `runSysCommand('N','S U')` - which is where the name NSU comes from. This
  * port already runs that loop at logon
- * (`handlers/message/message-scan.handler.ts`), and its `N` is
- * `file.handler.ts` displayNewFiles, which reads the SQL `file_entries`
- * mirror. That mirror is written only by `database/file-repository.ts` on a
- * web upload; nothing imports the DIR files, so on the live board conference
- * 2's areas hold zero rows while `Conf2/Dir1` on disk holds records. An
- * internal NSU built on it would answer "No new files found" for a conference
- * that is full - which is the sysop's own "worse than a refusal".
+ * (`handlers/message/message-scan.handler.ts`).
+ *
+ * (When this was written there was a second reason: that loop's `N` read the
+ * SQL `file_entries` mirror, which only a web upload writes, so an internal
+ * NSU would have answered "No new files found" for a conference full of DIR
+ * records. That is fixed as of 2026-09-07 - `N` reads the DIR files - so the
+ * refusal now rests on the dispatch list alone, which is the reason that was
+ * always load-bearing.)
  *
  * So the refusal stands, and the refusal gets HONEST: it names the command and
  * says the board has no version of it at this width, in express.e's own words

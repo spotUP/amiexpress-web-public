@@ -574,26 +574,15 @@ console.log('[displayNewFiles] Search date:', searchDate);
     emitText(socket, '\r\n');
     emitText(socket, `Searching for files newer than: ${formatLongDate(searchDate)}\r\n\r\n`);
 
-    // Get file areas for current conference from database
-    const conferenceId = session.currentConf || 1;
-console.log('[displayNewFiles] Getting file areas for conference:', conferenceId);
-    const areas = await db.getFileAreas(conferenceId);
-console.log('[displayNewFiles] Found', areas.length, 'file areas');
-
-  if (areas.length === 0) {
-    emitText(socket, '\r\n\x1b[33mNo file areas available in this conference.\x1b[0m\r\n');
-    finalizeCommand(socket, session, 'New files unavailable');
-    return;
-  }
-
-    // Display new files from database - express.e:27906-27950
-    await displayNewFilesFromDatabase(socket, session, searchDate, areas, nonStopDisplay);
-
-    // express.e:27934-27938: IF NOT newFilesPauseFlag THEN flagPause(1) — main loop doPause handles
-    if (!session.newFilesPauseFlag) {
-      session.menuPause = true;
-    }
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    // THE DIR FILES ARE THE ANSWER, not the SQL mirror. This used to query
+    // `file_entries`, which only a web upload ever writes - so a conference
+    // whose DIR files are full reported no new files (measured live
+    // 2026-09-07: conference 1, two areas, 0 rows, DIR files with records).
+    // FileListingHandler owns the DIR walk, the row painter and the pause,
+    // which is why the scan lives beside `F` rather than in a second copy
+    // here. express.e:27906-28023.
+    const { FileListingHandler } = require('./file-listing.handler');
+    await FileListingHandler.handleNewFileScan(socket, session, searchDate, nonStopDisplay);
   } catch (error) {
 console.error('[displayNewFiles] ERROR:', error);
     emitText(socket, `\r\n\x1b[31mError displaying new files: ${(error as Error).message}\x1b[0m\r\n`);
@@ -601,149 +590,6 @@ console.error('[displayNewFiles] ERROR:', error);
   }
 }
 
-/**
- * One new-files row as display lines (C64/40-col Task 5a).
- *
- * 80 columns: the historical colorized row plus its indented description,
- * byte-identical. Narrow: the same two-line convention as the search
- * listing, name line green, description lines white.
- */
-export function buildNewFileLines(
-  session: { screenWidth?: number; petsciiMode?: boolean },
-  file: any
-): string[] {
-  const sizeKB = Math.ceil(file.size / 1024);
-
-  if (!isNarrow(session)) {
-    const uploadDate = formatLongDate(new Date(file.uploaddate));
-    const lines = [
-      `\x1b[32m${file.filename.padEnd(20)}\x1b[0m ` +
-      `\x1b[36m${String(sizeKB).padStart(6)}KB\x1b[0m ` +
-      `\x1b[33m${uploadDate.padEnd(10)}\x1b[0m ` +
-      `\x1b[37m${file.uploader}\x1b[0m`,
-    ];
-    if (file.description) {
-      lines.push(`  \x1b[37m${file.description.substring(0, 70)}\x1b[0m`);
-    }
-    return lines;
-  }
-
-  const [nameLine, ...descLines] = narrowFileLines({
-    filename: file.filename,
-    sizeKB,
-    description: file.description,
-  });
-  return [
-    `\x1b[32m${nameLine}\x1b[0m`,
-    ...descLines.map((l) => `\x1b[37m${l}\x1b[0m`),
-  ];
-}
-
-// Display new files from database - express.e:27906-27950 myNewFiles()
-async function displayNewFilesFromDatabase(socket: any, session: BBSSession, searchDate: Date, areas: any[], nonStop: boolean) {
-  const { checkForPause, flagPause } = require('../../utils/flag-pause.util');
-  let foundNewFiles = false;
-  let totalNewFiles = 0;
-
-  // Helper to emit output and track lines for pause purposes
-  const emitLine = (text: string, lineCount: number = 1) => {
-    emitText(socket, text);
-    // Track lines for checkForPause()
-    if (!session.tempData) session.tempData = {};
-    session.tempData.lineCount = (session.tempData.lineCount || 0) + lineCount;
-  };
-
-  // Loop through all file areas in conference - express.e:27906 WHILE(fLLoop<=dirScan)
-  for (let dirIndex = 0; dirIndex < areas.length; dirIndex++) {
-    const area = areas[dirIndex];
-
-    try {
-      // express.e:27914,27928 - Output "Scanning directory X" for each directory
-      emitLine(`Scanning ${area.name || 'directory ' + (dirIndex + 1)}...\r\n`, 1);
-
-      // express.e:27934-27938 - Pause after each directory
-      // During confScan (newFilesPauseFlag=TRUE), use checkForPause()
-      // Otherwise use flagPause(1) for manual N command
-      let shouldContinue = true;
-      if (session.newFilesPauseFlag) {
-        shouldContinue = await checkForPause(socket, session);
-      } else {
-        shouldContinue = await flagPause(socket, session, 1);
-      }
-
-      // If user chose to stop, break out of loop
-      if (!shouldContinue) {
-console.log('[displayNewFilesFromDatabase] User stopped scan');
-        break;
-      }
-
-      // Query files newer than search date in this area
-      const query = `
-        SELECT
-          id,
-          filename,
-          description,
-          size,
-          uploader,
-          uploaddate,
-          downloads
-        FROM file_entries
-        WHERE areaid = $1
-          AND uploaddate > $2
-        ORDER BY uploaddate DESC
-      `;
-
-      // Convert Date to Unix timestamp (seconds) for SQLite3 compatibility
-      const searchTimestamp = Math.floor(searchDate.getTime() / 1000);
-      const result = await db.query(query, [area.id, searchTimestamp]);
-      const newFiles = result.rows;
-
-      if (newFiles.length > 0) {
-        foundNewFiles = true;
-        totalNewFiles += newFiles.length;
-
-        // Display area header (2-3 lines)
-        emitLine(`\r\n\x1b[33m${area.name}\x1b[0m\r\n`, 2);
-        if (area.description) {
-          emitLine(`${area.description}\r\n`, 1);
-        }
-        emitLine('\r\n', 1);
-
-        // Display each new file with pause check
-        for (const file of newFiles) {
-          for (const line of buildNewFileLines(session, file)) {
-            emitLine(`${line}\r\n`, 1);
-          }
-
-          // Check for pause after each file listing
-          if (session.newFilesPauseFlag) {
-            const cont = await checkForPause(socket, session);
-            if (!cont) {
-console.log('[displayNewFilesFromDatabase] User stopped during file listing');
-              return; // Exit early
-            }
-          }
-        }
-
-        emitLine(`\r\n\x1b[36m${newFiles.length} new file(s) in this area\x1b[0m\r\n`, 2);
-      }
-    } catch (error) {
-console.error(`[displayNewFilesFromDatabase] Error for area ${area.name}:`, error);
-    }
-  }
-
-  // Summary - express.e always shows this
-  emitLine('\r\n', 1);
-  if (foundNewFiles) {
-    emitLine(`\x1b[32mTotal: ${totalNewFiles} new file(s) found\x1b[0m\r\n`, 1);
-  } else {
-    emitLine('\x1b[33mNo new files found since last login\x1b[0m\r\n', 1);
-  }
-
-  if (!nonStop) {
-    emitLine('\r\n', 1);
-  }
-}
 
 
 // ===== Upload/Download Interfaces =====
