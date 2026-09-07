@@ -7,6 +7,12 @@
  * connection without touching the account.
  */
 
+// The handler chain reaches index.ts, which binds HTTP, telnet, SSH and FTP.
+// This suite wants the handlers, not the ports: without this it raced whatever
+// else holds 3001 and failed with EADDRINUSE (index.ts, SKIP_SERVER_START).
+// Set before the first require, because index.ts starts on import.
+process.env.SKIP_SERVER_START = '1';
+
 import {
   handleGdprBackfillInput,
 } from '../src/handlers/user/gdpr.handler';
