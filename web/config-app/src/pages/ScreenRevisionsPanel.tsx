@@ -36,8 +36,11 @@ export function ScreenRevisionsPanel({ path, onClose }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await apiClient.getScreenRevisions(path);
-      if (data) setRevisions(data.revisions);
+      // `.data` - the envelope, not the payload. Reading `data.revisions`
+      // off the envelope handed setRevisions undefined and the next render
+      // threw on `revisions.length`, which is what turned the page black.
+      const res = await apiClient.getScreenRevisions(path);
+      setRevisions(res?.data?.revisions ?? []);
     } catch {
       setStatus('Failed to load revisions');
     } finally {
@@ -54,7 +57,7 @@ export function ScreenRevisionsPanel({ path, onClose }: Props) {
       return;
     }
     try {
-      const data = await apiClient.getScreenRevision(path, file);
+      const data = (await apiClient.getScreenRevision(path, file))?.data;
       if (data) {
         const bytes = atob(data.content);
         // Decode latin1 (single-byte) to string for display

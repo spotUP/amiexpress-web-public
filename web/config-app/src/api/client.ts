@@ -1193,20 +1193,27 @@ class ApiClient {
   }
 
   // Screen Revisions
+  /**
+   * The three revision calls answer with the API ENVELOPE, like every other
+   * route here - `{ success, data, message }`. They used to be typed as the
+   * payload itself, so the revisions panel read `data.revisions` off the
+   * envelope, got undefined, and threw on `revisions.length` the moment a
+   * sysop pressed Revisions: the whole page went black.
+   */
   async getScreenRevisions(path: string) {
-    return this.request<{ revisions: Array<{ ts: string; file: string; bytes: number; sha256: string; source: string }> }>(
+    return this.request<ApiResponse<{ revisions: Array<{ ts: string; file: string; bytes: number; sha256: string; source: string }> }>>(
       `${API_BASE}/screens/revisions?path=${encodeURIComponent(path)}`
     );
   }
 
   async getScreenRevision(path: string, file: string) {
-    return this.request<{ content: string; bytes: number }>(
+    return this.request<ApiResponse<{ content: string; bytes: number }>>(
       `${API_BASE}/screens/revision?path=${encodeURIComponent(path)}&file=${encodeURIComponent(file)}`
     );
   }
 
   async restoreScreenRevision(path: string, file: string) {
-    return this.request<{ restored: string }>(`${API_BASE}/screens/restore`, {
+    return this.request<ApiResponse<{ restored: string }>>(`${API_BASE}/screens/restore`, {
       method: 'POST',
       body: JSON.stringify({ path, file }),
     });
