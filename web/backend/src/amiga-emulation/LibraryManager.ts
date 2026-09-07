@@ -26,6 +26,8 @@ import { LibraryTraps } from "./api/LibraryTraps.js";
 import { XIMProtocol } from "./XIMProtocol.js";
 import { DoorConfig, DoorConstants } from "./DoorTypes.js";
 import { Socket } from "socket.io";
+import { c64AdapterFor } from "../server/c64-door-adapter";
+import { C64_COLUMNS } from "./xim/screen-width.util";
 import * as path from "path";
 import * as fs from "fs";
 import * as amigafs from "../utils/amigafs";
@@ -529,6 +531,13 @@ debugLog(
 debugLog("[LibraryManager] Creating DOS.library...");
 
     this.dosLibrary = new DosLibrary(this.emulator, projectRoot);
+    // The caller's width, for the ONE place dos.library needs it: a door that
+    // opens its own header file (`ctop`, `conftop`) instead of asking the BBS
+    // to show it. The socket lives here, so the question is answered here.
+    this.dosLibrary.setNarrowArtProvider(() => {
+      const adapter = c64AdapterFor(this.socket);
+      return !!adapter && adapter.columns <= C64_COLUMNS;
+    });
     this.dosLibrary.setBasePaths(projectRoot);
     this.dosLibrary.setEnvironment(this.config.env);
     this.dosLibrary.setInheritedHandles(1, 2);

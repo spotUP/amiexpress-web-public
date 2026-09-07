@@ -56,7 +56,7 @@ describe('JH_SF picks the 40-column variant for an adapted caller', () => {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* noop */ }
   });
 
-  function buildHandler(adapted: boolean, columns: 40 | 80 = 40): { handler: XIMIOHandler; socket: any } {
+  function buildHandler(adapted: boolean, columns: 40 | 80 = 40, baseDir = tmpDir): { handler: XIMIOHandler; socket: any } {
     const socket: any = { emit: () => true };
     if (adapted) {
       // petsciiMode is what `c64AdapterDrives` reads; the adapter it installs
@@ -94,7 +94,7 @@ describe('JH_SF picks the 40-column variant for an adapted caller', () => {
       transfering: false,
       doorSilent: false,
     };
-    const bbsSession: any = { bbsPath: tmpDir, dataDir: tmpDir, user: { secLevel: 100 } };
+    const bbsSession: any = { bbsPath: baseDir, dataDir: baseDir, user: { secLevel: 100 } };
 
     const handler = new XIMIOHandler(
       emulator,
@@ -119,12 +119,12 @@ describe('JH_SF picks the 40-column variant for an adapted caller', () => {
    * it here reads the bytes the caller would have received - past the
    * adapter's own PETSCII conversion, which is not what this test is about.
    */
-  async function textShownFor(name: string, adapted: boolean, columns: 40 | 80 = 40): Promise<string> {
-    const { handler, socket } = buildHandler(adapted, columns);
+  async function textShownFor(name: string, adapted: boolean, columns: 40 | 80 = 40, baseDir = tmpDir): Promise<string> {
+    const { handler, socket } = buildHandler(adapted, columns, baseDir);
     const shown: string[] = [];
     (handler as any).emitText = (text: string) => { shown.push(text); };
     try {
-      await handler.handleShowFile(buildMsg(path.join(tmpDir, name)));
+      await handler.handleShowFile(buildMsg(path.join(baseDir, name)));
     } finally {
       if (adapted) uninstallC64DoorAdapter(socket, { silent: true });
     }
@@ -167,5 +167,56 @@ describe('JH_SF picks the 40-column variant for an adapted caller', () => {
     ]);
     // An extensionless name has only one spelling, and it is not repeated.
     expect(narrowVariants('/x/games')).toEqual(['/x/games_C64']);
+  });
+});
+
+/**
+ * THE ART ITSELF, on this board.
+ *
+ * The suite above proves the machinery picks a `_C64` file. This one proves
+ * the board HAS one where it needs one, and that it is really narrow - a
+ * variant nobody drew is a rung that never fires, and a "narrow" variant
+ * that is 78 columns wide is worse than none, because the ladder would have
+ * folded the wide file and this one is passed through untouched.
+ *
+ * `dRE!WAll` is the door it matters for: `dRE!WAll.info` carries `STYLES=2`,
+ * so the banner a caller meets is `dRE!WAll.StYlE.2`, and the door fetches it
+ * through JH_SF - the route this variant lives on.
+ */
+describe("the board's own 40-column door art", () => {
+  const REPO = path.resolve(__dirname, '../../../..');
+  const WALL = path.join(REPO, 'Doors', 'dRE', 'dRE!WAll');
+
+  /** Printable width: SGR sequences occupy no column. */
+  const widthOf = (line: string) => line.replace(/\x1b\[[0-9;]*m/g, '').length;
+
+  /** The style number the door's own icon selects. */
+  function styleFromInfo(): string {
+    const info = fs.readFileSync(path.join(WALL, 'dRE!WAll.info'), 'latin1');
+    const match = info.match(/STYLES=(\d+)/);
+    expect(match).not.toBeNull();
+    return match![1];
+  }
+
+  test('the style dRE!WAll.info selects has a narrow copy beside it', () => {
+    const style = styleFromInfo();
+    expect(fs.existsSync(path.join(WALL, `dRE!WAll.StYlE.${style}`))).toBe(true);
+    expect(fs.existsSync(path.join(WALL, `dRE!WAll.StYlE.${style}_C64`))).toBe(true);
+  });
+
+  test('every narrow copy is really 40 columns or less, and its wide original is not', () => {
+    const narrow = fs.readdirSync(WALL).filter((f) => f.endsWith('_C64'));
+    expect(narrow.length).toBeGreaterThan(0);
+    for (const file of narrow) {
+      const rows = fs.readFileSync(path.join(WALL, file), 'latin1').split('\n').filter((r) => r.length > 0);
+      expect({ file, rows: rows.length > 0 }).toEqual({ file, rows: true });
+      for (const row of rows) {
+        expect({ file, row, width: widthOf(row) <= 40 }).toEqual({ file, row, width: true });
+      }
+      // The point of the exercise: the door's own file did NOT fit.
+      const wide = fs.readFileSync(path.join(WALL, file.replace(/_C64$/, '')), 'latin1')
+        .split('\n').filter((r) => r.length > 0);
+      expect({ file, wideOverflows: wide.some((r) => widthOf(r) > 40) }).toEqual({ file, wideOverflows: true });
+    }
   });
 });

@@ -17,6 +17,7 @@ import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 import { buildGFileCandidates } from './user-info-handlers';
 import { c64AdapterFor } from '../../server/c64-door-adapter';
 import { C64_COLUMNS } from './screen-width.util';
+import { narrowVariants } from '../../utils/narrow-art.util';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const iconv = require('iconv-lite');
 
@@ -25,31 +26,12 @@ const iconv = require('iconv-lite');
 // ---------------------------------------------------------------------------
 
 /**
- * The narrow spellings of one display file.
- *
- * A door being adapted to 40 columns asks for a file its author drew for 80.
- * Where the sysop has drawn a narrow copy, that copy wins - and it reaches the
- * caller exactly as drawn, because the rule ladder leaves an already-fitting
- * row alone (`chooseRule` answers `crop`, the identity at that width, in
- * sdk/petscii/frame/adapt.ts:206-221).
- *
- * The suffix is `_C64`, the one `screen.handler.ts` already resolves screens
- * with, so there is one convention to learn rather than two. BOTH spellings
- * are probed because a door file is not always `NAME.ext`: the "extension" of
- * `dRE!WAll.StYlE.1` is a STYLE NUMBER, and the narrow copy a sysop would draw
- * for it is `dRE!WAll.StYlE.1_C64`, not `dRE!WAll.StYlE_C64.1`.
- *
- * Surveyed doors this reaches: `wall` (dRE!WAll, its banner) and `games`
- * (5D-AdiMenu, the whole menu screen) both fetch their file through JH_SF.
- * `ctop`/`conftop` open their `Conftop.header` through dos.library instead and
- * are NOT covered here - see thoughts/shared/research/2026-09-07_door-external-header-files.md.
+ * The `_C64` naming rule lives in `utils/narrow-art.util.ts`, because the
+ * dos.library route (`ctop`'s own `Conftop.header` Open) needs the same rule
+ * and a rule written twice drifts. Re-exported here so the display path's
+ * callers and its test keep one import.
  */
-export function narrowVariants(candidate: string): string[] {
-  const parsed = path.parse(candidate);
-  const whole = `${candidate}_C64`;
-  const stem = path.join(parsed.dir, `${parsed.name}_C64${parsed.ext}`);
-  return whole === stem ? [whole] : [whole, stem];
-}
+export { narrowVariants };
 
 /**
  * Each candidate preceded by its narrow spellings, when the caller's door

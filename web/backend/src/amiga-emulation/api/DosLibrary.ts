@@ -12,6 +12,7 @@ import { initializeENVFiles } from "../utils/env-initializer";
 import { amigaEnvArchiveDir, amigaEnvDir, amigaRamDir } from "../utils/env-paths";
 import { getSystemTime, dateTimeToDateStamp } from '../../utils/date-time.util';
 import { debugLog } from "../../utils/debug-log";
+import { narrowVariants } from "../../utils/narrow-art.util";
 
 // Debug log path - uses BBS_DATA_DIR env var or falls back to cwd
 const FGETS_DEBUG_LOG = path.join(process.env.BBS_DATA_DIR || process.cwd(), 'logs', 'fgets-debug.log');
@@ -164,6 +165,25 @@ export class DosLibrary {
   private pathManager: PathManager | null = null;
   private fileCache: AmigaFileCache | null = null;
   private useNewFileSystem: boolean = false; // Feature flag for gradual migration
+
+  /**
+   * Answers "is this caller reading a forty-column screen?", or null when
+   * nobody wired it (every non-session context: the harness, the probes, the
+   * tests that do not care).
+   *
+   * WHY THE DOS LAYER KNOWS ABOUT WIDTH AT ALL. `ctop` and `conftop` do not
+   * ask the BBS to show their header - they `Open()` `BBS:Conf<n>/Conftop.header`
+   * themselves, so the XIM show-file route's `_C64` rung (io-file-display.ts)
+   * never sees them. The two routes are indistinguishable from the door's
+   * side, which is exactly why a fix aimed at one silently misses the other.
+   *
+   * It is not a lie told to the door. The emulated machine is already
+   * per-session - its PROGDIR:, its assigns and its ENV: are - and this rung
+   * only ever fires when the SYSOP has drawn `NAME_C64` beside `NAME`. No
+   * narrow file, no change; and a write is never redirected, so a door cannot
+   * be made to save over art.
+   */
+  private narrowArtProvider: (() => boolean) | null = null;
 
   // Environment variable management (V36+ SetVar/GetVar/DeleteVar)
   private envManager: EnvironmentManager | null = null;
@@ -359,6 +379,35 @@ debugLog(`[DosLibrary] Environment variables initialized for node ${nodeId}`);
    * Enable the new file system with FileManager and PathManager
    * Called by AmigaDoorSession during initialization
    */
+  /**
+   * Wire the caller's width in. `LibraryManager` owns the socket, so it owns
+   * the question; this class only asks it.
+   */
+  setNarrowArtProvider(provider: (() => boolean) | null): void {
+    this.narrowArtProvider = provider;
+  }
+
+  /**
+   * The name a read-only `Open()` should really use.
+   *
+   * Returns the sysop's narrow copy when the caller is on forty columns and
+   * that copy exists, and the door's own name otherwise. Read modes only:
+   * `MODE_NEWFILE` and `MODE_READWRITE` create or mutate, and redirecting
+   * those would have a door write its data into a file named for a screen.
+   */
+  private narrowArtFor(filename: string, mode: number): string {
+    if (mode !== MODE_OLDFILE) return filename;
+    if (!this.narrowArtProvider?.()) return filename;
+    for (const variant of narrowVariants(filename)) {
+      const real = this.pathManager?.amiToSysPath(variant) || this.pathResolver.resolve(variant);
+      if (real && amigafs.existsSync(real)) {
+        debugLog(`[dos.library] Open: 40-column caller, "${filename}" -> "${variant}"`);
+        return variant;
+      }
+    }
+    return filename;
+  }
+
   enableNewFileSystem(baseDir: string, pathManager?: PathManager): void {
 debugLog(
       "[dos.library] Enabling new file system with FileManager/PathManager"
@@ -620,7 +669,7 @@ debugLog(`[dos.library] queueInput: ${typeof data === 'string' ? JSON.stringify(
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const mode = this.emulator.getRegister(CPURegister.D2);
 
-    const filename = this.readString(namePtr);
+    const filename = this.narrowArtFor(this.readString(namePtr), mode);
 
 debugLog(`[dos.library] Open(filename="${filename}", mode=${mode})`);
     this.logDoorFile(`OPEN req ami="${filename}" mode=${mode}`);
