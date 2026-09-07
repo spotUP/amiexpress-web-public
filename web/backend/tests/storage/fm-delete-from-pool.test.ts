@@ -417,3 +417,45 @@ describe('the quota a pooled delete gives back', () => {
     expect(row.object_key).toBe(`Conf1/Files/${filename}`);
   });
 });
+
+/**
+ * A pooled DELETE that the volume refuses is still reported as
+ * "Delete operation complete". `performDelete` has an honest branch for a
+ * physical delete that failed, but it only fires on a THROW, and the pooled
+ * path catches its own error and logs it - so the one case the branch exists
+ * for is the one case that cannot reach it. The DIR line is already gone by
+ * then: the sysop loses the listing, keeps the bytes, keeps paying quota for
+ * them, and is told the operation succeeded.
+ */
+describe('a pooled delete the volume refuses', () => {
+  it('is not reported as complete', async () => {
+    const h = harness();
+    await h.backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
+    h.backend.down = true;
+
+    await performDelete(h);
+
+    expect(h.written()).not.toContain('Delete operation complete');
+    expect(h.written()).toContain('could not be deleted');
+  });
+
+  it('leaves the object listable, because it is still in the bucket', async () => {
+    const h = harness();
+    await h.backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
+    // Prime the index while the volume still answers, the way a listing does.
+    expect((await locateRemoteFile('DEMO.LHA', 1, h.storage)).files).toHaveLength(1);
+
+    h.backend.down = true;
+    await performDelete(h);
+    h.backend.down = false;
+
+    // The DIR line is gone, but the bytes are not: forgetting the index entry
+    // as well would make a file that still occupies the drive invisible to
+    // every route that could remove it.
+    expect((await locateRemoteFile('DEMO.LHA', 1, h.storage)).files).toHaveLength(1);
+  });
+
+  // NOT tested here: a drive the pool does not have mounted. `usableAreasFor`
+  // filters that area out on purpose - it degrades to local disk with a
+  // throttled warning - so the delete never enters the pooled branch at all.
+});

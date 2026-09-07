@@ -777,18 +777,31 @@ console.log('[FM] Starting file maintenance');
       // the listing gave this key is what the quota credit below is worth.
       const sizeBytes = index.sizeOf(key) ?? 0;
 
-      let objectDeleted = false;
-      if (state) {
-        try {
-          await state.backend.delete(key);
-          objectDeleted = true;
-        } catch (error) {
-          console.error(
-            `[FileMaintenance] could not delete ${filename} (DRIVE.${driveNumber}:${key}) from the pool: ` +
-              `${error instanceof Error ? error.message : String(error)}`
-          );
-        }
+      if (!state) {
+        // There is nothing to delete THROUGH. The DIR line is already gone by
+        // the time this runs, so returning quietly is how a sysop loses the
+        // listing and keeps bytes that still occupy the drive.
+        throw new Error(
+          `DRIVE.${driveNumber} is not mounted, so ${key} was not removed from the pool`
+        );
       }
+
+      try {
+        await state.backend.delete(key);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(
+          `[FileMaintenance] could not delete ${filename} (DRIVE.${driveNumber}:${key}) from the pool: ${message}`
+        );
+        // The object is still in the bucket. Everything below - forgetting the
+        // name index entry, crediting the quota back, dropping the local copy -
+        // describes a delete that happened, and applying any of it to one that
+        // did not makes a file that still costs quota invisible to every route
+        // that could remove it. Report the failure instead: `performDelete`
+        // tells the sysop the listing went and the file did not.
+        throw new Error(`DRIVE.${driveNumber}:${key} - ${message}`);
+      }
+
       index.forget(key);
 
       // Gate 2, blocker 3: a pooled delete has to give the quota back, in
@@ -803,20 +816,19 @@ console.log('[FM] Starting file maintenance');
       //     until that rebuild, and `roomOn` (`quota - usedBytes`) is what
       //     the upload gate asks in the meantime.
       //
-      // Only on a delete that actually happened. A failed DeleteObject means
-      // the bytes are still there and still occupy the drive, and crediting
-      // them back would be the same lie in the opposite direction.
-      if (objectDeleted) {
-        storage.cache.creditDeleted(driveNumber, key, sizeBytes);
-        try {
-          _db?.clearLocation?.(filename, pooledArea.id);
-        } catch (err) {
-          console.error(
-            `[FileMaintenance] deleted ${filename} from DRIVE.${driveNumber} but could not clear its catalog ` +
-              `location, so the next rebuild will re-seed those bytes: ` +
-              `${err instanceof Error ? err.message : String(err)}`
-          );
-        }
+      // Only reached on a delete that actually happened - a failed
+      // DeleteObject throws above, because the bytes are still there and
+      // still occupy the drive, and crediting them back would be the same
+      // lie in the opposite direction.
+      storage.cache.creditDeleted(driveNumber, key, sizeBytes);
+      try {
+        _db?.clearLocation?.(filename, pooledArea.id);
+      } catch (err) {
+        console.error(
+          `[FileMaintenance] deleted ${filename} from DRIVE.${driveNumber} but could not clear its catalog ` +
+            `location, so the next rebuild will re-seed those bytes: ` +
+            `${err instanceof Error ? err.message : String(err)}`
+        );
       }
 
       // A staged, un-uploaded copy is the only copy of something the pool
@@ -830,7 +842,7 @@ console.log('[FM] Starting file maintenance');
         }
       }
 
-      return state?.volume.retentionDays !== undefined
+      return state.volume.retentionDays !== undefined
         ? `DRIVE.${driveNumber} has a ${state.volume.retentionDays}-day RETENTION policy - the provider may ` +
             `keep these bytes recoverable for that long even though the delete succeeded here.`
         : null;
