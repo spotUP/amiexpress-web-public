@@ -125,7 +125,10 @@ test('the account exists, and the caller is logged on, before the first question
   expect(socket._emits.some(e => String(e.payload).includes('What is your handle:'))).toBe(true);
   expect(db.createUser).toHaveBeenCalled();
   expect(session.user?.username).toBe('newbie');
-  expect(session.state).toBe(BBSState.LOGGEDON);
+  // Still REGISTERING: the dispatcher routes keystrokes to the questionnaire
+  // only in that state. LOGGEDON here is the bug that stranded a live caller
+  // at "What is your real name:".
+  expect(session.state).toBe(BBSState.REGISTERING);
   expect(session.subState).toBe(LoggedOnSubState.NEW_USER_SCRIPT);
 });
 

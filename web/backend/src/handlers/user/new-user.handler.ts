@@ -1035,10 +1035,35 @@ async function continueRegistrationFlow(socket: Socket, session: any) {
  */
 async function enterBoard(socket: Socket, session: any): Promise<void> {
   delete session.newUserData;
-  // The questionnaire ran in its own sub-states; the board starts here at the
-  // bulletins, which is where account creation used to leave the caller.
+  const newUser = session.user;
+  socket.emit('ansi-output', '\x1b[32mAccount created successfully!\x1b[0m\r\n\r\n');
+  // The questionnaire ran in its own sub-states, REGISTERING; the board
+  // starts here at the bulletins, which is where account creation used to
+  // leave the caller - and the browser learns it is logged on only now.
   session.state = BBSState.LOGGEDON;
   session.subState = LoggedOnSubState.DISPLAY_BULL;
+  socket.emit('login-success', {
+    user: {
+      id: newUser.id,
+      username: newUser.username,
+      realname: newUser.realname,
+      secLevel: newUser.secLevel,
+      expert: newUser.expert,
+      ansi: newUser.ansi
+    }
+  });
+
+  // Emit BBS event for LiveChat integration
+  try {
+    emitUserLogin({
+      username: newUser.username,
+      nodeId: session.nodeId || 1,
+      location: newUser.location || 'Unknown',
+      timestamp: Date.now()
+    });
+  } catch (error) {
+console.error('[BBSEvent] Error emitting new user login event:', error);
+  }
     try {
       const { displayScreen, doPause } = require('../screen.handler');
       const shown = await displayScreen(socket, session, 'JOINED', true, /* silent */ true);
@@ -1280,6 +1305,12 @@ async function advanceQuestionnaire(socket: Socket, session: any): Promise<void>
         if (!hadSegments) {
           session.screenSegments = { segments: [], currentIndex: 0, screenName: 'QUESTIONNAIRE', inlineMode: true, isFlowScreen: true };
         }
+        // processCommand ignores a session that is not LOGGEDON, and the
+        // caller is REGISTERING until the questionnaire is done - so the line
+        // runs as a logged-on caller and the state is handed straight back,
+        // or the next keystroke would miss the questionnaire.
+        const stateBefore = session.state;
+        session.state = BBSState.LOGGEDON;
         try {
           const result = await parseMciCodes(step.content, session, undefined, undefined, undefined, socket);
           if (result?.parsed && !result.inlineEmitted) socket.emit('ansi-output', `${result.parsed}\r\n`);
@@ -1287,6 +1318,7 @@ async function advanceQuestionnaire(socket: Socket, session: any): Promise<void>
 console.warn('[NEW USER] questionnaire MCI line failed:', step.content, (error as Error).message);
         } finally {
           if (!hadSegments) delete session.screenSegments;
+          session.state = stateBefore;
           session.subState = LoggedOnSubState.NEW_USER_SCRIPT;
         }
         continue;
@@ -1598,11 +1630,11 @@ console.error('[NewUser] Error running MAIL_ON_NEW_USER:', error);
     // Only BBS terminal registrations reach here — web/admin/test users must NOT be written.
     await db.appendUserToDisk(newUserId);
 
-    socket.emit('ansi-output', '\x1b[32mAccount created successfully!\x1b[0m\r\n\r\n');
-
-    // Log them in automatically
-    session.state = BBSState.LOGGEDON;
-    session.subState = LoggedOnSubState.DISPLAY_BULL;
+    // The caller stays REGISTERING until enterBoard(): the input dispatcher
+    // (command.handler, `if (session.state === BBSState.REGISTERING)`) only
+    // routes keystrokes to the questionnaire in that state. Flipping to
+    // LOGGEDON here - which this did for one deploy - left a live caller at
+    // "What is your real name:" with nothing reading his answer.
     session.user = newUser;
 
     // Initialize security
@@ -1618,28 +1650,6 @@ console.error('[NewUser] Error running MAIL_ON_NEW_USER:', error);
     // Clean up registration data (questionnaire path saves/restores it)
 
     // Send success to frontend
-    socket.emit('login-success', {
-      user: {
-        id: newUser.id,
-        username: newUser.username,
-        realname: newUser.realname,
-        secLevel: newUser.secLevel,
-        expert: newUser.expert,
-        ansi: newUser.ansi
-      }
-    });
-
-    // Emit BBS event for LiveChat integration
-    try {
-      emitUserLogin({
-        username: newUser.username,
-        nodeId: session.nodeId || 1,
-        location: newUser.location || 'Unknown',
-        timestamp: Date.now()
-      });
-    } catch (error) {
-console.error('[BBSEvent] Error emitting new user login event:', error);
-    }
 
     // express.e:30124-30125 — show the sysop-configured JOINED screen
     // file (BBS:Screens/JOINED.txt) followed by doPause(). Audit A-13
