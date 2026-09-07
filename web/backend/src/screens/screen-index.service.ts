@@ -136,6 +136,20 @@ export interface ScreenFileFacts {
    * nothing.
    */
   codesOnly: boolean;
+
+  /**
+   * The door that owns this file, when it is a DOOR's art rather than the
+   * board's.
+   *
+   * A door's screens are not routed by `screen-resolution.ts` at all - the
+   * door opens them itself, through XIM JH_SF for a 68K door or its own reads
+   * for a TypeScript one - so `findSecurityScreen`, the type-extension routing
+   * and the whole scope model do NOT apply to them. They are listed because a
+   * sysop asked to find "the art GWALL draws" without knowing that door's
+   * directory layout, and they are TAGGED so the manager can keep them apart
+   * from screens the board resolves.
+   */
+  door?: string;
 }
 
 export type ScreenProblem = 'empty' | 'colour-codes-without-escape';
@@ -235,6 +249,55 @@ function confIds(baseDir: string): number[] {
  * subdirectories, each node and conference and their Screens/, plus any
  * directory a SCREENS tooltype names.
  */
+/**
+ * Every installed door that has art of its own, and where it keeps it.
+ *
+ * Deliberately NOT part of `listScreenDirectories`: that list is what the
+ * board RESOLVES screens from, and putting a door's directory in it would make
+ * the door's files look like screens a caller could be served. They are a
+ * different kind of thing and the index says so with the `door` tag.
+ *
+ * `node_modules` and `dist` are skipped: a door's dependencies are megabytes of
+ * files that are not art, and one of them will always end in .txt.
+ */
+export function listDoorScreenDirectories(baseDir: string): { door: string; dir: string }[] {
+  const doorsRoot = path.join(baseDir, 'Doors');
+  const out: { door: string; dir: string }[] = [];
+
+  let doors: fs.Dirent[];
+  try {
+    doors = fs.readdirSync(doorsRoot, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+
+  for (const entry of doors) {
+    if (!entry.isDirectory()) continue;
+    const door = entry.name;
+
+    const walk = (dir: string, depth: number) => {
+      if (depth > 3) return; // deep enough for Doors/<door>/assets/screens
+      let kids: fs.Dirent[];
+      try {
+        kids = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      if (kids.some(kid => kid.isFile() && isScreenFile(kid.name))) {
+        out.push({ door, dir });
+      }
+      for (const kid of kids) {
+        if (!kid.isDirectory()) continue;
+        if (kid.name === 'node_modules' || kid.name === 'dist' || kid.name === '.git') continue;
+        walk(path.join(dir, kid.name), depth + 1);
+      }
+    };
+    walk(path.join(doorsRoot, door), 0);
+  }
+
+  return out;
+}
+
 export function listScreenDirectories(baseDir: string): string[] {
   const dirs = new Set<string>([baseDir, path.join(baseDir, 'Screens')]);
 
@@ -1014,6 +1077,17 @@ export function buildScreenIndex(baseDir: string): ScreenIndex {
       const rel = path.relative(baseDir, path.join(dir, name));
       if (readers.has(rel)) continue;
       unused.push(factsFor(path.join(dir, name)));
+    }
+  }
+
+  // A door's own art. Tagged rather than mixed in: nothing here is resolved by
+  // the board, so it must not appear beside screens that are.
+  for (const { door, dir } of listDoorScreenDirectories(baseDir)) {
+    for (const name of listDir(dir)) {
+      if (!isScreenFile(name)) continue;
+      const facts = factsFor(path.join(dir, name));
+      facts.door = door;
+      unused.push(facts);
     }
   }
 

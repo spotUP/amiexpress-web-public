@@ -130,4 +130,39 @@ describe('the screen index', () => {
     expect(node9.dirIsShared).toBe(true);
     expect(node9.file).toBe(path.join('Screens', 'Shared', 'BBSTITLE.txt'));
   });
+  test("a door's own art is listed, tagged with the door that owns it", () => {
+    write('Doors/GWALL/screens/wall.ans', '\x1b[32mthe wall\n');
+    const index = buildScreenIndex(root);
+    const wall = index.unused.find(f => f.relPath === path.join('Doors', 'GWALL', 'screens', 'wall.ans'))!;
+    expect(wall).toBeDefined();
+    expect(wall.door).toBe('GWALL');
+  });
+
+  test("a door's art is never offered as a screen the board resolves", () => {
+    // MENU.TXT inside a door is that door's own file. Listing it beside the
+    // board's MENU would tell a sysop the board might serve it, and it cannot.
+    write('Doors/GWALL/MENU.TXT', 'the door drew this\n');
+    const index = buildScreenIndex(root);
+    const menu = index.screens.find(s => s.screen === 'MENU')!;
+    for (const resolution of menu.resolutions) {
+      expect(resolution.file).not.toContain('Doors');
+    }
+    // It is in the file catalog - a sysop must be able to FIND it - but it
+    // carries the door tag, which is what keeps it out of the board's screens.
+    expect(index.files[path.join('Doors', 'GWALL', 'MENU.TXT')].door).toBe('GWALL');
+  });
+
+  test("a door's dependencies are not mistaken for its art", () => {
+    write('Doors/GWALL/node_modules/some-pkg/README.txt', 'not art\n');
+    write('Doors/GWALL/dist/build-log.txt', 'not art\n');
+    write('Doors/GWALL/art.ans', 'art\n');
+    const index = buildScreenIndex(root);
+    const doorFiles = index.unused.filter(f => f.door === 'GWALL').map(f => f.relPath);
+    expect(doorFiles).toEqual([path.join('Doors', 'GWALL', 'art.ans')]);
+  });
+
+  test('the board own screens carry no door tag', () => {
+    const index = buildScreenIndex(root);
+    expect(index.files[path.join('Node1', 'BBSTITLE.txt')].door).toBeUndefined();
+  });
 });
