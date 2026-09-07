@@ -1136,6 +1136,41 @@ console.error('[UserFileManager] Error reading user files:', error);
     }
   }
 
+  /**
+   * The byte offset of the auto-rejoin conference (INT16), inside one record.
+   *
+   * `confRJoin` is serialized right after the 10-byte conference access map and
+   * the uploads/downloads INT16 pair (serializeUserStruct), so it sits 14 bytes
+   * past the access map - derived from `conferenceAccessOffset()` rather than
+   * hardcoded, so a struct-layout change moves both together.
+   */
+  public confRJoinOffset(): number {
+    return this.conferenceAccessOffset() + 10 + 2 + 2;
+  }
+
+  /**
+   * Rewrite ONLY a user's auto-rejoin conference position, in place.
+   *
+   * Surgical like `writeConferenceAccessAt`, and for the same reason: the
+   * conference-removal migration must move this one INT16 without re-serialising
+   * the whole record (which dropped fields the last time it was tried).
+   */
+  public writeRejoinAt(slotNumber: number, confRJoin: number): void {
+    if (!Number.isInteger(slotNumber) || slotNumber < 1) {
+      throw new Error(`writeRejoinAt: invalid slot ${slotNumber}`);
+    }
+    this.ensureUserFilesReady();
+    const offset = (slotNumber - 1) * this.USER_STRUCT_SIZE + this.confRJoinOffset();
+    const bytes = Buffer.alloc(2);
+    bytes.writeInt16BE(Math.max(-32768, Math.min(32767, confRJoin)), 0);
+    const fd = fs.openSync(this.userDataPath, 'r+');
+    try {
+      fs.writeSync(fd, bytes, 0, 2, offset);
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+
   public updateUserDataFile(user: User, slotNumber: number): void {
     try {
       // Slot 1 is the first record. A slot of 0 computed offset -232, and

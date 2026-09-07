@@ -62,6 +62,8 @@ interface AccessCarrier {
   slotNumber?: number;
   confAccess?: string;
   conferenceAccess?: string;
+  /** The stored auto-rejoin conference position (1-based). */
+  confRJoin?: number;
 }
 
 export interface ConferenceRemovalDeps {
@@ -69,6 +71,8 @@ export interface ConferenceRemovalDeps {
   users?: {
     readAllUsers(): AccessCarrier[];
     writeConferenceAccessAt(slotNumber: number, access: string): void;
+    /** Rewrites just the auto-rejoin conference position on user.data. */
+    writeRejoinAt?(slotNumber: number, confRJoin: number): void;
   };
   /** SQLite, for the mirror tables that are keyed by conference id. */
   sqlite?: {
@@ -96,6 +100,22 @@ export function removeAccessPosition(access: string, conferenceId: number, width
   if (index < 0 || index >= padded.length) return padded.slice(0, width);
   const shifted = padded.slice(0, index) + padded.slice(index + 1);
   return shifted.padEnd(width, '_').slice(0, width);
+}
+
+/**
+ * A caller's stored REJOIN conference, after a conference below it is deleted.
+ *
+ * The rejoin is a 1-based conference position (express.e auto-joins it at
+ * login), so it moves the same way NAME.n/LOCATION.n and the access bitmap do:
+ * a rejoin ABOVE the deleted conference shifts down by one; a rejoin that WAS
+ * the deleted conference has nowhere to go and falls back to conference 1;
+ * a rejoin below is untouched. Its message base (`msgBaseRJoin`) is a session
+ * value rebuilt at login, so only this position persists and needs moving.
+ */
+export function shiftRejoin(rejoin: number, deletedConf: number): number {
+  if (rejoin > deletedConf) return rejoin - 1;
+  if (rejoin === deletedConf) return 1;
+  return rejoin;
 }
 
 export class ConferenceRemovalService {
@@ -240,16 +260,23 @@ console.warn(`[ConferenceRemoval] NOT deleting ${confDir}: ${removalPlan.reason}
         const user = all[index];
         const current = user.confAccess ?? user.conferenceAccess ?? '';
         const next = removeAccessPosition(current, conferenceId);
-        if (next === current) continue;
+        // The rejoin position moves the same way; a user can need its shift
+        // even when their access string did not change.
+        const rejoin = user.confRJoin;
+        const nextRejoin = typeof rejoin === 'number' && rejoin >= 1 ? shiftRejoin(rejoin, conferenceId) : rejoin;
+        const accessChanged = next !== current;
+        const rejoinChanged = typeof rejoin === 'number' && nextRejoin !== rejoin;
+        if (!accessChanged && !rejoinChanged) continue;
         // The slot is the record's position; the carrier's own field is
         // trusted only when it is a sane 1-based value. A slot of 0 wrote
         // every migrated user over slot 1 - see writeConferenceAccessAt.
         const slot = user.slotNumber && user.slotNumber >= 1 ? user.slotNumber : index + 1;
         try {
-          users.writeConferenceAccessAt(slot, next);
+          if (accessChanged) users.writeConferenceAccessAt(slot, next);
+          if (rejoinChanged && users.writeRejoinAt) users.writeRejoinAt(slot, nextRejoin as number);
           migrated += 1;
         } catch (error) {
-console.error(`[ConferenceRemoval] disk access not migrated for slot ${slot}:`, error);
+console.error(`[ConferenceRemoval] disk record not migrated for slot ${slot}:`, error);
         }
       }
     }
@@ -277,6 +304,25 @@ console.warn('[ConferenceRemoval] users mirror not migrated: statement has no al
         }
       } catch (error) {
 console.error('[ConferenceRemoval] users mirror not migrated (disk is correct):', error);
+      }
+
+      // The auto-rejoin position mirror (users.autorejoin) moves with the
+      // disk's confRJoin. Separate try: a board whose mirror predates the
+      // column must not fail the whole removal.
+      try {
+        const select = sqlite.prepare('SELECT id, autorejoin FROM users WHERE autorejoin IS NOT NULL');
+        if (select.all) {
+          const rows = select.all() as Array<{ id: unknown; autorejoin: number }>;
+          const update = sqlite.prepare('UPDATE users SET autorejoin = ? WHERE id = ?');
+          for (const row of rows) {
+            const current = row.autorejoin;
+            if (typeof current !== 'number' || current < 1) continue;
+            const next = shiftRejoin(current, conferenceId);
+            if (next !== current) update.run(next, row.id);
+          }
+        }
+      } catch (error) {
+console.error('[ConferenceRemoval] users.autorejoin mirror not migrated (disk is correct):', error);
       }
     }
 

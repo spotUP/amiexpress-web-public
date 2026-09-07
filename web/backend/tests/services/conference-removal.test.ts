@@ -23,6 +23,7 @@ import { readTooltypeMap } from '../../src/utils/info-file.util';
 import {
   ConferenceRemovalService,
   removeAccessPosition,
+  shiftRejoin,
 } from '../../src/services/conference-removal.service';
 
 function makeBoard(conferences: number): string {
@@ -42,26 +43,37 @@ function makeBoard(conferences: number): string {
 }
 
 /** A user file that records what was written back, and to which slot. */
-function makeUsers(access: string[], withSlots = true) {
+function makeUsers(access: string[], withSlots = true, rejoin?: number[]) {
   const users = access.map((confAccess, index) => ({
     ...(withSlots ? { slotNumber: index + 1 } : {}),
     confAccess,
+    ...(rejoin ? { confRJoin: rejoin[index] } : {}),
   }));
   const writes: Array<{ slot: number; access: string }> = [];
+  const rejoinWrites: Array<{ slot: number; confRJoin: number }> = [];
   return {
     users,
     writes,
+    rejoinWrites,
     readAllUsers: () => users.map((u) => ({ ...u })),
     writeConferenceAccessAt: jest.fn((slot: number, access: string) => {
       if (slot < 1) throw new Error(`invalid slot ${slot}`);
       writes.push({ slot, access });
       users[slot - 1].confAccess = access;
     }),
+    writeRejoinAt: jest.fn((slot: number, confRJoin: number) => {
+      if (slot < 1) throw new Error(`invalid slot ${slot}`);
+      rejoinWrites.push({ slot, confRJoin });
+      (users[slot - 1] as { confRJoin?: number }).confRJoin = confRJoin;
+    }),
   };
 }
 
 /** Records the SQL the migration runs, so the shift can be asserted. */
-function makeSqlite(userRows: Array<{ id: number; confaccess: string }> = []) {
+function makeSqlite(
+  userRows: Array<{ id: number; confaccess: string }> = [],
+  rejoinRows: Array<{ id: number; autorejoin: number }> = [],
+) {
   const calls: Array<{ sql: string; params: unknown[] }> = [];
   const statements: string[] = [];
   return {
@@ -76,7 +88,12 @@ function makeSqlite(userRows: Array<{ id: number; confaccess: string }> = []) {
         calls.push({ sql: sql.replace(/\s+/g, ' ').trim(), params });
         return { changes: 0 };
       },
-      all: () => (sql.includes('FROM users') ? userRows.map((r) => ({ ...r })) : []),
+      all: () =>
+        sql.includes('autorejoin FROM users')
+          ? rejoinRows.map((r) => ({ ...r }))
+          : sql.includes('FROM users')
+            ? userRows.map((r) => ({ ...r }))
+            : [],
     }),
   };
 }
@@ -151,6 +168,48 @@ describe('removing a conference from the middle', () => {
 
     expect(users.writes.map((w) => w.slot)).toEqual([1, 2]);
     expect(users.writes.every((w) => w.slot >= 1)).toBe(true);
+  });
+
+  describe('shiftRejoin', () => {
+    it('drops a rejoin above the deleted conference by one', () => {
+      expect(shiftRejoin(5, 2)).toBe(4);
+    });
+    it('sends a rejoin that WAS the deleted conference back to conference 1', () => {
+      expect(shiftRejoin(2, 2)).toBe(1);
+    });
+    it('leaves a rejoin below the deleted conference alone', () => {
+      expect(shiftRejoin(1, 2)).toBe(1);
+      expect(shiftRejoin(3, 5)).toBe(3);
+    });
+  });
+
+  it('moves every account\'s auto-rejoin conference with it, so nobody auto-joins the wrong one', async () => {
+    // conf 2 deleted: rejoin 4 -> 3, rejoin 2 -> 1 (gone), rejoin 1 -> 1 (below, no write).
+    const users = makeUsers(['XXXXXXXXXX', 'XXXXXXXXXX', 'XXXXXXXXXX'], true, [4, 2, 1]);
+    const service = new ConferenceRemovalService(root, { users });
+
+    await service.remove(2);
+
+    expect(users.rejoinWrites).toEqual([
+      { slot: 1, confRJoin: 3 },
+      { slot: 2, confRJoin: 1 },
+    ]);
+  });
+
+  it('shifts the mirror\'s autorejoin the same way', async () => {
+    const sqlite = makeSqlite(
+      [{ id: 10, confaccess: 'XXXXXXXXXXXXXX' }],
+      [{ id: 10, autorejoin: 4 }, { id: 11, autorejoin: 2 }, { id: 12, autorejoin: 1 }],
+    );
+    const service = new ConferenceRemovalService(root, { sqlite });
+
+    await service.remove(2);
+
+    const rejoinUpdates = sqlite.calls.filter((c) => c.sql === 'UPDATE users SET autorejoin = ? WHERE id = ?');
+    expect(rejoinUpdates).toEqual([
+      { sql: 'UPDATE users SET autorejoin = ? WHERE id = ?', params: [3, 10] },
+      { sql: 'UPDATE users SET autorejoin = ? WHERE id = ?', params: [1, 11] },
+    ]);
   });
 
   it('moves every mirror table keyed by conference, not just one', async () => {

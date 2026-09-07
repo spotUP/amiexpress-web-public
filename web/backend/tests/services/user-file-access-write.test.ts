@@ -57,3 +57,34 @@ describe('writeConferenceAccessAt', () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 });
+
+describe('writeRejoinAt', () => {
+  it('patches exactly the two rejoin bytes of the named slot, big-endian', () => {
+    const { mgr, root } = makeManager();
+    const before = fs.readFileSync(path.join(root, 'user.data'));
+    const at = SIZE + mgr.confRJoinOffset();
+
+    mgr.writeRejoinAt(2, 7);
+
+    const after = fs.readFileSync(path.join(root, 'user.data'));
+    // INT16 big-endian, as the Amiga struct reads it.
+    expect(after.readInt16BE(at)).toBe(7);
+    expect(after.subarray(at, at + 2)).toEqual(Buffer.from([0x00, 0x07]));
+    // Everything else - slot 1, slot 3, and the rest of slot 2 - is untouched.
+    expect(after.subarray(0, at)).toEqual(before.subarray(0, at));
+    expect(after.subarray(at + 2)).toEqual(before.subarray(at + 2));
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('the rejoin bytes sit 14 past the access map, where the struct writes them', () => {
+    const { mgr, root } = makeManager();
+    expect(mgr.confRJoinOffset()).toBe(mgr.conferenceAccessOffset() + 14);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('refuses slot 0', () => {
+    const { mgr, root } = makeManager();
+    expect(() => mgr.writeRejoinAt(0, 1)).toThrow(/invalid slot 0/);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+});
