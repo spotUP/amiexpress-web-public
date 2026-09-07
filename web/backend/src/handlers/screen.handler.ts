@@ -29,6 +29,7 @@ import { findCaseInsensitive, resolvePath as amigaResolvePath } from '../utils/a
 import { isPetsciiSeqFile, convertPetsciiToPetMe64 } from '../utils/petscii.util';
 import { getSystemTime } from '../utils/date-time.util';
 import { findSecurityScreen } from '../utils/screen-security.util';
+import { resolveCallerTheme } from '../screens/caller-theme';
 import {
   ScreenDirType, getScreenDirType, getScreenFileName,
   resolveNodeScreenDir, screenSearchLocations,
@@ -1088,9 +1089,19 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
 
     // express.e:6544-6640 - the directories, in its order, out of the module
     // the admin's screen manager reads too, so neither can drift.
+    // The caller's SCREEN theme is a fifth dimension on the same list, so the
+    // security walk and the variant walk below both get it from one place.
+    // `resolveCallerTheme` is the only judge of what a caller may wear - the
+    // picker asks it too, so a caller can never select a theme the loader
+    // then refuses.
     searchLocations.push(...screenSearchLocations(baseDir, screenName, {
       nodeId,
       confId: conferenceId || session?.relConfNum,
+      themeSlug: resolveCallerTheme(baseDir, {
+        username: session?.user?.username,
+        secLevel: session?.user?.secLevel,
+        screenTheme: session?.user?.screenTheme,
+      }),
     }));
 
     // express.e has NO cross-directory fallback: displayScreen() builds one

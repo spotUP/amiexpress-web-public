@@ -235,6 +235,10 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
       userFlags: safeNumber(user.userflags, 0),
       fontPreference: user.fontpreference || 'TopazPlus_a1200',  // Web font preference
       themePreference: user.themepreference || 'classic',        // Door theme; classic is today's look
+      // SCREEN theme - which set of board art this caller wears. Empty is
+      // "no preference", which resolves to the board default and then to the
+      // board's own screens. NOT the same preference as themePreference above.
+      screenTheme: user.screentheme || '',
       gdprConsentAt: user.gdpr_consent_at || undefined,
       gdprNoticeVersion: user.gdpr_notice_version || undefined,
       gdprConsentSource: user.gdpr_consent_source || undefined,

@@ -395,6 +395,18 @@ console.log('✓ Added fontpreference column');
 console.log('✓ Added themepreference column');
       }
 
+      if (!columnNames.includes('screentheme')) {
+        // The SCREEN theme - which set of board art this caller wears - and
+        // not the same thing as `themepreference`, which is the DOOR theme.
+        // Web-only for the same reason: user.data has to stay byte-compatible
+        // with real AmiExpress, and neither theme is anything express.e has
+        // heard of. Empty means "no preference", which resolves to the board
+        // default and then to the board's own screens, so an upgrade changes
+        // nobody's appearance.
+        this.db.exec("ALTER TABLE users ADD COLUMN screentheme TEXT DEFAULT ''");
+console.log('✓ Added screentheme column');
+      }
+
       if (!columnNames.includes('baud')) {
         this.db.exec('ALTER TABLE users ADD COLUMN baud INTEGER DEFAULT 56000');
 console.log('✓ Added baud column');
