@@ -27,6 +27,7 @@ import { parseMciReferences, type MciReference } from './mci-references';
 import { commandLocationIsLive, loadCommandFromInfo } from '../utils/amiga-command-parser.util';
 import { BBSPaths } from '../utils/bbs-paths.util';
 import { conferenceDir, conferenceNumbers } from '../conferences/conference-paths';
+import { readThemeRegistry, themeDirectory } from './theme-registry';
 import { loadConfConfig } from '../services/conf-config.service';
 import { screenTypeNames } from './screen-metadata';
 
@@ -263,6 +264,21 @@ export function listScreenDirectories(baseDir: string): string[] {
     const located = conferenceDir(baseDir, id);
     dirs.add(located);
     dirs.add(path.join(located, 'Screens'));
+  }
+
+  // Every theme's scope directories, so the manager can list and the editor can
+  // open a theme's screens. Without this a theme is a directory nobody can
+  // reach: the artist would have to write files onto the volume by hand, and
+  // the sysop could create a theme they then could not fill.
+  //
+  // Read from the REGISTRY rather than by globbing `Themes/`: a directory with
+  // no entry is not a theme, and listing it would offer files that nothing can
+  // ever resolve.
+  for (const theme of readThemeRegistry(baseDir).themes) {
+    const root = themeDirectory(baseDir, theme);
+    if (!root) continue; // `default` is the board's own screens, already listed
+    addTree(root);
+    addTree(path.join(root, 'Conf'));
   }
 
   return [...dirs].filter(d => fs.existsSync(d));
