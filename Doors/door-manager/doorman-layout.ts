@@ -32,6 +32,15 @@ export interface InstalledRowDoor {
   name: string;
   size: number;
   enabled?: boolean;
+  /** The minimum access level (the .info ACCESS tooltype); 32767 is the disabled sentinel. */
+  accessLevel?: number;
+}
+
+/** The access column: three cells, right-aligned; a disabled door shows a dash. */
+export function accessCell(level: number | undefined): string {
+  if (level === undefined || level === null) return '  ?';
+  if (level >= 32767) return '  -';
+  return String(level).padStart(3).slice(-3);
 }
 
 /**
@@ -220,10 +229,12 @@ export class DoormanLayout {
   installedRow(d: InstalledRowDoor): string {
     const badge = `[${typeBadge(d.type)}]`;
     const sz = formatSize(d.size).padStart(6);
-    const nameW = Math.max(6, this.width - 14);
+    const acc = accessCell(d.accessLevel);
+    // badge(4) + space + name + space + status(1) + space + size(6) + space + access(3)
+    const nameW = Math.max(6, this.width - 18);
     const name = d.name.length > nameW ? d.name.slice(0, nameW - 1) + '…' : d.name.padEnd(nameW);
     const st = d.enabled ? `{${T.ok}-fg}*{/${T.ok}-fg}` : `{${T.alert}-fg}-{/${T.alert}-fg}`;
-    return `${badge} ${name} ${st} ${sz}`;
+    return `${badge} ${name} ${st} ${sz} ${acc}`;
   }
 
   render(): void { this.screen.render(); }

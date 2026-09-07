@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DoormanLayout = void 0;
 exports.formatSize = formatSize;
+exports.accessCell = accessCell;
 /**
  * DOORMAN's shared layout: one set of panels that every view updates in
  * place, and the width rules that decide their shape.
@@ -30,6 +31,14 @@ function formatSize(bytes) {
     if (bytes < 1048576)
         return `${Math.round(bytes / 1024)} KB`;
     return `${Math.round(bytes / 1048576)} MB`;
+}
+/** The access column: three cells, right-aligned; a disabled door shows a dash. */
+function accessCell(level) {
+    if (level === undefined || level === null)
+        return '  ?';
+    if (level >= 32767)
+        return '  -';
+    return String(level).padStart(3).slice(-3);
 }
 /**
  * Exported for the 40-column layout test: the geometry rules are the thing
@@ -193,10 +202,12 @@ class DoormanLayout {
     installedRow(d) {
         const badge = `[${(0, type_badge_1.typeBadge)(d.type)}]`;
         const sz = formatSize(d.size).padStart(6);
-        const nameW = Math.max(6, this.width - 14);
+        const acc = accessCell(d.accessLevel);
+        // badge(4) + space + name + space + status(1) + space + size(6) + space + access(3)
+        const nameW = Math.max(6, this.width - 18);
         const name = d.name.length > nameW ? d.name.slice(0, nameW - 1) + '…' : d.name.padEnd(nameW);
         const st = d.enabled ? `{${door_theme_1.T.ok}-fg}*{/${door_theme_1.T.ok}-fg}` : `{${door_theme_1.T.alert}-fg}-{/${door_theme_1.T.alert}-fg}`;
-        return `${badge} ${name} ${st} ${sz}`;
+        return `${badge} ${name} ${st} ${sz} ${acc}`;
     }
     render() { this.screen.render(); }
 }

@@ -7,6 +7,8 @@
 import * as path from 'path';
 import { runSelectedDoor } from './run-door';
 import { installedFooter } from './installed-footer';
+import { nextSortMode, sortInstalled, sortLabel } from './installed-sort';
+import type { InstalledSortMode } from './installed-sort';
 import { performDoorDelete } from './delete-door-action';
 import { isSafeToDelete, resolveDoorInstallDir } from './safe-install-dir';
 import { ActionLog, installLogPanel } from './action-log';
@@ -183,6 +185,8 @@ class InstalledView extends BaseView {
   private layout: DoormanLayout;
   private bbs: any;
   private doors: DoorInfo[] = [];
+  /** The list's order (O cycles it); the rows are re-sorted on every refresh. */
+  private sortMode: InstalledSortMode = 'default';
   private statusTimer: any = null;
 
   constructor(layout: DoormanLayout, bbs: any, doors: DoorInfo[]) {
@@ -207,8 +211,10 @@ class InstalledView extends BaseView {
   }
 
   private refresh(selectIdx = 0): void {
+    this.doors = sortInstalled(this.doors, this.sortMode);
     const items = this.doors.map(d => this.layout.installedRow(d));
-    this.layout.setListLabel(' INSTALLED DOORS ');
+    const order = sortLabel(this.sortMode);
+    this.layout.setListLabel(order ? ` INSTALLED DOORS - ${order} ` : ' INSTALLED DOORS ');
     this.layout.setListItems(items);
     // Same clamp as the repo view: uninstalling or deleting the last door in
     // the list would otherwise leave the index one past the end.
@@ -272,6 +278,16 @@ class InstalledView extends BaseView {
     this.keys.key(['v', 'V'], () => this.doViewDoc());
     this.keys.key(['e', 'E'], () => this.doToggleEnabled());
     this.keys.key(['s', 'S'], () => this.doStripAds());
+    // O cycles the order: board order, access low first, access high first.
+    // The selected door stays selected across the re-sort.
+    this.keys.key(['o', 'O'], () => {
+      const selected = this.door();
+      this.sortMode = nextSortMode(this.sortMode);
+      this.refresh(0);
+      const idx = selected ? this.doors.findIndex(d => d.id === selected.id) : 0;
+      this.layout.setListSelect(Math.max(0, idx));
+      this.updateInfo(); this.updateFooter(); this.layout.render();
+    });
   }
 
   private _onSelectItem: any;

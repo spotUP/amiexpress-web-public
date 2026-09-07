@@ -44,6 +44,7 @@ exports.createApp = createApp;
 const path = __importStar(require("path"));
 const run_door_1 = require("./run-door");
 const installed_footer_1 = require("./installed-footer");
+const installed_sort_1 = require("./installed-sort");
 const delete_door_action_1 = require("./delete-door-action");
 const safe_install_dir_1 = require("./safe-install-dir");
 const action_log_1 = require("./action-log");
@@ -172,6 +173,8 @@ class InstalledView extends ViewManager_1.BaseView {
     constructor(layout, bbs, doors) {
         super();
         this.doors = [];
+        /** The list's order (O cycles it); the rows are re-sorted on every refresh. */
+        this.sortMode = 'default';
         this.statusTimer = null;
         this.layout = layout;
         this.bbs = bbs;
@@ -189,8 +192,10 @@ class InstalledView extends ViewManager_1.BaseView {
         this.layout.setHeader(`{center}{${door_theme_1.T.accent}-fg}DOORMAN v2{/${door_theme_1.T.accent}-fg}  {${door_theme_1.T.ink}-fg}${this.doors.length} doors, ${ec} enabled{/${door_theme_1.T.ink}-fg}{/center}`);
     }
     refresh(selectIdx = 0) {
+        this.doors = (0, installed_sort_1.sortInstalled)(this.doors, this.sortMode);
         const items = this.doors.map(d => this.layout.installedRow(d));
-        this.layout.setListLabel(' INSTALLED DOORS ');
+        const order = (0, installed_sort_1.sortLabel)(this.sortMode);
+        this.layout.setListLabel(order ? ` INSTALLED DOORS - ${order} ` : ' INSTALLED DOORS ');
         this.layout.setListItems(items);
         // Same clamp as the repo view: uninstalling or deleting the last door in
         // the list would otherwise leave the index one past the end.
@@ -256,6 +261,18 @@ class InstalledView extends ViewManager_1.BaseView {
         this.keys.key(['v', 'V'], () => this.doViewDoc());
         this.keys.key(['e', 'E'], () => this.doToggleEnabled());
         this.keys.key(['s', 'S'], () => this.doStripAds());
+        // O cycles the order: board order, access low first, access high first.
+        // The selected door stays selected across the re-sort.
+        this.keys.key(['o', 'O'], () => {
+            const selected = this.door();
+            this.sortMode = (0, installed_sort_1.nextSortMode)(this.sortMode);
+            this.refresh(0);
+            const idx = selected ? this.doors.findIndex(d => d.id === selected.id) : 0;
+            this.layout.setListSelect(Math.max(0, idx));
+            this.updateInfo();
+            this.updateFooter();
+            this.layout.render();
+        });
     }
     exit() {
         this.layout.doorList.off('select item', this._onSelectItem);

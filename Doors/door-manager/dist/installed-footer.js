@@ -26,6 +26,6 @@ function installedFooter(enabled, narrow = false) {
     return (`{center}{${door_theme_1.T.warn}-fg}ENTER{/${door_theme_1.T.warn}-fg}=Run {${door_theme_1.T.warn}-fg}U{/${door_theme_1.T.warn}-fg}pload ` +
         `{${door_theme_1.T.warn}-fg}I{/${door_theme_1.T.warn}-fg}nfo {${door_theme_1.T.warn}-fg}F{/${door_theme_1.T.warn}-fg}iles ` +
         `{${door_theme_1.T.warn}-fg}D{/${door_theme_1.T.warn}-fg}el {${door_theme_1.T.warn}-fg}V{/${door_theme_1.T.warn}-fg}iew doc {${door_theme_1.T.warn}-fg}E{/${door_theme_1.T.warn}-fg}=${en} ` +
-        `{${door_theme_1.T.warn}-fg}S{/${door_theme_1.T.warn}-fg}trip {${door_theme_1.T.warn}-fg}Tab{/${door_theme_1.T.warn}-fg}=Repo {${door_theme_1.T.warn}-fg}Q{/${door_theme_1.T.warn}-fg}uit{/center}`);
+        `{${door_theme_1.T.warn}-fg}S{/${door_theme_1.T.warn}-fg}trip {${door_theme_1.T.warn}-fg}O{/${door_theme_1.T.warn}-fg}rder {${door_theme_1.T.warn}-fg}Tab{/${door_theme_1.T.warn}-fg}=Repo {${door_theme_1.T.warn}-fg}Q{/${door_theme_1.T.warn}-fg}uit{/center}`);
 }
 //# sourceMappingURL=installed-footer.js.map

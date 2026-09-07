@@ -8,7 +8,11 @@ export interface InstalledRowDoor {
     name: string;
     size: number;
     enabled?: boolean;
+    /** The minimum access level (the .info ACCESS tooltype); 32767 is the disabled sentinel. */
+    accessLevel?: number;
 }
+/** The access column: three cells, right-aligned; a disabled door shows a dash. */
+export declare function accessCell(level: number | undefined): string;
 /**
  * Exported for the 40-column layout test: the geometry rules are the thing
  * under test, and constructing the real layout against a real Screen is the

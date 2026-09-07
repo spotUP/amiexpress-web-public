@@ -33,7 +33,7 @@ const { Screen } = require('../../../../../sdk/engines/ui/blessed');
 const chrome = require('../../../../../sdk/dist/engines/ui/theme/chrome');
 const { createScreen } = require('../../../../../sdk/utils/blessed-helpers');
 const { FrameReconstructor } = require('../../../../../sdk/petscii/frame/ansi-screen');
-const { DoormanLayout } = require('../../../../../Doors/door-manager/doorman-layout');
+const { DoormanLayout, accessCell } = require('../../../../../Doors/door-manager/doorman-layout');
 const { installedFooter } = require('../../../../../Doors/door-manager/installed-footer');
 
 type Coords = { xi: number; xl: number; yi: number; yl: number };
@@ -109,6 +109,23 @@ describe('DOORMAN layout on a 40x25 screen', () => {
     expect(printable(row)).toBeLessThanOrEqual(40);
     expect(row).toContain('[TS]');
     expect(row).toContain('240 KB');
+  });
+
+  // The access column (sysop, 2026-09-07: "a column for min access levels
+  // for doors, sortable"): three cells at the end of every row, the
+  // disabled sentinel drawn as a dash, and the row still forty wide.
+  it('the row carries the minimum access level, and a disabled door shows a dash', () => {
+    screen = new Screen({ width: 40, height: 25, responsive: true } as any);
+    layout = new DoormanLayout(screen, 1);
+    const open = layout.installedRow({ type: 'TS', name: 'GRANDMASTER', size: 245760, enabled: true, accessLevel: 255 });
+    const off = layout.installedRow({ type: 'AMI', name: 'A door nobody can run any more at all', size: 1024, enabled: false, accessLevel: 32767 });
+    const unknown = layout.installedRow({ type: 'TS', name: 'X', size: 0, enabled: true });
+    expect(printable(open)).toBeLessThanOrEqual(40);
+    expect(printable(off)).toBeLessThanOrEqual(40);
+    expect(open.endsWith(' 255')).toBe(true);
+    expect(off.endsWith('   -')).toBe(true);
+    expect(unknown.endsWith('   ?')).toBe(true);
+    expect(accessCell(5)).toBe('  5');
   });
 
   it('the narrow footer fits the row the wide one folds', () => {
@@ -244,7 +261,7 @@ const EIGHTY_COL_GRID: string[] = [
   "|                          ||                                                  |",
   "`--------------------------'`--------------------------------------------------'",
   ".------------------------------------------------------------------------------.",
-  "|      ENTER=Run Upload Info Files Del View doc E=Dis Strip Tab=Repo Quit      |",
+  "|   ENTER=Run Upload Info Files Del View doc E=Dis Strip Order Tab=Repo Quit   |",
   "`------------------------------------------------------------------------------'",
 ];
 /**
@@ -259,7 +276,7 @@ const EIGHTY_COL_GRID: string[] = [
  * Re-baseline this only when the text grid above is unchanged. If both halves
  * move, the layout moved, and that is the thing this file is here to refuse.
  */
-const EIGHTY_COL_HASH = '421e34a877597866c3422b7b276f8672adb81c73caaa8809029a880d1192141d';
+const EIGHTY_COL_HASH = '8c70752c9a8e9a931a90ebabddd3fdd47f7f7470adf0ffebb28e7cdb0779b334';
 
 /** The fixed screen both captures paint: nothing here depends on a live BBS. */
 const ROWS = [
