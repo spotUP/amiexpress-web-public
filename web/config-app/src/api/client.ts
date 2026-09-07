@@ -428,6 +428,29 @@ class ApiClient {
     return this.request<ApiResponse>(`${API_BASE}/screens/resolve?${params.toString()}`);
   }
 
+  /**
+   * What a caller in this theme, at this level, on this node, would be shown.
+   *
+   * The board's own loader and MCI parser answer it - nothing is re-rendered
+   * here - so what comes back is the screen, not an approximation of it.
+   */
+  async previewScreen(options: {
+    screen: string;
+    theme?: string;
+    node?: number;
+    conf?: number;
+    sec?: number;
+    term?: 'ansi' | 'c64' | 'rip';
+  }) {
+    const params = new URLSearchParams({ screen: options.screen });
+    if (options.theme) params.set('theme', options.theme);
+    if (options.node !== undefined) params.set('node', String(options.node));
+    if (options.conf !== undefined) params.set('conf', String(options.conf));
+    if (options.sec !== undefined) params.set('sec', String(options.sec));
+    if (options.term) params.set('term', options.term);
+    return this.request<ApiResponse>(`${API_BASE}/screens/preview?${params.toString()}`);
+  }
+
   // System Configuration
   async getSystemConfig() {
     return this.request<ApiResponse>(`${API_BASE}/config/system`);
@@ -591,6 +614,11 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ path: boardPath }),
     });
+  }
+
+  /** Can this theme be published without breaking a caller? The publish gate's own answer. */
+  async getScreenThemeValidation(slug: string) {
+    return this.request<ApiResponse>(`${API_BASE}/themes/${encodeURIComponent(slug)}/validation`);
   }
 
   async setDefaultScreenTheme(slug: string) {

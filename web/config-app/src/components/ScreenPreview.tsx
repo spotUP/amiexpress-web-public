@@ -5,6 +5,14 @@ import '@xterm/xterm/css/xterm.css';
 interface ScreenPreviewProps {
   /** The screen's bytes, decoded latin1 - one character per byte, as the board sends them. */
   content: string;
+  /**
+   * How wide the caller's terminal is.
+   *
+   * 80 is the board. 40 is a C64 that resolved to an ANSI file because the
+   * theme carries no `.seq` - and the wrap that produces is exactly what the
+   * preview is for, so it is shown rather than hidden.
+   */
+  cols?: number;
 }
 
 /**
@@ -20,7 +28,7 @@ interface ScreenPreviewProps {
  * 80 columns because that is what the board sends, and 25 rows because that is
  * what a screen is written for.
  */
-export function ScreenPreview({ content }: ScreenPreviewProps) {
+export function ScreenPreview({ content, cols = 80 }: ScreenPreviewProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
 
@@ -28,7 +36,7 @@ export function ScreenPreview({ content }: ScreenPreviewProps) {
     if (!hostRef.current) return;
 
     const terminal = new Terminal({
-      cols: 80,
+      cols,
       rows: 25,
       convertEol: true,
       disableStdin: true,
@@ -45,7 +53,7 @@ export function ScreenPreview({ content }: ScreenPreviewProps) {
       terminal.dispose();
       termRef.current = null;
     };
-  }, []);
+  }, [cols]);
 
   useEffect(() => {
     const terminal = termRef.current;
