@@ -28,9 +28,20 @@ function stageCopies(): string[] {
 
   return dockerfile.slice(start, end === -1 ? undefined : end)
     .split('\n')
-    .filter(line => line.startsWith('COPY ') && !line.includes('--from='))
-    .map(line => line.split(/\s+/)[1])
-    .filter(src => src !== undefined);
+    .filter(line => line.startsWith('COPY '))
+    .map((line) => {
+      const parts = line.split(/\s+/);
+      // `COPY <src> <dst>` names the repo path directly. `COPY --from=<stage>
+      // /app/<path> <dst>` copies a path an earlier stage BUILT - the terminal
+      // package arrives that way, source and dist together - so the repo path
+      // it satisfies is what follows /app/.
+      if (parts[1]?.startsWith('--from=')) {
+        const src = parts[2] ?? '';
+        return src.startsWith('/app/') ? src.slice('/app/'.length) : undefined;
+      }
+      return parts[1];
+    })
+    .filter((src): src is string => src !== undefined);
 }
 
 /** The alias targets vite resolves, as repo-relative paths. */
@@ -84,6 +95,42 @@ it('copies every source directory the admin imports through an alias', () => {
 
     const covered = copies.some(src => target === src || target.startsWith(`${src}/`));
     expect(covered).toBe(true);
+  }
+});
+
+/**
+ * The OTHER way an admin import escapes this stage, and the one that took the
+ * deploy down a second time on 2026-09-07: a workspace package imported by
+ * NAME. `@amiexpress/terminal` is a `file:../../packages/terminal` dependency,
+ * so npm links it out of the repo and `npm ci` inside a stage that never
+ * copied it leaves the bundler with nothing to resolve ("Rollup failed to
+ * resolve import @amiexpress/terminal"). An alias is not involved, so the case
+ * above cannot see it.
+ */
+it('copies every file: workspace package the admin imports by name', () => {
+  const pkg = JSON.parse(
+    fs.readFileSync(path.join(REPO, 'web', 'config-app', 'package.json'), 'utf8'),
+  ) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+  const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
+  const copies = stageCopies();
+  const imported = importedAliases();
+
+  const local = Object.entries(deps)
+    .filter(([, spec]) => spec.startsWith('file:'))
+    .filter(([name]) => [...imported].some(u => u === name || u.startsWith(`${name}/`)))
+    .map(([name, spec]) => ({
+      name,
+      // `file:../../packages/terminal`, relative to web/config-app.
+      target: path.posix.normalize(
+        path.posix.join('web/config-app', spec.slice('file:'.length)),
+      ),
+    }));
+
+  expect(local.length).toBeGreaterThan(0);
+
+  for (const { name, target } of local) {
+    const covered = copies.some(src => target === src || target.startsWith(`${src}/`));
+    expect({ name, covered }).toEqual({ name, covered: true });
   }
 });
 

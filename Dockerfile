@@ -84,12 +84,15 @@ WORKDIR /app
 COPY sdk/engines/ui/ansi-editor ./sdk/engines/ui/ansi-editor
 COPY web/backend/src/screens ./web/backend/src/screens
 COPY web/backend/src/services/config-services ./web/backend/src/services/config-services
-# ...and the RIP renderer, for the same reason: the admin's screen editor draws
-# a `.rip` with the terminal package's own renderer rather than a second copy
-# (`@amiexpress/terminal/rip` in vite.config.ts). Missing here, every deploy
-# since the RIP editor landed died with "Could not load
-# /app/packages/terminal/src/rip".
-COPY packages/terminal/src/rip ./packages/terminal/src/rip
+# ...and the terminal package, BUILT, from its own stage - source for the two
+# things the admin aliases into it (`@amiexpress/terminal/rip`, the RIP
+# renderer the caller's terminal draws with) and `dist` for the `file:` package
+# dependency the PETSCII preview imports by name. Missing here, every deploy
+# from the hour the RIP editor landed died in this stage: first "Could not load
+# /app/packages/terminal/src/rip", then "Rollup failed to resolve import
+# @amiexpress/terminal". The copy lands before `npm ci` so the file: dependency
+# resolves.
+COPY --from=terminal-builder /app/packages/terminal ./packages/terminal
 
 WORKDIR /app/web/config-app
 
