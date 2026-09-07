@@ -25,14 +25,38 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
 import { screenSearchLocations } from '../../src/screens/screen-resolution';
 
 const REPO = path.join(__dirname, '..', '..', '..', '..');
 
+/**
+ * The board's nodes - not every `Node<n>` directory that happens to exist.
+ *
+ * Two kinds of directory turn up beside them, both created at runtime and
+ * neither a node this board serves:
+ *   - a door launched on node 42 leaves `Node42/` holding DOOR.SYS,
+ *     DORINFO42.DEF and TempAns, from a drop-file write;
+ *   - a full node structure written by a test or a tool, as `Node97/` is.
+ * Walking those demanded a login screen in a directory nothing ever logs in
+ * from, and this suite went red on Node42-45 and Node97 the first time
+ * something ran at those numbers.
+ *
+ * GIT IS THE ANSWER TO "which nodes does the board ship?" - the tracked ones.
+ * A node the sysop adds is committed with its screens; a node a door invents
+ * is not.
+ */
 function nodeDirectories(): string[] {
-  return fs.readdirSync(REPO)
-    .filter(name => /^Node\d+$/.test(name))
-    .filter(name => fs.statSync(path.join(REPO, name)).isDirectory())
+  const tracked = execSync('git ls-files -- "Node*"', { cwd: REPO, encoding: 'utf8' })
+    .split('\n')
+    .map(line => line.split('/')[0])
+    .filter(name => /^Node\d+$/.test(name));
+
+  return [...new Set(tracked)]
+    .filter(name => {
+      const dir = path.join(REPO, name);
+      return fs.existsSync(dir) && fs.statSync(dir).isDirectory();
+    })
     .sort();
 }
 

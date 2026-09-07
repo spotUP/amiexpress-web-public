@@ -181,13 +181,18 @@ describe('isAnsiArtScreen', () => {
    * board with the FEWEST art rows - has exactly 6 of 12. Raising it would
    * start reflowing real pictures.
    */
-  it('the art-row floor is the lowest art-row count on the board (Logon24hrs 6/12)', () => {
+  it('the art-row floor stays under the board\'s thinnest art screen (Logon24hrs)', () => {
     const rows = fs
       .readFileSync(path.join(REPO_ROOT, 'Screens/Logon24hrs.txt'), 'latin1')
       .split(/\r\n|\r|\n/)
       .map((l) => l.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ''))
       .filter((l) => l.trim().length > 0);
-    expect(rows.filter((l) => looksLikeAsciiArt(l)).length).toBe(MIN_ART_ROWS);
+    /* AT LEAST, not exactly. This pinned the count at 6 and went red when the
+       screen itself was edited and gained a row - board DATA, not behaviour.
+       What must hold is that the floor stays BELOW the thinnest art screen on
+       the board; the assertion under this one is what proves it, because a
+       floor raised past this screen's count would stop detecting it as art. */
+    expect(rows.filter((l) => looksLikeAsciiArt(l)).length).toBeGreaterThanOrEqual(MIN_ART_ROWS);
     expect(isAnsiArtScreen(fs.readFileSync(path.join(REPO_ROOT, 'Screens/Logon24hrs.txt'), 'latin1'))).toBe(true);
   });
 
