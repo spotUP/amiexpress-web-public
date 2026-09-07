@@ -12,11 +12,13 @@
  *   narrow    one row, columns preserved, over-wide cells truncated with '>'
  *   record    a two-field row (message + a right-hand author/tag): the left
  *             field reflows, the field stays flush against the right margin
+ *   banner    an ATOM, padding, and a SENTENCE the door positioned beside it:
+ *             the atom keeps its row, the sentence is de-indented and wrapped
  *   gutter    runs of 2+ spaces collapse to one; still wide -> split
  *   reflow    word wrap, attributes travel with their cell
  *   split     plain halves, blank second half dropped
  *
- * Ladder order: crop -> deindent -> repeat -> stat -> record -> prose -> narrow ->
+ * Ladder order: crop -> deindent -> repeat -> stat -> record -> banner -> prose -> narrow ->
  * reflow/split, and then EVERY rung's output through `fitRow` - the gate that
  * makes "no row is wider than the caller's screen" a property of the adapter
  * rather than one each rung has to remember. `narrow` exists
@@ -91,7 +93,7 @@ import { wrapLineToWidth } from '../wrap';
 import { classifyRow, columnParts, columnSpans, contentWidth, hasTabularGutters, isRuleRow, looksLikeAsciiArt, rowText } from './classify';
 import { Cell, Cursor, Frame, blankCell, cloneCell, isBlank, makeFrame, padRow } from './types';
 
-export type AdaptRule = 'crop' | 'deindent' | 'gutter' | 'narrow' | 'prose' | 'record' | 'repeat' | 'reflow' | 'split' | 'stat';
+export type AdaptRule = 'banner' | 'crop' | 'deindent' | 'gutter' | 'narrow' | 'prose' | 'record' | 'repeat' | 'reflow' | 'split' | 'stat';
 export type RegionRule = AdaptRule | 'auto';
 
 export interface RegionPin {
@@ -202,8 +204,23 @@ function classifiedRule(cells: Row): AdaptRule {
 }
 
 export function chooseRule(cells: Row, cols: number): AdaptRule {
-  if (isCroppable(cells, cols) || isCroppableRule(cells, cols)) return 'crop';
+  // THE LOSSLESS PAIR FIRST. On a row that already fits, `crop` is the
+  // identity; `deindent` loses only leading blanks. Both are free.
+  //
+  // A crop that actually DROPS A GLYPH is not free, and until 2026-09-07 it was
+  // asked BEFORE the free `deindent`, which cost `pager5d` its box. Its title
+  // and footer rows are 43 columns wide at an indent of 4 - 39 columns of
+  // content, which fits - and the only thing past column 40 is the box's
+  // CLOSING '|'. `isCroppable` reads one repeated non-alphanumeric glyph as a
+  // border extension and cropped it, so the caller got
+  // `    |       5D_Page v0.01 by sNoW !` - an opening pipe with no closing
+  // partner - where deindent hands him the whole row, box included. Asking the
+  // lossless rung first is the same principle the ladder already applies at
+  // `stat` before `record`: where two rungs both match, the one that loses
+  // nothing wins.
+  if (contentWidth(cells) <= cols) return 'crop';
   if (contentWidth(cells) - indentOf(cells) <= cols) return 'deindent';
+  if (isCroppable(cells, cols) || isCroppableRule(cells, cols)) return 'crop';
   // BEFORE narrow, and only ever instead of it: a row of identical columns is
   // decoration, and narrow would shorten every copy.
   if (repeatRow(cells, cols) !== null) return 'repeat';
@@ -240,6 +257,10 @@ export function chooseRule(cells: Row, cols: number): AdaptRule {
   // this from eating real tables: a table's last column is prose (it contains a
   // blank) or decoration (no alphanumeric), and neither is a field.
   if (recordRow(cells, cols) !== null) return 'record';
+  // AFTER `record`, which owns the row whose right-hand field is an ATOM, and
+  // before everything below, which would let the stub's column break the
+  // sentence. See `bannerRow`.
+  if (bannerRow(cells, cols) !== null) return 'banner';
   if (proseRow(cells, cols) !== null) return 'prose';
   if (narrowRow(cells, cols) !== null) return 'narrow';
   return classifiedRule(cells);
@@ -262,6 +283,51 @@ export function cropRow(cells: Row, cols: number): RuleResult {
 }
 
 /**
+ * The row's WORDS, as source spans `[start, end)`.
+ *
+ * A word is a maximal run of alphanumerics that may be LETTER-SPACED: ONE
+ * non-blank, non-alphanumeric character standing between two alphanumerics is
+ * INSIDE the word, not a break. `THERMONUCLEAR` written `T÷H÷E÷R÷M÷O÷N÷U÷C÷L÷E÷A÷R`
+ * is one word; so are `2,020,282,473`, `doors.uprough.net` and `Sk!n`.
+ *
+ * WHY THIS AND NOT "BOTH NON-BLANK". `splitRow` used to call a cut a sever only
+ * when the characters either side of it were both alphanumeric, and GWALL's
+ * masthead defeated that: the door letter-spaces its banner with `÷`, so the
+ * cut at column 40 had `÷` on its left and `O` on its right, passed the guard,
+ * and reached the sysop as `...T÷H÷E÷R÷M÷` / `O÷N÷U÷C÷L÷E÷A÷R...` -
+ * `THERMONUCLEAR` cut in half in front of a reader who can plainly see the word
+ * ("its wrapped in two lines with an ugly linebreak in the middle of a word").
+ *
+ * The obvious widening - a sever is any cut with a non-blank on BOTH sides -
+ * was measured and rejected once already: it backs away from DECORATION, which
+ * carries no word to break, and the row it spends comes out of content
+ * (`doorrepo` lost its title row, `ulist` a user record). Letter-spacing is the
+ * strictly narrower statement: a SINGLE decoration character flanked by
+ * alphanumerics is spacing inside a word, TWO or more in a row are a real gap.
+ * That is what keeps this off a rule of dashes (`----`, no alphanumeric at
+ * all), off `--` word separators inside the very banner it fixes (GWALL writes
+ * `...L÷--÷T...` between GLOBAL and THERMONUCLEAR, and the break lands there
+ * instead), and off `... ) - © 1994`.
+ */
+function wordSpans(cells: Row, width: number): Array<[number, number]> {
+  const alnum = (i: number) => i >= 0 && i < width && /[A-Za-z0-9]/.test(cells[i].ch);
+  const spans: Array<[number, number]> = [];
+  let i = 0;
+  while (i < width) {
+    if (!alnum(i)) { i++; continue; }
+    let end = i + 1;
+    for (;;) {
+      if (alnum(end)) { end++; continue; }
+      if (end < width && !isBlank(cells[end]) && alnum(end + 1)) { end += 2; continue; }
+      break;
+    }
+    spans.push([i, end]);
+    i = end;
+  }
+  return spans;
+}
+
+/**
  * Plain halves - but NEVER through the middle of a word.
  *
  * This rung used to cut at every multiple of `cols` and nothing else, and that
@@ -274,13 +340,13 @@ export function cropRow(cells: Row, cols: number): RuleResult {
  * number. A reader cannot tell such a break from a terminal wrapping a row it
  * could not hold, which is exactly why it reads as a fault.
  *
- * A cut SEVERS when the characters either side of it are both alphanumeric.
- * That predicate and not "both non-blank" is what keeps the rung off
- * DECORATION: a rule of dashes, a run of box glyphs and a `... ) - © 1994`
- * boundary carry no word to break, and backing away from them would spend a
- * row and shear the picture (measured: it cost `doorrepo` its title row and
- * `ulist` a user record, which is content, and rows are only ever spent on
- * content).
+ * A cut SEVERS when it falls strictly inside one of `wordSpans`' words - a run
+ * of alphanumerics, letter-spacing included. That predicate and not "both
+ * non-blank" is what keeps the rung off DECORATION: a rule of dashes, a run of
+ * box glyphs and a `... ) - © 1994` boundary carry no word to break, and
+ * backing away from them would spend a row and shear the picture (measured: it
+ * cost `doorrepo` its title row and `ulist` a user record, which is content,
+ * and rows are only ever spent on content).
  *
  * When the cut would sever, the break moves back to the START of the word,
  * which is the smallest move that keeps the word whole. The one case that
@@ -292,19 +358,18 @@ export function cropRow(cells: Row, cols: number): RuleResult {
  */
 export function splitRow(cells: Row, cols: number): RuleResult {
   const width = contentWidth(cells);
-  const alnum = (c: Readonly<Cell>) => /[A-Za-z0-9]/.test(c.ch);
-  const severs = (k: number) => k > 0 && k < width && alnum(cells[k - 1]) && alnum(cells[k]);
+  const words = wordSpans(cells, width);
+  /** The word a break at `k` would land inside, or null when it lands between words. */
+  const severed = (k: number) => words.find(([a, b]) => k > a && k < b) ?? null;
   const rows: Cell[][] = [];
   const where: Array<RuleCursor | undefined> = new Array(cells.length);
   let start = 0;
   while (start < width) {
     let end = Math.min(width, start + cols);
     let marked = false;
-    if (severs(end)) {
-      let wordStart = end;
-      while (wordStart > start && alnum(cells[wordStart - 1])) wordStart--;
-      let wordEnd = end;
-      while (wordEnd < width && alnum(cells[wordEnd])) wordEnd++;
+    const word = end < width ? severed(end) : null;
+    if (word) {
+      const [wordStart, wordEnd] = word;
       // Move back to the word, but only when the word can live on a row of its
       // own; a word wider than the screen has no such row and is marked.
       if (wordStart > start && wordEnd - wordStart <= cols) end = wordStart;
@@ -550,6 +615,13 @@ export function narrowRow(cells: Row, cols: number): RuleResult | null {
 }
 
 /**
+ * The vertical glyphs a 68K door draws a box RAIL with. Deliberately a named
+ * set and not "any non-alphanumeric": see the block inside `recordFields`.
+ */
+const BOX_RAILS = ['|', '\u00a6', '!'];
+const isBoxRail = (ch: string) => BOX_RAILS.includes(ch);
+
+/**
  * The two fields of a RECORD row: a left field and one compact right-hand
  * field, in SOURCE columns `[start, end)`, both trimmed.
  */
@@ -662,15 +734,36 @@ export function recordFields(cells: Row, cols: number): RecordFields | null {
   // a right pipe with no left. Dropping it is also two more columns for the
   // caller's own words, which is the trade the house rule asks for.
   //
-  // Only when the border encloses ONE cell. A row with an interior '|' is a
+  // WHICH GLYPH the box is drawn with is the door's choice, not ours, and
+  // GWALL draws ONE wall with five of them: `.`/`.` on the top rule, `!`/`!` on
+  // the column header, `|`/`|` on every comment, `¦`/`¦` on the separator and
+  // `` ` ``/`'` on the footer. Until 2026-09-07 this test named the literal
+  // '|', so exactly one of the five was recognised: the comment rows dropped
+  // their box and the header row kept its `!` flush at column 39, and the
+  // caller read a right edge that stopped after one row - the sysop's "the
+  // right border is cut". Recognising the RAIL the row actually uses puts the
+  // header on the same footing as the rows underneath it, and buys it the same
+  // two columns.
+  //
+  // A rail is one of a named set of vertical box glyphs and it must be the SAME
+  // glyph at both ends. Both halves of that are load-bearing, measured over
+  // every frame of all 29 fixtures: the only non-alphanumeric end pairs that
+  // reach this rung are `!`...`!` (gwall's header), `|`...`|` (six_status) and
+  // `[`...`'` - and the last of those is `games`' `[ARCL] The Arcadian Legends
+  // ... Hackin' Crackin'`, a bracket and an apostrophe with no box anywhere in
+  // sight. Same-glyph-from-a-set keeps it out; "any two non-alphanumerics"
+  // would eat its bracket and its apostrophe.
+  //
+  // Only when the border encloses ONE cell. A row with an interior rail is a
   // multi-cell box row (`kd_confstats`' `| User...: Sysop | Files Up..: 0 |`,
   // `ulist`'s two-option footer), and reading it as one message plus a field
   // reflows a column boundary into the middle of a sentence - measured, and it
   // took `kd_confstats` from 32 adapted rows to 38 of nonsense. With the guard,
   // exactly three fixtures change and no fixture changes row count.
+  const rail = cells[lead].ch;
   let interior = false;
-  for (let x = lead + 1; x < full - 1; x++) if (cells[x].ch === '|') { interior = true; break; }
-  const bordered = cells[lead].ch === '|' && cells[full - 1].ch === '|' && lead < full - 1 && !interior;
+  for (let x = lead + 1; x < full - 1; x++) if (cells[x].ch === rail) { interior = true; break; }
+  const bordered = isBoxRail(rail) && cells[full - 1].ch === rail && lead < full - 1 && !interior;
   const indent = bordered ? lead + 1 : lead;
   const width = bordered ? full - 1 : full;
   if (width <= indent) return null;
@@ -1036,6 +1129,142 @@ export function proseRow(cells: Row, cols: number): RuleResult | null {
 }
 
 /**
+ * The two parts of a BANNER row: an ATOM and, after a run of padding, the
+ * SENTENCE the door positioned beside it, both in SOURCE columns `[start, end)`.
+ */
+export interface BannerFields {
+  stub: [number, number];
+  block: [number, number];
+}
+
+/**
+ * The row is a BANNER: one atom, one run of padding, and one sentence - and the
+ * two together are wider than the screen.
+ *
+ * `ctop`/`conftop` paint an empty uploader table as ten numbered slots and
+ * centre `- NO UPLOADERS ARE AVAILABLE IN THIS CONFERENCE -` across the 80
+ * columns, which lands ON one of the slots:
+ *
+ *   ` 5.            - NO UPLOADERS ARE AVAILABLE IN THIS CONFERENCE -`
+ *
+ * At 40 columns that row had no rung of its own. It has ONE interior gutter, so
+ * `columnSpans` sees no columns and `narrow`, `stat`, `prose` and `record` all
+ * decline; it fell to `reflow`, which is the session's own prose wrapper and
+ * therefore KEEPS the door's 12 blanks of centring. Twelve of the caller's
+ * forty columns went on padding, the sentence broke after `ARE`, and its tail
+ * landed at column 0 between slot 10 and slot 11 where it reads as a corrupted
+ * record - the sysop's "ctop needs to shorten the no top uploaders are
+ * available in this conference message it wraps".
+ *
+ * The string is inside a 68K binary and cannot be shortened, so "shorten it"
+ * has to mean something done here. What this rung does is DE-INDENT THE BLOCK:
+ * the atom keeps its own row at its own column (so slot 5 still lines up with
+ * slots 4 and 6), and the sentence is placed at column 0 underneath and
+ * wrapped. The 12 blanks were 80-column layout, exactly like the 33-column
+ * description indent `dirEntryRows` strips from a file listing, and nothing but
+ * blanks is lost.
+ *
+ * WHY A RUNG AND NOT A CHANGE TO `reflow`: `reflowRow` consumes
+ * `wrapLineToWidth` and nothing else, and `adapt.test.ts` pins
+ * `reflowRow == wrapLineToWidth` so the door adapter and the session's own
+ * prose wrap cannot drift. Teaching the wrapper to eat an interior gutter would
+ * move bytes on every 80-column session. The decision "this gutter is layout,
+ * not typing" belongs to the ladder, which is where every other rung already
+ * makes it.
+ *
+ * WHY NOT `gutter`, which already collapses interior runs: it would hand the
+ * caller ` 5. - NO UPLOADERS ARE AVAILABLE IN THIS` / ` CONFERENCE -`, and a
+ * slot number immediately followed by a sentence reads as that slot's CONTENT.
+ * The row's two halves are two different things the door happened to paint on
+ * one line; keeping them on one line at 40 columns is what makes them lie.
+ *
+ * GUARDS, every one of them structural and every one measured over every frame
+ * of all 29 fixtures (the rung takes exactly two source rows, `ctop`'s and
+ * `conftop`'s, and no other row in the corpus moves):
+ *
+ * - EXACTLY ONE interior run of two or more blanks. Two or more runs is column
+ *   structure, and `narrow`/`stat`/`gutter` own that.
+ * - The stub is an ATOM - no blank in it - and it fits `cols`. This is the
+ *   mirror of `record`'s test on its right-hand field, and for the same reason:
+ *   a stub with a blank in it is prose, and prose beside prose is one sentence
+ *   with a wide space, which `reflow` should keep as it is.
+ * - The block is a SENTENCE - it HAS a blank. A block that is itself an atom
+ *   makes the row a two-column table, which is `narrow`'s.
+ * - Both carry an alphanumeric, and NEITHER is ART by the board's own frozen
+ *   detector. The art guard is what keeps the rung off `rtw`'s half-painted
+ *   menu rows, which are block glyphs either side of a three-blank gap and
+ *   match every other condition here (measured: 82 of the 84 rows the shape
+ *   alone matches are `rtw`'s, and all 82 are art).
+ * - Squeezing the gutter to one blank would NOT fit the row. If it would,
+ *   nothing here is needed and the row wants one row, not three.
+ * - The row does not fit and does not deindent - both of those are lossless and
+ *   are asked earlier in the ladder anyway.
+ */
+export function bannerFields(cells: Row, cols: number): BannerFields | null {
+  const width = contentWidth(cells);
+  if (width <= cols) return null;
+  const lead = indentOf(cells);
+  if (width - lead <= cols) return null;
+  const runs: Array<[number, number]> = [];
+  for (let x = lead; x < width; x++) {
+    if (!isBlank(cells[x])) continue;
+    const start = x;
+    while (x < width && isBlank(cells[x])) x++;
+    if (x < width && x - start >= 2) runs.push([start, x]);   // interior only
+  }
+  if (runs.length !== 1) return null;
+  const stub: [number, number] = [lead, runs[0][0]];
+  const block: [number, number] = [runs[0][1], width];
+  if (stub[1] <= stub[0] || block[1] <= block[0]) return null;
+  if (stub[1] > cols) return null;
+  if (hasBlank(cells, stub)) return null;
+  if (!hasBlank(cells, block)) return null;
+  if (!hasAlnum(cells, stub) || !hasAlnum(cells, block)) return null;
+  if ((stub[1] - stub[0]) + 1 + (block[1] - block[0]) <= cols) return null;
+  if (looksLikeAsciiArt(rowText(cells.slice(stub[0], stub[1])))) return null;
+  if (looksLikeAsciiArt(rowText(cells.slice(block[0], block[1])))) return null;
+  return { stub, block };
+}
+
+/**
+ * The banner rung: the atom on a row of its own AT ITS OWN COLUMN, then the
+ * sentence de-indented to column 0 and reflowed underneath.
+ *
+ * Loses nothing but the run of padding between them - the same thing `narrow`,
+ * `gutter`, `stat` and `record` drop - and the stub's own leading blanks are
+ * KEPT, because they are what holds a numbered slot in line with the slots
+ * above and below it.
+ *
+ * DECLINES (returns null) on any row that is not a banner; the caller falls
+ * through to the classified rule unchanged.
+ */
+export function bannerRow(cells: Row, cols: number): RuleResult | null {
+  const fields = bannerFields(cells, cols);
+  if (!fields) return null;
+  const { stub, block } = fields;
+
+  const head = padRow(cells.slice(0, stub[1]).map(cloneCell), cols);
+  const flowed = reflowRow(cells.slice(block[0], block[1]), cols);
+  const rows = [head, ...flowed.rows.map((r) => r.map(cloneCell))];
+
+  // Total map over 0..cells.length-1: the stub's own cells answer for
+  // themselves on row 0, the padding answers with the stub's last cell, and
+  // everything past the block answers with the block's last position.
+  const where: RuleCursor[] = new Array(cells.length);
+  const blockEnd: RuleCursor = flowed.map(Math.max(0, block[1] - block[0] - 1));
+  for (let x = 0; x < cells.length; x++) {
+    if (x < stub[1]) where[x] = { row: 0, x: clampCol(cols, x) };
+    else if (x < block[0]) where[x] = { row: 0, x: clampCol(cols, stub[1] - 1) };
+    else if (x < block[1]) {
+      const at = flowed.map(x - block[0]);
+      where[x] = { row: at.row + 1, x: at.x };
+    } else where[x] = { row: blockEnd.row + 1, x: clampCol(cols, blockEnd.x + 1) };
+  }
+
+  return { rows, applied: 'banner', map: (x) => where[clampIndex(cells, x)] };
+}
+
+/**
  * THE GATE. Every rung's output passes through here on its way to `adaptRows`,
  * `adaptFrame` and the emitter's paged window, so no path can skip it and no
  * future rung can reintroduce the failure it guards.
@@ -1072,6 +1301,9 @@ export function applyRule(rule: AdaptRule, cells: Row, cols: number): RuleResult
 
 function applyRuleUnfitted(rule: AdaptRule, cells: Row, cols: number): RuleResult {
   switch (rule) {
+    // A pinned 'banner' on a row that is not one falls through to the rule the
+    // row would have had without the pin, exactly as a pinned 'record' does.
+    case 'banner': return bannerRow(cells, cols) ?? applyRule(classifiedRule(cells), cells, cols);
     case 'crop': return cropRow(cells, cols);
     case 'deindent': return deindentRow(cells, cols);
     // A pinned 'narrow' on a row `narrowRow` declines falls through to the

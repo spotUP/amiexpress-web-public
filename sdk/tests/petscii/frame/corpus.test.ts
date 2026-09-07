@@ -371,6 +371,44 @@ for (const [id, entry] of Object.entries(manifest)) {
      */
     it('no word a C64 caller reads is cut in half by the edge of the screen', () => {
       const alnum = (ch: string) => /[A-Za-z0-9]/.test(ch);
+      /**
+       * The source row's WORDS as index ranges, LETTER-SPACING INCLUDED: one
+       * non-blank, non-alphanumeric character between two alphanumerics is
+       * inside the word. Restated here rather than imported from adapt.ts for
+       * the same reason `narrowKeepsColumns` is - a test that reads its
+       * predicate out of the module it is checking asserts nothing about it.
+       *
+       * WIDENED 2026-09-07. Two alphanumerics either side of the break was the
+       * whole test until then, and GWALL's masthead walked straight through it:
+       * the door writes `T÷H÷E÷R÷M÷O÷N÷U÷C÷L÷E÷A÷R`, so the break at column 40
+       * had `÷` on its left, the invariant saw no fold, and the sysop saw
+       * `THERM` / `ONUCLEAR`.
+       */
+      const wordsOf = (t: string): Array<[number, number]> => {
+        const at = (i: number) => i >= 0 && i < t.length && alnum(t[i]);
+        const out: Array<[number, number]> = [];
+        let i = 0;
+        while (i < t.length) {
+          if (!at(i)) { i++; continue; }
+          let end = i + 1;
+          for (;;) {
+            if (at(end)) { end++; continue; }
+            if (end < t.length && t[end] !== ' ' && at(end + 1)) { end += 2; continue; }
+            break;
+          }
+          out.push([i, end]);
+          i = end;
+        }
+        return out;
+      };
+      /** Do `a` then `b` occur ADJACENT and INSIDE one word of `source`? */
+      const insideAWord = (source: string, a: string, b: string) => {
+        const spans = wordsOf(source);
+        for (let k = source.indexOf(a + b); k >= 0; k = source.indexOf(a + b, k + 1)) {
+          if (spans.some(([s, e]) => k >= s && k + 1 < e)) return true;
+        }
+        return false;
+      };
       for (const f of frames) {
         const rows = adaptRows(f).rows;
         for (let i = 0; i + 1 < rows.length; i++) {
@@ -384,12 +422,14 @@ for (const [id, entry] of Object.entries(manifest)) {
           const startAt = next.cells.findIndex((c) => !isBlank(c));
           if (startAt !== 0) continue;
           const first = next.cells[0].ch;
-          if (!alnum(last) || !alnum(first)) continue;
-          // Adjacent in the SOURCE row is what makes it a fold rather than a
-          // wrap: a word wrapper consumes the blank it broke on, so the two
-          // glyphs it leaves either side of the break were never neighbours.
+          if (last === ' ' || first === ' ') continue;
+          // Adjacent in the SOURCE row AND inside one of its words is what makes
+          // it a fold rather than a wrap: a word wrapper consumes the blank it
+          // broke on, so the two glyphs it leaves either side of the break were
+          // never neighbours, and two pieces of DECORATION that were neighbours
+          // carry no word between them.
           const source = text(f.cells[here.source]);
-          expect({ rule: here.rule, source: here.source, fold: `${last}|${first}`, adjacent: source.includes(last + first) })
+          expect({ rule: here.rule, source: here.source, fold: `${last}|${first}`, adjacent: insideAWord(source, last, first) })
             .toEqual({ rule: here.rule, source: here.source, fold: `${last}|${first}`, adjacent: false });
         }
       }
@@ -498,10 +538,23 @@ for (const [id, entry] of Object.entries(manifest)) {
             // and the opening pipe rode the message, so a wrapped comment came
             // out with half a box. The border is recognised here the way the
             // rung recognises it, from the row itself and not by importing the
-            // rung's own predicate: first and last non-blank cells both '|',
-            // with no '|' between them.
+            // rung's own predicate: first and last non-blank cells the SAME
+            // box rail, with no other occurrence of it between them.
+            //
+            // WHICH RAIL was widened on 2026-09-07 and this pin moved with it -
+            // it was recording a DEFECT, not guarding against one. GWALL draws
+            // one wall with five different glyph pairs and this test, like the
+            // rung, knew only '|', so gwall's column header
+            // `!cOMMENt\/\/ ... hANDLE¡bBS!` kept its `!` flush at column 39
+            // while every comment row underneath it had dropped its box: the
+            // caller saw a right edge that stopped after one row, which is the
+            // sysop's "the right border is cut". The rail set is restated here
+            // rather than imported for the same reason the predicate is.
             const bare = squeeze(text(src));
-            const boxed = rule === 'record' && /^\|[^|]*\|$/.test(bare) && bare.length > 2;
+            const rails = ['|', '\u00a6', '!'];
+            const rail = rails.find((r) => bare.length > 2 && bare[0] === r && bare[bare.length - 1] === r
+              && !bare.slice(1, -1).includes(r));
+            const boxed = rule === 'record' && rail !== undefined;
             const expected = boxed ? bare.slice(1, -1) : bare;
             expect({ ...where, chars: squeeze(text(joined)) }).toEqual({ ...where, chars: expected });
             // ...and when no source word is wider than the screen (nothing was
@@ -510,7 +563,7 @@ for (const [id, entry] of Object.entries(manifest)) {
               // The dropped border is a word of its own when the door padded it
               // away from the text (`| Upload Activities ... |`) and part of
               // the first/last word when it did not (`|This site ... ¦WWW|`).
-              const srcWords = words(boxed ? text(src).replace(/\|/g, ' ') : text(src));
+              const srcWords = words(boxed ? text(src).split(rail as string).join(' ') : text(src));
               const wanted = srcWords;
               expect({ ...where, words: words(rowsText(out)) }).toEqual({ ...where, words: wanted });
             }
@@ -653,14 +706,37 @@ const EXPECTED_ROWS: Record<string, number> = {
   // came off - and the three long comments cost a second row each. 26 of the 30
   // rows are painted, so the adapter's window shows the wall and pages once for
   // the door's own exit line.
-  gwall: 30,
+  //
+  // RE-PINNED 30 -> 31 on 2026-09-07, and this pin was RECORDING THE DEFECT.
+  // GWALL letter-spaces its masthead with `÷`, so `splitRow`'s sever test - two
+  // ALPHANUMERICS either side of the cut - saw `÷` on the left of column 40 and
+  // let the blind cut through, and the sysop photographed
+  // `...T÷H÷E÷R÷M÷` / `O÷N÷U÷C÷L÷E÷A÷R...`: "its wrapped in two lines with an
+  // ugly linebreak in the middle of a word". A word is now a run of
+  // alphanumerics WITH its letter-spacing (`wordSpans`), so the break moves back
+  // to the `--` GLOBAL and THERMONUCLEAR are separated by and the banner reads
+  // GLOBAL / THERMONUCLEAR--WALL-- / V1B on three rows. Same currency as `olm`
+  // below: a row is what a whole word costs.
+  gwall: 31,
   // `ctop` at 31: Conftop-II's uploader table. Four rows go to `stat` and five
   // to `record`; the door paints 28 of the 31, so the adapter's window shows the
   // table and pages once. Nothing is truncated anywhere on the screen.
-  ctop: 31,
+  //
+  // RE-PINNED 31 -> 32 on 2026-09-07 with the `banner` rung, and this pin was
+  // RECORDING THE DEFECT too. The door centres
+  // `- NO UPLOADERS ARE AVAILABLE IN THIS CONFERENCE -` across 80 columns, so it
+  // lands ON slot 5, and `reflow` - the only rung that would take the row - kept
+  // the door's 12 blanks of centring: the caller read
+  // ` 5.            - NO UPLOADERS ARE` with `AVAILABLE IN THIS CONFERENCE -`
+  // underneath at column 0, between two numbered slots, which is the sysop's
+  // "ctop needs to shorten the no top uploaders are available in this conference
+  // message it wraps". The slot now keeps its own row and its own column and the
+  // sentence is de-indented under it. One row, and nothing but padding lost.
+  ctop: 32,
   // `conftop` at 32: the 020 build of the same table, six `stat` rows and three
   // `record` rows. 29 of the 32 are painted.
-  conftop: 32,
+  // RE-PINNED 32 -> 33 on 2026-09-07: the same `banner` row, same door.
+  conftop: 33,
   // `sysinfo` at 29: SysInfo's four boxed panes. Two rows go to `stat` and two to
   // `prose`; what still crops is the box rule around them, which is decoration.
   // 23 of the 29 are painted, so the whole screen fits one page.

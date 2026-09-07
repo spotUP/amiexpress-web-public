@@ -991,3 +991,123 @@ describe('repeat', () => {
     expect(out.map(13)).toEqual({ row: 0, x: 9 });   // first cell of the second tag
   });
 });
+
+/**
+ * The sysop's 2026-09-07 report from the live board, one describe per symptom,
+ * each driven with the SOURCE ROW the door really paints (copied out of the
+ * harness capture in fixtures/, byte for byte) rather than a paraphrase of it.
+ */
+describe("the wall's banner", () => {
+  // Doors/GWall/GWall row 1, verbatim from fixtures/gwall.ans. The door
+  // letter-spaces the banner with '÷'.
+  const MASTHEAD = '.- - ---_\\/_--÷G÷L÷O÷B÷A÷L÷--÷T÷H÷E÷R÷M÷O÷N÷U÷C÷L÷E÷A÷R÷--÷W÷A÷L÷L÷--÷V÷1÷ß÷--.';
+
+  it('does not break inside a word', () => {
+    const out = applyRule(chooseRule(row(MASTHEAD), 40), row(MASTHEAD), 40);
+    const lines = out.rows.map((r) => str(r));
+    // The letters of THERMONUCLEAR, in order, with their spacing removed: they
+    // must all live on ONE of the produced rows.
+    const letters = (t: string) => t.replace(/[^A-Za-z0-9]/g, '');
+    expect(lines.some((l) => letters(l).includes('THERMONUCLEAR'))).toBe(true);
+    expect(lines.some((l) => letters(l).includes('GLOBAL'))).toBe(true);
+    expect(lines.some((l) => letters(l).includes('WALL'))).toBe(true);
+    // ...and no row ends part-way through one of them.
+    expect(lines.map(letters)).not.toContain('THERM');
+  });
+
+  it('spends a row on the whole word rather than folding it', () => {
+    expect(applyRule('split', row(MASTHEAD), 40).rows).toHaveLength(3);
+  });
+
+  it('still cuts at a run of two or more decoration characters', () => {
+    // GLOBAL and THERMONUCLEAR are separated by '--', which is a gap and not
+    // letter-spacing, so the break is allowed to land there.
+    const first = str(applyRule('split', row(MASTHEAD), 40).rows[0]).trimEnd();
+    expect(first.endsWith('L÷--÷')).toBe(true);
+  });
+
+  it('leaves a rule of dashes alone: it carries no word to break', () => {
+    const rule = '-'.repeat(79);
+    expect(applyRule('split', row(rule), 40).rows.map((r) => str(r).trimEnd()))
+      .toEqual(['-'.repeat(40), '-'.repeat(39)]);
+  });
+
+  it('marks a letter-spaced word too wide for any row instead of moving it', () => {
+    const huge = 'x' + Array.from('abcdefghijklmnopqrstuvwxyzabcdefghijklmno').join('.');
+    const out = applyRule('split', row(huge), 40);
+    expect(str(out.rows[0])[39]).toBe(TRUNCATION_MARK);
+  });
+});
+
+describe('a comment row', () => {
+  // fixtures/gwall.ans rows 2 and 4: the wall draws its column HEADER with '!'
+  // and every comment with '|', and both enclose one cell.
+  const HEADER = '!cOMMENt\\/\\/'.padEnd(68, ' ') + 'hANDLE¡bBS!';
+  const COMMENT = '|This site now has links to 3000 Amiga bbs doors'.padEnd(67, ' ') + '-REbEL¦WWW|';
+
+  const railsOf = (line: string) => ({ open: line.trimStart()[0], close: line.trimEnd().slice(-1) });
+
+  it('never shows half a box', () => {
+    for (const src of [HEADER, COMMENT]) {
+      const out = applyRule(chooseRule(row(src), 40), row(src), 40);
+      const lines = out.rows.map((r) => str(r).trimEnd()).filter((l) => l.length > 0);
+      const rail = src.trimStart()[0];
+      const shown = lines.filter((l) => l.startsWith(rail) || l.endsWith(rail));
+      expect({ src: src.slice(0, 12), shown }).toEqual({ src: src.slice(0, 12), shown: [] });
+    }
+  });
+
+  it('drops the header box the same way it drops a comment box, so the wall has one right edge or none', () => {
+    const header = applyRule(chooseRule(row(HEADER), 40), row(HEADER), 40);
+    const comment = applyRule(chooseRule(row(COMMENT), 40), row(COMMENT), 40);
+    expect(railsOf(str(header.rows[header.rows.length - 1])).close)
+      .toBe('S');                                        // ...hANDLE¡bBS, no '!'
+    expect(railsOf(str(comment.rows[comment.rows.length - 1])).close)
+      .toBe('W');                                        // ...-REbEL¦WWW, no '|'
+  });
+
+  it('keeps a box the row can hold whole: both rails or neither, never one', () => {
+    // fixtures/pager5d.ans row 1 - 43 columns at an indent of 4, so 39 columns
+    // of content. `crop` used to drop its closing rail; `deindent` keeps both.
+    const BOXED = '    |       5D_Page v0.01 by sNoW !        |';
+    expect(chooseRule(row(BOXED), 40)).toBe('deindent');
+    const line = str(applyRule('deindent', row(BOXED), 40).rows[0]).trimEnd();
+    expect(line[0]).toBe('|');
+    expect(line[line.length - 1]).toBe('|');
+  });
+});
+
+describe('the empty-conference banner', () => {
+  // fixtures/ctop.ans row 11: Conftop-II centres its empty-table message across
+  // 80 columns and it lands on slot 5.
+  const SLOT5 = ' 5.            - NO UPLOADERS ARE AVAILABLE IN THIS CONFERENCE -';
+
+  it('does not collide with the numbered list', () => {
+    expect(chooseRule(row(SLOT5), 40)).toBe('banner');
+    const lines = applyRule('banner', row(SLOT5), 40).rows.map((r) => str(r).trimEnd());
+    expect(lines[0]).toBe(' 5.');
+    expect(lines.slice(1).join(' ')).toBe('- NO UPLOADERS ARE AVAILABLE IN THIS CONFERENCE -');
+  });
+
+  it('loses nothing but the padding the door centred it with', () => {
+    const lines = applyRule('banner', row(SLOT5), 40).rows.map((r) => str(r));
+    expect(lines.join('').replace(/\s+/g, '')).toBe(SLOT5.replace(/\s+/g, ''));
+  });
+
+  it('declines on a row whose two halves are one sentence, so reflow still owns it', () => {
+    const prose = 'the quick brown fox jumps over  the lazy dog and keeps on running past it';
+    expect(chooseRule(row(prose), 40)).not.toBe('banner');
+  });
+
+  it('declines on ART, so a half-painted menu row still splits', () => {
+    // fixtures/rtw.txt: block glyphs either side of a three-blank gap, which
+    // matches every structural condition the rung has.
+    const art = '▓▓▓▓WNLO▓▓▓▓   [▓▓▓▓ SYS▓▓▓▓IEW'.padEnd(63, '▓');
+    expect(chooseRule(row(art), 40)).not.toBe('banner');
+  });
+
+  it('a pinned banner on a row that is not one falls through to the row own rule', () => {
+    const table = '| aa | bb | cc |'.padEnd(60, ' ') + '| dd |';
+    expect(applyRule('banner', row(table), 40).applied).not.toBe('banner');
+  });
+});

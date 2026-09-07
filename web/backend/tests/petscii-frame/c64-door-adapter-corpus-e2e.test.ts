@@ -480,9 +480,18 @@ function ruleViolations(frame: Frame): Array<Record<string, unknown>> {
       // closing pipe rode the right-hand field and the opening pipe rode the
       // message, so a wrapped comment came out with half a box. Recognised from
       // the row, not by importing the rung's predicate: first and last non-blank
-      // cells both '|', with no '|' between them.
+      // cells the SAME box rail, with no other occurrence of it between them.
+      //
+      // WHICH RAIL was widened on 2026-09-07 and this check moved with it - it
+      // was recording a DEFECT. GWALL draws one wall with five glyph pairs and
+      // only '|' was recognised, so its column header `!cOMMENt\/\/ ...
+      // hANDLE¡bBS!` kept its `!` flush at column 39 while every comment row
+      // under it had dropped its `|` box: one right edge on the screen and none
+      // below it, which is the sysop's "the right border is cut".
       const bare = squeeze(cellText(src));
-      const boxed = rule === 'record' && /^\|[^|]*\|$/.test(bare) && bare.length > 2;
+      const rail = ['|', '\u00a6', '!'].find((r) => bare.length > 2 && bare[0] === r
+        && bare[bare.length - 1] === r && !bare.slice(1, -1).includes(r));
+      const boxed = rule === 'record' && rail !== undefined;
       const want = boxed ? bare.slice(1, -1) : bare;
       if (squeeze(cellText(joined)) !== want) bad.push({ ...where, why: 'reflow lost or reordered characters' });
     }

@@ -126,6 +126,39 @@ interface Pin {
  * row, which is why its byte count falls; `ratiorep` gains bytes. The other 21
  * hashes are untouched.
  *
+ * SIX were RE-MEASURED on 2026-09-07 for the sysop's GWALL and ctop report,
+ * and the six were named by the rule census BEFORE a hash was touched: every
+ * frame of all 29 fixtures through `chooseRule`, which named `avhbc`,
+ * `conftop`, `ctop`, `gwall`, `pager5d` and `rtw` and nothing else. The pin
+ * agreed exactly - those six hashes moved and the other 23 did not - which is
+ * the check, because the census sees only WHICH rung took a row and these
+ * hashes see the bytes.
+ *
+ * - `gwall` (8921 -> 7877): TWO changes, both his. `splitRow` no longer cuts
+ *   through a LETTER-SPACED word, so the masthead reads GLOBAL /
+ *   THERMONUCLEAR--WALL-- / V1B on three rows instead of `...T÷H÷E÷R÷M÷` /
+ *   `O÷N÷U÷C÷L÷E÷A÷R...`; and `recordFields` recognises the box RAIL the row
+ *   actually uses instead of the literal '|', so the column header
+ *   `!cOMMENt\/\/ ... hANDLE¡bBS!` drops its `!` box the way every comment row
+ *   under it already dropped its `|` box. The byte count falls because a
+ *   dropped border and a shorter first masthead row are fewer runs to paint.
+ * - `ctop` (8496 -> 8198) and `conftop` (9137 -> 8699): the `banner` rung. The
+ *   centred `- NO UPLOADERS ARE AVAILABLE IN THIS CONFERENCE -` no longer keeps
+ *   the door's twelve blanks of 80-column centring; the slot number keeps its
+ *   own row and the sentence is de-indented under it. Fewer bytes because the
+ *   padding is gone, not because a character is.
+ * - `pager5d` (1417 -> 1473), `avhbc` (373 -> 353) and `rtw` (143975 ->
+ *   144781): the ladder asking the LOSSLESS `deindent` before a `crop` that
+ *   drops a glyph. Every one of the seven rows involved GAINS: `pager5d`'s
+ *   outer box comes back WHOLE (`.---...---.`, `|  5D_Page v0.01 by sNoW !  |`,
+ *   `` `---...---' ``) where it read as an opening pipe with no closing partner,
+ *   `avhbc`'s rule is all thirty `=` instead of seventeen, and `rtw`'s footer
+ *   is `- -- --- ---- -------------------------'` where it was thirty-eight
+ *   blanks and a single dash. `avhbc` loses bytes because a de-indented row
+ *   starts at column 0 and needs no cursor move.
+ *
+ * The other 23 hashes are untouched.
+ *
  * `wall` and `dtagwall` were RE-MEASURED on 2026-09-06, and this is the one
  * kind of re-measurement the rule above allows: the ladder gained a rung
  * (`record`, adapt.ts), so the FRAMES changed by design and renderDiff faithfully
@@ -147,7 +180,7 @@ const PINS: Record<string, Pin> = {
   ratiorep: { renders: 10, bytes: 2930, sha256: '23532d3965f685894e081c83854ac1668c99d7f43282bcfae8d9165f452a31e8' },
   super_stats: { renders: 21, bytes: 10315, sha256: '3369da21e831138c23dedfe41665ea642cdc6aa4197ee50bffca22f3742f2eef' },
   hststat: { renders: 12, bytes: 2484, sha256: '0746281e3871a50468228989d86b0ca69dbea5b7c3c9faaa90bb9d4a60485b2c' },
-  rtw: { renders: 69, bytes: 143975, sha256: '3cb53e6eeaf2ebca2ddfa1150cce30bee1e0b7235a3e4cba6aa577b8af629ed9' },
+  rtw: { renders: 69, bytes: 144781, sha256: 'd486e063a54f7a77a200c47a87563aba403a037ad1c62bbec90b6afb5b9dcaa8' },
   ustats: { renders: 217, bytes: 287701, sha256: '5a084d2f207ff792fc329a472d287f958a1b5074930d27a155eae14a4115a60a' },
   what: { renders: 13, bytes: 3581, sha256: '51c81e728a9d1304aed398510fad03bca0079497188882ff7977242f2251cdee' },
   b: { renders: 17, bytes: 10269, sha256: '1914422b391657000fde0ad5e71e69d37b7d89704c92e2b88d73834d26ff5eeb' },
@@ -158,14 +191,14 @@ const PINS: Record<string, Pin> = {
   wall: { renders: 3, bytes: 4782, sha256: '9d880fb46142bd6d40283592e90836b25ef3caa679174c54fcf12cd36a0f0624' },
   chat: { renders: 49, bytes: 37701, sha256: '94ce198cd0f6fc7edf28d9e78610e631b9583e4620a5220a3ee932ddd7892bea' },
   mrcstat1: { renders: 7, bytes: 951, sha256: '014fe8e6fed2a87b056ae76ee41457ec10fbfcd195261959d3b266738ebd0271' },
-  pager5d: { renders: 18, bytes: 1417, sha256: '7ed6b3f50c15a12f54cf79540cb718ac54286baa7664b576cc23e7ec3de0e92e' },
+  pager5d: { renders: 18, bytes: 1473, sha256: '21a18e667a2179ea68e2c8ddcefb27d08089e208feb5ae98fe0e100484e6115a' },
   dtagwall: { renders: 26, bytes: 6112, sha256: 'cf637615bc8d5935c8a9a56a3a9e1251c1c164bc20c836c105589f6265183a34' },
-  avhbc: { renders: 6, bytes: 373, sha256: 'f83aad48906dfa640bfe4372866394b973c5ce94bab6cec9d7815865423ea0c6' },
+  avhbc: { renders: 6, bytes: 353, sha256: '9fb4be94ff3faf7318dd0085bfafffc55972d1bc355a8177e05edb5e7d937e5f' },
   // First measurement of a new input, frozen from here on under the rule above.
-  gwall: { renders: 22, bytes: 8921, sha256: '39c384ff1bf1e4338df8824c76aca9afa3f9e167b994a701e30e99ddb484c8dc' },
+  gwall: { renders: 22, bytes: 7877, sha256: '2d9796bc1d0ea367b1aaf14d5affe45011942223e474ae663faec11a80394416' },
   hackcheck: { renders: 12, bytes: 1624, sha256: 'aa25e1dfa09db75b8b854410bc0e0831f89741e4c777805ac0f64e264cdecc3a' },
-  ctop: { renders: 25, bytes: 8496, sha256: 'd0132c864ed0360f25d549dda45f2991936b7fe715093c5fed239005150d8dd8' },
-  conftop: { renders: 22, bytes: 9137, sha256: 'a87497003d9779c8031cf2fb4bbb609bd83cae277e64bac5805f37713f2ba171' },
+  ctop: { renders: 25, bytes: 8198, sha256: '055140f4417c8809f626bc505808c4dff3b89aaa771001927df6816740b88b56' },
+  conftop: { renders: 22, bytes: 8699, sha256: '98cd16bbc6e0ed085d303838fba5605b470cfdc3202daf24ea36688a44d93c7d' },
   sysinfo: { renders: 22, bytes: 5732, sha256: 'b52efd325c043e34026c5728d930cf40b5ac8d956758959a502cafadd003b7a0' },
   games: { renders: 21, bytes: 18770, sha256: 'bc8ebf20627f33003f02090eace28e87af4f10c782fc71cd941804aa3510715f' },
   olm: { renders: 32, bytes: 9782, sha256: 'c2c4df72eee434d44a16df1144235f50594811384a3e952e58e5a29f7dacccf0' },

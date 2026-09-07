@@ -433,14 +433,34 @@ describe('i can see the top of the global wall', () => {
 
     const { rows, contentEnd } = census(rig.fedToAdapter);
     const top = Math.max(0, contentEnd - ROWS);
-    expect({ total: rows.length, contentEnd, top }).toEqual({ total: 30, contentEnd: 26, top: 1 });
+    // 30/26/1 -> 31/27/2 on 2026-09-07: the masthead is LETTER-SPACED with '÷'
+    // and `splitRow` was cutting through THERMONUCLEAR, so it now costs three
+    // rows instead of two. One more adapted row, one more painted row, one row
+    // further down the window - the wall's top is still on the glass, which is
+    // what this test is for.
+    expect({ total: rows.length, contentEnd, top }).toEqual({ total: 31, contentEnd: 27, top: 2 });
     const wrong: Array<Record<string, unknown>> = [];
     for (let y = 0; y < ROWS; y++) wrong.push(...rowMismatches(rig.glass, y, rows[top + y]));
     expect(wrong).toEqual([]);
     const letters = rig.glass.screen().replace(/[^A-Z ]/g, '');
-    expect(letters).toContain('GLOBAL');
-    expect(letters).toContain('THERM');
+    // THERMONUCLEAR whole - it used to reach this caller as `THERM` / `ONUCLEAR`
+    // because `splitRow` cut through the door's '÷' letter-spacing.
+    expect(letters).toContain('THERMONUCLEAR');
+    expect(letters).toContain('WALL');
     expect(rig.glass.screen()).toContain('COMMENT');
+
+    // WHAT THE WHOLE WORD COSTS, recorded rather than hidden. Keeping
+    // THERMONUCLEAR intact spends one more adapted row, the wall is 27 painted
+    // rows on a 25-row screen, and this caller has turned pausing OFF - so two
+    // rows go off the top instead of one, and the second of them is the row
+    // carrying GLOBAL. The trade is the sysop's own: he asked for the word not
+    // to be broken, and a caller who leaves pausing ON walks the page and sees
+    // every row of the wall (the two tests above).
+    const dropped = rows.slice(0, top).map((r) => rowText(r.cells).trim());
+    expect(dropped).toHaveLength(2);
+    expect(dropped[0]).toBe('__');
+    expect(dropped[1].replace(/[^A-Za-z]/g, '')).toBe('GLOBAL');
+    expect(letters).not.toContain('GLOBAL');
 
     uninstallC64DoorAdapter(rig.socket);
   });
@@ -511,10 +531,13 @@ describe('i can see the top of the global wall', () => {
 
     const oldTop = Math.max(0, rows.length - ROWS); // what adaptFrame would show
     const newTop = Math.max(0, contentEnd - ROWS);  // what windowTop() shows
+    // 30/26/5/1 -> 31/27/6/2 on 2026-09-07 with the letter-spacing fix to
+    // `splitRow`: the masthead is three rows now, not two. The measurement this
+    // test records is unchanged - every row the old window dropped is painted.
     expect({ total: rows.length, contentEnd, oldTop, newTop })
-      .toEqual({ total: 30, contentEnd: 26, oldTop: 5, newTop: 1 });
+      .toEqual({ total: 31, contentEnd: 27, oldTop: 6, newTop: 2 });
 
-    // Those five rows are the masthead and the column heading - painted, not
+    // Those six rows are the masthead and the column heading - painted, not
     // tail. The logo interleaves a separator glyph between its letters, so the
     // word is read with those squeezed out, the way the eye reads it.
     const lost = rows.slice(0, oldTop).map((r) => rowText(r.cells).trim());
