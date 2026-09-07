@@ -73,7 +73,7 @@ const NOT_YET = new Set([
 /** Verbs this phase answers, but only for a caller who has logged in. */
 const AFTER_LOGIN = new Set([
   'PWD', 'XPWD', 'CWD', 'XCWD', 'CDUP', 'TYPE', 'PBSZ', 'PROT', 'PASV', 'LIST', 'NLST',
-  'MLSD', 'MLST', 'OPTS',
+  'MLSD', 'MLST', 'OPTS', 'EPSV',
 ]);
 
 export function isLoopback(address: string | undefined): boolean {
@@ -229,7 +229,13 @@ export class FtpSession {
       case 'PROT':
         return this.onProt(arg);
       case 'PASV':
-        return this.onPasv();
+        return this.onPasv('classic');
+      case 'EPSV':
+        // What a modern client tries FIRST - curl and most GUI clients send
+        // EPSV, and only fall back to PASV when it is refused. Answering 500
+        // costs every one of them a round trip, and a client that does NOT
+        // fall back gets no data connection at all.
+        return this.onPasv('extended');
       case 'LIST':
         return this.onList(arg, 'long');
       case 'NLST':
@@ -341,10 +347,15 @@ export class FtpSession {
    * the PUBLIC address - the container's own is not reachable from anywhere a
    * caller is standing.
    */
-  private async onPasv(): Promise<void> {
+  private async onPasv(form: 'classic' | 'extended'): Promise<void> {
     const range = this.deps.passivePorts?.();
     const address = this.deps.passiveAddress?.();
-    if (!range || !address) return this.reply(425, 'Passive mode is not configured');
+    // EPSV names only a PORT - the client reuses the control connection's
+    // address - so it works without a configured address, and over IPv6,
+    // which is the reason RFC 2428 exists.
+    if (!range || (form === 'classic' && !address)) {
+      return this.reply(425, 'Passive mode is not configured');
+    }
 
     this.passive?.close();
     this.passive = null;
@@ -353,8 +364,11 @@ export class FtpSession {
     if (!channel) return this.reply(425, 'No free data port');
 
     this.passive = channel;
+    if (form === 'extended') {
+      return this.reply(229, `Entering Extended Passive Mode (|||${channel.port()}|)`);
+    }
     try {
-      this.reply(227, `Entering Passive Mode (${passiveReplyAddress(address, channel.port())})`);
+      this.reply(227, `Entering Passive Mode (${passiveReplyAddress(address!, channel.port())})`);
     } catch (error) {
       channel.close();
       this.passive = null;
@@ -438,7 +452,18 @@ export class FtpSession {
   }
 
   private sendFeatures(): void {
-    const lines = [' REST STREAM', ' SIZE', ' MDTM', ' MLST type*;size*;modify*;perm*;'];
+    // Everything named here must be a verb this server answers - a client
+    // believes FEAT and stops trying the alternatives (2026-09-07: MLST was
+    // advertised while MLSD answered 502, and Transmit simply stopped).
+    const lines = [
+      ' EPSV',
+      ' PASV',
+      ' REST STREAM',
+      ' SIZE',
+      ' MDTM',
+      ' MLST type*;size*;modify*;perm*;',
+      ' UTF8',
+    ];
     if (this.deps.startTls) lines.unshift(' AUTH TLS');
     this.socket.write('211-Extensions supported:\r\n');
     for (const line of lines) this.socket.write(`${line}\r\n`);

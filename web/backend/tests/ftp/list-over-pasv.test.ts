@@ -277,6 +277,7 @@ describe('LIST over a passive connection', () => {
 
     // Every advertised extension is a verb the server answers. MLST was the
     // one that was not, and the client that believed it got nothing.
+    expect(feature).toContain('EPSV');
     if (feature.some((f) => f.startsWith('MLST'))) {
       control.write('MLST /\r\n');
       expect(await lines.next()).toBe('250-Listing');
@@ -294,6 +295,36 @@ describe('LIST over a passive connection', () => {
 
     control.write('OPTS MLST modify;\r\n');
     expect(await lines.next()).toBe('200 MLST OPTS type;size;modify;perm;');
+
+    control.destroy();
+  });
+
+  /**
+   * What a modern client tries FIRST.
+   *
+   * curl sends EPSV and falls back to PASV when refused, costing a round
+   * trip; a client that does not fall back gets no data connection at all.
+   * Measured against the real server on 2026-09-07: `500 command not
+   * recognized`, then "Failed EPSV attempt. Disabling EPSV".
+   */
+  it('answers EPSV, which clients send before PASV', async () => {
+    const { control, lines } = await login();
+
+    control.write('EPSV\r\n');
+    const reply = await lines.next();
+    expect(reply).toMatch(/^229 Entering Extended Passive Mode \(\|\|\|\d+\|\)$/);
+
+    const port = Number(reply.match(/\|\|\|(\d+)\|/)![1]);
+    const data = net.createConnection({ port, host: '127.0.0.1' });
+    const received: Buffer[] = [];
+    data.on('data', (chunk) => received.push(chunk));
+    const closed = new Promise<void>((resolve) => data.once('close', () => resolve()));
+
+    control.write('LIST\r\n');
+    expect(await lines.next()).toMatch(/^150 /);
+    await closed;
+    expect(await lines.next()).toBe('226 Transfer complete');
+    expect(Buffer.concat(received).toString('latin1')).toContain('001-General');
 
     control.destroy();
   });
