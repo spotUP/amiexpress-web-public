@@ -229,7 +229,7 @@ export function ScreenThemesPage() {
       cell: row => (
         <div>
           <div>{row.title}{row.slug === defaultSlug ? ' (board default)' : ''}</div>
-          <div className="text-xs text-ink-muted font-mono">{row.slug}</div>
+          <div className="text-xs text-content-secondary font-mono">{row.slug}</div>
         </div>
       ),
     },
@@ -259,12 +259,12 @@ export function ScreenThemesPage() {
             <Monitor size={16} />
           </button>
           {row.dir !== '' && (
-            <button type="button" onClick={() => setChecking(row)} title="Check this theme">
+            <button type="button" onClick={() => setChecking(row)} className="p-1 rounded hover:bg-surface-3 text-content-secondary hover:text-content-primary transition-colors" title="Check this theme">
               <ShieldCheck size={16} />
             </button>
           )}
           {row.writable && row.dir !== '' && (
-            <button type="button" onClick={() => setCopyInto(row)} title="Start a screen from the board's">
+            <button type="button" onClick={() => setCopyInto(row)} className="p-1 rounded hover:bg-surface-3 text-content-secondary hover:text-content-primary transition-colors" title="Start a screen from the board's">
               <Copy size={16} />
             </button>
           )}
@@ -278,12 +278,12 @@ export function ScreenThemesPage() {
             </button>
           )}
           {canCreate && row.status !== 'live' && row.dir !== '' && (
-            <button type="button" onClick={() => makeLive(row)} title="Publish">
+            <button type="button" onClick={() => makeLive(row)} className="p-1 rounded hover:bg-surface-3 text-content-secondary hover:text-content-primary transition-colors" title="Publish">
               <Check size={16} />
             </button>
           )}
           {canCreate && row.status === 'live' && row.slug !== defaultSlug && (
-            <button type="button" onClick={() => makeDefault(row)} title="Make the board default">
+            <button type="button" onClick={() => makeDefault(row)} className="p-1 rounded hover:bg-surface-3 text-content-secondary hover:text-content-primary transition-colors" title="Make the board default">
               <Eye size={16} />
             </button>
           )}
@@ -296,15 +296,20 @@ export function ScreenThemesPage() {
     <div>
       <header className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="flex items-center gap-2"><Palette size={20} /> Screen Themes</h1>
-          <p className="text-sm text-ink-muted">
+          <h1 className="flex items-center gap-2 text-xl font-semibold text-content-primary"><Palette size={20} /> Screen Themes</h1>
+          <p className="mt-1 text-sm text-content-secondary">
             A theme is a whole set of the board&apos;s art. A caller wears one; every screen it does
             not carry falls back to the board&apos;s own. Draw a theme&apos;s screens in the screen editor.
           </p>
         </div>
         {canCreate && (
-          <button type="button" onClick={() => setIsCreateOpen(true)}>
-            <Plus size={16} /> New theme
+          <button
+            type="button"
+            onClick={() => setIsCreateOpen(true)}
+            className="btn-primary flex items-center space-x-2"
+          >
+            <Plus size={16} />
+            <span>New theme</span>
           </button>
         )}
       </header>
@@ -375,7 +380,7 @@ export function ScreenThemesPage() {
         title={previewing ? `${previewing.title}, as a caller meets it` : 'Preview'}
         maxWidth="max-w-4xl"
       >
-        <p className="text-sm text-ink-muted">
+        <p className="mt-1 text-sm text-content-secondary">
           The board&apos;s own loader and MCI parser answer this, so what is drawn below is the
           screen a caller would be served - not a rendering of it. Commands are named, never run.
         </p>
@@ -495,26 +500,35 @@ export function ScreenThemesPage() {
             event.preventDefault();
             if (copyInto) copyMutation.mutate({ slug: copyInto.slug, boardPath: copyPath });
           }}
+          className="space-y-4"
         >
-          <label htmlFor="copy-path">The board screen to start from</label>
-          <input
-            id="copy-path"
-            value={copyPath}
-            onChange={event => setCopyPath(event.target.value)}
-            placeholder="Screens/BULL.TXT"
-            required
-          />
-          <p className="text-xs text-ink-muted">
-            Its bytes are copied into the theme, where the screen editor can open them.
-            <br />
-            <code>Screens/BULL.TXT</code> becomes <code>Board/BULL.TXT</code>,{' '}
-            <code>Conf1/MENU250.TXT</code> becomes <code>Conf/1/MENU250.TXT</code>, and a node&apos;s
-            screen becomes <code>Node/&lt;name&gt;</code> - one Node directory serves every node.
-          </p>
+          <div>
+            <label htmlFor="copy-path" className="label">The board screen to start from</label>
+            <input
+              id="copy-path"
+              value={copyPath}
+              onChange={event => setCopyPath(event.target.value)}
+              placeholder="Screens/BULL.TXT"
+              className="input-field w-full"
+              required
+            />
+            <p className="mt-1 text-xs text-content-secondary">
+              Its bytes are copied into the theme, where the screen editor can open them.
+              <br />
+              <code>Screens/BULL.TXT</code> becomes <code>Board/BULL.TXT</code>,{' '}
+              <code>Conf1/MENU250.TXT</code> becomes <code>Conf/1/MENU250.TXT</code>, and a
+              node&apos;s screen becomes <code>Node/&lt;name&gt;</code> - one Node directory serves
+              every node.
+            </p>
+          </div>
 
-          <div className="flex gap-2 justify-end mt-4">
-            <button type="button" onClick={() => setCopyInto(null)}>Cancel</button>
-            <button type="submit" disabled={copyMutation.isPending}>Copy in</button>
+          <div className="flex justify-end space-x-2 pt-2">
+            <button type="button" onClick={() => setCopyInto(null)} className="btn-secondary">
+              Cancel
+            </button>
+            <button type="submit" className="btn-primary" disabled={copyMutation.isPending}>
+              {copyMutation.isPending ? 'Copying...' : 'Copy in'}
+            </button>
           </div>
         </form>
       </Modal>
@@ -529,51 +543,69 @@ export function ScreenThemesPage() {
             event.preventDefault();
             createMutation.mutate();
           }}
+          className="space-y-4"
         >
-          <label htmlFor="theme-slug">Slug</label>
-          <input
-            id="theme-slug"
-            value={form.slug}
-            onChange={event => setForm({ ...form, slug: event.target.value })}
-            placeholder="neon"
-            required
-          />
-          <p className="text-xs text-ink-muted">
-            Lowercase letters, digits and hyphens. It becomes the directory name and never changes.
-          </p>
+          <div>
+            <label htmlFor="theme-slug" className="label">Slug</label>
+            <input
+              id="theme-slug"
+              value={form.slug}
+              onChange={event => setForm({ ...form, slug: event.target.value })}
+              placeholder="neon"
+              className="input-field w-full"
+              required
+            />
+            <p className="mt-1 text-xs text-content-secondary">
+              Lowercase letters, digits and hyphens. It becomes the directory name and never changes.
+            </p>
+          </div>
 
-          <label htmlFor="theme-title">Title</label>
-          <input
-            id="theme-title"
-            value={form.title}
-            onChange={event => setForm({ ...form, title: event.target.value })}
-            placeholder="Neon"
-            required
-          />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="theme-title" className="label">Title</label>
+              <input
+                id="theme-title"
+                value={form.title}
+                onChange={event => setForm({ ...form, title: event.target.value })}
+                placeholder="Neon"
+                className="input-field w-full"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="theme-author" className="label">Artist</label>
+              <input
+                id="theme-author"
+                value={form.author}
+                onChange={event => setForm({ ...form, author: event.target.value })}
+                placeholder="How they want to be credited"
+                className="input-field w-full"
+              />
+            </div>
+          </div>
 
-          <label htmlFor="theme-author">Artist</label>
-          <input
-            id="theme-author"
-            value={form.author}
-            onChange={event => setForm({ ...form, author: event.target.value })}
-            placeholder="How they want to be credited"
-          />
+          <div>
+            <label htmlFor="theme-owner" className="label">Owned by</label>
+            <input
+              id="theme-owner"
+              value={form.owner}
+              onChange={event => setForm({ ...form, owner: event.target.value })}
+              placeholder="Their BBS username"
+              className="input-field w-full"
+            />
+            <p className="mt-1 text-xs text-content-secondary">
+              That account may edit this theme&apos;s screens in the editor, and nothing else on the
+              board. Leave it empty and only sysops can draw it.
+            </p>
+          </div>
 
-          <label htmlFor="theme-owner">Owned by</label>
-          <input
-            id="theme-owner"
-            value={form.owner}
-            onChange={event => setForm({ ...form, owner: event.target.value })}
-            placeholder="Their BBS username"
-          />
-          <p className="text-xs text-ink-muted">
-            That account may edit this theme&apos;s screens in the editor, and nothing else on the board.
-            Leave it empty and only sysops can draw it.
-          </p>
-
-          <div className="flex gap-2 justify-end mt-4">
-            <button type="button" onClick={() => setIsCreateOpen(false)}>Cancel</button>
-            <button type="submit" disabled={createMutation.isPending}>Create</button>
+          <div className="flex justify-end space-x-2 pt-2">
+            <button type="button" onClick={() => setIsCreateOpen(false)} className="btn-secondary">
+              Cancel
+            </button>
+            <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
+              {createMutation.isPending ? 'Creating...' : 'Create'}
+            </button>
           </div>
         </form>
       </Modal>

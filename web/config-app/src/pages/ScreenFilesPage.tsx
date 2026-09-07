@@ -15,6 +15,7 @@ import { ScreenThumbnail } from '../components/ScreenThumbnail';
 import { formatBytes } from '../lib/format';
 import { ScreenEditor } from '../components/ScreenEditor';
 import { RipScreenEditor } from '../components/RipScreenEditor';
+import { PetsciiScreenPreview } from '../components/PetsciiScreenPreview';
 import { CodeChip } from '../components/CodeChip';
 import { Modal } from '../components/ui/Modal';
 import { ScreenRevisionsPanel } from './ScreenRevisionsPanel';
@@ -736,7 +737,31 @@ export function ScreenFilesPage() {
       id: 'variants',
       header: 'Variants',
       value: res => res.variants.join(' '),
-      cell: res => <span className="font-mono">{res.variants.join(' ')}</span>,
+      // Each variant OPENS. They were plain text, so a screen's PETSCII and RIP
+      // variants were listed and unreachable - the row opened the file the
+      // resolver picked, which for an ANSI caller is always the .txt. That is
+      // why the board's .seq and .rip art looked absent from this page.
+      cell: res => (
+        <span className="font-mono space-x-2">
+          {res.variants.map(variant => {
+            const dir = (res.file ?? '').includes('/')
+              ? (res.file as string).slice(0, (res.file as string).lastIndexOf('/') + 1)
+              : '';
+            const target = `${dir}${variant}`;
+            return (
+              <button
+                key={variant}
+                type="button"
+                onClick={event => { event.stopPropagation(); setOpenFile(target); }}
+                className="underline hover:text-content-primary transition-colors"
+                title={`Open ${target}`}
+              >
+                {variant}
+              </button>
+            );
+          })}
+        </span>
+      ),
     },
   ];
 
@@ -1558,10 +1583,14 @@ export function ScreenFilesPage() {
               // Edit button opens, read-only - a viewer and an editor that draw
               // a file differently is the bug class this page keeps hitting.
               <RipScreenEditor content={file.content} filePath={openFile ?? undefined} readOnly />
+            ) : file.format === 'petscii' ? (
+              // The same PetsciiMachine + PetsciiCanvas a C64 caller's terminal
+              // draws with. The apology that stood here predated both: the
+              // renderer exists, so showing nothing was the misleading part.
+              <PetsciiScreenPreview content={file.content} />
             ) : (
-              <p className="text-sm text-status-warn">
-                PETSCII - the board does not render this correctly yet, so no
-                preview is shown rather than a misleading one.
+              <p className="text-sm text-content-secondary">
+                No preview for this format.
               </p>
             )}
 
