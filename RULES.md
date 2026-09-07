@@ -620,3 +620,56 @@ How:
   the bytes net of animation and the XIM message count. THEMEC on
   2026-09-07: ~210 bytes, 2 messages, first byte in 100-250 ms. More than
   a few hundred bytes for a cursor move means the door is not drawing smart.
+
+## The board is not a fixture
+
+A test may READ the board's own files. It may not PIN a value derived from
+them.
+
+Why: the board is live data. A sysop edits a menu, a door writes `Node42/`,
+`bbsConfig.info` gets rewritten through the admin, a screen gains a row - and
+a suite that pinned a byte count, a hash, a row count or a directory listing
+goes red while nothing is broken. Eight of the twelve red backend suites on
+2026-09-07 were this, and the sharpest was `screen-wipe-delta-pin`: its own
+header said "a changed hash IS the regression" while its input was a file
+anyone could edit.
+
+The distinction, both from the same directory:
+
+- `screen-wipe-fidelity.test.ts` reads the real screens and asserts
+  INVARIANTS - nothing is lost, the cursor ends where the plain render ends,
+  the last frame's delay is 0, the first frame clears. Editing the art cannot
+  break it, and reading real art is what makes it worth running.
+- `screen-wipe-delta-pin.test.ts` needs exact bytes, so its input is FROZEN:
+  the three screens are copied into `tests/fixtures/wipe-screens/` and read
+  from there. The differ is then the only thing that can move a hash.
+
+So:
+- Asserting a property of live board data: fine, and often better than a
+  fixture.
+- Asserting an exact value from live board data: copy the input into
+  `web/backend/tests/fixtures/` and read it from there.
+- Enumerating what is on disk (nodes, conferences, doors): ask git what the
+  board SHIPS - `git ls-files` - not the filesystem, which also holds whatever
+  a door or a test run left behind.
+
+Name fixtures for their content, not their source path: `Screens/MENU.TXT` and
+`Conf1/Menu.txt` are one filename on a case-folding disk, and copying both
+into one directory silently leaves you with two of the three files identical.
+
+## A test may not leave a timer running
+
+A module-level `setInterval` keeps jest alive, and `jest.resetModules()`
+collects one per test. Unref it: a heartbeat, a cleanup sweep or a timeout
+checker reports on a running process, it is not a reason for one to run. The
+server is what holds the process open in production, so nothing about its
+behaviour changes.
+
+Requiring a handler can boot the whole board: `message-scan.handler` ->
+`command.handler` -> `index.ts` -> HTTP, telnet, SSH and FTP listeners. A
+suite that wants the handlers and not the ports sets `SKIP_SERVER_START=1`
+before its first require.
+
+Both cost more than they look: the full backend suite could not finish, every
+run needed `--forceExit`, and 86 failing tests accumulated unseen because the
+run that would have shown them was killed at 25 minutes.
