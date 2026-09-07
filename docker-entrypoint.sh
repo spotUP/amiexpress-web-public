@@ -178,6 +178,51 @@ file_hash() {
 # the volume's is not, so copying the image's `n.info` beside the volume's
 # `N.info` would give this board two icons for one command. The manifest still
 # keys on the IMAGE's path, which is the stable name across deploys.
+# Did the BOARD write this screen, or is it just old?
+#
+# `sync_tracked` can only ask whether the volume differs from what the image
+# last put there, and for a class of files JOINING the tracked set that
+# question has no answer: the volume holds whatever the board was seeded with
+# when it was created, which differs from today's image for every screen the
+# repo has touched since - and adoption then records the image's hash without
+# copying, so from the next deploy on the difference reads as a sysop edit and
+# the screen is frozen for ever. That is why the wipe animations were on
+# origin/main, the deploy fix was live, and the main menu still did not wipe.
+#
+# Screens are different from Commands in one way that settles it: the admin's
+# screen editor leaves evidence. It snapshots into `Screens/.Revisions/<key>`
+# and copies the old bytes to `<file>.backup` before every write
+# (api/screens-routes.ts:243-250, screens/screen-revisions.ts). So a divergence
+# with neither is not an edit - it is the seed.
+#
+# <key> is the board-relative path, lowercased, with the separators and
+# anything else unsafe turned into underscores - `revDirFor`'s own rule, which
+# that module exports precisely so it can be checked from outside.
+# Whether this path's edits are recorded somewhere `sysop_edited_screen` can
+# read. Asked of the PATH rather than set as a mode by the caller: a flag the
+# screens loop switches on is a flag a test driving the real function does not
+# know to set, and the rule would then be live but unproven.
+records_its_edits() {
+    case "$1" in
+        Screens/*|Conf[0-9]*/Screens/*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+sysop_edited_screen() {
+    local rel="$1"
+    local dst_rel="$2"
+    local key revdir
+
+    [ -f "$BBS_DATA_DIR/$dst_rel.backup" ] && return 0
+
+    key=$(printf '%s' "$rel" | tr 'A-Z' 'a-z' | sed 's#[\\/]#_#g; s#[^a-z0-9_.-]#_#g')
+    revdir="$BBS_DATA_DIR/Screens/.Revisions/$key"
+    [ -d "$revdir" ] || return 1
+    [ -n "$(ls -A "$revdir" 2>/dev/null)" ] && return 0
+    return 1
+}
+
 sync_tracked() {
     local rel="$1"
     local dst_rel="${2:-$1}"
@@ -230,6 +275,31 @@ sync_tracked() {
 
     vh=$(file_hash "$dst")
     mh=$(manifest_hash "$rel")
+
+    # A file whose divergence nothing on the board attributes to the sysop.
+    # Only ever reached for screens (`records_its_edits`), because they are
+    # the only class that records who wrote them; a Commands/*.info that
+    # differs has no such record and stays sysop-owned, which is what keeps a
+    # DOORMAN edit from being undone by the next deploy.
+    #
+    # The old bytes are kept beside the file as `.pre-deploy` rather than
+    # discarded: an edit made outside the admin - straight onto the volume -
+    # leaves no evidence and would otherwise be lost here.
+    if records_its_edits "$rel" && [ "$vh" != "$ih" ] &&
+       { [ -z "$mh" ] || [ "$vh" != "$mh" ]; } &&
+       ! sysop_edited_screen "$rel" "$dst_rel"; then
+        cp "$dst" "$dst.pre-deploy" 2>/dev/null
+        if ! cp "$src" "$dst"; then
+            echo "[Entrypoint]   ERROR: could not update $rel" >&2
+            TRACKED_FAILED=$((TRACKED_FAILED + 1))
+            echo "$vh $rel" >> "$DEPLOY_MANIFEST_NEXT"
+            return 0
+        fi
+        echo "[Entrypoint]   $rel: the board's copy predates the tracked set and nothing says the sysop wrote it - taking the image's (old bytes kept as $dst_rel.pre-deploy)"
+        echo "$ih $rel" >> "$DEPLOY_MANIFEST_NEXT"
+        TRACKED_UPDATED=$((TRACKED_UPDATED + 1))
+        return 0
+    fi
 
     if [ -z "$mh" ]; then
         # First run with no baseline. Record the IMAGE's hash, not the

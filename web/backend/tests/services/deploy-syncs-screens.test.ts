@@ -72,6 +72,25 @@ const write = (dir: string, name: string, body: string) =>
   fs.writeFileSync(path.join(dir, name), body);
 const read = (dir: string, name: string) => fs.readFileSync(path.join(dir, name), 'utf8');
 
+/** The key `screen-revisions.ts` derives from a board-relative path. */
+const revKey = (name: string) =>
+  `Screens/${name}`.toLowerCase().replace(/[\\/]/g, '_').replace(/[^a-zA-Z0-9_.-]/g, '_');
+
+/** A snapshot in the revision store, the way the admin's editor leaves one. */
+function writeRevision(name: string): void {
+  const dir = path.join(root, 'volume', 'Screens', '.Revisions', revKey(name));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, '2026-09-01T00-00-00.000Z.txt'), 'an older version\n');
+}
+
+/** What the admin's screen editor actually does: revision, `.backup`, write. */
+function adminEdit(name: string, body: string): void {
+  const full = path.join(volumeScreens(), name);
+  writeRevision(name);
+  if (fs.existsSync(full)) fs.copyFileSync(full, `${full}.backup`);
+  fs.writeFileSync(full, body);
+}
+
 test('a wipe added to a screen in the repo reaches a board that already exists', () => {
   // The board was seeded with the pre-wipe screen on some earlier deploy.
   write(imageScreens(), 'MENU.TXT', 'Main Menu\n');
@@ -90,13 +109,72 @@ test('a screen the sysop edited on the board is NOT overwritten', () => {
   write(volumeScreens(), 'BULLETIN.TXT', 'shipped\n');
   deploy(root);
 
-  // The sysop rewrites it through the admin's screen editor.
-  write(volumeScreens(), 'BULLETIN.TXT', 'the sysop wrote this\n');
+  // The sysop rewrites it through the admin's screen editor, which leaves the
+  // `.backup` sibling and a revision beside every screen it writes.
+  adminEdit('BULLETIN.TXT', 'the sysop wrote this\n');
   // And the image moves on underneath them.
   write(imageScreens(), 'BULLETIN.TXT', 'a later version from the repo\n');
   deploy(root);
 
   expect(read(volumeScreens(), 'BULLETIN.TXT')).toBe('the sysop wrote this\n');
+});
+
+/**
+ * The live board, exactly: the screens joined the tracked set on a deploy where
+ * the volume ALREADY differed from the image, because it still held whatever
+ * the board was seeded with when it was created.
+ *
+ * Adoption records the IMAGE's hash without copying anything, so from the next
+ * deploy on the divergence reads as a sysop edit and the screen is kept for
+ * ever. The sysop's wipe animations were on origin/main, the deploy fix was
+ * live, and the main menu still did not wipe.
+ *
+ * The board knows the difference. The admin's screen editor leaves a `.backup`
+ * beside every screen it writes and a snapshot in `Screens/.Revisions`, so a
+ * divergence with NO such evidence is not a sysop edit - it is the stale seed.
+ */
+test("a stale screen nobody edited takes the repo's version", () => {
+  write(imageScreens(), 'MENU250.TXT', '~WXMain Menu\n');
+  // What this board was seeded with, years of repo changes ago.
+  write(volumeScreens(), 'MENU250.TXT', 'Main Menu\n');
+
+  deploy(root); // the deploy that first tracks screens
+  deploy(root); // and the one after it
+
+  expect(read(volumeScreens(), 'MENU250.TXT')).toBe('~WXMain Menu\n');
+});
+
+test('an edited screen survives that same first tracking deploy', () => {
+  write(imageScreens(), 'MENU250.TXT', '~WXMain Menu\n');
+  adminEdit('MENU250.TXT', 'the sysop drew this one\n');
+
+  deploy(root);
+  deploy(root);
+
+  expect(read(volumeScreens(), 'MENU250.TXT')).toBe('the sysop drew this one\n');
+});
+
+test('a revision on its own is enough evidence, with no .backup beside it', () => {
+  write(imageScreens(), 'MENU250.TXT', '~WXMain Menu\n');
+  write(volumeScreens(), 'MENU250.TXT', 'the sysop drew this one\n');
+  // An older edit whose `.backup` has since been cleaned away.
+  writeRevision('MENU250.TXT');
+
+  deploy(root);
+  deploy(root);
+
+  expect(read(volumeScreens(), 'MENU250.TXT')).toBe('the sysop drew this one\n');
+});
+
+test('the screen it replaces is recoverable afterwards', () => {
+  write(imageScreens(), 'MENU250.TXT', '~WXMain Menu\n');
+  write(volumeScreens(), 'MENU250.TXT', 'what the board had\n');
+
+  deploy(root);
+
+  // Overwriting is only safe because the old bytes are still there: an edit
+  // made outside the admin leaves no evidence and would otherwise be lost.
+  expect(read(volumeScreens(), 'MENU250.TXT.pre-deploy')).toBe('what the board had\n');
 });
 
 test('a screen the sysop deleted stays deleted across deploys', () => {
