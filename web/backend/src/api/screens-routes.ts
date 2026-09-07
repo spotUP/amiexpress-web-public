@@ -361,7 +361,12 @@ screensRouter.get('/preview', async (req: Request, res: Response) => {
     screenTheme: requestedTheme || null,
   });
 
-  const petscii = term === 'c64' || term === 'petscii';
+  // `petscii80` previews the web terminal's WIDE PETSCII screen. Without it
+  // there was no way to see what a P8 caller is served: the preview answered
+  // 40 for every PETSCII request, so an 80-column screen could only be judged
+  // by logging in as one.
+  const petscii = term === 'c64' || term === 'petscii' || term === 'petscii80';
+  const petsciiColumns = term === 'petscii80' ? 80 : 40;
   const session = {
     // Judged already, by the line above. The loader prefers this over asking
     // again, so the clamped level below cannot change which theme answers.
@@ -371,8 +376,9 @@ screensRouter.get('/preview', async (req: Request, res: Response) => {
     relConfNum: confId,
     terminalType: term === 'c64' ? 'c64' : 'web',
     petsciiMode: petscii,
+    petsciiColumns: petscii ? petsciiColumns : undefined,
     ripMode: term === 'rip',
-    screenWidth: petscii ? 40 : 80,
+    screenWidth: petscii ? petsciiColumns : 80,
     screenHeight: 25,
     user: {
       username: requester?.username,

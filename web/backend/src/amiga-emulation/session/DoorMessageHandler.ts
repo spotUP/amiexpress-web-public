@@ -4,6 +4,7 @@
 // 2025-11-20
 
 import { conferenceAmigaPath } from '../../conferences/conference-paths';
+import { petsciiColumnsOf, C64_COLUMNS } from '../xim/screen-width.util';
 import { config as appConfig } from '../../config';
 import { MoiraEmulator } from "../cpu/MoiraEmulator.js";
 import { Socket } from "socket.io";
@@ -3004,7 +3005,11 @@ debugLog(
     const bbsRoot = this.config.bbsSession?.bbsRoot || this.config.bbsSession?.dataDir || "";
     const user = this.config.bbsSession?.user;
     const secLevel = user?.secLevel || 0;
-    const petsciiMode = this.config.bbsSession?.petsciiMode || false;
+    // FORTY-column PETSCII, not PETSCII: a `.seq` is 40-column art the sysop
+    // drew, and an 80-column caller is served the ordinary screen, exactly as
+    // the live path does it (handlers/screen.handler.ts servesPetsciiArt).
+    const petsciiMode = this.config.bbsSession?.petsciiMode === true
+      && petsciiColumnsOf(this.config.bbsSession) === C64_COLUMNS;
     const ripMode = this.config.bbsSession?.ripMode || false;
 
     // Extensions to try based on graphics mode (express.e:6258-6295)

@@ -103,6 +103,20 @@ describe('screen wipes on a PETSCII session', () => {
     expect(widestColumnPainted(out)).toBeLessThanOrEqual(40);
   });
 
+  it('plays the wipe for an 80-column PETSCII caller, composed at his eighty', async () => {
+    const { out, emits } = await show({
+      petsciiMode: true, petsciiColumns: 80, screenWidth: 80, screenHeight: 25, nodeId: 0,
+    });
+
+    expect(getWipeFrames).toHaveBeenCalledTimes(1);
+    expect((getWipeFrames as jest.Mock).mock.calls[0][2]).toBe(80);
+    // The frames really went on the wire, on the event his terminal reads.
+    expect(emits).toBeGreaterThan(1);
+    expect(out).toContain('\x1b[2J\x1b[H');
+    expect(out).not.toContain('~WX');
+    expect(widestColumnPainted(out)).toBeLessThanOrEqual(80);
+  });
+
   it('still plays the wipe for an 80-column ANSI session', async () => {
     const { out, emits } = await show({ screenWidth: 80, screenHeight: 25, nodeId: 0 });
 

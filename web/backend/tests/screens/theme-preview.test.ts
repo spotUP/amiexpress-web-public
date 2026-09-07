@@ -142,3 +142,32 @@ test('a screen that resolves nowhere is a 404, not an empty preview', async () =
 
   expect(res.status).toBe(404);
 });
+
+/**
+ * Previewing the WIDE PETSCII screen (petscii80, 2026-09-07).
+ *
+ * `?term=petscii` answered 40 columns for every PETSCII request, so what a
+ * `P8` caller is served could not be judged from the admin at all - only by
+ * logging in as one. The observable difference is which FILE answers: a
+ * `.seq` is 40-column art the sysop drew, and an 80-column caller is served
+ * the ordinary screen instead (handlers/screen.handler.ts servesPetsciiArt).
+ */
+test('previews the file each PETSCII width is really served', async () => {
+  write('Screens/BULL.TXT', 'the eighty-column bulletin\r\n');
+  // A `.seq` beside it: 40-column art, raw PETSCII bytes.
+  fs.writeFileSync(path.join(root, 'Screens', 'BULL.SEQ'), Buffer.from([0x93, 0x0e, 0x48, 0x49, 0x0d]));
+
+  const c64 = await request(app()).get('/api/screens/preview').query({ screen: 'BULL', term: 'petscii' });
+  const wide = await request(app()).get('/api/screens/preview').query({ screen: 'BULL', term: 'petscii80' });
+
+  expect([c64.status, wide.status]).toEqual([200, 200]);
+
+  // The C64 gets the art...
+  expect(c64.body.data.isPetscii).toBe(true);
+  expect(String(c64.body.data.filePath).toUpperCase()).toContain('BULL.SEQ');
+
+  // ...and the wide screen gets the screen every 80-column caller gets.
+  expect(wide.body.data.isPetscii).toBe(false);
+  expect(String(wide.body.data.filePath).toUpperCase()).toContain('BULL.TXT');
+  expect(decoded(wide.body)).toContain('the eighty-column bulletin');
+});
