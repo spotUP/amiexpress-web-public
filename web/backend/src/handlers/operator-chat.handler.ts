@@ -33,6 +33,19 @@ import {
 } from '../server/session-emitter-registry';
 import { getGrumpySysopResponse, getGrumpyBotIntroMessage, planNaturalTyping, type AIProviderConfig, DEFAULT_AI_CONFIG } from './grumpy-sysop-bot.handler';
 import { buildBoardCard } from './sysop-ai/board-card';
+import { retrieve, retrievedAsPrompt } from './sysop-ai/corpus';
+
+/** The board's own help on this message, for this caller - or nothing. */
+function retrievedFor(message: string, chatSession: ChatSession): string | undefined {
+  try {
+    const caller = userSessions.get(String(chatSession.userId));
+    const chunks = retrieve(message, { bbsRoot, repoRoot: path.join(__dirname, '../../../..') }, caller?.user?.secLevel ?? 0, caller?.currentConf, 3);
+    return retrievedAsPrompt(chunks);
+  } catch (err) {
+console.log(`[Operator Chat] retrieval skipped (${(err as Error).message})`);
+    return undefined;
+  }
+}
 import {
   renderPicker,
   handlePickerInput,
@@ -1094,6 +1107,7 @@ function processBotQueue(
     timeOnline: Math.floor((Date.now() - page.createdAt.getTime()) / 1000),
     messageHistory: chatSession.botMessageHistory || [],
     boardCard: chatSession.boardCard as string | undefined,
+    retrieved: retrievedFor(lastMsg, chatSession),
   };
   context.messageHistory.push({ role: 'user', content: lastMsg });
   chatSession.botMessageHistory = context.messageHistory;
@@ -1176,6 +1190,7 @@ console.log('[Operator Chat] Bot busy, queuing message');
         timeOnline: Math.floor((Date.now() - page.createdAt.getTime()) / 1000),
         messageHistory: (chatSession as any).botMessageHistory || [],
         boardCard: (chatSession as any).boardCard as string | undefined,
+        retrieved: retrievedFor(message, chatSession),
       };
       context.messageHistory.push({ role: 'user', content: message });
       (chatSession as any).botMessageHistory = context.messageHistory;

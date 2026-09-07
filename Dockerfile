@@ -486,6 +486,11 @@ COPY Partdownload /app/default-data/Partdownload
 # Copy batch files (AmigaDOS maintenance scripts) and other root data files
 COPY batch0 batch1 batch2 batch3 batch4 batch5 batch6 batch000 /app/default-data/
 COPY acp.dat acpConnections.dat BBSHelp.txt SystemStats cplistan1000.dat /app/default-data/
+# The board's own help, for the AI co-sysop's retrieval (handlers/sysop-ai/corpus.ts):
+# the user and sysop guides are code, not board data, and live beside the
+# backend as they do in the repo (repoRoot/Documentation).
+COPY Documentation/1-Users/USER_GUIDE.md /app/Documentation/1-Users/USER_GUIDE.md
+COPY Documentation/2-Sysops/SYSOP_GUIDE.md /app/Documentation/2-Sysops/SYSOP_GUIDE.md
 COPY express /app/default-data/express
 
 # The defaults a NEW board is seeded with must not be THIS board's history.

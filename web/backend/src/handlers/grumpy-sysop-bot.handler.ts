@@ -23,6 +23,8 @@ interface ChatContext {
   messageHistory: Array<{ role: 'user' | 'bot'; content: string }>;
   /** The board card (sysop-ai/board-card.ts), built when the bot took the page. */
   boardCard?: string;
+  /** What the board's own help says about THIS message (sysop-ai/corpus.ts). */
+  retrieved?: string;
 }
 
 /**
@@ -485,6 +487,7 @@ console.log('[Grumpy Bot] No GROQ_API_KEY configured, skipping Groq');
     const messages = [
       { role: 'system', content: systemPrompt },
       ...(context.boardCard ? [{ role: 'system', content: context.boardCard }] : []),
+      ...(context.retrieved ? [{ role: 'system', content: context.retrieved }] : []),
       { role: 'system', content: BBS_HELP_KNOWLEDGE },
       { role: 'system', content: `User context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes` },
       ...context.messageHistory.map(msg => ({
@@ -537,7 +540,7 @@ console.log('[Grumpy Bot] No GEMINI_API_KEY configured, skipping Gemini');
   if (geminiTimeout < 250) return null;
   try {
     const systemPrompt = aiConfig.systemPrompt || GRUMPY_SYSOP_PERSONALITY;
-    const fullPrompt = `${systemPrompt}\n\n${context.boardCard ? context.boardCard + '\n\n' : ''}${BBS_HELP_KNOWLEDGE}\n\nUser context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes\n\n${
+    const fullPrompt = `${systemPrompt}\n\n${context.boardCard ? context.boardCard + '\n\n' : ''}${context.retrieved ? context.retrieved + '\n\n' : ''}${BBS_HELP_KNOWLEDGE}\n\nUser context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes\n\n${
       context.messageHistory.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n')
     }\nUser: ${userMessage}\nAssistant:`;
 
@@ -665,6 +668,7 @@ console.log('[Grumpy Bot] No OpenRouter free models available');
     const messages = [
       { role: 'system', content: systemPrompt },
       ...(context.boardCard ? [{ role: 'system', content: context.boardCard }] : []),
+      ...(context.retrieved ? [{ role: 'system', content: context.retrieved }] : []),
       { role: 'system', content: BBS_HELP_KNOWLEDGE },
       { role: 'system', content: `User context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes` },
       ...context.messageHistory.map(msg => ({
