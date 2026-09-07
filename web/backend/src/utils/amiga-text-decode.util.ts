@@ -258,6 +258,7 @@ export function transformIceColors(content: string): string {
     const codes = params.split(";").map((c: string) => parseInt(c, 10) || 0);
     const newCodes: number[] = [];
     let needsBrightBg = false;
+    let blinkInThisSequence = false;
 
     for (let i = 0; i < codes.length; i++) {
       const code = codes[i];
@@ -267,6 +268,7 @@ export function transformIceColors(content: string): string {
         newCodes.push(code);
       } else if (code === 5) {
         blinkEnabled = true;
+        blinkInThisSequence = true;
         if (currentBg >= 40 && currentBg <= 47) {
           needsBrightBg = true;
         }
@@ -280,20 +282,41 @@ export function transformIceColors(content: string): string {
         currentBg = code;
         newCodes.push(code);
       } else if (code === 49) {
-        currentBg = -1;
-        newCodes.push(code);
+        // Default background under the iCE bit is bright black, not black.
+        currentBg = blinkEnabled ? 100 : -1;
+        newCodes.push(blinkEnabled ? 100 : code);
       } else {
         newCodes.push(code);
       }
     }
 
     if (needsBrightBg && currentBg >= 40 && currentBg <= 47) {
+      let bumped = false;
       for (let i = 0; i < newCodes.length; i++) {
         if (newCodes[i] >= 40 && newCodes[i] <= 47) {
           newCodes[i] = newCodes[i] + 60;
           currentBg = newCodes[i];
+          bumped = true;
         }
       }
+      // The background was set by an EARLIER sequence; this one only carried
+      // the bit, so it has to say the bright background itself.
+      if (!bumped) {
+        currentBg += 60;
+        newCodes.push(currentBg);
+      }
+    }
+
+    /**
+     * The iCE bit with NO background set is the case the art editors use
+     * most: background 8 (dark grey) on the default black. The bit is the
+     * high-intensity half of the background, so "blink on black" IS bright
+     * black - and dropping the 5 without adding 100 painted the glyph on plain
+     * black, which is not what the artist drew (BBSTITLE's seventeen `|`).
+     */
+    if (blinkInThisSequence && currentBg === -1) {
+      newCodes.push(100);
+      currentBg = 100;
     }
 
     if (newCodes.length === 0) return "";

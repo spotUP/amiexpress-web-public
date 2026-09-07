@@ -226,6 +226,29 @@ describe('amiga-text-decode: iCE colors transform', () => {
     expect(transformIceColors(input)).toBe('\x1b[31;44mfoo\x1b[0m');
   });
 
+  /**
+   * The case the art editors use most, and the one that BLINKED in the
+   * sysop's telnet client: the iCE bit with no background set means bright
+   * black (dark grey) on the default black. Moebius writes BBSTITLE's
+   * seventeen `|` as `ESC[5;33m`; dropping the 5 without adding 100 painted
+   * them on plain black, which is not what the artist drew.
+   */
+  test('blink on the DEFAULT background is bright black, not nothing', () => {
+    expect(transformIceColors('\x1b[5;33m|\x1b[0m')).toBe('\x1b[33;100m|\x1b[0m');
+    expect(transformIceColors('\x1b[0;5;33m|\x1b[0m')).toBe('\x1b[0;33;100m|\x1b[0m');
+    expect(transformIceColors('\x1b[5m|\x1b[0m')).toBe('\x1b[100m|\x1b[0m');
+    // And no SGR 5 survives, so no client can read it as blink.
+    expect(transformIceColors('\x1b[5;33m|\x1b[0m')).not.toMatch(/\x1b\[(?:[0-9;]*;)?5(?:;[0-9;]*)?m/);
+  });
+
+  test('a bit that arrives AFTER the background was set still brightens it', () => {
+    expect(transformIceColors('\x1b[44mA\x1b[5mB\x1b[0m')).toBe('\x1b[44mA\x1b[104mB\x1b[0m');
+  });
+
+  test('returning to the default background under the bit is bright black', () => {
+    expect(transformIceColors('\x1b[5;44mA\x1b[49mB')).toBe('\x1b[104mA\x1b[100mB');
+  });
+
   test('ESC[m (full reset) clears blink state', () => {
     // After reset, the next blink+bg40 should still be promoted (state isolated).
     const input = '\x1b[5;44mA\x1b[m\x1b[5;44mB';
