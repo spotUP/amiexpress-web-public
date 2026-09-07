@@ -84,6 +84,12 @@ WORKDIR /app
 COPY sdk/engines/ui/ansi-editor ./sdk/engines/ui/ansi-editor
 COPY web/backend/src/screens ./web/backend/src/screens
 COPY web/backend/src/services/config-services ./web/backend/src/services/config-services
+# ...and the RIP renderer, for the same reason: the admin's screen editor draws
+# a `.rip` with the terminal package's own renderer rather than a second copy
+# (`@amiexpress/terminal/rip` in vite.config.ts). Missing here, every deploy
+# since the RIP editor landed died with "Could not load
+# /app/packages/terminal/src/rip".
+COPY packages/terminal/src/rip ./packages/terminal/src/rip
 
 WORKDIR /app/web/config-app
 
