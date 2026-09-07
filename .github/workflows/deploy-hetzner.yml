@@ -44,8 +44,15 @@
           # block below for why an anonymous fetch stopped being reliable.
           env:
             GH_TOKEN: ${{ github.token }}
+            # The caller guard's override. It reaches the script as an ENV
+            # VAR, deliberately: a `${{ }}` anywhere inside `script:` makes
+            # the WHOLE 31 KB block one Actions expression, and the cap is
+            # 21 000 characters. 6de2140f3 interpolated it inline and the
+            # workflow stopped loading altogether - `Exceeded max expression
+            # length 21000`, zero jobs, three pushes that never deployed.
+            FORCE_DEPLOY: ${{ github.event.inputs.force }}
           with:
-            envs: GH_TOKEN
+            envs: GH_TOKEN,FORCE_DEPLOY
             host: ${{ secrets.HETZNER_HOST }}
             username: root
             key: ${{ secrets.HETZNER_SSH_KEY }}
@@ -381,7 +388,9 @@
               #
               # Override: run the workflow manually with force=true. It says
               # what it is about to do, deliberately, in the log.
-              FORCE_DEPLOY="${{ github.event.inputs.force }}"
+              # Empty on a push run; appleboy passes no value for an input
+              # that was never asked for, and `set -u` would abort here.
+              FORCE_DEPLOY="${FORCE_DEPLOY:-false}"
               if [ "$(docker inspect -f '{{.State.Running}}' amiexpress-bbs 2>/dev/null || echo false)" = "true" ]; then
                 HEALTH=$(curl -s --max-time 5 http://127.0.0.1:3001/health || echo '')
                 CALLERS=$(printf '%s' "$HEALTH" | sed -n 's/.*"callers":\([0-9]*\).*/\1/p')
@@ -427,15 +436,21 @@
               # Re-copied on every deploy, which is also how a renewed
               # certificate reaches FTPS: Caddy renews in place, and the FTP
               # server reads the file once at boot.
-              CADDY_CERTS=/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/bbs.uprough.net
-              if [ -f "$CADDY_CERTS/bbs.uprough.net.crt" ]; then
-                echo "== staging FTPS certificate for the container =="
-                install -d -m 0750 -o 1001 -g 1001 /app/ftp-certs
-                install -m 0444 -o 1001 -g 1001 "$CADDY_CERTS/bbs.uprough.net.crt" /app/ftp-certs/
-                install -m 0400 -o 1001 -g 1001 "$CADDY_CERTS/bbs.uprough.net.key" /app/ftp-certs/
-              else
-                echo "== no Caddy certificate for the board; FTPS will answer 431 =="
-              fi
+              # Both names the board answers to: uptown is the address the
+              # sysop gives out, bbs is what everything internal uses. A
+              # certificate is issued for ONE name, so the FTP server carries
+              # both and picks by SNI (FTP_TLS_HOSTS in docker-compose.yml).
+              CADDY_CERTS=/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory
+              install -d -m 0750 -o 1001 -g 1001 /app/ftp-certs
+              for FTP_HOSTNAME in uptown.uprough.net bbs.uprough.net; do
+                if [ -f "$CADDY_CERTS/$FTP_HOSTNAME/$FTP_HOSTNAME.crt" ]; then
+                  echo "== staging FTPS certificate for $FTP_HOSTNAME =="
+                  install -m 0444 -o 1001 -g 1001 "$CADDY_CERTS/$FTP_HOSTNAME/$FTP_HOSTNAME.crt" /app/ftp-certs/
+                  install -m 0400 -o 1001 -g 1001 "$CADDY_CERTS/$FTP_HOSTNAME/$FTP_HOSTNAME.key" /app/ftp-certs/
+                else
+                  echo "== no Caddy certificate for $FTP_HOSTNAME; that name will not serve TLS =="
+                fi
+              done
 
               # `--force-recreate` is the critical bit: without it, docker
               # compose can decide the running container "matches" the spec
