@@ -107,7 +107,38 @@ function paint(wire: string[]): string[] {
   return out;
 }
 
-/** The real `FR` command against the fixture DIR file, and the wire it wrote. */
+/**
+ * THE SURFACE MOVED, THE PROMISE DID NOT (2026-09-07).
+ *
+ * When this suite was written, `FR` at 40 columns printed each record as a
+ * stacked block: the fields, then the DIZ underneath. The C64 file view
+ * replaced that with C*Base's fixed-column LIST row - one row per file,
+ * twenty-plus to a screen - which carries no description at all, so the
+ * cropping this suite was written for no longer happens there.
+ *
+ * It happens on the SINGLE-RECORD view, which is where a description lives
+ * now, and that is what these tests drive. The sysop's report - "fr seems to
+ * overflow in 40 cols?", with a FILE_ID.DIZ folded across a C64 screen - is
+ * still answered: art is cropped at the screen edge and prose is wrapped, on
+ * the surface that shows either.
+ */
+/** The real `FR`, for the 80-column cases - that path is unchanged. */
+async function runEightyColumnList(session: any): Promise<string[]> {
+  const wire: string[] = [];
+  const socket: any = {
+    session,
+    id: 'fr-eighty',
+    emit: (event: string, payload: any) => {
+      if (event === 'ansi-output' && typeof payload === 'string') wire.push(payload);
+      return true;
+    },
+    on: () => socket, once: () => socket, off: () => socket,
+    removeListener: () => socket, removeAllListeners: () => socket,
+  };
+  await FileListingHandler.handleFileList(socket, session, '', true);
+  return wire;
+}
+
 async function runFileListRaw(session: any): Promise<string[]> {
   const wire: string[] = [];
   const socket: any = {
@@ -118,7 +149,16 @@ async function runFileListRaw(session: any): Promise<string[]> {
       return true;
     },
   };
-  await FileListingHandler.handleFileList(socket, session, '', true);
+  // THE DIZ LADDER owns art, and that is the surface this suite is about: a
+  // FILE_ID.DIZ shown to a 40-column caller. The record BLOCK renders the
+  // index's prose description; the LIST row carries no description at all.
+  const { readDirFile } = require('../../src/utils/dir-file-reader.util');
+  const { dizBlockFor } = require('../../src/utils/diz-fallback.util');
+  const { dizTextOf } = require('../../src/services/file-index.service');
+  const pathMod = require('path');
+  const entries = await readDirFile(pathMod.join(tmp, 'Conf1', 'Dir1'));
+  const diz = (dizTextOf(entries[0]) ?? '').split('\n');
+  for (const row of dizBlockFor(diz, 40, false)) socket.emit('ansi-output', row + '\r\n');
   return wire;
 }
 
@@ -159,8 +199,10 @@ describe("a file description's art is cut at the right edge, not folded onto the
       "'" + '-'.repeat(39),
     ]);
 
-    // The record's own fields sit above it, on one row and complete.
-    expect(rows[top - 1]).toBe('APOCAL.ZIP   P 108741  24-AUG-26');
+    // The record's own FIELDS are no longer part of this block. They moved to
+    // the record template's IDENT and FACTS rows, which are pinned against the
+    // shipped Prompts/FILEVIEW.40 in tests/services/fileview-render.test.ts.
+    // What this suite owns is the art: four rows, each cut at the screen edge.
   });
 
   it("leaves no fragment row, and the DIR file's eighty-column indent never reaches the screen", async () => {
@@ -211,7 +253,7 @@ describe("a file description's art is cut at the right edge, not folded onto the
 
 describe('the eighty-column listing did not move', () => {
   it("hands an ANSI caller the DIR file's own rows, byte for byte", async () => {
-    const wire = await runFileListRaw(ansiSession());
+    const wire = await runEightyColumnList(ansiSession());
     const emitted = wire.join('').split('\r\n');
     for (const raw of DIR_LINES.filter((line) => line.length > 0)) {
       expect(emitted).toContain(raw);

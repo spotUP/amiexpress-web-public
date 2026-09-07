@@ -72,11 +72,32 @@ export function tagsFingerprint(tags: ReadonlySet<string>): string {
  * first, with that indent removed. An entry with no continuation lines has no
  * DIZ and the description is whatever was typed on the entry row itself.
  */
-export function dizTextOf(entry: Pick<DirFileEntry, 'rawLines'>): string | null {
-  const block = entry.rawLines
+export function dizTextOf(entry: Pick<DirFileEntry, 'rawLines' | 'uploadDateDisplay'>): string | null {
+  // THE FIRST ROW OF THE DIZ IS ON THE ENTRY ROW. express.e writes the fields
+  // and then the description's first line on the same row (express.e:19454),
+  // with the remaining lines following at indent 33. Taking only the
+  // continuation lines drops the top of the picture - which, on a boxed DIZ,
+  // is the row carrying its top border.
+  //
+  // AND THAT COLUMN IS NOT 33. The continuation indent is fixed, but the entry
+  // row's own description starts wherever the fields end - `\l\s[13] \s  \s  \s`
+  // (express.e:19454), so a wider size pushes it right. Slicing at a constant
+  // eats the first character of the art, which is exactly what it did here:
+  // `.------` arrived as `-------`. The date is the last field before the
+  // description, so its end is where the description begins.
+  const row0 = entry.rawLines[0] ?? '';
+  const date = (entry.uploadDateDisplay ?? '').trim();
+  const dateEnd = date ? row0.indexOf(date) : -1;
+  const first = (dateEnd >= 0
+    ? row0.slice(dateEnd + date.length).replace(/^ {1,2}/, '')
+    : row0.slice(33)
+  ).replace(/\s+$/, '');
+  const rest = entry.rawLines
     .slice(1)
     .filter((line) => line.length > 33 && line.slice(0, 33).trim() === '')
     .map((line) => line.slice(33).replace(/\s+$/, ''));
+
+  const block = first ? [first, ...rest] : rest;
   while (block.length > 0 && block[block.length - 1] === '') block.pop();
   return block.length > 0 ? block.join('\n') : null;
 }

@@ -102,5 +102,50 @@ export function dizBlockFor(
     // nothing than half a picture.
     return [DIZ_ART_SKIPPED_NOTICE];
   }
-  return lines.map((line) => squeezeIfProse(line, columns));
+
+  const out: string[] = [];
+  for (const line of lines) {
+    // 1. SQUEEZE - prose only, and only when it does not already fit.
+    const squeezed = squeezeIfProse(line, columns);
+    if (squeezed.length <= columns) {
+      out.push(squeezed);
+      continue;
+    }
+
+    if (looksLikeAsciiArt(squeezed)) {
+      // 3. CROP - art keeps its LEFT edge and loses its right. The sysop's own
+      // ruling: "i guess we will have to live with them being cut off on the
+      // right side". Wrapping it instead would put the tail of row 1 on top of
+      // row 2 and destroy the picture twice over.
+      out.push(squeezed.slice(0, columns));
+      continue;
+    }
+
+    // 2. REFLOW - prose that is still too wide is WORD-wrapped, so a sentence
+    // stays readable rather than being cut mid-word.
+    out.push(...wrapWords(squeezed, columns));
+  }
+  return out;
+}
+
+/** Word-wrap, breaking a word only when it cannot fit a row on its own. */
+function wrapWords(line: string, columns: number): string[] {
+  const rows: string[] = [];
+  let current = '';
+  for (const word of line.split(/\s+/).filter(Boolean)) {
+    if (current === '') {
+      current = word;
+    } else if (current.length + 1 + word.length <= columns) {
+      current += ' ' + word;
+    } else {
+      rows.push(current);
+      current = word;
+    }
+    while (current.length > columns) {
+      rows.push(current.slice(0, columns));
+      current = current.slice(columns);
+    }
+  }
+  if (current) rows.push(current);
+  return rows;
 }

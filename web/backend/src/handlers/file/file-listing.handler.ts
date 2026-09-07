@@ -22,7 +22,10 @@ import { config } from '../../config';
 import { getConferenceDir } from '../../utils/file-hold.util';
 import { flagPause, checkForPause, initPauseState, setNonStopMode } from '../../utils/flag-pause.util';
 import { getMaxDirs, getDirFiles, DirFileInfo } from '../../utils/max-dirs.util';
-import { dirEntryRows } from '../../utils/table-format.util';
+import { dirEntryRows, isNarrow } from '../../utils/table-format.util';
+import { sessionColumns } from '../../utils/door-min-columns.util';
+import { getFileViewLayout } from '../../services/file-layout.service';
+import { renderFileBlock, renderFileRow, type FileRecordFields } from '@amiexpress/bbs-door-sdk/petscii/frame';
 
 /**
  * Display file list for a conference
@@ -167,6 +170,16 @@ console.log(`[FileList] handleFileList: currentConf=${session.currentConf} relCo
     // express.e:27626-27636 displayFileList - just newline, no header
     socket.emit('ansi-output', '\r\n');
 
+    // ONE LAYOUT SNAPSHOT FOR THE WHOLE PASS, taken before the header: the two
+    // render paths cannot then be handed different layouts for the same
+    // record, and a save mid-listing cannot split the screen.
+    const narrow = isNarrow(session);
+    const layout = getFileViewLayout(bbsDataPath);
+    let ordinal = 0;
+    if (narrow) {
+      for (const line of layout.header) await this.emitTemplateRow(socket, session, line);
+    }
+
     // Get list of DIR files (express.e: numbered DIR1, DIR2, etc. only)
     const allDirFiles = await getDirFiles(session.currentConf, bbsDataPath);
 console.log(`[FileList] getDirFiles returned ${allDirFiles.length} dirs for conf=${session.currentConf} path=${conferencePath}`);
@@ -247,6 +260,22 @@ console.log(`[FileList] Could not read ${dirFilePath}: ${error.message}`);
         }
 
         for (const entry of displayEntries) {
+          // A 40-COLUMN CALLER GETS THE LIST ROW. One row per file, at the
+          // columns Prompts/FILEVIEW.40 names, so a screen holds twenty-plus
+          // records rather than three. The 80-column path below is untouched.
+          if (narrow) {
+            ordinal++;
+            const row = this.narrowRowFor(entry, ordinal, session, layout);
+            const { parseMciCodes } = require('../screen.handler');
+            const painted = (await parseMciCodes(row, session))?.parsed ?? row;
+            const ok = await this.displayFileEntry(socket, session, [painted]);
+            if (!ok) {
+              session.subState = LoggedOnSubState.DISPLAY_MENU;
+              return;
+            }
+            continue;
+          }
+
           // The entry's own rows, then laid out for THIS caller's screen.
           // At >= 80 columns `dirEntryRows` hands the same array straight
           // back, so the express.e bytes are the same strings; below 80 the
@@ -271,6 +300,10 @@ console.log(`[FileList] Could not read ${dirFilePath}: ${error.message}`);
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         return;
       }
+    }
+
+    if (narrow) {
+      for (const line of layout.footer) await this.emitTemplateRow(socket, session, line);
     }
 
     // Return to menu prompt (single redraw handled centrally)
@@ -398,6 +431,104 @@ console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
     socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
+  }
+
+  /**
+   * A rendered template row, as BYTES.
+   *
+   * The template carries MCI - `~c7|` is a pen - and the interpreter leaves
+   * every code it does not own alone, so the row has to go through the
+   * board's own MCI pass before it reaches the wire. Skipping this step sends
+   * a caller the literal text `~c7|`, which is exactly what happened here
+   * until a test that stripped MCI to read the columns stopped hiding it.
+   */
+  private static async emitTemplateRow(
+    socket: Socket,
+    session: Session,
+    row: string,
+  ): Promise<void> {
+    const { parseMciCodes } = require('../screen.handler');
+    const rendered = await parseMciCodes(row, session);
+    socket.emit('ansi-output', (rendered?.parsed ?? row) + '\r\n');
+  }
+
+  /**
+   * ONE RECORD, ON ITS OWN SCREEN - `FI <n>` after a listing, a search hit, an
+   * upload announcement.
+   *
+   * This is where the description lives now. A LIST row is identity fields at
+   * fixed columns and carries none; here there is one record on the screen, so
+   * description-first costs nothing and is what the sysop asked for. The DIZ
+   * that the row's continuation lines carry is squeezed and wrapped by the
+   * interpreter rather than folded by the terminal - which is the same promise
+   * the 40-column crop/wrap fix made, kept on the surface that now owns it.
+   */
+  static async showFileRecord(
+    socket: Socket,
+    session: Session,
+    entry: DirFileEntry,
+    ordinal: number,
+  ): Promise<void> {
+    const layout = getFileViewLayout(config.get('dataDir'));
+    const columns = sessionColumns(session);
+
+    const fields: FileRecordFields = {
+      num: ordinal,
+      name: entry.filename,
+      sizeBytes: entry.fileSize,
+      flag: entry.statusMarker,
+      isNew: this.isNewToCaller(entry, session),
+      date: entry.uploadDateDisplay,
+      desc: entry.description,
+    };
+
+    socket.emit('ansi-output', '\r\n');
+    for (const row of renderFileBlock(fields, layout.record, columns)) {
+      await this.emitTemplateRow(socket, session, row);
+    }
+  }
+
+  /**
+   * THE C*BASE-NATIVE LIST ROW, for a caller who has forty columns.
+   *
+   * One row per file - ordinal, size, marker, new flag, filename, date at
+   * fixed columns - so twenty-plus records fit on a screen instead of the
+   * three a stacked block leaves room for. The columns come from
+   * `Prompts/FILEVIEW.40`, which the sysop can edit; nothing here knows where
+   * a date belongs.
+   *
+   * ONE SNAPSHOT PER PASS. The layout is read once, before the header, and
+   * held to the end: a sysop saving the file mid-listing cannot split a screen
+   * between two layouts.
+   *
+   * At 80 columns this is not reached at all and `dirEntryRows` hands back the
+   * express.e bytes unchanged - decision 4 freezes every 80-column file
+   * format.
+   */
+  private static narrowRowFor(
+    entry: DirFileEntry,
+    ordinal: number,
+    session: Session,
+    layout: { row: readonly string[] },
+  ): string {
+    const fields: FileRecordFields = {
+      num: ordinal,
+      name: entry.filename,
+      sizeBytes: entry.fileSize,
+      flag: entry.statusMarker,
+      // PER CALLER, never stored: a file is new to the caller who has not seen
+      // it, and storing that would make the listing wrong for the next one.
+      isNew: this.isNewToCaller(entry, session),
+      date: entry.uploadDateDisplay,
+    };
+    return renderFileRow(fields, layout.row, sessionColumns(session));
+  }
+
+  /** Is this file newer than the caller's own new-since date? */
+  private static isNewToCaller(entry: DirFileEntry, session: Session): boolean {
+    const since = (session as any).user?.newSinceDate ?? (session as any).user?.lastLogin;
+    if (!since || !entry.uploadDate || Number.isNaN(entry.uploadDate.getTime())) return false;
+    return entry.uploadDate.getTime() >= new Date(since).getTime();
   }
 
   private static async displayFileEntry(

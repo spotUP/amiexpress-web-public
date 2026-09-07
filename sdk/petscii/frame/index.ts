@@ -9,3 +9,4 @@ export { FrameReconstructor, type FrameReconstructorOptions } from './ansi-scree
 export { renderDiff, renderFrame, cupTo } from './frame-render';
 export * from './classify';
 export * from './adapt';
+export * from './file-record';

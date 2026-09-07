@@ -111,7 +111,12 @@ describe('DIZ_ART_SKIP - the sysop who would rather see nothing than half a pict
   });
 
   it('crops rather than skips when the tooltype is off - decision 15', () => {
+    // Art keeps its LEFT edge and loses its right, which is the sysop's own
+    // ruling: "i guess we will have to live with them being cut off on the
+    // right side". Wrapping would put the tail of one row on top of the next
+    // and destroy the picture twice over.
     const block = dizBlockFor([MEASURED_ART_ROW], 40, false);
-    expect(block).toEqual([MEASURED_ART_ROW]);   // the CROP rung owns the cut
+    expect(block).toEqual([MEASURED_ART_ROW.slice(0, 40)]);
+    expect(block[0]).toHaveLength(40);
   });
 });

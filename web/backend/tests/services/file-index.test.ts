@@ -38,13 +38,25 @@ const entry = parseDirFile(DIR_ENTRY)[0];
 const TAGS = groupTagsFor(['OTL-DOOR.LHA', 'OTL-INTRO.LHA', 'OTL-TOOL.LHA', 'PDX-A.LHA', 'PDX-B.LHA']);
 
 describe('the DIZ a DIR entry carries', () => {
-  it('is the continuation block, with express.e\'s 33-column indent removed', () => {
-    expect(dizTextOf(entry)).toBe('MegaDoor v2.1\nCoded by sNoW/OUTLAWS\nRequires /X 4.x');
+  it('is the entry row\'s own text plus the continuation block, indent removed', () => {
+    // The first line is on the ENTRY row (express.e:19454 writes the fields
+    // and the first description line together); the rest follow at indent 33.
+    expect(dizTextOf(entry)).toBe(
+      'A door from the Outlaws\nMegaDoor v2.1\nCoded by sNoW/OUTLAWS\nRequires /X 4.x',
+    );
   });
 
-  it('is null when the entry has no continuation lines at all', () => {
+  it('is the typed line when an entry has no continuation rows', () => {
+    // The first row of a description lives on the ENTRY row, so an entry with
+    // nothing after it still has a description - it is one line long. Only an
+    // entry with nothing past column 33 at all has none.
     const bare = parseDirFile('BARE.LHA     P   1024  03-28-18  Just a line\n')[0];
-    expect(dizTextOf(bare)).toBeNull();
+    expect(dizTextOf(bare)).toBe('Just a line');
+  });
+
+  it('is null when there is nothing past the description column', () => {
+    const empty = parseDirFile('BARE.LHA     P   1024  03-28-18\n')[0];
+    expect(dizTextOf(empty)).toBeNull();
   });
 });
 
