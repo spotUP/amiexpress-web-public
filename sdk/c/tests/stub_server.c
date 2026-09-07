@@ -199,7 +199,7 @@ int stub_server_start_capturing(const unsigned char *response, unsigned long res
         close(listen_fd);
         if (conn_fd >= 0) {
             /* A short receive timeout is how this loop knows the client
-             * is done sending: the client (http_get()/http_request())
+             * is done sending: the client (ae_http_get()/ae_ae_http_request())
              * never closes its write side before reading the response,
              * so waiting for EOF here would deadlock. Once no more bytes
              * arrive within the timeout, everything the client sent has

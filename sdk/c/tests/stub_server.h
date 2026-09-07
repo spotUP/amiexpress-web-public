@@ -1,10 +1,10 @@
-/* stub_server.h - minimal one-shot HTTP stub server for testing http.c
+/* stub_server.h - minimal one-shot HTTP stub server for testing ae_http.c
  * against controlled, scripted responses. POSIX-only (fork + sockets);
  * used only by the native test suite, never linked into the door itself.
  */
 
-#ifndef DOORREPO_TEST_STUB_SERVER_H
-#define DOORREPO_TEST_STUB_SERVER_H
+#ifndef AE_TEST_STUB_SERVER_H
+#define AE_TEST_STUB_SERVER_H
 
 /* Forks a child process that listens on an ephemeral loopback port,
  * accepts exactly one connection, writes `response` (exactly
@@ -45,7 +45,7 @@ int stub_server_start_capturing(const unsigned char *response, unsigned long res
  * bytes - any excess captured bytes are still drained from the pipe so
  * the child never blocks on a full pipe buffer, but are not copied into
  * `out`), then closes capture_fd. Call this after the HTTP exchange
- * (e.g. after http_get()/http_request() returns), before
+ * (e.g. after ae_http_get()/ae_ae_http_request() returns), before
  * stub_server_reap(). Returns the number of bytes copied into `out`. */
 unsigned long stub_server_read_capture(int capture_fd, unsigned char *out, unsigned long outsize);
 
@@ -54,7 +54,7 @@ unsigned long stub_server_read_capture(int capture_fd, unsigned char *out, unsig
  * that makes more than one HTTP round trip to the same host:port within
  * one logical operation (e.g. owner_auth_call()'s re-login-and-retry flow:
  * an admin call that gets 401, a re-login, then the retried call - three
- * separate connections, since http_request() always sends
+ * separate connections, since ae_http_request() always sends
  * Connection: close). `responses[i]`/`response_lens[i]` is served to the
  * i-th connection accepted, in order; each connection's inbound bytes are
  * drained and discarded first, exactly like stub_server_start(). If the
@@ -69,4 +69,4 @@ int stub_server_start_sequence(const unsigned char * const *responses,
                                 const unsigned long *response_lens,
                                 int count, int *out_pid);
 
-#endif /* DOORREPO_TEST_STUB_SERVER_H */
+#endif /* AE_TEST_STUB_SERVER_H */

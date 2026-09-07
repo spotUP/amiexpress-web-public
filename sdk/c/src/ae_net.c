@@ -1,19 +1,20 @@
-/* netio.c - portable socket layer for the DoorRepo C client.
- * See netio.h for the interface contract.
+/* ae_net.c - the socket layer under ae_http, for every C door.
+ * See ae_net.h for the interface contract.
  *
- * THE ONLY FILE IN THIS PROJECT ALLOWED TO CONTAIN "#ifdef AMIGA". Three
- * branches, selected at compile time:
+ * Lifted from examples/doorrepo-c/netio.c on 2026-09-07 (backlog 4.11);
+ * the three branches and their behaviour are unchanged, only the names.
  *
- *   1. NETIO_STUB defined       -> compile-only stub, no real sockets.
- *      Exists so http.c and everything above it can be built to m68k
- *      object code on this toolchain, which lacks the AmiTCP SDK headers
- *      the real Amiga branch needs (see branch 2's comment). This is how
- *      Task 7 proves every module other than this one is m68k-clean.
- *   2. AMIGA defined (and NETIO_STUB not defined) -> bsdsocket.library.
- *      UNVERIFIED ON THIS TOOLCHAIN - see the comment at that branch.
- *   3. neither defined           -> POSIX (getaddrinfo + BSD sockets).
- *      Used for the native dev/test build; this is what test_http.c and
- *      the rest of the suite actually exercise.
+ * THE ONLY NETWORK FILE IN THE SDK ALLOWED TO CONTAIN "#ifdef AMIGA".
+ * Three branches, selected at compile time:
+ *
+ *   1. AE_NET_STUB defined      -> compile-only stub, no real sockets.
+ *      Exists so ae_ae_http.c and everything above it can be built to m68k
+ *      object code on a toolchain without the Roadshow/AmiTCP headers.
+ *   2. AMIGA defined (and AE_NET_STUB not defined) -> bsdsocket.library.
+ *      This is what a door links on a real Amiga AND on amiexpress-web,
+ *      whose emulator provides bsdsocket.library (LibraryManager.ts).
+ *   3. neither defined          -> POSIX (getaddrinfo + BSD sockets).
+ *      The native dev/test build; test_ae_ae_http.c exercises this one.
  *
  * Branches 2 and 3 are written to mirror each other function-for-function:
  * resolve host, open a non-blocking socket, connect with a wait-for-
@@ -22,7 +23,7 @@
  */
 
 #include <string.h>
-#include "netio.h"
+#include "ae_net.h"
 
 static char g_last_error[128] = "";
 
@@ -37,45 +38,45 @@ static void set_error(const char *msg)
     g_last_error[len] = '\0';
 }
 
-const char *net_last_error(void)
+const char *ae_net_last_error(void)
 {
     return g_last_error;
 }
 
-#if defined(NETIO_STUB)
+#if defined(AE_NET_STUB)
 
 /* ---- Branch 1: compile-only stub. Every call fails cleanly with a
- * distinct message; no header beyond netio.h itself is required, which is
- * the entire point - it lets a vbcc m68k build link http.c without ever
+ * distinct message; no header beyond ae_net.h itself is required, which is
+ * the entire point - it lets a vbcc m68k build link ae_http.c without ever
  * needing sys/socket.h, netinet/in.h, or netdb.h. */
 
 /* Parameters are intentionally unused here - this branch never touches a
  * real socket. Not suppressed with "(void) param;": that idiom (needed
- * under native -Wextra, where NETIO_STUB is never defined so this branch
+ * under native -Wextra, where AE_NET_STUB is never defined so this branch
  * never actually compiles there) trips vbcc's "statement has no effect"
  * warning instead, and vbcc does not warn on unused parameters by
  * default - so simply leaving them unused is the one form that is silent
  * on both toolchains. */
 
-int net_open(const char *host, int port, int timeout_secs)
+int ae_net_open(const char *host, int port, int timeout_secs)
 {
-    set_error("netio: NETIO_STUB build, no real networking");
+    set_error("ae_net: AE_NET_STUB build, no real networking");
     return -1;
 }
 
-long net_write(int s, const void *buf, unsigned long len)
+long ae_net_write(int s, const void *buf, unsigned long len)
 {
-    set_error("netio: NETIO_STUB build, no real networking");
+    set_error("ae_net: AE_NET_STUB build, no real networking");
     return -1;
 }
 
-long net_read(int s, void *buf, unsigned long len)
+long ae_net_read(int s, void *buf, unsigned long len)
 {
-    set_error("netio: NETIO_STUB build, no real networking");
+    set_error("ae_net: AE_NET_STUB build, no real networking");
     return -1;
 }
 
-void net_close(int s)
+void ae_net_close(int s)
 {
 }
 
@@ -199,11 +200,11 @@ static int fd_mask_limit(void)
  * unable to tell a closed port from a black hole. */
 static const char *connect_error_text(int err)
 {
-    if (err == ECONNREFUSED) return "netio: connect() refused";
-    if (err == ETIMEDOUT)    return "netio: connect() timed out";
-    if (err == ENETUNREACH)  return "netio: network unreachable";
-    if (err == EHOSTUNREACH) return "netio: no route to host";
-    return "netio: connect() failed";
+    if (err == ECONNREFUSED) return "ae_net: connect() refused";
+    if (err == ETIMEDOUT)    return "ae_net: connect() timed out";
+    if (err == ENETUNREACH)  return "ae_net: network unreachable";
+    if (err == EHOSTUNREACH) return "ae_net: no route to host";
+    return "ae_net: connect() failed";
 }
 
 static void close_socket_lib(void)
@@ -215,12 +216,12 @@ static int ensure_lib(void)
 {
     if (SocketBase != (struct Library *) 0) return 0;
     SocketBase = OpenLibrary((STRPTR) "bsdsocket.library", 4);
-    if (SocketBase == (struct Library *) 0) { set_error("netio: cannot open bsdsocket.library v4"); return -1; }
+    if (SocketBase == (struct Library *) 0) { set_error("ae_net: cannot open bsdsocket.library v4"); return -1; }
     atexit(close_socket_lib);
     return 0;
 }
 
-int net_open(const char *host, int port, int timeout_secs)
+int ae_net_open(const char *host, int port, int timeout_secs)
 {
     int s;
     long on;
@@ -233,13 +234,13 @@ int net_open(const char *host, int port, int timeout_secs)
     g_timeout_secs = timeout_secs;
 
     he = gethostbyname((STRPTR) host);
-    if (he == (struct hostent *) 0) { set_error("netio: gethostbyname() failed"); return -1; }
+    if (he == (struct hostent *) 0) { set_error("ae_net: gethostbyname() failed"); return -1; }
 
     s = socket(AF_INET, SOCK_STREAM, 0);
-    if (s < 0) { set_error("netio: socket() failed"); return -1; }
+    if (s < 0) { set_error("ae_net: socket() failed"); return -1; }
     if (s >= fd_mask_limit()) {
         /* Cannot be expressed in the single-long fd_set used below. */
-        set_error("netio: socket descriptor above this stack's fd_set width");
+        set_error("ae_net: socket descriptor above this stack's fd_set width");
         CloseSocket(s);
         return -1;
     }
@@ -262,7 +263,7 @@ int net_open(const char *host, int port, int timeout_secs)
     wmask = 1L << s;
     tv.tv_sec = timeout_secs; tv.tv_usec = 0;
     if (WaitSelect(s + 1, (APTR) 0, (APTR) &wmask, (APTR) 0, &tv, (unsigned long *) 0) <= 0) {
-        set_error("netio: connect() timed out"); CloseSocket(s); return -1;
+        set_error("ae_net: connect() timed out"); CloseSocket(s); return -1;
     }
 
     /* Becoming writable does NOT mean the connection succeeded: a
@@ -292,16 +293,16 @@ int net_open(const char *host, int port, int timeout_secs)
     return s;
 }
 
-long net_write(int s, const void *buf, unsigned long len)
+long ae_net_write(int s, const void *buf, unsigned long len)
 {
     long n = send(s, (APTR) buf, (long) len, 0);
-    if (n < 0) set_error("netio: send() failed");
+    if (n < 0) set_error("ae_net: send() failed");
     return n;
 }
 
-/* Every read is bounded by g_timeout_secs (set by net_open()): WaitSelect()
+/* Every read is bounded by g_timeout_secs (set by ae_net_open()): WaitSelect()
  * first, so a peer that stops sending mid-response cannot hang the door. */
-long net_read(int s, void *buf, unsigned long len)
+long ae_net_read(int s, void *buf, unsigned long len)
 {
     struct timeval tv;
     long rmask = 1L << s;
@@ -309,15 +310,15 @@ long net_read(int s, void *buf, unsigned long len)
 
     tv.tv_sec = g_timeout_secs; tv.tv_usec = 0;
     n = WaitSelect(s + 1, (APTR) &rmask, (APTR) 0, (APTR) 0, &tv, (unsigned long *) 0);
-    if (n == 0) { set_error("netio: read timed out"); return -1; }
-    if (n < 0) { set_error("netio: WaitSelect() failed"); return -1; }
+    if (n == 0) { set_error("ae_net: read timed out"); return -1; }
+    if (n < 0) { set_error("ae_net: WaitSelect() failed"); return -1; }
 
     n = recv(s, (APTR) buf, (long) len, 0);
-    if (n < 0) set_error("netio: recv() failed");
+    if (n < 0) set_error("ae_net: recv() failed");
     return n;
 }
 
-void net_close(int s)
+void ae_net_close(int s)
 {
     if (s >= 0) CloseSocket(s);
 }
@@ -327,7 +328,7 @@ void net_close(int s)
 /* ---- Branch 3: POSIX (getaddrinfo + BSD sockets). Native dev/test build.
  * Mirrors the Amiga branch above: non-blocking connect bounded by
  * select(), then blocking I/O with a select()-bounded wait before every
- * read (the socket-level read timeout net_read() promises). */
+ * read (the socket-level read timeout ae_net_read() promises). */
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -345,11 +346,11 @@ static int g_timeout_secs = 30;
  * literals). Keeps the two branches reporting the same distinctions. */
 static const char *connect_error_text(int err)
 {
-    if (err == ECONNREFUSED) return "netio: connect() refused";
-    if (err == ETIMEDOUT)    return "netio: connect() timed out";
-    if (err == ENETUNREACH)  return "netio: network unreachable";
-    if (err == EHOSTUNREACH) return "netio: no route to host";
-    return "netio: connect() failed";
+    if (err == ECONNREFUSED) return "ae_net: connect() refused";
+    if (err == ETIMEDOUT)    return "ae_net: connect() timed out";
+    if (err == ENETUNREACH)  return "ae_net: network unreachable";
+    if (err == EHOSTUNREACH) return "ae_net: no route to host";
+    return "ae_net: connect() failed";
 }
 
 /* Formats a non-negative int as decimal into `out` (at least 12 bytes).
@@ -378,7 +379,7 @@ static void format_port(char *out, int port)
     *out = '\0';
 }
 
-int net_open(const char *host, int port, int timeout_secs)
+int ae_net_open(const char *host, int port, int timeout_secs)
 {
     int s;
     int flags;
@@ -399,25 +400,25 @@ int net_open(const char *host, int port, int timeout_secs)
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     if (getaddrinfo(host, portbuf, &hints, &res) != 0) {
-        set_error("netio: getaddrinfo() failed");
+        set_error("ae_net: getaddrinfo() failed");
         return -1;
     }
 
-    /* Mirrors the Amiga branch's net_open(): "connect() failed" (refused
+    /* Mirrors the Amiga branch's ae_net_open(): "connect() failed" (refused
      * or otherwise rejected synchronously/asynchronously) and
      * "connect() timed out" (no response within timeout_secs) are
-     * reported as distinct net_last_error() strings, not folded into one
+     * reported as distinct ae_net_last_error() strings, not folded into one
      * generic message - a caller (or a human reading a log) can tell a
      * closed port from an unreachable/black-holed one. fail_reason
      * carries the most recent attempt's specific reason forward; if every
      * address in res fails, the last one's reason is what gets reported,
      * same as which failing `s` "wins" is already decided by the loop. */
-    fail_reason = "netio: connect() failed";
+    fail_reason = "ae_net: connect() failed";
     s = -1;
     for (rp = res; rp != (struct addrinfo *) 0; rp = rp->ai_next) {
         s = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
         if (s < 0) {
-            fail_reason = "netio: socket() failed";
+            fail_reason = "ae_net: socket() failed";
             continue;
         }
 
@@ -439,7 +440,7 @@ int net_open(const char *host, int port, int timeout_secs)
         tv.tv_sec = timeout_secs;
         tv.tv_usec = 0;
         if (select(s + 1, (fd_set *) 0, &wfds, (fd_set *) 0, &tv) <= 0) {
-            fail_reason = "netio: connect() timed out";
+            fail_reason = "ae_net: connect() timed out";
             close(s);
             s = -1;
             continue;
@@ -469,17 +470,17 @@ int net_open(const char *host, int port, int timeout_secs)
     return s;
 }
 
-long net_write(int s, const void *buf, unsigned long len)
+long ae_net_write(int s, const void *buf, unsigned long len)
 {
     ssize_t n;
     n = write(s, buf, (size_t) len);
     if (n < 0) {
-        set_error("netio: write() failed");
+        set_error("ae_net: write() failed");
     }
     return (long) n;
 }
 
-long net_read(int s, void *buf, unsigned long len)
+long ae_net_read(int s, void *buf, unsigned long len)
 {
     fd_set rfds;
     struct timeval tv;
@@ -498,22 +499,22 @@ long net_read(int s, void *buf, unsigned long len)
         break;
     }
     if (rv == 0) {
-        set_error("netio: read timed out");
+        set_error("ae_net: read timed out");
         return -1;
     }
     if (rv < 0) {
-        set_error("netio: select() failed");
+        set_error("ae_net: select() failed");
         return -1;
     }
 
     n = read(s, buf, (size_t) len);
     if (n < 0) {
-        set_error("netio: read() failed");
+        set_error("ae_net: read() failed");
     }
     return (long) n;
 }
 
-void net_close(int s)
+void ae_net_close(int s)
 {
     if (s >= 0) {
         close(s);

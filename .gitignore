@@ -276,6 +276,20 @@ dev/docs/radare2
 
 # NDK reference docs - too large for git
 Documentation/7-Reference Sources/NDK3.2R4/
+# ...except the 485 KB the 68K network build needs (sdk/c/src/ae_net.c and
+# examples/doorrepo-c): Roadshow's netinclude and the one NDK header the gcc
+# sys-include lacks. A build that only works on the machine that once had
+# the full 22 MB NDK is not a build - 2026-09-07.
+!Documentation/7-Reference Sources/NDK3.2R4/
+Documentation/7-Reference Sources/NDK3.2R4/*
+!Documentation/7-Reference Sources/NDK3.2R4/SANA+RoadshowTCP-IP/
+Documentation/7-Reference Sources/NDK3.2R4/SANA+RoadshowTCP-IP/*
+!Documentation/7-Reference Sources/NDK3.2R4/SANA+RoadshowTCP-IP/netinclude/
+!Documentation/7-Reference Sources/NDK3.2R4/Include_H/
+Documentation/7-Reference Sources/NDK3.2R4/Include_H/*
+!Documentation/7-Reference Sources/NDK3.2R4/Include_H/devices/
+Documentation/7-Reference Sources/NDK3.2R4/Include_H/devices/*
+!Documentation/7-Reference Sources/NDK3.2R4/Include_H/devices/timer.h
 Documentation/7-Reference Sources/AmiXDoors-master/
 Documentation/7-Reference Sources/Doors_with_Source/
 

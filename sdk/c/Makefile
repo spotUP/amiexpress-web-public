@@ -33,7 +33,7 @@ NDK  ?= /opt/homebrew/Cellar/m68k-amiga-elf-gcc/13.1.0/m68k-amiga-elf/sys-includ
 VC    = VBCC=$(VBCC) vc
 AMIGA_CFLAGS = +aos68k -c99 -DAMIGA -Iinclude -I"$(VBCC)/targets/m68k-amigaos/include" -I"$(NDK)"
 
-MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_theme ui_settings json_lite ae_chunk ae_transport_amiga ae_session_bbs
+MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_theme ui_settings json_lite ae_chunk ae_transport_amiga ae_session_bbs ae_net ae_http
 AMIGA_OBJS = $(patsubst %,build/amiga/%.o,$(MODULES))
 
 .PHONY: all test amiga lib measure clean
@@ -44,7 +44,7 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_theme build/test_ui_settings build/test_ui_doc
+test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
@@ -54,6 +54,7 @@ test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_
 	./build/test_ui_theme
 	./build/test_ui_settings
 	./build/test_ui_doc
+	./build/test_ae_http
 
 build/test_ae_host: src/ae_host.c tests/test_ae_host.c include/ae_host.h
 	@mkdir -p build
@@ -91,6 +92,13 @@ build/test_ui_settings: src/ui_settings.c src/json_lite.c tests/test_ui_settings
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) -D_DEFAULT_SOURCE src/ui_settings.c src/json_lite.c tests/test_ui_settings.c -o $@
 
+# The HTTP client, against a forked stub server on a loopback port. The
+# socket layer's POSIX branch needs the declarations glibc hides under a
+# strict -std, hence -D_DEFAULT_SOURCE.
+build/test_ae_http: src/ae_http.c src/ae_net.c tests/stub_server.c tests/test_ae_http.c include/ae_http.h include/ae_net.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) -D_DEFAULT_SOURCE src/ae_http.c src/ae_net.c tests/stub_server.c tests/test_ae_http.c -o $@
+
 # The generated table must match tokens.ts. Needs node; skipped where there
 # is none, because a C toolchain is not required to have one.
 .PHONY: check-themes
@@ -108,6 +116,23 @@ lib: build/amiga/libae.lib
 build/amiga/%.o: src/%.c
 	@mkdir -p build/amiga
 	$(VC) $(AMIGA_CFLAGS) -c $< -o $@
+
+# ae_net's bsdsocket branch needs the Roadshow netinclude headers and one
+# NDK header the gcc sys-include lacks. They come from the vendored NDK
+# under Documentation/, through a shim directory the build creates. The
+# shim and netinclude go BEFORE $(AMIGA_CFLAGS) so they win over the
+# sys-include's copies. Same arrangement as examples/doorrepo-c/Makefile.
+# Both reach vc through symlinks under build/, never as paths: the vendored
+# NDK lives under "7-Reference Sources", and vc reads a -I with a space in
+# it as a second input file ("only one input file allowed").
+VENDOR_NDK_ROOT ?= $(CURDIR)/../../Documentation/7-Reference Sources/NDK3.2R4
+NET_SHIM = build/amiga/ndk-shim
+NET_INCLUDE = build/amiga/netinclude
+build/amiga/ae_net.o: src/ae_net.c include/ae_net.h
+	@mkdir -p $(NET_SHIM)/devices
+	@ln -sf "$(VENDOR_NDK_ROOT)/Include_H/devices/timer.h" $(NET_SHIM)/devices/timer.h
+	@ln -sfn "$(VENDOR_NDK_ROOT)/SANA+RoadshowTCP-IP/netinclude" $(NET_INCLUDE)
+	$(VC) -I$(NET_SHIM) -I$(NET_INCLUDE) $(AMIGA_CFLAGS) -c $< -o $@
 
 # cat, not ar: see the note at the top. The order is the link order, and
 # ae_host goes first because it is what everything else may ask.
@@ -148,6 +173,14 @@ build/amiga/bench_repaint11: examples/bench/bench_repaint.c build/amiga/libae.li
 
 measure: amiga
 	@sh tools/measure-link.sh
+
+# What one keypress costs the proof door, at both widths, through the
+# board's own emulator (needs the backend's node_modules). "Doors draw
+# smart" in RULES.md: a cursor move is a row, not a screen.
+.PHONY: probe
+probe: build/amiga/theme-picker
+	@cd ../.. && npx tsx --tsconfig web/backend/tsconfig.json dev/scripts/door-probe/repaint-cost.ts sdk/c/build/amiga/theme-picker --cols 80 2>/dev/null
+	@cd ../.. && npx tsx --tsconfig web/backend/tsconfig.json dev/scripts/door-probe/repaint-cost.ts sdk/c/build/amiga/theme-picker --cols 40 2>/dev/null
 
 clean:
 	rm -rf build

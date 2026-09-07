@@ -613,7 +613,10 @@ How:
   widgets keeps `drawn_*` state the same way.
 - Animation ticks touch ONE row (the masthead), never the frame.
 - Never `ansi_clear()` / `screen.clearRegion()` between keypresses.
-- Measure it: capture the door's bytes for one keypress
-  (`web/backend/src/scripts/run-amiga-door.ts` or the door's own probe)
-  and count them. If a keypress costs more than a few hundred bytes, the
-  door is not drawing smart.
+- Measure it, do not guess:
+  `npx tsx --tsconfig web/backend/tsconfig.json dev/scripts/door-probe/repaint-cost.ts <binary> --cols 80`
+  (also `--cols 40`; `make probe` in sdk/c runs both on the proof door).
+  It drives the binary through the board's emulator and prints, per key,
+  the bytes net of animation and the XIM message count. THEMEC on
+  2026-09-07: ~210 bytes, 2 messages, first byte in 100-250 ms. More than
+  a few hundred bytes for a cursor move means the door is not drawing smart.

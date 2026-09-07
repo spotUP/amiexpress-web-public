@@ -6,7 +6,7 @@
  *   listtxt.h - list.txt header/row parser.
  *   config.h  - DoorRepo.cfg loader.
  *   http.h    - streaming HTTP GET over netio.h.
- *   netio.h   - only for net_last_error(), to tell the user WHY the
+ *   netio.h   - only for ae_net_last_error(), to tell the user WHY the
  *               connection failed. No socket is touched from this file.
  *   aedoor.h  - the XIM message-port door I/O layer (or its native twin).
  * Pure decision logic (pagination maths, the download-verification retry
@@ -15,7 +15,7 @@
  * tests/test_flow.c.
  *
  * C89. No "#ifdef AMIGA" anywhere in this file - the Makefile selects
- * aedoor_native.c or aedoor_amiga.c, and netio.c is the only file with a
+ * aedoor_native.c or aedoor_amiga.c, and the SDK's ae_net.c is the only file with a
  * platform branch. ASCII output only, full English words, no ANSI escapes.
  */
 
@@ -31,7 +31,7 @@
 #include "guide.h"
 #include "aedoor.h"
 #include "flow.h"
-#include "netio.h"
+#include "ae_net.h"
 #include "ansi.h"
 #include "infocache.h"
 #include "shell.h"
@@ -666,16 +666,16 @@ static int load_full_catalog(const dr_config *cfg, dr_catalog *cat, char *cache_
             } else if (rc == 1) {
                 ae_put("The repository server sent a catalog this door does not understand (malformed header). Cannot continue.", 1);
             } else if (rc == HTTP_ERR_CONNECT) {
-                /* The transport never came up. net_last_error() distinguishes
+                /* The transport never came up. ae_net_last_error() distinguishes
                  * a refused port from a timeout, an unreachable network and a
                  * failed name lookup - four situations with four different
                  * fixes, and a sysop staring at "could not reach the server"
-                 * cannot tell which one they have. net_last_error() is at
-                 * most 127 characters (netio.c bounds it), so this buffer
+                 * cannot tell which one they have. ae_net_last_error() is at
+                 * most 127 characters (ae_net.c bounds it), so this buffer
                  * cannot be overrun by it. */
                 char msg[220];
                 sprintf(msg, "Could not reach the door repository server (%s). Please try again later.",
-                        net_last_error());
+                        ae_net_last_error());
                 ae_put(msg, 1);
                 log_line(cfg, msg);
             } else {

@@ -3,21 +3,21 @@
 # Targets:
 #   native      - doorrepo, built for this host with aedoor_native.c (dev/test build)
 #   amiga       - doorrepo.amiga, cross-compiled with vbcc for a real AmigaOS
-#                 node: aedoor_amiga.c + netio.c's real bsdsocket.library
+#                 node: aedoor_amiga.c + ae_net.c's real bsdsocket.library
 #                 branch, built against this repo's vendored NDK3.2R4 (see
 #                 the AMIGA_NETINCLUDE_VENDOR_LINK block below) by default -
-#                 COMPILE-VERIFIED here (see netio.c's header comment and
+#                 COMPILE-VERIFIED here (see ae_net.c's header comment and
 #                 the task-4/task-6 reports for the full recipe and its
 #                 provenance); NOT link/run-verified against a real
 #                 bsdsocket.library, since no such runtime is available in
 #                 this environment. Pass NETINCLUDE=/path/to/sdk/include to
 #                 use a different (e.g. a builder's own AmiTCP/Roadshow) SDK
 #                 instead of the vendored one.
-#   amiga-stub  - doorrepo.amiga-stub, the same cross-compile but with netio.c's
-#                 NETIO_STUB branch instead of real sockets, so it needs no
+#   amiga-stub  - doorrepo.amiga-stub, the same cross-compile but with ae_net.c's
+#                 AE_NET_STUB branch instead of real sockets, so it needs no
 #                 AmiTCP SDK at all and fully LINKS (not just compiles) to a
 #                 loadseg()ble AmigaOS executable - the strongest m68k-clean
-#                 proof available here for every module other than netio.c's
+#                 proof available here for every module other than ae_net.c's
 #                 real socket branch.
 #   test        - builds and runs every unit test under tests/ (native only).
 #   live        - builds native and runs it once against http://bbs.uprough.net
@@ -30,7 +30,7 @@
 # 2026-08-17-doorrepo-c-client-design.md's pre-flight note on this).
 
 CC ?= cc
-# _DEFAULT_SOURCE is required, not cosmetic: netio.c's POSIX branch uses
+# _DEFAULT_SOURCE is required, not cosmetic: ae_net.c's POSIX branch uses
 # select()/fd_set/struct timeval/getaddrinfo, and under -std=c89 glibc hides
 # every one of them behind a feature-test macro, so the native build failed to
 # compile on Linux with "unknown type name 'fd_set'". macOS's libc exposes them
@@ -45,7 +45,7 @@ VBCC ?= /opt/homebrew/Cellar/vbcc/0.9hp3
 NDK ?= /opt/homebrew/Cellar/m68k-amiga-elf-gcc/13.1.0/m68k-amiga-elf/sys-include
 
 # Path to an AmiTCP/Roadshow SDK include directory (must provide
-# sys/socket.h, netinet/in.h, netdb.h - the headers netio.c's AMIGA branch
+# sys/socket.h, netinet/in.h, netdb.h - the headers ae_net.c's AMIGA branch
 # needs and which neither vbcc's own SDK nor the m68k-amiga-elf-gcc NDK
 # ship). Only needed to override the vendored default below - see that
 # block's comment for why nothing needs to be set for `make amiga` to work
@@ -65,7 +65,7 @@ AMIGA_CFLAGS = +aos68k -c99 -I"$(VBCC)/targets/m68k-amigaos/include"
 # Vendored AmiTCP/Roadshow SDK (NDK3.2R4) used by `amiga` when NETINCLUDE
 # is not overridden. This repo vendors a full copy at
 # "Documentation/7-Reference Sources/NDK3.2R4/" - Task 4 chased down and
-# proved that netio.c's real bsdsocket.library branch compiles with ZERO
+# proved that ae_net.c's real bsdsocket.library branch compiles with ZERO
 # warnings against it (see task-4-report.md's fix-round section for the
 # full transcript and the struct __timeval investigation that made this
 # possible). Two symlinks are created here rather than pointing vc's -I
@@ -104,17 +104,17 @@ LIVE_HOST = http://bbs.uprough.net
 # lifted into the SDK; ansi.c is now just this door's "send it to the BBS"
 # sink. One renderer, not two.
 SDK_C = ../../sdk/c
-CORE_SOURCES = flow.c config.c http.c listtxt.c md5.c sha256.c guide.c ansi.c $(SDK_C)/src/ui_ansi.c $(SDK_C)/src/ui_key.c $(SDK_C)/src/ae_chunk.c infocache.c $(SDK_C)/src/json_lite.c owner_auth.c
-HEADERS = flow.h config.h http.h listtxt.h md5.h sha256.h guide.h $(SDK_C)/include/aedoor.h netio.h ansi.h $(SDK_C)/include/ui_ansi.h infocache.h shell.h $(SDK_C)/include/json_lite.h owner_auth.h dirlist.h
+CORE_SOURCES = flow.c config.c http.c $(SDK_C)/src/ae_http.c listtxt.c md5.c sha256.c guide.c ansi.c $(SDK_C)/src/ui_ansi.c $(SDK_C)/src/ui_key.c $(SDK_C)/src/ae_chunk.c infocache.c $(SDK_C)/src/json_lite.c owner_auth.c
+HEADERS = flow.h config.h http.h $(SDK_C)/include/ae_http.h $(SDK_C)/include/ae_net.h listtxt.h md5.h sha256.h guide.h $(SDK_C)/include/aedoor.h ansi.h $(SDK_C)/include/ui_ansi.h infocache.h shell.h $(SDK_C)/include/json_lite.h owner_auth.h dirlist.h
 
-NATIVE_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c $(SDK_C)/src/ae_transport_native.c shell_native.c dirlist_native.c
-AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) netio.c $(SDK_C)/src/ae_transport_amiga.c shell_amiga.c dirlist_amiga.c
+NATIVE_SOURCES = doorrepo.c $(CORE_SOURCES) $(SDK_C)/src/ae_net.c $(SDK_C)/src/ae_transport_native.c shell_native.c dirlist_native.c
+AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) $(SDK_C)/src/ae_net.c $(SDK_C)/src/ae_transport_amiga.c shell_amiga.c dirlist_amiga.c
 
 # tools/probe_fetch.c is a head-less diagnostic, not part of the door: it
-# pulls one archive through the same http.c/netio.c path with no catalog and
+# pulls one archive through the same ae_http.c/ae_net.c path with no catalog and
 # no console, so the SAME source can be run natively and under this project's
 # 68K emulator and the two byte streams compared. See its header comment.
-PROBE_SOURCES = tools/probe_fetch.c config.c flow.c http.c md5.c sha256.c netio.c
+PROBE_SOURCES = tools/probe_fetch.c config.c flow.c http.c $(SDK_C)/src/ae_http.c md5.c sha256.c $(SDK_C)/src/ae_net.c
 
 .PHONY: all native amiga amiga-stub test live clean probe-native probe-amiga syntax
 
@@ -146,14 +146,14 @@ doorrepo.amiga: $(AMIGA_SOURCES) $(HEADERS)
 	  $(AMIGA_SOURCES) -lauto -o $@
 
 # ---------------------------------------------------------------------
-# amiga-stub (proves every module other than netio.c's real socket branch
+# amiga-stub (proves every module other than ae_net.c's real socket branch
 # is m68k-clean, with no AmiTCP SDK required at all)
 # ---------------------------------------------------------------------
 
 amiga-stub: doorrepo.amiga-stub
 
 doorrepo.amiga-stub: $(AMIGA_SOURCES) $(HEADERS)
-	$(VC) $(AMIGA_CFLAGS) -I"$(NDK)" -I$(SDK_C)/include -DNETIO_STUB $(AMIGA_SOURCES) -lauto -o $@
+	$(VC) $(AMIGA_CFLAGS) -I"$(NDK)" -I$(SDK_C)/include -DAE_NET_STUB $(AMIGA_SOURCES) -lauto -o $@
 
 # ---------------------------------------------------------------------
 # syntax (checks native C source files for compilation errors without
@@ -186,9 +186,9 @@ probe-amiga: $(PROBE_SOURCES) $(HEADERS)
 # ---------------------------------------------------------------------
 
 # -D_DEFAULT_SOURCE for the same reason as NATIVE_CFLAGS above: test-http
-# links netio.c's POSIX branch and tests/stub_server.c, both of which need the
+# links ae_net.c's POSIX branch and tests/stub_server.c, both of which need the
 # POSIX socket declarations that glibc hides under -std=c89.
-TEST_CFLAGS = -std=c89 -D_DEFAULT_SOURCE -Wall -Wextra -pedantic -O0 -g -I../../sdk/c/include
+TEST_CFLAGS = -std=c89 -D_DEFAULT_SOURCE -Wall -Wextra -pedantic -O0 -g -I../../sdk/c/include -I../../sdk/c/tests
 
 .PHONY: test-flow test-md5 test-sha256 test-guide test-listtxt test-config test-http test-aedoor-native test-ansi test-infocache test-json-lite test-owner-auth
 
@@ -233,8 +233,10 @@ test-config: config.c flow.c tests/test_config.c config.h flow.h
 	$(CC) $(TEST_CFLAGS) config.c flow.c tests/test_config.c -o build-test-config
 	./build-test-config
 
-test-http: http.c netio.c config.c flow.c tests/test_http.c tests/stub_server.c http.h netio.h config.h flow.h tests/stub_server.h
-	$(CC) $(TEST_CFLAGS) http.c netio.c config.c flow.c tests/stub_server.c tests/test_http.c -o build-test-http
+# The client's own suite lives with it in the SDK (sdk/c/tests/test_ae_http.c);
+# this one proves the adapter: DoorRepo's headers, User-Agent and error names.
+test-http: http.c $(SDK_C)/src/ae_http.c $(SDK_C)/src/ae_net.c config.c flow.c tests/test_http.c $(SDK_C)/tests/stub_server.c http.h config.h flow.h
+	$(CC) $(TEST_CFLAGS) http.c $(SDK_C)/src/ae_http.c $(SDK_C)/src/ae_net.c config.c flow.c $(SDK_C)/tests/stub_server.c tests/test_http.c -o build-test-http
 	./build-test-http
 
 test-aedoor-native: $(SDK_C)/src/ae_transport_native.c tests/test_aedoor_native.c $(SDK_C)/include/aedoor.h
@@ -245,11 +247,11 @@ test-infocache: infocache.c tests/test_infocache.c infocache.h
 	$(CC) $(TEST_CFLAGS) infocache.c tests/test_infocache.c -o build-test-infocache
 	./build-test-infocache
 
-# Same stub-server precedent as test-http (tests/stub_server.c) - see that
+# Same stub-server precedent as test-http (the SDK's tests/stub_server.c) - see that
 # target's comment above and owner_auth.h's file header.
-test-owner-auth: owner_auth.c http.c netio.c config.c flow.c $(SDK_C)/src/json_lite.c tests/test_owner_auth.c tests/stub_server.c \
-                  owner_auth.h http.h netio.h config.h flow.h $(SDK_C)/include/json_lite.h tests/stub_server.h
-	$(CC) $(TEST_CFLAGS) owner_auth.c http.c netio.c config.c flow.c $(SDK_C)/src/json_lite.c tests/stub_server.c tests/test_owner_auth.c -o build-test-owner-auth
+test-owner-auth: owner_auth.c http.c $(SDK_C)/src/ae_http.c $(SDK_C)/src/ae_net.c config.c flow.c $(SDK_C)/src/json_lite.c tests/test_owner_auth.c $(SDK_C)/tests/stub_server.c \
+                  owner_auth.h http.h config.h flow.h $(SDK_C)/include/json_lite.h $(SDK_C)/tests/stub_server.h
+	$(CC) $(TEST_CFLAGS) owner_auth.c http.c $(SDK_C)/src/ae_http.c $(SDK_C)/src/ae_net.c config.c flow.c $(SDK_C)/src/json_lite.c $(SDK_C)/tests/stub_server.c tests/test_owner_auth.c -o build-test-owner-auth
 	./build-test-owner-auth
 
 # ---------------------------------------------------------------------
