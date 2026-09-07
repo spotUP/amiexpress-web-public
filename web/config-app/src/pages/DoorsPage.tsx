@@ -595,6 +595,43 @@ export function DoorsPage() {
                 </div>
               )}
 
+              {/*
+                THE WAY TO THE TOOLTYPES, from the dialog a sysop actually
+                opens. The .info editor has always existed - it is the second
+                icon on the row - and a sysop looking for a door flag opens
+                Edit, finds six fields, and concludes the admin cannot do it
+                ("i dont see a way to edit tooltypes for the doors in the
+                admin ui when i click edit on gwall", 2026-09-07). Twice this
+                year a door flag (C64_ADAPT, then C64_DROP_OLDEST) has been
+                hand-edited on the live volume for want of this line.
+
+                A pointer, not a second editor: the tooltype table below is
+                the one that writes the file, and two of them would be two
+                ways to disagree about it.
+              */}
+              {editingDoor && (
+                <div className="pt-6 border-t border-border">
+                  <p className="text-content-secondary text-sm">
+                    Tooltypes - what AmiExpress itself reads, including flags
+                    like <code>C64_ADAPT</code> - live in this door's{' '}
+                    <code>{editingDoor.door_command}.info</code>.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsModalOpen(false);
+                      setEditingDoor(null);
+                      resetForm();
+                      void handleEditInfo(editingDoor);
+                    }}
+                    className="btn-secondary mt-2 flex items-center space-x-1 text-sm"
+                  >
+                    <FileCode size={16} />
+                    <span>Edit tooltypes (.info file)</span>
+                  </button>
+                </div>
+              )}
+
               <div className="flex justify-end space-x-4 pt-6 border-t border-border">
                 <button
                   type="button"

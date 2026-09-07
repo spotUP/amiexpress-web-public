@@ -1,0 +1,97 @@
+/**
+ * The door a sysop opens tells him where its tooltypes are.
+ *
+ * The .info editor has always existed, behind the second icon on the row. A
+ * sysop looking for a door flag opens Edit - the pencil - finds six fields,
+ * and concludes the admin cannot do it: "i dont see a way to edit tooltypes
+ * for the doors in the admin ui when i click edit on gwall" (2026-09-07).
+ * Twice this year a door flag has been hand-edited on the live volume for
+ * want of that route: C64_ADAPT, and then C64_DROP_OLDEST.
+ *
+ * A pointer, not a second editor. The assertion is that the pencil offers the
+ * way through AND that the way lands on the existing tooltype table, loaded
+ * from the door's own .info path.
+ */
+
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
+
+const DOORS = [
+  {
+    id: 7, door_name: 'GWall', door_command: 'GWALL', door_type: 'BBSCMD',
+    door_path: 'Doors/GWall/GWall', door_args: '', working_directory: '', priority: 'SAME',
+    door_options: [], runtime_env: 'AMIGA_68K', min_security_level: 30,
+    max_security_level: 255, required_flags: '', time_limit: 0, memory_limit: 0,
+    title: 'GWall', description: 'Global wall', category: 'Comms',
+    enabled: true, has_settings: false, created_at: new Date(), updated_at: new Date(),
+  },
+];
+
+const TOOLTYPES = [
+  { key: 'LOCATION', value: 'DOORS:GWall/GWall', commented: false, originalLine: 'LOCATION=DOORS:GWall/GWall' },
+  { key: 'C64_ADAPT', value: '40', commented: false, originalLine: 'C64_ADAPT=40' },
+];
+
+const getInfoFile = vi.fn(async (_path: string) => ({ success: true, data: { tooltypes: TOOLTYPES } }));
+
+vi.mock('../api/client', () => ({
+  apiClient: {
+    getDoors: vi.fn(async () => ({ success: true, data: DOORS })),
+    getInfoFile: (path: string) => getInfoFile(path),
+    updateInfoFile: vi.fn(async (_path: string, _tooltypes: unknown) => ({ success: true, data: {} })),
+    getDoorSettings: vi.fn(async (_command: string) => ({
+      success: true,
+      data: { manifest: { command: 'GWALL', settings: [] }, values: {}, secretsSet: [] as string[] },
+    })),
+    saveDoorSettings: vi.fn(async (_command: string, _values: Record<string, unknown>) => ({ success: true, data: {} })),
+    updateDoor: vi.fn(async (_id: number, _updates: unknown) => ({ success: true, data: {} })),
+  },
+}));
+
+vi.mock('../contexts/NotificationContext', () => ({
+  useNotification: () => ({ showSuccess: vi.fn(), showError: vi.fn(), confirm: vi.fn(async () => false) }),
+  NotificationProvider: ({ children }: { children: ReactNode }) => children,
+}));
+
+const { DoorsPage } = await import('../pages/DoorsPage');
+
+function renderPage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <DoorsPage />
+    </QueryClientProvider>
+  );
+}
+
+describe('editing a door', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('offers the way to the tooltypes, and names the flag a sysop is looking for', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByLabelText('Edit GWall'));
+
+    expect(await screen.findByRole('button', { name: /edit tooltypes/i })).toBeTruthy();
+    // The reason a sysop is here at all, said in the dialog rather than left
+    // to be discovered on the live volume.
+    expect(screen.getByText(/C64_ADAPT/)).toBeTruthy();
+  });
+
+  it('lands on the existing tooltype table, loaded from the door.s own .info', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByLabelText('Edit GWall'));
+    await user.click(await screen.findByRole('button', { name: /edit tooltypes/i }));
+
+    await waitFor(() => expect(getInfoFile).toHaveBeenCalledWith('Commands/BBSCmd/GWALL.info'));
+    // The table itself, with the door's own tooltypes in it.
+    expect(await screen.findByDisplayValue('C64_ADAPT')).toBeTruthy();
+    expect(screen.getByDisplayValue('40')).toBeTruthy();
+  });
+});
