@@ -700,6 +700,15 @@ function boardPath(baseDir: string, target: string): string {
   return absolute;
 }
 
+/** A path as the filesystem spells it, whatever case the caller used. */
+function onDiskSpelling(absolute: string): string {
+  try {
+    return fs.realpathSync.native(absolute);
+  } catch {
+    return absolute;
+  }
+}
+
 function resolveScreenReference(baseDir: string, target: string): string | null {
   /*
    * EVERY component case-insensitively, not just the filename.
@@ -1059,28 +1068,52 @@ export function buildScreenIndex(baseDir: string, themeSlug?: string): ScreenInd
   // A screen can pull another file in with ~SS_ or ~nSR_; that file is read by
   // the board just as surely as the screen naming it, and counting it unread is
   // how a sysop gets told to delete a logo every screen includes.
-  for (const [rel, existing] of [...readers.entries()]) {
-    const facts = factsFor(path.join(baseDir, rel));
-    for (const ref of facts.mci) {
-      if (ref.code !== 'SS' && ref.code !== 'SR') continue;
-
-      // `~<n>SR_<base>` shows a RANDOM numbered file from the base's directory
-      // - `Screens/reference-board/007.reference-board.txt` and its siblings
-      // (screen.handler.ts:851, express.e:5533-5554). There is no single file
-      // to resolve, so every one of them used to be read by nothing while the
-      // board showed them daily.
-      const targets = ref.code === 'SR'
-        ? numberedPool(baseDir, ref.target)
-        : [resolveScreenReference(baseDir, ref.target)].filter((t): t is string => !!t);
-
-      for (const target of targets) {
-        const targetRel = path.relative(baseDir, target);
-        readers.set(targetRel, [...(readers.get(targetRel) ?? []), {
-          ...existing[0],
-          via: 'include',
-        }]);
+  //
+  // Walked to a fixed point, not one level: an included file can include
+  // another (a logon that pulls in a frame that pulls in a logo), and a single
+  // pass over a snapshot of the readers left the second hop unread. `walked`
+  // stops a file being expanded twice and makes an include cycle finite.
+  const walked = new Set<string>();
+  let frontier = [...readers.keys()];
+  while (frontier.length > 0) {
+    const next: string[] = [];
+    for (const rel of frontier) {
+      if (walked.has(rel)) continue;
+      walked.add(rel);
+      const existing = readers.get(rel);
+      if (!existing?.length) continue;
+      const facts = factsFor(path.join(baseDir, rel));
+      for (const ref of facts.mci) {
+        if (ref.code !== 'SS' && ref.code !== 'SR') continue;
+        // `~<n>SR_<base>` shows a RANDOM numbered file from the base's directory
+        // - `Screens/reference-board/007.reference-board.txt` and its siblings
+        // (screen.handler.ts:851, express.e:5533-5554). There is no single file
+        // to resolve, so every one of them used to be read by nothing while the
+        // board showed them daily.
+        const targets = ref.code === 'SR'
+          ? numberedPool(baseDir, ref.target)
+          : [resolveScreenReference(baseDir, ref.target)].filter((t): t is string => !!t);
+        for (const target of targets) {
+          // The ON-DISK spelling, not the reference's. `~SS_BBS:screens/logo.txt`
+          // names a directory this board spells `Screens/`; on a case-folding
+          // filesystem (a developer's Mac) the reference resolves as written,
+          // and a reader keyed `screens/logo.txt` never meets the facts keyed
+          // `Screens/logo.txt` - so the include was credited to a path nothing
+          // else used and the file stayed an orphan. Linux walks the case and
+          // never showed it, which is why the test for it only failed here.
+          // Both sides through realpath: on a Mac the temp root itself is a
+          // symlink (/var -> /private/var), and one side canonicalised alone
+          // makes the relative path climb out of the board.
+          const targetRel = path.relative(onDiskSpelling(baseDir), onDiskSpelling(target));
+          readers.set(targetRel, [...(readers.get(targetRel) ?? []), {
+            ...existing[0],
+            via: 'include',
+          }]);
+          if (!walked.has(targetRel)) next.push(targetRel);
+        }
       }
     }
+    frontier = next;
   }
 
   // Everything else under a screen directory. Listed, never hidden: a file

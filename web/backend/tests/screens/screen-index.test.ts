@@ -166,3 +166,39 @@ describe('the screen index', () => {
     expect(index.files[path.join('Node1', 'BBSTITLE.txt')].door).toBeUndefined();
   });
 });
+
+describe('what an include pulls in, and what that pulls in', () => {
+  let root: string;
+  const write = (rel: string, body: string) => {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), body, 'latin1');
+  };
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'screen-index-includes-'));
+    fs.writeFileSync(path.join(root, 'ConfConfig.info'), '');
+  });
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  test('a file included by an included file is read, not an orphan', () => {
+    // LOGON pulls in a frame, the frame pulls in the logo. One pass over the
+    // readers caught the frame and called the logo read by nothing.
+    write('Node1/LOGON.TXT', '~SS_BBS:screens/frame.txt\r\n');
+    write('Screens/frame.txt', 'top of frame\r\n~SS_BBS:screens/logo.txt\r\nbottom\r\n');
+    write('Screens/logo.txt', 'the logo\r\n');
+
+    const index = buildScreenIndex(root);
+
+    expect(index.unused.map(f => f.relPath)).not.toContain(path.join('Screens', 'logo.txt'));
+    expect(index.files[path.join('Screens', 'logo.txt')].readBy.some(r => r.via === 'include')).toBe(true);
+  });
+
+  test('an include cycle ends', () => {
+    write('Node1/LOGON.TXT', '~SS_BBS:screens/a.txt\r\n');
+    write('Screens/a.txt', '~SS_BBS:screens/b.txt\r\n');
+    write('Screens/b.txt', '~SS_BBS:screens/a.txt\r\n');
+
+    const index = buildScreenIndex(root);
+
+    expect(index.unused.map(f => f.relPath)).not.toContain(path.join('Screens', 'b.txt'));
+  });
+});
