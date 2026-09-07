@@ -1580,6 +1580,36 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
   }
 
   /**
+   * Achievements (SP2, S10): report one of THIS door's own achievement
+   * events. The type must be `door.<command>.<slug>` for the running door -
+   * a door cannot report into another door's namespace or into a BBS
+   * family - and it goes through the same reporter and the same outbox as
+   * every BBS event. There is no direct HTTP call from a door. Returns
+   * true when a row was written; false (with one WARN) otherwise, and it
+   * never throws.
+   *
+   * @example
+   * ```typescript
+   * bbs.achievement('door.gmaster.win', { key: 'fast' });
+   * ```
+   */
+  achievement(type: string, opts: { value?: number; key?: string } = {}): boolean {
+    try {
+      const command = String(this.session.currentDoorName || this.session.commandText?.split(' ')[0] || '').toLowerCase();
+      const ns = new RegExp(`^door\\.${command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.[a-z0-9_]+$`);
+      if (!command || !ns.test(type)) {
+        console.warn(`[WARN] achievements: door ${command || '?'} may not report ${type}; only door.${command || '<command>'}.<slug>`);
+        return false;
+      }
+      const { report } = require('../achievements/reporter');
+      return report(this.session, type, { value: opts.value, key: opts.key, door: command.toUpperCase() }) !== null;
+    } catch (error) {
+      console.warn(`[WARN] achievements: door report failed: ${(error as Error).message}`);
+      return false;
+    }
+  }
+
+  /**
    * Request the user to upload a door archive via the browser file picker.
    * Resolves with the local path once upload completes; rejects after 5 min or on cancel.
    */

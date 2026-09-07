@@ -870,6 +870,14 @@ export interface StorageAPI {
  * BBS API (Advanced) - Optional BBS integration
  */
 export interface BBSApi {
+  /**
+   * Report one of this door's own achievement events (achievements SP2/SP3).
+   * The type must be `door.<command>.<slug>` for the running door; it goes
+   * through the board's reporter and outbox like every BBS event. Returns
+   * true when it was recorded. Optional: a board without achievements
+   * configured, or an older backend, has no such method.
+   */
+  achievement?(type: string, opts?: { value?: number; key?: string }): boolean;
   /** Get user by ID */
   getUser(userId: string): Promise<User | null>;
 
