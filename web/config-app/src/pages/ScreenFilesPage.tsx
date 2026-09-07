@@ -121,6 +121,32 @@ function formatSiblings(
   return [];
 }
 
+/**
+ * The formats this screen could have and does not.
+ *
+ * "there is no way to upload/complete a screen with .seq/.rip in the screen
+ * editor admin ui?" - there was not: the strip listed only the variants on
+ * disk, and Replace wrote onto the open file's own path. A screen the loader
+ * can serve three ways (`<stem>.txt`, `<stem>.seq`, `<stem>.rip`,
+ * screen.handler:1217-1234) needs the two it lacks offered right where the
+ * one it has is shown.
+ */
+export function missingFormats(openPath: string | null, siblings: string[]): Array<{ ext: string; label: string; path: string }> {
+  if (!openPath) return [];
+  const dir = openPath.slice(0, openPath.lastIndexOf('/') + 1);
+  const base = openPath.slice(openPath.lastIndexOf('/') + 1);
+  const stem = base.replace(/\.(txt|seq|rip|gr|ibm|ans)$/i, '');
+  const have = new Set([openPath, ...siblings].map(p => p.toLowerCase().replace(/^.*\./, '')));
+  const all = [
+    { ext: 'txt', label: 'ANSI / text' },
+    { ext: 'seq', label: 'PETSCII' },
+    { ext: 'rip', label: 'RIP' },
+  ];
+  return all
+    .filter(f => !have.has(f.ext) && !(f.ext === 'txt' && (have.has('gr') || have.has('ibm') || have.has('ans'))))
+    .map(f => ({ ...f, path: `${dir}${stem}.${f.ext}` }));
+}
+
 /** `BBSTITLE.SEQ` -> `PETSCII`, for a tab a designer can read. */
 function formatLabel(filePath: string): string {
   const lower = filePath.toLowerCase();
@@ -138,6 +164,9 @@ export function ScreenFilesPage() {
   const [openScreen, setOpenScreen] = useState<string | null>(null);
   const [openFile, setOpenFile] = useState<string | null>(null);
   const [pendingUpload, setPendingUpload] = useState<{ bytes: string; name: string } | null>(null);
+  /** The sibling path a chosen file will be written to as a NEW format of the open screen. */
+  const [addingFormat, setAddingFormat] = useState<{ ext: string; label: string; path: string } | null>(null);
+  const addFormatInput = useRef<HTMLInputElement | null>(null);
   /**
    * What replacing this file would do to its MCI codes, from the board's own
    * dry run - and what the sysop chose to do about it.
@@ -369,6 +398,30 @@ export function ScreenFilesPage() {
       // A verdict is an aid, not a gate. If the board cannot answer, the
       // replace still works exactly as it did before this existed.
       setCarryVerdict(null);
+    }
+  };
+
+  /**
+   * Write a chosen file as the open screen's missing format - to every node
+   * that has the open file, so a .seq added to BBSTITLE reaches all forty
+   * copies and not only Node1's. No MCI carry: there is no existing file of
+   * this format to carry from.
+   */
+  const addFormat = async (chosen: File) => {
+    if (!addingFormat || !openFile) return;
+    try {
+      const bytes = await readAsBase64(chosen);
+      const everyCopy = options.find(o => o.choice === 'all-copies')?.targets ?? [openFile];
+      const swap = (p: string) => p.replace(/\.[^./]+$/, '') + '.' + addingFormat.ext;
+      const targets = [...new Set(everyCopy.map(swap))];
+      await apiClient.putScreenFile(addingFormat.path, bytes, targets, { carryCodes: 'none' });
+      showSuccess(`Added the ${addingFormat.label} version - ${targets.length} file${targets.length === 1 ? '' : 's'}`);
+      queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+      setOpenFile(addingFormat.path);
+    } catch (error) {
+      showError((error as Error).message);
+    } finally {
+      setAddingFormat(null);
     }
   };
 
@@ -1479,6 +1532,61 @@ export function ScreenFilesPage() {
           setPendingUpload(null);
         }}
       >
+        {/*
+          The format strip lives ABOVE the editor modes, not inside the
+          read-only view: clicking a file opens it straight into the editor,
+          and a sysop drawing BBSTITLE's ANSI is exactly the person who needs
+          "+ PETSCII" and "+ RIP" in front of them.
+        */}
+        {openFile && file && !pendingUpload && (
+          <>
+        {(formatSiblings(openFile, data?.screens).length > 1
+          || missingFormats(openFile, formatSiblings(openFile, data?.screens)).length > 0) && (
+          <div className="flex flex-wrap gap-1 border-b border-surface-3 pb-2" role="tablist">
+            {formatSiblings(openFile, data?.screens).map(sibling => (
+              <button
+                key={sibling}
+                type="button"
+                role="tab"
+                aria-selected={sibling === openFile}
+                onClick={() => setOpenFile(sibling)}
+                className={
+                  sibling === openFile
+                    ? 'px-3 py-1 text-sm rounded-t bg-surface-3 text-content-primary'
+                    : 'px-3 py-1 text-sm rounded-t text-content-secondary hover:text-content-primary transition-colors'
+                }
+                title={sibling}
+              >
+                {formatLabel(sibling)}
+              </button>
+            ))}
+            {!isDoorArt(file) && missingFormats(openFile, formatSiblings(openFile, data?.screens)).map(missing => (
+              <button
+                key={missing.ext}
+                type="button"
+                className="px-3 py-1 text-sm rounded-t text-content-secondary hover:text-content-primary transition-colors border border-dashed border-surface-3"
+                title={`Upload a .${missing.ext} file as ${missing.path}`}
+                onClick={() => { setAddingFormat(missing); addFormatInput.current?.click(); }}
+              >
+                + {missing.label}
+              </button>
+            ))}
+            <input
+              ref={addFormatInput}
+              type="file"
+              data-testid="screen-add-format"
+              className="hidden"
+              accept={addingFormat ? `.${addingFormat.ext}` : undefined}
+              onChange={async e => {
+                const chosen = e.target.files?.[0];
+                e.target.value = '';
+                if (chosen) await addFormat(chosen);
+              }}
+            />
+          </div>
+        )}
+          </>
+        )}
         {editingRip && !pendingUpload && file && (
           <RipScreenEditor
             content={file.content}
@@ -1569,27 +1677,6 @@ export function ScreenFilesPage() {
               were listed as text in the table and could not be opened at all,
               so a board's PETSCII and RIP art was invisible here.
             */}
-            {formatSiblings(openFile, data?.screens).length > 1 && (
-              <div className="flex gap-1 border-b border-surface-3 pb-2" role="tablist">
-                {formatSiblings(openFile, data?.screens).map(sibling => (
-                  <button
-                    key={sibling}
-                    type="button"
-                    role="tab"
-                    aria-selected={sibling === openFile}
-                    onClick={() => setOpenFile(sibling)}
-                    className={
-                      sibling === openFile
-                        ? 'px-3 py-1 text-sm rounded-t bg-surface-3 text-content-primary'
-                        : 'px-3 py-1 text-sm rounded-t text-content-secondary hover:text-content-primary transition-colors'
-                    }
-                    title={sibling}
-                  >
-                    {formatLabel(sibling)}
-                  </button>
-                ))}
-              </div>
-            )}
             {fileError && (
               <p className="text-sm text-status-danger">
                 That did not work: {fileError}

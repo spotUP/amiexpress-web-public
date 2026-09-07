@@ -562,6 +562,25 @@ function resolutionsLost(baseDir: string, before: ReturnType<typeof buildScreenI
  * PUT /api/screens/file?path=...[&rename=...]
  * Body: { content: base64, targets?: string[] }
  */
+/**
+ * RIP bytes under a name the loader will not route as RIP, or the reverse.
+ *
+ * The extension decides which caller gets the file (screen.handler adds
+ * `<stem>.rip` for a RIP caller and nothing else), so `.rip` holding ANSI
+ * renders as garbage to every RIP caller and RIP under `.txt` to every ANSI
+ * one. One check for every route that writes screen bytes - the upload had
+ * it, the editor's PUT did not, and the PUT is what the "add a RIP version"
+ * button goes through.
+ */
+export function ripMismatch(rel: string, bytes: Buffer): string | null {
+  const looksRip = bytes.subarray(0, 2).toString('latin1') === '!|';
+  const namedRip = rel.toLowerCase().endsWith('.rip');
+  if (looksRip === namedRip) return null;
+  return looksRip
+    ? 'These are RIP bytes; the target name is not a .rip, and the extension is what the loader routes on'
+    : 'The target is a .rip but these bytes are not RIP';
+}
+
 screensRouter.put('/file', (req: Request, res: Response) => {
   const rel = String(req.query.path || '');
   const rename = req.query.rename ? String(req.query.rename) : null;
@@ -586,6 +605,10 @@ screensRouter.put('/file', (req: Request, res: Response) => {
   // Latin1 both ways: a screen carries Amiga high-bit bytes, and a UTF-8 round
   // trip turns one into U+FFFD.
   const uploaded = Buffer.from(content, 'base64').toString('latin1');
+  for (const target of targets) {
+    const mismatch = ripMismatch(target, Buffer.from(uploaded, 'latin1'));
+    if (mismatch) return res.status(400).json({ success: false, error: `${target}: ${mismatch}` });
+  }
   const plans = planCarryForTargets(targets, uploaded, placement);
 
   // A dry run answers 200 with the verdicts and writes nothing, so the dialog
@@ -1026,16 +1049,8 @@ screensRouter.post('/upload', upload.single('file'), (req: Request, res: Respons
   const file = (req as Request & { file?: { buffer: Buffer } }).file;
   if (!file) return res.status(400).json({ success: false, error: 'No file uploaded' });
 
-  const looksRip = file.buffer.subarray(0, 2).toString('latin1') === '!|';
-  const namedRip = rel.toLowerCase().endsWith('.rip');
-  if (looksRip !== namedRip) {
-    return res.status(400).json({
-      success: false,
-      error: looksRip
-        ? 'These are RIP bytes; the target name is not a .rip, and the extension is what the loader routes on'
-        : 'The target is a .rip but these bytes are not RIP',
-    });
-  }
+  const mismatch = ripMismatch(rel, file.buffer);
+  if (mismatch) return res.status(400).json({ success: false, error: mismatch });
 
   let targets: string[] = [rel];
   try {
