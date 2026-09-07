@@ -28,6 +28,9 @@ import { config } from '../config';
 import { userFileManager } from '../services/UserFileManager';
 import { getSystemTime } from '../utils/date-time.util';
 import { screenSearchLocations } from '../screens/screen-resolution';
+import { resolveCallerTheme } from '../screens/caller-theme';
+import { readThemeRegistry } from '../screens/theme-registry';
+import { themeOfPath, validateThemeFile, type ThemeFinding } from '../screens/theme-validation';
 import { checkShare } from '../screens/share-preconditions';
 import { applyTooltypes } from '../utils/info-file.util';
 import {
@@ -171,6 +174,28 @@ function hasBackslash(s: string): boolean {
   return s.includes('\\');
 }
 
+/**
+ * What the validator says about each board-relative path that lies inside a
+ * theme. Paths outside every theme are simply absent from the answer.
+ */
+function themeFindingsFor(relativePaths: string[]): Array<{ path: string; theme: string; findings: ThemeFinding[] }> {
+  const baseDir = config.get('dataDir');
+  const themes = readThemeRegistry(baseDir).themes;
+  if (themes.length === 0) return [];
+
+  const reports: Array<{ path: string; theme: string; findings: ThemeFinding[] }> = [];
+  for (const rel of relativePaths) {
+    const owner = themeOfPath(baseDir, rel, themes);
+    if (!owner) continue;
+    reports.push({
+      path: rel,
+      theme: owner.theme.slug,
+      findings: validateThemeFile(baseDir, owner.theme, owner.inTheme),
+    });
+  }
+  return reports;
+}
+
 /** The envelope every admin page unwraps - `success`, `data`, `message`. */
 function sendOk<T>(res: Response, data: T, message?: string): void {
   res.json({
@@ -280,6 +305,151 @@ screensRouter.get('/resolve', (req: Request, res: Response) => {
     searched,
     chosen: resolution?.file ?? null,
     variants: resolution?.variants ?? [],
+  });
+});
+
+/**
+ * GET /api/screens/preview?screen=&theme=&node=&conf=&sec=&term=ansi|c64|rip
+ *
+ * What a caller in that theme, at that level, on that node, would be shown.
+ *
+ * It drives `loadScreenFile` and `parseMciCodes` - the board's own two
+ * functions - against a synthetic session. Nothing is re-implemented, because
+ * a preview that re-implemented the resolver would be a second copy of the one
+ * rule `screen-resolution.ts` exists to keep single, and the sysop would be
+ * shown something the board never draws.
+ *
+ * Three things make it safe to expose:
+ *
+ * - The session carries NO socket, so `parseMciCodes` runs in its
+ *   string-building mode: `~CC_` is COLLECTED and never executed. A preview
+ *   must not run a door.
+ * - Includes are capped at one level. A preview walks paths the requester
+ *   chose, and the board's own include chain has no cycle guard.
+ * - `sec` is clamped to the requester's own level. A security variant is
+ *   content, and content the board withholds from an account stays withheld.
+ *
+ * Which theme answers is decided by `resolveCallerTheme` with the REQUESTER's
+ * real identity - the same judge the loader and the picker ask - so an artist
+ * cannot preview somebody else's unpublished work, and a sysop previewing at
+ * level 20 still sees the draft they asked for rather than the board's art.
+ */
+screensRouter.get('/preview', async (req: Request, res: Response) => {
+  const baseDir = config.get('dataDir');
+  const requester = (req as AuthRequest).user;
+
+  const screen = String(req.query.screen || '').trim();
+  if (screen === '') {
+    return res.status(400).json({ success: false, error: 'Name a screen to preview' });
+  }
+  if (hasBackslash(screen)) {
+    return res.status(400).json({ success: false, error: 'A screen name carries no backslash' });
+  }
+
+  const nodeId = Number.parseInt(String(req.query.node ?? '1'), 10) || 1;
+  const confId = req.query.conf ? Number.parseInt(String(req.query.conf), 10) : 1;
+  const term = String(req.query.term || 'ansi').toLowerCase();
+
+  const ownLevel = Number(requester?.secLevel ?? 0);
+  const askedLevel = Number.parseInt(String(req.query.sec ?? ownLevel), 10);
+  const secLevel = Math.max(0, Math.min(Number.isFinite(askedLevel) ? askedLevel : ownLevel, ownLevel));
+
+  const requestedTheme = String(req.query.theme || '').trim().toLowerCase();
+  const themeSlug = resolveCallerTheme(baseDir, {
+    username: requester?.username,
+    secLevel: ownLevel,
+    screenTheme: requestedTheme || null,
+  });
+
+  const petscii = term === 'c64' || term === 'petscii';
+  const session = {
+    // Judged already, by the line above. The loader prefers this over asking
+    // again, so the clamped level below cannot change which theme answers.
+    screenThemeResolved: themeSlug,
+    nodeId,
+    currentConf: confId,
+    relConfNum: confId,
+    terminalType: term === 'c64' ? 'c64' : 'web',
+    petsciiMode: petscii,
+    ripMode: term === 'rip',
+    screenWidth: petscii ? 40 : 80,
+    screenHeight: 25,
+    user: {
+      username: requester?.username,
+      name: requester?.username,
+      secLevel,
+      screenTheme: requestedTheme || null,
+    },
+  } as unknown as import('../index').BBSSession;
+
+  const { loadScreenFile, parseMciCodes } = require('../handlers/screen.handler');
+
+  const loaded = loadScreenFile(screen, confId, nodeId, session);
+  if (!loaded) {
+    return res.status(404).json({
+      success: false,
+      error: `Nothing resolves for "${screen}" at level ${secLevel} on node ${nodeId}`,
+    });
+  }
+
+  /*
+   * A `.seq` is BYTES, not text.
+   *
+   * The loader hands back `content` as the PetMe64 Unicode conversion for the
+   * legacy display path and the original buffer beside it. MCI-parsing the
+   * conversion would be parsing a rendering, so a PETSCII screen is answered
+   * with its own bytes and drawn on a real 40x25 C64 surface in the browser.
+   */
+  if (loaded.isPetscii && loaded.petsciiBuffer) {
+    return sendOk(res, {
+      screen,
+      theme: themeSlug,
+      requestedTheme: requestedTheme || null,
+      secLevel,
+      nodeId,
+      confId,
+      terminalType: term,
+      filePath: path.relative(baseDir, loaded.filePath),
+      isPetscii: true,
+      isRip: false,
+      content: (loaded.petsciiBuffer as Buffer).toString('base64'),
+      commands: [],
+      searched: screenSearchLocations(baseDir, screen, { nodeId, confId, themeSlug })
+        .map(l => ({ dir: path.relative(baseDir, l.dir) || '.', desc: l.desc })),
+    });
+  }
+
+  let parsed: string = loaded.content;
+  let commands: string[] = [];
+  try {
+    const result = await parseMciCodes(loaded.content, session, undefined, undefined, undefined, undefined, { includeDepth: 1 });
+    parsed = result.parsed;
+    commands = result.commands ?? [];
+  } catch (error) {
+    // A screen whose codes cannot be expanded is still worth looking at: the
+    // bytes are the art, and refusing to show them would hide the file the
+    // sysop is trying to diagnose.
+    console.error(`[Screens] preview could not parse MCI in ${loaded.filePath}: ${(error as Error).message}`);
+  }
+
+  return sendOk(res, {
+    screen,
+    /** The theme that ANSWERED, which is not always the one asked for. */
+    theme: themeSlug,
+    requestedTheme: requestedTheme || null,
+    secLevel,
+    nodeId,
+    confId,
+    terminalType: term,
+    filePath: path.relative(baseDir, loaded.filePath),
+    isPetscii: !!loaded.isPetscii,
+    isRip: !!loaded.isRip,
+    /** Bytes, base64. A UTF-8 round trip would eat every high-bit byte of art. */
+    content: Buffer.from(parsed, 'latin1').toString('base64'),
+    /** The commands a caller's screen WOULD have run. Named, never executed. */
+    commands,
+    searched: screenSearchLocations(baseDir, screen, { nodeId, confId, themeSlug })
+      .map(l => ({ dir: path.relative(baseDir, l.dir) || '.', desc: l.desc })),
   });
 });
 
@@ -444,10 +614,20 @@ screensRouter.put('/file', (req: Request, res: Response) => {
       const plan = byTarget.get(target);
       return Buffer.from(plan ? applyMciCarry(uploaded, plan, placement) : uploaded, 'latin1');
     });
+    const relWritten = written.map(w => path.relative(config.get('dataDir'), w));
     return sendOk(res, {
-      written: written.map(w => path.relative(config.get('dataDir'), w)),
+      written: relWritten,
       carried: plans.map(({ path: target, carried, lost }) => ({ path: target, carried, lost }))
         .filter(t => t.carried.length || t.lost.length),
+      /*
+       * What is wrong with what was just saved, when it was saved into a theme.
+       *
+       * Reported, never enforced: an artist saves a half-drawn screen, and a
+       * save that refused would make the validator a nuisance rather than a
+       * guard. The gate is publication - `PUT /api/themes/:slug` to `live`
+       * runs the same rules and does refuse.
+       */
+      themeFindings: themeFindingsFor(relWritten),
     }, `Wrote ${written.length} file${written.length === 1 ? '' : 's'}`);
   } catch (error) {
     return res.status(400).json({ success: false, error: (error as Error).message });

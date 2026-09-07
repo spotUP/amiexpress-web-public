@@ -19,6 +19,7 @@ import { config } from '../config';
 import type { AuthRequest } from '../middleware/auth.middleware';
 import { selectableThemes } from '../screens/caller-theme';
 import { isSysop, ownedThemes } from '../screens/theme-sandbox';
+import { validateTheme } from '../screens/theme-validation';
 import {
   DEFAULT_SLUG,
   THEMES_DIR,
@@ -177,6 +178,27 @@ themesRouter.put('/:slug', (req: Request, res: Response) => {
     return refuse(res, 403, 'Only a sysop may change who owns a theme');
   }
 
+  /*
+   * Publication is the gate the validator exists for.
+   *
+   * Not the save, and not the review request: an artist saves a half-drawn
+   * screen and sends a half-drawn theme for review, and blocking either would
+   * make the validator a nuisance rather than a guard. `live` is the moment a
+   * theme becomes something a caller can be shown, and the five blocking rules
+   * each name a file a caller would be shown that the board cannot serve, or
+   * that silently removes content the board has.
+   */
+  if (wantedStatus === 'live' && existing.status !== 'live') {
+    const report = validateTheme(bbsRoot, existing);
+    if (!report.publishable) {
+      return res.status(400).json({
+        success: false,
+        error: `"${existing.title}" cannot go live yet: ${report.blocking.length} ${report.blocking.length === 1 ? 'problem' : 'problems'} to fix`,
+        data: report,
+      });
+    }
+  }
+
   const updated: ThemeEntry = {
     ...existing,
     title: String(body.title ?? existing.title).trim() || existing.slug,
@@ -191,6 +213,23 @@ themesRouter.put('/:slug', (req: Request, res: Response) => {
 
   writeTheme(bbsRoot, updated);
   ok(res, updated, `Theme "${slug}" updated`);
+});
+
+/**
+ * GET /api/themes/:slug/validation - can this theme be selected without
+ * breaking a caller?
+ *
+ * The same function the publish gate runs, so the page can never show a green
+ * report for a theme the server would then refuse, or a red one for a theme it
+ * would accept.
+ */
+themesRouter.get('/:slug/validation', (req: Request, res: Response) => {
+  const bbsRoot = config.get('dataDir');
+  const slug = String(req.params.slug ?? '').trim().toLowerCase();
+  const theme = readThemeRegistry(bbsRoot).themes.find(entry => entry.slug === slug);
+  if (!theme) return refuse(res, 404, `No such theme: "${slug}"`);
+
+  ok(res, validateTheme(bbsRoot, theme));
 });
 
 /**
