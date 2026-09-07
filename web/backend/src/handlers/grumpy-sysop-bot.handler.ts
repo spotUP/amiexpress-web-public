@@ -13,6 +13,8 @@
  */
 
 import axios from 'axios';
+import { askWithTools } from './sysop-ai/loop';
+import type { SysopTool, ToolContext } from './sysop-ai/tools';
 import { getSystemTime } from '../utils/date-time.util';
 
 interface ChatContext {
@@ -25,6 +27,10 @@ interface ChatContext {
   boardCard?: string;
   /** What the board's own help says about THIS message (sysop-ai/corpus.ts). */
   retrieved?: string;
+  /** The tools this caller's tier may use, and what they run against (K3). Absent: no tool loop. */
+  tools?: { list: SysopTool[]; ctx: ToolContext };
+  /** Filled by the tool loop: actions to run once the reply has been typed. */
+  afters?: Array<() => Promise<void>>;
 }
 
 /**
@@ -72,6 +78,14 @@ export const DEFAULT_AI_BUDGET_MS = 8000;
  * is left of the cascade's budget. Under 250 ms is not worth a round trip -
  * the caller skips the provider and the rule-based reply goes out now.
  */
+/** The absolute deadline this reply must meet. */
+function cfgDeadline(aiConfig: AIProviderConfig): number {
+  return aiConfig.deadline ?? Date.now() + (aiConfig.budgetMs ?? DEFAULT_AI_BUDGET_MS);
+}
+
+/** A reply that may ask the board first gets longer than a plain one. */
+export const TOOL_AI_BUDGET_MS = 20000;
+
 function remainingBudget(aiConfig: AIProviderConfig, ownTimeoutMs: number): number {
   if (aiConfig.deadline === undefined) return ownTimeoutMs;
   return Math.min(ownTimeoutMs, aiConfig.deadline - Date.now());
@@ -84,6 +98,60 @@ interface OpenRouterModel {
     prompt: string;
     completion: string;
   };
+  supported_parameters?: string[];
+  context_length?: number;
+}
+
+/**
+ * FREE MODELS ONLY - the sysop's rule (2026-09-08: "never paid models"). A
+ * model is eligible when OpenRouter lists it at zero price for both prompt
+ * and completion. The tool loop needs `tools` among its supported
+ * parameters, and the picker prefers those, largest context first, so the
+ * board card and the help fit. A name typed into the admin is used only if
+ * it passes the same check; otherwise it is refused, with a log line, and
+ * the picker's choice is used.
+ */
+export const isFreeModel = (m: OpenRouterModel): boolean =>
+  parseFloat(m.pricing?.prompt || '1') === 0 && parseFloat(m.pricing?.completion || '1') === 0;
+export const supportsTools = (m: OpenRouterModel): boolean =>
+  Array.isArray(m.supported_parameters) && m.supported_parameters.includes('tools');
+/** Every zero-price model the last discovery saw, by id, for the admin-name check. */
+let knownFreeModels = new Map<string, OpenRouterModel>();
+/** The ids that also support tools. */
+let toolModels = new Set<string>();
+
+/** Tool-capable first, then the largest context, then the rest. */
+export function rankFreeModels(models: OpenRouterModel[]): string[] {
+  return models
+    .filter(isFreeModel)
+    .filter((m) => !m.id.toLowerCase().includes('think'))
+    .sort((a, b) => Number(supportsTools(b)) - Number(supportsTools(a)) || (b.context_length ?? 0) - (a.context_length ?? 0))
+    .map((m) => m.id);
+}
+
+/** Test seam: what a discovery would have returned. */
+export function primeModelCatalogue(models: OpenRouterModel[]): void {
+  knownFreeModels = new Map(models.filter(isFreeModel).map((m) => [m.id, m]));
+  toolModels = new Set([...knownFreeModels.values()].filter(supportsTools).map((m) => m.id));
+  cachedFreeModels = rankFreeModels(models);
+  lastModelDiscovery = Date.now();
+}
+
+/** Does this model (by id) support the tool loop, as far as the last discovery knows? */
+export function modelSupportsTools(id: string): boolean {
+  return toolModels.has(id);
+}
+
+/**
+ * The admin's model name, if it is a free model; otherwise null and a log
+ * line. Unknown to the last discovery counts as not free - the rule is
+ * "listed at zero", not "not known to cost".
+ */
+export function adminModelIfFree(name: string | undefined): string | null {
+  if (!name) return null;
+  if (knownFreeModels.has(name)) return name;
+console.log(`[Grumpy Bot] Model "${name}" from the admin is not a free model on OpenRouter (or not listed) - refused; using the picker's choice. Free models only.`);
+  return null;
 }
 
 // Cache for discovered free models
@@ -584,22 +652,11 @@ async function discoverFreeModels(timeoutMs: number): Promise<string[]> {
     });
 
     const models: OpenRouterModel[] = response.data.data || [];
+    knownFreeModels = new Map(models.filter(isFreeModel).map((m) => [m.id, m]));
+    toolModels = new Set([...knownFreeModels.values()].filter(supportsTools).map((m) => m.id));
+    const freeModels = rankFreeModels(models);
 
-    // Filter for free models (pricing is "0")
-    const freeModels = models
-      .filter(model => {
-        const promptPrice = parseFloat(model.pricing?.prompt || '1');
-        const completionPrice = parseFloat(model.pricing?.completion || '1');
-        const isFree = promptPrice === 0 && completionPrice === 0;
-        // Filter out "think" models as they are too verbose/slow for this use case
-        // and often exhaust token limits with internal reasoning
-        const isThinkingModel = model.id.toLowerCase().includes('think');
-
-        return isFree && !isThinkingModel;
-      })
-      .map(model => model.id);
-
-console.log(`[Grumpy Bot] Discovered ${freeModels.length} free models:`, freeModels.slice(0, 5));
+console.log(`[Grumpy Bot] Discovered ${freeModels.length} free models (${toolModels.size} with tools):`, freeModels.slice(0, 5));
 
     return freeModels;
   } catch (error) {
@@ -653,7 +710,8 @@ console.log('[Grumpy Bot] No OPENROUTER_API_KEY configured. OpenRouter requires 
 
   const discoveryTimeout = remainingBudget(aiConfig, 5000);
   if (discoveryTimeout < 250) return null;
-  const freeModel = aiConfig.modelName || await getFreeModel(discoveryTimeout);
+  const picked = await getFreeModel(discoveryTimeout);
+  const freeModel = adminModelIfFree(aiConfig.modelName) || picked;
 
   if (!freeModel) {
 console.log('[Grumpy Bot] No OpenRouter free models available');
@@ -678,6 +736,39 @@ console.log('[Grumpy Bot] No OpenRouter free models available');
       { role: 'user', content: userMessage }
     ];
 
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer': 'https://amiexpress.com',
+      'X-Title': 'AmiExpress BBS',
+    };
+
+    // THE TOOL LOOP (K3): when the caller has tools and the model can call
+    // them, the model may ask the board before it answers. Actions the tools
+    // scheduled come back on the context for the chat to run after the reply.
+    if (context.tools && context.tools.list.length > 0 && modelSupportsTools(freeModel)) {
+console.log(`[Grumpy Bot] Trying OpenRouter (${freeModel}) with ${context.tools.list.length} tools...`);
+      const result = await askWithTools({
+        model: freeModel,
+        messages,
+        tools: context.tools.list,
+        ctx: context.tools.ctx,
+        deadline: cfgDeadline(aiConfig),
+        temperature: aiConfig.temperature,
+        post: async (body, timeoutMs) => (await axios.post('https://openrouter.ai/api/v1/chat/completions', body, { headers, timeout: timeoutMs })).data,
+      });
+      // Into the SAME array the chat handler holds: getGrumpySysopResponse
+      // hands the providers a shallow copy of the context (the history with
+      // our tags stripped), and a new array on the copy would be lost.
+      (context.afters ??= []).push(...result.afters);
+      if (result.calls.length) console.log(`[Grumpy Bot] tools used: ${result.calls.map((c) => `${c.name}:${c.outcome}`).join(', ')}`);
+      if (result.text) {
+console.log('[Grumpy Bot] SUCCESS - Using OpenRouter response (tool loop)');
+        return result.text;
+      }
+      return null;
+    }
+
 console.log(`[Grumpy Bot] Trying OpenRouter (${freeModel})...`);
 
     const response = await axios.post(
@@ -688,15 +779,7 @@ console.log(`[Grumpy Bot] Trying OpenRouter (${freeModel})...`);
         max_tokens: 1000,
         temperature: aiConfig.temperature,
       },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          'HTTP-Referer': 'https://amiexpress.com',
-          'X-Title': 'AmiExpress BBS',
-        },
-        timeout: callTimeout
-      }
+      { headers, timeout: callTimeout }
     );
 
     const content = response.data.choices[0]?.message?.content;

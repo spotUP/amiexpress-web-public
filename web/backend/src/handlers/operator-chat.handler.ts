@@ -34,6 +34,51 @@ import {
 import { getGrumpySysopResponse, getGrumpyBotIntroMessage, planNaturalTyping, type AIProviderConfig, DEFAULT_AI_CONFIG } from './grumpy-sysop-bot.handler';
 import { buildBoardCard } from './sysop-ai/board-card';
 import { retrieve, retrievedAsPrompt } from './sysop-ai/corpus';
+import { toolsFor, type ToolContext } from './sysop-ai/tools';
+import { TOOL_AI_BUDGET_MS } from './grumpy-sysop-bot.handler';
+
+/**
+ * The tools for this caller and what they run against (K3). `execute` is
+ * how an action on the caller's session happens: the chat ends the way it
+ * always does, then the board's own command runs as the caller - the tool
+ * never re-implements a command. Injectable for tests.
+ */
+export type CommandExecutor = (session: BBSSession, command: string, params: string) => Promise<void>;
+const defaultExecutor: CommandExecutor = async (session, command, params) => {
+  const { processCommand } = require('./command.handler');
+  const reach = emitterForUserId(session.user!.id, undefined);
+  if (!reach) throw new Error('no emitter for the caller');
+  await processCommand(reach.emitter, session, command, params);
+};
+let commandExecutor: CommandExecutor = defaultExecutor;
+/** Test seam: what runs a board command for the caller. */
+export function setCommandExecutor(fn: CommandExecutor | null): void {
+  commandExecutor = fn ?? defaultExecutor;
+}
+
+function toolsForChat(io: any, repository: OperatorChatRepository, page: PageRequest, chatSession: ChatSession): { list: ReturnType<typeof toolsFor>; ctx: ToolContext } | undefined {
+  const config = repository.getConfig();
+  if ((config as any).aiToolsEnabled === false) return undefined;
+  const session = userSessions.get(String(page.userId));
+  if (!session) return undefined;
+  const ctx: ToolContext = {
+    io, session, page, chatSession, bbsRoot,
+    execute: async (command, params) => {
+      await endChat(io, repository, page.id);
+      await commandExecutor(session, command, params);
+    },
+  };
+  return { list: toolsFor(session), ctx };
+}
+
+/** Run what the tools scheduled, once the reply has been typed. */
+async function runAfters(context: { afters?: Array<() => Promise<void>> }, pageId: string): Promise<void> {
+  for (const after of context.afters ?? []) {
+    try { await after(); } catch (err) {
+console.error(`[Operator Chat] Page ${pageId}: a scheduled action failed:`, err);
+    }
+  }
+}
 
 /** The board's own help on this message, for this caller - or nothing. */
 function retrievedFor(message: string, chatSession: ChatSession): string | undefined {
@@ -1066,6 +1111,7 @@ console.log(`[Operator Chat] Page ${page.id}: a line for ${page.userHandle} has 
 /** The bot's engine and typing settings, from the board's operator-chat config. */
 function aiConfigFrom(config: OperatorChatConfig): AIProviderConfig {
   return {
+    budgetMs: (config as any).aiToolsEnabled === false ? undefined : TOOL_AI_BUDGET_MS,
     provider: config.aiEnabled ? config.aiProvider : 'rule-based',
     modelName: config.aiModelName,
     temperature: config.aiTemperature,
@@ -1108,6 +1154,8 @@ function processBotQueue(
     messageHistory: chatSession.botMessageHistory || [],
     boardCard: chatSession.boardCard as string | undefined,
     retrieved: retrievedFor(lastMsg, chatSession),
+    tools: toolsForChat(io, repository, page, chatSession),
+    afters: [] as Array<() => Promise<void>>,
   };
   context.messageHistory.push({ role: 'user', content: lastMsg });
   chatSession.botMessageHistory = context.messageHistory;
@@ -1121,6 +1169,7 @@ const aiConfig = aiConfigFrom(config);
     chatSession.botMessageHistory = context.messageHistory;
     await sendBotMessageWithTyping(io, repository, pageId, botResponse, page.nodeId, page, aiConfig);
     chatSession.botBusy = false;
+    await runAfters(context, pageId);
     // Recurse — process any more queued messages
     processBotQueue(io, repository, pageId, chatSession);
   }).catch(err => {
@@ -1191,6 +1240,8 @@ console.log('[Operator Chat] Bot busy, queuing message');
         messageHistory: (chatSession as any).botMessageHistory || [],
         boardCard: (chatSession as any).boardCard as string | undefined,
         retrieved: retrievedFor(message, chatSession),
+        tools: toolsForChat(io, repository, page, chatSession),
+        afters: [] as Array<() => Promise<void>>,
       };
       context.messageHistory.push({ role: 'user', content: message });
       (chatSession as any).botMessageHistory = context.messageHistory;
@@ -1203,6 +1254,7 @@ console.log('[Operator Chat] Bot busy, queuing message');
         (chatSession as any).botMessageHistory = context.messageHistory;
         await sendBotMessageWithTyping(io, repository, pageId, botResponse, nodeId, page, aiConfig);
         (chatSession as any).botBusy = false;
+        await runAfters(context, pageId);
 
         // Process any queued messages
         processBotQueue(io, repository, pageId, chatSession as any);

@@ -68,13 +68,18 @@ console.log(`[Board Card] ${name}: not included (${(err as Error).message})`);
   }
 }
 
-/** Commands/BBSCmd/*.info the caller may run, by name, with what the icon says. */
-function commandLines(bbsRoot: string, level: number): string[] {
+/**
+ * Commands/BBSCmd/*.info the caller may run, by name: the built-ins (TYPE
+ * BBS or none) and the doors and programs (every other TYPE). Read from the
+ * icons on disk each time - live, unlike the boot-time door registry. The
+ * list_doors and start_door tools read the same thing.
+ */
+export function commandsOnDisk(bbsRoot: string, level: number): { internal: string[]; external: string[] } {
   const dir = path.join(bbsRoot, 'Commands', 'BBSCmd');
-  if (!fs.existsSync(dir)) return [];
-  const names = fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.info'));
   const internal: string[] = [];
   const external: string[] = [];
+  if (!fs.existsSync(dir)) return { internal, external };
+  const names = fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.info'));
   for (const file of names.sort((a, b) => a.localeCompare(b))) {
     const tt = readTooltypeMap(path.join(dir, file));
     const access = parseInt(tt.get('ACCESS') ?? '0', 10);
@@ -83,6 +88,11 @@ function commandLines(bbsRoot: string, level: number): string[] {
     const type = (tt.get('TYPE') ?? '').toUpperCase();
     (type === 'BBS' || type === '' ? internal : external).push(name);
   }
+  return { internal, external };
+}
+
+function commandLines(bbsRoot: string, level: number): string[] {
+  const { internal, external } = commandsOnDisk(bbsRoot, level);
   const out: string[] = [];
   if (internal.length) out.push('built-in:', ...fold(internal));
   if (external.length) out.push(`doors and programs (${external.length}):`, ...fold(external));
@@ -120,7 +130,7 @@ function bulletinLines(bbsRoot: string, confId: number | undefined): string[] {
     });
 }
 
-function callerLines(session: BBSSession): string[] {
+export function callerLines(session: BBSSession): string[] {
   const u = session.user;
   if (!u) return [];
   const mb = (n: number | undefined) => `${((n ?? 0) / 1048576).toFixed(1)} MB`;
