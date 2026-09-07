@@ -99,7 +99,7 @@ import {
 } from '@amiexpress/bbs-door-sdk/petscii/frame';
 import { doorScreenWidth, C64_COLUMNS } from '../amiga-emulation/xim/screen-width.util';
 import { stripNarrowNoise } from './c64-door-noise';
-import { collapseBlankRunsToFit, dropOldestEntriesToFit } from './c64-door-fit';
+import { collapseBlankRunsToFit, collapseLongBlankRuns, dropOldestEntriesToFit } from './c64-door-fit';
 
 /** Quiet gap after the last write that ends a frame. */
 export const C64_ADAPT_TICK_MS = 30;
@@ -355,7 +355,10 @@ export class C64DoorFrameAdapter {
     // only where the door declared it - drop the oldest entries of its list.
     // See c64-door-noise.ts and c64-door-fit.ts for what each one may touch.
     const fit = { cols: this.cols, rows: ROWS };
-    const stripped = collapseBlankRunsToFit(stripNarrowNoise(this.screen.snapshot()), fit);
+    const stripped = collapseBlankRunsToFit(
+      collapseLongBlankRuns(stripNarrowNoise(this.screen.snapshot())),
+      fit,
+    );
     const source = this.dropOldest ? dropOldestEntriesToFit(stripped, fit) : stripped;
     const { rows, cursor } = adaptRows(source, { cols: this.cols });
     // The blank tail of a 25-row grid is not content. It still costs adapted

@@ -71,12 +71,19 @@ function textOf(row: ReadonlyArray<Readonly<Cell>>): string {
 export function stripNarrowNoise(frame: Frame): Frame {
   let hit = false;
   const cells = frame.cells.map((row) => {
-    const text = textOf(row);
-    if (NARROW_PLACEHOLDER_ROWS.some((pattern) => pattern.test(text))) {
-      hit = true;
-      return row.map(() => blankCell());
-    }
     let out: Cell[] | null = null;
+    let text = textOf(row);
+
+    // PHRASES FIRST, THEN THE WHOLE-ROW TEST ON WHAT IS LEFT.
+    //
+    // Order matters, and getting it wrong is visible on the caller's screen:
+    // ctop writes its empty-conference notice on the SAME row as an entry
+    // number, so the row starts as
+    //   ` 5.            - NO UPLOADERS ARE AVAILABLE IN THIS CONFERENCE -`
+    // The bare-number rule does not match THAT, and the first version of this
+    // function tested it against the original text and stopped - leaving ` 5.`
+    // alone in the middle of a screen whose other slots had been blanked.
+    // Reported from the live board 2026-09-07 as a stray number.
     for (const pattern of NARROW_NOISE) {
       const match = pattern.exec(text);
       if (!match) continue;
@@ -85,6 +92,12 @@ export function stripNarrowNoise(frame: Frame): Frame {
       for (let i = match.index; i < match.index + match[0].length; i += 1) {
         out[i] = blankCell();
       }
+      text = textOf(out);
+    }
+
+    if (NARROW_PLACEHOLDER_ROWS.some((pattern) => pattern.test(text))) {
+      hit = true;
+      return row.map(() => blankCell());
     }
     return out ?? row;
   });

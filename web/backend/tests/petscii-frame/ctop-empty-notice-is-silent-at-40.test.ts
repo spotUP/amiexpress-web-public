@@ -74,7 +74,7 @@ describe('ctop at 40 columns: the empty-conference notice is not spent on rows',
     expect(wire).toContain(NOTICE);
   });
 
-  test('the entry number keeps its slot; the sentence alone is blanked', () => {
+  test('the row goes entirely, number and all', () => {
     const source = ' 5.            - NO UPLOADERS ARE AVAILABLE IN THIS CONFERENCE -';
     const row: Cell[] = Array.from(source.padEnd(80)).map((ch) => ({
       ch, fg: 5, bg: 0, bold: false, rvs: false,
@@ -82,9 +82,13 @@ describe('ctop at 40 columns: the empty-conference notice is not spent on rows',
     const stripped = stripNarrowNoise(makeFrame(80, 1, [row], { x: 0, y: 0 }));
     const text = stripped.cells[0].map((c) => c.ch).join('');
     expect(text).not.toContain(NOTICE);
-    expect(text.trimEnd()).toBe(' 5.');
-    // What the ladder is handed now fits, so it costs the caller ONE row.
-    expect(text.trimEnd().length).toBeLessThanOrEqual(40);
+    // The number goes too, and that is a CHANGE from the first version of this
+    // rule (2026-09-07). Blanking the sentence and keeping ` 5.` left a lone
+    // number in the middle of a screen whose other slots had been blanked -
+    // reported from the live board the same day. The phrases are now blanked
+    // FIRST and the whole-row test runs on what is left, so a slot that held
+    // nothing but the notice is a slot that holds nothing.
+    expect(text.trim()).toBe('');
   });
 
   test('a real uploader row that happens to mention uploaders is untouched', () => {

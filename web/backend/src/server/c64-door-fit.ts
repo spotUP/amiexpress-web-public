@@ -58,6 +58,66 @@ function withoutRow(frame: Frame, y: number): Frame {
 }
 
 /**
+ * A gap of three or more blank rows becomes one, always - fitting or not.
+ *
+ * This is the "mostly black" the sysop reported on 2026-09-07: an empty
+ * conference at 40 columns is ctop's header, NINE blank rows where its slots
+ * were, and then the totals. The screen fits, so `collapseBlankRunsToFit`
+ * below never touches it, and the caller reads a hole.
+ *
+ * Three, not two: one or two blank rows are a door's own spacing - the line
+ * between a header and its table, the gap above a footer - and squeezing
+ * those changes the look of every adapted screen for nothing. A run of three
+ * or more is a place where content was expected and is not there.
+ *
+ * One row is kept, never zero: the blocks either side of a gap are separate
+ * and should stay separate.
+ */
+export function collapseLongBlankRuns(frame: Frame, minRun = 3): Frame {
+  let current = frame;
+  // A run is a candidate once, on the frame as it ARRIVED. Re-deciding on the
+  // shrinking frame would stop at `minRun - 1` rows and leave two blanks where
+  // the promise is one; deciding once and trimming to a single row keeps the
+  // threshold ("three or more is a hole") and the outcome ("one blank") from
+  // being the same number.
+  const longRun = (rows: ReadonlyArray<boolean>, y: number): boolean => {
+    let end = y;
+    while (end < rows.length && rows[end]) end += 1;
+    return end - y >= minRun && end < rows.length;
+  };
+  const seeded = current.cells.map((row) => row.every(isBlank));
+  const candidates = new Set<number>();
+  for (let y = 0; y < seeded.length; y += 1) {
+    if (seeded[y] && (y === 0 || !seeded[y - 1]) && longRun(seeded, y)) {
+      let end = y;
+      while (end < seeded.length && seeded[end]) end += 1;
+      for (let k = y; k < end; k += 1) candidates.add(k);
+    }
+  }
+  if (candidates.size === 0) return current;
+
+  for (let guard = 0; guard < frame.rows; guard += 1) {
+    const blanks = current.cells.map((row) => row.every(isBlank));
+    let found = -1;
+    for (let y = 0; y < blanks.length; ) {
+      if (!blanks[y]) { y += 1; continue; }
+      let end = y;
+      while (end < blanks.length && blanks[end]) end += 1;
+      // Two or more here, because a candidate run is being taken down to ONE.
+      // The blank TAIL of the grid is not a gap; it is the end of the screen.
+      if (end - y >= 2 && end < blanks.length) { found = y; break; }
+      y = end;
+    }
+    if (found < 0) return current;
+    // Remove ONE row per pass and look again: the loop below is what takes the
+    // run down to the single blank the doc-comment promises, and re-finding
+    // the run each time keeps this correct while rows shift under it.
+    current = withoutRow(current, found);
+  }
+  return current;
+}
+
+/**
  * Squeeze runs of blank rows until the screen fits.
  *
  * One row per pass, from the LONGEST run, so a screen two rows over loses two
