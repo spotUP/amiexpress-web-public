@@ -1,54 +1,121 @@
 /**
- * Regression test for A-3 connect-time bump (express.e:28734-28738 / 29129-29135).
+ * A-3 connect-time bump (express.e:28734-28738 / 29129-29135).
  *
- * When a node has a reservation set and a non-matching user authenticates
- * to that node, express.e emits "420 Node is currently reserved for
- * another user." and disconnects. doReserve() at express.e:29129-29135
- * uses StriCmp (case-insensitive) for the check.
+ * When a node carries a reservation and a caller whose name does not match it
+ * authenticates to that node, express.e prints "420 Node is currently reserved
+ * for another user." and disconnects. `doReserve()` at express.e:29129-29135
+ * uses StriCmp, so the comparison is case-insensitive.
  *
- * The auth-socket-handler is a heavyweight integration surface that
- * pulls in the entire BBS subsystem and can't be unit-loaded cleanly
- * under jest, so we use a structural grep test pinning the bump shape.
+ * THIS USED TO BE A GREP over `server/auth-socket-handlers.ts`, because that
+ * file was called a heavyweight surface that could not be unit-loaded. Two
+ * things changed with TP-9b. The check MOVED - it lived inside the web
+ * `login` handler's credential arm, which is retired, and it now sits in
+ * `runPostAuthLogin`, the one pipeline every transport's successful login runs
+ * through. And a grep would have gone green against a file that no longer
+ * performs the check while telnet, SSH and token logins all went unguarded -
+ * which is precisely the failure a source pin cannot see.
  *
- * What we pin:
- *   - the auth handler imports isReservationMatch from node-reservation.service
- *   - it calls isReservationMatch with (session.nodeId, user.username) BEFORE
- *     the login-success / state=LOGGEDON transition fires
- *   - on mismatch it emits the express.e:28736 string ("420 Node is currently
- *     reserved for another user.") and disconnects
- *   - it cites express.e:28734-28738 for the bump
+ * So this drives the pipeline instead. The bump is its FIRST act, before the
+ * database is touched, so nothing heavier than the reservation service and the
+ * logoff have to exist for the assertion to mean something.
  */
+process.env.SKIP_DB_INIT = '1';
 
-import * as fs from 'fs';
-import * as path from 'path';
+const isReservationMatch = jest.fn();
+jest.mock('../../src/services/node-reservation.service', () => ({
+  ...jest.requireActual('../../src/services/node-reservation.service'),
+  isReservationMatch,
+}));
 
-describe('Auth handler bumps non-matching user when node is reserved (A-3, express.e:28734-28738)', () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, '..', '..', 'src', 'server', 'auth-socket-handlers.ts'),
-    'utf8'
-  );
+const beginLogoff = jest.fn();
+jest.mock('../../src/server/logoff', () => ({
+  ...jest.requireActual('../../src/server/logoff'),
+  beginLogoff,
+}));
 
-  test('imports isReservationMatch from node-reservation.service', () => {
-    expect(src).toMatch(
-      /isReservationMatch[\s\S]{0,80}?from\s*['"][^'"]*node-reservation\.service['"]|require\(['"][^'"]*node-reservation\.service['"]\)[\s\S]{0,80}?isReservationMatch/
-    );
+/** Nothing past the bump may run; if it does, these say so by throwing. */
+jest.mock('../../src/database', () => ({
+  db: {
+    updateUser: jest.fn(async () => {
+      throw new Error('the pipeline advanced past a reserved node');
+    }),
+    generateAccessToken: jest.fn(async () => 'token'),
+    generateRefreshToken: jest.fn(async () => 'refresh'),
+  },
+}));
+
+import { BBSState, LoggedOnSubState } from '../../src/constants/bbs-states';
+
+function emitter() {
+  const emitted: Array<{ event: string; data: unknown }> = [];
+  return {
+    emitted,
+    id: 'reservation-socket',
+    emit(event: string, data?: unknown) { emitted.push({ event, data }); return true; },
+    on() { return this; },
+    join() { return this; },
+  } as any;
+}
+
+function session(connectionType: 'web' | 'telnet'): any {
+  return {
+    state: BBSState.LOGON,
+    subState: LoggedOnSubState.READ_COMMAND,
+    connectionType,
+    nodeId: 4,
+    tempData: {},
+  };
+}
+
+const USER = { id: 'u-9', username: 'newcomer', slotNumber: 0, calls: 0, callsToday: 0, ansi: true };
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
+
+describe('a caller who does not match the node reservation is bumped, on every transport', () => {
+  it.each(['web', 'telnet'] as const)('%s: says 420 and does not log in', async (transport) => {
+    isReservationMatch.mockReturnValue(false);
+    const { runPostAuthLogin } = require('../../src/services/login-post.service');
+    const socket = emitter();
+    const s = session(transport);
+
+    const result = await runPostAuthLogin(socket, s, USER, { lastLoginBeforeUpdate: new Date(0) });
+
+    expect(result).toEqual({ ok: false, terminated: 'reserved-node' });
+    expect(isReservationMatch).toHaveBeenCalledWith(4, 'newcomer');
+    expect(beginLogoff).toHaveBeenCalledTimes(1);
+    expect(beginLogoff.mock.calls[0][2]).toEqual({
+      message: '\r\n420 Node is currently reserved for another user.\r\n',
+    });
+    // The bump happens BEFORE the session is marked logged on.
+    expect(s.state).toBe(BBSState.LOGON);
   });
 
-  test('emits the express.e:28736 reservation-bump string somewhere in the file', () => {
-    expect(src).toMatch(/420 Node is currently reserved for another user/);
+  it('a caller who DOES match is not bumped', async () => {
+    isReservationMatch.mockReturnValue(true);
+    const { runPostAuthLogin } = require('../../src/services/login-post.service');
+    const socket = emitter();
+    const s = session('telnet');
+
+    // The stubbed `updateUser` throws, which is how this test proves the
+    // pipeline went PAST the bump rather than returning at it.
+    await expect(
+      runPostAuthLogin(socket, s, USER, { lastLoginBeforeUpdate: new Date(0) }),
+    ).rejects.toThrow('the pipeline advanced past a reserved node');
+    expect(beginLogoff).not.toHaveBeenCalled();
   });
 
-  test('the bump check calls isReservationMatch(session.nodeId, ...) and gates on its result', () => {
-    // We require the auth handler to:
-    //   1. invoke isReservationMatch with session.nodeId
-    //   2. branch on the result to disconnect / emit the 420 string
-    const matchSite = src.match(
-      /isReservationMatch\(\s*session\.nodeId[^)]*\)[\s\S]{0,500}?(420 Node is currently reserved|disconnect)/
-    );
-    expect(matchSite).not.toBeNull();
-  });
+  it('a session with no node number is not asked about a reservation', async () => {
+    isReservationMatch.mockReturnValue(false);
+    const { runPostAuthLogin } = require('../../src/services/login-post.service');
+    const s = session('telnet');
+    delete s.nodeId;
 
-  test('cites express.e:28734-28738 for the bump branch', () => {
-    expect(src).toMatch(/express\.e:28734-28738|express\.e:29129-29135/);
+    await expect(
+      runPostAuthLogin(emitter(), s, USER, { lastLoginBeforeUpdate: new Date(0) }),
+    ).rejects.toThrow('the pipeline advanced past a reserved node');
+    expect(isReservationMatch).not.toHaveBeenCalled();
+    expect(beginLogoff).not.toHaveBeenCalled();
   });
 });

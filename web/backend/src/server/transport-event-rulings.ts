@@ -1333,12 +1333,15 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "The import service's own EventEmitter " +
     "(services/import-transaction.service.ts:823). Not a socket.",
   },
-  "prompt-forced-pwd-change": {
-    kind: "web-only",
-    note:
-    "Emitted at services/login-post.service.ts:425. Telnet/SSH gets " +
-    "services/login-prompt.service.ts's line-buffered forced-change flow.",
-  },
+  /**
+   * FOUR RULINGS RETIRED HERE (TP-9b): `user-not-found`, `prompt-password`,
+   * `prompt-password-reset` and `prompt-forced-pwd-change`. Every one of them
+   * was a cue to the browser's login line editor, and there is no editor: the
+   * server prints those prompts as ordinary output and reads the answers as
+   * ordinary `command` input, on every transport. Their emit sites are gone,
+   * so the names are gone from the census too - a ruling for a name nothing
+   * sends is a claim about nothing.
+   */
   "prompt-login": {
     kind: "web-only",
     note:
@@ -1348,20 +1351,6 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "deleted: TP-9b re-points its browser handler instead of removing the " +
     "event. A byte transport needs no cue - the server loop's own `Username: ` " +
     "prompt travels as ansi-output.",
-  },
-  "prompt-password": {
-    kind: "web-only",
-    note:
-    "Emitted at server/auth-socket-handlers.ts:414, " +
-    "server/auth-socket-handlers.ts:495, server/auth-socket-handlers.ts:687. " +
-    "The byte-transport equivalent is the server loop's own `Password: ` prompt " +
-    "(handlers/command.handler.ts), already on the wire as ansi-output.",
-  },
-  "prompt-password-reset": {
-    kind: "web-only",
-    note:
-    "Emitted at server/auth-socket-handlers.ts:455. Telnet/SSH gets the " +
-    "line-buffered equivalent in services/login-prompt.service.ts.",
   },
   "ready": {
     kind: "not-transport",
@@ -1816,14 +1805,6 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "(Doors/card-lobby/server.ts:78, \"Emit event via socket to all connected " +
     "clients\"). No listener in this repo's frontends as measured 2026-09-03; a " +
     "byte terminal has no bundle to receive it.",
-  },
-  "user-not-found": {
-    kind: "web-only",
-    note:
-    "Emitted at server/auth-socket-handlers.ts:374, " +
-    "server/auth-socket-handlers.ts:680. The byte path prints its own line and, " +
-    "after TP-9a, offers registration - which today has exactly one, web-only, " +
-    "caller.",
   },
   "video:cells": {
     kind: "web-only",

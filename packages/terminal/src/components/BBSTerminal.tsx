@@ -42,7 +42,6 @@ import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
 import { WideScreenMachine, PetsciiMachine, AnsiToPetsciiTransducer, petsciiInputToAscii } from '@amiexpress/bbs-door-sdk/petscii';
 import { PetsciiCanvas, type PetsciiCanvasHandle } from '../petscii/PetsciiCanvas';
 import { petsciiSurfaceReducer, initialPetsciiSurface, type PetsciiSurface } from '../petscii/surface-state';
-import { processLoginKey, type LoginKeyContext } from '../utils/login-key-machine';
 
 // RIP Graphics.
 //
@@ -278,25 +277,32 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const fontSizeRef = useRef(fontSize);
   fontSizeRef.current = fontSize;
 
-  // Login state tracking
-  const loginState = useRef<
-    'waiting' |
-    'username' |
-    'password' |
-    'new-user-prompt' |
-    'registering' |
-    'loggedin' |
-    'checking-username' |
-    'logging-in' |
-    'password-reset' |
-    'forced-pwd-change'
-  >('waiting');
-  const passwordResetInput = useRef<string>('');      // Buffer for email-based password reset input
-  const forcedPwdChangeInput = useRef<string>('');   // Buffer for forced-change-at-login input
-  const username = useRef<string>('');
-  const password = useRef<string>('');
-  const newUserPromptUsername = useRef<string>('');
-  const passwordMode = useRef<boolean>(false);
+  /**
+   * TWO VALUES, because the browser no longer runs a login state machine
+   * (TP-9b). The server drives the whole prompt for every transport now -
+   * username, password, the new-user question, the password reset and the
+   * forced change - and every keystroke leaves here as ordinary `command`
+   * input, which is what the board already accepts for every other prompt.
+   *
+   * What is LEFT to know is only whether this session is past login, and two
+   * things ask: `attemptTokenLogin` (do not auto-login over a live session)
+   * and the disconnect handler.
+   *
+   * The eight-value union that used to be here, its five line buffers and the
+   * echo they did are gone. They were the second implementation of a machine
+   * the server already had, and the browser's copy diverged - its
+   * `injectInput` twin handled the new-user prompt differently from
+   * `term.onKey`'s, so the on-screen keyboard and a desktop key answered the
+   * same question in two ways.
+   */
+  const loginState = useRef<'server-driven' | 'loggedin'>('server-driven');
+  /**
+   * A token login is in flight. Not login STATE: it stops the storage-event
+   * listener from firing a second `login {token}` while the first is still
+   * unanswered, which is the one thing the retired 'logging-in' value was
+   * doing that still needs doing.
+   */
+  const tokenLoginPending = useRef<boolean>(false);
   const doorActive = useRef<boolean>(false);
   /**
    * The same fact as `doorActive`, as STATE, because the PETSCII canvas takes
@@ -554,7 +560,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const attemptTokenLogin = useCallback(() => {
     const socket = socketRef.current;
     if (!socket) return false;
-    if (loginState.current === 'loggedin' || loginState.current === 'registering') {
+    if (loginState.current === 'loggedin' || tokenLoginPending.current) {
       return false;
     }
 
@@ -571,16 +577,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     if (token) {
       console.log('[AutoLogin] Reusing shared auth token');
       socket.emit('login', { token });
-      loginState.current = 'logging-in';
+      tokenLoginPending.current = true;
       return true;
     }
     return false;
   }, [getStoredSharedToken, clearPetsciiSession]);
 
   useEffect(() => {
-    if (!attemptTokenLogin()) {
-      loginState.current = 'waiting';
-    }
+    attemptTokenLogin();
 
     const handleStorage = (event: StorageEvent) => {
       if (
@@ -1697,10 +1701,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         attemptTokenLogin();
       }
 
-      if (loginState.current === 'password' && newUserPromptUsername.current && password.current) {
-        socket.emit('login', { username: newUserPromptUsername.current, password: password.current });
-        loginState.current = 'logging-in';
-      }
+      // The reconnect re-login that stood here replayed a password the
+      // BROWSER had buffered. Nothing buffers one any more (TP-9b): the
+      // server owns the prompt, and a reconnect meets it again like any
+      // other caller, or restores through the token above.
 
       // Send initial terminal size to backend (80x25 in fixed mode)
       const { cols, rows } = term;
@@ -2039,9 +2043,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         // Network issue or transport close - preserve session state for restoration
         console.log('[DISCONNECT] Network disconnect - preserving session state for reconnection');
         reconnectPending.current = true;
-        loginState.current = 'waiting';
-        username.current = '';
-        password.current = '';
+        loginState.current = 'server-driven';
+        tokenLoginPending.current = false;
         // DO NOT clear session state - it will be used on reconnect
       }
       onDisconnect?.(reason);
@@ -2397,22 +2400,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // saved JWT), and the saved username/password are only used to seed
     // that token on a fresh registration.
 
+    /**
+     * The server's cue that its login prompt is on screen (it fires this from
+     * seven sites, on every transport). It used to hand the line to the
+     * browser's own editor; now it only records that this session is not past
+     * login, because the prompt itself - and its echo - is the server's.
+     */
     socket.on('prompt-login', () => {
-      // If we're already in the middle of manual login, don't duplicate the prompt
-      if (
-        loginState.current === 'username' ||
-        loginState.current === 'password' ||
-        loginState.current === 'checking-username' ||
-        loginState.current === 'logging-in'
-      ) {
-        return;
-      }
-
-      // Reset any prior login attempt so manual entry always works.
-      // Backend already sent the visible prompt via ansi-output.
-      username.current = '';
-      password.current = '';
-      loginState.current = 'username';
+      loginState.current = 'server-driven';
+      tokenLoginPending.current = false;
     });
 
     socket.on('login-success', (data: any) => {
@@ -2457,14 +2453,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         currentConf: data.currentConf,
       });
 
-      const autoLoginEnabled = localStorage.getItem('bbs_auto_login_enabled') === 'true';
-      if (autoLoginEnabled && newUserPromptUsername.current) {
-        const encodedUsername = btoa(newUserPromptUsername.current);
-        const encodedPassword = btoa(password.current || '');
-        localStorage.setItem('bbs_saved_username', encodedUsername);
-        localStorage.setItem('bbs_saved_password', encodedPassword);
-        console.log('[Quick Connect] Credentials saved for future auto-login');
-      }
+      /**
+       * The "Quick Connect" credential save that stood here is gone with the
+       * browser's login buffers (TP-9b), and it cost nothing: NOTHING read
+       * `bbs_saved_username` / `bbs_saved_password` back. Auto-login is the
+       * saved JWT (`attemptTokenLogin`), as the comment above the connect
+       * handler already recorded. What it did do was keep a base64 password
+       * in localStorage; the two `removeItem` calls in the failure path stay,
+       * so a browser that has one loses it on the next failed login.
+       */
 
       socket.emit('get-font-preference');
       focusSurface();
@@ -2506,9 +2503,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       clearSessionState();
       reconnectPending.current = false;
       // Fall back to token login
-      if (!attemptTokenLogin()) {
-        loginState.current = 'waiting';
-      }
+      loginState.current = 'server-driven';
+      tokenLoginPending.current = false;
+      attemptTokenLogin();
     });
 
     socket.on('login-failed', (data: string | { reason: string; retryFrom?: 'username' | 'password' }) => {
@@ -2526,73 +2523,36 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         writeTerm('\r\n\x1b[33m[Quick Connect] Saved credentials cleared due to login failure\x1b[0m\r\n');
       }
 
-      // If retrying from password, keep username and wait for prompt-password event
-      // If retrying from username (default), clear everything and go back to username prompt
-      if (retryFrom === 'password') {
-        // Keep username, just clear password - prompt-password event will set state
-        password.current = '';
-      } else {
-        // Go back to username entry
-        loginState.current = 'username';
-        username.current = '';
-        password.current = '';
-      }
+      // Where the caller goes next is the SERVER's decision and it has
+      // already sent the prompt; `retryFrom` is read only for the log.
+      console.log('[Login] server is re-prompting from:', retryFrom);
+      loginState.current = 'server-driven';
+      tokenLoginPending.current = false;
     });
 
-    socket.on('user-not-found', (data: { username: string; prompt: string }) => {
-      writeTerm('\x1b[33m' + data.prompt + '\x1b[0m');
-      loginState.current = 'new-user-prompt';
-      newUserPromptUsername.current = data.username;
-      username.current = '';
-    });
-
-    socket.on('retry-login', (data?: { prefillUsername?: string }) => {
-      loginState.current = 'username';
-      // Prefill username if provided (e.g., when user presses R to retry after "user not found")
-      username.current = data?.prefillUsername || '';
-      password.current = '';
-      passwordResetInput.current = '';
-      passwordMode.current = false;
-    });
-
-    socket.on('prompt-password', () => {
-      loginState.current = 'password';
-      password.current = '';
-      writeTerm('Password: ');
-    });
-
-    socket.on('password-mode', (enabled: boolean) => {
-      passwordMode.current = enabled;
-    });
-
-    // Password reset flow - express.e:29152-29213
-    socket.on('prompt-password-reset', (data: { state: string }) => {
-      console.log('[PasswordReset] Entering password reset mode:', data.state);
-      loginState.current = 'password-reset';
-      passwordResetInput.current = '';
-      // mask-input controls whether to echo or mask characters
-    });
-
-    // Forced password change flow - express.e:29785-29845
-    // Triggered when the server detects forcePwdReset=1 or PASSWORD_EXPIRY_DAYS has elapsed.
-    socket.on('prompt-forced-pwd-change', () => {
-      console.log('[ForcedPwdChange] Entering forced password change mode');
-      loginState.current = 'forced-pwd-change';
-      forcedPwdChangeInput.current = '';
-      // mask-input will be set true by the server immediately after this event
-    });
-
-    // Server signals that the forced password change succeeded and the BBS session
-    // is continuing normally (bulletin flow starting).
+    /**
+     * SIX LISTENERS RETIRED HERE (TP-9b): `user-not-found`, `retry-login`,
+     * `prompt-password`, `password-mode`, `prompt-password-reset` and
+     * `prompt-forced-pwd-change`.
+     *
+     * Each existed to move the browser's login editor into a new mode, and
+     * there is no editor to move: the server prints every one of those
+     * prompts as ordinary output and reads the answer as ordinary `command`
+     * input, on every transport (TP-9a).
+     *
+     * `password-mode` and `mask-input` go with them, and that is a small
+     * deviation from the plan, which kept them re-pointed at "suppress local
+     * echo". Nothing in this component echoes locally: `writeTerm` is fed by
+     * the SERVER's output alone, and the only local echo that ever existed
+     * was the retired editor's. A listener that gates nothing is not a
+     * re-pointing, it is a comment with a socket attached - so the masking
+     * lives where the echo does, on the server (`session.maskInput`).
+     */
+    // KEPT: a UI state signal, not a line-editor mode. The server says the
+    // forced change is done and the BBS session is continuing.
     socket.on('forced-pwd-change-complete', () => {
       console.log('[ForcedPwdChange] Password changed successfully, resuming BBS session');
       loginState.current = 'loggedin';
-      forcedPwdChangeInput.current = '';
-    });
-
-    socket.on('mask-input', (enabled: boolean) => {
-      console.log('[PasswordReset] Mask input:', enabled);
-      passwordMode.current = enabled;
     });
 
     socket.on('door-active', (active: boolean) => {
@@ -2845,22 +2805,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       void applyFont(term, data.font, fontSizeRef.current);
     });
 
-    // Login state machine context (utils/login-key-machine.ts). The echo
-    // goes through writeTerm, so a 'P' session sees its own typing on the
-    // canvas; passwords are masked exactly as before.
-    const loginCtx: LoginKeyContext = {
-      state: loginState,
-      username, password, newUserPromptUsername, passwordResetInput, forcedPwdChangeInput, passwordMode,
-      emit: (event, payload) => { socket.emit(event, payload); },
-      echo: writeTerm,
-      defer: (fn) => { setTimeout(fn, 0); },
-      log: (m) => console.log('[Login] ' + m),
-    };
-    const isLoginBusy = () =>
-      loginState.current === 'username' || loginState.current === 'password' ||
-      loginState.current === 'new-user-prompt' || loginState.current === 'checking-username' ||
-      loginState.current === 'logging-in' || loginState.current === 'password-reset' ||
-      loginState.current === 'forced-pwd-change';
     // Post-login input to the server (was the tail of term.onData).
     const sendInput = (data: string) => {
       if (!socket.connected) { console.error('[Terminal] Socket not connected, cannot send data'); return; }
@@ -2873,26 +2817,30 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
       socket.emit('command', data);
     };
-    // The one input path for the on-screen keyboard and the canvas: login
-    // machine first, otherwise server. (xterm's own two callbacks below keep
-    // their split because onData also delivers pastes that never hit onKey.)
+    /**
+     * The one input path for the on-screen keyboard and the canvas: straight
+     * to the server. It used to ask the browser's login machine first, and
+     * its answer differed from `term.onKey`'s at the new-user prompt - the
+     * same question answered two ways depending on which keyboard the caller
+     * used. Both paths are one path now.
+     */
     processInputKeyRef.current = (key: string) => {
       // Anything the transducer is still holding belongs to the BBS's own
       // output and must land BEFORE this keystroke's echo, not under it.
       if (surfaceRef.current === 'canvas' && petsciiTransducerRef.current) {
         enqueuePetscii(petsciiTransducerRef.current.flush());
       }
-      if (processLoginKey(key, loginCtx)) return;
       sendInput(key);
     };
 
-    term.onKey(({ key }) => {
-      if (!socket.connected) { console.error('[Terminal] Socket not connected, cannot send key'); return; }
-      processLoginKey(key, loginCtx);
-    });
-
+    /**
+     * ONE xterm callback, not two. `term.onKey` existed only to run the login
+     * machine, and `term.onData` had to skip whatever that machine had
+     * consumed - so a key at the login prompt travelled one way and every
+     * other key another. `onData` alone now carries both, and it is also the
+     * one that delivers PASTES, which never reached `onKey` at all.
+     */
     term.onData((data: string) => {
-      if (isLoginBusy()) return; // handled (or swallowed) by onKey above
       sendInput(data);
     });
 

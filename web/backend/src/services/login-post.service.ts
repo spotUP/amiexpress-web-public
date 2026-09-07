@@ -9,12 +9,10 @@
  * are guarded internally on `session.connectionType === 'web'` so
  * telnet/SSH safely run the same code.
  *
- * The forced-password-change flow currently still returns
- * `terminated: 'pwd-change-pending'` on both transports and lets the
- * web `forced-pwd-change-input` socket handler take over (legacy
- * behaviour for web; commit 4 will route both transports through
- * `services/login-prompt.service.ts` `promptForcedPwdChange` for true
- * parity).
+ * The forced-password-change flow routes EVERY transport through
+ * `services/login-prompt.service.ts` `promptForcedPwdChange` (TP-9b). It used
+ * to hand web to a socket handler of its own, which was the second
+ * implementation this plan exists to remove.
  */
 
 import type { BBSSession } from "../index";
@@ -22,6 +20,7 @@ import type { LoginEmitter } from "../types/login-emitter";
 import { BBSState, LoggedOnSubState } from "../constants/bbs-states";
 import { db } from "../database";
 import { nodeFileManager } from "../services/NodeFileManager";
+import { userFileManager } from "../services/UserFileManager";
 import { userDatabaseManager } from "../services/UserDatabaseManager";
 import { callersLogManager } from "./CallersLogManager";
 import { initializeSecurity, setEnvStat } from "../utils/security.util";
@@ -67,6 +66,7 @@ export type PostAuthResult =
   | {
       ok: false;
       terminated:
+        | "reserved-node"
         | "lockout"
         | "already-on-another-node"
         | "account-locked"
@@ -127,6 +127,78 @@ export async function runPostAuthLogin(
   // hash after the password is updated mid-flow.
   let user = userArg;
   const isWeb = session.connectionType === "web";
+
+  /**
+   * THE RESERVED-NODE BUMP (express.e:28734-28738 / 29129-29135).
+   *
+   * A sysop reserves a node, and a caller whose name does not match it is
+   * told so and disconnected. It used to live inside the web `login`
+   * handler's credential arm - which its own comment said guarded "both auth
+   * paths" - so retiring that arm (TP-9b) would have taken the check with it
+   * for token logins AND for telnet, which never had it at all. It belongs in
+   * the ONE pipeline every transport's successful login runs through, which
+   * is here. Case-insensitive, as StriCmp is at express.e:29131.
+   */
+  if (typeof session.nodeId === "number") {
+    const { isReservationMatch } = require("./node-reservation.service");
+    if (!isReservationMatch(session.nodeId, user.username)) {
+      const { beginLogoff } = require("../server/logoff");
+      beginLogoff(emitter as any, session, {
+        message: "\r\n420 Node is currently reserved for another user.\r\n",
+      });
+      return { ok: false, terminated: "reserved-node" };
+    }
+  }
+
+  /**
+   * The user record on DISK, which is what a 68K door reads (XIM reads
+   * user.data, not the database). This was in the web credential arm too, so
+   * a telnet caller's login never wrote it; now every transport does.
+   */
+  if (user.slotNumber) {
+    try {
+      userFileManager.updateUserDataFile(user, user.slotNumber);
+    } catch (error) {
+      // Best-effort: a failed disk sync must not fail a login.
+      console.error("[LOGIN] Failed to sync user to disk:", error);
+    }
+  }
+
+  /**
+   * THE BROWSER'S SESSION TOKEN.
+   *
+   * A web caller who types his name and password used to get a freshly
+   * minted JWT with `login-success`, from the credential arm of the `login`
+   * socket handler. That arm is retired (TP-9b), and without this the only
+   * `login-success` carrying a token would be the one a caller who ALREADY
+   * had a token gets - so a first login would never store one and auto-login
+   * would quietly stop working after this task.
+   *
+   * Telnet and SSH have no use for it: there is no browser to store it, and
+   * `login-success` is a frontend event.
+   */
+  if (isWeb) {
+    try {
+      const accessToken = await db.generateAccessToken(user);
+      const refreshToken = await db.generateRefreshToken(user);
+      emitter.emit("login-success", {
+        user: {
+          id: user.id,
+          username: user.username,
+          realname: user.realname,
+          secLevel: user.secLevel,
+          expert: user.expert,
+          ansi: user.ansi,
+        },
+        token: accessToken,
+        refreshToken,
+      });
+    } catch (err) {
+      // A token is a convenience, not the login: the caller is authenticated
+      // either way and must not be thrown out because minting failed.
+      console.error("[LOGIN] could not mint a session token:", err);
+    }
+  }
 
   // Update last login (preserve previous via ctx for new-since scans).
   await db.updateUser(user.id, {
@@ -422,21 +494,15 @@ export async function runPostAuthLogin(
       session.forcedPwdChangeMinLen = minPasswordLength;
       session.forcedPwdChangeMinStrength = minPasswordStrength;
 
-      if (isWeb) {
-        // Web frontend modal: emit the prompts and return; the existing
-        // `forced-pwd-change-input` socket handler in
-        // auth-socket-handlers.ts drives the rest asynchronously.
-        emitter.emit("prompt-forced-pwd-change");
-        emitter.emit(
-          "ansi-output",
-          "\r\nYour account requires your password to be changed.\r\n\r\n",
-        );
-        emitter.emit("ansi-output", "Enter New Password: ");
-        emitter.emit("mask-input", true);
-        return { ok: false, terminated: "pwd-change-pending" };
-      }
-
-      // Telnet/SSH: drive the prompt loop synchronously via the
+      // EVERY TRANSPORT drives the same prompt loop (TP-9b). The web branch
+      // that stood here emitted `prompt-forced-pwd-change` and handed the
+      // flow to a `forced-pwd-change-input` socket handler - the browser's
+      // login line editor under another name, and a second implementation of
+      // the loop below. That handler is gone and the adapter no longer steps
+      // aside for web, so one flow serves all three transports and a web
+      // caller's keystrokes reach it as ordinary `command` input.
+      //
+      // Drive the prompt loop synchronously via the
       // line-buffered adapter in services/login-prompt.service.ts. On
       // success the adapter has already applied the new password +
       // cleared session.forcedPwdChange* state; fall through to finish

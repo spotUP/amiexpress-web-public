@@ -58,16 +58,19 @@ export interface ForcedPwdChangeResult {
  *   session.forcedPwdChangeUsername / UserId / Slot / PwdHash
  *   session.forcedPwdChangeMinLen / MinStrength
  */
+/**
+   * EVERY TRANSPORT, since TP-9b. This used to return immediately for
+   * `connectionType === 'web'` and leave the flow to a socket handler in
+   * auth-socket-handlers.ts, which was the browser's login editor under
+   * another name. That handler is gone; this loop drives web, telnet and SSH
+   * alike, and the caller's keystrokes reach it as ordinary `command` input
+   * through `session.loginInputHandler`.
+   */
 export async function promptForcedPwdChange(
   emitter: LoginEmitter,
   session: BBSSession,
   user: any,
 ): Promise<ForcedPwdChangeResult> {
-  if (session.connectionType === "web") {
-    // Web is driven by the existing socket handler; nothing to do here.
-    return { ok: true };
-  }
-
   emitText(
     emitter as any,
     "\r\nYour account requires your password to be changed.\r\n\r\n",
@@ -188,6 +191,16 @@ export async function promptForcedPwdChange(
         emitter as any,
         "\r\n\x1b[32mPassword updated successfully.\x1b[0m\r\n",
       );
+      /**
+       * The browser's cue that the forced change is done and the BBS session
+       * is continuing (its listener leaves the login view). Its only emit site
+       * used to be the web-only `forced-pwd-change-input` socket handler; that
+       * handler is retired and this loop drives every transport now (TP-9b),
+       * so the event is emitted from the one place the change actually
+       * completes. A byte transport ignores it, as it ignores every other
+       * frontend event.
+       */
+      emitter.emit("forced-pwd-change-complete");
       resolve({ ok: true, newPassword: firstPassword });
     };
 
@@ -280,15 +293,18 @@ export async function isPasswordResetAvailable(userEmail: string | null | undefi
  *   session.passwordResetUsername = the username that failed login
  *   session.user must be undefined (we're pre-login)
  */
+/**
+   * EVERY TRANSPORT, since TP-9b. This used to return immediately for
+   * `connectionType === 'web'` and leave the flow to a socket handler in
+   * auth-socket-handlers.ts, which was the browser's login editor under
+   * another name. That handler is gone; this loop drives web, telnet and SSH
+   * alike, and the caller's keystrokes reach it as ordinary `command` input
+   * through `session.loginInputHandler`.
+   */
 export async function promptPasswordReset(
   emitter: LoginEmitter,
   session: BBSSession,
 ): Promise<PasswordResetResult> {
-  if (session.connectionType === "web") {
-    // Web is driven by the existing socket handler; nothing to do here.
-    return { ok: true };
-  }
-
   const username = session.passwordResetUsername || "";
   if (!username) return { ok: false, reason: "no-email" };
 

@@ -219,10 +219,7 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'presence:unsubscribe',
   'presence:update',
   'progress',
-  'prompt-forced-pwd-change',
   'prompt-login',
-  'prompt-password',
-  'prompt-password-reset',
   'ready',
   'replay:delete',
   'replay:list',
@@ -285,7 +282,6 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'transfer:end',
   'transfer:error',
   'unoEventBroadcast',
-  'user-not-found',
   'video:cells',
   'video:frame',
   'video:start-stream',
@@ -559,7 +555,11 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // re-announcing the running client door to a browser that reconnected,
     // because door:load-client never repeats and the browser clears its
     // active door on every connect.
-    expect(ruled.length).toBe(247);
+    // 243 as of TP-9b: four rulings retired with the browser's login line
+    // editor - `user-not-found`, `prompt-password`, `prompt-password-reset`
+    // and `prompt-forced-pwd-change`. Nothing emits them; a ruling for a name
+    // nothing sends is a claim about nothing.
+    expect(ruled.length).toBe(243);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -603,7 +603,8 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       render: 5,
       translate: 11,
       dead: 10,
-      'web-only': 117,
+      // 113 as of TP-9b: the four login-editor cues are gone with the editor.
+      'web-only': 113,
       'not-transport': 104,
     });
   });
@@ -636,11 +637,21 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // `operator:paging-dot` (:434) and `operator:bot-activated` (:1182). Each
     // is ruled in EVENT_RULINGS with the receiver that earns its class.
     //
-    // 153 now: `cursor-visibility` had NO SENDER - setCursorVisible() was the
+    // 151 as of 2026-09-07 (TP-9b): FOUR names left arm A with the browser's
+    // login line editor. `user-not-found`, `prompt-password`,
+    // `prompt-password-reset` and `prompt-forced-pwd-change` each existed to
+    // move that editor into a new mode, and the server prints those prompts
+    // as ordinary output now, on every transport. A fifth,
+    // `forced-pwd-change-complete`, did NOT leave: its only emit site was the
+    // retired `forced-pwd-change-input` handler, and it moved to the place the
+    // change actually completes (services/login-prompt.service.ts), where it
+    // now reaches every transport. Union 245 -> 241.
+    //
+    // 153 before that: `cursor-visibility` had NO SENDER - setCursorVisible() was the
     // only site that emitted it and nothing in the tree called setCursorVisible
     // - so the helper was deleted rather than left asserting behaviour no code
     // performs, and the name left arm A with it. Union 246 -> 245.
-    expect(fromA.length).toBe(155);
+    expect(fromA.length).toBe(151);
     // 86 from sdk/, 14 from Doors/, `ansi-output` in both. The plan records the
     // Doors arm as 0; that was a zsh `nomatch` artefact and the module header
     // records the correction.
