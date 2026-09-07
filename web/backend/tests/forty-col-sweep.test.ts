@@ -71,7 +71,7 @@ import { buildMenuPrompt } from '../src/utils/menu-prompt.util';
 import { ANSI_ART_SKIPPED_NOTICE } from '../src/utils/ansi-art-detect.util';
 import { DOOR_NEEDS_80_NOTICE } from '../src/utils/door-min-columns.util';
 import { wipeEffectsEnabled } from '../src/utils/screen-wipe.util';
-import { buildFileSearchLines, buildNewFileLines } from '../src/handlers/file/file.handler';
+import { buildFileSearchLines } from '../src/handlers/file/file.handler';
 import { buildWhoRow } from '../src/handlers/chat/chat-commands.handler';
 import { buildRoomMemberRow } from '../src/handlers/chat/room-commands.handler';
 import { buildNodeStatusRow } from '../src/handlers/message/message-commands.handler';
@@ -194,17 +194,9 @@ describe('40-column sweep: tables', () => {
     );
   });
 
-  it('new-file listing rows', () => {
-    fits(
-      buildNewFileLines(C64, {
-        filename: LONG,
-        size: 1 << 30,
-        uploaddate: Date.now(),
-        uploader: LONG,
-        description: LONG,
-      })
-    );
-  });
+  // NOT swept: new-file listing rows. `N` no longer builds a row of its own -
+  // it dumps the DIR file's bytes, the way `F` does, so its 40-column
+  // behaviour is the file listing's and is covered with the DIR files.
 
   it('WHO rows', () => {
     fits([

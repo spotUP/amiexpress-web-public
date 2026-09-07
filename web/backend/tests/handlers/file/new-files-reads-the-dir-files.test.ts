@@ -49,7 +49,6 @@ beforeAll(() => {
   fs.mkdirSync(path.join(tmp, 'Conf1'), { recursive: true });
   fs.writeFileSync(path.join(tmp, 'Conf1', 'Dir1'), DIR_LINES.join('\n'), 'binary');
   config.set('dataDir', tmp);
-  config.set('bbsRoot', tmp);
 });
 
 afterAll(() => {

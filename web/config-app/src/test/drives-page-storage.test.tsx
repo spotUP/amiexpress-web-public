@@ -103,7 +103,7 @@ const PROVIDERS = [
   },
 ];
 
-const confirmMock = vi.fn(async () => true);
+const confirmMock = vi.fn(async (_options: { title: string; message: string }) => true);
 vi.mock('../contexts/NotificationContext', () => ({
   useNotification: () => ({
     showSuccess: vi.fn(),

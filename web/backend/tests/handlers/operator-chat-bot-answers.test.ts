@@ -64,7 +64,7 @@ describe('the grumpy bot answers a caller', () => {
     const paged = await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
     expect(paged.success).toBe(true);
     await wait(2600);                                  // past the 1s timeout
-    expect(w.repo.getPageRequest(w.session.tempData.pageId).sysopHandle).toBe('GrumpyBot');
+    expect(w.repo.getPageRequest(w.session.tempData.pageId)!.sysopHandle).toBe('GrumpyBot');
 
     const before = w.seen.length;
     await H.handleUserChatMessage(w.io, w.repo, w.session, 'hello grumpy');
@@ -89,7 +89,7 @@ describe('the grumpy bot answers a caller', () => {
         done();
       });
     });
-    expect(w.repo.getPageRequest(pageId).sysopId).toBe('bot');
+    expect(w.repo.getPageRequest(pageId)!.sysopId).toBe('bot');
 
     // A NEW process: the same DB, an empty activeChatSessions.
     const before = w.seen.length;

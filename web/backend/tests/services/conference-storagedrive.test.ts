@@ -11,7 +11,7 @@
 import { readConferenceFields, applyConferenceFields } from '../../src/services/config-services/conference-info-file.service';
 
 /** The ToolTypes shape the service reads and writes. */
-function toolTypes(initial: Record<string, string> = {}) {
+function toolTypes(initial: Record<string, string> = {}): Parameters<typeof readConferenceFields>[0] {
   const map = new Map<string, string>(Object.entries(initial));
   return {
     get: (k: string) => map.get(k),
@@ -20,7 +20,7 @@ function toolTypes(initial: Record<string, string> = {}) {
     has: (k: string) => map.has(k),
     entries: () => map.entries(),
     raw: map,
-  } as never as ReturnType<typeof toolTypes>;
+  } as never as Parameters<typeof readConferenceFields>[0];
 }
 
 describe('a conference directory can name the drive it lives on', () => {
