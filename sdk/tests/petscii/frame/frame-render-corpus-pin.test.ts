@@ -220,6 +220,7 @@ const PINS: Record<string, Pin> = {
   aquascan_scan: { renders: 61, bytes: 141049, sha256: 'e01e6aa27252848f4d32e4f0562b8cd5f7cec630108b4abe6548e88870958754' },
   aquascan_nsu: { renders: 61, bytes: 141015, sha256: '32c9d2c449dc1d5401624d1a42d0c3f10932d9cbe4170ba31ccfd6b4126a1a8c' },
   aquascan_cs: { renders: 60, bytes: 136682, sha256: 'c989c183ff6e46ed78bf7134a0719cdf642225539638913fbe589b3f637bcd79' },
+  zippy: { renders: 55, bytes: 115666, sha256: '6f4173ea6dc0dc72b2b474a86c80e6385e66b733beefc2d31a47bb51d186323d' },
 };
 
 function renderChain(id: string): Pin {

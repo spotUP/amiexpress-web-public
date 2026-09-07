@@ -188,6 +188,9 @@ const SIGNATURES: Record<string, Signature> = {
   aquascan_scan: { door: '48376  P CB4!SR21.LZX' },
   aquascan_nsu: { door: '92470  N CB4!SA63.LHA' },
   aquascan_cs: { door: '98502  N CB4!SA60.LHA' },
+  // 5D-ZippySearch prints its hits in the same DIR-record grammar AquaScan
+  // does, so the record rung renders them; the signature is one of those.
+  zippy: { door: '92470  N CB4!SA63.LHA' },
 };
 
 // ---------------------------------------------------------------- sessions

@@ -536,5 +536,22 @@
       "cwd": "web/backend",
       "installed": "cs",
       "notes": "AquaScan v1.0 by Aquarius/Outlaws under its ALL-CONFERENCES names. `SCAN`, `NSU` and `CS` are one program and one screen - the same binary `FR` and `N` run - walking every conference the caller may read and printing each one's new files under a `Conference: [ name ]` header. They are marked separately because the claim is per registration (the RTW precedent), and each carries its own capture. The file rows are re-rendered by the record rung (web/backend/src/server/c64-file-record-rung.ts) through Prompts/FILEVIEW.40, exactly as the board's own listing renders them; the conference headers fall through to the ladder. Marked C64_ADAPT=40 on 2026-09-07. Captured as `cs 01-01-20`. CS is the conference-scan name; the screen is the same walk, and this capture ends mid-prompt rather than after Quit, which is why its bytes differ from the other two."
+    },
+    "zippy": {
+      "binary": "Doors/5D-ZippySearch/5D-ZippySearch",
+      "command": "Z",
+      "script": [
+        "5000 LHA\\r",
+        "9000 a\\r",
+        "14000 \\r",
+        "18000 \\r",
+        "22000 q\\r"
+      ],
+      "bytes": 4340,
+      "sha256": "8ab8bb1f1dcc9b1032d071e989a9816b329c8610059545135baf2ccd525699ec",
+      "harness": "printf '%s\\n' '5000 LHA\\r' '9000 a\\r' '14000 \\r' '18000 \\r' '22000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/5D-ZippySearch/5D-ZippySearch 1 --doortype XIM --command Z --timeout 32 > zippy.ans",
+      "cwd": "web/backend",
+      "installed": "Z",
+      "notes": "5D-ZippySearch v0.03 by sTc/5D, the board's Z command: a search string, a directory, and then the matching files - printed in the SAME DIR-record grammar AquaScan uses, which is why the record rung renders them and why this door is marked. Captured searching for `LHA` across all directories. Two line-input prompts before any output, so the script types a term and answers the directory; with neither, the capture is the header and a prompt. Marked C64_ADAPT=40 on 2026-09-07. The DIZ block under a record whose entry row has scrolled off the top of the frame falls through to the ladder rather than being consumed - the rung reads a record and its own continuation rows, and at a frame boundary the entry row is simply not there."
     }
 }
