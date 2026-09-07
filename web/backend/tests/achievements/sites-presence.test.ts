@@ -71,18 +71,39 @@ describe('presence and doors', () => {
     expect(kinds()).not.toContain('presence.call:return:30');
   });
 
+  /**
+   * ORDINALS ARE COMPUTED, NOT ASSUMED.
+   *
+   * `callerOrdinal` counts every user whose `firstlogin` is at or before the
+   * candidate's, and this suite shares one database with every other backend
+   * suite - so "insert until there are 1000 rows" was only right when nothing
+   * else had inserted a user with a NULL or later `firstlogin`. It drifted to
+   * 998 the moment two such rows existed, which is a red test that says
+   * nothing about the code under it.
+   *
+   * So the test places its own candidates at ordinals 999 and 1000 by
+   * MEASURING what is already counted and topping up from there, above every
+   * existing row.
+   */
   it("the thousandth account's first call writes caller:1000; the 999th does not", () => {
-    const base = Math.floor(NOW / 1000) - 1000;
     const insert = db.prepare(`INSERT INTO users (id, username, passwordhash, realname, email, firstlogin) VALUES (?, ?, 'x', 'r', ?, ?)`);
-    const existing = (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
-    for (let i = existing; i < 1000; i += 1) insert.run(`u-ord-${i}`, `ord${i}`, `ord${i}@example.com`, base + i);
-    const ninehundredninetynine = { id: 'u-ord-x', email: 'x@example.com', calls: 0, firstLogin: new Date((base + 998) * 1000) };
+    const maxExisting = (db.prepare('SELECT MAX(firstlogin) AS m FROM users').get() as { m: number | null }).m ?? 0;
+    const base = Math.max(maxExisting, Math.floor(NOW / 1000) - 1000) + 1;
+    // Everything already in the table sorts at or below `base`, so this is
+    // exactly the ordinal the next row above it would take minus one.
+    const counted = (db.prepare('SELECT COUNT(*) AS n FROM users WHERE firstlogin <= ?').get(base) as { n: number }).n;
+    expect(counted).toBeLessThan(998);
+    for (let i = 0; i < 998 - counted; i += 1) insert.run(`u-ord-${i}`, `ord${i}`, `ord${i}@example.com`, base + 1 + i);
+
+    const ninehundredninetynine = { id: 'u-ord-x', email: 'x@example.com', calls: 0, firstLogin: new Date((base + 999) * 1000) };
+    insert.run('u-ord-x', 'ordx', 'x@example.com', base + 999);
     expect(callerOrdinal(db, ninehundredninetynine)).toBe(999);
     reportPresence({}, ninehundredninetynine);
     expect(kinds()).not.toContain('presence.call:caller:1000');
 
     db.exec('DELETE FROM achievement_outbox');
-    const thousandth = { id: 'u-ord-y', email: 'y@example.com', calls: 0, firstLogin: new Date((base + 999) * 1000) };
+    const thousandth = { id: 'u-ord-y', email: 'y@example.com', calls: 0, firstLogin: new Date((base + 1000) * 1000) };
+    insert.run('u-ord-y', 'ordy', 'y@example.com', base + 1000);
     expect(callerOrdinal(db, thousandth)).toBe(1000);
     reportPresence({}, thousandth);
     expect(kinds()).toContain('presence.call:caller:1000');
