@@ -44,6 +44,23 @@ export const UNICODE_TO_PETSCII: ReadonlyMap<string, number | { rvs: number }> =
   ['╔', 0xB0], ['╗', 0xAE], ['╚', 0xAD], ['╝', 0xBD],
   ['╠', 0xAB], ['╣', 0xB3], ['╦', 0xB2], ['╩', 0xB1],
   ['╭', 0xB0], ['╮', 0xAE], ['╯', 0xBD], ['╰', 0xAD],
+  // The MIXED double/single corners and junctions (U+2552-U+256C). A PC or
+  // Amiga art screen draws a double rule with a single side - or the reverse -
+  // constantly, and every one of them was a '?' on a PETSCII screen: 57 of
+  // `╖` alone across six of the board's own captured door screens, and the
+  // sysop reported the marks the moment 80-column callers started being shown
+  // ordinary 80-column art (2026-09-07). PETSCII has ONE weight of line, so
+  // each folds to the single-line glyph of the same SHAPE - the corner still
+  // turns the right way and the junction still meets the right sides.
+  ['╒', 0xB0], ['╓', 0xB0],
+  ['╕', 0xAE], ['╖', 0xAE],
+  ['╘', 0xAD], ['╙', 0xAD],
+  ['╛', 0xBD], ['╜', 0xBD],
+  ['╞', 0xAB], ['╟', 0xAB],
+  ['╡', 0xB3], ['╢', 0xB3],
+  ['╤', 0xB2], ['╥', 0xB2],
+  ['╧', 0xB1], ['╨', 0xB1],
+  ['╪', 0xDB], ['╫', 0xDB],
   // block elements (screen codes $61-$67, $6C, $7B, $7C, $7E, $7F)
   ['▌', 0xA1], ['▄', 0xA2], ['▔', 0xA3], ['▁', 0xA4],
   ['▏', 0xA5], ['▒', 0xA6], ['▕', 0xA7],
@@ -70,6 +87,25 @@ export const UNICODE_TO_PETSCII: ReadonlyMap<string, number | { rvs: number }> =
   // symbols
   ['✓', 0xBA], ['£', 0x5C], ['↑', 0x5E], ['←', 0x5F],
   ['•', 0x2A], ['·', 0x2E], ['●', 0x2A],
+  // The dots and squares an ANSI artist shades with. `∙` is the same mark as
+  // `·` (51 of them in super-qix's backgrounds), and a filled square is the
+  // full block PETSCII already draws as a reversed space (32 more).
+  ['∙', 0x2E], ['▪', 0x2E], ['▫', 0x2E],
+  ['■', R(0x20)], ['□', 0xDB],
+  // REVERSED NOT SIGN, CP437's `⌐`: the same mark as `¬`, which the latin-1
+  // fold already measures onto the upper one-eighth rule (d=5). Three of them
+  // sit in the captured SiX-Status, sysinfo and uLIST screens. `¬` itself is
+  // NOT listed here - it is latin-1, and this table is consulted first, so an
+  // entry would silently overrule that measurement.
+  ['⌐', 0xA3],
+  // CP437's florin is a LETTER, and the scene spells with it: `$CP-BUß1.lha`
+  // in DoorRepo's capture, and GWALL's file list. It is not a latin-1 byte -
+  // it arrives from a cp437-decoded screen - so it cannot go in the fold
+  // table beside the accented letters, and `f` is the letter it reads as.
+  // `§` and `¶` deliberately stay '?': the scan that found them was reading
+  // AquaScanConfig.txt, an Amiga executable wearing a .txt name, and no
+  // capture on this board draws with either.
+  ['ƒ', 0x46],
   ['♠', 0x2A], ['♥', 0x2A], ['♦', 0x2A], ['♣', 0x2A],
   ['→', 0x3E],
   ['\u00A0', 0x20],   // NO-BREAK SPACE (written escaped: invisible in source)

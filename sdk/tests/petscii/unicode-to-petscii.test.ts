@@ -25,6 +25,57 @@ describe('UNICODE_TO_PETSCII', () => {
     }
   });
 
+  /**
+   * The MIXED double/single box characters (U+2552-U+256C), and the shading
+   * marks beside them.
+   *
+   * A PC or Amiga art screen draws a double rule meeting a single side, or
+   * the reverse, constantly - and every one of those was a '?' on a PETSCII
+   * screen until 2026-09-07, when 80-column callers started being shown
+   * ordinary 80-column art and the sysop saw the marks. Measured across the
+   * board's own screens, bulletins, door art and captured door output -
+   * 375,000 characters - nine printable characters were degrading, `╖` 57
+   * times across six door screens alone.
+   *
+   * PETSCII has ONE weight of line, so each folds to the single-line glyph of
+   * the same SHAPE: the corner still turns the right way and the junction
+   * still meets the right sides.
+   */
+  it('folds every mixed double/single box character to its single-line shape', () => {
+    const sameShape: ReadonlyArray<readonly [string, string]> = [
+      ['╒', '┌'], ['╓', '┌'],
+      ['╕', '┐'], ['╖', '┐'],
+      ['╘', '└'], ['╙', '└'],
+      ['╛', '┘'], ['╜', '┘'],
+      ['╞', '├'], ['╟', '├'],
+      ['╡', '┤'], ['╢', '┤'],
+      ['╤', '┬'], ['╥', '┬'],
+      ['╧', '┴'], ['╨', '┴'],
+      ['╪', '┼'], ['╫', '┼'],
+    ];
+    for (const [mixed, single] of sameShape) {
+      expect({ mixed, byte: UNICODE_TO_PETSCII.get(mixed) })
+        .toEqual({ mixed, byte: UNICODE_TO_PETSCII.get(single) });
+    }
+  });
+
+  it('draws the shading marks an ANSI artist reaches for', () => {
+    // The dots are the mark `·` already is; a filled square is the block
+    // PETSCII draws as a reversed space; `¬`/`⌐` are half-height rules and
+    // PETSCII has exactly one rule.
+    expect(UNICODE_TO_PETSCII.get('∙')).toBe(UNICODE_TO_PETSCII.get('·'));
+    expect(UNICODE_TO_PETSCII.get('▪')).toBe(UNICODE_TO_PETSCII.get('·'));
+    expect(UNICODE_TO_PETSCII.get('■')).toEqual(UNICODE_TO_PETSCII.get('█'));
+    expect(UNICODE_TO_PETSCII.get('□')).toBe(UNICODE_TO_PETSCII.get('┼'));
+    // `⌐` is CP437's reversed not-sign, the same mark as latin-1's `¬`, which
+    // the fold table already measures onto the upper one-eighth rule. `¬`
+    // itself is deliberately NOT in this table: it is a latin-1 byte, this
+    // table is consulted first, and an entry here would quietly overrule that
+    // measurement.
+    expect(UNICODE_TO_PETSCII.get('⌐')).toBe(0xA3);
+    expect(UNICODE_TO_PETSCII.has('¬')).toBe(false);
+  });
+
   it('pins the corner, line and half-block glyphs', () => {
     expect(UNICODE_TO_PETSCII.get('┌')).toBe(0xB0);
     expect(UNICODE_TO_PETSCII.get('┘')).toBe(0xBD);

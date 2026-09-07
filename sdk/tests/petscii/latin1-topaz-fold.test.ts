@@ -113,7 +113,11 @@ describe('latin-1 high bytes a 68K door writes', () => {
   });
 
   it('every fold target resolves in ONE more step and is never itself a latin-1 high byte', () => {
-    expect(LATIN1_TO_PETSCII_FOLD.size).toBe(89);
+    // AT LEAST, not exactly: the table grows whenever a corpus scan finds a
+    // character the board draws with (`ƒ` joined it on 2026-09-07), and the
+    // COUNT is not the property - what follows is. Pinning the number turned
+    // every addition into a red test that said nothing about the rule.
+    expect(LATIN1_TO_PETSCII_FOLD.size).toBeGreaterThanOrEqual(89);
     for (const [from, to] of LATIN1_TO_PETSCII_FOLD) {
       const src = from.codePointAt(0) as number;
       expect(src).toBeGreaterThanOrEqual(0xA0);
@@ -138,5 +142,27 @@ describe('latin-1 high bytes a 68K door writes', () => {
     const line = 'EnTe® thE laST foU® digiTs';
     expect(encodePetsciiValue(line, 1)).not.toContain(0x3F);
     expect(encodePetsciiValue(line, 1)).toEqual(encodePetsciiValue('EnTeR thE laST foUR digiTs', 1));
+  });
+});
+
+/**
+ * CP437's florin, the one character in this class the board actually draws
+ * with: `$CP-BUß1.lha` in DoorRepo's captured screen, and GWALL's file list.
+ * It is not a latin-1 byte, so it lives in UNICODE_TO_PETSCII rather than in
+ * the fold table - and it resolves to the letter it reads as.
+ *
+ * `§` and `¶` stay '?', as the three-of-96 case above says: the corpus scan
+ * that appeared to find them was reading AquaScanConfig.txt, which is an
+ * Amiga executable wearing a .txt name.
+ */
+describe('the florin', () => {
+  it('resolves to f, not to a question mark', () => {
+    expect(asciiToPetsciiByte(0x192, 1).byte).toBe(asciiToPetsciiByte(0x66, 1).byte);
+    expect(asciiToPetsciiByte(0x192, 1).byte).not.toBe(0x3f);
+  });
+
+  it('leaves the marks the board never draws with alone', () => {
+    expect(asciiToPetsciiByte(0xa7, 1).byte).toBe(0x3f); // SECTION SIGN
+    expect(asciiToPetsciiByte(0xb6, 1).byte).toBe(0x3f); // PILCROW
   });
 });
