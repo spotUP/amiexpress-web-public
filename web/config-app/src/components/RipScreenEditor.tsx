@@ -34,6 +34,36 @@ const COMMON_ACTIONS: { command: string; label: string }[] = [
 
 interface DoorOption { command: string; name: string; }
 
+/** The four corners a resize handle can drag. */
+export type ResizeCorner = 'nw' | 'ne' | 'sw' | 'se';
+
+/** The smallest box a region may be shrunk to, in RIP units - matches the
+ * "wide enough to be real" test the drawing tool uses. */
+const RESIZE_MIN = 4;
+
+/**
+ * Move one corner of a region to `point`, keeping the box a valid rectangle:
+ * a corner cannot cross its opposite (a minimum size is preserved) and stays
+ * inside the RIP picture. Pure, so the geometry is tested without a layout.
+ */
+export function resizeCorner(
+  spot: { x0: number; y0: number; x1: number; y1: number },
+  corner: ResizeCorner,
+  point: { x: number; y: number },
+  bounds: { w: number; h: number } = { w: RIP_WIDTH, h: RIP_HEIGHT },
+): { x0?: number; y0?: number; x1?: number; y1?: number } {
+  const px = Math.max(0, Math.min(bounds.w - 1, Math.round(point.x)));
+  const py = Math.max(0, Math.min(bounds.h - 1, Math.round(point.y)));
+  const west = corner === 'nw' || corner === 'sw';
+  const north = corner === 'nw' || corner === 'ne';
+  const out: { x0?: number; y0?: number; x1?: number; y1?: number } = {};
+  if (west) out.x0 = Math.min(px, spot.x1 - RESIZE_MIN);
+  else out.x1 = Math.max(px, spot.x0 + RESIZE_MIN);
+  if (north) out.y0 = Math.min(py, spot.y1 - RESIZE_MIN);
+  else out.y1 = Math.max(py, spot.y0 + RESIZE_MIN);
+  return out;
+}
+
 /** What a region sends, in the words a sysop reads rather than a bare letter. */
 function describeCommand(command: string, doors: DoorOption[]): string {
   if (!command) return 'sends nothing';
@@ -105,6 +135,7 @@ export function RipScreenEditor({
   // shut mid-word. Set when a region is selected and when a picker choice is
   // made; never on a keystroke.
   const [showCustom, setShowCustom] = useState(false);
+  const [resizing, setResizing] = useState<ResizeCorner | null>(null);
 
   // The board's doors, for the "Run a door" group. A failure here is not fatal:
   // the picker still has the common actions and the custom field.
@@ -236,11 +267,14 @@ export function RipScreenEditor({
             setPending({ x0: at.x, y0: at.y, x1: at.x, y1: at.y });
           }}
           onPointerMove={event => {
+            // Dragging a corner handle takes priority over drawing a new box.
+            if (resizing && chosen) { update(resizeCorner(chosen, resizing, toRip(event))); return; }
             if (!dragFrom.current) return;
             const at = toRip(event);
             setPending({ x0: dragFrom.current.x, y0: dragFrom.current.y, x1: at.x, y1: at.y });
           }}
           onPointerUp={() => {
+            if (resizing) { setResizing(null); return; }
             const region = pending;
             dragFrom.current = null;
             setPending(null);
@@ -271,6 +305,24 @@ export function RipScreenEditor({
               }}
             />
           ))}
+
+          {/* Corner handles for the selected region: drag to resize, instead
+              of typing the four numbers. */}
+          {chosen && !readOnly && (['nw', 'ne', 'sw', 'se'] as ResizeCorner[]).map(corner => {
+            const left = corner === 'nw' || corner === 'sw' ? Math.min(chosen.x0, chosen.x1) : Math.max(chosen.x0, chosen.x1);
+            const top = corner === 'nw' || corner === 'ne' ? Math.min(chosen.y0, chosen.y1) : Math.max(chosen.y0, chosen.y1);
+            return (
+              <div
+                key={corner}
+                role="button"
+                aria-label={`Resize ${corner} corner`}
+                data-testid="rip-resize-handle"
+                className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize border border-white bg-accent"
+                style={{ left: `${(left / RIP_WIDTH) * 100}%`, top: `${(top / RIP_HEIGHT) * 100}%` }}
+                onPointerDown={event => { event.stopPropagation(); setResizing(corner); }}
+              />
+            );
+          })}
 
           {pending && (
             <div
