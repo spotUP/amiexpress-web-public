@@ -4778,6 +4778,18 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       await handleFileListRawCommand(socket, session, params);
       return;
 
+    case 'FI': // FILE INFO - one record from the last listing, on its own
+      // screen. A C64 list row is identity fields at fixed columns and carries
+      // no description, so this is where a caller reads what a file IS; the
+      // ordinal the list prints is the argument. WEB-only: express.e has no
+      // FI, because an 80-column listing already shows the description under
+      // every record.
+      {
+        const { FileListingHandler } = require('./file/file-listing.handler');
+        await FileListingHandler.handleFileInfoCommand(socket, session, params);
+      }
+      return;
+
     case 'FM': // File Maintenance (internalCommandFM) - express.e:24889-25045
       await FileMaintenanceHandler.handleFileMaintenanceCommand(socket, session, params);
       return;

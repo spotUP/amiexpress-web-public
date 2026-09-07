@@ -265,6 +265,12 @@ console.log(`[FileList] Could not read ${dirFilePath}: ${error.message}`);
           // records rather than three. The 80-column path below is untouched.
           if (narrow) {
             ordinal++;
+            // THE ORDINAL HAS TO MEAN SOMETHING AFTERWARDS. A caller reads the
+            // list, sees `12`, and types `FI 12` - so the pass records what it
+            // showed, in the order it showed it. Without this the number in
+            // the leftmost column is decoration and the two surfaces never
+            // connect.
+            this.rememberListed(session, ordinal, dirInfo.index, entry.filename.trim());
             const row = this.narrowRowFor(entry, ordinal, session, layout);
             const { parseMciCodes } = require('../screen.handler');
             const painted = (await parseMciCodes(row, session))?.parsed ?? row;
@@ -426,6 +432,87 @@ console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
     // in SILENCE. "it gets stuck there as well ... i can exit with enter"
     // (2026-09-07, a PETSCII session that had just scanned an empty
     // conference). Same three lines as handleFileList's ending.
+    (session as any).flagPauseHandler = undefined;
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
+    session.menuPause = true;
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  }
+
+  /**
+   * What the last listing pass showed this caller, by ordinal.
+   *
+   * Per SESSION, because it is per pass and per caller: two callers listing
+   * the same conference at the same moment have their own numbering, and a
+   * new pass replaces the old one rather than appending to it.
+   */
+  private static rememberListed(
+    session: Session,
+    ordinal: number,
+    dirNumber: number,
+    filename: string,
+  ): void {
+    const temp = ((session as any).tempData ??= {});
+    if (ordinal === 1) temp.fileListIndex = [];
+    (temp.fileListIndex ??= [])[ordinal - 1] = { dirNumber, filename };
+  }
+
+  /** The record `FI <n>` is asking for, or null when the number means nothing. */
+  static listedRecord(session: Session, ordinal: number): { dirNumber: number; filename: string } | null {
+    const listed = (session as any).tempData?.fileListIndex as
+      | Array<{ dirNumber: number; filename: string }>
+      | undefined;
+    if (!listed || ordinal < 1 || ordinal > listed.length) return null;
+    return listed[ordinal - 1] ?? null;
+  }
+
+  /**
+   * `FI <n>` - show one record from the last listing, on its own screen.
+   *
+   * The list row is identity fields at fixed columns and carries no
+   * description; this is where a caller reads what the thing IS. The two
+   * surfaces connect through the ordinal, which is why the list prints one.
+   */
+  static async handleFileInfoCommand(
+    socket: Socket,
+    session: Session,
+    params: string,
+  ): Promise<void> {
+    const ordinal = parseInt((params ?? '').trim().split(/\s+/)[0] ?? '', 10);
+    if (!Number.isFinite(ordinal) || ordinal < 1) {
+      socket.emit('ansi-output', '\r\nUsage: FI <number from the file list>\r\n');
+      session.menuPause = true;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
+    const listed = this.listedRecord(session, ordinal);
+    if (!listed) {
+      // express.e's own shape for a number that names nothing.
+      socket.emit('ansi-output', `\r\nNo file ${ordinal} in the last listing.\r\n`);
+      session.menuPause = true;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
+    const bbsDataPath = config.get('dataDir');
+    const conferencePath = getConferenceDir(session.currentConf ?? 1, bbsDataPath);
+    let entry: DirFileEntry | undefined;
+    try {
+      const entries = await readDirFile(getDirFilePath(conferencePath, listed.dirNumber));
+      entry = entries.find((e) => e.filename.trim() === listed.filename);
+    } catch {
+      entry = undefined;
+    }
+
+    if (!entry) {
+      socket.emit('ansi-output', `\r\n${listed.filename} is no longer in this directory.\r\n`);
+      session.menuPause = true;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
+    await this.showFileRecord(socket, session, entry, ordinal);
     (session as any).flagPauseHandler = undefined;
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());

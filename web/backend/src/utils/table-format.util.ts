@@ -65,14 +65,19 @@ export interface NarrowFileRow {
 }
 
 /**
- * Classic C64 dir convention: the file on one line, its description
- * stacked underneath.
+ * RETIRED 2026-09-07, kept only for the sweep that measures it.
  *
- *   FILENAME.LHA                          88K
- *    description, wrapped to the screen
+ * This was the board's own two-line 40-column convention - the filename on one
+ * row, the description stacked underneath - invented before there was a
+ * layout. Every 40-column record surface now renders through
+ * `Prompts/FILEVIEW.40` instead: the LIST row for a listing, the RECORD block
+ * for a search hit or `FI <n>`. One shape, one file, and the sysop can
+ * re-columnise all of them without a rebuild.
  *
- * The size is flush right at column 40 whatever its width, and the name is
- * clipped to the room that leaves - never overflowed.
+ * Nothing in `src/` calls it. `tests/forty-col-sweep.test.ts` still does,
+ * because that sweep measures every 40-column formatter this port has ever
+ * had, and deleting the function would delete the measurement rather than the
+ * formatter's use.
  */
 export function narrowFileLines(row: NarrowFileRow): string[] {
   const size = `${String(row.sizeKB).trim()}K`;

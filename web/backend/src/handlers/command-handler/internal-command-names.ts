@@ -51,6 +51,7 @@ export const INTERNAL_COMMAND_NAMES: readonly string[] = [
   'F',
   'FR',
   'FM',
+  'FI',
   'FS',
   'N',
   'O',

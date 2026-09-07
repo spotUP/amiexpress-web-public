@@ -17,7 +17,8 @@ import { callersLogManager } from '../../services/CallersLogManager';
 
 import type { BBSSession, UploadSessionContext } from '../../index';
 import { formatLongDate } from '../../utils/date-time.util';
-import { isNarrow, narrowFileLines } from '../../utils/table-format.util';
+import { isNarrow } from '../../utils/table-format.util';
+import { sessionColumns } from '../../utils/door-min-columns.util';
 import { storeUploadContext } from '../../server/upload-session-store';
 import { getStorageContext } from '../../storage/storage-context';
 import { poolSpaceFor } from '../../storage/remote-upload';
@@ -420,8 +421,35 @@ export function buildFileSearchLines(
     ];
   }
 
+  // A SEARCH HIT IS A SINGLE RECORD, so it gets the record block - the same
+  // template `FI <n>` renders, from Prompts/FILEVIEW.40. It replaces
+  // `narrowFileLines`, the stacked two-line formatter this port invented
+  // before there was a layout: one shape for every 40-column record, and the
+  // sysop can re-columnise all of them by editing one file.
+  const { renderFileBlock } = require('@amiexpress/bbs-door-sdk/petscii/frame');
+  const { getFileViewLayout } = require('../../services/file-layout.service');
+  const layout = getFileViewLayout(config.get('dataDir'));
+
+  // THE PENS COME OFF HERE. These rows are emitted with `emitText`, which runs
+  // no MCI pass, so a `~c7|` in them would reach the caller as literal text -
+  // and `forty-col-sweep` would count it as four printable columns, which is
+  // how this was caught. The TEMPLATE still decides the layout; only its
+  // colour codes are dropped, which leaves a search hit exactly as colourless
+  // as `narrowFileLines` left it.
+  const stripMci = (row: string): string => row.replace(/~[^|]*\|/g, '');
+
   return [
-    ...narrowFileLines({ filename: file.filename, sizeKB, description }),
+    ...renderFileBlock(
+      {
+        name: file.filename,
+        sizeBytes: file.size,
+        date: formatLongDate(new Date(file.uploaddate)),
+        desc: description,
+        author: file.uploader,
+      },
+      layout.record,
+      sessionColumns(session),
+    ).map(stripMci),
     ` Area: ${String(file.areaname).substring(0, 33)}`,
   ];
 }
