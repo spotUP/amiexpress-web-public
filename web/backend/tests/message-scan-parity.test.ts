@@ -25,6 +25,23 @@ jest.mock('../src/handlers/command-execution.handler', () => ({
   runSystemCommand: jest.fn(),
 }));
 
+/**
+ * A message is not "new mail" unless there is something to show.
+ *
+ * `8444b111c` made one predicate answer both the count and the list, and a
+ * body file is part of it: a header with no body cannot be displayed, so it
+ * is not counted and does not move the pointer. These fixtures appended
+ * headers alone, which was enough before that fix and silently scans nothing
+ * after it - the pointer stopped at 1 where the fixture meant 4.
+ */
+function writeBodies(tmpRoot: string, conferenceId: number, msgNums: number[]): void {
+  const dir = path.join(tmpRoot, `Conf${conferenceId}`, 'MsgBase');
+  fs.mkdirSync(dir, { recursive: true });
+  for (const n of msgNums) {
+    fs.writeFileSync(path.join(dir, String(n)), `body of message ${n}\r\n`, 'latin1');
+  }
+}
+
 describe('message scan mail parity', () => {
   let db: any;
   let originalBbsRoot: string | undefined;
@@ -51,6 +68,14 @@ describe('message scan mail parity', () => {
   function setupMailScan(flagsOverride: Record<string, boolean> = {}) {
     const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'amix-mail-'));
     process.env.BBS_ROOT = tmpRoot;
+    /* AND THE CONFIG, which is what the scan actually asks. `config` reads
+       BBS_DATA_DIR once at import - long before this runs - so setting the
+       variable alone left the scan looking for message bodies under the real
+       board while reading headers from this temp one, and every candidate was
+       dropped for having no body to show (message-scan.handler.ts:369). */
+    process.env.BBS_DATA_DIR = tmpRoot;
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    require('../src/config').config.set('dataDir', tmpRoot);
     jest.resetModules();
 
     const tooltypes = require('../src/utils/conference-tooltypes.util');
@@ -177,6 +202,8 @@ describe('message scan mail parity', () => {
       extMsgNum: 0
     });
 
+    writeBodies(tmpRoot, 1, [1, 2, 3, 4]);
+
     const socket = { emit: jest.fn() };
     const session = { user: { ...sysop, confAccess: 'X' }, currentConf: 1, lastScanNewPublic: 0, lastScanNewPrivate: 0, lastScanTotal: 0 };
 
@@ -207,6 +234,8 @@ describe('message scan mail parity', () => {
       recv: 0,
       extMsgNum: 0
     });
+
+    writeBodies(tmpRoot, 1, [1, 2]);
 
     const socket = { emit: jest.fn() };
     const session = { user: { ...sysop, confAccess: 'X' }, currentConf: 1, lastScanNewPublic: 0, lastScanNewPrivate: 0, lastScanTotal: 0 };
@@ -248,6 +277,8 @@ describe('message scan mail parity', () => {
       recv: 0,
       extMsgNum: 0
     });
+
+    writeBodies(tmpRoot, 1, [1, 2]);
 
     const socket = { emit: jest.fn() };
     const session = { user: { ...sysop, confAccess: 'X' }, currentConf: 1, lastScanNewPublic: 0, lastScanNewPrivate: 0, lastScanTotal: 0 };

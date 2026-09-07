@@ -55,6 +55,9 @@ function makeWorld() {
 const plain = (chunks: string[]) =>
   chunks.join('').replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\x1b[78]/g, '');
 
+/** How a bot line announces itself, whichever engine wrote it. */
+const BOT_REPLY = /\[(AI|RB)\]/;
+
 describe('the grumpy bot answers a caller', () => {
   it('and the caller reads their own line before the reply', async () => {
     const H = require('../../src/handlers/operator-chat.handler');
@@ -72,8 +75,13 @@ describe('the grumpy bot answers a caller', () => {
     const text = plain(w.seen.slice(before));
 
     expect(text).toContain('hello grumpy');
-    expect(text).toMatch(/\[RB\]/);                    // a reply came, no key needed
-    expect(text.indexOf('hello grumpy')).toBeLessThan(text.indexOf('[RB]'));
+    // EITHER TAG. The bot answers `[AI] ...` when the provider cascade
+    // returns something and `[RB] ...` when it falls back to the rule-based
+    // replies (grumpy-sysop-bot.handler.ts:861,870). Which engine served the
+    // line is a configuration detail; what this test is about is that a reply
+    // came at all, without the caller pressing a key.
+    expect(text).toMatch(BOT_REPLY);
+    expect(text.indexOf('hello grumpy')).toBeLessThan(text.search(BOT_REPLY));
   });
 
   it('after the board restarts mid-chat', async () => {
@@ -111,6 +119,6 @@ describe('the grumpy bot answers a caller', () => {
     });
     const text = plain(w.seen.slice(before));
     expect(text).toContain('still there?');
-    expect(text).toMatch(/\[RB\]/);
+    expect(text).toMatch(BOT_REPLY);
   });
 });
