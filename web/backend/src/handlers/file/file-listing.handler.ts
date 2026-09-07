@@ -372,6 +372,11 @@ console.log(`[FileList] Could not read ${dirFilePath}: ${error.message}`);
     }
     session.menuPause = false;
 
+    // One snapshot for this pass, as the listing takes.
+    const narrow = isNarrow(session);
+    const layout = getFileViewLayout(bbsDataPath);
+    let ordinal = 0;
+
     const dirFiles = await getDirFiles(session.currentConf, bbsDataPath);
     if (dirFiles.length === 0) {
       socket.emit('ansi-output', '\r\nNo Files are available.\r\n\r\n');
@@ -393,6 +398,10 @@ console.log(`[FileList] Could not read ${dirFilePath}: ${error.message}`);
       }
       return d.getDate() >= searchDate.getDate();
     };
+
+    if (narrow) {
+      for (const line of layout.header) await this.emitTemplateRow(socket, session, line);
+    }
 
     for (const dirInfo of dirFiles) {
       socket.emit('ansi-output', `Scanning directory ${dirInfo.index}\r\n`);
@@ -418,6 +427,23 @@ console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
       if (first < 0) continue;
 
       for (const entry of entries.slice(first)) {
+        // THE SAME ROW `F` PRINTS. `N` is a listing too, and a caller who can
+        // read one at forty columns can read the other; it also gives him an
+        // ordinal to hand to `FI`.
+        if (narrow) {
+          ordinal++;
+          this.rememberListed(session, ordinal, dirInfo.index, entry.filename.trim());
+          const row = this.narrowRowFor(entry, ordinal, session, layout);
+          const { parseMciCodes } = require('../screen.handler');
+          const painted = (await parseMciCodes(row, session))?.parsed ?? row;
+          const ok = await this.displayFileEntry(socket, session, [painted]);
+          if (!ok) {
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            return;
+          }
+          continue;
+        }
+
         const displayLines = dirEntryRows(session, this.getDisplayLines(entry));
         const shouldContinue = await this.displayFileEntry(socket, session, displayLines);
         if (!shouldContinue) {
@@ -457,6 +483,34 @@ console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
     (temp.fileListIndex ??= [])[ordinal - 1] = { dirNumber, filename };
   }
 
+  /**
+   * The nth record of this conference, counted the way a listing counts.
+   *
+   * The listing walks the DIR files in number order and numbers every entry
+   * from one, so the same walk answers the same question without a session to
+   * remember it.
+   */
+  private static async nthRecordOf(
+    session: Session,
+    ordinal: number,
+  ): Promise<{ dirNumber: number; filename: string } | null> {
+    const bbsDataPath = config.get('dataDir');
+    let seen = 0;
+    for (const dir of await getDirFiles(session.currentConf ?? 1, bbsDataPath)) {
+      let entries: DirFileEntry[];
+      try {
+        entries = await readDirFile(dir.path);
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        seen++;
+        if (seen === ordinal) return { dirNumber: dir.index, filename: entry.filename.trim() };
+      }
+    }
+    return null;
+  }
+
   /** The record `FI <n>` is asking for, or null when the number means nothing. */
   static listedRecord(session: Session, ordinal: number): { dirNumber: number; filename: string } | null {
     const listed = (session as any).tempData?.fileListIndex as
@@ -486,7 +540,12 @@ console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
       return;
     }
 
-    const listed = this.listedRecord(session, ordinal);
+    // NO LISTING THIS SESSION IS NOT AN ERROR. A caller who knows the number -
+    // from a listing before a reconnect, or from a door that printed one - gets
+    // the same answer, because the ordinal is just the conference's own order.
+    // Depending on a session's memory made `FI 3` fail for a caller who had
+    // plainly just read a list (sysop, live, 2026-09-07).
+    const listed = this.listedRecord(session, ordinal) ?? await this.nthRecordOf(session, ordinal);
     if (!listed) {
       // express.e's own shape for a number that names nothing.
       socket.emit('ansi-output', `\r\nNo file ${ordinal} in the last listing.\r\n`);

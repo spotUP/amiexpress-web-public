@@ -191,3 +191,49 @@ describe('FI reaches its handler from a typed command', () => {
     expect(out).toContain('OTL-DOOR.LHA');
   });
 });
+
+describe('FI without a listing first', () => {
+  it('answers anyway, from the conference\'s own order', async () => {
+    // The sysop typed `fi 3` on a fresh session and got "No file 3 in the last
+    // listing" (live, 2026-09-07). Depending on a session's memory made the
+    // command fail for a caller who had plainly just read a list - across a
+    // reconnect, or after a door printed the numbers. The ordinal is the
+    // conference's own order, so the same walk answers without the memory.
+    const session = makeSession();
+    const wire: string[] = [];
+    const socket = makeSocket(session, wire);
+
+    await FileListingHandler.handleFileInfoCommand(socket, session, '2');
+
+    const out = glass(wire.join(''));
+    expect(out).toContain('PDX-TOOL.LHA');
+    expect(out).not.toMatch(/No file 2/);
+  });
+
+  it('still says so for a number the conference has not got', async () => {
+    const session = makeSession();
+    const wire: string[] = [];
+    await FileListingHandler.handleFileInfoCommand(makeSocket(session, wire), session, '99');
+    expect(glass(wire.join(''))).toMatch(/No file 99/);
+  });
+});
+
+describe('N prints the same row F does', () => {
+  it('numbers its records and lays them out at the template columns', async () => {
+    const { displayNewFiles } = require('../../../src/handlers/file/file.handler');
+    const session = makeSession();
+    session.user.newSinceDate = new Date(2018, 0, 1);   // everything is new
+    const wire: string[] = [];
+    const socket = makeSocket(session, wire);
+
+    await displayNewFiles(socket, session, 'NS');
+
+    const rows = glass(wire.join('')).split(/\r?\n/);
+    const door = rows.find((r) => r.includes('OTL-DOOR.LHA'));
+    expect(door).toBeDefined();
+    expect(door!.indexOf('40K')).toBe(5);
+    expect(door!.indexOf('OTL-DOOR.LHA')).toBe(13);
+    // And the ordinal it printed can be handed straight to FI.
+    expect(FileListingHandler.listedRecord(session, 1)?.filename).toBe('OTL-DOOR.LHA');
+  });
+});
