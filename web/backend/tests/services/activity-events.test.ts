@@ -31,6 +31,37 @@ function eventTypesIn(source: string): string[] {
   return [...union.matchAll(/'([a-z_]+)'/g)].map(m => m[1]).sort();
 }
 
+/**
+ * The first statement of `source`, skipping the blank lines and the comments
+ * that may precede it. A statement ends at the first line carrying a `;`, so
+ * a call broken over several lines is still read whole.
+ */
+function firstStatementIn(source: string): string {
+  const statement: string[] = [];
+  let inBlockComment = false;
+
+  for (const raw of source.split('\n')) {
+    const line = raw.trim();
+
+    if (statement.length === 0) {
+      if (inBlockComment) {
+        if (line.includes('*/')) inBlockComment = false;
+        continue;
+      }
+      if (line === '' || line.startsWith('//')) continue;
+      if (line.startsWith('/*')) {
+        if (!line.includes('*/')) inBlockComment = true;
+        continue;
+      }
+    }
+
+    statement.push(line);
+    if (line.includes(';')) break;
+  }
+
+  return statement.join(' ');
+}
+
 describe('the event vocabulary', () => {
   it('is the same on both sides of the socket', () => {
     const backend = eventTypesIn(
@@ -111,13 +142,20 @@ describe('the command emit site', () => {
     // exactly "only what this handler runs itself". The J-with-a-number case
     // reports too, and correctly: it deliberately bypasses the door path and
     // calls the internal handler directly.
-    const reports = funnel.split('reportCommand();').length - 1;
-    const reportsThenDispatch = [
-      ...funnel.matchAll(/reportCommand\(\);\s*await processBBSCommand\(/g),
-    ].length;
+    //
+    // Adjacency is read as "the next STATEMENT", not as a spelling: a comment
+    // may sit between the two, and the dispatch may be assigned (the refusal
+    // path needs its result). What must not be tolerated is a dispatch that
+    // merely happens LATER - that would let a report be followed by anything
+    // at all and stop proving the property - so only the first statement
+    // after the report is examined.
+    const reports = funnel.split('reportCommand();').slice(1);
+    const nextStatements = reports.map(firstStatementIn);
 
-    expect(reports).toBeGreaterThan(0);
-    expect(reportsThenDispatch).toBe(reports);
+    expect(nextStatements.length).toBeGreaterThan(0);
+    for (const statement of nextStatements) {
+      expect(statement).toContain('processBBSCommand(');
+    }
   });
 
   // A command line can carry a password - the login prompt, AUTOVAL_PASSWORD,
