@@ -783,7 +783,17 @@ export function recordFields(cells: Row, cols: number): RecordFields | null {
   for (let x = lead + 1; x < full - 1; x++) if (cells[x].ch === rail) { interior = true; break; }
   const bordered = isBoxRail(rail) && cells[full - 1].ch === rail && lead < full - 1 && !interior;
   const indent = bordered ? lead + 1 : lead;
-  const width = bordered ? full - 1 : full;
+  // PADDING BEFORE THE RAIL IS NOT CONTENT. `contentWidth` already drops an
+  // unbordered row's trailing blanks, but a BOXED row's trailing blanks sit
+  // INSIDE the box, so the scan below - which only counts a blank run as a
+  // separator when content follows it - could not see the last one and left it
+  // inside the field instead. Measured on `aquascan_f` row 16,
+  // `| AmiExpress \  / KeyMaker   |`: the separator came out as the two blanks
+  // in `\  /` and the field as `/ KeyMaker   `, three blanks of the door's own
+  // padding that the rung would then have right-aligned to column 40, putting
+  // the field three columns short of the edge it was aligned to.
+  let width = bordered ? full - 1 : full;
+  while (width > indent && isBlank(cells[width - 1])) width--;
   if (width <= indent) return null;
   const runs: Array<[number, number]> = [];
   for (let x = indent; x < width; x++) {

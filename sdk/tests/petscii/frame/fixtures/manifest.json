@@ -440,5 +440,56 @@
       "reason": "UNMARKED 2026-09-06 after the sysop drove it at 40 columns. Its node table READS - every node's number, user, location and action survives - but its HEADER cannot be made to line up with it, and a table whose header is somewhere else is not a table. The door draws the header as one 75-column art row, `.-(*USER*)-----.-(*LOCATION*)------.-(*ACTION*)---`, with no gutters and no column structure, so no rung can turn it into columns; `split` now breaks it before LOCATION instead of through the middle of the word, which is honest but still three rows of border above a table whose own columns move from row to row (`narrow` squeezes each row's gutters to one space, so `01 Sysop Local Console Using A Door` and `>00< ========> ========> No Node Present` do not line up with each other either). The credits row also narrows to `WarOLM V0.3 By War>`. Aligning the two needs a per-door pack (Phase 4), not a rung. The fixture STAYS - it is the corpus's only four-column node table and it is what pins `split` against severing a word - but Commands/BBSCmd/Olm.info no longer carries C64_ADAPT."
     },
     "notes": "WarOLM V0.3 by Wardancer/Vanity, the board's Olm command: a four-row node table inside a box, with a cursor-key help line under it. Zero unmapped glyphs at 40 and every node record whole - number, user, location and action. THREE narrow marks remain and none of them is on data: the door's own title/credits row, and the '=' runs that pad an absent node's empty USER and LOCATION cells on the two node-00 variants (plain and selected). Those two rows are the ones that forced narrowRow to spend decoration before content: widest-first put the truncation mark inside the ACTION field and the caller read 'No Node Present' as 'No Node Pre>'. The help line is the prose rung's - 'Use Cursor Keys To Choose, <-' Enter To>' no longer says how to quit. Marked C64_ADAPT=40 on 2026-09-06 and UNMARKED the same day - see `withdrawn`."
+  },
+  "aquascan_f": {
+    "binary": "Doors/AquaScan/AquaScan.020",
+    "command": "F",
+    "script": [
+      "4000 a\\r",
+      "9000 \\r",
+      "13000 \\r",
+      "17000 \\r",
+      "21000 q\\r"
+    ],
+    "bytes": 6392,
+    "sha256": "3162f25756e0946b4800c26cce45c9c7ab6051202d1bdc6e44551ba80064df92",
+    "harness": "printf '%s\\n' '4000 a\\r' '9000 \\r' '13000 \\r' '17000 \\r' '21000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/AquaScan/AquaScan.020 1 --doortype XIM --command f --timeout 30 > aquascan_f.ans",
+    "cwd": "web/backend",
+    "installed": "f",
+    "notes": "AquaScan v1.0 by Aquarius/Outlaws, this board's file lister. It is ONE program under three registrations - F is AquaScan.020, FR and N are AquaScan.000 - and each registration is marked separately, so each carries its own capture. The ladder alone destroys these screens: `narrow` shortens a row's widest column, and on a file record that is the filename or the size, so `CB4!ST13.LHA N 119214` came out as `CB4!ST13.LHA N> 01-21-26` with the size gone. What makes the mark honest is the FILE-RECORD RUNG (web/backend/src/server/c64-file-record-rung.ts): every row the shared DIR grammar recognises is re-rendered through the same interpreter and the same Prompts/FILEVIEW.40 the board's own listing uses, and the description block under it is consumed rather than folded. Marked C64_ADAPT=40 on 2026-09-07. This capture is F answered with `a` (all directories), walked through two More? pauses and quit: conference 1's Dir1 and Dir2, five records with DIZ art under three of them."
+  },
+  "aquascan_fr": {
+    "binary": "Doors/AquaScan/AquaScan.000",
+    "command": "FR",
+    "script": [
+      "4000 a\\r",
+      "9000 \\r",
+      "13000 \\r",
+      "17000 \\r",
+      "21000 q\\r"
+    ],
+    "bytes": 7300,
+    "sha256": "a4643ea9d5d32e849c5de4561f4266a660e9b50a797ae8939eb6501b41b1e14e",
+    "harness": "printf '%s\\n' '4000 a\\r' '9000 \\r' '13000 \\r' '17000 \\r' '21000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/AquaScan/AquaScan.000 1 --doortype XIM --command fr --timeout 30 > aquascan_fr.ans",
+    "cwd": "web/backend",
+    "installed": "fr",
+    "notes": "AquaScan v1.0 by Aquarius/Outlaws, this board's file lister. It is ONE program under three registrations - F is AquaScan.020, FR and N are AquaScan.000 - and each registration is marked separately, so each carries its own capture. The ladder alone destroys these screens: `narrow` shortens a row's widest column, and on a file record that is the filename or the size, so `CB4!ST13.LHA N 119214` came out as `CB4!ST13.LHA N> 01-21-26` with the size gone. What makes the mark honest is the FILE-RECORD RUNG (web/backend/src/server/c64-file-record-rung.ts): every row the shared DIR grammar recognises is re-rendered through the same interpreter and the same Prompts/FILEVIEW.40 the board's own listing uses, and the description block under it is consumed rather than folded. Marked C64_ADAPT=40 on 2026-09-07. FR is the reverse scan and prompts for the directory only. This capture is the whole of Dir2 backwards - the corpus's longest file listing, and the one whose DIZ art carries a truncated `ESC[44;3`."
+  },
+  "aquascan_n": {
+    "binary": "Doors/AquaScan/AquaScan.000",
+    "command": "N",
+    "script": [
+      "4000 01-01-20\\r",
+      "7000 a\\r",
+      "12000 \\r",
+      "16000 \\r",
+      "20000 q\\r"
+    ],
+    "bytes": 4285,
+    "sha256": "dd027a799337373d2033469c85535f3dd909e037f514d42dceb53f580db26f9b",
+    "harness": "printf '%s\\n' '4000 01-01-20\\r' '7000 a\\r' '12000 \\r' '16000 \\r' '20000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/AquaScan/AquaScan.000 1 --doortype XIM --command n --timeout 30 > aquascan_n.ans",
+    "cwd": "web/backend",
+    "installed": "n",
+    "notes": "AquaScan v1.0 by Aquarius/Outlaws, this board's file lister. It is ONE program under three registrations - F is AquaScan.020, FR and N are AquaScan.000 - and each registration is marked separately, so each carries its own capture. The ladder alone destroys these screens: `narrow` shortens a row's widest column, and on a file record that is the filename or the size, so `CB4!ST13.LHA N 119214` came out as `CB4!ST13.LHA N> 01-21-26` with the size gone. What makes the mark honest is the FILE-RECORD RUNG (web/backend/src/server/c64-file-record-rung.ts): every row the shared DIR grammar recognises is re-rendered through the same interpreter and the same Prompts/FILEVIEW.40 the board's own listing uses, and the description block under it is consumed rather than folded. Marked C64_ADAPT=40 on 2026-09-07. N asks for a date before the directory, so this capture answers 01-01-20 and then `a`: every record on the board reads as new, which is what makes it a listing rather than an empty scan."
   }
 }

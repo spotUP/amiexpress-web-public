@@ -170,10 +170,21 @@ interface Pin {
  * half-painted menu row was the third, and the rung was tightened until it was
  * excluded rather than the pin re-measured to accept it. The remaining 21
  * hashes are untouched and stay frozen.
+ *
+ * TWO were RE-MEASURED on 2026-09-07 for the AquaScan marks: `six_status` and
+ * `what`. `recordFields` now drops the blanks a BOXED row pads between its
+ * last field and the rail - `contentWidth` had already dropped them for an
+ * unbordered row, but inside a box they sat before the border and the
+ * separator scan, which only counts a blank run with content after it, could
+ * not see them. Named by measurement before a hash was touched: the pin over
+ * all 32 fixtures moved exactly these two and nothing else. Both GAIN a
+ * column: `six_status` reads `0 Bytes` flush at column 40 where the field was
+ * right-aligned one column short of the edge it was aligned to, and `what`'s
+ * `Total bytes: [ 0 ]` the same. The other 27 hashes are untouched.
  */
 const PINS: Record<string, Pin> = {
   aehelp: { renders: 21, bytes: 11883, sha256: 'af1abce9f143fff0ac3f81bab2f8ace2e3185fa24c2a417bf5c1b2ff3204d659' },
-  six_status: { renders: 23, bytes: 18176, sha256: '61af6dafacf0aba411707dc7cbbc9131878a59b3a6d01dc6fea40342a41280b5' },
+  six_status: { renders: 23, bytes: 17885, sha256: '3cca112881193acb8cc133a7d63154b8f551ee381b6b2f2b891f36b274e01402' },
   kd_confstats: { renders: 29, bytes: 24221, sha256: '5dd38a08afccbc632cfe41cd92e10fd2244a0892a482e4d81b40603007ac695a' },
   color_wall: { renders: 30, bytes: 9786, sha256: '4195cfcc3c36fcd345696af0f021d283381a047db502d7f0980932ac65bd5b28' },
   who: { renders: 6, bytes: 875, sha256: '0dd4a5c3c4df233caa23321afa048833fab577bd9dd914735b5f0fbbf6457643' },
@@ -182,7 +193,7 @@ const PINS: Record<string, Pin> = {
   hststat: { renders: 12, bytes: 2484, sha256: '0746281e3871a50468228989d86b0ca69dbea5b7c3c9faaa90bb9d4a60485b2c' },
   rtw: { renders: 69, bytes: 144781, sha256: 'd486e063a54f7a77a200c47a87563aba403a037ad1c62bbec90b6afb5b9dcaa8' },
   ustats: { renders: 217, bytes: 287701, sha256: '5a084d2f207ff792fc329a472d287f958a1b5074930d27a155eae14a4115a60a' },
-  what: { renders: 13, bytes: 3581, sha256: '51c81e728a9d1304aed398510fad03bca0079497188882ff7977242f2251cdee' },
+  what: { renders: 13, bytes: 3705, sha256: '584a221ff8cc779495319ba7ece4e97a814bc540f3f416af5720cfb21ae5edb1' },
   b: { renders: 17, bytes: 10269, sha256: '1914422b391657000fde0ad5e71e69d37b7d89704c92e2b88d73834d26ff5eeb' },
   j: { renders: 39, bytes: 7195, sha256: 'aa3db3f50277a2eb56a0cfc3a230847c9ae9eefd679bcda0cc4ab8dba5772bd8' },
   doorrepo: { renders: 22, bytes: 12062, sha256: '5b563469b13ca9e76856a621d5aca463e4f5e7217db4da94049a864db4d7375a' },
@@ -202,6 +213,10 @@ const PINS: Record<string, Pin> = {
   sysinfo: { renders: 22, bytes: 5732, sha256: 'b52efd325c043e34026c5728d930cf40b5ac8d956758959a502cafadd003b7a0' },
   games: { renders: 21, bytes: 18770, sha256: 'bc8ebf20627f33003f02090eace28e87af4f10c782fc71cd941804aa3510715f' },
   olm: { renders: 32, bytes: 9782, sha256: 'c2c4df72eee434d44a16df1144235f50594811384a3e952e58e5a29f7dacccf0' },
+  // First measurement of a new input, frozen from here on under the rule above.
+  aquascan_f: { renders: 66, bytes: 158936, sha256: 'd317b8997312750b725d94b807a9e24e12a97364903ac2072f852a4c812eab67' },
+  aquascan_fr: { renders: 75, bytes: 231444, sha256: '0e004049a01eec075b36f1f073b842e825492e0628d4d5e8d9dc57d8c36e2b4d' },
+  aquascan_n: { renders: 44, bytes: 73928, sha256: '7698eaf9fece00b3f7b4ee6c0c7ed16b027f0f64e4169d3da8e83d485425c755' },
 };
 
 function renderChain(id: string): Pin {

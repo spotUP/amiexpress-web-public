@@ -172,6 +172,16 @@ const SIGNATURES: Record<string, Signature> = {
   // The ACTION field of the absent node - the row that forced narrowRow to spend
   // its decoration columns first.
   olm: { door: 'No Node Present' },
+  // AquaScan under its three registrations, marked 2026-09-07. The signature
+  // is a whole FILE RECORD as the record rung re-rendered it - size, flag and
+  // filename, in the order Prompts/FILEVIEW.40 puts them - because that is
+  // precisely what these marks promise. The ladder alone cannot produce this
+  // string: `narrow` ate the size or the filename of every one of these rows.
+  aquascan_f: { door: '48376  P CB4!SR21.LZX' },
+  // `5D_AMU21.LHA` would be the neater pick here and the underscore has no
+  // PETSCII screen code, so the row below is the one the oracle can read.
+  aquascan_fr: { door: '92470  N CB4!SA63.LHA' },
+  aquascan_n: { door: '98502  N CB4!SA60.LHA' },
 };
 
 // ---------------------------------------------------------------- sessions
