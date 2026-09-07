@@ -188,6 +188,41 @@ describe('usableRemoteAreasFor', () => {
     expect(w.lines.join('')).toContain('Conf1/Files/');
   });
 
+  it("keeps both dirs of a conference that name ONE directory - this board's normal shape", () => {
+    // Every conference on this board declares DLPATH.1 and DLPATH.2 as the
+    // same directory: dir 1 and dir 2 share `BBS:Conf<n>/Upload/` and are told
+    // apart by their DIR listings, not by their storage. Refusing the second
+    // one pooled half of every conference and left the other half on local
+    // disk, silently, for a sysop who set STORAGEDRIVE for the conference.
+    //
+    // Two areas over ONE directory already share a key space on disk. Sharing
+    // the prefix mirrors that; it does not create it.
+    const w = collect();
+    const areas = [
+      area({ id: 1, dirNumber: 1, path: 'BBS:Conf1/Upload/' }),
+      area({ id: 2, dirNumber: 2, path: 'BBS:Conf1/Upload/' }),
+    ];
+
+    expect(usableRemoteAreasFor(1, areas, configured, w.warn).map(a => a.id)).toEqual([1, 2]);
+    expect(w.lines).toEqual([]);
+  });
+
+  it('keeps both when the shared directory is spelled differently, and says the keys will split', () => {
+    // AmigaDOS does not care about case; the bucket does. `bbs:conf1/upload`
+    // and `BBS:Conf1/Upload/` are ONE directory that would be filed under two
+    // prefixes, so dir 1's listing would not see what dir 2 uploaded. Neither
+    // area is dropped - both are real - but the sysop is told to spell them
+    // the same way.
+    const w = collect();
+    const areas = [
+      area({ id: 1, dirNumber: 1, path: 'BBS:Conf1/Upload/' }),
+      area({ id: 2, dirNumber: 2, path: 'bbs:conf1/upload' }),
+    ];
+
+    expect(usableRemoteAreasFor(1, areas, configured, w.warn).map(a => a.id)).toEqual([1, 2]);
+    expect(w.lines.join('')).toContain('spell');
+  });
+
   it('keeps two areas whose directories differ', () => {
     const areas = [
       area({ id: 1, dirNumber: 1, path: 'BBS:Conf1/Files/' }),

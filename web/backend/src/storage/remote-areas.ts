@@ -31,12 +31,20 @@
  * there is one prefix per area, not one per direction, and an uploaded file
  * must land where the download side already looks.
  *
- * TWO AREAS MUST NEVER SHARE A PREFIX. The prefix is built from the
- * conference number and the area's leaf directory, so `BBS:Conf1/Files/` and
- * `DH1:Archive/Files/` in the same conference both spell `Conf1/Files/` and
- * their objects would collide in the bucket under identical keys - and the
- * inverse lookup could only ever answer with one of them. `usableRemoteAreasFor`
- * refuses the duplicates rather than letting the pool silently merge two areas.
+ * TWO DIFFERENT DIRECTORIES MUST NEVER SHARE A PREFIX. The prefix is built
+ * from the conference number and the area's leaf directory, so
+ * `BBS:Conf1/Files/` and `DH1:Archive/Files/` in the same conference both
+ * spell `Conf1/Files/` and their objects would collide in the bucket under
+ * identical keys - and the inverse lookup could only ever answer with one of
+ * them. `usableRemoteAreasFor` refuses those duplicates rather than letting
+ * the pool silently merge two areas.
+ *
+ * TWO AREAS OVER ONE DIRECTORY ARE NOT THAT CASE, and they are the norm here:
+ * every conference on this board declares DLPATH.1 and DLPATH.2 as the same
+ * `BBS:Conf<n>/Upload/`, with the DIR listings - not the storage - telling
+ * their files apart. Those areas already share a key space on disk, so they
+ * share the prefix; refusing the second one pooled half of every conference
+ * and left the rest on local disk without saying so.
  *
  * This module is deliberately I/O free - `remote-download.ts` does the
  * fetching - so the upload path, the download path and DosLibrary all decide
@@ -230,6 +238,7 @@ export function usableRemoteAreasFor(
 ): RemoteArea[] {
   const usable: RemoteArea[] = [];
   const prefixOwner = new Map<string, RemoteArea>();
+  const directoryOwner = new Map<string, RemoteArea>();
 
   for (const area of remoteAreasFor(conferenceId, areas)) {
     const driveNumber = area.storageVolume;
@@ -244,6 +253,26 @@ export function usableRemoteAreasFor(
     }
 
     const prefix = objectPrefixFor(area);
+    const directory = normalizedDirectory(area.path);
+    const sameDirectory = directoryOwner.get(directory);
+
+    if (sameDirectory) {
+      // The same directory, declared twice. Not a collision: two areas over
+      // one directory already share a key space on disk, and the DIR listings
+      // are what tell their files apart. Sharing the prefix mirrors the board;
+      // it does not merge anything the board keeps separate.
+      if (objectPrefixFor(sameDirectory) !== prefix) {
+        warn(
+          `[Storage] Conf${area.conferenceId} dir ${area.dirNumber} ("${area.path}") and dir ` +
+            `${sameDirectory.dirNumber} ("${sameDirectory.path}") are the same directory spelled ` +
+            `differently, so their objects would split across "${prefix}" and ` +
+            `"${objectPrefixFor(sameDirectory)}" - spell them identically.`
+        );
+      }
+      usable.push(area);
+      continue;
+    }
+
     const owner = prefixOwner.get(prefix);
     if (owner) {
       warn(
@@ -255,10 +284,23 @@ export function usableRemoteAreasFor(
     }
 
     prefixOwner.set(prefix, area);
+    directoryOwner.set(directory, area);
     usable.push(area);
   }
 
   return usable;
+}
+
+/**
+ * One directory, however it was spelled.
+ *
+ * AmigaDOS paths are case-insensitive and a trailing slash means nothing, so
+ * `BBS:Conf1/Upload/` and `bbs:conf1/upload` name the same place. Comparing
+ * the declared text this way keeps the module I/O free - resolving both to a
+ * real path would need the data directory and a disk.
+ */
+function normalizedDirectory(areaPath: string): string {
+  return areaPath.trim().replace(/\/+$/, '').toLowerCase();
 }
 
 /**
