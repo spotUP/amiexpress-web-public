@@ -10,6 +10,11 @@
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
+    /* The vendored RIPtermJS is plain JavaScript with no types, and the RIP
+       renderer imports it from source (see the alias in vite.config.ts).
+       Same pair packages/terminal compiles it with: allowed, not checked. */
+    "allowJs": true,
+    "checkJs": false,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
@@ -27,6 +32,8 @@
       "@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/*": [
         "../../sdk/engines/ui/ansi-editor/*"
       ],
+      "@amiexpress/terminal/rip": ["../../packages/terminal/src/rip/index.ts"],
+      "@amiexpress/terminal/rip/*": ["../../packages/terminal/src/rip/*"],
       "@bbs/screens/*": ["../backend/src/screens/*"],
       "@bbs/config-services/*": ["../backend/src/services/config-services/*"]
     }

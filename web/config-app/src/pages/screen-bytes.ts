@@ -71,3 +71,20 @@ export async function screenToCanvas(base64: string, maxRows?: number): Promise<
 export function canvasToScreen(canvas: Cell[][]): string {
   return bytesToBase64(saveANSFile(canvas));
 }
+
+/**
+ * A screen's bytes as text, one byte per character.
+ *
+ * What `atob` already returns, named so a caller can see the intent: this is
+ * latin1, NOT a UTF-8 decode. A .rip screen is read this way because it is a
+ * program to be edited as text and written back as the same bytes, and a
+ * UTF-8 round trip would fold every high-bit byte into U+FFFD.
+ */
+export function base64ToLatin1(base64: string): string {
+  return atob(base64);
+}
+
+/** The inverse. Throws on any character above 0xFF, which would not be a screen. */
+export function latin1ToBase64(text: string): string {
+  return btoa(text);
+}

@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, resolve } from 'path';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-expect-error - the Tailwind config is plain JavaScript with no type declaration
+// The Tailwind config is plain JavaScript. It used to need a @ts-expect-error
+// here; the project now compiles with allowJs (the vendored RIP renderer is
+// JavaScript too), so tsc infers its shape and the suppression would be an
+// unused directive.
 import tailwindConfig from '../../tailwind.config.js';
 
 const SRC_DIR = resolve(__dirname, '..');
 
 /** Every `bbs-*` name Tailwind knows about, from the single source of truth. */
 const definedColors = new Set(
-  Object.keys((tailwindConfig.theme?.extend?.colors ?? {}) as Record<string, string>)
+  Object.keys(tailwindConfig.theme?.extend?.colors ?? {})
 );
 
 /**

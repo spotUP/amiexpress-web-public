@@ -29,6 +29,12 @@ export default defineConfig({
       '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor': path.resolve(
         __dirname, '../../sdk/engines/ui/ansi-editor',
       ),
+      // The RIP renderer, from SOURCE, for the same two reasons as the ANSI
+      // editor core above - and one more: the admin has to draw a .rip screen
+      // exactly as the caller's terminal draws it. A second renderer here
+      // would be a second answer to "what does this file look like", and the
+      // vendored RIPtermJS is the one the board actually ships.
+      '@amiexpress/terminal/rip': path.resolve(__dirname, '../../packages/terminal/src/rip'),
       // The board's own MCI parser, from the backend source.
       //
       // A screen's ~CC_/~SS_/~SR_/~CL. codes are already parsed in exactly one
@@ -50,6 +56,14 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/auth': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      // RIPtermJS fetches its .CHR vector fonts and its icons at runtime.
+      // They are served with the board's own frontend, which shares an origin
+      // with the admin in production; in dev the admin is on its own port, so
+      // a RIP preview would draw without fonts without this.
+      '/rip': {
         target: 'http://localhost:3001',
         changeOrigin: true,
       },

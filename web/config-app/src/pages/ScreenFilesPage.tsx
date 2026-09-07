@@ -14,6 +14,7 @@ import { ScreenGallery, type GalleryItem } from '../components/ScreenGallery';
 import { ScreenThumbnail } from '../components/ScreenThumbnail';
 import { formatBytes } from '../lib/format';
 import { ScreenEditor } from '../components/ScreenEditor';
+import { RipScreenEditor } from '../components/RipScreenEditor';
 import { CodeChip } from '../components/CodeChip';
 import { Modal } from '../components/ui/Modal';
 import { ScreenRevisionsPanel } from './ScreenRevisionsPanel';
@@ -151,6 +152,15 @@ export function ScreenFilesPage() {
    * Edit now sits on the row itself, and the bytes are fetched on the way.
    */
   const [pendingEdit, setPendingEdit] = useState<string | null>(null);
+  /**
+   * A .rip screen open in the RIP editor.
+   *
+   * Kept apart from `editing` because the two editors hold different things:
+   * the ANSI one owns a canvas of cells, the RIP one owns a parsed document.
+   * A .rip file has no cells - it is a vector program - so routing it into
+   * the ANSI editor would show a blank 80x25 and save that over the artwork.
+   */
+  const [editingRip, setEditingRip] = useState(false);
   const detailRef = useRef<HTMLElement>(null);
   const [showRevisions, setShowRevisions] = useState(false);
 
@@ -220,6 +230,14 @@ export function ScreenFilesPage() {
 
   useEffect(() => {
     if (!pendingEdit || !file || openFile !== pendingEdit) return;
+    // Routed by FORMAT, because the four screen types are different media and
+    // one editor cannot serve them: a .rip is a vector program, a .seq is
+    // PETSCII bytes, ANSI and plain text are cells.
+    if (file.format === 'rip') {
+      setEditingRip(true);
+      setPendingEdit(null);
+      return;
+    }
     if (file.format !== 'ansi' && file.format !== 'text') {
       setPendingEdit(null);
       return;
@@ -1098,7 +1116,7 @@ export function ScreenFilesPage() {
               setFileError(null);
               setOpenFile(res.file);
               const format = data?.files[res.file]?.format;
-              if (format === 'ansi' || format === 'text') setPendingEdit(res.file);
+              if (format === 'ansi' || format === 'text' || format === 'rip') setPendingEdit(res.file);
             }}
           />
 
@@ -1174,10 +1192,26 @@ export function ScreenFilesPage() {
         onClose={() => {
           setOpenFile(null);
           setEditing(null);
+          setEditingRip(false);
           setEditorWrite(false);
           setPendingUpload(null);
         }}
       >
+        {editingRip && !pendingUpload && file && (
+          <RipScreenEditor
+            content={file.content}
+            filePath={openFile ?? undefined}
+            // The same exit an ANSI edit takes: bytes into the fan-out, with
+            // the same backup, the same targets and the same refusals. A RIP
+            // screen is not a second write path.
+            onSave={bytes => {
+              setPendingUpload({ bytes, name: 'the edited screen' });
+              setEditorWrite(true);
+            }}
+            onCancel={() => { setEditingRip(false); setEditorWrite(false); }}
+          />
+        )}
+
         {editing && !pendingUpload && (
           <ScreenEditor
             surface={editing}
@@ -1246,7 +1280,7 @@ export function ScreenFilesPage() {
           </div>
         )}
 
-        {openFile && file && !editing && !editorWrite && (
+        {openFile && file && !editing && !editingRip && !editorWrite && (
           <div className="space-y-3 p-4">
             {fileError && (
               <p className="text-sm text-status-danger">
@@ -1333,6 +1367,21 @@ export function ScreenFilesPage() {
                   className="inline-flex items-center gap-1 underline"
                   aria-label="Edit this file"
                   onClick={async () => setEditing(createSurface(await screenToCanvas(file.content)))}
+                >
+                  <Pencil size={14} /> Edit
+                </button>
+              )}
+              {/*
+                A .rip screen opens in the RIP editor. Its own button rather
+                than a branch inside the ANSI one: the artwork is a vector
+                program that no canvas of cells can hold, and what is editable
+                about it is where a caller can click.
+              */}
+              {file.format === 'rip' && (
+                <button
+                  className="inline-flex items-center gap-1 underline"
+                  aria-label="Edit this file"
+                  onClick={() => setEditingRip(true)}
                 >
                   <Pencil size={14} /> Edit
                 </button>
@@ -1503,11 +1552,16 @@ export function ScreenFilesPage() {
                  */
                 maxRows={200}
               />
+            ) : file.format === 'rip' ? (
+              // Drawn by the same RIPtermJS a RIP caller's terminal uses, with
+              // this screen's clickable regions over it. The same component the
+              // Edit button opens, read-only - a viewer and an editor that draw
+              // a file differently is the bug class this page keeps hitting.
+              <RipScreenEditor content={file.content} filePath={openFile ?? undefined} readOnly />
             ) : (
               <p className="text-sm text-status-warn">
-                {file.format === 'rip'
-                  ? 'RIP graphics - preview arrives with the RIP editor in phase 3.'
-                  : 'PETSCII - the board does not render this correctly yet, so no preview is shown rather than a misleading one.'}
+                PETSCII - the board does not render this correctly yet, so no
+                preview is shown rather than a misleading one.
               </p>
             )}
 
