@@ -182,6 +182,12 @@ const SIGNATURES: Record<string, Signature> = {
   // PETSCII screen code, so the row below is the one the oracle can read.
   aquascan_fr: { door: '92470  N CB4!SA63.LHA' },
   aquascan_n: { door: '98502  N CB4!SA60.LHA' },
+  // AquaScan's all-conferences names, marked 2026-09-07. One screen under
+  // three registrations: the same record rows, under a `Conference: [ name ]`
+  // header per conference the caller may read.
+  aquascan_scan: { door: '48376  P CB4!SR21.LZX' },
+  aquascan_nsu: { door: '92470  N CB4!SA63.LHA' },
+  aquascan_cs: { door: '98502  N CB4!SA60.LHA' },
 };
 
 // ---------------------------------------------------------------- sessions

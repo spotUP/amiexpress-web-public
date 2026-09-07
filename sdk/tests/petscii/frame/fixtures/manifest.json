@@ -491,5 +491,50 @@
     "cwd": "web/backend",
     "installed": "n",
     "notes": "AquaScan v1.0 by Aquarius/Outlaws, this board's file lister. It is ONE program under three registrations - F is AquaScan.020, FR and N are AquaScan.000 - and each registration is marked separately, so each carries its own capture. The ladder alone destroys these screens: `narrow` shortens a row's widest column, and on a file record that is the filename or the size, so `CB4!ST13.LHA N 119214` came out as `CB4!ST13.LHA N> 01-21-26` with the size gone. What makes the mark honest is the FILE-RECORD RUNG (web/backend/src/server/c64-file-record-rung.ts): every row the shared DIR grammar recognises is re-rendered through the same interpreter and the same Prompts/FILEVIEW.40 the board's own listing uses, and the description block under it is consumed rather than folded. Marked C64_ADAPT=40 on 2026-09-07. N asks for a date before the directory, so this capture answers 01-01-20 and then `a`: every record on the board reads as new, which is what makes it a listing rather than an empty scan."
-  }
+  },
+    "aquascan_scan": {
+      "binary": "Doors/AquaScan/AquaScan.000",
+      "command": "scan",
+      "script": [
+        "6000 \\r",
+        "10000 \\r",
+        "14000 q\\r"
+      ],
+      "bytes": 5887,
+      "sha256": "aa0f365a913880fb26ca28f038ed6dd12aeebcdb1cf46438c2b0119a87944548",
+      "harness": "printf '%s\\n' '6000 \\r' '10000 \\r' '14000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/AquaScan/AquaScan.000 1 --doortype XIM --command \"scan 01-01-20\" --timeout 30 > aquascan_scan.ans",
+      "cwd": "web/backend",
+      "installed": "scan",
+      "notes": "AquaScan v1.0 by Aquarius/Outlaws under its ALL-CONFERENCES names. `SCAN`, `NSU` and `CS` are one program and one screen - the same binary `FR` and `N` run - walking every conference the caller may read and printing each one's new files under a `Conference: [ name ]` header. They are marked separately because the claim is per registration (the RTW precedent), and each carries its own capture. The file rows are re-rendered by the record rung (web/backend/src/server/c64-file-record-rung.ts) through Prompts/FILEVIEW.40, exactly as the board's own listing renders them; the conference headers fall through to the ladder. Marked C64_ADAPT=40 on 2026-09-07. Captured as `scan 01-01-20`, the date as an ARGUMENT - with no argument the door scans from the caller's last call, which on a fresh harness session is today, and every conference answers `Nothing found!`."
+    },
+    "aquascan_nsu": {
+      "binary": "Doors/AquaScan/AquaScan.000",
+      "command": "nsu",
+      "script": [
+        "6000 \\r",
+        "10000 \\r",
+        "14000 q\\r"
+      ],
+      "bytes": 5887,
+      "sha256": "cff6a176447cce64e5dec4eb87180ab2a3c884955c35a55e924426eca6e20488",
+      "harness": "printf '%s\\n' '6000 \\r' '10000 \\r' '14000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/AquaScan/AquaScan.000 1 --doortype XIM --command \"nsu 01-01-20\" --timeout 30 > aquascan_nsu.ans",
+      "cwd": "web/backend",
+      "installed": "nsu",
+      "notes": "AquaScan v1.0 by Aquarius/Outlaws under its ALL-CONFERENCES names. `SCAN`, `NSU` and `CS` are one program and one screen - the same binary `FR` and `N` run - walking every conference the caller may read and printing each one's new files under a `Conference: [ name ]` header. They are marked separately because the claim is per registration (the RTW precedent), and each carries its own capture. The file rows are re-rendered by the record rung (web/backend/src/server/c64-file-record-rung.ts) through Prompts/FILEVIEW.40, exactly as the board's own listing renders them; the conference headers fall through to the ladder. Marked C64_ADAPT=40 on 2026-09-07. Captured as `nsu 01-01-20`. NSU is the same scan under the name a caller reaches from the new-files prompt."
+    },
+    "aquascan_cs": {
+      "binary": "Doors/AquaScan/AquaScan.000",
+      "command": "cs",
+      "script": [
+        "6000 \\r",
+        "10000 \\r",
+        "14000 q\\r"
+      ],
+      "bytes": 5871,
+      "sha256": "780afd1cfea516ef94baf473358e095d8e0ca9313c0633b6fa8beb86e6d25e99",
+      "harness": "printf '%s\\n' '6000 \\r' '10000 \\r' '14000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/AquaScan/AquaScan.000 1 --doortype XIM --command \"cs 01-01-20\" --timeout 30 > aquascan_cs.ans",
+      "cwd": "web/backend",
+      "installed": "cs",
+      "notes": "AquaScan v1.0 by Aquarius/Outlaws under its ALL-CONFERENCES names. `SCAN`, `NSU` and `CS` are one program and one screen - the same binary `FR` and `N` run - walking every conference the caller may read and printing each one's new files under a `Conference: [ name ]` header. They are marked separately because the claim is per registration (the RTW precedent), and each carries its own capture. The file rows are re-rendered by the record rung (web/backend/src/server/c64-file-record-rung.ts) through Prompts/FILEVIEW.40, exactly as the board's own listing renders them; the conference headers fall through to the ladder. Marked C64_ADAPT=40 on 2026-09-07. Captured as `cs 01-01-20`. CS is the conference-scan name; the screen is the same walk, and this capture ends mid-prompt rather than after Quit, which is why its bytes differ from the other two."
+    }
 }

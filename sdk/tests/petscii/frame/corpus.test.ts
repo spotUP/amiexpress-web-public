@@ -235,7 +235,14 @@ for (const [id, entry] of Object.entries(manifest)) {
         // and drives one of the commands this entry claims.
         expect(entry.harness).toContain('run-amiga-door.ts');
         expect(entry.harness).toContain('--doortype ');
-        expect(entry.harness).toContain(`--command ${installedOf(entry)[0]}`);
+        // The command, optionally quoted because a door command can carry
+        // ARGUMENTS: AquaScan's all-conferences names take the date that way
+        // (`--command "scan 01-01-20"`), and with none of it the door scans
+        // from the caller's last call - which in a harness session is today,
+        // so every conference answers `Nothing found!` and the capture holds
+        // no records at all.
+        expect({ harness: entry.harness, namesCommand: new RegExp(`--command "?${installedOf(entry)[0]}(\\s|"|$)`).test(entry.harness) })
+          .toEqual({ harness: entry.harness, namesCommand: true });
         expect(entry.cwd).toEqual('web/backend');
       } else if (entry.withdrawn) {
         // A WITHDRAWN mark: still a real harness capture of a door that is
