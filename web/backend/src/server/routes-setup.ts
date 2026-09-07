@@ -191,6 +191,12 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   const { screensRouter } = require('../api/screens-routes');
   app.use('/api/screens', authenticateToken(db), requireLevel(100), screensRouter);
 
+  // ===== Screen Themes API - the same gate, because a theme IS a set of
+  // screens: this decides which sets exist and who owns them, the screen
+  // editor writes the files, and both enforce the same ownership rule.
+  const { themesRouter } = require('../api/theme-routes');
+  app.use('/api/themes', authenticateToken(db), requireLevel(100), themesRouter);
+
   // ===== Admin Permissions API - Sysop-only =====
   app.get('/api/admin-permissions', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
     adminPermsHandler.get(req, res)
