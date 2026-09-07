@@ -153,22 +153,35 @@ async function displayChooseTranslator(socket: any, session: BBSSession): Promis
 
   emitText(socket, '\r\n');
 
-  // Display SCREEN_LANGUAGES if it exists - express.e:11395-11397
-  // (simplified - we just display the list inline)
-  const languagesHeading = 'Available Languages';
-  emitText(
-    socket,
-    AnsiUtil.colorize(`${headingIndent(session, 'languageList', languagesHeading)}${languagesHeading}`, 'green')
-  );
-  emitText(socket, '\r\n\r\n');
+  // express.e:11395-11397 - the SYSOP's Languages screen, if the board has one.
+  // express.e has no list of its own: it shows that screen or says "Languages
+  // list unavailable". This port only ever built the list inline, so a board
+  // that had drawn the screen never showed it.
+  //
+  // The built list stays as the FALLBACK rather than express.e's apology - it
+  // names the same numbers the prompt below accepts, which the apology does
+  // not, and a caller who cannot see the choices cannot make one.
+  let shown = false;
+  try {
+    const { displayScreen } = require('../screen.handler');
+    shown = await displayScreen(socket, session, 'LANGUAGES', true, /* silent */ true);
+  } catch { /* a board without the screen falls through to the list */ }
 
-  // List languages with numbers - express.e uses displayScreen(SCREEN_LANGUAGES)
-  languages.forEach((lang, index) => {
-    const num = String(index + 1).padStart(2);
-    const marker = lang === currentUserLang ? ' *' : '';
-    const hostMarker = lang === hostLanguage ? ' (Host)' : '';
-    emitText(socket, `  ${AnsiUtil.colorize(num, 'yellow')}. ${lang}${marker}${hostMarker}\r\n`);
-  });
+  if (!shown) {
+    const languagesHeading = 'Available Languages';
+    emitText(
+      socket,
+      AnsiUtil.colorize(`${headingIndent(session, 'languageList', languagesHeading)}${languagesHeading}`, 'green')
+    );
+    emitText(socket, '\r\n\r\n');
+
+    languages.forEach((lang, index) => {
+      const num = String(index + 1).padStart(2);
+      const marker = lang === currentUserLang ? ' *' : '';
+      const hostMarker = lang === hostLanguage ? ' (Host)' : '';
+      emitText(socket, `  ${AnsiUtil.colorize(num, 'yellow')}. ${lang}${marker}${hostMarker}\r\n`);
+    });
+  }
 
   emitText(socket, '\r\n');
   // express.e:11399-11400 - redoTrans: aePuts('\b\nLanguage (num) >: ')
