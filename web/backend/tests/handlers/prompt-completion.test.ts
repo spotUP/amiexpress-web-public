@@ -79,6 +79,32 @@ describe('what the prompt can complete to', () => {
     expect(names).toContain('G');
   });
 
+  /**
+   * The completer is INFRASTRUCTURE, and offering it is noise: a caller
+   * typing `PR` wants a command, not the machinery that answered him ("i
+   * think the bbs autocompletes promptcomplete", sysop, live board,
+   * 2026-09-07). It stays runnable - typing the whole name still opens its
+   * report - it is simply never suggested.
+   */
+  it('does not offer the door that provides the completion', () => {
+    commandCache.bbscmd.set('PROMPTCOMPLETE', {
+      name: 'PROMPTCOMPLETE',
+      location: 'Doors/prompt-complete',
+      toolTypes: { PROMPTCOMPLETE: 'YES' },
+    } as any);
+    commandCache.bbscmd.set('PONG', { name: 'PONG' } as any);
+
+    const names = promptCommandNames();
+
+    expect(names).not.toContain('PROMPTCOMPLETE');
+    expect(names).toContain('PONG');
+  });
+
+  it('still offers a door that merely starts with the same letters', () => {
+    commandCache.bbscmd.set('PROMPTS', { name: 'PROMPTS' } as any);
+    expect(promptCommandNames()).toContain('PROMPTS');
+  });
+
   it('offers each name once, in a stable order', () => {
     // A suggestion that reshuffles between keystrokes reads as a glitch.
     commandCache.bbscmd.set('J', { name: 'J' } as any);   // also an internal name

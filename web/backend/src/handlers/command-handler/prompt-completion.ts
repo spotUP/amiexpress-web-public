@@ -79,12 +79,14 @@ export function __setCompleterForTests(completer: PromptCompleter | null): void 
  * door that has been deleted or whose registration is dead is not found
  * here either.
  */
+function isCompleterProvider(cmd: { toolTypes?: Record<string, string> } | null | undefined): boolean {
+  const flag = cmd?.toolTypes?.[COMPLETER_TOOLTYPE];
+  return typeof flag === 'string' && /^(YES|1|TRUE)$/i.test(flag.trim());
+}
+
 function findCompleterDoor(): { location: string } | null {
   for (const cmd of commandCache.bbscmd.values()) {
-    const flag = cmd.toolTypes?.[COMPLETER_TOOLTYPE];
-    if (flag && /^(YES|1|TRUE)$/i.test(flag.trim())) {
-      return { location: cmd.location };
-    }
+    if (isCompleterProvider(cmd)) return { location: cmd.location };
   }
   return null;
 }
@@ -137,7 +139,15 @@ async function loadCompleter(bbsRoot: string): Promise<PromptCompleter | null> {
  */
 export function promptCommandNames(): string[] {
   const names = new Set<string>();
-  for (const name of commandCache.bbscmd.keys()) names.add(name.toUpperCase());
+  for (const [name, cmd] of commandCache.bbscmd.entries()) {
+    // ...except the completer itself. It is INFRASTRUCTURE: the prompt asks
+    // it what to suggest, and a caller typing `PR` wants a command, not the
+    // machinery that answered him ("i think the bbs autocompletes
+    // promptcomplete", sysop, 2026-09-07). It stays runnable - typing the
+    // whole name still opens its report - it is simply not offered.
+    if (isCompleterProvider(cmd)) continue;
+    names.add(name.toUpperCase());
+  }
   for (const name of INTERNAL_COMMAND_NAMES) names.add(name.toUpperCase());
   return [...names].sort();
 }
