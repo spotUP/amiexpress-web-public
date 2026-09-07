@@ -11,6 +11,9 @@ import { doorRepoRouter, isDoorRepoProxyEnabled } from './door-repo.routes';
 import { doorRepoCors, isDoorRepoPath } from './door-repo-cors';
 import { getSystemTime } from '../utils/date-time.util';
 import { getRepoRevision } from './repo-revision';
+import { sessions } from './session-manager';
+import { ftpCallersOnline } from '../ftp/ftp-presence';
+import { BBSState } from '../constants/bbs-states';
 
 /**
  * Express Application Setup
@@ -217,10 +220,45 @@ app.post('/api/csp-report', (req, res) => {
 // revision string but can't import this file (app.ts pulls in the entire
 // express/helmet/cors/log-stream stack at import time).
 app.get('/health', (req, res) => {
+  /*
+   * `callers` is here so a DEPLOY can refuse to drop people.
+   *
+   * Recreating the container ends every session on the board - the sysop's
+   * words on 2026-09-07: "we are throwing users out of the live bbs". A
+   * deploy has no way to know whether that costs somebody a half-typed
+   * message or nothing at all, so the board answers the question itself, on
+   * the endpoint the deploy already reads for the revision.
+   *
+   * Counted: a caller who has LOGGED ON, over any transport, plus anyone on
+   * over FTP (an FTP session holds a node but has no BBSSession - see
+   * ftp/ftp-presence.ts). A connection that has not logged on yet is not
+   * counted: it is a port scanner or a login prompt nobody is sitting at, and
+   * blocking deploys on those would block them for ever.
+   */
+  const loggedOn = Array.from(sessions.values()).filter(
+    (session) => session.state === BBSState.LOGGEDON && session.user
+  );
+  const ftp = ftpCallersOnline();
+
   res.json({
     status: 'ok',
     timestamp: getSystemTime().toISOString(),
     revision: getRepoRevision(),
+    callers: loggedOn.length + ftp.length,
+    // Named, because "3 callers" and "3 callers, one of them you" are
+    // different decisions for whoever is about to deploy.
+    online: [
+      ...loggedOn.map((session) => ({
+        username: session.user?.username ?? 'unknown',
+        nodeId: session.nodeId ?? 0,
+        transport: session.connectionType ?? 'web',
+      })),
+      ...ftp.map((caller) => ({
+        username: caller.username,
+        nodeId: caller.nodeId,
+        transport: 'ftp',
+      })),
+    ],
   });
 });
 

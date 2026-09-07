@@ -18,6 +18,11 @@
         - 'docs/**'
         - 'LICENSE'
     workflow_dispatch:
+      inputs:
+        force:
+          description: 'Deploy even if callers are online (they WILL be disconnected)'
+          type: boolean
+          default: false
 
   # Serialize deploys. Without this, two pushes in quick succession
   # (e.g. the bbfb57736 + e92037b26 pair on 2026-05-20) both grab the
@@ -356,6 +361,51 @@
               # RESTART_NOTICE_SECONDS in docker-compose.yml must match this
               # sleep. Skipped entirely when nothing is running (first deploy,
               # or a container that died), so a cold start is not delayed.
+              # WHO IS ON THE BOARD RIGHT NOW.
+              #
+              # Recreating the container ends every session. On 2026-09-07 an
+              # evening of iterating on FTP meant kicking the sysop's callers
+              # off over and over - "we are throwing users out of the live
+              # bbs" - and nothing in the pipeline knew or cared.
+              #
+              # The board answers on its own /health: `callers` counts anyone
+              # LOGGED ON over any transport, plus anyone on over FTP (who
+              # holds a node but no session). A connection sitting at the
+              # login prompt is not counted, or a port scanner would block
+              # deploys for ever.
+              #
+              # Curled from the HOST against the published port, so it tests
+              # what a caller would reach rather than a container's own idea
+              # of itself. A board that does not answer is a board with nobody
+              # on it - that is a cold start, not a reason to refuse.
+              #
+              # Override: run the workflow manually with force=true. It says
+              # what it is about to do, deliberately, in the log.
+              FORCE_DEPLOY="${{ github.event.inputs.force }}"
+              if [ "$(docker inspect -f '{{.State.Running}}' amiexpress-bbs 2>/dev/null || echo false)" = "true" ]; then
+                HEALTH=$(curl -s --max-time 5 http://127.0.0.1:3001/health || echo '')
+                CALLERS=$(printf '%s' "$HEALTH" | sed -n 's/.*"callers":\([0-9]*\).*/\1/p')
+                CALLERS=${CALLERS:-0}
+                if [ "$CALLERS" -gt 0 ] 2>/dev/null; then
+                  echo "== $CALLERS caller(s) are on the board =="
+                  printf '%s' "$HEALTH" | tr ',' '\n' | grep -i 'username' || true
+                  if [ "$FORCE_DEPLOY" = "true" ]; then
+                    echo "== force=true: deploying anyway, they will be disconnected =="
+                  else
+                    echo ""
+                    echo "REFUSING TO DEPLOY. The image is built and the repo is updated;"
+                    echo "nothing has been recreated, so the board is untouched and still"
+                    echo "serving the previous build."
+                    echo ""
+                    echo "Re-run this workflow when they have gone, or run it manually with"
+                    echo "force=true to disconnect them deliberately."
+                    exit 78
+                  fi
+                else
+                  echo "== nobody is on the board; deploying =="
+                fi
+              fi
+
               NOTICE_SECONDS=60
               if [ "$(docker inspect -f '{{.State.Running}}' amiexpress-bbs 2>/dev/null || echo false)" = "true" ]; then
                 echo "== restart notice: SIGUSR1, then ${NOTICE_SECONDS}s countdown =="
@@ -377,21 +427,15 @@
               # Re-copied on every deploy, which is also how a renewed
               # certificate reaches FTPS: Caddy renews in place, and the FTP
               # server reads the file once at boot.
-              # Both names the board answers to: uptown is the address the
-              # sysop gives out, bbs is what everything internal uses. A
-              # certificate is issued for ONE name, so the FTP server carries
-              # both and picks by SNI (FTP_TLS_HOSTS in docker-compose.yml).
-              CADDY_CERTS=/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory
-              install -d -m 0750 -o 1001 -g 1001 /app/ftp-certs
-              for FTP_HOSTNAME in uptown.uprough.net bbs.uprough.net; do
-                if [ -f "$CADDY_CERTS/$FTP_HOSTNAME/$FTP_HOSTNAME.crt" ]; then
-                  echo "== staging FTPS certificate for $FTP_HOSTNAME =="
-                  install -m 0444 -o 1001 -g 1001 "$CADDY_CERTS/$FTP_HOSTNAME/$FTP_HOSTNAME.crt" /app/ftp-certs/
-                  install -m 0400 -o 1001 -g 1001 "$CADDY_CERTS/$FTP_HOSTNAME/$FTP_HOSTNAME.key" /app/ftp-certs/
-                else
-                  echo "== no Caddy certificate for $FTP_HOSTNAME; that name will not serve TLS =="
-                fi
-              done
+              CADDY_CERTS=/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/bbs.uprough.net
+              if [ -f "$CADDY_CERTS/bbs.uprough.net.crt" ]; then
+                echo "== staging FTPS certificate for the container =="
+                install -d -m 0750 -o 1001 -g 1001 /app/ftp-certs
+                install -m 0444 -o 1001 -g 1001 "$CADDY_CERTS/bbs.uprough.net.crt" /app/ftp-certs/
+                install -m 0400 -o 1001 -g 1001 "$CADDY_CERTS/bbs.uprough.net.key" /app/ftp-certs/
+              else
+                echo "== no Caddy certificate for the board; FTPS will answer 431 =="
+              fi
 
               # `--force-recreate` is the critical bit: without it, docker
               # compose can decide the running container "matches" the spec

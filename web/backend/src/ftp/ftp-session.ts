@@ -296,6 +296,8 @@ export class FtpSession {
         return this.onPass(arg);
       case 'PWD':
       case 'XPWD':
+        // ftpd.e:1197-1209, verbatim - including the full-stop, which some
+        // clients echo to the user.
         return this.reply(257, `"${this.cwd}" is current directory.`);
       case 'CWD':
       case 'XCWD':
@@ -384,7 +386,8 @@ export class FtpSession {
       return this.reply(501, 'REST needs a byte offset');
     }
     this.restartAt = offset;
-    this.reply(350, `Restarting at ${offset}. Send RETR to resume`);
+    // ftpd.e:1426, verbatim.
+    this.reply(350, `Restarting at ${offset}. Send STORE or RETRIEVE to initiate transfer`);
   }
 
   /**
@@ -410,17 +413,23 @@ export class FtpSession {
       return this.reply(550, 'Downloads are not available');
     }
 
+    // ftpd.e:1729 - the same TYPE gate STOR has.
+    if (!this.binary && !this.ascii) {
+      channel.close();
+      return this.reply(550, 'This server only supports binary or ascii transfers');
+    }
+
     const target = resolvePath(this.cwd, arg.trim());
     const entry = target === null ? null : await tree.find(this.user, target);
     if (!entry || entry.isDirectory) {
       channel.close();
-      return this.reply(550, `${arg.trim()}: no such file`);
+      return this.reply(550, `${arg.trim()}: No such file or directory`);
     }
 
     const conference = tree.conferenceAt(this.user, target!);
     if (!conference) {
       channel.close();
-      return this.reply(550, `${arg.trim()}: no such file`);
+      return this.reply(550, `${arg.trim()}: No such file or directory`);
     }
 
     // The gate first, and its own words. A refusal here moves zero bytes.
@@ -453,6 +462,9 @@ export class FtpSession {
     }
     if (!located) {
       channel.close();
+      // Deliberately NOT express's flat "No such file or directory": the
+      // board LISTED this file, so telling a caller it does not exist sends
+      // him to argue with a sysop about a catalogue entry that is right there.
       return this.reply(550, `${entry.name}: the board lists it, but its bytes are not here`);
     }
 
@@ -506,17 +518,21 @@ export class FtpSession {
    * area's local copy would answer about a file that may not even be here.
    */
   private async onSize(arg: string): Promise<void> {
+    // ftpd.e:1417 - one sentence for "not there", whatever the reason.
     const entry = await this.entryFor(arg);
-    if (!entry) return this.reply(550, `${arg.trim()}: no such file`);
-    if (entry.isDirectory) return this.reply(550, `${arg.trim()}: not a plain file`);
+    if (!entry || entry.isDirectory) {
+      return this.reply(550, `${arg.trim()}: No such file or directory`);
+    }
     this.reply(213, String(entry.size));
   }
 
   /** `MDTM`: the upload date the DIR entry carries, in RFC 3659's UTC form. */
   private async onMdtm(arg: string): Promise<void> {
+    // ftpd.e:1394.
     const entry = await this.entryFor(arg);
-    if (!entry) return this.reply(550, `${arg.trim()}: no such file`);
-    if (entry.isDirectory) return this.reply(550, `${arg.trim()}: not a plain file`);
+    if (!entry || entry.isDirectory) {
+      return this.reply(550, `${arg.trim()}: No such file or directory`);
+    }
     this.reply(213, machineTimestamp(entry.modified));
   }
 
@@ -641,7 +657,7 @@ export class FtpSession {
     const target = resolvePath(this.cwd, arg.trim() || '.');
     const entry = target === null ? null : await tree.find(this.user, target);
     if (!entry) {
-      return this.reply(550, `${arg.trim() || this.cwd}: no such file or directory`);
+      return this.reply(550, `${arg.trim() || this.cwd}: No such file or directory`);
     }
 
     // The path, not the bare name: RFC 3659 says MLST answers about what was
@@ -672,9 +688,11 @@ export class FtpSession {
     if (!fs) return this.reply(550, 'No directories available');
 
     const target = resolvePath(this.cwd, arg.trim() || '/');
-    if (target === null) return this.reply(550, 'Cannot go above the root');
+    if (target === null) return this.reply(550, '..: No such file or directory.');
     if (!fs.exists(this.user, target)) {
-      return this.reply(550, `${arg.trim()}: no such conference`);
+      // ftpd.e:1261 - the same sentence for a conference and a subdirectory,
+      // because to the caller they are both just a directory that is not there.
+      return this.reply(550, `${arg.trim()}: No such file or directory.`);
     }
     this.cwd = target;
     return this.reply(250, `Directory changed to ${target}`);
@@ -821,13 +839,17 @@ export class FtpSession {
     // Everything named here must be a verb this server answers - a client
     // believes FEAT and stops trying the alternatives (2026-09-07: MLST was
     // advertised while MLSD answered 502, and Transmit simply stopped).
+    // ftpd.e:1219-1226 lists five. The three extra are ones this server
+    // genuinely answers and a modern client looks for - and the rule that
+    // matters is the one the MLSD bug taught: everything advertised here must
+    // be answered.
     const lines = [
-      ' EPSV',
-      ' PASV',
       ' REST STREAM',
       ' SIZE',
       ' MDTM',
       ' MLST type*;size*;modify*;perm*;',
+      ' EPSV',
+      ' PASV',
       ' UTF8',
     ];
     if (this.deps.startTls) lines.unshift(' AUTH TLS');

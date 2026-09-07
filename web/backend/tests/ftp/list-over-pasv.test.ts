@@ -147,7 +147,8 @@ describe('a caller who has just logged in', () => {
     const { control, lines } = await login();
 
     control.write('CWD 003-Hidden\r\n');
-    expect(await lines.next()).toBe('550 003-Hidden: no such conference');
+    // ftpd.e:1261 - a conference and a subdirectory read the same to a caller.
+    expect(await lines.next()).toBe('550 003-Hidden: No such file or directory.');
 
     control.destroy();
   });
@@ -366,9 +367,9 @@ describe('asking about one file', () => {
     const { control, lines } = await login();
 
     control.write('SIZE nothing.lha\r\n');
-    expect(await lines.next()).toBe('550 nothing.lha: no such file');
+    expect(await lines.next()).toBe('550 nothing.lha: No such file or directory');
     control.write('MDTM nothing.lha\r\n');
-    expect(await lines.next()).toBe('550 nothing.lha: no such file');
+    expect(await lines.next()).toBe('550 nothing.lha: No such file or directory');
 
     control.destroy();
   });
@@ -377,7 +378,8 @@ describe('asking about one file', () => {
     const { control, lines } = await login();
 
     control.write('SIZE 001-General\r\n');
-    expect(await lines.next()).toBe('550 001-General: not a plain file');
+    // A directory is not a plain file, and express does not distinguish.
+    expect(await lines.next()).toBe('550 001-General: No such file or directory');
 
     control.destroy();
   });

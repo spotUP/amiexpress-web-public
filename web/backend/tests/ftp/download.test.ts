@@ -220,7 +220,10 @@ describe('a caller downloading a file', () => {
 
     const { body, control } = await retrieve(rig.port, 'RETR DEMO.LHA', async (io) => {
       io.control.write(`REST ${offset}\r\n`);
-      expect(await io.lines.next()).toBe(`350 Restarting at ${offset}. Send RETR to resume`);
+      expect(await io.lines.next()).toBe(
+        // ftpd.e:1426, verbatim.
+        `350 Restarting at ${offset}. Send STORE or RETRIEVE to initiate transfer`
+      );
     });
 
     expect(body.toString('latin1')).toBe(PAYLOAD.subarray(offset).toString('latin1'));
@@ -236,7 +239,8 @@ describe('a caller downloading a file', () => {
 
     const { replies, control } = await retrieve(rig.port, 'RETR NOTHERE.LHA');
 
-    expect(replies[1]).toBe('550 NOTHERE.LHA: no such file');
+    // ftpd.e:1739 - one sentence for anything that is not there.
+    expect(replies[1]).toBe('550 NOTHERE.LHA: No such file or directory');
     expect(rig.charged).toEqual([]);
 
     control.destroy();
