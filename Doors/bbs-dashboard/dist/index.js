@@ -20,6 +20,7 @@ const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 let T = (0, theme_1.themeById)('classic').tokens;
 const door_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/door-input-manager");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const settings_1 = require("./settings");
 class BBSDashboard {
     constructor() {
         /**
@@ -35,6 +36,8 @@ class BBSDashboard {
         this.chrome = null;
         this.theme = (0, theme_1.themeById)('classic');
         this.updateInterval = null;
+        /** Seconds between refreshes, from door.settings.json; default 3. */
+        this.refreshSeconds = 3;
         this.terminalMode = null;
         this.exitResolve = null;
         this.resizeHandler = null;
@@ -56,6 +59,7 @@ class BBSDashboard {
         // Fetch initial data
         await this.fetchBBSStats();
         await this.renderDashboard();
+        this.refreshSeconds = (0, settings_1.loadSettings)().refreshSeconds;
         this.startAutoRefresh();
         // Wait for exit
         await new Promise((resolve) => {
@@ -473,13 +477,13 @@ class BBSDashboard {
         this.updateInterval = setInterval(async () => {
             // Fetch fresh stats from BBS
             await this.fetchBBSStats();
-            // Increment uptime (3 seconds per refresh)
-            this.stats.systemUptime += 3;
+            // Increment uptime by one refresh period (the configured interval).
+            this.stats.systemUptime += this.refreshSeconds;
             this.validateStats();
             if (this.screen && !this.screen.destroyed) {
                 await this.renderDashboard();
             }
-        }, 3000);
+        }, this.refreshSeconds * 1000);
     }
     cleanup() {
         // Gives the board its 80 columns back and unhooks resize and Alt+Enter.

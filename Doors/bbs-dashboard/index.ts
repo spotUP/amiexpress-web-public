@@ -33,6 +33,7 @@ let T: ThemeTokens = themeById('classic').tokens;
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { Text } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { loadSettings } from './settings';
 
 interface BBSStats {
   totalUsers: number;
@@ -75,6 +76,8 @@ class BBSDashboard {
   private chrome: DoorChrome | null = null;
   private theme: Theme = themeById('classic');
   private updateInterval: NodeJS.Timeout | null = null;
+  /** Seconds between refreshes, from door.settings.json; default 3. */
+  private refreshSeconds = 3;
   private terminalMode: TerminalModeSwitch | null = null;
   private exitResolve: (() => void) | null = null;
   private resizeHandler: ((width: number, height: number) => void) | null = null;
@@ -100,6 +103,7 @@ class BBSDashboard {
     await this.fetchBBSStats();
 
     await this.renderDashboard();
+    this.refreshSeconds = loadSettings().refreshSeconds;
     this.startAutoRefresh();
 
     // Wait for exit
@@ -555,15 +559,15 @@ class BBSDashboard {
       // Fetch fresh stats from BBS
       await this.fetchBBSStats();
 
-      // Increment uptime (3 seconds per refresh)
-      this.stats.systemUptime += 3;
+      // Increment uptime by one refresh period (the configured interval).
+      this.stats.systemUptime += this.refreshSeconds;
 
       this.validateStats();
 
       if (this.screen && !this.screen.destroyed) {
         await this.renderDashboard();
       }
-    }, 3000);
+    }, this.refreshSeconds * 1000);
   }
 
   private cleanup(): void {
