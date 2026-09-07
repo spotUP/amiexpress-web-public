@@ -155,6 +155,20 @@ app.use((req, res, next) => {
   if (isDoorRepoPath(req.path)) {
     return next();
   }
+  /*
+   * A request from the page this server itself served is not cross-origin,
+   * whatever port it is on. Browsers send `Origin` on same-origin fetches and
+   * on stylesheet/script loads too, so a board on any port but the ones in
+   * the allowlist answered its OWN admin bundle with
+   * `{"error":"Not allowed by CORS"}` - the sysop's test server on 3011 could
+   * not load its stylesheet. Same-origin is decided against the request's own
+   * Host; the allowlist still rules every other origin.
+   */
+  const origin = req.get('origin');
+  const self = `${req.protocol}://${req.get('host') ?? ''}`.toLowerCase();
+  if (origin && origin.toLowerCase() === self) {
+    return next();
+  }
   return globalCors(req, res, next);
 });
 
