@@ -100,9 +100,36 @@ function screenCodeToChar(sc: number): string {
 }
 
 /** What a real C64 is showing after eating `ansi`, row by row. */
+/**
+ * The screen the CALLER saw, which is not the screen the session ends on.
+ *
+ * The picker clears on the way out and leaves the terminal black (44c444fdc),
+ * so the capture ends with `ESC[2J ESC[H ESC[?25h`. Transducing the whole
+ * session therefore models the screen AFTER the door quit - empty, every time,
+ * however well the door painted. That is what made this test read as "the door
+ * writes nothing at 40 columns" while the door was in fact writing 2,182 bytes
+ * of correctly addressed 40-column output.
+ *
+ * So the model stops at the teardown clear, and `leavesScreenBlack` below pins
+ * the teardown itself rather than letting it hide the screen.
+ */
+function beforeTeardown(ansi: string): string {
+  const clear = ansi.lastIndexOf('\x1b[2J');
+  // Only the FINAL clear counts, and only when nothing but the teardown tail
+  // follows it - a clear mid-session is a repaint and belongs in the model.
+  if (clear <= 0) return ansi;
+  const tail = ansi.slice(clear);
+  return /^\x1b\[2J(\x1b\[H)?(\x1b\[\?25[hl])?\s*$/.test(tail) ? ansi.slice(0, clear) : ansi;
+}
+
+/** Whether the door really did leave the screen black behind it. */
+function leavesScreenBlack(ansi: string): boolean {
+  return /\x1b\[2J(\x1b\[H)?(\x1b\[\?25[hl])?\s*$/.test(ansi);
+}
+
 function petsciiScreen(ansi: string): { rows: string[]; painted: number } {
   const transducer = new AnsiToPetsciiTransducer();
-  transducer.transduce(ansi);
+  transducer.transduce(beforeTeardown(ansi));
   const { screen, cols, rows } = transducer.machine.state;
   const out: string[] = [];
   let painted = 0;
@@ -141,6 +168,9 @@ describe('THEMEC opens on a 40-column caller', () => {
 
   it('the theme list is readable at 40: the real door on a real C64 screen', async () => {
     const ansi = await drive(40);
+    // The door clears on the way out by design; the caller's screen is what it
+    // painted before that, and the teardown is asserted separately below.
+    expect(leavesScreenBlack(ansi)).toBe(true);
     const { rows, painted } = petsciiScreen(ansi);
 
     // A C64 screen, and a full one.
