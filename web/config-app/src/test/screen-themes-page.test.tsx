@@ -39,6 +39,12 @@ vi.mock('../api/client', () => ({
   },
 }));
 
+let authUser = { username: 'sysop', secLevel: 255 };
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({ user: authUser, secLevel: authUser.secLevel }),
+  AuthProvider: ({ children }: { children: ReactNode }) => children,
+}));
+
 const confirmMock = vi.fn(async (_options: { title: string; message: string }) => true);
 vi.mock('../contexts/NotificationContext', () => ({
   useNotification: () => ({ showSuccess: vi.fn(), showError: vi.fn(), confirm: confirmMock }),
@@ -65,6 +71,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  authUser = { username: 'sysop', secLevel: 255 };
   vi.clearAllMocks();
   confirmMock.mockResolvedValue(true);
   createScreenTheme.mockResolvedValue({ success: true, data: {} });
@@ -158,5 +165,49 @@ describe('the actions each account is offered', () => {
 
     await waitFor(() => expect(setDefaultScreenTheme).toHaveBeenCalledWith('neon'));
     expect(confirmMock.mock.calls[0][0].message).toMatch(/who has not chosen/i);
+  });
+});
+
+describe('who the create form asks about', () => {
+  beforeEach(() => {
+    getScreenThemes.mockResolvedValue({
+      success: true,
+      data: { defaultSlug: 'default', canCreate: true, themes: [] },
+    });
+  });
+
+  it('asks a sysop who owns it and who to credit', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /new theme/i }));
+
+    expect(screen.getByLabelText(/owned by/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/artist/i)).toBeInTheDocument();
+  });
+
+  it("asks an artist neither, because both are their own name", async () => {
+    // The server forces a non-sysop's theme to their own account whatever the
+    // request says, so asking is a question with one answer and a way to get
+    // it wrong.
+    authUser = { username: 'skope', secLevel: 100 };
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /new theme/i }));
+
+    expect(screen.queryByLabelText(/owned by/i)).toBeNull();
+    expect(screen.queryByLabelText(/artist/i)).toBeNull();
+    expect(screen.getByText(/credited to/i)).toHaveTextContent('skope');
+  });
+
+  it("sends the artist's own name as both owner and artist", async () => {
+    authUser = { username: 'skope', secLevel: 100 };
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /new theme/i }));
+    await userEvent.type(screen.getByLabelText(/slug/i), 'neon');
+    await userEvent.type(screen.getByLabelText(/title/i), 'Neon');
+    await userEvent.click(screen.getByRole('button', { name: /^create$/i }));
+
+    await waitFor(() => expect(createScreenTheme).toHaveBeenCalled());
+    expect(createScreenTheme.mock.calls[0][0]).toMatchObject({
+      slug: 'neon', title: 'Neon', author: 'skope', owner: 'skope',
+    });
   });
 });

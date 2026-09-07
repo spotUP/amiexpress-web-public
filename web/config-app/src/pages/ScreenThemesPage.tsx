@@ -9,6 +9,7 @@ import { ScreenPreview } from '../components/ScreenPreview';
 import { PetsciiScreenPreview } from '../components/PetsciiScreenPreview';
 import { SkeletonRows } from '../components/ui/states';
 import { useNotification } from '../contexts/NotificationContext';
+import { useAuth } from '../contexts/AuthContext';
 
 /**
  * Screen themes - a full set of the board's art, drawn by one artist, that a
@@ -90,11 +91,36 @@ const STATUS_LABEL: Record<ScreenTheme['status'], string> = {
 export function ScreenThemesPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
+  // Who is filling this in decides what the form asks for. A sysop assigns a
+  // theme to somebody; an artist only ever makes their own, so asking them who
+  // owns it is a question with one answer and a way to get it wrong - the
+  // server forces it to their own account regardless.
+  const { user, secLevel } = useAuth();
+  const isSysop = secLevel >= 255;
+  const myName = String((user as { username?: string } | null)?.username ?? '').trim();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   /** The theme a board screen is being copied into, and the screen to copy. */
   const [copyInto, setCopyInto] = useState<ScreenTheme | null>(null);
   const [copyPath, setCopyPath] = useState('');
   const [form, setForm] = useState({ slug: '', title: '', author: '', owner: '', widths: [80] as number[] });
+
+  /**
+   * The artist and the owner an artist gets: their own BBS name, both of them.
+   *
+   * The owner IS a BBS account - it is the account the sandbox lets write - and
+   * the artist is how they are credited. For an artist creating their own
+   * theme those are the same person, so neither is worth asking for.
+   */
+  const openCreate = () => {
+    setForm({
+      slug: '',
+      title: '',
+      author: isSysop ? '' : myName,
+      owner: isSysop ? '' : myName,
+      widths: [80],
+    });
+    setIsCreateOpen(true);
+  };
   /** The theme whose validation report is open. */
   const [checking, setChecking] = useState<ScreenTheme | null>(null);
   /** The theme being previewed, and the caller to preview it as. */
@@ -309,7 +335,7 @@ export function ScreenThemesPage() {
         {canCreate && (
           <button
             type="button"
-            onClick={() => setIsCreateOpen(true)}
+            onClick={openCreate}
             className="btn-primary flex shrink-0 items-center space-x-2 whitespace-nowrap"
           >
             <Plus size={16} />
@@ -564,7 +590,7 @@ export function ScreenThemesPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className={isSysop ? 'grid grid-cols-2 gap-4' : ''}>
             <div>
               <label htmlFor="theme-title" className="label">Title</label>
               <input
@@ -576,32 +602,41 @@ export function ScreenThemesPage() {
                 required
               />
             </div>
-            <div>
-              <label htmlFor="theme-author" className="label">Artist</label>
-              <input
-                id="theme-author"
-                value={form.author}
-                onChange={event => setForm({ ...form, author: event.target.value })}
-                placeholder="How they want to be credited"
-                className="input-field w-full"
-              />
-            </div>
+            {isSysop && (
+              <div>
+                <label htmlFor="theme-author" className="label">Artist</label>
+                <input
+                  id="theme-author"
+                  value={form.author}
+                  onChange={event => setForm({ ...form, author: event.target.value })}
+                  placeholder="How they want to be credited"
+                  className="input-field w-full"
+                />
+              </div>
+            )}
           </div>
 
-          <div>
-            <label htmlFor="theme-owner" className="label">Owned by</label>
-            <input
-              id="theme-owner"
-              value={form.owner}
-              onChange={event => setForm({ ...form, owner: event.target.value })}
-              placeholder="Their BBS username"
-              className="input-field w-full"
-            />
-            <p className="mt-1 text-xs text-content-secondary">
-              That account may edit this theme&apos;s screens in the editor, and nothing else on the
-              board. Leave it empty and only sysops can draw it.
+          {isSysop ? (
+            <div>
+              <label htmlFor="theme-owner" className="label">Owned by</label>
+              <input
+                id="theme-owner"
+                value={form.owner}
+                onChange={event => setForm({ ...form, owner: event.target.value })}
+                placeholder="Their BBS username"
+                className="input-field w-full"
+              />
+              <p className="mt-1 text-xs text-content-secondary">
+                That account may edit this theme&apos;s screens in the editor, and nothing else on
+                the board. Leave it empty and only sysops can draw it.
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-content-secondary">
+              This theme will be yours, credited to <span className="font-mono">{myName}</span>. Only
+              a sysop can make a theme for somebody else.
             </p>
-          </div>
+          )}
 
           <div className="flex justify-end space-x-2 pt-2">
             <button type="button" onClick={() => setIsCreateOpen(false)} className="btn-secondary">
