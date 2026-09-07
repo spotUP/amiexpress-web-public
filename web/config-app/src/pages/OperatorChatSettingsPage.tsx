@@ -285,7 +285,7 @@ export function OperatorChatSettingsPage() {
                 className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded focus:outline-none focus:ring-2 focus:ring-accent"
               />
               <p className="text-sm text-content-secondary mt-1">
-                How long to wait before grumpy bot activates (10-300 seconds)
+                How long a caller waits at the paging prompt, one dot a second. When it ends, GrumpyBot answers the page right there - or the sysop does first (10-300 seconds)
               </p>
             </div>
 

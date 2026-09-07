@@ -159,6 +159,13 @@ console.log(`[Operator Chat] Sysop ${session.user.username} set status to ${data
         return;
       }
 
+      const target = repository.getPageRequest(data.pageId);
+      const callerSession = target ? userSessions.get(String(target.userId)) : null;
+      if (callerSession && !callerCanBeInterrupted(callerSession)) {
+console.log(`[Operator Chat] Page ${data.pageId}: ${session.user.username} tried to accept while ${target!.userHandle} is inside a door (subState=${callerSession.subState}) - refused, the caller would never see it`);
+        socket.emit('operator:error', { message: `${target!.userHandle} is inside a door right now and would not see the chat. Try again when they are back at a prompt.` });
+        return;
+      }
       await acceptPage(io, repository, data.pageId, session.user.id, session.user.username, socket.id);
     });
 
@@ -439,9 +446,20 @@ console.error('[Operator Chat] Failed to join page/user rooms:', err);
   socket.emit('ansi-output', `\r\n${currentTime}\r\n`);
   socket.emit('ansi-output', `\r\nPaging ${sysopName} (CTRL-C to Abort). .`);
 
-  // Start animated dot sequence - 30 dots over 30 seconds
+  // THE WAIT IS THE CONFIGURED TIMEOUT. express.e's ccom() pages for a fixed
+  // 20 dots (express.e:20353) and then frees the caller, because a human
+  // sysop's chat can begin any time later - it starts inside readChar, i.e.
+  // wherever the board is reading the caller's keyboard, so it is always
+  // seen and the keyboard always follows it. This port's stand-in sysop is
+  // a TIMER, and a timer that fires 90 seconds after the caller was freed
+  // lands wherever they went: inside a 68K door on 2026-09-07 19:15, where
+  // the door painted over the intro and took every keystroke, and the page
+  // sat "accepted by GrumpyBot" for ever - "neither the openrouter ai or the
+  // grumpy sysop answers". So the caller waits at this prompt for the whole
+  // pageTimeout the sysop set in the admin, one dot a second, and the bot
+  // arrives while the keyboard is still here.
   let dotCount = 0;
-  const maxDots = 30;
+  const maxDots = Math.max(1, Math.floor(config.pageTimeout));
   
   // Register interval in map immediately (before async notifications)
   // This ensures acceptPage can find and stop it even if notifications take time
@@ -470,16 +488,21 @@ console.error('[Operator Chat] Failed to join page/user rooms:', err);
     socket.emit('ansi-output', ' .');
     io.to('sysops').emit('operator:paging-dot');
 
-    // After 30 dots, show final message and return to normal BBS operation
+    // The wait is over. The bot takes the page HERE, while the caller is
+    // still at this prompt; only if it cannot (no live session to reach)
+    // does the caller get express.e's "you may continue" and the menu.
     if (dotCount >= maxDots) {
       stopPagingDots(pageRequest.id);
+      void (async () => {
+        const page = repository.getPageRequest(pageRequest.id);
+        const currentSubState = session.subState as LoggedOnSubState;
+        const chatAccepted = page?.status === PageStatus.ACCEPTED ||
+                             currentSubState === LoggedOnSubState.OPERATOR_CHAT_ACTIVE;
+        if (chatAccepted) return;
 
-      const page = repository.getPageRequest(pageRequest.id);
-      const currentSubState = session.subState as LoggedOnSubState;
-      const chatAccepted = page?.status === PageStatus.ACCEPTED ||
-                           currentSubState === LoggedOnSubState.OPERATOR_CHAT_ACTIVE;
+        const taken = await activateGrumpyBot(io, repository, pageRequest.id, 'the paging wait ended');
+        if (taken) return;
 
-      if (!chatAccepted) {
         socket.emit('ansi-output', '\r\n\r\nThe Sysop has been paged\r\n');
         socket.emit('ansi-output', 'You may continue using the system\r\n');
         socket.emit('ansi-output', `until ${sysopName} answers your request.\r\n\r\n`);
@@ -487,7 +510,7 @@ console.error('[Operator Chat] Failed to join page/user rooms:', err);
         if (session.subState === LoggedOnSubState.OPERATOR_CHAT_WAITING) {
           session.subState = LoggedOnSubState.DISPLAY_MENU;
         }
-      }
+      })();
     }
   }, 1000);
 
@@ -800,24 +823,39 @@ console.error(`[Operator Chat] Failed to join sysop socket to page room ${pageId
   // telnet caller gets the chat layout; the structured `operator:*` events
   // beside it are web-only (transport adapter, TP-3) and keep addressing the
   // room, which is also how a second browser tab still sees them.
-  emitterForUserId(page.userId, io)?.emitter.emit('ansi-output', userSetupScreen);
+  const reach = emitterForUserId(page.userId, io);
+  if (reach) {
+    reach.emitter.emit('ansi-output', userSetupScreen);
+  } else {
+console.log(`[Operator Chat] Page ${pageId} (${page.userHandle}@Node${page.nodeId}): accepted by ${sysopHandle} but NO EMITTER reaches user ${page.userId} - ${userSessions.has(String(page.userId)) ? 'session is known but its socket is gone' : 'no session in userSessions'}. The chat screen went nowhere.`);
+  }
 
   io.to(targetRoom).emit('operator:chat-accepted', {
     pageId,
     sysopHandle
   });
 
-  // Update session state
-  const userSession = userSessions.get(page.userId);
-  if (userSession) {
-    if (userSession.tempData?.pageId === pageId) {
-      if (userSession.tempData?.dotIntervalId) {
-        clearInterval(userSession.tempData.dotIntervalId);
-        delete userSession.tempData.dotIntervalId;
-      }
-      userSession.subState = LoggedOnSubState.OPERATOR_CHAT_ACTIVE;
-      userSession.inputBuffer = '';
+  // THE SESSION IS RE-LINKED FROM THE PAGE ROW, not trusted to still carry the
+  // link. `tempData.pageId` was where the page lived, and `tempData` is
+  // scratch that twelve command paths wipe (`session.tempData = undefined`):
+  // a caller who ran one menu command between paging and the accept had no
+  // link left, this block did nothing, the chat screen appeared and every
+  // keystroke still went to the menu. The row says who the page belongs to;
+  // the session is theirs; the link is written again here.
+  const userSession = userSessions.get(String(page.userId));
+  if (!userSession) {
+console.log(`[Operator Chat] Page ${pageId}: no session for user ${page.userId} to switch into the chat - keystrokes will not reach it`);
+  } else {
+    if (userSession.tempData?.pageId !== pageId) {
+console.log(`[Operator Chat] Page ${pageId}: re-linking session of ${page.userHandle} (tempData.pageId was ${userSession.tempData?.pageId ?? 'unset'} - the caller moved on since paging)`);
     }
+    if (userSession.tempData?.dotIntervalId) {
+      clearInterval(userSession.tempData.dotIntervalId);
+      delete userSession.tempData.dotIntervalId;
+    }
+    userSession.tempData = { ...(userSession.tempData || {}), pageId };
+    userSession.subState = LoggedOnSubState.OPERATOR_CHAT_ACTIVE;
+    userSession.inputBuffer = '';
   }
 
   // Notify sysop
@@ -891,7 +929,12 @@ async function sendBotMessageWithTyping(
   // the sysop's own message is, so it goes through the ONE registry too. The
   // `user:<id>` room holds web sockets only, and a telnet caller paged into a
   // bot-answered chat would otherwise watch a scroll region nothing wrote to.
-  emitterForUserId(page.userId, io)?.emitter.emit('ansi-output', output);
+  const reach = emitterForUserId(page.userId, io);
+  if (reach) {
+    reach.emitter.emit('ansi-output', output);
+  } else {
+console.log(`[Operator Chat] Page ${pageId}: GrumpyBot's reply has NO EMITTER for user ${page.userId} - saved and shown to the admin, not to the caller`);
+  }
 }
 
 /**
@@ -1202,53 +1245,114 @@ console.log(`[Operator Chat] Checking ${pending.length} pending pages, timeout=$
 console.log(`[Operator Chat] Page ${page.id}: elapsed=${Math.floor(elapsed/1000)}s, timeout=${config.pageTimeout}s, willTimeout=${elapsed > timeoutMs}`);
 
     if (elapsed > timeoutMs) {
-      // Activate grumpy bot instead of timing out
-console.log(`[Operator Chat] Page ${page.id} timed out - activating grumpy bot`);
-
-      // Get user's session to update subState directly
-      // Use the centralized userSessions map for reliable lookup
-      let userSession = userSessions.get(page.userId) || null;
-
-      // Fallback: try socket room lookup if direct lookup failed
-      if (!userSession) {
-console.log(`[Operator Chat] Direct session lookup failed for userId ${page.userId}, trying socket rooms`);
-        const userSocketsFromRoom = Array.from(io.sockets.adapter.rooms.get(`user:${page.userId}`) || []);
-        for (const socketId of userSocketsFromRoom as string[]) {
-          // TP-10: the one module that holds the io namespace's socket map.
-          const sock = socketIoSocketFor(socketId, io);
-          if (sock && (sock as any).session) {
-            userSession = (sock as any).session;
-            break;
-          }
-        }
-      }
-
-      // Send intro message in the setup screen itself rather than as a separate
-      // sendChatMessage call — that would trigger the bot response loop and
-      // also show the generic "This is GrumpyBot, How can I help you??" first.
-      const introMsg = getGrumpyBotIntroMessage();
-      // Re-call acceptPage with customIntro to show the bot's intro directly
-      await acceptPage(io, repository, page.id, 'bot', 'GrumpyBot', 'grumpy-bot-session', introMsg);
-
-      const chatSession = activeChatSessions.get(page.id);
-      if (chatSession) {
-        (chatSession as any).isBotControlled = true;
-        (chatSession as any).botMessageHistory = [];
-console.log(`[Operator Chat] Set isBotControlled=true for page ${page.id}`);
-      } else {
-console.log(`[Operator Chat] WARNING: No chat session found to mark as bot-controlled for page ${page.id}`);
-      }
-
-console.log(`[Operator Chat] Grumpy bot activated for page ${page.id}`);
-
-      // Notify admin pages about the bot-controlled chat so the sysop can take over
-      io.emit('operator:bot-activated', {
-        pageId: page.id,
-        userHandle: page.userHandle,
-        userNodeId: page.nodeId,
-        startedAt: Date.now(),
-      });
+      // The normal path is the paging prompt's own end-of-wait (handlePageSysop);
+      // this is the retry for a page that outlived it - the caller left the
+      // prompt for a door, or the process that ran the prompt restarted.
+      await activateGrumpyBot(io, repository, page.id, `${Math.floor(elapsed / 1000)}s pending`);
     }
+  }
+}
+
+/**
+ * Can a chat begin on this caller RIGHT NOW?
+ *
+ * express.e answers this structurally: a chat starts inside readChar, so it
+ * can only ever begin where the board is reading the caller's keyboard. Here a
+ * door owns the keyboard (`doorInputHandler`, socket-handlers.ts routes every
+ * keystroke to it) and the screen; a chat begun underneath it is painted over
+ * and never typed into. So the takeover waits for the door to give the caller
+ * back, and `checkPageTimeouts` retries every second until it has.
+ */
+function callerCanBeInterrupted(session: BBSSession | null | undefined): boolean {
+  if (!session) return false;
+  if (session.doorInputHandler) return false;
+  if ((session as any).inDoorManager) return false;
+  return session.subState !== LoggedOnSubState.DOOR_RUNNING;
+}
+
+/** Pages whose takeover was logged as deferred, so the retry does not log once a second. */
+const deferredTakeovers = new Set<string>();
+/** Pages whose takeover is in progress, so the prompt's end and the retry cannot both accept. */
+const takeoversInFlight = new Set<string>();
+
+/**
+ * GrumpyBot takes a pending page - if the caller can be reached and interrupted.
+ *
+ * Returns true when the bot now holds the page. Returns false, and says why in
+ * the log, when it does not: the caller is inside a door (the retry will come
+ * back), or has no live session at all.
+ */
+async function activateGrumpyBot(
+  io: any,
+  repository: OperatorChatRepository,
+  pageId: string,
+  reason: string
+): Promise<boolean> {
+  const page = repository.getPageRequest(pageId);
+  if (!page || page.status !== PageStatus.PENDING) return page?.sysopId === 'bot';
+  if (takeoversInFlight.has(pageId)) return false;
+
+  // The caller's session, by user id; the socket room is the fallback for a
+  // session the map has lost.
+  let userSession = userSessions.get(String(page.userId)) || null;
+  if (!userSession) {
+    const userSocketsFromRoom = Array.from(io.sockets?.adapter?.rooms?.get(`user:${page.userId}`) || []);
+    for (const socketId of userSocketsFromRoom as string[]) {
+      // TP-10: the one module that holds the io namespace's socket map.
+      const sock = socketIoSocketFor(socketId, io);
+      if (sock && (sock as any).session) {
+        userSession = (sock as any).session;
+        break;
+      }
+    }
+  }
+
+  if (!userSession) {
+    if (!deferredTakeovers.has(pageId)) {
+      deferredTakeovers.add(pageId);
+console.log(`[Operator Chat] Page ${pageId} (${page.userHandle}@Node${page.nodeId}): GrumpyBot cannot take it - no live session for user ${page.userId}. Retrying every second.`);
+    }
+    return false;
+  }
+  if (!callerCanBeInterrupted(userSession)) {
+    if (!deferredTakeovers.has(pageId)) {
+      deferredTakeovers.add(pageId);
+console.log(`[Operator Chat] Page ${pageId} (${page.userHandle}@Node${page.nodeId}): GrumpyBot deferred - caller is inside a door (subState=${userSession.subState}, doorInputHandler=${Boolean(userSession.doorInputHandler)}). Retrying every second until they are back.`);
+    }
+    return false;
+  }
+
+  takeoversInFlight.add(pageId);
+  try {
+    if (deferredTakeovers.delete(pageId)) {
+console.log(`[Operator Chat] Page ${pageId}: caller is back at a prompt (subState=${userSession.subState}); GrumpyBot takes it now.`);
+    }
+console.log(`[Operator Chat] Page ${pageId}: ${reason} - GrumpyBot takes it`);
+
+    // Send intro message in the setup screen itself rather than as a separate
+    // sendChatMessage call - that would trigger the bot response loop and
+    // also show the generic "This is GrumpyBot, How can I help you??" first.
+    const introMsg = getGrumpyBotIntroMessage();
+    await acceptPage(io, repository, pageId, 'bot', 'GrumpyBot', 'grumpy-bot-session', introMsg);
+
+    const chatSession = activeChatSessions.get(pageId);
+    if (chatSession) {
+      (chatSession as any).isBotControlled = true;
+      (chatSession as any).botMessageHistory = [];
+    } else {
+console.log(`[Operator Chat] WARNING: No chat session found to mark as bot-controlled for page ${pageId}`);
+    }
+
+    // Notify admin pages about the bot-controlled chat so the sysop can take over
+    io.emit('operator:bot-activated', {
+      pageId,
+      userHandle: page.userHandle,
+      userNodeId: page.nodeId,
+      startedAt: Date.now(),
+    });
+    return repository.getPageRequest(pageId)?.sysopId === 'bot';
+  } finally {
+    takeoversInFlight.delete(pageId);
   }
 }
 

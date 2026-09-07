@@ -17,7 +17,7 @@ interface Field {
 
 const FIELDS: Field[] = [
   // General
-  { key: 'pageTimeout',     label: 'Page Timeout (s)',     type: 'number' },
+  { key: 'pageTimeout',     label: 'Page Wait (s)',        type: 'number' },
   { key: 'pageCooldown',    label: 'Cooldown (s)',         type: 'number' },
   { key: 'maxActivePages',  label: 'Max Active Pages',     type: 'number' },
   // Discord
