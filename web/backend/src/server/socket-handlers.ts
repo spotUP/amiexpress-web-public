@@ -25,8 +25,7 @@ import {
   socketToNodeId,
   userSessions,
   pendingDisconnects,
-  trackPendingDisconnect
-} from './session-manager';
+  trackPendingDisconnect, reboundSince } from './session-manager';
 import { callersLog, getRecentCallerActivity, displaySystemBulletins } from './database-helpers';
 import { nodeManager } from '../services/node-manager.service';
 // Use the real interpreter (full REXX semantics) instead of the simulated
@@ -908,10 +907,12 @@ console.log(`[DISCONNECT] sessionBeforeDelay.sysopKicked=${sessionBeforeDelay?.s
 console.log(`[DISCONNECT] Waiting ${reconnectGracePeriod}ms for potential reconnection...`);
       await new Promise(resolve => setTimeout(resolve, reconnectGracePeriod));
 
-      // Check if socket reconnected during grace period
+      // Reconnected during the grace period? Only if the session now names a
+      // DIFFERENT socket - the restore rebinds it. A session still holding
+      // this dead socket's id is a ghost (see reboundSince).
       const sessionAfterDelay = getSession(socket.id);
-      if (sessionAfterDelay && sessionAfterDelay.socketId) {
-console.log(`[DISCONNECT] User reconnected during grace period, skipping cleanup`);
+      if (reboundSince(sessionAfterDelay, socket.id)) {
+console.log(`[DISCONNECT] User reconnected during grace period on socket ${sessionAfterDelay!.socketId}, skipping cleanup`);
         return; // User reconnected, skip cleanup
       }
     } else if (sessionBeforeDelay?.sysopKicked) {

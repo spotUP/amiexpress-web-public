@@ -1304,6 +1304,16 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "canvas to mount and needs no shape: a real C64 IS the screen, and its " +
     "width is settled by the port it called.",
   },
+  "petscii-palette": {
+    kind: "web-only",
+    note:
+    "The browser's PETSCII palette choice (vic/pepto/colodore...), answered " +
+    "to the browser's own `get-petscii-palette` / `set-petscii-palette` " +
+    "(server/preference-socket-handlers.ts:30,38; consumer " +
+    "packages/terminal/src/components/BBSTerminal.tsx:2323, which recolours " +
+    "its canvas). A byte caller has no canvas: a real C64 paints its own " +
+    "palette and a PETSCII-over-telnet terminal has its own setting for it.",
+  },
   "petscii-bytes": {
     kind: "render",
     note:

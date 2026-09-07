@@ -356,3 +356,20 @@ export function getActivityFromSubState(subState?: string): string {
       return 'UNKNOWN';
   }
 }
+
+/**
+ * Did this session come back on ANOTHER socket since `socketId` dropped?
+ *
+ * The reconnect path (`server/auth-socket-handlers.ts`, session restore)
+ * rebinds `session.socketId` to the new socket and maps it. A session that
+ * still names the DEAD socket has not reconnected - it is a ghost, and the
+ * disconnect cleanup must run. The old check was `Boolean(session.socketId)`,
+ * which is true for every session that ever had a socket: on 2026-09-07 every
+ * web caller who dropped (ping timeout, transport close) was logged as
+ * "reconnected during grace period, skipping cleanup", stayed counted on
+ * /health, and the deploy guard refused every deploy for a sysop who had
+ * closed his browser an hour before.
+ */
+export function reboundSince(session: { socketId?: string } | null | undefined, socketId: string): boolean {
+  return Boolean(session?.socketId) && session!.socketId !== socketId;
+}

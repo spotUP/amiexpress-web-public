@@ -435,7 +435,11 @@ describe('TP-10 - one registry, so a cross-session push finds a byte terminal', 
     try {
       await handleUserChatMessage(ioServer, repository as never, session, 'HELLO SYSOP');
       flushAllBuffers();
-      expect(socket.since(preamble)).toContain('HELLO SYSOP');
+      // The chat is express.e's one stream: the caller's line is on their wire
+      // as they type it (command.handler's chat branch echoes each key), and
+      // return - sent HERE, through the registry - ends it. Silence would be
+      // no return at all.
+      expect(socket.since(preamble)).toContain('\r\n');
       expect(mockRegistryCalls.emitterForUserId).toBeGreaterThanOrEqual(1);
       // The structured half is still addressed to the sysop panel's room.
       const rooms = (ioServer as unknown as { roomEmits: Array<{ room: string; event: string }> })
@@ -618,10 +622,11 @@ describe('TP-10 - one registry, so a cross-session push finds a byte terminal', 
       flushAllBuffers();
 
       const wire = socket.since(preamble);
-      // The caller's own line (queued while the bot was busy, then flushed)
-      // AND the bot's reply both crossed.
-      expect(wire).toContain('HELLO?');
-      expect(wire).toContain('WHAT DO YOU WANT');
+      // The return that ends the caller's line AND the bot's reply, word by
+      // word, both crossed the byte wire (the line itself was echoed as typed).
+      expect(wire).toContain('\r\n');
+      // Word by word, the colour switching around each word (express.e:5966-5990).
+      expect(wire.replace(/\x1b\[[0-9;]*m/g, '')).toContain('WHAT DO YOU WANT');
       expect(mockRegistryCalls.emitterForUserId).toBeGreaterThanOrEqual(2);
     } finally {
       getActiveChatSessions().delete('page-53');

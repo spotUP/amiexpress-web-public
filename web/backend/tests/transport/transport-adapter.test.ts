@@ -210,6 +210,7 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'password-mode',
   'petscii-bytes',
   'petscii-mode',
+  'petscii-palette',
   'petscii-output',
   'ping',
   'pong-test',
@@ -559,7 +560,8 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // editor - `user-not-found`, `prompt-password`, `prompt-password-reset`
     // and `prompt-forced-pwd-change`. Nothing emits them; a ruling for a name
     // nothing sends is a claim about nothing.
-    expect(ruled.length).toBe(243);
+    // 244 as of 2026-09-07: `petscii-palette` ruled (web-only).
+    expect(ruled.length).toBe(244);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -604,7 +606,9 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       translate: 11,
       dead: 10,
       // 113 as of TP-9b: the four login-editor cues are gone with the editor.
-      'web-only': 113,
+      // 114 (2026-09-07): `petscii-palette`, the browser's palette choice
+      // answered to its own request - a canvas concern by construction.
+      'web-only': 114,
       'not-transport': 104,
     });
   });
@@ -651,7 +655,9 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // only site that emitted it and nothing in the tree called setCursorVisible
     // - so the helper was deleted rather than left asserting behaviour no code
     // performs, and the name left arm A with it. Union 246 -> 245.
-    expect(fromA.length).toBe(151);
+    // 152 as of 2026-09-07: `petscii-palette` (server/preference-socket-handlers.ts)
+    // landed unruled and this pin caught it a push later.
+    expect(fromA.length).toBe(152);
     // 86 from sdk/, 14 from Doors/, `ansi-output` in both. The plan records the
     // Doors arm as 0; that was a zsh `nomatch` artefact and the module header
     // records the correction.
