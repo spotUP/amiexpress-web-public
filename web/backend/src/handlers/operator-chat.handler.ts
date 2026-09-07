@@ -49,6 +49,7 @@ import { mailOnSysopPage } from '../services/mail-notification.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getSystemTime } from '../utils/date-time.util';
+import { report } from '../achievements/reporter';
 
 // BBS root for config and log files
 const bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
@@ -735,6 +736,8 @@ console.error(`[Operator Chat] Failed to join sysop socket to page room ${pageId
   };
 
   activeChatSessions.set(pageId, chatSession);
+  // Achievements (SP2): the caller got their chat. Non-throwing.
+  { const callerSession = userSessions.get(String(page.userId)); if (callerSession) report(callerSession as any, 'social.chat'); }
 
   if (existingMessages.length > 0) {
     const messagesWithTimestamps = existingMessages.map(msg => ({

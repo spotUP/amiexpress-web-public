@@ -51,6 +51,7 @@ import { formatBytesCompact } from '../../utils/byte-format.util';
 import { formatDateSlash } from '../../utils/date-format.util';
 
 import type { BBSSession } from '../../index';
+import { reportBulletinRead } from '../../achievements/sites';
 
 // Dependencies injected from index.ts
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => void;
@@ -674,6 +675,8 @@ function _displayBulletin(socket: any, session: BBSSession, bulletinNum: number,
 
   if (bulletinScreen) {
     _displayScreen(socket, session, bulletinScreen);
+    // Achievements (SP2): every bulletin read is bull.read.all, once. Non-throwing.
+    reportBulletinRead(session as any, bulletinNum, path.join(confScreenDir, 'Bulletins'));
 
     if (!nonStopDisplay) {
       socket.emit('ansi-output', '\r\n');

@@ -6,6 +6,7 @@
  * (S9) are computed here, never at the call site, so the two login paths,
  * the two upload paths and every door type say the same thing.
  */
+import * as fs from 'fs';
 import type Database from 'better-sqlite3';
 import { db } from '../database';
 import { hourKey, isMidnightWindow, isReturnAfter30, report, reportSnapshot, defaultDeps } from './reporter';
@@ -213,4 +214,44 @@ export function reportDownload(session: ReporterSession, file: { size?: number; 
   const uploaded = seconds(file.uploadDate);
   const old = uploaded !== null && deps.now() / 1000 - uploaded > OLD_FILE_YEARS * 365.25 * 24 * 3600;
   return report(session, 'file.download', { value: Math.max(0, Math.floor(file.size ?? 0)), ...(old ? { key: 'age:25y+' } : {}) }, deps.reporter) ? 1 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// Bulletins
+// ---------------------------------------------------------------------------
+
+/** The bulletin numbers a directory holds: Bull1, Bull2.ans, Bull10.txt -> 1, 2, 10. */
+export function bulletinNumbersIn(bulletinsDir: string): number[] {
+  let names: string[];
+  try {
+    names = fs.readdirSync(bulletinsDir);
+  } catch {
+    return [];
+  }
+  const nums = new Set<number>();
+  for (const n of names) {
+    const m = /^Bull(\d+)(?:\.|$)/i.exec(n);
+    if (m) nums.add(Number(m[1]));
+  }
+  return [...nums].sort((a, b) => a - b);
+}
+
+interface BulletinTracking {
+  achievementsBulletinsRead?: Set<number>;
+  achievementsBulletinsReported?: boolean;
+}
+
+/**
+ * After a bulletin was displayed: remember it on the session, and when the
+ * caller has now seen every bulletin the directory holds, bull.read.all -
+ * once per session.
+ */
+export function reportBulletinRead(session: ReporterSession & BulletinTracking, bulletinNum: number, bulletinsDir: string, deps: SiteDeps = defaultSiteDeps): boolean {
+  if (!session.achievementsBulletinsRead) session.achievementsBulletinsRead = new Set<number>();
+  session.achievementsBulletinsRead.add(bulletinNum);
+  if (session.achievementsBulletinsReported) return false;
+  const all = bulletinNumbersIn(bulletinsDir);
+  if (all.length === 0 || !all.every((n) => session.achievementsBulletinsRead!.has(n))) return false;
+  session.achievementsBulletinsReported = true;
+  return report(session, 'bull.read.all', {}, deps.reporter) !== null;
 }

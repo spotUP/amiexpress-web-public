@@ -17,6 +17,7 @@ import {
   socketIoSocketFor,
   type SessionEmitter,
 } from '../../server/session-emitter-registry';
+import { report } from '../../achievements/reporter';
 // Session type
 
 // Dependencies (injected)
@@ -311,6 +312,9 @@ console.log('✅ [handleChatAccept] All validations passed, continuing...');
       await db.updateChatSessionStatus(sessionId, 'ended');
       return;
     }
+    // Achievements (SP2): both parties chatted node to node. Non-throwing.
+    report(initiatorSession as any, 'social.nodechat');
+    report(session as any, 'social.nodechat');
 
     // Get recipient session from Map (CRITICAL: we need the actual session object from the Map, not the passed-in copy)
     let recipientSession: BBSSession | null = null;

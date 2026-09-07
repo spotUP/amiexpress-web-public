@@ -19,6 +19,7 @@ import { LoggedOnSubState } from '../../constants/bbs-states';
 import { ChatState } from '../../services/use-cases/chat-session.use-case';
 import { getSystemTime } from '../../utils/date-time.util';
 import { db } from '../../database';
+import { report } from '../../achievements/reporter';
 
 // Dependencies that need to be injected externally (circular dependency workaround)
 let executePagerDoor: (socket: any, session: BBSSession, chatSession: ChatSession) => boolean;
@@ -509,6 +510,8 @@ console.warn(`[ChatHandler] acceptChat: paged user ${accepted.userId} has no liv
     } catch (error) {
 console.error('[Webhook] Error sending sysop page webhook:', error);
     }
+    // Achievements (SP2). Non-throwing.
+    report(session as any, 'social.page');
   }
 }
 

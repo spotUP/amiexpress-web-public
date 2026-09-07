@@ -14,6 +14,7 @@ import { BBSPaths } from '../../utils/bbs-paths.util';
 import { ZmodemTransferManager, TransferTransport } from '../../services/zmodem-transfer.service';
 import * as path from 'path';
 import { formatLongDateTime } from '../../utils/date-time.util';
+import { report } from '../../achievements/reporter';
 
 // Dependencies (injected)
 let _setEnvStat: any;
@@ -760,6 +761,8 @@ async function submitAllVotes(socket: any, session: BBSSession): Promise<void> {
   const success = await _submitVote(session.user.id, topic.id, session.currentConf || 1, votes);
 
   if (success) {
+    // Achievements (SP2). Non-throwing.
+    report(session as any, 'social.vote');
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', AnsiUtil.successLine('Your votes have been recorded!'));
   } else {

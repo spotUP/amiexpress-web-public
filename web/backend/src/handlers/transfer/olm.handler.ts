@@ -21,6 +21,7 @@ import { getSocketIdByNodeId } from '../../server/session-manager';
 import { emitterForSession } from '../../server/session-emitter-registry';
 
 import type { BBSSession } from '../../index';
+import { report } from '../../achievements/reporter';
 // Session type
 
 // Dependencies (injected)
@@ -299,6 +300,8 @@ console.log(`[OLM] Looking for node ${nodenum}: session=${!!targetSession}, sock
   // express.e:25497-25500 - Show status
   if (msgsent) {
     socket.emit('ansi-output', '\x1b[34m*\x1b[0mOLM SENT\x1b[34m*\x1b[0m\r\n');
+    // Achievements (SP2). Non-throwing.
+    report(session as any, 'social.olm');
   } else {
     socket.emit('ansi-output', '\x1b[34m*\x1b[0mOLM UNSUCCESSFUL\x1b[34m*\x1b[0m\r\n');
   }
