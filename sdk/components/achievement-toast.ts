@@ -61,6 +61,9 @@ export function toastLines(notice: AchievementNotice, inner: number): [string, s
   return [clip('ACHIEVEMENT UNLOCKED'), clip(notice.name ?? ''), clip(tail)];
 }
 
+/** The widest PETSCII screen this board serves: the wide web terminal's. */
+const PETSCII_MAX_COLUMNS = 80;
+
 /** The box width for a terminal `width` columns wide. */
 export function toastWidth(width: number): number {
   const dialog = calculateDialogWidth(width);
@@ -70,10 +73,16 @@ export function toastWidth(width: number): number {
 /**
  * The toast as bytes. Five physical lines: top rule, three rows, bottom
  * rule; each `|`-framed, padded to the box width. With `petscii` there is
- * no SGR at all, and the width is never over forty.
+ * no SGR at all.
+ *
+ * The width is the CALLER'S, at either flavour. This used to clamp a PETSCII
+ * toast to forty columns, which was true while every PETSCII screen was a
+ * C64's; the web terminal's wide screen is eighty, and a board that answers
+ * the mode's own width (doorScreenWidth) is already telling the truth here.
+ * Eighty is the widest PETSCII screen there is, so that is the ceiling.
  */
 export function renderAchievementToast(notice: AchievementNotice, width: number, opts: ToastRenderOptions = {}): string {
-  const cols = opts.petscii ? Math.min(width, 40) : width;
+  const cols = opts.petscii ? Math.min(width, PETSCII_MAX_COLUMNS) : width;
   const boxWidth = toastWidth(cols);
   const inner = boxWidth - 4; // "| " and " |"
   const rows = toastLines(notice, inner);

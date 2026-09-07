@@ -42,10 +42,29 @@ describe('the achievement toast', () => {
       expect(/^[\x20-\x7e]*$/.test(l)).toBe(true);
     }
     expect(lines[2]).toMatch(/~ \|$/); // clipped, marked
-    // A PETSCII caller on a wider claim is still held to forty.
-    expect(strip(renderAchievementToast(link, 80, { petscii: true })).split('\r\n')[0].length).toBeLessThanOrEqual(40);
     // The link notice names the door.
     expect(toastLines(link, 60)[1]).toBe('Type ACHIEVE at the prompt to link');
+  });
+
+  /**
+   * A PETSCII screen is 40 columns on a C64 and 80 on the web terminal's wide
+   * screen, so the toast takes the width it is GIVEN rather than clamping
+   * every PETSCII caller to forty - which it did while a C64 was the only
+   * PETSCII screen there was. Eighty is the widest one that exists, so a
+   * claim past it is still refused.
+   */
+  it('a PETSCII caller is given his own width, up to the widest PETSCII screen', () => {
+    const widthOf = (claim: number): number =>
+      strip(renderAchievementToast(link, claim, { petscii: true })).split('\r\n')[0].length;
+
+    expect(widthOf(40)).toBeLessThanOrEqual(40);
+    const wide = widthOf(80);
+    expect(wide).toBeGreaterThan(40);
+    expect(wide).toBeLessThanOrEqual(80);
+    // Nothing on this board is a 132-column PETSCII screen.
+    expect(widthOf(132)).toBe(wide);
+    // ...and no SGR reaches a PETSCII caller at any width.
+    expect(renderAchievementToast(link, 80, { petscii: true })).not.toContain('\x1b[');
   });
 
   it('inside a blessed screen the overlay takes no focus and expires on its timer', () => {

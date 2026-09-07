@@ -138,6 +138,50 @@ describe('unlock notices', () => {
     expect(shown.map((t) => (t.includes('Century') ? 'Century' : 'Second'))).toEqual(['Century', 'Second']);
   });
 
+  /**
+   * A PETSCII session can still be carrying the width the BROWSER reported
+   * before the caller answered the graphics prompt: index.ts sets
+   * petsciiMode and then refuses to write geometry for a PETSCII session, so
+   * `screenWidth` may read 80 on a C64. The toast used to believe it and
+   * drew an 80-column box across a 40-column screen. The mode owns the
+   * width, which is what doorScreenWidth answers.
+   */
+  it('a C64 whose session still carries the browser 80 gets a 40-column toast anyway', async () => {
+    expect(deliverNotice(null, 'u-caller', 'unlock', unlock)).toBe('kept');
+    const socket = socketOf();
+    const stale = makeSession({ screenWidth: 80, petsciiMode: true, terminalType: 'c64' });
+    await displayMainMenu(socket as any, stale);
+    const shown = toasts(socket);
+    expect(shown).toHaveLength(1);
+    for (const line of shown[0].split('\r\n')) expect(line.length).toBeLessThanOrEqual(40);
+  });
+
+  /**
+   * ...and the wide PETSCII screen is 80, from the same authority. A name
+   * that does not fit 40 columns is what tells the two widths apart: the C64
+   * has to fold it, and this caller does not.
+   */
+  it('an 80-column PETSCII caller is given the room a C64 does not have', async () => {
+    const longName = 'The Longest Achievement Name This Board Has Ever Shipped';
+    const widestOf = async (session: any): Promise<number> => {
+      db.exec("DELETE FROM achievement_pending_notices");
+      expect(deliverNotice(null, 'u-caller', 'unlock', { ...unlock, name: longName })).toBe('kept');
+      const socket = socketOf();
+      await displayMainMenu(socket as any, session);
+      const shown = toasts(socket);
+      expect(shown).toHaveLength(1);
+      expect(shown[0]).not.toContain('\x1b[');
+      return Math.max(...shown[0].split('\r\n').map((l: string) => l.length));
+    };
+
+    const narrow = await widestOf(makeSession({ screenWidth: 80, petsciiMode: true, terminalType: 'c64' }));
+    const wide = await widestOf(makeSession({ screenWidth: 80, petsciiMode: true, petsciiColumns: 80 }));
+
+    expect(narrow).toBeLessThanOrEqual(40);
+    expect(wide).toBeGreaterThan(40);
+    expect(wide).toBeLessThanOrEqual(80);
+  });
+
   it('a not_linked refusal shows the link explanation once, not once per event', async () => {
     expect(deliverNotice(null, 'u-caller', 'link', null)).toBe('kept');
     expect(deliverNotice(null, 'u-caller', 'link', null)).toBe('kept');

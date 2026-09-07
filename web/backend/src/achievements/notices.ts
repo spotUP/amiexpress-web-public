@@ -20,6 +20,7 @@ import { emitterForUserId } from '../server/session-emitter-registry';
 import { addLinkNotice, addUnlockNotice, takeNotices } from './outbox.repository';
 import type { Notice } from './outbox.repository';
 import type { UnlockOut } from './contract';
+import { doorScreenWidth } from '../amiga-emulation/xim/screen-width.util';
 
 /** The command a caller types to reach the ACHIEVE door. */
 export const ACHIEVE_COMMAND = 'ACHIEVE';
@@ -30,6 +31,8 @@ export interface NoticeSession {
   inDoorManager?: boolean;
   screenWidth?: number;
   petsciiMode?: boolean;
+  /** 40 (a C64) or 80 (the web terminal's wide PETSCII screen). Absent = 40. */
+  petsciiColumns?: number;
   terminalType?: string;
 }
 
@@ -52,7 +55,13 @@ export function toToast(kind: 'unlock' | 'link', unlock: UnlockOut | null): Achi
 /** The bytes for this caller's terminal. */
 export function noticeBytes(session: NoticeSession, notice: AchievementNotice): string {
   const petscii = session.petsciiMode === true || session.terminalType === 'c64';
-  const width = session.screenWidth ?? (petscii ? 40 : 80);
+  // A PETSCII screen's width is the MODE's, never the browser's report:
+  // doorScreenWidth is the same authority BB_SCRWIDTH, wrapForSession and
+  // BBSApi.getTerminalSize already answer with - 40 for a C64, 80 for the
+  // wide screen. Reading `screenWidth` first drew an 80-wide toast across a
+  // C64's 40-column screen whenever the session still carried the width the
+  // browser reported before the caller answered P.
+  const width = petscii ? doorScreenWidth(session, 40) : (session.screenWidth ?? 80);
   return renderAchievementToast(notice, width, { petscii, bare: true }) + '\r\n';
 }
 
