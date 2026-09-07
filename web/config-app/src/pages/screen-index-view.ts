@@ -56,6 +56,11 @@ export interface ScreenFileShape {
   sauce?: SauceShape;
   /** 'backup' or 'runtime' when a designer would never edit this file. */
   generated?: 'backup' | 'runtime';
+  /**
+   * The door that owns the file, when it belongs to a door rather than the
+   * board. Set by the index; absent on every screen the board resolves.
+   */
+  door?: string;
   /** Nothing but the codes the board runs - plumbing, not art. */
   codesOnly?: boolean;
   /** What is wrong with the bytes: 'empty', 'colour-codes-without-escape'. */
@@ -168,6 +173,42 @@ export function isArt(file: ScreenFileShape): boolean {
   // tables would put it beyond reach entirely. The gallery narrows to the
   // formats it can DRAW; that is a different question from what is art.
   return !file.generated && !file.codesOnly && file.bytes > 0;
+}
+
+/**
+ * Art that belongs to a DOOR, not to the board.
+ *
+ * A door opens its own files, so none of the board's screen routing reaches
+ * them and none of the board's tables should mix them in. Asked for in those
+ * words - "we also need to split up actual bbs screens and screens that come
+ * from doors in separate tabs".
+ */
+export function isDoorArt(file: ScreenFileShape): boolean {
+  return !!file.door;
+}
+
+/**
+ * A screen file with no art in it at all - nothing but the codes the board
+ * runs.
+ *
+ * `AWAITSCREEN.TXT` is `~CC_V-AWAIT|`; `LOGON10.TXT` is four includes and a
+ * pause. They are real screens and a sysop edits them, but an ARTIST opening
+ * one finds an empty canvas: the art they were looking for is in the file
+ * those codes pull in. Their own tab, not the gallery.
+ */
+export function isCommandsOnly(file: ScreenFileShape): boolean {
+  return !!file.codesOnly && !file.generated && file.bytes > 0;
+}
+
+/**
+ * Not a thing anyone edits: a leftover copy, a file the board rewrites for
+ * itself, or zero bytes.
+ *
+ * Kept listed rather than hidden - a file the manager refuses to show is a
+ * file a sysop cannot find - but kept out of every view that means "art".
+ */
+export function isNotArt(file: ScreenFileShape): boolean {
+  return !!file.generated || file.bytes === 0;
 }
 
 export function toScreenRows(index: ScreenIndexShape): ScreenRow[] {

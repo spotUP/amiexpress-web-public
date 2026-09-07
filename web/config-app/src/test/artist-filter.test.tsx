@@ -16,7 +16,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { isArt, toScreenRows } from '../pages/screen-index-view';
+import { isArt, isDoorArt, isCommandsOnly, isNotArt, toScreenRows } from '../pages/screen-index-view';
 
 const art = new TextEncoder().encode('\x1b[31mHI');
 const base64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
@@ -56,6 +56,29 @@ describe('what counts as art', () => {
   });
 });
 
+describe('what belongs to a door, and what holds no art at all', () => {
+  it("calls a door's file the door's", () => {
+    expect(isDoorArt(file({ relPath: 'Doors/GWALL/wall.ans', door: 'GWALL' }) as never)).toBe(true);
+    expect(isDoorArt(file({}) as never)).toBe(false);
+  });
+
+  it('separates a plumbing screen from a leftover', () => {
+    // Both are kept out of the gallery, and they are not the same thing: one
+    // is a screen the board runs, the other is a file nobody should keep.
+    expect(isCommandsOnly(file({ codesOnly: true }) as never)).toBe(true);
+    expect(isNotArt(file({ codesOnly: true }) as never)).toBe(false);
+
+    expect(isNotArt(file({ generated: 'backup' }) as never)).toBe(true);
+    expect(isCommandsOnly(file({ generated: 'backup' }) as never)).toBe(false);
+  });
+
+  it('counts an empty file as no art, whatever else it is', () => {
+    expect(isNotArt(file({ bytes: 0 }) as never)).toBe(true);
+    // Zero bytes runs no codes either, so it is not plumbing.
+    expect(isCommandsOnly(file({ bytes: 0, codesOnly: true }) as never)).toBe(false);
+  });
+});
+
 const index = {
   builtAt: '2026-09-02T00:00:00.000Z',
   unused: [], conferences: [], bulletins: [], callersByLevel: {},
@@ -73,6 +96,10 @@ const index = {
     'Node1/BBSTITLE.txt': file({ relPath: 'Node1/BBSTITLE.txt' }),
     // 47 copies of this on the live board, and it is one code.
     'Node1/awaitscreen.txt': file({ relPath: 'Node1/awaitscreen.txt', bytes: 15, codesOnly: true }),
+    // A door's own art: listed, but never among the board's screens.
+    // Its own sha256: the gallery groups by content, so a door file sharing
+    // the board art's hash would collapse into that card and hide the bug.
+    'Doors/GWALL/wall.ans': file({ relPath: 'Doors/GWALL/wall.ans', door: 'GWALL', sha256: 'door-hash' }),
   },
 };
 
@@ -155,5 +182,37 @@ describe('the screens page as an artist opens it', () => {
     await user.click(screen.getByRole('checkbox', { name: /plumbing/i }));
 
     expect(await screen.findByText('AWAITSCREEN')).toBeTruthy();
+  });
+
+  it("keeps a door's art in its own tab", async () => {
+    const user = userEvent.setup();
+    render(<ScreenFilesPage />, { wrapper });
+
+    await user.click(await screen.findByRole('tab', { name: /Door screens/ }));
+
+    expect(await screen.findByText('Doors/GWALL/wall.ans')).toBeTruthy();
+    expect(screen.getByText('GWALL')).toBeTruthy();
+  });
+
+  it("keeps a door's art out of the gallery", async () => {
+    // The gallery is the artist's view of THE BOARD. A door directory is also
+    // full of .txt files that are documentation, and drawing those as art was
+    // the false positive this tab split fixes.
+    render(<ScreenFilesPage />, { wrapper });
+
+    // The count on the tab is the assertion: the card itself is labelled by
+    // screen name, so looking for the path finds nothing either way and would
+    // pass on the unfiltered gallery too. This fixture holds one piece of
+    // board art (BBSTITLE), one codes-only screen and one door file.
+    expect(await screen.findByRole('tab', { name: 'Gallery 1' })).toBeTruthy();
+  });
+
+  it('gives a screen that is only codes a tab of its own', async () => {
+    const user = userEvent.setup();
+    render(<ScreenFilesPage />, { wrapper });
+
+    await user.click(await screen.findByRole('tab', { name: /Commands and text/ }));
+
+    expect(await screen.findByText('Node1/awaitscreen.txt')).toBeTruthy();
   });
 });

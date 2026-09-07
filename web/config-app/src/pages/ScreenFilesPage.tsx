@@ -33,6 +33,7 @@ import {
   type ScreenIndexShape, type ScreenRow, type ScreenIndexEntryShape,
   type ScopeResolutionShape, type ConferenceShape, type ScreenReaderShape,
   type MciReferenceShape, type ScreenFileShape, describeReader, describeProblem, isArt,
+  isDoorArt, isCommandsOnly, isNotArt,
 } from './screen-index-view';
 
 /** Stable fallback: a fresh array each render invalidates the row model. */
@@ -807,6 +808,53 @@ export function ScreenFilesPage() {
   ];
 
   /** The files nothing reads - a table, because a list of 400 paths is not one. */
+  /**
+   * A door's file, named by the door first: a sysop looking for "the art GWALL
+   * draws" knows the door, never the path inside it.
+   */
+  const doorColumns: DataTableColumn<ScreenFileShape>[] = [
+    { id: 'door', header: 'Door', sortable: true, value: item => item.door ?? '',
+      cell: item => <span className="text-content-primary">{item.door}</span> },
+    {
+      id: 'path',
+      header: 'File',
+      sortable: true,
+      value: item => item.relPath,
+      cell: item => <span className="font-mono underline">{item.relPath}</span>,
+    },
+    { id: 'format', header: 'Format', sortable: true, value: item => item.format },
+    { id: 'bytes', header: 'Size', align: 'right', sortable: true, value: item => item.bytes,
+      cell: item => formatBytes(item.bytes) },
+  ];
+
+  /**
+   * A plumbing screen, with the codes it runs shown as the reason it holds no
+   * art. The count is what tells a sysop whether it is one command or a whole
+   * logon sequence.
+   */
+  const commandColumns: DataTableColumn<ScreenFileShape>[] = [
+    {
+      id: 'path',
+      header: 'File',
+      sortable: true,
+      value: item => item.relPath,
+      cell: item => <span className="font-mono underline">{item.relPath}</span>,
+    },
+    {
+      id: 'includes',
+      header: 'Runs',
+      sortable: true,
+      value: item => item.mci?.length ?? 0,
+      cell: item => (
+        <span className="font-mono text-content-secondary">
+          {(item.mci ?? []).map(ref => `~${ref.code}_${ref.target}`).join(' ') || 'no codes'}
+        </span>
+      ),
+    },
+    { id: 'bytes', header: 'Size', align: 'right', sortable: true, value: item => item.bytes,
+      cell: item => formatBytes(item.bytes) },
+  ];
+
   const unusedColumns: DataTableColumn<ScreenFileShape>[] = [
     {
       id: 'path',
@@ -876,6 +924,9 @@ export function ScreenFilesPage() {
 
     const drawable = Object.values(data.files)
       .filter(file => file.format === 'ansi' || file.format === 'text')
+      // A door's art is the door's, and a door directory is full of .txt files
+      // that are documentation, not art. It has its own tab.
+      .filter(file => !isDoorArt(file))
       .filter(file => showGenerated || isArt(file));   // drawable-only is applied above
 
     /**
@@ -925,6 +976,25 @@ export function ScreenFilesPage() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [data, showGenerated]);
 
+  /**
+   * The three kinds of file that are NOT a piece of the board's art, each
+   * with a tab of its own.
+   *
+   * Asked for together: door art apart from board art, "screens that have no
+   * art only commands" in their own place, and a gallery holding "only valid
+   * art that the artists actually should edit".
+   */
+  const buckets = useMemo(() => {
+    const all = Object.values(data?.files ?? {});
+    return {
+      door: all.filter(isDoorArt).sort((a, b) => a.relPath.localeCompare(b.relPath)),
+      commands: all.filter(f => !isDoorArt(f) && isCommandsOnly(f))
+        .sort((a, b) => a.relPath.localeCompare(b.relPath)),
+      notArt: all.filter(f => !isDoorArt(f) && isNotArt(f))
+        .sort((a, b) => a.relPath.localeCompare(b.relPath)),
+    };
+  }, [data]);
+
   const tabs: TabDefinition[] = [
     {
       id: 'gallery',
@@ -971,6 +1041,84 @@ export function ScreenFilesPage() {
       id: 'board',
       label: `Board screens ${byScope.global.length}`,
       render: () => screenTable(byScope.global),
+    },
+    {
+      id: 'doors',
+      label: `Door screens ${buckets.door.length}`,
+      render: () => (
+        <div className="space-y-2 text-sm">
+          <p className="text-content-secondary">
+            Art that belongs to a door, not to the board. A door opens these
+            files itself, so none of the board's screen rules reach them: no
+            security variants, no per-node or per-conference copies, no
+            <span className="font-mono"> .GR </span> routing. Editing one
+            changes what that door draws, and nothing else.
+          </p>
+          <DataTable
+            columns={doorColumns}
+            rows={buckets.door.filter(item =>
+              !query.trim() || item.relPath.toLowerCase().includes(query.trim().toLowerCase()))}
+            getRowId={item => item.relPath}
+            initialSort={[{ id: 'door', desc: false }]}
+            isLoading={isLoading}
+            error={error as Error | null}
+            emptyMessage="No installed door ships art of its own."
+            onRowClick={item => setOpenFile(item.relPath)}
+          />
+        </div>
+      ),
+    },
+    {
+      id: 'commands',
+      label: `Commands and text ${buckets.commands.length}`,
+      render: () => (
+        <div className="space-y-2 text-sm">
+          <p className="text-content-secondary">
+            Screens with no art in them - nothing but the codes the board runs.
+            <span className="font-mono"> AWAITSCREEN.TXT </span> is one command;
+            <span className="font-mono"> LOGON10.TXT </span> is a few includes
+            and a pause. A sysop edits these to change what the board DOES. An
+            artist should not: the picture is in the file these codes pull in,
+            and the Includes column says which.
+          </p>
+          <DataTable
+            columns={commandColumns}
+            rows={buckets.commands.filter(item =>
+              !query.trim() || item.relPath.toLowerCase().includes(query.trim().toLowerCase()))}
+            getRowId={item => item.relPath}
+            initialSort={[{ id: 'path', desc: false }]}
+            isLoading={isLoading}
+            error={error as Error | null}
+            emptyMessage="Every screen on this board carries art of its own."
+            onRowClick={item => setOpenFile(item.relPath)}
+          />
+        </div>
+      ),
+    },
+    {
+      id: 'not-art',
+      label: `Not art ${buckets.notArt.length}`,
+      render: () => (
+        <div className="space-y-2 text-sm">
+          <p className="text-content-secondary">
+            Leftovers, files the board rewrites for itself, and empty files.
+            Listed so they can be found and deleted - never drawn in the
+            gallery, because an edit here is either lost at the next write or
+            changes nothing a caller sees.
+          </p>
+          <DataTable
+            columns={unusedColumns}
+            rows={buckets.notArt.filter(item =>
+              !query.trim() || item.relPath.toLowerCase().includes(query.trim().toLowerCase()))}
+            getRowId={item => item.relPath}
+            initialSort={[{ id: 'bytes', desc: true }]}
+            isLoading={isLoading}
+            error={error as Error | null}
+            emptyMessage="Nothing on this board is a leftover."
+            onRowClick={item => setOpenFile(item.relPath)}
+          />
+        </div>
+      ),
     },
     {
       id: 'codes',
@@ -1054,7 +1202,7 @@ export function ScreenFilesPage() {
           </p>
           <DataTable
             columns={unusedColumns}
-            rows={data?.unused ?? []}
+            rows={(data?.unused ?? []).filter(item => !isDoorArt(item))}
             getRowId={item => item.relPath}
             initialSort={[{ id: 'bytes', desc: true }]}
             emptyMessage="Every screen file on this board is read by something."
