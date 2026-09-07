@@ -10,3 +10,4 @@ export { renderDiff, renderFrame, cupTo } from './frame-render';
 export * from './classify';
 export * from './adapt';
 export * from './file-record';
+export * from './dir-grammar';

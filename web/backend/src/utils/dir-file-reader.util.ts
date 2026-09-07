@@ -1,3 +1,4 @@
+import { isDirRecordRow, dirSizeToBytes } from '@amiexpress/bbs-door-sdk/petscii/frame';
 import * as path from 'path';
 import * as fs from 'fs';
 import { findCaseInsensitive } from './amigafs';
@@ -34,29 +35,12 @@ export interface DirFileEntry {
  * Note: NO guaranteed space after status marker - size can be variable width
  */
 export function isNewFileEntry(line: string): boolean {
-  // Must be at least 14 chars (filename + space + status)
-  if (line.length < 14) return false;
-
-  const statusPos = 13;
-  const statusChar = line[statusPos];
-
-  // Check if it's a valid status marker at position 13
-  if (statusChar !== 'P' && statusChar !== 'F' && statusChar !== 'N' && statusChar !== 'D') {
-    return false;
-  }
-
-  // Position 12 must be a space (between filename and status)
-  if (line[12] !== ' ') {
-    return false;
-  }
-
-  // Filename section (first 12 chars) should not be all spaces (continuation line)
-  const filename = line.substring(0, 12);
-  if (filename.trim().length === 0) {
-    return false; // This is a continuation line (33 spaces of indentation)
-  }
-
-  return true;
+  // ONE GRAMMAR, in the SDK, because two things read it and they must not
+  // drift: this reader, off disk, and the C64 frame adapter, which reads the
+  // same rows back out of what a 68K door PRINTED. If those two disagreed
+  // about what a record is, one would render a record the other did not - and
+  // the byte-identity the C64 file view is built on would be gone.
+  return isDirRecordRow(line);
 }
 
 /**
@@ -92,18 +76,11 @@ export function parseDirEntry(lines: string[], startIndex: number): DirFileEntry
   if (fields.length >= 2) {
     fileSizeDisplay = fields[1];
 
-    // Convert size to bytes
-    const sizeStr = fileSizeDisplay.toUpperCase();
-    const num = parseInt(sizeStr);
-    if (sizeStr.endsWith('K')) {
-      fileSize = num * 1024;
-    } else if (sizeStr.endsWith('M')) {
-      fileSize = num * 1024 * 1024;
-    } else if (sizeStr.endsWith('G')) {
-      fileSize = num * 1024 * 1024 * 1024;
-    } else {
-      fileSize = num;
-    }
+    // ONE conversion, in the shared grammar. This used to test for a
+    // single-letter suffix, so `82MB` - which is how 160 of the 213 records on
+    // this board are written - fell through to `parseInt` and became 82 BYTES.
+    // Every one of them listed as `1K`.
+    fileSize = dirSizeToBytes(fileSizeDisplay);
   }
 
   // THE DATE COLUMN IS `mm-dd-yy`, and this reader used to refuse it.
