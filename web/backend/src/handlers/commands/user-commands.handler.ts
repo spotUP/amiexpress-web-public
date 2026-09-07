@@ -47,7 +47,17 @@ let _messageBases: MessageBase[] = [];
 let _db: Database;
 let _joinConference: (socket: any, session: BBSSession, confId: number, msgBaseId: number) => Promise<boolean>;
 let _checkConfAccess: (user: any, confNum: number) => boolean;
-let _displayScreen: (socket: any, session: BBSSession, screenName: string) => Promise<boolean>;
+// `runCommands` and `silent` are part of displayScreen's real signature
+// (screen.handler.ts:1760); the injected type had dropped them, so a caller
+// here could not ask for a screen SILENTLY - and a screen a conference
+// legitimately does not have would log and notify the sysop on every use.
+let _displayScreen: (
+  socket: any,
+  session: BBSSession,
+  screenName: string,
+  runCommands?: boolean,
+  silent?: boolean,
+) => Promise<boolean>;
 let _displayUploadInterface: (socket: any, session: BBSSession, params: string) => void;
 let _displayDownloadInterface: (socket: any, session: BBSSession, params: string) => void;
 
@@ -913,7 +923,7 @@ console.log('[ENV] Join Conference');
  * Handle U command - Upload files
  * 1:1 port from express.e:25646-25658 internalCommandU()
  */
-export function handleUploadCommand(socket: any, session: BBSSession): void {
+export async function handleUploadCommand(socket: any, session: BBSSession): Promise<void> {
   // express.e:25648 - Check ACS_UPLOAD permission
   if (!checkSecurity(session.user, ACSPermission.UPLOAD)) {
     ErrorHandler.permissionDenied(socket, 'upload files', {
@@ -924,6 +934,23 @@ export function handleUploadCommand(socket: any, session: BBSSession): void {
 
   // express.e:25649 - setEnvStat(ENV_UPLOADING)
 console.log('[ENV] Uploading');
+
+  // express.e:18981 - IF displayScreen(SCREEN_NOUPLOADS) THEN RETURN.
+  //
+  // The screen EXISTING is the refusal: a conference closes its uploads by
+  // having the file at all, and the caller is told why instead of being
+  // dropped back at the menu with no explanation. Silent, because a
+  // conference without the file is the normal case and not worth a log line.
+  const refused = await _displayScreen(socket, session, 'NOUPLOADS', true, true);
+  if (refused) {
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return;
+  }
+
+  // express.e:18986 - IF(uLFType=0) THEN displayScreen(SCREEN_UPLOAD). The
+  // command path is always uLFType 0 here; an attach is a different entry.
+  // No pause: express.e pauses after the DOWNLOAD screen, not this one.
+  await _displayScreen(socket, session, 'UPLOADMSG', true, true);
 
   // express.e:25656 - uploadaFile(0, cmdcode, FALSE)
   // The first parameter 0 means show upload interface first, not immediate ZMODEM

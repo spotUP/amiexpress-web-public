@@ -149,7 +149,7 @@ console.log(`[InternalRouter] Overriding internal command '${command}' with exte
       return RESULT_SUCCESS;
 
     case 'U': // Upload File(s) (internalCommandU) - express.e:25646-25658
-      handleUploadCommand(socket, session);
+      void handleUploadCommand(socket, session);
       return RESULT_SUCCESS;
 
     case 'UP': // Upload Status / Node Uptime (internalCommandUP) - express.e:25667

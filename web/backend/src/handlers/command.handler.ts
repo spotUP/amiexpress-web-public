@@ -4608,7 +4608,9 @@ async function dispatchInternalCommand(
       return await BatchDownloadHandler.handleBatchDownload(socket, session);
 
     case 'U': // Upload File(s) (internalCommandU) - express.e:25646-25658
-      handleUploadCommand(socket, session);
+      // Awaited: it shows NoUploads/UploadMsg before the interface, and
+      // firing it off would race the screen against the prompt.
+      await handleUploadCommand(socket, session);
       return;
 
     case 'UP': // Upload Status / Node Uptime (internalCommandUP) - express.e:25667

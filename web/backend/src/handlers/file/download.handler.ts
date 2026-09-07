@@ -97,7 +97,11 @@ export class DownloadHandler {
     try {
       const { displayScreen, doPause } = require('../screen.handler');
       if (typeof displayScreen === 'function') {
-        const shown = await displayScreen(socket, session, 'DOWNLOAD', true, true);
+        // 'DOWNLOADMSG', not 'DOWNLOAD': the routing table keys on the former
+        // (screen-tables.ts:69). Asking for 'DOWNLOAD' made getScreenDirType
+        // answer null, which makes the search list EMPTY - so the screen could
+        // never be found however well it was drawn, and the `catch` below hid it.
+        const shown = await displayScreen(socket, session, 'DOWNLOADMSG', true, true);
         if (shown) {
           if (typeof doPause === 'function') doPause(socket, session);
           socket.emit('ansi-output', '\r\n');

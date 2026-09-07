@@ -201,7 +201,7 @@ describe('DownloadHandler — flagged-file plumbing (regression for #10)', () =>
     expect(session.tempData?.downloadNumFiles).toBe(0);
   });
 
-  test('displayScreen("DOWNLOAD") is called with silent=true so missing screen does not trigger sysop alert', async () => {
+  test('the download screen is asked for by a name the loader routes, silently', async () => {
     const socket = makeSocket();
     const session: any = {
       state: 'logged_in',
@@ -214,11 +214,20 @@ describe('DownloadHandler — flagged-file plumbing (regression for #10)', () =>
 
     await DownloadHandler.handleDownloadCommand(socket, session, '');
 
-    // displayScreen(socket, session, 'DOWNLOAD', runCommands=true, silent=true)
-    // The 5th argument MUST be true — express.e treats the DOWNLOAD screen as optional.
+    // This test used to pin the string 'DOWNLOAD', and passed for months on a
+    // handler that could never show the screen: 'DOWNLOAD' is not a key in
+    // SCREEN_DIR_MAP, so getScreenDirType answered null, the search list came
+    // back empty, and the file was unreachable however well it was drawn.
+    // Pin the ROUTED name - the one screen-tables.ts actually has - so the
+    // test fails if the two ever disagree again.
+    const { SCREEN_DIR_MAP } = require('../../../src/screens/screen-tables');
     expect(mockedDisplayScreen).toHaveBeenCalled();
-    const call = (mockedDisplayScreen as jest.Mock).mock.calls.find((c: any[]) => c[2] === 'DOWNLOAD');
+    const call = (mockedDisplayScreen as jest.Mock).mock.calls.find(
+      (c: any[]) => typeof c[2] === 'string' && c[2].toUpperCase().startsWith('DOWNLOAD')
+    );
     expect(call).toBeDefined();
+    expect(SCREEN_DIR_MAP[String(call[2]).toUpperCase()]).toBeDefined();
+    // The 5th argument MUST be true — express.e treats the screen as optional.
     expect(call[4]).toBe(true);
   });
 });

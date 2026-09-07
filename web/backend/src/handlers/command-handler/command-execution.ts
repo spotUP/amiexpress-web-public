@@ -189,7 +189,7 @@ console.log("Entering switch statement for command:", command);
       return;
 
     case "U": // Upload File(s) (internalCommandU) - express.e:25646-25658
-      handleUploadCommand(socket, session);
+      void handleUploadCommand(socket, session);
       return;
 
     case "UP": // Upload Status / Node Uptime (internalCommandUP) - express.e:25667
