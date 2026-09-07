@@ -11,6 +11,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
 const levels = { levels: [10, 20, 50, 255], inUse: [
@@ -50,9 +51,18 @@ vi.mock('../contexts/NotificationContext', () => ({
 import { SystemConfigPage } from '../pages/SystemConfigPage';
 import { OperatorChatSettingsPage } from '../pages/OperatorChatSettingsPage';
 
+/**
+ * The router is not decoration: SystemConfigPage reads `?section=` so a
+ * sidebar search result can open one section, and `useSearchParams` throws
+ * outside a Router.
+ */
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <MemoryRouter initialEntries={['/admin/system']}>
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    </MemoryRouter>
+  );
 }
 
 describe('the levels a form offers', () => {

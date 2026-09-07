@@ -10,6 +10,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, LogOut, Search, User, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { ADMIN_BASE, navItemsForLevel, groupForPath, filterNavGroups } from './nav-config';
+import { SECTION_PARAM, sectionsMatching } from './page-sections';
 
 export function Sidebar() {
   const { user, logout, adminPerms } = useAuth();
@@ -129,6 +130,27 @@ export function Sidebar() {
                             </>
                           )}
                         </NavLink>
+
+                        {/*
+                          What inside this destination matched. Only while
+                          filtering: the sidebar at rest is a list of
+                          destinations, not an index of every setting.
+                        */}
+                        {isFiltering && (
+                          <ul className="mb-1 ml-6 space-y-px border-l border-border pl-2">
+                            {sectionsMatching(item.path, query).map((section) => (
+                              <li key={section.name}>
+                                <NavLink
+                                  to={`${to}?${SECTION_PARAM}=${encodeURIComponent(section.name)}`}
+                                  className="block truncate rounded px-2 py-0.5 text-xs text-content-muted transition-colors hover:bg-surface-3 hover:text-content-primary"
+                                  title={`${item.label} - ${section.name}`}
+                                >
+                                  {section.name}
+                                </NavLink>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </li>
                     );
                   })}

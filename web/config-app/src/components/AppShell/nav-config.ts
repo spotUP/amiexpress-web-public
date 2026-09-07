@@ -37,6 +37,8 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
+import { sectionsMatching } from './page-sections';
+
 export const ADMIN_BASE = '/admin';
 
 export interface NavItem {
@@ -152,13 +154,22 @@ export function groupForPath(pathname: string): NavGroup | undefined {
   return NAV_GROUPS.find((group) => group.items.includes(item));
 }
 
-/** Case-insensitive substring match against label, description and keywords. */
+/**
+ * Case-insensitive substring match against label, description and keywords -
+ * and against what the destination CONTAINS.
+ *
+ * The second half is the whole point: `ftp` names no page, so the filter used
+ * to answer "No destinations match" while four FTP fields sat inside
+ * Configuration. A destination whose sections match is a destination the sysop
+ * was looking for. See `page-sections.ts`.
+ */
 export function navItemMatchesQuery(item: NavItem, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
 
   const haystacks = [item.label, item.description, ...(item.keywords ?? [])];
-  return haystacks.some((text) => text?.toLowerCase().includes(needle));
+  if (haystacks.some((text) => text?.toLowerCase().includes(needle))) return true;
+  return sectionsMatching(item.path, query).length > 0;
 }
 
 /**

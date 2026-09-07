@@ -5,8 +5,13 @@ import { apiClient } from '../api/client';
 import { TooltypeKey } from '../components/ui/TooltypeKey';
 import type { SystemConfig, Language, ScreenType } from '../types';
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useNotification } from '../contexts/NotificationContext';
 import { securityLevelOptions } from './security-level-options';
+import {
+  SECTION_PARAM,
+  SYSTEM_CONFIG_SECTIONS,
+} from '../components/AppShell/page-sections';
 
 // AmiExpress editor types (express.e:31745+)
 const EDITOR_TYPES = [
@@ -55,6 +60,20 @@ export function SystemConfigPage() {
    */
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
+  /**
+   * A sidebar search result opens ONE section: `?section=FTP Server Settings`.
+   * Typing `ftp` and being dropped at the top of a nineteen-section page is
+   * barely better than not finding it, so the result names the section and the
+   * page shows that section alone until the sysop clears it.
+   */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focusedSection = searchParams.get(SECTION_PARAM);
+  const clearFocusedSection = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete(SECTION_PARAM);
+    setSearchParams(next, { replace: true });
+  };
+
   // Password visibility and SMTP test state
   const [showSmtpPassword, setShowSmtpPassword] = useState(false);
   const [showAchievementsKey, setShowAchievementsKey] = useState(false);
@@ -64,18 +83,21 @@ export function SystemConfigPage() {
   // Define categories
   const categories = ['All', 'General', 'Security & Access', 'Networking', 'System'];
 
-  // Helper function to determine if a section should be shown based on category
+  /**
+   * Whether a section is on screen: the focused one alone when a search result
+   * asked for it, otherwise the category filter.
+   *
+   * The category of each section comes from `SYSTEM_CONFIG_SECTIONS`, which the
+   * sidebar search reads too - the table used to be a second copy here, and a
+   * section added to one and not the other is invisible in exactly one of them.
+   */
   const shouldShowSection = (section: string): boolean => {
+    if (focusedSection) return section === focusedSection;
     if (selectedCategory === 'All') return true;
 
-    const categoryMap: Record<string, string[]> = {
-      'General': ['Basic Information', 'Display Settings', 'Language Settings'],
-      'Security & Access': ['Security Settings', 'Session Settings', 'New User Defaults', 'Auto-Validation Settings', 'Password & Account Security'],
-      'Networking': ['Mail & SMTP Settings', 'Achievements', 'Email Notification Events', 'FTP Server Settings', 'HTTP Server Settings', 'BBS Server Ports', 'SSH Key Management'],
-      'System': ['System Limits', 'File Management', 'System Behavior', 'Logging Settings']
-    };
-
-    return categoryMap[selectedCategory]?.includes(section) || false;
+    return SYSTEM_CONFIG_SECTIONS.some(
+      (entry) => entry.name === section && entry.category === selectedCategory
+    );
   };
 
   const { data, isLoading, error } = useQuery({
@@ -346,6 +368,26 @@ export function SystemConfigPage() {
 
   return (
     <div>
+      {/*
+        Arrived from a search result. Says which section is on screen and how
+        to get the rest back - a page that silently shows one of its nineteen
+        sections reads as a page that lost the other eighteen.
+      */}
+      {focusedSection && (
+        <div className="mb-4 flex items-center gap-2 rounded border border-border-strong bg-surface-2 px-3 py-2 text-xs text-content-secondary">
+          <span>
+            Showing one section: <span className="text-content-primary">{focusedSection}</span>
+          </span>
+          <button
+            type="button"
+            onClick={clearFocusedSection}
+            className="ml-auto rounded border border-border px-2 py-0.5 text-content-secondary transition-colors hover:bg-surface-3 hover:text-content-primary"
+          >
+            Show all sections
+          </button>
+        </div>
+      )}
+
       <div className="mb-4 flex flex-wrap gap-1">
         {categories.map((category) => (
           <button
