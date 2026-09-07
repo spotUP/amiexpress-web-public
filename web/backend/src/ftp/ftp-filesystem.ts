@@ -174,6 +174,38 @@ export class FtpFilesystem {
     return entries;
   }
 
+  /**
+   * One entry by path - a FILE inside a conference, or the conference itself.
+   *
+   * `SIZE`, `MDTM` and `MLST` all ask about a single name, and until now the
+   * tree could only answer about directories: `MLST 1oo-olsk.txt` came back
+   * `550 no such directory` for a file that was right there in the listing.
+   */
+  async find(user: unknown, absolutePath: string): Promise<FtpEntry | null> {
+    const segments = pathSegments(absolutePath);
+    if (segments.length === 0) {
+      return { name: '/', isDirectory: true, size: 0, modified: new Date() };
+    }
+
+    const conferencePath = `/${segments[0]}`;
+    const conf = this.conferenceAt(user, conferencePath);
+    if (!conf) return null;
+
+    if (segments.length === 1) {
+      return {
+        name: conferenceDirectoryName(conf),
+        isDirectory: true,
+        size: 0,
+        modified: new Date(),
+      };
+    }
+    if (segments.length > 2) return null;
+
+    const wanted = segments[1].toLowerCase();
+    const entries = await this.list(user, conferencePath);
+    return entries.find((entry) => entry.name.toLowerCase() === wanted) ?? null;
+  }
+
   /** The conference directory on disk, for the phases that read bytes. */
   conferencePath(conf: FtpConference): string {
     return conferenceDir(this.deps.bbsRoot, conf.conference_id);
@@ -185,7 +217,7 @@ const MONTHS = [
 ];
 
 /** `YYYYMMDDHHMMSS` in UTC - the only time format RFC 3659 allows. */
-function machineTime(when: Date): string {
+export function machineTimestamp(when: Date): string {
   const pad = (value: number, width = 2) => String(value).padStart(width, '0');
   return (
     `${pad(when.getUTCFullYear(), 4)}${pad(when.getUTCMonth() + 1)}${pad(when.getUTCDate())}` +
@@ -210,7 +242,7 @@ export function machineListLine(entry: FtpEntry): string {
   const type = entry.isDirectory ? 'dir' : 'file';
   const perm = entry.isDirectory ? 'el' : '';
   return (
-    `type=${type};size=${entry.size};modify=${machineTime(entry.modified)};perm=${perm}; ` +
+    `type=${type};size=${entry.size};modify=${machineTimestamp(entry.modified)};perm=${perm}; ` +
     entry.name
   );
 }

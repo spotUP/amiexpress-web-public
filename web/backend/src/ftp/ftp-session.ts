@@ -19,6 +19,7 @@ import {
   FtpFilesystem,
   longListLine,
   machineListLine,
+  machineTimestamp,
   resolvePath,
 } from './ftp-filesystem';
 
@@ -67,13 +68,33 @@ const PRE_LOGIN = new Set(['USER', 'PASS', 'QUIT', 'FEAT', 'NOOP', 'AUTH', 'SYST
  * set shrinks to nothing as phases 3-6 land.
  */
 const NOT_YET = new Set([
-  'MODE', 'STRU', 'PORT', 'RETR', 'STOR', 'REST', 'SIZE', 'MDTM',
+  'MODE', 'STRU', 'PORT', 'RETR', 'STOR', 'STOU', 'APPE', 'REST',
 ]);
+
+/**
+ * Commands the board will not carry over FTP at all, and why they say so.
+ *
+ * A refusal with a reason is worth having: `DELE` answered `500 command not
+ * recognized`, which tells a client the server is broken rather than that the
+ * board does not hand out deletions. Files leave this board through the
+ * sysop's own tools, not through a caller's file manager.
+ */
+const REFUSED: Record<string, string> = {
+  DELE: 'Deleting files over FTP is not permitted on this board',
+  RMD: 'Removing directories over FTP is not permitted - a directory here is a conference',
+  XRMD: 'Removing directories over FTP is not permitted - a directory here is a conference',
+  MKD: 'Making directories over FTP is not permitted - a directory here is a conference',
+  XMKD: 'Making directories over FTP is not permitted - a directory here is a conference',
+  RNFR: 'Renaming files over FTP is not permitted on this board',
+  RNTO: 'Renaming files over FTP is not permitted on this board',
+  SITE: 'No SITE commands on this board',
+};
 
 /** Verbs this phase answers, but only for a caller who has logged in. */
 const AFTER_LOGIN = new Set([
   'PWD', 'XPWD', 'CWD', 'XCWD', 'CDUP', 'TYPE', 'PBSZ', 'PROT', 'PASV', 'LIST', 'NLST',
-  'MLSD', 'MLST', 'OPTS', 'EPSV',
+  'MLSD', 'MLST', 'OPTS', 'EPSV', 'SIZE', 'MDTM',
+  ...Object.keys(REFUSED),
 ]);
 
 export function isLoopback(address: string | undefined): boolean {
@@ -250,7 +271,12 @@ export class FtpSession {
         return this.onMlst(arg);
       case 'OPTS':
         return this.onOpts(arg);
+      case 'SIZE':
+        return this.onSize(arg);
+      case 'MDTM':
+        return this.onMdtm(arg);
       default:
+        if (REFUSED[verb]) return this.reply(550, REFUSED[verb]);
         if (NOT_YET.has(verb)) return this.reply(502, `${verb} not implemented yet`);
         return this.reply(500, 'command not recognized');
     }
@@ -261,6 +287,37 @@ export class FtpSession {
    * so the answer is 250 or 550 - never a path a later phase would have to
    * un-invent.
    */
+  /**
+   * `SIZE`: the byte count the BOARD holds, not the file on disk.
+   *
+   * The DIR entry is what the board shows in `F`, what a ratio is charged
+   * against, and what a caller sees before he decides. A `stat` of a pooled
+   * area's local copy would answer about a file that may not even be here.
+   */
+  private async onSize(arg: string): Promise<void> {
+    const entry = await this.entryFor(arg);
+    if (!entry) return this.reply(550, `${arg.trim()}: no such file`);
+    if (entry.isDirectory) return this.reply(550, `${arg.trim()}: not a plain file`);
+    this.reply(213, String(entry.size));
+  }
+
+  /** `MDTM`: the upload date the DIR entry carries, in RFC 3659's UTC form. */
+  private async onMdtm(arg: string): Promise<void> {
+    const entry = await this.entryFor(arg);
+    if (!entry) return this.reply(550, `${arg.trim()}: no such file`);
+    if (entry.isDirectory) return this.reply(550, `${arg.trim()}: not a plain file`);
+    this.reply(213, machineTimestamp(entry.modified));
+  }
+
+  /** The one entry an argument names, relative to where the caller stands. */
+  private async entryFor(arg: string) {
+    const tree = this.deps.filesystem;
+    if (!tree) return null;
+    const target = resolvePath(this.cwd, arg.trim() || '.');
+    if (target === null) return null;
+    return tree.find(this.user, target);
+  }
+
   /**
    * `MLST`: the facts about ONE path, on the control connection.
    *
@@ -273,16 +330,15 @@ export class FtpSession {
     if (!tree) return this.reply(550, 'No directories available');
 
     const target = resolvePath(this.cwd, arg.trim() || '.');
-    if (target === null || !tree.exists(this.user, target)) {
-      return this.reply(550, `${arg.trim() || this.cwd}: no such directory`);
+    const entry = target === null ? null : await tree.find(this.user, target);
+    if (!entry) {
+      return this.reply(550, `${arg.trim() || this.cwd}: no such file or directory`);
     }
 
-    const fact = machineListLine({
-      name: target,
-      isDirectory: true,
-      size: 0,
-      modified: new Date(),
-    });
+    // The path, not the bare name: RFC 3659 says MLST answers about what was
+    // asked for. A file gets its own size and date, which is the half that was
+    // missing - `MLST 1oo-olsk.txt` used to answer "no such directory".
+    const fact = machineListLine({ ...entry, name: target! });
     this.socket.write('250-Listing\r\n');
     this.socket.write(` ${fact}\r\n`);
     this.reply(250, 'END');

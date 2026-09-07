@@ -341,6 +341,91 @@ describe('LIST over a passive connection', () => {
   });
 });
 
+describe('asking about one file', () => {
+  /**
+   * The sysop's client asked `MLST 1oo-olsk.txt` and `SIZE 1oo-olsk.txt` about
+   * a file that was in the listing, and got `550 no such directory` and `502
+   * not implemented yet`. The tree could only answer about directories.
+   *
+   * These cases use the ROOT, whose entries are conferences, because this
+   * suite's filesystem has no DIR files behind it - what is pinned is that a
+   * single name is answered at all, and refused cleanly when it is not there.
+   */
+  it('answers MLST about a path that exists', async () => {
+    const { control, lines } = await login();
+
+    control.write('MLST 001-General\r\n');
+    expect(await lines.next()).toBe('250-Listing');
+    expect(await lines.next()).toMatch(/^ type=dir;size=0;modify=\d{14};perm=el; \/001-General$/);
+    expect(await lines.next()).toBe('250 END');
+
+    control.destroy();
+  });
+
+  it('refuses SIZE and MDTM for a name that is not there, by name', async () => {
+    const { control, lines } = await login();
+
+    control.write('SIZE nothing.lha\r\n');
+    expect(await lines.next()).toBe('550 nothing.lha: no such file');
+    control.write('MDTM nothing.lha\r\n');
+    expect(await lines.next()).toBe('550 nothing.lha: no such file');
+
+    control.destroy();
+  });
+
+  it('refuses SIZE on a directory rather than answering 0', async () => {
+    const { control, lines } = await login();
+
+    control.write('SIZE 001-General\r\n');
+    expect(await lines.next()).toBe('550 001-General: not a plain file');
+
+    control.destroy();
+  });
+});
+
+describe('what the board will not do over FTP', () => {
+  /**
+   * `DELE` answered `500 command not recognized`, which tells a client the
+   * server is broken. The board simply does not hand out deletions, and
+   * saying so is a different answer from not knowing the verb.
+   */
+  it('refuses a delete with a reason, not with 500', async () => {
+    const { control, lines } = await login();
+
+    control.write('DELE SOMETHING.LHA\r\n');
+    expect(await lines.next()).toBe(
+      '550 Deleting files over FTP is not permitted on this board'
+    );
+
+    control.destroy();
+  });
+
+  it('refuses making and removing directories - a directory here is a conference', async () => {
+    const { control, lines } = await login();
+
+    control.write('MKD newthing\r\n');
+    expect(await lines.next()).toMatch(/^550 Making directories over FTP is not permitted/);
+    control.write('RMD 001-General\r\n');
+    expect(await lines.next()).toMatch(/^550 Removing directories over FTP is not permitted/);
+    control.write('RNFR 001-General\r\n');
+    expect(await lines.next()).toMatch(/^550 Renaming files over FTP is not permitted/);
+
+    control.destroy();
+  });
+
+  it('still says 502 for a transfer verb that is coming, not 550', async () => {
+    // The distinction is the point: RETR is unbuilt, DELE is refused.
+    const { control, lines } = await login();
+
+    control.write('RETR SOMETHING.LHA\r\n');
+    expect(await lines.next()).toBe('502 RETR not implemented yet');
+    control.write('STOR SOMETHING.LHA\r\n');
+    expect(await lines.next()).toBe('502 STOR not implemented yet');
+
+    control.destroy();
+  });
+});
+
 describe('the passive settings', () => {
   it('reads the range shapes the board writes', () => {
     expect(parsePortRange('50101-50107')).toEqual({ first: 50101, last: 50107 });
