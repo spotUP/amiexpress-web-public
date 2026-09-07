@@ -1,0 +1,8 @@
+BBSCMD=SCREENTHEME
+TYPE=TS
+LOCATION=Doors/screen-theme-picker
+DESCRIPTION=Pick which set of the board's art you are shown
+MULTINODE=YES
+PRIORITY=SAME
+ACCESS=1
+MIN_COLUMNS=40

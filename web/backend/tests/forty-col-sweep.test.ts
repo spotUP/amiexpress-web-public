@@ -403,6 +403,19 @@ describe('40-column sweep: the adapted doors', () => {
     fits(buildFooterHints(compact).map((h: any) => `${h.key}: ${h.does}`));
   });
 
+  it('screen-theme-picker: theme rows, note, footer hints', () => {
+    const { getCompactProfile } = require('../../../sdk/engines/ui/blessed/core/responsive-constants');
+    const { buildThemeItems, buildNote, buildFooterHints, choicesForWidth } =
+      require('../../../Doors/screen-theme-picker/app');
+    const compact = getCompactProfile(40);
+    fits(buildThemeItems(
+      choicesForWidth([{ slug: 'a', title: LONG, author: LONG, widths: [], status: 'draft' }], 40),
+      'a', PLAIN_STYLES, compact, 40,
+    ));
+    fits([buildNote(PLAIN_STYLES, compact)]);
+    fits(buildFooterHints(compact).map((h: any) => `${h.key}: ${h.does}`));
+  });
+
   it('bug-tracker: bug title and chrome strips', () => {
     const { CompactLayout } = require('../../../Doors/bug-tracker/layout');
     const layout = new CompactLayout(() => 40);

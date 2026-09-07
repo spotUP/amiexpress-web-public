@@ -99,7 +99,13 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  * C64_ADAPT would put the frame adapter on a screen that is already forty
  * columns wide and crop it again.
  */
-const ADAPTED = ['THEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE'];
+/*
+ * SCREENTHEME is THEME's twin for the BOARD's art rather than the doors'
+ * colours, and it earns the mark the same way: exported row builders that take
+ * their width from the live screen, proven at 40 in
+ * tests/doors/compact-40/screen-theme-picker.test.ts.
+ */
+const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE'];
 
 const UNROUTED = 'unrouted-gate-test-type' as unknown as Door['type'];
 

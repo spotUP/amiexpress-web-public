@@ -17,6 +17,15 @@ const getScreenThemes = vi.fn();
 const createScreenTheme = vi.fn();
 const updateScreenTheme = vi.fn();
 const setDefaultScreenTheme = vi.fn();
+/**
+ * Publish asks the server whether the theme CAN go live before it offers the
+ * confirmation, so the page has to be able to ask. These cases are about the
+ * BUTTONS each account is offered; the gate itself is proved in
+ * screen-theme-validation-and-preview.test.tsx.
+ */
+const getScreenThemeValidation = vi.fn();
+const previewScreen = vi.fn();
+const getScreenIndex = vi.fn();
 
 vi.mock('../api/client', () => ({
   apiClient: {
@@ -24,6 +33,9 @@ vi.mock('../api/client', () => ({
     createScreenTheme: (...args: unknown[]) => createScreenTheme(...args),
     updateScreenTheme: (...args: unknown[]) => updateScreenTheme(...args),
     setDefaultScreenTheme: (...args: unknown[]) => setDefaultScreenTheme(...args),
+    getScreenThemeValidation: (...args: unknown[]) => getScreenThemeValidation(...args),
+    previewScreen: (...args: unknown[]) => previewScreen(...args),
+    getScreenIndex: (...args: unknown[]) => getScreenIndex(...args),
   },
 }));
 
@@ -58,6 +70,12 @@ beforeEach(() => {
   createScreenTheme.mockResolvedValue({ success: true, data: {} });
   updateScreenTheme.mockResolvedValue({ success: true, data: {} });
   setDefaultScreenTheme.mockResolvedValue({ success: true, data: {} });
+  getScreenThemeValidation.mockResolvedValue({
+    success: true,
+    data: { slug: 'neon', blocking: [], advisory: [], publishable: true, coverage: { provided: 4, total: 44 } },
+  });
+  previewScreen.mockResolvedValue({ success: true, data: null });
+  getScreenIndex.mockResolvedValue({ success: true, data: { screens: [] } });
 });
 
 describe('what the page lists', () => {
