@@ -79,6 +79,11 @@ vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
 
 const showError = vi.fn();
 const confirm = vi.fn(async () => true);
+// The page asks who is logged in - a sysop is offered fields an artist is not.
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({ user: { username: 'sysop', secLevel: 255 }, secLevel: 255 }),
+}));
+
 vi.mock('../contexts/NotificationContext', () => ({
   useNotification: () => ({ showSuccess: vi.fn(), showError, confirm }),
 }));
