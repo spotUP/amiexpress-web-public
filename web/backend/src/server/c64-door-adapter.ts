@@ -98,6 +98,7 @@ import {
   type Frame,
 } from '@amiexpress/bbs-door-sdk/petscii/frame';
 import { doorScreenWidth, C64_COLUMNS } from '../amiga-emulation/xim/screen-width.util';
+import { stripNarrowNoise } from './c64-door-noise';
 
 /** Quiet gap after the last write that ends a frame. */
 export const C64_ADAPT_TICK_MS = 30;
@@ -340,7 +341,11 @@ export class C64DoorFrameAdapter {
   /** The adapted rows of the frame as it stands, memoised until the next write. */
   private adapted(): AdaptedView {
     if (this.adaptedCache && this.adaptedCache.seq === this.writeSeq) return this.adaptedCache;
-    const { rows, cursor } = adaptRows(this.screen.snapshot(), { cols: this.cols });
+    // The noise pre-pass runs on the SOURCE grid, before any rung sees it:
+    // a phrase blanked here costs the caller no rows at all, where blanking it
+    // afterwards would leave the rows the ladder had already spent. See
+    // c64-door-noise.ts for what qualifies and why it is not a ladder rung.
+    const { rows, cursor } = adaptRows(stripNarrowNoise(this.screen.snapshot()), { cols: this.cols });
     // The blank tail of a 25-row grid is not content. It still costs adapted
     // rows, which is exactly how adaptFrame comes to push painted rows off the
     // top, so the window is measured against the PAINTED height instead.

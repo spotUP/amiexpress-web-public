@@ -64,6 +64,7 @@ import {
   uninstallC64DoorAdapter,
   c64AdapterFor,
 } from '../../src/server/c64-door-adapter';
+import { stripNarrowNoise } from '../../src/server/c64-door-noise';
 
 const COLS = 40;
 const ROWS = 25;
@@ -537,7 +538,14 @@ function reconstruct(text: string): Frame {
 
 describe.each(Object.keys(manifest))('fixture %s end to end', (id) => {
   const text = fixtureText(id);
-  const source = reconstruct(text);
+  // The SAME pre-pass the adapter runs before the ladder
+  // (C64DoorFrameAdapter.adapted -> stripNarrowNoise). This suite rebuilds the
+  // adapter's pipeline stage by stage, so a stage added there has to be added
+  // here too or the two copies disagree - which is exactly what happened when
+  // the noise strip landed and ctop/conftop's oracle stopped matching. Applied
+  // ONCE, to the reconstructed frame, because the strip is a pure function of
+  // the frame: every adaptRows below then sees what the adapter sees.
+  const source = stripNarrowNoise(reconstruct(text));
   const adapted = shownFrame(source);
 
   let c64: Wire;
