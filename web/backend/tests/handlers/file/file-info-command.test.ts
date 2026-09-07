@@ -33,8 +33,9 @@ beforeAll(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'file-info-'));
   fs.mkdirSync(path.join(tmp, 'Conf1'), { recursive: true });
   fs.writeFileSync(path.join(tmp, 'Conf1', 'DIR1'), DIR, 'binary');
+  // `dataDir` is the only root this config has; there is no `bbsRoot` key,
+  // and asking for one broke `typecheck:tests` on main.
   config.set('dataDir', tmp);
-  config.set('bbsRoot', tmp);
   resetFileViewLayoutCache();
 });
 
