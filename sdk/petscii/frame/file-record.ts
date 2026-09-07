@@ -31,6 +31,15 @@ export interface FileRecordFields {
   name?: string | null;
   /** Size in BYTES. Formatted by `formatNarrowSize`, never pre-formatted. */
   sizeBytes?: number | null;
+  /**
+   * The size field EXACTLY as the source wrote it - `82MB`, `100596`, `117K`.
+   *
+   * `~F_SIZE|` converts to K, which is honest and reads badly for a large
+   * archive: an 82 megabyte file is `83968K`. A DIR file that already said
+   * `82MB` has the friendlier answer in it, so the template can print the
+   * source's own words instead - the same rule the date follows.
+   */
+  sizeText?: string | null;
   /** Status marker P/F/N/D. */
   flag?: string | null;
   /** True when this file is new to THIS caller - never stored, always computed. */
@@ -84,6 +93,9 @@ function valueOf(fields: FileRecordFields, field: string): string {
     case 'NAME': return (fields.name ?? '').trim();
     case 'SIZE': return formatNarrowSize(fields.sizeBytes);
     case 'BLOCKS': return formatBlocks(fields.sizeBytes);
+    // As written, when the source wrote one; the K form otherwise, so a
+    // template using it never prints an empty column.
+    case 'SIZE_RAW': return (fields.sizeText ?? '').trim() || formatNarrowSize(fields.sizeBytes);
     case 'FLAG': return (fields.flag ?? '').trim();
     // A space, not empty: the flag column holds its place so the filename
     // beside it does not shift for a caller who has seen the file before.

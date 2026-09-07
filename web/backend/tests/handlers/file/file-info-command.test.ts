@@ -231,8 +231,9 @@ describe('N prints the same row F does', () => {
     const rows = glass(wire.join('')).split(/\r?\n/);
     const door = rows.find((r) => r.includes('OTL-DOOR.LHA'));
     expect(door).toBeDefined();
-    expect(door!.indexOf('40K')).toBe(5);
-    expect(door!.indexOf('OTL-DOOR.LHA')).toBe(13);
+    // The size as the DIR file wrote it - see forty-column-file-list.
+    expect(door!.indexOf('40960')).toBe(5);
+    expect(door!.indexOf('OTL-DOOR.LHA')).toBe(14);
     // And the ordinal it printed can be handed straight to FI.
     expect(FileListingHandler.listedRecord(session, 1)?.filename).toBe('OTL-DOOR.LHA');
   });

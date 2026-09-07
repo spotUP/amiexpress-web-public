@@ -622,6 +622,7 @@ console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
       num: ordinal,
       name: entry.filename,
       sizeBytes: entry.fileSize,
+      sizeText: entry.fileSizeDisplay,
       flag: entry.statusMarker,
       isNew: this.isNewToCaller(entry, session),
       date: entry.uploadDateDisplay,
@@ -661,6 +662,7 @@ console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
       num: ordinal,
       name: entry.filename,
       sizeBytes: entry.fileSize,
+      sizeText: entry.fileSizeDisplay,
       flag: entry.statusMarker,
       // PER CALLER, never stored: a file is new to the caller who has not seen
       // it, and storing that would make the listing wrong for the next one.

@@ -21,7 +21,8 @@ const INDENT = ' '.repeat(33);
 const DIR = [
   'OTL-DOOR.LHA P  40960  03-28-18  A door from the Outlaws',
   INDENT + 'MegaDoor v2.1',
-  'PDX-TOOL.LHA N 108741  01-21-26  A tool',
+  // The shape 160 of the live board's 213 records use.
+  'PDX-TOOL.LHA N    82MB  01-21-26  A tool',
   // 12 characters, which is express.e's DIR grammar cap - a 13-character
   // name is not parsed as an entry AT ALL, which this fixture found the hard
   // way and is worth knowing before anyone widens ~12F_NAME|.
@@ -79,9 +80,13 @@ describe('a 40-column caller gets one row per file', () => {
     const door = rows.find((r) => r.includes('OTL-DOOR.LHA'));
     expect(door).toBeDefined();
     expect(door!.indexOf('1')).toBe(0);              // first record's ordinal
-    expect(door!.indexOf('40K')).toBe(5);
-    expect(door![11]).toBe('P');
-    expect(door!.indexOf('OTL-DOOR.LHA')).toBe(13);
+    // THE SIZE AS THE DIR FILE WROTE IT. `~F_SIZE_RAW|` prints the source's
+    // own words, so a board whose records say `82MB` reads `82MB` rather than
+    // `83968K` - which is seven characters in a six-column field and lost its
+    // K on the live board (sysop, 2026-09-07).
+    expect(door!.indexOf('40960')).toBe(5);
+    expect(door![12]).toBe('P');
+    expect(door!.indexOf('OTL-DOOR.LHA')).toBe(14);
     expect(door!.indexOf('03-28-18')).toBe(31);
   });
 
@@ -94,9 +99,9 @@ describe('a 40-column caller gets one row per file', () => {
   it('marks what is new to THIS caller and nothing else', async () => {
     const rows = (await listAt(40, true)).map(glass);
     // Last call 2026-01-01: the 2026 file is new, the 2018 and 1992 ones are not.
-    expect(rows.find((r) => r.includes('PDX-TOOL.LHA'))![12]).toBe('*');
-    expect(rows.find((r) => r.includes('OTL-DOOR.LHA'))![12]).toBe(' ');
-    expect(rows.find((r) => r.includes('OLDTHING.LHA'))![12]).toBe(' ');
+    expect(rows.find((r) => r.includes('PDX-TOOL.LHA'))![13]).toBe('*');
+    expect(rows.find((r) => r.includes('OTL-DOOR.LHA'))![13]).toBe(' ');
+    expect(rows.find((r) => r.includes('OLDTHING.LHA'))![13]).toBe(' ');
   });
 
   it('prints the header and its rule once, not per record', async () => {
@@ -141,5 +146,15 @@ describe('what actually reaches the wire', () => {
     // the columns, which is exactly how it stayed hidden.
     const raw = (await listAt(40, true)).join('\n');
     expect(raw).not.toMatch(/~[A-Za-z0-9_]*\|/);
+  });
+});
+
+describe('a size written the way this board writes them', () => {
+  it('prints 82MB, not 83968K clipped to six columns', async () => {
+    const rows = (await listAt(40, true)).map(glass);
+    const tool = rows.find((r) => r.includes('PDX-TOOL.LHA'))!;
+    expect(tool.indexOf('82MB')).toBe(5);
+    expect(tool).not.toContain('83968');
+    expect(tool.length).toBeLessThanOrEqual(40);
   });
 });

@@ -55,22 +55,25 @@ export interface CompiledFileLayout {
  */
 export const BUILT_IN_FILEVIEW_LAYOUT = `; AmiExpress-Web - the 40-column file view layout.
 ; Columns are 0-based. ~tNN pads forward with spaces and never truncates.
-; Fields: ~F_NUM ~F_NAME ~F_SIZE ~F_BLOCKS ~F_FLAG ~F_NEW ~F_DATE
+; Fields: ~F_NUM ~F_NAME ~F_SIZE ~F_SIZE_RAW ~F_BLOCKS ~F_FLAG ~F_NEW ~F_DATE
 ;         ~F_VERSION ~F_DESC ~F_GROUP ~F_AUTHOR
+; ~F_SIZE_RAW prints the size the DIR file wrote - 82MB - where ~F_SIZE
+; converts to K, which reads as 83968K for the same file and loses its K to
+; the six-column field. Swap them here if you prefer the K.
 ; A line whose every field is empty and which has no other printable
 ; character is not printed at all.
 [HEADER]
-~c7|#~t05|Size~t13|Filename~t31|Date
+~c7|#~t05|Size~t14|Filename~t31|Date
 ~c4|▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
 [ROW]
-~c7|~4F_NUM|~t05|~c2|~6F_SIZE|~t11|~c3|~1F_FLAG|~1F_NEW|~t13|~c6|~12F_NAME|~t31|~c4|~9F_DATE|
+~c7|~4F_NUM|~t05|~c2|~6F_SIZE_RAW|~t12|~c3|~1F_FLAG|~1F_NEW|~t14|~c6|~12F_NAME|~t31|~c4|~9F_DATE|
 [FOOTER]
 ~c4|▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
 [RECORD]
 ~c6|~F_GROUP|
 ~c7|~F_DESC|
 ~c3|~F_NAME| ~F_VERSION|
-~c2|~F_SIZE| ~F_FLAG|~t31|~c4|~F_DATE|
+~c2|~F_SIZE_RAW| ~F_FLAG|~t31|~c4|~F_DATE|
 `;
 
 /**
@@ -84,7 +87,7 @@ export const BUILT_IN_FILEVIEW_LAYOUT = `; AmiExpress-Web - the 40-column file v
  * would collide with five live codes. `F_` collides with none.
  */
 export const FILE_RECORD_FIELDS = [
-  'NUM', 'NAME', 'SIZE', 'BLOCKS', 'FLAG', 'NEW',
+  'NUM', 'NAME', 'SIZE', 'SIZE_RAW', 'BLOCKS', 'FLAG', 'NEW',
   'DATE', 'VERSION', 'DESC', 'GROUP', 'AUTHOR',
 ] as const;
 

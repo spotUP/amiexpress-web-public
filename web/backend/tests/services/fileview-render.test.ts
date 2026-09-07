@@ -40,9 +40,9 @@ describe('the shipped FILEVIEW.40, rendering a list row', () => {
   it('produces the columns the design specifies', () => {
     expect(row.indexOf('12')).toBe(0);
     expect(row.indexOf('40K')).toBe(5);
-    expect(row[11]).toBe('P');
-    expect(row[12]).toBe('*');
-    expect(row.indexOf('OTL-DOOR.LHA')).toBe(13);
+    expect(row[12]).toBe('P');
+    expect(row[13]).toBe('*');
+    expect(row.indexOf('OTL-DOOR.LHA')).toBe(14);
     expect(row.indexOf('03-28-18')).toBe(31);
   });
 
