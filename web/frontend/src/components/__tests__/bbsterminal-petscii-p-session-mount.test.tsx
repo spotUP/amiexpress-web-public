@@ -292,7 +292,7 @@ describe("answering 'P8' at the graphics prompt", () => {
       socket.fire('terminal-resize', { cols: 80, rows: 25 });
       socket.fire('petscii-mode', { cols: 80, rows: 25, palette: 'vic' });
     });
-    expect(await shapeOf(container)).toBeCloseTo(672 / 232, 5);
+    expect(await shapeOf(container)).toBeCloseTo(672 / 432, 5);
     expect(escaped).toEqual([]);
   });
 

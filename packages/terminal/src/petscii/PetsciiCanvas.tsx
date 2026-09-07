@@ -66,16 +66,38 @@ const BORDER_PER_SCALE = 16; // px of border per axis, per unit of scale - match
 // Bordered screen footprint per unit of integer scale: 40*8 + 2*16 = 352
 // wide, 25*8 + 2*16 = 232 tall. Derived from the same constants `border`/
 // `width`/`height` use below so the two can never drift apart.
+/**
+ * How TALL a character is, in stored pixels, at a given screen width.
+ *
+ * A C128 in 80-column mode puts twice as many characters across the same
+ * physical screen a C64 puts 40 across, so an 80-column character is half as
+ * wide as a 40-column one and the SCREEN keeps its shape. Drawn with square
+ * 8x8 cells instead, the wide screen came out twice as wide as it is tall:
+ * "the 80 column petscii looks very horizontally stretched" (sysop, live
+ * board, 2026-09-07), whose own fix was "double each chars height" - the same
+ * proportion, arrived at by eye.
+ *
+ * Doubling the HEIGHT is the version drawn here, rather than halving the
+ * width: every one of the glyph's eight columns survives, where a horizontal
+ * squeeze would throw half of them away before the browser ever saw it. The
+ * cell becomes 8x16, the screen 672x432, and its shape (1.56) is a C64
+ * screen's (1.52).
+ */
+const WIDE_ROW_DOUBLING = 2;
+const cellHeightFor = (cols: number): number =>
+  CELL_PX * (cols > DEFAULT_COLS ? WIDE_ROW_DOUBLING : 1);
+
 const unitWidthFor = (cols: number): number => cols * CELL_PX + 2 * BORDER_PER_SCALE;
-const unitHeightFor = (rows: number): number => rows * CELL_PX + 2 * BORDER_PER_SCALE;
+const unitHeightFor = (rows: number, cols: number = DEFAULT_COLS): number =>
+  rows * cellHeightFor(cols) + 2 * BORDER_PER_SCALE;
 /**
  * The footprint per unit of integer scale, for anything that needs to
  * reserve room before a machine exists: 352x232 for a C64's screen, and
  * 672x232 for the wide one (petscii80 phase 0 measured both).
  */
 export const PETSCII_UNIT_FOOTPRINT = {
-  c64: { width: unitWidthFor(DEFAULT_COLS), height: unitHeightFor(DEFAULT_ROWS) },
-  wide: { width: unitWidthFor(80), height: unitHeightFor(DEFAULT_ROWS) },
+  c64: { width: unitWidthFor(DEFAULT_COLS), height: unitHeightFor(DEFAULT_ROWS, DEFAULT_COLS) },
+  wide: { width: unitWidthFor(80), height: unitHeightFor(DEFAULT_ROWS, 80) },
 } as const;
 
 /**
@@ -116,7 +138,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
   const cols = machine.state.cols || DEFAULT_COLS;
   const rows = machine.state.rows || DEFAULT_ROWS;
   const unitW = unitWidthFor(cols);
-  const unitH = unitHeightFor(rows);
+  const unitH = unitHeightFor(rows, cols);
 
   // Measure the parent container (ResizeObserver + an initial synchronous
   // measure) and recompute the continuous fit ratio. `maxScale` (the
@@ -138,8 +160,8 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
     ro.observe(el);
     return () => ro.disconnect();
     // The footprint is part of the measurement: an 80-column screen is
-    // 672x232 per unit of scale where a C64's is 352x232, so a mode change
-    // has to re-fit.
+    // 672x432 per unit of scale where a C64's is 352x232 - a taller cell, not
+    // a wider screen - so a mode change has to re-fit.
   }, [unitW, unitH]);
 
   // Fill-fit policy (sysop live-screenshot review, final wave addendum): a
@@ -155,8 +177,10 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
   const scale = Math.max(1, Math.min(maxScale, Math.ceil(fitScale)));
 
   const border = 16 * scale;
-  const width = cols * CELL_PX * scale + 2 * border;
-  const height = rows * CELL_PX * scale + 2 * border;
+  const cellW = CELL_PX * scale;
+  const cellH = cellHeightFor(cols) * scale;
+  const width = cols * cellW + 2 * border;
+  const height = rows * cellH + 2 * border;
 
   // Build the glyph atlas once per mount.
   useEffect(() => {
@@ -189,7 +213,10 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
     ctx.imageSmoothingEnabled = false;
 
     const s = machine.state;
-    const destCell = CELL_PX * scale;
+    // One cell on the glass. Square on a C64; twice as tall as it is wide on
+    // the wide screen, where 80 characters share a C64's width.
+    const destW = cellW;
+    const destH = cellH;
 
     // Border.
     ctx.fillStyle = palette[s.border & 0x0F];
@@ -197,7 +224,7 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
 
     // Screen background.
     ctx.fillStyle = palette[s.background & 0x0F];
-    ctx.fillRect(border, border, cols * destCell, rows * destCell);
+    ctx.fillRect(border, border, cols * destW, rows * destH);
 
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
@@ -207,9 +234,9 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
         const color = palette[s.colorRam[idx] & 0x0F];
         const tinted = atlasCache.get(color);
         const sx = glyphCellIndex(s.charsetBank, screenCode) * ATLAS_PX_SIZE;
-        const dx = border + x * destCell;
-        const dy = border + y * destCell;
-        ctx.drawImage(tinted, sx, 0, ATLAS_PX_SIZE, ATLAS_PX_SIZE, dx, dy, destCell, destCell);
+        const dx = border + x * destW;
+        const dy = border + y * destH;
+        ctx.drawImage(tinted, sx, 0, ATLAS_PX_SIZE, ATLAS_PX_SIZE, dx, dy, destW, destH);
       }
     }
 
@@ -229,13 +256,13 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
     if (effectiveCursorOn) {
       const cursorIdx = s.cursorY * cols + s.cursorX;
       ctx.fillStyle = palette[s.colorRam[cursorIdx] & 0x0F];
-      ctx.fillRect(border + s.cursorX * destCell, border + s.cursorY * destCell, destCell, destCell);
+      ctx.fillRect(border + s.cursorX * destW, border + s.cursorY * destH, destW, destH);
     }
     // `cursorVisible` belongs in this list: without it a change to the
     // override kept the STALE closure - the repaint effects below re-run on
     // `draw`'s identity, so a prop the memo does not watch cannot reach the
     // glass until something else happens to change.
-  }, [machine, palette, scale, cursorOn, cursorVisible, width, height, border]);
+  }, [machine, palette, scale, cursorOn, cursorVisible, width, height, border, cellW, cellH, cols, rows]);
 
   // Keep a ref to the latest draw() so the onUpdate subscription below
   // doesn't need to be torn down and rebuilt every cursor blink.
@@ -335,9 +362,11 @@ export const PetsciiCanvas = forwardRef<PetsciiCanvasHandle, PetsciiCanvasProps>
           // attributes above; leaving the CSS size on 'auto' lets the
           // canvas's own intrinsic size (that resolution) drive layout like
           // an <img>. max-width/max-height only bite when the container is
-          // smaller than even scale 1 (352x232) - see `fitScale` above -
-          // proportionally shrinking the crisp pixel art instead of letting
-          // it overflow.
+          // smaller than even scale 1 (352x232 for a C64, 672x432 for the
+          // wide screen) - see `fitScale` above - proportionally shrinking the
+          // crisp pixel art instead of letting it overflow. The wide screen's
+          // proportions are already IN that resolution, because its cells are
+          // drawn twice as tall.
           width: 'auto',
           height: 'auto',
           maxWidth: '100%',

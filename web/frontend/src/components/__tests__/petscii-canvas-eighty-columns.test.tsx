@@ -37,11 +37,23 @@ function fill(machine: PetsciiMachine): void {
 }
 
 describe('PetsciiCanvas at either width', () => {
-  it('the wide screen is 672x232 per unit of scale, where a C64 is 352x232', () => {
+  /**
+   * The wide screen is a DENSER screen, not a wider one: a C128 fits 80
+   * characters across the same physical width a C64 fits 40 across, so its
+   * characters are half as wide. Drawn with square 8x8 cells the whole screen
+   * came out twice as wide as it is tall - "the 80 column petscii looks very
+   * horizontally stretched" (sysop, live board, 2026-09-07). The cell is
+   * twice as tall instead, which is the same proportion with every one of the
+   * glyph's eight columns kept.
+   */
+  it('the wide screen is 672x432 per unit of scale, where a C64 is 352x232', () => {
     expect(PETSCII_UNIT_FOOTPRINT).toEqual({
       c64: { width: 352, height: 232 },
-      wide: { width: 672, height: 232 },
+      wide: { width: 672, height: 432 },
     });
+    const shape = (f: { width: number; height: number }) => f.width / f.height;
+    // Both read as a screen, not a letterbox: a C64's 1.52 against 1.56.
+    expect(shape(PETSCII_UNIT_FOOTPRINT.wide)).toBeCloseTo(shape(PETSCII_UNIT_FOOTPRINT.c64), 1);
   });
 
   it('paints two thousand cells at 80x25, and one thousand at 40x25', async () => {
@@ -59,13 +71,13 @@ describe('PetsciiCanvas at either width', () => {
     }
   });
 
-  it('the backing store is as wide as the screen it draws', async () => {
+  it('the backing store is the shape of the screen it draws', async () => {
     const wide = new WideScreenMachine();
     const { container } = render(<PetsciiCanvas machine={wide} scale={1} />);
     const canvas = container.querySelector('canvas') as HTMLCanvasElement;
     await waitFor(() => expect(canvas.width).toBeGreaterThan(0));
-    // 80 * 8 + 2 * 16 at scale 1, the wide footprint above.
-    expect([canvas.width, canvas.height]).toEqual([672, 232]);
+    // 80 * 8 + 2 * 16 wide, 25 * 16 + 2 * 16 tall, at scale 1.
+    expect([canvas.width, canvas.height]).toEqual([672, 432]);
 
     cleanup();
     const c64 = new PetsciiMachine();
