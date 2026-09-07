@@ -314,6 +314,8 @@ RUN mkdir -p /app/logs /app/default-data
 COPY Screens /app/default-data/Screens
 COPY Bulletins /app/default-data/Bulletins
 COPY Commands /app/default-data/Commands
+# The sysop-editable layout templates - see the entrypoint's Prompts block.
+COPY Prompts /app/default-data/Prompts
 COPY Conf1 /app/default-data/Conf1
 COPY Conf2 /app/default-data/Conf2
 COPY Conf3 /app/default-data/Conf3

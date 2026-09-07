@@ -714,6 +714,27 @@ else
         rm -f "$COMMANDS_LIST"
     fi
 
+    # Prompts/: the sysop-editable LAYOUT templates - today just
+    # FILEVIEW.40, the 40-column file view's columns (the C64 file-view
+    # design, "The layout is data"). Tracked for exactly the reason Commands
+    # and Screens are: an image update must reach a board that never touched
+    # the file, and must NOT revert a board that did.
+    #
+    # It is its own tree rather than a corner of Screens/ because it is not a
+    # screen: nothing ever displays it, `displayScreen` never routes to it,
+    # and a sysop looking for "the thing that decides my file columns" should
+    # not have to know it lives among the art.
+    echo "[Entrypoint] Syncing Prompts (tracked)..."
+    if [ -d "$DEFAULT_DATA_DIR/Prompts" ]; then
+        PROMPTS_LIST=$(mktemp)
+        (cd "$DEFAULT_DATA_DIR" && find Prompts -type f -print) > "$PROMPTS_LIST"
+        while IFS= read -r rel; do
+            [ -n "$rel" ] || continue
+            sync_tracked_case_aware "$rel"
+        done < "$PROMPTS_LIST"
+        rm -f "$PROMPTS_LIST"
+    fi
+
     # Screens/: the same rule, and for the same reason.
     #
     # These were seeded FIRST RUN ONLY, so every screen edited in the repo
