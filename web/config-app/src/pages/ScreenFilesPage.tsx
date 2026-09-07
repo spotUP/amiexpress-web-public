@@ -304,15 +304,23 @@ export function ScreenFilesPage() {
    * user select among his themes and the gallery etc updates".
    */
   const [theme, setTheme] = useState('default');
-  const { data: themeList } = useQuery({
+  /*
+   * The SAME key and the SAME shape as ScreenThemesPage's query.
+   *
+   * This cached the unwrapped payload while that page caches the ENVELOPE and
+   * unwraps at the use site. React Query keys the cache, not the shape, so
+   * whichever ran last won - and the Screens workspace opens on THIS tab, so
+   * the themes page then read `data.data`, got undefined, and decided the
+   * sysop could not create a theme. The New theme button vanished.
+   */
+  const { data: themeEnvelope } = useQuery({
     queryKey: ['screen-themes'],
-    queryFn: async () => (await apiClient.getScreenThemes()).data as {
-      themes: { slug: string; title: string; status: string }[];
-    },
+    queryFn: () => apiClient.getScreenThemes(),
   });
+  const themeList = (themeEnvelope as { data?: { themes?: Array<{ slug: string; title: string; status: string }> } } | undefined)?.data;
   const themeTitle = theme === 'default'
     ? 'the board itself'
-    : (themeList?.themes.find(t => t.slug === theme)?.title ?? theme);
+    : (themeList?.themes?.find(t => t.slug === theme)?.title ?? theme);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['screen-index', theme],
