@@ -32,8 +32,6 @@
       "@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/*": [
         "../../sdk/engines/ui/ansi-editor/*"
       ],
-      "@amiexpress/terminal/rip": ["../../packages/terminal/src/rip/index.ts"],
-      "@amiexpress/terminal/rip/*": ["../../packages/terminal/src/rip/*"],
       "@bbs/screens/*": ["../backend/src/screens/*"],
       "@bbs/config-services/*": ["../backend/src/services/config-services/*"]
     }

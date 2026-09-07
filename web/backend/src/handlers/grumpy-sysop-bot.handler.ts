@@ -28,9 +28,20 @@ interface ChatContext {
  */
 export interface AIProviderConfig {
   provider: 'groq' | 'gemini' | 'openrouter' | 'rule-based';
-  modelName: string;
-  temperature: number;
-  systemPrompt: string;
+  /**
+   * The three below belong to the AI providers, not to the bot.
+   *
+   * They are OPTIONAL because `provider: 'rule-based'` needs none of them -
+   * there is no model to name, no temperature to set and no system prompt
+   * to send - and because every reader has always defaulted them anyway
+   * (`aiConfig.systemPrompt || GRUMPY_SYSOP_PERSONALITY`,
+   * `aiConfig.modelName || 'llama-3.1-8b-instant'`). Declaring them
+   * required made the type disagree with its own code, and forced a
+   * rule-based caller to invent a model name to satisfy the compiler.
+   */
+  modelName?: string;
+  temperature?: number;
+  systemPrompt?: string;
   groqApiKey?: string;
   geminiApiKey?: string;
   openRouterApiKey?: string;

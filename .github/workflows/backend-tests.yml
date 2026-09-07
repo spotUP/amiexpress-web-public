@@ -144,6 +144,25 @@ jobs:
           cache: 'npm'
           cache-dependency-path: web/config-app/package-lock.json
 
+      # config-app imports `@amiexpress/terminal`, and that package's types
+      # are its BUILT dist (its package.json "exports" points every subpath
+      # at dist/*.d.ts). Nothing builds it on install - there is no prepare
+      # script and this repo has no workspaces - so a bare checkout
+      # type-checked against a package that did not exist yet and failed with
+      # "Cannot find module '@amiexpress/terminal'". The terminal package
+      # imports the SDK, so the SDK is built first.
+      #
+      # --ignore-scripts on both: they depend on each other through `file:`
+      # paths, and npm's automatic prepare for a file: dependency rebuilds it
+      # WITHOUT its dev dependencies, which fails.
+      - name: Build the SDK
+        working-directory: sdk
+        run: npm ci --no-audit --no-fund --ignore-scripts && npm run build
+
+      - name: Build the terminal package
+        working-directory: packages/terminal
+        run: npm ci --no-audit --no-fund --ignore-scripts && npm run build
+
       - name: Install config-app deps
         working-directory: web/config-app
         run: npm ci --no-audit --no-fund
