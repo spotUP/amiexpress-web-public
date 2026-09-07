@@ -6,6 +6,7 @@
  */
 
 import { utf8ChunkEnd } from '../utils/utf8-chunk.util';
+import { C64_COLUMNS, petsciiColumnsOf } from '../amiga-emulation/xim/screen-width.util';
 import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
@@ -224,6 +225,30 @@ export function setConferences(confs: Conference[]) {
 /** The injected conference list, read by the shared MCI pre-passes. */
 export function getConferences(): Conference[] {
   return conferences;
+}
+
+/**
+ * Is this caller served PETSCII ART - the hand-drawn `.seq` screens?
+ *
+ * A `.seq` is 40 columns wide by definition: a C64 screen the sysop drew
+ * cell by cell. There is no fold that makes one 80 columns without
+ * stretching it or leaving half the screen empty, so an 80-column PETSCII
+ * caller is served the ordinary ANSI screen instead - which costs him
+ * nothing, because the transducer turns it into PETSCII on the wire exactly
+ * as it does every other byte the board sends him.
+ *
+ * The same sentence a door's `<name>_C64` files already follow
+ * (xim/io-file-display.ts): art named for the C64's screen is 40 columns
+ * wide, and an 80-column caller gets the ordinary file. 80-column `.seq` art
+ * is a sysop commission, not something this resolver can invent.
+ *
+ * ONE predicate, because the choice is made in two places - the extension
+ * order in loadScreenFile's variant list, and resolvePetsciiPath, which
+ * swaps a resolved `.txt` for its `.seq` neighbour. A caller who passed the
+ * first and failed the second would be served the art anyway.
+ */
+export function servesPetsciiArt(session: { petsciiMode?: boolean; petsciiColumns?: number } | null | undefined): boolean {
+  return session?.petsciiMode === true && petsciiColumnsOf(session) === C64_COLUMNS;
 }
 
 function resolvePetsciiPath(originalPath: string, petsciiEnabled: boolean): string {
@@ -1050,14 +1075,14 @@ export function loadScreenFile(
     const dir = path.dirname(normalizedAbs);
     const base = path.basename(normalizedAbs);
     const resolved = findCaseInsensitive(dir, base) || normalizedAbs;
-    paths.push(resolvePetsciiPath(resolved, !!session?.petsciiMode));
+    paths.push(resolvePetsciiPath(resolved, servesPetsciiArt(session)));
   } else if (effectiveName.includes(':')) {
     // Use centralized BBS path resolver for Amiga assigns (BBS:, WORK:, NODE:, etc.)
     const resolved = bbsPaths.resolveAmigaPath(effectiveName, nodeId);
     const dir = path.dirname(resolved);
     const base = path.basename(resolved);
     const ci = findCaseInsensitive(dir, base) || resolved;
-    const normalized = resolvePetsciiPath(ci, !!session?.petsciiMode).replace(new RegExp(`^${baseDir}/bbs/`, 'i'), `${baseDir}/`);
+    const normalized = resolvePetsciiPath(ci, servesPetsciiArt(session)).replace(new RegExp(`^${baseDir}/bbs/`, 'i'), `${baseDir}/`);
     if (normalized !== ci) {
 console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${ci} -> ${normalized}`);
     }
@@ -1178,10 +1203,12 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
     return Array.from(variants);
   };
 
+  const wantsPetsciiArt = servesPetsciiArt(session);
+
   const filenameVariations = (() => {
     // Special-case BBSTITLE: try .TXT first to avoid noisy extensionless probes
     if (screenName.toUpperCase() === 'BBSTITLE') {
-      if (session?.petsciiMode) {
+      if (wantsPetsciiArt) {
         return [...addPetsciiVariants(screenName)];
       } else if (session?.ripMode) {
         return [...addRipVariants(screenName)];
@@ -1189,7 +1216,7 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
       return ['BBSTITLE.txt', 'BBSTITLE.TXT', 'BBSTITLE'];
     }
     if (screenName.toUpperCase() === 'AWAITSCREEN') {
-      if (session?.petsciiMode) {
+      if (wantsPetsciiArt) {
         return [...addPetsciiVariants(screenName)];
       } else if (session?.ripMode) {
         return [...addRipVariants(screenName)];
@@ -1198,7 +1225,7 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
     }
     // Use actualFileName for mapped screen types (e.g., NODE_BULL -> BULL)
     const fileToFind = actualFileName;
-    if (session?.petsciiMode) {
+    if (wantsPetsciiArt) {
       return isC64Client ? addPetsciiVariants(`${fileToFind}_C64`) : addPetsciiVariants(fileToFind);
     }
     if (session?.ripMode) {
@@ -1215,7 +1242,7 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
     // Skip security-numbered lookup when the screen already used an assign (bbs:, node:, etc.)
     if (!isAssignPath) {
       const securityBasePath = path.join(location.dir, screenBaseNoExt);
-      const securityVariant = findSecurityScreen(securityBasePath, userSecLevel, null, session?.ripMode ?? false, false, !!session?.petsciiMode);
+      const securityVariant = findSecurityScreen(securityBasePath, userSecLevel, null, session?.ripMode ?? false, false, servesPetsciiArt(session));
       if (securityVariant) {
         screenDebug(`[loadScreenFile]  Found security screen for ${screenName} at: ${securityVariant}`);
         try {
@@ -1250,7 +1277,7 @@ console.error(`[loadScreenFile]     (error reading security screen: ${(error as 
         screenDebug(`[loadScreenFile]  Found screen ${screenName} at: ${foundPath}`);
         let fileToUse: string = foundPath;
         try {
-          fileToUse = resolvePetsciiPath(foundPath, !!session?.petsciiMode);
+          fileToUse = resolvePetsciiPath(foundPath, servesPetsciiArt(session));
           const isPetsciiFile = isPetsciiSeqFile(fileToUse);
           if (isPetsciiFile) {
             screenDebug(`[loadScreenFile] PETSCII .seq file detected, converting for PetMe64 font`);
@@ -1293,7 +1320,7 @@ console.error(`[loadScreenFile]     (error reading file: ${(error as Error).mess
     // For assign paths (bbs:, node:, work:), also honor security-numbered variants (LOGON20.TXT, etc.)
     if (isAssignPath) {
       const baseWithoutExt = filePath.replace(/\.[^/.]+$/, '');
-      const secPath = findSecurityScreen(baseWithoutExt, userSecLevel, null, session?.ripMode ?? false, false, !!session?.petsciiMode);
+      const secPath = findSecurityScreen(baseWithoutExt, userSecLevel, null, session?.ripMode ?? false, false, servesPetsciiArt(session));
       if (secPath) {
         screenDebug(`[loadScreenFile]  Found security screen for assign path: ${secPath}`);
         try {
@@ -1315,7 +1342,7 @@ console.error(`[loadScreenFile]     (error reading security screen: ${(error as 
     }
 
     try {
-      const candidatePath = resolvePetsciiPath(filePath, !!session?.petsciiMode);
+      const candidatePath = resolvePetsciiPath(filePath, servesPetsciiArt(session));
       // Try the path as-is, then with common extensions (.txt, .TXT, .ans, .ANS)
       // This handles ~SR_ which generates paths like "001.logoff" but files are "001.logoff.txt"
       // Same rule as the variant builders above, for the arm an absolute or
@@ -1324,7 +1351,9 @@ console.error(`[loadScreenFile]     (error reading security screen: ${(error as 
       // SWAPPED, not appended: `001.logoff.seq` must be able to land on
       // `001.logoff.txt`, which is the only file the shipped board ships.
       const pathStem = stripScreenExtension(candidatePath);
-      const extOrder = session?.petsciiMode
+      // `.seq` first only for a caller who is served 40-column art; an
+      // 80-column PETSCII caller takes the ANSI order, as an ANSI caller does.
+      const extOrder = servesPetsciiArt(session)
         ? ['.seq', '.SEQ', '.txt', '.TXT', '.ans', '.ANS']
         : ['.txt', '.TXT', '.ans', '.ANS'];
       const pathsToTry = [candidatePath, ...extOrder.map(ext => pathStem + ext)]
