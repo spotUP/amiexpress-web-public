@@ -1,7 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import { findCaseInsensitive } from './amigafs';
-import { getSystemTime } from '../utils/date-time.util';
 
 /**
  * DIR File Reader Utility
@@ -107,38 +106,71 @@ export function parseDirEntry(lines: string[], startIndex: number): DirFileEntry
     }
   }
 
-  // Parse date (field 2, format: DD-MMM-YY)
-  // Example: "23-Oct-25"
+  // THE DATE COLUMN IS `mm-dd-yy`, and this reader used to refuse it.
+  //
+  // express.e:27962-27963 identifies the column by SHAPE - eight characters,
+  // first one a digit, `-` at [2] and [5] - and its own prompt spells the
+  // format out: "Date as (mm-dd-yy) to search from" (express.e:27873). Every
+  // DIR file this board inherited is written that way; measured on the live
+  // volume, `Conf12/Dir1` holds 81 records dated `03-28-18` and the like.
+  //
+  // This port accepted ONLY `23-Oct-25`, a form of its own invention that
+  // `utils/dir-file.util.ts` writes. So on a real record the date fell through
+  // to the description, and - worse - `uploadDate` DEFAULTED TO NOW. Every
+  // legacy file read as uploaded today, which is what made `N` (new files)
+  // meaningless: everything was always new. Both forms are read now, the
+  // canonical one first.
   let uploadDateDisplay = '';
-  let uploadDate = getSystemTime();
+  let uploadDate: Date | null = null;
   let description = '';
 
-  // Parse date from field 2 (format: DD-MMM-YY)
-  if (fields.length >= 3 && fields[2].match(/^\d{1,2}-[A-Za-z]{3}-\d{2}$/)) {
-    uploadDateDisplay = fields[2];
+  const dateField = fields.length >= 3 ? fields[2] : '';
 
-    // Parse date (DD-MMM-YY format)
-    const dateParts = uploadDateDisplay.split('-');
-    if (dateParts.length === 3) {
-      const day = parseInt(dateParts[0]);
-      const monthStr = dateParts[1].toLowerCase();
-      const year = parseInt(dateParts[2]) + 2000; // Assume 20xx
+  // express.e's own two-digit year: `ydt > year` compares them raw, with no
+  // century at all. A Date needs one, so the usual pivot - 80 and up is the
+  // 1900s, which puts a 1992 Amiga upload in 1992 and a 2026 one in 2026.
+  const century = (yy: number): number => (yy >= 80 ? 1900 + yy : 2000 + yy);
 
-      const months: { [key: string]: number } = {
-        'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5,
-        'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11
-      };
+  const MONTHS: { [key: string]: number } = {
+    jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+    jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+  };
 
-      const month = months[monthStr] ?? 0;
-      uploadDate = new Date(year, month, day);
+  const canonical = dateField.match(/^(\d{2})-(\d{2})-(\d{2})$/);
+  const portForm = dateField.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2})$/);
+
+  if (canonical) {
+    // mm-dd-yy, express.e's format and what the board's own files carry.
+    uploadDateDisplay = dateField;
+    uploadDate = new Date(
+      century(parseInt(canonical[3], 10)),
+      parseInt(canonical[1], 10) - 1,
+      parseInt(canonical[2], 10),
+    );
+  } else if (portForm) {
+    // dd-Mon-yy, what utils/dir-file.util.ts writes today.
+    uploadDateDisplay = dateField;
+    const month = MONTHS[portForm[2].toLowerCase()];
+    if (month !== undefined) {
+      uploadDate = new Date(
+        century(parseInt(portForm[3], 10)),
+        month,
+        parseInt(portForm[1], 10),
+      );
     }
+  }
 
-    // Description is everything after date (fields 3+)
+  if (uploadDate && !Number.isNaN(uploadDate.getTime())) {
+    // Description is everything after the date.
     if (fields.length > 3) {
       description = fields.slice(3).join(' ');
     }
   } else {
-    // No valid date, description starts after size
+    // NO DATE THIS READER UNDERSTANDS. It must not claim the file arrived
+    // now - that is the bug above, and it makes a twenty-year-old upload the
+    // newest thing on the board. Undated records sort and scan as OLD.
+    uploadDate = new Date(0);
+    uploadDateDisplay = '';
     if (fields.length > 2) {
       description = fields.slice(2).join(' ');
     }

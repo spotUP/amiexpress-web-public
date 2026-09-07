@@ -320,13 +320,18 @@ describe('DIR File Reader Utility', () => {
       expect(entry!.rawLines.length).toBe(2);
     });
 
-    it('should use system time for upload date when date invalid', () => {
+    it('dates a record it cannot read as OLD, never as now', () => {
       const lines = ['file.txt     P  100K  InvalidDate  Test'];
       const entry = parseDirEntry(lines, 0);
 
-      // Should use system time (not parsed from invalid date string)
+      // REVERSED 2026-09-07. This used to assert the system time, and that is
+      // the bug: a record whose date column the reader could not parse became
+      // the NEWEST file on the board. Every DIR file this board inherited is
+      // `mm-dd-yy`, which this reader refused until today, so on the live
+      // volume that was every record - and `N` (new files) listed everything,
+      // for ever, whatever date the caller gave.
       expect(entry!.uploadDate).toBeInstanceOf(Date);
-      expect(entry!.uploadDate.getFullYear()).toBeGreaterThan(2020);
+      expect(entry!.uploadDate.getTime()).toBe(0);
       expect(entry!.uploadDateDisplay).toBe('');
     });
 
