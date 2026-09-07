@@ -138,6 +138,25 @@ function accumulatePause(session: BBSSession, which: PauseKind, data: string): I
   const bufferField = BUFFER_FIELD[which];
   if (state[bufferField] === undefined) state[bufferField] = '';
 
+  /**
+   * SPACE on an EMPTY buffer submits, exactly as RETURN does.
+   *
+   * The sysop, 2026-09-07: "Some BBS prompts are not dismissable with
+   * SPACE." Both pause prompts read a LINE, so a space used to be typed
+   * into the buffer and nothing happened until the caller also pressed
+   * RETURN - and a space is what every pager on every other system takes
+   * for "next page". Both handlers already read an empty line as "more",
+   * so this submits the same empty line RETURN submits; no handler needed
+   * a new branch, and no prompt gained a second meaning.
+   *
+   * Only on an empty buffer. `NS`, and a filename with a space in it, are
+   * still lines a caller can type at these prompts.
+   */
+  if (data === ' ' && state[bufferField] === '') {
+    const handler = state[HANDLER_FIELD[which]] as (line: string) => void;
+    return { kind: 'pause', which, handler, line: '', echo: null };
+  }
+
   // CR or LF submits the line.
   if (data === '\r' || data === '\n') {
     const handler = state[HANDLER_FIELD[which]] as (line: string) => void;
