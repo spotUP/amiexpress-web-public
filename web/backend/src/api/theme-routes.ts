@@ -218,3 +218,94 @@ themesRouter.post('/default', (req: Request, res: Response) => {
   setDefaultTheme(bbsRoot, slug);
   ok(res, { defaultSlug: slug }, `The board default is now "${slug}"`);
 });
+
+/**
+ * Where a board screen lives INSIDE a theme.
+ *
+ * The theme tree is keyed on the SCOPE the loader computes, not on the board's
+ * directory names (`screen-resolution.ts:138-148`), so a copy has to be
+ * translated rather than mirrored:
+ *
+ *   Screens/BULL.TXT        -> Board/BULL.TXT
+ *   BULL.TXT                -> Board/BULL.TXT      (the board root)
+ *   Conf1/MENU250.TXT       -> Conf/1/MENU250.TXT
+ *   Conf1/Screens/MENU.TXT  -> Conf/1/MENU.TXT
+ *   Node3/LOGON.txt         -> Node/LOGON.txt      (one Node/ serves them all)
+ *
+ * Anything else - a bulletin reached by path, a `~SR_` pool member - keeps its
+ * shape under `Files/`, which is the mirror those arms resolve through.
+ */
+export function themeTargetFor(relativePath: string): string | null {
+  const parts = relativePath.split(/[\\/]/).filter(part => part !== '' && part !== '.');
+  if (parts.length === 0) return null;
+  if (parts.includes('..')) return null;
+
+  const [head, ...rest] = parts;
+
+  if (/^Screens$/i.test(head) && rest.length === 1) return path.join('Board', rest[0]);
+  if (rest.length === 0) return path.join('Board', head);
+
+  const conf = /^Conf(\d+)$/i.exec(head);
+  if (conf) {
+    const tail = /^Screens$/i.test(rest[0]) ? rest.slice(1) : rest;
+    if (tail.length === 1) return path.join('Conf', conf[1], tail[0]);
+    return path.join('Files', ...parts);
+  }
+
+  if (/^Node\d+$/i.test(head)) {
+    const tail = /^Screens$/i.test(rest[0]) ? rest.slice(1) : rest;
+    if (tail.length === 1) return path.join('Node', tail[0]);
+    return path.join('Files', ...parts);
+  }
+
+  return path.join('Files', ...parts);
+}
+
+/**
+ * POST /api/themes/:slug/copy - start a theme's screen from the board's.
+ *
+ * An artist redrawing a screen wants what callers see today as the starting
+ * point, and the screen editor only REPLACES a file that exists - so without
+ * this a new theme is a set of empty directories with nothing to open.
+ */
+themesRouter.post('/:slug/copy', (req: Request, res: Response) => {
+  const bbsRoot = config.get('dataDir');
+  const who = caller(req);
+  const slug = String(req.params.slug ?? '').trim().toLowerCase();
+
+  const theme = readThemeRegistry(bbsRoot).themes.find(entry => entry.slug === slug);
+  if (!theme) return refuse(res, 404, `No such theme: "${slug}"`);
+  if (!isSysop(who) && !ownedThemes(bbsRoot, who).some(owned => owned.slug === slug)) {
+    return refuse(res, 403, 'That theme is not yours');
+  }
+
+  const from = String((req.body ?? {}).path ?? '').trim();
+  const target = themeTargetFor(from);
+  if (!from || !target) return refuse(res, 400, 'Name a board screen to copy');
+
+  const source = path.resolve(bbsRoot, from);
+  if (!source.startsWith(path.resolve(bbsRoot) + path.sep)) {
+    return refuse(res, 400, 'That path is outside the board');
+  }
+  if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
+    return refuse(res, 404, `The board has no screen at ${from}`);
+  }
+
+  const themeRoot = themeDirectory(bbsRoot, theme);
+  if (!themeRoot) return refuse(res, 400, `"${slug}" has no directory of its own`);
+
+  const destination = path.join(themeRoot, target);
+  if (fs.existsSync(destination)) {
+    return refuse(res, 409, `${theme.title} already has ${target} - edit it in the screen editor`);
+  }
+
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  // Bytes, never text: a screen carries Amiga high-bit art and a UTF-8 round
+  // trip turns each of those into three replacement bytes.
+  fs.copyFileSync(source, destination);
+
+  ok(res, {
+    from,
+    to: path.join(theme.dir, target),
+  }, `Copied into ${theme.title} - edit it in the screen editor`);
+});

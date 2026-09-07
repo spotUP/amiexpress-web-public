@@ -585,6 +585,14 @@ class ApiClient {
     });
   }
 
+  /** Copy a board screen into a theme, as the artist's starting point. */
+  async copyScreenIntoTheme(slug: string, boardPath: string) {
+    return this.request<ApiResponse>(`${API_BASE}/themes/${encodeURIComponent(slug)}/copy`, {
+      method: 'POST',
+      body: JSON.stringify({ path: boardPath }),
+    });
+  }
+
   async setDefaultScreenTheme(slug: string) {
     return this.request<ApiResponse>(`${API_BASE}/themes/default`, {
       method: 'POST',

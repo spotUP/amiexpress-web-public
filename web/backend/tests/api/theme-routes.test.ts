@@ -178,3 +178,68 @@ describe('the list a page renders', () => {
     expect(res.body.data.themes[0]).toMatchObject({ writable: true, wearable: true });
   });
 });
+
+describe('starting a theme screen from the board', () => {
+  const { themeTargetFor } = require('../../src/api/theme-routes');
+
+  it('translates a board path into the theme SCOPE, not a mirror of the directory', () => {
+    // The tree is keyed on the scope the loader computes; a node's directory
+    // is whatever its SCREENS tooltype says and a conference's is what
+    // LOCATION.n names, so mirroring those names would break on a renumber.
+    expect(themeTargetFor('Screens/BULL.TXT')).toBe('Board/BULL.TXT');
+    expect(themeTargetFor('BULL.TXT')).toBe('Board/BULL.TXT');
+    expect(themeTargetFor('Conf1/MENU250.TXT')).toBe('Conf/1/MENU250.TXT');
+    expect(themeTargetFor('Conf2/Screens/MENU.TXT')).toBe('Conf/2/MENU.TXT');
+    expect(themeTargetFor('Node3/LOGON.txt')).toBe('Node/LOGON.txt');
+    expect(themeTargetFor('Node3/Screens/LOGON.txt')).toBe('Node/LOGON.txt');
+  });
+
+  it('keeps anything reached by PATH under Files/, which is the mirror those arms read', () => {
+    expect(themeTargetFor('Conf1/Screens/Bulletins/Bull3.txt')).toBe('Files/Conf1/Screens/Bulletins/Bull3.txt');
+    expect(themeTargetFor('Screens/reference-board/001.txt')).toBe('Files/Screens/reference-board/001.txt');
+  });
+
+  it('refuses to climb out of the board', () => {
+    expect(themeTargetFor('../../etc/passwd')).toBeNull();
+    expect(themeTargetFor('')).toBeNull();
+  });
+
+  it('copies the board bytes in, so the artist starts from what callers see', async () => {
+    seed('neon');
+    fs.mkdirSync(path.join(root, 'Screens'), { recursive: true });
+    // High-bit Amiga art: the copy must be bytes, never a text round trip.
+    fs.writeFileSync(path.join(root, 'Screens', 'BULL.TXT'), Buffer.from([0x1b, 0x5b, 0x33, 0x31, 0x6d, 0xa1, 0xb0, 0x0a]));
+
+    const res = await request(app(artist)).post('/api/themes/neon/copy').send({ path: 'Screens/BULL.TXT' });
+
+    expect(res.status).toBe(200);
+    const copied = fs.readFileSync(path.join(root, 'Themes', 'neon', 'Board', 'BULL.TXT'));
+    expect([...copied]).toEqual([0x1b, 0x5b, 0x33, 0x31, 0x6d, 0xa1, 0xb0, 0x0a]);
+  });
+
+  it('will not overwrite what the artist has already drawn', async () => {
+    seed('neon');
+    fs.mkdirSync(path.join(root, 'Screens'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'Screens', 'BULL.TXT'), 'the board');
+    fs.mkdirSync(path.join(root, 'Themes', 'neon', 'Board'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'Themes', 'neon', 'Board', 'BULL.TXT'), 'the artist');
+
+    const res = await request(app(artist)).post('/api/themes/neon/copy').send({ path: 'Screens/BULL.TXT' });
+
+    expect(res.status).toBe(409);
+    expect(fs.readFileSync(path.join(root, 'Themes', 'neon', 'Board', 'BULL.TXT'), 'utf8')).toBe('the artist');
+  });
+
+  it("is refused for somebody else's theme", async () => {
+    seed('neon', { owner: 'other' });
+    fs.mkdirSync(path.join(root, 'Screens'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'Screens', 'BULL.TXT'), 'the board');
+
+    expect((await request(app(artist)).post('/api/themes/neon/copy').send({ path: 'Screens/BULL.TXT' })).status).toBe(403);
+  });
+
+  it('says so when the board has no such screen', async () => {
+    seed('neon');
+    expect((await request(app(artist)).post('/api/themes/neon/copy').send({ path: 'Screens/NOPE.TXT' })).status).toBe(404);
+  });
+});

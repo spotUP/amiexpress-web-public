@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Check, Send, Eye, Palette } from 'lucide-react';
+import { Plus, Check, Send, Eye, Palette, Copy } from 'lucide-react';
 
 import { apiClient } from '../api/client';
 import { Modal } from '../components/ui/Modal';
@@ -47,6 +47,9 @@ export function ScreenThemesPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  /** The theme a board screen is being copied into, and the screen to copy. */
+  const [copyInto, setCopyInto] = useState<ScreenTheme | null>(null);
+  const [copyPath, setCopyPath] = useState('');
   const [form, setForm] = useState({ slug: '', title: '', author: '', owner: '', widths: [80] as number[] });
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -80,6 +83,18 @@ export function ScreenThemesPage() {
       showSuccess(`"${variables.slug}" is now ${STATUS_LABEL[variables.status].toLowerCase()}`);
     },
     onError: (err: Error) => showError(`Could not change the status: ${err.message}`),
+  });
+
+  const copyMutation = useMutation({
+    mutationFn: ({ slug, boardPath }: { slug: string; boardPath: string }) =>
+      apiClient.copyScreenIntoTheme(slug, boardPath),
+    onSuccess: () => {
+      invalidate();
+      showSuccess('Copied in - open it in the screen editor to redraw it');
+      setCopyInto(null);
+      setCopyPath('');
+    },
+    onError: (err: Error) => showError(`Could not copy that screen: ${err.message}`),
   });
 
   const defaultMutation = useMutation({
@@ -141,6 +156,11 @@ export function ScreenThemesPage() {
       align: 'right',
       cell: row => (
         <div className="flex gap-2 justify-end">
+          {row.writable && row.dir !== '' && (
+            <button type="button" onClick={() => setCopyInto(row)} title="Start a screen from the board's">
+              <Copy size={16} />
+            </button>
+          )}
           {row.mine && row.status === 'draft' && (
             <button
               type="button"
@@ -191,6 +211,40 @@ export function ScreenThemesPage() {
         onRetry={() => refetch()}
         emptyMessage="No themes yet. The board wears its own screens."
       />
+
+      <Modal
+        open={copyInto !== null}
+        onClose={() => setCopyInto(null)}
+        title={copyInto ? `Start a screen in ${copyInto.title}` : 'Start a screen'}
+      >
+        <form
+          onSubmit={event => {
+            event.preventDefault();
+            if (copyInto) copyMutation.mutate({ slug: copyInto.slug, boardPath: copyPath });
+          }}
+        >
+          <label htmlFor="copy-path">The board screen to start from</label>
+          <input
+            id="copy-path"
+            value={copyPath}
+            onChange={event => setCopyPath(event.target.value)}
+            placeholder="Screens/BULL.TXT"
+            required
+          />
+          <p className="text-xs text-ink-muted">
+            Its bytes are copied into the theme, where the screen editor can open them.
+            <br />
+            <code>Screens/BULL.TXT</code> becomes <code>Board/BULL.TXT</code>,{' '}
+            <code>Conf1/MENU250.TXT</code> becomes <code>Conf/1/MENU250.TXT</code>, and a node&apos;s
+            screen becomes <code>Node/&lt;name&gt;</code> - one Node directory serves every node.
+          </p>
+
+          <div className="flex gap-2 justify-end mt-4">
+            <button type="button" onClick={() => setCopyInto(null)}>Cancel</button>
+            <button type="submit" disabled={copyMutation.isPending}>Copy in</button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal
         open={isCreateOpen}
