@@ -266,9 +266,20 @@ export interface FileIndexRow {
   indexed_at: number | null;
 }
 
-/** What this module needs of a database, so a test can hand it a fake. */
+/**
+ * What this module needs of a database, so a test can hand it a fake.
+ *
+ * TWO METHODS, because the driver under `Database` has two. `query()` prepares
+ * the statement and calls better-sqlite3's `.all()`, which THROWS on any
+ * statement that returns no rows - `This statement does not return data. Use
+ * run() instead`. Every write here went through `query()` until 2026-09-07 and
+ * so could not run at all: the sysop's first backfill on the live board died on
+ * the very first DELETE, and the mock in the unit tests answered `query` for
+ * anything, which is why nothing here was red. Writes take `run()`.
+ */
 export interface IndexDb {
   query(sql: string, params?: any[]): Promise<{ rows: any[] }>;
+  run(sql: string, params?: any[]): Promise<void>;
 }
 
 /**
@@ -283,7 +294,7 @@ export async function upsertFileIndex(
   key: IndexKey,
   facts: FileFacts,
 ): Promise<void> {
-  await db.query(
+  await db.run(
     `INSERT INTO file_index (
        conf_id, dir_number, filename, description, version, requires_bbs,
        author, release_group, group_source, category, diz_sha1, tags_sha1,
@@ -356,5 +367,5 @@ export async function dirIsStale(
 
 /** Drop every row for one DIR - used before a re-index so deletions vanish. */
 export async function clearDirIndex(db: IndexDb, confId: number, dirNumber: number): Promise<void> {
-  await db.query(`DELETE FROM file_index WHERE conf_id = $1 AND dir_number = $2`, [confId, dirNumber]);
+  await db.run(`DELETE FROM file_index WHERE conf_id = $1 AND dir_number = $2`, [confId, dirNumber]);
 }

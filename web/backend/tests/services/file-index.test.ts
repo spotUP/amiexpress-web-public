@@ -156,7 +156,7 @@ describe('the lookup, over a database', () => {
   const TAGS_SHA = tagsFingerprint(TAGS);
 
   /** A database that answers with whatever rows the test hands it. */
-  const dbOf = (rows: any[]): IndexDb => ({ query: async () => ({ rows }) });
+  const dbOf = (rows: any[]): IndexDb => ({ query: async () => ({ rows }), run: async () => undefined });
 
   const row = (over: Record<string, unknown> = {}) => ({
     conf_id: 1, dir_number: 1, filename: 'OTL-DOOR.LHA',
@@ -189,7 +189,7 @@ describe('the lookup, over a database', () => {
 });
 
 describe('the DIR freshness guard', () => {
-  const dbOf = (newest: unknown): IndexDb => ({ query: async () => ({ rows: [{ newest }] }) });
+  const dbOf = (newest: unknown): IndexDb => ({ query: async () => ({ rows: [{ newest }] }), run: async () => undefined });
 
   it('is stale when the DIR has never been indexed', async () => {
     expect(await dirIsStale(dbOf(null), 1, 1, 1000)).toBe(true);
