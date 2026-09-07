@@ -414,13 +414,17 @@ describe('what the board will not do over FTP', () => {
   });
 
   it('still says 502 for a transfer verb that is coming, not 550', async () => {
-    // The distinction is the point: RETR is unbuilt, DELE is refused.
+    // The distinction is the point, and the LINE between them moves as phases
+    // land: STOR is unbuilt (502), DELE is refused (550), and RETR - which
+    // stood here until phase 4 - now answers 425 without a data connection.
     const { control, lines } = await login();
 
-    control.write('RETR SOMETHING.LHA\r\n');
-    expect(await lines.next()).toBe('502 RETR not implemented yet');
     control.write('STOR SOMETHING.LHA\r\n');
     expect(await lines.next()).toBe('502 STOR not implemented yet');
+    control.write('APPE SOMETHING.LHA\r\n');
+    expect(await lines.next()).toBe('502 APPE not implemented yet');
+    control.write('RETR SOMETHING.LHA\r\n');
+    expect(await lines.next()).toBe('425 Use PASV first');
 
     control.destroy();
   });

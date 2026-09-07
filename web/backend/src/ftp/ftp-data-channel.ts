@@ -66,10 +66,13 @@ export function passiveReplyAddress(address: string, port: number): string {
 export class PassiveChannel {
   private readonly server: net.Server;
   private readonly connection: Promise<Duplex>;
+  /** The caller's socket once it arrives, so an abandoned transfer can end it. */
+  private accepted: Duplex | null = null;
 
   private constructor(server: net.Server, connection: Promise<Duplex>) {
     this.server = server;
     this.connection = connection;
+    connection.then((socket) => { this.accepted = socket; }).catch(() => undefined);
   }
 
   /** The port actually bound, which is what PASV has to advertise. */
@@ -83,11 +86,25 @@ export class PassiveChannel {
     return this.connection;
   }
 
+  /**
+   * Give the port back, and end the caller's data connection if he already
+   * opened one.
+   *
+   * Closing only the LISTENER leaves a client that connected between `227` and
+   * a refusal holding a socket nothing will ever write to - it waits for its
+   * own timeout while the control connection has already told it 550. A
+   * refusal should be immediate on both connections.
+   */
   close(): void {
     try {
       this.server.close();
     } catch {
       /* already closed */
+    }
+    try {
+      this.accepted?.destroy();
+    } catch {
+      /* the caller may have gone first */
     }
   }
 

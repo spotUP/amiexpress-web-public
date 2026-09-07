@@ -12,6 +12,10 @@
 import { config } from '../config';
 import { db } from '../database';
 import { checkConfAccess } from '../handlers/message/message-scan.handler';
+import { ACSPermission } from '../constants/acs-permissions';
+import { checkSecurity, getACSConfig, ToggleFlags } from '../utils/acs.util';
+import { checkDownloadRatios, updateDownloadStats } from '../utils/download-ratios.util';
+import { resolveFile } from '../handlers/transfer/batch-download.handler';
 import { loadConfConfig } from '../services/conf-config.service';
 import { FtpFilesystem } from './ftp-filesystem';
 import { nodeManager } from '../services/node-manager.service';
@@ -83,8 +87,45 @@ export function boardFtpFilesystem(root?: string): FtpFilesystem {
 }
 
 export function boardFtpDeps(): FtpDeps {
+  const filesystem = boardFtpFilesystem();
+
   return {
-    filesystem: boardFtpFilesystem(),
+    filesystem,
+
+    /**
+     * The same locator `D` uses (`handlers/transfer/batch-download.handler`),
+     * so a pooled file is fetched from its bucket for an FTP caller exactly as
+     * it is for a caller at the menu, and neither can see a file the other
+     * cannot. It THROWS when a volume is down, and that is deliberate: null
+     * means "no such file", and a storage outage reported as "not found" is
+     * how a sysop deletes a catalogue row for a file that was always fine.
+     */
+    async resolveFile(conferenceId: number, filename: string) {
+      const found = await resolveFile(config.get('dataDir'), conferenceId, filename);
+      return found ? { path: found.fullPath, size: found.size, name: found.name } : null;
+    },
+
+    /**
+     * express.e's own ratio rules, through the call `batch-download` makes -
+     * including the sysop bypass and CREDITBYKB. The gate's own sentence is
+     * carried back, because "refused" without which limit is useless to the
+     * caller.
+     */
+    async mayDownload(user: FtpUser, size: number) {
+      const verdict = await checkDownloadRatios(
+        user as unknown as Parameters<typeof checkDownloadRatios>[0],
+        [{ size, isFree: false }],
+        undefined,
+        checkSecurity(user as any, ACSPermission.CONFERENCE_ACCOUNTING),
+        getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true
+      );
+      return { allowed: verdict.canDownload, message: verdict.errorMessage };
+    },
+
+    /** Charge it once the bytes have actually gone. */
+    async recordDownload(user: FtpUser, size: number) {
+      await updateDownloadStats(user as unknown as Parameters<typeof updateDownloadStats>[0], size);
+    },
     async authenticate(username: string, password: string): Promise<FtpUser | null> {
       const user = await db.authenticateUser(username, password);
       if (!user) return null;

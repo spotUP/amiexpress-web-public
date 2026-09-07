@@ -55,6 +55,20 @@ export interface FtpDeps {
   passivePorts?(): PassivePortRange | null;
   /** The PUBLIC address `PASV` advertises - never the container's own. */
   passiveAddress?(): string | null;
+  /**
+   * Where a named file's BYTES are - a local area, or a pooled area's object
+   * fetched down. Production wires `resolveFile`, the same locator the board's
+   * own download path uses, so FTP and `D` can never disagree about what
+   * exists.
+   */
+  resolveFile?(conferenceId: number, filename: string): Promise<{ path: string; size: number; name: string } | null>;
+  /**
+   * The ratio gate. `allowed: false` carries the gate's OWN sentence, because
+   * a caller refused for ratio has to be told which of his limits stopped him.
+   */
+  mayDownload?(user: FtpUser, size: number): Promise<{ allowed: boolean; message?: string }>;
+  /** Charge the download once the bytes are actually gone. */
+  recordDownload?(user: FtpUser, size: number): Promise<void>;
 }
 
 /** Commands a caller may use before logging in. */
@@ -68,7 +82,7 @@ const PRE_LOGIN = new Set(['USER', 'PASS', 'QUIT', 'FEAT', 'NOOP', 'AUTH', 'SYST
  * set shrinks to nothing as phases 3-6 land.
  */
 const NOT_YET = new Set([
-  'MODE', 'STRU', 'PORT', 'RETR', 'STOR', 'STOU', 'APPE', 'REST',
+  'MODE', 'STRU', 'PORT', 'STOR', 'STOU', 'APPE',
 ]);
 
 /**
@@ -93,7 +107,7 @@ const REFUSED: Record<string, string> = {
 /** Verbs this phase answers, but only for a caller who has logged in. */
 const AFTER_LOGIN = new Set([
   'PWD', 'XPWD', 'CWD', 'XCWD', 'CDUP', 'TYPE', 'PBSZ', 'PROT', 'PASV', 'LIST', 'NLST',
-  'MLSD', 'MLST', 'OPTS', 'EPSV', 'SIZE', 'MDTM',
+  'MLSD', 'MLST', 'OPTS', 'EPSV', 'SIZE', 'MDTM', 'RETR', 'REST',
   ...Object.keys(REFUSED),
 ]);
 
@@ -123,6 +137,8 @@ export class FtpSession {
   private binary = true;
   private protectData = false;
   private passive: PassiveChannel | null = null;
+  /** `REST` offset for the NEXT transfer, and only that one. */
+  private restartAt = 0;
 
   constructor(
     socket: Duplex,
@@ -275,6 +291,10 @@ export class FtpSession {
         return this.onSize(arg);
       case 'MDTM':
         return this.onMdtm(arg);
+      case 'REST':
+        return this.onRest(arg);
+      case 'RETR':
+        return this.onRetr(arg);
       default:
         if (REFUSED[verb]) return this.reply(550, REFUSED[verb]);
         if (NOT_YET.has(verb)) return this.reply(502, `${verb} not implemented yet`);
@@ -287,6 +307,128 @@ export class FtpSession {
    * so the answer is 250 or 550 - never a path a later phase would have to
    * un-invent.
    */
+  /**
+   * `REST`: where the next transfer starts.
+   *
+   * Cleared by the transfer it applies to, and by anything else that moves the
+   * caller - a stale offset silently truncating the NEXT download is the
+   * classic way to hand somebody a corrupt file.
+   */
+  private onRest(arg: string): void {
+    const offset = Number(arg.trim());
+    if (!Number.isInteger(offset) || offset < 0) {
+      return this.reply(501, 'REST needs a byte offset');
+    }
+    this.restartAt = offset;
+    this.reply(350, `Restarting at ${offset}. Send RETR to resume`);
+  }
+
+  /**
+   * `RETR`: the file, through the board's own gates.
+   *
+   * The order is the board's, not FTP's: the RATIO is checked before a byte
+   * moves, because a caller who is over his limit must be refused rather than
+   * served and charged afterwards. `resolveFile` is the same locator `D` uses,
+   * so a pooled file is fetched from its bucket exactly as it would be for a
+   * download at the menu.
+   */
+  private async onRetr(arg: string): Promise<void> {
+    const channel = this.passive;
+    if (!channel) return this.reply(425, 'Use PASV first');
+    this.passive = null;
+
+    const offset = this.restartAt;
+    this.restartAt = 0;
+
+    const tree = this.deps.filesystem;
+    if (!tree || !this.deps.resolveFile || !this.user) {
+      channel.close();
+      return this.reply(550, 'Downloads are not available');
+    }
+
+    const target = resolvePath(this.cwd, arg.trim());
+    const entry = target === null ? null : await tree.find(this.user, target);
+    if (!entry || entry.isDirectory) {
+      channel.close();
+      return this.reply(550, `${arg.trim()}: no such file`);
+    }
+
+    const conference = tree.conferenceAt(this.user, target!);
+    if (!conference) {
+      channel.close();
+      return this.reply(550, `${arg.trim()}: no such file`);
+    }
+
+    // The gate first, and its own words. A refusal here moves zero bytes.
+    if (this.deps.mayDownload) {
+      const verdict = await this.deps.mayDownload(this.user, entry.size);
+      if (!verdict.allowed) {
+        channel.close();
+        return this.reply(550, verdict.message || 'Refused by your download ratio');
+      }
+    }
+
+    let located;
+    try {
+      located = await this.deps.resolveFile(conference.conference_id, entry.name);
+    } catch (error) {
+      // A pooled volume being down is NOT "no such file": telling a caller his
+      // file is missing when the bucket is having a bad minute is how a sysop
+      // deletes a catalogue row for a file that was always fine.
+      channel.close();
+      return this.reply(
+        451,
+        `The storage this file lives on did not answer: ${
+          error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    if (!located) {
+      channel.close();
+      return this.reply(550, `${entry.name}: the board lists it, but its bytes are not here`);
+    }
+
+    this.reply(150, `Opening ${this.binary ? 'BINARY' : 'ASCII'} mode data connection for ${entry.name} (${located.size} bytes)`);
+
+    let data: Duplex;
+    try {
+      data = await channel.accept();
+      if (this.protectData && this.deps.secureData) data = await this.deps.secureData(data);
+    } catch (error) {
+      return this.reply(425, error instanceof Error ? error.message : 'No data connection');
+    }
+
+    try {
+      const sent = await this.sendFile(located.path, data, offset);
+      if (this.deps.recordDownload) await this.deps.recordDownload(this.user, sent);
+      this.deps.log(this.user.username, `\tFTP Download >: ${entry.name} (${sent} bytes)`, this.nodeId);
+      this.reply(226, 'Transfer complete');
+    } catch (error) {
+      data.destroy();
+      this.reply(451, `Transfer failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * The bytes, streamed rather than read into memory - an Amiga release is
+   * small, a pooled ISO is not, and one caller must not be able to hold the
+   * board's whole heap.
+   */
+  private sendFile(filePath: string, data: Duplex, offset: number): Promise<number> {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const nodeFs = require('fs') as typeof import('fs');
+    return new Promise<number>((resolve, reject) => {
+      let sent = 0;
+      const stream = nodeFs.createReadStream(filePath, offset > 0 ? { start: offset } : {});
+      stream.on('data', (chunk: Buffer | string) => {
+        sent += typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length;
+      });
+      stream.on('error', reject);
+      data.on('error', reject);
+      data.on('close', () => resolve(sent));
+      stream.pipe(data);
+    });
+  }
+
   /**
    * `SIZE`: the byte count the BOARD holds, not the file on disk.
    *
