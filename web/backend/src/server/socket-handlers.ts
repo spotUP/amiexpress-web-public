@@ -9,6 +9,7 @@
  */
 
 import { Server as SocketIOServer, Socket } from 'socket.io';
+import { keyBytesFor } from './composed-key';
 import { config } from '../config';
 import { db } from '../database';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
@@ -536,7 +537,12 @@ console.log('[socket-handlers] keys:state received:', data);
         // see Alt+Enter - it arrived as a bare Enter, and in GRANDMASTER's
         // menu that is "select" (2026-09-02). Ctrl+letter is already a
         // control byte in `base`, so only Alt needs adding here.
-        session.doorInputHandler(data.alt ? `\x1b${base}` : base);
+        //
+        // ...unless Alt COMPOSED the character, which on a Mac is how half
+        // the punctuation is typed: `@` on a Nordic layout is Option+2. See
+        // composed-key.ts - prefixing there spells ESCAPE, and cost the sysop
+        // his dialog and then his door while typing an email address.
+        session.doorInputHandler(keyBytesFor(base, data.key, data.code, data.alt));
       }
     }
   });
