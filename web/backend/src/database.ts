@@ -1043,6 +1043,51 @@ console.error('Error running migrations:', error);
         )
       `);
 
+      // THE FILE INDEX - a CACHE over what the DIR files already say.
+      //
+      // The truth is the DIR file on disk, not this table and not
+      // `file_entries`: measured on this board, `file_entries` holds 1508 rows
+      // and not one of them carries a description or a fileiddiz, while
+      // `Conf2/DIR1` holds whole DIZ blocks as continuation lines. AmiExpress
+      // writes a file's DIZ INTO the DIR entry at upload, so that is where a
+      // description lives, and an indexer reading the database would index
+      // nothing.
+      //
+      // Every column here can be recomputed from disk, so an empty index is a
+      // valid state and a miss degrades to the DIR row's own text - never to a
+      // broken listing.
+      //
+      // The key is the DIR-FILE identity because that is the identity BOTH
+      // render paths can produce: the internal listing walks DIR files, and
+      // the adapter knows the caller's conference from the session.
+      //
+      // There is deliberately NO new-file column: that is per CALLER, not per
+      // file, so it is computed at render time from the record's date and the
+      // caller's own new-since date. Storing it would make the listing wrong
+      // for the second caller.
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS file_index (
+          conf_id        INTEGER NOT NULL,
+          dir_number     INTEGER NOT NULL,
+          filename       TEXT    NOT NULL,
+          description    TEXT,
+          version        TEXT,
+          requires_bbs   TEXT,
+          author         TEXT,
+          release_group  TEXT,
+          group_source   TEXT,
+          category       TEXT,
+          diz_sha1       TEXT,
+          tags_sha1      TEXT,
+          extractor_ver  TEXT,
+          indexed_at     INTEGER DEFAULT (strftime('%s','now')),
+          PRIMARY KEY (conf_id, dir_number, filename)
+        )
+      `);
+      this.db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_file_index_lookup ON file_index(conf_id, filename)
+      `);
+
       // Sessions table
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS sessions (
