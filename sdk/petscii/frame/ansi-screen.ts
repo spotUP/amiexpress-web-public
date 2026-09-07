@@ -195,6 +195,16 @@ export class FrameReconstructor {
       // parameter bytes has grown past the same runaway cap the string sequences
       // use - a CSI that lost its final is dropped, not buffered for ever.
       if (j >= s.length) return s.length - i > STRING_SEQUENCE_MAX ? s.length - i : 0;
+      // AN ESC INSIDE A CSI CANCELS IT, as every VT does: the parameter run
+      // ended on a byte below 0x20, and if that byte is ESC it is the START of
+      // the next sequence, not this one's final. Taking it as a final swallows
+      // the ESC and prints the sequence that followed as TEXT - measured on
+      // this board's own DIR art, where a file_id.diz carries a truncated
+      // `ESC[44;3` and the `ESC[0m` after it reached the caller as the literal
+      // `[0m`. That put printable text in the first column of a description
+      // row, which stopped it being a continuation row, which leaked seven
+      // rows of DIZ into a C64 file listing.
+      if (s[j] === ESC) return j - i;
       this.csi(params, s[j]);
       return j - i + 1;
     }

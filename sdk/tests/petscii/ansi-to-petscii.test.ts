@@ -427,6 +427,18 @@ describe('AnsiToPetsciiTransducer malformed string sequences never stall the str
     expect(Array.from(t.transduce('OK'))).toEqual([0x0E, 0xCF, 0xCB]);
   });
 
+  /**
+   * The same cancel rule the frame reconstructor keeps, pinned on the wire
+   * side: this board's DIR art carries a truncated `ESC[44;3`, and taking the
+   * ESC after it as that CSI's final byte printed the following `ESC[0m` to a
+   * C64 as the literal text `[0m`.
+   */
+  it('an ESC inside a CSI cancels it, so the next sequence is obeyed and not printed', () => {
+    const { display } = run('\x1b[44;3\x1b[0mX');
+    expect(cell(display, 0, 0)).toBe(scUpper('X'));
+    expect(cell(display, 1, 0)).toBe(0x20);
+  });
+
   it('an unterminated OSC under the cap is still held across chunks and completed later', () => {
     const t = new AnsiToPetsciiTransducer();
     expect(Array.from(t.transduce('\x1b]0;ti'))).toEqual([]);

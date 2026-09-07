@@ -558,6 +558,12 @@ export class AnsiToPetsciiTransducer {
       let params = '';
       while (j < s.length && s.charCodeAt(j) >= 0x20 && s.charCodeAt(j) <= 0x3F) params += s[j++];
       if (j >= s.length) return 0;
+      // AN ESC INSIDE A CSI CANCELS IT, as every VT does - the same rule the
+      // frame reconstructor keeps (sdk/petscii/frame/ansi-screen.ts). Without
+      // it the ESC is eaten as a final byte and the sequence that followed
+      // reaches the C64 as literal text: this board's DIR art carries a
+      // truncated `ESC[44;3`, and the `ESC[0m` after it printed as `[0m`.
+      if (s[j] === ESC) return j - i;
       const final = s[j];
       this.csi(params, final, out);
       return j - i + 1;

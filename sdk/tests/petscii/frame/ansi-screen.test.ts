@@ -207,6 +207,27 @@ describe('FrameReconstructor CSI edge cases', () => {
     expect(at(run('\x1b[31m\x1b[?7mX').f, 0, 0).fg).toBe(2);
   });
 
+  /**
+   * MEASURED ON THIS BOARD. `Conf1/Dir2`'s CB4!ST13.LHA description carries a
+   * truncated `ESC[44;3` from the original file_id.diz, and the `ESC[0m` that
+   * follows it opens the next row. Taking the ESC as the CSI's final byte
+   * swallowed it and printed `[0m` as text in column 0 - which stopped that
+   * row being a blank-to-33 continuation row, so the file-record rung could
+   * not consume the description block and seven rows of DIZ leaked into a C64
+   * file listing.
+   */
+  it('an ESC inside a CSI cancels it and the sequence that follows is obeyed, not printed', () => {
+    const { f } = run('\x1b[44;3\x1b[0mX');
+    expect(text(f, 0)).toBe('X');
+    expect(at(f, 0, 0).bg).toBe(0);
+  });
+
+  it('an ESC arriving in a later write still cancels the CSI it interrupts', () => {
+    const { r } = run('\x1b[44;3');
+    r.write('\x1b[0mX');
+    expect(text(r.snapshot(), 0)).toBe('X');
+  });
+
   it('an unterminated CSI is dropped at the same runaway cap as a string sequence', () => {
     const { r } = run('\x1b[' + '1;'.repeat(200));
     r.write('W');
