@@ -19,6 +19,11 @@ export interface FtpServerOptions {
   host?: string;
   /** PEM certificate and key. Without them `AUTH TLS` answers 431. */
   tls?: { cert: Buffer; key: Buffer };
+  /**
+   * Let a caller off the box log in without `AUTH TLS`. Off unless the sysop
+   * sets `FTP_ALLOW_PLAINTEXT=1` - see `FtpSession.mustUpgradeFirst`.
+   */
+  allowPlaintext?: boolean;
 }
 
 export class FtpServer extends EventEmitter {
@@ -65,7 +70,9 @@ export class FtpServer extends EventEmitter {
       ? { ...this.deps, startTls: raw => this.upgrade(raw) }
       : { ...this.deps, startTls: undefined };
 
-    const session = new FtpSession(socket, deps, socket.remoteAddress);
+    const session = new FtpSession(socket, deps, socket.remoteAddress, {
+      allowPlaintext: this.options.allowPlaintext,
+    });
     session.start();
   }
 

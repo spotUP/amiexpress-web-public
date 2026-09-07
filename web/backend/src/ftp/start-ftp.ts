@@ -25,6 +25,11 @@ export interface FtpEnv {
   /** PEM paths. Without them the server runs, and `AUTH TLS` answers 431. */
   FTP_TLS_CERT?: string;
   FTP_TLS_KEY?: string;
+  /**
+   * `1` lets a caller off the box log in without `AUTH TLS`. Off by default,
+   * and it should stay off wherever the clients can manage explicit FTPS.
+   */
+  FTP_ALLOW_PLAINTEXT?: string;
 }
 
 /**
@@ -49,6 +54,18 @@ export function ftpPortFrom(config: FtpConfig | null, env: FtpEnv = {}): number 
 
 export function ftpEnabled(config: FtpConfig | null): boolean {
   return Boolean(config?.ftp_enabled);
+}
+
+/**
+ * Whether the sysop has switched the plaintext refusal off.
+ *
+ * Only an explicit `1`/`true`/`yes`: an empty string, an unset variable and
+ * anything else all mean the policy stands. A weakening that could be turned
+ * on by a typo would not be opt-in at all.
+ */
+export function ftpAllowsPlaintext(env: FtpEnv = {}): boolean {
+  const raw = (env.FTP_ALLOW_PLAINTEXT ?? '').trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes';
 }
 
 function tlsMaterial(env: FtpEnv): { cert: Buffer; key: Buffer } | undefined {
@@ -76,8 +93,18 @@ export async function startFtpServer(
   if (!ftpEnabled(config)) return null;
 
   const port = ftpPortFrom(config, env);
+  const allowPlaintext = ftpAllowsPlaintext(env);
+  if (allowPlaintext) {
+    // Loud, every boot, and never only in a config file: a board can be left
+    // like this by accident, and the cost is every FTP password in the clear.
+    console.warn(
+      '[FTP] FTP_ALLOW_PLAINTEXT is set - a caller may log in WITHOUT TLS and ' +
+        'his password crosses the network in clear text. Unset it once the ' +
+        'clients can use AUTH TLS.'
+    );
+  }
   const server = new FtpServer(
-    { port, host: env.FTP_HOST || '0.0.0.0', tls: tlsMaterial(env) },
+    { port, host: env.FTP_HOST || '0.0.0.0', tls: tlsMaterial(env), allowPlaintext },
     deps
   );
   await server.start();

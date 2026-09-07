@@ -68,13 +68,18 @@ services:
       # host's Caddy already holds a Let's Encrypt pair for the board, so this
       # mounts that directory rather than copying keys around.
       #
-      # The path is the live host's. Point FTP_TLS_DIR somewhere else (or at a
-      # directory that does not exist) and the server simply starts without
-      # TLS, which is the right behaviour on a developer's machine.
+      # NOT Caddy's own directory: it keeps certificates 0600 as the caddy
+      # user, and this container runs as uid 1001, so mounting it gave
+      # `EACCES ... /certs/bbs.uprough.net.crt` and AUTH TLS answered 431
+      # while looking configured. The deploy stages a copy owned by 1001
+      # (deploy-hetzner.yml, "staging FTPS certificate"), and this mounts
+      # that. Point FTP_TLS_DIR at a directory that does not exist and the
+      # server simply starts without TLS - the right behaviour on a
+      # developer's machine.
       #
       # Caddy renews in place and the server reads the certificate once, at
-      # boot, so a renewal needs a container restart before FTPS serves it.
-      - ${FTP_TLS_DIR:-/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/bbs.uprough.net}:/certs:ro
+      # boot, so a renewal reaches FTPS at the next deploy or restart.
+      - ${FTP_TLS_DIR:-/app/ftp-certs}:/certs:ro
     networks:
       - default
       - doorserver-net
@@ -111,9 +116,18 @@ services:
       # so that changing the port in the UI alone cannot leave the mapping
       # pointing at a socket nobody is listening on.
       - FTP_PORT=${FTP_PORT:-1541}
-      # Read by start-ftp.ts:56. Both must be present or AUTH TLS answers 431.
+      # Read by start-ftp.ts. Both must be present or AUTH TLS answers 431.
       - FTP_TLS_CERT=/certs/bbs.uprough.net.crt
       - FTP_TLS_KEY=/certs/bbs.uprough.net.key
+      # TEMPORARY, and the sysop's own call (2026-09-07): let a caller off the
+      # box log in WITHOUT AUTH TLS, because the client on the sysop's Mac
+      # offers no explicit-FTPS mode and is otherwise refused at USER.
+      #
+      # While this is `1`, an FTP password crosses the internet in clear text,
+      # and it is the caller's BBS password - the same one the admin takes.
+      # Set it to 0 (or delete the line) as soon as the clients can do AUTH
+      # TLS; the server logs a warning at every boot while it is on.
+      - FTP_ALLOW_PLAINTEXT=${FTP_ALLOW_PLAINTEXT:-1}
 
       # Security - MUST override in .env file
       - JWT_SECRET=${JWT_SECRET:-CHANGE_ME}

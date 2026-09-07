@@ -70,13 +70,20 @@ export class FtpSession {
   private user: FtpUser | null = null;
   private nodeId = 0;
   private secure: boolean;
+  private readonly allowPlaintext: boolean;
   private closed = false;
 
-  constructor(socket: Duplex, deps: FtpDeps, peerAddress?: string, opts: { secure?: boolean } = {}) {
+  constructor(
+    socket: Duplex,
+    deps: FtpDeps,
+    peerAddress?: string,
+    opts: { secure?: boolean; allowPlaintext?: boolean } = {}
+  ) {
     this.socket = socket;
     this.deps = deps;
     this.peerAddress = peerAddress;
     this.secure = opts.secure ?? false;
+    this.allowPlaintext = opts.allowPlaintext ?? false;
     this.sessionId = `ftp-${++sessionCounter}-${Date.now()}`;
   }
 
@@ -213,16 +220,38 @@ export class FtpSession {
    * greeting instead would also refuse the `AUTH TLS` that is the fix.
    */
   private onUser(arg: string): void {
-    if (!this.secure && !isLoopback(this.peerAddress)) {
+    if (this.mustUpgradeFirst()) {
       return this.reply(534, 'Policy requires TLS - issue AUTH TLS first');
     }
     this.pendingUser = arg.trim();
     this.reply(331, 'Password required');
   }
 
+  /**
+   * Whether this caller has to secure the connection before naming himself.
+   *
+   * Three ways past it, in order of preference: the connection is already
+   * inside TLS (`AUTH TLS`, what a capable client does); the caller is on
+   * loopback, so nothing crosses a wire; or the sysop has switched the policy
+   * off for this board.
+   *
+   * That third one is a real weakening, and opt-in for that reason -
+   * `FTP_ALLOW_PLAINTEXT=1`, off unless it is set. It exists because a client
+   * with no explicit-FTPS option cannot log in AT ALL otherwise, and whether
+   * that trade is worth making is the board owner's call rather than this
+   * file's. What it costs while it is on: the password crosses the internet in
+   * clear text, and it is the caller's BBS password, which is also his admin
+   * password.
+   */
+  private mustUpgradeFirst(): boolean {
+    if (this.secure) return false;
+    if (isLoopback(this.peerAddress)) return false;
+    return !this.allowPlaintext;
+  }
+
   private async onPass(arg: string): Promise<void> {
     if (!this.pendingUser) return this.reply(503, 'Login with USER first');
-    if (!this.secure && !isLoopback(this.peerAddress)) {
+    if (this.mustUpgradeFirst()) {
       return this.reply(534, 'Policy requires TLS - issue AUTH TLS first');
     }
 

@@ -365,6 +365,28 @@
                 echo "== restart notice skipped: no running container =="
               fi
 
+              # FTPS material, staged where the container can actually read it.
+              #
+              # Caddy keeps its certificates 0600 and owned by the caddy user;
+              # the container runs as uid 1001 (bbsuser), so mounting Caddy's
+              # own directory gave `EACCES: permission denied, open
+              # /certs/bbs.uprough.net.crt` and AUTH TLS answered 431 while
+              # looking configured. So the pair is copied to a directory owned
+              # by that uid, key mode 0400, and THAT is what compose mounts.
+              #
+              # Re-copied on every deploy, which is also how a renewed
+              # certificate reaches FTPS: Caddy renews in place, and the FTP
+              # server reads the file once at boot.
+              CADDY_CERTS=/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/bbs.uprough.net
+              if [ -f "$CADDY_CERTS/bbs.uprough.net.crt" ]; then
+                echo "== staging FTPS certificate for the container =="
+                install -d -m 0750 -o 1001 -g 1001 /app/ftp-certs
+                install -m 0444 -o 1001 -g 1001 "$CADDY_CERTS/bbs.uprough.net.crt" /app/ftp-certs/
+                install -m 0400 -o 1001 -g 1001 "$CADDY_CERTS/bbs.uprough.net.key" /app/ftp-certs/
+              else
+                echo "== no Caddy certificate for the board; FTPS will answer 431 =="
+              fi
+
               # `--force-recreate` is the critical bit: without it, docker
               # compose can decide the running container "matches" the spec
               # hash and skip the restart even when the build produced a
