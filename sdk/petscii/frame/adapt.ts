@@ -93,7 +93,7 @@ import { wrapLineToWidth } from '../wrap';
 import { classifyRow, columnParts, columnSpans, contentWidth, hasTabularGutters, isRuleRow, looksLikeAsciiArt, rowText } from './classify';
 import { Cell, Cursor, Frame, blankCell, cloneCell, isBlank, makeFrame, padRow } from './types';
 
-export type AdaptRule = 'banner' | 'crop' | 'deindent' | 'gutter' | 'narrow' | 'prose' | 'record' | 'repeat' | 'reflow' | 'split' | 'stat';
+export type AdaptRule = 'banner' | 'crop' | 'deindent' | 'gutter' | 'narrow' | 'prose' | 'record' | 'repeat' | 'reflow' | 'split' | 'stack' | 'stat';
 export type RegionRule = AdaptRule | 'auto';
 
 export interface RegionPin {
@@ -106,6 +106,24 @@ export interface AdaptOptions {
   cols?: number;
   rows?: number;
   regions?: RegionPin[];
+  /**
+   * Consulted at each source row BEFORE the ladder, and free to answer with a
+   * whole BLOCK: the rows to emit, and how many source rows they replace.
+   *
+   * WHY A BLOCK AND NOT A ROW, even when it emits one row. A file record's
+   * description arrives as its CONTINUATION rows - express.e's DIR grammar
+   * and AquaScan's own output both put the DIZ on the rows after the header at
+   * indent 33 - and those rows have to be CONSUMED by the record rather than
+   * adapted a second time on their own. A C*Base list row discards them, and
+   * discarding is still consuming: `rows.length` is 1 while `consumed` may be
+   * many.
+   *
+   * PURE, and the SDK never learns what a file record IS. The hook is the
+   * caller's; this module only asks and advances.
+   *
+   * Answer `null` to fall through to the ladder untouched.
+   */
+  blockRenderer?: (frame: Frame, y: number) => { rows: Cell[][]; consumed: number } | null;
 }
 
 export interface AdaptedRow {
@@ -1356,6 +1374,12 @@ function applyRuleUnfitted(rule: AdaptRule, cells: Row, cols: number): RuleResul
     // row would have had without the pin, exactly as a pinned 'record' does.
     case 'banner': return bannerRow(cells, cols) ?? applyRule(classifiedRule(cells), cells, cols);
     case 'crop': return cropRow(cells, cols);
+    // 'stack' is the BLOCK HOOK's rule, not one the ladder can produce: it is
+    // how an adapted row says "a renderer outside this module built me". A pin
+    // naming it on a row the hook did not claim has nothing to stack, so it
+    // falls through to what the row would have had - the same shape as a
+    // pinned 'banner' or 'record' the guard declines.
+    case 'stack': return applyRule(classifiedRule(cells), cells, cols);
     case 'deindent': return deindentRow(cells, cols);
     // A pinned 'narrow' on a row `narrowRow` declines falls through to the
     // rule it would have had before the ladder grew: plain halves.
@@ -1378,6 +1402,17 @@ function applyRuleUnfitted(rule: AdaptRule, cells: Row, cols: number): RuleResul
   }
 }
 
+/**
+ * The rule this row was PINNED to, or null when it was left to the ladder.
+ *
+ * `'auto'` is not a pin - it is the caller saying "you decide" - so it does
+ * not outrank the block hook.
+ */
+function explicitPinFor(y: number, regions: RegionPin[] | undefined): AdaptRule | null {
+  const pin = regions?.find((r) => y >= r.rows[0] && y <= r.rows[1]);
+  return pin && pin.rule !== 'auto' ? pin.rule : null;
+}
+
 function ruleFor(y: number, cells: Row, cols: number, regions: RegionPin[] | undefined): AdaptRule {
   const pin = regions?.find((r) => y >= r.rows[0] && y <= r.rows[1]);
   if (!pin || pin.rule === 'auto') return chooseRule(cells, cols);
@@ -1390,6 +1425,28 @@ export function adaptRows(src: Frame, opts: AdaptOptions = {}): AdaptResult {
   let cursor: Cursor = { x: 0, y: 0 };
   for (let y = 0; y < src.rows; y++) {
     const cells = src.cells[y];
+
+    // THE BLOCK HOOK COMES FIRST, but an EXPLICIT pin still outranks it: a pin
+    // is a deliberate override by whoever adapted this door, and the hook is a
+    // default. `ruleFor` resolves 'auto' to the ladder's own answer, so the
+    // question here is whether the caller pinned this row to something.
+    const pinned = explicitPinFor(y, opts.regions);
+    const block = pinned ? null : opts.blockRenderer?.(src, y) ?? null;
+    if (block && block.consumed > 0) {
+      const first = rows.length;
+      for (const r of block.rows) rows.push({ cells: r, source: y, rule: 'stack' });
+      // THE CURSOR OF A CONSUMED BLOCK goes to its first row, column 0. A
+      // record row is never the row a door leaves the cursor on - that is the
+      // prompt row, which no renderer claims - and if it ever were, the cursor
+      // lands somewhere visible and stable rather than inside a field that no
+      // longer exists.
+      if (src.cursor.y >= y && src.cursor.y < y + block.consumed) {
+        cursor = { x: 0, y: first };
+      }
+      y += block.consumed - 1;
+      continue;
+    }
+
     const result = applyRule(ruleFor(y, cells, cols, opts.regions), cells, cols);
     const first = rows.length;
     for (const r of result.rows) rows.push({ cells: r, source: y, rule: result.applied });
