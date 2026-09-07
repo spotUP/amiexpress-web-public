@@ -105,10 +105,20 @@ export class FileRepository extends BaseRepository<any> {
    * has nothing left to correct, and turning that into an exception would
    * make a successful delete report failure.
    */
-  clearLocation(filename: string, areaId: number): boolean {
+  clearLocation(filename: string, areaId: number, objectKey?: string | null): boolean {
+    // The caller's `filename` is the DIR LINE's spelling, and the object it
+    // just deleted was resolved the way `D` resolves one - through the name
+    // index, which matches case-insensitively. A row catalogued as
+    // `demo.lha` and listed as `DEMO.LHA` is the same file, and matching it
+    // letter for letter cleared nothing: the delete succeeded, the row kept
+    // its drive, and the next boot re-seeded `usedBytes` from bytes that no
+    // longer exist. Match on the key that was actually deleted when there is
+    // one, and fold case on the filename either way.
     const result = this.run(
-      'UPDATE file_entries SET storage_volume = NULL, object_key = NULL WHERE filename = ? AND areaid = ?',
-      [filename, areaId]
+      `UPDATE file_entries SET storage_volume = NULL, object_key = NULL
+         WHERE areaid = ?
+           AND (filename = ? COLLATE NOCASE OR (? IS NOT NULL AND object_key = ?))`,
+      [areaId, filename, objectKey ?? null, objectKey ?? null]
     );
     return result.changes > 0;
   }

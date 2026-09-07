@@ -258,6 +258,19 @@ describe('an object whose key does not match the DIR line letter for letter', ()
     await expect(h.backend.get('Conf1/Files/demo.lha')).rejects.toThrow();
   });
 
+  it('takes the locally cached copy with it, which is cached under the KEY, not the DIR line', async () => {
+    const h = harness();
+    await h.backend.put('Conf1/Files/demo.lha', Buffer.from('payload'));
+    const cachedPath = await h.storage.cache.ensureLocal(2, 'Conf1/Files/demo.lha');
+    expect(fs.existsSync(cachedPath)).toBe(true);
+
+    await performDelete(h);
+
+    // A local copy left behind under the real key is a file the cache will
+    // still serve after the object it mirrors is gone.
+    expect(fs.existsSync(cachedPath)).toBe(false);
+  });
+
   it('stops being findable through D, which is the index that found it in the first place', async () => {
     const h = harness();
     await h.backend.put('Conf1/Files/demo.lha', Buffer.from('payload'));
@@ -459,3 +472,54 @@ describe('a pooled delete the volume refuses', () => {
   // filters that area out on purpose - it degrades to local disk with a
   // throttled warning - so the delete never enters the pooled branch at all.
 });
+
+/**
+ * The catalog row and the DIR line do not have to agree letter for letter.
+ * The object key is resolved the way `D` resolves it - case-insensitively,
+ * through the name index - but the catalog row was cleared by
+ * `WHERE filename = ?` with the DIR LINE's spelling. A row written as
+ * `demo.lha` and listed as `DEMO.LHA` matched nothing: the delete succeeded,
+ * the row kept its `storage_volume`, and the next boot re-seeded `usedBytes`
+ * with the bytes of a file that is gone. The in-process credit hides it until
+ * the restart, which is when a QUOTA'd drive starts refusing uploads.
+ */
+describe('a catalog row whose filename differs in case from the DIR line', () => {
+  const SIZE = 4096;
+  const DRIVE = 2;
+
+  it('is cleared anyway, so the next boot does not re-seed bytes that are gone', async () => {
+    let attempts = 0;
+    while (!(global as any).testDb && attempts < 30) {
+      await new Promise((r) => setTimeout(r, 200));
+      attempts++;
+    }
+    const db = (global as any).testDb;
+    if (!db) throw new Error('Test database not initialized');
+    const raw = (db as any).db;
+    const repo = new FileRepository(raw);
+
+    const listed = `CASE_${Date.now()}.LHA`;   // what the DIR line says
+    const stored = listed.toLowerCase();        // what the bucket and catalog hold
+    const empty = repo.usedBytesByVolume().get(DRIVE) ?? 0;
+    raw
+      .prepare('INSERT INTO file_entries (filename, size, uploader, areaid) VALUES (?, ?, ?, ?)')
+      .run(stored, SIZE, 'sysop', 1);
+    repo.recordLocation(stored, 1, DRIVE, `Conf1/Files/${stored}`);
+    expect(repo.usedBytesByVolume().get(DRIVE)).toBe(empty + SIZE);
+
+    const h = harness({
+      filename: listed,
+      db: {
+        query: async () => ({ rows: [] }),
+        clearLocation: (f: string, a: number, key?: string | null) => repo.clearLocation(f, a, key),
+      },
+    });
+    await h.backend.put(`Conf1/Files/${stored}`, Buffer.alloc(SIZE, 1));
+
+    await performDelete(h);
+
+    await expect(h.backend.get(`Conf1/Files/${stored}`)).rejects.toThrow();
+    expect(repo.usedBytesByVolume().get(DRIVE) ?? 0).toBe(empty);
+  });
+});
+

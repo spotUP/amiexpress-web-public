@@ -822,7 +822,9 @@ console.log('[FM] Starting file maintenance');
       // lie in the opposite direction.
       storage.cache.creditDeleted(driveNumber, key, sizeBytes);
       try {
-        _db?.clearLocation?.(filename, pooledArea.id);
+        // The key, not just the DIR line's spelling: the two can differ in
+        // case and the row is cleared by the key that was really deleted.
+        _db?.clearLocation?.(filename, pooledArea.id, key);
       } catch (err) {
         console.error(
           `[FileMaintenance] deleted ${filename} from DRIVE.${driveNumber} but could not clear its catalog ` +
