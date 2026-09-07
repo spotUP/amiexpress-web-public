@@ -35,7 +35,6 @@ beforeAll(() => {
   fs.writeFileSync(path.join(tmp, 'Conf1', 'DIR1'), ROW + '\n', 'binary');
   fs.writeFileSync(path.join(tmp, 'Conf1', 'Dir1'), ROW + '\n', 'binary');
   config.set('dataDir', tmp);
-  config.set('bbsRoot', tmp);
 });
 
 afterAll(() => {
