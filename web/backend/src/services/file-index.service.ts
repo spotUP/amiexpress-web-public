@@ -222,3 +222,118 @@ export function resolveAcrossDirs<T extends {
 export function groupTagsFor(filenames: readonly string[]): Set<string> {
   return buildGroupTags(filenames as string[]);
 }
+
+// ---------------------------------------------------------------------------
+// The store, and the freshness guard in front of it
+// ---------------------------------------------------------------------------
+
+/** The one row the table holds per (conference, DIR, filename). */
+export interface FileIndexRow {
+  conf_id: number;
+  dir_number: number;
+  filename: string;
+  description: string | null;
+  version: string | null;
+  requires_bbs: string | null;
+  author: string | null;
+  release_group: string | null;
+  group_source: string | null;
+  category: string | null;
+  diz_sha1: string | null;
+  tags_sha1: string | null;
+  extractor_ver: string | null;
+  indexed_at: number | null;
+}
+
+/** What this module needs of a database, so a test can hand it a fake. */
+export interface IndexDb {
+  query(sql: string, params?: any[]): Promise<{ rows: any[] }>;
+}
+
+/**
+ * Write one file's facts.
+ *
+ * An UPSERT keyed by the DIR-file identity, so the backfill is safe to re-run
+ * and an upload that replaces a file replaces its row rather than adding a
+ * second one.
+ */
+export async function upsertFileIndex(
+  db: IndexDb,
+  key: IndexKey,
+  facts: FileFacts,
+): Promise<void> {
+  await db.query(
+    `INSERT INTO file_index (
+       conf_id, dir_number, filename, description, version, requires_bbs,
+       author, release_group, group_source, category, diz_sha1, tags_sha1,
+       extractor_ver, indexed_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, strftime('%s','now'))
+     ON CONFLICT(conf_id, dir_number, filename) DO UPDATE SET
+       description   = excluded.description,
+       version       = excluded.version,
+       requires_bbs  = excluded.requires_bbs,
+       author        = excluded.author,
+       release_group = excluded.release_group,
+       group_source  = excluded.group_source,
+       category      = excluded.category,
+       diz_sha1      = excluded.diz_sha1,
+       tags_sha1     = excluded.tags_sha1,
+       extractor_ver = excluded.extractor_ver,
+       indexed_at    = excluded.indexed_at`,
+    [
+      key.confId, key.dirNumber, key.filename,
+      facts.description, facts.version, facts.requiresBbs,
+      facts.author, facts.releaseGroup, facts.groupSource, facts.category,
+      facts.dizSha1, facts.tagsSha1, facts.extractorVer,
+    ],
+  );
+}
+
+/**
+ * The facts for a file the caller is looking at, or null.
+ *
+ * Null is a perfectly good answer and every caller must handle it: an empty
+ * index, a file indexed under a different corpus, or two DIRs that disagree
+ * all land here. The record then renders from its own parsed row.
+ */
+export async function lookupFileFacts(
+  db: IndexDb,
+  confId: number,
+  filename: string,
+  tagsSha1: string,
+): Promise<FileIndexRow | null> {
+  const { rows } = await db.query(
+    `SELECT * FROM file_index WHERE conf_id = $1 AND filename = $2`,
+    [confId, filename],
+  );
+  const usable = (rows as FileIndexRow[]).filter((row) => !rowIsStale(row, tagsSha1));
+  return resolveAcrossDirs(usable);
+}
+
+/**
+ * Has this DIR file changed since it was last indexed?
+ *
+ * The mtime guard, the `revalidateBbsCommandsIfChanged()` pattern - checked
+ * BEFORE a listing reads the index, never an unconditional rescan and never a
+ * watcher. A DIR file the sysop edited by hand, or one an upload appended to,
+ * is re-indexed on the next listing rather than at some later sweep.
+ */
+export async function dirIsStale(
+  db: IndexDb,
+  confId: number,
+  dirNumber: number,
+  dirMtimeSeconds: number,
+): Promise<boolean> {
+  const { rows } = await db.query(
+    `SELECT MAX(indexed_at) AS newest FROM file_index WHERE conf_id = $1 AND dir_number = $2`,
+    [confId, dirNumber],
+  );
+  const newest = rows[0]?.newest;
+  if (newest === null || newest === undefined) return true;   // never indexed
+  return Number(newest) < Math.floor(dirMtimeSeconds);
+}
+
+/** Drop every row for one DIR - used before a re-index so deletions vanish. */
+export async function clearDirIndex(db: IndexDb, confId: number, dirNumber: number): Promise<void> {
+  await db.query(`DELETE FROM file_index WHERE conf_id = $1 AND dir_number = $2`, [confId, dirNumber]);
+}

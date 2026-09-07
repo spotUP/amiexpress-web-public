@@ -12,6 +12,7 @@
  */
 import { parseDirFile } from '../../src/utils/dir-file-reader.util';
 import {
+  dirIsStale,
   deriveGroup,
   dizTextOf,
   factsForEntry,
@@ -20,6 +21,8 @@ import {
   rowIsStale,
   sha1Of,
   tagsFingerprint,
+  lookupFileFacts,
+  type IndexDb,
 } from '../../src/services/file-index.service';
 import { DESCRIBE_CONTRACT_VERSION } from '../../src/utils/describe.generated';
 
@@ -134,5 +137,58 @@ describe('the ambiguity rule - two DIRs, one filename', () => {
 
   it('answers nothing for an empty result', () => {
     expect(resolveAcrossDirs([])).toBeNull();
+  });
+});
+
+describe('the lookup, over a database', () => {
+  const TAGS_SHA = tagsFingerprint(TAGS);
+
+  /** A database that answers with whatever rows the test hands it. */
+  const dbOf = (rows: any[]): IndexDb => ({ query: async () => ({ rows }) });
+
+  const row = (over: Record<string, unknown> = {}) => ({
+    conf_id: 1, dir_number: 1, filename: 'OTL-DOOR.LHA',
+    description: 'A door', version: '2.1', requires_bbs: null,
+    author: null, release_group: 'Outlaws', group_source: 'prefix',
+    category: null, diz_sha1: null,
+    tags_sha1: TAGS_SHA, extractor_ver: DESCRIBE_CONTRACT_VERSION,
+    indexed_at: 1000, ...over,
+  });
+
+  it('answers with the row when one DIR holds the file', async () => {
+    const facts = await lookupFileFacts(dbOf([row()]), 1, 'OTL-DOOR.LHA', TAGS_SHA);
+    expect(facts?.description).toBe('A door');
+  });
+
+  it('IGNORES a row analysed under different rules or a different corpus', async () => {
+    // Silently serving a reading from an older extractor is exactly the drift
+    // the version and fingerprint columns exist to catch.
+    const stale = row({ extractor_ver: '0' });
+    expect(await lookupFileFacts(dbOf([stale]), 1, 'OTL-DOOR.LHA', TAGS_SHA)).toBeNull();
+
+    const otherCorpus = row({ tags_sha1: 'another-board' });
+    expect(await lookupFileFacts(dbOf([otherCorpus]), 1, 'OTL-DOOR.LHA', TAGS_SHA)).toBeNull();
+  });
+
+  it('answers nothing when two DIRs disagree', async () => {
+    const rows = [row(), row({ dir_number: 3, description: 'Something else' })];
+    expect(await lookupFileFacts(dbOf(rows), 1, 'OTL-DOOR.LHA', TAGS_SHA)).toBeNull();
+  });
+});
+
+describe('the DIR freshness guard', () => {
+  const dbOf = (newest: unknown): IndexDb => ({ query: async () => ({ rows: [{ newest }] }) });
+
+  it('is stale when the DIR has never been indexed', async () => {
+    expect(await dirIsStale(dbOf(null), 1, 1, 1000)).toBe(true);
+  });
+
+  it('is stale when the DIR file is newer than its rows', async () => {
+    expect(await dirIsStale(dbOf(1000), 1, 1, 2000)).toBe(true);
+  });
+
+  it('is fresh when the rows are newer than the file', async () => {
+    // The listing then reads the index without touching the disk again.
+    expect(await dirIsStale(dbOf(2000), 1, 1, 1000)).toBe(false);
   });
 });
