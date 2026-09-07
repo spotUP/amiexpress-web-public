@@ -147,6 +147,35 @@ export function missingFormats(openPath: string | null, siblings: string[]): Arr
     .map(f => ({ ...f, path: `${dir}${stem}.${f.ext}` }));
 }
 
+/**
+ * Which formats a screen HAS, by looking for its siblings on the board.
+ *
+ * Keyed on the stem, because that is what the loader does: for one screen it
+ * tries `<stem>.rip`, `<stem>.seq` and the text file, and serves whichever the
+ * caller's terminal wants. `.gr` and `.ibm` are ANSI under another name.
+ */
+export function formatsPresent(
+  openPath: string,
+  files: Record<string, { relPath: string }> | undefined,
+): { ansi: boolean; petscii: boolean; rip: boolean } {
+  const dir = openPath.slice(0, openPath.lastIndexOf('/') + 1).toLowerCase();
+  const base = openPath.slice(openPath.lastIndexOf('/') + 1);
+  const stem = base.replace(/\.(txt|seq|rip|gr|ibm|ans)$/i, '').toLowerCase();
+
+  const have = { ansi: false, petscii: false, rip: false };
+  for (const key of Object.keys(files ?? {})) {
+    const lower = key.toLowerCase();
+    if (lower.slice(0, lower.lastIndexOf('/') + 1) !== dir) continue;
+    const name = lower.slice(lower.lastIndexOf('/') + 1);
+    const ext = name.slice(name.lastIndexOf('.') + 1);
+    if (name.replace(/\.(txt|seq|rip|gr|ibm|ans)$/i, '') !== stem) continue;
+    if (ext === 'seq') have.petscii = true;
+    else if (ext === 'rip') have.rip = true;
+    else have.ansi = true;
+  }
+  return have;
+}
+
 /** `BBSTITLE.SEQ` -> `PETSCII`, for a tab a designer can read. */
 function formatLabel(filePath: string): string {
   const lower = filePath.toLowerCase();
@@ -1082,6 +1111,7 @@ export function ScreenFilesPage() {
             ? `${file.sauce.title || 'untitled'} by ${file.sauce.author}`
             : undefined,
           problem: (file.problems?.length ?? 0) > 0,
+          formats: formatsPresent(file.relPath, data.files),
         };
       })
       .sort((a, b) => a.label.localeCompare(b.label));

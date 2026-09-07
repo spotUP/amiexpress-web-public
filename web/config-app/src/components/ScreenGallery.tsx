@@ -63,6 +63,14 @@ export interface GalleryItem {
   /** Shown in the corner - the artist, from SAUCE. */
   credit?: string;
   problem?: boolean;
+  /**
+   * Which of the three formats this screen HAS, so an artist can see at a
+   * glance how far along it is. A caller is served by extension - the loader
+   * looks for `<stem>.rip` for a RIP terminal, `<stem>.seq` for a C64 and the
+   * text/ANSI file otherwise - so a screen with only one of them is a screen
+   * two thirds of the board cannot show properly.
+   */
+  formats?: { ansi: boolean; petscii: boolean; rip: boolean };
 }
 
 interface ScreenGalleryProps {
@@ -152,6 +160,28 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
         )}
         {item.credit && (
           <span className="block truncate text-content-muted">{item.credit}</span>
+        )}
+        {item.formats && (
+          <span className="mt-1 flex gap-1" data-testid="format-chips">
+            {([
+              ['ANSI', item.formats.ansi],
+              ['SEQ', item.formats.petscii],
+              ['RIP', item.formats.rip],
+            ] as const).map(([label, have]) => (
+              <span
+                key={label}
+                data-testid={`chip-${label.toLowerCase()}-${have ? 'have' : 'missing'}`}
+                title={have ? `${label} version exists` : `no ${label} version - this screen falls back for those callers`}
+                className={
+                  have
+                    ? 'px-1 rounded-sm bg-surface-3 text-content-primary'
+                    : 'px-1 rounded-sm border border-dashed border-border text-content-muted'
+                }
+              >
+                {label}
+              </span>
+            ))}
+          </span>
         )}
       </div>
     </button>
