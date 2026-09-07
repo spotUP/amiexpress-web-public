@@ -62,6 +62,14 @@ export function resolveCallerTheme(bbsRoot: string, caller: ThemeCaller): string
   const registry = readThemeRegistry(bbsRoot);
 
   const wanted = (caller.screenTheme ?? '').trim().toLowerCase();
+
+  // `default` is not a theme - it is the ABSENCE of one, the board's own
+  // screens - so it needs no registry entry and is always available. Looking
+  // it up like any other slug found nothing and fell through to the board
+  // default, so a caller who had deliberately turned the shipped theme OFF
+  // was handed it straight back and had no way to refuse it.
+  if (wanted === DEFAULT_SLUG) return DEFAULT_SLUG;
+
   if (wanted) {
     const theme = registry.themes.find(entry => entry.slug === wanted);
     if (theme && canWearTheme(caller, theme)) return theme.slug;
