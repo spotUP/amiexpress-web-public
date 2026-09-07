@@ -123,6 +123,25 @@ describe('applyClientReportedGeometry (the shared gate, also used by telnet NAWS
     expect(applyClientReportedGeometry(undefined, 80, 25)).toBe(false);
     expect(applyClientReportedGeometry(null, 80, 25)).toBe(false);
   });
+
+  /**
+   * The wire width is the terminal's real size, and it is recorded even when
+   * the geometry itself is refused, because the wire fold needs it after the
+   * graphics prompt has reset screenWidth to the board's 80-column model.
+   * Measured 2026-09-07: a telnet caller reported 200, answered A, and the
+   * title emitted at screenWidth 80 - the fold read 80 and never fired.
+   */
+  it('records the terminal width for the fold, even for a PETSCII session it refuses', () => {
+    const c64: any = { petsciiMode: true, screenWidth: 40, screenHeight: 25 };
+    expect(applyClientReportedGeometry(c64, 200, 66)).toBe(false);
+    expect({ model: c64.screenWidth, wire: c64.wireWidth }).toEqual({ model: 40, wire: 200 });
+  });
+
+  it('records the terminal width beside the model for a modern session', () => {
+    const session: any = { petsciiMode: false, screenWidth: 80, screenHeight: 24 };
+    applyClientReportedGeometry(session, 200, 66);
+    expect({ model: session.screenWidth, wire: session.wireWidth }).toEqual({ model: 200, wire: 200 });
+  });
 });
 
 /**

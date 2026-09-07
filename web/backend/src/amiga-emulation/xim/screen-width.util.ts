@@ -24,6 +24,13 @@ export const C64_ROWS = 25;
 export interface ScreenWidthSource {
   petsciiMode?: boolean;
   screenWidth?: number;
+  /**
+   * The caller's REAL terminal width, as last negotiated (NAWS / PTY). Unlike
+   * `screenWidth`, which the graphics prompt resets to the board's 80-column
+   * model, this is left alone by mode changes, so a wire-level consumer (the
+   * fold) can tell an 80-column model on a 200-column terminal.
+   */
+  wireWidth?: number;
   /** 40 (a C64) or 80 (the web terminal's wide PETSCII screen). Absent = 40. */
   petsciiColumns?: number;
 }
@@ -124,6 +131,10 @@ export function applyClientReportedGeometry(
   rows: number,
 ): boolean {
   if (!session) return false;
+  // The wire width is the terminal's real size and is recorded even for a
+  // PETSCII caller's non-40 report, because the fold is a wire concern and a
+  // later mode change must not have erased what the terminal said it is.
+  session.wireWidth = cols;
   if (session.petsciiMode === true) return false;
   session.screenWidth = cols;
   session.screenHeight = rows;

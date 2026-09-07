@@ -181,14 +181,52 @@ interface WireFoldState { wireFoldColumn?: number }
  */
 export function foldForWire(
   text: string,
-  session: ({ screenWidth?: number; petsciiMode?: boolean } & WireFoldState) | null | undefined,
+  session: ({ screenWidth?: number; wireWidth?: number; petsciiMode?: boolean } & WireFoldState) | null | undefined,
 ): string {
   if (!session || session.petsciiMode === true) return text;
-  const reported = session.screenWidth;
+  /**
+   * The caller's REAL terminal width, which is not `screenWidth`.
+   *
+   * `screenWidth` is the board's column MODEL - the width its 80-column
+   * screens and its doors are drawn for - and the graphics-prompt handler
+   * deliberately resets it to 80 for an ANSI caller (pre-login.ts, express.e
+   * :29538). The fold is a WIRE concern: it needs how wide the terminal on
+   * the other end actually is, so it knows an 80-column screen will stream
+   * out to the right instead of wrapping. That is `wireWidth`, set from NAWS
+   * / the PTY size at negotiation and never touched by the mode reset. It was
+   * conflating the two that made the fold read 80 and never fire for a wide
+   * telnet caller (measured 2026-09-07: title emitted at screenWidth 80 while
+   * NAWS had reported 200).
+   */
+  const reported = session.wireWidth ?? session.screenWidth;
   if (typeof reported !== 'number' || reported <= 80) return text;
   if (doorOwnsTerminal(session as any)) { session.wireFoldColumn = 0; return text; }
-  if (positionsCursorAbsolutely(text)) { session.wireFoldColumn = 0; return text; }
-  const { out, col } = foldFrom(text, 80, session.wireFoldColumn ?? 0);
+  /**
+   * Every screen of this board's opens `ESC[2J ESC[H` - clear, then home -
+   * and that is not the art positioning its rows; it is where the art
+   * STARTS. Measured on the live board with a 200x66 probe: the title
+   * arrived as one chunk with that preamble and rows of 1427 cells behind it,
+   * untouched, because the preamble tripped the check meant for art that
+   * addresses the cursor row by row. So the preamble is passed through, the
+   * column is 0 after it, and the check is asked about the rest.
+   */
+  const preamble = leadingClearAndHome(text);
+  const body = text.slice(preamble.length);
+  if (positionsCursorAbsolutely(body)) { session.wireFoldColumn = 0; return text; }
+  const startCol = preamble.length > 0 ? 0 : (session.wireFoldColumn ?? 0);
+  const { out, col } = foldFrom(body, 80, startCol);
   session.wireFoldColumn = col;
-  return out;
+  return preamble + out;
+}
+
+/**
+ * The run of screen-clearing and homing sequences a chunk opens with: ED
+ * (`ESC[2J`, `ESC[J`), a home (`ESC[H`, `ESC[1;1H`, `ESC[;H`), SGR and DEC
+ * private-mode sets, in any order. Stops at the first byte that is not one
+ * of those.
+ */
+export function leadingClearAndHome(text: string): string {
+  const re = /^(?:\x1b\[(?:[0-2]?J|(?:1?;?1?)H|f|[0-9;]*m|\?[0-9;]*[hl]))+/;
+  const m = re.exec(text);
+  return m ? m[0] : '';
 }

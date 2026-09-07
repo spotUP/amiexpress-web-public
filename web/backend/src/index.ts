@@ -435,7 +435,8 @@ export interface BBSSession {
   petsciiTransducer?: import("@amiexpress/bbs-door-sdk/petscii").AnsiToPetsciiTransducer;
   ripMode?: boolean; // Whether RIP graphics mode is enabled (640x350, .rip files)
   terminalType?: "c64" | "modern" | "unknown"; // Terminal type: C64 (raw PETSCII), modern (Unicode PUA), or unknown
-  screenWidth?: number; // Terminal width (40 for C64, 80 for modern)
+  screenWidth?: number; // The board's column MODEL (40 for C64, 80 for modern) - what its screens and doors are drawn for
+  wireWidth?: number; // The caller's REAL terminal width, from NAWS / the PTY size. Not reset by the graphics prompt; the wire fold reads THIS, not screenWidth.
   screenHeight?: number; // Terminal height (25 for C64, 24 for modern)
   currentRoomId?: string; // Current chat room ID for group chat
   gamepadHandler?: (event: any) => void; // Set by GamepadInputManager; called by socket-handlers on gamepad-event

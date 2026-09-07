@@ -192,3 +192,59 @@ describe('foldForWire - the fold at the wire, for a caller wider than 80', () =>
     expect(wrapForSession(text, { screenWidth: 200, petsciiMode: false })).toBe(text);
   });
 });
+
+/**
+ * Measured on the live board 2026-09-07 with a 200x66 telnet probe: the
+ * title screen reached the caller as ONE chunk that opens `ESC[2J ESC[H`
+ * and then carries the art, rows of 240, 927 and 1427 cells among it -
+ * unfolded. The clear-and-home is what every screen starts with, and the
+ * bail-out for "art that positions its own rows" was reading it as that.
+ */
+describe('foldForWire folds a screen that opens with clear-and-home', () => {
+  const wide = 'X'.repeat(240);
+  const session = () => ({ screenWidth: 200, wireFoldColumn: 0 });
+
+  it('the clear-and-home preamble is not absolute positioning of the art', () => {
+    const out = foldForWire(`\x1b[2J\x1b[H\r\n${wide}\r\n`, session());
+    const rows = out.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').split('\r\n');
+    expect(Math.max(...rows.map((r) => r.length))).toBe(80);
+    expect(out.startsWith('\x1b[2J\x1b[H')).toBe(true);
+  });
+
+  it('art that positions rows itself is still left alone', () => {
+    const art = `\x1b[5;10H${wide}`;
+    expect(foldForWire(art, session())).toBe(art);
+  });
+});
+
+/**
+ * The fold reads the caller's WIRE width, not the board's column model.
+ *
+ * Measured on the live board and reproduced on localhost 2026-09-07: a telnet
+ * caller negotiated NAWS 200x66, and the title still streamed out to column
+ * 1427. `applyClientReportedGeometry` had set screenWidth to 200, then the
+ * graphics-prompt handler reset it to the board's 80-column model for an ANSI
+ * caller (pre-login.ts, express.e:29538) - correct for the model, and it
+ * turned the fold off, because the fold was reading the same field. The wire
+ * width is a separate fact the mode reset does not touch.
+ */
+describe('foldForWire keys on wireWidth, which the graphics prompt does not reset', () => {
+  const wide = `\x1b[2J\x1b[H\r\n${'X'.repeat(240)}\r\n`;
+
+  it('folds when the board model is 80 but the terminal reported 200', () => {
+    const session = { screenWidth: 80, wireWidth: 200, wireFoldColumn: 0 };
+    const out = foldForWire(wide, session);
+    const rows = out.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').split('\r\n');
+    expect(Math.max(...rows.map((r) => r.length))).toBe(80);
+  });
+
+  it('does not fold a caller whose terminal really is 80, model or no model', () => {
+    expect(foldForWire(wide, { screenWidth: 80, wireWidth: 80, wireFoldColumn: 0 })).toBe(wide);
+  });
+
+  it('falls back to screenWidth when no wire width was ever negotiated', () => {
+    const out = foldForWire(wide, { screenWidth: 200, wireFoldColumn: 0 });
+    const rows = out.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').split('\r\n');
+    expect(Math.max(...rows.map((r) => r.length))).toBe(80);
+  });
+});
