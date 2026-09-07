@@ -85,6 +85,9 @@
  * 68K door can trigger) repaints the caller's screen outside this model, so the
  * diff baseline is dropped and the next frame is a full paint.
  */
+import { fileRecordRung } from './c64-file-record-rung';
+import { getFileViewLayout } from '../services/file-layout.service';
+import { config } from '../config';
 import {
   FrameReconstructor,
   adaptRows,
@@ -388,7 +391,29 @@ export class C64DoorFrameAdapter {
       fit,
     );
     const source = this.dropOldest ? dropOldestEntriesToFit(stripped, fit) : stripped;
-    const { rows, cursor } = adaptRows(source, { cols: this.cols });
+
+    // THE FILE-RECORD RUNG. A DIR row a 68K door printed is re-rendered
+    // through the SAME interpreter and the SAME Prompts/FILEVIEW.40 the
+    // board's own listing uses, so `F` through AquaScan and `F` through the
+    // internal handler are one screen rather than two.
+    //
+    // ONE LAYOUT SNAPSHOT PER FRAME, taken here: a sysop saving the file
+    // mid-listing cannot split a frame between two layouts, and the two paths
+    // cannot be handed different layouts for the same record.
+    //
+    // The ordinal restarts per frame because a frame is what a caller can see
+    // - and the internal listing's own numbering is per pass for the same
+    // reason.
+    let ordinal = 0;
+    const layout = getFileViewLayout(config.get('dataDir'));
+    const { rows, cursor } = adaptRows(source, {
+      cols: this.cols,
+      blockRenderer: fileRecordRung({
+        layout,
+        cols: this.cols,
+        nextOrdinal: () => ++ordinal,
+      }),
+    });
     // The blank tail of a 25-row grid is not content. It still costs adapted
     // rows, which is exactly how adaptFrame comes to push painted rows off the
     // top, so the window is measured against the PAINTED height instead.
