@@ -1666,6 +1666,28 @@ console.error(`[WARNING] Failed to start SSH server:`, error);
 console.log("   BBS will continue without SSH support");
     }
 
+    // FTP, when the sysop has turned it on. Same posture as SSH above: the
+    // board comes up without it if it cannot start, and the port comes from
+    // system_config unless FTP_PORT overrides. Phase 2 of
+    // thoughts/shared/plans/2026-09-07-ftp-server.md - login only so far, so a
+    // caller who gets in is answered 502 by everything else.
+    try {
+      const { startFtpServer } = require("./ftp/start-ftp");
+      const { boardFtpDeps } = require("./ftp/ftp-auth");
+      const ftpConfig = (() => {
+        try { return getBoardConfig(config.get('dataDir')); } catch { return null; }
+      })();
+      const ftpServer = await startFtpServer(ftpConfig, boardFtpDeps());
+      if (ftpServer) {
+        const bound = ftpServer.address();
+console.log(`[OK] FTP Server ready on port ${bound?.port}`);
+console.log(`[FTP] Connect: ftp -p localhost ${bound?.port} (AUTH TLS required from off the box)`);
+      }
+    } catch (error) {
+console.error(`[WARNING] Failed to start FTP server:`, error);
+console.log("   BBS will continue without FTP support");
+    }
+
 console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 console.log("[READY] AmiExpress BBS is ready for connections!");
 console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
