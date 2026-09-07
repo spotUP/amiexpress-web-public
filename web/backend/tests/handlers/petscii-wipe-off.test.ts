@@ -1,29 +1,23 @@
 /**
- * C64 40-col plan, Task 8 (gap a): screen wipe effects are OFF for a
- * PETSCII session.
+ * Screen wipes on a PETSCII session, at the caller's own width.
  *
- * `~WX` on the board's real menu (Screens/MENU250.TXT, first line) plays a
- * wipe animation. Its frames are built by `getWipeFrames`, which composes
- * an 80-column grid out of the screen's content and emits each frame
- * straight at the socket - past the reflow choke (`wrapForSession`) and
- * past Task 7's menu reflow. A C64 caller therefore got 80-column noise
- * frames whatever the rest of this plan did to the screen underneath.
+ * A wipe used to be refused to every PETSCII caller: `getWipeFrames` composed
+ * the screen onto an 80-column grid whatever his width, so on a C64's 40 the
+ * animation smeared the screen the 40-column work had just fitted. The engine
+ * is width-aware now (tests/utils/wipes-at-the-callers-width.test.ts), so the
+ * effect RUNS for him, built at forty - "try to fix the wipes for petscii 40
+ * cols as well" (sysop, 2026-09-07).
  *
- * The effects-off principle (the same one Task 3/6 applied to the doors'
- * glitch, typewriter and masthead animations at the XXS tier): on a
- * 40-column canvas the effect does not run at all and the screen paints
- * directly. Nothing about the animation is re-sized - a wipe IS an
- * 80-column effect.
- *
- * RED before the fix: `getWipeFrames` was called for the PETSCII session
- * and rows of 80 columns went on the wire.
- *
- * The ANSI session keeps the animation: same file, same session shape as
- * every 80-column caller, frames still generated and still played.
+ * What has to stay true either way, and is what this file pins: nothing wider
+ * than the caller's screen goes on his wire, and the directive itself is
+ * consumed rather than printed - on the ANSI path and on the `.seq` path,
+ * which returns before the wipe detection and must strip it in its own right.
  *
  * Harness (socket stub, absolute-path seam, real loadScreenFile) follows
  * tests/handlers/petscii-screen-reflow.test.ts.
  */
+import { widestColumnPainted } from '../helpers/painted-columns';
+
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -94,23 +88,26 @@ function contentRows(out: string): string[] {
 }
 
 describe('screen wipes on a PETSCII session', () => {
-  it('does not run the wipe effect at all for a petsciiMode session', async () => {
-    const { out } = await show({ petsciiMode: true, screenWidth: 40, screenHeight: 25, nodeId: 0 });
+  it('plays the wipe for a C64, composed at his forty columns', async () => {
+    const { out } = await show({ petsciiMode: true, petsciiColumns: 40, screenWidth: 40, screenHeight: 25, nodeId: 0 });
 
-    // The effect never ran...
-    expect(getWipeFrames).not.toHaveBeenCalled();
-    // ...the directive itself was still consumed, not printed...
+    // The effect ran, and it was told the caller's width...
+    expect(getWipeFrames).toHaveBeenCalledTimes(1);
+    expect((getWipeFrames as jest.Mock).mock.calls[0][2]).toBe(40);
+    // ...the directive itself was consumed, not printed...
     expect(out).not.toContain('~WX');
-    // ...and what did go out fits a C64 screen.
-    for (const row of contentRows(out)) {
-      expect(printableLength(row)).toBeLessThanOrEqual(40);
-    }
+    // ...and nothing wider than his screen went on the wire. Measured by
+    // replaying the stream, because a wipe frame carries no newlines: it
+    // addresses each row and paints a run, so splitting on `\n` measures one
+    // line thousands of columns long and proves nothing.
+    expect(widestColumnPainted(out)).toBeLessThanOrEqual(40);
   });
 
   it('still plays the wipe for an 80-column ANSI session', async () => {
     const { out, emits } = await show({ screenWidth: 80, screenHeight: 25, nodeId: 0 });
 
     expect(getWipeFrames).toHaveBeenCalledTimes(1);
+    expect((getWipeFrames as jest.Mock).mock.calls[0][2]).toBe(80);
     // The frames really went on the wire: an animation is many emits, each
     // repainting the screen from home.
     expect(emits).toBeGreaterThan(1);
@@ -127,9 +124,9 @@ describe('screen wipes on a PETSCII session', () => {
  * `isPetscii` branch BEFORE the wipe detection above it ever runs, so the
  * directive reached the tokenizer instead: strict fall-through
  * (express.e-exact) consumes the `~` and prints the cmd text, putting the
- * letters `WX` on a C64's screen. A wipe is an 80-column effect by
- * construction and never animates for a PETSCII session
- * (`wipeEffectsEnabled`), so on this path the directive must be stripped
+ * letters `WX` on a C64's screen. Those bytes are raw PETSCII
+ * - and a `.seq` has no ANSI to model, so it
+ * animates on no path at all - so the directive must be stripped here
  * exactly as the ANSI path strips it - same `parseWipeMCI`, same
  * own-line semantics (the code and its line break go together) - and
  * nothing of it may reach the wire.

@@ -58,8 +58,16 @@ const RESET = '\x1b[0m';
 /** A cell nothing has painted: a space in the terminal's default attributes. */
 const BLANK: Cell = Object.freeze({ char: ' ', ansi: RESET });
 
-/** The screens this board serves are 80 columns; a longer row wraps, as it does on the wire. */
-const GRID_COLUMNS = 80;
+/**
+ * The width the board's screens are drawn at, and the default this engine
+ * models a terminal at. A longer row wraps, as it does on the wire.
+ *
+ * It is a DEFAULT, not a constant: a C64 caller reads the same screen at 40,
+ * and a wipe composed on an 80-column grid smears across his 40 - which is
+ * why wipes were refused to PETSCII callers outright until 2026-09-07. The
+ * caller's own width is threaded in from `getWipeFrames`.
+ */
+const DEFAULT_GRID_COLUMNS = 80;
 
 /**
  * Upper bound on grid rows. A screen is normally <= 25 rows; the cap only
@@ -188,7 +196,7 @@ function applySgr(params: string, attrs: Attributes): void {
  * animation on the caller's own bytes, so the screen the user is left
  * looking at never depends on this model being bit-exact.
  */
-function parseAnsiToGrid(content: string): Cell[][] {
+function parseAnsiToGrid(content: string, columns: number = DEFAULT_GRID_COLUMNS): Cell[][] {
   const rows: Cell[][] = [[]];
   const attrs = defaultAttributes();
   let ansi = RESET;
@@ -204,7 +212,7 @@ function parseAnsiToGrid(content: string): Cell[][] {
   };
   const moveTo = (y: number, x: number): void => {
     row = Math.max(0, Math.min(y, MAX_GRID_ROWS));
-    col = Math.max(0, Math.min(x, GRID_COLUMNS - 1));
+    col = Math.max(0, Math.min(x, columns - 1));
     ensureRow(row);
   };
 
@@ -292,11 +300,11 @@ function parseAnsiToGrid(content: string): Cell[][] {
 
     if (ch === '\r') { col = 0; i++; continue; }
     if (ch === '\n') { moveTo(row + 1, 0); i++; continue; }
-    if (ch === '\t') { moveTo(row, Math.min(GRID_COLUMNS - 1, (Math.floor(col / 8) + 1) * 8)); i++; continue; }
+    if (ch === '\t') { moveTo(row, Math.min(columns - 1, (Math.floor(col / 8) + 1) * 8)); i++; continue; }
     if (ch === '\b') { col = Math.max(0, col - 1); i++; continue; }
     if (ch === '\x07' || ch === '\x00') { i++; continue; }
 
-    if (col >= GRID_COLUMNS) {
+    if (col >= columns) {
       // Wrap exactly where the terminal wraps.
       if (row >= MAX_GRID_ROWS) { i++; continue; }
       row++;
@@ -495,16 +503,16 @@ function framesFromGrids(animation: WipeGrids): WipeFrame[] {
  * survive (`tests/utils/screen-wipe-fidelity.test.ts` renders this and the
  * original side by side). Not part of the animation path.
  */
-export function renderScreenGrid(content: string): string {
-  return gridToAnsi(parseAnsiToGrid(content));
+export function renderScreenGrid(content: string, columns: number = DEFAULT_GRID_COLUMNS): string {
+  return gridToAnsi(parseAnsiToGrid(content, columns));
 }
 
 /**
  * ~WM - Matrix Rain Wipe
  * Characters scramble and cascade down like Matrix code
  */
-function matrixRainWipe(content: string): WipeGrids {
-  const grid = parseAnsiToGrid(content);
+function matrixRainWipe(content: string, columns: number): WipeGrids {
+  const grid = parseAnsiToGrid(content, columns);
   const grids: Cell[][][] = [];
   const height = grid.length;
 
@@ -569,9 +577,10 @@ function blindsWipe(
   content: string,
   axis: 'row' | 'col',
   stripSize: number,
-  delay: number
+  delay: number,
+  columns: number,
 ): WipeGrids {
-  const grid = parseAnsiToGrid(content);
+  const grid = parseAnsiToGrid(content, columns);
   const grids: Cell[][][] = [];
   const extent = axis === 'row' ? grid.length : gridWidth(grid);
   const stripCount = Math.max(1, Math.ceil(extent / stripSize));
@@ -601,16 +610,16 @@ function blindsWipe(
  * ~WH - Horizontal Blinds Wipe
  * Reveals screen in horizontal strips
  */
-function horizontalBlindsWipe(content: string): WipeGrids {
-  return blindsWipe(content, 'row', 3, 40);
+function horizontalBlindsWipe(content: string, columns: number): WipeGrids {
+  return blindsWipe(content, 'row', 3, 40, columns);
 }
 
 /**
  * ~WV - Vertical Blinds Wipe
  * Reveals screen in vertical strips
  */
-function verticalBlindsWipe(content: string): WipeGrids {
-  return blindsWipe(content, 'col', 5, 40);
+function verticalBlindsWipe(content: string, columns: number): WipeGrids {
+  return blindsWipe(content, 'col', 5, 40, columns);
 }
 
 /**
@@ -624,8 +633,8 @@ function verticalBlindsWipe(content: string): WipeGrids {
  * spiral, and a list so full of duplicates that the last 16 of 21 frames
  * were identical.
  */
-function spiralWipe(content: string): WipeGrids {
-  const grid = parseAnsiToGrid(content);
+function spiralWipe(content: string, columns: number): WipeGrids {
+  const grid = parseAnsiToGrid(content, columns);
   const grids: Cell[][][] = [];
   const height = grid.length;
   const maxWidth = gridWidth(grid);
@@ -677,8 +686,8 @@ function spiralWipe(content: string): WipeGrids {
  * ~WC - Checkerboard Wipe
  * Reveals in alternating squares like a checkerboard
  */
-function checkerboardWipe(content: string): WipeGrids {
-  const grid = parseAnsiToGrid(content);
+function checkerboardWipe(content: string, columns: number): WipeGrids {
+  const grid = parseAnsiToGrid(content, columns);
   const grids: Cell[][][] = [];
   const squareSize = 4;
 
@@ -711,8 +720,8 @@ function checkerboardWipe(content: string): WipeGrids {
  * of its 25 frames showing exactly what the previous frame showed. The sweep
  * now covers the half plane the geometry actually reaches.
  */
-function radialWipe(content: string): WipeGrids {
-  const grid = parseAnsiToGrid(content);
+function radialWipe(content: string, columns: number): WipeGrids {
+  const grid = parseAnsiToGrid(content, columns);
   const grids: Cell[][][] = [];
   const maxWidth = gridWidth(grid);
   const centerX = maxWidth / 2;
@@ -745,8 +754,8 @@ function radialWipe(content: string): WipeGrids {
  * ~WB - Block Wipe
  * Random blocks appear until screen is complete
  */
-function blockWipe(content: string): WipeGrids {
-  const grid = parseAnsiToGrid(content);
+function blockWipe(content: string, columns: number): WipeGrids {
+  const grid = parseAnsiToGrid(content, columns);
   const grids: Cell[][][] = [];
   const height = grid.length;
   const maxWidth = gridWidth(grid);
@@ -797,8 +806,8 @@ function blockWipe(content: string): WipeGrids {
  * a delta could not make cheap. Fixed noise dissolves at the same rate and
  * costs one cell's worth of bytes per cell, once.
  */
-function noiseFadeWipe(content: string): WipeGrids {
-  const grid = parseAnsiToGrid(content);
+function noiseFadeWipe(content: string, columns: number): WipeGrids {
+  const grid = parseAnsiToGrid(content, columns);
   const grids: Cell[][][] = [];
 
   const noise = grid.map(row =>
@@ -833,8 +842,8 @@ function noiseFadeWipe(content: string): WipeGrids {
  * lands on an odd row count, and a screen with an odd number of rows used to
  * end with its last row missing (a one-row screen ended blank).
  */
-function typewriterWipe(content: string): WipeGrids {
-  const grid = parseAnsiToGrid(content);
+function typewriterWipe(content: string, columns: number): WipeGrids {
+  const grid = parseAnsiToGrid(content, columns);
   const grids: Cell[][][] = [];
   const height = grid.length;
 
@@ -855,8 +864,8 @@ function typewriterWipe(content: string): WipeGrids {
  * ~WE - Explode Wipe
  * Characters explode from center outward
  */
-function explodeWipe(content: string): WipeGrids {
-  const grid = parseAnsiToGrid(content);
+function explodeWipe(content: string, columns: number): WipeGrids {
+  const grid = parseAnsiToGrid(content, columns);
   const grids: Cell[][][] = [];
   const height = grid.length;
   const maxWidth = gridWidth(grid);
@@ -909,7 +918,11 @@ function explodeWipe(content: string): WipeGrids {
  * exactly where the direct-display path leaves it (which is what the pause
  * prompt, screen.handler.ts:2559, prints from).
  */
-export function getWipeFrames(wipeType: WipeType, content: string): WipeFrame[] {
+export function getWipeFrames(
+  wipeType: WipeType,
+  content: string,
+  columns: number = DEFAULT_GRID_COLUMNS,
+): WipeFrame[] {
   // Handle random selection
   if (wipeType === 'random') {
     const types: WipeType[] = [
@@ -923,34 +936,34 @@ export function getWipeFrames(wipeType: WipeType, content: string): WipeFrame[] 
 
   switch (wipeType) {
     case 'matrix':
-      animation = matrixRainWipe(content);
+      animation = matrixRainWipe(content, columns);
       break;
     case 'hblinds':
-      animation = horizontalBlindsWipe(content);
+      animation = horizontalBlindsWipe(content, columns);
       break;
     case 'vblinds':
-      animation = verticalBlindsWipe(content);
+      animation = verticalBlindsWipe(content, columns);
       break;
     case 'spiral':
-      animation = spiralWipe(content);
+      animation = spiralWipe(content, columns);
       break;
     case 'checker':
-      animation = checkerboardWipe(content);
+      animation = checkerboardWipe(content, columns);
       break;
     case 'radial':
-      animation = radialWipe(content);
+      animation = radialWipe(content, columns);
       break;
     case 'blocks':
-      animation = blockWipe(content);
+      animation = blockWipe(content, columns);
       break;
     case 'noise':
-      animation = noiseFadeWipe(content);
+      animation = noiseFadeWipe(content, columns);
       break;
     case 'typewriter':
-      animation = typewriterWipe(content);
+      animation = typewriterWipe(content, columns);
       break;
     case 'explode':
-      animation = explodeWipe(content);
+      animation = explodeWipe(content, columns);
       break;
     default:
       return [];
@@ -1069,25 +1082,26 @@ export function parseWipeMCI(content: string): { wipeType: WipeType | null; cont
 }
 
 /**
- * Whether this session's screens may play a wipe animation at all
- * (C64/40-col plan, Task 8).
+ * Whether this session's screens may play a wipe animation at all.
  *
- * A wipe is an 80-column effect by construction: `getWipeFrames` composes
- * the screen into a grid, reveals it cell by cell, and emits each frame
- * straight at the socket with its own clear-and-home. Those frames never
- * pass the session reflow choke (`wrapForSession`) and never pass Task 7's
- * menu reflow, so on a 40-column canvas the animation smeared the very
- * screen the rest of this plan had just fitted - the board's own menu
- * carries `~WX`.
+ * A wipe used to be an 80-column effect by construction: `getWipeFrames`
+ * composed the screen onto an 80-column grid whatever the caller's width, so
+ * on a C64's 40 columns the animation smeared the very screen the 40-column
+ * work had just fitted - and the board's own menu carries `~WX`. The answer
+ * then was the effects-off principle: on a C64 the effect does not run and the
+ * screen paints directly.
  *
- * The answer is the effects-off principle Task 3/6 applied to the doors'
- * glitch, typewriter and masthead animations at the XXS tier: on a C64 the
- * effect does not run, and the screen paints directly. Nothing is re-sized
- * or half-played. `petsciiMode === true` is the single source of truth for
- * "is this a C64 caller" (the same gate `wrapForSession` and
- * `sessionColumns` use), so an ANSI caller - at any width, including a
- * narrow browser window - keeps every wipe it has today, byte for byte.
+ * IT RUNS NOW, at the caller's own width (sysop, 2026-09-07: "try to fix the
+ * wipes for petscii 40 cols as well"). The grid is built at the width the
+ * caller reads at, so a 40-column screen is revealed 40 columns wide, and the
+ * frames go out as ordinary `ansi-output` - which for a PETSCII caller is
+ * exactly what every other screen goes out as, and reaches the same
+ * transducer.
+ *
+ * The one session that still gets no wipe is a `.seq` screen: those are raw
+ * PETSCII bytes with no ANSI to model, and the renderer never asks for one
+ * (handlers/petscii-screen.render.ts).
  */
-export function wipeEffectsEnabled(session: { petsciiMode?: boolean } | null | undefined): boolean {
-  return session?.petsciiMode !== true;
+export function wipeEffectsEnabled(_session: { petsciiMode?: boolean } | null | undefined): boolean {
+  return true;
 }

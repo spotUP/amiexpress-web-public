@@ -72,6 +72,23 @@ export interface TransferResult {
 }
 
 /**
+ * Is the caller a real Commodore, rather than a browser drawing Commodore
+ * glyphs?
+ *
+ * `terminalType === 'c64'` is what the TTYPE handshake and the DEL-probe
+ * stamp on a genuine machine (server/telnet-server.ts, utils/c64-detect.util
+ * .ts). A `P` or `P8` answer in the web terminal sets `petsciiMode` and
+ * nothing else - that caller is a browser, and asking him to use Punter
+ * because his font is Commodore denied him ZMODEM for no reason (sysop,
+ * 2026-09-07: "about the transfers, yes fix it for petscii browser users as
+ * well").
+ */
+function isCommodoreHardware(session: BBSSession): boolean {
+  const s = session as any;
+  return s?.terminalType === 'c64' && s?.connectionType !== 'web';
+}
+
+/**
  * Get the appropriate protocol for a session based on terminal type
  */
 export function getDefaultProtocol(session: BBSSession): TransferProtocol {
@@ -88,8 +105,12 @@ export function getDefaultProtocol(session: BBSSession): TransferProtocol {
     }
   }
 
-  // PETSCII mode = C64/C128, prefer Punter or XMODEM
-  if ((session as any).petsciiMode) {
+  // A REAL Commodore prefers Punter. PETSCII is not the question: the web
+  // terminal draws Commodore glyphs on a browser canvas, and a browser does
+  // ZMODEM (packages/terminal ships zmodem.js) - it was being offered Punter
+  // and nothing else because it asked for glyphs. The transport is what can
+  // and cannot carry a protocol, so the transport is what decides.
+  if (isCommodoreHardware(session)) {
     return 'punter';
   }
 
@@ -103,11 +124,12 @@ export function getDefaultProtocol(session: BBSSession): TransferProtocol {
 export function getAvailableProtocols(session: BBSSession): TransferProtocol[] {
   const protocols: TransferProtocol[] = [];
 
-  if ((session as any).petsciiMode) {
-    // C64/C128 terminals
+  if (isCommodoreHardware(session)) {
+    // A real C64/C128 on the other end of a byte transport.
     protocols.push('punter', 'xmodem', 'xmodem-crc');
   } else {
-    // Modern terminals
+    // Every other caller, PETSCII glyphs or not: the browser terminal runs
+    // zmodem.js, and a modern telnet client has its own.
     protocols.push('zmodem', 'ymodem', 'xmodem-1k', 'xmodem-crc', 'xmodem');
     // Also offer Punter for testing/compatibility
     protocols.push('punter');

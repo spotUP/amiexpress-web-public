@@ -27,12 +27,13 @@
  * WHAT THE TOKENS MEAN ON A C64 (plan Task 8; the sysop-facing copy of
  * this table is in `handoff.md`):
  *
- *  - `~WX` and the rest of the `~W*` family - wipes NEVER animate on a C64.
- *    A wipe is an 80-column effect by construction (`getWipeFrames` composes
- *    an 80-wide grid and pushes frames straight at the socket), so
- *    `wipeEffectsEnabled` is false for a PETSCII session and the directive
- *    is STRIPPED here, exactly as `displayScreen` strips it for the ANSI
- *    path - code and its own line together. It is never printed.
+ *  - `~WX` and the rest of the `~W*` family - a `.seq` never animates. The
+ *    ANSI path DOES animate for a C64 now, at his own forty columns
+ *    (`getWipeFrames` takes the caller's width since 2026-09-07), but a
+ *    `.seq` is raw PETSCII with no ANSI for the wipe engine to model, so the
+ *    directive is stripped here rather than played - and stripping it is the
+ *    point: the tokenizer's strict fall-through would print `WX` on the
+ *    caller's screen.
  *  - `~c0..~c7` - one VIC pen byte, in force until art or another token
  *    changes it. There is no "colour off".
  *  - `~b0..~b7` / `~z0..~z7` - the CCGMS pair `$02 <colour>`, which sets
@@ -260,7 +261,7 @@ export async function preparePetsciiSeq(
   //     `isPetscii` branch BEFORE the ANSI wipe detection runs, so the strip
   //     has to happen here or the tokenizer's strict fall-through prints the
   //     cmd text (`~WX` reaches a C64 as the letters `WX`). Effects are off
-  //     for a PETSCII session by construction - `wipeEffectsEnabled` is
+  //     for a `.seq` by construction - there is no ANSI here to model, and
   //     false, a wipe being an 80-column effect - so the directive is
   //     consumed and never animated. ONE regex, the ANSI path's own
   //     (`parseWipeMCI`), including its own-line semantics: the code and its

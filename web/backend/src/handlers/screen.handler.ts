@@ -45,6 +45,7 @@ import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { formatBytes as formatBytesUtil } from '../utils/byte-format.util';
 import { parseWipeMCI, getWipeFrames, wipeEffectsEnabled, type WipeType } from '../utils/screen-wipe.util';
+import { sessionColumns } from '../utils/door-min-columns.util';
 import { PRE_PACED, fromCharset, pacedFromCharset, type OutputAttributes } from '../utils/output-pacing';
 import { emitText, emitPrompt, flushOutput } from '../utils/output.util';
 import { fileCache } from '../utils/file-cache.util';
@@ -2573,7 +2574,10 @@ console.log(`[WIPE] Starting wipe animation: ${wipeType}`);
       screenDebug(`[displayScreen] Playing wipe animation: ${wipeType}`);
 
       // Generate animation frames
-      const wipeFrames = getWipeFrames(wipeType, parsed);
+      // AT THE CALLER'S WIDTH. The grid is a model of his terminal, so a C64
+      // gets a 40-column model and a 40-column reveal; `parsed` has already
+      // been folded to that width by the reflow above, so the two agree.
+      const wipeFrames = getWipeFrames(wipeType, parsed, sessionColumns(session));
 console.log(`[WIPE] Generated ${wipeFrames.length} frames`);
 
       // Get direct socket emit (bypasses modem emulator wrapper if installed)
