@@ -1,0 +1,8 @@
+BBSCMD=ACHIEVE
+TYPE=TS
+LOCATION=Doors/achieve
+DESCRIPTION=Your achievements, scoreboards, and linking this board to your global profile
+MULTINODE=YES
+PRIORITY=SAME
+ACCESS=1
+MIN_COLUMNS=40

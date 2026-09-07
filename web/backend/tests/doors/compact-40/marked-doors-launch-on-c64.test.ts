@@ -99,7 +99,7 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  * C64_ADAPT would put the frame adapter on a screen that is already forty
  * columns wide and crop it again.
  */
-const ADAPTED = ['THEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC'];
+const ADAPTED = ['THEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE'];
 
 const UNROUTED = 'unrouted-gate-test-type' as unknown as Door['type'];
 
