@@ -10,6 +10,7 @@ import { formatTime, escapeContent } from '../utils/format';
 import { parseContent } from '../utils/markdown';
 import { getUserColor } from '../core/formatter';
 import { T } from '../door-theme';
+import { findOnlineUser, formatWhois } from './whois-render';
 
 export function createSubmitHandler(
   socket: Socket,
@@ -148,6 +149,13 @@ export function createSubmitHandler(
             socket.emit('chat:group-dm', { participants: r.data.targets, message: processedMsg });
           }
           // local echo removed: backend echoes sent DM with direction: 'sent'
+        }
+
+        // /whois <name> (and its /info alias) - the command returns
+        // { type: 'whois', username } and this is the only consumer. Keyed on
+        // the data type, not cmdName, so the alias works too.
+        if (r.data?.type === 'whois' && r.data?.username) {
+          addSystemMessage(formatWhois(findOnlineUser(onlineUsers, r.data.username), r.data.username));
         }
 
         if (cmdName === 'me' && r.message?.startsWith('ACTION:')) {

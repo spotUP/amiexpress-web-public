@@ -8,6 +8,7 @@ const format_1 = require("../utils/format");
 const markdown_1 = require("../utils/markdown");
 const formatter_1 = require("../core/formatter");
 const door_theme_1 = require("../door-theme");
+const whois_render_1 = require("./whois-render");
 function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, handleCommandActions, showLoading, showUserList, addChatMessage, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, createSearchOverlay, searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChatLog, tryJoinVoiceChannel) {
     return async (value) => {
         try {
@@ -94,6 +95,12 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                         socket.emit('chat:group-dm', { participants: r.data.targets, message: processedMsg });
                     }
                     // local echo removed: backend echoes sent DM with direction: 'sent'
+                }
+                // /whois <name> (and its /info alias) - the command returns
+                // { type: 'whois', username } and this is the only consumer. Keyed on
+                // the data type, not cmdName, so the alias works too.
+                if (r.data?.type === 'whois' && r.data?.username) {
+                    addSystemMessage((0, whois_render_1.formatWhois)((0, whois_render_1.findOnlineUser)(onlineUsers, r.data.username), r.data.username));
                 }
                 if (cmdName === 'me' && r.message?.startsWith('ACTION:')) {
                     const processedMsg = (0, emojis_1.replaceEmojis)(r.message);
