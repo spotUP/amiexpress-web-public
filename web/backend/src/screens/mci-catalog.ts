@@ -225,6 +225,14 @@ export const MCI_CATALOG: MciCode[] = [
     family: 'layout', argument: { kind: 'number', label: 'Row' },
     takesWidth: false, terminator: '|', source: 'express.e:5487', handledBy: 'dispatch',
   },
+  {
+    // Not express.e's: C*Base's `£t` (ml1.o.asm:1464-1490), added by f9f4f9a57
+    // because a column tab is what a sysop-editable layout needs and the
+    // Amiga's MCI set has none.
+    code: 't', summary: 'Pad forward with spaces to a column - a tab, not a cursor move',
+    family: 'layout', argument: { kind: 'number', label: 'Column (two digits, 0-based)' },
+    takesWidth: false, terminator: '|', source: 'C*Base ml1.o.asm:1464-1490', handledBy: 'dispatch',
+  },
 
   // -- What the screen does next (express.e:5455-5477, 5726-5768) ----------
   action('SP', 'Wait for a key, showing the pause prompt', 'flow', 5455),

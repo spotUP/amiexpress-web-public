@@ -126,7 +126,11 @@ IMAGE_OWNED_INFO="Doors.info NamesNotAllowed.info Access.info Commands.info Stor
 # the difference by remembering what the last deploy wrote: a file still
 # matching that is untouched and may be updated; one that differs was edited
 # and is left alone. See sync_tracked.
-TRACKED_INFO="ConfConfig.info ComputerList.info Drives.info ScreenTypes.info Languages.info FCheck.info"
+# `Themes.info` is the screen-theme registry: which themes the board has,
+# who owns each, and which a caller may wear. Tracked for the same reason
+# ScreenTypes.info is - the image may ship entries, and the sysop and the
+# admin write it, so neither side may simply win.
+TRACKED_INFO="ConfConfig.info ComputerList.info Drives.info ScreenTypes.info Languages.info FCheck.info Themes.info"
 
 # Every node the image seeds a directory for, not just the seven that used to
 # have an icon. A node's SCREENS tooltype is what points it at the shared
@@ -548,6 +552,16 @@ list_tracked_screens() {
         esac
         (cd "$DEFAULT_DATA_DIR" && find "$dir" -type f -print)
     done
+
+    # A theme the IMAGE ships. An artist's own theme is absent from the image
+    # by construction, so no rule here reaches it: this loop walks what the
+    # image has. `Themes/` is deliberately NOT in the tar sync list above
+    # (Doors Screens Libs C) and NOT in either FORCE_REINIT_SCREENS rm -rf
+    # path - a themes tree under `Screens/` would be destroyed by the recovery
+    # action for the problem it caused.
+    if [ -d "$DEFAULT_DATA_DIR/Themes" ]; then
+        (cd "$DEFAULT_DATA_DIR" && find Themes -type f -print)
+    fi
 
     for conf in Conf1 Conf2 Conf3 Conf4 Conf5 Conf6 Conf7 Conf8 Conf9 Conf10 \
                 Conf11 Conf12 Conf13 Conf14; do

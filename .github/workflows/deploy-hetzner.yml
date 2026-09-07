@@ -127,6 +127,35 @@
               # archive and still nothing next to the disk.
               ls -1t "$BACKUP_DIR"/bbs-doordata-*.tar.gz 2>/dev/null | tail -n +21 | xargs -r rm -f
 
+              # The board's ART: the screens a sysop drew and the screen
+              # THEMES an artist uploaded.
+              #
+              # This ships with the Themes/ directory rather than after it, on
+              # purpose. Every other artist-facing directory on this board has
+              # been lost at least once - the .info backup covers configuration
+              # and the door backup covers door data, and neither covers a
+              # single screen file. An artist's theme exists ONLY on the
+              # volume: it is absent from the image by construction, so a lost
+              # volume is a lost theme with nothing to restore from.
+              #
+              # Screens/ comes too, including .Revisions: it is the board's
+              # own art and the ten-deep undo the admin editor keeps.
+              echo "== backup: the board's art and themes =="
+              docker run --rm \
+                -v amiexpress-bbs-data:/data:ro \
+                -v "$BACKUP_DIR":/backup \
+                alpine:3 \
+                sh -c "cd /data && find bbs/Themes bbs/Screens bbs/Conf*/Screens \
+                       -type f -print 2>/dev/null \
+                       | tar -czf /backup/bbs-art-$STAMP.tar.gz -T -" \
+                || echo "WARNING: art backup failed, continuing"
+              if [ -f "$BACKUP_DIR/bbs-art-$STAMP.tar.gz" ]; then
+                echo "Backup: $BACKUP_DIR/bbs-art-$STAMP.tar.gz ($(du -h "$BACKUP_DIR/bbs-art-$STAMP.tar.gz" | cut -f1), $(tar -tzf "$BACKUP_DIR/bbs-art-$STAMP.tar.gz" | wc -l) files)"
+              else
+                echo "WARNING: no art archive was written"
+              fi
+              ls -1t "$BACKUP_DIR"/bbs-art-*.tar.gz 2>/dev/null | tail -n +21 | xargs -r rm -f
+
               # Always sync to origin/main exactly. `git pull` can silently
               # leave the checkout behind when the working tree has local
               # edits (which the server should never have, but accumulates
