@@ -11,6 +11,7 @@ import { ActivityPage } from './pages/ActivityPage';
 import { SystemConfigPage } from './pages/SystemConfigPage';
 import { DoorsPage } from './pages/DoorsPage';
 import { ScreenFilesPage } from './pages/ScreenFilesPage';
+import { ScreenThemesPage } from './pages/ScreenThemesPage';
 import { AdminRolesPage } from './pages/AdminRolesPage';
 import { SpriteManagerPage } from './pages/SpriteManagerPage';
 import { AuditLogPage } from './pages/AuditLogPage';
@@ -103,6 +104,9 @@ function App() {
         {/* Live — sysop-only except Overview */}
         <Route path="activity" element={<SysopRoute><ActivityPage /></SysopRoute>} />
         <Route path="screens" element={<ScreenFilesPage />} />
+        {/* Level 100 like the editor beside it: an artist needs both - one
+            names the theme, the other draws its screens. */}
+        <Route path="screen-themes" element={<ScreenThemesPage />} />
         <Route path="nodes" element={<SysopRoute><NodesWorkspace /></SysopRoute>} />
         <Route path="operator-chat" element={<SysopRoute><OperatorChatWorkspace /></SysopRoute>} />
 

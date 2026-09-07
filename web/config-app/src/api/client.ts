@@ -562,6 +562,36 @@ class ApiClient {
   }
 
   // Languages
+  // ===== Screen themes =====
+  // A theme is a full set of board art one artist owns. These four calls are
+  // the whole surface: the server answers what THIS account may do with each
+  // theme, so the page never re-decides a permission.
+
+  async getScreenThemes() {
+    return this.request<ApiResponse>(`${API_BASE}/themes`);
+  }
+
+  async createScreenTheme(theme: { slug: string; title: string; author?: string; owner?: string; widths?: number[]; doorTheme?: string }) {
+    return this.request<ApiResponse>(`${API_BASE}/themes`, {
+      method: 'POST',
+      body: JSON.stringify(theme),
+    });
+  }
+
+  async updateScreenTheme(slug: string, updates: Record<string, unknown>) {
+    return this.request<ApiResponse>(`${API_BASE}/themes/${encodeURIComponent(slug)}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async setDefaultScreenTheme(slug: string) {
+    return this.request<ApiResponse>(`${API_BASE}/themes/default`, {
+      method: 'POST',
+      body: JSON.stringify({ slug }),
+    });
+  }
+
   async getLanguages() {
     return this.request<ApiResponse>(`${API_BASE}/config/languages`);
   }

@@ -18,6 +18,7 @@
  */
 
 import {
+  Palette,
   Activity,
   ArrowUpDown,
   Boxes,
@@ -87,6 +88,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: 'conferences', label: 'Conferences', icon: MessageSquare, minLevel: 255, description: 'Message areas, and the file paths that belong to them', keywords: ['Drives', 'Drive Setup', 'File Areas', 'DLPATH', 'ULPATH', 'Storage', 'S3', 'Bucket', 'Pooled Storage', 'QUOTA', 'Cloud'] },
       { path: 'doors', label: 'Doors', icon: DoorOpen, minLevel: 255, description: 'External programs on the command menu', keywords: ['Global Wall'] },
       { path: 'screens', label: 'Screen Files', icon: FileImage, minLevel: 100, description: 'Every screen the board can display, and where it resolves from' },
+      { path: 'screen-themes', label: 'Screen Themes', icon: Palette, minLevel: 100, description: "A whole set of board art a caller can wear, and who owns each one", keywords: ['Theme', 'Artist', 'ANSI', 'Art', 'Skin'] },
       { path: 'sprite-manager', label: 'Sprite Manager', icon: FileImage, minLevel: 255, description: 'Upload and manage sprite sheets for installed doors' },
     ],
   },
