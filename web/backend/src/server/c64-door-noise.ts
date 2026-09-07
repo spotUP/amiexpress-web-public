@@ -1,6 +1,10 @@
 /**
  * Door chatter that says nothing to a 40-column caller.
  *
+ * TWO kinds, and both are text a door writes into a slot nobody filled in:
+ * a phrase inside a row (blanked in place, the rest of the row kept) and a
+ * whole row of placeholder (blanked entirely). See the two tables below.
+ *
  * `ctop` and `conftop` print
  *
  *   ` 5.            - NO UPLOADERS ARE AVAILABLE IN THIS CONFERENCE -`
@@ -28,6 +32,25 @@ export const NARROW_NOISE: RegExp[] = [
   /-\s*NO UPLOADERS ARE AVAILABLE IN THIS CONFERENCE\s*-/i,
 ];
 
+/**
+ * Whole rows that are a door's placeholder for a slot NOBODY HAS WRITTEN IN.
+ *
+ * dRE!WAll fills its unused wall slots with `VIRGIN LINE VIRGIN LINE ...`
+ * against the author `dR.dRE!/tRSi`. Each one is a `record` row, so each costs
+ * the 40-column caller TWO rows - measured on the corpus fixture, seven
+ * placeholders spend 14 of the 31 rows the screen needs, and 25 is what he
+ * has. The seven real comments below them cost one row each.
+ *
+ * Blanked whole, not trimmed: there is no part of the row worth a column, and
+ * unlike ctop's numbered slots there is no number to keep the list aligned.
+ *
+ * Two "VIRGIN LINE"s in a row is the test, not one: it is the door's own
+ * repeated filler, and a caller who writes `virgin line` on the wall keeps it.
+ */
+export const NARROW_PLACEHOLDER_ROWS: RegExp[] = [
+  /VIRGIN LINE\s+VIRGIN LINE/i,
+];
+
 /** The row's text, exactly as wide as the row. */
 function textOf(row: ReadonlyArray<Readonly<Cell>>): string {
   return row.map((c) => c.ch).join('');
@@ -43,6 +66,10 @@ export function stripNarrowNoise(frame: Frame): Frame {
   let hit = false;
   const cells = frame.cells.map((row) => {
     const text = textOf(row);
+    if (NARROW_PLACEHOLDER_ROWS.some((pattern) => pattern.test(text))) {
+      hit = true;
+      return row.map(() => blankCell());
+    }
     let out: Cell[] | null = null;
     for (const pattern of NARROW_NOISE) {
       const match = pattern.exec(text);

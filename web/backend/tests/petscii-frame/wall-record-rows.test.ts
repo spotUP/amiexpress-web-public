@@ -153,9 +153,9 @@ describe("the sysop's dRE!WAll report, on the glass of a real 40-column C64", ()
         if (text.endsWith(author)) seen.push({ y, author });
       }
     });
-    // The capture has seven wall entries plus seven "VIRGIN LINE" placeholder
-    // rows; the ones still on a 25-row screen after the ladder's tail-paging
-    // all end in their author.
+    // The capture has seven wall entries; its seven "VIRGIN LINE" placeholder
+    // rows no longer reach the glass (server/c64-door-noise.ts). Every entry
+    // still on the 25-row screen ends in its author.
     expect(seen.length).toBeGreaterThanOrEqual(7);
     for (const { y, author } of seen) {
       expect({ y, endsAt: rows[y].length }).toEqual({ y, endsAt: COLS });
@@ -182,17 +182,29 @@ describe("the sysop's dRE!WAll report, on the glass of a real 40-column C64", ()
     expect(ys).toEqual(ys.map((_, i) => ys[0] + i));
   });
 
-  it('a long wall comment wraps instead of vanishing', () => {
-    // The door's own placeholder line is 59 columns of message beside a
-    // 12-column author - a comment authored on an 80-column board. Every word
-    // of it must be on the glass, across two 40-column rows, with the author
-    // right-aligned on the LAST of them, and nothing truncated.
-    const rows = screenText(machine);
-    const tail = rows.findIndex((t) => t.endsWith('dR.dRE!/tRSi'));
+  it('a long wall comment wraps instead of vanishing', async () => {
+    // The specimen USED to be the door's own `VIRGIN LINE ...` placeholder, the
+    // only long line in this capture. It is blanked at 40 columns now
+    // (server/c64-door-noise.ts): seven of them cost the caller fourteen rows
+    // of a 25-row screen for slots nobody had written in, and the pause that
+    // cost him is what the sysop asked to be rid of on 2026-09-07.
+    //
+    // So the long comment is written the way the DOOR writes every entry -
+    // `liveWallCapture`'s own `entry` path, a 61-column message field beside a
+    // 17-column author. 59 columns of message: every word of it must be on the
+    // glass across two 40-column rows, with the author right-aligned on the
+    // LAST of them, and nothing truncated.
+    const long = {
+      message: 'a wall comment long enough to need two rows on a c64 screen',
+      author: 'spot',
+    };
+    const m = await glass(liveWallCapture(2, long));
+    const rows = screenText(m);
+    const tail = rows.findIndex((t) => t.includes('c64') && t.endsWith(long.author));
     expect(tail).toBeGreaterThan(0);
     const head = rows[tail - 1];
-    const joined = `${head} ${rows[tail].slice(0, COLS - 'dR.dRE!/tRSi'.length)}`.replace(/\s+/g, ' ').trim();
-    expect(joined).toBe('VIRGIN LINE VIRGIN LINE VIRGIN LINE VIRGIN LINE VIRGIN LINE');
+    const joined = `${head} ${rows[tail].slice(0, COLS - long.author.length)}`.replace(/\s+/g, ' ').trim();
+    expect(joined).toBe(long.message);
     // The continuation row carries no author: that is what tells a reader which
     // text belongs to which name.
     expect(/(spot|sysop|Sysop|dR\.dRE!\/tRSi)$/.test(head)).toBe(false);
