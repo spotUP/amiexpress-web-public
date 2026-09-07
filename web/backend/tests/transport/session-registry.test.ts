@@ -110,8 +110,7 @@ import {
 import { handleOlmCommand, setOlmDependencies } from '../../src/handlers/transfer/olm.handler';
 import {
   handleUserChatMessage,
-  getActiveChatSessions,
-} from '../../src/handlers/operator-chat.handler';
+  getActiveChatSessions, callerTypedChar, callerPressedReturn } from '../../src/handlers/operator-chat.handler';
 import {
   handleChatRequest,
   setInternodeChatDependencies,
@@ -433,12 +432,14 @@ describe('TP-10 - one registry, so a cross-session push finds a byte terminal', 
 
     const ioServer = ioWith();
     try {
+      // The chat is express.e's one stream: the caller's keys go onto the
+      // shared line and back to their own wire as pressed (6172), through the
+      // registry - the chat branch of command.handler calls these for each key.
+      for (const ch of 'HELLO SYSOP') callerTypedChar(ioServer, session, ch);
+      callerPressedReturn(ioServer, session);
       await handleUserChatMessage(ioServer, repository as never, session, 'HELLO SYSOP');
       flushAllBuffers();
-      // The chat is express.e's one stream: the caller's line is on their wire
-      // as they type it (command.handler's chat branch echoes each key), and
-      // return - sent HERE, through the registry - ends it. Silence would be
-      // no return at all.
+      expect(socket.since(preamble)).toContain('HELLO SYSOP');
       expect(socket.since(preamble)).toContain('\r\n');
       expect(mockRegistryCalls.emitterForUserId).toBeGreaterThanOrEqual(1);
       // The structured half is still addressed to the sysop panel's room.
@@ -624,10 +625,10 @@ describe('TP-10 - one registry, so a cross-session push finds a byte terminal', 
       const wire = socket.since(preamble);
       // The return that ends the caller's line AND the bot's reply, word by
       // word, both crossed the byte wire (the line itself was echoed as typed).
-      expect(wire).toContain('\r\n');
-      // Word by word, the colour switching around each word (express.e:5966-5990).
+      // A character at a time, the sysop colour once in front (express.e:6164-6172).
       expect(wire.replace(/\x1b\[[0-9;]*m/g, '')).toContain('WHAT DO YOU WANT');
-      expect(mockRegistryCalls.emitterForUserId).toBeGreaterThanOrEqual(2);
+      expect(wire).toContain('\r\n');
+      expect(mockRegistryCalls.emitterForUserId).toBeGreaterThanOrEqual(1);
     } finally {
       getActiveChatSessions().delete('page-53');
     }

@@ -189,7 +189,9 @@ describe('GrumpyBot arrives where the caller is', () => {
 
     expect(w.session.subState).toBe(LoggedOnSubState.OPERATOR_CHAT_ACTIVE);
     expect(w.session.tempData?.pageId).toBe(pageId);
-    expect(plain(w.seen)).toContain('This is Spot, How can I help you??');
+    // express.e:6085-6087 prints the BOARD's sysop name (cmds.sysopName), not the
+    // handle of whoever pressed accept.
+    expect(plain(w.seen)).toMatch(/This is [^,]+, How can I help you\?\?/);
 
     // And the line they type goes INTO the chat, not to the menu.
     await H.handleUserChatMessage(w.io, w.repo, w.session, 'are you there');
@@ -234,8 +236,7 @@ describe('GrumpyBot arrives where the caller is', () => {
     await H.handleUserChatMessage(w.io, w.repo, w.session, 'hello from the browser');
     await wait(2500);
     const text = plain(w.seen.slice(before));
-    // The caller's line was on their screen as they typed it; return ends it.
-    expect(w.seen[before]).toBe('\r\n');
+    // The caller's line went out as they typed it; what arrives is the reply.
     expect(text).toMatch(BOT_REPLY);
   });
 });

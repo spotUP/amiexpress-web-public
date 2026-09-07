@@ -951,62 +951,70 @@ const TYPO_MAP: { [key: string]: string[] } = {
   'z': ['a', 'x', 's'],
 };
 
-/**
- * One word of a bot "typing", the way express.e's chat() delivers text to the
- * other side: per word (express.e:5966-5990 - on space or return the sender's
- * word is written to the receiver). `typo`, when set, is the misspelt form
- * that appears first and is backspaced away.
- */
-export interface TypedWord {
-  word: string;
-  typo: string | null;
-  /** Thinking/typing time before the word appears. */
-  beforeMs: number;
-  /** How long the misspelt form stays before it is corrected. */
-  typoMs: number;
-}
+/** One step of a bot "typing": a character, a correction, or a wait. */
+export type TypingEvent =
+  | { kind: 'char'; ch: string }
+  | { kind: 'backspace' }
+  | { kind: 'pause'; ms: number };
 
 /**
- * The plan for typing `text` word by word at a human pace: the time to type
- * each word's characters, a breath after punctuation, and now and then a
- * neighbouring key in one word, noticed and corrected. PURE - renders nothing,
- * sleeps for nothing; `rng` is injectable so a test can force or forbid a
- * typo. Every pause scales with `typingSpeed`, so the admin's one number sets
- * the pace of the whole thing.
+ * The plan for typing `text` the way a person does at a keyboard - which is
+ * how express.e's chat() delivers it (6162-6175: every key goes out with
+ * sendChar the moment it is pressed): variable speed, a breath after
+ * punctuation, and now and then a neighbouring key hit, noticed, backspaced
+ * and retyped (6143-6149 is the backspace both sides see). PURE - renders
+ * nothing and sleeps for nothing; `rng` is injectable so a test can force or
+ * forbid a typo. Every pause scales with `typingSpeed`, so the admin's one
+ * number sets the pace of the whole thing.
  *
- * Joining the plan's words with spaces yields `text` (collapsed whitespace).
+ * Applying the events in order yields `text` exactly.
  */
-export function planWordTyping(
+export function planNaturalTyping(
   text: string,
   options?: { typingSpeed?: number; typoProbability?: number },
   rng: () => number = Math.random
-): TypedWord[] {
-  const typoProbability = options?.typoProbability ?? 0.04;
-  const speed = options?.typingSpeed ?? 40;
-  const unit = speed / 40;
-  const words = text.split(/\s+/).filter((w) => w.length > 0);
+): TypingEvent[] {
+  const TYPO_PROBABILITY = options?.typoProbability ?? 0.04;
+  const MIN_TYPING_DELAY = options?.typingSpeed ?? 40;
+  const MAX_TYPING_DELAY = MIN_TYPING_DELAY * 3;
+  const unit = MIN_TYPING_DELAY / 40;
+  const PAUSE_AFTER_TYPO = 150 * unit; // the bot "notices"
+  const BACKSPACE_DELAY = 40 * unit;
 
-  return words.map((word) => {
-    let beforeMs = 0;
-    for (const ch of word) beforeMs += speed + rng() * speed * 2;
-    beforeMs += 20 * unit;                                   // the space
-    if (/[.,!?;:]$/.test(word)) beforeMs += 100 * unit;      // a breath
+  const events: TypingEvent[] = [];
+  for (const char of text) {
+    const isSpace = char === ' ';
+    const isPunctuation = /[.,!?;:]/.test(char);
+    const canTypo = char.toLowerCase() in TYPO_MAP && !isSpace && !isPunctuation;
 
-    const eligible = [...word].map((ch, i) => (ch.toLowerCase() in TYPO_MAP ? i : -1)).filter((i) => i >= 0);
-    let typo: string | null = null;
-    if (eligible.length > 0 && rng() < typoProbability * eligible.length) {
-      const at = eligible[Math.floor(rng() * eligible.length)]!;
-      const ch = word[at]!;
-      const neighbours = TYPO_MAP[ch.toLowerCase()];
-      const wrong = neighbours[Math.floor(rng() * neighbours.length)] ?? neighbours[0];
-      typo = word.slice(0, at) + (ch === ch.toUpperCase() ? wrong.toUpperCase() : wrong) + word.slice(at + 1);
+    if (canTypo && rng() < TYPO_PROBABILITY) {
+      const neighbours = TYPO_MAP[char.toLowerCase()];
+      const typo = neighbours[Math.floor(rng() * neighbours.length)] ?? neighbours[0];
+      events.push({ kind: 'char', ch: char === char.toUpperCase() ? typo.toUpperCase() : typo });
+      events.push({ kind: 'pause', ms: PAUSE_AFTER_TYPO });
+      events.push({ kind: 'backspace' });
+      events.push({ kind: 'pause', ms: BACKSPACE_DELAY });
+      events.push({ kind: 'char', ch: char });
+      events.push({ kind: 'pause', ms: MIN_TYPING_DELAY });
+      continue;
     }
-    return { word, typo, beforeMs, typoMs: typo ? 150 * unit + 40 * unit * typo.length : 0 };
-  });
+
+    events.push({ kind: 'char', ch: char });
+    let delay = MIN_TYPING_DELAY + rng() * (MAX_TYPING_DELAY - MIN_TYPING_DELAY);
+    if (isPunctuation) delay += 100 * unit;
+    else if (isSpace) delay += 20 * unit;
+    events.push({ kind: 'pause', ms: delay });
+  }
+  return events;
 }
 
-/** The text a word plan produces once every word is on the line. */
-export function applyWordPlan(plan: TypedWord[]): string {
-  return plan.map((w) => w.word).join(' ');
+/** The text a plan leaves on the line once every event has been applied. */
+export function applyTypingPlan(events: TypingEvent[]): string {
+  let out = '';
+  for (const e of events) {
+    if (e.kind === 'char') out += e.ch;
+    else if (e.kind === 'backspace') out = out.slice(0, -1);
+  }
+  return out;
 }
 

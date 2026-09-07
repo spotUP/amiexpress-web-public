@@ -2247,13 +2247,13 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
     const { getDatabase } = require('./command-handler/dependency-injection');
     const db = getDatabase();
     const repository = db?.getOperatorChatRepository();
-    const { CHAT_COLOR_USER } = require('./operator-chat.handler');
+    const { callerTypedChar, callerBackspaced, callerPressedReturn } = require('./operator-chat.handler');
 
-    // express.e chat() 5947-6028: the caller's keys echo where the cursor is,
-    // in the caller's colour; backspace rubs one out; return ends the line;
-    // CTRL-C (ACS_BREAK_CHAT, 5964) leaves the chat. There is no input line,
-    // no picker, no scroll region - this is the stream the board was already
-    // writing to, and the sysop's words arrive in it between the caller's.
+    // express.e chat() 6101-6223: the caller's keys go onto the ONE shared
+    // line and back to their own terminal as pressed (6172), in the caller's
+    // colour when the sender changes (6168-6171); backspace rubs one out
+    // (6143-6152); return is a newline (6130-6141); CTRL-C (ACS_BREAK_CHAT,
+    // 6118) leaves the chat. No input line, no picker, no scroll region.
     if (data === '\x03') {
       await handleUserQuitChat(socket.server, repository, session, socket);
       return;
@@ -2273,10 +2273,8 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
 
       session.inputBuffer = '';
 
-      if (!input) {
-        emitText(socket, '\r\n');
-        return;
-      }
+      callerPressedReturn(socket.server, session);
+      if (!input) return;
 
       if (input.toUpperCase() === '/QUIT' || input.toUpperCase() === '/END') {
         await handleUserQuitChat(socket.server, repository, session, socket);
@@ -2284,18 +2282,18 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
       }
 
       if (input.toUpperCase() === '/HELP') {
-        emitText(socket, '\r\n\x1b[36m/quit ends the chat; so does CTRL-C.\x1b[0m\r\n');
+        emitText(socket, '\x1b[36m/quit ends the chat; so does CTRL-C.\x1b[0m\r\n');
         return;
       }
 
-      // The line is on the screen already; this ends it and hands it over.
+      // The line is on the screen already and ended; this hands it over.
       await handleUserChatMessage(socket.server, repository, session, input);
     }
     // Backspace - real-time transmission
     else if (data === '\x7f' || data === '\b') {
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        emitText(socket, '\b \b');
+        callerBackspaced(socket.server, session);
         // Don't transmit backspace if typing a command
         const isCommand = session.inputBuffer.trim().startsWith('/');
         if (!isCommand) {
@@ -2306,7 +2304,7 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
     // Printable characters - real-time transmission
     else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      emitText(socket, `\x1b[${CHAT_COLOR_USER}m${data}`);
+      callerTypedChar(socket.server, session, data);
       // Don't transmit commands (starting with /) to sysop
       const isCommand = session.inputBuffer.trim().startsWith('/');
       if (!isCommand) {

@@ -31,7 +31,7 @@ import {
   emitterForUserId,
   socketIoSocketFor,
 } from '../server/session-emitter-registry';
-import { getGrumpySysopResponse, getGrumpyBotIntroMessage, planWordTyping, type AIProviderConfig, DEFAULT_AI_CONFIG } from './grumpy-sysop-bot.handler';
+import { getGrumpySysopResponse, getGrumpyBotIntroMessage, planNaturalTyping, type AIProviderConfig, DEFAULT_AI_CONFIG } from './grumpy-sysop-bot.handler';
 import {
   renderPicker,
   handlePickerInput,
@@ -798,8 +798,11 @@ console.log(`[Operator Chat] Page ${pageId} (${page.userHandle}@Node${page.nodeI
 console.log(`[Operator Chat] Page ${pageId}: StartChat screen not shown (${(err as Error).message}); using the built-in line`);
       }
     }
-    if (!shown) reach.emitter.emit('ansi-output', `\r\n\r\nThis is ${sysopHandle}, How can I help you??\r\n\r\n`);
-    reach.emitter.emit('ansi-output', `\x1b[${CHAT_COLOR_SYSOP}m`);
+    // express.e:6085-6087 prints cmds.sysopName, in whatever colour is
+    // current; the sysop colour comes after (6092-6094), and here it comes
+    // with the first character the sysop sends, as the line model does it.
+    const startName = sysopId === 'bot' ? sysopHandle : (loadBBSConfig(bbsRoot).sysop_name || sysopHandle);
+    if (!shown) reach.emitter.emit('ansi-output', `\r\n\r\nThis is ${startName}, How can I help you??\r\n\r\n`);
   }
 
   io.to(targetRoom).emit('operator:chat-accepted', {
@@ -884,27 +887,28 @@ async function sendBotMessageWithTyping(
   });
 
   if (thinkTime > 0) await sleep(thinkTime);
-  await deliverToCaller(io, chatSession, page, message, CHAT_COLOR_SYSOP, {
+  await deliverToCaller(io, chatSession, page, message, {
     typingSpeed: aiConfig?.botTypingSpeed,
     typoProbability: aiConfig?.botTypoProbability,
   });
 }
 
 /**
- * THE CHAT IS ONE SCROLLING STREAM - express.e chat(), 5860-6065.
+ * THE CHAT IS ONE SCROLLING STREAM - express.e chat(), 6067-6244.
  *
- * No clear, no scroll region, no input line at the bottom. The caller's keys
- * echo where the cursor is, in the caller's colour; the other side's text
- * arrives WORD BY WORD in the sender's colour (express.e:5966-5990: on space
- * or return the sender's word is written to the receiver), and around every
- * incoming word the receiver's half-typed word is rubbed out and put back
- * (the backspace/space/backspace run at 5968-5979). At the end: attributes
- * off, the EndChat screen or "Ending Chat.", and the prompt.
+ * No clear, no scroll region, no input line at the bottom. Every key from
+ * EITHER side goes out with sendChar the moment it is pressed (6172); the
+ * colour switches only when the SENDER changes (6164-6171); backspace is
+ * BS-space-BS to both sides (6147-6149); return is a newline (6138). Both
+ * sides type into ONE line buffer (`space`), and when it passes 78 columns
+ * the half-typed word at its end is rubbed out, a newline sent, and the word
+ * put back at the start of the next line (6181-6223). At the end: attributes
+ * off, the EndChat screen or "Ending Chat." (6228-6242), and the prompt.
  *
  * The split-screen layout this replaces (scroll region 1-23, input on 24,
- * a preview line) was this port's invention; the sysop asked for the real
- * thing (2026-09-07: "make the flow of the chat 1:1 - ours dont feel like a
- * real operator page chat with the input at the bottom etc").
+ * a preview line) was this port's invention; so was a word-at-a-time
+ * delivery that came from reading tranChat() (5860-6065, the translator
+ * variant, which buffers words so it can translate them) instead of chat().
  *
  * express.e colours the two sides with LVL_CHAT_COLOR_SYSOP / _USER from the
  * board's ACS levels; this port has no such setting yet, so the colours are
@@ -918,20 +922,100 @@ const MAX_DELIVERY_MS = 12_000;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+type ChatSender = 'user' | 'sysop';
+/** express.e's `space` and `x` (6098-6100), and who wrote last, per chat. */
+interface ChatLine { text: string; lastSender: ChatSender | null }
+function chatLineOf(chatSession: ChatSession): ChatLine {
+  const cs = chatSession as any;
+  if (!cs.line) cs.line = { text: '', lastSender: null } as ChatLine;
+  return cs.line as ChatLine;
+}
+
 /**
- * Deliver one side's text to the caller's terminal, word by word, serialised
- * per chat so two senders (the bot's opening line and its reply, or a human
- * sysop over the bot) never interleave on one line.
+ * One character from one side onto the shared line - the bytes the caller's
+ * terminal gets. express.e:6162-6223: a colour change if the sender changed,
+ * the character, and the wrap when the line passes 78 columns.
+ */
+export function chatCharBytes(chatSession: ChatSession, sender: ChatSender, ch: string): string {
+  const line = chatLineOf(chatSession);
+  let out = '';
+  if (line.lastSender !== sender) {
+    out += `\x1b[${sender === 'sysop' ? CHAT_COLOR_SYSOP : CHAT_COLOR_USER}m`;
+    line.lastSender = sender;
+  }
+  out += ch;
+  line.text += ch;
+  if (line.text.length > 78) {
+    // 6181-6223: back up to the last space; no space (or a trailing one)
+    // means a plain newline; otherwise rub out the partial word, newline,
+    // and put the word at the start of the next line.
+    const at = line.text.lastIndexOf(' ');
+    const word = at < 0 ? '' : line.text.slice(at + 1);
+    if (word.length === 0) {
+      out += '\r\n';
+      line.text = '';
+    } else {
+      out += '\b \b'.repeat(word.length) + '\r\n' + word;
+      line.text = word;
+    }
+  }
+  return out;
+}
+/** express.e:6143-6152: one character off the shared line, both sides. */
+export function chatBackspaceBytes(chatSession: ChatSession): string {
+  const line = chatLineOf(chatSession);
+  if (line.text.length === 0) return '';
+  line.text = line.text.slice(0, -1);
+  return '\b \b';
+}
+/** express.e:6130-6141: return ends the line. */
+export function chatReturnBytes(chatSession: ChatSession): string {
+  chatLineOf(chatSession).text = '';
+  return '\r\n';
+}
+
+/** The chat the caller's session is in, or null. */
+function chatOfSession(session: BBSSession): ChatSession | null {
+  const pageId = session.tempData?.pageId;
+  return (pageId && activeChatSessions.get(pageId)) || null;
+}
+function emitToCaller(io: any, session: BBSSession, bytes: string): void {
+  if (!bytes) return;
+  const reach = emitterForUserId(session.user!.id, io);
+  if (reach) reach.emitter.emit('ansi-output', bytes);
+}
+/**
+ * THE CALLER'S SIDE of the stream, called from the chat branch of
+ * command.handler for every key: the character goes onto the shared line and
+ * back to the caller's own terminal, exactly as express echoes it (6172).
+ */
+export function callerTypedChar(io: any, session: BBSSession, ch: string): void {
+  const cs = chatOfSession(session);
+  emitToCaller(io, session, cs ? chatCharBytes(cs, 'user', ch) : ch);
+}
+export function callerBackspaced(io: any, session: BBSSession): void {
+  const cs = chatOfSession(session);
+  emitToCaller(io, session, cs ? chatBackspaceBytes(cs) : '\b \b');
+}
+export function callerPressedReturn(io: any, session: BBSSession): void {
+  const cs = chatOfSession(session);
+  emitToCaller(io, session, cs ? chatReturnBytes(cs) : '\r\n');
+}
+
+/**
+ * Deliver one side's text to the caller's terminal, a character at a time,
+ * serialised per chat so two senders (the bot's opening line and its reply,
+ * or a human sysop over the bot) never interleave. The caller's OWN keys do
+ * interleave with it, onto the same line - that is /X.
  *
- * `pace` null delivers at once, word by word without pauses (a human sysop's
- * line from the admin); a pace types it with the bot's speed and typos.
+ * `pace` null sends the characters at once (a human sysop's line from the
+ * admin); a pace types them with the bot's speed and typos.
  */
 async function deliverToCaller(
   io: any,
   chatSession: ChatSession,
   page: PageRequest,
   text: string,
-  color: string,
   pace: { typingSpeed?: number; typoProbability?: number } | null
 ): Promise<void> {
   const run = async (): Promise<void> => {
@@ -940,40 +1024,23 @@ async function deliverToCaller(
 console.log(`[Operator Chat] Page ${page.id}: a line for ${page.userHandle} has NO EMITTER for user ${page.userId} - saved and shown to the admin, not to the caller`);
       return;
     }
-    const caller = userSessions.get(String(page.userId));
-    const partial = () => caller?.inputBuffer ?? '';
-    const erase = (n: number) => '\b \b'.repeat(n);
-    const emit = (ansi: string) => reach.emitter.emit('ansi-output', ansi);
+    const emit = (bytes: string) => { if (bytes) reach.emitter.emit('ansi-output', bytes); };
 
-    const lines = wrapChatMessage(text, 79);
+    // The message's own line breaks are returns; the shared line wraps itself.
+    const lines = text.replace(/\r/g, '').split('\n');
     const plans = lines.map((line) =>
-      pace
-        ? planWordTyping(line, pace)
-        : line.split(/\s+/).filter((w) => w.length > 0).map((word) => ({ word, typo: null, beforeMs: 0, typoMs: 0 }))
+      pace ? planNaturalTyping(line, pace) : [...line].map((ch) => ({ kind: 'char', ch }) as const)
     );
-    const plannedMs = plans.flat().reduce((sum, w) => sum + w.beforeMs + w.typoMs, 0);
+    const plannedMs = plans.flat().reduce((sum, e) => sum + (e.kind === 'pause' ? e.ms : 0), 0);
     const scale = plannedMs > MAX_DELIVERY_MS ? MAX_DELIVERY_MS / plannedMs : 1;
 
     for (const plan of plans) {
-      for (let i = 0; i < plan.length; i++) {
-        const w = plan[i]!;
-        const trail = i < plan.length - 1 ? ' ' : '';
-        if (w.beforeMs * scale >= 1) await sleep(w.beforeMs * scale);
-        if (w.typo) {
-          const p = partial();
-          emit(erase(p.length) + `\x1b[${color}m${w.typo}` + `\x1b[${CHAT_COLOR_USER}m${p}`);
-          if (w.typoMs * scale >= 1) await sleep(w.typoMs * scale);
-          const p2 = partial();
-          emit(erase(p2.length + w.typo.length) + `\x1b[${color}m${w.word}${trail}` + `\x1b[${CHAT_COLOR_USER}m${p2}`);
-        } else {
-          const p = partial();
-          emit(erase(p.length) + `\x1b[${color}m${w.word}${trail}` + `\x1b[${CHAT_COLOR_USER}m${p}`);
-        }
+      for (const event of plan) {
+        if (event.kind === 'char') emit(chatCharBytes(chatSession, 'sysop', event.ch));
+        else if (event.kind === 'backspace') emit(chatBackspaceBytes(chatSession));
+        else if (event.ms * scale >= 1) await sleep(event.ms * scale);
       }
-      // Return: the line ends, and the caller's half-typed word follows it
-      // onto the new line (express.e:5988-5990).
-      const p = partial();
-      emit(erase(p.length) + '\r\n' + `\x1b[${CHAT_COLOR_USER}m${p}`);
+      emit(chatReturnBytes(chatSession));
     }
   };
   const prev: Promise<void> = (chatSession as any).delivery ?? Promise.resolve();
@@ -1138,13 +1205,13 @@ console.error('[Operator Chat] Bot response error:', err);
   const page = repository.getPageRequest(pageId);
   if (!page) return;
   if (senderType === 'user') {
-    // The caller's line is already on their screen - they typed it there.
-    // Return ends it (express.e:5988).
-    emitterForUserId(page.userId, io)?.emitter.emit('ansi-output', '\r\n');
+    // The caller's line is already on their screen - they typed it there,
+    // and the return that ended it went out from the chat branch. Nothing
+    // to deliver; the record above is what this was for.
     return;
   }
   // A human sysop's line reaches the caller word by word, at once.
-  await deliverToCaller(io, chatSession, page, message, CHAT_COLOR_SYSOP, null);
+  await deliverToCaller(io, chatSession, page, message, null);
 }
 
 

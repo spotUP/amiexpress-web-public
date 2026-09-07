@@ -1,13 +1,19 @@
 /**
  * The chat is express.e's one scrolling stream, and the bot types into it.
  *
- * express.e chat() (5860-6065): no clear, no scroll region, no input line.
- * The caller's keys echo where the cursor is; the other side's text arrives
- * WORD BY WORD (5966-5990) in the sender's colour, and around each incoming
- * word the receiver's half-typed word is rubbed out and put back (5968-5979).
+ * express.e chat() (6067-6244), the procedure F1 runs unless a translator is
+ * active: no clear, no scroll region, no input line. Every key from either
+ * side goes out with sendChar the moment it is pressed (6172); the colour
+ * switches only when the SENDER changes (6164-6171); backspace is
+ * BS-space-BS to both sides (6147-6149); return is a newline (6138). Both
+ * sides share ONE line buffer, and past 78 columns the half-typed word at its
+ * end is rubbed out and put at the start of the next line (6181-6223).
+ *
  * This port had a split screen of its own invention until 2026-09-07 ("make
  * the flow of the chat 1:1 - ours dont feel like a real operator page chat
- * with the input at the bottom etc").
+ * with the input at the bottom etc"), and then, briefly, a word-at-a-time
+ * delivery read off tranChat() - the translator variant - by mistake ("he
+ * types word by word thats wrong").
  *
  * Also here: the engine tag is ours and added once (the model copied it from
  * its history: "[AI] [AI] *grumble*"), and the bot's opening line is a
@@ -20,34 +26,32 @@ import Database from 'better-sqlite3';
 import { OperatorChatRepository } from '../../src/database/operator-chat.repository';
 import { registerConnectionEmitter } from '../../src/server/session-emitter-registry';
 import { userSessions } from '../../src/server/session-manager';
-import { planWordTyping, applyWordPlan, stripEngineTag, getGrumpySysopResponse } from '../../src/handlers/grumpy-sysop-bot.handler';
+import { planNaturalTyping, applyTypingPlan, stripEngineTag, getGrumpySysopResponse } from '../../src/handlers/grumpy-sysop-bot.handler';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const INTRO = /is AFK|isn't answering|sysop is off doing|didn't answer your page/;
 
-describe('the word plan', () => {
-  it('with no typos is the text, one word at a time', () => {
-    const plan = planWordTyping('Read the docs, kid.', { typingSpeed: 10, typoProbability: 0 }, () => 0.5);
-    expect(plan.map((w) => w.word)).toEqual(['Read', 'the', 'docs,', 'kid.']);
-    expect(plan.every((w) => w.typo === null)).toBe(true);
-    expect(applyWordPlan(plan)).toBe('Read the docs, kid.');
-    // A word takes time; punctuation adds a breath.
-    expect(plan[3]!.beforeMs).toBeGreaterThan(plan[1]!.beforeMs);
+describe('the typing plan', () => {
+  it('with no typos types the text in order, one character per event', () => {
+    const plan = planNaturalTyping('Read the docs.', { typingSpeed: 10, typoProbability: 0 }, () => 0.5);
+    const chars = plan.filter((e) => e.kind === 'char').map((e) => (e as any).ch).join('');
+    expect(chars).toBe('Read the docs.');
+    expect(plan.some((e) => e.kind === 'backspace')).toBe(false);
+    expect(applyTypingPlan(plan)).toBe('Read the docs.');
   });
 
-  it('a typo is one neighbouring key in one word, and the right word follows it', () => {
-    const plan = planWordTyping('Hi lamer', { typingSpeed: 10, typoProbability: 1 }, () => 0);
-    expect(plan[0]!.typo).not.toBeNull();
-    expect(plan[0]!.typo).not.toBe(plan[0]!.word);
-    expect(plan[0]!.typo!.length).toBe(plan[0]!.word.length);
-    expect(plan[0]!.typoMs).toBeGreaterThan(0);
-    expect(applyWordPlan(plan)).toBe('Hi lamer');
+  it('a typo is a neighbouring key, a pause, a backspace and the right key - and the line still comes out right', () => {
+    const plan = planNaturalTyping('Hi lamer', { typingSpeed: 10, typoProbability: 1 }, () => 0);
+    expect(plan.slice(0, 5).map((e) => e.kind)).toEqual(['char', 'pause', 'backspace', 'pause', 'char']);
+    expect((plan[0] as any).ch).toBe('G');
+    expect((plan[4] as any).ch).toBe('H');
+    expect(applyTypingPlan(plan)).toBe('Hi lamer');
   });
 
   it('every pause scales with the typing speed', () => {
-    const slow = planWordTyping('Well, no.', { typingSpeed: 40, typoProbability: 0 }, () => 0.5);
-    const fast = planWordTyping('Well, no.', { typingSpeed: 1, typoProbability: 0 }, () => 0.5);
-    const total = (p: typeof slow) => p.reduce((a, w) => a + w.beforeMs, 0);
+    const total = (p: ReturnType<typeof planNaturalTyping>) => p.reduce((a, e) => a + (e.kind === 'pause' ? e.ms : 0), 0);
+    const slow = planNaturalTyping('Well, no.', { typingSpeed: 40, typoProbability: 0 }, () => 0.5);
+    const fast = planNaturalTyping('Well, no.', { typingSpeed: 1, typoProbability: 0 }, () => 0.5);
     expect(total(fast) * 30).toBeLessThan(total(slow));
   });
 });
@@ -98,12 +102,15 @@ function makeWorld() {
 const H = require('../../src/handlers/operator-chat.handler');
 afterEach(() => H.stopOperatorChatHandler());
 
-/** Bytes with every escape sequence and every erase run removed: what stays on the screen. */
-const shown = (chunks: string[]) =>
-  chunks.join('').replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\x08 \x08/g, '');
+/** What stays on the screen: escapes gone, and every BS-space-BS takes the character before it. */
+const shown = (chunks: string[]) => {
+  let s = chunks.join('').replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+  while (/[^\x08]\x08 \x08/.test(s)) s = s.replace(/[^\x08]\x08 \x08/, '');
+  return s;
+};
 
 describe('the chat is one stream', () => {
-  it("opens the way express does, and the bot's first line is a message it types", async () => {
+  it("opens the way express does, and the bot's first line is a message it types, one character at a time", async () => {
     const w = makeWorld();
     H.initOperatorChatHandler(w.io, w.repo);
     await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
@@ -111,14 +118,14 @@ describe('the chat is one stream', () => {
     const pageId = w.session.tempData.pageId;
     const all = w.seen.join('');
 
-    // Nothing of the old split screen: no clear, no scroll region, no mouse, no line 23/24 positioning.
+    // Nothing of the old split screen.
     expect(all).not.toContain('\x1b[2J');
     expect(all).not.toMatch(/\x1b\[\d+;\d+r/);
     expect(all).not.toContain('\x1b[?1000h');
-    expect(all).not.toMatch(/\x1b\[2[34];\d+H/);
-    // express.e:5899-5901, the built-in start line, then the sysop's colour.
-    expect(all).toContain('This is GrumpyBot, How can I help you??');
-    // The opening line is a message: saved, and on the screen after the start line.
+    expect(all).not.toMatch(/\x1b\[\d+;\d+H/);
+    // express.e:6085-6087, the built-in start line, in the colour that was current.
+    expect(all).toContain('\r\n\r\nThis is GrumpyBot, How can I help you??\r\n\r\n');
+    // The opening line is a message: saved, and typed after the start line.
     const messages = w.repo.getChatMessages(pageId);
     expect(messages.length).toBe(1);
     expect(messages[0].senderId).toBe('bot');
@@ -126,55 +133,71 @@ describe('the chat is one stream', () => {
     const text = shown(w.seen);
     expect(text.indexOf('How can I help you??')).toBeLessThan(text.search(INTRO));
     expect(text.replace(/\s/g, '')).toContain(messages[0].message.replace(/\s/g, ''));
+    // One character per chunk, and the sysop colour ONCE, on the first (6164-6167).
+    const startAt = w.seen.findIndex((c) => c.startsWith('\x1b[36m'));
+    expect(startAt).toBeGreaterThan(0);
+    expect(w.seen[startAt]).toMatch(/^\x1b\[36m.$/);
+    const typed = w.seen.slice(startAt + 1, startAt + 20);
+    for (const c of typed) expect(c).toMatch(/^(.|\r\n|\x08 \x08)$/);
   });
 
-  it("a reply arrives word by word, and the caller's half-typed word is rubbed out and put back around each", async () => {
+  it('the caller and the bot share one line: the colour switches with the sender, backspace rubs out, return ends it', async () => {
     const w = makeWorld();
     H.initOperatorChatHandler(w.io, w.repo);
     await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
     await wait(3500);
-    const pageId = w.session.tempData.pageId;
 
-    // The caller typed a line, pressed return, and is two letters into the next one.
     const before = w.seen.length;
-    await H.handleUserChatMessage(w.io, w.repo, w.session, 'hello there');
-    w.session.inputBuffer = 'ok';
+    // The caller types "ok", corrects, types more, presses return - as the
+    // chat branch of command.handler drives it.
+    H.callerTypedChar(w.io, w.session, 'o');
+    H.callerTypedChar(w.io, w.session, 'k');
+    H.callerBackspaced(w.io, w.session);
+    H.callerTypedChar(w.io, w.session, 'i');
+    H.callerPressedReturn(w.io, w.session);
+    const mine = w.seen.slice(before);
+    expect(mine).toEqual(['\x1b[33mo', 'k', '\x08 \x08', 'i', '\r\n']);
+    expect(shown(mine)).toBe('oi\r\n');
+
+    // Now the bot answers: the colour switches back once, then characters.
+    const b2 = w.seen.length;
+    await H.handleUserChatMessage(w.io, w.repo, w.session, 'oi');
     await wait(3500);
-    const chunks = w.seen.slice(before);
+    const reply = w.seen.slice(b2);
+    expect(reply[0]).toMatch(/^\x1b\[36m.$/);
+    expect(reply.filter((c) => c.startsWith('\x1b[36m')).length).toBe(1);
+    const said = w.repo.getChatMessages(w.session.tempData.pageId).filter((m: any) => m.senderId === 'bot').pop()!.message as string;
+    expect(shown(reply).replace(/\s/g, '')).toContain(said.replace(/\s/g, ''));
+    expect(reply[reply.length - 1]).toBe('\r\n');
+  });
 
-    // Return ended the caller's line (express.e:5988).
-    expect(chunks[0]).toBe('\r\n');
-
-    const reply = w.repo.getChatMessages(pageId).filter((m: any) => m.senderId === 'bot').pop()!.message as string;
-    const words = chunks.filter((c) => /\x1b\[36m\S/.test(c));
-    // Word by word: as many chunks as words, each carrying one word.
-    expect(words.length).toBe(reply.split(/\s+/).filter(Boolean).length);
-    expect(words.map((c) => c.match(/\x1b\[36m([^\x1b]*)/)![1].trim()).join(' ')).toBe(reply.replace(/\s+/g, ' ').trim());
-    // Around each word: "ok" rubbed out first, put back after, in the caller's colour.
-    for (const c of words) {
-      expect(c.startsWith('\b \b\b \b')).toBe(true);
-      expect(c.endsWith('\x1b[33mok')).toBe(true);
-    }
-    // No positioning, no clearing - a stream.
-    expect(chunks.join('')).not.toMatch(/\x1b\[\d+;\d+H/);
-    expect(chunks.join('')).not.toContain('\x1b[2K');
-    // The line ends with return, and the caller's word follows onto the new line.
-    expect(chunks.some((c) => c === '\b \b\b \b\r\n\x1b[33mok')).toBe(true);
+  it('past 78 columns the half-typed word moves to the next line (express.e:6181-6223)', () => {
+    const cs: any = { line: { text: '', lastSender: 'sysop' } };
+    let out = '';
+    const text = 'x'.repeat(70) + ' wordthatwraps';
+    for (const ch of text) out += H.chatCharBytes(cs, 'sysop', ch);
+    // At the 79th character: the partial word is rubbed out, a newline, the word again.
+    const rubbed = 'wordthat'.length;
+    expect(out).toContain('\x08 \x08'.repeat(rubbed) + '\r\n' + 'wordthat');
+    expect(cs.line.text).toBe('wordthatwraps');
+    // A line with no space in it simply breaks.
+    const cs2: any = { line: { text: '', lastSender: 'sysop' } };
+    let out2 = '';
+    for (const ch of 'y'.repeat(79)) out2 += H.chatCharBytes(cs2, 'sysop', ch);
+    expect(out2.endsWith('y\r\n')).toBe(true);
+    expect(cs2.line.text).toBe('');
   });
 
   it('two lines for one caller never interleave: the second waits for the first', async () => {
     const w = makeWorld();
     H.initOperatorChatHandler(w.io, w.repo);
     await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
-    // Do NOT wait for the opening line to finish; answer at once.
     await wait(1300);
     await H.handleUserChatMessage(w.io, w.repo, w.session, 'hello');
     await wait(4000);
     const text = shown(w.seen).replace(/\s+/g, ' ');
-    // The bot's lines (the caller's own line is on their screen as they typed it, not on this wire).
     const messages = w.repo.getChatMessages(w.session.tempData.pageId).filter((m: any) => m.senderId === 'bot').map((m: any) => m.message as string);
     expect(messages.length).toBe(2);
-    // Every line appears whole and in order, no word of one inside another.
     let cursor = 0;
     for (const m of messages) {
       const at = text.indexOf(m.replace(/\s+/g, ' ').trim(), cursor);

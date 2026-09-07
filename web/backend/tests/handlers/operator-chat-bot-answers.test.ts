@@ -32,7 +32,7 @@ function makeWorld() {
   const repo = new OperatorChatRepository(db);
   repo.updateConfig({
     enabled: true, pageTimeout: 1, aiEnabled: true, aiProvider: 'openrouter',
-    openRouterApiKey: '', botThinkTime: 0, botTypingSpeed: 1, allowedSecLevels: [],
+    openRouterApiKey: '', botThinkTime: 0, botTypingSpeed: 1, botTypoProbability: 0, allowedSecLevels: [],
   } as any);
   // botTypingSpeed 1: the bot TYPES its reply now (grumpy-bot-types-live), and
   // this suite is about order and survival, not pace - at 200 ms a character
@@ -72,14 +72,18 @@ describe('the grumpy bot answers a caller', () => {
     await wait(3000);                                  // past the 1s timeout, and the opening line
     expect(w.repo.getPageRequest(w.session.tempData.pageId)!.sysopHandle).toBe('GrumpyBot');
 
+    // The caller types their line as the chat branch drives it, then return.
+    for (const ch of 'hello grumpy') H.callerTypedChar(w.io, w.session, ch);
+    H.callerPressedReturn(w.io, w.session);
     const before = w.seen.length;
     await H.handleUserChatMessage(w.io, w.repo, w.session, 'hello grumpy');
     await wait(2500);
     const text = plain(w.seen.slice(before));
 
-    // The caller's own line was on their screen as they typed it; return ends
-    // it (express.e:5988) before the first word of the reply arrives.
-    expect(w.seen[before]).toBe('\r\n');
+    // The caller's own line, and the return that ended it, went out from the
+    // chat branch as they typed (express.e:6172, 6138); what arrives now is
+    // the reply, a character at a time, the sysop colour first (6164-6167).
+    expect(w.seen[before]).toMatch(/^\x1b\[36m.$/);
     // EITHER TAG. The bot answers `[AI] ...` when the provider cascade
     // returns something and `[RB] ...` when it falls back to the rule-based
     // replies (grumpy-sysop-bot.handler.ts:861,870). Which engine served the
@@ -122,7 +126,6 @@ describe('the grumpy bot answers a caller', () => {
       });
     });
     const text = plain(w.seen.slice(before));
-    expect(w.seen[before]).toBe('\r\n');
     expect(text).toMatch(BOT_REPLY);
   });
 });

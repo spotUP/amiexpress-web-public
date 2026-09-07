@@ -50,6 +50,10 @@ export const SCREEN_DIR_MAP: Record<string, ScreenDirType> = {
   'NODE_BULL': ScreenDirType.NODE,  // SCREEN_NODE_BULL uses nodeScreenDir + 'BULL'
   'LOGOFF': ScreenDirType.NODE,
   'LOGON': ScreenDirType.NODE,
+  // express.e:6076-6081 / 6232-6237: chat() opens with Node<n>/StartChat and
+  // closes with Node<n>/EndChat - node screens, like LOGON.
+  'STARTCHAT': ScreenDirType.NODE,
+  'ENDCHAT': ScreenDirType.NODE,
   'BBSTITLE': ScreenDirType.NODE,
   'JOIN': ScreenDirType.NODE,
   'JOINED': ScreenDirType.NODE,
