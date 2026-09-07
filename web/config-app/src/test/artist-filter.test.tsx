@@ -81,7 +81,13 @@ describe('what belongs to a door, and what holds no art at all', () => {
 
 const index = {
   builtAt: '2026-09-02T00:00:00.000Z',
-  unused: [], conferences: [], bulletins: [], callersByLevel: {},
+  // The index's own verdict: orphan.ans is on the volume and no screen,
+  // node, conference or bulletin reads it. A bulletin is deliberately NOT
+  // here - it is read by number, never by name, and the index excludes it.
+  unused: [{ relPath: 'Screens/orphan.ans', bytes: 100, format: 'ansi', sha256: 'orphan', mci: [], problems: [], readBy: [] }],
+  conferences: [],
+  bulletins: [{ file: 'Screens/bull1.txt', number: 1, title: 'the first bulletin' }],
+  callersByLevel: {},
   screens: [
     {
       screen: 'BBSTITLE', dirType: 'node', missingScopes: 0,
@@ -97,6 +103,8 @@ const index = {
     // 47 copies of this on the live board, and it is one code.
     'Node1/awaitscreen.txt': file({ relPath: 'Node1/awaitscreen.txt', bytes: 15, codesOnly: true }),
     // A door's own art: listed, but never among the board's screens.
+    'Screens/orphan.ans': file({ relPath: 'Screens/orphan.ans', sha256: 'orphan' }),
+    'Screens/bull1.txt': file({ relPath: 'Screens/bull1.txt', format: 'text', sha256: 'bulletin', readBy: [] }),
     // Its own sha256: the gallery groups by content, so a door file sharing
     // the board art's hash would collapse into that card and hide the bug.
     'Doors/GWALL/wall.ans': file({ relPath: 'Doors/GWALL/wall.ans', door: 'GWALL', sha256: 'door-hash' }),
@@ -202,9 +210,39 @@ describe('the screens page as an artist opens it', () => {
 
     // The count on the tab is the assertion: the card itself is labelled by
     // screen name, so looking for the path finds nothing either way and would
-    // pass on the unfiltered gallery too. This fixture holds one piece of
-    // board art (BBSTITLE), one codes-only screen and one door file.
-    expect(await screen.findByRole('tab', { name: 'Gallery 1' })).toBeTruthy();
+    // pass on the unfiltered gallery too. Two cards belong here - BBSTITLE and
+    // the bulletin - against a codes-only screen, an orphan and a door file.
+    expect(await screen.findByRole('tab', { name: 'Gallery 2' })).toBeTruthy();
+  });
+
+  it('leaves art nothing reads out of the gallery', async () => {
+    // "i see a lot of read by nothing in the gallery the artists are not
+    // interested in those". The fixture's gallery is BBSTITLE and the
+    // bulletin; orphan.ans and the door file are not art anyone is serving.
+    render(<ScreenFilesPage />, { wrapper });
+
+    expect(await screen.findByRole('tab', { name: 'Gallery 2' })).toBeTruthy();
+  });
+
+  it('keeps a bulletin in the gallery, which no screen name reads', async () => {
+    // A bulletin is read by NUMBER. Filtering on readBy alone would have
+    // dropped every bulletin from the artist's view; the index's own unused
+    // list already knows the difference, which is why the filter uses it.
+    const user = userEvent.setup();
+    render(<ScreenFilesPage />, { wrapper });
+
+    await user.click(await screen.findByRole('tab', { name: /Gallery/ }));
+
+    expect(await screen.findByText(/the first bulletin/)).toBeTruthy();
+  });
+
+  it('shows the orphans once the sysop asks for them', async () => {
+    const user = userEvent.setup();
+    render(<ScreenFilesPage />, { wrapper });
+
+    await user.click(screen.getByRole('checkbox', { name: /Show art nothing reads/i }));
+
+    expect(await screen.findByRole('tab', { name: 'Gallery 3' })).toBeTruthy();
   });
 
   it('gives a screen that is only codes a tab of its own', async () => {

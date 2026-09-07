@@ -167,6 +167,15 @@ export function ScreenFilesPage() {
    */
   const [showGenerated, setShowGenerated] = useState(false);
   /**
+   * Art on the volume that no screen, node, conference or bulletin reads.
+   *
+   * Off by default: "i see a lot of read by nothing in the gallery the artists
+   * are not interested in those". It is still one checkbox away, and the whole
+   * list has a tab of its own - a file the manager refuses to show is a file a
+   * sysop cannot find.
+   */
+  const [showUnread, setShowUnread] = useState(false);
+  /**
    * Why the last action on the open file failed.
    *
    * Reported as "i deleted a screen file but the dialog did not close and the
@@ -922,8 +931,14 @@ export function ScreenFilesPage() {
 
     const bulletinTitles = new Map((data.bulletins ?? []).map(b => [b.file, b] as const));
 
+    // The index's OWN list of what nothing reads - not a second derivation
+    // from readBy, which would have to re-learn that a bulletin is read by
+    // number and never by name.
+    const readByNothing = new Set((data.unused ?? []).map(f => f.relPath));
+
     const drawable = Object.values(data.files)
       .filter(file => file.format === 'ansi' || file.format === 'text')
+      .filter(file => showUnread || !readByNothing.has(file.relPath))
       // A door's art is the door's, and a door directory is full of .txt files
       // that are documentation, not art. It has its own tab.
       .filter(file => !isDoorArt(file))
@@ -974,7 +989,7 @@ export function ScreenFilesPage() {
         };
       })
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [data, showGenerated]);
+  }, [data, showGenerated, showUnread]);
 
   /**
    * The three kinds of file that are NOT a piece of the board's art, each
@@ -1013,6 +1028,14 @@ export function ScreenFilesPage() {
                 onChange={e => setShowGenerated(e.target.checked)}
               />
               Show leftovers and files the board writes
+            </label>
+            <label className="flex items-center gap-2 text-sm text-content-secondary">
+              <input
+                type="checkbox"
+                checked={showUnread}
+                onChange={e => setShowUnread(e.target.checked)}
+              />
+              Show art nothing reads
             </label>
           </div>
           <ScreenGallery
@@ -1190,7 +1213,7 @@ export function ScreenFilesPage() {
       id: 'unused',
       // Files nothing resolves to. Not a screen list: these are files on the
       // volume that no screen, node or conference reads.
-      label: `Read by nothing ${data?.unused.length ?? 0}`,
+      label: `Read by nothing ${(data?.unused ?? []).filter(f => !isDoorArt(f)).length}`,
       render: () => (
         <div className="space-y-2 text-sm">
           <p className="text-content-secondary">
