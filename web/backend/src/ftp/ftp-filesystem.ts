@@ -17,10 +17,18 @@
  * LOCATION.n, which is why `conferenceDir` exists.
  */
 import * as fs from 'fs';
+import * as path from 'path';
 
 import { conferenceDir } from '../conferences/conference-paths';
 import { getDirFiles } from '../utils/max-dirs.util';
 import { parseDirFile, type DirFileEntry } from '../utils/dir-file-reader.util';
+
+/**
+ * How far back a conference listing reaches when the sysop has not said.
+ *
+ * ftpd.e:1160 - `IF dayOffset=-1 THEN dayOffset:=10`.
+ */
+export const DEFAULT_LISTING_DAYS = 10;
 
 /** One row of a listing, whatever it turns out to be underneath. */
 export interface FtpEntry {
@@ -30,6 +38,12 @@ export interface FtpEntry {
   modified: Date;
   /** The DIR entry this row came from, for SIZE/MDTM and later RETR. */
   source?: DirFileEntry;
+  /**
+   * Where the bytes are, when this row came from walking a directory rather
+   * than reading the catalogue. `RETR` uses it directly - the file was found
+   * on disk, so there is nothing left to resolve.
+   */
+  hostPath?: string;
 }
 
 /** The conference facts this layer needs; the shape `getConferenceConfigs` returns. */
@@ -43,6 +57,29 @@ export interface FtpConference {
 export interface FtpFilesystemDeps {
   /** Every conference the board has, in whatever order the repository gives them. */
   conferences(): FtpConference[];
+  /**
+   * `FTP_DIR_DAYS` for a conference - how far back a listing reaches.
+   *
+   * ftpd.e:1157-1163: the tooltype, defaulting to TEN days, and
+   * `makeList` emits a row only when its date is newer. An express listing is
+   * the conference's recent files, not its whole history, and a board that
+   * lists everything shows entries whose bytes left years ago.
+   */
+  listingDays?(conferenceId: number): number;
+  /**
+   * The conference's `DLPATH.n` directories, resolved to host paths.
+   *
+   * ftpd.e:1010-1058 walks these and de-duplicates any DLPATH that is a
+   * prefix of another, so a parent and its child do not list the same files
+   * twice.
+   */
+  downloadDirs?(conferenceId: number): string[];
+  /**
+   * `FTP_NO_DIRLIST` (ftpd.e:1170): list the DIRECTORIES rather than the DIR
+   * files. The catalogue is the default; this is the sysop saying his
+   * conference is better described by what is on disk.
+   */
+  listsDirectories?(conferenceId: number): boolean;
   /** express.e's own access check, per caller and conference. */
   canAccess(user: unknown, conferenceId: number): boolean;
   /** The board root, for `conferenceDir`. */
@@ -122,8 +159,22 @@ export class FtpFilesystem {
   exists(user: unknown, absolutePath: string): boolean {
     const segments = pathSegments(absolutePath);
     if (segments.length === 0) return true;
-    if (segments.length > 1) return false; // one level below the root, for now
-    return this.conferenceAt(user, absolutePath) !== null;
+
+    const conf = this.conferenceAt(user, `/${segments[0]}`);
+    if (!conf) return false;
+    if (segments.length === 1) return true;
+
+    // Deeper: a real directory under one of the conference's DLPATHs -
+    // ftpd.e's `subDirPath` (1232-1330). Checked on disk rather than assumed,
+    // so `CWD nonsense` is still 550.
+    const subPath = segments.slice(1).join('/');
+    return (this.deps.downloadDirs?.(conf.conference_id) ?? []).some((root) => {
+      try {
+        return fs.statSync(path.join(root, subPath)).isDirectory();
+      } catch {
+        return false;
+      }
+    });
   }
 
   /**
@@ -147,9 +198,32 @@ export class FtpFilesystem {
     const conf = this.conferenceAt(user, absolutePath);
     if (!conf) return [];
 
+    /*
+     * ftpd.e:1166-1174 - WHICH SOURCE.
+     *
+     *   inside a subdirectory        -> the DLPATH directories
+     *   FTP_NO_DIRLIST on the conf   -> the DLPATH directories
+     *   otherwise                    -> the DIR files, the catalogue
+     *
+     * The catalogue is the default and stays it. Walking the directories is
+     * what a sysop asks for when the conference's real contents describe it
+     * better than its DIR files do - and it is the only thing that CAN
+     * describe a subdirectory, which the catalogue has no notion of.
+     */
+    const subPath = pathSegments(absolutePath).slice(1).join('/');
+    if (subPath || this.deps.listsDirectories?.(conf.conference_id)) {
+      return this.listFromDownloadDirs(conf, subPath);
+    }
+
     const dirFiles = await getDirFiles(conf.conference_id, this.deps.bbsRoot).catch(() => []);
     const entries: FtpEntry[] = [];
     const seen = new Set<string>();
+    // ftpd.e:1157-1163 - FTP_DIR_DAYS, ten days when the tooltype is absent.
+    // A listing is what arrived recently, not everything the conference ever
+    // held: the sysop's client showed `-D-CALC.LHA`, an entry whose bytes had
+    // long gone, because ours was unbounded.
+    const days = this.deps.listingDays?.(conf.conference_id) ?? DEFAULT_LISTING_DAYS;
+    const oldest = days > 0 ? Date.now() - days * 86_400_000 : 0;
     for (const dirFile of dirFiles) {
       let content: string;
       try {
@@ -161,6 +235,13 @@ export class FtpFilesystem {
         const name = parsed.filename.trim();
         // A file can be listed in more than one area; a caller wants it once.
         if (!name || seen.has(name.toLowerCase())) continue;
+        // The date bound. An entry with no usable date is KEPT: a listing that
+        // silently drops rows because a DIR line is malformed is worse than
+        // one that shows an old file.
+        const when = parsed.uploadDate?.getTime?.();
+        if (oldest > 0 && typeof when === 'number' && !Number.isNaN(when) && when < oldest) {
+          continue;
+        }
         seen.add(name.toLowerCase());
         entries.push({
           name,
@@ -171,6 +252,64 @@ export class FtpFilesystem {
         });
       }
     }
+    return entries;
+  }
+
+  /**
+   * The conference's DLPATH directories, walked - ftpd.e:1010 and 910.
+   *
+   * Directories are listed as well as files, because that is what makes a
+   * subdirectory reachable: a client can only enter what a listing showed it.
+   * A name seen in more than one DLPATH is listed once, and the date bound
+   * applies here exactly as it does to the catalogue.
+   */
+  private async listFromDownloadDirs(conf: FtpConference, subPath: string): Promise<FtpEntry[]> {
+    const roots = this.deps.downloadDirs?.(conf.conference_id) ?? [];
+    if (roots.length === 0) return [];
+
+    const days = this.deps.listingDays?.(conf.conference_id) ?? DEFAULT_LISTING_DAYS;
+    const oldest = days > 0 ? Date.now() - days * 86_400_000 : 0;
+
+    const entries: FtpEntry[] = [];
+    const seen = new Set<string>();
+
+    for (const root of roots) {
+      const dir = subPath ? path.join(root, subPath) : root;
+      let names: string[];
+      try {
+        names = fs.readdirSync(dir);
+      } catch {
+        // A DLPATH that is not there, or a subdirectory this one does not
+        // have: the next DLPATH may still have it.
+        continue;
+      }
+
+      for (const name of names) {
+        const key = name.toLowerCase();
+        if (seen.has(key)) continue;
+
+        let stats: fs.Stats;
+        try {
+          stats = fs.statSync(path.join(dir, name));
+        } catch {
+          continue;
+        }
+
+        // A DIRECTORY is always listed: the date bound is about files
+        // arriving, and hiding a directory hides everything under it.
+        if (!stats.isDirectory() && oldest > 0 && stats.mtimeMs < oldest) continue;
+
+        seen.add(key);
+        entries.push({
+          name,
+          isDirectory: stats.isDirectory(),
+          size: stats.isDirectory() ? 0 : stats.size,
+          modified: stats.mtime,
+          hostPath: path.join(dir, name),
+        });
+      }
+    }
+
     return entries;
   }
 
@@ -199,10 +338,12 @@ export class FtpFilesystem {
         modified: new Date(),
       };
     }
-    if (segments.length > 2) return null;
-
-    const wanted = segments[1].toLowerCase();
-    const entries = await this.list(user, conferencePath);
+    // Anything deeper resolves by listing the PARENT and matching the last
+    // segment - one code path for SIZE, MDTM, MLST and RETR, whether the row
+    // came from the catalogue or from a directory walk.
+    const wanted = segments[segments.length - 1].toLowerCase();
+    const parent = segments.length === 2 ? conferencePath : `/${segments.slice(0, -1).join('/')}`;
+    const entries = await this.list(user, parent);
     return entries.find((entry) => entry.name.toLowerCase() === wanted) ?? null;
   }
 
@@ -239,13 +380,19 @@ export function machineTimestamp(when: Date): string {
  * being readable rather than promising something the server would refuse.
  */
 export function machineListLine(entry: FtpEntry): string {
-  const type = entry.isDirectory ? 'dir' : 'file';
-  const perm = entry.isDirectory ? 'el' : '';
-  return (
-    `type=${type};size=${entry.size};modify=${machineTimestamp(entry.modified)};perm=${perm}; ` +
-    entry.name
-  );
+  // ftpd.e:878-891:
+  //   `Type=dir;Modify=<ts>;Perm=r; <name>`
+  //   `Type=file;Size=<n>;Modify=<ts>;Perm=r; <name>`
+  //
+  // `Perm=r` on both: this server hands out reads. An earlier version said
+  // `perm=el` on a directory and nothing on a file, which promised a client
+  // less than the board actually offers.
+  const modify = machineTimestamp(entry.modified);
+  return entry.isDirectory
+    ? `Type=dir;Modify=${modify};Perm=r; ${entry.name}`
+    : `Type=file;Size=${entry.size};Modify=${modify};Perm=r; ${entry.name}`;
 }
+
 
 /**
  * One row of `LIST` in the Unix long format every client parses.
@@ -259,17 +406,24 @@ export function machineListLine(entry: FtpEntry): string {
  * That is what `ls` does, and a client that guesses the year from a missing
  * field gets it right for both.
  */
-export function longListLine(entry: FtpEntry, now: Date = new Date()): string {
-  const permissions = entry.isDirectory ? 'drwxr-xr-x' : '-rw-r--r--';
-  const size = String(entry.size).padStart(12, ' ');
-  const month = MONTHS[entry.modified.getMonth()] ?? 'Jan';
-  const day = String(entry.modified.getDate()).padStart(2, ' ');
-  const sixMonths = 183 * 24 * 60 * 60 * 1000;
-  const stamp =
-    now.getTime() - entry.modified.getTime() > sixMonths
-      ? String(entry.modified.getFullYear()).padStart(5, ' ')
-      : `${String(entry.modified.getHours()).padStart(2, '0')}:${String(
-          entry.modified.getMinutes()
-        ).padStart(2, '0')}`.padStart(5, ' ');
-  return `${permissions}    1 bbs      bbs  ${size} ${month} ${day} ${stamp} ${entry.name}`;
+export function longListLine(entry: FtpEntry, _now: Date = new Date()): string {
+  // ftpd.e:885-897, exactly:
+  //   `dr--r--r--   1 root  root %10d %s %s`  for a directory
+  //   `-r--r--r--   1 root  root %10d %s %s`  for a file
+  //
+  // Read-only permissions and a `root root` owner because that is what the
+  // board tells a caller: nothing here is his to change. The date is
+  // `formatFileDate` (ftpd.e:647) - `MMM-DD-YYYY HH:MM`, one field, not the
+  // Unix "recent or year" pair.
+  const permissions = entry.isDirectory ? 'dr--r--r--' : '-r--r--r--';
+  const size = String(entry.isDirectory ? 0 : entry.size).padStart(10, ' ');
+  return `${permissions}   1 root  root ${size} ${listDate(entry.modified)} ${entry.name}`;
 }
+
+/** `Sep-07-2026 19:45` - ftpd.e:660, the date a LIST row carries. */
+export function listDate(when: Date): string {
+  const month = MONTHS[when.getMonth()] ?? 'Jan';
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${month}-${pad(when.getDate())}-${when.getFullYear()} ${pad(when.getHours())}:${pad(when.getMinutes())}`;
+}
+

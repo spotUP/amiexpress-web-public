@@ -24,6 +24,8 @@ export interface FtpConfig {
 export interface FtpEnv {
   FTP_PORT?: string;
   FTP_HOST?: string;
+  /** `1` runs the FTP server even when the board's icon has not switched it on. */
+  FTP_ENABLED?: string;
   /** PEM paths. Without them the server runs, and `AUTH TLS` answers 431. */
   FTP_TLS_CERT?: string;
   FTP_TLS_KEY?: string;
@@ -64,12 +66,30 @@ export function ftpPortFrom(config: FtpConfig | null, env: FtpEnv = {}): number 
   // (index.ts:1505-1514) - it is what lets a container be moved without an
   // admin round trip.
   const fromEnv = env.FTP_PORT ? parseInt(env.FTP_PORT, 10) : NaN;
-  if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
+  // `>= 0`, not `> 0`: port 0 is a real request - "bind an ephemeral port" -
+  // and rejecting it sent the caller to the 2121 default instead, where it
+  // collided with whatever already held that port.
+  if (Number.isFinite(fromEnv) && fromEnv >= 0) return fromEnv;
   if (config?.ftp_port) return config.ftp_port;
   return DEFAULT_FTP_PORT;
 }
 
-export function ftpEnabled(config: FtpConfig | null): boolean {
+/**
+ * Whether this board runs FTP at all.
+ *
+ * `FTP_ENABLED` in `bbsConfig.info` is the sysop's switch and stays the
+ * authority. The same name in the ENVIRONMENT turns it on as well, for one
+ * reason: a developer must be able to run this on his own machine without
+ * editing the board's icon, because every deploy of the live board drops the
+ * callers on it (sysop, 2026-09-07: "we are throwing users out of the live
+ * bbs").
+ *
+ * Env can only turn it ON. A board whose icon says off, with no variable set,
+ * is off.
+ */
+export function ftpEnabled(config: FtpConfig | null, env: FtpEnv = {}): boolean {
+  const fromEnv = (env.FTP_ENABLED ?? '').trim().toLowerCase();
+  if (fromEnv === '1' || fromEnv === 'true' || fromEnv === 'yes') return true;
   return Boolean(config?.ftp_enabled);
 }
 
@@ -147,7 +167,7 @@ export async function startFtpServer(
   deps: FtpDeps,
   env: FtpEnv = process.env as FtpEnv
 ): Promise<FtpServer | null> {
-  if (!ftpEnabled(config)) return null;
+  if (!ftpEnabled(config, env)) return null;
 
   const port = ftpPortFrom(config, env);
   const allowPlaintext = ftpAllowsPlaintext(env);

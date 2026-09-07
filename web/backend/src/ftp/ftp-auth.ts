@@ -23,12 +23,12 @@ import { resolveFile } from '../handlers/transfer/batch-download.handler';
 import { loadConfConfig } from '../services/conf-config.service';
 import { fileUploadedFile } from '../services/upload-filing.service';
 import { registerFtpCaller, releaseFtpCaller } from './ftp-presence';
-import { conferenceDir } from '../conferences/conference-paths';
+import { conferenceDir, conferenceDownloadDirs } from '../conferences/conference-paths';
 import { getNodeWorkDir, getPlaypenDir } from '../utils/bbs-paths.util';
 import { readTooltypeMap } from '../utils/info-file.util';
 import { testFile, TestResult } from '../utils/file-test.util';
 import { validateFilename } from '../utils/file-upload.util';
-import { FtpFilesystem } from './ftp-filesystem';
+import { DEFAULT_LISTING_DAYS, FtpFilesystem } from './ftp-filesystem';
 import { nodeManager } from '../services/node-manager.service';
 import { writeToCallersLog } from '../utils/download-logging.util';
 import { getTimeRemainingMinutes } from '../utils/time-tracking.util';
@@ -93,6 +93,37 @@ export function boardFtpFilesystem(root?: string): FtpFilesystem {
       });
     },
     canAccess: (user, conferenceId) => checkConfAccess(user, conferenceId),
+
+    /**
+     * `FTP_DIR_DAYS` from the conference's own icon - the SIBLING
+     * `<root>/Conf2.info`, as everything else on this board reads it. Absent
+     * or unreadable means express's default of ten days (ftpd.e:1160); `0` is
+     * the sysop asking for no bound at all.
+     */
+    listingDays: (conferenceId: number) => {
+      try {
+        const raw = readTooltypeMap(`${conferenceDir(bbsRoot, conferenceId)}.info`)
+          .get('FTP_DIR_DAYS')
+          ?.trim();
+        if (raw === undefined || raw === '') return DEFAULT_LISTING_DAYS;
+        const days = Number(raw);
+        return Number.isFinite(days) && days >= 0 ? days : DEFAULT_LISTING_DAYS;
+      } catch {
+        return DEFAULT_LISTING_DAYS;
+      }
+    },
+
+    /** The conference's DLPATH directories - the same resolver downloads use. */
+    downloadDirs: (conferenceId: number) => conferenceDownloadDirs(bbsRoot, conferenceId),
+
+    /** `FTP_NO_DIRLIST` (ftpd.e:1170): list the directories, not the catalogue. */
+    listsDirectories: (conferenceId: number) => {
+      try {
+        return readTooltypeMap(`${conferenceDir(bbsRoot, conferenceId)}.info`).has('FTP_NO_DIRLIST');
+      } catch {
+        return false;
+      }
+    },
     bbsRoot,
   });
 }
@@ -134,6 +165,15 @@ export function boardFtpDeps(): FtpDeps {
     },
 
     /** Charge it once the bytes have actually gone. */
+    /** `FILENAMECAPS` on the board's icon (ftpd.e:1443). Presence semantics. */
+    uppercaseUploads() {
+      try {
+        return readTooltypeMap(path.join(config.get('dataDir'), 'bbsConfig.info')).has('FILENAMECAPS');
+      } catch {
+        return false;
+      }
+    },
+
     async recordDownload(user: FtpUser, size: number) {
       await updateDownloadStats(user as unknown as Parameters<typeof updateDownloadStats>[0], size);
     },
@@ -147,13 +187,27 @@ export function boardFtpDeps(): FtpDeps {
      * socket upload applies.
      */
     async refuseUpload(_user: FtpUser, conferenceId: number, filename: string) {
-      if (!filename) return 'No filename';
+      // The CODES are express's, and a client acts on the difference: 553 says
+      // "your filename is the problem, pick another", 550 says "this board
+      // will not take it at all" (ftpd.e:1463-1553). The log lines are its own
+      // too, so a sysop reading the CallersLog sees what AmiExpress showed.
+      if (!filename) {
+        return { code: 553, text: 'Invalid filename', logAs: 'Invalid filename' };
+      }
 
       const name = validateFilename(filename);
-      if (!name.valid) return name.error ?? 'That filename is not allowed';
+      if (!name.valid) {
+        return {
+          code: 553,
+          text: `${filename}: ${name.error ?? 'Invalid filename'}`,
+          logAs: 'Invalid filename',
+        };
+      }
 
       const areas = await db.getFileAreas(conferenceId);
-      if (!areas || areas.length === 0) return 'This conference has no upload area';
+      if (!areas || areas.length === 0) {
+        return { code: 550, text: 'Cant upload here', logAs: 'No upload area for' };
+      }
 
       // The tooltype is presence-semantics, like every other boolean on this
       // board: NO_FTP_UPLOADS present means uploads are off here.
@@ -170,7 +224,13 @@ export function boardFtpDeps(): FtpDeps {
       try {
         const confIcon = readTooltypeMap(iconPath);
         if (confIcon.has('NO_FTP_UPLOADS')) {
-          return confIcon.get('NO_FTP_UPLOADS')?.trim() || 'Uploads are not accepted in this conference';
+          // ftpd.e:1532-1536 - the conference's own block TEXT, because a
+          // sysop writes it to say why.
+          return {
+            code: 550,
+            text: confIcon.get('NO_FTP_UPLOADS')?.trim() || 'Not expecting any uploads',
+            logAs: 'Uploads blocked for',
+          };
         }
       } catch {
         // No icon, or one this reader cannot parse. Uploads are not switched
@@ -242,13 +302,14 @@ export function boardFtpDeps(): FtpDeps {
         addSentBy: nodeConfig?.sentby_files ?? true,
       });
 
-      const summary = outcome.orphaned
-        ? 'Transfer complete, but the board could not file it - a sysop has been told'
-        : outcome.status === 'hold'
-          ? 'Transfer complete - held for the sysop'
-          : 'Transfer complete';
-
-      return { bytes, summary, notices: outcome.notices.map((notice) => notice.text) };
+      // ftpd.e:1690 - 426 when the upload did not survive. A file the board
+      // could not file anywhere is not a completed transfer, whatever the
+      // socket did; a HOLD is, and the notices say where it went.
+      return {
+        bytes,
+        accepted: !outcome.orphaned,
+        notices: outcome.notices.map((notice) => notice.text),
+      };
     },
     async authenticate(username: string, password: string): Promise<FtpUser | null> {
       const user = await db.authenticateUser(username, password);

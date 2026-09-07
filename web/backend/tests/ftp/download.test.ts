@@ -37,6 +37,10 @@ function makeFilesystem(): FtpFilesystem {
     conferences: () => [{ conference_id: 1, name: 'General' }],
     canAccess: () => true,
     bbsRoot: board,
+    // No date bound: this file's DIR entry carries a fixed date and what is
+    // under test is the transfer, not how far back a listing reaches
+    // (tests/ftp/tree.test.ts owns FTP_DIR_DAYS).
+    listingDays: () => 0,
   });
 }
 

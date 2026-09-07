@@ -13,7 +13,9 @@ import * as os from 'os';
 import * as path from 'path';
 
 import {
+  DEFAULT_LISTING_DAYS,
   FtpFilesystem,
+  machineListLine,
   conferenceDirectoryName,
   longListLine,
   resolvePath,
@@ -57,6 +59,10 @@ beforeAll(() => {
     conferences: () => CONFERENCES,
     canAccess,
     bbsRoot: root,
+    // No date bound in THIS file: its DIR entries carry fixed dates and what
+    // is under test is the grammar and the access rules. The bound has its
+    // own block below, where the dates are relative on purpose.
+    listingDays: () => 0,
   });
 });
 
@@ -143,6 +149,65 @@ describe('where a path lands', () => {
   });
 });
 
+describe('how far back a listing reaches', () => {
+  /**
+   * ftpd.e:1157-1163. `FTP_DIR_DAYS`, defaulting to TEN days, and `makeList`
+   * emits a row only when its date is newer. An express listing is what
+   * arrived recently, not the conference's whole history - the sysop met the
+   * other behaviour when his client listed a file whose bytes had long gone.
+   */
+  const dated = (name: string, when: string) =>
+    `${name.padEnd(12)} N ${String(1024).padStart(7)}  ${when}         A file\r\n`;
+
+  let bounded: string;
+
+  beforeAll(() => {
+    bounded = fs.mkdtempSync(path.join(os.tmpdir(), 'ftp-days-'));
+    fs.mkdirSync(path.join(bounded, 'Conf1'), { recursive: true });
+    const today = new Date();
+    const stamp = (daysAgo: number) => {
+      const d = new Date(today.getTime() - daysAgo * 86_400_000);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getFullYear() % 100)}`;
+    };
+    fs.writeFileSync(
+      path.join(bounded, 'Conf1', 'DIR1'),
+      dated('FRESH.LHA', stamp(1)) + dated('STALE.LHA', stamp(400)),
+      'latin1'
+    );
+  });
+
+  afterAll(() => fs.rmSync(bounded, { recursive: true, force: true }));
+
+  const treeWith = (days?: number) =>
+    new FtpFilesystem({
+      conferences: () => [{ conference_id: 1, name: 'General' }],
+      canAccess: () => true,
+      bbsRoot: bounded,
+      ...(days === undefined ? {} : { listingDays: () => days }),
+    });
+
+  it('drops an entry older than the bound', async () => {
+    expect((await treeWith(30).list(SYSOP, '/001-General')).map((e) => e.name)).toEqual([
+      'FRESH.LHA',
+    ]);
+  });
+
+  it('defaults to ten days when the sysop has not said', async () => {
+    expect((await treeWith().list(SYSOP, '/001-General')).map((e) => e.name)).toEqual([
+      'FRESH.LHA',
+    ]);
+    expect(DEFAULT_LISTING_DAYS).toBe(10);
+  });
+
+  it('lists everything when the sysop asks for no bound', async () => {
+    expect((await treeWith(0).list(SYSOP, '/001-General')).map((e) => e.name)).toEqual([
+      'FRESH.LHA',
+      'STALE.LHA',
+    ]);
+  });
+});
+
 describe('the LIST row', () => {
   const file = {
     name: 'UPROUGH.LHA',
@@ -151,27 +216,58 @@ describe('the LIST row', () => {
     modified: new Date('2026-09-01T12:34:00Z'),
   };
 
-  it('has the nine fields every client parses', () => {
-    const line = longListLine(file, new Date('2026-09-07T00:00:00Z'));
-
-    // permissions, links, owner, group, size, month, day, time, name
-    expect(line.split(/\s+/)).toHaveLength(9);
-    expect(line.startsWith('-rw-r--r--')).toBe(true);
-    expect(line.endsWith(' UPROUGH.LHA')).toBe(true);
-    expect(line).toContain('1234567');
-  });
-
-  it('marks a directory as one, or a client will not enter it', () => {
-    expect(longListLine({ ...file, isDirectory: true, name: '001-General' })).toMatch(
-      /^drwxr-xr-x/
+  /**
+   * ftpd.e:885-897. `-r--r--r--   1 root  root %10d %s %s`, the date being
+   * `MMM-DD-YYYY HH:MM` (ftpd.e:660). Read-only and `root root` because
+   * nothing a caller sees here is his to change.
+   */
+  it('is express\'s own row, field for field', () => {
+    expect(longListLine(file)).toMatch(
+      /^-r--r--r--   1 root  root {4}1234567 [A-Z][a-z]{2}-\d{2}-\d{4} \d{2}:\d{2} UPROUGH\.LHA$/
     );
   });
 
-  it('shows a year instead of a time once the file is old', () => {
-    const old = { ...file, modified: new Date('2019-03-04T10:00:00Z') };
-    const line = longListLine(old, new Date('2026-09-07T00:00:00Z'));
+  it('marks a directory, and gives it size zero as express does', () => {
+    const line = longListLine({ ...file, isDirectory: true, name: '001-General' });
 
-    expect(line).toContain('2019');
-    expect(line).not.toMatch(/\d\d:\d\d/);
+    expect(line.startsWith('dr--r--r--')).toBe(true);
+    expect(line).toContain('         0 ');
+    expect(line.endsWith(' 001-General')).toBe(true);
+  });
+
+  it('keeps the date in one field, whatever its age', () => {
+    // The Unix format switches to a year after six months, which changes the
+    // COLUMN COUNT - a client splitting on whitespace then reads a different
+    // filename for an old file. express has one field either way.
+    expect(longListLine({ ...file, modified: new Date('2019-03-04T10:00:00Z') }).split(/\s+/).length)
+      .toBe(longListLine(file).split(/\s+/).length);
+  });
+});
+
+describe('the MLSD row', () => {
+  /**
+   * ftpd.e:878-891, including `Perm=r` on a FILE - which is what lets a
+   * client offer the download rather than greying it out.
+   */
+  it('is express\'s own facts', () => {
+    expect(
+      machineListLine({
+        name: 'UPROUGH.LHA',
+        isDirectory: false,
+        size: 4096,
+        modified: new Date(Date.UTC(2026, 8, 7, 19, 45, 3)),
+      })
+    ).toBe('Type=file;Size=4096;Modify=20260907194503;Perm=r; UPROUGH.LHA');
+  });
+
+  it('says dir, with no size, for a conference', () => {
+    expect(
+      machineListLine({
+        name: '001-General',
+        isDirectory: true,
+        size: 0,
+        modified: new Date(Date.UTC(2026, 8, 7, 19, 45, 3)),
+      })
+    ).toBe('Type=dir;Modify=20260907194503;Perm=r; 001-General');
   });
 });

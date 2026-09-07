@@ -74,7 +74,13 @@ export interface FtpDeps {
    * `NO_FTP_UPLOADS` text, a name the board will not accept, a caller without
    * the access. Undefined means go ahead.
    */
-  refuseUpload?(user: FtpUser, conferenceId: number, filename: string): Promise<string | undefined>;
+  refuseUpload?(
+    user: FtpUser,
+    conferenceId: number,
+    filename: string
+  ): Promise<{ code: number; text: string; logAs: string } | undefined>;
+  /** `FILENAMECAPS`: an upload's name is uppercased before anything reads it. */
+  uppercaseUploads?(): boolean;
   /**
    * Read the caller's bytes into the node's playpen and file them the way the
    * board files every other upload. Returns what to tell him.
@@ -82,7 +88,7 @@ export interface FtpDeps {
   acceptUpload?(
     request: { user: FtpUser; conferenceId: number; nodeId: number; filename: string },
     data: Duplex
-  ): Promise<{ bytes: number; summary: string; notices: string[] }>;
+  ): Promise<{ bytes: number; accepted: boolean; notices: string[] }>;
 }
 
 /** Commands a caller may use before logging in. */
@@ -95,9 +101,7 @@ const PRE_LOGIN = new Set(['USER', 'PASS', 'QUIT', 'FEAT', 'NOOP', 'AUTH', 'SYST
  * told that about LIST concludes the server is not an FTP server at all. The
  * set shrinks to nothing as phases 3-6 land.
  */
-const NOT_YET = new Set([
-  'MODE', 'STRU', 'PORT', 'STOU', 'APPE',
-]);
+const NOT_YET = new Set(['STOU', 'APPE']);
 
 /**
  * Commands the board will not carry over FTP at all, and why they say so.
@@ -122,6 +126,7 @@ const REFUSED: Record<string, string> = {
 const AFTER_LOGIN = new Set([
   'PWD', 'XPWD', 'CWD', 'XCWD', 'CDUP', 'TYPE', 'PBSZ', 'PROT', 'PASV', 'LIST', 'NLST',
   'MLSD', 'MLST', 'OPTS', 'EPSV', 'SIZE', 'MDTM', 'RETR', 'REST', 'STOR',
+  'MODE', 'STRU', 'PORT',
   ...Object.keys(REFUSED),
 ]);
 
@@ -149,6 +154,8 @@ export class FtpSession {
   /** Where the caller is standing. `/` is the list of his conferences. */
   private cwd = '/';
   private binary = true;
+  /** TYPE A. Tracked separately so an unset TYPE can be refused, as express does. */
+  private ascii = false;
   private protectData = false;
   private passive: PassiveChannel | null = null;
   /** `REST` offset for the NEXT transfer, and only that one. */
@@ -304,6 +311,22 @@ export class FtpSession {
         return this.reply(200, 'PBSZ=0');
       case 'PROT':
         return this.onProt(arg);
+      case 'MODE':
+        // ftpd.e:1361 - only Stream.
+        return arg.trim().toUpperCase().startsWith('S')
+          ? this.reply(200, 'Mode set to S')
+          : this.reply(504, `Mode ${arg.trim()} not supported`);
+      case 'STRU':
+        // ftpd.e:1371 - only File.
+        return arg.trim().toUpperCase().startsWith('F')
+          ? this.reply(200, 'Structure set to F')
+          : this.reply(504, `Structure ${arg.trim()} not supported`);
+      case 'PORT':
+        // ftpd.e:1357 answers 200 and does nothing. Active mode asks the
+        // SERVER to dial the caller, which is unreachable behind NAT and
+        // refused by any sane firewall - a cheerful 200 followed by a
+        // transfer that never starts is worse than saying so now.
+        return this.reply(504, 'Active mode is not supported - use PASV or EPSV');
       case 'PASV':
         return this.onPasv('classic');
       case 'EPSV':
@@ -411,7 +434,12 @@ export class FtpSession {
 
     let located;
     try {
-      located = await this.deps.resolveFile(conference.conference_id, entry.name);
+      // A row from a directory walk already knows where its bytes are; only a
+      // CATALOGUE row needs resolving, because a DIR entry is a claim about a
+      // file rather than a path to one.
+      located = entry.hostPath
+        ? { path: entry.hostPath, size: entry.size, name: entry.name }
+        : await this.deps.resolveFile(conference.conference_id, entry.name);
     } catch (error) {
       // A pooled volume being down is NOT "no such file": telling a caller his
       // file is missing when the bucket is having a bad minute is how a sysop
@@ -516,22 +544,38 @@ export class FtpSession {
       return this.reply(550, 'Uploads are not available');
     }
 
-    const name = arg.trim().split('/').pop() ?? '';
+    let name = arg.trim().split('/').pop() ?? '';
+    // ftpd.e:1443 - FILENAMECAPS uppercases an upload's name before anything
+    // else looks at it, so the dupe check and the DIR entry agree.
+    if (this.deps.uppercaseUploads?.()) name = name.toUpperCase();
+
+    // ftpd.e:1445-1460 - only I and A exist.
+    if (!this.binary && !this.ascii) {
+      channel.close();
+      return this.reply(550, 'This server only supports binary or ascii transfers');
+    }
+
+    // ftpd.e:1512-1516 - at the ROOT there is no conference to file it in,
+    // and "Cant upload here" is express's own wording.
     const conference = tree.conferenceAt(this.user, this.cwd);
     if (!conference) {
       channel.close();
-      return this.reply(550, 'Move into a conference before uploading');
+      return this.reply(550, 'Cant upload here');
     }
 
-    // Everything the board would refuse BEFORE a byte is taken: a caller who
-    // is going to be told no should be told now, not after his transfer.
+    // Everything the board would refuse BEFORE a byte is taken: a caller told
+    // no after ten megabytes has been told no expensively. express separates
+    // 553 (the NAME is wrong, or it is already here) from 550 (the board will
+    // not take it), and a client acts on that difference.
     const refusal = await this.deps.refuseUpload?.(this.user, conference.conference_id, name);
     if (refusal) {
       channel.close();
-      return this.reply(550, refusal);
+      this.deps.log(this.user.username, '\tUpload Failed..', this.nodeId);
+      this.deps.log(this.user.username, `\t${refusal.logAs} ${name}`, this.nodeId);
+      return this.reply(refusal.code, refusal.text);
     }
 
-    this.reply(150, `Opening ${this.binary ? 'BINARY' : 'ASCII'} mode data connection for ${name}`);
+    this.reply(150, `Opening ${this.binary ? 'Binary' : 'Ascii'} connection`);
 
     let data: Duplex;
     try {
@@ -542,17 +586,29 @@ export class FtpSession {
     }
 
     try {
+      /*
+       * ftpd.e:1669-1692 - the file-check conversation.
+       *
+       * The bytes arriving is not the end of it: the board tests the archive,
+       * and express keeps the caller informed WHILE it does, with `226-`
+       * continuation lines. A client told nothing for ten seconds decides the
+       * server has died; one that reads "file check in progress" waits.
+       */
+      this.socket.write(`226-${name} ... Upload complete, file check in progress.. \r\n`);
+
       const outcome = await this.deps.acceptUpload(
         { user: this.user, conferenceId: conference.conference_id, nodeId: this.nodeId, filename: name },
         data
       );
-      // The board's own words, on the control connection, before the 226 - a
-      // duplicate or a quarantine is the difference between "uploaded" and
-      // "uploaded and waiting for the sysop", and a caller must not have to
-      // guess which happened.
+
+      // What the board decided - a duplicate, a quarantine, a dead volume.
       for (const notice of outcome.notices) this.socket.write(`226-${notice}\r\n`);
       this.deps.log(this.user.username, `\tFTP Upload >: ${name} (${outcome.bytes} bytes)`, this.nodeId);
-      this.reply(226, outcome.summary);
+      // ftpd.e:1690 - 226 or 426, the filename in both.
+      this.reply(
+        outcome.accepted === false ? 426 : 226,
+        `${name} ... ${outcome.accepted === false ? 'Transfer aborted' : 'Transfer Complete'}`
+      );
     } catch (error) {
       data.destroy();
       this.reply(
@@ -635,6 +691,7 @@ export class FtpSession {
       return this.reply(504, `TYPE ${arg.trim()} not supported`);
     }
     this.binary = mode !== 'A';
+    this.ascii = mode === 'A';
     this.reply(200, `Type set to ${this.binary ? 'I' : 'A'}`);
   }
 

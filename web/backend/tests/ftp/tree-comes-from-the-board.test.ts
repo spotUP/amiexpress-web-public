@@ -50,9 +50,15 @@ function writeBoard(root: string): void {
   // and the DIRECTORIES come from the same place: LOCATION.2 is Conf3.
   const conf = path.join(root, 'Conf3');
   fs.mkdirSync(conf, { recursive: true });
+  // TODAY's date, deliberately: this drives the REAL wiring, which applies
+  // express's ten-day FTP_DIR_DAYS default (ftpd.e:1160). A fixed past date
+  // would test the bound rather than the tree, and would rot.
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, '0');
+  const stamp = `${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getFullYear() % 100)}`;
   fs.writeFileSync(
     path.join(conf, 'DIR1'),
-    'PARTY.LHA    N  123456  01-01-26         A demo from the C64 conference\r\n',
+    `PARTY.LHA    N  123456  ${stamp}         A demo from the C64 conference\r\n`,
     'latin1'
   );
 }

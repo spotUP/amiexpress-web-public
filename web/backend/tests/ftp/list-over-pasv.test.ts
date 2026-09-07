@@ -199,7 +199,8 @@ describe('LIST over a passive connection', () => {
     const body = Buffer.concat(received).toString('latin1');
     const rows = body.split('\r\n').filter((row) => row.length > 0);
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatch(/^drwxr-xr-x/);
+    // ftpd.e:891 - `dr--r--r--   1 root  root`, read-only and root-owned.
+    expect(rows[0]).toMatch(/^dr--r--r--   1 root  root/);
     expect(body).toContain('001-General');
     expect(body).toContain('002-Elite');
     // EXCLUDE_FTP is honoured through the whole path, not only in the unit.
@@ -258,9 +259,8 @@ describe('LIST over a passive connection', () => {
     const rows = Buffer.concat(received).toString('latin1').split('\r\n').filter(Boolean);
     expect(rows).toHaveLength(2);
     // The facts FEAT names - type, size, modify, perm - then the name.
-    expect(rows[0]).toMatch(
-      /^type=dir;size=0;modify=\d{14};perm=el; 001-General$/
-    );
+    // ftpd.e:881 - capitalised facts, and `Perm=r`.
+    expect(rows[0]).toMatch(/^Type=dir;Modify=\d{14};Perm=r; 001-General$/);
     expect(rows[1]).toContain('002-Elite');
 
     control.destroy();
@@ -281,7 +281,7 @@ describe('LIST over a passive connection', () => {
     if (feature.some((f) => f.startsWith('MLST'))) {
       control.write('MLST /\r\n');
       expect(await lines.next()).toBe('250-Listing');
-      expect(await lines.next()).toMatch(/^ type=dir;/);
+      expect(await lines.next()).toMatch(/^ Type=dir;/);
       expect(await lines.next()).toBe('250 END');
     }
 
@@ -356,7 +356,7 @@ describe('asking about one file', () => {
 
     control.write('MLST 001-General\r\n');
     expect(await lines.next()).toBe('250-Listing');
-    expect(await lines.next()).toMatch(/^ type=dir;size=0;modify=\d{14};perm=el; \/001-General$/);
+    expect(await lines.next()).toMatch(/^ Type=dir;Modify=\d{14};Perm=r; \/001-General$/);
     expect(await lines.next()).toBe('250 END');
 
     control.destroy();

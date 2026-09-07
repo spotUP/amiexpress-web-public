@@ -55,6 +55,7 @@ async function listen(over: Partial<FtpDeps> = {}): Promise<Rig> {
     passivePorts: () => ({ first: 34_301, last: 34_310 }),
     passiveAddress: () => '127.0.0.1',
     refuseUpload: async () => undefined,
+    uppercaseUploads: () => false,
     acceptUpload: async (request, data: Duplex) => {
       // The real wiring writes into the playpen and calls the filing service;
       // here the bytes are counted so the transfer itself is what is proved.
@@ -67,7 +68,7 @@ async function listen(over: Partial<FtpDeps> = {}): Promise<Rig> {
         data.on('close', () => resolve(seen));
       });
       filed.push({ filename: request.filename, bytes, conferenceId: request.conferenceId });
-      return { bytes, summary: 'Transfer complete', notices: [] };
+      return { bytes, accepted: true, notices: [] };
     },
     ...over,
   };
@@ -174,8 +175,11 @@ describe('a caller uploading a file', () => {
 
     const { replies, control } = await upload(rig.port, 'STOR DEMO.LHA');
 
-    expect(replies[0]).toMatch(/^150 .*DEMO\.LHA/);
-    expect(replies[replies.length - 1]).toBe('226 Transfer complete');
+    // ftpd.e:1580 and 1690 - "150 Opening Binary connection", the file-check
+    // conversation, then "226 <name> ... Transfer Complete".
+    expect(replies[0]).toBe('150 Opening Binary connection');
+    expect(replies).toContain('226-DEMO.LHA ... Upload complete, file check in progress.. ');
+    expect(replies[replies.length - 1]).toBe('226 DEMO.LHA ... Transfer Complete');
     expect(rig.filed).toEqual([{ filename: 'DEMO.LHA', bytes: PAYLOAD.length, conferenceId: 1 }]);
 
     control.destroy();
@@ -194,7 +198,7 @@ describe('a caller uploading a file', () => {
         await new Promise<void>((resolve) => data.on('close', () => resolve()));
         return {
           bytes: PAYLOAD.length,
-          summary: 'Transfer complete - held for the sysop',
+          accepted: true,
           notices: ['File already exists, moving to Sysop\'s private directory'],
         };
       },
@@ -203,7 +207,7 @@ describe('a caller uploading a file', () => {
     const { replies, control } = await upload(rig.port, 'STOR DEMO.LHA');
 
     expect(replies).toContain("226-File already exists, moving to Sysop's private directory");
-    expect(replies[replies.length - 1]).toBe('226 Transfer complete - held for the sysop');
+    expect(replies[replies.length - 1]).toBe('226 DEMO.LHA ... Transfer Complete');
 
     control.destroy();
     await new Promise<void>((resolve) => rig.server.close(() => resolve()));
@@ -224,7 +228,11 @@ describe('a caller uploading a file', () => {
 describe('what is refused, and when', () => {
   it('refuses BEFORE the transfer when the conference forbids uploads', async () => {
     const rig = await listen({
-      refuseUpload: async () => 'Uploads are not accepted in this conference',
+      refuseUpload: async () => ({
+        code: 550,
+        text: 'Uploads are not accepted in this conference',
+        logAs: 'Uploads blocked for',
+      }),
     });
 
     const { replies, control } = await upload(rig.port, 'STOR DEMO.LHA');
@@ -242,8 +250,65 @@ describe('what is refused, and when', () => {
 
     const { replies, control } = await upload(rig.port, 'STOR DEMO.LHA', '');
 
-    expect(replies[0]).toBe('550 Move into a conference before uploading');
+    // ftpd.e:1513 - express's own words for an upload at the root.
+    expect(replies[0]).toBe('550 Cant upload here');
     expect(rig.filed).toEqual([]);
+
+    control.destroy();
+    await new Promise<void>((resolve) => rig.server.close(() => resolve()));
+  });
+
+  it('uses express\'s own codes: 553 for a name, 550 for a policy', async () => {
+    // A client acts on the difference. 553 says "pick another name"; 550 says
+    // "this board will not take it" (ftpd.e:1463-1553).
+    const rig = await listen({
+      refuseUpload: async (_user, _conf, filename) => ({
+        code: 553,
+        text: `${filename}: Duplicate file skipped`,
+        logAs: 'Skipped',
+      }),
+    });
+
+    const { replies, control } = await upload(rig.port, 'STOR DEMO.LHA');
+
+    expect(replies[0]).toBe('553 DEMO.LHA: Duplicate file skipped');
+    expect(rig.filed).toEqual([]);
+
+    control.destroy();
+    await new Promise<void>((resolve) => rig.server.close(() => resolve()));
+  });
+
+  it('answers 426 when the board could not file the upload at all', async () => {
+    // ftpd.e:1690. A file that reached the playpen and nowhere else is not a
+    // completed transfer, whatever the socket managed.
+    const rig = await listen({
+      acceptUpload: async (_request, data) => {
+        data.resume();
+        await new Promise<void>((resolve) => data.on('close', () => resolve()));
+        return {
+          bytes: PAYLOAD.length,
+          accepted: false,
+          notices: ['DEMO.LHA could not be filed anywhere and needs a sysop'],
+        };
+      },
+    });
+
+    const { replies, control } = await upload(rig.port, 'STOR DEMO.LHA');
+
+    expect(replies[replies.length - 1]).toBe('426 DEMO.LHA ... Transfer aborted');
+
+    control.destroy();
+    await new Promise<void>((resolve) => rig.server.close(() => resolve()));
+  });
+
+  it('uppercases the name when FILENAMECAPS is set, before anything reads it', async () => {
+    // ftpd.e:1443, and the ORDER matters: the dupe check and the DIR entry
+    // have to agree about what the file is called.
+    const rig = await listen({ uppercaseUploads: () => true });
+
+    const { control } = await upload(rig.port, 'STOR quiet.lha');
+
+    expect(rig.filed.map((f) => f.filename)).toEqual(['QUIET.LHA']);
 
     control.destroy();
     await new Promise<void>((resolve) => rig.server.close(() => resolve()));
