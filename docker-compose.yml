@@ -45,9 +45,36 @@ services:
       - "31337:31337"   # BBS SSH (matches SSH_PORT default in
                         # web/backend/src/index.ts:822; 2222:2222 was a
                         # dead port for the same reason as telnet above).
+      - "1541:1541"     # FTP control (FTP_PORT below, and FTPPORT in
+                        # bbsConfig.info). The server binds 0.0.0.0 inside
+                        # the container whenever the sysop ticks FTP Server
+                        # Enabled; without this line it stops at the
+                        # container edge, which is what "Not connected"
+                        # looked like from Transmit on 2026-09-07.
+                        #
+                        # The PASSIVE range (FTPDATAPORT, 50101-50107) is
+                        # deliberately NOT published yet: PASV, LIST, RETR
+                        # and STOR still answer 502, so nothing would ever
+                        # listen on those ports. Publish them in the same
+                        # commit that implements PASV.
     volumes:
       # Persistent data volume - survives container rebuilds
       - bbs-data:/app/data
+      # The TLS material explicit FTPS needs, read-only.
+      #
+      # Without a certificate the FTP server still runs, but `AUTH TLS`
+      # answers 431 and the plaintext policy then refuses every caller who is
+      # not on loopback - the server looks reachable and admits nobody. The
+      # host's Caddy already holds a Let's Encrypt pair for the board, so this
+      # mounts that directory rather than copying keys around.
+      #
+      # The path is the live host's. Point FTP_TLS_DIR somewhere else (or at a
+      # directory that does not exist) and the server simply starts without
+      # TLS, which is the right behaviour on a developer's machine.
+      #
+      # Caddy renews in place and the server reads the certificate once, at
+      # boot, so a renewal needs a container restart before FTPS serves it.
+      - ${FTP_TLS_DIR:-/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/bbs.uprough.net}:/certs:ro
     networks:
       - default
       - doorserver-net
@@ -77,6 +104,16 @@ services:
       # makes the BBS unreachable. This is a known follow-up.
       - TELNET_PORT=${TELNET_PORT:-64128}
       - SSH_PORT=${SSH_PORT:-31337}
+
+      # FTP, same rule: this is the CONTAINER-side port and it must match the
+      # "1541:1541" mapping above. It overrides the admin's FTP Port field
+      # (web/backend/src/ftp/start-ftp.ts:44), exactly as TELNET_PORT does -
+      # so that changing the port in the UI alone cannot leave the mapping
+      # pointing at a socket nobody is listening on.
+      - FTP_PORT=${FTP_PORT:-1541}
+      # Read by start-ftp.ts:56. Both must be present or AUTH TLS answers 431.
+      - FTP_TLS_CERT=/certs/bbs.uprough.net.crt
+      - FTP_TLS_KEY=/certs/bbs.uprough.net.key
 
       # Security - MUST override in .env file
       - JWT_SECRET=${JWT_SECRET:-CHANGE_ME}

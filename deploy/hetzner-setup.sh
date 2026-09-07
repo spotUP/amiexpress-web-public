@@ -106,6 +106,9 @@ if command -v ufw &> /dev/null; then
                         #   binds 64128 inside container; compose forwards
                         #   64128:64128 so this rule must match)
   ufw allow 31337/tcp   # BBS SSH (matches SSH_PORT default)
+  ufw allow 1541/tcp    # FTP control (matches FTP_PORT and the compose
+                        # mapping; the passive range is not open yet because
+                        # PASV is not implemented)
   ufw --force enable
   echo "  Firewall configured"
 else

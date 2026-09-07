@@ -518,7 +518,7 @@ USER bbsuser
 # 2323: Telnet
 # 2222: SSH
 # 8080: SDK backend API
-EXPOSE 3001 2323 2222 8080
+EXPOSE 3001 2323 2222 8080 1541
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
