@@ -33,7 +33,7 @@ import { findSecurityScreen } from '../utils/screen-security.util';
 import { resolveCallerTheme } from '../screens/caller-theme';
 import {
   ScreenDirType, getScreenDirType, getScreenFileName,
-  resolveNodeScreenDir, screenSearchLocations,
+  resolveNodeScreenDir, screenSearchLocations, themedPath,
 } from '../screens/screen-resolution';
 
 // Kept on this module's surface: callers and tests reached the resolver
@@ -644,8 +644,22 @@ export async function parseMciCodes(
   bbsName: string = 'AmiExpress-Web',
   sysopName: string = 'Sysop',
   location: string = 'The Internet',
-  socket?: any  // When provided, execute inline (express.e outdata=NIL mode)
+  socket?: any,  // When provided, execute inline (express.e outdata=NIL mode)
+  options?: {
+    /**
+     * How many levels of `~SS_`/`~SR_` include to expand. Undefined means
+     * "as many as the screens name", which is what the board does and what
+     * every existing caller gets.
+     *
+     * Only the admin's preview passes a number. A preview renders a screen
+     * nobody has approved yet, on a request from a browser, and an include
+     * chain is a walk over paths the requester chose - so it is bounded there
+     * and nowhere else.
+     */
+    includeDepth?: number;
+  }
 ): Promise<{ parsed: string; commands: string[]; hasPause: boolean; slowmo?: number; slowmoCount?: number; inlineEmitted?: boolean; pendingInlineContent?: string }> {
+  const includeDepth = options?.includeDepth ?? Number.POSITIVE_INFINITY;
   let parsed = content;
   const commandsToExecute: string[] = [];
   let hasPause = false;
@@ -951,12 +965,19 @@ console.error('[parseMciCodes] Error fetching users for MultiTop codes:', error)
     const filename = filesToDisplay[i];
     const placeholder = `{{DISPLAY_FILE:${i}}}`;
 
+    // A preview caps the walk; the board does not. `includeDepth` is Infinity
+    // for every caller of this function but the preview route.
+    if (includeDepth <= 0) {
+      parsed = parsed.replace(placeholder, '');
+      continue;
+    }
+
     // Load the file content - loadScreenFile now handles Amiga paths
     let screenData = loadScreenFile(filename, session.currentConf, 0, session);
 
     if (screenData) {
       // Recursively process MCI codes in the embedded file
-      const embedded = await parseMciCodes(screenData.content, session, bbsName, sysopName, location);
+      const embedded = await parseMciCodes(screenData.content, session, bbsName, sysopName, location, undefined, { includeDepth: includeDepth - 1 });
       // Add any commands from embedded file to our command list
       commandsToExecute.push(...embedded.commands);
       if (embedded.hasPause) {
@@ -1035,6 +1056,29 @@ export function loadScreenFile(
   const baseDir = config.getConfig().dataDir;
   const bbsPaths = new BBSPaths(baseDir);
   const paths = [];
+
+  /*
+   * The caller's SCREEN theme, resolved once for every arm of this function.
+   *
+   * `resolveCallerTheme` is the only judge of what a caller may wear - the
+   * picker, the preview and the admin all ask it - so a caller can never be
+   * served a theme the picker says they cannot have, nor refused one it
+   * offered. A session carrying `screenThemeResolved` has ALREADY been past
+   * that judge; only the admin's preview builds one, and it does so by asking
+   * `resolveCallerTheme` with the REQUESTER's real identity, so there is still
+   * exactly one rule and one place it lives.
+   *
+   * It is computed HERE rather than inside the directory-list branch because
+   * the absolute, assign and slash arms below need it too: those arms are how
+   * a bulletin, a `~SS_` include and a `~SR_` pool member reach the loader,
+   * and a themed board that served the board's bulletins would be a theme
+   * with a hole in it exactly where the art is.
+   */
+  const callerThemeSlug = session?.screenThemeResolved ?? resolveCallerTheme(baseDir, {
+    username: session?.user?.username,
+    secLevel: session?.user?.secLevel,
+    screenTheme: session?.user?.screenTheme,
+  });
 
   const normalizeAbsoluteCaseInsensitive = (absPath: string): string => {
     if (!path.isAbsolute(absPath)) return absPath;
@@ -1122,11 +1166,7 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
     searchLocations.push(...screenSearchLocations(baseDir, screenName, {
       nodeId,
       confId: conferenceId || session?.relConfNum,
-      themeSlug: resolveCallerTheme(baseDir, {
-        username: session?.user?.username,
-        secLevel: session?.user?.secLevel,
-        screenTheme: session?.user?.screenTheme,
-      }),
+      themeSlug: callerThemeSlug,
     }));
 
     // express.e has NO cross-directory fallback: displayScreen() builds one
@@ -1311,9 +1351,29 @@ console.error(`[loadScreenFile]     (error reading file: ${(error as Error).mess
     }
   }
 
+  /*
+   * The theme's mirror of each path candidate, offered FIRST.
+   *
+   * `paths[]` is what the three arms above built - an absolute path, an Amiga
+   * assign, a slash-bearing relative path - and none of them passed through
+   * `screenSearchLocations`, so none of them had seen a theme. That is the
+   * hole this closes: `~SS_BBS:Screens/subhead.txt` from a themed MENU reached
+   * outside its theme, and a themed board served the board's bulletins.
+   *
+   * `themedPath` returns null for a path outside the board root and for one
+   * already inside the theme, so a candidate with no mirror is left exactly as
+   * it was. Everything downstream - the assign-path security walk, the
+   * extension-swap ladder - runs against the themed candidate first and then
+   * the original, unchanged.
+   */
+  const pathCandidates = paths.flatMap((candidate: string) => {
+    const mirrored = themedPath(baseDir, callerThemeSlug, candidate);
+    return mirrored ? [mirrored, candidate] : [candidate];
+  });
+
   // If we have paths from Amiga-style handling, try those too
-  for (let i = 0; i < paths.length; i++) {
-    const filePath = paths[i];
+  for (let i = 0; i < pathCandidates.length; i++) {
+    const filePath = pathCandidates[i];
     attemptNum++;
     screenDebug(`[loadScreenFile]   [${attemptNum}] ${filePath}`);
 

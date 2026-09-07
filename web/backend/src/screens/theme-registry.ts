@@ -27,6 +27,16 @@ export const REGISTRY_FILE = 'Themes.info';
 export const THEMES_DIR = 'Themes';
 
 /**
+ * The theme's verbatim mirror of the board root.
+ *
+ * Beside `Node/`, `Conf/` and `Board/`, which are keyed on the SCOPE the
+ * loader computed. `Files/` is keyed on the PATH instead, and it is for
+ * path-shaped references only - a bulletin, a `~SS_` include, a `~SR_` pool
+ * member. A screen resolved by name never looks there.
+ */
+export const THEME_FILES_DIR = 'Files';
+
+/**
  * The theme every caller falls back to, and the only one whose directory may
  * be empty: the default theme is NOT a directory - it is the board's own
  * screens, exactly where they are today.

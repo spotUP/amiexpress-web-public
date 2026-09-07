@@ -16,7 +16,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { DEFAULT_SLUG, findTheme, isValidSlug, themeDirectory } from './theme-registry';
+import { DEFAULT_SLUG, THEME_FILES_DIR, findTheme, isValidSlug, themeDirectory } from './theme-registry';
 import { BBSPaths } from '../utils/bbs-paths.util';
 import { readTooltypeMap } from '../utils/info-file.util';
 import { conferenceDir } from '../conferences/conference-paths';
@@ -160,6 +160,56 @@ function themeLocation(
   const dir = path.join(root, scope);
   if (!fs.existsSync(dir)) return null;
   return { dir, desc: `${entry.slug}: ${desc}` };
+}
+
+/**
+ * The theme's mirror of one board-relative path, for the arms of the loader
+ * that never reach the directory list.
+ *
+ * `loadScreenFile` has three arms that push a finished path and skip
+ * `screenSearchLocations` entirely: an absolute filesystem path, an Amiga
+ * assign, and a slash-bearing relative path. That is how a bulletin arrives
+ * (`display-file-commands.handler.ts` runs the security walk itself and hands
+ * over what it found), how `~SS_` arrives, and how `~SR_` arrives once it has
+ * resolved `BBS:`/`WORK:`/`SCREENS:`. Without a mirror, a themed board serves
+ * the board's bulletins and the board's pool art whatever the artist drew.
+ *
+ * `Themes/<slug>/Files/` mirrors the board root VERBATIM, so
+ * `~SS_BBS:Screens/subhead.txt` finds `Themes/neon/Files/Screens/subhead.txt`
+ * when the theme carries one and the board's own file when it does not.
+ *
+ * Two limits, both deliberate:
+ *
+ * - A path outside the board root has no mirror. A theme is the board's art,
+ *   not a redirection primitive for the whole filesystem.
+ * - A theme may REPLACE a file the board already has by that path and may not
+ *   introduce one it does not. That falls out of the shape rather than being
+ *   enforced here: by the time the loader sees a bulletin or a pool member,
+ *   the caller has ALREADY chosen the path from the board's own files, so a
+ *   number or a security variant the board lacks is never asked for.
+ */
+export function themedPath(
+  baseDir: string,
+  themeSlug: string | undefined,
+  absPath: string,
+): string | null {
+  if (!themeSlug || themeSlug === DEFAULT_SLUG) return null;
+  if (!isValidSlug(themeSlug)) return null;
+  if (!path.isAbsolute(absPath)) return null;
+
+  const entry = findTheme(baseDir, themeSlug);
+  if (!entry) return null;
+  const root = themeDirectory(baseDir, entry);
+  if (!root) return null;
+
+  const rel = path.relative(path.resolve(baseDir), path.resolve(absPath));
+  // Outside the board root, or the root itself: no mirror.
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  // A path already inside the theme has no second mirror - `Files/Themes/...`
+  // is a directory no artist means to fill.
+  if (path.resolve(absPath).startsWith(path.resolve(root) + path.sep)) return null;
+
+  return path.join(root, THEME_FILES_DIR, rel);
 }
 
 export function screenSearchLocations(

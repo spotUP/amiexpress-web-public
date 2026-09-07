@@ -285,6 +285,18 @@ export interface UploadSessionContext {
 }
 
 export interface BBSSession {
+  /**
+   * The screen theme this session has ALREADY been judged fit to wear.
+   *
+   * A real caller never carries this: `loadScreenFile` asks
+   * `resolveCallerTheme` about `user.screenTheme`, and that function is the
+   * one judge of what may be worn. Only the admin's preview sets it, because
+   * a preview asks two questions at once - "may this ACCOUNT look at this
+   * theme" and "what would a caller at level 20 be served" - and the second
+   * must not be allowed to answer the first. The preview route asks the judge
+   * with the requester's real identity and puts the answer here.
+   */
+  screenThemeResolved?: string;
   state: BBSState;
   subState?: LoggedOnSubState;
   skipNextDisplayFlowMenu?: boolean;
