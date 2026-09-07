@@ -1129,6 +1129,57 @@ export function proseRow(cells: Row, cols: number): RuleResult | null {
 }
 
 /**
+ * Collapse every run of two or more spaces to one, and say where each source
+ * cell went.
+ *
+ * FOR THE SINGLE-RECORD PATH, NOT FOR THIS LADDER. The C64 file view's DIZ
+ * fallback squeezes prose before reflowing it, because a door pads its
+ * description to fill an 80-column row and those runs cost a 40-column reader
+ * whole rows once the sentence wraps.
+ *
+ * IT IS DELIBERATELY NOT WIRED INTO `proseRow`, and that is a MEASURED
+ * decision rather than a scoping preference. Wiring it there changed real
+ * door output: `Olm`'s help row went from
+ *   "Select,  Q or ESC To Quit"  to  "Select, Q or ESC To Quit"
+ * and the adapter's byte-pin corpus moved with it. The spec's "squeeze fires
+ * zero times" was measured over FILE_ID.DIZ files, NOT over the 68K corpus
+ * that this shared ladder serves - so on the ladder it is not a no-op, it is
+ * a silent rewrite of every door's spacing. The rung belongs to the record
+ * renderer, which owns text nobody else has already laid out.
+ *
+ * The index map is not decoration: the contract is that a cursor at source
+ * column X lands on the cell that shows X, and a transform that DROPS cells
+ * has to answer for the dropped ones. A space collapsed away maps to the
+ * space that survived it, which is where a reader would put their finger.
+ */
+export function squeezeProseCells(cells: Row): { cells: Row; indexOf: (i: number) => number } {
+  const out: Array<Readonly<Cell>> = [];
+  const map: number[] = new Array(cells.length);
+  let runOfSpaces = 0;
+
+  for (let i = 0; i < cells.length; i++) {
+    const isSpace = cells[i].ch === ' ';
+    if (isSpace && runOfSpaces > 0) {
+      // Dropped: point at the space that stands for this run.
+      map[i] = out.length - 1;
+      continue;
+    }
+    map[i] = out.length;
+    out.push(cells[i]);
+    runOfSpaces = isSpace ? runOfSpaces + 1 : 0;
+  }
+
+  return {
+    cells: out,
+    indexOf: (i: number) => {
+      if (i <= 0) return 0;
+      if (i >= map.length) return Math.max(0, out.length - 1);
+      return map[i];
+    },
+  };
+}
+
+/**
  * The two parts of a BANNER row: an ATOM and, after a run of padding, the
  * SENTENCE the door positioned beside it, both in SOURCE columns `[start, end)`.
  */
