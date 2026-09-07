@@ -87,4 +87,21 @@ export const SCREEN_DIR_MAP: Record<string, ScreenDirType> = {
   'INTERNETNAMES': ScreenDirType.GLOBAL, // SCREEN_INTERNETNAMES: cmds.bbsLoc + 'InternetNames'
   'REALNAMES': ScreenDirType.GLOBAL,   // SCREEN_REALNAMES: cmds.bbsLoc + 'RealNames'
   'MAILSCAN': ScreenDirType.GLOBAL,    // SCREEN_MAILSCAN: cmds.bbsLoc + 'MailScan'
+
+  /*
+   * This port's own, with no express.e line to cite.
+   *
+   * The board express.e was written for had no web signup and no privacy
+   * notice; this one shows `Screens/PRIVACY.TXT` to every new caller
+   * (handlers/user/new-user.handler.ts) and again on demand
+   * (handlers/user/gdpr.handler.ts). Those read it by path, so no catalogue
+   * name claimed it and the screen index called a screen every new caller
+   * meets "read by nothing" - which the admin gallery then offered to an
+   * artist as a file nobody wants.
+   *
+   * It belongs in THIS table rather than a second one beside it: the question
+   * the table answers is what the board can display and from where, and two
+   * tables are two answers that drift.
+   */
+  'PRIVACY': ScreenDirType.GLOBAL,
 };
