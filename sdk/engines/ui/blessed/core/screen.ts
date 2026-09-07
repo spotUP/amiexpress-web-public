@@ -2946,9 +2946,26 @@ export class Screen extends Element {
       this._contextMenuHandler = null;
     }
 
-    this.write(cursor.show);
+    /*
+     * RESET FIRST, then clear - THEMEC's order, and the order that matters.
+     *
+     * `ESC[2J` erases with the CURRENT background (background-colour-erase,
+     * which xterm.js implements), so clearing while the last drawn cell's blue
+     * is still live paints the whole screen blue, and the reset that used to
+     * follow arrived too late to un-paint it. Every TypeScript door exits
+     * through here, so every one of them handed the board a coloured screen -
+     * "the caller's terminal keeps a colour the door set, so whatever the
+     * board draws next arrives wearing it". The C door THEMEC never did,
+     * because its teardown is `ESC[0m ESC[2J ESC[H ESC[?25h`: attributes
+     * reset, then the clear, then home, then the cursor. Measured 2026-09-07.
+     *
+     * The trailing reset stays: the sequence must END on a reset as well, so
+     * nothing between clear and cursor can leave an attribute live.
+     */
+    this.write(attrs.reset);
     this.write(screenAnsi.clear);
     this.write(cursor.pos(0, 0));
+    this.write(cursor.show);
     this.write(attrs.reset);
     this.flush();
 
