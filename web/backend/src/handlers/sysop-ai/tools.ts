@@ -23,6 +23,8 @@ import { conferenceDir } from '../../conferences/conference-paths';
 import { conferencesFromDisk, commandsOnDisk, callerLines } from './board-card';
 import { tierAllows, tierOf, remainingToday, spendToday, SYSOP_LEVEL, type Tier } from './fences';
 import { emitterForNodeId } from '../../server/session-emitter-registry';
+import { searchProductions, searchGroups, searchParties } from './external/demozoo';
+import { lookupGame } from './external/games';
 
 /** The slice of the board's database the sysop-grade tools use; injectable. */
 export interface ToolDatabase {
@@ -46,6 +48,8 @@ export interface ToolContext {
   caps: { grantTimeMinutesPerDay: number };
   /** The board's sysop name, the author of what the co-sysop posts. */
   sysopName: string;
+  /** RAWG API key from the admin, if any; without it games come from Wikipedia. */
+  rawgKey?: string;
 }
 
 export interface ToolResult {
@@ -137,6 +141,31 @@ export const CALLER_TOOLS: SysopTool[] = [
     tier: 'caller',
     async run(ctx) {
       return { content: callerLines(ctx.session).join('\n') || 'No account record.' };
+    },
+  },
+  {
+    name: 'search_demozoo',
+    description: 'Ask Demozoo, the demoscene database: a production (demo, intro, musicdisk) by title, a group or scener by name, or a party by name.',
+    parameters: { type: 'object', properties: { kind: { type: 'string', enum: ['production', 'group', 'party'] }, query: { type: 'string' } }, required: ['kind', 'query'], additionalProperties: false },
+    tier: 'caller',
+    async run(_ctx, args) {
+      const q = str(args.query, 80);
+      if (!q) return { content: 'What should I look up?' };
+      switch (String(args.kind)) {
+        case 'production': return { content: await searchProductions(q) };
+        case 'group': return { content: await searchGroups(q) };
+        case 'party': return { content: await searchParties(q) };
+        default: return { content: 'kind must be production, group or party.' };
+      }
+    },
+  },
+  {
+    name: 'lookup_game',
+    description: 'What is known about a game (any platform): release, platforms, genre, a summary.',
+    parameters: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'], additionalProperties: false },
+    tier: 'caller',
+    async run(ctx, args) {
+      return { content: await lookupGame(str(args.title, 80), ctx.rawgKey) };
     },
   },
   {

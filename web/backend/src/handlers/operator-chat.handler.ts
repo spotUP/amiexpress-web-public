@@ -76,6 +76,7 @@ function toolsForChat(io: any, repository: OperatorChatRepository, page: PageReq
     db,
     caps: { grantTimeMinutesPerDay: Number((config as any).aiTimeGrantCapMinutes ?? 30) },
     sysopName: loadBBSConfig(bbsRoot).sysop_name || 'Sysop',
+    rawgKey: ((config as any).rawgApiKey as string | undefined) || process.env.RAWG_API_KEY || undefined,
   };
   return { list: toolsFor(session), ctx };
 }
