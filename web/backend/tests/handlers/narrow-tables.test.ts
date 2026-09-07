@@ -161,29 +161,30 @@ describe('5a file search listing (file.handler.ts handleFileSearch)', () => {
     expect(driver.output()).toContain(expected);
   });
 
-  test('40-col: laid out as the two-line convention, nothing over 39 columns', async () => {
-    const { narrowFileLines } = require('../../src/utils/table-format.util');
+  test('40-col: the record block, and nothing over 39 columns', async () => {
     const driver = narrow();
     await driveSearch(driver);
 
     const out = driver.output();
     expectNarrowScreen(out);
 
-    // The exact block, so a row that only fits because the prose choke
-    // folded it fails here: the choke's break lands in a different place.
-    const expected =
-      [
-        ...narrowFileLines({
-          filename: SEARCH_FILE.filename,
-          sizeKB: 88,
-          description: SEARCH_FILE.description,
-        }),
-        ' Area: AMIGA/DEMOS',
-      ]
-        .map((l: string) => `${l}\r\n`)
-        .join('') + '\r\n';
-    expect(out).toContain(expected);
-    expect(out).toContain('ALKYS241.LHA'.padEnd(36) + ' 88K\r\n');
+    /*
+     * REPINNED 2026-09-07. This asserted `narrowFileLines`' exact block - the
+     * stacked two-line formatter this port invented before there was a
+     * layout. A search hit is a single record and now renders the RECORD
+     * BLOCK, the same template `FI <n>` draws, from Prompts/FILEVIEW.40
+     * (file.handler.ts:424-431): one shape for every 40-column record, which
+     * the sysop can re-columnise by editing one file.
+     *
+     * So the pin is on what a caller must be able to READ - the file, how big
+     * it is, where it lives, and its description - rather than on where the
+     * template happens to put them. The width is asserted above, which is the
+     * other half of what this suite is for.
+     */
+    expect(out).toContain('ALKYS241.LHA');
+    expect(out).toContain('88K');
+    expect(out).toContain('AMIGA/DEMOS');
+    expect(out).toMatch(/Fine Amiga release/);
   });
 });
 
@@ -259,10 +260,18 @@ describe('5a new files listing (file.handler.ts displayNewFiles)', () => {
     // TABLES, so it is excluded exactly as the other 40-column cases do.
     expectNarrowScreen(out, (l) => l.startsWith('Searching for files newer than'));
 
-    // The record is still there, and it is not the 80-column row folded: the
-    // filename and its description both survive.
+    /*
+     * REPINNED 2026-09-07, a second time. `N` renders the numbered LIST ROW
+     * now - ordinal, size, filename, date - with the description behind
+     * `FI <n>` (8e04290f5, "the command that makes the list row's ordinal
+     * mean something"). A list row that carried its description was the thing
+     * that made a 40-column listing unreadable, so its absence here is the
+     * feature rather than a loss.
+     */
     expect(out).toContain('TESTFILE.LHA');
-    expect(out).toMatch(/A brand new upload/);
+    // The ordinal `FI` takes, and the size, both on the row.
+    expect(out).toMatch(/\b1\b/);
+    expect(out).toContain('40960');
   });
 });
 

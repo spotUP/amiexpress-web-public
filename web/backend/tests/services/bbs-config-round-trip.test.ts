@@ -221,17 +221,34 @@ describeIcon('bbsConfig.info, the icon file', () => {
     expect(after.length).toBeGreaterThan(0);
     expect(before.length).toBeGreaterThan(0);
   });
-  it('saves anyway when the icon cannot be rewritten, and says so', () => {
-    // This fixture's tooltype array is not in the standard layout, so the
-    // writer can only read it heuristically and refuses to re-serialise it.
-    // That used to throw BEFORE the text companion was written, so the
-    // sysop's change was lost and the form reported a failure with nothing
-    // saved anywhere.
+  it('writes the icon when it can', () => {
+    // The ordinary case, and the one the board is in today: the icon is
+    // rewritten and the caller is told so.
+    const result = saveBBSConfig(root, { sysop_name: 'Spot' });
+
+    expect(result.infoFileWritten).toBe(true);
+    expect(result.textFileWritten).toBe(true);
+    expect(loadBBSConfig(root).sysop_name).toBe('Spot');
+  });
+
+  it('saves anyway when the icon cannot be written, and says so', () => {
+    // THE DEGRADED PATH, BUILT HERE RATHER THAN BORROWED FROM THE BOARD.
+    //
+    // This used to rely on the live bbsConfig.info carrying a tooltype array
+    // the writer could not re-serialise - a claim about a file anyone may
+    // edit, and it stopped being true the day the icon was rewritten in the
+    // standard layout: the writer succeeded, and a test asserting failure
+    // failed. The guarantee has nothing to do with which icon the board has:
+    // whatever goes wrong with the icon, the change still reaches
+    // bbsConfig.info.txt and the caller is told the icon did not take it.
+    fs.rmSync(path.join(root, 'bbsConfig.info'));
+
     const result = saveBBSConfig(root, { sysop_name: 'Spot' });
 
     expect(result.textFileWritten).toBe(true);
     expect(result.infoFileWritten).toBe(false);
     expect(result.warning).toContain('bbsConfig.info');
+    // The point of saving anyway: the value is readable afterwards.
     expect(loadBBSConfig(root).sysop_name).toBe('Spot');
   });
   it('does not copy binary fragments into the text companion', () => {
