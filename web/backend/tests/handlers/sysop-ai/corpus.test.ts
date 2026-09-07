@@ -99,6 +99,11 @@ describe('the guides ship in the image', () => {
     expect(dockerfile).toMatch(/^COPY Documentation\/1-Users\/USER_GUIDE\.md \/app\/Documentation\/1-Users\/USER_GUIDE\.md$/m);
     expect(dockerfile).toMatch(/^COPY Documentation\/2-Sysops\/SYSOP_GUIDE\.md \/app\/Documentation\/2-Sysops\/SYSOP_GUIDE\.md$/m);
     expect(fs.existsSync(path.join(REPO, 'Documentation/1-Users/USER_GUIDE.md'))).toBe(true);
+    // .dockerignore excludes Documentation/ wholesale; the two guides must be
+    // let back through or the COPY fails the build (deploy of 92602c035 did).
+    const ignore = fs.readFileSync(path.join(REPO, '.dockerignore'), 'utf8');
+    expect(ignore).toMatch(/^!Documentation\/1-Users\/USER_GUIDE\.md$/m);
+    expect(ignore).toMatch(/^!Documentation\/2-Sysops\/SYSOP_GUIDE\.md$/m);
   });
 });
 

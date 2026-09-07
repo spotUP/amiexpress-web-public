@@ -36,6 +36,10 @@ Thumbs.db
 # Dev-only directories
 dev/scripts
 Documentation
+# ...except the two guides the AI co-sysop retrieves from (handlers/sysop-ai/corpus.ts;
+# the Dockerfile COPYs exactly these two).
+!Documentation/1-Users/USER_GUIDE.md
+!Documentation/2-Sysops/SYSOP_GUIDE.md
 thoughts
 history
 tmp
