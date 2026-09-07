@@ -33,7 +33,7 @@ import {
   toScreenRows, filterScreenRows,
   type ScreenIndexShape, type ScreenRow, type ScreenIndexEntryShape,
   type ScopeResolutionShape, type ConferenceShape, type ScreenReaderShape,
-  type MciReferenceShape, type ScreenFileShape, describeReader, describeProblem, isArt,
+  type MciReferenceShape, type ScreenFileShape, describeReader, describeProblem, galleryLabel, gallerySortKey, isArt,
   isDoorArt, isCommandsOnly, isNotArt,
 } from './screen-index-view';
 
@@ -1097,9 +1097,7 @@ export function ScreenFilesPage() {
         const bulletin = bulletinTitles.get(file.relPath);
         const reader = file.readBy?.[0];
 
-        const label = bulletin
-          ? `Bulletin ${bulletin.number}${bulletin.title ? ` - ${bulletin.title}` : ''}`
-          : reader?.screen ?? file.relPath;
+        const label = galleryLabel(file, reader, bulletin);
 
         const detail = file.generated
           ? file.generated === 'backup' ? 'a leftover copy' : 'written by the board'
@@ -1112,6 +1110,7 @@ export function ScreenFilesPage() {
         return {
           path: file.relPath,
           label,
+          sortKey: gallerySortKey(reader, label),
           detail: copies.length > 1
             ? `${detail} - and ${copies.length - 1} identical ${copies.length === 2 ? 'copy' : 'copies'}`
             : detail,
@@ -1122,7 +1121,8 @@ export function ScreenFilesPage() {
           formats: formatsPresent(file.relPath, data.files),
         };
       })
-      .sort((a, b) => a.label.localeCompare(b.label));
+      .sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+      .map(({ sortKey: _sortKey, ...item }) => item);
   }, [data, showGenerated, showUnread, theme]);
 
   /**

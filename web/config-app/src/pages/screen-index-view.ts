@@ -311,7 +311,58 @@ export function describeReader(
   // "Amiga Ansi" is what the board calls .GR; the suffix alone is a puzzle.
   if (reader.screenTypeName) qualifiers.push(`${reader.screenTypeName} only`);
   else if (reader.screenType) qualifiers.push(`${reader.screenType} screens only`);
-  if (reader.via === 'include') qualifiers.push('included by it');
+  const tail = qualifiers.length ? ` - ${qualifiers.join(', ')}` : '';
+  // An include is read THROUGH the screen, so say so in those words - "LOGON
+  // in node 0 - included by it" made the reader guess what "it" was.
+  if (reader.via === 'include') return `Included by ${reader.screen} in ${where}${tail}`;
 
-  return `${reader.screen} in ${where}${qualifiers.length ? ` - ${qualifiers.join(', ')}` : ''}`;
+  return `${reader.screen} in ${where}${tail}`;
+}
+
+/**
+ * What a gallery card is called.
+ *
+ * The card is the ART, and the label has to tell two pieces of art apart at a
+ * glance - the whole reason for a gallery over a table. Naming every card
+ * after the screen that reads it did not: this board's logon is three
+ * different files (`reference-board.txt`, `flt.txt`, `uprough.txt`, one per level
+ * band) pulled in by `~SS_`, and all three came up as "LOGON"; five
+ * conference bulletins came up as five "CONF_BULL". The sysop: "the gallery
+ * feels off".
+ *
+ * So: a bulletin by its number and title; an INCLUDED file by its own name,
+ * because it is its own piece of art and the screen that includes it is in the
+ * detail line; a conference screen with the conference's name; a security
+ * variant with the callers it serves. A node screen is just the screen - the
+ * node number tells an artist nothing, and this board shares one copy across
+ * every node anyway.
+ */
+export function galleryLabel(
+  file: Pick<ScreenFileShape, 'relPath'>,
+  reader: ScreenReaderShape | undefined,
+  bulletin: BulletinShape | undefined,
+): string {
+  if (bulletin) return `Bulletin ${bulletin.number}${bulletin.title ? ` - ${bulletin.title}` : ''}`;
+  if (!reader) return file.relPath;
+  if (reader.via === 'include') return file.relPath.split('/').pop() ?? file.relPath;
+
+  const parts = [reader.screen];
+  if (reader.scope === 'conf') parts.push(reader.scopeName ?? `conference ${reader.id}`);
+  if (reader.serves) parts.push(`level ${reader.serves}`);
+  else if (reader.securityLevel !== undefined) parts.push(`level ${reader.securityLevel}`);
+  // MENU250.TXT and menu250.txt.GR serve the same callers on different
+  // terminals; without this they are two cards with one name.
+  if (reader.screenTypeName) parts.push(reader.screenTypeName);
+  else if (reader.screenType) parts.push(reader.screenType);
+  return parts.join(' - ');
+}
+
+/**
+ * The order cards come in: grouped under the screen they belong to, so the
+ * three files a logon pulls in sit beside LOGON rather than filed under F, S
+ * and U by their own names.
+ */
+export function gallerySortKey(reader: ScreenReaderShape | undefined, label: string): string {
+  // The screen first, then what it pulls in, then by name within each.
+  return `${reader?.screen ?? '~'}\u0000${reader?.via === 'include' ? 1 : 0}\u0000${label}`;
 }

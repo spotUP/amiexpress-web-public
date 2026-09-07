@@ -99,7 +99,7 @@ describe('the gallery', () => {
   it('names a screen by what it IS, and a bulletin by its published title', async () => {
     render(<ScreenFilesPage />, { wrapper });
 
-    expect(await screen.findByText('CONF_BULL')).toBeTruthy();
+    expect(await screen.findByText('CONF_BULL - Amiga Demoscene - level 30 and above')).toBeTruthy();
     expect(screen.getByText('Bulletin 20 - Card Lobby Weekly Leaders')).toBeTruthy();
   });
 
@@ -147,7 +147,7 @@ describe('the gallery', () => {
     const user = userEvent.setup();
     render(<ScreenFilesPage />, { wrapper });
 
-    await user.click(await screen.findByText('CONF_BULL'));
+    await user.click(await screen.findByText('CONF_BULL - Amiga Demoscene - level 30 and above'));
 
     await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
   });
