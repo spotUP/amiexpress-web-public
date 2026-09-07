@@ -124,7 +124,7 @@ describe('the chat is one stream', () => {
     expect(all).not.toContain('\x1b[?1000h');
     expect(all).not.toMatch(/\x1b\[\d+;\d+H/);
     // express.e:6085-6087, the built-in start line, in the colour that was current.
-    expect(all).toContain('\r\n\r\nThis is GrumpyBot, How can I help you??\r\n\r\n');
+    expect(all).toContain('\r\n\r\nThis is Agnus, How can I help you??\r\n\r\n');   // the co-sysop's admin-set handle, default Agnus
     // The opening line is a message: saved, and typed after the start line.
     const messages = w.repo.getChatMessages(pageId);
     expect(messages.length).toBe(1);

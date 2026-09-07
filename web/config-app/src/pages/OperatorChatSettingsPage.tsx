@@ -31,6 +31,10 @@ interface OperatorChatConfig {
   aiEnabled: boolean;
   aiProvider: 'groq' | 'gemini' | 'openrouter' | 'rule-based';
   aiModelName: string;
+  aiSysopName: string;
+  aiToolsEnabled: boolean;
+  aiTimeGrantCapMinutes: number;
+  rawgApiKey: string;
   aiTemperature: number;
   aiSystemPrompt: string;
   groqApiKey: string;
@@ -898,11 +902,37 @@ export function OperatorChatSettingsPage() {
               <p className="text-xs text-content-secondary mt-1">Select which AI provider to use. When a provider-specific model is set below, it overrides the default.</p>
             </div>
 
+            {/* The co-sysop's name */}
+            <div>
+              <label className="block text-sm font-medium text-content-primary mb-1">AI Co-Sysop Name</label>
+              <input type="text" maxLength={30} {...register('aiSysopName')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded" placeholder="Agnus" />
+              <p className="text-xs text-content-secondary mt-1">The handle it answers pages under: the start line, the message sender, how it introduces itself. Default Agnus.</p>
+            </div>
+
+            {/* Tools */}
+            <div className="flex items-center gap-3">
+              <input type="checkbox" id="aiToolsEnabled" {...register('aiToolsEnabled')} className="w-4 h-4" />
+              <label htmlFor="aiToolsEnabled" className="text-sm font-medium text-content-primary">Let the co-sysop look things up and act</label>
+            </div>
+            <p className="text-xs text-content-secondary -mt-2">Who is online, doors, conferences, files, bulletins; joining a caller to a conference or starting a door for them; extra time up to the cap; and, for the sysop account, the admin API with every write held until you type yes in the chat. Needs a free OpenRouter model that supports tools - the picker prefers one.</p>
+
+            <div>
+              <label className="block text-sm font-medium text-content-primary mb-1">Extra Time Cap (minutes per caller per day)</label>
+              <input type="number" min={0} max={600} {...register('aiTimeGrantCapMinutes', { valueAsNumber: true })} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded" />
+              <p className="text-xs text-content-secondary mt-1">The most the co-sysop may grant one caller in a day, however hard they ask. 0 turns it off.</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-content-primary mb-1">RAWG API Key (optional)</label>
+              <input type="password" {...register('rawgApiKey')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs" placeholder="from rawg.io/apidocs" autoComplete="off" />
+              <p className="text-xs text-content-secondary mt-1">For game questions across every platform. Without it, Wikipedia answers. Demozoo needs no key.</p>
+            </div>
+
             {/* Model Name */}
             <div>
               <label className="block text-sm font-medium text-content-primary mb-1">Model Name (optional)</label>
               <input type="text" {...register('aiModelName')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded" placeholder="Leave empty for provider default" />
-              <p className="text-xs text-content-secondary mt-1">Override the default model for the selected provider. For OpenRouter, you can specify any model ID from openrouter.ai/models.</p>
+              <p className="text-xs text-content-secondary mt-1">Override the picker's choice. Free models only: an OpenRouter model ID that is not listed at zero price is refused and the picker's choice is used.</p>
             </div>
 
             {/* API Keys */}

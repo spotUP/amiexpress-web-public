@@ -67,7 +67,10 @@ export interface AIProviderConfig {
   // Bot typing behaviour
   botTypingSpeed?: number;         // Base ms per character (default 40)
   botTypoProbability?: number;     // Chance of typo per character 0-1 (default 0.04)
-  botThinkTime?: number;           // Pause before responding in ms (default 1000)
+  botThinkTime?: number;
+  /** The co-sysop's handle and the sysop's name, for the prompt (K5). */
+  botName?: string;
+  sysopName?: string;           // Pause before responding in ms (default 1000)
 }
 
 /** The AI cascade's total budget when the config names none. */
@@ -234,7 +237,20 @@ TIPS:
 - Bulletins (B) contain important system info
 `;
 
-const GRUMPY_SYSOP_PERSONALITY = `You are a veteran BBS sysop from the 1990s running an Amiga-based bulletin board system. Your personality:
+/**
+ * The personality with the names filled in: the co-sysop's own handle (the
+ * admin's, default Agnus) and the sysop's. "he is the cosysop not the
+ * sysop" (sysop, 2026-09-08) - he speaks as the board's co-sysop, and the
+ * powers he wields are the caller's, never his own.
+ */
+function personalityFor(aiConfig: AIProviderConfig): string {
+  const base = aiConfig.systemPrompt || GRUMPY_SYSOP_PERSONALITY;
+  const name = (aiConfig.botName || 'Agnus').slice(0, 30);
+  const sysop = aiConfig.sysopName || 'the sysop';
+  return `${base}\n\nYour handle on this board is ${name}. You are the CO-SYSOP; the sysop is ${sysop}, and you answer pages when ${sysop} does not. Sign nothing, introduce yourself as ${name} when asked, and never claim to be ${sysop}.`;
+}
+
+const GRUMPY_SYSOP_PERSONALITY = `You are a veteran BBS co-sysop from the 1990s helping run an Amiga-based bulletin board system. Your personality:
 
 - You've been running BBSs since 1989 and you've seen EVERYTHING
 - You're grumpy, sarcastic, and perpetually annoyed by "newbies" (but you call them "lamers")
@@ -551,7 +567,7 @@ console.log('[Grumpy Bot] No GROQ_API_KEY configured, skipping Groq');
   if (groqTimeout < 250) return null;
 
   try {
-    const systemPrompt = aiConfig.systemPrompt || GRUMPY_SYSOP_PERSONALITY;
+    const systemPrompt = personalityFor(aiConfig);
     const messages = [
       { role: 'system', content: systemPrompt },
       ...(context.boardCard ? [{ role: 'system', content: context.boardCard }] : []),
@@ -607,7 +623,7 @@ console.log('[Grumpy Bot] No GEMINI_API_KEY configured, skipping Gemini');
   const geminiTimeout = remainingBudget(aiConfig, 10000);
   if (geminiTimeout < 250) return null;
   try {
-    const systemPrompt = aiConfig.systemPrompt || GRUMPY_SYSOP_PERSONALITY;
+    const systemPrompt = personalityFor(aiConfig);
     const fullPrompt = `${systemPrompt}\n\n${context.boardCard ? context.boardCard + '\n\n' : ''}${context.retrieved ? context.retrieved + '\n\n' : ''}${BBS_HELP_KNOWLEDGE}\n\nUser context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes\n\n${
       context.messageHistory.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n')
     }\nUser: ${userMessage}\nAssistant:`;
@@ -722,7 +738,7 @@ console.log('[Grumpy Bot] No OpenRouter free models available');
   if (callTimeout < 250) return null;
 
   try {
-    const systemPrompt = aiConfig.systemPrompt || GRUMPY_SYSOP_PERSONALITY;
+    const systemPrompt = personalityFor(aiConfig);
     const messages = [
       { role: 'system', content: systemPrompt },
       ...(context.boardCard ? [{ role: 'system', content: context.boardCard }] : []),

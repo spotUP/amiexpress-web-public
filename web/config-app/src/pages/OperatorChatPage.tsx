@@ -237,6 +237,16 @@ export function OperatorChatPage() {
       setMessages(prev => [...prev, message]);
     });
 
+    // K5: what the AI co-sysop looked up or did, inline in the transcript.
+    // Every tool call is also in the CallersLog; this is the live view.
+    socketInstance.on('operator:tool-event', (ev: { pageId: string; tool: string; outcome: string; summary: string; timestamp: number }) => {
+      if (activeChatRef.current?.id !== ev.pageId) return;
+      setMessages(prev => [...prev, {
+        id: `tool-${ev.timestamp}-${ev.tool}`, pageId: ev.pageId, senderId: 'tool', senderHandle: `[tool ${ev.tool}]`,
+        senderType: 'sysop', message: `${ev.outcome}: ${ev.summary}`, timestamp: ev.timestamp, nodeId: 0,
+      }]);
+    });
+
     socketInstance.on('operator:message-history', (data: { pageId: string; messages: ChatMessage[] }) => {
       console.log('[Operator Chat] Message history received:', data.messages.length, 'messages');
       setMessages(data.messages);

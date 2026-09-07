@@ -70,7 +70,7 @@ describe('the grumpy bot answers a caller', () => {
     const paged = await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
     expect(paged.success).toBe(true);
     await wait(3000);                                  // past the 1s timeout, and the opening line
-    expect(w.repo.getPageRequest(w.session.tempData.pageId)!.sysopHandle).toBe('GrumpyBot');
+    expect(w.repo.getPageRequest(w.session.tempData.pageId)!.sysopHandle).toBe('Agnus');   // the admin's name, default Agnus (K5)
 
     // The caller types their line as the chat branch drives it, then return.
     for (const ch of 'hello grumpy') H.callerTypedChar(w.io, w.session, ch);

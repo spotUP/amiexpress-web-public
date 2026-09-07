@@ -59,7 +59,7 @@ export function setCommandExecutor(fn: CommandExecutor | null): void {
 
 function toolsForChat(io: any, repository: OperatorChatRepository, page: PageRequest, chatSession: ChatSession): { list: ReturnType<typeof toolsFor>; ctx: ToolContext } | undefined {
   const config = repository.getConfig();
-  if ((config as any).aiToolsEnabled === false) return undefined;
+  if (config.aiToolsEnabled === false) return undefined;
   const session = userSessions.get(String(page.userId));
   if (!session) return undefined;
   let db: ToolContext['db'];
@@ -74,9 +74,9 @@ function toolsForChat(io: any, repository: OperatorChatRepository, page: PageReq
       await commandExecutor(session, command, params);
     },
     db,
-    caps: { grantTimeMinutesPerDay: Number((config as any).aiTimeGrantCapMinutes ?? 30) },
+    caps: { grantTimeMinutesPerDay: Number(config.aiTimeGrantCapMinutes ?? 30) },
     sysopName: loadBBSConfig(bbsRoot).sysop_name || 'Sysop',
-    rawgKey: ((config as any).rawgApiKey as string | undefined) || process.env.RAWG_API_KEY || undefined,
+    rawgKey: config.rawgApiKey || process.env.RAWG_API_KEY || undefined,
   };
   return { list: toolsFor(session), ctx };
 }
@@ -941,7 +941,7 @@ async function sendBotMessageWithTyping(
   const saved = repository.addChatMessage({
     pageId,
     senderId: 'bot',
-    senderHandle: 'GrumpyBot',
+    senderHandle: botName(repository),
     senderType: 'sysop',
     message,
     timestamp: getSystemTime(),
@@ -1118,10 +1118,17 @@ console.log(`[Operator Chat] Page ${page.id}: a line for ${page.userHandle} has 
   return next;
 }
 
+/** The AI co-sysop's handle on the board - the admin's, default Agnus. */
+function botName(repository: OperatorChatRepository): string {
+  try { return (repository.getConfig().aiSysopName || 'Agnus').slice(0, 30); } catch { return 'Agnus'; }
+}
+
 /** The bot's engine and typing settings, from the board's operator-chat config. */
 function aiConfigFrom(config: OperatorChatConfig): AIProviderConfig {
   return {
-    budgetMs: (config as any).aiToolsEnabled === false ? undefined : TOOL_AI_BUDGET_MS,
+    botName: (config.aiSysopName || 'Agnus').slice(0, 30),
+    sysopName: loadBBSConfig(bbsRoot).sysop_name || 'the sysop',
+    budgetMs: config.aiToolsEnabled === false ? undefined : TOOL_AI_BUDGET_MS,
     provider: config.aiEnabled ? config.aiProvider : 'rule-based',
     modelName: config.aiModelName,
     temperature: config.aiTemperature,
@@ -1523,7 +1530,7 @@ console.log(`[Operator Chat] Page ${pageId}: caller is back at a prompt (subStat
     }
 console.log(`[Operator Chat] Page ${pageId}: ${reason} - GrumpyBot takes it`);
 
-    await acceptPage(io, repository, pageId, 'bot', 'GrumpyBot', 'grumpy-bot-session');
+    await acceptPage(io, repository, pageId, 'bot', botName(repository), 'grumpy-bot-session');
 
     const chatSession = activeChatSessions.get(pageId);
     if (!chatSession) {
@@ -1777,7 +1784,7 @@ function reviveBotChat(repository: OperatorChatRepository, pageId: string): Chat
     userHandle: page.userHandle,
     userNodeId: page.nodeId,
     sysopId: 'bot',
-    sysopHandle: page.sysopHandle || 'GrumpyBot',
+    sysopHandle: page.sysopHandle || botName(repository),
     sysopSessionId: 'grumpy-bot-session',
     startedAt: page.acceptedAt ? new Date(page.acceptedAt) : getSystemTime(),
     lastActivity: getSystemTime(),

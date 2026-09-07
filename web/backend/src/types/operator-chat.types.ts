@@ -148,6 +148,11 @@ export interface OperatorChatConfig {
   botTypingSpeed: number;          // Base ms per character (default 40, range 5-200)
   botTypoProbability: number;      // Chance of typo per character 0-1 (default 0.04)
   botThinkTime: number;            // Pause before responding in ms (default 1000, range 0-5000)
+  // The AI co-sysop (K5, 2026-09-08)
+  aiSysopName: string;             // Its handle on the board (default Agnus)
+  aiToolsEnabled: boolean;         // May it look things up and act (tool loop)
+  aiTimeGrantCapMinutes: number;   // grant_time cap per caller per day
+  rawgApiKey: string;              // RAWG key for lookup_game; empty = Wikipedia only
 }
 
 /**

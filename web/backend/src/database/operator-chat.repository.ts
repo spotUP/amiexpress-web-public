@@ -203,6 +203,19 @@ export class OperatorChatRepository {
     try {
       this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN bot_think_time INTEGER DEFAULT 1000`);
     } catch (e) { /* Column already exists */ }
+    // K5 (2026-09-08): the AI co-sysop's name, its tools, the time-grant cap, the RAWG key.
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN ai_sysop_name TEXT DEFAULT 'Agnus'`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN ai_tools_enabled INTEGER DEFAULT 1`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN ai_time_grant_cap_minutes INTEGER DEFAULT 30`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN rawg_api_key TEXT DEFAULT ''`);
+    } catch (e) { /* Column already exists */ }
 
     // Push notification subscriptions table
     this.db.exec(`
@@ -542,6 +555,10 @@ ntfyTopic: row.ntfy_topic || '',
       botTypingSpeed: row.bot_typing_speed ?? 40,
       botTypoProbability: row.bot_typo_probability ?? 0.04,
       botThinkTime: row.bot_think_time ?? 1000,
+      aiSysopName: (row.ai_sysop_name || 'Agnus') as string,
+      aiToolsEnabled: (row.ai_tools_enabled ?? 1) === 1,
+      aiTimeGrantCapMinutes: row.ai_time_grant_cap_minutes ?? 30,
+      rawgApiKey: row.rawg_api_key || '',
     };
   }
 
@@ -588,7 +605,11 @@ ntfyTopic: row.ntfy_topic || '',
         ntfy_url = ?,
         bot_typing_speed = ?,
         bot_typo_probability = ?,
-        bot_think_time = ?
+        bot_think_time = ?,
+        ai_sysop_name = ?,
+        ai_tools_enabled = ?,
+        ai_time_grant_cap_minutes = ?,
+        rawg_api_key = ?
       WHERE id = 1
     `).run(
       merged.enabled ? 1 : 0,
@@ -625,7 +646,11 @@ ntfyTopic: row.ntfy_topic || '',
       merged.ntfyUrl ?? 'https://ntfy.sh',
       merged.botTypingSpeed ?? 40,
       merged.botTypoProbability ?? 0.04,
-      merged.botThinkTime ?? 1000
+      merged.botThinkTime ?? 1000,
+      (merged.aiSysopName || 'Agnus').slice(0, 30),
+      merged.aiToolsEnabled === false ? 0 : 1,
+      Math.max(0, Math.min(600, Number(merged.aiTimeGrantCapMinutes ?? 30))),
+      merged.rawgApiKey ?? ''
     );
   }
 
