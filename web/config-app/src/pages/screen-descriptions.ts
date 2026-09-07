@@ -13,11 +13,6 @@
 export const SCREEN_DESCRIPTIONS: Record<string, string> = {
   // Before and during logon
   AWAITSCREEN: 'Waiting for a caller, on the node itself',
-  // express.e:6076-6082 - chat() displays Node<n>/StartChat before the
-  // conversation and Node<n>/EndChat after it. Without StartChat the board
-  // falls back to announcing the sysop by name (express.e:6084-6086).
-  STARTCHAT: 'Shown to the caller as the sysop opens a chat',
-  ENDCHAT: 'Shown to the caller as the chat ends',
   BBSTITLE: 'The first thing a caller sees on connecting',
   LOGON: 'Shown as a caller logs on, before the menu',
   LOGON24: 'Shown to a caller who has already called today',
@@ -51,6 +46,9 @@ export const SCREEN_DESCRIPTIONS: Record<string, string> = {
   BULL: 'The board bulletin, shown to every caller',
   NODE_BULL: "This node's own bulletin",
   PRIVATE: 'Shown when the board is private',
+  // express.e:6076-6086 - chat() displays Node<n>/StartChat before the
+  // conversation and Node<n>/EndChat after it; without StartChat the board
+  // announces the sysop by name instead.
   STARTCHAT: 'Shown to the caller when the sysop starts a chat',
   ENDCHAT: 'Shown to the caller when the chat ends',
   PRIVACY: 'The privacy notice every new caller is shown before signing up',

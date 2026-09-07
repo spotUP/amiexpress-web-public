@@ -35,7 +35,7 @@ const FIELDS: Field[] = [
   { key: 'aiProvider',      label: 'AI Provider',          type: 'select', options: ['openrouter', 'groq', 'gemini', 'rule-based'] },
   { key: 'aiModelName',     label: 'AI Model Name',        type: 'string' },
   { key: 'aiSysopName',     label: 'AI Co-Sysop Name',     type: 'string' },
-  { key: 'aiToolsEnabled',  label: 'Co-Sysop Tools',       type: 'boolean' },
+  { key: 'aiToolsEnabled',  label: 'Co-Sysop Tools',       type: 'bool' },
   { key: 'aiTimeGrantCapMinutes', label: 'Extra Time Cap (min/day)', type: 'number' },
   { key: 'rawgApiKey',      label: 'RAWG API Key',         type: 'string' },
   { key: 'openRouterApiKey', label: 'OpenRouter API Key',  type: 'string' },
