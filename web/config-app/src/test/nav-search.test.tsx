@@ -85,12 +85,24 @@ describe('filterNavGroups', () => {
   it('never surfaces an item above the caller-supplied level, because filtering runs on already-gated groups', () => {
     // Screen Files (minLevel 100) matches "screen"; so does Screen Types
     // vocabulary on Lookup Tables (minLevel 255). A level-100 user must see
-    // only the level-100 destination.
+    // the level-100 destinations and none of the level-255 ones.
+    //
+    // THE PROPERTY, NOT THE LIST. This asserted an exact `['Screen Files']`
+    // and went red the moment Screen Themes was added at a level 100 can
+    // reach - a true result failing a stale pin. What the test is named for is
+    // the LEVEL, so that is what it checks: every destination returned is one
+    // this caller may open, the level-100 one is among them, and the level-255
+    // one is not.
     const gated = navItemsForLevel(100);
     const result = filterNavGroups(gated, 'screen');
 
-    expect(labelsOf(result)).toEqual(['Screen Files']);
+    expect(labelsOf(result)).toContain('Screen Files');
     expect(labelsOf(result)).not.toContain('Lookup Tables');
+    const tooHigh = result
+      .flatMap((group) => group.items)
+      .filter((item) => (item.minLevel ?? 255) > 100)
+      .map((item) => item.label);
+    expect(tooHigh).toEqual([]);
   });
 
   it('restores the original groups on an empty query', () => {
