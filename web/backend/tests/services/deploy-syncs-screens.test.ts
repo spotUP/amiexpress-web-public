@@ -257,3 +257,116 @@ describe('the conference-root screens the resolver reads first', () => {
     expect(read(confDir('volume'), 'menu250.txt.GR')).toBe('~WXgraphics menu\n');
   });
 });
+
+/**
+ * Two files, one name, different case.
+ *
+ * The volume is case-sensitive and the resolver is not, so `BBSTITLE.RIP`
+ * beside `bbstitle.rip` means the board serves whichever it reaches first.
+ * Node directories are not tracked by the deploy, and a dynamically created
+ * node copies the pair it was templated from: one case-only rename in the
+ * repo had spread to 327 node directories on the live board, 74 files, and
+ * nothing reported it. Found by the sysop reading the screens page: "same
+ * filenames different casing".
+ */
+/**
+ * Whether this filesystem can hold `A.txt` and `a.txt` at once.
+ *
+ * macOS cannot: the second write lands on the first file, so the situation
+ * under test cannot be built and every assertion here would pass or fail for
+ * the wrong reason. Linux can, which is where CI runs - the rule is proven
+ * there, and skipped honestly here rather than faked with a mock filesystem
+ * that would prove nothing about `ls | sort -f`.
+ */
+function filesystemKeepsCaseApart(): boolean {
+  const probe = fs.mkdtempSync(path.join(os.tmpdir(), 'case-probe-'));
+  try {
+    fs.writeFileSync(path.join(probe, 'A'), 'a');
+    fs.writeFileSync(path.join(probe, 'a'), 'a');
+    return fs.readdirSync(probe).length === 2;
+  } finally {
+    fs.rmSync(probe, { recursive: true, force: true });
+  }
+}
+
+const caseSensitive = filesystemKeepsCaseApart();
+const onCaseSensitiveFs = caseSensitive ? describe : describe.skip;
+
+if (!caseSensitive) {
+  // Loud, because a silently skipped suite is a suite nobody notices is gone.
+  console.warn('[deploy-syncs-screens] case-duplicate tests skipped: this filesystem folds case (macOS). They run in CI.');
+}
+
+onCaseSensitiveFs('case-only duplicates on the volume', () => {
+  /** The dedupe pass alone, over one directory, out of the real entrypoint. */
+  function dedupe(dir: string): string {
+    const script = `
+      set -eu
+      DEFAULT_DATA_DIR="${root}/image"
+      BBS_DATA_DIR="${root}/volume"
+      ${extractFunctions()}
+      CASE_TWINS_REMOVED=0; CASE_TWINS_CONFLICTING=0
+      dedupe_case_twins "${dir}"
+      echo "removed=$CASE_TWINS_REMOVED conflicting=$CASE_TWINS_CONFLICTING"
+    `;
+    return execFileSync('sh', ['-c', script], { encoding: 'utf8' }).trim();
+  }
+
+  const node = () => path.join(root, 'volume', 'Node1');
+
+  beforeEach(() => fs.mkdirSync(node(), { recursive: true }));
+
+  it('removes the duplicate when both copies hold the same bytes', () => {
+    fs.writeFileSync(path.join(node(), 'BBSTITLE.RIP'), 'the same art');
+    fs.writeFileSync(path.join(node(), 'bbstitle.rip'), 'the same art');
+
+    const out = dedupe(node());
+
+    expect(out).toContain('removed=1');
+    expect(fs.readdirSync(node())).toEqual(['BBSTITLE.RIP']);
+  });
+
+  it('keeps both when the bytes differ, because choosing is the sysop\'s call', () => {
+    fs.writeFileSync(path.join(node(), 'BBSTITLE.RIP'), 'the old art');
+    fs.writeFileSync(path.join(node(), 'bbstitle.rip'), 'art somebody redrew');
+
+    const out = dedupe(node());
+
+    expect(out).toContain('removed=0');
+    expect(out).toContain('conflicting=1');
+    expect(fs.readdirSync(node()).sort()).toEqual(['BBSTITLE.RIP', 'bbstitle.rip']);
+  });
+
+  it('leaves files that differ by more than case alone', () => {
+    fs.writeFileSync(path.join(node(), 'BBSTITLE.txt'), 'title');
+    fs.writeFileSync(path.join(node(), 'BBSTITLE.SEQ'), 'title');
+    fs.writeFileSync(path.join(node(), 'MENU.TXT'), 'menu');
+
+    const out = dedupe(node());
+
+    expect(out).toContain('removed=0');
+    expect(fs.readdirSync(node()).sort()).toEqual(['BBSTITLE.SEQ', 'BBSTITLE.txt', 'MENU.TXT']);
+  });
+
+  it('does not touch a non-screen file that happens to have a case twin', () => {
+    // CallersLog and its friends are the board's own data, written at runtime.
+    fs.writeFileSync(path.join(node(), 'CallersLog'), 'calls');
+    fs.writeFileSync(path.join(node(), 'callerslog'), 'calls');
+
+    dedupe(node());
+
+    expect(fs.readdirSync(node()).sort()).toEqual(['CallersLog', 'callerslog']);
+  });
+
+  it('picks the same survivor every run, so a deploy is not a coin toss', () => {
+    fs.writeFileSync(path.join(node(), 'BBSTITLE.RIP'), 'same');
+    fs.writeFileSync(path.join(node(), 'bbstitle.rip'), 'same');
+    dedupe(node());
+    const first = fs.readdirSync(node());
+
+    fs.writeFileSync(path.join(node(), 'bbstitle.rip'), 'same');
+    dedupe(node());
+
+    expect(fs.readdirSync(node())).toEqual(first);
+  });
+});

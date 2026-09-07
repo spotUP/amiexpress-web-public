@@ -238,6 +238,59 @@ sysop_edited_screen() {
     return 1
 }
 
+# Screen files on the volume whose names differ ONLY by case.
+#
+# The volume is case-sensitive; every path the board resolves is not. A
+# case-only rename in the repo - `Node1/BBSTITLE.RIP` becoming
+# `Node1/bbstitle.rip` - leaves both names on the volume, and
+# `findSecurityScreen` serves whichever it reaches first. Node directories make
+# it worse: they are not tracked by the deploy at all, and a dynamically
+# created node copies the pair it was templated from, so one rename spread to
+# every node. 74 such files on the live board 2026-09-07, across 327 node
+# directories, every one of them a byte-identical duplicate of its twin.
+#
+# ONLY byte-identical twins are removed, and that is the whole safety of this
+# function: identical bytes mean nothing can be lost, whichever name wins.
+# Twins that DIFFER are art someone changed under one spelling - they are
+# reported and left alone, because choosing between them is the sysop's call.
+#
+# The survivor is the lexicographically first name, which is stable across
+# runs: an unstable choice would delete and re-create on alternate deploys.
+dedupe_case_twins() {
+    local dir="$1"
+    local entry base lower keeper keeper_lower prev_lower prev_path
+
+    [ -d "$dir" ] || return 0
+
+    prev_lower=""
+    prev_path=""
+    # `sort` on the lowercased name brings each twin pair together; the pair is
+    # then two adjacent lines and needs no arrays, which this shell lacks.
+    for entry in $(ls -1 "$dir" 2>/dev/null | sort -f); do
+        [ -f "$dir/$entry" ] || continue
+        case "$entry" in
+            *.txt|*.TXT|*.ans|*.ANS|*.seq|*.SEQ|*.rip|*.RIP|*.gr|*.GR) ;;
+            *) prev_lower=""; prev_path=""; continue ;;
+        esac
+        lower=$(printf '%s' "$entry" | tr 'A-Z' 'a-z')
+
+        if [ "$lower" = "$prev_lower" ]; then
+            if [ "$(file_hash "$dir/$prev_path")" = "$(file_hash "$dir/$entry")" ]; then
+                # Identical. Keep the first name, drop the second.
+                if rm -f "$dir/$entry"; then
+                    CASE_TWINS_REMOVED=$(( ${CASE_TWINS_REMOVED:-0} + 1 ))
+                fi
+                continue
+            fi
+            echo "[Entrypoint]   WARNING: $dir/$prev_path and $dir/$entry differ only by case AND hold different bytes - both kept, the board serves whichever it finds first"
+            CASE_TWINS_CONFLICTING=$(( ${CASE_TWINS_CONFLICTING:-0} + 1 ))
+        fi
+
+        prev_lower="$lower"
+        prev_path="$entry"
+    done
+}
+
 sync_tracked() {
     local rel="$1"
     local dst_rel="${2:-$1}"
@@ -583,6 +636,18 @@ for f in $VOLUME_OWNED_INFO; do sync_volume_owned "$f"; done
 TRACKED_CREATED=0; TRACKED_UPDATED=0; TRACKED_KEPT=0; TRACKED_ADOPTED=0; TRACKED_FAILED=0
 rm -f "$DEPLOY_MANIFEST_NEXT"
 for f in $TRACKED_INFO; do sync_tracked "$f"; done
+
+# Case-only duplicates, which no other rule can reach: node directories are
+# not tracked, so a rename that left both spellings behind stayed on the volume
+# for ever and appeared in the admin as two files with one name.
+CASE_TWINS_REMOVED=0; CASE_TWINS_CONFLICTING=0
+for d in "$BBS_DATA_DIR" "$BBS_DATA_DIR"/Node* "$BBS_DATA_DIR"/Node*/Screens \
+         "$BBS_DATA_DIR"/Screens "$BBS_DATA_DIR"/Conf*/Screens "$BBS_DATA_DIR"/Conf*; do
+    dedupe_case_twins "$d"
+done
+if [ "$CASE_TWINS_REMOVED" -gt 0 ] || [ "$CASE_TWINS_CONFLICTING" -gt 0 ]; then
+    echo "[Entrypoint]   Case duplicates: $CASE_TWINS_REMOVED identical copies removed, $CASE_TWINS_CONFLICTING left for the sysop to settle"
+fi
 
 # Also mirror the entire Access/ directory (ACS.*.info, AREA.*.info,
 # PRESET.*.info) — these are pure permission tables, never edited by the
