@@ -79,7 +79,7 @@ beforeEach(() => {
 
 describe('unlock notices', () => {
   it('an unlock earned while the caller reads a message is shown at the next menu, not mid-read', async () => {
-    const session = makeSession({ subState: LoggedOnSubState.READ_MESSAGE ?? 'READ_MESSAGE' });
+    const session = makeSession({ subState: LoggedOnSubState.READ_MESSAGES });
     const emitter = { emit: jest.fn() };
     registerConnectionEmitter(session, emitter as any);
     userSessions.set('u-caller', session);
