@@ -16,6 +16,7 @@
  * sections 1.1 (control codes), 1.2-1.3 (KERNAL semantics), 3 (palette).
  */
 import { PetsciiMachine, type PetsciiMachineState } from './petscii-machine';
+import { WideScreenMachine } from './wide-screen-machine';
 import { C64_PALETTE_COLODORE, PETSCII_COLOR_TO_VIC, hexToRgb } from './c64-palette';
 import { printablePetsciiToScreenCode, screenCodeToPetscii } from './screen-codes';
 import { asciiToPetsciiByte } from './ascii-to-petscii';
@@ -40,6 +41,17 @@ const SETTLES_THE_WRAP = new Set(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'd', 'J', '
 export interface AnsiToPetsciiOptions {
   /** VIC-II palette used for truecolor/256-color nearest matching. Defaults to Colodore. */
   palette?: readonly string[];
+  /**
+   * How wide the caller's PETSCII screen is: 40 (a C64) or 80 (the web
+   * terminal's wide screen). Defaults to 40, so every existing caller and
+   * every existing test constructs exactly what it constructed before.
+   *
+   * The width is not decoration: it is the boundary the deferred-wrap latch,
+   * the bottom-right idiom, every clamp and every erase are written around.
+   * One transducer per session, and the session's width never changes after
+   * the graphics prompt.
+   */
+  columns?: 40 | 80;
 }
 
 /** VIC index -> PETSCII color control byte (inverse of PETSCII_COLOR_TO_VIC; every index has exactly one byte). */
@@ -118,7 +130,10 @@ export function petsciiMoveTo(state: PetsciiMachineState, x: number, y: number, 
 type PendingWrap = 'none' | 'wrapped' | 'held';
 
 export class AnsiToPetsciiTransducer {
-  readonly machine = new PetsciiMachine();
+  readonly machine: PetsciiMachine;
+  /** The caller's screen shape, read off the machine so the two cannot differ. */
+  private readonly cols: number;
+  private readonly rows: number;
   private readonly palette: readonly string[];
   /** Incomplete escape sequence or trailing CR held until the next chunk. */
   private pending = '';
@@ -172,6 +187,16 @@ export class AnsiToPetsciiTransducer {
 
   constructor(opts: AnsiToPetsciiOptions = {}) {
     this.palette = opts.palette ?? C64_PALETTE_COLODORE;
+    // The wide screen is a model of its own (wide-screen-machine.ts): no
+    // logical lines, and $02 is not a background prefix there.
+    this.machine = opts.columns === 80 ? new WideScreenMachine() : new PetsciiMachine();
+    this.cols = this.machine.state.cols;
+    this.rows = this.machine.state.rows;
+  }
+
+  /** How wide this caller's screen is. 40 for a C64, 80 for the wide screen. */
+  get columns(): number {
+    return this.cols;
   }
 
   reset(): void {
@@ -250,7 +275,7 @@ export class AnsiToPetsciiTransducer {
         // column 39, so from 'wrapped' the walk back is all the move there is.
         this.settleWrap(out);
         const x = this.machine.state.cursorX;
-        const next = Math.min(COLS - 1, (Math.floor(x / 8) + 1) * 8);
+        const next = Math.min(this.cols - 1, (Math.floor(x / 8) + 1) * 8);
         for (let k = x; k < next; k++) this.printByte(out, 0x20);
         i++;
         continue;
@@ -294,6 +319,10 @@ export class AnsiToPetsciiTransducer {
    * back where both sides agree it is.
    */
   private restoreScreenBg(out: number[]): void {
+    // Never at 80: `$02 <colour>` is a CCGMS TERMINAL convention, and on a
+    // C128's 80-column screen $02 is UNDERLINE ON. The wide canvas paints
+    // its own ground from the mode default instead.
+    if (this.cols !== 40) return;
     if (this.machine.state.background === this.screenBg) return;
     this.emit(out, 0x02);
     this.emit(out, vicColorToPetscii(this.screenBg));
@@ -326,8 +355,8 @@ export class AnsiToPetsciiTransducer {
       this.emit(out, 0x0D);
       this.setReverse(reverse, out);
     }
-    if (st.cursorX === COLS - 1 && st.cursorY === ROWS - 1) return this.printAtBottomRight(out, byte);
-    const atLastColumn = st.cursorX === COLS - 1;
+    if (st.cursorX === this.cols - 1 && st.cursorY === this.rows - 1) return this.printAtBottomRight(out, byte);
+    const atLastColumn = st.cursorX === this.cols - 1;
     this.emit(out, byte);
     this.pendingWrap = atLastColumn && st.cursorX === 0 ? 'wrapped' : 'none';
   }
@@ -385,7 +414,7 @@ export class AnsiToPetsciiTransducer {
    */
   private printAtBottomRight(out: number[], byte: number): void {
     const st = this.machine.state;
-    const target = (ROWS - 1) * COLS + (COLS - 1);
+    const target = (this.rows - 1) * this.cols + (this.cols - 1);
     const wanted = printablePetsciiToScreenCode(byte) | (st.reverse ? 0x80 : 0);
     // Already what the stream is asking for - a repaint of an unchanged cell,
     // which is most of what an erase or a full-row fill asks for here.
@@ -428,7 +457,7 @@ export class AnsiToPetsciiTransducer {
    *  - The cursor row is linked to the row below (an earlier print wrapped
    *    through column 39): the KERNAL's RETURN goes to the row after the END
    *    of the logical line and would skip a row, so deltas are used instead.
-   *    `logicalLineEndRow(ROWS - 1)` is always `ROWS - 1`, so this branch
+   *    `logicalLineEndRow(this.rows - 1)` is always `this.rows - 1`, so this branch
    *    cannot fire on the bottom row.
    *  - Otherwise $0D, which is exact and is the only byte that scrolls.
    */
@@ -475,7 +504,7 @@ export class AnsiToPetsciiTransducer {
    */
   private ansiCursor(): { x: number; y: number } {
     const st = this.machine.state;
-    if (this.pendingWrap === 'wrapped') return { x: COLS - 1, y: Math.max(0, st.cursorY - 1) };
+    if (this.pendingWrap === 'wrapped') return { x: this.cols - 1, y: Math.max(0, st.cursorY - 1) };
     return { x: st.cursorX, y: st.cursorY };
   }
 
@@ -622,10 +651,10 @@ export class AnsiToPetsciiTransducer {
     switch (final) {
       case 'm': return this.sgr(nums.map((v) => (Number.isNaN(v) ? 0 : v)), out);
       case 'A': return this.moveTo(st.cursorX, Math.max(0, st.cursorY - n(0, 1)), out);
-      case 'B': return this.moveTo(st.cursorX, Math.min(ROWS - 1, st.cursorY + n(0, 1)), out);
-      case 'C': return this.moveTo(Math.min(COLS - 1, st.cursorX + n(0, 1)), st.cursorY, out);
+      case 'B': return this.moveTo(st.cursorX, Math.min(this.rows - 1, st.cursorY + n(0, 1)), out);
+      case 'C': return this.moveTo(Math.min(this.cols - 1, st.cursorX + n(0, 1)), st.cursorY, out);
       case 'D': return this.moveTo(Math.max(0, st.cursorX - n(0, 1)), st.cursorY, out);
-      case 'E': return this.moveTo(0, Math.min(ROWS - 1, st.cursorY + n(0, 1)), out);
+      case 'E': return this.moveTo(0, Math.min(this.rows - 1, st.cursorY + n(0, 1)), out);
       case 'F': return this.moveTo(0, Math.max(0, st.cursorY - n(0, 1)), out);
       case 'G': return this.moveTo(this.clampCol(n(0, 1) - 1), st.cursorY, out);
       case 'd': return this.moveTo(st.cursorX, this.clampRow(n(0, 1) - 1), out);
@@ -639,8 +668,8 @@ export class AnsiToPetsciiTransducer {
     }
   }
 
-  private clampCol(x: number): number { return Math.max(0, Math.min(COLS - 1, x)); }
-  private clampRow(y: number): number { return Math.max(0, Math.min(ROWS - 1, y)); }
+  private clampCol(x: number): number { return Math.max(0, Math.min(this.cols - 1, x)); }
+  private clampRow(y: number): number { return Math.max(0, Math.min(this.rows - 1, y)); }
 
   /**
    * Absolute positioning. The walk itself is `petsciiMoveTo` (below) - the
@@ -709,7 +738,7 @@ export class AnsiToPetsciiTransducer {
    * glyph a previous frame put in it.
    */
   private fillRow(r: number, x0: number, x1: number, out: number[]): void {
-    const last = Math.min(x1, COLS - 1);
+    const last = Math.min(x1, this.cols - 1);
     if (last < x0) return;
     this.moveTo(x0, r, out);
     this.setReverse(false, out);
@@ -729,8 +758,8 @@ export class AnsiToPetsciiTransducer {
     const { cursorX: x, cursorY: y } = this.machine.state;
     this.withCursorRestored(out, () => {
       if (mode === 1) this.fillRow(y, 0, x, out);
-      else if (mode === 2) this.fillRow(y, 0, COLS - 1, out);
-      else this.fillRow(y, x, COLS - 1, out);
+      else if (mode === 2) this.fillRow(y, 0, this.cols - 1, out);
+      else this.fillRow(y, x, this.cols - 1, out);
     });
   }
 
@@ -740,11 +769,11 @@ export class AnsiToPetsciiTransducer {
     if (mode === 2 || mode === 3) return this.clearKeepingCursor(out, x, y);
     this.withCursorRestored(out, () => {
       if (mode === 1) {
-        for (let r = 0; r < y; r++) this.fillRow(r, 0, COLS - 1, out);
+        for (let r = 0; r < y; r++) this.fillRow(r, 0, this.cols - 1, out);
         this.fillRow(y, 0, x, out);
       } else {
-        this.fillRow(y, x, COLS - 1, out);
-        for (let r = y + 1; r < ROWS; r++) this.fillRow(r, 0, COLS - 1, out);
+        this.fillRow(y, x, this.cols - 1, out);
+        for (let r = y + 1; r < this.rows; r++) this.fillRow(r, 0, this.cols - 1, out);
       }
     });
   }

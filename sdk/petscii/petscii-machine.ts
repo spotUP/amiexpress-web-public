@@ -39,8 +39,43 @@ import { printablePetsciiToScreenCode } from './screen-codes';
 
 const COLS = 40, ROWS = 25, CELLS = COLS * ROWS;
 
+/**
+ * The shape of the screen a model describes.
+ *
+ * The C64's is 40x25 with the KERNAL's two rules; the web terminal's wide
+ * PETSCII screen is 80x25 with neither, and says so here rather than in a
+ * second copy of this file. See WideScreenMachine (wide-screen-machine.ts)
+ * for what each option means and why the wide screen turns it off.
+ */
+export interface PetsciiScreenShape {
+  cols?: number;
+  rows?: number;
+  /**
+   * Whether two rows link into one logical line, the way a C64's 40-column
+   * screen makes an 80-character line out of two rows (ROM E8EA). INSERT,
+   * DELETE and RETURN all work on that line. A screen that is already 80
+   * wide has no such rule: a row is a line.
+   */
+  logicalLines?: boolean;
+  /**
+   * Whether `$02 <colour>` sets the background and border (CCGMS's
+   * convention, which this board follows at 40). It is a TERMINAL
+   * convention, not a Commodore one - on a C128's 80-column screen $02 is
+   * UNDERLINE ON - so the wide screen does not read it, and nothing emits
+   * it there.
+   */
+  backgroundPrefix?: boolean;
+}
+
 export interface PetsciiMachineState {
-  cols: 40; rows: 25;
+  /**
+   * The screen's shape. 40x25 for a C64 (PetsciiMachine, this file); the
+   * web terminal's wide PETSCII screen is 80x25 and is modelled by
+   * WideScreenMachine beside it. Numbers rather than literal types because
+   * one canvas, one renderer and one transducer serve both, and each of
+   * them reads the width from HERE rather than from a constant.
+   */
+  cols: number; rows: number;
   screen: Uint8Array;    // 1000 screen codes (bit 7 = reverse)
   colorRam: Uint8Array;  // 1000 VIC color indices
   cursorX: number; cursorY: number;
@@ -64,15 +99,33 @@ export interface PetsciiMachineState {
 }
 
 export class PetsciiMachine {
-  readonly state: PetsciiMachineState = {
-    cols: COLS, rows: ROWS,
-    screen: new Uint8Array(CELLS).fill(0x20),
-    colorRam: new Uint8Array(CELLS).fill(14),
-    cursorX: 0, cursorY: 0, charsetBank: 0, reverse: false,
-    pen: 14, background: 0, border: 0, cursorShown: true,
-  };
+  readonly state: PetsciiMachineState;
+  /** The screen's own shape - read here, never from a module constant. */
+  protected readonly cols: number;
+  protected readonly rows: number;
+  protected readonly cells: number;
+  /** Two rows are one logical line (a C64's 40-column screen). Off at 80. */
+  protected readonly logicalLines: boolean;
+  /** `$02 <colour>` sets background and border (CCGMS at 40). Off at 80. */
+  protected readonly backgroundPrefix: boolean;
   /** rowLinked[y] = true when row y is the continuation of row y-1 (logical 80-char line) */
-  private rowLinked: boolean[] = new Array(ROWS).fill(false);
+  private rowLinked: boolean[];
+
+  constructor(shape: PetsciiScreenShape = {}) {
+    this.cols = shape.cols ?? COLS;
+    this.rows = shape.rows ?? ROWS;
+    this.cells = this.cols * this.rows;
+    this.logicalLines = shape.logicalLines ?? true;
+    this.backgroundPrefix = shape.backgroundPrefix ?? true;
+    this.state = {
+      cols: this.cols, rows: this.rows,
+      screen: new Uint8Array(this.cells).fill(0x20),
+      colorRam: new Uint8Array(this.cells).fill(14),
+      cursorX: 0, cursorY: 0, charsetBank: 0, reverse: false,
+      pen: 14, background: 0, border: 0, cursorShown: true,
+    };
+    this.rowLinked = new Array(this.rows).fill(false);
+  }
   /** A `$02` has been seen and the NEXT byte is a candidate background colour. Survives chunk boundaries. */
   private bgPrefix = false;
   /**
@@ -139,7 +192,9 @@ export class PetsciiMachine {
     }
     if (b in PETSCII_COLOR_TO_VIC) { s.pen = PETSCII_COLOR_TO_VIC[b]; return false; }
     switch (b) {
-      case 0x02: this.bgPrefix = true; return false;
+      // $02 is CCGMS's background prefix at 40 and UNDERLINE ON on a C128's
+      // 80-column screen. The wide screen reads neither: it is dropped.
+      case 0x02: if (this.backgroundPrefix) this.bgPrefix = true; return false;
       case 0x0E: {
         // CCGMS ties the lowercase-charset switch to a background/border reset.
         const changed = this.setScreenColor(0);
@@ -172,7 +227,7 @@ export class PetsciiMachine {
   private putScreenCode(sc: number): boolean {
     const s = this.state;
     if (this.insertCount > 0) this.insertCount--;
-    const idx = s.cursorY * COLS + s.cursorX;
+    const idx = s.cursorY * this.cols + s.cursorX;
     s.screen[idx] = sc;
     s.colorRam[idx] = s.pen;
     return this.cursorRight(/*fromPrint*/ true);
@@ -190,7 +245,7 @@ export class PetsciiMachine {
     const end = this.logicalLineEndRow(s.cursorY);
     s.cursorX = 0;
     for (let r = s.cursorY + 1; r <= end; r++) this.rowLinked[r] = false;
-    if (end >= ROWS - 1) {
+    if (end >= this.rows - 1) {
       this.scroll();
     } else {
       s.cursorY = end + 1;
@@ -208,7 +263,7 @@ export class PetsciiMachine {
   private cursorRight(fromPrint = false): boolean {
     const s = this.state;
     s.cursorX++;
-    if (s.cursorX < COLS) return false;
+    if (s.cursorX < this.cols) return false;
     s.cursorX = 0;
     // E6C1 `CMP #$4F` / E6C3 `BEQ $E6F7`: a logical line stops at 80
     // characters. Printing off the end of a row that is ALREADY a continuation
@@ -217,7 +272,7 @@ export class PetsciiMachine {
     const leavingRow = s.cursorY;
     const lineCanGrow = fromPrint && this.logicalLineStartRow(leavingRow) === leavingRow;
     let scrolled = false;
-    if (s.cursorY >= ROWS - 1) {
+    if (s.cursorY >= this.rows - 1) {
       this.scroll();
       scrolled = true;
     } else {
@@ -233,7 +288,7 @@ export class PetsciiMachine {
     if (s.cursorX > 0) {
       s.cursorX--;
     } else if (s.cursorY > 0) {
-      s.cursorX = COLS - 1;
+      s.cursorX = this.cols - 1;
       s.cursorY--;
     }
   }
@@ -241,7 +296,7 @@ export class PetsciiMachine {
   /** Cursor down. Scrolls (and reports full repaint) at the bottom row; cursor stays on the bottom row. */
   private cursorDown(): boolean {
     const s = this.state;
-    if (s.cursorY >= ROWS - 1) {
+    if (s.cursorY >= this.rows - 1) {
       this.scroll();
       return true;
     }
@@ -275,23 +330,25 @@ export class PetsciiMachine {
   /** Shifts screen + colorRam up one physical row, shifts the link-flag table with it, and clears the new bottom row. */
   private scroll(): void {
     const s = this.state;
-    s.screen.copyWithin(0, COLS, CELLS);
-    s.colorRam.copyWithin(0, COLS, CELLS);
-    s.screen.fill(0x20, CELLS - COLS, CELLS);
-    s.colorRam.fill(s.pen, CELLS - COLS, CELLS);
-    for (let y = 0; y < ROWS - 1; y++) this.rowLinked[y] = this.rowLinked[y + 1];
-    this.rowLinked[ROWS - 1] = false;
+    s.screen.copyWithin(0, this.cols, this.cells);
+    s.colorRam.copyWithin(0, this.cols, this.cells);
+    s.screen.fill(0x20, this.cells - this.cols, this.cells);
+    s.colorRam.fill(s.pen, this.cells - this.cols, this.cells);
+    for (let y = 0; y < this.rows - 1; y++) this.rowLinked[y] = this.rowLinked[y + 1];
+    this.rowLinked[this.rows - 1] = false;
   }
 
   /** Last physical row of the logical line containing row y, found by following the link chain forward. */
   logicalLineEndRow(y: number): number {
+    if (!this.logicalLines) return y;
     let end = y;
-    while (end + 1 < ROWS && this.rowLinked[end + 1]) end++;
+    while (end + 1 < this.rows && this.rowLinked[end + 1]) end++;
     return end;
   }
 
   /** First physical row of the logical line containing row y (ROM E6ED's walk back). */
   logicalLineStartRow(y: number): number {
+    if (!this.logicalLines) return y;
     let start = y;
     while (start > 0 && this.rowLinked[start]) start--;
     return start;
@@ -316,9 +373,9 @@ export class PetsciiMachine {
   private deleteChar(): void {
     const s = this.state;
     this.cursorLeft();
-    const startIdx = s.cursorY * COLS + s.cursorX;
+    const startIdx = s.cursorY * this.cols + s.cursorX;
     const endRow = this.logicalLineEndRow(s.cursorY);
-    const endIdx = endRow * COLS + (COLS - 1);
+    const endIdx = endRow * this.cols + (this.cols - 1);
     for (let i = startIdx; i < endIdx; i++) {
       s.screen[i] = s.screen[i + 1];
       s.colorRam[i] = s.colorRam[i + 1];
@@ -350,15 +407,15 @@ export class PetsciiMachine {
    */
   private insertChar(): void {
     const s = this.state;
-    const lastIdx = this.logicalLineEndRow(s.cursorY) * COLS + (COLS - 1);
-    const onLastCell = s.cursorY * COLS + s.cursorX === lastIdx;
+    const lastIdx = this.logicalLineEndRow(s.cursorY) * this.cols + (this.cols - 1);
+    const onLastCell = s.cursorY * this.cols + s.cursorX === lastIdx;
     if (s.screen[lastIdx] !== 0x20 || onLastCell) {
       const startRow = this.logicalLineStartRow(s.cursorY);
       if (this.logicalLineEndRow(s.cursorY) - startRow >= 1) return; // CPY #$4F: an 80-char line cannot grow
       this.openSpaceOnScreen();
     }
-    const startIdx = s.cursorY * COLS + s.cursorX;
-    const endIdx = this.logicalLineEndRow(s.cursorY) * COLS + (COLS - 1);
+    const startIdx = s.cursorY * this.cols + s.cursorX;
+    const endIdx = this.logicalLineEndRow(s.cursorY) * this.cols + (this.cols - 1);
     for (let i = endIdx; i > startIdx; i--) {
       s.screen[i] = s.screen[i - 1];
       s.colorRam[i] = s.colorRam[i - 1];
@@ -381,28 +438,28 @@ export class PetsciiMachine {
   private openSpaceOnScreen(): void {
     const s = this.state;
     let marker = s.cursorY + 1;
-    while (marker < ROWS && this.rowLinked[marker]) marker++;
-    if (marker > ROWS - 1) {
+    while (marker < this.rows && this.rowLinked[marker]) marker++;
+    if (marker > this.rows - 1) {
       // E975: no row left below, so the screen scrolls and the freed bottom row
       // is the one that joins the line. `scroll()` moves the cursor's row up
       // with everything else (E8EA `DEC $D6`).
       this.scroll();
-      marker = ROWS - 1;
+      marker = this.rows - 1;
       if (s.cursorY > 0) s.cursorY--;
     } else {
       // E981-E9A6: rows marker..23 move down to marker+1..24, row `marker` is
       // cleared, and the link flags travel with their rows.
-      for (let y = ROWS - 1; y > marker; y--) {
-        s.screen.copyWithin(y * COLS, (y - 1) * COLS, y * COLS);
-        s.colorRam.copyWithin(y * COLS, (y - 1) * COLS, y * COLS);
+      for (let y = this.rows - 1; y > marker; y--) {
+        s.screen.copyWithin(y * this.cols, (y - 1) * this.cols, y * this.cols);
+        s.colorRam.copyWithin(y * this.cols, (y - 1) * this.cols, y * this.cols);
         this.rowLinked[y] = this.rowLinked[y - 1];
       }
-      s.screen.fill(0x20, marker * COLS, (marker + 1) * COLS);
-      s.colorRam.fill(s.pen, marker * COLS, (marker + 1) * COLS);
+      s.screen.fill(0x20, marker * this.cols, (marker + 1) * this.cols);
+      s.colorRam.fill(s.pen, marker * this.cols, (marker + 1) * this.cols);
     }
     // E6DA: the marker row becomes a continuation of the cursor's line, and the
     // row after it starts a new one.
     this.rowLinked[marker] = true;
-    if (marker + 1 < ROWS) this.rowLinked[marker + 1] = false;
+    if (marker + 1 < this.rows) this.rowLinked[marker + 1] = false;
   }
 }
