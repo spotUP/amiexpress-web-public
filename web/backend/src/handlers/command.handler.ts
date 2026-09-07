@@ -1774,12 +1774,37 @@ console.log('   Current state:', session.state);
     return;
   }
 
+/**
+ * The password phase is over: stop masking, and tell the caller's terminal.
+ *
+ * One place, because the phase has five exits - a blank username, a bad
+ * password, a completed reset, a successful login, and a thrown error - and a
+ * mask left on after any of them types the caller's next line as asterisks.
+ */
+function endPasswordMask(socket: any, session: BBSSession): void {
+  session.maskInput = false;
+  socket.emit('mask-input', false);
+}
+
   // LOGIN FLOW (telnet/SSH): line-buffered username/password when in LOGON state
   // Frontend socket clients use prompt-login events; telnet/SSH need server-side buffering.
   if (session.state === BBSState.LOGON) {
-    if (session.connectionType === 'web') {
-      return;
-    }
+    /**
+     * TP-9a: EVERY TRANSPORT COMES THROUGH HERE.
+     *
+     * This branch used to return immediately for `connectionType === 'web'`,
+     * because the browser ran a login line editor of its own
+     * (`packages/terminal/src/utils/login-key-machine.ts`) and drove the
+     * server through `check-username` / `new-user-response` socket events. Two
+     * implementations of one state machine is the shape this whole plan
+     * exists to remove, and the server's is the one that keeps: its success
+     * path already calls the same `runPostAuthLogin` the web handler calls,
+     * and its failure path the same `promptPasswordReset` and
+     * `runPwfailAndLogoff`. Nothing had to be ported into it.
+     *
+     * The browser's half is retired in TP-9b, and the pair ships together: a
+     * web caller sees DOUBLED echo while both are live.
+     */
     // Ensure tempData exists
     session.tempData = session.tempData || {};
     const phase = session.tempData.loginPhase || 'username';
@@ -1820,11 +1845,13 @@ console.log('   Current state:', session.state);
       for (const char of textPart) {
         if (char >= ' ' && char <= '~') {
           appendChar(char);
-          if (phase === 'password') {
-            emitText(socket, '*');
-          } else {
-            emitText(socket, char);
-          }
+          // ONE mask switch (TP-9a). `session.maskInput` is the field the
+          // whole board already echoes by - command.handler's three other echo
+          // sites, gdpr.handler and new-user.handler all read it - so the
+          // system-password gate and the forced-password-change adapter mask
+          // through the same switch as the password phase rather than each
+          // testing a phase name of its own.
+          emitText(socket, session.maskInput ? '*' : char);
         }
       }
     }
@@ -1841,10 +1868,71 @@ console.log('   Current state:', session.state);
       session.tempData.inputBuffer = '';
 
       if (phase === 'username') {
-        // Store username, ask for password
-        session.tempData.loginUsername = input.trim();
+        const typed = input.trim();
+        session.tempData.loginUsername = typed;
+
+        /**
+         * A NAME THIS BOARD DOES NOT KNOW (TP-9a, express.e:29622-29651).
+         *
+         * `startNewUserRegistration` had exactly ONE caller in the whole
+         * backend - the web-only `new-user-response` socket handler - so a
+         * telnet or SSH caller who typed an unknown name was told `Invalid
+         * PassWord` after the password prompt and could never create an
+         * account. The whole NEW_USER_* substate machine he needed already
+         * existed and is dispatched from this same handler; only the door
+         * into it was web-only.
+         *
+         * The prompt text and the R/C semantics are the web path's, so both
+         * transports ask the same question in the same words.
+         */
+        if (typed.length > 0) {
+          const existing = await getDatabase().getUserByUsername(typed);
+          if (!existing) {
+            session.tempData.loginPhase = 'new-user-confirm';
+            emitPrompt(
+              socket,
+              typed.toUpperCase() === 'NEW'
+                ? '\r\n[C]ontinue as a new user? '
+                : `\r\nThe name ${typed} is not used on this BBS.\r\n[R]etry your name or [C]ontinue as a new user? `,
+            );
+            return;
+          }
+        }
+
         session.tempData.loginPhase = 'password';
+        // The board's one mask switch, set here rather than inferred from the
+        // phase name: the echo sites, the browser's local echo suppression
+        // and the transport adapter all read this single field.
+        session.maskInput = true;
+        socket.emit('mask-input', true);
         emitPrompt(socket, '\r\nPassword: ');
+        return;
+      }
+
+      /**
+       * The answer to that question. `C` or Enter creates the account through
+       * the SAME `startNewUserRegistration` the web path calls; anything else
+       * is a retry, and five of those is express.e's disconnect
+       * (`:29633-29637`).
+       */
+      if (phase === 'new-user-confirm') {
+        const answer = input.trim().toUpperCase();
+        const wanted = (session.tempData.loginUsername || '').trim();
+        if (answer === 'C' || answer === '') {
+          session.tempData.loginPhase = 'username';
+          const { startNewUserRegistration } = require('./user/new-user.handler');
+          await startNewUserRegistration(socket, session, wanted);
+          return;
+        }
+        session.loginRetryCount = (session.loginRetryCount || 0) + 1;
+        if (session.loginRetryCount >= 5) {
+          const { beginLogoff } = require('../server/logoff');
+          beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
+          return;
+        }
+        session.tempData.loginPhase = 'username';
+        session.tempData.loginUsername = '';
+        emitPrompt(socket, '\r\nUsername: ');
         return;
       }
 
@@ -1857,6 +1945,7 @@ console.log('   Current state:', session.state);
         const passwordLower = input.toLowerCase();
 
         if (!username) {
+          endPasswordMask(socket, session);
           emitPrompt(socket, '\r\nUsername: ');
           session.tempData.loginPhase = 'username';
           return;
@@ -1896,6 +1985,7 @@ console.log('   Current state:', session.state);
                 const resetResult = await promptPasswordReset(socket, session);
                 if (resetResult.ok) {
                   // Re-prompt for username/password from the top.
+                  endPasswordMask(socket, session);
                   emitPrompt(socket, '\r\n\r\nUsername: ');
                   session.tempData.loginPhase = 'username';
                   session.tempData.loginUsername = '';
@@ -1917,6 +2007,7 @@ console.log('   Current state:', session.state);
               return;
             }
 
+            endPasswordMask(socket, session);
             emitPrompt(socket, '\r\nInvalid PassWord\r\nUsername: ');
             session.tempData.loginPhase = 'username';
             session.tempData.loginUsername = '';
@@ -1932,6 +2023,7 @@ console.log('   Current state:', session.state);
           // / bulletin flow consistent across all three transports.
           session.loginRetryCount = 0;
           const lastLoginBeforeUpdate = user.lastLogin ? new Date(user.lastLogin) : new Date(0);
+          endPasswordMask(socket, session);
           const { runPostAuthLogin } = await import('../services/login-post.service');
           const postAuthResult = await runPostAuthLogin(socket, session, user, {
             io,
@@ -1944,7 +2036,8 @@ console.log('   Current state:', session.state);
             return;
           }
         } catch (err: any) {
-console.error('[LOGIN] Error during telnet/ssh login:', err?.message || err);
+console.error('[LOGIN] Error during login:', err?.message || err);
+          endPasswordMask(socket, session);
           emitPrompt(socket, '\r\n\x1b[31mLogin failed, please try again.\x1b[0m\r\nUsername: ');
           session.tempData.loginPhase = 'username';
           session.tempData.loginUsername = '';
@@ -1963,12 +2056,9 @@ console.error('[LOGIN] Error during telnet/ssh login:', err?.message || err);
         session.tempData.lastCharWasCR = false;
 
         appendChar(char);
-        // Echo only for username; mask password
-        if (phase === 'password') {
-          emitText(socket, '*');
-        } else {
-          emitText(socket, char);
-        }
+        // Echo by the board's one mask switch; see the note at the other echo
+        // site above.
+        emitText(socket, session.maskInput ? '*' : char);
       }
     }
 
