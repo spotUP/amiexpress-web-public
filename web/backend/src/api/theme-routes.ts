@@ -20,6 +20,13 @@ import type { AuthRequest } from '../middleware/auth.middleware';
 import { selectableThemes } from '../screens/caller-theme';
 import { isSysop, ownedThemes } from '../screens/theme-sandbox';
 import { validateTheme } from '../screens/theme-validation';
+// The scope translator moved to screens/theme-target-path so the SEEDER can use
+// it without importing this router - re-exported because tests and callers name
+// it here.
+import { themeTargetFor } from '../screens/theme-target-path';
+import { seedThemeFromBoard } from '../screens/theme-seeding';
+import { userFileManager } from '../services/UserFileManager';
+export { themeTargetFor };
 import { liveThemeRegressions } from '../screens/theme-live-check';
 import { getScreenIndex } from '../screens/screen-index.service';
 import {
@@ -80,6 +87,40 @@ function screenCount(root: string): number {
  * page that decides for itself which buttons to show is a second copy of the
  * permission rules and it will drift from the one the server enforces.
  */
+/**
+ * The BBS accounts a theme may be owned by.
+ *
+ * Ownership is not a label: `theme-sandbox` lets the account named here write
+ * that directory, so a typo hands the theme to nobody and the artist cannot
+ * open their own screens. Read from DISK - user.data is the board's truth,
+ * the SQL mirror is a mirror.
+ */
+export function boardUsernames(): string[] {
+  try {
+    return userFileManager.readAllUsers()
+      .map(user => String((user as { username?: string }).username ?? '').trim())
+      .filter(name => name.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The account as the board spells it, or null when the board CONTRADICTS it.
+ *
+ * A board whose user.data cannot be read yields no opinion, and no opinion is
+ * not a refusal: a fresh board, or one whose files are momentarily unreadable,
+ * must still let a sysop hand a theme to somebody. The check exists to catch a
+ * typo against a list we actually have - it is not a gate that fails closed.
+ */
+export function resolveOwner(name: string): string | null {
+  const wanted = name.trim().toLowerCase();
+  if (!wanted) return '';
+  const known = boardUsernames();
+  if (known.length === 0) return name.trim();
+  return known.find(user => user.toLowerCase() === wanted) ?? null;
+}
+
 themesRouter.get('/', (req: Request, res: Response) => {
   const bbsRoot = config.get('dataDir');
   const who = caller(req);
@@ -194,11 +235,48 @@ themesRouter.post('/', (req: Request, res: Response) => {
     status: 'draft',
   };
 
+  /*
+   * An owner has to BE somebody. The sandbox grants write access by matching
+   * this string against the caller's account name, so a misspelt owner is a
+   * theme its artist cannot open - and nothing said so until they tried.
+   * Empty stays legal and means what it always meant: sysops only.
+   */
+  if (entry.owner) {
+    const resolved = resolveOwner(entry.owner);
+    if (resolved === null) {
+      return refuse(res, 400, `This board has no account called "${entry.owner}"`);
+    }
+    entry.owner = resolved;
+  }
+
   const root = path.join(bbsRoot, entry.dir);
   for (const scope of SCOPES) fs.mkdirSync(path.join(root, scope), { recursive: true });
   writeTheme(bbsRoot, entry);
 
-  ok(res, entry, `Theme "${slug}" created`);
+  /*
+   * A new theme is a COPY of the board, not three empty directories.
+   *
+   * "all new themes should be a copy of the default theme" - `default` is the
+   * board itself, so the copy is what the board resolves today, variants and
+   * all. Seeded after the registry entry exists because the seeder resolves
+   * the theme's directory through it, and reported rather than thrown: a
+   * theme that exists with half its screens is recoverable, one that failed
+   * to be created is not.
+   */
+  let seeded = { copied: 0, screens: 0, conflicts: [] as Array<{ path: string; keptFromPath: string; target: string }> };
+  try {
+    seeded = seedThemeFromBoard(bbsRoot, entry);
+  } catch (error) {
+console.warn(`[Themes] ${entry.slug} was created but could not be seeded: ${(error as Error).message}`);
+  }
+
+  ok(
+    res,
+    { ...entry, seeded },
+    seeded.copied > 0
+      ? `Theme "${slug}" created with ${seeded.copied} screen file(s) copied from the board`
+      : `Theme "${slug}" created`,
+  );
 });
 
 /**
@@ -263,6 +341,16 @@ themesRouter.put('/:slug', (req: Request, res: Response) => {
     status: wantedStatus,
   };
 
+  // Reassigning ownership has the same rule as granting it: the account has
+  // to exist, or the sandbox grants write access to nobody.
+  if (sysop && updated.owner && updated.owner !== existing.owner) {
+    const resolved = resolveOwner(updated.owner);
+    if (resolved === null) {
+      return refuse(res, 400, `This board has no account called "${updated.owner}"`);
+    }
+    updated.owner = resolved;
+  }
+
   writeTheme(bbsRoot, updated);
   ok(res, updated, `Theme "${slug}" updated`);
 });
@@ -310,47 +398,6 @@ themesRouter.post('/default', (req: Request, res: Response) => {
   ok(res, { defaultSlug: slug }, `The board default is now "${slug}"`);
 });
 
-/**
- * Where a board screen lives INSIDE a theme.
- *
- * The theme tree is keyed on the SCOPE the loader computes, not on the board's
- * directory names (`screen-resolution.ts:138-148`), so a copy has to be
- * translated rather than mirrored:
- *
- *   Screens/BULL.TXT        -> Board/BULL.TXT
- *   BULL.TXT                -> Board/BULL.TXT      (the board root)
- *   Conf1/MENU250.TXT       -> Conf/1/MENU250.TXT
- *   Conf1/Screens/MENU.TXT  -> Conf/1/MENU.TXT
- *   Node3/LOGON.txt         -> Node/LOGON.txt      (one Node/ serves them all)
- *
- * Anything else - a bulletin reached by path, a `~SR_` pool member - keeps its
- * shape under `Files/`, which is the mirror those arms resolve through.
- */
-export function themeTargetFor(relativePath: string): string | null {
-  const parts = relativePath.split(/[\\/]/).filter(part => part !== '' && part !== '.');
-  if (parts.length === 0) return null;
-  if (parts.includes('..')) return null;
-
-  const [head, ...rest] = parts;
-
-  if (/^Screens$/i.test(head) && rest.length === 1) return path.join('Board', rest[0]);
-  if (rest.length === 0) return path.join('Board', head);
-
-  const conf = /^Conf(\d+)$/i.exec(head);
-  if (conf) {
-    const tail = /^Screens$/i.test(rest[0]) ? rest.slice(1) : rest;
-    if (tail.length === 1) return path.join('Conf', conf[1], tail[0]);
-    return path.join('Files', ...parts);
-  }
-
-  if (/^Node\d+$/i.test(head)) {
-    const tail = /^Screens$/i.test(rest[0]) ? rest.slice(1) : rest;
-    if (tail.length === 1) return path.join('Node', tail[0]);
-    return path.join('Files', ...parts);
-  }
-
-  return path.join('Files', ...parts);
-}
 
 /**
  * POST /api/themes/:slug/copy - start a theme's screen from the board's.

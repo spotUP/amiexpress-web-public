@@ -108,6 +108,28 @@ export function ScreenThemesPage() {
     });
     setIsCreateOpen(true);
   };
+  /*
+   * The accounts a theme can be owned by.
+   *
+   * Ownership is not a label: the sandbox grants write access by matching this
+   * name against the caller's account, so a typed name with a typo makes a
+   * theme its artist cannot open. Only a sysop assigns it, so only a sysop
+   * fetches the list.
+   */
+  const { data: userData } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => apiClient.getUsers(),
+    enabled: isSysop,
+  });
+  const usernames: string[] = (() => {
+    const payload = (userData as { data?: unknown } | undefined)?.data;
+    const list = (Array.isArray(payload) ? payload : (payload as { users?: unknown[] } | undefined)?.users) ?? [];
+    return (list as Array<{ username?: string }>)
+      .map(user => String(user?.username ?? '').trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+  })();
+
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['screen-themes'],
     queryFn: () => apiClient.getScreenThemes(),
@@ -522,13 +544,17 @@ export function ScreenThemesPage() {
           {isSysop ? (
             <div>
               <label htmlFor="theme-owner" className="label">Owned by</label>
-              <input
+              <select
                 id="theme-owner"
                 value={form.owner}
                 onChange={event => setForm({ ...form, owner: event.target.value })}
-                placeholder="Their BBS username"
                 className="input-field w-full"
-              />
+              >
+                <option value="">Sysops only</option>
+                {usernames.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
               <p className="mt-1 text-xs text-content-secondary">
                 That account may edit this theme&apos;s screens in the editor, and nothing else on
                 the board. Leave it empty and only sysops can draw it.
