@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { SkeletonRows } from '../components/ui/states';
+import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { Upload, Trash2, Download, Eye, EyeOff, FileImage, FolderOpen } from 'lucide-react';
 
 interface SpriteInfo {
@@ -71,6 +72,45 @@ export function SpriteManagerPage() {
     }
   };
 
+  /**
+   * The listing's columns. A sprite file is read here and edited in the
+   * sprite editor, so this is a DataTable like every other read-only listing
+   * in the admin - sorting, the empty message and the hover-revealed row
+   * actions all come with it (design-system-usage.test.ts).
+   */
+  const spriteColumns: DataTableColumn<SpriteInfo>[] = [
+    {
+      id: 'file',
+      header: 'File',
+      value: (s) => s.file,
+      mono: true,
+      cell: (s) => (
+        <span className="flex items-center gap-2">
+          <FileImage size={14} className="shrink-0 text-content-muted" aria-hidden="true" />
+          <span className="truncate">{s.file}</span>
+        </span>
+      ),
+    },
+    { id: 'animations', header: 'Animations', value: (s) => s.animationCount, align: 'right', width: '8rem' },
+    {
+      id: 'size',
+      header: 'Size',
+      value: (s) => s.size,
+      align: 'right',
+      mono: true,
+      width: '8rem',
+      cell: (s) => `${(s.size / 1024).toFixed(1)} KB`,
+    },
+    {
+      id: 'dimensions',
+      header: 'Dimensions',
+      value: (s) => s.dimensions.width * s.dimensions.height,
+      mono: true,
+      width: '10rem',
+      cell: (s) => `${s.dimensions.width}\u00d7${s.dimensions.height}`,
+    },
+  ];
+
   const handleDelete = async (file: string) => {
     if (!selectedDoor) return;
     if (!window.confirm(`Delete ${file}? This cannot be undone.`)) return;
@@ -83,6 +123,25 @@ export function SpriteManagerPage() {
     } catch (e: unknown) {
       setStatus(`Error: ${e instanceof Error ? e.message : 'Delete failed'}`);
     }
+  };
+
+  /**
+   * The download the row's <a download> used to do inline.
+   *
+   * fetch-and-blob rather than a plain href: the sprite endpoint needs the
+   * auth header, which a browser navigation does not send.
+   */
+  const handleDownload = (file: string) => {
+    if (!selectedDoor) return;
+    apiClient.getSprite(selectedDoor, file).then(data => {
+      if (!data?.content) return;
+      const url = URL.createObjectURL(new Blob([data.content], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file;
+      a.click();
+      URL.revokeObjectURL(url);
+    }).catch(() => setStatus('Error downloading sprite'));
   };
 
   const handlePreview = async (file: string) => {
@@ -171,77 +230,41 @@ export function SpriteManagerPage() {
                 </label>
               </div>
 
-              {sprites.length === 0 ? (
-                <p className="text-content-muted text-sm">No sprites in this door.</p>
-              ) : (
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-border text-2xs font-semibold uppercase tracking-widest text-content-muted">
-                      <th className="px-3 py-2 text-left">File</th>
-                      <th className="px-3 py-2 text-left">Animations</th>
-                      <th className="px-3 py-2 text-left">Size</th>
-                      <th className="px-3 py-2 text-left">Dimensions</th>
-                      <th className="px-3 py-2 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sprites.map(s => (
-                      <tr key={s.file} className="border-b border-border last:border-0 hover:bg-surface-2 transition-colors">
-                        <td className="px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <FileImage size={14} className="text-content-muted shrink-0" />
-                            <span className="text-sm text-content-primary font-mono">{s.file}</span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 text-sm text-content-secondary">{s.animationCount}</td>
-                        <td className="px-3 py-2 text-sm text-content-secondary font-mono">{(s.size / 1024).toFixed(1)} KB</td>
-                        <td className="px-3 py-2 text-sm text-content-secondary">{s.dimensions.width}×{s.dimensions.height}</td>
-                        <td className="px-3 py-2 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handlePreview(s.file)}
-                              className="p-1.5 rounded hover:bg-surface-3 text-content-secondary hover:text-content-primary transition-colors"
-                              title={previewSprite === s.file ? 'Hide preview' : 'Preview'}
-                            >
-                              {previewSprite === s.file ? <EyeOff size={14} /> : <Eye size={14} />}
-                            </button>
-                            <a
-                              href={`/api/sprite-manager/${encodeURIComponent(selectedDoor)}/sprite/${encodeURIComponent(s.file)}`}
-                              download={s.file}
-                              className="p-1.5 rounded hover:bg-surface-3 text-content-secondary hover:text-content-primary transition-colors"
-                              title="Download"
-                              onClick={e => {
-                                // Use fetch + blob download to include auth header
-                                e.preventDefault();
-                                apiClient.getSprite(selectedDoor, s.file).then(data => {
-                                  if (data?.content) {
-                                    const blob = new Blob([data.content], { type: 'application/json' });
-                                    const url = URL.createObjectURL(blob);
-                                    const a = document.createElement('a');
-                                    a.href = url;
-                                    a.download = s.file;
-                                    a.click();
-                                    URL.revokeObjectURL(url);
-                                  }
-                                }).catch(() => setStatus('Error downloading sprite'));
-                              }}
-                            >
-                              <Download size={14} />
-                            </a>
-                            <button
-                              onClick={() => handleDelete(s.file)}
-                              className="p-1.5 rounded hover:bg-alert/10 text-content-secondary hover:text-alert transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+              <DataTable
+                columns={spriteColumns}
+                rows={sprites}
+                getRowId={(s) => s.file}
+                initialSort={[{ id: 'file', desc: false }]}
+                emptyMessage="No sprites in this door."
+                rowActions={(s) => (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handlePreview(s.file)}
+                      aria-label={previewSprite === s.file ? `Hide the preview of ${s.file}` : `Preview ${s.file}`}
+                      className="rounded p-1 text-content-secondary transition-colors hover:bg-surface-2 hover:text-content-primary"
+                    >
+                      {previewSprite === s.file ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDownload(s.file)}
+                      aria-label={`Download ${s.file}`}
+                      className="rounded p-1 text-content-secondary transition-colors hover:bg-surface-2 hover:text-content-primary"
+                    >
+                      <Download size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(s.file)}
+                      aria-label={`Delete ${s.file}`}
+                      className="rounded p-1 text-content-secondary transition-colors hover:bg-status-danger/20 hover:text-status-danger"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </>
+                )}
+              />
 
               {/* JSON Preview */}
               {previewSprite && (

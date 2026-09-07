@@ -52,6 +52,10 @@ const EDITABLE_GRIDS = [
   'components/ui/DataTable.tsx',
   'components/DataGrid.tsx',
   'pages/DoorsPage.tsx',
+  // Edited IN THE ROW: a section's minimum level is typed into the cell, with
+  // save and cancel beside it (AdminRolesPage.tsx:103-118). That is the grid
+  // this exception is for, and it arrived after the list was written.
+  'pages/AdminRolesPage.tsx',
 ];
 
 function offenders(pattern: RegExp): string[] {

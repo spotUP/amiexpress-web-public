@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 
 /**
@@ -74,7 +75,6 @@ interface ScreenGalleryProps {
 /** One card. Draws nothing until it is scrolled to. */
 function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: string) => void }) {
   const ref = useRef<HTMLButtonElement>(null);
-  const [content, setContent] = useState<string | null>(null);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -96,25 +96,38 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
-    if (!visible || content !== null) return;
-
-    let cancelled = false;
-    (async () => {
+  /**
+   * THE SAME QUERY KEY THE FILE PANEL USES, so a write refreshes the picture.
+   *
+   * This card fetched into local state guarded by `content !== null`: it asked
+   * once and never again. `invalidateQueries` cannot reach local state, and
+   * the card is not remounted - its key is the path, which does not change
+   * when the file does - so a repaired screen went on showing its damage
+   * ("i repaired some screens now it worked but their thumbnail didnt
+   * regenerate in the gallery so they still look broken", sysop). The page
+   * invalidates `['screen-file']` after a repair; being a query is what makes
+   * that arrive.
+   *
+   * The concurrency limiter stays exactly where it was, INSIDE the fetch: it
+   * is what stops a viewport of cards firing thirty requests at once, and
+   * react-query does not limit concurrency of its own.
+   */
+  const { data: fetched } = useQuery({
+    queryKey: ['screen-file', item.path],
+    enabled: visible,
+    queryFn: async () => {
       await acquire();
-      if (cancelled) { release(); return; }
       try {
         const res = await apiClient.getScreenFile(item.path);
-        if (!cancelled) setContent((res.data as { content?: string })?.content ?? '');
+        return (res.data as { content?: string })?.content ?? '';
       } catch {
-        if (!cancelled) setContent('');
+        return '';
       } finally {
-        if (!cancelled) release();
+        release();
       }
-    })();
-
-    return () => { cancelled = true; };
-  }, [visible, content, item.path]);
+    },
+  });
+  const content = fetched ?? null;
 
   return (
     <button
@@ -131,7 +144,7 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
           : <div className="h-full w-full animate-pulse bg-surface-2/40" />}
       </div>
       <div className="text-xs">
-        <span className="block font-topaz text-content-primary truncate">{item.label}</span>
+        <span className="block text-content-primary truncate">{item.label}</span>
         {item.detail && (
           <span className={`block truncate ${item.problem ? 'text-status-warn' : 'text-content-secondary'}`}>
             {item.detail}
