@@ -109,11 +109,37 @@ themesRouter.get('/', (req: Request, res: Response) => {
  * itself the owner of a new theme could grant itself write access to a
  * directory - which is the whole of the sandbox, handed out by the sandboxed.
  */
+/**
+ * How many themes one artist may own.
+ *
+ * A cap, not a permission: creating a theme makes a directory an account may
+ * write, so an uncapped account could make them until the volume filled. Five
+ * is well past what an artist redrawing a board needs and well short of a
+ * problem; a sysop is not capped.
+ */
+const THEMES_PER_ARTIST = 5;
+
 themesRouter.post('/', (req: Request, res: Response) => {
   const who = caller(req);
-  if (!isSysop(who)) return refuse(res, 403, 'Only a sysop may create a theme');
-
   const bbsRoot = config.get('dataDir');
+
+  // An ARTIST may create their own theme. The danger was never creation - it
+  // is naming SOMEBODY ELSE as the owner, which would hand out write access to
+  // a directory, so a non-sysop's theme is owned by the account that made it
+  // and by nobody else. Their own sandbox is exactly what the feature is for,
+  // and requiring a sysop for it made an artist wait on one to start drawing.
+  const sysop = isSysop(who);
+  const requester = String(who.username ?? '').trim();
+  if (!sysop && requester === '') {
+    return refuse(res, 403, 'An account with no name may not create a theme');
+  }
+  if (!sysop && ownedThemes(bbsRoot, who).length >= THEMES_PER_ARTIST) {
+    return refuse(
+      res,
+      409,
+      `You already own ${THEMES_PER_ARTIST} themes - retire one before starting another`
+    );
+  }
   const body = (req.body ?? {}) as Record<string, unknown>;
   const slug = String(body.slug ?? '').trim().toLowerCase();
 
@@ -131,7 +157,8 @@ themesRouter.post('/', (req: Request, res: Response) => {
     slug,
     title: String(body.title ?? slug).trim() || slug,
     author: String(body.author ?? '').trim(),
-    owner: String(body.owner ?? '').trim(),
+    // A sysop assigns an owner; an artist IS the owner. See above.
+    owner: sysop ? String(body.owner ?? '').trim() : requester,
     dir: `${THEMES_DIR}/${slug}`,
     widths: Array.isArray(body.widths)
       ? (body.widths as unknown[]).map(Number).filter(w => w === 80 || w === 40)

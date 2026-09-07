@@ -88,6 +88,47 @@ function scopeName(scope: string, id: number | null, conferences?: ConferenceSha
  * serves, and "which file does node 7 display for BBSTITLE" is the question
  * nobody could answer before this page.
  */
+
+/**
+ * The other FORMATS of the screen that is open, from the index.
+ *
+ * A screen is one thing a caller sees and several files: `BBSTITLE.txt` for an
+ * ANSI caller, `BBSTITLE.SEQ` for a C64, `bbstitle.rip` for RIPscrip. Those are
+ * one axis and belong in a tab strip.
+ *
+ * SECURITY LEVEL IS A DIFFERENT AXIS AND IS DELIBERATELY NOT HERE. `MENU250` is
+ * not "the RIP version of MENU" - it is the menu a level-250 caller gets, its
+ * own screen with its own formats. Putting the two on one strip would have a
+ * sysop editing the sysop menu believing they were switching format.
+ */
+function formatSiblings(
+  openPath: string | null,
+  screens: Array<{ resolutions: Array<{ variants: string[] }> }> | undefined,
+): string[] {
+  if (!openPath) return [];
+  const name = openPath.slice(openPath.lastIndexOf('/') + 1).toLowerCase();
+  const dir = openPath.slice(0, openPath.lastIndexOf('/') + 1);
+
+  for (const entry of screens ?? []) {
+    for (const res of entry.resolutions) {
+      if (res.variants.some(v => v.toLowerCase() === name)) {
+        return res.variants.map(v => `${dir}${v}`);
+      }
+    }
+  }
+  return [];
+}
+
+/** `BBSTITLE.SEQ` -> `PETSCII`, for a tab a designer can read. */
+function formatLabel(filePath: string): string {
+  const lower = filePath.toLowerCase();
+  if (lower.endsWith('.seq')) return 'PETSCII';
+  if (lower.endsWith('.rip')) return 'RIP';
+  if (lower.endsWith('.gr')) return 'Amiga ANSI';
+  if (lower.endsWith('.ibm')) return 'IBM ANSI';
+  return 'ANSI / text';
+}
+
 export function ScreenFilesPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
@@ -1307,6 +1348,32 @@ export function ScreenFilesPage() {
 
         {openFile && file && !editing && !editingRip && !editorWrite && (
           <div className="space-y-3 p-4">
+            {/*
+              One tab per FORMAT of this screen. Before this the other formats
+              were listed as text in the table and could not be opened at all,
+              so a board's PETSCII and RIP art was invisible here.
+            */}
+            {formatSiblings(openFile, data?.screens).length > 1 && (
+              <div className="flex gap-1 border-b border-surface-3 pb-2" role="tablist">
+                {formatSiblings(openFile, data?.screens).map(sibling => (
+                  <button
+                    key={sibling}
+                    type="button"
+                    role="tab"
+                    aria-selected={sibling === openFile}
+                    onClick={() => setOpenFile(sibling)}
+                    className={
+                      sibling === openFile
+                        ? 'px-3 py-1 text-sm rounded-t bg-surface-3 text-content-primary'
+                        : 'px-3 py-1 text-sm rounded-t text-content-secondary hover:text-content-primary transition-colors'
+                    }
+                    title={sibling}
+                  >
+                    {formatLabel(sibling)}
+                  </button>
+                ))}
+              </div>
+            )}
             {fileError && (
               <p className="text-sm text-status-danger">
                 That did not work: {fileError}

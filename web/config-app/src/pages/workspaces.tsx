@@ -23,6 +23,8 @@ import { ConferencesPage } from './ConferencesPage';
 import { DrivesPage } from './DrivesPage';
 import { ComputersPage } from './ComputersPage';
 import { ScreenTypesPage } from './ScreenTypesPage';
+import { ScreenFilesPage } from './ScreenFilesPage';
+import { ScreenThemesPage } from './ScreenThemesPage';
 import { LanguagesPage } from './LanguagesPage';
 import { ProtocolsPage } from './ProtocolsPage';
 import { FileCheckersPage } from './FileCheckersPage';
@@ -140,7 +142,24 @@ export function OperatorChatWorkspace() {
  * left two redirects pointing at tabs that were gone, landing the sysop on
  * the default tab with no indication anything had moved.
  */
+/**
+ * The screens, and the themes that are sets of them.
+ *
+ * One page because they are one subject: a theme IS a set of screen files, an
+ * artist moves between "which themes exist" and "the files in mine" constantly,
+ * and two nav entries made that a navigation problem.
+ */
+const SCREEN_TABS: TabDefinition[] = [
+  { id: 'files', label: 'Screen files', render: () => <ScreenFilesPage /> },
+  { id: 'themes', label: 'Themes', render: () => <ScreenThemesPage /> },
+];
+
+export function ScreensWorkspace() {
+  return <TabbedWorkspace tabs={SCREEN_TABS} defaultTab="files" />;
+}
+
 export const WORKSPACE_TABS: Record<string, string[]> = {
+  screens: SCREEN_TABS.map((tab) => tab.id),
   nodes: NODE_TABS.map((tab) => tab.id),
   conferences: CONFERENCE_TABS.map((tab) => tab.id),
   'lookup-tables': LOOKUP_TABS.map((tab) => tab.id),

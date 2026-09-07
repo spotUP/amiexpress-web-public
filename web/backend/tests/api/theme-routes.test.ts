@@ -76,11 +76,42 @@ describe('creating a theme', () => {
     expect(readThemeRegistry(root).themes[0].status).toBe('draft');
   });
 
-  it('is refused to anybody but a sysop', async () => {
-    // An account that could name itself the owner of a new theme could grant
-    // itself a writable directory: the sandbox, handed out by the sandboxed.
-    const res = await request(app(artist)).post('/api/themes').send({ slug: 'neon', owner: 'skope' });
-    expect(res.status).toBe(403);
+  it('is open to an artist, who owns what they make', async () => {
+    // Creating a theme is how an artist gets a sandbox; requiring a sysop for
+    // it made them wait on one to start drawing. What an artist may NOT do is
+    // name somebody else as owner, which would hand out write access.
+    const res = await request(app(artist)).post('/api/themes').send({ slug: 'neon', title: 'Neon' });
+
+    expect(res.status).toBe(200);
+    clearThemeRegistryCache();
+    expect(readThemeRegistry(root).themes[0].owner).toBe('skope');
+  });
+
+  it('will not let an artist put a theme in somebody else\'s name', async () => {
+    const res = await request(app(artist))
+      .post('/api/themes')
+      .send({ slug: 'neon', title: 'Neon', owner: 'someone-else' });
+
+    expect(res.status).toBe(200);
+    clearThemeRegistryCache();
+    // The owner is the account that made it, whatever the request asked for.
+    expect(readThemeRegistry(root).themes[0].owner).toBe('skope');
+  });
+
+  it('caps how many one artist may own, so a volume cannot be filled', async () => {
+    for (let i = 0; i < 5; i++) {
+      const made = await request(app(artist)).post('/api/themes').send({ slug: `theme-${i}` });
+      expect(made.status).toBe(200);
+      clearThemeRegistryCache();
+    }
+
+    const sixth = await request(app(artist)).post('/api/themes').send({ slug: 'theme-5' });
+    expect(sixth.status).toBe(409);
+    expect(sixth.body.error).toMatch(/already own/i);
+
+    // A sysop is not capped - they are the one who cleans up.
+    const bySysop = await request(app(sysop)).post('/api/themes').send({ slug: 'theme-5', owner: 'skope' });
+    expect(bySysop.status).toBe(200);
   });
 
   it('refuses a slug that cannot be a directory name, and a duplicate', async () => {
