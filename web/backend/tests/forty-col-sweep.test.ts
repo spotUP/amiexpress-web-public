@@ -70,7 +70,7 @@ import {
 import { buildMenuPrompt } from '../src/utils/menu-prompt.util';
 import { ANSI_ART_SKIPPED_NOTICE } from '../src/utils/ansi-art-detect.util';
 import { DOOR_NEEDS_80_NOTICE } from '../src/utils/door-min-columns.util';
-import { wipeEffectsEnabled } from '../src/utils/screen-wipe.util';
+import { getWipeFrames, wipeEffectsEnabled } from '../src/utils/screen-wipe.util';
 import { buildFileSearchLines } from '../src/handlers/file/file.handler';
 import { buildWhoRow } from '../src/handlers/chat/chat-commands.handler';
 import { buildRoomMemberRow } from '../src/handlers/chat/room-commands.handler';
@@ -329,6 +329,9 @@ describe('40-column sweep: a sysop-authored MENU_PROMPT', () => {
   });
 });
 
+/** A screen a C64 caller could actually be shown: 40 wide, coloured. */
+const WIPE_SOURCE = ['\x1b[36m' + '='.repeat(38), 'AmiExpress', '='.repeat(38)].join('\r\n');
+
 describe('40-column sweep: screens', () => {
   it('the art-skip token', () => {
     fits([ANSI_ART_SKIPPED_NOTICE]);
@@ -339,13 +342,23 @@ describe('40-column sweep: screens', () => {
     fits(wrapForSession(screen, C64).split('\r\n'));
   });
 
-  it('wipe effects do not run at all on a C64', () => {
-    // The frames are composed 80 wide and bypass the choke; the surface's
-    // answer is not to fit them but to not play them.
-    expect(wipeEffectsEnabled(C64)).toBe(false);
-    // The gate is PETSCII, not width (screen-wipe.util.ts:622 reads
-    // petsciiMode and nothing else), so this is what an ordinary session is.
+  it('wipe effects run on a C64 too, at the width it reads at', () => {
+    // This pinned `false` while the frames were composed 80 wide and could
+    // only be skipped. The sysop asked for the other thing (2026-09-07:
+    // "try to fix the wipes for petscii 40 cols as well"), the grid is
+    // built at the caller's own width now, and the frames leave as ordinary
+    // `ansi-output` - the same event, through the same transducer, as every
+    // other screen a PETSCII caller is sent.
+    expect(wipeEffectsEnabled(C64)).toBe(true);
     expect(wipeEffectsEnabled({ petsciiMode: false })).toBe(true);
+    // And what a wipe PRODUCES for that caller still has to fit, which is
+    // the thing this sweep is actually for.
+    // A wipe frame is not line-oriented: it positions absolutely with
+    // `ESC[<row>;1H` and paints. Split it back into the rows it paints and
+    // measure those - that is what the caller's 40 columns have to hold.
+    const frames = getWipeFrames('matrix', WIPE_SOURCE, 40);
+    expect(frames.length).toBeGreaterThan(0);
+    fits(frames.flatMap((frame) => frame.content.split(/\x1b\[\d+;1H/)));
   });
 });
 
