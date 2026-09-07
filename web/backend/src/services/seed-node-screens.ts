@@ -206,6 +206,8 @@ export function collapseSeedNodeScreens(
   }
 
   const plan = planScreenCollapse(screens, sharedDir);
+  // Taken now, while every node's file is still on disk and in `screens`.
+  const ballot = takeBallot(screens, sources);
   const report: SeedCollapseReport = {
     shared: plan.collapsed,
     pointed: [],
@@ -216,7 +218,7 @@ export function collapseSeedNodeScreens(
   };
 
   if (plan.collapsed.length === 0) {
-    if (existingSharedWins) refreshKeptNodes(sharedAbs, plan, sources, existingShared, report);
+    if (existingSharedWins) refreshKeptNodes(sharedAbs, plan, sources, existingShared, ballot, report);
     return report;
   }
 
@@ -294,7 +296,7 @@ export function collapseSeedNodeScreens(
     report.pointed.push(node);
   }
 
-  if (existingSharedWins) refreshKeptNodes(sharedAbs, plan, sources, existingShared, report);
+  if (existingSharedWins) refreshKeptNodes(sharedAbs, plan, sources, existingShared, ballot, report);
 
   return report;
 }
@@ -319,11 +321,21 @@ function iconNodes(boardDir: string): number[] {
  * forty nodes share is the generation everyone was seeded with.
  */
 const SHARED_MANIFEST = '.collapse-manifest';
+/**
+ * The record's format, and the reason it has one: the first build of this
+ * recorded every shared screen whether or not the kept nodes had been
+ * aligned to it, and on the live board that record then vouched for a title
+ * the nodes had never received. A record without this header is that one,
+ * and is ignored.
+ */
+const SHARED_MANIFEST_HEADER = '# collapse-manifest 2';
 
 function readSharedManifest(sharedAbs: string): Map<string, string> {
   const manifest = new Map<string, string>();
   try {
-    for (const line of fs.readFileSync(path.join(sharedAbs, SHARED_MANIFEST), 'utf8').split('\n')) {
+    const lines = fs.readFileSync(path.join(sharedAbs, SHARED_MANIFEST), 'utf8').split('\n');
+    if (lines[0]?.trim() !== SHARED_MANIFEST_HEADER) return manifest;
+    for (const line of lines.slice(1)) {
       const space = line.indexOf(' ');
       if (space > 0) manifest.set(line.slice(space + 1).trim().toLowerCase(), line.slice(0, space));
     }
@@ -346,27 +358,52 @@ const sha256 = (buffer: Buffer): string => crypto.createHash('sha256').update(bu
  * the shared copy, old bytes kept beside it as `.pre-collapse`. A copy that
  * matches neither is the node's own and is not touched.
  */
+/**
+ * What "a stale copy" is allowed to mean, with no record to go on: every
+ * node that still reads its own directory holds the SAME bytes, at least two
+ * of them do, and the shared copy differs. Duplication is the evidence - a
+ * screen seeded to forty-one nodes is identical on forty-one nodes, and a
+ * sysop who edits one node's screen leaves the others as they were. One node
+ * disagreeing among them is enough to make it nobody's decision.
+ *
+ * Only the nodes' REAL files vote, never the shared copy on behalf of the
+ * nodes already reading it: measured on the live board, 249 such votes made
+ * the fresh shared copy the "majority" and the seven nodes' identical old
+ * title looked like seven dissenters. And the ballot is taken BEFORE the
+ * pointed nodes' files are taken away, or the nodes that keep their
+ * directories are the only voters left.
+ */
+interface Ballot {
+  /** By lowercased name: the one version every real copy has, or null if they differ. */
+  unanimous: Map<string, Buffer | null>;
+  /** By lowercased name: how many real copies voted. */
+  votes: Map<string, number>;
+}
+
+function takeBallot(screens: CollapsibleScreen[], sources: Map<string, string>): Ballot {
+  const unanimous = new Map<string, Buffer | null>();
+  const votes = new Map<string, number>();
+  for (const { relPath, content } of screens) {
+    if (!sources.has(relPath)) continue;
+    const key = path.basename(relPath).toLowerCase();
+    votes.set(key, (votes.get(key) ?? 0) + 1);
+    const seen = unanimous.get(key);
+    if (seen === undefined) unanimous.set(key, content);
+    else if (seen !== null && !seen.equals(content)) unanimous.set(key, null);
+  }
+  return { unanimous, votes };
+}
+
 function refreshKeptNodes(
   sharedAbs: string,
   plan: CollapsePlan,
   sources: Map<string, string>,
   existingShared: Map<string, { name: string; content: Buffer }>,
+  ballot: Ballot,
   report: SeedCollapseReport,
 ): void {
   const previous = readSharedManifest(sharedAbs);
-  /**
-   * The majority is evidence only on the first run, when nothing else is.
-   * Once a record exists it is the record that says what a kept node was
-   * aligned to: on a board where the nodes that kept their directories
-   * outnumber the ones that share, their common screen IS the majority, and
-   * is their own art, not a stale copy of the shared one.
-   */
-  const useMajority = previous.size === 0;
-  const chosen = new Map<string, Buffer>();
-  for (const file of plan.write) {
-    if (/^Node\d+[\\/]/i.test(file.relPath)) continue;
-    chosen.set(path.basename(file.relPath).toLowerCase(), file.content);
-  }
+  const { unanimous, votes } = ballot;
 
   for (const relPath of plan.kept) {
     const source = sources.get(relPath);
@@ -376,25 +413,35 @@ function refreshKeptNodes(
     if (!shared) continue;
     const mine = fs.readFileSync(source);
     if (mine.equals(shared.content)) continue;
-    const majority = chosen.get(key);
-    const stale = useMajority
-      ? majority !== undefined && mine.equals(majority)
-      : previous.get(key) === sha256(mine);
+    const agreed = unanimous.get(key);
+    const stale = previous.has(key)
+      ? previous.get(key) === sha256(mine)
+      : agreed !== null && agreed !== undefined && (votes.get(key) ?? 0) >= 2 && mine.equals(agreed);
     if (!stale) continue;
     fs.writeFileSync(`${source}.pre-collapse`, mine);
     fs.writeFileSync(source, shared.content);
     report.refreshed.push(relPath);
   }
 
-  // The record for next time: what the shared directory holds now. Re-read
-  // rather than taken from memory, so a copy the plan wrote this run is in it.
+  /**
+   * The record for next time, and only for screens every kept node is now
+   * ALIGNED to: a name with a kept copy that still differs gets no entry, so
+   * the next run asks the unanimity question again rather than trusting a
+   * record the copy was never part of.
+   */
+  const divergent = new Set<string>();
+  for (const relPath of plan.kept) {
+    const source = sources.get(relPath);
+    if (!source || !fs.existsSync(source)) continue;
+    const key = path.basename(relPath).toLowerCase();
+    const shared = existingShared.get(key);
+    if (shared && !fs.readFileSync(source).equals(shared.content)) divergent.add(key);
+  }
   const lines: string[] = [];
   for (const name of listFiles(sharedAbs)) {
-    if (!isScreenFile(name)) continue;
+    if (!isScreenFile(name) || divergent.has(name.toLowerCase())) continue;
     lines.push(`${sha256(fs.readFileSync(path.join(sharedAbs, name)))} ${name}`);
   }
-  if (lines.length > 0) {
-    fs.mkdirSync(sharedAbs, { recursive: true });
-    fs.writeFileSync(path.join(sharedAbs, SHARED_MANIFEST), `${lines.sort().join('\n')}\n`);
-  }
+  fs.mkdirSync(sharedAbs, { recursive: true });
+  fs.writeFileSync(path.join(sharedAbs, SHARED_MANIFEST), `${[SHARED_MANIFEST_HEADER, ...lines.sort()].join('\n')}\n`);
 }
