@@ -247,9 +247,38 @@ console.log(`[Operator Chat] Sysop ${session.user.username} set status to ${data
           });
         });
   // Start page timeout checker
-  setInterval(() => {
+  //
+  // UNREF'D, AND STOPPABLE. A bare setInterval here is a handle nothing ever
+  // clears: the server does not mind - it runs until the process ends - but a
+  // test that initialises this handler leaves jest holding a timer that fires
+  // every second for ever. `Jest did not exit one second after the test run
+  // has completed` is that timer, and it is why the backend suite could only
+  // be run with --forceExit and why a full run was killed twice at 25 minutes
+  // rather than finishing (2026-09-07).
+  //
+  // unref() keeps the checker running for as long as anything else is running
+  // and stops it being the reason the process stays alive. The handle is kept
+  // as well, so a test - or a shutdown - can stop it outright.
+  pageTimeoutChecker = setInterval(() => {
     checkPageTimeouts(io, repository);
   }, 1000); // Check every 1 second for tight bot takeover
+  pageTimeoutChecker.unref?.();
+}
+
+/** The page-timeout interval, so it can be stopped. See initOperatorChatHandler. */
+let pageTimeoutChecker: NodeJS.Timeout | null = null;
+
+/**
+ * Stop the page-timeout checker.
+ *
+ * For a test that initialised the handler, and for an orderly shutdown. Safe
+ * to call when nothing is running.
+ */
+export function stopOperatorChatHandler(): void {
+  if (pageTimeoutChecker) {
+    clearInterval(pageTimeoutChecker);
+    pageTimeoutChecker = null;
+  }
 }
 
 /**

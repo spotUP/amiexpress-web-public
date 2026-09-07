@@ -741,7 +741,15 @@ process.on("uncaughtException", (error: Error) => {
 // Memory monitoring and heartbeat (helps diagnose Render.com crashes)
 const MEMORY_LOG_INTERVAL = 60000; // Log every 60 seconds
 let lastHeartbeat = Date.now();
-setInterval(() => {
+/**
+ * UNREF'D: it reports that the process is alive, it does not keep it alive.
+ *
+ * This is module-level, so a suite calling jest.resetModules() per test gets
+ * one more of them each time - eight after four tests - and every one keeps
+ * jest from exiting. The server itself is what holds the process open in
+ * production, and while it does this timer goes on logging exactly as before.
+ */
+const heartbeatTimer = setInterval(() => {
   const mem = process.memoryUsage();
   const heapMB = Math.round(mem.heapUsed / 1024 / 1024);
   const rssMB = Math.round(mem.rss / 1024 / 1024);
@@ -756,6 +764,7 @@ setInterval(() => {
     console.warn(`[MEMORY WARNING] RSS ${rssMB}MB approaching ${memLimitMB}MB limit!`);
   }
 }, MEMORY_LOG_INTERVAL);
+heartbeatTimer.unref?.();
 
 // SIGUSR1 - the deploy workflow's "you are about to be replaced" signal.
 //
@@ -1002,8 +1011,12 @@ function checkConnectionLimit(ip: string): boolean {
   return true;
 }
 
-// Cleanup old connection tracking data every 5 minutes
-setInterval(() => {
+// Cleanup old connection tracking data every 5 minutes.
+//
+// UNREF'D for the same reason as the heartbeat above: it is housekeeping for
+// a running server, not a reason for the process to keep running. Module
+// level, so a suite using jest.resetModules() collects one per test.
+const connectionCleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [ip, connections] of recentConnections.entries()) {
     const recent = connections.filter((time) => now - time < CONNECTION_WINDOW);
@@ -1014,6 +1027,7 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000); // 5 minutes
+connectionCleanupTimer.unref?.();
 
 // getNextAvailableNodeId is now imported from session-manager
 
@@ -1573,6 +1587,26 @@ console.warn(
         err.message || err
       );
       (global as any).firstUserIsSysop = false;
+    }
+
+    /**
+     * LISTENING IS OPTIONAL, AND ONLY A TEST TURNS IT OFF.
+     *
+     * Requiring `message-scan.handler` pulls in `command.handler`, which
+     * pulls in this file, which starts the HTTP, telnet, SSH and FTP servers.
+     * A suite that only wanted the mail scan therefore left four listening
+     * servers behind, jest reported "did not exit one second after the test
+     * run has completed", and the full backend run had to be killed at 25
+     * minutes rather than finishing - which is how 86 failing tests went
+     * unnoticed (2026-09-07).
+     *
+     * Absent, the flag changes nothing: every server starts exactly as it
+     * did. A test that wants the handler chain without the ports sets
+     * SKIP_SERVER_START=1 before its first require.
+     */
+    if (process.env.SKIP_SERVER_START === '1') {
+console.log('[SETUP] SKIP_SERVER_START=1 - handlers wired, no listeners bound');
+      return;
     }
 
     // Start HTTP/Socket.IO server

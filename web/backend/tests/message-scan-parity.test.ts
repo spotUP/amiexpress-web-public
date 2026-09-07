@@ -3,6 +3,10 @@
 // that chain per test, so each test would try to bind the same fixed ports.
 // Override before any require to make every binding land on an ephemeral
 // port (or a clearly unused range) so successive resetModules() never collide.
+// And no listeners at all: this suite wants the handler chain, not four
+// servers. Without it index.ts leaves HTTP, telnet, SSH and FTP listening and
+// jest cannot exit (index.ts, SKIP_SERVER_START).
+process.env.SKIP_SERVER_START = '1';
 process.env.TELNET_PORT = '0';
 process.env.SSH_PORT = '0';
 process.env.BACKEND_PORT = '0';
