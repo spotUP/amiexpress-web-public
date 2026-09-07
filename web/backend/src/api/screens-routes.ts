@@ -15,7 +15,10 @@
  *   4. Back up before every destructive write, and restore on failure.
  */
 
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
+
+import type { AuthRequest } from '../middleware/auth.middleware';
+import { isSysop, mayWriteScreen, writableRoots } from '../screens/theme-sandbox';
 import multer from 'multer';
 import AdmZip from 'adm-zip';
 import * as fs from 'fs';
@@ -38,6 +41,81 @@ import { setScreenFlag, readScreenFlags, type ScreenFlag } from '../screens/scre
 import { saveRevision, listRevisions, readRevision, restoreRevision } from '../screens/screen-revisions';
 
 export const screensRouter = express.Router();
+
+/**
+ * Who may write what, applied to every mutating request before any route runs.
+ *
+ * The mount is `requireLevel(100)` (`routes-setup.ts:192`), and that level is
+ * what an artist needs to reach the screen editor at all - so without this,
+ * giving somebody an artist account gives them the live board. The rule comes
+ * from OWNERSHIP in the registry rather than a new role: a sysop writes
+ * anything, an artist writes their own theme directories, and an admin account
+ * that owns no theme writes nothing.
+ *
+ * It runs as MIDDLEWARE rather than as a call inside each handler because
+ * there are ten mutating routes here and the one that gets forgotten is the
+ * hole. Every path-shaped field in the query and the body is checked; a
+ * request naming no path at all is refused for a non-sysop rather than
+ * assumed harmless, since a route that takes its target from somewhere this
+ * does not read must not silently become the exception.
+ */
+function pathsInRequest(req: Request): string[] {
+  const found: string[] = [];
+  const take = (value: unknown) => {
+    if (typeof value === 'string' && value.trim() !== '') found.push(value);
+    else if (Array.isArray(value)) for (const item of value) take(item);
+  };
+
+  for (const key of ['path', 'rename', 'target', 'dir', 'to', 'from']) {
+    take((req.query as Record<string, unknown>)[key]);
+    take((req.body as Record<string, unknown> | undefined)?.[key]);
+  }
+  take((req.body as Record<string, unknown> | undefined)?.targets);
+  take((req.body as Record<string, unknown> | undefined)?.paths);
+
+  return found;
+}
+
+screensRouter.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+
+  const writer = (req as AuthRequest).user;
+  const bbsRoot = config.get('dataDir');
+  const caller = { username: writer?.username, secLevel: writer?.secLevel };
+
+  if (isSysop(caller)) return next();
+
+  const roots = writableRoots(bbsRoot, caller);
+  if (roots.length === 0) {
+    // Not an artist: an admin account that owns no theme keeps exactly the
+    // access level 100 has always carried. The sandbox exists to CONSTRAIN AN
+    // ARTIST, and taking board access away from every other admin account
+    // would be a second, unasked-for change - one that breaks a board whose
+    // helpers have been editing screens for years.
+    return next();
+  }
+
+  const targets = pathsInRequest(req);
+  if (targets.length === 0) {
+    // An artist's request that names no path at all: refused rather than
+    // assumed harmless, because a route taking its target from somewhere this
+    // does not read must not quietly become the exception.
+    return res.status(403).json({
+      success: false,
+      error: 'This request names no screen path, and an artist may only write inside their own theme',
+    });
+  }
+
+  const refused = targets.filter(target => !mayWriteScreen(bbsRoot, caller, target));
+  if (refused.length > 0) {
+    return res.status(403).json({
+      success: false,
+      error: `Outside your theme: ${refused.join(', ')}`,
+    });
+  }
+
+  return next();
+});
 
 /**
  * Resolve a path under the BBS root, the way the rest of this codebase does.
