@@ -60,29 +60,29 @@ const H = require('../../src/handlers/operator-chat.handler');
 afterEach(() => H.stopOperatorChatHandler());
 
 describe('leaving the chat', () => {
-  it('/quit resets the terminal, clears the screen, says so once, and goes straight to the prompt', async () => {
+  it('/quit says Ending Chat. once, resets attributes, and puts the caller back at the prompt', async () => {
     const w = makeWorld();
     H.initOperatorChatHandler(w.io, w.repo);
     await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
     await wait(2600);
     expect(w.session.subState).toBe(LoggedOnSubState.OPERATOR_CHAT_ACTIVE);
+    await wait(1500); // the opening line finishes typing
 
     const before = w.seen.length;
     await H.handleUserQuitChat(w.io, w.repo, w.session, w.socket);
     const out = w.seen.slice(before).join('');
 
-    // The terminal is put back: scroll region off, mouse reporting off, screen cleared.
-    expect(out).toContain('\x1b[r');
-    expect(out).toContain('\x1b[?1000l');
-    expect(out).toContain('\x1b[2J');
-    // Said once, and nothing left hanging.
-    expect(out.match(/Chat ended\./g)?.length).toBe(1);
-    expect(out).not.toContain('Ending Chat');
+    // express.e:6049-6062: attributes off, then "Ending Chat." - once - and no
+    // pause, no second notice, no split screen to take down because there
+    // never was one.
+    expect(out).toContain('\x1b[0m');
+    expect(out.match(/Ending Chat\./g)?.length).toBe(1);
     expect(out).not.toContain('Press any key');
     expect(out).not.toContain('Returning to menu');
-    // Out of the chat, no pause armed, and the display flow was pumped past DISPLAY_MENU.
-    expect(w.session.subState).not.toBe(LoggedOnSubState.OPERATOR_CHAT_ACTIVE);
-    expect(w.session.subState).not.toBe(LoggedOnSubState.DISPLAY_MENU);
+    expect(out).not.toContain('Chat ended.');
+    expect(out).not.toContain('\x1b[2J');
+    // Back at the prompt: reading a command, nothing armed.
+    expect(w.session.subState).toBe(LoggedOnSubState.READ_COMMAND);
     expect(w.session.menuPause).toBe(false);
     expect(w.session.tempData?.pageId).toBeUndefined();
   });

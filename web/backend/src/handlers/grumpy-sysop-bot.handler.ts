@@ -843,6 +843,31 @@ function randomFrom<T>(array: T[]): T {
 /**
  * Main handler - gets bot response (AI or rule-based)
  */
+/**
+ * The engine tag a reply carries on the screen - `[AI] ` or `[RB] ` - is OURS,
+ * added once, here. It is not part of what the bot said, so it is stripped
+ * from anything that goes back to a model as its own earlier lines, and from
+ * anything a model produces: shown its history with the tags left in, the
+ * model copied them, and the caller read `[AI] [AI] *grumble*` (2026-09-07,
+ * screenshot). Repeated tags fall together.
+ */
+const ENGINE_TAG = /^(?:\s*\[(?:AI|RB)\]\s*)+/;
+export function stripEngineTag(text: string): string {
+  return text.replace(ENGINE_TAG, '');
+}
+function tagReply(engine: 'AI' | 'RB', text: string): string {
+  return `[${engine}] ${stripEngineTag(text).trim()}`;
+}
+/** The history as a model should see it: its own lines without our tags. */
+function untaggedHistory(context: ChatContext): ChatContext {
+  return {
+    ...context,
+    messageHistory: context.messageHistory.map((m) =>
+      m.role === 'bot' ? { ...m, content: stripEngineTag(m.content) } : m
+    ),
+  };
+}
+
 export async function getGrumpySysopResponse(
   userMessage: string,
   context: ChatContext,
@@ -855,10 +880,10 @@ export async function getGrumpySysopResponse(
 
   // If AI is enabled and provider is set, try the AI cascade first
   if (cfg.provider !== 'rule-based') {
-    const aiResponse = await getAIResponse(userMessage, context, cfg);
+    const aiResponse = await getAIResponse(userMessage, untaggedHistory(context), cfg);
     if (aiResponse) {
 console.log('[Grumpy Bot] Using AI response');
-      return `[AI] ${aiResponse}`;
+      return tagReply('AI', aiResponse);
     }
 console.log('[Grumpy Bot] AI cascade returned nothing — falling back to rule-based');
   } else {
@@ -867,7 +892,7 @@ console.log('[Grumpy Bot] AI provider set to "rule-based" — skipping AI cascad
 
   // Fall back to rule-based (always works, no API keys needed)
 console.log('[Grumpy Bot] Using rule-based response');
-  return `[RB] ${getRuleBasedResponse(userMessage, context)}`;
+  return tagReply('RB', getRuleBasedResponse(userMessage, context));
 }
 
 export const DEFAULT_AI_CONFIG: AIProviderConfig = {
@@ -926,68 +951,62 @@ const TYPO_MAP: { [key: string]: string[] } = {
   'z': ['a', 'x', 's'],
 };
 
-/** One step of a bot "typing" a line: a character, a correction, or a wait. */
-export type TypingEvent =
-  | { kind: 'char'; ch: string }
-  | { kind: 'backspace' }
-  | { kind: 'pause'; ms: number };
+/**
+ * One word of a bot "typing", the way express.e's chat() delivers text to the
+ * other side: per word (express.e:5966-5990 - on space or return the sender's
+ * word is written to the receiver). `typo`, when set, is the misspelt form
+ * that appears first and is backspaced away.
+ */
+export interface TypedWord {
+  word: string;
+  typo: string | null;
+  /** Thinking/typing time before the word appears. */
+  beforeMs: number;
+  /** How long the misspelt form stays before it is corrected. */
+  typoMs: number;
+}
 
 /**
- * The plan for typing `text` the way a person does: variable speed, a
- * breath after punctuation, and now and then a neighbouring key hit and
- * backspaced. PURE - it renders nothing and sleeps for nothing; the caller
- * plays the events on whatever reaches the terminal (operator-chat.handler
- * `sendBotMessageWithTyping`). `rng` is injectable so a test can force or
- * forbid a typo.
+ * The plan for typing `text` word by word at a human pace: the time to type
+ * each word's characters, a breath after punctuation, and now and then a
+ * neighbouring key in one word, noticed and corrected. PURE - renders nothing,
+ * sleeps for nothing; `rng` is injectable so a test can force or forbid a
+ * typo. Every pause scales with `typingSpeed`, so the admin's one number sets
+ * the pace of the whole thing.
  *
- * Applying the events in order yields `text` exactly: every typo is followed
- * by its own backspace and the right character.
+ * Joining the plan's words with spaces yields `text` (collapsed whitespace).
  */
-export function planNaturalTyping(
+export function planWordTyping(
   text: string,
   options?: { typingSpeed?: number; typoProbability?: number },
   rng: () => number = Math.random
-): TypingEvent[] {
-  const TYPO_PROBABILITY = options?.typoProbability ?? 0.04;
-  const MIN_TYPING_DELAY = options?.typingSpeed ?? 40;
-  const MAX_TYPING_DELAY = MIN_TYPING_DELAY * 3;
-  const PAUSE_AFTER_TYPO = 150; // the bot "notices"
-  const BACKSPACE_DELAY = 40;
+): TypedWord[] {
+  const typoProbability = options?.typoProbability ?? 0.04;
+  const speed = options?.typingSpeed ?? 40;
+  const unit = speed / 40;
+  const words = text.split(/\s+/).filter((w) => w.length > 0);
 
-  const events: TypingEvent[] = [];
-  for (const char of text) {
-    const isSpace = char === ' ';
-    const isPunctuation = /[.,!?;:]/.test(char);
-    const canTypo = char.toLowerCase() in TYPO_MAP && !isSpace && !isPunctuation;
+  return words.map((word) => {
+    let beforeMs = 0;
+    for (const ch of word) beforeMs += speed + rng() * speed * 2;
+    beforeMs += 20 * unit;                                   // the space
+    if (/[.,!?;:]$/.test(word)) beforeMs += 100 * unit;      // a breath
 
-    if (canTypo && rng() < TYPO_PROBABILITY) {
-      const neighbours = TYPO_MAP[char.toLowerCase()];
-      const typo = neighbours[Math.floor(rng() * neighbours.length)] ?? neighbours[0];
-      events.push({ kind: 'char', ch: char === char.toUpperCase() ? typo.toUpperCase() : typo });
-      events.push({ kind: 'pause', ms: PAUSE_AFTER_TYPO });
-      events.push({ kind: 'backspace' });
-      events.push({ kind: 'pause', ms: BACKSPACE_DELAY });
-      events.push({ kind: 'char', ch: char });
-      events.push({ kind: 'pause', ms: MIN_TYPING_DELAY });
-      continue;
+    const eligible = [...word].map((ch, i) => (ch.toLowerCase() in TYPO_MAP ? i : -1)).filter((i) => i >= 0);
+    let typo: string | null = null;
+    if (eligible.length > 0 && rng() < typoProbability * eligible.length) {
+      const at = eligible[Math.floor(rng() * eligible.length)]!;
+      const ch = word[at]!;
+      const neighbours = TYPO_MAP[ch.toLowerCase()];
+      const wrong = neighbours[Math.floor(rng() * neighbours.length)] ?? neighbours[0];
+      typo = word.slice(0, at) + (ch === ch.toUpperCase() ? wrong.toUpperCase() : wrong) + word.slice(at + 1);
     }
-
-    events.push({ kind: 'char', ch: char });
-    let delay = MIN_TYPING_DELAY + rng() * (MAX_TYPING_DELAY - MIN_TYPING_DELAY);
-    if (isPunctuation) delay += 100;
-    else if (isSpace) delay += 20;
-    events.push({ kind: 'pause', ms: delay });
-  }
-  return events;
+    return { word, typo, beforeMs, typoMs: typo ? 150 * unit + 40 * unit * typo.length : 0 };
+  });
 }
 
-/** The text a plan leaves on the line once every event has been applied. */
-export function applyTypingPlan(events: TypingEvent[]): string {
-  let out = '';
-  for (const e of events) {
-    if (e.kind === 'char') out += e.ch;
-    else if (e.kind === 'backspace') out = out.slice(0, -1);
-  }
-  return out;
+/** The text a word plan produces once every word is on the line. */
+export function applyWordPlan(plan: TypedWord[]): string {
+  return plan.map((w) => w.word).join(' ');
 }
 

@@ -69,7 +69,7 @@ describe('the grumpy bot answers a caller', () => {
 
     const paged = await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
     expect(paged.success).toBe(true);
-    await wait(2600);                                  // past the 1s timeout
+    await wait(3000);                                  // past the 1s timeout, and the opening line
     expect(w.repo.getPageRequest(w.session.tempData.pageId)!.sysopHandle).toBe('GrumpyBot');
 
     const before = w.seen.length;
@@ -77,14 +77,15 @@ describe('the grumpy bot answers a caller', () => {
     await wait(2500);
     const text = plain(w.seen.slice(before));
 
-    expect(text).toContain('hello grumpy');
+    // The caller's own line was on their screen as they typed it; return ends
+    // it (express.e:5988) before the first word of the reply arrives.
+    expect(w.seen[before]).toBe('\r\n');
     // EITHER TAG. The bot answers `[AI] ...` when the provider cascade
     // returns something and `[RB] ...` when it falls back to the rule-based
     // replies (grumpy-sysop-bot.handler.ts:861,870). Which engine served the
     // line is a configuration detail; what this test is about is that a reply
     // came at all, without the caller pressing a key.
     expect(text).toMatch(BOT_REPLY);
-    expect(text.indexOf('hello grumpy')).toBeLessThan(text.search(BOT_REPLY));
   });
 
   it('after the board restarts mid-chat', async () => {
@@ -96,7 +97,7 @@ describe('the grumpy bot answers a caller', () => {
         H.initOperatorChatHandler(w.io, w.repo);
         await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
         pageId = w.session.tempData.pageId;
-        await wait(2600);
+        await wait(3000);
         done();
       });
     });
@@ -121,7 +122,7 @@ describe('the grumpy bot answers a caller', () => {
       });
     });
     const text = plain(w.seen.slice(before));
-    expect(text).toContain('still there?');
+    expect(w.seen[before]).toBe('\r\n');
     expect(text).toMatch(BOT_REPLY);
   });
 });

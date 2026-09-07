@@ -2247,55 +2247,24 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
     const { getDatabase } = require('./command-handler/dependency-injection');
     const db = getDatabase();
     const repository = db?.getOperatorChatRepository();
-    const {
-      shouldOpenPicker,
-      createPickerState,
-      renderPicker,
-      handlePickerInput,
-      savePickerArea,
-      restorePickerArea
-    } = require('../utils/smiley-picker.util');
+    const { CHAT_COLOR_USER } = require('./operator-chat.handler');
 
-    // Handle smiley picker mode
-    if (session.smileyPickerState?.isOpen) {
-      const result = handlePickerInput(session.smileyPickerState, data);
-      session.smileyPickerState = result.newState;
-
-      if (result.action === 'select' && result.smiley) {
-        // Insert smiley into input buffer
-        session.inputBuffer += result.smiley;
-        // Restore screen and echo smiley
-        emitText(socket, restorePickerArea() + result.smiley);
-        // Transmit smiley to sysop
-        for (const char of result.smiley) {
-          await handleOperatorChatKeystroke(socket.server, session, char);
-        }
-      } else if (result.action === 'cancel') {
-        // Just restore screen
-        emitText(socket, restorePickerArea());
-      } else {
-        // Update picker display
-        emitText(socket, renderPicker(session.smileyPickerState));
-      }
+    // express.e chat() 5947-6028: the caller's keys echo where the cursor is,
+    // in the caller's colour; backspace rubs one out; return ends the line;
+    // CTRL-C (ACS_BREAK_CHAT, 5964) leaves the chat. There is no input line,
+    // no picker, no scroll region - this is the stream the board was already
+    // writing to, and the sysop's words arrive in it between the caller's.
+    if (data === '\x03') {
+      await handleUserQuitChat(socket.server, repository, session, socket);
       return;
     }
 
-    // Ctrl+E opens smiley picker
-    if (shouldOpenPicker(data)) {
-      const pickerState = createPickerState();
-      pickerState.isOpen = true;
-      session.smileyPickerState = pickerState;
-      emitText(socket, savePickerArea() + renderPicker(pickerState));
-      return;
-    }
-
-    // Handle arrow keys - ignore for chat
+    // Arrow keys mean nothing in a chat.
     if (data === '\x1b[D' || data === '\x1b[C' || data === '\x1b[A' || data === '\x1b[B') {
       return;
     }
 
-    // Handle Enter key - finalize and send message
-    // Note: Some terminals send '\r\n' together, so we check for that too
+    // Return ends the line. Some terminals send CR LF together.
     if (data === '\r' || data === '\n' || data === '\r\n') {
       const input = (session.inputBuffer || '').trim();
 
@@ -2304,35 +2273,28 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
 
       session.inputBuffer = '';
 
-      if (!input) return;
+      if (!input) {
+        emitText(socket, '\r\n');
+        return;
+      }
 
-      // Check for /QUIT or /END command
       if (input.toUpperCase() === '/QUIT' || input.toUpperCase() === '/END') {
         await handleUserQuitChat(socket.server, repository, session, socket);
         return;
       }
 
-      // Check for /HELP command
       if (input.toUpperCase() === '/HELP') {
-        // Show help in scroll region
-        const helpMessage =
-          '\x1b7' + // Save cursor
-          '\x1b[S\x1b[21;1H' + // Scroll up, move to line 21
-          '\x1b[36mCommands: /quit /end - Exit, /help - Help, Ctrl+E - Smileys\x1b[0m' +
-          '\x1b8\x1b[K'; // Restore cursor, clear input line
-        emitText(socket, helpMessage);
+        emitText(socket, '\r\n\x1b[36m/quit ends the chat; so does CTRL-C.\x1b[0m\r\n');
         return;
       }
 
-      // Send complete message (sendChatMessage handles scroll region display)
+      // The line is on the screen already; this ends it and hands it over.
       await handleUserChatMessage(socket.server, repository, session, input);
-      // Note: Don't echo locally - sendChatMessage already displays the message in the scroll region
     }
-    // Handle Backspace - real-time transmission
+    // Backspace - real-time transmission
     else if (data === '\x7f' || data === '\b') {
       if (session.inputBuffer.length > 0) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);
-        // Echo backspace at line 24 (current cursor position)
         emitText(socket, '\b \b');
         // Don't transmit backspace if typing a command
         const isCommand = session.inputBuffer.trim().startsWith('/');
@@ -2341,11 +2303,10 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
         }
       }
     }
-    // Handle printable characters - real-time transmission
+    // Printable characters - real-time transmission
     else if (data.length === 1 && data >= ' ' && data <= '~') {
       session.inputBuffer += data;
-      // Echo character at line 24 (current cursor position)
-      emitText(socket, data);
+      emitText(socket, `\x1b[${CHAT_COLOR_USER}m${data}`);
       // Don't transmit commands (starting with /) to sysop
       const isCommand = session.inputBuffer.trim().startsWith('/');
       if (!isCommand) {

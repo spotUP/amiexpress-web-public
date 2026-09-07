@@ -56,7 +56,7 @@ function makeWorld(opts: { pageTimeout: number; web?: boolean; userId?: string }
   const repo = new OperatorChatRepository(db);
   repo.updateConfig({
     enabled: true, pageTimeout: opts.pageTimeout, aiEnabled: false, aiProvider: 'rule-based',
-    openRouterApiKey: '', botThinkTime: 0, botTypingSpeed: 200, allowedSecLevels: [], pageCooldown: 0,
+    openRouterApiKey: '', botThinkTime: 0, botTypingSpeed: 1, allowedSecLevels: [], pageCooldown: 0, botTypoProbability: 0,
   } as any);
   const rooms = new Map<string, Set<string>>();
   const sockets = new Map<string, any>();
@@ -225,7 +225,7 @@ describe('GrumpyBot arrives where the caller is', () => {
     const w = makeWorld({ pageTimeout: 1, web: true, userId: 'u-web' });
     H.initOperatorChatHandler(w.io, w.repo);
     await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
-    await wait(2600);
+    await wait(3200);
 
     expect(plain(w.seen)).toMatch(INTRO);
     expect(w.session.subState).toBe(LoggedOnSubState.OPERATOR_CHAT_ACTIVE);
@@ -234,7 +234,8 @@ describe('GrumpyBot arrives where the caller is', () => {
     await H.handleUserChatMessage(w.io, w.repo, w.session, 'hello from the browser');
     await wait(2500);
     const text = plain(w.seen.slice(before));
-    expect(text).toContain('hello from the browser');
+    // The caller's line was on their screen as they typed it; return ends it.
+    expect(w.seen[before]).toBe('\r\n');
     expect(text).toMatch(BOT_REPLY);
   });
 });

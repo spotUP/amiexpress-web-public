@@ -31,7 +31,7 @@ import {
   emitterForUserId,
   socketIoSocketFor,
 } from '../server/session-emitter-registry';
-import { getGrumpySysopResponse, getGrumpyBotIntroMessage, planNaturalTyping, type AIProviderConfig, DEFAULT_AI_CONFIG } from './grumpy-sysop-bot.handler';
+import { getGrumpySysopResponse, getGrumpyBotIntroMessage, planWordTyping, type AIProviderConfig, DEFAULT_AI_CONFIG } from './grumpy-sysop-bot.handler';
 import {
   renderPicker,
   handlePickerInput,
@@ -223,31 +223,9 @@ console.log(`[Operator Chat] Page ${data.pageId}: ${session.user.username} tried
         (chatSession as any).sysopTypingBuffer += data.keystroke;
       }
 
-      // Send real-time typing preview to BBS user's terminal at line 22
-            // Real-time sysop keystroke transmission to BBS user
-            // Restored: Live typing preview at line 23 (bottom of chat window)
-            // This mimics the 'live' feel while keeping the user's input line (24) clean.
-            const page = repository.getPageRequest(data.pageId);
-            if (page) {
-              const sysopHandle = chatSession.sysopHandle || 'Sysop';
-              const buffer = (chatSession as any).sysopTypingBuffer || '';
-      
-              // Display typing preview at line 23 (bottom of scroll region)
-              // Uses save/restore cursor to preserve BBS user's typing position at line 24
-              const typingPreview =
-                '\x1b7' + // Save BBS user's cursor position (they're typing at line 24)
-                '\x1b[23;1H' + // Move to line 23
-                '\x1b[2K' + // Clear line
-                (buffer.length > 0
-                  ? `\x1b[36m${sysopHandle}:\x1b[0m ${buffer}`
-                  : '') +
-                '\x1b8'; // Restore BBS user's cursor position
-      
-              // TP-10: the paged user is resolved through the ONE registry,
-              // so a telnet caller sees the sysop typing. The `user:<id>`
-              // room holds web sockets only.
-              emitterForUserId(page.userId, io)?.emitter.emit('ansi-output', typingPreview);
-            }
+      // The caller does not see the sysop's keystrokes. express.e sends a
+      // word when it is finished (5966-5990), and so does operator:send-message;
+      // a preview line needs a place on the screen this chat no longer has.
       
             // Update typing indicator
             chatSession.isTyping.sysop = (chatSession as any).sysopTypingBuffer.length > 0;
@@ -727,8 +705,7 @@ async function acceptPage(
   pageId: string,
   sysopId: string,
   sysopHandle: string,
-  sysopSessionId: string,
-  customIntro?: string
+  sysopSessionId: string
 ): Promise<void> {
   const page = repository.getPageRequest(pageId);
   if (!page) {
@@ -802,32 +779,27 @@ console.error(`[Operator Chat] Failed to join sysop socket to page room ${pageId
     });
   }
 
-  // Notify user - Linear Chat Setup matching AmiExpress
-  // Scroll region 1-23 to keep line 24 for input
-  let userSetupScreen =
-    '\x1b%G' +
-    '\x1b[2J\x1b[H' +
-    '\x1b[?1000h\x1b[?1006h' +
-    '\x1b[1;23r';
-  if (customIntro) {
-    // Bot intro: show the intro message immediately without the generic greeting
-    userSetupScreen += '\r\n' + customIntro + '\r\n';
-  } else {
-    // Real sysop: standard express.e greeting
-    userSetupScreen += '\r\n\r\nThis is ' + sysopHandle + ', How can I help you??\r\n\r\n';
-  }
-  userSetupScreen += '\x1b[24;1H';
-
+  // express.e chat() 5885-5915: a blank line, the StartChat screen or
+  // "This is <sysop>, How can I help you??", then the sysop's colour. The
+  // chat continues in the stream the caller was already in.
   const targetRoom = `user:${page.userId}`;
-  // TP-10: the terminal half of an accepted page goes to the SESSION, so a
-  // telnet caller gets the chat layout; the structured `operator:*` events
-  // beside it are web-only (transport adapter, TP-3) and keep addressing the
-  // room, which is also how a second browser tab still sees them.
   const reach = emitterForUserId(page.userId, io);
-  if (reach) {
-    reach.emitter.emit('ansi-output', userSetupScreen);
-  } else {
+  const callerNow = userSessions.get(String(page.userId));
+  if (!reach) {
 console.log(`[Operator Chat] Page ${pageId} (${page.userHandle}@Node${page.nodeId}): accepted by ${sysopHandle} but NO EMITTER reaches user ${page.userId} - ${userSessions.has(String(page.userId)) ? 'session is known but its socket is gone' : 'no session in userSessions'}. The chat screen went nowhere.`);
+  } else {
+    reach.emitter.emit('ansi-output', '\r\n');
+    let shown = false;
+    if (callerNow) {
+      try {
+        const { displayScreen } = require('./screen.handler');
+        shown = Boolean(await displayScreen(reach.emitter, callerNow, 'StartChat', false, true));
+      } catch (err) {
+console.log(`[Operator Chat] Page ${pageId}: StartChat screen not shown (${(err as Error).message}); using the built-in line`);
+      }
+    }
+    if (!shown) reach.emitter.emit('ansi-output', `\r\n\r\nThis is ${sysopHandle}, How can I help you??\r\n\r\n`);
+    reach.emitter.emit('ansi-output', `\x1b[${CHAT_COLOR_SYSOP}m`);
   }
 
   io.to(targetRoom).emit('operator:chat-accepted', {
@@ -911,67 +883,119 @@ async function sendBotMessageWithTyping(
     timestamp: saved.timestamp.getTime()
   });
 
-  if (thinkTime > 0) await new Promise(r => setTimeout(r, thinkTime));
-
-  // TP-10: the bot's reply is the operator chat's terminal half, exactly as
-  // the sysop's own message is, so it goes through the ONE registry too. The
-  // `user:<id>` room holds web sockets only, and a telnet caller paged into a
-  // bot-answered chat would otherwise watch a scroll region nothing wrote to.
-  const reach = emitterForUserId(page.userId, io);
-  if (!reach) {
-console.log(`[Operator Chat] Page ${pageId}: GrumpyBot's reply has NO EMITTER for user ${page.userId} - saved and shown to the admin, not to the caller`);
-    return;
-  }
-
-  // THE BOT TYPES, IN PLACE. The reply is typed a character at a time on
-  // line 23, the bottom of the scroll region, with the occasional neighbouring
-  // key hit and backspaced - the live typing the sysop asked for back
-  // (2026-09-07: "we have lost the live typing for the ai sysops").
-  //
-  // The first version of this (removed in 18229ceb5) redrew the WHOLE line
-  // on every character - `ESC[23;1H ESC[2K GrumpyBot: <buffer>` - and then
-  // cleared it and wrote the finished line again: a flicker per keystroke,
-  // and a line the caller's own message had just been committed to. This one
-  // appends each character where the cursor already is, corrects a typo with
-  // a real backspace, and when the line is done sends `\r\n` from line 23 so
-  // the region scrolls it up exactly as a committed line would. Nothing is
-  // ever cleared or redrawn, so there is nothing to flicker.
-  //
-  // The caller may be typing on line 24 all the while, so every chunk ends
-  // by putting the cursor back at the end of their input.
-  const wrapped = wrapChatMessage(message, 78);
-  const color = '36';
-  const callerSession = userSessions.get(String(page.userId));
-  const callerCursor = () => `\x1b[24;${1 + (callerSession?.inputBuffer?.length ?? 0)}H`;
-  const emit = (ansi: string) => reach.emitter.emit('ansi-output', ansi);
-
-  // A long reply should not take half a minute to type. The plan's pauses
-  // are scaled so the whole message lands within the budget.
-  const MAX_TYPING_MS = 12_000;
-  const plans = wrapped.map((line) => planNaturalTyping(line, {
+  if (thinkTime > 0) await sleep(thinkTime);
+  await deliverToCaller(io, chatSession, page, message, CHAT_COLOR_SYSOP, {
     typingSpeed: aiConfig?.botTypingSpeed,
     typoProbability: aiConfig?.botTypoProbability,
-  }));
-  const plannedMs = plans.flat().reduce((sum, e) => sum + (e.kind === 'pause' ? e.ms : 0), 0);
-  const scale = plannedMs > MAX_TYPING_MS ? MAX_TYPING_MS / plannedMs : 1;
+  });
+}
 
-  for (const plan of plans) {
-    let col = 1;
-    for (const event of plan) {
-      if (event.kind === 'char') {
-        emit(`\x1b[23;${col}H\x1b[${color}m${event.ch}\x1b[0m${callerCursor()}`);
-        col++;
-      } else if (event.kind === 'backspace') {
-        col = Math.max(1, col - 1);
-        emit(`\x1b[23;${col}H ${callerCursor()}`);
-      } else if (event.ms * scale >= 1) {
-        await new Promise(r => setTimeout(r, event.ms * scale));
-      }
+/**
+ * THE CHAT IS ONE SCROLLING STREAM - express.e chat(), 5860-6065.
+ *
+ * No clear, no scroll region, no input line at the bottom. The caller's keys
+ * echo where the cursor is, in the caller's colour; the other side's text
+ * arrives WORD BY WORD in the sender's colour (express.e:5966-5990: on space
+ * or return the sender's word is written to the receiver), and around every
+ * incoming word the receiver's half-typed word is rubbed out and put back
+ * (the backspace/space/backspace run at 5968-5979). At the end: attributes
+ * off, the EndChat screen or "Ending Chat.", and the prompt.
+ *
+ * The split-screen layout this replaces (scroll region 1-23, input on 24,
+ * a preview line) was this port's invention; the sysop asked for the real
+ * thing (2026-09-07: "make the flow of the chat 1:1 - ours dont feel like a
+ * real operator page chat with the input at the bottom etc").
+ *
+ * express.e colours the two sides with LVL_CHAT_COLOR_SYSOP / _USER from the
+ * board's ACS levels; this port has no such setting yet, so the colours are
+ * the ones its chat has always used.
+ */
+export const CHAT_COLOR_SYSOP = '36';
+export const CHAT_COLOR_USER = '33';
+
+/** Longest a single message may take to arrive, whatever the pace setting. */
+const MAX_DELIVERY_MS = 12_000;
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Deliver one side's text to the caller's terminal, word by word, serialised
+ * per chat so two senders (the bot's opening line and its reply, or a human
+ * sysop over the bot) never interleave on one line.
+ *
+ * `pace` null delivers at once, word by word without pauses (a human sysop's
+ * line from the admin); a pace types it with the bot's speed and typos.
+ */
+async function deliverToCaller(
+  io: any,
+  chatSession: ChatSession,
+  page: PageRequest,
+  text: string,
+  color: string,
+  pace: { typingSpeed?: number; typoProbability?: number } | null
+): Promise<void> {
+  const run = async (): Promise<void> => {
+    const reach = emitterForUserId(page.userId, io);
+    if (!reach) {
+console.log(`[Operator Chat] Page ${page.id}: a line for ${page.userHandle} has NO EMITTER for user ${page.userId} - saved and shown to the admin, not to the caller`);
+      return;
     }
-    // The line is done: scroll it up from the bottom of the region, as a
-    // committed line is, and leave line 23 blank for the next one.
-    emit(`\x1b[23;1H\r\n${callerCursor()}`);
-  }
+    const caller = userSessions.get(String(page.userId));
+    const partial = () => caller?.inputBuffer ?? '';
+    const erase = (n: number) => '\b \b'.repeat(n);
+    const emit = (ansi: string) => reach.emitter.emit('ansi-output', ansi);
+
+    const lines = wrapChatMessage(text, 79);
+    const plans = lines.map((line) =>
+      pace
+        ? planWordTyping(line, pace)
+        : line.split(/\s+/).filter((w) => w.length > 0).map((word) => ({ word, typo: null, beforeMs: 0, typoMs: 0 }))
+    );
+    const plannedMs = plans.flat().reduce((sum, w) => sum + w.beforeMs + w.typoMs, 0);
+    const scale = plannedMs > MAX_DELIVERY_MS ? MAX_DELIVERY_MS / plannedMs : 1;
+
+    for (const plan of plans) {
+      for (let i = 0; i < plan.length; i++) {
+        const w = plan[i]!;
+        const trail = i < plan.length - 1 ? ' ' : '';
+        if (w.beforeMs * scale >= 1) await sleep(w.beforeMs * scale);
+        if (w.typo) {
+          const p = partial();
+          emit(erase(p.length) + `\x1b[${color}m${w.typo}` + `\x1b[${CHAT_COLOR_USER}m${p}`);
+          if (w.typoMs * scale >= 1) await sleep(w.typoMs * scale);
+          const p2 = partial();
+          emit(erase(p2.length + w.typo.length) + `\x1b[${color}m${w.word}${trail}` + `\x1b[${CHAT_COLOR_USER}m${p2}`);
+        } else {
+          const p = partial();
+          emit(erase(p.length) + `\x1b[${color}m${w.word}${trail}` + `\x1b[${CHAT_COLOR_USER}m${p}`);
+        }
+      }
+      // Return: the line ends, and the caller's half-typed word follows it
+      // onto the new line (express.e:5988-5990).
+      const p = partial();
+      emit(erase(p.length) + '\r\n' + `\x1b[${CHAT_COLOR_USER}m${p}`);
+    }
+  };
+  const prev: Promise<void> = (chatSession as any).delivery ?? Promise.resolve();
+  const next = prev.then(run, run);
+  (chatSession as any).delivery = next.catch(() => undefined);
+  return next;
+}
+
+/** The bot's engine and typing settings, from the board's operator-chat config. */
+function aiConfigFrom(config: OperatorChatConfig): AIProviderConfig {
+  return {
+    provider: config.aiEnabled ? config.aiProvider : 'rule-based',
+    modelName: config.aiModelName,
+    temperature: config.aiTemperature,
+    systemPrompt: config.aiSystemPrompt,
+    groqApiKey: config.groqApiKey,
+    geminiApiKey: config.geminiApiKey,
+    openRouterApiKey: config.openRouterApiKey,
+    botTypingSpeed: config.botTypingSpeed,
+    botTypoProbability: config.botTypoProbability,
+    botThinkTime: config.botThinkTime,
+  };
 }
 
 /**
@@ -1007,31 +1031,18 @@ function processBotQueue(
 
   chatSession.botBusy = true;
   const config = repository.getConfig();
-const aiConfig: AIProviderConfig = {
-        provider: config.aiEnabled ? config.aiProvider : 'rule-based',
-        modelName: config.aiModelName,
-        temperature: config.aiTemperature,
-        systemPrompt: config.aiSystemPrompt,
-        groqApiKey: config.groqApiKey,
-        geminiApiKey: config.geminiApiKey,
-        openRouterApiKey: config.openRouterApiKey,
-        botTypingSpeed: config.botTypingSpeed,
-        botTypoProbability: config.botTypoProbability,
-        botThinkTime: config.botThinkTime,
-      };
+const aiConfig = aiConfigFrom(config);
 
       getGrumpySysopResponse(lastMsg, context, aiConfig).then(async botResponse => {
     context.messageHistory.push({ role: 'bot', content: botResponse });
     chatSession.botMessageHistory = context.messageHistory;
     await sendBotMessageWithTyping(io, repository, pageId, botResponse, page.nodeId, page, aiConfig);
     chatSession.botBusy = false;
-    flushPendingUserAnsi(chatSession, io);
     // Recurse — process any more queued messages
     processBotQueue(io, repository, pageId, chatSession);
   }).catch(err => {
 console.error('[Operator Chat] Bot queue response error:', err);
     chatSession.botBusy = false;
-    flushPendingUserAnsi(chatSession, io);
   });
 }
 
@@ -1100,32 +1111,19 @@ console.log('[Operator Chat] Bot busy, queuing message');
       (chatSession as any).botMessageHistory = context.messageHistory;
 
       const config = repository.getConfig();
-      const aiConfig: AIProviderConfig = {
-        provider: config.aiEnabled ? config.aiProvider : 'rule-based',
-        modelName: config.aiModelName,
-        temperature: config.aiTemperature,
-        systemPrompt: config.aiSystemPrompt,
-        groqApiKey: config.groqApiKey,
-        geminiApiKey: config.geminiApiKey,
-        openRouterApiKey: config.openRouterApiKey,
-        botTypingSpeed: config.botTypingSpeed,
-        botTypoProbability: config.botTypoProbability,
-        botThinkTime: config.botThinkTime,
-      };
+      const aiConfig = aiConfigFrom(config);
 
       getGrumpySysopResponse(message, context, aiConfig).then(async botResponse => {
         context.messageHistory.push({ role: 'bot', content: botResponse });
         (chatSession as any).botMessageHistory = context.messageHistory;
         await sendBotMessageWithTyping(io, repository, pageId, botResponse, nodeId, page, aiConfig);
         (chatSession as any).botBusy = false;
-        flushPendingUserAnsi(chatSession as any, io);
 
         // Process any queued messages
         processBotQueue(io, repository, pageId, chatSession as any);
       }).catch(err => {
 console.error('[Operator Chat] Bot response error:', err);
         (chatSession as any).botBusy = false;
-        flushPendingUserAnsi(chatSession as any, io);
       });
     }
   }
@@ -1138,49 +1136,17 @@ console.error('[Operator Chat] Bot response error:', err);
 
   // Emit to User (Linear ANSI text) — queue when bot is typing, flush after bot done
   const page = repository.getPageRequest(pageId);
-  if (page) {
-    const color = senderType === 'sysop' ? '36' : '33';
-    const wrappedLines = wrapChatMessage(message, 79);
-
-    // Build output:
-    // 1. \r\n to advance from input line
-    // 2. Position at bottom of scroll region (23), write message with \r\n to scroll
-    // 3. Position at input line (24), clear it
-    let output = '\r\n';
-    output += '\x1b[23;1H'; // position at bottom of scroll region
-    for (const line of wrappedLines) {
-      output += `\x1b[${color}m${line}\x1b[0m\r\n`;
-    }
-    // Position cursor at input line, ready for next keystroke
-    output += '\x1b[24;1H\x1b[2K';
-
-    // THE CALLER'S OWN LINE IS NEVER HELD BACK. botBusy is set the moment
-    // the caller's message arrives - before the bot has said anything - so
-    // deferring on it put the caller's line UNDER the reply to it: driven
-    // on 2026-09-07 the screen read "[RB] Oh great, another lamer..." and
-    // then, two lines later, "hello grumpy". The queue exists for a sysop's
-    // line landing while the bot is mid-write; a caller writing their own
-    // message is not that case.
-    if ((chatSession as any).botBusy && senderType !== 'user') {
-      if (!(chatSession as any).userPendingAnsi) (chatSession as any).userPendingAnsi = [];
-      (chatSession as any).userPendingAnsi.push({ userId: page.userId, ansi: output });
-    } else {
-      // TP-10: the message itself reaches the caller on every transport.
-      emitterForUserId(page.userId, io)?.emitter.emit('ansi-output', output);
-    }
+  if (!page) return;
+  if (senderType === 'user') {
+    // The caller's line is already on their screen - they typed it there.
+    // Return ends it (express.e:5988).
+    emitterForUserId(page.userId, io)?.emitter.emit('ansi-output', '\r\n');
+    return;
   }
+  // A human sysop's line reaches the caller word by word, at once.
+  await deliverToCaller(io, chatSession, page, message, CHAT_COLOR_SYSOP, null);
 }
 
-/** Flush pending user ANSI output queued while bot was typing */
-function flushPendingUserAnsi(chatSession: any, io: any): void {
-  const pending = chatSession.userPendingAnsi || [];
-  chatSession.userPendingAnsi = [];
-  for (const item of pending) {
-    // TP-10: a queued message reaches the caller on every transport, exactly
-    // as the un-queued one above does.
-    emitterForUserId(item.userId, io)?.emitter.emit('ansi-output', item.ansi);
-  }
-}
 
 /**
  * End chat session
@@ -1210,33 +1176,37 @@ console.log(`[Operator Chat] Chat session ${pageId} ended`);
   // directly - no pause in between, nothing to press.
   const userSession = userSessions.get(String(page.userId));
   if (userSession) {
-    userSession.subState = LoggedOnSubState.DISPLAY_MENU;
+    userSession.subState = LoggedOnSubState.READ_COMMAND;
     userSession.menuPause = false;
     userSession.inputBuffer = '';
     delete userSession.tempData?.pageId;
   }
-  const endMessage =
-    '\x1b[?25l' +
-    '\x1b[r' +                     // scroll region off
-    '\x1b[?1000l\x1b[?1006l' +     // mouse reporting off
-    '\x1b[0m\x1b[2J\x1b[H' +      // attributes off, screen clear, home
-    'Chat ended.\r\n\r\n' +
-    '\x1b[?25h';
-  // TP-10: through the one registry, so a telnet caller is not left sitting
-  // in a scroll region nothing would clear.
   const reach = emitterForUserId(page.userId, io);
   if (!reach) {
 console.log(`[Operator Chat] Page ${pageId}: chat ended but no emitter reaches user ${page.userId}`);
     return;
   }
-  reach.emitter.emit('ansi-output', endMessage);
+  // Whatever was still being typed to the caller finishes first.
+  try { await ((chatSession as any).delivery ?? Promise.resolve()); } catch { /* logged where it happened */ }
+  // express.e:6049-6062: attributes off, the EndChat screen or "Ending Chat.".
+  reach.emitter.emit('ansi-output', '\x1b[0m');
+  let shown = false;
   if (userSession) {
-    // The menu display flow is pumped by input; this is not input, so pump it.
     try {
-      const { advanceDisplayFlow } = require('./command.handler');
-      await advanceDisplayFlow(reach.emitter, userSession);
+      const { displayScreen } = require('./screen.handler');
+      shown = Boolean(await displayScreen(reach.emitter, userSession, 'EndChat', false, true));
     } catch (err) {
-console.error(`[Operator Chat] Page ${pageId}: could not return the caller to the prompt:`, err);
+console.log(`[Operator Chat] Page ${pageId}: EndChat screen not shown (${(err as Error).message}); using the built-in line`);
+    }
+  }
+  reach.emitter.emit('ansi-output', (shown ? '' : '\r\n\r\nEnding Chat.') + '\r\n');
+  // chat() returns into the input loop; the caller is back at the prompt.
+  if (userSession) {
+    try {
+      const { displayMenuPrompt } = require('./command-handler/menu');
+      displayMenuPrompt(reach.emitter, userSession);
+    } catch (err) {
+console.error(`[Operator Chat] Page ${pageId}: could not draw the prompt after the chat:`, err);
     }
   }
 }
@@ -1385,17 +1355,10 @@ console.log(`[Operator Chat] Page ${pageId}: caller is back at a prompt (subStat
     }
 console.log(`[Operator Chat] Page ${pageId}: ${reason} - GrumpyBot takes it`);
 
-    // Send intro message in the setup screen itself rather than as a separate
-    // sendChatMessage call - that would trigger the bot response loop and
-    // also show the generic "This is GrumpyBot, How can I help you??" first.
-    const introMsg = getGrumpyBotIntroMessage();
-    await acceptPage(io, repository, pageId, 'bot', 'GrumpyBot', 'grumpy-bot-session', introMsg);
+    await acceptPage(io, repository, pageId, 'bot', 'GrumpyBot', 'grumpy-bot-session');
 
     const chatSession = activeChatSessions.get(pageId);
-    if (chatSession) {
-      (chatSession as any).isBotControlled = true;
-      (chatSession as any).botMessageHistory = [];
-    } else {
+    if (!chatSession) {
 console.log(`[Operator Chat] WARNING: No chat session found to mark as bot-controlled for page ${pageId}`);
     }
 
@@ -1406,6 +1369,24 @@ console.log(`[Operator Chat] WARNING: No chat session found to mark as bot-contr
       userNodeId: page.nodeId,
       startedAt: Date.now(),
     });
+
+    // The opening line is the bot's first MESSAGE: saved, shown to the admin,
+    // typed to the caller, and in the bot's own memory of the conversation -
+    // not a caption in the layout. It goes out through the same path as
+    // every reply, with the caller's lines queued behind it meanwhile.
+    if (chatSession) {
+      const intro = getGrumpyBotIntroMessage();
+      (chatSession as any).isBotControlled = true;
+      (chatSession as any).botMessageHistory = [{ role: 'bot', content: intro }];
+      (chatSession as any).botBusy = true;
+      const accepted = repository.getPageRequest(pageId) ?? page;
+      void sendBotMessageWithTyping(io, repository, pageId, intro, accepted.nodeId, accepted, aiConfigFrom(repository.getConfig()))
+        .catch((err) => console.error(`[Operator Chat] Page ${pageId}: the bot's opening line failed:`, err))
+        .finally(() => {
+          (chatSession as any).botBusy = false;
+          processBotQueue(io, repository, pageId, chatSession as any);
+        });
+    }
     return repository.getPageRequest(pageId)?.sysopId === 'bot';
   } finally {
     takeoversInFlight.delete(pageId);
