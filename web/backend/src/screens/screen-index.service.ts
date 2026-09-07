@@ -997,43 +997,79 @@ export function buildScreenIndex(baseDir: string, themeSlug?: string): ScreenInd
       const dir = foundIn;
       const ownDir = scope === 'node' ? path.join(baseDir, `Node${id}`) : dir;
 
-      // Everything in that directory this screen can serve, and to whom. The
-      // loader picks ONE of these per caller; all of them are read by the board.
-      const variants: string[] = [];
-      const matched: { name: string; securityLevel?: number; screenType?: string }[] = [];
-      for (const name of listDir(dir)) {
-        if (!isScreenFile(name)) continue;
-        const variant = variantOf(fileName, name);
-        if (!variant) continue;
+      // Everything this screen can serve, and to whom. The loader picks ONE
+      // file per caller; all of them are read by the board.
+      const variantsIn = (from: string) => {
+        const found: { name: string; securityLevel?: number; screenType?: string }[] = [];
+        for (const name of listDir(from)) {
+          if (!isScreenFile(name)) continue;
+          const variant = variantOf(fileName, name);
+          if (!variant) continue;
+          found.push({ name, ...variant });
+        }
+        return found;
+      };
 
-        variants.push(name);
-        matched.push({ name, ...variant });
-      }
+      const variants: string[] = variantsIn(dir).map(v => v.name);
 
-      // Which callers each variant actually serves. express.e walks DOWN in
-      // fives, so a variant covers everything from its own level up to just
-      // below the next one, and the top variant covers everything above it.
-      const levels = [...new Set(matched.map(m => m.securityLevel).filter((l): l is number => l !== undefined))]
-        .sort((a, b) => a - b);
+      /*
+       * EVERY search location, not only the one that answers a sysop.
+       *
+       * `screenSearchLocations` gives a conference screen `Conf<n>` and then
+       * `Conf<n>/Screens`, and a global screen the board root and then
+       * `Screens/` - and `findSecurityScreen` runs per CALLER, walking that
+       * caller's level down in fives inside one directory before the loader
+       * moves to the next. So a directory holding only `bull20.txt` answers
+       * nobody below level 20, and the `BULL.TXT` in the next directory is
+       * what those callers are shown.
+       *
+       * Claiming variants from the resolved directory alone declared all of
+       * them dead: on this board that was every conference's `Screens/`
+       * directory, offered to artists as files nothing reads. The sysop:
+       * "either the claim is wrong and they are used or they should not be
+       * included in the gallery".
+       *
+       * `floor` is the lowest level the directories already walked answer for,
+       * which is exactly the level below which the loader falls through. A
+       * directory with an UNNUMBERED file answers every caller, so nothing
+       * after it is reachable and the walk stops there.
+       */
+      const servesRange = (level: number | undefined, next: number | undefined, ceiling: number) => {
+        const top = next ?? ceiling;
+        if (level === undefined) return Number.isFinite(top) ? `below ${top}` : undefined;
+        return Number.isFinite(top) ? `${level}-${top - 1}` : `${level} and above`;
+      };
 
-      for (const variant of matched) {
-        const rel = path.relative(baseDir, path.join(dir, variant.name));
-        const level = variant.securityLevel;
-        const next = level === undefined ? undefined : levels.find(l => l > level);
+      let floor = Number.POSITIVE_INFINITY;
+      for (const location of locations) {
+        const matched = variantsIn(location.dir);
+        if (matched.length === 0) continue;
 
-        readers.set(rel, [...(readers.get(rel) ?? []), {
-          screen,
-          scope,
-          id,
-          scopeName: scope === 'conf' && id ? conferenceNames.get(id) : undefined,
-          securityLevel: level,
-          screenType: variant.screenType,
-          screenTypeName: variant.screenType ? typeNames[variant.screenType] : undefined,
-          serves: level === undefined
-            ? undefined
-            : next !== undefined ? `${level}-${next - 1}` : `${level} and above`,
-          via: found && path.relative(baseDir, found) === rel ? 'resolved' : 'variant',
-        }]);
+        // express.e walks DOWN in fives, so a variant covers everything from
+        // its own level up to just below the next one.
+        const levels = [...new Set(matched.map(m => m.securityLevel).filter((l): l is number => l !== undefined))]
+          .sort((a, b) => a - b);
+
+        for (const variant of matched) {
+          const rel = path.relative(baseDir, path.join(location.dir, variant.name));
+          const level = variant.securityLevel;
+          const next = level === undefined ? undefined : levels.find(l => l > level);
+
+          readers.set(rel, [...(readers.get(rel) ?? []), {
+            screen,
+            scope,
+            id,
+            scopeName: scope === 'conf' && id ? conferenceNames.get(id) : undefined,
+            securityLevel: level,
+            screenType: variant.screenType,
+            screenTypeName: variant.screenType ? typeNames[variant.screenType] : undefined,
+            serves: servesRange(level, next, floor),
+            via: found && path.relative(baseDir, found) === rel ? 'resolved' : 'variant',
+          }]);
+        }
+
+        floor = Math.min(floor, ...matched.map(m => m.securityLevel ?? 0));
+        if (matched.some(m => m.securityLevel === undefined)) break;
       }
       if (found) resolvedPaths.add(path.relative(baseDir, found));
 
