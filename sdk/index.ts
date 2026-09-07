@@ -360,6 +360,8 @@ export { HUDBuilder } from './components/hud/hud-builder';
 export { LevelManager } from './components/level/level-manager';
 export { SaveManager } from './components/save/save-manager';
 export { InventorySystem } from './components/inventory/inventory-system';
+export { renderAchievementToast, showAchievementToast, toastLines, toastWidth } from './components/achievement-toast';
+export type { AchievementNotice, ToastRenderOptions } from './components/achievement-toast';
 export { DialogueSystem } from './components/dialogue/dialogue-system';
 export { QuestSystem } from './components/quest/quest-system';
 export { ClassSystem } from './components/tactical/class-system';
