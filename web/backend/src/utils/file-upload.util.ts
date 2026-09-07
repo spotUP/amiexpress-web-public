@@ -3,6 +3,7 @@
  * 1:1 port from AmiExpress express.e file upload functions
  */
 
+import { formatLongDate } from './date-time.util';
 import { db } from '../database';
 import { getRootConferenceDir } from './file-hold.util';
 
@@ -207,12 +208,17 @@ export function formatFileSize(bytes: number, useKB: boolean = false): string {
  * @returns Formatted date string in MM-DD-YY format
  */
 export function formatUploadDate(date: Date): string {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = months[date.getMonth()];
-  const year = String(date.getFullYear()).slice(-2);
-  return `${day}-${month}-${year}`;  // express.e: "15-Jan-26" (DD-Mon-YY)
+  // express.e:19165 - `formatLongDate(getSystemTime(), fmtstr)` IS the `odate`
+  // that goes into the DIR row at :19454 and onto the upload prompt at
+  // :19300. So this is not a second date format, it is that one - and the
+  // doc block above, with its real-file evidence, was right all along while
+  // the body had drifted to a `15-Jan-26` shape this port invented.
+  //
+  // It matters on the wire, not just on screen: express.e:27962 identifies
+  // the date column by shape (digit first, `-` at [2] and [5]) and SHIFTS THE
+  // COLUMNS when that fails, so a real AmiExpress reading a row we wrote
+  // took the date for the size and mangled the record.
+  return formatLongDate(date);
 }
 
 // Check if description starts with / (private upload marker) - express.e:19344

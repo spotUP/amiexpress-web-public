@@ -189,41 +189,47 @@ describe('file-upload.util', () => {
   });
 
   describe('formatUploadDate', () => {
-    it('should format date as DD-Mon-YY', () => {
-      const date = new Date('2026-01-07');
-      expect(formatUploadDate(date)).toBe('07-Jan-26');
+    // REVERSED 2026-09-07: this is `mm-dd-yy`, and these tests used to pin the
+    // `07-Jan-26` shape the body had drifted to while its own doc block (with
+    // real-file evidence: "12-26-17", "01-25-18") said otherwise.
+    //
+    // express.e:19165 makes the DIR row's date `formatLongDate(getSystemTime())`
+    // and :27962 identifies the column by shape - digit first, `-` at [2] and
+    // [5] - SHIFTING THE COLUMNS when that fails. So a row written the old way
+    // was mangled by a real AmiExpress, which took the date for the size.
+    it('formats a date the way express.e writes it into a DIR file', () => {
+      expect(formatUploadDate(new Date(2026, 0, 7))).toBe('01-07-26');
     });
 
-    it('should pad single-digit days', () => {
-      const date = new Date('2026-01-01');
-      expect(formatUploadDate(date)).toBe('01-Jan-26');
+    it('pads single-digit months and days', () => {
+      expect(formatUploadDate(new Date(2026, 0, 1))).toBe('01-01-26');
+      expect(formatUploadDate(new Date(2026, 8, 9))).toBe('09-09-26');
     });
 
-    it('should handle all months', () => {
-      expect(formatUploadDate(new Date('2026-01-15'))).toBe('15-Jan-26');
-      expect(formatUploadDate(new Date('2026-02-15'))).toBe('15-Feb-26');
-      expect(formatUploadDate(new Date('2026-03-15'))).toBe('15-Mar-26');
-      expect(formatUploadDate(new Date('2026-04-15'))).toBe('15-Apr-26');
-      expect(formatUploadDate(new Date('2026-05-15'))).toBe('15-May-26');
-      expect(formatUploadDate(new Date('2026-06-15'))).toBe('15-Jun-26');
-      expect(formatUploadDate(new Date('2026-07-15'))).toBe('15-Jul-26');
-      expect(formatUploadDate(new Date('2026-08-15'))).toBe('15-Aug-26');
-      expect(formatUploadDate(new Date('2026-09-15'))).toBe('15-Sep-26');
-      expect(formatUploadDate(new Date('2026-10-15'))).toBe('15-Oct-26');
-      expect(formatUploadDate(new Date('2026-11-15'))).toBe('15-Nov-26');
-      expect(formatUploadDate(new Date('2026-12-15'))).toBe('15-Dec-26');
+    it('covers every month as two digits, never a name', () => {
+      for (let m = 0; m < 12; m++) {
+        const expected = `${String(m + 1).padStart(2, '0')}-15-26`;
+        expect(formatUploadDate(new Date(2026, m, 15))).toBe(expected);
+      }
     });
 
-    it('should use 2-digit year', () => {
-      expect(formatUploadDate(new Date('2026-01-01'))).toBe('01-Jan-26');
-      expect(formatUploadDate(new Date('1999-12-31'))).toBe('31-Dec-99');
-      expect(formatUploadDate(new Date('2000-01-01'))).toBe('01-Jan-00');
+    it('uses a 2-digit year, as the eight-character column requires', () => {
+      expect(formatUploadDate(new Date(2026, 0, 1))).toBe('01-01-26');
+      expect(formatUploadDate(new Date(1999, 11, 31))).toBe('12-31-99');
+      expect(formatUploadDate(new Date(2000, 0, 1))).toBe('01-01-00');
     });
 
-    it('should handle end of month dates', () => {
-      expect(formatUploadDate(new Date('2026-01-31'))).toBe('31-Jan-26');
-      expect(formatUploadDate(new Date('2026-02-28'))).toBe('28-Feb-26');
-      expect(formatUploadDate(new Date('2024-02-29'))).toBe('29-Feb-24'); // Leap year
+    it('passes express.e\'s own column test', () => {
+      // express.e:27962-27963 - eight characters, digit first, `-` at [2] and
+      // [5], digit at [6]. This is the check that decides whether the field is
+      // a date or gets treated as the size.
+      const dt = formatUploadDate(new Date(2024, 1, 29));
+      expect(dt).toHaveLength(8);
+      expect(dt[0] >= '0' && dt[0] <= '9').toBe(true);
+      expect(dt[2]).toBe('-');
+      expect(dt[5]).toBe('-');
+      expect(dt[6] >= '0' && dt[6] <= '9').toBe(true);
+      expect(dt).toBe('02-29-24');
     });
   });
 
@@ -442,7 +448,7 @@ describe('file-upload.util', () => {
       // Date should work regardless of timezone
       const date = new Date(Date.UTC(2026, 0, 7)); // Jan 7, 2026 UTC
       const result = formatUploadDate(date);
-      expect(result).toMatch(/\d{2}-[A-Z][a-z]{2}-\d{2}/);
+      expect(result).toMatch(/^\d{2}-\d{2}-\d{2}$/);
     });
 
     it('should handle buildDirFileEntry with special chars in description', () => {

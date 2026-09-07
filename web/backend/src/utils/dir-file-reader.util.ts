@@ -148,7 +148,8 @@ export function parseDirEntry(lines: string[], startIndex: number): DirFileEntry
       parseInt(canonical[2], 10),
     );
   } else if (portForm) {
-    // dd-Mon-yy, what utils/dir-file.util.ts writes today.
+    // dd-Mon-yy, what utils/dir-file.util.ts wrote until 2026-09-07. Still
+    // read, because rows in that shape are on disk on this board.
     uploadDateDisplay = dateField;
     const month = MONTHS[portForm[2].toLowerCase()];
     if (month !== undefined) {
