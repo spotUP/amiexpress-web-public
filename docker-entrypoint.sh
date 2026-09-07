@@ -644,6 +644,45 @@ else
         rm -f "$COMMANDS_LIST"
     fi
 
+    # Screens/: the same rule, and for the same reason.
+    #
+    # These were seeded FIRST RUN ONLY, so every screen edited in the repo
+    # after a board's first boot never reached it - the volume kept whatever
+    # it was initialised with, for ever. Reported 2026-09-07: the random wipe
+    # animations (~WX and friends) were added to Screens/*.txt, worked on
+    # localhost, and were invisible on the live board, because live's volume
+    # still held the pre-wipe screens. FORCE_REINIT_SCREENS=1 was the only
+    # way out, and it is a blunt one: it deletes the directory, taking every
+    # screen a sysop wrote with it.
+    #
+    # sync_tracked already knows how to do this properly - image updates
+    # arrive, a screen edited on the board is kept, a screen deleted on the
+    # board stays deleted - so screens simply join the tracked set. The
+    # conference Screens directories come too: they are seeded the same way
+    # and were stale for the same reason.
+    echo "[Entrypoint] Syncing Screens (tracked)..."
+    SCREENS_LIST=$(mktemp)
+    : > "$SCREENS_LIST"
+    for screens_dir in Screens Conf1/Screens Conf2/Screens Conf3/Screens Conf4/Screens \
+                       Conf5/Screens Conf6/Screens Conf7/Screens Conf8/Screens Conf9/Screens \
+                       Conf10/Screens Conf11/Screens Conf12/Screens Conf13/Screens Conf14/Screens; do
+        [ -d "$DEFAULT_DATA_DIR/$screens_dir" ] || continue
+        case "$screens_dir" in
+            Conf[0-9]*)
+                # A conference the board no longer has does not get its
+                # screens re-created, exactly as sync_volume_owned refuses to
+                # re-create its icon.
+                conference_still_exists "${screens_dir%%/*}" || continue
+                ;;
+        esac
+        (cd "$DEFAULT_DATA_DIR" && find "$screens_dir" -type f -print) >> "$SCREENS_LIST"
+    done
+    while IFS= read -r rel; do
+        [ -n "$rel" ] || continue
+        sync_tracked_case_aware "$rel"
+    done < "$SCREENS_LIST"
+    rm -f "$SCREENS_LIST"
+
     # Anything the manifest still names that the image no longer ships stays
     # on the volume untouched; it simply stops being tracked.
     if [ -f "$DEPLOY_MANIFEST_NEXT" ]; then
