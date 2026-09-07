@@ -14,6 +14,23 @@ const AUTH_BASE = '/auth';
  * undefined either way and eighteen pages rendered "No doors configured" as a
  * POSITIVE claim about a request that had failed.
  */
+/**
+ * The filename a `Content-Disposition: attachment` header offers, or null.
+ *
+ * Handles the quoted form every route here sends and the RFC 5987
+ * `filename*=UTF-8''...` form, and refuses anything with a path separator
+ * in it: a download must never be able to name a directory.
+ */
+function filenameFromContentDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const extended = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(header);
+  const plain = /filename="?([^";]+)"?/i.exec(header);
+  const raw = extended ? decodeURIComponent(extended[1].trim()) : plain ? plain[1].trim() : null;
+  if (!raw) return null;
+  const name = raw.replace(/^["']|["']$/g, '');
+  return name && !name.includes('/') && !name.includes('\\') ? name : null;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -156,6 +173,17 @@ class ApiClient {
    * never looked at a query string, so the download could not have worked
    * whatever the key was called.
    */
+  /**
+   * Fetch a file WITH the Authorization header and hand the browser a blob.
+   *
+   * A plain `<a href="/api/...">` cannot carry a header, so every admin
+   * download written as a link answered `{"error":"Access token required"}`.
+   * This is the only way to download from this API; a link is a bug.
+   *
+   * The server's own `Content-Disposition` filename wins when it sends one
+   * (the screen export names its archive with the scope and a timestamp),
+   * and `filename` is the fallback for the routes that send none.
+   */
   async downloadFile(url: string, filename: string): Promise<void> {
     const response = await fetch(url, { headers: this.authHeaders() });
     if (!response.ok) {
@@ -163,6 +191,8 @@ class ApiClient {
       throw this.failed(response.status, error, response.statusText);
     }
 
+    const offered = filenameFromContentDisposition(response.headers.get('content-disposition'));
+    if (offered) filename = offered;
     const blob = await response.blob();
     const objectUrl = URL.createObjectURL(blob);
     try {

@@ -65,6 +65,7 @@ vi.mock('../contexts/NotificationContext', () => ({
 vi.mock('../components/ScreenPreview', () => ({ ScreenPreview: () => null }));
 
 import { ScreenFilesPage } from '../pages/ScreenFilesPage';
+import { apiClient } from '../api/client';
 
 /** The gallery opens first; these cases are about the tables behind it. */
 async function openScreenTab(user: ReturnType<typeof userEvent.setup>, name: RegExp = /Node screens/) {
@@ -110,19 +111,28 @@ describe('opening a screen from its row', () => {
 
   it('offers Download inside the dialog, not on every row', async () => {
     const user = userEvent.setup();
+    // It is a BUTTON, not a link: the endpoint is behind the admin's auth
+    // and an anchor cannot carry the Authorization header, which is what
+    // made Download answer `{"error":"Access token required"}` on live.
+    const download = vi.spyOn(apiClient, 'downloadFile').mockResolvedValue(undefined);
     render(<ScreenFilesPage />, { wrapper });
 
     await openScreenTab(user);
 
     await user.click(await screen.findByText('BBSTITLE'));
     // The row itself carries no actions any more.
+    expect(screen.queryByRole('button', { name: /download/i })).toBeNull();
     expect(screen.queryByRole('link', { name: /download/i })).toBeNull();
 
     await user.click(await screen.findByText('Node1/BBSTITLE.txt'));
     const dialog = await screen.findByRole('dialog');
-    const download = within(dialog).getByRole('link', { name: /download/i });
+    await user.click(within(dialog).getByRole('button', { name: /download/i }));
 
-    expect(download.getAttribute('href')).toContain('Node1%2FBBSTITLE.txt');
+    expect(download).toHaveBeenCalledWith(
+      expect.stringContaining('Node1%2FBBSTITLE.txt'),
+      'BBSTITLE.txt',
+    );
+    download.mockRestore();
   });
 
   it('loads a local ANSI file into the canvas it is editing', async () => {

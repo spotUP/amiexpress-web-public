@@ -57,6 +57,15 @@ export interface ScreenEditorProps {
    * loads art INTO the editor, it does not replace the file on the board.
    */
   onLoadFile?: (file: File) => void;
+  /**
+   * Hand the sysop this file.
+   *
+   * The PAGE downloads, through the API client, because the endpoint is
+   * behind the same auth as everything else and an `<a href>` cannot carry
+   * an Authorization header - this button used to be a link, and answered
+   * `{"error":"Access token required"}`. Absent means no Download button.
+   */
+  onDownload?: () => void;
   /** What the index knows about this file's MCI codes - which of them resolve. */
   mci?: MciReferenceShape[];
   onChange: (surface: EditorSurface) => void;
@@ -66,7 +75,7 @@ export interface ScreenEditorProps {
 }
 
 export function ScreenEditor({
-  surface, mci = [], filePath, onLoadFile, onChange, onSave, onCancel,
+  surface, mci = [], filePath, onLoadFile, onDownload, onChange, onSave, onCancel,
 }: ScreenEditorProps) {
   const [cursor, setCursor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [pickingCode, setPickingCode] = useState(false);
@@ -336,13 +345,14 @@ export function ScreenEditor({
             />
           </label>
         )}
-        {filePath && (
-          <a
+        {filePath && onDownload && (
+          <button
+            type="button"
             className="inline-flex items-center gap-1 underline"
-            href={`/api/screens/file?path=${encodeURIComponent(filePath)}&download=1`}
+            onClick={onDownload}
           >
             <Download size={14} /> Download
-          </a>
+          </button>
         )}
         <button type="button" className="inline-flex items-center gap-1 underline"
           onClick={() => onChange(undo(surface))}>

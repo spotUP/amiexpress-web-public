@@ -157,9 +157,30 @@ function formatLabel(filePath: string): string {
   return 'ANSI / text';
 }
 
+/** The last segment of a board path, for a download's fallback filename. */
+function baseName(filePath: string): string {
+  const parts = filePath.split(/[\\/]/).filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : 'screen.txt';
+}
+
 export function ScreenFilesPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
+
+  /**
+   * Download through the API CLIENT, never through an `<a href>`.
+   *
+   * The endpoints below are behind the same auth as every other admin
+   * route, and a link cannot carry an Authorization header - which is why
+   * clicking Download used to answer `{"error":"Access token required"}`.
+   */
+  const downloadScreen = async (url: string, fallbackName: string) => {
+    try {
+      await apiClient.downloadFile(url, fallbackName);
+    } catch (err) {
+      showError(`Download failed: ${(err as Error).message}`);
+    }
+  };
   const [query, setQuery] = useState('');
   const [openScreen, setOpenScreen] = useState<string | null>(null);
   const [openFile, setOpenFile] = useState<string | null>(null);
@@ -1371,9 +1392,13 @@ export function ScreenFilesPage() {
       </div>
 
       <div className="flex items-center gap-4 text-sm">
-        <a className="inline-flex items-center gap-1 underline" href="/api/screens/export?scope=all">
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 underline"
+          onClick={() => downloadScreen('/api/screens/export?scope=all', 'screens.zip')}
+        >
           <Download size={14} /> Export every screen
-        </a>
+        </button>
         <input
           ref={importInput}
           type="file"
@@ -1614,6 +1639,15 @@ export function ScreenFilesPage() {
               setEditing(createSurface(await screenToCanvas(bytes)));
             }}
             onChange={setEditing}
+            onDownload={
+              openFile
+                ? () =>
+                    downloadScreen(
+                      `/api/screens/file?path=${encodeURIComponent(openFile)}&download=1`,
+                      baseName(openFile),
+                    )
+                : undefined
+            }
             // An edit produces bytes, and bytes go out the way an uploaded file
             // does - the same fan-out, the same backup, the same refusals. The
             // editor is not a second write path.
@@ -1789,12 +1823,18 @@ export function ScreenFilesPage() {
                   <Pencil size={14} /> Edit
                 </button>
               )}
-              <a
+              <button
+                type="button"
                 className="inline-flex items-center gap-1 underline"
-                href={`/api/screens/file?path=${encodeURIComponent(openFile)}&download=1`}
+                onClick={() =>
+                  downloadScreen(
+                    `/api/screens/file?path=${encodeURIComponent(openFile)}&download=1`,
+                    baseName(openFile),
+                  )
+                }
               >
                 <Download size={14} /> Download
-              </a>
+              </button>
               <button
                 className="inline-flex items-center gap-1 underline"
                 onClick={() => setShowRevisions(v => !v)}
