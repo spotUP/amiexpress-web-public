@@ -140,7 +140,7 @@ export interface C64AdapterOptions {
 }
 
 /** The rule ladder's output for the frame as it stands, plus where the painted rows end. */
-interface AdaptedView {
+export interface AdaptedView {
   seq: number;
   rows: AdaptedRow[];
   cursor: Cursor;
@@ -366,6 +366,43 @@ export class C64DoorFrameAdapter {
     return this.adapted();
   }
 
+  /**
+   * The frame the ladder folds: the reconstructed screen after the pre-passes,
+   * before adaptRows sees it. Public for the same reason `adaptedView` is -
+   * the corpus end-to-end suite has to check the ladder's rules against what
+   * the ladder was actually given, and every copy of these three calls is a
+   * copy that drifts when a pre-pass is added.
+   */
+  sourceView(): Frame {
+    return this.prePassed();
+  }
+
+  /**
+   * The pre-passes, applied to the reconstructed screen.
+   *
+   * Three steps, each a no-op on a screen that already fits: blank what the
+   * door wrote into slots nobody filled, squeeze runs of blank rows, and -
+   * only where the door declared it - drop the oldest entries of its list.
+   * See c64-door-noise.ts and c64-door-fit.ts for what each one may touch.
+   *
+   * A rule that matches TEXT needs a width gate; a reducer that MEASURES
+   * does not. stripNarrowNoise blanks what a door writes into slots nobody
+   * filled in - and every one of those was removed because it cost a
+   * 40-column caller ROWS he did not have. An 80-column caller has the
+   * room the 80-column ANSI caller has and sees what that caller sees.
+   * The two fit reducers beside it stay ungated: they ask how tall the
+   * screen came out and do nothing while it fits.
+   */
+  private prePassed(): Frame {
+    const fit = { cols: this.cols, rows: ROWS };
+    const snapshot = this.screen.snapshot();
+    const stripped = collapseBlankRunsToFit(
+      collapseLongBlankRuns(this.cols <= C64_COLUMNS ? stripNarrowNoise(snapshot) : snapshot),
+      fit,
+    );
+    return this.dropOldest ? dropOldestEntriesToFit(stripped, fit) : stripped;
+  }
+
   /** The adapted rows of the frame as it stands, memoised until the next write. */
   private adapted(): AdaptedView {
     if (this.adaptedCache && this.adaptedCache.seq === this.writeSeq) return this.adaptedCache;
@@ -373,25 +410,8 @@ export class C64DoorFrameAdapter {
     // a phrase blanked here costs the caller no rows at all, where blanking it
     // afterwards would leave the rows the ladder had already spent. See
     // c64-door-noise.ts for what qualifies and why it is not a ladder rung.
-    // Three steps, each a no-op on a screen that already fits: blank what the
-    // door wrote into slots nobody filled, squeeze runs of blank rows, and -
-    // only where the door declared it - drop the oldest entries of its list.
-    // See c64-door-noise.ts and c64-door-fit.ts for what each one may touch.
-    const fit = { cols: this.cols, rows: ROWS };
-    // A rule that matches TEXT needs a width gate; a reducer that MEASURES
-    // does not. stripNarrowNoise blanks what a door writes into slots nobody
-    // filled in - and every one of those was removed because it cost a
-    // 40-column caller ROWS he did not have. An 80-column caller has the
-    // room the 80-column ANSI caller has and sees what that caller sees.
-    // The two fit reducers beside it stay ungated: they ask how tall the
-    // screen came out and do nothing while it fits.
-    const snapshot = this.screen.snapshot();
-    const stripped = collapseBlankRunsToFit(
-      collapseLongBlankRuns(this.cols <= C64_COLUMNS ? stripNarrowNoise(snapshot) : snapshot),
-      fit,
-    );
-    const source = this.dropOldest ? dropOldestEntriesToFit(stripped, fit) : stripped;
-
+    // It lives in prePassed(), which is also what sourceView() hands a test.
+    //
     // THE FILE-RECORD RUNG. A DIR row a 68K door printed is re-rendered
     // through the SAME interpreter and the SAME Prompts/FILEVIEW.40 the
     // board's own listing uses, so `F` through AquaScan and `F` through the
@@ -406,7 +426,7 @@ export class C64DoorFrameAdapter {
     // reason.
     let ordinal = 0;
     const layout = getFileViewLayout(config.get('dataDir'));
-    const { rows, cursor } = adaptRows(source, {
+    const { rows, cursor } = adaptRows(this.prePassed(), {
       cols: this.cols,
       blockRenderer: fileRecordRung({
         layout,

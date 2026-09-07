@@ -40,7 +40,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-  FrameReconstructor,
   adaptRows,
   applyRule,
   chooseRule,
@@ -63,14 +62,13 @@ import {
   installC64DoorAdapter,
   uninstallC64DoorAdapter,
   c64AdapterFor,
+  type AdaptedView,
+  type C64DoorFrameAdapter,
 } from '../../src/server/c64-door-adapter';
-import { stripNarrowNoise } from '../../src/server/c64-door-noise';
-import { collapseBlankRunsToFit, collapseLongBlankRuns } from '../../src/server/c64-door-fit';
 
 const COLS = 40;
 const ROWS = 25;
 /** The grid a 68K door believes it is painting on. */
-const SOURCE_COLS = 80;
 /** Door output arrives in small pieces; 64 bytes is what the identity pin uses. */
 const CHUNK = 64;
 /** A quiet gap after this many chunks, so the tick cuts a frame mid-stream. */
@@ -224,6 +222,8 @@ interface Wire {
   timersMade: number;
   emitRestored: boolean;
   emitter: any;
+  /** The adapter that ran, captured before uninstall so its view can be asked for. */
+  adapter: C64DoorFrameAdapter | null;
 }
 
 /**
@@ -265,6 +265,9 @@ async function drive(
   const timers = censusTimers();
   try {
     if (useAdapter) installC64DoorAdapter(emitter, session, { tickMs: TICK_MS, maxFrameMs: MAX_FRAME_MS });
+    // Held before the uninstall below takes it off the emitter: the suite asks
+    // this object what the caller saw instead of rebuilding the pipeline.
+    const adapter = c64AdapterFor(emitter);
     const stopAfter = opts.stopAfterChunks ?? Infinity;
     let n = 0;
     for (let i = 0; i < text.length && n < stopAfter; i += CHUNK, n++) {
@@ -280,6 +283,7 @@ async function drive(
       timersMade: timers.made,
       emitRestored: emitter.emit === recorder,
       emitter,
+      adapter,
     };
   } finally {
     timers.restore();
@@ -519,8 +523,8 @@ function windowStart(rows: ReadonlyArray<{ cells: Cell[] }>): number {
   return Math.max(0, contentEnd - ROWS);
 }
 
-function shownFrame(source: Frame): Frame {
-  const { rows, cursor } = adaptRows(source, { cols: COLS });
+function shownFrame(view: AdaptedView): Frame {
+  const { rows, cursor } = view;
   const top = windowStart(rows);
   return makeFrame(COLS, ROWS, rows.slice(top, top + ROWS).map((r) => r.cells), {
     x: Math.max(0, Math.min(COLS - 1, cursor.x)),
@@ -528,31 +532,21 @@ function shownFrame(source: Frame): Frame {
   });
 }
 
-/** The 80x25 screen the adapter's own FrameReconstructor holds when the door stops, chunked identically. */
-function reconstruct(text: string): Frame {
-  const screen = new FrameReconstructor({ cols: SOURCE_COLS, rows: ROWS });
-  for (let i = 0; i < text.length; i += CHUNK) screen.write(text.slice(i, i + CHUNK));
-  return screen.snapshot();
-}
-
 // ------------------------------------------------------------- the cases
 
 describe.each(Object.keys(manifest))('fixture %s end to end', (id) => {
   const text = fixtureText(id);
-  // The SAME two pre-passes the adapter runs before the ladder
-  // (C64DoorFrameAdapter.adapted -> stripNarrowNoise -> collapseBlankRunsToFit;
-  // the third, dropOldestEntriesToFit, is per-door and off here because this
-  // suite installs the adapter without C64_DROP_OLDEST). This suite rebuilds the
-  // adapter's pipeline stage by stage, so a stage added there has to be added
-  // here too or the two copies disagree - which is exactly what happened when
-  // the noise strip landed and ctop/conftop's oracle stopped matching. Applied
-  // ONCE, to the reconstructed frame, because the strip is a pure function of
-  // the frame: every adaptRows below then sees what the adapter sees.
-  const source = collapseBlankRunsToFit(
-    collapseLongBlankRuns(stripNarrowNoise(reconstruct(text))),
-    { cols: COLS, rows: ROWS },
-  );
-  const adapted = shownFrame(source);
+
+  // What the ladder folded and what it produced, ASKED FOR rather than
+  // rebuilt. This suite used to re-run the pre-passes itself
+  // (stripNarrowNoise -> collapseLongBlankRuns -> collapseBlankRunsToFit) and
+  // broke twice in one day, each time a stage was added on the adapter's side
+  // and not here - and it would have broken a third time on petsciiColumns,
+  // whose width gate lives inside those pre-passes. The adapter now exposes
+  // both halves (sourceView / adaptedView) and there is one copy again.
+  let source: Frame;
+  let view: AdaptedView;
+  let adapted: Frame;
 
   let c64: Wire;
   let ansiWith: Wire;
@@ -561,6 +555,9 @@ describe.each(Object.keys(manifest))('fixture %s end to end', (id) => {
 
   beforeAll(async () => {
     c64 = await drive(text, petsciiSession(), true);
+    source = c64.adapter!.sourceView();
+    view = c64.adapter!.adaptedView();
+    adapted = shownFrame(view);
     ansiWith = await drive(text, ansiSession(), true);
     ansiWithout = await drive(text, ansiSession(), false);
     machine = oracle(c64.bytes);
@@ -585,7 +582,7 @@ describe.each(Object.keys(manifest))('fixture %s end to end', (id) => {
   });
 
   it('every adapted row is exactly 40 cells and every cursor address the adapter emitted is inside 25x40', () => {
-    for (const row of adaptRows(source, { cols: COLS }).rows) {
+    for (const row of view.rows) {
       expect({ source: row.source, rule: row.rule, cells: row.cells.length })
         .toEqual({ source: row.source, rule: row.rule, cells: COLS });
     }
@@ -618,7 +615,7 @@ describe.each(Object.keys(manifest))('fixture %s end to end', (id) => {
     // A row whose text contains a glyph PETSCII has no code for cannot be
     // asserted through the oracle as a run; the cell-for-cell check above
     // already covers every mappable cell of it.
-    const all = adaptRows(source, { cols: COLS }).rows;
+    const all = view.rows;
     const top = windowStart(all);
     const tail = all.slice(top, top + ROWS);
     const assertable = tail
