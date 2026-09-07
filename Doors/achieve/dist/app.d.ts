@@ -56,6 +56,8 @@ export interface ApiResult<T> {
     body: T | null;
     error?: string;
     detail?: string;
+    /** Seconds from the server's Retry-After, when it sent one. */
+    retryAfter?: number;
 }
 interface DoorSession {
     bbs: any;
@@ -92,6 +94,17 @@ export declare function familiesOf(catalog: CatalogResponse): string[];
 /** The whole catalog grouped by family; a withheld hidden one shows as the server sent it (???). */
 export declare function catalogLines(catalog: CatalogResponse, width: number, unlocked?: Set<string>): string[];
 export declare function leaderboardLines(lb: LeaderboardResponse, width: number): string[];
+/**
+ * How long the caller actually has to wait.
+ *
+ * This said "try again in a minute" whatever the server answered, and the
+ * limits it reports are per HOUR: registration is 3 an hour and verification
+ * 10. A sysop who registered three times while his mail was being fixed was
+ * told to wait a minute, waited many, and was refused every time - reported
+ * as "it says too many requests try again in a minute but it was many minutes
+ * ago". The server sends Retry-After; this says what it says.
+ */
+export declare function rateLimitWords(retryAfter?: number): string;
 /** A refusal or a fault, in the caller's words. */
 export declare function explain(result: ApiResult<unknown>): string;
 export declare function footerHints(compact: CompactProfile, inView: boolean): Array<{

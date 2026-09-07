@@ -71,6 +71,22 @@ describe('ACHIEVE builders', () => {
     }
     expect(explain({ status: 200, body: {} })).toBe('');
     expect(explain({ status: 500, body: null, error: 'internal_error' })).toBe('The server said internal_error.');
+  });
+
+  it('says how long a refused caller really has to wait', () => {
+    // Registration is 3 an HOUR. This said "try again in a minute" whatever
+    // the server answered, so a sysop waited minutes and was refused each
+    // time - the message was the only thing that was wrong.
+    expect(explain({ status: 429, body: null, error: 'rate_limited', retryAfter: 2400 }))
+      .toBe('Too many requests; try again in 40 minutes.');
+
+    expect(explain({ status: 429, body: null, error: 'rate_limited', retryAfter: 45 }))
+      .toBe('Too many requests; try again in 45 seconds.');
+
+    // Nothing from the server means no number is invented.
+    const vague = explain({ status: 429, body: null, error: 'rate_limited' });
+    expect(vague).toContain('Too many requests');
+    expect(vague).not.toContain('minute');
     expect(footerHints(compact, true).map((h: { key: string }) => h.key)).toEqual(['Up/Dn', 'Q']);
     expect(footerHints(wide, false).map((h: { key: string }) => h.key)).toEqual(['Up/Down', 'Enter', 'Q']);
   });

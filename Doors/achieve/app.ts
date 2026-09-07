@@ -37,7 +37,9 @@ export interface CatalogAchievement { id: string; name: string; description: str
 export interface CatalogResponse { revision: string; achievements: CatalogAchievement[] }
 export interface LeaderboardRow { rank: number; handle: string; points: number; unlocks: number }
 export interface LeaderboardResponse { scope: string; period: string; season: string | null; rows: LeaderboardRow[] }
-export interface ApiResult<T> { status: number; body: T | null; error?: string; detail?: string }
+export interface ApiResult<T> { status: number; body: T | null; error?: string; detail?: string;
+  /** Seconds from the server's Retry-After, when it sent one. */
+  retryAfter?: number }
 
 interface DoorSession {
   bbs: any;
@@ -133,6 +135,25 @@ export function leaderboardLines(lb: LeaderboardResponse, width: number): string
   return out;
 }
 
+/**
+ * How long the caller actually has to wait.
+ *
+ * This said "try again in a minute" whatever the server answered, and the
+ * limits it reports are per HOUR: registration is 3 an hour and verification
+ * 10. A sysop who registered three times while his mail was being fixed was
+ * told to wait a minute, waited many, and was refused every time - reported
+ * as "it says too many requests try again in a minute but it was many minutes
+ * ago". The server sends Retry-After; this says what it says.
+ */
+export function rateLimitWords(retryAfter?: number): string {
+  if (retryAfter === undefined || retryAfter <= 0) {
+    return 'Too many requests; the server is holding this address off for a while.';
+  }
+  if (retryAfter < 90) return `Too many requests; try again in ${retryAfter} seconds.`;
+  const minutes = Math.ceil(retryAfter / 60);
+  return `Too many requests; try again in ${minutes} minutes.`;
+}
+
 /** A refusal or a fault, in the caller's words. */
 export function explain(result: ApiResult<unknown>): string {
   switch (result.error) {
@@ -146,7 +167,7 @@ export function explain(result: ApiResult<unknown>): string {
     case 'handle_taken': return 'That handle belongs to someone else on the server.';
     case 'bad_handle': return 'A handle is 3 to 16 characters, letters and digits.';
     case 'bad_email': return 'That is not an address the server can mail.';
-    case 'rate_limited': return 'Too many requests; try again in a minute.';
+    case 'rate_limited': return rateLimitWords(result.retryAfter);
     case 'unreachable': case 'timeout': return 'The achievements server did not answer.';
     case 'not_json': return 'The achievements server is not answering as itself.';
     case 'unauthenticated': case 'board_suspended': return 'This board is not accepted by the server (sysop: check the key).';

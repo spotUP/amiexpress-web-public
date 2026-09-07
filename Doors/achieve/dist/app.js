@@ -6,6 +6,7 @@ exports.profileLines = profileLines;
 exports.familiesOf = familiesOf;
 exports.catalogLines = catalogLines;
 exports.leaderboardLines = leaderboardLines;
+exports.rateLimitWords = rateLimitWords;
 exports.explain = explain;
 exports.footerHints = footerHints;
 exports.createApp = createApp;
@@ -109,6 +110,25 @@ function leaderboardLines(lb, width) {
     }
     return out;
 }
+/**
+ * How long the caller actually has to wait.
+ *
+ * This said "try again in a minute" whatever the server answered, and the
+ * limits it reports are per HOUR: registration is 3 an hour and verification
+ * 10. A sysop who registered three times while his mail was being fixed was
+ * told to wait a minute, waited many, and was refused every time - reported
+ * as "it says too many requests try again in a minute but it was many minutes
+ * ago". The server sends Retry-After; this says what it says.
+ */
+function rateLimitWords(retryAfter) {
+    if (retryAfter === undefined || retryAfter <= 0) {
+        return 'Too many requests; the server is holding this address off for a while.';
+    }
+    if (retryAfter < 90)
+        return `Too many requests; try again in ${retryAfter} seconds.`;
+    const minutes = Math.ceil(retryAfter / 60);
+    return `Too many requests; try again in ${minutes} minutes.`;
+}
 /** A refusal or a fault, in the caller's words. */
 function explain(result) {
     switch (result.error) {
@@ -122,7 +142,7 @@ function explain(result) {
         case 'handle_taken': return 'That handle belongs to someone else on the server.';
         case 'bad_handle': return 'A handle is 3 to 16 characters, letters and digits.';
         case 'bad_email': return 'That is not an address the server can mail.';
-        case 'rate_limited': return 'Too many requests; try again in a minute.';
+        case 'rate_limited': return rateLimitWords(result.retryAfter);
         case 'unreachable':
         case 'timeout': return 'The achievements server did not answer.';
         case 'not_json': return 'The achievements server is not answering as itself.';

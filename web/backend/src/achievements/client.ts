@@ -67,6 +67,15 @@ export interface ApiResult<T = unknown> {
   /** The server's error code on a refusal, or a transport description. */
   error?: string;
   detail?: string;
+  /**
+   * Seconds to wait, from a 429.
+   *
+   * The surface sends it as `Retry-After` AND in the body, and this dropped
+   * both - so ACHIEVE told a sysop "try again in a minute" for a limit that
+   * is three registrations an HOUR. He waited many minutes and was refused
+   * every time. A door can only say what it is given.
+   */
+  retryAfter?: number;
 }
 
 export async function apiRequest<T = unknown>(
@@ -100,8 +109,17 @@ export async function apiRequest<T = unknown>(
       return { status: 502, body: null, error: 'not_json', detail: 'the server answered something that is not the API (is its achievements surface on?)' };
     }
     if (res.status >= 400) {
-      const e = (parsed ?? {}) as { error?: string; detail?: string };
-      return { status: res.status, body: null, error: e.error ?? String(res.status), detail: e.detail };
+      const e = (parsed ?? {}) as { error?: string; detail?: string; retryAfter?: number };
+      // The body first, the header as the fallback: both carry it, and a
+      // proxy that strips headers must not cost the caller the number.
+      const header = Number(res.headers?.get?.('retry-after'));
+      const retryAfter = typeof e.retryAfter === 'number' ? e.retryAfter
+        : Number.isFinite(header) && header > 0 ? header
+        : undefined;
+      return {
+        status: res.status, body: null, error: e.error ?? String(res.status), detail: e.detail,
+        ...(retryAfter !== undefined ? { retryAfter } : {}),
+      };
     }
     return { status: res.status, body: parsed as T };
   } catch (err) {
