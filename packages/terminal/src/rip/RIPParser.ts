@@ -4,6 +4,15 @@
  * Parses RIPscrip command sequences from text input.
  * RIP commands start with !| followed by command character(s) and parameters.
  * Numbers are encoded in MegaNums (base-36) format.
+ *
+ * NOT the model to edit a .rip file with, and not what the board renders
+ * with. RIPtermJS (./vendor) draws every screen a caller sees, and
+ * `web/backend/src/screens/rip-document.ts` is what reads and writes one.
+ * Measured on this board's 149 .rip files on 2026-09-07: parsing with this
+ * module and printing the commands back reproduces none of them, and its
+ * argument widths for 1M (mouse fields) and 1U (buttons) disagree with the
+ * renderer's own table - it reads their one-digit flags as two. What is left
+ * here serves the pipeline test that proves RIP text reaches the terminal.
  */
 
 import { RIPCommand, RIPCommandType } from './RIPTypes';
