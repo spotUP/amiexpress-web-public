@@ -58,6 +58,12 @@ export function currentSettings(): AchievementsSettings {
   if (cachedSettings && now - cachedSettings.at < SETTINGS_TTL_MS) return cachedSettings.value;
   let value: AchievementsSettings;
   try {
+    // The achievements BOARD KEY is a secret: the admin writes it to the
+    // ENCRYPTED system_config row (config-repository's encryptSecret) and
+    // bbsConfig.info has no half of it at all. There are no two stores here
+    // to disagree, which is the entire thing the rule guards against, and
+    // reading the file would read a key that is not in it.
+    // config-source-ok: a secret with no bbsConfig.info half.
     value = achievementsSettings((db as any).getConfigRepository?.()?.getSystemConfig?.() ?? null);
   } catch {
     value = achievementsSettings(null);

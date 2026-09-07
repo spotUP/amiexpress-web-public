@@ -74,6 +74,13 @@ const NOT_ON_DISK: Record<string, string> = {
   vapid_private_key: 'Web push signing key; encrypted in the database, decrypted on read.',
   vapid_contact_email: 'Web push contact; a database column, not a tooltype.',
   webhook_include_pii: 'GDPR toggle for what a webhook payload may carry; a database column, not a tooltype.',
+  // The achievements trio travels together, and it travels with the KEY. The
+  // board key is a secret and lives encrypted in the database; splitting its
+  // server URL and its off-switch onto bbsConfig.info would put one feature's
+  // settings in two stores, which is the exact bug the config-source rule
+  // exists to stop. express.e has no tooltype for any of them either.
+  achievements_server_url: 'Companion to the encrypted board key; database column, not a tooltype.',
+  achievements_disabled: 'The board key\'s off-switch; database column beside the key it disables.',
 };
 
 describe('System Configuration field coverage', () => {
