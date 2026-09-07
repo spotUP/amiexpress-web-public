@@ -65,6 +65,7 @@ const DISCONNECT_GRACE_MS = 15000;
 // import from socket-handlers.
 export { enableGameMode, disableGameMode } from '../services/game-mode.service';
 import { deliversKeyEvents } from '../services/key-event-capable';
+import { reportLogout } from '../achievements/sites';
 
 /**
  * Convert special key names to their corresponding characters or escape sequences
@@ -1140,6 +1141,8 @@ console.log(`[DISCONNECT] finalizeDisconnectCleanup: no userId, session.nodeId=$
     } catch (error) {
 console.error('[BBSEvent] Error emitting logout event:', error);
     }
+    // Achievements (SP2): the minutes snapshot and the PETSCII session. Non-throwing.
+    reportLogout(session as any, session.user, session.connectionStart ? Math.floor((Date.now() - session.connectionStart) / 1000) : undefined);
 
     // Run logoff batches (mirror logon batch runner)
     try {

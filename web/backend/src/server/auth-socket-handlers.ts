@@ -33,6 +33,7 @@ import { beginLogoff } from './logoff';
 import { getBoardConfig } from '../services/bbs-config-file.service';
 import { config as appConfig } from '../config';
 import { installPetsciiModelChoke, disposePetsciiSessionModel } from '../utils/petscii-session-model';
+import { reportPresence } from '../achievements/sites';
 
 /**
  * Check password strength against MIN_PASSWORD_LENGTH and MIN_PASSWORD_STRENGTH tooltypes.
@@ -1035,6 +1036,9 @@ console.log(`[AUTH] Forced password change completed for user ${session.forcedPw
             });
           } catch (_e) { /* non-fatal */ }
         }
+
+        // Achievements (SP2): the same presence facts the regular login reports.
+        if (sessionUserObj) reportPresence(session as any, sessionUserObj);
 
         // Session preferences (confRJoin, currentConf etc.) normally set between
         // callersLog and the bulletin flow in the regular login handler.

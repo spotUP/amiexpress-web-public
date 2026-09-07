@@ -499,6 +499,7 @@ function applyAcpSideEffect(session: BBSSession, acp: { code: number; targetNode
 // (DreamDoorLibrary/dreamdoor-vectors) the same way.
 export { AMIGA_68K_DOOR_TYPES } from '../constants/door-types';
 import { AMIGA_68K_DOOR_TYPES as AMIGA_TYPES } from '../constants/door-types';
+import { withDoorReporting } from '../achievements/sites';
 
 export function isAmiga68kDoorType(t: string): boolean {
   return (AMIGA_TYPES as readonly string[]).includes((t || '').toUpperCase());
@@ -1751,6 +1752,13 @@ export async function applyPostDoorMenuAction(
  * Execute door game/utility
  */
 export async function executeDoor(socket: any, session: BBSSession, door: Door) {
+  // Achievements (SP2): door.play at launch and door.minutes when it is over,
+  // for every door type and whatever the outcome - one site, not one per
+  // executor. Non-throwing around the real thing.
+  return withDoorReporting(session as any, String(door.command || door.id || door.name || ''), () => executeDoorUnreported(socket, session, door));
+}
+
+async function executeDoorUnreported(socket: any, session: BBSSession, door: Door) {
 console.log('Executing door:', door.name);
 
   // Defensive: an adapter can NEVER survive one door into the next, or into

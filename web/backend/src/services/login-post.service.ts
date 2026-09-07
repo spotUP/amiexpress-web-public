@@ -44,6 +44,7 @@ import { getSystemTime } from "../utils/date-time.util";
 import { beginLogoff } from "../server/logoff";
 import { getBoardConfig } from './bbs-config-file.service';
 import { config as appConfig } from '../config';
+import { reportPresence } from "../achievements/sites";
 
 export interface PostAuthContext {
   /**
@@ -487,6 +488,10 @@ export async function runPostAuthLogin(
   }
 
   // Conference / preference defaults.
+  // Achievements (SP2): the presence facts and the snapshots, beside the
+  // webhook and never inside its try. Non-throwing.
+  reportPresence(session as any, { ...user, lastLoginBeforeUpdate: ctx.lastLoginBeforeUpdate });
+
   session.confRJoin = user.autoRejoin || 1;
   (session as any).msgBaseRJoin = 1;
   (session as any).currentConf = user.autoRejoin || 1;
