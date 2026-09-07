@@ -171,6 +171,11 @@ export class Door {
       // announcer over a host without the bridge is a no-op, so a door
       // never has to guard the call (core/announce.ts).
       announce: createAnnouncer(bbs),
+      // The door's own achievements (SP3). The board owns the credential and
+      // the namespace check; a host without the method is a no-op, so a door
+      // never has to guard the call.
+      achievement: (type: string, opts?: { value?: number; key?: string }): boolean =>
+        typeof bbs?.achievement === 'function' ? bbs.achievement(type, opts ?? {}) : false,
       socket,
       bbsSession,
       session: bbsSession, // alias used by older arcade door code (ctx.session)

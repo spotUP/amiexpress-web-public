@@ -226,10 +226,9 @@ export async function createApp(session: DoorSession): Promise<void> {
   };
   let chrome = attachDoorChrome(theme, chromeOptions as never);
 
-  const setHints = (): void => {
-    try { chrome.stop(); } catch { /* it is going anyway */ }
-    chrome = attachDoorChrome(theme, { ...chromeOptions, hints: footerHints(compact, inView) } as never);
-  };
+  // The footer only. Re-attaching the whole chrome to change one line put
+  // the rail back to frame zero on every Enter (sysop, 2026-09-07).
+  const setHints = (): void => { chrome.setHints(footerHints(compact, inView)); };
   const note = (text: string): void => { noteRow.setContent(`  ${text}`); screen.render(); };
   const paint = (): void => {
     const rows = viewLines.slice(viewOffset, viewOffset + panelHeight).map((l) => clip(l, panelWidth));

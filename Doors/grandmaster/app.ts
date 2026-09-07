@@ -4220,6 +4220,20 @@ export class GrandmasterApp {
     if (submission.rank) parts.push(`Rank: #${submission.rank}`);
     if (submission.isPersonalBest) parts.push('NEW PB!');
 
+    // The player's own achievements (SP3). One event per fact, each the
+    // door's own namespace; the board owns the credential and drops them
+    // when the caller is not a player. Never throws, never blocks the game.
+    try {
+      const bbs = this.session.bbs as { achievement?: (t: string, o?: { key?: string; value?: number }) => boolean };
+      if (typeof bbs.achievement === 'function') {
+        bbs.achievement('door.gmaster.game', { key: modeName.toLowerCase() });
+        if (typeof result.grade === 'string' && result.grade.trim().toUpperCase().startsWith('S')) {
+          bbs.achievement('door.gmaster.grade', { key: 's' });
+        }
+        if (result.score >= 1000000) bbs.achievement('door.gmaster.big_score', { key: '1m' });
+      }
+    } catch { /* a score is not worth a crash */ }
+
     try {
       this.session.bbs.emitCustomEvent('score', parts.join(' | '), {
         score: result.score,

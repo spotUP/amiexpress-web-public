@@ -72,6 +72,9 @@ const deps = (over: Partial<FlusherDeps> = {}): FlusherDeps => ({
     const id = userIdForEmail(rawDb, email);
     if (id) addUnlockNotice(rawDb, id, unlock, Math.floor(now / 1000));
   },
+  // The doors' own manifests are a suite of their own (door-catalog.test.ts);
+  // here they would eat the scripted answer for the events request.
+  publishDoorCatalogs: async () => ({ pushed: [], unchanged: [], refused: [] }),
   onNotLinked: (rawDb, email, now) => {
     const { addLinkNotice } = require('../../src/achievements/outbox.repository');
     const id = userIdForEmail(rawDb, email);

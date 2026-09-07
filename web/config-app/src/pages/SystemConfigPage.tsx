@@ -1378,9 +1378,9 @@ export function SystemConfigPage() {
                 type="text"
                 {...register('achievements_server_url')}
                 className="input-field w-full"
-                placeholder="https://doors.uprough.net"
+                placeholder="empty = https://doors.uprough.net"
               />
-              <p className="text-xs text-content-secondary mt-1">The door server's base address; /achievements/v1 is appended.</p>
+              <p className="text-xs text-content-secondary mt-1">Leave empty for the public server (https://doors.uprough.net). /achievements/v1 is appended.</p>
             </div>
             <div>
               <label htmlFor="achievements_board_key" className="label flex items-center gap-2">

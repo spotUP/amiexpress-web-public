@@ -61,7 +61,9 @@ describe('a door reporting an achievement', () => {
     // The command falls back to the input line, without its arguments.
     const fallback = apiFor({ commandText: 'ARKANOID -WINDOW' });
     expect(fallback.achievement('door.arkanoid.clear')).toBe(true);
-    expect(events().map((e) => e.type)).toEqual(['door.gmaster.win', 'door.arkanoid.clear']);
+    // Two events written in the same second: the outbox orders by
+    // created_at then ref, and a ref is random, so this is a SET.
+    expect(events().map((e) => e.type).sort()).toEqual(['door.arkanoid.clear', 'door.gmaster.win']);
     // A caller without an email: not a player, no row, no throw.
     const nobody = createBBSApi({ id: 's', emit: () => {}, on: () => {} } as any, { user: { id: 'u2', username: 'x' }, nodeId: 1, currentDoorName: 'GMASTER' } as any);
     expect(nobody.achievement('door.gmaster.win')).toBe(false);

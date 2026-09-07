@@ -34,6 +34,7 @@ import {
 import type { OutboxRow } from './outbox.repository';
 import type { EventIn, EventsResponse, UnlockOut } from './contract';
 import { deliverNotice } from './notices';
+import { registerDoorCatalogs } from './door-catalog';
 
 export const FLUSH_INTERVAL_MS = 5_000;
 export const FLUSH_BATCH = 100;
@@ -48,6 +49,11 @@ export interface FlusherDeps {
   onUnlock: (rawDb: Database.Database, email: string, unlock: UnlockOut, now: number) => void;
   /** The server refused this address as not linked. Default: one link notice. */
   onNotLinked: (rawDb: Database.Database, email: string, now: number) => void;
+  /**
+   * Publish the doors' own achievements, once per process. A seam so a
+   * suite about the outbox is not also a suite about door manifests.
+   */
+  publishDoorCatalogs: (settings: AchievementsSettings, fetchImpl: FetchLike, log: (line: string) => void) => Promise<unknown>;
 }
 
 export interface PlayerRow { id: string; username: string; gdprConsentAt: number | string | null }
@@ -108,6 +114,7 @@ export function productionFlusherDeps(io: unknown): FlusherDeps {
       const userId = userIdForEmail(rawDb, email);
       if (userId) deliverNotice(io, userId, 'link', null, { rawDb: () => rawDb, now: () => now });
     },
+    publishDoorCatalogs: (settings, fetchImpl, log) => registerDoorCatalogs(settings, undefined, fetchImpl, log),
   };
 }
 
@@ -125,6 +132,7 @@ export const defaultFlusherDeps: FlusherDeps = {
     const userId = userIdForEmail(rawDb, email);
     if (userId) addLinkNotice(rawDb, userId, Math.floor(now / 1000));
   },
+  publishDoorCatalogs: (settings, fetchImpl, log) => registerDoorCatalogs(settings, undefined, fetchImpl, log),
 };
 
 export interface FlushOutcome {
@@ -138,6 +146,11 @@ export interface FlushOutcome {
 }
 
 let lastPurgeAt = 0;
+let doorCatalogsDone = false;
+
+export function _resetDoorCatalogsDoneForTests(): void {
+  doorCatalogsDone = false;
+}
 
 /** One pass. Returns what happened, for the log and the tests. */
 export async function flushOnce(deps: FlusherDeps = defaultFlusherDeps): Promise<FlushOutcome> {
@@ -147,6 +160,18 @@ export async function flushOnce(deps: FlusherDeps = defaultFlusherDeps): Promise
   if (!settings.enabled || !rawDb) return out;
   const nowMs = deps.now();
   const now = Math.floor(nowMs / 1000);
+
+  // The doors' own achievements, once per process, the first time this board
+  // is configured (door-catalog.ts). A door with none costs one scan.
+  if (!doorCatalogsDone) {
+    doorCatalogsDone = true;
+    try {
+      await deps.publishDoorCatalogs(settings, deps.fetch, deps.log);
+    } catch (err) {
+      doorCatalogsDone = false;
+      deps.log(`[WARN] achievements: door catalogs not published: ${(err as Error).message}`);
+    }
+  }
 
   if (now - lastPurgeAt > 3600) {
     lastPurgeAt = now;

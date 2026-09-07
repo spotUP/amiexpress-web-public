@@ -332,18 +332,53 @@ export interface MastheadTarget {
  * NOT something to copy into a 68K door, which pays ~45ms of emulation per
  * message. See the cost table at the top of this file.
  */
+/**
+ * What attachMasthead gives back: call it to stop, or re-theme it in place.
+ *
+ * A callable rather than an object so every existing caller - which just
+ * calls the return value to stop - is unchanged.
+ */
+export interface MastheadHandle {
+  (): void;
+  /**
+   * Swap the colours and the rail glyphs without touching the timer: the
+   * run keeps its phase, so a theme change does not restart the slide.
+   * A theme that GAINS or LOSES its rail needs a fresh attach; `railed`
+   * says which kind this handle is.
+   */
+  retheme(next: Theme, rail: (text: string) => string, ink: (text: string) => string): void;
+  /** True when this masthead has a moving rail to re-colour. */
+  railed: boolean;
+}
+
 export function attachMasthead(
   target: MastheadTarget,
   theme: Theme,
   options: MastheadOptions
-): () => void {
-  const { title, width, rail, ink, render, seed = 1, entryFrames = 6 } = options;
+): MastheadHandle {
+  const { title, width, render, seed = 1, entryFrames = 6 } = options;
+  // Mutable, so a theme change re-colours the run WITHOUT restarting it:
+  // stopping and re-attaching puts the rail back to frame zero, which is
+  // the visible jump a caller reads as "the slashes redraw" every time the
+  // door changes anything (sysop, 2026-09-07).
+  let rail = options.rail;
+  let ink = options.ink;
+  let railChars = theme.rail;
 
   // No rail: draw the plain title once and start nothing.
-  if (!theme.rail) {
+  if (!railChars) {
     target.setContent(` ${title} `);
     render();
-    return () => { /* nothing was started */ };
+    const idle = (() => { /* nothing was started */ }) as MastheadHandle;
+    idle.retheme = (next, nextRail, nextInk) => {
+      rail = nextRail;
+      ink = nextInk;
+      railChars = next.rail;
+      target.setContent(` ${title} `);
+      render();
+    };
+    idle.railed = false;
+    return idle;
   }
 
   // One column short of `width` is the caller's job, but the run is sized
@@ -356,7 +391,7 @@ export function attachMasthead(
 
   const line = (): string => {
     const shown = barWidth === null ? runWidth : Math.min(barWidth, runWidth);
-    const run = railStream(theme.rail, shown, tick, seed).padEnd(runWidth);
+    const run = railStream(railChars as string, shown, tick, seed).padEnd(runWidth);
     return `${rail(run)} ${ink(title)}`;
   };
 
@@ -404,7 +439,7 @@ export function attachMasthead(
     }, 60);
   }
 
-  return () => {
+  const handle = (() => {
     if (entryTimer) clearInterval(entryTimer);
     if (slideTimer) clearInterval(slideTimer);
     entryTimer = null;
@@ -413,7 +448,15 @@ export function attachMasthead(
     barWidth = null;
     tick = 0;
     draw();
+  }) as MastheadHandle;
+  handle.retheme = (next, nextRail, nextInk) => {
+    rail = nextRail;
+    ink = nextInk;
+    if (next.rail) railChars = next.rail;
+    draw();
   };
+  handle.railed = true;
+  return handle;
 }
 
 /** One hint in a footer: the key to press, and what it does. */
@@ -565,6 +608,15 @@ export interface DoorChrome {
   stop(): void;
   /** Replace the hints and repaint the footer row. */
   setHints(hints: readonly FooterHint[]): void;
+  /**
+   * Wear another theme without restarting the rail.
+   *
+   * The masthead keeps its phase (MastheadHandle.retheme) and the footer is
+   * repainted; the glitches are restarted, which is invisible at their
+   * cadence. A theme that gains or loses its rail cannot be swapped in
+   * place: `setTheme` returns false and the door re-attaches for that one.
+   */
+  setTheme(next: Theme, styles?: ThemeStyles): boolean;
   /** Replace the trailing text and repaint the footer row. */
   setFooterSuffix(text: string): void;
   /** The footer row exactly as it currently stands. */
@@ -610,7 +662,8 @@ export function attachDoorChrome(
     entryFrames,
   } = options;
 
-  const s = options.styles ?? themeStyles(theme);
+  let s = options.styles ?? themeStyles(theme);
+  let current = theme;
   // The one gate - unless the door is a SHOWCASE. The theme pickers exist to
   // show what a theme does, and a picker that shows a still rail on a C64 is
   // showing the wrong thing: "none of the theme doors display the animated
@@ -628,7 +681,7 @@ export function attachDoorChrome(
 
   // The branding tail is decoration, and a 40-column row has no spare cells
   // for it - the hints win.
-  const railTail = compact.collapseChrome ? '' : s.rail;
+  let railTail = compact.collapseChrome ? '' : s.rail;
 
   const paintFooter = () => {
     footerText =
@@ -641,10 +694,11 @@ export function attachDoorChrome(
   }
 
   // The masthead. At XXS the title still draws - it just never moves.
+  let mastheadHandle: MastheadHandle | null = null;
   let stopMasthead: () => void = () => { /* nothing was started */ };
   if (masthead) {
     if (animated) {
-      stopMasthead = attachMasthead(masthead, theme, {
+      mastheadHandle = attachMasthead(masthead, theme, {
         title,
         // One column short of the screen: writing a row's final cell leaves
         // the terminal in a pending-wrap state and clips the last glyph.
@@ -655,6 +709,7 @@ export function attachDoorChrome(
         seed,
         entryFrames,
       });
+      stopMasthead = mastheadHandle;
     } else {
       masthead.setContent(` ${title} `);
       render();
@@ -696,9 +751,9 @@ export function attachDoorChrome(
         }
       : (glitch as GlitchTarget);
 
-  const stopGlitches =
+  let stopGlitches =
     animated && glitchTarget
-      ? attachGlitches(glitchTarget, theme, render, glitchOptions ?? {})
+      ? attachGlitches(glitchTarget, current, render, glitchOptions ?? {})
       : () => { /* nothing was started */ };
 
   let stopped = false;
@@ -716,6 +771,27 @@ export function attachDoorChrome(
     setHints(next) {
       hints = next;
       if (footer) { paintFooter(); render(); }
+    },
+    setTheme(next, styles) {
+      if (stopped) return false;
+      // A rail that appears or disappears changes what the masthead IS, not
+      // how it is painted; the caller re-attaches for that.
+      if (Boolean(current.rail) !== Boolean(next.rail)) return false;
+      current = next;
+      s = styles ?? themeStyles(next);
+      railTail = compact.collapseChrome ? '' : s.rail;
+      mastheadHandle?.retheme(next, s.accent, s.ink);
+      if (!animated && masthead) masthead.setContent(` ${title} `);
+      if (glitchTarget && animated) {
+        // The glitches carry the theme's own damage table, so they do get a
+        // fresh timer - at their cadence nobody sees the seam, and the old
+        // one puts the row it damaged back before it goes.
+        try { stopGlitches(); } catch { /* it is going anyway */ }
+        stopGlitches = attachGlitches(glitchTarget, next, render, glitchOptions ?? {});
+      }
+      if (footer) paintFooter();
+      render();
+      return true;
     },
     setFooterSuffix(text) {
       suffix = text;

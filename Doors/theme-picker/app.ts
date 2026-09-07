@@ -275,9 +275,16 @@ export async function createApp(session: DoorSession): Promise<void> {
     (footer as any).style = footerStyle(next);
     (mastheadRow as any).style = { fg: next.tokens.dim, bg: next.tokens.ground };
 
-    // The rail and the glitches belong to the theme that is leaving.
-    try { chrome.stop(); } catch { /* it is going anyway */ }
-    chrome = attachDoorChrome(next, { ...chromeOptions, styles: s } as never);
+    // Re-coloured IN PLACE. Stopping the chrome and attaching a new one put
+    // the rail back to frame zero, so the slashes visibly redrew on every
+    // keypress in the list - "the ///'s redraw for every time i press enter
+    // on an entry in the list" (sysop, 2026-09-07). setTheme keeps the run's
+    // phase; it refuses only a theme that gains or loses its rail, and that
+    // one gets the old path.
+    if (!chrome.setTheme(next, s)) {
+      try { chrome.stop(); } catch { /* it is going anyway */ }
+      chrome = attachDoorChrome(next, { ...chromeOptions, styles: s } as never);
+    }
 
     screen.render();
   };

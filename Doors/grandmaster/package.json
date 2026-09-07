@@ -57,6 +57,71 @@
     "minPlayers": 1,
     "maxPlayers": 64,
     "version": "1.0.0",
-    "runtime": "hybrid"
+    "runtime": "hybrid",
+    "achievements": [
+      {
+        "id": "door.gmaster.first_game",
+        "name": "First Drop",
+        "description": "Finish a game of GRANDMASTER",
+        "tier": "bronze",
+        "points": 5,
+        "rule": {
+          "op": "first",
+          "type": "door.gmaster.game"
+        }
+      },
+      {
+        "id": "door.gmaster.games_100",
+        "name": "Hundred Games",
+        "description": "Finish a hundred games of GRANDMASTER",
+        "tier": "silver",
+        "points": 10,
+        "rule": {
+          "op": "count",
+          "type": "door.gmaster.game",
+          "n": 100
+        }
+      },
+      {
+        "id": "door.gmaster.every_mode",
+        "name": "All Comers",
+        "description": "Finish a game in five different GRANDMASTER modes",
+        "tier": "gold",
+        "points": 25,
+        "rule": {
+          "op": "distinct",
+          "type": "door.gmaster.game",
+          "dim": "key",
+          "n": 5
+        }
+      },
+      {
+        "id": "door.gmaster.grade_s",
+        "name": "Graded",
+        "description": "Reach an S grade",
+        "tier": "gold",
+        "points": 25,
+        "rule": {
+          "op": "count",
+          "type": "door.gmaster.grade",
+          "key": "s",
+          "n": 1
+        }
+      },
+      {
+        "id": "door.gmaster.million",
+        "name": "Seven Figures",
+        "description": "Score a million points in one game",
+        "tier": "platinum",
+        "points": 50,
+        "hidden": true,
+        "rule": {
+          "op": "count",
+          "type": "door.gmaster.big_score",
+          "key": "1m",
+          "n": 1
+        }
+      }
+    ]
   }
 }

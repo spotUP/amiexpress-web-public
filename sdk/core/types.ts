@@ -758,6 +758,18 @@ export interface DoorContext {
   session?: any;
 
   /** Close the door and return to BBS */
+  /**
+   * Report one of THIS door's own achievement events (achievements SP3).
+   * The type is `door.<command>.<slug>` for the running door; anything else
+   * is refused by the board. Returns true when it was recorded, false when
+   * the board has no achievements server, the caller is not a player, or
+   * the type is not this door's. Never throws.
+   *
+   * Optional so a door built against an older SDK - and the legacy context
+   * copy under sdk/src - still satisfies the type; Door.ts always supplies
+   * it, so `ctx.achievement?.(...)` is the only guard a door ever needs.
+   */
+  achievement?: (type: string, opts?: { value?: number; key?: string }) => boolean;
   close: () => void;
 }
 

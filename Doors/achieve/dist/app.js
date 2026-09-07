@@ -193,13 +193,9 @@ async function createApp(session) {
         render: () => screen.render(),
     };
     let chrome = (0, theme_1.attachDoorChrome)(theme, chromeOptions);
-    const setHints = () => {
-        try {
-            chrome.stop();
-        }
-        catch { /* it is going anyway */ }
-        chrome = (0, theme_1.attachDoorChrome)(theme, { ...chromeOptions, hints: footerHints(compact, inView) });
-    };
+    // The footer only. Re-attaching the whole chrome to change one line put
+    // the rail back to frame zero on every Enter (sysop, 2026-09-07).
+    const setHints = () => { chrome.setHints(footerHints(compact, inView)); };
     const note = (text) => { noteRow.setContent(`  ${text}`); screen.render(); };
     const paint = () => {
         const rows = viewLines.slice(viewOffset, viewOffset + panelHeight).map((l) => clip(l, panelWidth));

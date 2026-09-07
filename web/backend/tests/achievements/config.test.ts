@@ -8,7 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ConfigRepository } from '../../src/database/config-repository';
-import { achievementsSettings } from '../../src/achievements/config';
+import { achievementsSettings, DEFAULT_ACHIEVEMENTS_SERVER } from '../../src/achievements/config';
 import { ACHIEVEMENTS_CONTRACT_VERSION } from '../../src/achievements/contract';
 import { isSensitiveField, isDatabaseOnlyField } from '../../src/utils/secrets-encryption.util';
 
@@ -62,6 +62,20 @@ describe('achievements configuration', () => {
     expect(s.boardKey).toBe('uprough.abc');
     repo.updateSystemConfig({ achievements_disabled: false });
     expect(achievementsSettings(repo.getSystemConfig()).enabled).toBe(true);
+  });
+
+  it('a key with no address means the public server', () => {
+    // The address field's placeholder was the only place that string
+    // appeared, and a sysop read it as a value: the key saved, the address
+    // did not, and the door said the board was not configured (2026-09-07).
+    repo.updateSystemConfig({ achievements_board_key: 'REDACTED' });
+    const s = achievementsSettings(repo.getSystemConfig());
+    expect(s.serverUrl).toBe(DEFAULT_ACHIEVEMENTS_SERVER);
+    expect(s.enabled).toBe(true);
+    // A typed address still wins, and no key means no server at all.
+    repo.updateSystemConfig({ achievements_server_url: 'https://doors.example.invalid' });
+    expect(achievementsSettings(repo.getSystemConfig()).serverUrl).toBe('https://doors.example.invalid');
+    expect(achievementsSettings({ achievements_board_key: '' } as any).serverUrl).toBe('');
   });
 
   it("the board id is the key's prefix and nothing else", () => {
