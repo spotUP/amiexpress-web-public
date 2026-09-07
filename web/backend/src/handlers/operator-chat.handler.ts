@@ -32,6 +32,7 @@ import {
   socketIoSocketFor,
 } from '../server/session-emitter-registry';
 import { getGrumpySysopResponse, getGrumpyBotIntroMessage, planNaturalTyping, type AIProviderConfig, DEFAULT_AI_CONFIG } from './grumpy-sysop-bot.handler';
+import { buildBoardCard } from './sysop-ai/board-card';
 import {
   renderPicker,
   handlePickerInput,
@@ -1091,7 +1092,8 @@ function processBotQueue(
     nodeId: page.nodeId,
     conferenceName: page.conferenceName,
     timeOnline: Math.floor((Date.now() - page.createdAt.getTime()) / 1000),
-    messageHistory: chatSession.botMessageHistory || []
+    messageHistory: chatSession.botMessageHistory || [],
+    boardCard: chatSession.boardCard as string | undefined,
   };
   context.messageHistory.push({ role: 'user', content: lastMsg });
   chatSession.botMessageHistory = context.messageHistory;
@@ -1172,7 +1174,8 @@ console.log('[Operator Chat] Bot busy, queuing message');
         nodeId: page.nodeId,
         conferenceName: page.conferenceName,
         timeOnline: Math.floor((Date.now() - page.createdAt.getTime()) / 1000),
-        messageHistory: (chatSession as any).botMessageHistory || []
+        messageHistory: (chatSession as any).botMessageHistory || [],
+        boardCard: (chatSession as any).boardCard as string | undefined,
       };
       context.messageHistory.push({ role: 'user', content: message });
       (chatSession as any).botMessageHistory = context.messageHistory;
@@ -1442,6 +1445,13 @@ console.log(`[Operator Chat] WARNING: No chat session found to mark as bot-contr
     // not a caption in the layout. It goes out through the same path as
     // every reply, with the caller's lines queued behind it meanwhile.
     if (chatSession) {
+      // The board card: what this board is and who this caller is, read
+      // from the board once now, carried on the chat, in every prompt.
+      try {
+        (chatSession as any).boardCard = await buildBoardCard(userSession);
+      } catch (err) {
+console.log(`[Operator Chat] Page ${pageId}: no board card (${(err as Error).message})`);
+      }
       const intro = getGrumpyBotIntroMessage();
       (chatSession as any).isBotControlled = true;
       (chatSession as any).botMessageHistory = [{ role: 'bot', content: intro }];
@@ -1679,6 +1689,10 @@ function reviveBotChat(repository: OperatorChatRepository, pageId: string): Chat
   (chatSession as any).isBotControlled = true;
   (chatSession as any).botMessageHistory = [];
   activeChatSessions.set(pageId, chatSession);
+  const revivedCaller = userSessions.get(String(page.userId));
+  if (revivedCaller) {
+    void buildBoardCard(revivedCaller).then((card) => { (chatSession as any).boardCard = card; }).catch(() => undefined);
+  }
 console.log(`[Operator Chat] Revived bot chat ${pageId} from its DB row after a restart`);
   return chatSession;
 }
