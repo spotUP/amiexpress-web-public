@@ -191,6 +191,12 @@ export class Message extends Box {
     if (this.screen) {
       this.screen.saveFocus?.();
       this.screen.focusPush?.(this);
+      // The modal contract, the same one Question and Prompt hold: while this
+      // dialog is up, the door's own `screen.key()` bindings must not see the
+      // caller's keys, or dismissing a message with `q` quits the door
+      // instead. Screen._handleKey consults trapFocus before the focused
+      // element.
+      (this.screen as any).trapFocus?.(this);
       // Also trap navigation keys to prevent them from leaking to elements behind
       if (!this._trapCleanup) {
         this._trapCleanup = trapModalInput(this);
@@ -219,6 +225,7 @@ export class Message extends Box {
     // Restore focus state when modal is hidden
     if (this.screen) {
       this.screen.restoreFocus?.();
+      (this.screen as any).releaseFocusTrap?.(this);
     }
 
     // Cleanup trap handlers

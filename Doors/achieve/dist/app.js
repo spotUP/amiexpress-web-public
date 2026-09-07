@@ -210,11 +210,20 @@ async function createApp(session) {
     };
     /** A prompt, awaited. null when cancelled. */
     const ask = (title, text, value = '') => new Promise((resolve) => {
+        // No height: the widget knows what its own children need, and asking
+        // for less than that drew the buttons on top of the input field - the
+        // `@` of an email address was the first thing they covered.
         const p = new blessed_1.Prompt({
-            parent: screen, top: 'center', left: 'center', width: Math.min(screenWidth - 2, 44), height: 10,
+            parent: screen, top: 'center', left: 'center', width: Math.min(screenWidth - 2, 44),
             border: { type: 'line' }, label: ` ${title} `, text, value, tags: false,
         });
         p.showInput(undefined, undefined, (err, v) => {
+            // The dialog is finished with; leaving it parented keeps a hidden
+            // element with live key handlers on the screen for the whole session.
+            try {
+                p.destroy?.();
+            }
+            catch { /* already gone */ }
             list.focus();
             resolve(err || v === undefined ? null : String(v).trim());
         });

@@ -21,6 +21,7 @@ import { makeModalResponsive, trapModalInput } from '../utils/modal-helpers';
 import type { ResponsiveState } from '../core/responsive-mixin';
 import type { BreakpointName } from '../core/responsive-constants';
 import { calculateDialogWidth, MIN_TOUCH_HEIGHT, DIALOG_EDGE_PADDING } from '../core/responsive-constants';
+import { confirmButtonStyle } from './confirm-modal';
 
 export interface PromptOptions extends BoxOptions {
   text?: string;
@@ -31,6 +32,12 @@ export interface PromptOptions extends BoxOptions {
   /** Mobile width (default: calculated based on screen) */
   mobileWidth?: number | string;
 }
+
+/**
+ * The shortest this dialog can be drawn without its children overlapping:
+ * 2 border + 2 padding + 2 message + 3 input + 3 buttons.
+ */
+export const PROMPT_MIN_HEIGHT = 12;
 
 export class Prompt extends Box {
   private messageText: Box;
@@ -49,8 +56,20 @@ export class Prompt extends Box {
   private _mobileButtonHeight: number = 3;
 
   constructor(options: PromptOptions = {}) {
-    // Force fixed height - 'shrink' doesn't work well with nested elements
-    const height = typeof options.height === 'number' ? options.height : 12;
+    // Force fixed height - 'shrink' doesn't work well with nested elements.
+    //
+    // MINIMUM 12, and it is not a preference: this dialog's children are laid
+    // out at fixed offsets - 2 rows of border, 2 of padding, 2 for the
+    // message, 3 for the input field and 3 for the button row. A caller who
+    // asks for 10 does not get a shorter dialog, he gets the button box drawn
+    // ON TOP of the input field: the buttons are the later siblings, so from
+    // the 7th column onwards they win, and everything the caller typed past
+    // it is invisible. Reported against ACHIEVE on the live board on
+    // 2026-09-07, where an email address stopped painting at the `@`.
+    const height = Math.max(
+      PROMPT_MIN_HEIGHT,
+      typeof options.height === 'number' ? options.height : PROMPT_MIN_HEIGHT,
+    );
 
     const originalParent = options.parent;
     const useOverlay = options.overlay || options.overlayOpacity !== undefined;
@@ -131,7 +150,7 @@ export class Prompt extends Box {
       parent: this,
       bottom: 0,
       left: 'center',
-      width: 26,
+      width: 30,
       height: 3,
       style: {
         bg: dialogBg === 'transparent' ? 'transparent' : dialogBg,
@@ -143,41 +162,35 @@ export class Prompt extends Box {
       parent: this.buttonBox,
       top: 0,
       left: 0,
-      width: 12,
+      width: 14,
       height: 3,
       content: '[ OK ]',
       align: 'center',
       valign: 'middle',
       border: { type: 'line' },
       mouse: true,
-      style: {
-        fg: 'white',
-        bg: 'green',
-        border: { fg: 'green' },
-        hover: { bg: 'lightgreen', fg: 'black' },
-        focus: { bg: 'lightgreen', fg: 'black' },
-      },
+      // ONLY THE ACTIVE BUTTON IS FRAMED. Both buttons used to be drawn
+      // filled and framed at once, so a dialog read as a stack of nested
+      // windows and neither button looked like the one that would answer.
+      // confirmButtonStyle is the SDK's single owner of that rule: idle is
+      // the role colour as TEXT with the frame drawn in the dialog's own
+      // black, so the cells stay put and only the focused button lights up.
+      style: confirmButtonStyle('green') as any,
     });
 
     // Cancel button
     this.cancelButton = new Button({
       parent: this.buttonBox,
       top: 0,
-      left: 14,
-      width: 12,
+      left: 16,
+      width: 14,
       height: 3,
       content: '[ Cancel ]',
       align: 'center',
       valign: 'middle',
       border: { type: 'line' },
       mouse: true,
-      style: {
-        fg: 'white',
-        bg: 'red',
-        border: { fg: 'red' },
-        hover: { bg: 'lightred', fg: 'black' },
-        focus: { bg: 'lightred', fg: 'black' },
-      },
+      style: confirmButtonStyle('red') as any,
     });
 
     this.okButton.on('press', () => {
@@ -275,6 +288,18 @@ export class Prompt extends Box {
     if (this.screen) {
       this.screen.saveFocus?.();
       this.screen.focusPush?.(this);
+      // THE MODAL CONTRACT: while this dialog is up, the screen's own key
+      // handlers must not see the caller's keystrokes. Screen._handleKey runs
+      // registered `screen.key()` handlers BEFORE the focused element, so a
+      // door with a `screen.key(['q','Q','escape'])` quit binding - which is
+      // every door on this board - quit the moment the caller typed a `q` into
+      // this field, or pressed Escape meaning "close the dialog". Reported
+      // against ACHIEVE on the live board, 2026-09-07: entering an email
+      // address dropped the caller out of the door.
+      //
+      // `trapFocus` is what Screen._handleKey consults; Question has done this
+      // since the LiveChat quit dialog leaked arrow keys on 2026-08-26.
+      (this.screen as any).trapFocus?.(this);
       // Also trap navigation keys to prevent them from leaking to elements behind
       if (!this._trapCleanup) {
         this._trapCleanup = trapModalInput(this);
@@ -308,6 +333,9 @@ export class Prompt extends Box {
     // Restore focus state when modal is hidden
     if (this.screen) {
       this.screen.restoreFocus?.();
+      // ...and hand the screen's keys back. releaseFocusTrap ignores a caller
+      // that is not the owner, so a dialog hidden twice costs nothing.
+      (this.screen as any).releaseFocusTrap?.(this);
     }
 
     // Cleanup trap handlers
