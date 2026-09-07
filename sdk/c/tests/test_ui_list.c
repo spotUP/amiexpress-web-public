@@ -335,6 +335,68 @@ static void the_profile_says_which_screens_have_backgrounds(void)
  * it, and it must address exactly the row that was left and the row that
  * was reached.
  */
+/*
+ * The row the cursor LEAVES loses its caret.
+ *
+ * `draw_row` starts a row's text after the caret column so the list does not
+ * shuffle sideways as the cursor moves - and nothing ever wrote over the
+ * caret of the row being left, so a caller who pressed Down four times was
+ * looking at five ">>" marks down the theme picker (sysop, 2026-09-07).
+ *
+ * Asserted on the BYTES of the changed-rows repaint, which is what reaches
+ * the caller: the row left behind must carry blanks where its caret was, and
+ * the row reached must carry the caret.
+ */
+static void the_row_left_behind_loses_its_caret(void)
+{
+    ui_list list = a_list(50, 10);
+    static ansi_buf b;
+    const char *left_row;
+    const char *reached_row;
+
+    list.caret = ">>";
+    ui_list_select(&list, 0);
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ui_list_draw(&list, &b);
+
+    ui_list_move(&list, 1);                    /* row 0 -> row 1 */
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ui_list_draw_changed(&list, &b, 0);
+    frame[b.len] = '\0';
+
+    /* Row 0 is screen row 2 under a border, row 1 is screen row 3. Each
+       repaint addresses its row first, so the text that follows the address
+       belongs to that row. */
+    left_row = strstr(frame, "\033[2;");
+    reached_row = strstr(frame, "\033[3;");
+    assert(left_row != 0);
+    assert(reached_row != 0);
+
+    /* The caret is on the row that has it now... */
+    assert(strstr(reached_row, ">>") != 0);
+
+    /* ...and the row it left is REPAINTED FROM THE CARET COLUMN.
+       
+       Absence of ">>" in these bytes proves nothing - the bug was that the
+       old caret was never written over, so it does not appear in the stream
+       either way (a first version of this test passed on the broken code for
+       exactly that reason). What separates them is WHERE the row starts: the
+       fix addresses the caret column and writes blanks into it, the bug
+       addresses the column after it and leaves the mark standing. */
+    {
+        static char before[512];
+        long n = (long)(reached_row - left_row);
+        if (n > (long)sizeof(before) - 1) n = (long)sizeof(before) - 1;
+        memcpy(before, left_row, (size_t)n);
+        before[n] = '\0';
+        /* Screen row 2, column 2: the first inner cell, which is where the
+           caret of a selected row goes. */
+        assert(strstr(before, "\033[2;2H") != 0);
+        assert(strstr(before, ">>") == 0);
+    }
+    printf("  [OK] the row left behind loses its caret\n");
+}
+
 static void a_cursor_move_repaints_two_rows(void)
 {
     ui_list list = a_list(50, 10);
@@ -392,6 +454,7 @@ int main(void)
     a_screen_with_backgrounds_keeps_the_filled_bar();
     the_profile_says_which_screens_have_backgrounds();
     a_cursor_move_repaints_two_rows();
+    the_row_left_behind_loses_its_caret();
     printf("ui_list: all passed\n");
     return 0;
 }

@@ -148,6 +148,27 @@ static void draw_row(ui_list *list, ansi_buf *b, int row, int inner_left,
        the list does not shuffle sideways as the cursor moves. */
     {
     int lead = list->caret ? (int) ui_printable_len(list->caret) : 0;
+
+        /* ERASE THE CARET CELLS ON A ROW THAT NO LONGER CARRIES IT.
+         *
+         * The text starts AFTER the caret column so the list does not shuffle
+         * sideways - which means nothing was ever written over the caret of
+         * the row the cursor just left. `ui_list_draw_changed` repaints both
+         * rows and the old one kept its ">>" anyway, so every row a caller
+         * visited stayed marked: five carets down the theme picker after four
+         * keypresses (sysop, 2026-09-07).
+         *
+         * Spaces, not a fill: a list row is text on whatever ground the screen
+         * has, and painting a background here would put a band under the one
+         * place the widget is careful not to. */
+        if (!chosen && lead > 0) {
+            char blanks[16];
+            int n = lead < (int) sizeof(blanks) - 1 ? lead : (int) sizeof(blanks) - 1;
+            memset(blanks, ' ', (size_t) n);
+            blanks[n] = '\0';
+            ansi_text_raw(b, screen_row, inner_left, blanks, n);
+        }
+
         ansi_text(b, screen_row, inner_left + lead, text,
                   inner_width - lead);
     }
