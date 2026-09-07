@@ -4,7 +4,7 @@
  */
 import { getCompactProfile } from '../../../../../sdk/engines/ui/blessed/core/responsive-constants';
 const {
-  menuItems, profileLines, catalogLines, leaderboardLines, explain, footerHints, familiesOf, clip,
+  menuItems, profileLines, catalogLines, leaderboardLines, explain, footerHints, familiesOf, clip, accountAction,
 } = require('../../../../../Doors/achieve/app');
 
 const compact = getCompactProfile(40);
@@ -71,6 +71,22 @@ describe('ACHIEVE builders', () => {
     }
     expect(explain({ status: 200, body: {} })).toBe('');
     expect(explain({ status: 500, body: null, error: 'internal_error' })).toBe('The server said internal_error.');
+  });
+
+  it('does not mail a code just because the screen was opened', () => {
+    // Opening the account screen registered every time, and registration is
+    // three an hour. A sysop whose paste was broken opened it three times,
+    // typed nothing, and was locked out for an hour without ever asking for
+    // a second code. A code is sent only when the caller asks for one.
+    expect(accountAction('A1B2C3')).toEqual({ do: 'verify', code: 'A1B2C3' });
+    expect(accountAction('  A1B2C3  ')).toEqual({ do: 'verify', code: 'A1B2C3' });
+
+    // Blank is the ask: this is the ONLY input that spends a registration.
+    expect(accountAction('')).toEqual({ do: 'send-code' });
+    expect(accountAction('   ')).toEqual({ do: 'send-code' });
+
+    // Escape sends nothing at all.
+    expect(accountAction(null)).toEqual({ do: 'cancel' });
   });
 
   it('says how long a refused caller really has to wait', () => {

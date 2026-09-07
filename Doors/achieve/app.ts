@@ -154,6 +154,29 @@ export function rateLimitWords(retryAfter?: number): string {
   return `Too many requests; try again in ${minutes} minutes.`;
 }
 
+/**
+ * What opening the account screen should DO.
+ *
+ * It used to register unconditionally - every visit mailed a code and spent
+ * one of the caller's three registrations an hour. A sysop whose paste was
+ * not working opened the screen three times, entered nothing, and was locked
+ * out for an hour without ever having asked for a second code: "rate limited
+ * again try again in 31 minutes".
+ *
+ * Sending mail is not something a screen does on the way in. The caller types
+ * the code they already have, or leaves it blank to ask for one.
+ */
+export type AccountAction =
+  | { do: 'cancel' }
+  | { do: 'send-code' }
+  | { do: 'verify'; code: string };
+
+export function accountAction(typed: string | null): AccountAction {
+  if (typed === null) return { do: 'cancel' };
+  const code = typed.trim();
+  return code === '' ? { do: 'send-code' } : { do: 'verify', code };
+}
+
 /** A refusal or a fault, in the caller's words. */
 export function explain(result: ApiResult<unknown>): string {
   switch (result.error) {
@@ -313,21 +336,39 @@ export async function createApp(session: DoorSession): Promise<void> {
       ]);
       return;
     }
-    let handle = (session.user?.username ?? 'caller').replace(/[^A-Za-z0-9 ._-]/g, '').slice(0, 16) || 'caller';
-    for (;;) {
-      const reg: ApiResult<unknown> = await api.register(addr, handle);
-      if (reg.status === 202) break;
-      if (reg.error === 'handle_taken' || reg.error === 'bad_handle') {
-        const next = await ask('Handle', `${explain(reg)}\nPick another handle:`, handle);
-        if (!next) return;
-        handle = next;
-        continue;
+    /** Register, and keep asking while the server refuses the handle. */
+    const sendCode = async (): Promise<boolean> => {
+      let handle = (session.user?.username ?? 'caller').replace(/[^A-Za-z0-9 ._-]/g, '').slice(0, 16) || 'caller';
+      for (;;) {
+        const reg: ApiResult<unknown> = await api.register(addr, handle);
+        if (reg.status === 202) return true;
+        if (reg.error === 'handle_taken' || reg.error === 'bad_handle') {
+          const next = await ask('Handle', `${explain(reg)}\nPick another handle:`, handle);
+          if (!next) return false;
+          handle = next;
+          continue;
+        }
+        show([explain(reg)]);
+        return false;
       }
-      show([explain(reg)]);
-      return;
+    };
+
+    // The code comes FIRST. Opening this screen used to mail one every time,
+    // which is how three visits became an hour's lockout.
+    let action = accountAction(await ask(
+      'Mailed code',
+      `Enter the six-character code mailed to\n${clip(addr, 40)}\n\nLeave it blank to have one sent:`,
+    ));
+    if (action.do === 'cancel') return;
+    if (action.do === 'send-code') {
+      if (!(await sendCode())) return;
+      action = accountAction(await ask(
+        'Mailed code',
+        `A six-character code was mailed to\n${clip(addr, 40)}\nEnter it:`,
+      ));
+      if (action.do !== 'verify') return;
     }
-    const code = await ask('Mailed code', `A six-character code was mailed to\n${clip(addr, 40)}\nEnter it:`);
-    if (!code) return;
+    const code = action.code;
     const ver: ApiResult<PlayerProfile> = await api.verify(addr, code);
     if (ver.status !== 200 || !ver.body) { show([explain(ver)]); return; }
     const linkCode = ver.body.linkCode;

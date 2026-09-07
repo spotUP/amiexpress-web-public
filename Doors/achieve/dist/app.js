@@ -7,6 +7,7 @@ exports.familiesOf = familiesOf;
 exports.catalogLines = catalogLines;
 exports.leaderboardLines = leaderboardLines;
 exports.rateLimitWords = rateLimitWords;
+exports.accountAction = accountAction;
 exports.explain = explain;
 exports.footerHints = footerHints;
 exports.createApp = createApp;
@@ -128,6 +129,12 @@ function rateLimitWords(retryAfter) {
         return `Too many requests; try again in ${retryAfter} seconds.`;
     const minutes = Math.ceil(retryAfter / 60);
     return `Too many requests; try again in ${minutes} minutes.`;
+}
+function accountAction(typed) {
+    if (typed === null)
+        return { do: 'cancel' };
+    const code = typed.trim();
+    return code === '' ? { do: 'send-code' } : { do: 'verify', code };
 }
 /** A refusal or a fault, in the caller's words. */
 function explain(result) {
@@ -290,24 +297,37 @@ async function createApp(session) {
             ]);
             return;
         }
-        let handle = (session.user?.username ?? 'caller').replace(/[^A-Za-z0-9 ._-]/g, '').slice(0, 16) || 'caller';
-        for (;;) {
-            const reg = await api.register(addr, handle);
-            if (reg.status === 202)
-                break;
-            if (reg.error === 'handle_taken' || reg.error === 'bad_handle') {
-                const next = await ask('Handle', `${explain(reg)}\nPick another handle:`, handle);
-                if (!next)
-                    return;
-                handle = next;
-                continue;
+        /** Register, and keep asking while the server refuses the handle. */
+        const sendCode = async () => {
+            let handle = (session.user?.username ?? 'caller').replace(/[^A-Za-z0-9 ._-]/g, '').slice(0, 16) || 'caller';
+            for (;;) {
+                const reg = await api.register(addr, handle);
+                if (reg.status === 202)
+                    return true;
+                if (reg.error === 'handle_taken' || reg.error === 'bad_handle') {
+                    const next = await ask('Handle', `${explain(reg)}\nPick another handle:`, handle);
+                    if (!next)
+                        return false;
+                    handle = next;
+                    continue;
+                }
+                show([explain(reg)]);
+                return false;
             }
-            show([explain(reg)]);
+        };
+        // The code comes FIRST. Opening this screen used to mail one every time,
+        // which is how three visits became an hour's lockout.
+        let action = accountAction(await ask('Mailed code', `Enter the six-character code mailed to\n${clip(addr, 40)}\n\nLeave it blank to have one sent:`));
+        if (action.do === 'cancel')
             return;
+        if (action.do === 'send-code') {
+            if (!(await sendCode()))
+                return;
+            action = accountAction(await ask('Mailed code', `A six-character code was mailed to\n${clip(addr, 40)}\nEnter it:`));
+            if (action.do !== 'verify')
+                return;
         }
-        const code = await ask('Mailed code', `A six-character code was mailed to\n${clip(addr, 40)}\nEnter it:`);
-        if (!code)
-            return;
+        const code = action.code;
         const ver = await api.verify(addr, code);
         if (ver.status !== 200 || !ver.body) {
             show([explain(ver)]);

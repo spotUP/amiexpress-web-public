@@ -105,6 +105,27 @@ export declare function leaderboardLines(lb: LeaderboardResponse, width: number)
  * ago". The server sends Retry-After; this says what it says.
  */
 export declare function rateLimitWords(retryAfter?: number): string;
+/**
+ * What opening the account screen should DO.
+ *
+ * It used to register unconditionally - every visit mailed a code and spent
+ * one of the caller's three registrations an hour. A sysop whose paste was
+ * not working opened the screen three times, entered nothing, and was locked
+ * out for an hour without ever having asked for a second code: "rate limited
+ * again try again in 31 minutes".
+ *
+ * Sending mail is not something a screen does on the way in. The caller types
+ * the code they already have, or leaves it blank to ask for one.
+ */
+export type AccountAction = {
+    do: 'cancel';
+} | {
+    do: 'send-code';
+} | {
+    do: 'verify';
+    code: string;
+};
+export declare function accountAction(typed: string | null): AccountAction;
 /** A refusal or a fault, in the caller's words. */
 export declare function explain(result: ApiResult<unknown>): string;
 export declare function footerHints(compact: CompactProfile, inView: boolean): Array<{
