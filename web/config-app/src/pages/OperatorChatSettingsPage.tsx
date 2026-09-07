@@ -47,6 +47,29 @@ interface OperatorChatConfig {
   botThinkTime: number;
 }
 
+/**
+ * The top-level fields the sysop touched, with their current values.
+ *
+ * react-hook-form marks dirtiness per leaf; a nested object (`quietHours`)
+ * or an array (`allowedSecLevels`, `quickReplies`) is sent whole when any
+ * part of it is dirty, because that is how the server stores it. Exported for
+ * the test that pins what a save may carry.
+ */
+export function changedFields(
+  dirtyFields: Record<string, unknown>,
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  const isTouched = (d: unknown): boolean =>
+    d === true ||
+    (Array.isArray(d) && d.some(isTouched)) ||
+    (!!d && typeof d === 'object' && Object.values(d as Record<string, unknown>).some(isTouched));
+  const patch: Record<string, unknown> = {};
+  for (const [key, dirty] of Object.entries(dirtyFields)) {
+    if (isTouched(dirty)) patch[key] = values[key];
+  }
+  return patch;
+}
+
 export function OperatorChatSettingsPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useNotification();
@@ -69,8 +92,10 @@ export function OperatorChatSettingsPage() {
     queryFn: () => apiClient.getAcsLevels(),
   });
 
-  const { register, watch, getValues, setValue } = useForm<OperatorChatConfig>({
+  const { register, watch, getValues, setValue, formState } = useForm<OperatorChatConfig>({
     values: config,
+    // A refetch must not clobber a field the sysop is in the middle of typing.
+    resetOptions: { keepDirtyValues: true },
   });
 
   // Update configuration mutation
@@ -88,7 +113,18 @@ export function OperatorChatSettingsPage() {
     },
   });
 
-  // Auto-save with debounce (500ms delay).
+  // Auto-save with debounce (500ms delay) - ONLY THE FIELDS THAT CHANGED.
+  //
+  // This used to PUT the whole form. The form is a copy of the config taken
+  // when the page loaded; anything written since by anybody else - the TUI
+  // console, a second tab, the sysop's own earlier session, a key set on the
+  // server - sat in that copy as its OLD value, and the next keystroke here
+  // wrote the old value back over every column at once. On 2026-09-07 an
+  // OpenRouter key written at 20:45 was gone at 20:47, taken by a page-timeout
+  // edit in a tab that had loaded before the key existed: "we keep losing
+  // settings made in the admin ui". The server merges over the current row
+  // (operator-chat.repository updateConfig), so sending what the sysop
+  // actually touched is the whole fix.
   //
   // useCallback so the watch subscription below can depend on it honestly:
   // the effect ran once and closed over the first render's autoSave, which
@@ -100,10 +136,11 @@ export function OperatorChatSettingsPage() {
     }
 
     saveTimeoutRef.current = setTimeout(() => {
-      const currentValues = getValues();
-      updateMutation.mutate(currentValues);
+      const patch = changedFields(formState.dirtyFields as Record<string, unknown>, getValues() as unknown as Record<string, unknown>);
+      if (Object.keys(patch).length === 0) return;
+      updateMutation.mutate(patch as unknown as OperatorChatConfig);
     }, 500);
-  }, [getValues, updateMutation]);
+  }, [getValues, formState, updateMutation]);
 
   // Watch all fields and trigger auto-save
   const quietHoursEnabled = watch('quietHours.enabled');
