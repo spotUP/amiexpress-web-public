@@ -1141,10 +1141,23 @@ export function buildScreenIndex(baseDir: string, themeSlug?: string): ScreenInd
           // symlink (/var -> /private/var), and one side canonicalised alone
           // makes the relative path climb out of the board.
           const targetRel = path.relative(onDiskSpelling(baseDir), onDiskSpelling(target));
-          readers.set(targetRel, [...(readers.get(targetRel) ?? []), {
-            ...existing[0],
-            via: 'include',
-          }]);
+          // EVERY reader of the including file, not its first. `Logon100.txt`
+          // and `logon20.txt` both include the same art; crediting the first
+          // reader of each gave the art two readers that both said "20-99",
+          // and a shared node screen with sixty readers credited the include
+          // to one node. Keyed so a file reached by two routes is not listed
+          // twice for the same caller.
+          const already = readers.get(targetRel) ?? [];
+          const key = (r: ScreenReader) => `${r.screen}|${r.scope}|${r.id ?? ''}|${r.serves ?? ''}|${r.screenType ?? ''}`;
+          const seen = new Set(already.map(key));
+          const added: ScreenReader[] = [];
+          for (const parent of existing) {
+            const reader: ScreenReader = { ...parent, via: 'include' };
+            if (seen.has(key(reader))) continue;
+            seen.add(key(reader));
+            added.push(reader);
+          }
+          if (added.length > 0) readers.set(targetRel, [...already, ...added]);
           if (!walked.has(targetRel)) next.push(targetRel);
         }
       }
