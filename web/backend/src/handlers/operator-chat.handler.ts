@@ -1042,8 +1042,14 @@ console.error('[Operator Chat] Bot response error:', err);
     // Position cursor at input line, ready for next keystroke
     output += '\x1b[24;1H\x1b[2K';
 
-    // Queue when bot is typing to avoid interleaving; flush when bot finishes
-    if ((chatSession as any).botBusy) {
+    // THE CALLER'S OWN LINE IS NEVER HELD BACK. botBusy is set the moment
+    // the caller's message arrives - before the bot has said anything - so
+    // deferring on it put the caller's line UNDER the reply to it: driven
+    // on 2026-09-07 the screen read "[RB] Oh great, another lamer..." and
+    // then, two lines later, "hello grumpy". The queue exists for a sysop's
+    // line landing while the bot is mid-write; a caller writing their own
+    // message is not that case.
+    if ((chatSession as any).botBusy && senderType !== 'user') {
       if (!(chatSession as any).userPendingAnsi) (chatSession as any).userPendingAnsi = [];
       (chatSession as any).userPendingAnsi.push({ userId: page.userId, ansi: output });
     } else {
@@ -1365,10 +1371,19 @@ console.error('[Operator Chat] No pageId in session tempData');
     return;
   }
 
-  const chatSession = activeChatSessions.get(pageId);
+  let chatSession: ChatSession | null | undefined = activeChatSessions.get(pageId);
   if (!chatSession) {
+    // activeChatSessions is memory, and the board restarts on every deploy
+    // - eight times on the night of 2026-09-06. A page the bot had taken
+    // is still `accepted` by `bot` in the DB, but its session was gone, so
+    // every line the caller typed after the restart hit this branch and
+    // vanished: "neither the openrouter ai or the grumpy sysop answers".
+    // The row has everything the session needs; rebuild it here.
+    chatSession = reviveBotChat(repository, pageId);
+    if (!chatSession) {
 console.error(`[Operator Chat] Chat session not found: ${pageId}`);
-    return;
+      return;
+    }
   }
 
   await sendChatMessage(
@@ -1381,6 +1396,36 @@ console.error(`[Operator Chat] Chat session not found: ${pageId}`);
     message,
     session.nodeId || 0
   );
+}
+
+/**
+ * A bot-held chat, rebuilt from its DB row after the process that held it
+ * in memory has gone. Returns null for anything that is not a live bot
+ * chat - a human sysop's chat cannot be revived, because the human's
+ * socket is what made it one.
+ */
+function reviveBotChat(repository: OperatorChatRepository, pageId: string): ChatSession | null {
+  const page = repository.getPageRequest(pageId);
+  if (!page || page.status !== PageStatus.ACCEPTED || page.sysopId !== 'bot') return null;
+
+  const chatSession: ChatSession = {
+    pageId,
+    userId: page.userId,
+    userHandle: page.userHandle,
+    userNodeId: page.nodeId,
+    sysopId: 'bot',
+    sysopHandle: page.sysopHandle || 'GrumpyBot',
+    sysopSessionId: 'grumpy-bot-session',
+    startedAt: page.acceptedAt ? new Date(page.acceptedAt) : getSystemTime(),
+    lastActivity: getSystemTime(),
+    messages: repository.getChatMessages(pageId),
+    isTyping: { user: false, sysop: false }
+  };
+  (chatSession as any).isBotControlled = true;
+  (chatSession as any).botMessageHistory = [];
+  activeChatSessions.set(pageId, chatSession);
+console.log(`[Operator Chat] Revived bot chat ${pageId} from its DB row after a restart`);
+  return chatSession;
 }
 
 /**
