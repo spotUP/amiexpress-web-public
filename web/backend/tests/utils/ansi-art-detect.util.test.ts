@@ -177,9 +177,13 @@ describe('isAnsiArtScreen', () => {
   });
 
   /**
-   * The floor is 6 because Screens/Logon24hrs.txt - the art file on this
-   * board with the FEWEST art rows - has exactly 6 of 12. Raising it would
-   * start reflowing real pictures.
+   * The floor was chosen from Screens/Logon24hrs.txt, the art file on this
+   * board with the FEWEST art rows: 6 of 12 when the rule was written.
+   * Raising the floor above what a real art screen scores starts reflowing
+   * pictures, so what this pins is the RELATION, not the screen - the file
+   * itself is the sysop's to redraw, and it gained a row when the Tango
+   * logos landed (7 of 13 on 2026-09-07). Equality here read as a change to
+   * the rule every time the art changed.
    */
   it('the art-row floor stays under the board\'s thinnest art screen (Logon24hrs)', () => {
     const rows = fs
@@ -231,6 +235,31 @@ describe('petsciiTextScreenPlan', () => {
     expect(petsciiTextScreenPlan(BLOCK_ART, petscii)).toBe('art-skip');
     expect(petsciiTextScreenPlan(POSITIONED, petscii)).toBe('art-skip');
     expect(petsciiTextScreenPlan(PROSE, petscii)).toBe('reflow');
+  });
+
+  /**
+   * The 80-column PETSCII caller (petscii80, 2026-09-07). Both other answers
+   * exist to survive a FORTY-column screen - `art-skip` because 80-column art
+   * folded to 40 is smeared, `reflow` because prose has to fold - and a
+   * caller who answered `P8` has the columns the screen was drawn for.
+   * "p8 skips all 80 column ansi screens but it shouldn't need to" (sysop,
+   * live board).
+   */
+  it('an 80-column PETSCII caller passes everything through, art included', () => {
+    const wide = { petsciiMode: true, petsciiColumns: 80 };
+
+    expect(petsciiTextScreenPlan(BLOCK_ART, wide)).toBe('passthrough');
+    expect(petsciiTextScreenPlan(POSITIONED, wide)).toBe('passthrough');
+    expect(petsciiTextScreenPlan(PROSE, wide)).toBe('passthrough');
+    // ...and a menu, which the 40-column caller reflows, needs no exception.
+    expect(petsciiTextScreenPlan(BLOCK_ART, wide, true)).toBe('passthrough');
+  });
+
+  it('a C64 is still a C64, however its width field reads', () => {
+    // 40 is the default, and anything that is not the wide screen is a C64:
+    // a stale browser width must never turn the fold off.
+    expect(petsciiTextScreenPlan(BLOCK_ART, { petsciiMode: true, petsciiColumns: 40 })).toBe('art-skip');
+    expect(petsciiTextScreenPlan(BLOCK_ART, { petsciiMode: true, petsciiColumns: undefined })).toBe('art-skip');
   });
 
   /**

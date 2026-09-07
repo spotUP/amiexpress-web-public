@@ -61,6 +61,7 @@
  * middle of an empty band - the most robust point available.
  */
 import { looksLikeAsciiArt, positionsCursorAbsolutely } from './ascii-art.util';
+import { C64_COLUMNS, petsciiColumnsOf } from '../amiga-emulation/xim/screen-width.util';
 
 /** ASCII token per the strategy plan - the board never uses emoji or icons in BBS output. */
 export const ANSI_ART_SKIPPED_NOTICE = '[80-COLUMN ANSI SCREEN - SKIPPED]\r\n';
@@ -100,7 +101,17 @@ export function isAnsiArtScreen(content: string): boolean {
 /**
  * What `displayScreen` should do with a text screen for this session.
  * `'passthrough'` for every non-PETSCII session, which is what keeps the
- * 80-column path byte-identical.
+ * 80-column path byte-identical - and for an 80-COLUMN PETSCII session,
+ * which is the same screen for the same reason.
+ *
+ * THE WIDTH IS THE WHOLE RULE HERE. Both other answers exist to survive a
+ * FORTY-column screen: `art-skip` because 80-column art reflowed to 40 is
+ * smeared, `reflow` because prose has to fold. A caller who answered `P8`
+ * has the 80 columns the screen was drawn for, so nothing is folded and
+ * nothing is skipped - he sees what the ANSI caller sees, in Commodore
+ * glyphs, because the transducer converts the same bytes downstream.
+ * Reported live on 2026-09-07: "p8 skips all 80 column ansi screens but it
+ * shouldn't need to".
  *
  * `isMenu` forces `'reflow'`: a MENU is the one screen a caller cannot do
  * without. Screens/MENU.TXT scores 0.45 and MENU250.TXT 0.74 - both art -
@@ -112,10 +123,11 @@ export function isAnsiArtScreen(content: string): boolean {
  */
 export function petsciiTextScreenPlan(
   content: string,
-  session: { petsciiMode?: boolean } | undefined,
+  session: { petsciiMode?: boolean; petsciiColumns?: number } | undefined,
   isMenu: boolean = false
 ): 'art-skip' | 'reflow' | 'passthrough' {
   if (session?.petsciiMode !== true) return 'passthrough';
+  if (petsciiColumnsOf(session) > C64_COLUMNS) return 'passthrough';
   if (isMenu) return 'reflow';
   return isAnsiArtScreen(content) ? 'art-skip' : 'reflow';
 }
