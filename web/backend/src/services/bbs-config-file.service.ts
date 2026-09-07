@@ -483,6 +483,25 @@ function removeTooltype(info: { tooltypes: { key: string }[] }, key: string): vo
 }
 
 /**
+ * Keys the icon and the text companion do not agree on.
+ *
+ * Only keys BOTH files carry: a key absent from one is a boolean the sysop
+ * switched off, which is the presence semantics the loader already handles,
+ * not a disagreement.
+ */
+export function disagreeingKeys(
+  icon: Map<string, string>,
+  text: Map<string, string>,
+): string[] {
+  const out: string[] = [];
+  for (const [key, value] of icon.entries()) {
+    if (!text.has(key)) continue;
+    if (text.get(key) !== value) out.push(key);
+  }
+  return out.sort();
+}
+
+/**
  * Load system configuration from bbsConfig.info
  */
 export function loadBBSConfig(bbsRoot: string): BBSConfigData {
@@ -490,6 +509,8 @@ export function loadBBSConfig(bbsRoot: string): BBSConfigData {
   const configTextPath = configPath + '.txt';
 
   const mergedToolTypes = new Map<string, string>();
+  /** What the ICON said, kept only to report where it disagrees with the companion. */
+  const iconToolTypes = new Map<string, string>();
 
   if (fs.existsSync(configPath)) {
     try {
@@ -505,6 +526,7 @@ export function loadBBSConfig(bbsRoot: string): BBSConfigData {
         if (mergedToolTypes.has(key)) continue;
         mergedToolTypes.set(key, rawValue);
       }
+      for (const [key, value] of mergedToolTypes.entries()) iconToolTypes.set(key, value);
 console.log('[BBSConfig] Loaded configuration from bbsConfig.info');
     } catch (error) {
 console.error('[BBSConfig] Failed to read bbsConfig.info:', error);
@@ -514,27 +536,45 @@ console.error('[BBSConfig] Failed to read bbsConfig.info:', error);
   if (fs.existsSync(configTextPath)) {
     const textToolTypes = parseTooltypesTextFile(configTextPath);
 
-    // Both files are complete snapshots - the writer builds the text
-    // companion from the whole merged tooltype set - so the NEWER of the two
-    // is the truth and the older one is stale, not a partial override.
+    // Both files are complete snapshots - the writer builds the text companion
+    // from the whole merged tooltype set - so one of them is the truth and the
+    // other is stale, not a partial override.
     //
     // Merging the text file over the icon looked equivalent and was not: a
     // boolean tooltype is expressed by its PRESENCE, so switching one off
     // removes it from the text file, and a merge then read it straight back
     // out of the icon. Turning any flag off silently did nothing on a board
     // whose icon the writer cannot update.
-    const textIsNewer =
-      !fs.existsSync(configPath) ||
-      fs.statSync(configTextPath).mtimeMs >= fs.statSync(configPath).mtimeMs;
+    //
+    // THE COMPANION WINS, and it is not a question of which file is newer.
+    // saveBBSConfig writes the companion FIRST and always, then attempts the
+    // icon - and the icon attempt is allowed to fail: an icon whose tooltype
+    // array is not in the standard layout is left untouched by design, with a
+    // warning that says "the icon file no longer matches it". Ordering by
+    // mtime therefore let the icon's stale bytes outrank the sysop's own save
+    // whenever the icon write DID land, milliseconds later, carrying values
+    // the update could not reach.
+    //
+    // The live board 2026-09-07: the companion said SMTP_PORT=587, the icon
+    // said 465 with SMTP_HOST listed twice and length bytes baked into three
+    // keys. 465 is not reachable from that host, so the achievements mail hung
+    // and the drain died - and the effective port changed between two runs
+    // minutes apart, because it was decided by a millisecond.
+    mergedToolTypes.clear();
+    for (const [key, value] of textToolTypes.entries()) {
+      mergedToolTypes.set(key, value);
+    }
+console.log('[BBSConfig] Loaded configuration from bbsConfig.info.txt');
 
-    if (textIsNewer) {
-      mergedToolTypes.clear();
-      for (const [key, value] of textToolTypes.entries()) {
-        mergedToolTypes.set(key, value);
-      }
-console.log('[BBSConfig] Loaded configuration from bbsConfig.info.txt (newer than the icon)');
-    } else {
-console.log('[BBSConfig] Ignoring bbsConfig.info.txt; the icon file is newer');
+    // A disagreement is worth saying out loud. It was silent before, and the
+    // only symptom was a setting that would not stick.
+    const disagreements = disagreeingKeys(iconToolTypes, textToolTypes);
+    if (disagreements.length > 0) {
+console.warn(
+        `[BBSConfig] bbsConfig.info disagrees with the companion on ${disagreements.length} key(s) ` +
+        `and the companion wins: ${disagreements.slice(0, 8).join(', ')}` +
+        `${disagreements.length > 8 ? ', ...' : ''}. Re-create the icon to bring them back together.`
+      );
     }
   }
 
