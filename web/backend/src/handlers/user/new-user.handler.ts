@@ -991,12 +991,85 @@ async function continueRegistrationFlow(socket: Socket, session: any) {
     return;
   }
 
+  /*
+   * express.e:30356 - `IF (runSysCommand('SCRIPT','')<>RESULT_SUCCESS)`: the
+   * board first offers a SYSCMD door named SCRIPT, and only when there is no
+   * such command does it read the Node<n>/Script<baud> text. The port went
+   * straight to the text, so there was no way to put a DOOR at this point in
+   * a new caller's life. That door is where onboarding goes - theme setup,
+   * the achievements sign-up - because a script line can only ask and print.
+   * Register it as Commands/SysCmd/SCRIPT.info and it runs here; when it
+   * answers success the text questionnaire is skipped, exactly as on the Amiga.
+   */
+  // The account FIRST - express.e:30096-30112 assigns the slot before
+  // doNewUserQuestions. The port used to ask first and create after, which
+  // meant nothing a script launched could see the caller: processCommand
+  // ignores a session that is not LOGGEDON, and a theme picker or the
+  // achievements sign-up has no user to work on.
+  //
+  // Once only: the questionnaire's confirm handler comes back through here
+  // when it finds no questionnaire on the session, and the caller by then
+  // already HAS an account.
+  if (!session.user && !(await createAccountRecord(socket, session))) return;
+
+  if (await scriptDoorRan(socket, session)) {
+    await enterBoard(socket, session);
+    return;
+  }
+
   const questionnaireStarted = await beginQuestionnaire(socket, session);
   if (questionnaireStarted) {
     return;
   }
 
-  await createAccount(socket, session);
+  await enterBoard(socket, session);
+}
+
+/**
+ * Into the board: JOINED and the pause that leads to the bulletins.
+ *
+ * Split from account creation so the questionnaire - and any onboarding it
+ * runs - happens with the account IN EXISTENCE and BEFORE the caller is
+ * shown the board, which is express.e's order (30096-30112: the slot is
+ * assigned, then doNewUserQuestions, then the logon carries on).
+ */
+async function enterBoard(socket: Socket, session: any): Promise<void> {
+  delete session.newUserData;
+  // The questionnaire ran in its own sub-states; the board starts here at the
+  // bulletins, which is where account creation used to leave the caller.
+  session.state = BBSState.LOGGEDON;
+  session.subState = LoggedOnSubState.DISPLAY_BULL;
+    try {
+      const { displayScreen, doPause } = require('../screen.handler');
+      const shown = await displayScreen(socket, session, 'JOINED', true, /* silent */ true);
+      if (shown) {
+        if (typeof doPause === 'function') doPause(socket, session);
+      } else {
+        socket.emit('ansi-output', '\r\n\x1b[36mWelcome to the BBS!\x1b[0m\r\n\r\n');
+        socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m\r\n');
+      }
+    } catch (_) {
+      socket.emit('ansi-output', '\r\n\x1b[36mWelcome to the BBS!\x1b[0m\r\n\r\n');
+      socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m\r\n');
+    }
+}
+
+/**
+ * The SCRIPT sys-command, if this board has one. `0` is RESULT_SUCCESS; a
+ * missing command, a refused one or a door that failed all mean the text
+ * questionnaire is what the caller gets, which is express.e's fallback too.
+ */
+async function scriptDoorRan(socket: Socket, session: any): Promise<boolean> {
+  try {
+    // require(), not import: command-execution reaches back into the user
+    // handlers, and the cycle is only harmless when resolved at call time.
+    const { runSysCommand } = require('../command-execution.handler');
+    const result = await runSysCommand(socket, session, 'SCRIPT', '');
+    return result === 0;
+  } catch (error) {
+    console.warn('[NEW USER] SCRIPT sys-command failed; falling back to the text questionnaire:', (error as Error).message);
+    return false;
+  }
 }
 
 /**
@@ -1136,17 +1209,16 @@ export async function handleQuestionnaireConfirmInput(socket: Socket, session: a
   }
 
   socket.emit('ansi-output', 'Yes..\r\n\r\n');
-  // Save questionnaire data BEFORE createAccount deletes session.newUserData
+  // The account was created before the questionnaire began (express.e's
+  // order), so the slot number is already on the session.
   const savedQuestionnaire = questionnaire;
   const savedNewUserData = session.newUserData;
-  // Create account first to get the slot number (express.e:30054-30060 creates user before answers)
-  await createAccount(socket, session);
-  // Now persist questionnaire answers with the correct slot number
   // The slot number is the user's position in USER.DATA (0-indexed)
   const slotNumber = userDatabaseManager.getUserCount() - 1;
   // Temporarily restore newUserData for persistQuestionnaireAnswers
   session.newUserData = savedNewUserData;
   await persistQuestionnaireAnswers(session, slotNumber);
+  await enterBoard(socket, session);
   // Final cleanup
   delete session.newUserData;
 }
@@ -1191,6 +1263,34 @@ async function advanceQuestionnaire(socket: Socket, session: any): Promise<void>
     questionnaire.currentIndex++;
     if (step.type === 'text') {
       questionnaire.transcript.push(step.content);
+      if (step.content.startsWith('~')) {
+        // A line that OPENS with a tilde is MCI, exactly as in a screen file:
+        // `~CC_THEME|` runs the theme picker, `~CC_ACHIEVE|` the achievements
+        // sign-up, `~SS_` pulls a file in. The sysop's ask - "it doesnt even
+        // have to be a door it can run our theme settings etc apps from a
+        // script" - and the reason the account is created before this runs:
+        // processCommand ignores a session that is not LOGGEDON.
+        //
+        // The board's own parser, not a second one, so a door launched here
+        // is the same door with the same subState bookkeeping. The segment
+        // marker is what door exit looks for to know it is INSIDE a flow and
+        // must not draw the menu; it is cleared as soon as the line is done.
+        const { parseMciCodes } = require('../screen.handler');
+        const hadSegments = session.screenSegments;
+        if (!hadSegments) {
+          session.screenSegments = { segments: [], currentIndex: 0, screenName: 'QUESTIONNAIRE', inlineMode: true, isFlowScreen: true };
+        }
+        try {
+          const result = await parseMciCodes(step.content, session, undefined, undefined, undefined, socket);
+          if (result?.parsed && !result.inlineEmitted) socket.emit('ansi-output', `${result.parsed}\r\n`);
+        } catch (error) {
+console.warn('[NEW USER] questionnaire MCI line failed:', step.content, (error as Error).message);
+        } finally {
+          if (!hadSegments) delete session.screenSegments;
+          session.subState = LoggedOnSubState.NEW_USER_SCRIPT;
+        }
+        continue;
+      }
       socket.emit('ansi-output', `${step.content}\r\n`);
       continue;
     }
@@ -1358,7 +1458,7 @@ console.warn('[NEW USER] Failed to load system defaults for new users:', error);
 /**
  * Create the user account in database
  */
-async function createAccount(socket: Socket, session: any) {
+async function createAccountRecord(socket: Socket, session: any): Promise<boolean> {
   const data = session.newUserData;
   setPasswordMask(socket, session, false);
 
@@ -1452,7 +1552,7 @@ console.log(`[SETUP] First user created: ${data.username} - Auto-assigned sysop 
     if (!newUserId) {
       socket.emit('ansi-output', '\r\n\x1b[31mError creating account. Please try again.\x1b[0m\r\n');
       session.state = BBSState.AWAIT;
-      return;
+      return false;
     }
 
     // Trigger webhook for new user registration
@@ -1491,7 +1591,7 @@ console.error('[NewUser] Error running MAIL_ON_NEW_USER:', error);
     if (!newUser) {
       socket.emit('ansi-output', '\r\n\x1b[31mError fetching account. Please try again.\x1b[0m\r\n');
       session.state = BBSState.AWAIT;
-      return;
+      return false;
     }
 
     // DISK-BASED: Append to user.data/keys/misc for Amiga door compatibility.
@@ -1516,7 +1616,6 @@ console.error('[NewUser] Error running MAIL_ON_NEW_USER:', error);
     if (session.shortcuts) session.shortcuts.clear();
 
     // Clean up registration data (questionnaire path saves/restores it)
-    delete session.newUserData;
 
     // Send success to frontend
     socket.emit('login-success', {
@@ -1549,22 +1648,11 @@ console.error('[BBSEvent] Error emitting new user login event:', error);
     // instead of the sysop's screen. Falls back to the hardcoded text
     // if no JOINED file exists, so a fresh install still gives the
     // user *some* feedback.
-    try {
-      const { displayScreen, doPause } = require('../screen.handler');
-      const shown = await displayScreen(socket, session, 'JOINED', true, /* silent */ true);
-      if (shown) {
-        if (typeof doPause === 'function') doPause(socket, session);
-      } else {
-        socket.emit('ansi-output', '\r\n\x1b[36mWelcome to the BBS!\x1b[0m\r\n\r\n');
-        socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m\r\n');
-      }
-    } catch (_) {
-      socket.emit('ansi-output', '\r\n\x1b[36mWelcome to the BBS!\x1b[0m\r\n\r\n');
-      socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m\r\n');
-    }
+    return true;
   } catch (error) {
 console.error(' [NEW USER] Account creation error:', error);
     socket.emit('ansi-output', '\r\n\x1b[31mError creating account. Please try again.\x1b[0m\r\n');
     session.state = BBSState.AWAIT;
+    return false;
   }
 }

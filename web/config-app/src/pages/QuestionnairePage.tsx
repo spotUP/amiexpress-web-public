@@ -103,10 +103,15 @@ export function QuestionnairePage() {
       </header>
 
       <p className="text-sm text-content-secondary max-w-3xl">
-        Asked once, right after a new caller confirms their registration. A line that ends in
-        <span className="font-mono"> ~ </span> is a question and the answer is written to the
-        node&apos;s Answers file; every other line is shown as it is. One text here reaches
-        every node and every baud rate - the board keeps a copy per node, as AmiExpress does.
+        Asked once, right after a new caller confirms their registration - the account exists
+        by then. A line that ends in <span className="font-mono"> ~ </span> is a question and
+        the answer is written to the node&apos;s Answers file. A line that starts with a tilde
+        is a command, the same as in a screen file:
+        <span className="font-mono"> ~CC_SCREENTHEME| </span> opens the theme picker,
+        <span className="font-mono"> ~CC_ACHIEVE| </span> the achievements sign-up, and the
+        script carries on when the caller comes back. Every other line is shown as it is. One
+        text here reaches every node and every baud rate - the board keeps a copy per node, as
+        AmiExpress does.
       </p>
 
       {error && <p className="text-status-danger text-sm">{(error as Error).message}</p>}
