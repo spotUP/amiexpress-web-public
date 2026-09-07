@@ -12,6 +12,37 @@ import {
   type RipHotspot,
 } from '@bbs/screens/rip-document';
 import { base64ToLatin1, latin1ToBase64 } from '../pages/screen-bytes';
+import { apiClient } from '../api/client';
+
+/**
+ * The board's most-used built-in commands, so a sysop picks an action instead
+ * of guessing a letter. Verified against handlers/command.handler.ts (each
+ * carries its express.e line there); the fifty rarer internal commands stay
+ * reachable through "Custom keystrokes".
+ */
+const COMMON_ACTIONS: { command: string; label: string }[] = [
+  { command: 'F', label: 'File listings' },
+  { command: 'N', label: 'New files' },
+  { command: 'R', label: 'Read messages' },
+  { command: 'E', label: 'Enter a message' },
+  { command: 'J', label: 'Join a conference' },
+  { command: 'B', label: 'Read bulletins' },
+  { command: 'C', label: 'Comment to the sysop' },
+  { command: 'O', label: 'Page the sysop' },
+  { command: 'G', label: 'Log off' },
+];
+
+interface DoorOption { command: string; name: string; }
+
+/** What a region sends, in the words a sysop reads rather than a bare letter. */
+function describeCommand(command: string, doors: DoorOption[]): string {
+  if (!command) return 'sends nothing';
+  const preset = COMMON_ACTIONS.find(a => a.command === command);
+  if (preset) return `${preset.label} (${command})`;
+  const door = doors.find(d => d.command === command);
+  if (door) return `runs the ${door.name} door`;
+  return `sends ${command}`;
+}
 
 /**
  * A RIP screen, editable - without being a drawing program.
@@ -67,6 +98,43 @@ export function RipScreenEditor({
   const [selected, setSelected] = useState<number | null>(null);
   const [pending, setPending] = useState<PendingRegion | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [doors, setDoors] = useState<DoorOption[]>([]);
+  // Whether the raw "keystrokes" field is open for the selected region. STICKY
+  // state, not derived from the command: while a sysop types JOIN 7, the value
+  // passes through "J" (a known command), and re-deriving would snap the field
+  // shut mid-word. Set when a region is selected and when a picker choice is
+  // made; never on a keystroke.
+  const [showCustom, setShowCustom] = useState(false);
+
+  // The board's doors, for the "Run a door" group. A failure here is not fatal:
+  // the picker still has the common actions and the custom field.
+  useEffect(() => {
+    if (readOnly) return;
+    let cancelled = false;
+    apiClient.getDoors()
+      .then(res => {
+        const list = (res?.data as Array<{ door_name?: string; door_command?: string }> | undefined) ?? [];
+        if (cancelled) return;
+        setDoors(list
+          .filter(d => d.door_command)
+          .map(d => ({ command: d.door_command as string, name: d.door_name || (d.door_command as string) })));
+      })
+      .catch(() => { /* no doors: common actions and custom still work */ });
+    return () => { cancelled = true; };
+  }, [readOnly]);
+
+  const isKnownCommand = (command: string) =>
+    COMMON_ACTIONS.some(a => a.command === command) || doors.some(d => d.command === command);
+
+  /**
+   * Select a region and decide, ONCE, whether its command needs the raw field:
+   * an empty or unrecognised command opens Custom, a known one shows the picker.
+   */
+  const selectRegion = (index: number | null) => {
+    setSelected(index);
+    const command = index !== null ? (spots[index]?.command ?? '') : '';
+    setShowCustom(index !== null && !isKnownCommand(command));
+  };
 
   const rip = useRef<RIPRendererRef>(null);
   const surface = useRef<HTMLDivElement>(null);
@@ -126,6 +194,7 @@ export function RipScreenEditor({
     });
     setDoc(next);
     setSelected(readRipHotspots(next).length - 1);
+    setShowCustom(true); // a fresh region has no command yet
   };
 
   return (
@@ -186,7 +255,7 @@ export function RipScreenEditor({
               key={`${spot.line}:${spot.index}`}
               type="button"
               data-testid="rip-hotspot"
-              aria-label={`${describeHotspot(spot)}, sends ${spot.command || 'nothing'}`}
+              aria-label={`${describeHotspot(spot)}, ${describeCommand(spot.command, doors)}`}
               className={`absolute border-2 ${
                 index === selected ? 'border-accent' : 'border-status-info'
               }`}
@@ -198,7 +267,7 @@ export function RipScreenEditor({
               }}
               onPointerDown={event => {
                 event.stopPropagation();
-                setSelected(index);
+                selectRegion(index);
               }}
             />
           ))}
@@ -240,29 +309,64 @@ export function RipScreenEditor({
                   className={`flex w-full items-baseline gap-2 rounded px-2 py-1 text-left text-sm ${
                     index === selected ? 'bg-surface-3' : 'hover:bg-surface-2'
                   }`}
-                  onClick={() => setSelected(index)}
+                  onClick={() => selectRegion(index)}
                 >
                   <MousePointerClick size={14} className="shrink-0 text-content-muted" />
                   <span className="text-content-primary">{describeHotspot(spot)}</span>
                   <span className="text-content-secondary">
-                    {spot.command ? `sends ${spot.command}` : 'sends nothing'}
+                    {describeCommand(spot.command, doors)}
                   </span>
                 </button>
               </li>
             ))}
           </ul>
 
-          {chosen && !readOnly && (
+          {chosen && !readOnly && (() => {
+            const currentKey =
+              COMMON_ACTIONS.some(a => a.command === chosen.command) ? `cmd:${chosen.command}`
+              : doors.some(d => d.command === chosen.command) ? `door:${chosen.command}`
+              : 'custom';
+            const pick = (key: string) => {
+              if (key === 'custom') { setShowCustom(true); return; }
+              setShowCustom(false);
+              update({ command: key.startsWith('cmd:') ? key.slice(4) : key.slice(5) });
+            };
+            return (
             <div className="card space-y-3">
               <label className="block">
-                <span className="label">What a click sends to the board</span>
-                <input
+                <span className="label">When a caller clicks here</span>
+                <select
                   className="input-field w-full"
-                  aria-label="What a click sends to the board"
-                  value={chosen.command}
-                  onChange={event => update({ command: event.target.value })}
-                />
+                  aria-label="When a caller clicks here"
+                  value={showCustom ? 'custom' : currentKey}
+                  onChange={event => pick(event.target.value)}
+                >
+                  <optgroup label="Common actions">
+                    {COMMON_ACTIONS.map(a => (
+                      <option key={a.command} value={`cmd:${a.command}`}>{a.label} ({a.command})</option>
+                    ))}
+                  </optgroup>
+                  {doors.length > 0 && (
+                    <optgroup label="Run a door">
+                      {doors.map(d => (
+                        <option key={d.command} value={`door:${d.command}`}>{d.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <option value="custom">Custom keystrokes&hellip;</option>
+                </select>
               </label>
+              {showCustom && (
+                <label className="block">
+                  <span className="label">What a click sends to the board</span>
+                  <input
+                    className="input-field w-full"
+                    aria-label="What a click sends to the board"
+                    value={chosen.command}
+                    onChange={event => update({ command: event.target.value })}
+                  />
+                </label>
+              )}
 
               {chosen.kind === 'button' && (
                 <label className="block">
@@ -304,7 +408,8 @@ export function RipScreenEditor({
                 <Trash2 size={14} /> Remove this region
               </button>
             </div>
-          )}
+            );
+          })()}
 
           {!chosen && !readOnly && spots.length > 0 && (
             <p className="text-sm text-content-secondary">

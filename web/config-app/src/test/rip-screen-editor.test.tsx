@@ -48,7 +48,7 @@ describe('editing a RIP screen', () => {
     render(<RipScreenEditor content={asBase64(SCREEN)} onSave={vi.fn()} onCancel={vi.fn()} />);
 
     const rows = screen.getAllByTestId('rip-region-row').map(row => row.textContent);
-    expect(rows).toEqual(['Filessends F', 'Mouse field 1sends JOIN 3']);
+    expect(rows).toEqual(['FilesFile listings (F)', 'Mouse field 1sends JOIN 3']);
   });
 
   it('changes what a mouse field sends, and rewrites only that instruction', async () => {
