@@ -20,6 +20,8 @@ import type { AuthRequest } from '../middleware/auth.middleware';
 import { selectableThemes } from '../screens/caller-theme';
 import { isSysop, ownedThemes } from '../screens/theme-sandbox';
 import { validateTheme } from '../screens/theme-validation';
+import { liveThemeRegressions } from '../screens/theme-live-check';
+import { getScreenIndex } from '../screens/screen-index.service';
 import {
   DEFAULT_SLUG,
   THEMES_DIR,
@@ -85,6 +87,20 @@ themesRouter.get('/', (req: Request, res: Response) => {
   const owned = new Set(ownedThemes(bbsRoot, who).map(theme => theme.slug));
   const wearable = new Set(selectableThemes(bbsRoot, who).map(theme => theme.slug));
 
+  /*
+   * A live theme is checked against the board AS IT IS NOW, not as it was the
+   * day it was published. A sysop who adds a security variant afterwards
+   * re-opens the shadowing hole the publish gate exists to close, and until
+   * this the only sign was callers of one level being served the wrong screen.
+   *
+   * Keyed on the index's builtAt, so it is computed when the screens change
+   * and read from cache otherwise.
+   */
+  const regressions = new Map(
+    liveThemeRegressions(bbsRoot, getScreenIndex(bbsRoot).builtAt, registry.themes)
+      .map(report => [report.slug, report] as const)
+  );
+
   ok(res, {
     defaultSlug: registry.defaultSlug,
     canCreate: isSysop(who),
@@ -97,6 +113,15 @@ themesRouter.get('/', (req: Request, res: Response) => {
         mine: owned.has(theme.slug),
         wearable: wearable.has(theme.slug),
         writable: isSysop(who) || owned.has(theme.slug),
+        // Present only for a LIVE theme that has stopped passing its rules.
+        regressed: regressions.has(theme.slug)
+          ? {
+              blocking: regressions.get(theme.slug)!.blocking.length,
+              advisory: regressions.get(theme.slug)!.advisory.length,
+              first: regressions.get(theme.slug)!.blocking[0]?.message
+                ?? regressions.get(theme.slug)!.advisory[0]?.message ?? '',
+            }
+          : null,
       };
     }),
   });

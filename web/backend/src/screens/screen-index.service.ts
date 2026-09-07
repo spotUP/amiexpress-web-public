@@ -1129,6 +1129,31 @@ export function getScreenIndex(baseDir: string): ScreenIndex {
   if (cached && cached.key === key) return cached.index;
   const index = buildScreenIndex(baseDir);
   cached = { key, index };
+
+  /*
+   * The board just changed, so every LIVE theme is checked against it again.
+   *
+   * A theme is validated when it is PUBLISHED and was never looked at after
+   * that, which the themes plan wrote down as knowingly undone: "a sysop who
+   * adds a security variant to the BOARD after a theme has gone live re-opens
+   * the shadowing hole ... The spec names the index rebuild as the hook; it is
+   * not wired." This is that hook.
+   *
+   * The cache is set FIRST on purpose: validateTheme asks for the index, and
+   * it must find the one just built rather than start another build.
+   *
+   * require(), not import: theme-validation imports this module, and the cycle
+   * is only harmless if it is resolved when called rather than when loaded.
+   * Failure here must never cost the caller their screens - an index that
+   * built is worth returning whatever the themes say.
+   */
+  try {
+    const { liveThemeRegressions, announceLiveThemeRegressions } = require('./theme-live-check');
+    announceLiveThemeRegressions(liveThemeRegressions(baseDir, index.builtAt));
+  } catch (error) {
+    console.warn(`[Themes] live theme check skipped: ${(error as Error).message}`);
+  }
+
   return index;
 }
 

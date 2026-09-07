@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Check, Send, Eye, Palette, Copy, Monitor, ShieldCheck } from 'lucide-react';
+import { Plus, Check, Send, Eye, Palette, Copy, Monitor, ShieldCheck, AlertTriangle } from 'lucide-react';
 
 import { apiClient } from '../api/client';
 import { Modal } from '../components/ui/Modal';
@@ -37,6 +37,13 @@ interface ScreenTheme extends Record<string, unknown> {
   mine: boolean;
   wearable: boolean;
   writable: boolean;
+  /**
+   * Set when a LIVE theme has stopped passing the rules it was published
+   * under - the board gained a security variant this theme now shadows, or a
+   * door one of its screens calls was removed. Null when there is nothing
+   * wrong, and absent for a theme that is not live.
+   */
+  regressed: { blocking: number; advisory: number; first: string } | null;
 }
 
 /**
@@ -270,7 +277,28 @@ export function ScreenThemesPage() {
       cell: row => (row.screens === null ? "the board's own" : String(row.screens)),
     },
     { id: 'widths', header: 'Widths', value: row => row.widths.join(', ') || '-' },
-    { id: 'status', header: 'Status', value: row => STATUS_LABEL[row.status] },
+    {
+      id: 'status',
+      header: 'Status',
+      value: row => STATUS_LABEL[row.status],
+      // A live theme that has gone wrong says so HERE, beside the word "Live"
+      // that is no longer the whole truth. The board changes after a theme is
+      // published and nothing used to look again.
+      cell: row => (
+        <span className="flex items-center gap-2">
+          {STATUS_LABEL[row.status]}
+          {row.regressed && row.regressed.blocking > 0 && (
+            <span
+              className="inline-flex items-center gap-1 text-status-warn"
+              title={row.regressed.first}
+            >
+              <AlertTriangle size={14} />
+              {row.regressed.blocking} to fix
+            </span>
+          )}
+        </span>
+      ),
+    },
     {
       id: 'actions',
       header: '',
