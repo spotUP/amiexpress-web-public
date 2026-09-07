@@ -37,6 +37,8 @@ export interface ReportOptions {
   door?: string | null;
   /** The event's own time; defaults to now. Epoch ms. */
   at?: number;
+  /** A deterministic ref, for a fact that must count once ever (the server dedups refs). */
+  ref?: string;
 }
 
 /** What report() needs from the world; tests hand it their own. */
@@ -124,7 +126,7 @@ export function report(session: ReporterSession, type: string, opts: ReportOptio
     const email = (session.user?.email ?? '').trim();
     if (email === '') return null;
     const event: EventIn = {
-      ref: newRef(settings.boardId),
+      ref: opts.ref ? `${settings.boardId}:${opts.ref}` : newRef(settings.boardId),
       email,
       type,
       at: new Date(opts.at ?? deps.now()).toISOString(),

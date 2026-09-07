@@ -110,3 +110,107 @@ export async function withDoorReporting<T>(session: ReporterSession, command: st
     report(session, 'door.minutes', { value: minutes, door: command.toUpperCase() }, deps.reporter);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Messages
+// ---------------------------------------------------------------------------
+
+export interface MessageFacts {
+  body: string[];
+  isPrivate?: boolean;
+  parentId?: number | null;
+  toUserIsSysop?: boolean;
+}
+
+interface ParentRow {
+  author: string;
+  timestamp: number;
+  replies: number;
+}
+
+/** The parent of a reply: its author, its time, and how many replies it has now (this one included). */
+function parentOf(rawDb: Database.Database | undefined, parentId: number): ParentRow | null {
+  if (!rawDb) return null;
+  const row = rawDb
+    .prepare('SELECT author, timestamp, (SELECT COUNT(*) FROM messages r WHERE r.parentid = m.id) AS replies FROM messages m WHERE m.id = ?')
+    .get(parentId) as ParentRow | undefined;
+  return row ?? null;
+}
+
+function userByUsername(rawDb: Database.Database | undefined, username: string): { id: string; email: string | null } | null {
+  if (!rawDb) return null;
+  const row = rawDb.prepare('SELECT id, email FROM users WHERE username = ? COLLATE NOCASE').get(username) as { id: string; email: string | null } | undefined;
+  return row ?? null;
+}
+
+/**
+ * After saveMessage committed: msg.post keyed by the conference, and the
+ * facts around it - a long message, the midnight window, a private one, a
+ * reply (fast when under a minute), the parent's author's msg.thread on
+ * the first reply, and msg.comment when the sysop is the recipient.
+ */
+export function reportMessage(session: ReporterSession, facts: MessageFacts, conferenceId: number, deps: SiteDeps = defaultSiteDeps): number {
+  let n = 0;
+  const bump = (r: string | null): void => { if (r) n += 1; };
+  bump(report(session, 'msg.post', { key: `conf:${conferenceId}` }, deps.reporter));
+  if (facts.body.length > 100) bump(report(session, 'msg.post', { key: 'lines:100+' }, deps.reporter));
+  const midnight = midnightKey(deps);
+  if (midnight) bump(report(session, 'msg.post', { key: midnight }, deps.reporter));
+  if (facts.isPrivate) bump(report(session, 'msg.private', {}, deps.reporter));
+  if (facts.toUserIsSysop) bump(report(session, 'msg.comment', {}, deps.reporter));
+  if (facts.parentId) {
+    const parent = parentOf(deps.rawDb(), facts.parentId);
+    const fast = parent !== null && deps.now() / 1000 - parent.timestamp < 60;
+    bump(report(session, 'msg.reply', fast ? { key: 'fast' } : {}, deps.reporter));
+    if (parent && parent.replies === 1) {
+      const author = userByUsername(deps.rawDb(), parent.author);
+      if (author && author.email && String(author.id) !== String(session.user?.id ?? '')) {
+        bump(report({ ...session, user: { id: author.id, email: author.email } }, 'msg.thread', { ref: `msg.thread:${facts.parentId}` }, deps.reporter));
+      }
+    }
+  }
+  return n;
+}
+
+// ---------------------------------------------------------------------------
+// Files
+// ---------------------------------------------------------------------------
+
+export const RATIO_MIN_UPLOADS = 10;
+
+/** The caller's counters as the row holds them now (after the upload's own update). */
+function countersOf(rawDb: Database.Database | undefined, userId: string | number | undefined): { uploads: number; downloads: number } | null {
+  if (!rawDb || userId === undefined) return null;
+  const row = rawDb.prepare('SELECT uploads, downloads FROM users WHERE id = ?').get(String(userId)) as { uploads: number; downloads: number } | undefined;
+  return row ?? null;
+}
+
+/**
+ * After an upload was accepted: file.upload with its bytes, file.desc when
+ * the caller wrote a real description (not one lifted from FILE_ID.DIZ),
+ * and the ratio milestones - this board's definition: silver at one upload
+ * per download, gold at two, both needing ten uploads, each once ever
+ * (a deterministic ref the server dedups).
+ */
+export function reportUpload(session: ReporterSession, bytes: number, description: string, descriptionFromDiz: boolean, deps: SiteDeps = defaultSiteDeps): number {
+  let n = 0;
+  const bump = (r: string | null): void => { if (r) n += 1; };
+  bump(report(session, 'file.upload', { value: Math.max(0, Math.floor(bytes)) }, deps.reporter));
+  if (!descriptionFromDiz && description.trim().length >= 10) bump(report(session, 'file.desc', {}, deps.reporter));
+  const c = countersOf(deps.rawDb(), session.user?.id ?? undefined);
+  if (c && c.uploads >= RATIO_MIN_UPLOADS) {
+    const email = (session.user?.email ?? '').toLowerCase();
+    if (c.uploads >= c.downloads) bump(report(session, 'file.ratio', { key: 'silver', ref: `${email}:ratio:silver` }, deps.reporter));
+    if (c.uploads >= 2 * c.downloads) bump(report(session, 'file.ratio', { key: 'gold', ref: `${email}:ratio:gold` }, deps.reporter));
+  }
+  return n;
+}
+
+export const OLD_FILE_YEARS = 25;
+
+/** After a download: file.download with its bytes, keyed age:25y+ for a file uploaded that long ago. */
+export function reportDownload(session: ReporterSession, file: { size?: number; uploadDate?: Date | string | number | null }, deps: SiteDeps = defaultSiteDeps): number {
+  const uploaded = seconds(file.uploadDate);
+  const old = uploaded !== null && deps.now() / 1000 - uploaded > OLD_FILE_YEARS * 365.25 * 24 * 3600;
+  return report(session, 'file.download', { value: Math.max(0, Math.floor(file.size ?? 0)), ...(old ? { key: 'age:25y+' } : {}) }, deps.reporter) ? 1 : 0;
+}

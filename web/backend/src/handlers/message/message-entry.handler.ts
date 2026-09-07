@@ -18,6 +18,7 @@ import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 import { getSystemTime, formatLongDateTime } from '../../utils/date-time.util';
 import { messageIndent, messageRule } from '../../utils/table-format.util';
+import { reportMessage } from '../../achievements/sites';
 
 
 // Dependencies (injected from index.ts)
@@ -1047,6 +1048,9 @@ console.error('[Message] Error writing user disk files:', diskErr);
 
     // Trigger webhook for new message
 console.log('[Message] About to trigger NEW_MESSAGE webhook');
+    // Whether the recipient is the sysop: decided inside the webhook block
+    // below, read again by the achievements site after it.
+    let toUserIsSysop = false;
     try {
       const { webhookService, WebhookTrigger } = await import('../../services/webhook.service');
 
@@ -1072,7 +1076,7 @@ console.log('[Message] Webhook call completed');
       // We accept both the literal 'SYSOP' token AND a DB lookup that
       // resolves to slot 1, so sysops who don't go by 'sysop' still
       // get the notification.
-      let toUserIsSysop = entry.toUser.toLowerCase() === 'sysop';
+      toUserIsSysop = entry.toUser.toLowerCase() === 'sysop';
       if (!toUserIsSysop && entry.toUser) {
         try {
           const resolved = await _db?.getUserByUsername?.(entry.toUser);
@@ -1118,6 +1122,10 @@ console.error('[Webhook] Error sending new message webhook:', error);
         DebugSeverity.WARNING
       );
     }
+
+    // Achievements (SP2): the message facts, beside the webhook and outside
+    // its try. Non-throwing.
+    reportMessage(session as any, { body: entry.body, isPrivate: entry.isPrivate, parentId: entry.parentId || null, toUserIsSysop }, session.currentConf || 1);
 
     // express.e:9898-9903 (replyToMSG): after saving, prompt "Delete original message (y/N)?"
     // only if user has DELETE permission AND original message was addressed to current user.

@@ -45,6 +45,7 @@ import {
   getUploadContextById,
   deleteUploadContextById,
 } from "./upload-session-store";
+import { reportDownload, reportUpload } from '../achievements/sites';
 
 /**
  * Helper function to load conferences for stats tracking
@@ -353,6 +354,8 @@ export async function processBatchFile(
 
     // Extract FILE_ID.DIZ and test file (express.e:19258-19370)
     let finalDescription = currentFile.description;
+    // Achievements (SP2): a description lifted from FILE_ID.DIZ is not one the caller wrote.
+    let descriptionFromDiz = false;
     let testStatus = TestResult.NOT_TESTED;
     let fileStatus: "active" | "private" | "hold" = currentFile.isPrivate
       ? "private"
@@ -376,6 +379,7 @@ console.log(
 
           if (dizLines && dizLines.length > 0) {
             finalDescription = dizLines.join("\n");
+            descriptionFromDiz = true;
 console.log(
               `[FILE_ID.DIZ] Using FILE_ID.DIZ content (${dizLines.length} lines)`
             );
@@ -859,6 +863,8 @@ console.error("[BBSEvent] Error emitting upload event:", error);
 console.error("[Webhook] Error sending file upload webhook:", error);
       }
     }
+    // Achievements (SP2): the upload, the description, the ratio. Non-throwing.
+    if (!foundDupe && !quarantineFailed) reportUpload(session as any, data.size, finalDescription, descriptionFromDiz);
 
     // Update sysop upload statistics (express.e:19440)
     try {
@@ -1339,6 +1345,8 @@ console.error(
 console.log(
           `[Download] Updated stats for ${session.user.username} - ${fileEntry.filename} (${fileEntry.size} bytes)`
         );
+        // Achievements (SP2): the download, keyed by the file's age. Non-throwing.
+        reportDownload(session as any, fileEntry);
       } catch (error) {
 console.error("[Download] Error updating statistics:", error);
       }
