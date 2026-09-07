@@ -34,10 +34,32 @@ export interface AIProviderConfig {
   groqApiKey?: string;
   geminiApiKey?: string;
   openRouterApiKey?: string;
+  /**
+   * The whole AI cascade - every provider, every retry, the model discovery
+   * - gets THIS long in total before the rule-based reply goes out. The
+   * sysop's rule (2026-09-07): "if the AI fails grumpy sysop should take
+   * over directly". Default 8 s. A provider call never waits past it.
+   */
+  budgetMs?: number;
+  /** Absolute deadline (epoch ms) set by getGrumpySysopResponse; internal. */
+  deadline?: number;
   // Bot typing behaviour
   botTypingSpeed?: number;         // Base ms per character (default 40)
   botTypoProbability?: number;     // Chance of typo per character 0-1 (default 0.04)
   botThinkTime?: number;           // Pause before responding in ms (default 1000)
+}
+
+/** The AI cascade's total budget when the config names none. */
+export const DEFAULT_AI_BUDGET_MS = 8000;
+
+/**
+ * How long a call may still wait: the smaller of its own timeout and what
+ * is left of the cascade's budget. Under 250 ms is not worth a round trip -
+ * the caller skips the provider and the rule-based reply goes out now.
+ */
+function remainingBudget(aiConfig: AIProviderConfig, ownTimeoutMs: number): number {
+  if (aiConfig.deadline === undefined) return ownTimeoutMs;
+  return Math.min(ownTimeoutMs, aiConfig.deadline - Date.now());
 }
 
 interface OpenRouterModel {
@@ -442,6 +464,8 @@ async function getGroqResponse(userMessage: string, context: ChatContext, aiConf
 console.log('[Grumpy Bot] No GROQ_API_KEY configured, skipping Groq');
     return null;
   }
+  const groqTimeout = remainingBudget(aiConfig, 8000);
+  if (groqTimeout < 250) return null;
 
   try {
     const systemPrompt = aiConfig.systemPrompt || GRUMPY_SYSOP_PERSONALITY;
@@ -472,7 +496,7 @@ console.log(`[Grumpy Bot] Trying Groq (${model})...`);
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
-        timeout: 8000
+        timeout: groqTimeout
       }
     );
 
@@ -495,6 +519,8 @@ console.log('[Grumpy Bot] No GEMINI_API_KEY configured, skipping Gemini');
     return null;
   }
 
+  const geminiTimeout = remainingBudget(aiConfig, 10000);
+  if (geminiTimeout < 250) return null;
   try {
     const systemPrompt = aiConfig.systemPrompt || GRUMPY_SYSOP_PERSONALITY;
     const fullPrompt = `${systemPrompt}\n\n${BBS_HELP_KNOWLEDGE}\n\nUser context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes\n\n${
@@ -515,7 +541,7 @@ console.log(`[Grumpy Bot] Trying Gemini (${model})...`);
       },
       {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 10000
+        timeout: geminiTimeout
       }
     );
 
@@ -534,10 +560,10 @@ console.error('[Grumpy Bot] Gemini failed:', error instanceof Error ? error.mess
 /**
  * Tier 3: OpenRouter (Free models with auto-discovery)
  */
-async function discoverFreeModels(): Promise<string[]> {
+async function discoverFreeModels(timeoutMs: number): Promise<string[]> {
   try {
     const response = await axios.get('https://openrouter.ai/api/v1/models', {
-      timeout: 5000
+      timeout: timeoutMs
     });
 
     const models: OpenRouterModel[] = response.data.data || [];
@@ -565,7 +591,7 @@ console.error('[Grumpy Bot] Failed to discover free models:', error instanceof E
   }
 }
 
-async function getFreeModel(): Promise<string | null> {
+async function getFreeModel(timeoutMs: number): Promise<string | null> {
   const now = Date.now();
 
   // Use cached models if available and not expired
@@ -576,7 +602,7 @@ console.log('[Grumpy Bot] Using cached free model:', cachedFreeModels[0]);
 
   // Discover new free models
 console.log('[Grumpy Bot] Discovering free models...');
-  const freeModels = await discoverFreeModels();
+  const freeModels = await discoverFreeModels(timeoutMs);
 
   if (freeModels.length === 0) {
 console.log('[Grumpy Bot] No free models from API, trying hardcoded fallback list');
@@ -595,20 +621,30 @@ console.log('[Grumpy Bot] No free models from API, trying hardcoded fallback lis
   return freeModels[0];
 }
 
-async function getOpenRouterResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
-  // Try to get a free model
-  const freeModel = aiConfig.modelName || await getFreeModel();
+/** How many OpenRouter models one message may try before giving up. */
+const MAX_OPENROUTER_MODELS_PER_MESSAGE = 2;
+
+async function getOpenRouterResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig, modelsTried = 0): Promise<string | null> {
+  // The key, BEFORE the model discovery: a board with no key used to pay a
+  // five-second round trip to openrouter.ai to find a model it could never
+  // call, and the caller sat through that before the rule-based reply.
+  const apiKey = aiConfig.openRouterApiKey || process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+console.log('[Grumpy Bot] No OPENROUTER_API_KEY configured. OpenRouter requires an API key even for free models.');
+    return null;
+  }
+
+  const discoveryTimeout = remainingBudget(aiConfig, 5000);
+  if (discoveryTimeout < 250) return null;
+  const freeModel = aiConfig.modelName || await getFreeModel(discoveryTimeout);
 
   if (!freeModel) {
 console.log('[Grumpy Bot] No OpenRouter free models available');
     return null;
   }
 
-  const apiKey = aiConfig.openRouterApiKey || process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
-console.log('[Grumpy Bot] No OPENROUTER_API_KEY configured. OpenRouter requires an API key even for free models.');
-    return null;
-  }
+  const callTimeout = remainingBudget(aiConfig, 10000);
+  if (callTimeout < 250) return null;
 
   try {
     const systemPrompt = aiConfig.systemPrompt || GRUMPY_SYSOP_PERSONALITY;
@@ -640,7 +676,7 @@ console.log(`[Grumpy Bot] Trying OpenRouter (${freeModel})...`);
           'HTTP-Referer': 'https://amiexpress.com',
           'X-Title': 'AmiExpress BBS',
         },
-        timeout: 10000
+        timeout: callTimeout
       }
     );
 
@@ -657,11 +693,12 @@ console.error('[Grumpy Bot] Status:', error.response.status);
 console.error('[Grumpy Bot] Data:', JSON.stringify(error.response.data));
     }
 
-    // If this model failed, try to find another one
-    if (cachedFreeModels.length > 1) {
+    // If this model failed, try the next one - but not every model on the
+    // list, and never past the deadline. The caller is waiting.
+    if (cachedFreeModels.length > 1 && modelsTried + 1 < MAX_OPENROUTER_MODELS_PER_MESSAGE) {
 console.log('[Grumpy Bot] Trying next OpenRouter model...');
       cachedFreeModels.shift();
-      return getOpenRouterResponse(userMessage, context, aiConfig);
+      return getOpenRouterResponse(userMessage, context, aiConfig, modelsTried + 1);
     }
 
     // Clear cache
@@ -811,7 +848,10 @@ export async function getGrumpySysopResponse(
   context: ChatContext,
   aiConfig?: AIProviderConfig
 ): Promise<string> {
-  const cfg = aiConfig || DEFAULT_AI_CONFIG;
+  const cfg: AIProviderConfig = {
+    ...(aiConfig || DEFAULT_AI_CONFIG),
+    deadline: Date.now() + ((aiConfig || DEFAULT_AI_CONFIG).budgetMs ?? DEFAULT_AI_BUDGET_MS),
+  };
 
   // If AI is enabled and provider is set, try the AI cascade first
   if (cfg.provider !== 'rule-based') {
