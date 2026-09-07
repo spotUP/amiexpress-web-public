@@ -210,3 +210,142 @@ describe('the image and the entrypoint still carry the shared shape', () => {
     expect(seeded.filter(n => !names.has(`Node${n}.info`))).toEqual([]);
   });
 });
+
+/**
+ * A board that is already RUNNING gets the same shape, without losing the
+ * deploy that just happened.
+ *
+ * The image's template is collapsed at build time; a board seeded before that
+ * never was. Its `Node<n>.info` is volume-owned (seeded once), so its nodes
+ * still read `Node<n>/` - forty-one copies no deploy refreshes - while the
+ * deploy keeps `Screens/Node/` fresh for nobody. Found 2026-09-07: a BBSTITLE
+ * fix landed three times and the live log still read Node1/BBSTITLE.txt.
+ *
+ * Run at boot (server/initialization.ts) in `existingSharedWins` mode, on a
+ * board like the live one: every node holds the OLD generation, the deploy
+ * has already put the NEW one in `Screens/Node/`, and one node has art of its
+ * own. The proofs go through `resolveNodeScreenDir`, the function the loader
+ * asks - an icon that says SCREENS is nothing until the resolver reads it.
+ */
+describe('a running board collapses its node screens without undoing the deploy', () => {
+  const OLD_TITLE = Buffer.from([0x1b, 0x5b, 0x35, 0x3b, 0x33, 0x33, 0x6d, 0x7c, 0x0a]); // ESC[5;33m|
+  const NEW_TITLE = Buffer.from([0x1b, 0x5b, 0x33, 0x33, 0x3b, 0x31, 0x30, 0x30, 0x6d, 0x7c, 0x0a]); // ESC[33;100m|
+  const NEWER_TITLE = Buffer.concat([NEW_TITLE, Buffer.from('v3\n')]);
+  const OWN_LOGON = Buffer.concat([LOGON, Buffer.from('node one only\n')]);
+  const NODES = [0, 1, 2, 3, 4, 5];
+  const DISSENTER = 1;
+  let board: string;
+
+  /** The live board's shape: seeded before the collapse existed, then deployed. */
+  function runningBoard(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'running-board-'));
+    fs.writeFileSync(path.join(dir, '.initialized'), 'seeded\n');
+    for (const n of NODES) {
+      const nodeDir = path.join(dir, `Node${n}`);
+      fs.mkdirSync(nodeDir, { recursive: true });
+      fs.writeFileSync(path.join(nodeDir, 'BBSTITLE.txt'), OLD_TITLE);
+      fs.writeFileSync(path.join(nodeDir, 'Logon.txt'), n === DISSENTER ? OWN_LOGON : LOGON);
+      fs.writeFileSync(path.join(nodeDir, 'DOOR.SYS'), 'dropfile\n');
+      // The icon a seeded board has: real, with the node's own settings on it.
+      fs.copyFileSync(path.join(REPO, 'Node2.info'), path.join(dir, `Node${n}.info`));
+    }
+    // What the deploy just did: the shared directory holds the new generation.
+    fs.mkdirSync(path.join(dir, 'Screens', 'Node'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'Screens', 'Node', 'BBSTITLE.txt'), NEW_TITLE);
+    return dir;
+  }
+
+  const read = (rel: string) => fs.readFileSync(path.join(board, rel));
+  const exists = (rel: string) => fs.existsSync(path.join(board, rel));
+  const shared = () => path.resolve(board, 'Screens', 'Node');
+
+  afterEach(() => {
+    if (board) fs.rmSync(board, { recursive: true, force: true });
+  });
+
+  test('the deployed shared copy stays, and the nodes\' old bytes are kept beside it', () => {
+    board = runningBoard();
+    const report = collapseSeedNodeScreens(board, { existingSharedWins: true });
+
+    expect(read('Screens/Node/BBSTITLE.txt').equals(NEW_TITLE)).toBe(true);
+    expect(read('Screens/Node/BBSTITLE.txt.pre-collapse').equals(OLD_TITLE)).toBe(true);
+    expect(report.sharedKept).toEqual(['BBSTITLE.txt']);
+    // Logon had no shared copy yet, so the nodes' own version is what arrives.
+    expect(read('Screens/Node/Logon.txt').equals(LOGON)).toBe(true);
+  });
+
+  test('every agreeing node now READS the shared directory, with its other settings intact', () => {
+    board = runningBoard();
+    const before = readTooltypeMap(path.join(board, 'Node2.info'));
+    collapseSeedNodeScreens(board, { existingSharedWins: true });
+
+    for (const n of NODES.filter(n => n !== DISSENTER)) {
+      expect({ n, dir: path.resolve(resolveNodeScreenDir(board, n)) }).toEqual({ n, dir: shared() });
+      expect({ n, gone: !exists(`Node${n}/BBSTITLE.txt`) }).toEqual({ n, gone: true });
+    }
+    const after = readTooltypeMap(path.join(board, 'Node2.info'));
+    for (const [key, value] of before) {
+      expect({ key, value: after.get(key) }).toEqual({ key, value });
+    }
+  });
+
+  test('the node with its own art keeps its directory - and still gets the new BBSTITLE', () => {
+    board = runningBoard();
+    const report = collapseSeedNodeScreens(board, { existingSharedWins: true });
+
+    const own = path.resolve(board, `Node${DISSENTER}`);
+    expect(path.resolve(resolveNodeScreenDir(board, DISSENTER))).toBe(own);
+    expect(read(`Node${DISSENTER}/Logon.txt`).equals(OWN_LOGON)).toBe(true);
+    // The screen it agreed with everyone about follows the shared copy.
+    expect(read(`Node${DISSENTER}/BBSTITLE.txt`).equals(NEW_TITLE)).toBe(true);
+    expect(read(`Node${DISSENTER}/BBSTITLE.txt.pre-collapse`).equals(OLD_TITLE)).toBe(true);
+    expect(report.refreshed).toEqual([path.join(`Node${DISSENTER}`, 'BBSTITLE.txt')]);
+  });
+
+  test('the next deploy reaches the kept node too, and never its own art', () => {
+    board = runningBoard();
+    collapseSeedNodeScreens(board, { existingSharedWins: true });
+
+    // A later deploy: the shared copy moves on; the sysop also edits the
+    // kept node's own Logon again.
+    fs.writeFileSync(path.join(board, 'Screens', 'Node', 'BBSTITLE.txt'), NEWER_TITLE);
+    fs.writeFileSync(path.join(board, 'Screens', 'Node', 'Logon.txt'), Buffer.concat([LOGON, Buffer.from('v2\n')]));
+    const report = collapseSeedNodeScreens(board, { existingSharedWins: true });
+
+    expect(read(`Node${DISSENTER}/BBSTITLE.txt`).equals(NEWER_TITLE)).toBe(true);
+    expect(read(`Node${DISSENTER}/Logon.txt`).equals(OWN_LOGON)).toBe(true);
+    expect(report.refreshed).toEqual([path.join(`Node${DISSENTER}`, 'BBSTITLE.txt')]);
+    expect(report.pointed).toEqual([]);
+    // The nodes that share were not written into, and still share.
+    expect(exists('Node2/BBSTITLE.txt')).toBe(false);
+    expect(path.resolve(resolveNodeScreenDir(board, 2))).toBe(shared());
+  });
+
+  test('a minority that keeps its own version of a screen the shared directory has is not outvoted later', () => {
+    board = runningBoard();
+    // Nodes 3, 4, 5 have their own awaitscreen; nodes 0, 1, 2 the seeded one,
+    // which is what the shared directory already holds.
+    const SEEDED = Buffer.from('await seeded\n');
+    const THEIRS = Buffer.from('await theirs\n');
+    for (const n of NODES) fs.writeFileSync(path.join(board, `Node${n}`, 'awaitscreen.txt'), n >= 3 ? THEIRS : SEEDED);
+    fs.writeFileSync(path.join(board, 'Screens', 'Node', 'awaitscreen.txt'), SEEDED);
+    collapseSeedNodeScreens(board, { existingSharedWins: true });
+    for (const n of [0, 2]) expect(path.resolve(resolveNodeScreenDir(board, n))).toBe(shared());
+
+    // Second run: only nodes 1, 3, 4, 5 still have directories. Three of the
+    // four agree on THEIRS - a majority among the leftovers, and not a
+    // majority of the board.
+    collapseSeedNodeScreens(board, { existingSharedWins: true });
+    for (const n of [3, 4, 5]) {
+      expect({ n, dir: path.resolve(resolveNodeScreenDir(board, n)) }).toEqual({ n, dir: path.resolve(board, `Node${n}`) });
+      expect({ n, art: read(`Node${n}/awaitscreen.txt`).equals(THEIRS) }).toEqual({ n, art: true });
+    }
+    expect(read('Screens/Node/awaitscreen.txt').equals(SEEDED)).toBe(true);
+  });
+
+  test('without the flag - the image build - the nodes\' bytes are what the shared directory gets', () => {
+    board = runningBoard();
+    collapseSeedNodeScreens(board);
+    expect(read('Screens/Node/BBSTITLE.txt').equals(OLD_TITLE)).toBe(true);
+  });
+});

@@ -141,6 +141,7 @@ import { findSecurityScreen } from '../utils/screen-security.util';
 import { searchFileDescriptions } from './database-helpers';
 import { getBoardConfig } from '../services/bbs-config-file.service';
 import { nodeFileManager } from '../services/NodeFileManager';
+import { collapseSeedNodeScreens } from '../services/seed-node-screens';
 
 const AROS_ROM_FILES = ['aros-rom.bin', 'aros-ext.bin'];
 
@@ -440,10 +441,46 @@ export async function refreshConferencesFromDisk(bbsRootOverride?: string): Prom
  * Initialize database and inject dependencies into all handlers
  * @param io - Optional Socket.IO server instance for handlers that need socket access
  */
+/**
+ * A deployed board shares its node screens the way a fresh install does.
+ *
+ * The image's template is collapsed at build time (`collapseSeedNodeScreens`
+ * in the Dockerfile): one `Screens/Node/` copy of each node screen, every
+ * `Node<n>.info` pointed at it with SCREENS. A board that was seeded BEFORE
+ * that never got either half - `Node<n>.info` is volume-owned, seeded once -
+ * so its nodes still read `Node<n>/`, forty-one copies the deploy never
+ * refreshes, while the deploy keeps `Screens/Node/` fresh for nobody. Found
+ * 2026-09-07: a BBSTITLE fix landed three times and the live log still read
+ * `/app/data/bbs/Node1/BBSTITLE.txt`.
+ *
+ * Gated on the entrypoint's `.initialized` marker: only a volume the
+ * entrypoint seeded. This repository is itself a 41-node board, and running
+ * the collapse against a developer's checkout would move tracked art around.
+ */
+function collapseNodeScreensOnBoot(caller: string): void {
+  const bbsRoot = process.env.BBS_ROOT || process.env.BBS_DATA_DIR || config.get('dataDir');
+  if (!fs.existsSync(path.join(bbsRoot, '.initialized'))) return;
+  try {
+    const report = collapseSeedNodeScreens(bbsRoot, { existingSharedWins: true });
+    if (report.pointed.length > 0 || report.refreshed.length > 0 || report.sharedKept.length > 0) {
+      process.stdout.write(
+        `[${caller}] Node screens: ${report.pointed.length} node(s) now read Screens/Node` +
+        ` (${report.shared.map(s => s.name).join(', ') || 'nothing new shared'}); ` +
+        `${report.sharedKept.length} shared cop${report.sharedKept.length === 1 ? 'y' : 'ies'} kept as deployed; ` +
+        `${report.refreshed.length} screen(s) refreshed in nodes that keep their own directory` +
+        `${report.kept.length > 0 ? `; kept: ${report.kept.join(', ')}` : ''}\n`,
+      );
+    }
+  } catch (e) {
+    process.stderr.write(`[${caller}] node screen collapse warn: ${e}\n`);
+  }
+}
+
 export async function initializeData(io?: SocketIOServer) {
   try {
     if (io) _io = io;
     ensureArosRomsAvailable();
+    collapseNodeScreensOnBoot('Server');
 
     // Initialize database schema first
     await db.init();
