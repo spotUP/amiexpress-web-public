@@ -939,7 +939,7 @@ console.log(`[Operator Chat] Page ${pageId}: GrumpyBot's reply has NO EMITTER fo
   //
   // The caller may be typing on line 24 all the while, so every chunk ends
   // by putting the cursor back at the end of their input.
-  const wrapped = wordWrapMessage(message, 78, 78);
+  const wrapped = wrapChatMessage(message, 78);
   const color = '36';
   const callerSession = userSessions.get(String(page.userId));
   const callerCursor = () => `\x1b[24;${1 + (callerSession?.inputBuffer?.length ?? 0)}H`;
@@ -1140,7 +1140,7 @@ console.error('[Operator Chat] Bot response error:', err);
   const page = repository.getPageRequest(pageId);
   if (page) {
     const color = senderType === 'sysop' ? '36' : '33';
-    const wrappedLines = wordWrapMessage(message, 79, 79);
+    const wrappedLines = wrapChatMessage(message, 79);
 
     // Build output:
     // 1. \r\n to advance from input line
@@ -1194,32 +1194,51 @@ async function endChat(io: any, repository: OperatorChatRepository, pageId: stri
   await logChatTranscript(repository, chatSession);
 
   const page = repository.getPageRequest(pageId);
-  if (page) {
-    // Return user to menu
-    const userSession = userSessions.get(page.userId);
-    if (userSession) {
-      userSession.subState = LoggedOnSubState.DISPLAY_MENU;
-      userSession.menuPause = true;
-      delete userSession.tempData?.pageId;
-    }
-
-    const endMessage =
-      '\x1b[?25l' +
-      '\x1b[r' +
-      '\x1b[?1000l\x1b[?1006l' +
-      '\r\n\r\nEnding Chat.\r\n' +
-      '\r\n' +
-      '\x1b[32mPress any key to continue...\x1b[0m' +
-      '\x1b[?25h';
-
-    // TP-10: and so does the end-of-chat notice, which otherwise left a
-    // telnet caller sitting in a scroll region nothing would clear.
-    emitterForUserId(page.userId, io)?.emitter.emit('ansi-output', endMessage);
-  }
-
   io.to(`page:${pageId}`).emit('operator:chat-ended', { pageId });
   activeChatSessions.delete(pageId);
 console.log(`[Operator Chat] Chat session ${pageId} ended`);
+  if (!page) return;
+
+  // THE ONE WAY OUT OF A CHAT, whoever ended it. This used to print "Ending
+  // Chat." and a "Press any key" it armed with menuPause, and the caller's
+  // own /quit then printed "Chat ended. Returning to menu." after it - with
+  // the scroll region still set and the transcript still on the screen, the
+  // two notices landed on top of the chat and the caller sat there
+  // (2026-09-07 22:59, screenshot: "leave me hanging like this"). Now: the
+  // terminal is put back the way the chat found it, the screen is cleared,
+  // one line says the chat is over, and the caller is taken to the prompt
+  // directly - no pause in between, nothing to press.
+  const userSession = userSessions.get(String(page.userId));
+  if (userSession) {
+    userSession.subState = LoggedOnSubState.DISPLAY_MENU;
+    userSession.menuPause = false;
+    userSession.inputBuffer = '';
+    delete userSession.tempData?.pageId;
+  }
+  const endMessage =
+    '\x1b[?25l' +
+    '\x1b[r' +                     // scroll region off
+    '\x1b[?1000l\x1b[?1006l' +     // mouse reporting off
+    '\x1b[0m\x1b[2J\x1b[H' +      // attributes off, screen clear, home
+    'Chat ended.\r\n\r\n' +
+    '\x1b[?25h';
+  // TP-10: through the one registry, so a telnet caller is not left sitting
+  // in a scroll region nothing would clear.
+  const reach = emitterForUserId(page.userId, io);
+  if (!reach) {
+console.log(`[Operator Chat] Page ${pageId}: chat ended but no emitter reaches user ${page.userId}`);
+    return;
+  }
+  reach.emitter.emit('ansi-output', endMessage);
+  if (userSession) {
+    // The menu display flow is pumped by input; this is not input, so pump it.
+    try {
+      const { advanceDisplayFlow } = require('./command.handler');
+      await advanceDisplayFlow(reach.emitter, userSession);
+    } catch (err) {
+console.error(`[Operator Chat] Page ${pageId}: could not return the caller to the prompt:`, err);
+    }
+  }
 }
 
 /**
@@ -1465,6 +1484,21 @@ async function checkSysopAvailability(io: any, repository: OperatorChatRepositor
  * First line can be shorter (to account for timestamp + handle prefix)
  * Continuation lines use full width minus indent
  */
+/**
+ * A chat message as terminal lines: its OWN line breaks first, then each
+ * paragraph word-wrapped to `width`. An AI reply arrives with `\n` in it, and
+ * a bare LF sent to a terminal moves down without returning to column 1 -
+ * the staircase the sysop photographed on 2026-09-07 ("Welcome to
+ * AMIEXPRESS" starting mid-screen). Every line this returns is sent with
+ * `\r\n`. Exported for the test.
+ */
+export function wrapChatMessage(message: string, width: number): string[] {
+  return message
+    .replace(/\r/g, '')
+    .split('\n')
+    .flatMap((paragraph) => (paragraph.trim() === '' ? [''] : wordWrapMessage(paragraph, width, width)));
+}
+
 function wordWrapMessage(message: string, firstLineMax: number, continuationMax: number): string[] {
   const lines: string[] = [];
   let remaining = message;
@@ -1668,13 +1702,9 @@ console.error('[Operator Chat] No pageId in session tempData');
     return;
   }
 
+  // endChat clears the screen, says the chat is over and takes the caller to
+  // the prompt; a second notice here landed on top of it.
   await endChat(io, repository, pageId);
-
-  // Reset session state
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
-  delete session.tempData?.pageId;
-
-  socket.emit('ansi-output', '\r\n\x1b[33mChat ended. Returning to menu.\x1b[0m\r\n');
 }
 
 /**

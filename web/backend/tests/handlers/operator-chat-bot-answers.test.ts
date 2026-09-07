@@ -32,8 +32,11 @@ function makeWorld() {
   const repo = new OperatorChatRepository(db);
   repo.updateConfig({
     enabled: true, pageTimeout: 1, aiEnabled: true, aiProvider: 'openrouter',
-    openRouterApiKey: '', botThinkTime: 0, botTypingSpeed: 200, allowedSecLevels: [],
+    openRouterApiKey: '', botThinkTime: 0, botTypingSpeed: 1, allowedSecLevels: [],
   } as any);
+  // botTypingSpeed 1: the bot TYPES its reply now (grumpy-bot-types-live), and
+  // this suite is about order and survival, not pace - at 200 ms a character
+  // the reply had not reached its tag inside the wait under a loaded worker.
   const rooms = new Map<string, Set<string>>();
   const io: any = {
     fetchSockets: async () => [], on() {}, emit() {},
