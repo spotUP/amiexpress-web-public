@@ -12,6 +12,7 @@
 import { config } from '../config';
 import { db } from '../database';
 import { checkConfAccess } from '../handlers/message/message-scan.handler';
+import { loadConfConfig } from '../services/conf-config.service';
 import { FtpFilesystem } from './ftp-filesystem';
 import { nodeManager } from '../services/node-manager.service';
 import { writeToCallersLog } from '../utils/download-logging.util';
@@ -21,25 +22,63 @@ import type { FtpDeps, FtpUser } from './ftp-session';
 /**
  * The board's own conference tree, for browsing.
  *
- * `getConferenceConfigs` is the same list the admin edits and `checkConfAccess`
- * is express.e:8499 itself, so a caller sees over FTP exactly the conferences
- * he sees at the `J` prompt - minus the ones marked EXCLUDE_FTP.
+ * `ConfConfig.info` is the list - the same one `conferenceDir` reads - and
+ * `checkConfAccess` is express.e:8499 itself, so a caller sees over FTP
+ * exactly the conferences he sees at the `J` prompt, minus EXCLUDE_FTP.
  */
-export function boardFtpFilesystem(): FtpFilesystem {
-  // The repository the board already built, not a second one: it is the same
-  // list the admin edits, and nothing here needs ConfigService's validation or
-  // its write path. Read at call time so a conference added while the board
-  // runs is visible to the next listing.
+export function boardFtpFilesystem(root?: string): FtpFilesystem {
+  // The root is a parameter so a test can point this at a board of its own.
+  // `config` captures the data directory when it loads, which is before any
+  // test can set an environment variable - and testing the WIRING is the
+  // whole point: the defect was here, not in the layer underneath.
+  const bbsRoot = root ?? config.get('dataDir');
+
   return new FtpFilesystem({
-    conferences: () =>
-      db.getConfigRepository().getConferenceConfigs().map((conf) => ({
-        conference_id: conf.conference_id,
-        name: conf.name,
-        exclude_ftp: conf.exclude_ftp,
-        ndirs: conf.ndirs,
-      })),
+    /**
+     * THE BOARD, NOT THE MIRROR.
+     *
+     * The first version of this read `conference_config` through the config
+     * repository, which is the list the admin edits. On the live board that
+     * table has ZERO rows - the conferences are in `ConfConfig.info`, as
+     * `NCONFS` plus `NAME.n`/`LOCATION.n` - so every FTP listing came back
+     * empty while the caller had access to five conferences. It looked
+     * exactly like a permissions problem and was not one.
+     *
+     * The rule this belongs to is already written down: user and conference
+     * truth lives on disk and SQL is a mirror that may be empty, stale, or
+     * absent. `loadConfConfig` is the same reader `conferenceDir` uses to
+     * find where a conference's files are, so the names and the directories
+     * cannot disagree.
+     *
+     * The database is still consulted, but only as an OVERLAY and only for
+     * what the icon has no field for here - `exclude_ftp`. A missing table or
+     * an empty one now costs a flag, not the whole tree.
+     */
+    conferences: () => {
+      const onDisk = loadConfConfig(bbsRoot);
+      if (!onDisk) return [];
+
+      const flags = new Map<number, { exclude_ftp?: boolean; ndirs?: number }>();
+      try {
+        for (const row of db.getConfigRepository().getConferenceConfigs()) {
+          flags.set(row.conference_id, { exclude_ftp: row.exclude_ftp, ndirs: row.ndirs });
+        }
+      } catch {
+        // No table, no rows, no database - the board still has conferences.
+      }
+
+      return onDisk.entries.map((entry, index) => {
+        const conferenceId = index + 1;
+        return {
+          conference_id: conferenceId,
+          name: entry.name,
+          exclude_ftp: flags.get(conferenceId)?.exclude_ftp ?? false,
+          ndirs: flags.get(conferenceId)?.ndirs,
+        };
+      });
+    },
     canAccess: (user, conferenceId) => checkConfAccess(user, conferenceId),
-    bbsRoot: config.get('dataDir'),
+    bbsRoot,
   });
 }
 
