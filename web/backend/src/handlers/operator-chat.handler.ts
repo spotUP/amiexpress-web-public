@@ -35,6 +35,7 @@ import { getGrumpySysopResponse, getGrumpyBotIntroMessage, planNaturalTyping, ty
 import { buildBoardCard } from './sysop-ai/board-card';
 import { retrieve, retrievedAsPrompt } from './sysop-ai/corpus';
 import { toolsFor, type ToolContext } from './sysop-ai/tools';
+import { confirmPendingAdmin } from './sysop-ai/admin-tool';
 import { TOOL_AI_BUDGET_MS } from './grumpy-sysop-bot.handler';
 
 /**
@@ -1228,6 +1229,27 @@ async function sendChatMessage(
   // there is no "double enter" signal. Previously this required an empty
   // message before responding, which is non-obvious; users typed a question
   // and waited indefinitely.
+  if ((chatSession as any).isBotControlled && senderType === 'user' && message.trim() !== '' && (chatSession as any).pendingAdmin) {
+    // K3c: a held admin call is settled by THIS line - `yes` runs it,
+    // anything else cancels it - and the co-sysop reports, without the model.
+    const heldPage = repository.getPageRequest(pageId);
+    const tools = heldPage ? toolsForChat(io, repository, heldPage, chatSession) : undefined;
+    if (heldPage && tools) {
+      const verdict = await confirmPendingAdmin(tools.ctx, message);
+      if (verdict) {
+        const aiConfig = aiConfigFrom(repository.getConfig());
+        (chatSession as any).botBusy = true;
+        try {
+          (chatSession as any).botMessageHistory = [...((chatSession as any).botMessageHistory || []), { role: 'user', content: message }, { role: 'bot', content: verdict }];
+          await sendBotMessageWithTyping(io, repository, pageId, verdict, nodeId, heldPage, aiConfig);
+        } finally {
+          (chatSession as any).botBusy = false;
+        }
+        io.to(`page:${pageId}`).emit('operator:message', { ...saved, timestamp: saved.timestamp.getTime() });
+        return;
+      }
+    }
+  }
   if ((chatSession as any).isBotControlled && senderType === 'user' && message.trim() !== '') {
     // Skip if bot is already typing
     if ((chatSession as any).botBusy) {

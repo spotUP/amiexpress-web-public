@@ -301,8 +301,10 @@ export const COSYSOP_TOOLS: SysopTool[] = [
   },
 ];
 
-/** Every tool known to the board, all tiers. K3c adds the sysop's admin tool. */
-export const ALL_TOOLS: SysopTool[] = [...CALLER_TOOLS, ...BOUNDED_TOOLS, ...COSYSOP_TOOLS];
+import { ADMIN_TOOL } from './admin-tool';
+
+/** Every tool known to the board, all tiers. */
+export const ALL_TOOLS: SysopTool[] = [...CALLER_TOOLS, ...BOUNDED_TOOLS, ...COSYSOP_TOOLS, ADMIN_TOOL];
 
 /** The tools this caller's tier may use. */
 export function toolsFor(session: Pick<BBSSession, 'user'>): SysopTool[] {
