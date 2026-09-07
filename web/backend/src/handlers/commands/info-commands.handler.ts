@@ -9,6 +9,7 @@
  */
 
 import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
+import { settingsDoorsFor, type SettingsDoorEntry } from './w-settings-doors';
 import { getBoardConfig } from '../../services/bbs-config-file.service';
 import { config as appConfig } from '../../config';
 import { ACSPermission } from '../../constants/acs-permissions';
@@ -507,8 +508,45 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
   emitText(socket, AnsiUtil.colorize('erase your data (GDPR)', 'red'));
   emitText(socket, '\r\n');
 
+  // WEB_: the PETSCII palette. Only the 80-column screen has a choice - a C64
+  // is a VIC-II by construction - but the row is shown either way so a caller
+  // can set it before he next answers P8, and it says which screen it governs.
+  {
+    const vdc = session.user?.petsciiPalette !== 'vic';
+    emitText(socket, AnsiUtil.colorize('[', 'blue'));
+    emitText(socket, ' 21');
+    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+    emitText(socket, AnsiUtil.colorize('PETSCII 80 COLOURS..... ', 'magenta'));
+    emitText(socket, AnsiUtil.colorize(vdc ? 'C128 (VDC)' : 'C64 (VIC-II)', 'yellow'));
+    emitText(socket, '\r\n');
+  }
+
+  // WEB_: DOORS THAT REGISTER THEMSELVES AS SETTINGS. A door that exists to
+  // change what the board does for this caller belongs in the list he already
+  // opens to change such things, rather than behind a command name he has to
+  // know. It declares `SETTINGS=YES` in its own .info; nothing here knows any
+  // door by name. See commands/w-settings-doors.ts.
+  for (const [index, entry] of settingsDoorEntries(session).entries()) {
+    const number = String(FIRST_SETTINGS_DOOR_OPTION + index).padStart(3, ' ');
+    emitText(socket, AnsiUtil.colorize('[', 'blue'));
+    emitText(socket, number);
+    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
+    emitText(socket, AnsiUtil.colorize(`${entry.label.toUpperCase()}${'.'.repeat(Math.max(1, 23 - entry.label.length))} `, 'magenta'));
+    emitText(socket, AnsiUtil.colorize(entry.command, 'yellow'));
+    emitText(socket, '\r\n');
+  }
+
   emitText(socket, '\r\n');
   emitText(socket, 'Which to change <CR>=QUIT ? ');
+}
+
+/** The first W option number a registered settings door can take. */
+export const FIRST_SETTINGS_DOOR_OPTION = 22;
+
+/** The settings doors this caller may open, from the board's own door list. */
+export function settingsDoorEntries(session: BBSSession): SettingsDoorEntry[] {
+  const { getDoors } = require('../command-handler/dependency-injection');
+  return settingsDoorsFor(getDoors(), session as never);
 }
 
 /**
@@ -609,9 +647,26 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
 
   const option = parseInt(trimmed, 10);
 
-  // Invalid option number (18 = last express.e/web-extension option, 19/20 = GDPR)
-  if (isNaN(option) || option < 0 || option > 20) {
+  // 18 = last express.e/web-extension option, 19/20 = GDPR, 21 = the PETSCII
+  // palette, and from FIRST_SETTINGS_DOOR_OPTION up are the doors that
+  // registered themselves as settings.
+  const settingsDoors = settingsDoorEntries(session);
+  const lastOption = FIRST_SETTINGS_DOOR_OPTION + settingsDoors.length - 1;
+  if (isNaN(option) || option < 0 || option > lastOption) {
     _displayWCommandMenu(socket, session);
+    return;
+  }
+
+  if (option >= FIRST_SETTINGS_DOOR_OPTION) {
+    const entry = settingsDoors[option - FIRST_SETTINGS_DOOR_OPTION];
+    emitText(socket, '\r\n');
+    const { executeDoor } = require('../door.handler');
+    // The door owns the screen while it runs; when it returns, the caller is
+    // back where he chose it from, with whatever he changed already shown.
+    await executeDoor(socket, session, entry.door as never);
+    if (session.subState === LoggedOnSubState.W_OPTION_SELECT) {
+      _displayWCommandMenu(socket, session);
+    }
     return;
   }
 
@@ -811,6 +866,23 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       const { startForgetMe } = require('../user/gdpr.handler');
       startForgetMe(socket, session);
       break;
+    }
+
+    case 21: { // WEB_ which sixteen colours his 80-column PETSCII screen uses
+      const { db } = require('../../database');
+      const next = session.user?.petsciiPalette === 'vic' ? 'vdc' : 'vic';
+      if (session.user) {
+        try {
+          await db.updateUser(session.user.id, { petsciiPalette: next });
+          session.user.petsciiPalette = next;
+        } catch (error) {
+console.error('[W] could not save the PETSCII palette:', error);
+        }
+      }
+      // The canvas repaints from the machine it already has.
+      socket.emit('petscii-palette', { palette: next });
+      _displayWCommandMenu(socket, session);
+      return;
     }
 
     default:
