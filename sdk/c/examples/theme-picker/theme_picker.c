@@ -50,6 +50,57 @@ static char active_theme[32];
 /** The theme the rows are painted in; the door re-points this when it changes. */
 static const ui_theme *row_theme;
 
+/**
+ * THE SWATCH: the row under the cursor, repainted in ITS OWN theme's colours.
+ *
+ * "it doesnt live update the theme when i navigate like theme does either"
+ * (sysop, 2026-09-07). A whole-screen preview is a whole-screen repaint -
+ * measured with `make probe`, 1,949 bytes and ten XIM messages per keypress
+ * at 80 columns against 216 and two - which is the "its slow" the two-row
+ * repaint had been written to cure that same morning. A palette change
+ * changes every cell; there is no cheaper way to show a whole screen. So one
+ * ROW shows the theme instead.
+ *
+ * The palette, not the pen. A plain colour marker is resolved through
+ * whatever palette the buffer carries (ui_ansi.h), so writing `t->accent`
+ * gives the ACTIVE theme's shade - measured on a capture: every row came out
+ * `38;2;170;170;170`. The exact colours live in the theme's own `rgb`/`idx`
+ * tables and reach the wire only as TOKENS, so the swatch swaps the buffer's
+ * palette for the length of one row and puts it back.
+ *
+ * Called after the list has drawn, so the row the cursor LEFT has already
+ * been repainted in the screen's palette and needs nothing here.
+ */
+static void draw_swatch(ui_screen *screen, ui_list *list,
+                        const ui_theme *active, int wide)
+{
+    const ui_theme *t;
+    int row, lead;
+
+    if (!screen || !list || list->count <= 0) return;
+    t = ui_theme_at(list->selected);
+    if (!t || t == active) return;      /* the screen already wears it */
+
+    /* This door's list is borderless, unscrolled and offset-free (height ==
+       count), so the row is its index and the text starts after the caret. */
+    row = list->top + (list->selected - list->offset);
+    lead = list->caret ? (int) ui_printable_len(list->caret) : 0;
+
+    /* THE MARK AND THE NAME, not the blurb. At 80 columns the blurb is fifty
+       of the row's seventy-six cells and rewriting it in a second palette
+       cost 746 bytes and four XIM messages a keypress (`make probe`); the
+       twenty cells the eye is actually on cost 572 and three. At 40 there is
+       no blurb, so the whole row is the name and this is the same thing. */
+    { int span = wide ? 20 : list->width - lead;
+      if (span > list->width - lead) span = list->width - lead;
+
+      ansi_set_palette(&screen->buf, t->rgb, t->idx, UI_TOKEN_COUNT);
+      ansi_color(&screen->buf, UI_TOKEN(UI_T_INK), -1, 0);
+      ansi_text(&screen->buf, row, list->left + lead,
+                list->row(list->context, list->selected), span);
+      ansi_set_palette(&screen->buf, active->rgb, active->idx, UI_TOKEN_COUNT); }
+}
+
 /** One row: the mark, the name, and the blurb if the screen has room. */
 static const char *theme_row(void *context, int index)
 {
@@ -262,6 +313,7 @@ int main(int argc, char **argv)
 
         if (!full) {
             ui_list_draw_changed(&list, &screen.buf, 0);
+            draw_swatch(&screen, &list, theme, wide);
             ui_screen_flush(&screen);
             key = ui_key_read(&keys, &pushback);
             if (key < 0) break;
@@ -285,6 +337,7 @@ int main(int argc, char **argv)
                               UI_TOKEN(UI_T_ACCENT), UI_TOKEN(UI_T_GROUND),
                               rail_tick);
         ui_list_draw(&list, &screen.buf);
+        draw_swatch(&screen, &list, theme, wide);
 
         /* Say what will happen, and say the truth about this board - in
            words that FIT. ansi_text() clips at cols-3, which is 37 cells on
