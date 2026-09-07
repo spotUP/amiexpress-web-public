@@ -1570,6 +1570,7 @@ console.error('Error running migrations:', error);
           -- (the default) means "every door", preserving the old behaviour
           -- where a door_score webhook fired for every door on the board.
           door_filter TEXT DEFAULT '[]',
+          tier_filter TEXT DEFAULT '[]',
           created INTEGER DEFAULT (strftime('%s', 'now')),
           updated INTEGER DEFAULT (strftime('%s', 'now'))
         )
@@ -1581,6 +1582,12 @@ console.error('Error running migrations:', error);
       if (!webhookCols.includes('door_filter')) {
         this.db.exec("ALTER TABLE webhooks ADD COLUMN door_filter TEXT DEFAULT '[]'");
         console.log('✓ Added door_filter column to webhooks');
+      }
+      // Achievements (SP2): the tier filter, added the same way for boards
+      // whose webhooks table predates it.
+      if (!webhookCols.includes('tier_filter')) {
+        this.db.exec("ALTER TABLE webhooks ADD COLUMN tier_filter TEXT DEFAULT '[]'");
+        console.log('[OK] Added tier_filter column to webhooks');
       }
 
       // ===== Configuration Tables =====

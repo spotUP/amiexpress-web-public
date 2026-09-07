@@ -256,6 +256,45 @@ export class WebhookCommandsHandler {
   }
 
   /**
+   * Achievements (SP2): limit achievement_unlocked to tiers, the same way
+   * the door filter limits door events. Reuses the door filter's line
+   * buffering in command.handler.ts through tempData.webhookTierFilter.
+   */
+  static async promptTierFilter(socket: any, session: any, webhookId: number): Promise<void> {
+    const webhook = await db.getWebhook(webhookId);
+    if (!webhook) {
+      socket.emit('ansi-output', AnsiUtil.errorLine('Webhook not found'));
+      await this.listWebhooks(socket, session);
+      return;
+    }
+    socket.emit('ansi-output', AnsiUtil.clearScreen());
+    socket.emit('ansi-output', AnsiUtil.headerBox(`TIERS: ${webhook.name}`));
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', 'Limit achievement unlocks to these tiers: bronze, silver, gold, platinum.\r\n');
+    socket.emit('ansi-output', 'Enter tiers separated by commas, or leave blank for all tiers.\r\n\r\n');
+    socket.emit('ansi-output', `\x1b[36mCurrent:\x1b[0m ${webhook.tierFilter && webhook.tierFilter.length > 0 ? webhook.tierFilter.join(', ') : 'All tiers'}\r\n\r\n`);
+    socket.emit('ansi-output', '\x1b[36mTiers:\x1b[0m ');
+    session.inputBuffer = '';
+    session.tempData = { webhookTierFilter: { webhookId } };
+    session.subState = LoggedOnSubState.FILE_DIR_SELECT;
+  }
+
+  static async handleTierFilterInput(socket: any, session: any, input: string): Promise<void> {
+    const webhookId = session.tempData?.webhookTierFilter?.webhookId;
+    delete session.tempData;
+    if (webhookId === undefined) {
+      await this.handleWebhookCommand(socket, session);
+      return;
+    }
+    const known = ['bronze', 'silver', 'gold', 'platinum'];
+    const tiers = input.split(',').map(t => t.trim().toLowerCase()).filter(t => known.includes(t));
+    await db.updateWebhook(webhookId, { tierFilter: tiers });
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', AnsiUtil.successLine(tiers.length > 0 ? `Unlock webhook limited to: ${tiers.join(', ')}` : 'Unlock webhook will fire for every tier'));
+    await this.showWebhookActions(socket, session, webhookId);
+  }
+
+  /**
    * Apply a comma-separated door filter typed at the prompt above.
    */
   static async handleDoorFilterInput(socket: any, session: any, input: string): Promise<void> {
@@ -302,12 +341,14 @@ export class WebhookCommandsHandler {
     socket.emit('ansi-output', `\x1b[36mStatus:\x1b[0m ${webhook.enabled ? '\x1b[32mENABLED\x1b[0m' : '\x1b[31mDISABLED\x1b[0m'}\r\n`);
     socket.emit('ansi-output', `\x1b[36mTriggers:\x1b[0m ${webhook.triggers.length > 0 ? webhook.triggers.join(', ') : 'None'}\r\n`);
     socket.emit('ansi-output', `\x1b[36mDoors:\x1b[0m ${webhook.doorFilter && webhook.doorFilter.length > 0 ? webhook.doorFilter.join(', ') : 'All doors'}\r\n`);
+    socket.emit('ansi-output', `\x1b[36mTiers:\x1b[0m ${webhook.tierFilter && webhook.tierFilter.length > 0 ? webhook.tierFilter.join(', ') : 'All tiers'}\r\n`);
     socket.emit('ansi-output', '\r\n');
 
     // Actions menu
     const menuItems: MenuItem[] = [
       { label: webhook.enabled ? 'Disable' : 'Enable', action: 'toggle', description: 'Toggle webhook on/off' },
       { label: 'Doors', action: 'doors', description: 'Limit this webhook to specific doors' },
+      { label: 'Tiers', action: 'tiers', description: 'Limit achievement unlocks to tiers' },
       { label: 'Test', action: 'test', description: 'Send test notification' },
       { label: 'Delete', action: 'delete', description: 'Remove this webhook' },
       { label: 'Back', action: 'back', description: 'Return to webhook list' }
@@ -353,6 +394,10 @@ export class WebhookCommandsHandler {
 
         case 'doors':
           await this.promptDoorFilter(socket, session, menuData.webhookId);
+          break;
+
+        case 'tiers':
+          await this.promptTierFilter(socket, session, menuData.webhookId);
           break;
 
         case 'test':

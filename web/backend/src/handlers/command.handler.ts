@@ -2942,11 +2942,12 @@ console.log(' In file upload state - canceling upload');
   // READ_COMMAND/GDPR_BACKFILL happen to already have their own.
   // Door-filter input reuses the identical line-buffering contract below;
   // handled first because both set tempData and only one is ever active.
-  if (session.tempData?.webhookDoorFilter) {
+  if (session.tempData?.webhookDoorFilter || session.tempData?.webhookTierFilter) {
     if (data === '\r' || data === '\n') {
       const dfInput = (session.inputBuffer || '');
       session.inputBuffer = '';
-      await WebhookCommandsHandler.handleDoorFilterInput(socket, session, dfInput);
+      if (session.tempData?.webhookTierFilter) await WebhookCommandsHandler.handleTierFilterInput(socket, session, dfInput);
+      else await WebhookCommandsHandler.handleDoorFilterInput(socket, session, dfInput);
     } else if (data === '\x7f' || data === '\b') {
       if (session.inputBuffer?.length) {
         session.inputBuffer = session.inputBuffer.slice(0, -1);

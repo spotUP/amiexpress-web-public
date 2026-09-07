@@ -190,6 +190,11 @@ export interface Webhook {
    * posted to all of them.
    */
   doorFilter: string[];
+  /**
+   * Achievement tiers this webhook fires for (SP2), shaped like doorFilter:
+   * a JSON array, empty means every tier. Read only by achievement_unlocked.
+   */
+  tierFilter: string[];
   created: Date;
   updated: Date;
 }

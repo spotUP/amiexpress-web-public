@@ -22,6 +22,7 @@ export class WebhookRepository extends BaseRepository<any> {
       enabled: Boolean(row.enabled),
       triggers: JSON.parse(row.triggers || '[]'),
       doorFilter: JSON.parse(row.door_filter || '[]'),
+      tierFilter: JSON.parse(row.tier_filter || '[]'),
       created: new Date(row.created * 1000),
       updated: new Date(row.updated * 1000)
     }));
@@ -42,18 +43,19 @@ export class WebhookRepository extends BaseRepository<any> {
       enabled: Boolean(row.enabled),
       triggers: JSON.parse(row.triggers || '[]'),
       doorFilter: JSON.parse(row.door_filter || '[]'),
+      tierFilter: JSON.parse(row.tier_filter || '[]'),
       created: new Date(row.created * 1000),
       updated: new Date(row.updated * 1000)
     };
   }
 
-  async createWebhook(data: { name: string; url: string; type: 'discord' | 'slack'; triggers: string[]; doorFilter?: string[] }): Promise<number> {
+  async createWebhook(data: { name: string; url: string; type: 'discord' | 'slack'; triggers: string[]; doorFilter?: string[]; tierFilter?: string[] }): Promise<number> {
 
     const stmt = this.prepare(`
-      INSERT INTO webhooks (name, url, type, enabled, triggers, door_filter)
-      VALUES (?, ?, ?, 1, ?, ?)
+      INSERT INTO webhooks (name, url, type, enabled, triggers, door_filter, tier_filter)
+      VALUES (?, ?, ?, 1, ?, ?, ?)
     `);
-    const result = stmt.run(data.name, data.url, data.type, JSON.stringify(data.triggers), JSON.stringify(data.doorFilter ?? []));
+    const result = stmt.run(data.name, data.url, data.type, JSON.stringify(data.triggers), JSON.stringify(data.doorFilter ?? []), JSON.stringify(data.tierFilter ?? []));
     return result.lastInsertRowid as number;
   }
 
@@ -86,6 +88,10 @@ export class WebhookRepository extends BaseRepository<any> {
       fields.push('door_filter = ?');
       values.push(JSON.stringify(data.doorFilter));
     }
+    if (data.tierFilter !== undefined) {
+      fields.push('tier_filter = ?');
+      values.push(JSON.stringify(data.tierFilter));
+    }
 
     if (fields.length === 0) return;
 
@@ -111,7 +117,7 @@ export class WebhookRepository extends BaseRepository<any> {
    * empty doorFilter matches everything, which is what every pre-existing
    * webhook has, so behaviour is unchanged until a filter is set.
    */
-  async getWebhooksByTrigger(trigger: string, door?: string): Promise<Webhook[]> {
+  async getWebhooksByTrigger(trigger: string, door?: string, tier?: string): Promise<Webhook[]> {
 
     const stmt = this.prepare('SELECT * FROM webhooks WHERE enabled = 1');
     const rows = stmt.all() as any[];
@@ -125,6 +131,7 @@ export class WebhookRepository extends BaseRepository<any> {
         enabled: Boolean(row.enabled),
         triggers: JSON.parse(row.triggers || '[]'),
         doorFilter: JSON.parse(row.door_filter || '[]'),
+        tierFilter: JSON.parse(row.tier_filter || '[]'),
         created: new Date(row.created * 1000),
         updated: new Date(row.updated * 1000)
       }))
@@ -134,6 +141,15 @@ export class WebhookRepository extends BaseRepository<any> {
         if (!door) return true;
         const wanted = door.trim().toLowerCase();
         return webhook.doorFilter.some((d: string) => String(d).trim().toLowerCase() === wanted);
+      })
+      // The tier filter (SP2): shaped exactly like the door filter - a JSON
+      // array, empty meaning every tier - and consulted only when the
+      // payload names a tier (achievement_unlocked does).
+      .filter(webhook => {
+        if (!webhook.tierFilter || webhook.tierFilter.length === 0) return true;
+        if (!tier) return true;
+        const wanted = tier.trim().toLowerCase();
+        return webhook.tierFilter.some((t: string) => String(t).trim().toLowerCase() === wanted);
       });
   }
 }

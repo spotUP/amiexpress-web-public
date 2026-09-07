@@ -30,7 +30,9 @@ export enum WebhookTrigger {
    * started, a winner. Separate from DOOR_SCORE on purpose - a channel that
    * wants "come and play" is rarely the channel that wants every high score.
    */
-  DOOR_ANNOUNCEMENT = 'door_announcement'
+  DOOR_ANNOUNCEMENT = 'door_announcement',
+  /** Achievements (SP2): a player's global unlock; tier_filter narrows it. */
+  ACHIEVEMENT_UNLOCKED = 'achievement_unlocked'
 }
 
 /**
@@ -151,7 +153,11 @@ class WebhookService {
       // everything else. Without this every door_score webhook fired for
       // every door, so a board with one webhook per game saw each score
       // posted to all of them.
-      const webhooks = await db.getWebhooksByTrigger(trigger, typeof data.door === 'string' ? data.door : undefined);
+      const webhooks = await db.getWebhooksByTrigger(
+      trigger,
+      typeof data.door === 'string' ? data.door : undefined,
+      typeof data.tier === 'string' ? data.tier : undefined
+    );
 
       if (webhooks.length === 0) {
         return; // No webhooks configured for this trigger

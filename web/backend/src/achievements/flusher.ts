@@ -50,10 +50,39 @@ export interface FlusherDeps {
   onNotLinked: (rawDb: Database.Database, email: string, now: number) => void;
 }
 
+export interface PlayerRow { id: string; username: string; gdprConsentAt: number | string | null }
+
 /** The users row for an address, matched case-insensitively. */
+export function userForEmail(rawDb: Database.Database, email: string): PlayerRow | null {
+  const row = rawDb.prepare('SELECT id, username, gdpr_consent_at FROM users WHERE lower(email) = lower(?) LIMIT 1').get(email) as
+    | { id: string | number; username: string; gdpr_consent_at: number | string | null }
+    | undefined;
+  return row ? { id: String(row.id), username: row.username, gdprConsentAt: row.gdpr_consent_at } : null;
+}
+
 export function userIdForEmail(rawDb: Database.Database, email: string): string | null {
-  const row = rawDb.prepare('SELECT id FROM users WHERE lower(email) = lower(?) LIMIT 1').get(email) as { id: string | number } | undefined;
-  return row ? String(row.id) : null;
+  return userForEmail(rawDb, email)?.id ?? null;
+}
+
+/**
+ * The webhook (S8): achievement_unlocked with the board's username and the
+ * achievement - never the email; the handle is the server's, not sent.
+ */
+export function fireUnlockWebhook(player: PlayerRow, unlock: UnlockOut, send: (trigger: string, data: Record<string, unknown>) => Promise<unknown> = defaultWebhookSend): void {
+  send('achievement_unlocked', {
+    username: player.username,
+    userId: player.id,
+    gdprConsented: !!player.gdprConsentAt,
+    achievementId: unlock.id,
+    name: unlock.name,
+    tier: unlock.tier,
+    points: unlock.points,
+  }).catch((err: Error) => console.warn(`[WARN] achievements: unlock webhook failed: ${err.message}`));
+}
+
+function defaultWebhookSend(trigger: string, data: Record<string, unknown>): Promise<unknown> {
+  const { webhookService } = require('../services/webhook.service');
+  return webhookService.sendWebhook(trigger, data);
 }
 
 /**
@@ -70,8 +99,10 @@ export function productionFlusherDeps(io: unknown): FlusherDeps {
     now: () => Date.now(),
     log: (line) => console.log(line),
     onUnlock: (rawDb, email, unlock, now) => {
-      const userId = userIdForEmail(rawDb, email);
-      if (userId) deliverNotice(io, userId, 'unlock', unlock, { rawDb: () => rawDb, now: () => now });
+      const player = userForEmail(rawDb, email);
+      if (!player) return;
+      deliverNotice(io, player.id, 'unlock', unlock, { rawDb: () => rawDb, now: () => now });
+      fireUnlockWebhook(player, unlock);
     },
     onNotLinked: (rawDb, email, now) => {
       const userId = userIdForEmail(rawDb, email);
