@@ -126,7 +126,12 @@ export async function runPostAuthLogin(
   // Reassignable so the forced-pwd-change adapter can refresh the
   // hash after the password is updated mid-flow.
   let user = userArg;
-  const isWeb = session.connectionType === "web";
+  // Unset means web: session-manager defaults an unset connectionType to
+  // 'web', and every other reader in the tree (`session.connectionType ??
+  // 'web'` in the achievements reporter, `|| 'web'` in BBSApi) says the same.
+  // A strict `=== "web"` here was the odd one out, and a session built
+  // anywhere that leaves the field unset would silently get no session token.
+  const isWeb = (session.connectionType ?? "web") === "web";
 
   /**
    * THE RESERVED-NODE BUMP (express.e:28734-28738 / 29129-29135).
