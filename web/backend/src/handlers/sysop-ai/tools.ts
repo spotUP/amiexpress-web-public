@@ -21,7 +21,16 @@ import { listOnlineNodes } from '../../doors/who-is-online';
 import { searchFilesAdvanced } from '../../server/database-helpers';
 import { conferenceDir } from '../../conferences/conference-paths';
 import { conferencesFromDisk, commandsOnDisk, callerLines } from './board-card';
-import { tierAllows, tierOf, type Tier } from './fences';
+import { tierAllows, tierOf, remainingToday, spendToday, SYSOP_LEVEL, type Tier } from './fences';
+import { emitterForNodeId } from '../../server/session-emitter-registry';
+
+/** The slice of the board's database the sysop-grade tools use; injectable. */
+export interface ToolDatabase {
+  getUserByUsername(username: string): Promise<{ id: string; username: string; secLevel: number; timeTotal: number } | null>;
+  updateUser(id: string, updates: Record<string, unknown>): Promise<void>;
+  createMessage(message: Record<string, unknown>): Promise<number>;
+  getMessageBases(conferenceId: number): Promise<Array<{ id: number }>>;
+}
 
 export interface ToolContext {
   io: any;
@@ -31,6 +40,12 @@ export interface ToolContext {
   bbsRoot: string;
   /** Run a board command as the caller, after the chat has ended. */
   execute: (command: string, params: string) => Promise<void>;
+  /** The board's database, for the sysop-grade tools. Absent: those tools refuse. */
+  db?: ToolDatabase;
+  /** The admin's caps. */
+  caps: { grantTimeMinutesPerDay: number };
+  /** The board's sysop name, the author of what the co-sysop posts. */
+  sysopName: string;
 }
 
 export interface ToolResult {
@@ -171,8 +186,123 @@ export const CALLER_TOOLS: SysopTool[] = [
   },
 ];
 
-/** Every tool known to the board, all tiers. K3b/K3c add theirs here. */
-export const ALL_TOOLS: SysopTool[] = [...CALLER_TOOLS];
+/**
+ * Sysop-grade, bounded, any caller (K3b): a real sysop grants a regular a
+ * little time, posts a notice, leaves a note. Each one capped or scoped so a
+ * caller talking the model into it gets the cap, not the board.
+ */
+export const BOUNDED_TOOLS: SysopTool[] = [
+  {
+    name: 'grant_time',
+    description: 'Give the caller extra time online today, in minutes. Capped per caller per day by the sysop.',
+    parameters: { type: 'object', properties: { minutes: { type: 'integer', minimum: 1, maximum: 120 } }, required: ['minutes'], additionalProperties: false },
+    tier: 'caller',
+    async run(ctx, args) {
+      const wanted = int(args.minutes);
+      const user = ctx.session.user;
+      if (!wanted || wanted < 1 || !user) return { content: 'Minutes must be a number from 1 up.' };
+      if (!ctx.db) return { content: 'The board cannot change accounts right now.' };
+      const cap = ctx.caps.grantTimeMinutesPerDay;
+      const left = remainingToday(String(user.id), 'grant_time', cap);
+      if (left <= 0) return { content: `The caller already had today's ${cap} minutes; nothing more today.` };
+      const granted = spendToday(String(user.id), 'grant_time', cap, Math.min(wanted, 120));
+      user.timeTotal = (user.timeTotal ?? 0) + granted * 60;
+      await ctx.db.updateUser(String(user.id), { timeTotal: user.timeTotal });
+      return { content: `Granted ${granted} extra minutes today${granted < wanted ? ` (the daily cap is ${cap})` : ''}.` };
+    },
+  },
+  {
+    name: 'post_message',
+    description: 'Post a public message as the sysop in a conference (a notice, an announcement). Subject and body.',
+    parameters: { type: 'object', properties: { conference: { type: 'integer', minimum: 1 }, subject: { type: 'string' }, body: { type: 'string' } }, required: ['subject', 'body'], additionalProperties: false },
+    tier: 'caller',
+    async run(ctx, args) {
+      if (!ctx.db) return { content: 'The board cannot post right now.' };
+      const conf = int(args.conference) ?? ctx.session.currentConf ?? 1;
+      const subject = str(args.subject, 60);
+      const body = String(args.body ?? '').trim().slice(0, 2000);
+      if (!subject || !body) return { content: 'A message needs a subject and a body.' };
+      const bases = await ctx.db.getMessageBases(conf);
+      const base = bases[0]?.id ?? 1;
+      const id = await ctx.db.createMessage({
+        subject, body: `${body}
+
+-- posted by the co-sysop for ${ctx.session.user?.username ?? 'a caller'}`,
+        author: ctx.sysopName, timestamp: new Date(), conferenceId: conf, messageBaseId: base, isPrivate: false,
+      });
+      return { content: `Posted message #${id} "${subject}" in conference ${conf}.` };
+    },
+  },
+  {
+    name: 'note_on_account',
+    description: 'Leave the caller a private note from the sysop, read as mail on their next call.',
+    parameters: { type: 'object', properties: { note: { type: 'string' } }, required: ['note'], additionalProperties: false },
+    tier: 'caller',
+    async run(ctx, args) {
+      if (!ctx.db) return { content: 'The board cannot leave notes right now.' };
+      const note = String(args.note ?? '').trim().slice(0, 2000);
+      const user = ctx.session.user;
+      if (!note || !user) return { content: 'The note is empty.' };
+      const conf = ctx.session.currentConf ?? 1;
+      const bases = await ctx.db.getMessageBases(conf);
+      await ctx.db.createMessage({
+        subject: 'A note from the sysop', body: note, author: ctx.sysopName, timestamp: new Date(),
+        conferenceId: conf, messageBaseId: bases[0]?.id ?? 1, isPrivate: true, toUser: user.username,
+      });
+      return { content: `Left ${user.username} a private note.` };
+    },
+  },
+];
+
+/**
+ * Co-sysop only (level 100-254): the two things a co-sysop does at the
+ * console. Kicks reach any node but the sysop's own account; a level is
+ * never set above the caller's own, never on the sysop account, never to 0.
+ */
+export const COSYSOP_TOOLS: SysopTool[] = [
+  {
+    name: 'kick_node',
+    description: 'Disconnect the caller on a node (co-sysops only). Never the sysop.',
+    parameters: { type: 'object', properties: { node: { type: 'integer', minimum: 0 } }, required: ['node'], additionalProperties: false },
+    tier: 'cosysop',
+    async run(ctx, args) {
+      const node = int(args.node);
+      if (node === null) return { content: 'Which node?' };
+      const target = emitterForNodeId(node, ctx.io);
+      if (!target) return { content: `Nobody is on node ${node}.` };
+      const victim = target.session.user;
+      if ((victim?.secLevel ?? 0) >= SYSOP_LEVEL) return { content: 'The sysop is not kicked by the co-sysop.' };
+      if (target.session === ctx.session) return { content: 'That is the caller you are talking to; use show_menu to end the chat instead.' };
+      target.session.sysopKicked = true;
+      target.emitter.emit('ansi-output', '\r\n\x1b[31m*** Disconnected by SYSOP ***\x1b[0m\r\n');
+      setTimeout(() => { try { (target.emitter as any).disconnect?.(true); } catch { /* gone already */ } }, 500);
+      return { content: `Node ${node} (${victim?.username ?? 'unknown'}) has been disconnected.` };
+    },
+  },
+  {
+    name: 'set_level',
+    description: 'Set a user\'s security level by handle (co-sysops only). Never above your own level, never the sysop, never 0.',
+    parameters: { type: 'object', properties: { handle: { type: 'string' }, level: { type: 'integer', minimum: 1, maximum: 254 } }, required: ['handle', 'level'], additionalProperties: false },
+    tier: 'cosysop',
+    async run(ctx, args) {
+      if (!ctx.db) return { content: 'The board cannot change accounts right now.' };
+      const handle = str(args.handle, 30);
+      const level = int(args.level);
+      const own = ctx.session.user?.secLevel ?? 0;
+      if (!handle || level === null) return { content: 'A handle and a level, please.' };
+      if (level < 1 || level > own || level >= SYSOP_LEVEL) return { content: `A co-sysop at ${own} may set levels 1 to ${Math.min(own, SYSOP_LEVEL - 1)}.` };
+      const target = await ctx.db.getUserByUsername(handle);
+      if (!target) return { content: `No user called ${handle}.` };
+      if (target.secLevel >= SYSOP_LEVEL) return { content: 'The sysop account is not touched.' };
+      if (target.secLevel > own) return { content: `${handle} outranks the caller; not touched.` };
+      await ctx.db.updateUser(target.id, { secLevel: level });
+      return { content: `${target.username}: level ${target.secLevel} -> ${level}.` };
+    },
+  },
+];
+
+/** Every tool known to the board, all tiers. K3c adds the sysop's admin tool. */
+export const ALL_TOOLS: SysopTool[] = [...CALLER_TOOLS, ...BOUNDED_TOOLS, ...COSYSOP_TOOLS];
 
 /** The tools this caller's tier may use. */
 export function toolsFor(session: Pick<BBSSession, 'user'>): SysopTool[] {

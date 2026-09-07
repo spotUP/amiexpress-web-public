@@ -61,12 +61,20 @@ function toolsForChat(io: any, repository: OperatorChatRepository, page: PageReq
   if ((config as any).aiToolsEnabled === false) return undefined;
   const session = userSessions.get(String(page.userId));
   if (!session) return undefined;
+  let db: ToolContext['db'];
+  try {
+    const { getDatabase } = require('./command-handler/dependency-injection');
+    db = getDatabase();
+  } catch { db = undefined; }
   const ctx: ToolContext = {
     io, session, page, chatSession, bbsRoot,
     execute: async (command, params) => {
       await endChat(io, repository, page.id);
       await commandExecutor(session, command, params);
     },
+    db,
+    caps: { grantTimeMinutesPerDay: Number((config as any).aiTimeGrantCapMinutes ?? 30) },
+    sysopName: loadBBSConfig(bbsRoot).sysop_name || 'Sysop',
   };
   return { list: toolsFor(session), ctx };
 }
