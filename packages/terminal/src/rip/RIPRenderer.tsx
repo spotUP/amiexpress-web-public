@@ -99,14 +99,27 @@ const RIPRenderer = React.forwardRef<RIPRendererRef, RIPRendererProps>(
 
     useEffect(() => {
       let cancelled = false;
-      const term: any = new RIPterm({
-        canvasId,
-        fontsPath,
-        iconsPath,
-        logQuiet: true,
-        modemSpeed: 0,
-        refreshInterval: 20,
-      });
+
+      // A canvas with no 2D context - a headless test environment, a browser
+      // that refuses the context under memory pressure - makes RIPtermJS's BGI
+      // constructor throw, and an effect that throws unmounts the whole tree
+      // above it. A picture that cannot be drawn is a missing picture, not a
+      // blank page: the admin's screen manager renders this component inside
+      // its file dialog, and the dialog has to survive it.
+      let term: any;
+      try {
+        term = new RIPterm({
+          canvasId,
+          fontsPath,
+          iconsPath,
+          logQuiet: true,
+          modemSpeed: 0,
+          refreshInterval: 20,
+        });
+      } catch (err) {
+        console.warn('[RIP] RIPtermJS could not start on this canvas:', err);
+        return;
+      }
       termRef.current = term;
       term.onHostCommand = (text: string) => onCommandRef.current?.(text);
 

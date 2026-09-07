@@ -325,13 +325,16 @@ describe('editing a screen in the browser', () => {
     expect(items[0].textContent).toContain('points at nothing');
   });
 
-  it('offers no editor for a RIP screen, and says which phase owns it', async () => {
+  it('opens a RIP screen in the RIP editor, not on a canvas of cells', async () => {
+    // This used to assert the opposite - "no editor, phase 3 owns it". A .rip
+    // is a vector program; a canvas of cells would show a blank 80x25 and save
+    // the blank over the artwork, so the page routes by FORMAT.
     fileFormat = 'rip';
     const user = userEvent.setup();
     await openTheFile(user);
 
-    expect(await screen.findByText(/RIP graphics/i)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /edit/i })).toBeNull();
+    expect(await screen.findByTestId('rip-screen-editor')).toBeTruthy();
+    expect(screen.queryByTestId('ansi-canvas')).toBeNull();
   });
 });
 
