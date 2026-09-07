@@ -20,6 +20,64 @@ import { c64AdapterFor } from '../../server/c64-door-adapter';
 const iconv = require('iconv-lite');
 
 // ---------------------------------------------------------------------------
+// 40-column variants (backlog lane 13.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * The narrow spellings of one display file.
+ *
+ * A door being adapted to 40 columns asks for a file its author drew for 80.
+ * Where the sysop has drawn a narrow copy, that copy wins - and it reaches the
+ * caller exactly as drawn, because the rule ladder leaves an already-fitting
+ * row alone (`chooseRule` answers `crop`, the identity at that width, in
+ * sdk/petscii/frame/adapt.ts:206-221).
+ *
+ * The suffix is `_C64`, the one `screen.handler.ts` already resolves screens
+ * with, so there is one convention to learn rather than two. BOTH spellings
+ * are probed because a door file is not always `NAME.ext`: the "extension" of
+ * `dRE!WAll.StYlE.1` is a STYLE NUMBER, and the narrow copy a sysop would draw
+ * for it is `dRE!WAll.StYlE.1_C64`, not `dRE!WAll.StYlE_C64.1`.
+ *
+ * Surveyed doors this reaches: `wall` (dRE!WAll, its banner) and `games`
+ * (5D-AdiMenu, the whole menu screen) both fetch their file through JH_SF.
+ * `ctop`/`conftop` open their `Conftop.header` through dos.library instead and
+ * are NOT covered here - see thoughts/shared/research/2026-09-07_door-external-header-files.md.
+ */
+export function narrowVariants(candidate: string): string[] {
+  const parsed = path.parse(candidate);
+  const whole = `${candidate}_C64`;
+  const stem = path.join(parsed.dir, `${parsed.name}_C64${parsed.ext}`);
+  return whole === stem ? [whole] : [whole, stem];
+}
+
+/**
+ * Each candidate preceded by its narrow spellings, when the caller's door
+ * output is being adapted to 40 columns.
+ *
+ * INTERLEAVED, not all-narrow-first: JH_SG's candidate list is an ACCESS
+ * ladder (`NAME50.txt` before `NAME45.txt`), and width is a variant WITHIN a
+ * rung, not above it. Hoisting every narrow spelling to the front would let a
+ * narrow lower-access file answer ahead of the plain file the caller is
+ * entitled to.
+ */
+export function widthAwareCandidates(self: any, candidates: string[]): string[] {
+  if (!c64AdapterFor(self?.socket)) return candidates;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (p: string) => {
+    if (!seen.has(p)) {
+      seen.add(p);
+      out.push(p);
+    }
+  };
+  for (const candidate of candidates) {
+    narrowVariants(candidate).forEach(add);
+    add(candidate);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Exported handlers (delegated from XIMIOHandler methods)
 // ---------------------------------------------------------------------------
 
@@ -40,7 +98,7 @@ export async function handleShowGFile(self: any, msg: XIMMessage): Promise<void>
   const secLevel = self.bbsSession?.user?.secLevel ?? 0;
 
   const candidates = buildGFileCandidates(baseWithoutExt, parsed.ext, language, secLevel);
-  const target = findFirstExisting(candidates);
+  const target = findFirstExisting(widthAwareCandidates(self, candidates));
   if (!target) {
     console.warn(`[XIMIOHandler] JH_SG: No gfile found for base ${partName}`);
     self.reply(msg, 0);
@@ -78,7 +136,7 @@ export async function handleShowFile(self: any, msg: XIMMessage): Promise<void> 
           `${resolved}.GR1`,
         ];
 
-  const target = findFirstExisting(candidates);
+  const target = findFirstExisting(widthAwareCandidates(self, candidates));
   if (!target) {
     console.warn(`[XIMIOHandler] JH_SF: File not found: ${targetPath}`);
     self.reply(msg, 0);
