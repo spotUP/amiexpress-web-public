@@ -78,6 +78,27 @@ describe('what the row says', () => {
  * feature is not merely possible but actually in use, and a rename of either
  * file is caught here rather than by a caller finding an empty list.
  */
+/**
+ * WHICH doors are settings, decided once by reading the whole roster
+ * (2026-09-07, at the sysop's request: "audit what other doors should have
+ * user settings registered in W and register them").
+ *
+ * Three qualify, and the reason is the same for each: they change what the
+ * BOARD does for this caller, and the change outlives the door.
+ *
+ *   SCREENTHEME  which set of the board's art he is shown
+ *   THEME        the colours the doors are drawn with
+ *   ACHIEVE      the account this board reports his achievements to
+ *
+ * The rest of the roster is games, chat, viewers, sysop tools and the
+ * batch-registered DayDream imports: none of them remembers anything about
+ * the caller. Two are deliberately NOT registered:
+ *
+ *   THEMEC       the same setting as THEME, in C. Two rows for one choice is
+ *                worse than one, and this port exists to prove the C SDK.
+ *   PROMPTCOMPLETE  a board-wide feature a door PROVIDES, not a per-caller
+ *                setting. If it ever gains an on/off it belongs here.
+ */
 describe("the board's shipped settings doors", () => {
   const BBSCMD = path.resolve(__dirname, '../../../../Commands/BBSCmd');
 
@@ -91,10 +112,20 @@ describe("the board's shipped settings doors", () => {
   it.each([
     ['SCREENTHEME', 'Screen artwork'],
     ['THEME', 'Door colours'],
+    ['ACHIEVE', 'Achievements account'],
   ])('%s declares itself a setting and names its row', (command, label) => {
     expect(fs.existsSync(path.join(BBSCMD, `${command}.info`))).toBe(true);
     const toolTypes = toolTypesOf(command);
     expect(toolTypes.SETTINGS).toBe('YES');
     expect(settingsLabelFor({ command, toolTypes })).toBe(label);
   });
+
+  it.each(['THEMEC', 'PROMPTCOMPLETE', 'DOORS', 'GMASTER'])(
+    '%s is not a setting, and does not claim to be',
+    (command) => {
+      const file = path.join(BBSCMD, `${command}.info`);
+      if (!fs.existsSync(file)) return; // a board that does not install it
+      expect(toolTypesOf(command).SETTINGS).toBeUndefined();
+    },
+  );
 });

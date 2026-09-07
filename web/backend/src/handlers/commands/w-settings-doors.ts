@@ -92,3 +92,29 @@ export function settingsDoorsFor(
     .filter((entry) => entry.command !== '')
     .sort((a, b) => a.label.localeCompare(b.label) || a.command.localeCompare(b.command));
 }
+
+/**
+ * THE AUDIT, 2026-09-07 ("audit what other doors should have user settings
+ * registered in W and register them").
+ *
+ * Every command on the board was read. Three qualify, and the test is the
+ * same for each: does it change what the BOARD does for this caller, and does
+ * the change outlive the door?
+ *
+ *   SCREENTHEME  which set of the board's art he is shown
+ *   THEME        the colours the doors are drawn with
+ *   ACHIEVE      the account this board reports his achievements to, and
+ *                whether his profile is public
+ *
+ * Everything else is a game, a chat, a viewer, a sysop tool, or one of the
+ * batch-registered DayDream imports: none of them remembers anything about
+ * the caller. Two near misses, recorded so the question is not re-asked:
+ *
+ *   THEMEC          the same setting as THEME, in C. Two rows for one choice
+ *                   is worse than one; that port exists to prove the C SDK.
+ *   PROMPTCOMPLETE  a board-wide feature a door PROVIDES, not a per-caller
+ *                   setting. If it ever gains an on/off, it belongs here.
+ *
+ * The board's own settings - font, transfer protocol, PETSCII palette, the
+ * express.e fields - are built-in W rows and need no door.
+ */
