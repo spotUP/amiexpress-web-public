@@ -535,14 +535,12 @@ export class ProtocolManager {
       config: { path: './bin/zmodem', timeout: 300 }
     });
 
-    // FTP protocol (now implemented)
-    this.protocols.set('ftp', {
-      id: 'ftp',
-      name: 'FTP Protocol',
-      type: 'ftp',
-      enabled: true,
-      config: { port: 21, passive: true, timeout: 300 }
-    });
+    // No FTP entry: there is no FTP transfer here to register. The one that
+    // used to sit here answered `startTransfer('ftp', ...)` by waiting three
+    // seconds and reporting success, which recorded transfers that never
+    // happened. A real server is specified in
+    // docs/superpowers/specs/2026-09-07-ftp-server-design.md and will register
+    // itself when it exists.
   }
 
   // Get protocol by ID
@@ -581,9 +579,6 @@ export class ProtocolManager {
         break;
       case 'zmodem':
         await this.startZModemTransfer(sessionId, transferData);
-        break;
-      case 'ftp':
-        await this.startFTPTransfer(sessionId, transferData);
         break;
       default:
         throw new Error(`Unsupported protocol type: ${protocol.type}`);
@@ -634,46 +629,6 @@ console.error('ZModem transfer initialization error:', error);
       await db.updateTransferSession(sessionId, {
         status: 'error',
         error: `ZModem initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      });
-    }
-  }
-
-  // FTP transfer implementation
-  private async startFTPTransfer(sessionId: string, data: any): Promise<void> {
-    try {
-console.log('Starting FTP transfer for session:', sessionId);
-
-      // Update protocol status to enabled
-      const ftpProtocol = this.protocols.get('ftp');
-      if (!ftpProtocol) {
-        throw new Error('FTP protocol not configured');
-      }
-
-      // Check FTP server configuration
-      const ftpConfig = ftpProtocol.config;
-console.log('FTP server config:', ftpConfig);
-
-      // For web implementation, we'll simulate FTP behavior
-      // In a real implementation, this would connect to FTP server
-      await db.updateTransferSession(sessionId, { status: 'active' });
-
-      // Simulate FTP handshake and transfer
-      setTimeout(async () => {
-        try {
-          // Simulate successful transfer completion
-          await this.completeTransfer(sessionId, 'ftp_checksum_placeholder');
-console.log('FTP transfer completed for session:', sessionId);
-        } catch (error) {
-console.error('FTP transfer completion error:', error);
-          await this.failTransfer(sessionId, 'Transfer completion failed');
-        }
-      }, 3000); // Simulate 3-second transfer
-
-    } catch (error) {
-console.error('FTP transfer initialization error:', error);
-      await db.updateTransferSession(sessionId, {
-        status: 'error',
-        error: `FTP initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       });
     }
   }
