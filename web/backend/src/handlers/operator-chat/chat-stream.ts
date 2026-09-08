@@ -141,6 +141,54 @@ export function callerPressedReturn(io: any, session: BBSSession): void {
  * Pure over the session's own scratch (`chatPendingLines`), so the chat
  * branch of command.handler stays a few lines and this is testable alone.
  */
+/** How long a kept line may sit before the co-sysop says how to send it. */
+export const SEND_HINT_AFTER_MS = 6000;
+
+type ChatScratch = BBSSession & {
+  chatPendingLines?: string[];
+  chatSendHintShown?: boolean;
+  chatSendHintTimer?: ReturnType<typeof setTimeout>;
+};
+
+/**
+ * A caller who does not know the convention presses return ONCE and waits
+ * for an answer that is not coming ("if the user doesnt know that he needs
+ * to press enter twice the sysop could tell him the first time it happens"
+ * - sysop, 2026-09-08). So when a line has been kept and the caller has
+ * gone quiet, the co-sysop says how to send it - ONCE per chat, and never
+ * while they are still typing.
+ */
+export function scheduleSendHint(io: any, session: BBSSession, delayMs = SEND_HINT_AFTER_MS): void {
+  const s = session as ChatScratch;
+  if (s.chatSendHintShown) return;
+  cancelSendHint(session);
+  const timer = setTimeout(() => {
+    delete s.chatSendHintTimer;
+    // Still waiting, still silent, still in the chat, and nothing half-typed
+    // on the shared line for the hint to land in the middle of.
+    if (s.chatSendHintShown || (s.chatPendingLines ?? []).length === 0) return;
+    if ((session.inputBuffer ?? '') !== '') return;
+    const cs = chatOfSession(session);
+    if (!cs) return;
+    s.chatSendHintShown = true;
+    let out = '';
+    for (const ch of 'press return once more on the empty line and I will read it') {
+      out += chatCharBytes(cs, 'sysop', ch);
+    }
+    out += chatReturnBytes(cs);
+    emitToCaller(io, session, out);
+  }, delayMs);
+  timer.unref?.();
+  s.chatSendHintTimer = timer;
+}
+
+/** The line went, or the chat did: nothing left to hint about. */
+export function cancelSendHint(session: BBSSession): void {
+  const s = session as ChatScratch;
+  if (s.chatSendHintTimer) clearTimeout(s.chatSendHintTimer);
+  delete s.chatSendHintTimer;
+}
+
 export function callerLineEntered(session: BBSSession, line: string): { send?: string } {
   const s = session as BBSSession & { chatPendingLines?: string[] };
   const text = line.trim();

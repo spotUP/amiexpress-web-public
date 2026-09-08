@@ -2247,7 +2247,7 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
     const { getDatabase } = require('./command-handler/dependency-injection');
     const db = getDatabase();
     const repository = db?.getOperatorChatRepository();
-    const { callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered } = require('./operator-chat.handler');
+    const { callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, scheduleSendHint, cancelSendHint } = require('./operator-chat.handler');
 
     // express.e chat() 6101-6223: the caller's keys go onto the ONE shared
     // line and back to their own terminal as pressed (6172), in the caller's
@@ -2288,7 +2288,14 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
       // Return twice sends: a line with text is kept, an empty line hands
       // over what was kept as one message (see callerLineEntered).
       const { send } = callerLineEntered(session, input);
-      if (send) await handleUserChatMessage(socket.server, repository, session, send);
+      if (send) {
+        cancelSendHint(session);
+        await handleUserChatMessage(socket.server, repository, session, send);
+      } else if (input) {
+        // Kept, not sent: if the caller now goes quiet, they are waiting for
+        // an answer and do not know the convention. Tell them, once.
+        scheduleSendHint(socket.server, session);
+      }
     }
     // Backspace - real-time transmission
     else if (data === '\x7f' || data === '\b') {

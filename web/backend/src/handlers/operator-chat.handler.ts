@@ -124,9 +124,9 @@ import { report } from '../achievements/reporter';
 const bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
 
 // Active chat sessions (in-memory)
-import { activeChatSessions, deliverToCaller, chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER } from './operator-chat/chat-stream';
+import { activeChatSessions, deliverToCaller, chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER } from './operator-chat/chat-stream';
 // The caller's half of the chat lives in ./operator-chat/chat-stream; these stay importable from here.
-export { chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER };
+export { chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER };
 
 // Track active paging dot intervals by pageId (for reliable cleanup)
 const activePagingIntervals = new Map<string, NodeJS.Timeout>();
@@ -1201,6 +1201,8 @@ console.log(`[Operator Chat] Chat session ${pageId} ended`);
   // directly - no pause in between, nothing to press.
   const userSession = userSessions.get(String(page.userId));
   if (userSession) {
+    cancelSendHint(userSession);
+    delete (userSession as BBSSession & { chatPendingLines?: string[] }).chatPendingLines;
     userSession.subState = LoggedOnSubState.READ_COMMAND;
     userSession.menuPause = false;
     userSession.inputBuffer = '';

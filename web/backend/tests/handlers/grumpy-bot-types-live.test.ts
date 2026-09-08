@@ -218,6 +218,55 @@ describe('the chat is one stream', () => {
     expect(H.callerLineEntered(session, '   ')).toEqual({});        // whitespace is an empty line
   });
 
+  it('a caller who presses return once and waits is told how to send - once, and never mid-line', async () => {
+    const w = makeWorld();
+    H.initOperatorChatHandler(w.io, w.repo);
+    await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
+    await wait(3000);
+
+    // They type a line and press return, the way a caller who does not know
+    // the convention does - and then they wait.
+    for (const ch of 'are you there') H.callerTypedChar(w.io, w.session, ch);
+    H.callerPressedReturn(w.io, w.session);
+    expect(H.callerLineEntered(w.session, 'are you there')).toEqual({});
+    const before = w.seen.length;
+    H.scheduleSendHint(w.io, w.session, 30);
+    await wait(200);
+    const said = w.seen.slice(before).join('').replace(/\x1b\[[0-9;]*m/g, '');
+    expect(said).toContain('press return once more on the empty line and I will read it');
+
+    // Once per chat: a second kept line says nothing more.
+    const after = w.seen.length;
+    H.callerLineEntered(w.session, 'hello?');
+    H.scheduleSendHint(w.io, w.session, 30);
+    await wait(200);
+    expect(w.seen.slice(after).join('')).not.toContain('press return once more');
+  });
+
+  it('the hint stays silent while the caller is still typing, and once the line has been sent', async () => {
+    const w = makeWorld();
+    H.initOperatorChatHandler(w.io, w.repo);
+    await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
+    await wait(3000);
+
+    // Mid-line: the caller has a half-typed line, so nothing lands in it.
+    H.callerLineEntered(w.session, 'first line');
+    w.session.inputBuffer = 'still typ';
+    let before = w.seen.length;
+    H.scheduleSendHint(w.io, w.session, 30);
+    await wait(200);
+    expect(w.seen.slice(before).join('')).not.toContain('press return once more');
+
+    // Sent: nothing is pending, so an armed hint says nothing either.
+    w.session.inputBuffer = '';
+    H.scheduleSendHint(w.io, w.session, 60);
+    expect(H.callerLineEntered(w.session, '')).toEqual({ send: 'first line' });
+    H.cancelSendHint(w.session);
+    before = w.seen.length;
+    await wait(200);
+    expect(w.seen.slice(before).join('')).not.toContain('press return once more');
+  });
+
   it('the start of a bot chat tells the caller how to send', async () => {
     const w = makeWorld();
     H.initOperatorChatHandler(w.io, w.repo);
