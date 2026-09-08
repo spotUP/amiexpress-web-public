@@ -303,23 +303,12 @@ describe('Command Handlers', () => {
   });
 
   describe('System Commands', () => {
-    // Shared dispatch helper for processBBSCommand tests
-    async function dispatchCmd(cmd: string, secLevel = 255) {
-      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
-      const sock = { emit: jest.fn(), disconnect: jest.fn() };
-      const sess: any = { state: 'loggedon', currentUser: { username: 'sysop', secLevel } };
-      return { result: await processBBSCommand(sock, sess, cmd), sock };
-    }
-
-    test('? command (Help) — express.e:24594 — dispatched and handled (returns 0)', async () => {
-      expect((await dispatchCmd('?')).result).toBe(0);
-    });
-
-    test('G command (Goodbye) — express.e:25047 — calls socket.disconnect', async () => {
-      const { result, sock } = await dispatchCmd('G');
-      expect(result).toBe(0);
-      expect(sock.disconnect).toHaveBeenCalled();
-    });
+    // The dispatch tests that stood here drove
+    // `command-handler/internal-commands.ts` - a copy of the switch that no
+    // caller reaches - and asserted its 0/-1 return codes. They live now in
+    // tests/handlers/internal-command-dispatch.test.ts, against
+    // `command.handler.ts`'s processBBSCommand, which is the dispatcher the
+    // board runs.
 
     test('should handle Q command (Quiet Node)', async () => {
       // Test quiet node toggle
@@ -481,13 +470,6 @@ describe('Command Handlers', () => {
       expect(uptime).toBeGreaterThan(0);
     });
 
-    test('VER command — express.e:25688 — dispatched and emits output', async () => {
-      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
-      const sock = { emit: jest.fn(), disconnect: jest.fn() };
-      const sess: any = { state: 'loggedon', currentUser: { username: 'sysop', secLevel: 255 } };
-      expect(await processBBSCommand(sock, sess, 'VER')).toBe(0);
-      expect(sock.emit).toHaveBeenCalled();
-    });
 
     test('should handle W command (User Parameters)', async () => {
       const userId = await db.createUser({
@@ -541,39 +523,7 @@ describe('Command Handlers', () => {
     });
   });
 
-  describe('Advanced Commands — dispatch via processBBSCommand', () => {
-    async function dispatch(cmd: string, secLevel = 255) {
-      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
-      const sock = { emit: jest.fn(), disconnect: jest.fn() };
-      const sess: any = { state: 'loggedon', currentUser: { username: 'sysop', secLevel } };
-      return (await processBBSCommand(sock, sess, cmd));
-    }
 
-    test('O — Online Users (express.e:25372) — returns 0', async () => expect(await dispatch('O')).toBe(0));
-    test('OLM — Online Message (express.e:25406) — returns 0', async () => expect(await dispatch('OLM')).toBe(0));
-    test('RL — Relogon (express.e:25534) — returns 0', async () => expect(await dispatch('RL')).toBe(0));
-    test('RZ — Zmodem Upload (express.e:25608) — returns 0', async () => expect(await dispatch('RZ')).toBe(0));
-    test('MS — Mail Scan (express.e:25250) — returns 0', async () => expect(await dispatch('MS')).toBe(0));
-    test('ZOOM — QWK Download — returns 0', async () => expect(await dispatch('ZOOM')).toBe(0));
-    test('CF — Conference Flags (express.e:24672) — returns 0', async () => expect(await dispatch('CF')).toBe(0));
-    test('VO — Voting Booth (express.e:25700) — returns 0', async () => expect(await dispatch('VO')).toBe(0));
-    test('0 — Remote Shell (express.e:24424, sysop) — returns 0', async () => expect(await dispatch('0', 255)).toBe(0));
-    test('1 — Account Editing (express.e:24453, sysop) — returns 0', async () => expect(await dispatch('1', 255)).toBe(0));
-    test('2 — Callers Log (express.e:24461, sysop) — returns 0', async () => expect(await dispatch('2', 255)).toBe(0));
-    test('3 — Edit Directory Files (express.e:24511, sysop) — returns 0', async () => expect(await dispatch('3', 255)).toBe(0));
-    test('4 — Edit Any File (express.e:24517, sysop) — returns 0', async () => expect(await dispatch('4', 255)).toBe(0));
-    test('5 — Change Directory (express.e:24523, sysop) — returns 0', async () => expect(await dispatch('5', 255)).toBe(0));
-    test('unknown command — returns -1 (RESULT_FAILURE)', async () => expect(await dispatch('__NO_SUCH_CMD__')).toBe(-1));
-  });
-
-  describe('Door Commands', () => {
-    test('DOORS command — door games menu — dispatched and returns 0', async () => {
-      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
-      const sock = { emit: jest.fn(), disconnect: jest.fn() };
-      const sess: any = { state: 'loggedon', currentUser: { username: 'user', secLevel: 30 } };
-      expect(await processBBSCommand(sock, sess, 'DOORS')).toBe(0);
-    });
-  });
 
   describe('File Transfer Commands', () => {
     test('should handle file upload operations', async () => {
@@ -621,35 +571,9 @@ describe('Command Handlers', () => {
       expect(foundFile?.downloads).toBe(1);
     });
 
-    test('U command (Upload) — express.e:25646 — dispatched correctly', async () => {
-      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
-      const sock = { emit: jest.fn(), disconnect: jest.fn() };
-      const sess: any = { state: 'loggedon', currentUser: { username: 'user', secLevel: 30 } };
-      expect(await processBBSCommand(sock, sess, 'U')).toBe(0);
-    });
-
-    test('UP command (Node Uptime) — express.e:25667 — dispatched correctly', async () => {
-      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
-      const sock = { emit: jest.fn(), disconnect: jest.fn() };
-      const sess: any = { state: 'loggedon', currentUser: { username: 'user', secLevel: 30 } };
-      expect(await processBBSCommand(sock, sess, 'UP')).toBe(0);
-    });
   });
 
   describe('Chat System', () => {
-    test('O command (Page Sysop) — express.e:25372 — dispatched correctly', async () => {
-      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
-      const sock = { emit: jest.fn(), disconnect: jest.fn() };
-      const sess: any = { state: 'loggedon', currentUser: { username: 'user', secLevel: 30 } };
-      expect(await processBBSCommand(sock, sess, 'O')).toBe(0);
-    });
-
-    test('Q command (Quiet Mode) — express.e:25505 — dispatched correctly', async () => {
-      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
-      const sock = { emit: jest.fn(), disconnect: jest.fn() };
-      const sess: any = { state: 'loggedon', currentUser: { username: 'user', secLevel: 30 } };
-      expect(await processBBSCommand(sock, sess, 'Q')).toBe(0);
-    });
 
     test('should handle comment to sysop', async () => {
       // Test comment to sysop functionality
@@ -673,12 +597,6 @@ describe('Command Handlers', () => {
   });
 
   describe('Error Handling', () => {
-    test('invalid command returns -1 (RESULT_FAILURE)', async () => {
-      const { processBBSCommand } = require('../src/handlers/command-handler/internal-commands');
-      const sock = { emit: jest.fn(), disconnect: jest.fn() };
-      const sess: any = { state: 'loggedon', currentUser: { username: 'user', secLevel: 30 } };
-      expect(await processBBSCommand(sock, sess, 'NOTACOMMAND')).toBe(-1);
-    });
 
     test('should handle permission denied scenarios', async () => {
       // Test permission checking
