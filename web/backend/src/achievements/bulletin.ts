@@ -112,7 +112,13 @@ export function renderAchievementsBulletin(
 
   const emptyGlobal = global.length === 0;
   const emptyBoard = board.length === 0;
-  for (let i = 0; i < ACHIEVE_BULLETIN_ROWS; i++) {
+  // Only as tall as it has something to say. A fixed fifteen rows left a
+  // field of blank lines under a board with one player on it.
+  const height = Math.min(
+    ACHIEVE_BULLETIN_ROWS,
+    Math.max(1, global.length, board.length)
+  );
+  for (let i = 0; i < height; i++) {
     let l = bulletinRow(global[i]);
     let r = bulletinRow(board[i]);
     if (i === 0 && emptyGlobal) l = fit('     Nobody has scored yet.', COLUMN_WIDTH);

@@ -129,6 +129,24 @@ describe('renderAchievementsBulletin', () => {
     expect(text).not.toContain('Type ACHIEVE');
   });
 
+  /**
+   * A board with one player got fourteen blank rows under it. The table is
+   * as tall as the taller column, never taller.
+   */
+  test('is only as tall as it has rows to show', () => {
+    const plain = strip(
+      renderAchievementsBulletin(rows(1, 'w'), [], 'UpRough', new Date())
+    ).split('\r\n');
+    expect(plain.filter((l) => /^\s*\d+\./.test(l))).toHaveLength(1);
+    // Nothing blank between the column rule and the footer rule.
+    const body = plain.slice(
+      plain.findIndex((l) => l.startsWith('====')) + 1,
+      plain.findIndex((l) => l.startsWith('----'))
+    );
+    expect(body.filter((l) => l.trim() !== '')).toHaveLength(1);
+    expect(body).toHaveLength(2);  // the single row, then the gap before the footer
+  });
+
   test('holds exactly the row count it advertises', () => {
     const plain = strip(
       renderAchievementsBulletin(rows(50, 'w'), rows(50, 'b'), 'UpRough', new Date())
