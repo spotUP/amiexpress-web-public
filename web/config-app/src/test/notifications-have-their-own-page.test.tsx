@@ -24,6 +24,14 @@ const push = {
   subscribe: vi.fn(),
   unsubscribe: vi.fn(),
   testNotification: vi.fn(),
+  // What the browser reports about itself, printed under the buttons.
+  diagnostics: {
+    workerState: 'active' as const,
+    workerScope: '/admin/',
+    hasBrowserSubscription: true,
+    endpointHost: 'fcm.googleapis.com',
+    endpointTail: 'APA91bHSVTXY',
+  },
 };
 vi.mock('../hooks/usePushNotifications', () => ({ usePushNotifications: () => push }));
 

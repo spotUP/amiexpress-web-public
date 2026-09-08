@@ -40,6 +40,7 @@ vi.mock('../hooks/usePushNotifications', () => ({
       workerScope: 'https://board.example/admin/',
       hasBrowserSubscription: true,
       endpointHost: 'fcm.googleapis.com',
+      endpointTail: 'THIS-BROWSER',
     },
     subscribe: vi.fn(),
     unsubscribe: vi.fn(),
@@ -71,7 +72,12 @@ describe('a test push from the board', () => {
   beforeEach(() => post.mockReset());
 
   it('asks the board, and says how many browsers it reached', async () => {
-    post.mockResolvedValue({ data: { data: { sent: 2, failed: 0, subscriptions: 2 } } });
+    post.mockResolvedValue({
+      data: { data: { sent: 2, failed: 0, subscriptions: 2, endpoints: [
+        { tail: 'THIS-BROWSER', success: true },
+        { tail: 'another-one1', success: true },
+      ] } },
+    });
     render(<NotificationsPage />);
 
     await press();
@@ -80,6 +86,26 @@ describe('a test push from the board', () => {
     await waitFor(() =>
       expect(screen.getByTestId('push-from-board')).toHaveTextContent('sent one to 2 of 2 subscribed browsers')
     );
+    expect(screen.getByTestId('push-from-board')).toHaveTextContent('One of them was this browser');
+  });
+
+  it('says when the board is sending to a subscription this browser does not have', async () => {
+    // The push service answers 201 for an endpoint whose worker is gone, so
+    // the board reports success and nothing is ever drawn. This is the case
+    // that looked exactly like "macOS is suppressing it".
+    post.mockResolvedValue({
+      data: { data: { sent: 1, failed: 0, subscriptions: 1, endpoints: [
+        { tail: 'a-stale-one1', success: true },
+      ] } },
+    });
+    render(<NotificationsPage />);
+
+    await press();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('push-from-board')).toHaveTextContent('None of them was THIS browser')
+    );
+    expect(screen.getByTestId('push-from-board')).toHaveTextContent('Switch this browser off and on again');
   });
 
   it('says when the board has no keys to send with, rather than "failed"', async () => {

@@ -2903,8 +2903,12 @@ console.log('[Push] Removed subscription');
         sent,
         failed: results.length - sent,
         subscriptions: results.length,
+        // The TAIL, not the head: every FCM endpoint starts the same, and the
+        // question this answers is whether the browser holding a subscription
+        // is the one the board just sent to. A board sending to a
+        // subscription no browser has still gets 201 from the push service.
         endpoints: results.map((r: any) => ({
-          endpoint: String(r.subscription.endpoint).substring(0, 60) + '...',
+          tail: String(r.subscription.endpoint).slice(-12),
           success: r.success,
         })),
       });

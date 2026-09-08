@@ -34,6 +34,16 @@ export interface PushDiagnostics {
   /** The browser's own subscription, which is the one that must exist. */
   hasBrowserSubscription: boolean;
   endpointHost: string | null;
+  /**
+   * The tail of this browser's endpoint, which is what identifies it.
+   *
+   * The board can hold a subscription this browser no longer has - a worker
+   * re-registered at a different scope, site data cleared - and the push
+   * service still answers 201 for it, so every send "succeeds" and nothing is
+   * ever drawn. Comparing this with what the board sends to is the only way
+   * to see that from the outside.
+   */
+  endpointTail: string | null;
 }
 
 const NO_DIAGNOSTICS: PushDiagnostics = {
@@ -41,7 +51,13 @@ const NO_DIAGNOSTICS: PushDiagnostics = {
   workerScope: null,
   hasBrowserSubscription: false,
   endpointHost: null,
+  endpointTail: null,
 };
+
+/** The last characters of an endpoint - enough to tell two apart, not a key. */
+export function endpointTail(endpoint: string): string {
+  return endpoint.slice(-12);
+}
 
 /** What a registration is doing right now, named the way the sysop reads it. */
 function describeWorker(registration: ServiceWorkerRegistration | null | undefined): PushDiagnostics['workerState'] {
@@ -173,6 +189,7 @@ export function usePushNotifications() {
             workerScope: registration?.scope ?? null,
             hasBrowserSubscription: !!subscription,
             endpointHost: subscription ? new URL(subscription.endpoint).host : null,
+            endpointTail: subscription ? endpointTail(subscription.endpoint) : null,
           }
         }));
       } catch (error) {
@@ -268,6 +285,7 @@ export function usePushNotifications() {
           workerScope: registration.scope,
           hasBrowserSubscription: true,
           endpointHost: new URL(subscriptionJson.endpoint as string).host,
+          endpointTail: endpointTail(subscriptionJson.endpoint as string),
         }
       }));
 

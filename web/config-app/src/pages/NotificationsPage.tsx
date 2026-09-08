@@ -32,6 +32,8 @@ export function NotificationsPage() {
    * without asking a caller to page him.
    */
   const [pushed, setPushed] = useState<string | null>(null);
+  /** Absent only in a consumer that stubs the hook without it. */
+  const diagnostics = push.diagnostics;
 
   return (
     <div className="space-y-8">
@@ -113,13 +115,16 @@ export function NotificationsPage() {
                 setTested(null);
                 setPushed('sending');
                 try {
-                  const response = await apiClient.post<{
-                    data?: { sent: number; failed: number; subscriptions: number; reason?: string };
-                    sent?: number;
-                    failed?: number;
-                    subscriptions?: number;
+                  type TestPushResult = {
+                    sent: number;
+                    failed: number;
+                    subscriptions: number;
                     reason?: string;
-                  }>('/api/config/push/test', {});
+                    endpoints?: Array<{ tail: string; success: boolean }>;
+                  };
+                  const response = await apiClient.post<
+                    { data?: TestPushResult } & Partial<TestPushResult>
+                  >('/api/config/push/test', {});
                   // sendResponse wraps the payload in `data`; the client hands
                   // back the body as it came, so accept either shape.
                   const body = response?.data;
@@ -129,9 +134,29 @@ export function NotificationsPage() {
                   } else if (result.reason) {
                     setPushed(result.reason);
                   } else if ((result.sent ?? 0) > 0) {
+                    // The board can be sending, successfully, to a
+                    // subscription THIS browser no longer holds: a worker that
+                    // re-registered at another scope, or site data cleared.
+                    // The push service answers 201 for it either way, so every
+                    // send "succeeds" and nothing is ever drawn. The endpoints
+                    // are compared here rather than left to the eye.
+                    const mine = diagnostics?.endpointTail ?? null;
+                    const theirs = (result.endpoints ?? [])
+                      .filter((e) => e.success)
+                      .map((e) => e.tail);
+                    const reachesThisBrowser = mine !== null && theirs.includes(mine);
+
                     setPushed(
                       `The board sent one to ${result.sent} of ${result.subscriptions} subscribed browsers. ` +
-                        'If nothing appeared, the push service or your operating system is holding it back.',
+                        (mine === null
+                          ? 'This browser holds no subscription of its own, so none of them was this one - ' +
+                            'switch it off and on again above.'
+                          : reachesThisBrowser
+                            ? 'One of them was this browser. If nothing appeared, your operating system is ' +
+                              'holding it back - check its notification settings for this browser.'
+                            : 'None of them was THIS browser: the board is sending to a subscription this ' +
+                              'browser no longer has, which the push service accepts and nothing draws. ' +
+                              'Switch this browser off and on again above.'),
                     );
                   } else {
                     setPushed(
@@ -172,7 +197,7 @@ export function NotificationsPage() {
             never activated, a subscription the board holds and the browser
             does not, and a permission that is not what the page thinks. They
             are read here instead of asked for one at a time. */}
-        {push.isSupported && (
+        {push.isSupported && diagnostics && (
           <dl
             className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-1 text-xs text-content-muted"
             data-testid="push-diagnostics"
@@ -182,16 +207,16 @@ export function NotificationsPage() {
 
             <dt>Service worker</dt>
             <dd className="text-content-secondary">
-              {push.diagnostics.workerState === 'none'
+              {diagnostics.workerState === 'none'
                 ? 'none installed - nothing can be drawn'
-                : push.diagnostics.workerState}
-              {push.diagnostics.workerScope ? ` (${push.diagnostics.workerScope})` : ''}
+                : diagnostics.workerState}
+              {diagnostics.workerScope ? ` (${diagnostics.workerScope})` : ''}
             </dd>
 
             <dt>Subscription in this browser</dt>
             <dd className="text-content-secondary">
-              {push.diagnostics.hasBrowserSubscription
-                ? `yes, through ${push.diagnostics.endpointHost}`
+              {diagnostics.hasBrowserSubscription
+                ? `yes, through ${diagnostics.endpointHost} (...${diagnostics.endpointTail})`
                 : 'none - the board may still hold an old one'}
             </dd>
           </dl>
