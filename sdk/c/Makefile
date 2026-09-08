@@ -33,7 +33,11 @@ NDK  ?= /opt/homebrew/Cellar/m68k-amiga-elf-gcc/13.1.0/m68k-amiga-elf/sys-includ
 VC    = VBCC=$(VBCC) vc
 AMIGA_CFLAGS = +aos68k -c99 -DAMIGA -Iinclude -I"$(VBCC)/targets/m68k-amigaos/include" -I"$(NDK)"
 
-MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_doc ui_theme ui_settings json_lite ae_chunk ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve ae_request ae_msgbase
+# ae_dos is the platform-free half (byte order, the short-read loop) and
+# ae_dos_amiga is the dos.library backend - the same split as
+# ae_transport_amiga, whose host twin is likewise absent from this list because
+# the host is not what `lib` builds.
+MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_doc ui_theme ui_settings json_lite ae_chunk ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve ae_request ae_msgbase ae_dos ae_dos_amiga
 AMIGA_OBJS = $(patsubst %,build/amiga/%.o,$(MODULES))
 
 .PHONY: all test amiga lib measure settings clean
@@ -44,7 +48,7 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase
+test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
@@ -58,10 +62,18 @@ test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_
 	./build/test_ae_achieve
 	./build/test_ae_request
 	./build/test_ae_msgbase
+	./build/test_ae_dos
 
 build/test_ae_host: src/ae_host.c tests/test_ae_host.c include/ae_host.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ae_host.c tests/test_ae_host.c -o $@
+
+# The file layer, on its stdio backend. ae_dos_amiga.c is deliberately NOT
+# here: it needs the NDK and only ever builds for 68K, which is the same reason
+# ae_transport_amiga.c never appears in a host test rule.
+build/test_ae_dos: src/ae_dos.c src/ae_dos_native.c tests/test_ae_dos.c include/ae_dos.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) src/ae_dos.c src/ae_dos_native.c tests/test_ae_dos.c -o $@
 
 build/test_ae_session: src/ae_session.c tests/test_ae_session.c include/ae_session.h
 	@mkdir -p build
