@@ -1,3 +1,4 @@
+import type { GalleryItem } from '../components/ScreenGallery';
 /**
  * The screens list, as rows.
  *
@@ -372,4 +373,129 @@ export function galleryLabel(
 export function gallerySortKey(reader: ScreenReaderShape | undefined, label: string): string {
   // The screen first, then what it pulls in, then by name within each.
   return `${reader?.screen ?? '~'}\u0000${reader?.via === 'include' ? 1 : 0}\u0000${label}`;
+}
+
+/** Which formats a screen HAS - moved here from ScreenFilesPage so the board's
+ *  gallery and an artist's are answered by one function. */
+/**
+ * Which formats a screen HAS, by looking for its siblings on the board.
+ *
+ * Keyed on the stem, because that is what the loader does: for one screen it
+ * tries `<stem>.rip`, `<stem>.seq` and the text file, and serves whichever the
+ * caller's terminal wants. `.gr` and `.ibm` are ANSI under another name.
+ */
+export function formatsPresent(
+  openPath: string,
+  files: Record<string, { relPath: string }> | undefined,
+): { ansi: boolean; petscii: boolean; rip: boolean } {
+  const dir = openPath.slice(0, openPath.lastIndexOf('/') + 1).toLowerCase();
+  const base = openPath.slice(openPath.lastIndexOf('/') + 1);
+  const stem = base.replace(/\.(txt|seq|rip|gr|ibm|ans)$/i, '').toLowerCase();
+
+  const have = { ansi: false, petscii: false, rip: false };
+  for (const key of Object.keys(files ?? {})) {
+    const lower = key.toLowerCase();
+    if (lower.slice(0, lower.lastIndexOf('/') + 1) !== dir) continue;
+    const name = lower.slice(lower.lastIndexOf('/') + 1);
+    const ext = name.slice(name.lastIndexOf('.') + 1);
+    if (name.replace(/\.(txt|seq|rip|gr|ibm|ans)$/i, '') !== stem) continue;
+    if (ext === 'seq') have.petscii = true;
+    else if (ext === 'rip') have.rip = true;
+    else have.ansi = true;
+  }
+  return have;
+}
+
+export interface GalleryBuildOptions {
+  /** The theme being looked through; `default` is the board's own screens. */
+  theme: string;
+  showGenerated: boolean;
+  showUnread: boolean;
+  /**
+   * Set when the gallery belongs to a theme: each card then says whose art it
+   * is, so an artist can see at a glance what they have redrawn and what is
+   * still the board's.
+   */
+  ownedBy?: string;
+}
+
+/**
+ * Every screen a caller looking through `opts.theme` is served, as cards.
+ *
+ * ONE rule, called by the sysop's gallery and the artist's: a card cannot be
+ * art on one page and plumbing on the next, and a second copy of this filter
+ * is how the two would come to disagree about what an artist may touch.
+ */
+export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOptions): GalleryItem[] {
+  const bulletinTitles = new Map((index.bulletins ?? []).map(b => [b.file, b] as const));
+
+  // The index's OWN list of what nothing reads - not a second derivation
+  // from readBy, which would have to re-learn that a bulletin is read by
+  // number and never by name.
+  const readByNothing = new Set((index.unused ?? []).map(f => f.relPath));
+
+  const drawable = Object.values(index.files)
+    .filter(file => file.format === 'ansi' || file.format === 'text')
+    .filter(file => opts.showUnread || !readByNothing.has(file.relPath))
+    // A door's art is the door's, and a door directory is full of .txt files
+    // that are documentation, not art. It has its own tab.
+    .filter(file => !isDoorArt(file))
+    // Another theme's files are another theme's view. Under `default` no
+    // theme file belongs here at all.
+    .filter(file => !file.theme || file.theme === opts.theme)
+    .filter(file => opts.showGenerated || isArt(file));   // drawable-only is applied above
+
+  /**
+   * One card per piece of ART, not per file.
+   *
+   * This board has 71 identical Node<n>/BBSTITLE.txt - one screen,
+   * provisioned per node - and 43 more copies under Node<n>/Screens. Drawing
+   * each as its own card buries the art nobody has seen in the art everybody
+   * has. Grouped by content hash, which is what "identical" means here.
+   */
+  const byContent = new Map<string, ScreenFileShape[]>();
+  for (const file of drawable) {
+    byContent.set(file.sha256, [...(byContent.get(file.sha256) ?? []), file]);
+  }
+
+  return [...byContent.values()]
+    .map(copies => {
+      // The copy a screen actually resolves to leads; failing that, the first.
+      const file = copies.find(c => c.readBy?.some(r => r.via === 'resolved')) ?? copies[0];
+      const bulletin = bulletinTitles.get(file.relPath);
+      const reader = file.readBy?.[0];
+
+      const label = galleryLabel(file, reader, bulletin);
+
+      const detail = file.generated
+        ? file.generated === 'backup' ? 'a leftover copy' : 'written by the board'
+        : file.problems?.length
+          ? file.problems.map(describeProblem).join('; ')
+          : reader
+            ? describeReader(reader, index.callersByLevel)
+            : 'read by nothing';
+
+      return {
+        path: file.relPath,
+        label,
+        sortKey: gallerySortKey(reader, label),
+        detail: copies.length > 1
+          ? `${detail} - and ${copies.length - 1} identical ${copies.length === 2 ? 'copy' : 'copies'}`
+          : detail,
+        credit: file.sauce?.author
+          ? `${file.sauce.title || 'untitled'} by ${file.sauce.author}`
+          : undefined,
+        problem: (file.problems?.length ?? 0) > 0,
+        formats: formatsPresent(file.relPath, index.files),
+        ...(opts.ownedBy
+          ? {
+            badge: file.theme === opts.ownedBy
+              ? { label: 'Yours', kind: 'mine' as const }
+              : { label: "Board's - not redrawn yet", kind: 'theirs' as const },
+          }
+          : {}),
+      };
+    })
+    .sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+    .map(({ sortKey: _sortKey, ...item }) => item);
 }

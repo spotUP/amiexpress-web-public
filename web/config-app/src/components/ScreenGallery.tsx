@@ -64,6 +64,14 @@ export interface GalleryItem {
   credit?: string;
   problem?: boolean;
   /**
+   * Whose art this is, when the gallery belongs to a theme.
+   *
+   * An artist's gallery holds both: the screens they have redrawn, and the
+   * board's own art still showing through underneath. Absent in the board's
+   * own view, where every card is the board's.
+   */
+  badge?: { label: string; kind: 'mine' | 'theirs' };
+  /**
    * Which of the three formats this screen HAS, so an artist can see at a
    * glance how far along it is. A caller is served by extension - the loader
    * looks for `<stem>.rip` for a RIP terminal, `<stem>.seq` for a C64 and the
@@ -160,6 +168,18 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
         )}
         {item.credit && (
           <span className="block truncate text-content-muted">{item.credit}</span>
+        )}
+        {item.badge && (
+          <span
+            data-testid={`badge-${item.badge.kind}`}
+            className={
+              item.badge.kind === 'mine'
+                ? 'mt-1 inline-block px-1 rounded-sm bg-surface-3 text-content-primary'
+                : 'mt-1 inline-block px-1 rounded-sm border border-dashed border-border text-content-muted'
+            }
+          >
+            {item.badge.label}
+          </span>
         )}
         {item.formats && (
           <span className="mt-1 flex gap-1" data-testid="format-chips">
