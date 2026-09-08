@@ -17,6 +17,18 @@ import { planNaturalTyping } from '../grumpy-sysop-bot.handler';
 export const activeChatSessions = new Map<string, ChatSession>();
 
 /**
+ * Is this still the chat the board is holding for that page?
+ *
+ * A reply is generated, thinks for a while, and only then types. A `/quit`
+ * inside that pause left nothing in flight to wait for, the chat was gone, and
+ * the typing began anyway - on top of the caller's NEXT page. Anything that
+ * emits to a caller between one await and the next asks this first.
+ */
+export function chatIsLive(chatSession: ChatSession, pageId: string): boolean {
+  return activeChatSessions.get(pageId) === chatSession && !(chatSession as any).ended;
+}
+
+/**
  * THE CHAT IS ONE SCROLLING STREAM - express.e chat(), 6067-6244.
  *
  * No clear, no scroll region, no input line at the bottom. Every key from
@@ -229,7 +241,7 @@ console.log(`[Operator Chat] Page ${page.id}: a line for ${page.userHandle} has 
     // began anyway - on top of the caller's NEXT page ("old chat leaking in
     // here", 2026-09-08 07:05). The chat that owns this line is either the one
     // in the map or over.
-    const live = () => activeChatSessions.get(page.id) === chatSession && !(chatSession as any).ended;
+    const live = () => chatIsLive(chatSession, page.id);
     const emit = (bytes: string) => { if (bytes && live()) reach.emitter.emit('ansi-output', bytes); };
 
     // The message's own line breaks are returns; the shared line wraps itself.
