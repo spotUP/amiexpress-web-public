@@ -90,7 +90,8 @@ function runVerify(pattern: string): 'found' | 'missing' {
 function collect(): PlanRow[] {
   const files = fs
     .readdirSync(PLANS_DIR)
-    .filter((f) => f.endsWith('.md') && f !== 'INDEX.md')
+    // Plans only — skip generated/meta files (INDEX, README, _-prefixed templates/notes).
+    .filter((f) => f.endsWith('.md') && f !== 'INDEX.md' && f !== 'README.md' && !f.startsWith('_'))
     .sort();
 
   return files.map((file) => {

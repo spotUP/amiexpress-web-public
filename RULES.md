@@ -285,6 +285,9 @@ in the plan but the work landed in a commit elsewhere. Rules:
   a plan claims `implemented` without `landed`/with its `verify` pattern absent,
   when a not-implemented plan's `verify` pattern IS present, or when INDEX.md is
   stale. Run it before pushing plan/status changes.
+- **How-to, contract, and new-plan template: `thoughts/shared/plans/README.md`.**
+  Plans live only in `thoughts/shared/plans/` — a plan found anywhere else gets
+  `git mv`'d in. Status is updated in the SAME change that lands the work.
 
 ### 14. Fix Root Causes — in the right layer
 
