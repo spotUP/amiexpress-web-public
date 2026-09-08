@@ -96,6 +96,33 @@ export function entryPoints(root: string = SRC): string[] {
     }
   }
   entries.push(...crossPackageEntries(root));
+  entries.push(...repoScriptEntries(root));
+  return entries;
+}
+
+/**
+ * The repo's own tooling, which imports backend source directly.
+ *
+ * `dev/scripts/door-corpus/*` builds the door catalogue with
+ * `door-catalog.service.ts`'s `resolveArchivePath` and
+ * `utils/lha-list-parser.ts`'s `parseLhaList`, by relative path across the
+ * package boundary. Without these entry points the tool calls both dead, and
+ * the 2026-09-08 audit had to carry them as hand-written exceptions - which is
+ * the kind of note that rots into a wrong deletion.
+ */
+export function repoScriptEntries(root: string = SRC): string[] {
+  const scripts = path.resolve(root, '..', '..', '..', 'dev', 'scripts');
+  const entries: string[] = [];
+  const collect = (dir: string): void => {
+    let names: string[];
+    try { names = fs.readdirSync(dir); } catch { return; }
+    for (const name of names) {
+      const full = path.join(dir, name);
+      if (fs.statSync(full).isDirectory()) collect(full);
+      else if (/\.tsx?$/.test(name) && !/\.d\.ts$/.test(name)) entries.push(full);
+    }
+  };
+  collect(scripts);
   return entries;
 }
 

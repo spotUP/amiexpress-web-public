@@ -5,11 +5,12 @@
  * running server does not import: `handlers/command-handler/*` is a barrel
  * nothing imports, and the live dispatcher `handlers/command.handler.ts` kept
  * the old behaviour. The fixes were real, their tests passed, and the board did
- * not change. 50 files and about 15000 lines are unreachable today.
+ * not change. Phase 0 of the plan deleted twelve of those files; 25 and about
+ * 7100 lines are unreachable today, each with its reason below.
  *
- * This is the ratchet. The known-dead files are listed below and the list may
- * only shrink: delete one and remove its line. Add a new unreachable file and
- * this fails, naming it.
+ * This is the ratchet. The known-dead files are listed below WITH THE REASON
+ * each one is still there, and the list may only shrink: delete a file and
+ * remove its row. Add a new unreachable file and this fails, naming it.
  *
  * It is deliberately not a "no dead code" rule - dead code is the symptom. The
  * failure it prevents is a fix that lands somewhere nothing runs.
@@ -18,48 +19,73 @@ import * as path from 'path';
 import { walk, entryPoints } from '../../dev-scripts/module-reachability';
 
 /**
- * Unreachable as of 2026-09-08, each awaiting a disposition in the parity
- * plan's Phase 0 (thoughts/shared/plans/2026-09-08-express-parity-100.md).
- * Shrink this list; never grow it.
+ * Unreachable as of 2026-09-08, EACH WITH THE REASON IT IS STILL HERE.
+ *
+ * A bare list of paths rots: nobody can tell a file that is waiting for a
+ * decision from one nobody has looked at, so the safe move is always to leave
+ * it, and the list never shrinks. Every row therefore says what it is waiting
+ * for, and a row whose reason has been settled is a row to act on.
+ *
+ * Phase 0 of the parity plan deleted twelve of these
+ * (thoughts/shared/plans/2026-09-08-express-parity-100.md). Shrink this map;
+ * never grow it.
  */
-const KNOWN_UNREACHABLE = new Set<string>([
-  'src/amiga-emulation/AREXXDoorSession.ts',
-  'src/amiga-emulation/PythonDoorSession.ts',
-  'src/amiga-emulation/SystemStructures.ts',
-  'src/amiga-emulation/api/AmiExpressLibrary.ts',
-  'src/amiga-emulation/api/RexxArpLibrary.ts',
-  'src/amiga-emulation/api/RexxSupportLibrary.ts',
-  'src/amiga-emulation/api/rexx-path.ts',
-  'src/amiga-emulation/constants/lvo-params.generated.ts',
-  'src/amiga-emulation/constants/struct-fields.generated.ts',
-  'src/amiga-emulation/doorHandler.ts',
-  'src/amiga-emulation/session/lifecycle/index.ts',
-  'src/amiga-emulation/structures/UserStructures.ts',
-  'src/amiga-emulation/xim/host-service.ts',
-  'src/amigaguide/AmigaGuideParser.ts',
-  'src/amigaguide/AmigaGuideViewer.ts',
-  'src/constants/security-levels.ts',
-  'src/doors/door-path.util.ts',
-  'src/doors/door-repo-manifest.ts',
-  'src/handlers/command-handler/command-processing.ts',
-  'src/handlers/command-handler/index.ts',
-  'src/handlers/command-handler/internal-commands.ts',
-  'src/handlers/command-handler/types.ts',
-  'src/handlers/door-handler/door-types.ts',
-  'src/handlers/examples/modern-handler.example.ts',
-  'src/handlers/operations/navigation-quick.handler.ts',
-  'src/nodes/index.ts',
-  'src/server/api-routes.ts',
-  'src/server/file-routes.ts',
-  'src/services/mrc-client.ts',
-  'src/utils/background-check.util.ts',
-  'src/utils/diz-fallback.util.ts',
-  'src/utils/file-io.util.ts',
-  'src/utils/format-util.ts',
-  'src/utils/iff-parser.util.ts',
-  'src/utils/lha-list-parser.ts',
-  'src/utils/multitop-generator.ts',
-  'src/utils/string-util.ts',
+const KNOWN_UNREACHABLE = new Map<string, string>([
+  // THE 68K EMULATOR'S SUPERSEDED SIDE. `amiga-emulation/doorHandler.ts` is
+  // the only thing that constructs the AREXX and Python door sessions, and
+  // nothing constructs it; live AREXX runs through `services/arexx.service.ts`
+  // and `services/arexx-file-io.ts` instead. Parking rather than deleting:
+  // this is the emulator, deleting a structure or an LVO table on a
+  // static-import verdict is how a working door stops working, and the audit
+  // that would clear them needs XIM traces, not a graph walk.
+  ['src/amiga-emulation/AREXXDoorSession.ts', 'emulator: superseded by services/arexx.service.ts - needs an XIM-level audit before deletion'],
+  ['src/amiga-emulation/PythonDoorSession.ts', 'emulator: constructed only by the unreachable doorHandler.ts'],
+  ['src/amiga-emulation/SystemStructures.ts', 'emulator: struct layouts, needs an XIM-level audit before deletion'],
+  ['src/amiga-emulation/api/AmiExpressLibrary.ts', 'emulator: an older amiexpress.library surface; the live one is under api/'],
+  ['src/amiga-emulation/api/RexxArpLibrary.ts', 'emulator: reached only by tests/amiga-emulation/arexx-lowercase-bbs-path-finds-real-file.test.ts'],
+  ['src/amiga-emulation/api/RexxSupportLibrary.ts', 'emulator: reached only by that same AREXX test'],
+  ['src/amiga-emulation/api/rexx-path.ts', 'emulator: imported by the two Rexx libraries above and nothing else'],
+  ['src/amiga-emulation/constants/lvo-params.generated.ts', 'emulator: generated table, no importer - regenerate or delete with the generator'],
+  ['src/amiga-emulation/constants/struct-fields.generated.ts', 'emulator: generated table, no importer'],
+  ['src/amiga-emulation/doorHandler.ts', 'emulator: a second door dispatcher; the live one is handlers/door.handler.ts'],
+  ['src/amiga-emulation/session/lifecycle/index.ts', 'emulator: barrel nothing imports'],
+  ['src/amiga-emulation/structures/UserStructures.ts', 'emulator: struct layouts, needs an XIM-level audit before deletion'],
+  ['src/amiga-emulation/xim/host-service.ts', 'emulator: XIM host surface with no importer'],
+
+  // A COMPLETE FEATURE NOBODY OPENED. The parser and the viewer work; no
+  // command serves a .guide file, and Doors/* ships plenty of them. Wire a
+  // command or delete the pair - the sysop's call, not the tool's.
+  ['src/amigaguide/AmigaGuideParser.ts', 'unwired feature: .guide viewer, awaiting the sysop - wire a command or delete both'],
+  ['src/amigaguide/AmigaGuideViewer.ts', 'unwired feature: .guide viewer, awaiting the sysop - wire a command or delete both'],
+
+  ['src/doors/door-path.util.ts', 'one helper, reached only by the unreachable amiga-emulation/doorHandler.ts'],
+  ['src/doors/door-repo-manifest.ts', 'reached only by tests; whether the door repo still wants a manifest builder is open'],
+
+  // THE SECOND DISPATCHER. `command-handler/internal-commands.ts` and its
+  // barrel are a parallel copy of the live command dispatch, and the audit
+  // found fixes that had landed in it and never reached a caller. Deleting it
+  // means re-pointing tests/commandHandlers.test.ts and
+  // tests/command-handler/internal-commands.test.ts at the LIVE dispatcher
+  // (handlers/command-handler/command-execution.ts, same processBBSCommand
+  // name), which is a job of its own - those suites are currently green
+  // against code no caller runs.
+  ['src/handlers/command-handler/command-processing.ts', 'second dispatcher: delete with internal-commands.ts once its tests are re-pointed'],
+  ['src/handlers/command-handler/index.ts', 'second dispatcher: barrel for the copy above'],
+  ['src/handlers/command-handler/internal-commands.ts', 'second dispatcher: tests/commandHandlers.test.ts drives THIS, not the live one - re-point, then delete'],
+  ['src/handlers/command-handler/types.ts', 'second dispatcher: its types'],
+
+  ['src/handlers/door-handler/door-types.ts', 'types for a door handler split that never landed'],
+  ['src/handlers/examples/modern-handler.example.ts', 'documentation: the example src/handlers/examples/README.md walks through, for a DI pattern the live handlers do use'],
+  ['src/nodes/index.ts', 'barrel: every consumer imports NodeStatusManager/MulticomManager directly'],
+
+  // PARKED BY DECISION, 2026-09-08 (ledger item P0-3b). The DIZ fallback
+  // ladder is designed behaviour with no live surface to hang on: at 40
+  // columns the file view shows a list row with no description, or a record
+  // block that squeezes the description to two rows, so a wide FILE_ID.DIZ is
+  // never cropped there - it is never shown. Wiring it is SP7 of the C64
+  // file-view design and needs the sysop's word on when the fallback fires.
+  // Until then this is the only copy of that design and must not be deleted.
+  ['src/utils/diz-fallback.util.ts', 'parked by decision: the DIZ ladder has no live surface yet - see ledger P0-3b'],
 ]);
 
 const BACKEND = path.resolve(__dirname, '..', '..');
@@ -90,7 +116,7 @@ describe('every file under src is reachable from an entry point', () => {
     // must go too, or the list rots into a lie about what is dead.
     const found = new Set(walk().unreachable.map(relative));
 
-    const stale = [...KNOWN_UNREACHABLE].filter((file) => !found.has(file));
+    const stale = [...KNOWN_UNREACHABLE.keys()].filter((file) => !found.has(file));
 
     expect(stale).toEqual([]);
   });
