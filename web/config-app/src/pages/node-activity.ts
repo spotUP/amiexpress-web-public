@@ -70,6 +70,8 @@ const EXACT: Record<string, string> = {
   // express.e:21884-22042. A sysop's screen, not a caller's - but it is a
   // node in that state and the list has to say something true about it.
   credit_maintenance_view: 'Looking at file credits',
+  // A sysop reading what a caller typed at signup - the questionnaire answers.
+  user_answers_view: 'Reading a caller\'s signup answers',
   font_selection: 'Editing their settings',
 };
 

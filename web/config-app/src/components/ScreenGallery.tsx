@@ -134,16 +134,22 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
     queryFn: async () => {
       await acquire();
       try {
+        // The PAYLOAD, not the content string. ScreenFilesPage and the
+        // artist's dialog cache this same key and both read `.content` off an
+        // object; a card storing the bare string meant whichever mounted
+        // second read `undefined` and tried to decode it - which is why every
+        // screen in the studio said "These bytes cannot be read as ANSI art".
+        // One key, one shape.
         const res = await apiClient.getScreenFile(item.path);
-        return (res.data as { content?: string })?.content ?? '';
+        return (res.data ?? null) as { content?: string } | null;
       } catch {
-        return '';
+        return null;
       } finally {
         release();
       }
     },
   });
-  const content = fetched ?? null;
+  const content = fetched?.content ?? null;
 
   return (
     <button

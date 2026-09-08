@@ -1,0 +1,113 @@
+/**
+ * The studio must draw the screen, not apologise for it.
+ *
+ * "the artist studio is broken all of them say These bytes cannot be read as
+ * ANSI art." That string is the catch I added around screenToCanvas, so every
+ * screen is failing to decode - and the sysop's page decodes the same bytes
+ * through the same function.
+ */
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
+
+import { QUERY_DEFAULTS } from '../lib/query-client';
+
+// Real ANSI: ESC[31m then HI, exactly what the board serves.
+const art = new TextEncoder().encode('\x1b[31mHI\r\n');
+const base64 = btoa(String.fromCharCode(...art));
+
+const envelope = (data: unknown) => Promise.resolve({
+  ok: true, status: 200, headers: new Headers({ 'content-type': 'application/json' }),
+  json: async () => ({ success: true, data, timestamp: '' }),
+  text: async () => JSON.stringify({ success: true, data }),
+} as unknown as Response);
+
+vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+  const url = String(input);
+  if (url.includes('/api/screens/file')) {
+    return envelope({ relPath: 'Themes/skope/Board/BULL.TXT', content: base64, format: 'ansi', bytes: art.length, mci: [] });
+  }
+  if (url.includes('/api/mci')) return envelope({ codes: [] });
+  return envelope({});
+}));
+
+vi.mock('../contexts/NotificationContext', () => ({
+  useNotification: () => ({ showSuccess: vi.fn(), showError: vi.fn(), confirm: vi.fn(async () => true) }),
+}));
+
+import { ArtistScreenDialog } from '../pages/ArtistScreenDialog';
+import { ScreenGallery } from '../components/ScreenGallery';
+import type { ScreenIndexShape } from '../pages/screen-index-view';
+
+const theme = { slug: 'skope', title: "skope's screens", status: 'draft' as const, dir: 'Themes/skope', owner: 'skope', screens: 1, mine: true };
+const index = { files: { 'Themes/skope/Board/BULL.TXT': { relPath: 'Themes/skope/Board/BULL.TXT', theme: 'skope' } } } as unknown as ScreenIndexShape;
+
+function wrapper({ children }: { children: ReactNode }) {
+  const client = new QueryClient({ defaultOptions: { ...QUERY_DEFAULTS, queries: { ...QUERY_DEFAULTS.queries, retry: false } } });
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+describe('opening a screen in the studio', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('draws it even though the gallery card fetched it first', async () => {
+    // The card ALWAYS gets there first in the studio - it is the only way in.
+    // Both readers cache ['screen-file', path], so if they disagree about the
+    // shape the dialog decodes `undefined` and every screen reports itself
+    // unreadable. This is that collision, in one QueryClient.
+    const client = new QueryClient({ defaultOptions: { ...QUERY_DEFAULTS, queries: { ...QUERY_DEFAULTS.queries, retry: false } } });
+    const both = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const item = { path: 'Themes/skope/Board/BULL.TXT', label: 'BULL', detail: '' };
+
+    const view = render(<ScreenGallery items={[item]} onOpen={vi.fn()} />, { wrapper: both });
+    await waitFor(() => expect(client.getQueryData(['screen-file', item.path])).toBeTruthy());
+    view.unmount();
+
+    render(<ArtistScreenDialog path={item.path} theme={theme} index={index} onClose={vi.fn()} onOpenPath={vi.fn()} />, { wrapper: both });
+
+    await waitFor(() => expect(screen.queryByTestId('canvas-viewport')).toBeTruthy(), { timeout: 3000 });
+    expect(screen.queryByText(/cannot be read as ANSI art/)).toBeNull();
+  });
+
+  it('one screen it cannot read does not break the next one', async () => {
+    // The first file is not base64 at all, so the decoder throws. The second
+    // is ordinary art, and must draw.
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/screens/file')) {
+        return envelope(url.includes('BROKEN')
+          ? { relPath: 'Screens/BROKEN.TXT', content: 'not base64 !!!', format: 'ansi', bytes: 3, mci: [] }
+          : { relPath: 'Screens/BULL.TXT', content: base64, format: 'ansi', bytes: art.length, mci: [] });
+      }
+      if (url.includes('/api/mci')) return envelope({ codes: [] });
+      return envelope({});
+    });
+    const boardIndex = { files: {} } as unknown as ScreenIndexShape;
+
+    const view = render(<ArtistScreenDialog path="Screens/BROKEN.TXT" theme={theme} index={boardIndex} onClose={vi.fn()} onOpenPath={vi.fn()} />, { wrapper });
+    await waitFor(() => expect(screen.queryByText(/cannot be read as ANSI art/)).toBeTruthy());
+
+    view.rerender(<ArtistScreenDialog path="Screens/BULL.TXT" theme={theme} index={boardIndex} onClose={vi.fn()} onOpenPath={vi.fn()} />);
+
+    await waitFor(() => expect(screen.queryByTestId('canvas-viewport')).toBeTruthy(), { timeout: 3000 });
+    expect(screen.queryByText(/cannot be read as ANSI art/)).toBeNull();
+  });
+
+  it('draws a BOARD screen read-only instead of refusing it', async () => {
+    const boardIndex = { files: { 'Screens/BULL.TXT': { relPath: 'Screens/BULL.TXT' } } } as unknown as ScreenIndexShape;
+    render(<ArtistScreenDialog path="Screens/BULL.TXT" theme={theme} index={boardIndex} onClose={vi.fn()} onOpenPath={vi.fn()} />, { wrapper });
+
+    await waitFor(() => expect(screen.queryByTestId('canvas-viewport')).toBeTruthy(), { timeout: 3000 });
+    expect(screen.queryByText(/cannot be read as ANSI art/)).toBeNull();
+  });
+
+  it('draws the artist\'s own screen instead of refusing it', async () => {
+    render(<ArtistScreenDialog path="Themes/skope/Board/BULL.TXT" theme={theme} index={index} onClose={vi.fn()} onOpenPath={vi.fn()} />, { wrapper });
+
+    await waitFor(() => expect(screen.queryByTestId('canvas-viewport')).toBeTruthy(), { timeout: 3000 });
+    expect(screen.queryByText(/cannot be read as ANSI art/)).toBeNull();
+  });
+});
