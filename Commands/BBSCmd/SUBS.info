@@ -1,0 +1,10 @@
+BBSCMD=SUBS
+NAME=Subs - public discussion
+TYPE=XIM
+LOCATION=Doors/SUBS/subs
+DESCRIPTION=Read and join the public discussion in this conference
+ACCESS=1
+MULTINODE=YES
+PRIORITY=SAME
+STACK=8192
+MIN_COLUMNS=40

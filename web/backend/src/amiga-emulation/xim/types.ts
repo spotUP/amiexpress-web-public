@@ -310,6 +310,26 @@ export enum XIMCommand {
    */
   AEW_THEME = 10100,
 
+  /**
+   * THIS BOARD'S OWN: read the current conference's PUBLIC message feed.
+   *
+   * A 68K door cannot parse HeaderFile itself: this board's files hold two
+   * record layouts interleaved, and telling them apart needs a whole-file
+   * sequence pass (services/msgheader-layout.ts). A C copy of that would be
+   * a second source of truth for who wrote what. And a door reading the disk
+   * sees every message regardless of the caller's READ_PRIV_EALL /
+   * READ_PRIV_ALL (handlers/message/messaging.handler.ts:188-199), which
+   * would put the read filter in C on the wrong side of the trust boundary.
+   *
+   * So the board answers with TEXT the door only has to split, the 110-byte
+   * record stays parsed in exactly one place, and the ACS filter stays in the
+   * one place that already owns it. Read-only by construction: a write
+   * (msg.data === 0) is answered with 0 and nothing else.
+   *
+   * See xim/msgfeed.ts for the three verbs and the row format.
+   */
+  AEW_MSGQUERY = 10200,
+
   NETUPLOAD = 10001,
   NETDOWNLOAD = 10002,
 }

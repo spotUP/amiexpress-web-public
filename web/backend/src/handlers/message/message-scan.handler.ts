@@ -342,8 +342,13 @@ interface ConfScanResult {
  * express.e:11651-11735 searchNewMail. Replaces getMessagesForConfScan and
  * countNewMessages, which walked the same headers twice with two copies of
  * the rule.
+ *
+ * EXPORTED so the AEW_MSGQUERY handler (amiga-emulation/xim/msgfeed.ts) can
+ * ask this question instead of growing the third copy this function exists to
+ * prevent. Nothing about the scan changes: that caller drops the private
+ * messages and intersects the rest with what the caller's ACS lets it show.
  */
-async function scanConferenceForNewMail(
+export async function scanConferenceForNewMail(
   userId: string,
   conferenceId: number,
   messageBaseId: number,

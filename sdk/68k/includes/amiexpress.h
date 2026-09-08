@@ -187,6 +187,24 @@ struct JHMessage {
 #define DT_REMBIT         1001
 #define DT_QUERYBIT       1002
 
+/*
+ * THIS BOARD'S OWN COMMANDS, above express.e's MAX_CMD (1003).
+ *
+ * AmiExpress cannot grow into this range without a version bump, and a
+ * classic board answers an unknown command with nothing - which is exactly
+ * the signal a door needs: ask, get an empty reply, fall back.
+ *
+ * AEW_MSGQUERY reads the current conference's PUBLIC message feed as plain
+ * text. Send the query in msg.String with msg.Data = READIT; the answer comes
+ * back in msg.String and the byte count in msg.Data (0 = nothing more,
+ * -1 = carrier gone). Verbs: "STAT", "LIST <first> <count>",
+ * "BODY <msgNum> <chunk>". Full format in
+ * web/backend/src/amiga-emulation/xim/msgfeed.ts; the SDK wrapper is
+ * sdk/c/include/ae_msgbase.h.
+ */
+#define AEW_THEME         10100
+#define AEW_MSGQUERY      10200
+
 /* ACP Command Constants */
 #define ACP_CONTROLCOMMAND -1
 #define ACP_CUSTOMCOMMAND  19

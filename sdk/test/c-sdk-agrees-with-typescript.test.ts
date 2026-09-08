@@ -103,7 +103,9 @@ describe('the C SDK', () => {
       ['AE_FIELD_SCREEN_COLS', 'BB_SCRWIDTH'],
       ['AE_FIELD_SCREEN_ROWS', 'BB_SCRHEIGHT'],
       ['AE_FIELD_CONFERENCE', 'BB_CONFNUM'],
+      ['AE_FIELD_MENU_COMMAND', 'GET_CUSTOM_MSGBASE_MENUCMD'],
       ['AE_FIELD_THEME', 'AEW_THEME'],
+      ['AE_FIELD_MSGQUERY', 'AEW_MSGQUERY'],
     ];
 
     for (const [cName, boardName] of pairs) {
@@ -118,6 +120,8 @@ describe('the C SDK', () => {
     const header = fs.readFileSync(path.join(cRoot, 'include', 'ae_session.h'), 'utf8');
     const theme = Number(header.match(/AE_FIELD_THEME\s*=\s*(\d+)/)![1]);
     expect(theme).toBeGreaterThan(1003);
+    const msgQuery = Number(header.match(/AE_FIELD_MSGQUERY\s*=\s*(\d+)/)![1]);
+    expect(msgQuery).toBeGreaterThan(1003);
   });
 
   it('agrees about which widths are compact, across the boundary', () => {

@@ -1,0 +1,16 @@
+{
+  "command": "SUBS",
+  "cfgFile": "SUBS.cfg",
+  "settings": [
+    {
+      "key": "feedWindow",
+      "cfgKey": "FeedWindow",
+      "label": "Messages held in the feed",
+      "type": "number",
+      "default": 100,
+      "min": 10,
+      "max": 200,
+      "help": "How many of the NEWEST public messages the door loads when it opens. The board answers about four rows per XIM round trip and each trip costs roughly 45ms of emulation, so 100 is about a second to open and 200 is about two. Older messages are still read at the R prompt. A conference with more than this says so on screen."
+    }
+  ]
+}

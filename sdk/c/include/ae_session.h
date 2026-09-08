@@ -41,13 +41,37 @@ typedef enum {
     AE_FIELD_SCREEN_ROWS    = 521,  /* BB_SCRHEIGHT */
     AE_FIELD_CONFERENCE     = 510,  /* BB_CONFNUM */
     /*
+     * WHICH COMMAND NAME LAUNCHED THIS DOOR - express.e:3974-3975,
+     * AstrCopy(msg.string, customMsgCmd, 200).
+     *
+     * The only way one binary can behave differently under two registrations,
+     * because AmigaDOS gives a door ONE argument string and only argv[1]
+     * survives (sdk/c/README.md:132-143) - and argv[1] is the node number.
+     * SUBS uses it to tell its full screen from its three-line digest.
+     */
+    AE_FIELD_MENU_COMMAND   = 605,  /* GET_CUSTOM_MSGBASE_MENUCMD */
+    /*
      * THIS BOARD'S OWN, above express.e's MAX_CMD (1003).
      *
      * A classic board answers an unknown command with nothing, which is the
      * signal to fall back - and a door should have checked AE_HOST first
      * anyway (ae_host.h).
      */
-    AE_FIELD_THEME          = 10100 /* AEW_THEME */
+    AE_FIELD_THEME          = 10100, /* AEW_THEME */
+    /*
+     * ALSO THIS BOARD'S OWN, and the one field here that is not a field.
+     *
+     * AEW_MSGQUERY carries a QUERY out and TEXT back in the same message, so
+     * it is reached through ae_field_exchange (aedoor.h), never through the
+     * session accessors above - there is no "the caller's message feed" the
+     * way there is "the caller's name". It is named here because this enum is
+     * where the board's numbers are pinned against xim/types.ts
+     * (sdk/test/c-sdk-agrees-with-typescript.test.ts), and a number that lives
+     * in two files and is checked in neither is how they drift.
+     *
+     * The door-facing wrapper is sdk/c/include/ae_msgbase.h.
+     */
+    AE_FIELD_MSGQUERY       = 10200  /* AEW_MSGQUERY */
 } ae_field;
 
 /**
@@ -155,6 +179,16 @@ int ae_conference(ae_session *s);
  * board does not answer - a classic AmiExpress, which has no themes.
  */
 int ae_user_theme(ae_session *s, char *out, int n);
+
+/**
+ * The command name the caller typed to get here, or "" where the board does
+ * not say.
+ *
+ * One binary can then be registered twice and behave differently under each
+ * name - which is the only mechanism available, since AmigaDOS hands a door a
+ * single argument string and argv[1] is already the node number.
+ */
+int ae_menu_command(ae_session *s, char *out, int n);
 
 /**
  * Change the caller's theme, and have the board remember it.

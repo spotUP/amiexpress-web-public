@@ -143,6 +143,16 @@ int ae_user_theme(ae_session *s, char *out, int n)
     return got > 0 ? got : 0;
 }
 
+int ae_menu_command(ae_session *s, char *out, int n)
+{
+    int got = ask(s, AE_FIELD_MENU_COMMAND, out, n);
+
+    /* "" for a board that does not answer, never a guessed name: a door that
+       assumed its own primary name would run its main screen under every
+       registration it has. */
+    return got > 0 ? got : 0;
+}
+
 int ae_set_user_theme(ae_session *s, const char *theme_id)
 {
     char round_trip[64];

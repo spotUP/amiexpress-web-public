@@ -185,6 +185,26 @@ void ae_shutdown(void);
 int ae_field_read(int field, char *out, int cap);
 int ae_field_write(int field, const char *value);
 
+/* One round trip that SENDS a string and READS one back.
+ *
+ * Neither of the two above can do it, and that is not an oversight in them:
+ * ae_field_read sends an EMPTY String (ae_transport_amiga.c:487) because
+ * every DT_/BB_ field is "tell me this one thing", and ae_field_write reads
+ * nothing back because a field write has no answer. A board command that
+ * takes a QUERY - "LIST 40 8" - and answers with TEXT needs both halves of
+ * the same message, which is what this is.
+ *
+ * `request` goes into the message's String (truncated at AE_MAX_LINE, which
+ * is the wire's own limit, not a choice); the reply is copied into `out`,
+ * always NUL-terminated. Returns the board's msg.Data - the number of bytes
+ * it wrote, 0 for "nothing more" and for a classic board that does not know
+ * the command at all - or -1 when the carrier is gone.
+ *
+ * Data is set to READIT (1) on the way out, the same direction flag every
+ * field read uses: this is a READ that happens to carry a question.
+ */
+int ae_field_exchange(int field, const char *request, char *out, int cap);
+
 /* TakeOffEh equivalent (AEDoor.c TakeOffEh(), lines 231-239): fatal-error
  * shutdown. Still notifies the BBS (JH_SHUTDOWN) before terminating -- the
  * mandate applies on every exit path, not just the happy one -- then calls

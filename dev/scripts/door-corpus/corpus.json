@@ -109039,6 +109039,34 @@
      ]
     }
    }
+  },
+  {
+   "id": "subs",
+   "name": "SUBS",
+   "category": "XIM-BBSCmd",
+   "binary": "Doors/SUBS/subs",
+   "doorType": "XIM",
+   "command": "SUBS",
+   "timeoutMs": 30000,
+   "notes": "SUBS - the public discussion feed for the current conference, built from sdk/c/examples/subs/subs.c (2026-09-08). Exercises this board's own AEW_MSGQUERY (10200) read command, GET_CUSTOM_MSGBASE_MENUCMD (605) for the SUBS/SUBSCAN mode switch, BB_SCRWIDTH/BB_SCRHEIGHT and RAWARROW. Read-only: posting hands EALL back with RETURNCOMMAND and exits, so this run never writes a message. With no message base under the harness's root the door draws its empty-conference screen and leaves on q, which is a clean XIM shutdown either way.",
+   "integration": {
+    "timeoutMs": 20000,
+    "assertions": {
+     "mustNotContain": [
+      "TRAP",
+      "PANIC",
+      "Guru",
+      "Software failure"
+     ],
+     "expectedSubState": "DISPLAY_MENU"
+    },
+    "inputs": [
+     {
+      "delayMs": 6000,
+      "data": "q"
+     }
+    ]
+   }
   }
  ],
  "_generated": "2026-05-26b"

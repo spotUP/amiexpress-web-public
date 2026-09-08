@@ -146,6 +146,11 @@ struct jh_size_check { int flag : (sizeof(struct JHMessage) == 264) ? 1 : -1; };
 #define BB_SCRWIDTH  520
 #define BB_SCRHEIGHT 521
 
+/* The caller's message pointers. Both answer in Data, not String
+ * (express.e:3963-3966) - see field_answers_in_data() below. */
+#define LAST_READ    602
+#define LAST_SCANNED 603
+
 /* RETURNCOMMAND: hand a command back for the BBS to run once this door has
  * exited (express.e:3492-3493; xim/types.ts RETURNCOMMAND = 136). */
 #define RETURNCOMMAND 136
@@ -464,6 +469,19 @@ static int field_answers_in_data(int field)
         case BB_SCRTOP:
         case BB_SCRWIDTH:
         case BB_SCRHEIGHT:
+        /* express.e:3963-3966 answers both of these in Data and writes
+         * nothing into String:
+         *
+         *     CASE LAST_READ    -> msg.data:=lastMsgReadConf
+         *     CASE LAST_SCANNED -> msg.data:=lastNewReadConf
+         *
+         * Without them here ae_field_read(LAST_SCANNED, ...) would render the
+         * String buffer - whatever the previous round trip left in it - and
+         * hand the door junk. Same class of bug as the four above, which made
+         * ae_screen_cols() answer 80 for every C door on every board until
+         * this function landed. */
+        case LAST_READ:
+        case LAST_SCANNED:
             return 1;
         default:
             return 0;
@@ -519,6 +537,48 @@ int ae_field_read(int field, char *out, int cap)
     }
     out[len] = '\0';
     return len;
+}
+
+int ae_field_exchange(int field, const char *request, char *out, int cap)
+{
+    int i;
+    int len;
+
+    if (out == NULL || cap <= 0) {
+        return -1;
+    }
+    out[0] = '\0';
+    if (msg == NULL || bbs_port == NULL || carrier_lost) {
+        return -1;
+    }
+    if (request == NULL) {
+        request = "";
+    }
+
+    /* The question goes out in the SAME buffer the answer comes back in -
+     * there is one String per message and the board overwrites it in place. */
+    for (i = 0; i < AE_MAX_LINE && request[i] != '\0'; i++) {
+        msg->String[i] = request[i];
+    }
+    msg->String[i] = '\0';
+
+    msg->Command = field;
+    msg->Data = 1;                 /* != 0: read. See ae_field_read. */
+    xim_call();
+
+    if (msg->Data == -1) {
+        return -1;
+    }
+
+    /* Copy no more than the board said it wrote. The buffer is reused between
+     * calls and a short reply can leave a previous longer one's tail behind
+     * (xim/messages.ts:232), so trusting the NUL alone would hand the door the
+     * end of the last answer glued onto this one. */
+    for (len = 0; len < cap - 1 && len < AE_MAX_LINE && len < (int)msg->Data; len++) {
+        out[len] = msg->String[len];
+    }
+    out[len] = '\0';
+    return (int)msg->Data;
 }
 
 int ae_field_write(int field, const char *value)

@@ -38,6 +38,56 @@
 #include <unistd.h>
 
 #include "aedoor.h"
+#include "ae_transport_native.h"
+
+/* ---- the stand-in board -------------------------------------------------
+ *
+ * ae_field_exchange is the one call in aedoor.h that stdio cannot honestly
+ * implement: "send a query, get an answer" has no terminal equivalent. So the
+ * host backend delegates to whatever a test installed, and answers NOTHING
+ * when nothing is installed.
+ *
+ * WHAT "NO HOOK" MODELS, exactly: a classic AmiExpress being asked a command
+ * it has never heard of. Its DEFAULT case (express.e:4221-4228) logs a warning
+ * and touches NEITHER msg.String NOR msg.data - so the door gets back the
+ * request it wrote into String itself, and the read flag it put in Data. Not
+ * an empty reply: its own question, echoed. This function reproduces that
+ * exactly, because a door telling "the board has no feed" apart from "the
+ * conference is empty" is the difference between the right sentence and a
+ * screen that says nobody has ever posted here.
+ *
+ * ae_field_read/ae_field_write are deliberately still absent from this file:
+ * they are reached only through ae_session_bbs.c, which no host test links.
+ */
+static ae_native_exchange_fn exchange_fn = 0;
+static void *exchange_ctx = 0;
+
+void ae_native_set_exchange(ae_native_exchange_fn fn, void *ctx)
+{
+    exchange_fn = fn;
+    exchange_ctx = ctx;
+}
+
+int ae_field_exchange(int field, const char *request, char *out, int cap)
+{
+    int len;
+
+    if (out == 0 || cap <= 0) {
+        return -1;
+    }
+    out[0] = '\0';
+    if (request == 0) {
+        request = "";
+    }
+    if (exchange_fn != 0) {
+        return exchange_fn(exchange_ctx, field, request, out, cap);
+    }
+
+    /* A classic board: the question comes back untouched. */
+    for (len = 0; len < cap - 1 && request[len] != '\0'; len++) out[len] = request[len];
+    out[len] = '\0';
+    return len;
+}
 
 /* AmiExpress doors sometimes deliberately send "bbs:" device/volume paths
  * via JH_SM to trigger file display instead of a printed line: our emulator

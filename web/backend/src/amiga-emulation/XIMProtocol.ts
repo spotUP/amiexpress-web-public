@@ -24,6 +24,7 @@ import { XIMIOHandler } from './xim/io';
 import { XIMDataQueryHandler } from './xim/data-query';
 import { XIMBBSInfoHandler } from './xim/bbs-info';
 import { XIMSystemCommandsHandler } from './xim/system-commands';
+import { handleMsgQuery } from './xim/msgfeed';
 import { ximDebugLogger } from './xim/debug-logger';
 import { getDoorLogger, DoorLogger } from './DoorLogger';
 import { ximLogger } from '../utils/XIMLogger';
@@ -891,6 +892,16 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
       XIMCommand.GETKEY,
       XIMCommand.DISPLAY_FILE,
       XIMCommand.CHECK_TO_DISPLAY,
+      // THIS BOARD'S OWN, above express.e's MAX_CMD (1003). AEW_MSGQUERY reads
+      // the message base, so it is asynchronous and belongs with the I/O
+      // family rather than the synchronous data-query one.
+      //
+      // THIS LINE IS THE STEP THAT GETS FORGOTTEN. AEW_THEME was implemented
+      // in xim/data-query.ts and left out of `isDataQueryCommand`, so the C
+      // theme picker asked on every open, got "UNHANDLED COMMAND: 10100" and
+      // an empty reply, and drew every theme in the classic palette. The
+      // handler was fine; the route was missing.
+      XIMCommand.AEW_MSGQUERY,
       // Note: PG_SM, PG_UD, PG_US were removed - they don't exist in axcommon.e
       // and conflicted with JH_REGISTER (1), JH_FLAGFILE (13), JH_SHOWFLAGS (14)
     ];
@@ -981,6 +992,32 @@ debugLog(
 
       case XIMCommand.GETKEY:
         this.ioHandler.handleGetKey(msg);
+        break;
+
+      /**
+       * AEW_MSGQUERY (10200): the current conference's PUBLIC message feed,
+       * decoded and ACS-filtered here so the door never parses HeaderFile and
+       * never sees a message the caller could not read at the `R` prompt.
+       * See xim/msgfeed.ts.
+       *
+       * READ ONLY, by construction. Data != 0 is a read and Data == 0 is a
+       * write, the same direction flag every DT_ field uses
+       * (xim/data-query.ts:92). There is no write path in this command, so a
+       * write is answered with 0 and the door's own request buffer is left
+       * exactly as it sent it.
+       */
+      case XIMCommand.AEW_MSGQUERY:
+        {
+          if (!msg.data) {
+            debugLog('[XIMProtocol] AEW_MSGQUERY: write refused - this command only reads');
+            this.sendReply(msg, 0);
+            break;
+          }
+          const answer = await handleMsgQuery(String(msg.string || ''), this.bbsSession);
+          debugLog(`[XIMProtocol] AEW_MSGQUERY "${msg.string}" -> ${answer.bytes} bytes`);
+          this.messageParser.writeMessageString(msg.msgAddr, answer.text);
+          this.sendReply(msg, answer.bytes);
+        }
         break;
 
       // Note: PG_SM, PG_UD, PG_US case handlers removed - they don't exist in axcommon.e
@@ -1097,6 +1134,23 @@ debugLog(
       XIMCommand.PASSWORD_HASH,
       // Message base location
       XIMCommand.MSGBASE_LOC,
+      /*
+       * The caller's message pointers - express.e:3963-3966, which answers
+       * both in msg.data:
+       *
+       *     CASE LAST_READ    -> msg.data:=lastMsgReadConf
+       *     CASE LAST_SCANNED -> msg.data:=lastNewReadConf
+       *
+       * Implemented only in session/DoorMessageHandler.processCommand, which
+       * runs solely when `this.ximProtocol` is null (:594) - the live entry
+       * point delegates at :590-593, so that switch is a dead fallback copy.
+       * Neither number was in ANY predicate here, so both fell through to the
+       * unknown-command default at :748-752, which replies with msg.data
+       * UNCHANGED: a door that asked for its pointer got back the `1` it sent
+       * as the read flag and could not tell. A parity gap, not a divergence.
+       */
+      XIMCommand.LAST_READ,
+      XIMCommand.LAST_SCANNED,
     ];
     if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
 debugLog(
@@ -1268,6 +1322,26 @@ debugLog(`[XIMProtocol] handleBBSInfoCommand called: cmd=${msg.command} doorPara
 debugLog(`[XIMProtocol] MSGBASE_LOC: "${msgBaseLoc}"`);
           this.messageParser.writeMessageString(msg.msgAddr, msgBaseLoc);
           this.sendReply(msg, 1);
+        }
+        break;
+
+      // The caller's message pointers, both answered in msg.data
+      // (express.e:3963-3966). sendReply IS the writeData, so the value goes
+      // through it - writing it first and then replying with something else
+      // is the bug that made BB_SCRWIDTH answer 1 for every door.
+      case XIMCommand.LAST_READ:
+        {
+          const lastRead = Number((this.bbsSession as any)?.lastMsgReadConf || 0);
+debugLog(`[XIMProtocol] LAST_READ: ${lastRead}`);
+          this.sendReply(msg, lastRead);
+        }
+        break;
+
+      case XIMCommand.LAST_SCANNED:
+        {
+          const lastScanned = Number((this.bbsSession as any)?.lastNewReadConf || 0);
+debugLog(`[XIMProtocol] LAST_SCANNED: ${lastScanned}`);
+          this.sendReply(msg, lastScanned);
         }
         break;
     }

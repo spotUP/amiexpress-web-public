@@ -105,7 +105,19 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  * their width from the live screen, proven at 40 in
  * tests/doors/compact-40/screen-theme-picker.test.ts.
  */
-const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE'];
+/*
+ * SUBS is the second 68K binary here, added 2026-09-08, and it earns the mark
+ * the same way THEMEC does: it asks the board for the caller's width and lays
+ * ITSELF out through `ui_profile_for()`, so at 40 the date column and the
+ * sender's full name go and the SUBJECT survives - proven on a real
+ * PetsciiMachine in tests/doors/compact-40/subs-40.test.ts.
+ *
+ * SUBSCAN is the SAME binary under a second registration, and it is
+ * deliberately NOT on this list: it never opens a screen at all. It prints
+ * three lines and exits, which is what a conference bulletin's ~XISUBSCAN
+ * runs, so there is no 40-column layout to prove.
+ */
+const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS'];
 
 const UNROUTED = 'unrouted-gate-test-type' as unknown as Door['type'];
 
