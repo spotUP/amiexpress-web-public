@@ -1,0 +1,19 @@
+[Unit]
+# Deploy origin/main when it moves. The work is deploy/watch-main.sh, in the
+# repository, so this unit never has to change when the deploy does.
+Description=Deploy amiexpress-web when origin/main moves
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# The board's own checkout, which is also where the script lives.
+WorkingDirectory=/app/amiexpress
+ExecStart=/app/amiexpress/deploy/watch-main.sh
+# A build takes about eight minutes on this box; the timer ticks every two, so
+# a run that overruns must not be killed half way through a container recreate.
+TimeoutStartSec=45min
+# The deploy needs docker, the volume and root's deploy key.
+User=root
+StandardOutput=journal
+StandardError=journal
