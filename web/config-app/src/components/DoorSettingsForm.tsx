@@ -44,6 +44,23 @@ export interface DoorSettingsFormProps {
 
 type Values = Record<string, string | number | boolean>;
 
+/**
+ * What one press of the arrow keys - and the browser's own validation - takes
+ * a number setting to be.
+ *
+ * `<input type="number">` defaults to step=1, so a fractional value is
+ * REFUSED by the browser before it can be saved: the sysop typing the Card
+ * Lobby's declared 0.02 entry fee was told "the two nearest valid values are
+ * 0 and 1". A setting whose own default, minimum or maximum is fractional is
+ * a fractional setting, and takes any value in its range; the rest keep whole
+ * numbers, which is the right guard for turns, chips and node counts.
+ */
+function stepFor(setting: DoorSetting): number | 'any' {
+  const declared = [setting.default, setting.min, setting.max]
+    .filter((v): v is number => typeof v === 'number');
+  return declared.some(v => !Number.isInteger(v)) ? 'any' : 1;
+}
+
 export function DoorSettingsForm({ command, onPendingChange }: DoorSettingsFormProps) {
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useNotification();
@@ -158,6 +175,7 @@ export function DoorSettingsForm({ command, onPendingChange }: DoorSettingsFormP
                 value={String(value ?? '')}
                 min={setting.min}
                 max={setting.max}
+                step={setting.type === 'number' ? stepFor(setting) : undefined}
                 placeholder={secretIsSet ? 'Set - leave blank to keep it' : undefined}
                 onChange={e => set(
                   setting.key,

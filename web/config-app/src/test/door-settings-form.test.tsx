@@ -20,13 +20,15 @@ const VIEW = {
     settings: [
       { key: 'server', label: 'Server', type: 'string', default: 'bbs.example.org', help: 'Where the door connects' },
       { key: 'port', label: 'Port', type: 'number', default: 6667, min: 1, max: 65535 },
+      // The Card Lobby's entry fee: a rate, declared fractional.
+      { key: 'entryFeeRate', label: 'Entry fee rate', type: 'number', default: 0.02, min: 0, max: 1 },
       { key: 'announce', label: 'Announce joins', type: 'boolean', default: true },
       { key: 'style', label: 'Style', type: 'choice', default: '4',
         choices: [{ value: '1', label: 'One' }, { value: '4', label: 'Four' }] },
       { key: 'password', label: 'Password', type: 'string', secret: true },
     ],
   },
-  values: { server: 'bbs.example.org', port: 6667, announce: true, style: '4', password: '' },
+  values: { server: 'bbs.example.org', port: 6667, entryFeeRate: 0.02, announce: true, style: '4', password: '' },
   secretsSet: ['password'],
 };
 
@@ -71,6 +73,29 @@ describe('the door settings form', () => {
     expect(screen.getByLabelText('Announce joins')).toBeTruthy();
     expect(screen.getByLabelText('Style')).toBeTruthy();
     expect(screen.getByText('Where the door connects')).toBeTruthy();
+  });
+
+  it('lets a fractional setting hold a fraction', async () => {
+    // `<input type="number">` defaults to step=1, so the browser REFUSED the
+    // Card Lobby's own declared 0.02: "the two nearest valid values are 0 and
+    // 1". Reported from the board on 2026-09-08.
+    renderForm();
+
+    const rate = await screen.findByLabelText('Entry fee rate') as HTMLInputElement;
+
+    expect(rate.step).toBe('any');
+    expect(rate.checkValidity()).toBe(true);
+    expect(rate.value).toBe('0.02');
+  });
+
+  it('keeps whole numbers whole where the door declared them that way', async () => {
+    renderForm();
+
+    const port = await screen.findByLabelText('Port') as HTMLInputElement;
+
+    // Turns, chips and ports have no fractional half; stepping by 1 is the
+    // guard, and only a setting that declares a fraction gives it up.
+    expect(port.step).toBe('1');
   });
 
   it('sends what the sysop changed, keyed the way the door declared it', async () => {
