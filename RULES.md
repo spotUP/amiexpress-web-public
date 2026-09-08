@@ -285,6 +285,9 @@ in the plan but the work landed in a commit elsewhere. Rules:
   a plan claims `implemented` without `landed`/with its `verify` pattern absent,
   when a not-implemented plan's `verify` pattern IS present, or when INDEX.md is
   stale. Run it before pushing plan/status changes.
+- **A plan is only safe on `origin/main`.** Before ending a session or removing
+  a worktree, run `plan-index.ts --stranded` - it exits non-zero if any worktree
+  holds a plan that is not on origin. Two plans were nearly lost this way.
 - **How-to, contract, and new-plan template: `thoughts/shared/plans/README.md`.**
   Plans live only in `thoughts/shared/plans/` — a plan found anywhere else gets
   `git mv`'d in. Status is updated in the SAME change that lands the work.
