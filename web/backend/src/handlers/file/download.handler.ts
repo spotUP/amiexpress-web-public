@@ -552,8 +552,27 @@ export class DownloadHandler {
         // Persist download stats for each file before handing off - the
         // ZMODEM transfer is async and the user could disconnect; record
         // intent now so per-user totals stay accurate.
-        onBeforeHandoff: async () => {
+        /**
+         * Booked when the transfer FINISHES, not when it is handed off.
+         *
+         * express counts a download inside `updateDownloadStats` behind
+         * `IF sentsize` (express.e:15437): nothing sent, nothing counted.
+         * This ran before sz was even spawned - "record intent now so
+         * per-user totals stay accurate" - which charged a caller who
+         * aborted a batch for every file in it. On a ratio board that is
+         * the difference between keeping and losing download access.
+         *
+         * lrzsz reports only whether the whole batch went, so this is
+         * per-batch. A caller who takes four of five files is still billed
+         * for none, which errs in his favour rather than the board's; per
+         * file would need sz's stderr parsed for each name.
+         */
+        onTransferFinished: async (ok: boolean) => {
           if (!session.user) return;
+          if (!ok) {
+            console.log('[download] transfer did not complete - nothing booked');
+            return;
+          }
           for (const fileInfo of fileList) {
             try {
               const isFree = this.isFreeDownload(fileInfo);
@@ -563,7 +582,7 @@ export class DownloadHandler {
               await this.updateConferenceDownloadStats(session, fileInfo, isFree);
               doorDropFileManager.updateDownloadBytesToday(session.nodeId || 0, fileInfo.size);
             } catch (err) {
-              console.warn('[download] pre-transfer stats failed:', err);
+              console.warn('[download] post-transfer stats failed:', err);
             }
           }
         },

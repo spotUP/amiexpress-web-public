@@ -384,7 +384,24 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
   manager.start();
 }
 
-export function startZmodemDownload(socket: any, session: BBSSession, files: string[]): void {
+export function startZmodemDownload(
+  socket: any,
+  session: BBSSession,
+  files: string[],
+  /**
+   * Called once the transfer ends, with whether it actually succeeded.
+   *
+   * express books a download in `updateDownloadStats` behind `IF sentsize`
+   * (express.e:15429-15465) - nothing sent, nothing counted. This port booked
+   * every file BEFORE handing off to sz, so a caller who aborted a batch was
+   * charged for files he never received, which on a ratio board is real money.
+   *
+   * lrzsz tells us only whether the whole batch went (it does not report
+   * per-file progress on an abnormal exit), so this is per-batch rather than
+   * per-file - the closest fidelity the transport offers.
+   */
+  onFinished?: (ok: boolean) => Promise<void> | void,
+): void {
   const ctxId = `zd-${session.nodeId || 0}-${Date.now()}`;
   console.log(`[ZMODEM-DL ${ctxId}] startZmodemDownload entry files=${JSON.stringify(files)}`);
 
@@ -497,6 +514,13 @@ export function startZmodemDownload(socket: any, session: BBSSession, files: str
         paths: files,
         onComplete: async (ok: boolean, detail: any) => {
           console.log(`[ZMODEM-DL ${ctxId}] lrzsz onComplete ok=${ok} exit=${detail.exitCode} signal=${detail.signal}`);
+          // Book the download now that it is known to have happened, not
+          // when it was merely intended. express.e:15437's `IF sentsize`.
+          try {
+            await onFinished?.(ok);
+          } catch (err) {
+            console.error(`[ZMODEM-DL ${ctxId}] booking the download failed:`, err);
+          }
           // express.e:20249 clearFlagItems(flagFilesList) — clear the
           // user's flagged-files queue after a successful batch ZMODEM
           // download so they don't see the same files queued next time.
@@ -717,8 +741,19 @@ console.log('[ENV] User Statistics');
   const screenClr = ((user.userFlags || 0) & 8) ? 'YES' : 'NO';
   socket.emit('ansi-output', `\x1b[32mScreen  Clr\x1b[33m:\x1b[0m ${screenClr}\r\n`);
 
-  // Protocol (express.e:25583)
-  const protocol = user.xferProtocol || 'Zmodem';
+  /**
+   * Protocol (express.e:25583) - `xprTitle.item(loggedOnUser.xferProtocol)`,
+   * the title of the protocol the caller chose.
+   *
+   * `xferProtocol` is the INT field of the on-disk user struct
+   * (UserFileManager writes it via protocolToInt); the session's user is the
+   * database record, which carries `protocol` as a string. So this read was
+   * always undefined and every caller was told "Zmodem" whatever he had
+   * picked at the W menu - including a Commodore caller on Punter.
+   */
+  const { PROTOCOL_DISPLAY_NAMES } = require('../../types');
+  const chosenProtocol = (user as any).protocol || 'zmodem';
+  const protocol = PROTOCOL_DISPLAY_NAMES[chosenProtocol] || String(chosenProtocol).toUpperCase();
   socket.emit('ansi-output', `\x1b[32mProtocol   \x1b[33m:\x1b[0m ${protocol}\r\n`);
 
   // Credit Account (express.e:25586-25594)

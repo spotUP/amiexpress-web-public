@@ -57,6 +57,15 @@ export interface DeliverOptions {
    * is what keeps a refusal from booking anything.
    */
   onBeforeHandoff?: () => Promise<void> | void;
+  /**
+   * Called when a ZMODEM transfer has actually finished, with whether it
+   * succeeded. express books a download behind `IF sentsize`
+   * (express.e:15437), so anything that charges the caller belongs here
+   * rather than in `onBeforeHandoff` - an aborted batch must not be billed.
+   * The browser route has no such moment: its files are handed to the DOM
+   * and are gone, so it books at handoff as before.
+   */
+  onTransferFinished?: (ok: boolean) => Promise<void> | void;
 }
 
 /** The name a file goes by, whichever of the two shapes it arrived in. */
@@ -150,7 +159,7 @@ console.error('[Download] re-fetch before transfer failed:', error);
     }
 
     await opts.onBeforeHandoff?.();
-    startZmodemDownload(socket, session, paths);
+    startZmodemDownload(socket, session, paths, opts.onTransferFinished);
     return 'zmodem';
   }
 
