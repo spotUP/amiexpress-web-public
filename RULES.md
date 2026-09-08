@@ -602,10 +602,22 @@ it is gitignored, so a worktree or a fresh clone cannot see it at all.
 Every plan with an execution ledger carries a `## Claims` table. Before
 writing any code:
 
+0. **`git fetch origin main` and re-read the ledger AT THE MOMENT you start,
+   and again before you land.** This step is the one that matters and it was
+   added because the rest was not enough: on 2026-09-08 P2-12 and P2-20 were
+   claimed here at 11:44Z and another session landed both anyway. A pushed row
+   does not stop anyone; reading first does. If the item is already ticked,
+   drop it and pick another - do not produce a duplicate.
 1. Add a row naming the IDs you will do and yourself.
 2. **Commit and push that row first.** An uncommitted claim is not a claim.
 3. Tick the items and delete your row when the work lands.
 4. A row older than a day with nothing landed is stale - take it and say so.
+
+This is ADVISORY, not a lock. Nothing enforces it, and with five sessions on
+one checkout the window between reading and pushing is real. Treat a claim as
+"someone probably has this", not as a guarantee - and expect to throw work
+away occasionally, which is cheaper than two people landing the same feature
+two different ways.
 
 One owner per ID; if two rows name the same ID, whoever pushed first holds it.
 
