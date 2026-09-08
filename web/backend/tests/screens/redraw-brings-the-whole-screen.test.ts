@@ -145,7 +145,7 @@ test('high-bit Amiga art survives the copy, byte for byte', async () => {
     .toEqual(fs.readFileSync(path.join(root, 'Screens', 'MAILSCAN.TXT')));
 });
 
-test('art the index does not know is still copied, on its own', async () => {
+test('art no screen resolves to is copied on its own, into the Files mirror', async () => {
   write('Screens/logo.txt', 'somebody\'s logo\r\n');
   invalidateScreenIndex();
 
@@ -153,7 +153,12 @@ test('art the index does not know is still copied, on its own', async () => {
 
   expect(res.status).toBe(200);
   expect(res.body.data.copied).toHaveLength(1);
-  expect(fs.existsSync(themeFile(path.join('Board', 'logo.txt')))).toBe(true);
+  // It used to land at `Board/logo.txt`, and that was never served: the Board
+  // scope is searched by catalogue screen NAME, and no screen is called
+  // `logo`. A logo is reached by PATH - LOGON splices it in - so the tree that
+  // arm of the loader reads is the theme's verbatim `Files/` mirror.
+  expect(fs.existsSync(themeFile(path.join('Files', 'Screens', 'logo.txt')))).toBe(true);
+  expect(fs.existsSync(themeFile(path.join('Board', 'logo.txt')))).toBe(false);
 });
 
 test('the theme has to be yours', async () => {

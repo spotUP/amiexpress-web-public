@@ -23,8 +23,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { getScreenIndex } from './screen-index.service';
-import { themeTargetFor } from './theme-target-path';
-import { variantSetFor } from './theme-variant-set';
+import { themeTargetFor, themeTargetForBoardFile } from './theme-target-path';
+import { variantSetFor, type ScreenScope } from './theme-variant-set';
 import { themeDirectory } from './theme-registry';
 import type { ThemeEntry } from './theme-registry';
 
@@ -84,7 +84,11 @@ export function seedThemeFromBoard(bbsRoot: string, theme: ThemeEntry): ThemeSee
         // A leftover or a file the board rewrites for itself is not art.
         if (facts?.generated) continue;
 
-        const target = themeTargetFor(relative);
+        // The scope the INDEX resolved this screen at, not a guess from the
+        // directory name: this board's nodes share `Screens/Node/`, which the
+        // name rule reads as ordinary files and mirrors under `Files/`,
+        // writing every node screen twice.
+        const target = themeTargetFor(relative, scopeOf(resolution));
         if (!target) continue;
 
         const source = path.join(bbsRoot, relative);
@@ -117,6 +121,13 @@ export function seedThemeFromBoard(bbsRoot: string, theme: ThemeEntry): ThemeSee
   return result;
 }
 
+/** The scope one resolution was measured at, as the theme tree names it. */
+function scopeOf(resolution: { scope: 'node' | 'conf' | 'board'; id: number | null }): ScreenScope {
+  if (resolution.scope === 'node') return { kind: 'node' };
+  if (resolution.scope === 'conf') return { kind: 'conf', id: resolution.id ?? 1 };
+  return { kind: 'board' };
+}
+
 /**
  * Redraw ONE board screen inside a theme: the file, and its variants with it.
  *
@@ -146,7 +157,7 @@ export function copyScreenIntoTheme(
     // artist who opens something and presses redraw meant that file.
     if (relative !== boardRelPath && index.files[relative]?.generated) continue;
 
-    const target = themeTargetFor(relative);
+    const target = themeTargetForBoardFile(index, relative);
     if (!target) continue;
 
     const source = path.join(bbsRoot, relative);

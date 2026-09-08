@@ -23,10 +23,10 @@ import { validateTheme } from '../screens/theme-validation';
 // The scope translator moved to screens/theme-target-path so the SEEDER can use
 // it without importing this router - re-exported because tests and callers name
 // it here.
-import { themeTargetFor } from '../screens/theme-target-path';
+import { themeTargetFor, themeTargetForBoardFile } from '../screens/theme-target-path';
 import { copyScreenIntoTheme, seedThemeFromBoard } from '../screens/theme-seeding';
 import { userFileManager } from '../services/UserFileManager';
-export { themeTargetFor };
+export { themeTargetFor, themeTargetForBoardFile };
 import { liveThemeRegressions } from '../screens/theme-live-check';
 import { getScreenIndex } from '../screens/screen-index.service';
 import {
@@ -418,7 +418,10 @@ themesRouter.post('/:slug/copy', (req: Request, res: Response) => {
   }
 
   const from = String((req.body ?? {}).path ?? '').trim();
-  const target = themeTargetFor(from);
+  // The index decides the scope. A logo the board pulls into LOGON by path is
+  // not a Board screen and belongs in the theme's `Files/` mirror, which is
+  // the tree that arm of the loader reads.
+  const target = from ? themeTargetForBoardFile(getScreenIndex(bbsRoot), from) : null;
   if (!from || !target) return refuse(res, 400, 'Name a board screen to copy');
 
   const source = path.resolve(bbsRoot, from);

@@ -23,6 +23,14 @@ import { buildGalleryItems, type ScreenIndexShape } from './screen-index-view';
 import { themeChecklist, themeProgress } from './theme-checklist';
 import { useMyTheme } from './use-my-theme';
 
+/** What an artist calls each scope. `files` is the logos a screen pulls in. */
+const SCOPE_LABEL = {
+  node: 'node',
+  conf: 'conference',
+  board: 'board',
+  files: 'logos',
+} as const;
+
 export function ArtistStudioPage() {
   const { theme, mine, select, isPreparing, error } = useMyTheme();
   const [openPath, setOpenPath] = useState<string | null>(null);
@@ -126,8 +134,8 @@ export function ArtistStudioPage() {
             {progress.drawn} of {progress.total} screens drawn
           </p>
           <p className="text-sm text-content-secondary">
-            {(['node', 'conf', 'board'] as const)
-              .map(scope => `${scope === 'conf' ? 'conference' : scope}: ${progress.byScope[scope].drawn}/${progress.byScope[scope].total}`)
+            {(['node', 'conf', 'board', 'files'] as const)
+              .map(scope => `${SCOPE_LABEL[scope]}: ${progress.byScope[scope].drawn}/${progress.byScope[scope].total}`)
               .join('   ')}
           </p>
         </div>

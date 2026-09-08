@@ -28,6 +28,40 @@ import type { ScreenIndex } from './screen-index.service';
  * is only bigger when the board says the file is part of a screen.
  */
 export function variantSetFor(index: ScreenIndex, boardRelPath: string): string[] {
+  return matchIn(index, boardRelPath)?.set ?? [boardRelPath];
+}
+
+/**
+ * The SCOPE the loader reads a board file as, when it reads it as a screen.
+ *
+ * The theme tree is keyed on scope, and the only authority on a board's scopes
+ * is the board: a node's screen directory is whatever its SCREENS tooltype
+ * says (215 nodes on this board share `Screens/Node/`) and a conference's is
+ * what LOCATION.n names. Reading the scope off the DIRECTORY NAME - `Node<n>`,
+ * `Conf<n>` - gets the shared node directory wrong, and every theme seeded
+ * from this board carries the proof: `Node/BBSTITLE.txt` (which the loader
+ * reads) and a second copy at `Files/Screens/Node/BBSTITLE.txt` (which it does
+ * not).
+ *
+ * `undefined` means no screen resolves from this file - pool art like
+ * `Screens/flt.txt`, which LOGON pulls in by PATH. Those belong under the
+ * theme's `Files/` mirror, which is the tree that arm of the loader reads.
+ */
+export function screenScopeOf(index: ScreenIndex, boardRelPath: string): ScreenScope | undefined {
+  return matchIn(index, boardRelPath)?.scope;
+}
+
+/** Where the board reads a screen from: the three scopes a theme mirrors. */
+export type ScreenScope =
+  | { kind: 'node' }
+  | { kind: 'conf'; id: number }
+  | { kind: 'board' };
+
+/** The one walk both questions are answered by. */
+function matchIn(
+  index: ScreenIndex,
+  boardRelPath: string,
+): { set: string[]; scope: ScreenScope } | undefined {
   const wanted = path.normalize(boardRelPath);
 
   for (const entry of index.screens) {
@@ -41,9 +75,16 @@ export function variantSetFor(index: ScreenIndex, boardRelPath: string): string[
 
       // The file asked for has to BE one of them - a screen resolving in the
       // same directory does not make every neighbour part of this screen.
-      if (set.some(rel => path.normalize(rel) === wanted)) return set;
+      if (!set.some(rel => path.normalize(rel) === wanted)) continue;
+
+      const scope: ScreenScope = resolution.scope === 'node'
+        ? { kind: 'node' }
+        : resolution.scope === 'conf'
+          ? { kind: 'conf', id: resolution.id as number }
+          : { kind: 'board' };
+      return { set, scope };
     }
   }
 
-  return [boardRelPath];
+  return undefined;
 }

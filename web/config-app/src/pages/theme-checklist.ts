@@ -18,10 +18,17 @@ import { describeScreen } from './screen-descriptions';
 import type { ScreenIndexShape } from './screen-index-view';
 
 export interface ThemeSlot {
-  /** The catalogue name: BBSTITLE, CONF_BULL. */
+  /** The catalogue name: BBSTITLE, CONF_BULL. For a logo, its file name. */
   screen: string;
-  /** Where the board looks for it. */
-  scope: 'node' | 'conf' | 'board';
+  /**
+   * Where the board looks for it.
+   *
+   * `files` is the fourth scope: art no catalogue name claims, which a screen
+   * pulls in BY PATH - the group logos in `Screens/`, the ones spliced into
+   * LOGON and LOGOFF. A caller sees them on the way in, so a theme without
+   * them is a theme wearing somebody else's logo.
+   */
+  scope: 'node' | 'conf' | 'board' | 'files';
   /** The conference it belongs to, for conference screens. */
   conference?: number;
   /** What a caller is doing when they meet it. */
@@ -108,6 +115,36 @@ export function themeChecklist(
     else for (const id of conferences) push(screen, 'conf', id);
   }
 
+  /*
+   * The logos.
+   *
+   * A screen the catalogue names is one slot; the art a screen PULLS IN is
+   * not in the catalogue at all, and on this board that is where the group
+   * logos live - LOGON splices in two of them, LOGOFF picks from three. They
+   * are reached by PATH, so their home in a theme is the `Files/` mirror,
+   * verbatim, which is the tree that arm of the loader reads.
+   *
+   * Only files whose readers are ALL includes: a file some screen also
+   * resolves to already has its slot above, in the scope the loader reads it
+   * at, and two slots for one file would ask an artist to draw it twice.
+   */
+  for (const file of Object.values(files)) {
+    if (file.theme) continue;                       // already a theme's own copy
+    if (file.generated) continue;                   // leftovers, and what the board writes
+    const readers = file.readBy ?? [];
+    if (readers.length === 0) continue;             // nothing reads it; the sysop's problem
+    if (!readers.every(reader => reader.via === 'include')) continue;
+
+    const path = `${root}/Files/${file.relPath}`;
+    slots.push({
+      screen: file.relPath.split('/').pop() ?? file.relPath,
+      scope: 'files',
+      description: `Pulled into ${readers[0].screen}`,
+      path,
+      drawn: drawnAt.has(path.toLowerCase().replace(/\.(txt|gr|ans|asc|ibm)$/i, '')),
+    });
+  }
+
   return slots;
 }
 
@@ -115,7 +152,7 @@ export interface ThemeProgress {
   drawn: number;
   total: number;
   /** By scope, for a breakdown that tells an artist where the work is. */
-  byScope: Record<'node' | 'conf' | 'board', { drawn: number; total: number }>;
+  byScope: Record<'node' | 'conf' | 'board' | 'files', { drawn: number; total: number }>;
 }
 
 export function themeProgress(slots: ThemeSlot[]): ThemeProgress {
@@ -123,6 +160,7 @@ export function themeProgress(slots: ThemeSlot[]): ThemeProgress {
     node: { drawn: 0, total: 0 },
     conf: { drawn: 0, total: 0 },
     board: { drawn: 0, total: 0 },
+    files: { drawn: 0, total: 0 },
   };
   for (const slot of slots) {
     byScope[slot.scope].total += 1;

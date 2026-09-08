@@ -94,3 +94,55 @@ describe('screens the board writes for itself', () => {
     expect(slots.some(slot => slot.screen === 'BULL')).toBe(true);
   });
 });
+
+/**
+ * The logos count too.
+ *
+ * LOGON splices in two group logos and LOGOFF picks from three; they live in
+ * `Screens/` under names no catalogue claims, so the checklist did not know
+ * they existed and an artist's "44 of 44" theme still wore somebody else's
+ * logo. They are reached by PATH, so their slot is the theme's `Files/`
+ * mirror - the tree that arm of the loader reads.
+ */
+describe('art a screen pulls in by path', () => {
+  const withLogos = {
+    builtAt: '', unused: [], screens: [], conferences: [{ id: 1 }],
+    files: {
+      'Screens/flt.txt': {
+        relPath: 'Screens/flt.txt', bytes: 10, format: 'ansi', sha256: 'a', mci: [],
+        readBy: [{ screen: 'LOGON', scope: 'node', id: 1, via: 'include' }],
+      },
+      'Screens/BULL.TXT': {
+        relPath: 'Screens/BULL.TXT', bytes: 10, format: 'ansi', sha256: 'b', mci: [],
+        readBy: [{ screen: 'BULL', scope: 'board', id: null, via: 'resolved' }],
+      },
+      'Screens/lastc.txt': {
+        relPath: 'Screens/lastc.txt', bytes: 10, format: 'ansi', sha256: 'c', mci: [],
+        generated: 'runtime',
+        readBy: [{ screen: 'LOGON', scope: 'node', id: 1, via: 'include' }],
+      },
+    },
+  } as unknown as ScreenIndexShape;
+
+  it('is a slot, in the mirror the loader reads for it', () => {
+    const slot = themeChecklist(withLogos, 'neon').find(s => s.screen === 'flt.txt');
+
+    expect(slot).toBeDefined();
+    expect(slot!.scope).toBe('files');
+    expect(slot!.path).toBe('Themes/neon/Files/Screens/flt.txt');
+    expect(slot!.description).toBe('Pulled into LOGON');
+  });
+
+  it('is not a second slot for a screen the catalogue already names', () => {
+    const slots = themeChecklist(withLogos, 'neon').filter(s => s.scope === 'files');
+
+    expect(slots.map(s => s.screen)).toEqual(['flt.txt']);
+  });
+
+  it('counts towards the artist progress', () => {
+    const progress = themeProgress(themeChecklist(withLogos, 'neon'));
+
+    expect(progress.byScope.files.total).toBe(1);
+    expect(progress.byScope.files.drawn).toBe(0);
+  });
+});
