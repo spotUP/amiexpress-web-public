@@ -1,3 +1,31 @@
+/*
+ * THE C64 CHARACTER ROM, for the PETSCII previews.
+ *
+ * `buildGlyphAtlas` draws all 512 screen codes with `PetMe64`, which maps each
+ * one to a Private Use Area codepoint. The admin never declared the face and
+ * never shipped the file - only web/frontend did - so every codepoint resolved
+ * to the missing-glyph box and a `.seq` preview came out as a grid of
+ * identical hollow squares with the right colours in the right places. The
+ * sysop, having uploaded one: "i uploaded a petscii .seq file now in the ansi
+ * studio but the preview is broken".
+ *
+ * `font-display: block` matters: the atlas is rasterised ONCE, so a fallback
+ * face drawn while the real one loads would be baked into every glyph.
+ *
+ * The file lives in `src/` rather than `public/` so VITE resolves and hashes
+ * it: the stylesheet is emitted into `assets/`, and a `public/` path written
+ * relative from there points at `assets/fonts/...`, which is nowhere. Vite
+ * rewrites this one to the real emitted URL under whatever base the admin is
+ * served from.
+ */
+@font-face {
+  font-family: 'PetMe64';
+  src: url('./fonts/PetMe64.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
 @import './styles/tokens.css';
 
 @font-face {
