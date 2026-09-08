@@ -188,6 +188,10 @@ export const SystemConfigSchema = z.object({
   autoval_delay: z.number().int().min(0).optional(),
   autoval_preset: z.string().max(100).optional(),
   autoval_password: z.string().max(200).optional(),
+  // ACP.e:2632 - the board's new-user password, typed by a caller, not the sysop's.
+  new_user_password: z.string().max(200).optional(),
+  // sz -L. 1024 is this board's MuffinTerm-safe default; 8192 is lrzsz's own.
+  zmodem_packetlen: z.number().int().min(128).max(8192).optional(),
 
   // Accounts, uploads and file descriptions
   auto_deactivate_days: z.number().int().min(0).optional(),

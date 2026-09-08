@@ -60,6 +60,12 @@ const DISK_ONLY_FIELDS = new Set<string>([
   // it sits in the same file as the rest of the board's configuration.
   'autoval_password',
 
+  // ACP.e:2632 reads NEWUSER_PASSWORD out of bbsConfig.info into
+  // `cmds.newUserPw`, which express.e:30013 asks a would-be caller for. Same
+  // class as AUTOVAL_PASSWORD exactly: a shared board password typed by
+  // somebody who is not the sysop, in the file the board reads.
+  'new_user_password',
+
   // The password POLICY. These describe the rules a password must satisfy;
   // none of them is a password. The substring rule below caught all five, so
   // they were encrypted into the database and served back masked - and since

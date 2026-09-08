@@ -44,8 +44,30 @@ let screenConfig = {
   GUESTLOGON: 'GuestLogon',
   JOIN: 'JOIN'
 };
-let newUserAccessPassword = '';
-let autoValidationPassword = '';
+/**
+ * The dependency-injected values, kept as a FALLBACK ONLY.
+ *
+ * These used to be the answer, and they came from environment variables - so
+ * `NEWUSER_PASSWORD` and `AUTOVAL_PASSWORD` in `bbsConfig.info`, the only
+ * place express looks (ACP.e:2632, express.e:30063), did nothing at all. The
+ * board file is asked first now, at the moment the caller is standing at the
+ * prompt; these still answer for a board configured the old way, and for a
+ * test that injects them.
+ */
+let injectedNewUserPassword = '';
+let injectedAutoValidationPassword = '';
+
+/** The board's answer, with the injected value behind it. */
+function accessPasswordNow(): string {
+  const { newUserAccessPassword } = require('../../services/new-user-policy.service');
+  return newUserAccessPassword() || injectedNewUserPassword;
+}
+
+/** The same, for auto-validation - node icon, then board, then injected. */
+function autoValidationPasswordNow(session?: { nodeId?: number }): string {
+  const { autoValidationPassword } = require('../../services/new-user-policy.service');
+  return autoValidationPassword(session?.nodeId) || injectedAutoValidationPassword;
+}
 let autoValidationSecLevel = 50;
 let cachedComputerChoices: string[] | null = null;
 let configService: ConfigService | null = null;
@@ -94,10 +116,10 @@ export function setNewUserDependencies(deps: NewUserDependencies) {
     screenConfig = { ...screenConfig, ...deps.screens };
   }
   if (typeof deps.newUserPassword === 'string') {
-    newUserAccessPassword = deps.newUserPassword.trim();
+    injectedNewUserPassword = deps.newUserPassword.trim();
   }
   if (typeof deps.autoValidationPassword === 'string') {
-    autoValidationPassword = deps.autoValidationPassword.trim();
+    injectedAutoValidationPassword = deps.autoValidationPassword.trim();
   }
   if (typeof deps.autoValidationSecLevel === 'number' && !Number.isNaN(deps.autoValidationSecLevel)) {
     autoValidationSecLevel = deps.autoValidationSecLevel;
@@ -155,7 +177,7 @@ console.log(' [NEW USER] Starting registration for:', username);
     accessPasswordTries: 0,
     introShown: false,
     autoValidationTries: 0,
-    autoValidationComplete: !autoValidationPassword,
+    autoValidationComplete: !autoValidationPasswordNow(session),
     autoValidated: false,
     linesCountdownShown: false,
     questionnaire: undefined,
@@ -230,7 +252,7 @@ export async function handleGdprConsentInput(socket: Socket, session: any, input
 
 async function continueAfterGdprConsent(socket: Socket, session: any) {
   const username = session.newUserData?.username || '';
-  if (newUserAccessPassword) {
+  if (accessPasswordNow()) {
     if (await showScreen(socket, session, screenConfig.NEWUSERPW)) {
       doPause(socket, session);
     }
@@ -519,11 +541,34 @@ export async function handleAccessPasswordInput(socket: Socket, session: any, in
   const attempt = input.trim();
   session.newUserData.accessPasswordTries = session.newUserData.accessPasswordTries || 0;
 
-  if (!attempt || attempt !== newUserAccessPassword) {
+  if (!attempt || attempt !== accessPasswordNow()) {
     session.newUserData.accessPasswordTries++;
     socket.emit('ansi-output', '\r\n\x1b[31mInvalid Password\x1b[0m\r\n');
 
+    // express.e:30029-30035 - every failure is logged, and the node's
+    // SHOWPWFAIL decides whether the log holds what was typed or `xxxx`. The
+    // login path already does this (command.handler.ts:2035); a new-user
+    // password failure left no trace at all.
+    try {
+      const { callersLogManager } = require('../../services/CallersLogManager');
+      const { nodeFlag } = require('../../utils/node-tooltypes.util');
+      const shown = nodeFlag(session.nodeId || 1, 'SHOWPWFAIL') ? attempt : 'xxxx';
+      callersLogManager.logActivity(session.nodeId || 1, `\tPassword Failure (${shown})`);
+    } catch (error) {
+      console.error('[NEW USER] could not log the password failure:', error);
+    }
+
     if (session.newUserData.accessPasswordTries > 2) {
+      socket.emit('ansi-output', '\r\nExcessive Password Failure\r\n');
+      // express.e:30040 - `runSysCommand('NUPFAIL','')`. A board that has no
+      // NUPFAIL registered loses nothing: runSysCommand answers "not found"
+      // and the caller is dropped exactly as before.
+      try {
+        const { runSysCommand } = require('../../handlers/command-execution.handler');
+        await runSysCommand(socket, session, 'NUPFAIL', '');
+      } catch (error) {
+        console.error('[NEW USER] NUPFAIL failed:', error);
+      }
       // express.e:29634: '\b\nToo Many Errors, Goodbye!\b\n' — plain text, no color
       await abortNewUser(socket, session, '\r\nToo Many Errors, Goodbye!\r\n');
       return;
@@ -985,7 +1030,7 @@ function showSummaryAndConfirm(socket: Socket, session: any) {
 }
 
 async function continueRegistrationFlow(socket: Socket, session: any) {
-  if (autoValidationPassword && !session.newUserData.autoValidationComplete) {
+  if (autoValidationPasswordNow(session) && !session.newUserData.autoValidationComplete) {
     session.subState = LoggedOnSubState.NEW_USER_AUTOVAL;
     promptForAutoValidation(socket, session);
     return;
@@ -1157,7 +1202,7 @@ export async function handleAutoValidationInput(socket: Socket, session: any, in
     return;
   }
 
-  if (attempt.toUpperCase() === autoValidationPassword.toUpperCase()) {
+  if (attempt.toUpperCase() === autoValidationPasswordNow(session).toUpperCase()) {
     data.autoValidated = true;
     data.autoValidationComplete = true;
     socket.emit('ansi-output', '\r\n\x1b[32mAuto-validation password accepted.\x1b[0m\r\n');

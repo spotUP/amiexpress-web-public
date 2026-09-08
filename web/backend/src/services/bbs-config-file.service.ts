@@ -195,6 +195,23 @@ export interface BBSConfigData {
   autoval_delay?: number;
   autoval_preset?: string;
   autoval_password?: string;
+  /**
+   * ACP.e:2632 reads NEWUSER_PASSWORD into `cmds.newUserPw`, and
+   * express.e:30013 asks for it before a new account can be created - the
+   * board's "by application" setting. Empty means anyone may register.
+   */
+  new_user_password?: string;
+  /**
+   * `sz -L` - the ZMODEM subpacket cap, in bytes.
+   *
+   * The DEFAULT IS 1024 AND THAT IS NOT lrzsz's: lrzsz would use 8192, and
+   * this board dropped to 1024 because MuffinTerm's receive buffer overflowed
+   * at about 30KB with 8K subpackets. It is a knob rather than a constant
+   * because a board whose callers all run SyncTerm or NetRunner can have the
+   * throughput back, and because the next client to need a different number
+   * should cost a tooltype and not a deploy.
+   */
+  zmodem_packetlen?: number;
 
   // Accounts and uploads
   auto_deactivate_days?: number;
@@ -431,6 +448,8 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'AUTOVAL_DELAY': 'autoval_delay',
   'AUTOVAL_PRESET': 'autoval_preset',
   'AUTOVAL_PASSWORD': 'autoval_password',
+  'NEWUSER_PASSWORD': 'new_user_password',           // ACP.e:2632 express.e:30013
+  'ZMODEM_PACKETLEN': 'zmodem_packetlen',            // sz -L, this port's own knob
 
   // Accounts, uploads and file descriptions
   'AUTO_DEACTIVATE_DAYS': 'auto_deactivate_days',
@@ -1067,6 +1086,8 @@ function getDefaultConfig(): BBSConfigData {
     autoval_delay: 0,
     autoval_preset: '',
     autoval_password: '',
+    new_user_password: '',
+    zmodem_packetlen: 1024,
     auto_deactivate_days: 0,
     local_upload_path: '',
     filediz_syscmd: '',
