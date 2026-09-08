@@ -57,9 +57,24 @@ export interface LrzszTransferOptions {
    * `touch()`. 0 disables the watchdog.
    */
   timeoutMs?: number;
+  /**
+   * express.e:16831 `zmdupecheck`, answered where express answers it: at the
+   * ZFILE header, before one byte of the file has crossed the line.
+   *
+   * express's ZMODEM receiver calls this on the name in the ZFILE
+   * (zmodem.e:2571) and, when it says yes, sends ZSKIP (zmodem.e:2725)
+   * instead of receiving. This port used to take the whole file and reject it
+   * afterwards - the outcome was right and the caller's minutes were spent
+   * for nothing. Upload only; absent means every file is accepted, which is
+   * what a sysop-upload or a netmail transfer wants (express.e:16833 exempts
+   * exactly those).
+   */
+  isDuplicate?: (filename: string) => boolean | Promise<boolean>;
   onComplete?: (success: boolean, detail: {
     received: string[];
     sent: string[];
+    /** Names answered with ZSKIP, in the order they were offered. */
+    skipped: string[];
     exitCode: number | null;
     signal: NodeJS.Signals | null;
     stderr: string;
@@ -107,6 +122,27 @@ export class LrzszTransferManager {
    */
   private zrinitForwarded: boolean = false;
 
+  /** express.e:16831's answer, when the caller supplied one. */
+  private isDuplicate?: (filename: string) => boolean | Promise<boolean>;
+  /** Names this transfer answered with ZSKIP - express's `skipdFiles`. */
+  private skippedFiles: string[] = [];
+  /** Inbound bytes held while a ZFILE is being screened. */
+  private screenBuf: Buffer = Buffer.alloc(0);
+  /** True while a duplicate answer is in flight. */
+  private screenPending: boolean = false;
+  /**
+   * Whether a ZFILE could be the next thing on the wire.
+   *
+   * IT IS NOT ALWAYS. `*\x18A\x18D` is five bytes that a compressed archive
+   * can produce by chance, and screening the whole stream for them would hold
+   * file DATA hostage waiting for a subpacket terminator that never comes.
+   * A ZFILE can only follow the receiver saying it is ready, so this is set
+   * when a ZRINIT goes out to the caller and cleared the moment a ZFILE is
+   * dealt with. Between those two points the stream is passed through
+   * untouched.
+   */
+  private expectingZfile: boolean = true;
+
   constructor(opts: LrzszTransferOptions) {
     this.session = opts.session;
     this.transport = opts.transport;
@@ -116,6 +152,7 @@ export class LrzszTransferManager {
     // An IDLE timeout, not a total-duration one. See `touch()`.
     this.timeoutMs = opts.timeoutMs ?? 5 * 60 * 1000;
     this.onComplete = opts.onComplete;
+    this.isDuplicate = opts.isDuplicate;
   }
 
   /**
@@ -280,18 +317,196 @@ export class LrzszTransferManager {
           ? this.rewriteMuffintermZfile(data)
           : data;
       if (rewritten.length === 0) return; // buffering for fragmentation
-      if (process.env.LRZSZ_DEBUG) {
-        const preview = rewritten.slice(0, 64).toString('hex');
-        console.log(`[lrzsz ${this.direction}] stdin <- ${rewritten.length}B: ${preview}${rewritten.length > 64 ? '...' : ''}`);
-        try {
-          require('fs').appendFileSync(`/tmp/rz-stdin-tee-${this.direction}.bin`, rewritten);
-        } catch (_e) { /* ignore */ }
+      // THE DUPLICATE IS ANSWERED HERE, not after the bytes have arrived.
+      // Only when the caller gave a rule, and only for an upload.
+      if (this.direction === 'upload' && this.isDuplicate) {
+        this.screenForDuplicates(rewritten);
+        return;
       }
-      this.touch();
-      this.proc.stdin.write(rewritten);
+      this.forwardToChild(rewritten);
     } catch (err) {
       console.error(`[lrzsz ${this.direction}] stdin.write failed:`, err);
     }
+  }
+
+  /** The write that was inline in handleInput, so the screen can share it. */
+  private forwardToChild(buf: Buffer): void {
+    if (!this.proc || !this.proc.stdin || this.done || buf.length === 0) return;
+    if (process.env.LRZSZ_DEBUG) {
+      const preview = buf.slice(0, 64).toString('hex');
+      console.log(`[lrzsz ${this.direction}] stdin <- ${buf.length}B: ${preview}${buf.length > 64 ? '...' : ''}`);
+      try {
+        require('fs').appendFileSync(`/tmp/rz-stdin-tee-${this.direction}.bin`, buf);
+      } catch (_e) { /* ignore */ }
+    }
+    this.touch();
+    this.proc.stdin.write(buf);
+  }
+
+  /**
+   * Hold the stream just long enough to answer a ZFILE.
+   *
+   * The sender is already waiting: a ZFILE's subpacket ends with ZCRCW, which
+   * says "no more data until the receiver answers" (Forsberg). So holding a
+   * few hundred bytes here costs nothing and is exactly the window express
+   * uses to decide between ZRPOS and ZSKIP.
+   */
+  private screenForDuplicates(chunk: Buffer): void {
+    this.screenBuf = Buffer.concat([this.screenBuf, chunk]);
+    if (this.screenPending) return;
+    this.drainScreen();
+  }
+
+  private drainScreen(): void {
+    if (!this.expectingZfile) {
+      const out = this.screenBuf;
+      this.screenBuf = Buffer.alloc(0);
+      this.forwardToChild(out);
+      return;
+    }
+
+    const found = this.locateZfileFrame(this.screenBuf);
+    if (found === 'incomplete') return; // wait for the rest of the frame
+    if (found === null) {
+      const out = this.screenBuf;
+      this.screenBuf = Buffer.alloc(0);
+      this.forwardToChild(out);
+      return;
+    }
+
+    const before = this.screenBuf.slice(0, found.start);
+    const frame = this.screenBuf.slice(found.start, found.end);
+    this.screenBuf = this.screenBuf.slice(found.end);
+    this.expectingZfile = false;
+    if (before.length > 0) this.forwardToChild(before);
+
+    this.screenPending = true;
+    Promise.resolve()
+      .then(() => this.isDuplicate!(found.name))
+      .then((duplicate) => {
+        if (duplicate) {
+          // express.e:2725 - the file is refused before it is sent, and the
+          // name goes on the list the CallersLog prints (express.e:15101).
+          this.skippedFiles.push(found.name);
+          console.log(`[lrzsz upload] duplicate ${found.name} - answering ZSKIP`);
+          this.sendZskip();
+          return;
+        }
+        this.forwardToChild(frame);
+      })
+      .catch((err) => {
+        // A rule that throws must not cost the caller his upload: take the
+        // file, and let the post-transfer filing catch the duplicate the way
+        // it always did.
+        console.error('[lrzsz upload] duplicate check failed, accepting file:', err);
+        this.forwardToChild(frame);
+      })
+      .then(() => {
+        this.screenPending = false;
+        if (this.screenBuf.length > 0) this.drainScreen();
+      });
+  }
+
+  /**
+   * The ZFILE frame in `buf`, if a whole one is there.
+   *
+   * `null` - no frame begins in these bytes.
+   * `'incomplete'` - one begins and has not finished arriving.
+   */
+  private locateZfileFrame(
+    buf: Buffer,
+  ): { start: number; end: number; name: string } | 'incomplete' | null {
+    // `*` ZDLE 'A' ZDLE 'D' is ZBIN + ZFILE (0x04 escaped); 'C' is ZBIN32.
+    const shapes: Array<{ prefix: Buffer; crcLen: number; headerBytes: number }> = [
+      { prefix: Buffer.from([0x2a, 0x18, 0x41, 0x18, 0x44]), crcLen: 2, headerBytes: 7 },
+      { prefix: Buffer.from([0x2a, 0x18, 0x43, 0x18, 0x44]), crcLen: 4, headerBytes: 9 },
+    ];
+    let start = -1;
+    let shape = shapes[0];
+    for (const candidate of shapes) {
+      const at = buf.indexOf(candidate.prefix);
+      if (at >= 0 && (start === -1 || at < start)) {
+        start = at;
+        shape = candidate;
+      }
+    }
+    if (start < 0) return null;
+
+    // Step over the header: `headerBytes` DECODED bytes after `*\x18A`.
+    let cursor = start + 3;
+    let decodedHeader = 0;
+    while (decodedHeader < shape.headerBytes && cursor < buf.length) {
+      cursor += buf[cursor] === 0x18 ? 2 : 1;
+      decodedHeader++;
+    }
+    if (decodedHeader < shape.headerBytes || cursor > buf.length) return 'incomplete';
+
+    // The name is the subpacket's first field, NUL-terminated, and the
+    // subpacket ends at ZDLE + a ZCRC* marker.
+    const name: number[] = [];
+    let sawNul = false;
+    let i = cursor;
+    while (i < buf.length) {
+      const byte = buf[i];
+      if (byte === 0x18) {
+        if (i + 1 >= buf.length) return 'incomplete';
+        const next = buf[i + 1];
+        if (next === 0x68 || next === 0x69 || next === 0x6a || next === 0x6b) {
+          // Subpacket terminator: the CRC follows, escapes and all.
+          let crcCursor = i + 2;
+          let crcBytes = 0;
+          while (crcBytes < shape.crcLen && crcCursor < buf.length) {
+            crcCursor += buf[crcCursor] === 0x18 ? 2 : 1;
+            crcBytes++;
+          }
+          if (crcBytes < shape.crcLen || crcCursor > buf.length) return 'incomplete';
+          return {
+            start,
+            end: crcCursor,
+            name: Buffer.from(name).toString('latin1'),
+          };
+        }
+        if (!sawNul) {
+          const decoded = next ^ 0x40;
+          if (decoded === 0) sawNul = true;
+          else name.push(decoded);
+        }
+        i += 2;
+        continue;
+      }
+      if (!sawNul) {
+        if (byte === 0) sawNul = true;
+        else name.push(byte);
+      }
+      i += 1;
+    }
+    return 'incomplete';
+  }
+
+  /**
+   * express.e's `zmodem_send_zskip` (zmodem.e:1128) - a hex ZSKIP header with
+   * position 0, which is the whole of what a refused file is told.
+   */
+  private sendZskip(): void {
+    const ZSKIP = 0x05;
+    const bytes = [ZSKIP, 0, 0, 0, 0];
+    let crc = 0;
+    for (const b of bytes) {
+      crc ^= b << 8;
+      for (let k = 0; k < 8; k++) {
+        crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+      }
+    }
+    const hex = (n: number) => n.toString(16).padStart(2, '0');
+    const body = bytes.map(hex).join('') + hex((crc >> 8) & 0xff) + hex(crc & 0xff);
+    this.transport.send(Buffer.concat([
+      Buffer.from([0x2a, 0x2a, 0x18, 0x42]),
+      Buffer.from(body, 'ascii'),
+      // CR, LF, XON - the trailer every hex header but ZFIN/ZACK carries.
+      // Plain LF rather than Forsberg's 0x8a for the same reason
+      // `normalizeHexHeaderTrailers` rewrites it: browser parsers refuse it.
+      Buffer.from([0x0d, 0x0a, 0x11]),
+    ]));
   }
 
   /**
@@ -388,6 +603,9 @@ export class LrzszTransferManager {
     const suppressDuplicates = this.transport.type !== 'telnet';
     for (const part of parts) {
       if (part.length === 0) continue;
+      // A ZRINIT is the receiver saying "send me a file", so a ZFILE may now
+      // arrive - and only now. See `expectingZfile`.
+      if (isLoneZrinit(part)) this.expectingZfile = true;
       if (suppressDuplicates && isLoneZrinit(part)) {
         if (this.zrinitForwarded) {
           if (process.env.LRZSZ_DEBUG) {
@@ -728,6 +946,7 @@ export class LrzszTransferManager {
       this.onComplete?.(success, {
         received,
         sent,
+        skipped: this.skippedFiles,
         exitCode: code,
         signal,
         stderr: this.stderrBuf,

@@ -17,7 +17,14 @@ export interface TransferOptions {
   transport: TransferTransport;
   direction: TransferDirection;
   paths: string[];
-  onComplete?: (success: boolean, detail: { received: string[]; sent: string[] }) => void;
+  /**
+   * express.e:16831 `zmdupecheck`, answered at the offer - which is this
+   * library's name for the ZFILE header. `xfer.skip()` sends the ZSKIP
+   * express sends at zmodem.e:2725, so a file the board already has costs the
+   * caller nothing. Upload only; absent accepts everything.
+   */
+  isDuplicate?: (filename: string) => boolean | Promise<boolean>;
+  onComplete?: (success: boolean, detail: { received: string[]; sent: string[]; skipped: string[] }) => void;
 }
 
 /**
@@ -31,9 +38,12 @@ export class ZmodemTransferManager {
   private paths: string[];
   private sentry: any;
   private active: boolean = false;
-  private onComplete?: (success: boolean, detail: { received: string[]; sent: string[] }) => void;
+  private onComplete?: (success: boolean, detail: { received: string[]; sent: string[]; skipped: string[] }) => void;
   private receivedFiles: string[] = [];
   private sentFiles: string[] = [];
+  /** Names answered with ZSKIP - express's `skipdFiles`. */
+  private skippedFiles: string[] = [];
+  private isDuplicate?: (filename: string) => boolean | Promise<boolean>;
 
   constructor(opts: TransferOptions) {
     this.session = opts.session;
@@ -41,6 +51,7 @@ export class ZmodemTransferManager {
     this.direction = opts.direction;
     this.paths = opts.paths || [];
     this.onComplete = opts.onComplete;
+    this.isDuplicate = opts.isDuplicate;
 
     this.sentry = new Zmodem.Sentry({
       to_terminal: (octets: number[]) => {
@@ -201,22 +212,44 @@ console.error('[ZMODEM] Failed to create target dir:', targetDir, err);
     zsession.on('offer', (xfer: any) => {
       const details = xfer.get_details ? xfer.get_details() : {};
       const safeName = this.sanitizeFilename(details.name || 'upload.bin');
-      const dest = path.join(targetDir, safeName);
-      const dirForFile = path.dirname(dest);
-      fs.mkdirSync(dirForFile, { recursive: true });
 
-      const writer = fs.createWriteStream(dest);
-      xfer.on('input', (octets: Uint8Array) => {
-        writer.write(Buffer.from(octets));
-      });
-
-      xfer.accept().then(() => {
-        writer.end();
-        this.receivedFiles.push(dest);
-      }).catch((err: any) => {
+      const accept = () => {
+        const dest = path.join(targetDir, safeName);
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        const writer = fs.createWriteStream(dest);
+        xfer.on('input', (octets: Uint8Array) => {
+          writer.write(Buffer.from(octets));
+        });
+        xfer.accept().then(() => {
+          writer.end();
+          this.receivedFiles.push(dest);
+        }).catch((err: any) => {
 console.error('[ZMODEM] Offer accept failed:', err);
-        writer.end();
-      });
+          writer.end();
+        });
+      };
+
+      // THE DUPLICATE IS REFUSED HERE, before a byte is asked for -
+      // express.e:16831 and zmodem.e:2725. Without a rule, everything is
+      // accepted, which is what a sysop upload wants.
+      if (this.direction === 'upload' && this.isDuplicate) {
+        Promise.resolve()
+          .then(() => this.isDuplicate!(safeName))
+          .then((duplicate) => {
+            if (!duplicate) return accept();
+            this.skippedFiles.push(safeName);
+console.log(`[ZMODEM] duplicate ${safeName} - sending ZSKIP`);
+            xfer.skip();
+          })
+          .catch((err: any) => {
+            // A rule that throws must not cost the caller his upload.
+console.error('[ZMODEM] duplicate check failed, accepting file:', err);
+            accept();
+          });
+        return;
+      }
+
+      accept();
     });
 
     zsession.start();
@@ -251,7 +284,7 @@ console.error('[ZMODEM] Offer accept failed:', err);
     (this.session as any).transferRawSend = undefined;
     if (typeof this.onComplete === 'function') {
       try {
-        this.onComplete(success, { received: this.receivedFiles, sent: this.sentFiles });
+        this.onComplete(success, { received: this.receivedFiles, sent: this.sentFiles, skipped: this.skippedFiles });
       } catch (_) {
         /* ignore */
       }

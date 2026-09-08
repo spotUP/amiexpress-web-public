@@ -103,16 +103,40 @@ describe('ZMODEM web unification — lrzsz-transfer.service.ts', () => {
     expect(fn![0]).toMatch(/buf\[4\] === 0x30 && buf\[5\] === 0x31/);
   });
 
-  test('rewriteMuffintermZfile is skipped for transport.type === "web"', () => {
-    // zmodem.js correctly uses ZCRCW (0x6b). The MuffinTerm-only
-    // rewrite scans for ZCRCE (0x68) and, when absent, buffers the
-    // chunk indefinitely. For web, ZFILE bytes never reach rz stdin
-    // and the transfer aborts.
-    const handleInput = lrzszSrc.match(/handleInput\(data: Buffer\): void \{[\s\S]+?\n  \}/);
-    expect(handleInput).not.toBeNull();
-    expect(handleInput![0]).toMatch(
-      /this\.direction === ['"]upload['"] && this\.transport\.type !== ['"]web['"]/
-    );
+  test('a web upload does not go through the MuffinTerm rewrite', () => {
+    // zmodem.js correctly uses ZCRCW (0x6b). The MuffinTerm-only rewrite
+    // scans for ZCRCE (0x68) and, when absent, buffers the chunk
+    // indefinitely - for web that means ZFILE bytes never reach rz stdin and
+    // the transfer aborts.
+    //
+    // THIS USED TO BE A SOURCE-TEXT PIN and had been red since TP-12 changed
+    // the condition from `type !== 'web'` to `type === 'telnet'`: SSH is a
+    // clean 8-bit stream and had inherited a serial-line workaround. The
+    // property never changed, only the spelling, so it is asserted through
+    // the method now - a rewrite that came back for web would fail this, and
+    // a reworded condition would not.
+    const { LrzszTransferManager } = require('../src/services/lrzsz-transfer.service');
+    // A ZFILE frame ending in ZCRCW, which is what a web sender emits.
+    const frame = Buffer.from([
+      0x2a, 0x18, 0x41, 0x18, 0x44,       // `*` ZDLE 'A' ZDLE 'D' - ZBIN ZFILE
+      0x30, 0x30, 0x30, 0x30, 0x11, 0x22, // position + header CRC
+      ...Buffer.from('WEB.LHA\x00100 0 0 0 1 100\x00', 'latin1'),
+      0x18, 0x6b, 0x33, 0x44,             // ZDLE ZCRCW + CRC
+    ]);
+
+    const written: Buffer[] = [];
+    const manager = new LrzszTransferManager({
+      session: { nodeId: 1 } as never,
+      transport: { type: 'web', send: () => { /* nothing goes back on this path */ } },
+      direction: 'upload',
+      paths: ['/tmp'],
+    });
+    (manager as any).proc = { stdin: { write: (b: Buffer) => { written.push(Buffer.from(b)); return true; } } };
+
+    manager.handleInput(frame);
+
+    // Byte for byte: nothing buffered, nothing rewritten.
+    expect(Buffer.concat(written)).toEqual(frame);
   });
 
   test('LrzszTransport type accepts "web"', () => {

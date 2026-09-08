@@ -56,13 +56,31 @@ describe('lrzsz protocol patches (MuffinTerm interop)', () => {
     });
 
     test('runs inside the stdout handler so it actually reaches the client', () => {
-      // patchZrinitFlags must be in the same call chain as transport.send.
-      // Originally bounded to 300 chars; the stdout handler grew (chunk
-      // splitting at hex-header boundaries + ZRINIT dedupe), pushing the
-      // transport.send call further away. Bumped to 3000 — still tight
-      // enough to fail if patchZrinitFlags is moved out of the stdout
-      // path entirely.
-      expect(src).toMatch(/patchZrinitFlags[\s\S]{0,3000}?transport\.send/);
+      // THE PATCH IS NO USE IF IT DOES NOT REACH THE CALLER, and this used to
+      // be asserted by how many characters separated `patchZrinitFlags` from
+      // `transport.send` in the source. That bound had already been raised
+      // from 300 to 3000 once as the handler grew, and it went red again the
+      // next time the file changed - the distance was never the property.
+      //
+      // What it is now: a raw ZRINIT carrying CANFC32 goes in, and what the
+      // caller receives has the flag cleared. Moving the patch out of the
+      // stdout path fails this; rearranging the file does not.
+      const { LrzszTransferManager } = require('../src/services/lrzsz-transfer.service');
+      const sent: Buffer[] = [];
+      const manager = new LrzszTransferManager({
+        session: { nodeId: 1 } as never,
+        transport: { type: 'ssh', send: (b: Buffer) => { sent.push(Buffer.from(b)); } },
+        direction: 'upload',
+        paths: ['/tmp'],
+      });
+
+      // lrzsz's ZRINIT with CANFC32 set: ZF0 = 0x23.
+      const raw = Buffer.from('2a2a18423031303030303030323362653530', 'hex');
+      (manager as any).processStdoutChunk(raw);
+
+      const out = Buffer.concat(sent).toString('ascii');
+      expect(out).toContain('00000003'); // CANFDX|CANOVIO, CANFC32 cleared
+      expect(out).not.toContain('00000023');
     });
   });
 

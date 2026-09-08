@@ -177,6 +177,19 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         transport: { type: transportType, send: sender },
         direction: 'upload',
         paths: [playpen],
+        // express.e:16831 zmdupecheck - asked at the ZFILE header, so a file
+      // the board already has is answered with ZSKIP instead of being
+      // received and then rejected. A rule that cannot answer takes the
+      // file: the post-transfer filing still catches it.
+      isDuplicate: (name: string) => {
+        const { uploadIsDuplicate } = require('../../services/upload-duplicate.service');
+        const { config: appCfg } = require('../../config');
+        return uploadIsDuplicate({
+          filename: name,
+          conferenceId: session.currentConf,
+          bbsRoot: appCfg.get('dataDir'),
+        });
+      },
         onComplete: async (ok: boolean, detail: any) => {
           endRawTransfer(session);
           if (!ok) {
@@ -195,6 +208,18 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
           // snapshot diff in lrzsz-transfer.service), then iterate
           // processBatchFile per file followed by handleUploadBatchComplete.
           const received: string[] = detail?.received || [];
+          // express.e:15101 - every refused name goes to the CallersLog and
+          // the UD log, and nowhere else: the caller's own client has already
+          // told him the file was skipped.
+          for (const skippedName of (detail?.skipped || [])) {
+            try {
+              const { writeToUDLog, writeToCallersLog } = require('../../utils/download-logging.util');
+              void writeToCallersLog(session.user?.username || '', `Skipped ${skippedName}`, session.nodeId || 0);
+              void writeToUDLog(`\tSkipped ${skippedName}`, session.nodeId || 0);
+            } catch (err) {
+              console.error('[UPLOAD] could not log a skipped file:', err);
+            }
+          }
           const fsSync = require('fs');
           const pathMod = require('path');
           const { db } = require('../../database');
