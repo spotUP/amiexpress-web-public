@@ -15,6 +15,7 @@
 import { useState } from 'react';
 import { Bell, BellOff, BellRing, Send } from 'lucide-react';
 
+import { apiClient } from '../api/client';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import { OperatorChatSettingsPage } from './OperatorChatSettingsPage';
 
@@ -22,6 +23,15 @@ export function NotificationsPage() {
   const push = usePushNotifications();
   /** What the last test did, so pressing it is never silent. */
   const [tested, setTested] = useState<'drawn' | null>(null);
+  /**
+   * What the BOARD's own test push did.
+   *
+   * The local test answers "will this browser draw one at all". It cannot
+   * answer "does one the board sends reach me", which is the half that
+   * crosses the push service and the half a sysop otherwise cannot test
+   * without asking a caller to page him.
+   */
+  const [pushed, setPushed] = useState<string | null>(null);
 
   return (
     <div className="space-y-8">
@@ -88,10 +98,53 @@ export function NotificationsPage() {
               className="btn-secondary inline-flex items-center gap-1"
               onClick={async () => {
                 setTested(null);
+                setPushed(null);
                 if (await push.testNotification()) setTested('drawn');
               }}
             >
               <Send size={14} /> Send a test notification
+            </button>
+
+            <button
+              type="button"
+              className="btn-secondary inline-flex items-center gap-1"
+              data-testid="push-test-from-board"
+              onClick={async () => {
+                setTested(null);
+                setPushed('sending');
+                try {
+                  const response = await apiClient.post<{
+                    data?: { sent: number; failed: number; subscriptions: number; reason?: string };
+                    sent?: number;
+                    failed?: number;
+                    subscriptions?: number;
+                    reason?: string;
+                  }>('/api/config/push/test', {});
+                  // sendResponse wraps the payload in `data`; the client hands
+                  // back the body as it came, so accept either shape.
+                  const body = response?.data;
+                  const result = body?.data ?? body;
+                  if (!result) {
+                    setPushed('The board did not answer.');
+                  } else if (result.reason) {
+                    setPushed(result.reason);
+                  } else if ((result.sent ?? 0) > 0) {
+                    setPushed(
+                      `The board sent one to ${result.sent} of ${result.subscriptions} subscribed browsers. ` +
+                        'If nothing appeared, the push service or your operating system is holding it back.',
+                    );
+                  } else {
+                    setPushed(
+                      `The push service refused all ${result.subscriptions} subscriptions, so they were dropped. ` +
+                        'Switch this browser off and on again above to re-subscribe.',
+                    );
+                  }
+                } catch (error) {
+                  setPushed(error instanceof Error ? error.message : 'The board could not send a test push.');
+                }
+              }}
+            >
+              <Send size={14} /> Send one from the board
             </button>
           </div>
         )}
@@ -102,8 +155,14 @@ export function NotificationsPage() {
 
         {tested === 'drawn' && !push.error && (
           <p className="text-sm text-content-secondary" data-testid="push-tested">
-            Sent. If nothing appeared, your operating system is holding it back -
-            check its notification settings for this browser.
+            Drawn by this browser. If nothing appeared, your operating system is
+            holding it back - check its notification settings for this browser.
+          </p>
+        )}
+
+        {pushed && (
+          <p className="text-sm text-content-secondary" data-testid="push-from-board">
+            {pushed === 'sending' ? 'Asking the board to send one...' : pushed}
           </p>
         )}
       </section>

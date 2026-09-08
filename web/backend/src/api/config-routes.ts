@@ -2839,6 +2839,81 @@ console.log('[Push] Removed subscription');
   });
 
   /**
+   * POST /api/config/push/test
+   *
+   * Sends a REAL push through the same path an operator page takes, to every
+   * subscription the board holds.
+   *
+   * The page already draws a notification locally, which answers "will this
+   * browser show me one at all". It does NOT answer "does a notification the
+   * BOARD sends reach me" - the half that crosses the push service - and that
+   * is the half a sysop cannot test without a caller paging him. Reported on
+   * 2026-09-08: "desktop notifications still dont fire in the admin ui or in
+   * the desktop or wherever i should see them", with the board's own log
+   * saying it had sent one successfully.
+   *
+   * Answers with what each subscription did, so a delivery that the push
+   * service accepted and the desktop never drew is distinguishable from one
+   * that never left the board. Subscriptions the service rejects are removed,
+   * exactly as the page path removes them.
+   */
+  router.post('/push/test', async (_req: Request, res: Response) => {
+    try {
+      const { isWebPushEnabled, sendPushNotifications } = require('../utils/web-push.util');
+
+      if (!isWebPushEnabled()) {
+        return sendResponse(res, {
+          sent: 0,
+          failed: 0,
+          subscriptions: 0,
+          reason: 'The board has no VAPID keys, so it cannot send a push at all.',
+        });
+      }
+
+      const operatorChatRepo = database.getOperatorChatRepository();
+      const subscriptions = operatorChatRepo.getAllPushSubscriptions();
+
+      if (subscriptions.length === 0) {
+        return sendResponse(res, {
+          sent: 0,
+          failed: 0,
+          subscriptions: 0,
+          reason: 'No browser is subscribed, so there is nowhere to send one.',
+        });
+      }
+
+      const results = await sendPushNotifications(
+        subscriptions.map((s: any) => ({ endpoint: s.endpoint, keys: s.keys })),
+        {
+          title: 'AmiExpress',
+          body: 'A test from the board. A caller paging you looks like this.',
+          icon: '/admin/icon.svg',
+          badge: '/admin/icon.svg',
+          tag: 'push-test',
+          data: { type: 'push-test', url: `${require('../utils/admin-base-url.util').adminBaseUrl()}/admin/notifications` },
+        },
+      );
+
+      for (const result of results) {
+        if (!result.success) operatorChatRepo.removePushSubscription(result.subscription.endpoint);
+      }
+
+      const sent = results.filter((r: any) => r.success).length;
+      sendResponse(res, {
+        sent,
+        failed: results.length - sent,
+        subscriptions: results.length,
+        endpoints: results.map((r: any) => ({
+          endpoint: String(r.subscription.endpoint).substring(0, 60) + '...',
+          success: r.success,
+        })),
+      });
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
+  /**
    * POST /api/config/push/generate-vapid
    * Generate new VAPID keys (admin only)
    */
