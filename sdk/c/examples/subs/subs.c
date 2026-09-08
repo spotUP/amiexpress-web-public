@@ -96,7 +96,40 @@ typedef enum { FEED_OK, FEED_EMPTY, FEED_NOHOST, FEED_GONE } feed_state;
 
 static ui_screen screen;
 static ui_key_source keys;
+
+
+
 static const ui_theme *theme;
+/* ------------------------------------------------------------- masthead rail
+
+   The rail slides. A 68K door has no timers, so the frames come from the idle
+   hook while we are waiting for a key (ui_key.h): one row redrawn, about five
+   frames a second. Twenty would cost twenty XIM messages a second for
+   decoration, which is exactly what the "draw smart" rule is about.
+
+   The current title is remembered so the hook can redraw the row it is on
+   without knowing which view put it there. */
+static int rail_tick;
+static const char *masthead_title = "SUBS";
+
+static void draw_masthead(const char *title)
+{
+    masthead_title = title;
+    ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, title,
+                          theme->rail, UI_TOKEN(UI_T_BAR_INK),
+                          UI_TOKEN(UI_T_BAR), rail_tick);
+}
+static void door_idle(void *ctx)
+{
+    (void)ctx;
+    rail_tick++;
+    ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, masthead_title,
+                          theme->rail, UI_TOKEN(UI_T_BAR_INK),
+                          UI_TOKEN(UI_T_BAR), rail_tick);
+    ui_screen_flush(&screen);
+    ae_delay_ticks(10);   /* ten ticks is a fifth of a second on PAL */
+}
+
 static int pushback = -1;
 static int wide;
 
@@ -401,8 +434,7 @@ static int post_flow(const char *question, const char *subject)
     if (subject != 0 && subject[0] != '\0') {
         char line[160];
         ansi_clear(&screen.buf);
-        ui_masthead_draw(&screen.buf, 1, 1, screen.cols, "POST TO EVERYONE",
-                         theme->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
+        draw_masthead("POST TO EVERYONE");
         say(3, "You are replying to:");
         sprintf(line, "  \"%.60s\"", subject);
         say(4, line);
@@ -498,7 +530,7 @@ int main(int argc, char **argv)
     keys.next = door_key;
     keys.pending = door_pending;
     keys.settle = door_settle;
-    keys.idle = 0;
+    keys.idle = door_idle;
     keys.ctx = 0;
 
     config_load("SUBS.cfg");
@@ -506,8 +538,7 @@ int main(int argc, char **argv)
     /* The feed is a round trip per four rows, so say what is happening rather
        than leaving a black screen for a second. */
     ansi_clear(&screen.buf);
-    ui_masthead_draw(&screen.buf, 1, 1, screen.cols, "SUBS",
-                     theme->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
+    draw_masthead("SUBS");
     say(3, wide ? "Reading the public messages in this conference..." : "Reading the messages...");
     ui_screen_flush(&screen);
 
@@ -543,9 +574,7 @@ int main(int argc, char **argv)
             };
 
             ansi_clear(&screen.buf);
-            ui_masthead_draw(&screen.buf, 1, 1, screen.cols,
-                             conf_name[0] != '\0' && wide ? conf_name : "SUBS",
-                             theme->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
+            draw_masthead(conf_name[0] != '\0' && wide ? conf_name : "SUBS");
 
             if (state == FEED_NOHOST) {
                 /* Not an error, and not the same sentence as an empty

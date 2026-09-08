@@ -151,6 +151,15 @@ static int collect(void *ctx, const unsigned char *buf, unsigned long len)
     return 0;
 }
 
+/* The HTTP status of the last listing fetch, or a negative ae_req error.
+   The view needs it to tell "the server said there is nothing" from "the
+   server never answered" - two very different sentences to show a caller.
+   It lives here because the fetch happens in a helper and the draw happens
+   in main: open_list used to compute it and drop it on the floor with
+   (void)status, so main's own `status` stayed 0 for the life of the door and
+   EVERY empty listing reported itself as unreachable. */
+static int last_status;
+
 /** GET a text listing into `listing`. Returns the HTTP status, or a negative
     ae_req error. Parsed by split_rows(). */
 static int fetch_text(const char *path_and_query)
@@ -159,7 +168,8 @@ static int fetch_text(const char *path_and_query)
     listing[0] = '\0';
     listing_truncated = 0;
     row_count = 0;
-    return ae_req_get(&reqcfg, path_and_query, collect, 0);
+    last_status = ae_req_get(&reqcfg, path_and_query, collect, 0);
+    return last_status;
 }
 
 /** Fetch one detail page into `listing` for ui_doc; leaves it whole. */
@@ -318,6 +328,38 @@ static char handle[32];
 static char status_line[80];
 static char list_title[24];
 static int list_is_mine;
+
+/* ------------------------------------------------------------- masthead rail
+
+   The rail slides. A 68K door has no timers, so the frames come from the idle
+   hook while we are waiting for a key (ui_key.h): one row redrawn, about five
+   frames a second. Twenty would cost twenty XIM messages a second for
+   decoration, which is exactly what the "draw smart" rule is about.
+
+   The current title is remembered so the hook can redraw the row it is on
+   without knowing which view put it there. */
+static int rail_tick;
+static const char *masthead_title = "GLOBAL REQUESTS";
+
+static void draw_masthead(const char *title)
+{
+    masthead_title = title;
+    ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, title,
+                          theme->rail, UI_TOKEN(UI_T_BAR_INK),
+                          UI_TOKEN(UI_T_BAR), rail_tick);
+}
+
+static void door_idle(void *ctx)
+{
+    (void)ctx;
+    rail_tick++;
+    ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, masthead_title,
+                          theme->rail, UI_TOKEN(UI_T_BAR_INK),
+                          UI_TOKEN(UI_T_BAR), rail_tick);
+    ui_screen_flush(&screen);
+    ae_delay_ticks(10);   /* ten ticks is a fifth of a second on PAL */
+}
+
 static char list_query[256];
 
 /* The footer, built so its suffix survives at any width. */
@@ -397,8 +439,7 @@ static int modal_choose(const char *title, const char *const *labels, int n)
     list.selected_bg = UI_TOKEN(UI_T_SELECTION_BG);
 
     ansi_clear(&screen.buf);
-    ui_masthead_draw(&screen.buf, 1, 1, screen.cols, title,
-                     theme->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
+    draw_masthead(title);
     ui_list_draw(&list, &screen.buf);
     say(&screen, list.top + n + 2, "Up/Down choose, Enter picks, Q cancels.");
     ui_screen_flush(&screen);
@@ -441,8 +482,7 @@ static int post_flow(void)
     if (choice < 0) return 0;
 
     ansi_clear(&screen.buf);
-    ui_masthead_draw(&screen.buf, 1, 1, screen.cols, "POST A REQUEST",
-                     theme->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
+    draw_masthead("POST A REQUEST");
     say(&screen, 3, choice == 0 ? "A release wanted. What is it?" : "ASCII art wanted. What for?");
     ui_screen_flush(&screen);
 
@@ -514,7 +554,6 @@ static void open_list(ui_list *list, const char *title, const char *query, int i
     list->height = screen.rows - 6;
     ui_list_select(list, 0);
     status_line[0] = '\0';
-    (void)status;
 }
 
 int main(int argc, char **argv)
@@ -525,7 +564,6 @@ int main(int argc, char **argv)
     int node = (argc > 1) ? atoi(argv[1]) : 1;
     view_id current_view = VIEW_MENU;
     int running = 1;
-    int status = 0;
     int full = 1;
 
     if (ae_start(node) != 0) return 20;
@@ -548,13 +586,12 @@ int main(int argc, char **argv)
     keys.next = door_key;
     keys.pending = door_pending;
     keys.settle = door_settle;
-    keys.idle = 0;
+    keys.idle = door_idle;
     keys.ctx = 0;
 
     if (!config_load(&config, "REQUESTS.cfg")) {
         ansi_clear(&screen.buf);
-        ui_masthead_draw(&screen.buf, 1, 1, screen.cols, "GLOBAL REQUESTS",
-                         theme->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
+        draw_masthead("GLOBAL REQUESTS");
         say(&screen, 3, "This door has no REQUESTS.cfg beside it.");
         say(&screen, 4, "A sysop sets Host= and BoardKey= there.");
         say(&screen, 6, "Press any key.");
@@ -596,12 +633,10 @@ int main(int argc, char **argv)
             static const char *const mine_hints[4] = { "Enter Detail", "D Done", "X Withdraw", "R Refresh" };
 
             ansi_clear(&screen.buf);
-            ui_masthead_draw(&screen.buf, 1, 1, screen.cols,
-                             current_view == VIEW_MENU ? "GLOBAL REQUESTS" : list_title,
-                             theme->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
+            draw_masthead(current_view == VIEW_MENU ? "GLOBAL REQUESTS" : list_title);
 
             if (current_view != VIEW_MENU && row_count == 0) {
-                say(&screen, 3, status > 0
+                say(&screen, 3, last_status > 0
                         ? "The server answered, and had nothing to show."
                         : "The server could not be reached.");
                 say(&screen, 5, "Press Q to go back.");
