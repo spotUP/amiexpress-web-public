@@ -1610,6 +1610,26 @@ console.log('[SETUP] SKIP_SERVER_START=1 - handlers wired, no listeners bound');
       return;
     }
 
+    /**
+     * Tee console output to logs/backend.log before anything else starts.
+     *
+     * The container runs `exec npx tsx src/index.ts`, so every line the board
+     * logs goes to docker's stdout and nowhere else - it dies with the
+     * container. On 2026-09-08 a caller's failing upload was investigated
+     * twice and the evidence was gone both times because the container had
+     * been recreated. The admin's own log viewer reads logs/backend.log,
+     * which in production nothing had written since 22 April.
+     *
+     * Capped and rotated - the same logs/ directory held an 8.1 GB
+     * filehandle-debug.log because a debug write had no ceiling.
+     */
+    try {
+      const { installBackendFileLog } = require('./utils/backend-file-log.util');
+      installBackendFileLog(config.get('dataDir') || './data');
+    } catch (err: any) {
+      console.error(`[SETUP] backend file log not installed: ${err?.message || err}`);
+    }
+
     // Start HTTP/Socket.IO server
     server.listen(port, host, () => {
 console.log(`[OK] HTTP/WebSocket Server running on ${host}:${port}`);
