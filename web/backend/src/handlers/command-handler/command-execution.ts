@@ -65,8 +65,8 @@ import {
   handleAnsiModeCommand,
   handleExpertModeCommand,
   handleCommentToSysopCommand,
-  handlePageSysopCommand,
 } from "../chat/preference-chat-commands.handler";
+import { handlePageSysopCommand } from './page-sysop-command';
 import { handleLiveChatCommand } from "../chat/chat-commands.handler";
 import {
   handleGreetingsCommand,
@@ -372,7 +372,11 @@ console.error("❌ ERROR in handleLiveChatCommand:", error);
       return;
 
     case "O": // Page Sysop (internalCommandO) - express.e:25372-25404
-      handlePageSysopCommand(socket, session);
+      // The ONE gated handler. This dispatcher is live alongside
+      // command.handler.ts's own `case 'O'`, and it used to reach a different
+      // copy of the command - so whether a caller's page budget was enforced
+      // depended on which dispatcher had handled him.
+      await handlePageSysopCommand(socket, session, (socket as any).server);
       return;
 
     case "T": // Time/Date Display (internalCommandT) - express.e:25622-25644

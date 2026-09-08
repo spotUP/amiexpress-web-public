@@ -12,6 +12,7 @@ import { TRACK_UPLOADS_BIT, TRACK_DOWNLOADS_BIT } from '../../utils/download-rat
 import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { config } from '../../config';
+import { findUserAnswerBlocks } from '../../utils/user-answers.util';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 
@@ -130,10 +131,11 @@ export async function handleAccountEditInput(socket: any, session: BBSSession, k
     return;
   }
 
-  // ? - User Answers (express.e:21319-21326)
+  // ? - User Answers (express.e:21319-21326): show this user's new-user
+  // questionnaire transcript, read-only.
   if (command === '?') {
-    socket.emit('ansi-output', '\r\n\x1b[33mUser questionnaire answers not implemented in web version.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[32mPress any key...\x1b[0m');
+    session.subState = LoggedOnSubState.USER_ANSWERS_VIEW;
+    displayUserAnswers(socket, session);
     return;
   }
 
@@ -1247,6 +1249,40 @@ function exitCreditMaintenance(socket: any, session: BBSSession): void {
   session.tempData.creditExitPending = undefined;
   session.inputBuffer = '';
 
+  session.subState = LoggedOnSubState.ACCOUNT_EDITOR_EDIT;
+  const page = session.tempData.page || 0;
+  if (page === 0) {
+    displayAccountPage0(socket, session.tempData.editingUser, session.tempData.editingSlot);
+  } else {
+    displayAccountPage1(socket, session.tempData.editingUser, session.tempData.editingSlot);
+  }
+}
+
+// ===== User Answers (read-only) - express.e:21319-21326 showUserAnswers =====
+
+/**
+ * Display this user's new-user questionnaire answers - every Node<n>/Answers
+ * block whose header names them. Read-only; any key returns to the editor.
+ */
+export function displayUserAnswers(socket: any, session: BBSSession): void {
+  const user = session.tempData.editingUser;
+  const blocks = findUserAnswerBlocks(config.getConfig().dataDir, user.username || '');
+
+  socket.emit('ansi-output', '\x1b[2J\x1b[H');
+  socket.emit('ansi-output', `\x1b[33mQUESTIONNAIRE ANSWERS\x1b[0m - \x1b[32m${user.username || ''}\x1b[0m\r\n\r\n`);
+  if (blocks.length === 0) {
+    socket.emit('ansi-output', '\x1b[37mNo questionnaire answers on file for this user.\x1b[0m\r\n');
+  } else {
+    for (const b of blocks) {
+      socket.emit('ansi-output', `\x1b[36m[${b.node}]\x1b[0m\r\n`);
+      socket.emit('ansi-output', b.text.replace(/\r?\n/g, '\r\n') + '\r\n\r\n');
+    }
+  }
+  socket.emit('ansi-output', '\x1b[32mPress any key to return...\x1b[0m');
+}
+
+/** Any key returns to the account editor (express.e:21326 displayAccount). */
+export function handleUserAnswersInput(socket: any, session: BBSSession, _key: string): void {
   session.subState = LoggedOnSubState.ACCOUNT_EDITOR_EDIT;
   const page = session.tempData.page || 0;
   if (page === 0) {

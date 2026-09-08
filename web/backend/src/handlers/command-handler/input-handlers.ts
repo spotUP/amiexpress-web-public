@@ -71,7 +71,6 @@ import {
   handleAnsiModeCommand,
   handleExpertModeCommand,
   handleCommentToSysopCommand,
-  handlePageSysopCommand,
   setPreferenceChatCommandsDependencies,
 } from "../chat/preference-chat-commands.handler";
 import { handleLiveChatCommand } from "../chat/chat-commands.handler";

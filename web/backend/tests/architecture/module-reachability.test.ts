@@ -41,12 +41,8 @@ const KNOWN_UNREACHABLE = new Set<string>([
   'src/conferences/conference-directory-compaction.ts',
   'src/conferences/conference-directory-plan.ts',
   'src/constants/security-levels.ts',
-  'src/doors/ami-stripper.lib.ts',
-  'src/doors/door-catalog.service.ts',
   'src/doors/door-path.util.ts',
-  'src/doors/door-repo-checksums.ts',
   'src/doors/door-repo-manifest.ts',
-  'src/doors/lha-member-delete.ts',
   'src/handlers/command-handler/command-processing.ts',
   'src/handlers/command-handler/index.ts',
   'src/handlers/command-handler/internal-commands.ts',
@@ -70,7 +66,8 @@ const KNOWN_UNREACHABLE = new Set<string>([
   'src/utils/lha-list-parser.ts',
   'src/utils/multitop-generator.ts',
   'src/utils/string-util.ts',
-  'src/utils/transfer-protocol.util.ts',]);
+  'src/utils/transfer-protocol.util.ts',
+]);
 
 const BACKEND = path.resolve(__dirname, '..', '..');
 const relative = (file: string): string => path.relative(BACKEND, file);
@@ -112,6 +109,18 @@ describe('every file under src is reachable from an entry point', () => {
 
     expect(entries.some((file) => file.endsWith(path.join('src', 'index.ts')))).toBe(true);
     expect(entries.length).toBeGreaterThan(1);
+  });
+
+  it('follows a bare side-effect import', () => {
+    // `import './door-catalog.service';` has no `from`, and the first version
+    // of this tool could not see it - so it reported the module dead one line
+    // after it had been deliberately wired up with exactly that syntax, for
+    // exactly the reason it must not be deleted (DOORMAN finds it through
+    // require.cache). Rebuilding the regex per file also dropped its `m` flag,
+    // which anchored ^ to the whole file and hid four more live modules.
+    const reachable = new Set([...walk().reachable].map(relative));
+
+    expect(reachable.has(path.join('src', 'doors', 'door-catalog.service.ts'))).toBe(true);
   });
 
   it('resolves NodeNext .js specifiers back to their .ts source', () => {

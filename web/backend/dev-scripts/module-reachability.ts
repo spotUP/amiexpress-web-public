@@ -26,8 +26,15 @@ const BACKEND = path.resolve(__dirname, '..');
 const SRC = path.join(BACKEND, 'src');
 const ENTRY = path.join(SRC, 'index.ts');
 
-/** `from '...'`, `require('...')`, `import('...')` - literal arguments only. */
-const SPECIFIER = /(?:\bfrom\s*|\brequire\s*\(\s*|\bimport\s*\(\s*)(['"])([^'"]+)\1/g;
+/**
+ * `from '...'`, `require('...')`, `import('...')`, and the bare side-effect
+ * `import '...';` - literal arguments only.
+ *
+ * The side-effect form has no `from` and is easy to leave out, which is how
+ * this tool first reported `src/doors/door-catalog.service.ts` dead one line
+ * after it had been wired up with exactly that syntax.
+ */
+const SPECIFIER = /(?:\bfrom\s*|\brequire\s*\(\s*|\bimport\s*\(\s*|^\s*import\s+)(['"])([^'"]+)\1/gm;
 /** A require/import whose argument is not a literal - the blind spot. */
 const COMPUTED = /\b(?:require|import)\s*\(\s*[^'")\s]/g;
 
@@ -141,7 +148,10 @@ export function walk(entries: string | string[] = entryPoints(), root: string = 
     let match: RegExpExecArray | null;
     // A fresh regex per file: a module-level /g regex shared across a walk
     // keeps its lastIndex between files and silently skips matches.
-    const specifiers = new RegExp(SPECIFIER.source, 'g');
+    // Flags too, not just the source: SPECIFIER is multiline (the bare
+    // side-effect `import '...'` is anchored to the start of a line), and
+    // rebuilding it with 'g' alone silently anchored ^ to the whole file.
+    const specifiers = new RegExp(SPECIFIER.source, SPECIFIER.flags);
     while ((match = specifiers.exec(source)) !== null) {
       const specifier = match[2];
       if (!specifier.startsWith('.')) continue;

@@ -18,6 +18,28 @@ import * as amigafs from '../utils/amigafs';
 import { getInstallByCommand, DoorInstall } from './door-installs.repository';
 import { applyRepoMetadata, getRepoMetadataIndex } from './door-repo-metadata';
 
+/**
+ * Loaded for its SIDE EFFECT: DOORMAN needs it in `require.cache`.
+ *
+ * A door runs in its own context and cannot import backend source paths, so
+ * `Doors/door-manager/doorman-services.ts:getCatalogSvc()` reaches the
+ * catalogue by scanning `require.cache` for a key containing
+ * 'door-catalog.service' - the same trick it uses for
+ * `door-installs.repository`, which is in the cache because the line above
+ * imports it.
+ *
+ * Nothing in the backend imported door-catalog.service, so the cache never
+ * held it, `getCatalogSvc()` returned null in production, and DOORMAN's
+ * owner-mode catalogue browse degraded silently to an empty list
+ * (`repoDataSource.ts` -> `{ entries: [], repoUnavailable: true }`). It looked
+ * like an empty repository rather than a missing module.
+ *
+ * This import is what puts it there. It has no named binding on purpose: a
+ * named import that nothing used would be elided by the compiler and the bug
+ * would come straight back.
+ */
+import './door-catalog.service';
+
 /** One row of the installed-door list, as both doors render it. */
 export interface DoorListEntry {
   id: string;

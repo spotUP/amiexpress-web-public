@@ -10,15 +10,37 @@ import { Socket } from 'socket.io';
 import { BBSSession } from '../../index';
 import { handlePageSysop } from '../operator-chat.handler';
 import { db } from '../../database';
+import { checkSecurity } from '../../utils/acs.util';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { handleCommentToSysopCommand } from '../chat/preference-chat-commands.handler';
+import { ErrorHandler } from '../../utils/error-handling.util';
+import { LoggedOnSubState } from '../../constants/bbs-states';
 
 /**
  * Handle O command - Page Sysop
  *
- * express.e flow:
- * 1. Check pagesAllowed counter (our: cooldown check)
- * 2. If 0, redirect to Comment to Sysop (our: check cooldown)
- * 3. Check ACS_PAGE_SYSOP security
- * 4. Decrement pagesAllowed (our: set cooldown)
+ * express.e:25372-25404, internalCommandO():
+ *
+ *     IF pagesAllowed = 0
+ *       IF checkSecurity(ACS_COMMENT_TO_SYSOP) = FALSE THEN RETURN NOT_ALLOWED
+ *       RETURN commentToSYSOP()
+ *     ENDIF
+ *     IF pagesAllowed <> -1 THEN pagesAllowed--
+ *     IF checkSecurity(ACS_PAGE_SYSOP) = FALSE THEN RETURN NOT_ALLOWED
+ *
+ * The lines that used to sit here claimed all of that was implemented
+ * "(our: cooldown check)". None of it was - this function went straight to
+ * handlePageSysop - so a caller whose ACS level allows ZERO pages could page
+ * the sysop as often as he liked, and no page budget was ever spent.
+ *
+ * A correct copy of the gate existed in chat/preference-chat-commands.handler.ts
+ * exporting a function of THE SAME NAME; command.handler.ts imports that module
+ * on line 96 and this one on line 97, so this one shadowed it and the correct
+ * copy never ran. That duplicate is gone.
+ *
+ * What remains ours is the plumbing after the gate: handlePageSysop is the
+ * modern operator-chat pipeline (PageRequest rows, notifications, accept),
+ * which is what sysopPaged()/ccom() amount to here.
  * 5. Set ENV_REQ_CHAT (our: OPERATOR_CHAT_WAITING state)
  * 6. Set pagedFlag:=1 (our: create PageRequest)
  * 7. Call sysopPaged() (our: sendPageNotifications)
@@ -29,6 +51,31 @@ export async function handlePageSysopCommand(
   session: BBSSession,
   io: any
 ): Promise<void> {
+  // express.e:25376 - out of pages: leave a comment instead.
+  if (session.pagesAllowed === 0) {
+    if (!checkSecurity(session.user, ACSPermission.COMMENT_TO_SYSOP)) {
+      ErrorHandler.permissionDenied(socket as any, 'leave comments for sysop', {
+        nextState: LoggedOnSubState.DISPLAY_MENU,
+      });
+      return;
+    }
+    handleCommentToSysopCommand(socket as any, session);
+    return;
+  }
+
+  // express.e:25385 - spend one, unless the level is unlimited (-1).
+  if (typeof session.pagesAllowed === 'number' && session.pagesAllowed !== -1) {
+    session.pagesAllowed -= 1;
+  }
+
+  // express.e:25387 - no chat unless validated.
+  if (!checkSecurity(session.user, ACSPermission.PAGE_SYSOP)) {
+    ErrorHandler.permissionDenied(socket as any, 'page the sysop', {
+      nextState: LoggedOnSubState.DISPLAY_MENU,
+    });
+    return;
+  }
+
   try {
     // Get operator chat repository
     const operatorChatRepo = db.getOperatorChatRepository();
