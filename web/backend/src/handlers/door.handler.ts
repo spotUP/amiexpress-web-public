@@ -2580,6 +2580,7 @@ console.log(`[executeTypeScriptDoor] Door ${door.name} completed during segment 
     const displayFlowStates = [
       LoggedOnSubState?.DISPLAY_BULL,
       LoggedOnSubState?.DISPLAY_NODE_BULL,
+      LoggedOnSubState?.DISPLAY_ACHIEVE_BULL,
       LoggedOnSubState?.CONF_SCAN,
       LoggedOnSubState?.DISPLAY_CONF_BULL,
       LoggedOnSubState?.DISPLAY_MENU,

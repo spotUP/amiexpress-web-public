@@ -77,6 +77,9 @@ export const SCREEN_DIR_MAP: Record<string, ScreenDirType> = {
 
   // cmds.bbsLoc screens (express.e:6548-6550, 6637-6640, 6615-6653)
   'BULL': ScreenDirType.GLOBAL,  // SCREEN_BULL uses cmds.bbsLoc + 'BULL'
+  // Written by achievements/bulletin.ts, not by a sysop; shown at login
+  // between NODE_BULL and the conference scan. Missing is the normal state.
+  'ACHIEVETOP': ScreenDirType.GLOBAL,
   'ONENODE': ScreenDirType.GLOBAL,
   'LOGON24': ScreenDirType.GLOBAL,
   // express.e:6615-6653 - additional global screens

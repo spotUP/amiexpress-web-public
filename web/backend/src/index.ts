@@ -1480,6 +1480,14 @@ console.log("[OK] Operator chat handler initialized");
     startFlusher(productionFlusherDeps(io));
 console.log(`[OK] Achievements flusher started (${achievementsNow().enabled ? "reporting to " + achievementsNow().serverUrl : "not configured, idle"})`);
 
+    // The achievements bulletin (Screens/AchieveTop.txt): the two
+    // leaderboards a caller sees at login, on the Conftop-II shape - a file
+    // the board writes, a screen the login ladder reads. Off boards remove
+    // the file instead of writing one, so nothing is ever shown stale.
+    const { startAchievementsBulletin } = await import("./achievements/bulletin");
+    startAchievementsBulletin();
+console.log("[OK] Achievements bulletin refresher started");
+
     // Initialize web push notifications with database config
     const { initWebPush } = await import("./utils/web-push.util");
     // config-source-ok: the VAPID push keys are database-only - express.e has

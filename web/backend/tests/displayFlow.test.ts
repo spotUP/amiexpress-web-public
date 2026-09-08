@@ -228,6 +228,28 @@ describe('Display flow parity', () => {
     expect(screenNames2).toContain('CONF_BULL');
   });
 
+  /**
+   * The achievements bulletin is REACHED at login.
+   *
+   * achievements/bulletin.ts writes Screens/AchieveTop.txt on its own timer;
+   * without a step in the login ladder that file is a file nobody reads. The
+   * pin is the order: NODE_BULL, then ACHIEVETOP, then the conference scan.
+   */
+  test('the achievements bulletin is shown between NODE_BULL and the conference scan', async () => {
+    const session = baseSession();
+    doPauseMock.mockImplementation(() => { /* no pause — walk the whole ladder */ });
+
+    await handleCommand(socket, session, '');
+
+    const names = displayScreenMock.mock.calls.map((c: any[]) => c[2]);
+    expect(names).toContain('ACHIEVETOP');
+    expect(names.indexOf('ACHIEVETOP')).toBeGreaterThan(names.indexOf('NODE_BULL'));
+    // Silent: a board with no achievements server has no file, and a missing
+    // screen must not raise the sysop alert BULL/NODE_BULL are also spared.
+    const achieveCall = displayScreenMock.mock.calls.find((c: any[]) => c[2] === 'ACHIEVETOP');
+    expect(achieveCall?.[4]).toBe(true);
+  });
+
   // express.e:29853-29855 — quickFlag only skips the LOGON screen, NOT BULL.
   // Earlier copies of this test asserted the opposite, but the source is
   //   IF (quickFlag=FALSE) IF (displayScreen(SCREEN_LOGON)) THEN doPause()

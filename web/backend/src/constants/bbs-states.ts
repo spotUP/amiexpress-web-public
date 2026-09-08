@@ -30,6 +30,7 @@ export enum LoggedOnSubState {
   DISPLAY_LOGON = 'display_logon',
   DISPLAY_BULL = 'display_bull',
   DISPLAY_NODE_BULL = 'display_node_bull',
+  DISPLAY_ACHIEVE_BULL = 'display_achieve_bull',  // the achievements leaderboards bulletin (achievements/bulletin.ts)
   EXEC_QUICKNEW = 'exec_quicknew',
   DISPLAY_PAGED_SCREEN = 'display_paged_screen',
   CONF_SCAN = 'conf_scan',

@@ -275,6 +275,7 @@ let SCREEN_MENU: string = 'MENU';
 const displayFlowStates = new Set<LoggedOnSubState>([
   LoggedOnSubState.DISPLAY_BULL,
   LoggedOnSubState.DISPLAY_NODE_BULL,
+  LoggedOnSubState.DISPLAY_ACHIEVE_BULL,
   LoggedOnSubState.EXEC_QUICKNEW,
   LoggedOnSubState.CONF_SCAN,
   LoggedOnSubState.DISPLAY_CONF_BULL,
@@ -811,8 +812,24 @@ console.error('[handleCommand] Error running queued screen commands:', error);
         displayFlowLog('showing NODE_BULL');
         const shown = await displayScreen(socket, session, 'NODE_BULL', true, /* silent */ true);
         if (shown && pauseDisplayFlow(socket, session)) {
-          session.subState = LoggedOnSubState.CONF_SCAN;
+          session.subState = LoggedOnSubState.DISPLAY_ACHIEVE_BULL;
           displayFlowLog('pause after NODE_BULL');
+          return;
+        }
+        session.subState = LoggedOnSubState.DISPLAY_ACHIEVE_BULL;
+        continue;
+      }
+
+      if (session.subState === LoggedOnSubState.DISPLAY_ACHIEVE_BULL) {
+        // The achievements leaderboards, written by achievements/bulletin.ts
+        // into Screens/AchieveTop.txt on its own timer. Silent and skipped
+        // when the file is not there, which is every board that has no
+        // achievements server configured - same contract as NODE_BULL.
+        displayFlowLog('showing ACHIEVETOP');
+        const shown = await displayScreen(socket, session, 'ACHIEVETOP', true, /* silent */ true);
+        if (shown && pauseDisplayFlow(socket, session)) {
+          session.subState = LoggedOnSubState.CONF_SCAN;
+          displayFlowLog('pause after ACHIEVETOP');
           return;
         }
         session.subState = LoggedOnSubState.CONF_SCAN;
