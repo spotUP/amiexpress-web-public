@@ -405,8 +405,18 @@ export async function processToRecipient(socket: any, session: BBSSession, input
       applyConfForwardMail(socket, session);
       promptForSubject(socket, session);
     } else {
-      // express.e:10814 - No permission, reject
-      emitText(socket, '\r\nUser does not exist!!\r\n\r\n');
+      // express.e:10814 - No permission, reject.
+      //
+      // express.e answers a caller who may not use EALL with "User does not
+      // exist!!", which is true of no user and explains nothing: EALL is not a
+      // user, it is the public recipient, and the real reason is the missing
+      // permission. The express.e line stays first for parity; the sentence
+      // after it is the one that lets a sysop fix his own board.
+      emitText(socket, '\r\nUser does not exist!!\r\n');
+      emitText(
+        socket,
+        '[INFO] EALL posts to everyone and needs ACS.EALL_MESSAGES, which your access level does not grant.\r\n\r\n',
+      );
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.tempData = undefined;
     }

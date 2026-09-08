@@ -171,11 +171,31 @@ export class ErrorHandler {
    */
   static permissionDenied(
     socket: Socket,
-    _action: string,
+    action: string,
     options: ErrorHandlingOptions = {}
   ): void {
     // express.e:3037-3039 higherAccess() — no separator, no press-key, just the message
     higherAccess(socket);
+
+    // Then say WHAT was refused.
+    //
+    // express.e's line is identical for every refusal in the system, so a
+    // caller is told only that something needs more access - never which
+    // thing, and never how close he is. Thirty-five call sites already pass a
+    // description ("download files", "edit accounts", "join conference") and
+    // this method discarded every one of them.
+    //
+    // Deliberately ADDITIVE: express.e's sentence still comes first and
+    // unchanged, so the parity a board expects is intact and this is an extra
+    // line after it, not a rewrite of it. Asked for by the sysop 2026-09-08
+    // after "User does not exist!!" cost him an afternoon.
+    if (action) {
+      const session = (socket as any).session;
+      const level = session?.user?.secLevel;
+      const grants =
+        typeof level === 'number' ? `level ${level} grants` : 'your account grants';
+      socket.emit('ansi-output', `[INFO] ${action} needs more access than ${grants}.\r\n`);
+    }
     const { nextState, clearMenuPause, clearTempData } = options;
     const session = (socket as any).session;
     if (session) {
