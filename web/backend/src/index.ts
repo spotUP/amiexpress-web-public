@@ -96,6 +96,7 @@ import {
   attachWSTerminalServer,
   WSTerminalConnection,
 } from "./server/ws-terminal-server";
+import { buildWsTerminalConnectionHandler } from "./server/ws-terminal-session";
 import { SSHServerImpl, SSHConnection } from "./server/ssh-server";
 import { SSHKeyUtil } from "./utils/ssh-key.util";
 import type { WireCharset } from "./utils/wire-encoding.util";
@@ -1620,47 +1621,18 @@ console.log(`[WEB] BBS accessible at http://localhost:${port}/`);
     // and CLI ws clients connect to the BBS over wss:// using just the
     // standard WebSocket protocol (no Socket.IO handshake).
     try {
-      attachWSTerminalServer(server, (conn: WSTerminalConnection) => {
-        const cfg = config.getConfig();
-        const session = createSession(conn.nodeId, {
-          connectionType: "telnet", // Raw bytes both ways — same surface as telnet.
-          remoteAddress: conn.getRemoteAddress(),
-          connectionHostname: cfg.hostname,
-          connectionPort: port,
-          connectionBaud: 0,
-        });
-        // A WebSocket TEXT frame is UTF-8 by RFC 6455, and
-        // `WSTerminalConnection.write` sends one for every string it is
-        // handed. The session is created with `connectionType: "telnet"`
-        // above (raw bytes both ways) and cannot otherwise be told apart from
-        // a real telnet caller, so the wire charset is stated here - the same
-        // field a telnet CHARSET negotiation sets. `connectionType` is NOT
-        // changed: nine `=== 'telnet'` comparisons in web/backend/src depend
-        // on it.
-        session.wireCharset = "utf-8";
-        conn.session = session;
-        setSession(conn.sessionId, session);
-        // Reuse the same connection handler telnet/SSH use.
-        setupTelnetSSHHandler(conn as unknown as TelnetConnection, "telnet", transportDeps);
-
-        /**
-         * ...and the same PRE-LOGIN, which this transport never ran
-         * (divergence 38). A /ws/terminal caller got no connect banner, no
-         * FRONTEND screen, no graphics prompt and no AREXX `login` trigger -
-         * only whatever the first keystroke happened to provoke. Same shape
-         * telnet uses (telnet-server.ts's connect path).
-         */
-        void (async () => {
-          try {
-            const { buildConnectionEmitter } = await import("./server/connection-emitter");
-            const { runPreLoginConnect } = await import("./services/login-connect.service");
-            const emitter = buildConnectionEmitter(conn as any);
-            await runPreLoginConnect(emitter as any, session, { socketId: conn.sessionId });
-          } catch (err) {
-console.error("[WS-Terminal] pre-login connect failed:", err);
-          }
-        })();
-      });
+      // The handler lives in server/ws-terminal-session.ts now. It was an
+      // inline callback here, and the PRE-LOGIN runs inside it - not in
+      // attachWSTerminalServer and not in setupTelnetSSHHandler - so no test
+      // could reach it while index.ts started servers on import. Same reason
+      // TP-2 moved setupTelnetSSHHandler out.
+      attachWSTerminalServer(server, buildWsTerminalConnectionHandler({
+        createSession: createSession as never,
+        setSession: setSession as never,
+        transportDeps,
+        hostname: config.getConfig().hostname,
+        port,
+      }));
     } catch (err) {
 console.error("[WS-Terminal] Failed to attach:", err);
     }
