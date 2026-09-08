@@ -19,6 +19,7 @@
 
 import {
   Activity,
+  Bell,
   ArrowUpDown,
   Boxes,
   DoorOpen,
@@ -72,7 +73,12 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: '', label: 'Overview', icon: LayoutDashboard, minLevel: 100, description: 'The state of the board at a glance' },
       { path: 'activity', label: 'Activity', icon: Zap, minLevel: 255, description: 'Live feed of logons, doors and transfers' },
       { path: 'nodes', label: 'Nodes', icon: Monitor, minLevel: 255, description: 'Live nodes, supervisor commands and per-node settings', keywords: ['Node Control'] },
-      { path: 'operator-chat', label: 'Operator Chat', icon: MessageSquare, minLevel: 255, description: 'Answer a caller paging the sysop', keywords: ['Operator Chat Settings', 'Paging Hours', 'Away Messages', 'Notification', 'Notifications', 'Notification Settings', 'Push', 'Push Notifications', 'Desktop Notifications', 'Browser Notifications', 'Alerts', 'Sound', 'Email', 'Webhook', 'VAPID', 'Subscribe', 'Page Sysop'] },
+      { path: 'operator-chat', label: 'Operator Chat', icon: MessageSquare, minLevel: 255, description: 'Answer a caller paging the sysop', keywords: ['Operator Chat Settings', 'Paging Hours', 'Away Messages', 'Quiet Hours', 'AI Bot', 'Quick Replies', 'Page Sysop'] },
+      // Its own destination since 2026-09-08. The switches were spread over a
+      // header badge and three sections two thirds of the way down operator
+      // chat settings: "i think all notification settings deserves its own
+      // menu entry its to spread out now hard to find".
+      { path: 'notifications', label: 'Notifications', icon: Bell, minLevel: 255, description: 'How the board reaches you when you are away from the admin', keywords: ['Notification', 'Notifications', 'Notification Settings', 'Push', 'Push Notifications', 'Desktop Notifications', 'Browser Notifications', 'Web Push', 'Alerts', 'Sound', 'Email', 'Webhook', 'VAPID', 'Subscribe', 'Unsubscribe', 'Service Worker', 'Pushover', 'ntfy', 'ntfy.sh', 'Phone', 'Mobile'] },
     ],
   },
   {

@@ -26,8 +26,13 @@ export type SystemConfigCategory = 'General' | 'Security & Access' | 'Networking
 export interface PageSection {
   /** The heading exactly as the page renders it - also the `?section=` value. */
   name: string;
-  /** Which category tab shows it. */
-  category: SystemConfigCategory;
+  /**
+   * Which category tab shows it, on the one page that has category tabs.
+   *
+   * Every other destination indexes its TABS and its section headings, and has
+   * no categories - so this is optional, and only Configuration sets it.
+   */
+  category?: SystemConfigCategory;
   /**
    * The `system_config` keys the section edits, as `register('...')` names
    * them. These carry most of the search value: `ftp` finds four of them.
@@ -215,8 +220,98 @@ export const SYSTEM_CONFIG_SECTIONS: PageSection[] = [
  * nineteen sections and eighty-one fields behind a single nav label. A page
  * added here becomes searchable with no change to the sidebar.
  */
+/**
+ * What every OTHER destination contains, so the sidebar filter can reach it.
+ *
+ * Configuration was the only page indexed, so a search for anything that lives
+ * on another page answered "No destinations match" - which is how a sysop came
+ * to conclude the settings he wanted did not exist: "the menu search still
+ * sucks and returns nothing from all pages".
+ *
+ * A destination's sections are its TABS and the headings inside them. Tabs are
+ * taken from `workspaces.tsx`, which is the authority on what each destination
+ * holds; a tab renamed there and not here loses only its search terms, never a
+ * page. `fields` carries the config keys a section writes, because a key is
+ * what a sysop knows a setting by.
+ */
+const NOTIFICATION_SECTIONS: PageSection[] = [
+  {
+    name: 'Desktop notifications on this browser',
+    fields: [],
+    keywords: ['push', 'browser', 'desktop', 'subscribe', 'unsubscribe', 'service worker',
+      'chrome', 'permission', 'alerts', 'notify me', 'test notification'],
+  },
+  {
+    name: 'Notification Settings',
+    fields: ['notifyOnPage', 'notifySound', 'browserPush', 'emailNotifications'],
+    keywords: ['page', 'paged', 'sound', 'email', 'alerts', 'when a caller pages'],
+  },
+  {
+    name: 'Push Notification Server Configuration',
+    fields: ['vapid_public_key', 'vapid_private_key', 'vapid_contact_email'],
+    keywords: ['VAPID', 'keys', 'web push', 'server keys', 'generate'],
+  },
+  {
+    name: 'Phone/Desktop Push Channels',
+    fields: ['pushoverUserKey', 'pushoverAppToken', 'ntfyTopic', 'ntfyUrl'],
+    keywords: ['pushover', 'ntfy', 'ntfy.sh', 'phone', 'mobile', 'third party', 'channel'],
+  },
+];
+
+const OPERATOR_CHAT_SECTIONS: PageSection[] = [
+  { name: 'Chat', fields: [], keywords: ['operator', 'page', 'paging', 'answer', 'caller waiting'] },
+  { name: 'General Settings', fields: ['enabled', 'awayMessage', 'welcomeMessage'], keywords: ['away', 'welcome'] },
+  { name: 'Security Settings', fields: ['requireAuth', 'blockedUsers'], keywords: ['block', 'ban'] },
+  { name: 'Quiet Hours', fields: ['quietHoursStart', 'quietHoursEnd'], keywords: ['paging hours', 'do not disturb', 'night'] },
+  { name: 'AI Bot Settings', fields: ['aiEnabled', 'aiModel'], keywords: ['bot', 'assistant', 'auto reply', 'AI'] },
+  { name: 'Quick Replies', fields: [], keywords: ['canned', 'macro', 'shortcut'] },
+];
+
+const SCREEN_SECTIONS: PageSection[] = [
+  { name: 'Screen files', fields: [], keywords: ['gallery', 'codes', 'duplicates', 'door art', 'MCI', 'revisions'] },
+  { name: 'Themes', fields: [], keywords: ['theme', 'publish', 'wearable', 'validate', 'coverage'] },
+  { name: 'Artist studio', fields: [], keywords: ['artist', 'redraw', 'ANSI', 'PETSCII', 'RIP', 'SEQ', 'logo', 'checklist', 'progress'] },
+  { name: 'Questionnaire', fields: [], keywords: ['new user', 'signup questions'] },
+];
+
+const NODE_SECTIONS: PageSection[] = [
+  { name: 'Live', fields: [], keywords: ['who is online', 'supervisor', 'chat', 'kick', 'node control'] },
+  { name: 'Configuration', fields: [], keywords: ['tooltype', 'SCREENS', 'per-node', 'node settings'] },
+];
+
+const CONFERENCE_SECTIONS: PageSection[] = [
+  { name: 'Conferences', fields: [], keywords: ['message base', 'join', 'ACS', 'LOCATION'] },
+  { name: 'File areas', fields: [], keywords: ['DLPATH', 'ULPATH', 'drives', 'storage', 'S3', 'quota'] },
+];
+
+const LOOKUP_SECTIONS: PageSection[] = [
+  { name: 'Computers', fields: [], keywords: ['computer types'] },
+  { name: 'Screen types', fields: [], keywords: ['ANSI', 'ASCII', 'RIP', 'terminal type'] },
+  { name: 'Languages', fields: [], keywords: ['language'] },
+  { name: 'Transfer protocols', fields: [], keywords: ['zmodem', 'xmodem', 'protocol'] },
+  { name: 'File checkers', fields: [], keywords: ['archive', 'lha', 'zip', 'checker'] },
+];
+
+const CONFIG_FILE_SECTIONS: PageSection[] = [
+  { name: 'All .info files', fields: [], keywords: ['tooltype', 'icon', 'bbsConfig', 'AmiXnet'] },
+  { name: 'Batch scripts', fields: [], keywords: ['batch', 'script', 'quicknew'] },
+];
+
+const HEALTH_SECTIONS: PageSection[] = [
+  { name: 'Health check', fields: [], keywords: ['filesystem', 'audit', 'missing', 'permissions'] },
+  { name: 'Deployment', fields: [], keywords: ['deploy', 'container', 'image', 'build', 'version'] },
+];
+
 export const PAGE_SECTIONS: Record<string, PageSection[]> = {
   system: SYSTEM_CONFIG_SECTIONS,
+  notifications: NOTIFICATION_SECTIONS,
+  'operator-chat': OPERATOR_CHAT_SECTIONS,
+  screens: SCREEN_SECTIONS,
+  nodes: NODE_SECTIONS,
+  conferences: CONFERENCE_SECTIONS,
+  'lookup-tables': LOOKUP_SECTIONS,
+  'config-files': CONFIG_FILE_SECTIONS,
+  health: HEALTH_SECTIONS,
 };
 
 /** The query parameter a search result uses to open one section on its page. */

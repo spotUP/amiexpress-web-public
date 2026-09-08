@@ -130,7 +130,10 @@ const OPERATOR_CHAT_TABS: TabDefinition[] = [
       </Suspense>
     ),
   },
-  { id: 'settings', label: 'Settings', render: () => <OperatorChatSettingsPage /> },
+  // The chat half. The three notification sections moved to their own
+  // destination - same form, gated - because they were unfindable here:
+  // "i think all notification settings deserves its own menu entry".
+  { id: 'settings', label: 'Settings', render: () => <OperatorChatSettingsPage only="chat" /> },
 ];
 
 export function OperatorChatWorkspace() {

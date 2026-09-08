@@ -26,6 +26,7 @@ import {
   OperatorChatWorkspace,
   ScreensWorkspace,
 } from './pages/workspaces';
+import { NotificationsPage } from './pages/NotificationsPage';
 
 /**
  * The heavy leaves. Session Logs pulls in xterm and Import and Export pulls in
@@ -108,6 +109,7 @@ function App() {
         <Route path="screens" element={<ScreensWorkspace />} />
         <Route path="nodes" element={<SysopRoute><NodesWorkspace /></SysopRoute>} />
         <Route path="operator-chat" element={<SysopRoute><OperatorChatWorkspace /></SysopRoute>} />
+        <Route path="notifications" element={<SysopRoute><NotificationsPage /></SysopRoute>} />
 
         {/* People — sysop-only */}
         <Route path="users" element={<SysopRoute><UsersPage /></SysopRoute>} />

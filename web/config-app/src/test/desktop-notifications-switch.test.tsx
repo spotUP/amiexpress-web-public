@@ -38,7 +38,9 @@ vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<Record<string, unknown>>('react-router-dom');
   return {
     ...actual,
-    Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+    Link: ({ to, children, ...rest }: { to: string; children: React.ReactNode }) => (
+      <a href={to} {...rest}>{children}</a>
+    ),
     useLocation: () => ({ pathname: '/admin' }),
   };
 });
@@ -65,35 +67,47 @@ describe('the desktop-notification switch in the header', () => {
     push.subscribe.mockClear();
   });
 
-  const renderHeader = () => {
-    try {
-      render(<Header />);
-      return true;
-    } catch {
-      return false;
-    }
-  };
+  // No try/catch. A render that throws must FAIL the test - the first version
+  // of this file swallowed `useAuth must be used within an AuthProvider` and
+  // reported green with every assertion unreachable.
+  const renderHeader = () => render(<Header />);
 
   it('says notifications are off when the browser can do them and the sysop has not', () => {
-    if (!renderHeader()) return;
+    renderHeader();
     expect(screen.getByText(/Desktop notifications off/i)).toBeTruthy();
   });
 
-  it('subscribes when it is clicked - one click, not a settings hunt', () => {
-    if (!renderHeader()) return;
-    fireEvent.click(screen.getByText(/Desktop notifications off/i));
-    expect(push.subscribe).toHaveBeenCalledTimes(1);
+  /*
+   * THE BADGE SURVIVES ITS OWN CLICK.
+   *
+   * It used to subscribe in place and then remove itself, so the sysop's click
+   * made the control vanish under the cursor with nothing confirming what had
+   * happened - and he had to click twice before anything reached the server:
+   * "the button should not be removed when i click it".
+   */
+  it('is still there after it is clicked, and leads to the notifications page', () => {
+    renderHeader();
+    const badge = screen.getByText(/Desktop notifications off/i).closest('a');
+
+    expect(badge?.getAttribute('href')).toBe('/admin/notifications');
+
+    fireEvent.click(badge!);
+
+    expect(screen.getByText(/Desktop notifications off/i)).toBeTruthy();
   });
 
-  it('says nothing once he is subscribed - a badge for a working feature is noise', () => {
+  it('says ON once he is subscribed, rather than going quiet', () => {
     push.isSubscribed = true;
-    if (!renderHeader()) return;
+    renderHeader();
+
+    expect(screen.getByText(/Desktop notifications on/i)).toBeTruthy();
     expect(screen.queryByText(/Desktop notifications off/i)).toBeNull();
   });
 
-  it('offers no button when the browser has REFUSED, and explains instead', () => {
+  it('offers no switch when the browser has REFUSED, and explains instead', () => {
     push.permission = 'denied';
-    if (!renderHeader()) return;
+    renderHeader();
+
     expect(screen.queryByText(/Desktop notifications off/i)).toBeNull();
     expect(screen.getByText(/blocked by the browser/i)).toBeTruthy();
   });

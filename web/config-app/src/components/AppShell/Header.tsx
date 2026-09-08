@@ -8,7 +8,7 @@
  */
 
 import { Link, useLocation } from 'react-router-dom';
-import { AlignJustify, Rows, PhoneCall, BellOff } from 'lucide-react';
+import { AlignJustify, Rows, PhoneCall, BellOff, BellRing } from 'lucide-react';
 import { useDensity } from '../../hooks/useDensity';
 import { NODE_BACKGROUND_POLL_MS, useNodeStatus, useSessionStats } from '../../hooks/useBoardData';
 import { useRealtime } from '../../realtime/RealtimeProvider';
@@ -71,21 +71,30 @@ export function Header() {
           * chair, so the state now says so where he cannot miss it, beside
           * the callers-waiting pill that follows him around the app.
           *
-          * Shown ONLY when the browser can do it and he has not enabled it.
-          * Once subscribed this disappears - a permanent badge for a working
-          * feature is noise.
+          * IT DOES NOT DISAPPEAR WHEN CLICKED. It used to subscribe in place
+          * and then remove itself, so the sysop's own click made the control
+          * vanish under the cursor with nothing to confirm what had happened:
+          * "the button should not be removed when i click it". It is now a
+          * LINK to the Notifications page, where the switch, its state, a test
+          * notification and the server settings all live - and it stays in the
+          * header afterwards, saying ON instead of going quiet.
           */}
-        {push.isSupported && !push.isSubscribed && push.permission !== 'denied' && (
-          <button
-            type="button"
-            onClick={() => { void push.subscribe(); }}
-            disabled={push.loading}
-            title="Get a desktop notification when a caller pages you, even with this page closed"
-            className="flex h-control items-center gap-2 rounded border border-status-warn/40 bg-status-warn/10 px-3 text-xs text-content-primary transition-colors hover:bg-status-warn/20 disabled:opacity-50"
+        {push.isSupported && push.permission !== 'denied' && (
+          <Link
+            to="/admin/notifications"
+            title={push.isSubscribed
+              ? 'Desktop notifications are on for this browser - open Notifications to test or switch off'
+              : 'Get a desktop notification when a caller pages you, even with this page closed'}
+            className={`flex h-control items-center gap-2 rounded border px-3 text-xs transition-colors ${
+              push.isSubscribed
+                ? 'border-status-ok/40 bg-status-ok/10 text-content-primary hover:bg-status-ok/20'
+                : 'border-status-warn/40 bg-status-warn/10 text-content-primary hover:bg-status-warn/20'
+            }`}
           >
-            <BellOff size={14} aria-hidden="true" className="text-status-warn" />
-            Desktop notifications off
-          </button>
+            {push.isSubscribed
+              ? <><BellRing size={14} aria-hidden="true" className="text-status-ok" /> Desktop notifications on</>
+              : <><BellOff size={14} aria-hidden="true" className="text-status-warn" /> Desktop notifications off</>}
+          </Link>
         )}
 
         {/* Permission refused at the browser level - we cannot fix that from

@@ -74,7 +74,34 @@ export function changedFields(
   return patch;
 }
 
-export function OperatorChatSettingsPage() {
+/**
+ * Which half of this page to draw.
+ *
+ * The notification settings used to be three sections two thirds of the way
+ * down the operator-chat settings, and the sysop could not find them: "i think
+ * all notification settings deserves its own menu entry its to spread out now
+ * hard to find". They are now a destination of their own - but they are still
+ * THIS page, gated, rather than a second copy of the same form: two copies of
+ * a form that writes the same nine keys is how they come to disagree.
+ */
+export type SettingsAudience = 'chat' | 'notifications';
+
+/** Every section this page draws, and who it belongs to. */
+const SECTION_AUDIENCE: Record<string, SettingsAudience> = {
+  'General Settings': 'chat',
+  'Security Settings': 'chat',
+  'Quiet Hours': 'chat',
+  'Notification Settings': 'notifications',
+  'Push Notification Server Configuration': 'notifications',
+  'Phone/Desktop Push Channels': 'notifications',
+  'AI Bot Settings': 'chat',
+  'Quick Replies': 'chat',
+};
+
+export function OperatorChatSettingsPage({ only }: { only?: SettingsAudience } = {}) {
+  /** A section is drawn unless the caller asked for the other audience. */
+  const shows = (section: keyof typeof SECTION_AUDIENCE) =>
+    !only || SECTION_AUDIENCE[section] === only;
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useNotification();
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -293,6 +320,7 @@ export function OperatorChatSettingsPage() {
 
       <div className="space-y-8">
         {/* General Settings */}
+        {shows('General Settings') && (
         <section className="bg-surface-1 border border-border rounded-lg p-6">
           <h2 className="text-xl font-semibold text-content-primary mb-4 flex items-center gap-2">
             <MessageSquare className="w-5 h-5" />
@@ -379,8 +407,10 @@ export function OperatorChatSettingsPage() {
             </div>
           </div>
         </section>
+        )}
 
         {/* Security Settings */}
+        {shows('Security Settings') && (
         <section className="bg-surface-1 border border-border rounded-lg p-6">
           <h2 className="text-xl font-semibold text-content-primary mb-4 flex items-center gap-2">
             <Shield className="w-5 h-5" />
@@ -423,8 +453,10 @@ export function OperatorChatSettingsPage() {
             </p>
           </div>
         </section>
+        )}
 
         {/* Quiet Hours */}
+        {shows('Quiet Hours') && (
         <section className="bg-surface-1 border border-border rounded-lg p-6">
           <h2 className="text-xl font-semibold text-content-primary mb-4 flex items-center gap-2">
             <Clock className="w-5 h-5" />
@@ -521,8 +553,10 @@ export function OperatorChatSettingsPage() {
             )}
           </div>
         </section>
+        )}
 
         {/* Notification Settings */}
+        {shows('Notification Settings') && (
         <section className="bg-surface-1 border border-border rounded-lg p-6">
           <h2 className="text-xl font-semibold text-content-primary mb-4 flex items-center gap-2">
             <Bell className="w-5 h-5" />
@@ -661,8 +695,10 @@ export function OperatorChatSettingsPage() {
             </div>
           </div>
         </section>
+        )}
 
         {/* VAPID Server Configuration */}
+        {shows('Push Notification Server Configuration') && (
         <section className="bg-surface-1 border border-border rounded-lg p-6">
           <h2 className="text-xl font-semibold text-content-primary mb-4 flex items-center gap-2">
             <Server className="w-5 h-5" />
@@ -797,8 +833,10 @@ export function OperatorChatSettingsPage() {
             </div>
           </div>
         </section>
+        )}
 
         {/* Third-party Push Notification Channels */}
+        {shows('Phone/Desktop Push Channels') && (
         <section className="bg-surface-1 border border-border rounded-lg p-6">
           <h2 className="text-xl font-semibold text-content-primary mb-4 flex items-center gap-2">
             <Bell className="w-5 h-5" />
@@ -863,8 +901,10 @@ export function OperatorChatSettingsPage() {
             </div>
           </div>
         </section>
+        )}
 
         {/* AI Bot Settings */}
+        {shows('AI Bot Settings') && (
         <section className="bg-surface-1 border border-border rounded-lg p-6">
           <h2 className="text-xl font-semibold text-content-primary mb-4 flex items-center gap-2">
             <Bot className="w-5 h-5" />
@@ -1022,8 +1062,10 @@ export function OperatorChatSettingsPage() {
             </div>
           </div>
         </section>
+        )}
 
         {/* Quick Replies */}
+        {shows('Quick Replies') && (
         <section className="bg-surface-1 border border-border rounded-lg p-6">
           <h2 className="text-xl font-semibold text-content-primary mb-4">
             Quick Replies
@@ -1053,6 +1095,7 @@ export function OperatorChatSettingsPage() {
             Quick replies appear as buttons in the operator chat interface for fast responses
           </p>
         </section>
+        )}
 
         {/* Auto-save indicator */}
         <div className="flex justify-end gap-3 pt-4">
