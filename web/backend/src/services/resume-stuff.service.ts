@@ -222,6 +222,14 @@ function processAnswer(session: BBSSession, answer: string): void {
         const dest = path.join(state.playpenDir, p.basename);
         try {
           fs.renameSync(p.fullPath, dest);
+          // rename preserves mtime, which would leave the restored partial
+          // looking older than this logon - and cleanPlayPen now refuses to
+          // claim anything that old. Stamp it as this session's so a second
+          // abort files it again instead of orphaning it in the playpen.
+          try {
+            const nowTs = new Date();
+            fs.utimesSync(dest, nowTs, nowTs);
+          } catch { /* best effort: attribution only */ }
         } catch (err: any) {
           if (err?.code === 'EXDEV') {
             fs.copyFileSync(p.fullPath, dest);

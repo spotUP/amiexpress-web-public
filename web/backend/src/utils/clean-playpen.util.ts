@@ -28,6 +28,23 @@ export async function cleanPlayPen(
 
   const slot = session.user.slotNumber;
   const nodeId = session.nodeId || 0;
+
+  // Only claim what THIS session created.
+  //
+  // The playpen is a persistent per-node directory and nothing ever empties
+  // it - every touchpoint is mkdirSync(recursive). A session that dropped
+  // hard leaves its partial behind, and the next caller to trigger this
+  // function would have it moved to PartUpload stamped with HIS slot, so
+  // resumeStuff then offered him a file he never uploaded (live report
+  // 2026-09-08). resumeStuff's @slot filter was right; the stamp was the lie.
+  //
+  // A file older than this caller's logon is not his. Leave it exactly where
+  // it is - never branded, never deleted. With no logon time we cannot
+  // attribute anything, so we claim nothing rather than guess.
+  const logonMs = session.logonTime ? session.logonTime * 1000 : null;
+  if (logonMs === null) {
+    console.log("[cleanPlayPen] no logonTime on session; claiming nothing (cannot attribute)");
+  }
   const ownPartFiles = (config && typeof config.get === 'function')
     ? !!config.get('ownPartFiles')
     : false;
@@ -74,6 +91,11 @@ export async function cleanPlayPen(
     let stat: fs.Stats;
     try { stat = fs.statSync(src); } catch { continue; }
     if (!stat.isFile()) continue;
+
+    if (logonMs === null || stat.mtimeMs < logonMs) {
+      console.log(`[cleanPlayPen] skipped ${name}: predates this logon, not this caller's`);
+      continue;
+    }
 
     const dest = path.join(partUploadDir, `${name}${suffix}`);
     try {
