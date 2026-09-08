@@ -34,6 +34,12 @@ jest.mock('../../src/utils/acs.util', () => ({
   checkSecurity: jest.fn().mockReturnValue(false),
 }));
 
+// express.e:566 saveHistory() — persisted before the drop.
+const mockSaveHistory = jest.fn().mockResolvedValue(undefined);
+jest.mock('../../src/utils/command-history.util', () => ({
+  saveHistory: (...args: any[]) => mockSaveHistory(...args),
+}));
+
 import { checkTimeUsed } from '../../src/utils/time-tracking.util';
 
 function makeSocket() {
@@ -49,6 +55,7 @@ function makeSession(overrides: any = {}): any {
     state: BBSState.LOGGEDON,
     subState: LoggedOnSubState.READ_COMMAND,
     user: { id: 1, username: 'N', timeTotal: 3600, timeUsed: 3601 }, // over by 1s
+    flagManager: { save: jest.fn() },
     ...overrides,
   };
 }
@@ -79,6 +86,10 @@ describe('checkTimeUsed - daily time exceeded drops the line', () => {
     expect(socket.disconnect).not.toHaveBeenCalled();
     jest.advanceTimersByTime(5000);
     expect(socket.disconnect).toHaveBeenCalled();
+
+    // express.e:565-566 - flagged list + command history persisted before drop.
+    expect(session.flagManager.save).toHaveBeenCalled();
+    expect(mockSaveHistory).toHaveBeenCalledWith(session, 1);
   });
 
   it('does nothing when the caller is still under the limit', async () => {
@@ -91,5 +102,7 @@ describe('checkTimeUsed - daily time exceeded drops the line', () => {
     expect(session.state).toBe(BBSState.LOGGEDON);
     jest.advanceTimersByTime(5000);
     expect(socket.disconnect).not.toHaveBeenCalled();
+    expect(session.flagManager.save).not.toHaveBeenCalled();
+    expect(mockSaveHistory).not.toHaveBeenCalled();
   });
 });

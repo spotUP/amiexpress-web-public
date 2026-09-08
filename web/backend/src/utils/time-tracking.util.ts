@@ -120,6 +120,25 @@ export async function checkTimeUsed(socket: any, session: BBSSession): Promise<b
     // express.e:563 - Set state to logging off
     session.subState = LoggedOnSubState.LOGOFF;
 
+    // express.e:565-566 saveFlagged() + saveHistory() — persist the caller's
+    // flagged-file list and command history BEFORE the line drops. The normal
+    // Goodbye path (system-commands.handler.ts:85-93,129-133) does the same and
+    // notes that leaving it to disconnect-time cleanup loses history to a race.
+    // A timed-out caller must not lose either.
+    try {
+      session.flagManager?.save();
+    } catch {
+      // Non-fatal; never block the logoff on a persistence hiccup.
+    }
+    if (session.user.id) {
+      try {
+        const { saveHistory } = require('../utils/command-history.util');
+        await saveHistory(session, session.user.id);
+      } catch {
+        // Non-fatal.
+      }
+    }
+
     // express.e:563 modemOffHook() — DROP THE CARRIER. The port previously
     // stopped at the subState above, but no dispatcher in this codebase turns
     // subState=LOGOFF into a disconnect, so the line stayed open forever after
