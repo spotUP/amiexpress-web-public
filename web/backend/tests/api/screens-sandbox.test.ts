@@ -174,6 +174,22 @@ describe('the accounts at either end', () => {
     expect(res.status).toBe(200);
   });
 
+  it('an artist may save the screen the copy route just made them', async () => {
+    // The point of "redraw this": the copy lands inside the theme, and the
+    // very next thing the artist does is save over it. A sandbox that refused
+    // that would make the button a dead end.
+    fs.mkdirSync(path.join(root, 'Themes/neon/Board'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'Themes/neon/Board/BULL.TXT'), 'the board bulletin\r\n', 'latin1');
+
+    const res = await request(app(artist))
+      .put('/api/screens/file')
+      .query({ path: 'Themes/neon/Board/BULL.TXT' })
+      .send({ content: b64('the artist drew it\r\n') });
+
+    expect(res.status).toBe(200);
+    expect(fs.readFileSync(path.join(root, 'Themes/neon/Board/BULL.TXT'), 'latin1')).toBe('the artist drew it\r\n');
+  });
+
   it('reading is not writing - the guard leaves GET alone', async () => {
     const res = await request(app(artist)).get('/api/screens/file').query({ path: 'Screens/BULL.TXT' });
     expect(res.status).toBe(200);

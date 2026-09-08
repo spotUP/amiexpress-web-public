@@ -274,3 +274,22 @@ describe('starting a theme screen from the board', () => {
     expect((await request(app(artist)).post('/api/themes/neon/copy').send({ path: 'Screens/NOPE.TXT' })).status).toBe(404);
   });
 });
+
+test('a slug somebody already has is refused, and the first theme is untouched', () => {
+  // Two tabs of the same artist's admin, or two artists reaching for the same
+  // name: the second is told, rather than both being answered yes and the
+  // board ending up with a theme whose owner nobody agrees on. The client
+  // recovers by re-reading the list.
+  return (async () => {
+    const first = await request(app(sysop)).post('/api/themes').send({ slug: 'neon', title: 'Neon', widths: [80] });
+    expect(first.status).toBe(200);
+
+    const second = await request(app(sysop)).post('/api/themes').send({ slug: 'neon', title: 'Neon Again', widths: [80] });
+    expect(second.status).toBe(409);
+    expect(second.body.error).toMatch(/already a theme called/i);
+
+    const themes = readThemeRegistry(root).themes.filter(t => t.slug === 'neon');
+    expect(themes).toHaveLength(1);
+    expect(themes[0].title).toBe('Neon');
+  })();
+});

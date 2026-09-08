@@ -68,14 +68,24 @@ export interface ScreenEditorProps {
   onDownload?: () => void;
   /** What the index knows about this file's MCI codes - which of them resolve. */
   mci?: MciReferenceShape[];
-  onChange: (surface: EditorSurface) => void;
+  onChange?: (surface: EditorSurface) => void;
   /** The edited screen as base64 - the same shape an uploaded file arrives in. */
-  onSave: (base64: string) => void;
-  onCancel: () => void;
+  onSave?: (base64: string) => void;
+  onCancel?: () => void;
+  /**
+   * Show the art and its codes; change nothing.
+   *
+   * The board's own screen, opened by an artist who has not redrawn it into
+   * their theme yet. One component in two modes rather than a viewer beside an
+   * editor, for the reason RipScreenEditor gives: two things that draw the
+   * same file differently drift, and the artist is then redrawing what the
+   * viewer showed rather than what the board serves.
+   */
+  readOnly?: boolean;
 }
 
 export function ScreenEditor({
-  surface, mci = [], filePath, onLoadFile, onDownload, onChange, onSave, onCancel,
+  surface, mci = [], filePath, onLoadFile, onDownload, onChange, onSave, onCancel, readOnly = false,
 }: ScreenEditorProps) {
   const [cursor, setCursor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [pickingCode, setPickingCode] = useState(false);
@@ -91,6 +101,8 @@ export function ScreenEditor({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // Nothing typed reaches a screen that is not the artist's to change.
+      if (readOnly) return;
       // Typing belongs to the canvas only while the Type tool is chosen -
       // otherwise the sysop is searching, or filling in a field, and a screen
       // that ate those keystrokes would be unusable.
@@ -107,10 +119,10 @@ export function ScreenEditor({
       else if (event.key === 'Enter') { setCursor(c => ({ x: 0, y: Math.min(rows - 1, c.y + 1) })); }
       else if (event.key === 'Backspace') {
         const x = Math.max(0, cursor.x - 1);
-        onChange(typeCharacter(surface, x, cursor.y, ' '));
+        onChange?.(typeCharacter(surface, x, cursor.y, ' '));
         setCursor({ x, y: cursor.y });
       } else if (event.key.length === 1) {
-        onChange(typeCharacter(surface, cursor.x, cursor.y, event.key));
+        onChange?.(typeCharacter(surface, cursor.x, cursor.y, event.key));
         setCursor(c => ({ ...c, x: Math.min(cols - 1, c.x + 1) }));
       } else {
         return;
@@ -121,7 +133,7 @@ export function ScreenEditor({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [surface, cursor, cols, rows, onChange]);
+  }, [surface, cursor, cols, rows, onChange, readOnly]);
 
   const swatches = (which: 'fg' | 'bg') => (
     <div className="flex flex-wrap gap-1">
@@ -137,7 +149,7 @@ export function ScreenEditor({
               : 'border-border'
           }`}
           style={{ backgroundColor: color }}
-          onClick={() => onChange({ ...surface, [which]: index })}
+          onClick={() => onChange?.({ ...surface, [which]: index })}
         />
       ))}
     </div>
@@ -152,6 +164,10 @@ export function ScreenEditor({
     // tool looked like the thing it edits. The canvas draws its own font and
     // the character picker below shows real board glyphs; those keep it.
     <section className="space-y-3 border border-border p-3">
+      {/* The tools, the palette and the brushes: what a read-only view has no
+          use for. The art below is the same in both modes. */}
+      {!readOnly && (
+      <>
       <div className="flex flex-wrap items-center gap-2">
         {TOOLS.map(({ tool, label }) => (
           <button
@@ -161,7 +177,7 @@ export function ScreenEditor({
             className={`px-2 py-1 text-sm border ${
               surface.tool === tool ? 'border-border-strong text-content-primary' : 'border-border text-content-secondary'
             }`}
-            onClick={() => onChange({ ...surface, tool })}
+            onClick={() => onChange?.({ ...surface, tool })}
           >
             {label}
           </button>
@@ -189,7 +205,7 @@ export function ScreenEditor({
                 className={`w-6 h-6 font-topaz border ${
                   surface.char === char ? 'border-border-strong' : 'border-border'
                 }`}
-                onClick={() => onChange({ ...surface, char })}
+                onClick={() => onChange?.({ ...surface, char })}
               >
                 {char}
               </button>
@@ -197,6 +213,8 @@ export function ScreenEditor({
           </div>
         </div>
       </div>
+      </>
+      )}
 
       {/*
         A viewport, not the whole canvas.
@@ -216,20 +234,21 @@ export function ScreenEditor({
       >
         <AnsiCanvas
           canvas={surface.canvas}
-          cursor={surface.tool === 'text' ? cursor : null}
+          cursor={!readOnly && surface.tool === 'text' ? cursor : null}
           highlights={tokens.map(token => ({
             x: token.column, y: token.line, length: token.length, broken: !token.resolves,
           }))}
-          onCellPointer={(x, y, phase) => {
+          onCellPointer={readOnly ? undefined : (x, y, phase) => {
             if (surface.tool === 'text') {
               if (phase === 'down') setCursor({ x, y });
               return;
             }
-            onChange(pointerToCanvas(surface, x, y, phase));
+            onChange?.(pointerToCanvas(surface, x, y, phase));
           }}
         />
       </div>
 
+      {!readOnly && (
       <div className="space-y-1 text-sm">
         <span className="block text-content-secondary">
           Codes go in at the text cursor - click where you want one first
@@ -242,6 +261,7 @@ export function ScreenEditor({
           Insert a code
         </button>
       </div>
+      )}
 
       <MciPicker
         open={pickingCode || editingToken !== null}
@@ -253,19 +273,19 @@ export function ScreenEditor({
           : null}
         // The tilde that switches MCI on has to be the first character of the
         // first line, and the canvas is a grid, so that is cell 0,0.
-        onEnable={() => onChange(typeText(surface, 0, 0, '~'))}
+        onEnable={() => onChange?.(typeText(surface, 0, 0, '~'))}
         onInsert={token => {
           if (editingToken) {
             // Written over the old code's cells, padded so no tail of it is
             // left behind as art - `~CC_a|` over `~CC_gwall|` would otherwise
             // read `~CC_a|all|`.
             const edit = tokenEdit(token, editingToken.length);
-            onChange(typeText(surface, editingToken.column, editingToken.line, edit.text));
+            onChange?.(typeText(surface, editingToken.column, editingToken.line, edit.text));
             setEditingToken(null);
             return;
           }
 
-          onChange(typeText(surface, cursor.x, cursor.y, token));
+          onChange?.(typeText(surface, cursor.x, cursor.y, token));
           setCursor(c => ({ ...c, x: Math.min(cols - 1, c.x + token.length) }));
         }}
       />
@@ -316,7 +336,7 @@ export function ScreenEditor({
                       // Blanked in place: the canvas is a grid, so a code is
                       // removed by returning its cells to spaces rather than
                       // by closing the gap and shifting the art left.
-                      onChange(typeText(
+                      onChange?.(typeText(
                         surface, token.column, token.line, tokenRemoval(token.length),
                       ));
                     }}
@@ -330,7 +350,7 @@ export function ScreenEditor({
       )}
 
       <div className="flex flex-wrap items-center gap-3 text-sm">
-        {onLoadFile && (
+        {onLoadFile && !readOnly && (
           <label className="inline-flex items-center gap-1 underline cursor-pointer">
             <Upload size={14} /> Open a file into the editor
             <input
@@ -354,22 +374,28 @@ export function ScreenEditor({
             <Download size={14} /> Download
           </button>
         )}
-        <button type="button" className="inline-flex items-center gap-1 underline"
-          onClick={() => onChange(undo(surface))}>
-          <Undo2 size={14} /> Undo
-        </button>
-        <button type="button" className="inline-flex items-center gap-1 underline"
-          onClick={() => onChange(redo(surface))}>
-          <Redo2 size={14} /> Redo
-        </button>
-        <button type="button" className="inline-flex items-center gap-1 underline"
-          onClick={() => onSave(canvasToScreen(surface.canvas))}>
-          <Save size={14} /> Save
-        </button>
-        <button type="button" aria-label="Cancel editing"
-          className="inline-flex items-center gap-1 underline text-content-secondary" onClick={onCancel}>
-          <X size={14} /> Cancel
-        </button>
+        {!readOnly && (
+          <>
+            <button type="button" className="inline-flex items-center gap-1 underline"
+              onClick={() => onChange?.(undo(surface))}>
+              <Undo2 size={14} /> Undo
+            </button>
+            <button type="button" className="inline-flex items-center gap-1 underline"
+              onClick={() => onChange?.(redo(surface))}>
+              <Redo2 size={14} /> Redo
+            </button>
+            <button type="button" className="inline-flex items-center gap-1 underline"
+              onClick={() => onSave?.(canvasToScreen(surface.canvas))}>
+              <Save size={14} /> Save
+            </button>
+          </>
+        )}
+        {onCancel && (
+          <button type="button" aria-label={readOnly ? 'Close' : 'Cancel editing'}
+            className="inline-flex items-center gap-1 underline text-content-secondary" onClick={onCancel}>
+            <X size={14} /> {readOnly ? 'Close' : 'Cancel'}
+          </button>
+        )}
       </div>
     </section>
   );
