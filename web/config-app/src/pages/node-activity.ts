@@ -22,6 +22,7 @@ const EXACT: Record<string, string> = {
   process_command: 'Running a command',
   waiting: 'Idle',
   logoff: 'Logging off',
+  callerslog_node_input: 'Reading the callers log',
   conf_scan: 'Scanning conferences',
   auto_rejoin: 'Rejoining their conference',
   display_connect: 'Connecting',

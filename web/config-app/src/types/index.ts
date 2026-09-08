@@ -220,6 +220,15 @@ export interface ConferenceConfig {
   ftpdirname?: string;
   ftp_dir_days?: number;
   no_ftp_uploads?: boolean;
+  no_newscan?: boolean;
+  show_new_files?: boolean;
+  no_new_files?: boolean;
+  free_downloads?: boolean;
+  use_username?: boolean;
+  use_realname?: boolean;
+  use_internetname?: boolean;
+  menu_prompt?: string;
+  confdb_shared?: number;
   no_ftp_uploads_text?: string;
   private_conf: boolean;
   read_only: boolean;

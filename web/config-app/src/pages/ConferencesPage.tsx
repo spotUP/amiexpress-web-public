@@ -28,6 +28,21 @@ interface ConferenceFormData {
   ftp_dir_days: number;
   /** NO_FTP_UPLOADS - whether the tooltype is on the icon at all. */
   no_ftp_uploads: boolean;
+  /** NO_NEWSCAN - never include this conference in a new-message scan. */
+  no_newscan: boolean;
+  /** SHOW_NEW_FILES / NO_NEW_FILES - whether a new-files scan reaches it. */
+  show_new_files: boolean;
+  no_new_files: boolean;
+  /** FREEDOWNLOADS (express.e:5010) - downloads here cost no ratio. */
+  free_downloads: boolean;
+  /** Which name a caller wears here: USERNAME, REALNAME or INTERNETNAME. */
+  use_username: boolean;
+  use_realname: boolean;
+  use_internetname: boolean;
+  /** MENU_PROMPT (express.e:5013) - the prompt this conference shows. */
+  menu_prompt: string;
+  /** CONFDB_SHARED - the conference whose message base this one shares. */
+  confdb_shared: number;
   /** What NO_FTP_UPLOADS holds: the refusal an FTP caller reads. */
   no_ftp_uploads_text: string;
   private_conf: boolean;
@@ -77,6 +92,15 @@ export function ConferencesPage() {
     ftpdirname: '',
     ftp_dir_days: 10,
     no_ftp_uploads: false,
+    no_newscan: false,
+    show_new_files: false,
+    no_new_files: false,
+    free_downloads: false,
+    use_username: false,
+    use_realname: false,
+    use_internetname: false,
+    menu_prompt: '',
+    confdb_shared: 0,
     no_ftp_uploads_text: '',
     private_conf: false,
     read_only: false,
@@ -187,7 +211,16 @@ export function ConferencesPage() {
     exclude_ftp: false,
       ftpdirname: '',
       ftp_dir_days: 10,
-      no_ftp_uploads: false,
+    no_ftp_uploads: false,
+      no_newscan: false,
+      show_new_files: false,
+      no_new_files: false,
+      free_downloads: false,
+      use_username: false,
+      use_realname: false,
+      use_internetname: false,
+      menu_prompt: '',
+      confdb_shared: 0,
       no_ftp_uploads_text: '',
       private_conf: false,
       read_only: false,
@@ -252,6 +285,15 @@ export function ConferencesPage() {
       // so a stored 0 must survive the fallback.
       ftp_dir_days: conf.ftp_dir_days ?? 10,
       no_ftp_uploads: conf.no_ftp_uploads ?? false,
+      no_newscan: conf.no_newscan ?? false,
+      show_new_files: conf.show_new_files ?? false,
+      no_new_files: conf.no_new_files ?? false,
+      free_downloads: conf.free_downloads ?? false,
+      use_username: conf.use_username ?? false,
+      use_realname: conf.use_realname ?? false,
+      use_internetname: conf.use_internetname ?? false,
+      menu_prompt: conf.menu_prompt ?? '',
+      confdb_shared: conf.confdb_shared ?? 0,
       no_ftp_uploads_text: conf.no_ftp_uploads_text ?? '',
       private_conf: conf.private_conf,
       read_only: conf.read_only,
@@ -733,6 +775,114 @@ export function ConferencesPage() {
                     </div>
                   )}
 
+
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.no_newscan}
+                      onChange={(e) => setFormData({ ...formData, no_newscan: e.target.checked })}
+                      className="form-checkbox h-5 w-5 text-accent"
+                    />
+                    <span className="text-content-primary">Never New-Scan</span>
+                  </label>
+                  <p className="text-sm text-content-secondary ml-7 -mt-2">Skip this conference when a caller scans for new messages.</p>
+
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.show_new_files}
+                      onChange={(e) => setFormData({ ...formData, show_new_files: e.target.checked })}
+                      className="form-checkbox h-5 w-5 text-accent"
+                    />
+                    <span className="text-content-primary">Show New Files</span>
+                  </label>
+                  <p className="text-sm text-content-secondary ml-7 -mt-2">Include this conference in a new-files scan.</p>
+
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.no_new_files}
+                      onChange={(e) => setFormData({ ...formData, no_new_files: e.target.checked })}
+                      className="form-checkbox h-5 w-5 text-accent"
+                    />
+                    <span className="text-content-primary">Never New-Files Scan</span>
+                  </label>
+                  <p className="text-sm text-content-secondary ml-7 -mt-2">Skip it when a caller scans for new files.</p>
+
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.free_downloads}
+                      onChange={(e) => setFormData({ ...formData, free_downloads: e.target.checked })}
+                      className="form-checkbox h-5 w-5 text-accent"
+                    />
+                    <span className="text-content-primary">Free Downloads</span>
+                  </label>
+                  <p className="text-sm text-content-secondary ml-7 -mt-2">Downloads here do not count against the caller\u2019s ratio.</p>
+
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.use_username}
+                      onChange={(e) => setFormData({ ...formData, use_username: e.target.checked })}
+                      className="form-checkbox h-5 w-5 text-accent"
+                    />
+                    <span className="text-content-primary">Show User Names</span>
+                  </label>
+                  <p className="text-sm text-content-secondary ml-7 -mt-2">Callers appear here under their user name.</p>
+
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.use_realname}
+                      onChange={(e) => setFormData({ ...formData, use_realname: e.target.checked })}
+                      className="form-checkbox h-5 w-5 text-accent"
+                    />
+                    <span className="text-content-primary">Show Real Names</span>
+                  </label>
+                  <p className="text-sm text-content-secondary ml-7 -mt-2">Callers appear here under their real name.</p>
+
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.use_internetname}
+                      onChange={(e) => setFormData({ ...formData, use_internetname: e.target.checked })}
+                      className="form-checkbox h-5 w-5 text-accent"
+                    />
+                    <span className="text-content-primary">Show Internet Names</span>
+                  </label>
+                  <p className="text-sm text-content-secondary ml-7 -mt-2">Callers appear here under their internet name.</p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="menu_prompt" className="label">Menu Prompt</label>
+                      <input
+                        id="menu_prompt"
+                        type="text"
+                        value={formData.menu_prompt}
+                        onChange={(e) => setFormData({ ...formData, menu_prompt: e.target.value })}
+                        className="input-field w-full"
+                      />
+                      <p className="text-sm text-content-secondary mt-1">
+                        The prompt this conference shows in place of the board default.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label htmlFor="confdb_shared" className="label">Shares Message Base With</label>
+                      <input
+                        id="confdb_shared"
+                        type="number"
+                        min="0"
+                        value={formData.confdb_shared}
+                        onChange={(e) => setFormData({ ...formData, confdb_shared: parseInt(e.target.value) || 0 })}
+                        className="input-field w-full"
+                      />
+                      <p className="text-sm text-content-secondary mt-1">
+                        Conference number whose messages this one shares. 0 keeps its own.
+                      </p>
+                    </div>
+                  </div>
                   <label className="flex items-center space-x-2 cursor-pointer">
                     <input
                       type="checkbox"
