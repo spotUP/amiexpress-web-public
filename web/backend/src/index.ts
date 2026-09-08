@@ -1460,10 +1460,14 @@ console.log(
 console.log("Initializing database and loading data...");
     await initializeData(io);
 
-    // Initialize operator chat handler
-    const { initOperatorChatHandler } = await import(
-      "./handlers/operator-chat.handler"
-    );
+    // Initialize operator chat handler.
+    //
+    // `require`, NOT `await import`. Under tsx a dynamic import of a TS
+    // module yields a SECOND instance with its own module state, and under
+    // jest it yields a namespace whose function is not callable at all -
+    // "initOperatorChatHandler is not a function", which then took the
+    // whole test run down through the exit below.
+    const { initOperatorChatHandler } = require("./handlers/operator-chat.handler");
     const operatorChatRepo = db.getOperatorChatRepository();
     initOperatorChatHandler(io, operatorChatRepo);
 console.log("[OK] Operator chat handler initialized");
@@ -1727,6 +1731,17 @@ console.log("[READY] AmiExpress BBS is ready for connections!");
 console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
   } catch (error) {
 console.error("[ERROR] Failed to start server:", error);
+    /**
+     * A test that imports this module must not be able to kill the run.
+     *
+     * `process.exit(1)` here ends the JEST WORKER, so one suite that boots
+     * the server and fails takes every suite queued behind it with it - the
+     * run stops mid-way with no summary, which reads as "no tests work".
+     * A real board still exits; a test gets an error it can assert on.
+     */
+    if (process.env.JEST_WORKER_ID !== undefined || process.env.NODE_ENV === "test") {
+      throw error;
+    }
     process.exit(1);
   }
 })();
