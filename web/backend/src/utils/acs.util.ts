@@ -159,6 +159,34 @@ export function getACSConfig(): ACSConfig {
  * @param userKeys - User key flags (optional, can be part of user object)
  * @returns true if user has permission, false otherwise
  */
+/**
+ * The board's access files are read before any question is answered.
+ *
+ * BBS root contains the Access/ directory. On dev (localhost) the BBS lives
+ * at the project root, so cwd-relative ../.. works. On production (docker)
+ * the BBS data is mounted at $BBS_DATA_DIR (/app/data/bbs), and cwd-relative
+ * ../.. lands on /app - which has no Access/ subdirectory, causing ALL ACS
+ * lookups to deny. That left sysop locked out of `j`, `who`, `b`, `r`, etc.
+ * on live for months. Honour BBS_ROOT, then BBS_DATA_DIR, then the dev-only
+ * cwd fallback.
+ *
+ * This used to run at login only (initializeSecurity). A session that reaches
+ * a permission check WITHOUT having come through that path - the board
+ * restarts under a caller and the session is rebuilt, which a deploy does
+ * several times an evening - then asked an empty ACS set, and findAcsLevel
+ * answers -1 before the files are read, which denies EVERYTHING. A level-255
+ * sysop was told `User does not exist!!` for EALL on a board whose
+ * ACS.255.info grants it.
+ */
+export function ensureAcsLoaded(): void {
+  if (isAcsLoaded()) return;
+  const bbsRoot =
+    process.env.BBS_ROOT ||
+    process.env.BBS_DATA_DIR ||
+    path.resolve(process.cwd(), '..', '..');
+  loadAcsAccessFiles(bbsRoot);
+}
+
 export function checkSecurity(
   user: User | null,
   securityFlag: ACSPermission,
@@ -226,7 +254,10 @@ export function checkSecurity(
   }
 
   // express.e:8491 - IF (acsLevel=-1) THEN RETURN FALSE
-  // Compute acsLevel from loaded ACS files (express.e:3025-3035 findAcsLevel)
+  // Compute acsLevel from loaded ACS files (express.e:3025-3035 findAcsLevel).
+  // The files are read here rather than trusted to have been read: an
+  // unloaded set answers -1, which denies every permission on the board.
+  ensureAcsLoaded();
   const acsLevel = findAcsLevelFromFiles(user.secLevel);
   if (acsLevel === -1) return false;
 
@@ -468,22 +499,7 @@ export function checkOverrideDefaults(session: any): boolean {
 export function initializeSecurity(session: any): void {
   if (!session.user) return;
 
-  // Load ACS access files if not already loaded
-  if (!isAcsLoaded()) {
-    // BBS root contains the Access/ directory. On dev (localhost) the
-    // BBS lives at the project root, so cwd-relative ../.. works. On
-    // production (docker) the BBS data is mounted at $BBS_DATA_DIR
-    // (/app/data/bbs), and cwd-relative ../.. lands on /app — which
-    // has no Access/ subdirectory, causing ALL ACS lookups to deny.
-    // That left sysop locked out of `j`, `who`, `b`, `r`, etc. on
-    // live for months. Honour BBS_ROOT, then BBS_DATA_DIR, then the
-    // dev-only cwd fallback.
-    const bbsRoot =
-      process.env.BBS_ROOT ||
-      process.env.BBS_DATA_DIR ||
-      path.resolve(process.cwd(), '..', '..');
-    loadAcsAccessFiles(bbsRoot);
-  }
+  ensureAcsLoaded();
 
   // Calculate ACS level using file-based scanning (express.e:3025-3035)
   session.acsLevel = findAcsLevelFromFiles(session.user.secLevel || 0);
