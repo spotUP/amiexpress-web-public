@@ -51,7 +51,11 @@ export interface LrzszTransferOptions {
   paths: string[];
   /** Override the spawned binary (sz/rz). Default: 'sz' / 'rz'. */
   binary?: string;
-  /** Spawn timeout (ms). Default 10 minutes. */
+  /**
+   * How long the transfer may be SILENT before it is killed, in ms.
+   * Default 5 minutes. Not a limit on how long a transfer may take - see
+   * `touch()`. 0 disables the watchdog.
+   */
   timeoutMs?: number;
   onComplete?: (success: boolean, detail: {
     received: string[];
@@ -109,7 +113,8 @@ export class LrzszTransferManager {
     this.direction = opts.direction;
     this.paths = opts.paths || [];
     this.binary = opts.binary || (this.direction === 'download' ? 'sz' : 'rz');
-    this.timeoutMs = opts.timeoutMs ?? 10 * 60 * 1000;
+    // An IDLE timeout, not a total-duration one. See `touch()`.
+    this.timeoutMs = opts.timeoutMs ?? 5 * 60 * 1000;
     this.onComplete = opts.onComplete;
   }
 
@@ -170,6 +175,7 @@ export class LrzszTransferManager {
     // \r\n\x11 which every client recognises.
     proc.stdout?.on('data', (chunk: Buffer) => {
       try {
+        this.touch();
         this.processStdoutChunk(chunk);
       } catch (err) {
         console.error(`[lrzsz ${this.direction}] transport.send failed:`, err);
@@ -216,13 +222,36 @@ export class LrzszTransferManager {
       this.finish(code === 0, code, signal);
     });
 
-    // Watchdog
-    if (this.timeoutMs > 0) {
-      this.timer = setTimeout(() => {
-        console.warn(`[lrzsz ${this.direction}] timeout (${this.timeoutMs}ms), killing`);
-        this.cancel();
-      }, this.timeoutMs);
-    }
+    // Watchdog. See `touch()` for why this measures silence and not duration.
+    this.touch();
+  }
+
+  /**
+   * Restart the watchdog, because the transfer is alive.
+   *
+   * This used to be a single `setTimeout` armed at spawn: ten minutes after
+   * the transfer STARTED, the child was killed, however well it was going. On
+   * a dial-up-rate connection - which is the point of this board - a large
+   * file legitimately takes longer than that, so the watchdog killed exactly
+   * the transfers it existed to protect, and the caller lost the lot.
+   *
+   * express has no such timer at all. It relies on the protocol's own
+   * timeouts and on carrier detect, and ZMODEM already retries and resyncs on
+   * its own. So the only thing worth killing is a transfer that has gone
+   * SILENT, and the measure is time since the last byte in either direction,
+   * not time since the start.
+   */
+  private touch(): void {
+    if (this.timeoutMs <= 0) return;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      console.warn(
+        `[lrzsz ${this.direction}] no data for ${this.timeoutMs}ms, killing`,
+      );
+      this.cancel();
+    }, this.timeoutMs);
+    // A watchdog must never be the reason the process stays up.
+    this.timer.unref?.();
   }
 
   /**
@@ -258,6 +287,7 @@ export class LrzszTransferManager {
           require('fs').appendFileSync(`/tmp/rz-stdin-tee-${this.direction}.bin`, rewritten);
         } catch (_e) { /* ignore */ }
       }
+      this.touch();
       this.proc.stdin.write(rewritten);
     } catch (err) {
       console.error(`[lrzsz ${this.direction}] stdin.write failed:`, err);
@@ -610,10 +640,21 @@ export class LrzszTransferManager {
     //      `C` + CAN abort sequence, and exits 128 before the
     //      browser's send_files() has a chance to emit ZFILE.
     //   -vv verbose to stderr
-    // TP-12: not-telnet takes these. `-y` (overwrite) rather than `-r`
-    // (resume) is right wherever the sender is not a serial-line telnet
-    // client mid-stream, and SSH is not.
-    if (this.transport.type !== 'telnet') {
+    // What decides this is the CLIENT, not the transport.
+    //
+    // TP-12 grouped SSH with the browser on the grounds that SSH "is not a
+    // serial-line telnet client mid-stream". But the paragraph above gives the
+    // real discriminator, and it is ZRPOS: the browser's zmodem.js does not
+    // implement it, and every terminal program that speaks ZMODEM does. An
+    // SSH caller is running MuffinTerm or SyncTerm or mTelnet - the same
+    // programs as a telnet caller, over a different pipe - so SSH resumes
+    // exactly as well as telnet does, and only the browser cannot.
+    //
+    // The cost of having it backwards was that an interrupted upload over SSH
+    // could not be resumed: rz overwrote from byte zero, and the caller sent
+    // the whole file again. express resumes (`-r` is its behaviour, and
+    // `resumeStuff()` exists for it).
+    if (this.transport.type === 'web') {
       return ['-b', '-y', '-t', '600', '-vv'];
     }
     return ['-b', '-r', '-t', '600', '-vv'];

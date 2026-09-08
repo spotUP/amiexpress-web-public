@@ -16,6 +16,7 @@
  * in any transport-specific path.
  */
 import type { BBSSession } from '../index';
+import * as path from 'path';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { config } from '../config';
 import { callersLog } from '../server/database-helpers';
@@ -157,6 +158,34 @@ export async function runPostUpload(
     } catch (err: any) {
       console.error(`[postUpload] KEEP_UPLOAD_CREDIT persist failed: ${err?.message || err}`);
     }
+  }
+
+  /**
+   * express.e:18915 — cleanPlayPen(), at the end of this very procedure.
+   *
+   * Whatever is still in the node's playpen when an upload session ends is a
+   * partial file. express files each one away as
+   * `<conf>/PartUpload/<name>@<slot>` so that `resumeStuff()` can offer it
+   * back on the caller's next upload, which is how a dropped 40MB upload
+   * resumes instead of starting again.
+   *
+   * `cleanPlayPen` was ported, documented, and called by NOTHING - the
+   * playpen was never swept, PartUpload never filled, and so resume had
+   * nothing to find and never fired. Wiring it here is what makes the resume
+   * path that already exists actually reachable.
+   */
+  try {
+    const { cleanPlayPen } = require('../utils/clean-playpen.util');
+    // getPlaypenDir, not a hand-built path, so this agrees with every other
+    // caller about where the playpen is. Its optional RAMPEN argument
+    // (express's sopt.ramPen, express.e:28940) is left unset because this
+    // board has no such setting to read.
+    const { getPlaypenDir } = require('../utils/bbs-paths.util');
+    const playpenDir = getPlaypenDir(session.nodeId || 0, config.get('dataDir'));
+    await cleanPlayPen(playpenDir, session, config);
+  } catch (err: any) {
+    // A failure to sweep must never swallow the caller's upload result.
+    console.error(`[postUpload] cleanPlayPen failed: ${err?.message || err}`);
   }
 
   // Caller cleanup (e.g. clearUploadContext for web) — must run before
