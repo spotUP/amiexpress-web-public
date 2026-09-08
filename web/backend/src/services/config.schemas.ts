@@ -194,6 +194,8 @@ export const SystemConfigSchema = z.object({
   zmodem_packetlen: z.number().int().min(128).max(8192).optional(),
   // express.e:31826 - count an input timeout as a dropped call in the log.
   timeout_lc: z.boolean().optional(),
+  // express.e:31991 - the name VER says the board is registered to.
+  reg_key: z.string().max(100).optional(),
 
   // Accounts, uploads and file descriptions
   auto_deactivate_days: z.number().int().min(0).optional(),

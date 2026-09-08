@@ -56,6 +56,19 @@ export interface YmodemOptions {
   onFileComplete?: (filename: string, success: boolean) => void;
   onError?: (error: string) => void;
   onComplete?: (success: boolean, files: string[]) => void;
+  /**
+   * express.e:16831 `zmdupecheck`, asked from xymodem.e:1082 - the same
+   * question ZMODEM asks, at the only place YMODEM can ask it: the header
+   * block that names the file.
+   *
+   * A YES CANCELS THE WHOLE TRANSFER, and that is the protocol's own doing.
+   * ZMODEM has ZSKIP, so a duplicate costs one file; YMODEM has no per-file
+   * refusal, so express calls `xmodem_cancel` (xymodem.e:1084) and stops the
+   * batch. Absent means accept everything, which is what a sysop upload wants.
+   */
+  isDuplicate?: (filename: string) => boolean | Promise<boolean>;
+  /** Told when a file was refused, so the caller can say so on the screen. */
+  onDuplicate?: (filename: string) => void;
 }
 
 export interface FileToSend {
@@ -439,6 +452,34 @@ console.log('[YMODEM] End of batch signaled');
 
 console.log(`[YMODEM] Receiving file: ${filename} (${fileSize} bytes)`);
 
+    // THE DUPLICATE IS ANSWERED HERE, before a byte of the file arrives -
+    // xymodem.e:1082-1087. The sender is waiting for our ACK of block 0, so
+    // holding it while the rule answers costs nothing and is the only window
+    // the protocol gives us.
+    if (this.options.isDuplicate) {
+      Promise.resolve()
+        .then(() => this.options.isDuplicate!(filename))
+        .then((duplicate) => {
+          if (!duplicate) return this.acceptFileHeader(filename, fileSize);
+          console.log(`[YMODEM] duplicate ${filename} - cancelling the batch`);
+          this.options.onDuplicate?.(filename);
+          // xymodem.e:1084 - a cancel, because YMODEM has no ZSKIP.
+          this.cancel();
+        })
+        .catch((error) => {
+          // A rule that throws must not cost the caller his upload; the
+          // post-transfer filing still catches the duplicate.
+          console.error('[YMODEM] duplicate check failed, accepting file:', error);
+          this.acceptFileHeader(filename, fileSize);
+        });
+      return;
+    }
+
+    this.acceptFileHeader(filename, fileSize);
+  }
+
+  /** The rest of block 0, once the file is known to be wanted. */
+  private acceptFileHeader(filename: string, fileSize: number): void {
     this.currentReceiveFilename = filename;
     this.expectedFileSize = fileSize;
     this.receivedBlocks = [];

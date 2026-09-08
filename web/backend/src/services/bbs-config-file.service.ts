@@ -222,6 +222,17 @@ export interface BBSConfigData {
    * the CallersLog back.
    */
   timeout_lc?: boolean;
+  /**
+   * `REGKEY` (express.e:31991) - the name this board is registered to, printed
+   * by `VER` ("Registered to \s.", :25696) and in express's connect banner
+   * (:29516).
+   *
+   * express defaults it to `NONE`, meaning an unregistered copy of shareware.
+   * That does not apply here and would make every board's VER line read
+   * `Registered to NONE.`, so the default stays the line this port has always
+   * printed and the tooltype overrides it.
+   */
+  reg_key?: string;
 
   // Accounts and uploads
   auto_deactivate_days?: number;
@@ -461,6 +472,7 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'NEWUSER_PASSWORD': 'new_user_password',           // ACP.e:2632 express.e:30013
   'ZMODEM_PACKETLEN': 'zmodem_packetlen',            // sz -L, this port's own knob
   'TIMEOUT_LC': 'timeout_lc',                        // express.e:31826
+  'REGKEY': 'reg_key',                               // express.e:31991
 
   // Accounts, uploads and file descriptions
   'AUTO_DEACTIVATE_DAYS': 'auto_deactivate_days',
@@ -1100,6 +1112,7 @@ function getDefaultConfig(): BBSConfigData {
     new_user_password: '',
     zmodem_packetlen: 1024,
     timeout_lc: false,
+    reg_key: '',
     auto_deactivate_days: 0,
     local_upload_path: '',
     filediz_syscmd: '',

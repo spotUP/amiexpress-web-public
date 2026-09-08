@@ -284,6 +284,27 @@ console.log(`[TRANSFER] Starting ${this.protocol} ${this.direction}`);
   private async startYmodem(): Promise<void> {
     this.manager = new YmodemTransferManager({
       use1kBlocks: true,
+      // express.e:16831's rule, asked at the header block (xymodem.e:1082) -
+      // the same question the ZMODEM path asks at the ZFILE. Uploads only: a
+      // download has nothing to be a duplicate of.
+      isDuplicate: this.direction === 'upload'
+        ? (name: string) => {
+            const { uploadIsDuplicate } = require('./upload-duplicate.service');
+            const { config } = require('../config');
+            return uploadIsDuplicate({
+              filename: name,
+              conferenceId: (this.session as any)?.currentConf ?? 1,
+              bbsRoot: config.get('dataDir'),
+            });
+          }
+        : undefined,
+      onDuplicate: (name: string) => {
+        // YMODEM cancels the batch rather than skipping one file, so the
+        // caller is told why his transfer stopped.
+        try {
+          this.transport.send(Buffer.from(`\r\n${name} is already on the board - transfer cancelled.\r\n`, 'latin1'));
+        } catch { /* the line is already gone */ }
+      },
       onProgress: (filename, transferred, total) => {
         this.bytesTransferred = transferred;
         if (this.options.onProgress) {
