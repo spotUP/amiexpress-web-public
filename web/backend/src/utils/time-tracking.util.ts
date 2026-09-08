@@ -10,6 +10,7 @@ import { checkSecurity } from './acs.util';
 import { ACSPermission } from '../constants/acs-permissions';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { displayScreen } from '../handlers/screen.handler';
+import { beginLogoff } from '../server/logoff';
 
 /**
  * Update time used in session based on elapsed time since last update.
@@ -118,6 +119,16 @@ export async function checkTimeUsed(socket: any, session: BBSSession): Promise<b
 
     // express.e:563 - Set state to logging off
     session.subState = LoggedOnSubState.LOGOFF;
+
+    // express.e:563 modemOffHook() — DROP THE CARRIER. The port previously
+    // stopped at the subState above, but no dispatcher in this codebase turns
+    // subState=LOGOFF into a disconnect, so the line stayed open forever after
+    // the LOGON24 screen (telnet callers hung). beginLogoff() is the canonical
+    // teardown (server/logoff.ts): it sets session.state=LOGGING_OFF and
+    // force-closes the transport (telnet emitter's disconnect/end/destroy all
+    // call connection.close()). The read delay lets the LOGON24 screen render
+    // before the drop, matching the ~2s window the normal Goodbye path uses.
+    beginLogoff(socket, session, { readDelayMs: 2000 });
 
     return true;
   }
