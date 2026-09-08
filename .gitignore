@@ -601,3 +601,7 @@ user.misc
 User.misc
 Node*/DOOR.SYS
 Node*/DORINFO*.DEF
+
+# The global-requests door holds the board secret in its cfg beside the
+# binary; never commit it.
+Doors/REQUESTS/REQUESTS.cfg

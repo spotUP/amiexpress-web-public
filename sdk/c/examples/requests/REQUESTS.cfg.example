@@ -1,0 +1,13 @@
+# REQUESTS.cfg - the global-requests door's own config, read from beside the
+# executable (PROGDIR:). A 68K door cannot ask the BBS for the board's
+# encrypted key, so the sysop puts it here. Keep this file out of the file
+# areas and out of git: it holds the board secret.
+#
+# Copy to REQUESTS.cfg next to the binary and fill BoardKey=.
+
+Host=doors.uprough.net
+Port=80
+# The key the door server minted for this board: <board-id>.<secret>.
+BoardKey=
+# Seconds to wait on the connect and each read. 1..119; default 10.
+Timeout=10

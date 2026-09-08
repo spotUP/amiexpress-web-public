@@ -33,7 +33,7 @@ NDK  ?= /opt/homebrew/Cellar/m68k-amiga-elf-gcc/13.1.0/m68k-amiga-elf/sys-includ
 VC    = VBCC=$(VBCC) vc
 AMIGA_CFLAGS = +aos68k -c99 -DAMIGA -Iinclude -I"$(VBCC)/targets/m68k-amigaos/include" -I"$(NDK)"
 
-MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_theme ui_settings json_lite ae_chunk ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve
+MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_doc ui_theme ui_settings json_lite ae_chunk ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve ae_request
 AMIGA_OBJS = $(patsubst %,build/amiga/%.o,$(MODULES))
 
 .PHONY: all test amiga lib measure clean
@@ -44,7 +44,7 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve
+test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
@@ -56,6 +56,7 @@ test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_
 	./build/test_ui_doc
 	./build/test_ae_http
 	./build/test_ae_achieve
+	./build/test_ae_request
 
 build/test_ae_host: src/ae_host.c tests/test_ae_host.c include/ae_host.h
 	@mkdir -p build
@@ -104,6 +105,10 @@ build/test_ae_achieve: src/ae_achieve.c src/ae_http.c src/ae_net.c src/json_lite
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) -D_DEFAULT_SOURCE src/ae_achieve.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c tests/test_ae_achieve.c -o $@
 
+build/test_ae_request: src/ae_request.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c tests/test_ae_request.c include/ae_request.h include/ae_http.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) -D_DEFAULT_SOURCE src/ae_request.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c tests/test_ae_request.c -o $@
+
 # The generated table must match tokens.ts. Needs node; skipped where there
 # is none, because a C toolchain is not required to have one.
 .PHONY: check-themes
@@ -114,7 +119,7 @@ check-themes:
 # The 68K library and the two yardstick doors
 # ---------------------------------------------------------------------
 
-amiga: lib build/amiga/hello build/amiga/hello_box build/amiga/hello_list build/amiga/theme-picker build/amiga/achieve build/amiga/bench_repaint build/amiga/bench_repaint11
+amiga: lib build/amiga/hello build/amiga/hello_box build/amiga/hello_list build/amiga/theme-picker build/amiga/achieve build/amiga/requests build/amiga/bench_repaint build/amiga/bench_repaint11
 
 lib: build/amiga/libae.lib
 
@@ -166,6 +171,13 @@ build/amiga/theme-picker: examples/theme-picker/theme_picker.c build/amiga/libae
 	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
 
 build/amiga/achieve: examples/achieve/achieve.c build/amiga/libae.lib
+	@mkdir -p build/amiga
+	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
+
+# The global-requests door: reads and writes through ae_request, drawn with
+# the same widgets. Links the WHOLE library; make measure proves only what it
+# calls costs bytes.
+build/amiga/requests: examples/requests/requests.c build/amiga/libae.lib
 	@mkdir -p build/amiga
 	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
 
