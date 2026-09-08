@@ -106,6 +106,15 @@ export const TOOL_AI_BUDGET_MS = 35000;
 export const PER_ROUND_MS = 12000;
 
 /**
+ * How long the co-sysop's reply may be.
+ *
+ * 1 000 tokens of budget is 1 000 tokens a slow model may spend generating,
+ * and the caller waits for every one of them. The bot answers in a line or
+ * three; the tool loop gets the same cap for the same reason.
+ */
+export const CHAT_REPLY_TOKENS = 400;
+
+/**
  * WHICH FREE MODEL ANSWERS FASTEST - measured, not guessed.
  *
  * The picker ranked free tool-capable models by CONTEXT LENGTH, which says
@@ -177,7 +186,69 @@ export function modelCostMs(model: string, now = Date.now()): number {
 }
 
 /** Test seam. */
+/**
+ * MEASURE A MODEL WITHOUT MAKING ANYBODY WAIT FOR IT.
+ *
+ * The ranking is only as good as what has been measured, and the only way a
+ * model got measured was by answering a caller - so every unmeasured model
+ * cost somebody a slow reply before it could sink, and this board is offered
+ * sixteen tool-capable free ones. The sysop, after the costs began to
+ * persist and the picker still reached for a 550-billion-parameter model:
+ * "the ai sysop is still super slow to reply in the operator chat it should
+ * be instant".
+ *
+ * So the board measures them itself, one at a time, off the caller's path: a
+ * five-token prompt, a short timeout, and the result recorded exactly as a
+ * real reply would record it. Fire and forget - nothing waits for this, and a
+ * failure only marks the model.
+ */
+let probing = false;
+export async function probeAnUnmeasuredModel(
+  aiConfig: AIProviderConfig,
+  post?: (model: string, timeoutMs: number) => Promise<unknown>,
+): Promise<string | null> {
+  if (probing) return null;
+  const apiKey = aiConfig.openRouterApiKey || process.env.OPENROUTER_API_KEY;
+  if (!apiKey && !post) return null;
+
+  const unmeasured = cachedFreeModels.find((id) => !costs().has(id));
+  if (!unmeasured) return null;
+
+  probing = true;
+  const startedAt = Date.now();
+  try {
+    const send = post ?? (async (model: string, timeoutMs: number) => (await axios.post(
+      'https://openrouter.ai/api/v1/chat/completions',
+      { model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 5 },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': 'https://amiexpress.com',
+          'X-Title': 'AmiExpress BBS',
+        },
+        timeout: timeoutMs,
+      },
+    )).data);
+
+    await send(unmeasured, PROBE_TIMEOUT_MS);
+    noteModelCost(unmeasured, Date.now() - startedAt, true);
+  } catch {
+    // A model that will not answer a five-token prompt is not one to hand a
+    // caller. The failure is the measurement.
+    noteModelCost(unmeasured, PROBE_TIMEOUT_MS, false);
+  } finally {
+    probing = false;
+    cachedFreeModels = rankFreeModels([...knownFreeModels.values()]);
+  }
+  return unmeasured;
+}
+
+/** How long a probe waits before calling the model too slow to bother with. */
+export const PROBE_TIMEOUT_MS = 8000;
+
 export function resetModelCosts(): void {
+  probing = false;
   modelCostCache = new Map();
   if (costFlush) { clearTimeout(costFlush); costFlush = undefined; }
 }
@@ -221,12 +292,28 @@ export function rankFreeModels(models: OpenRouterModel[], now = Date.now()): str
   return models
     .filter(isFreeModel)
     .filter((m) => !m.id.toLowerCase().includes('think'))
-    // Tools first (the loop needs them), then the fastest measured round
-    // trip, then the larger context as a tie-break among the untried.
+    /*
+     * Tools first (the loop needs them), then the fastest MEASURED round trip -
+     * and among models nothing has measured yet, the SMALLER context.
+     *
+     * The tie-break used to be the larger context, and every untried model
+     * costs the same 6 000 ms guess, so with sixteen untried tool-capable
+     * models the board systematically reached for the biggest thing on the
+     * list. The live log, after the costs began to persist:
+     *
+     *   Trying OpenRouter (nvidia/nemotron-3.5-lightning:free) with 15 tools
+     *   Trying OpenRouter (nvidia/nemotron-3-ultra-550b-a55b:free) with 15 tools
+     *
+     * A one-million-token context and 550 billion parameters is not what a
+     * two-line chat reply needs, and the first of those is the model measured
+     * at 21.4 s. Context length says nothing about speed, but the SIGN of the
+     * correlation is not neutral: the giant models are the slow ones, so the
+     * guess costs the caller less when it leans small.
+     */
     .sort((a, b) =>
       Number(supportsTools(b)) - Number(supportsTools(a)) ||
       modelCostMs(a.id, now) - modelCostMs(b.id, now) ||
-      (b.context_length ?? 0) - (a.context_length ?? 0))
+      (a.context_length ?? 0) - (b.context_length ?? 0))
     .map((m) => m.id);
 }
 
@@ -541,6 +628,7 @@ console.log(`[Grumpy Bot] Trying OpenRouter (${freeModel}) with ${context.tools.
         ctx: context.tools.ctx,
         deadline: cfgDeadline(aiConfig),
         perRoundMs: PER_ROUND_MS,
+        maxTokens: CHAT_REPLY_TOKENS,
         temperature: aiConfig.temperature,
         post: async (body, timeoutMs) => (await axios.post('https://openrouter.ai/api/v1/chat/completions', body, { headers, timeout: timeoutMs })).data,
       });
@@ -579,7 +667,9 @@ console.log(`[Grumpy Bot] Trying OpenRouter (${freeModel})...`);
       {
         model: freeModel,
         messages: messages,
-        max_tokens: 1000,
+        // A co-sysop's line, not an essay: generation time is most of the wait
+        // on a big model, and nothing the bot says needs a thousand tokens.
+        max_tokens: CHAT_REPLY_TOKENS,
         temperature: aiConfig.temperature,
       },
       { headers, timeout: callTimeout }
@@ -691,6 +781,9 @@ export async function getGrumpySysopResponse(
   const aiResponse = await getAIResponse(userMessage, untaggedHistory(context), cfg);
   if (aiResponse) {
 console.log('[Grumpy Bot] Using AI response');
+    // The caller has their answer; the board spends the quiet moment learning
+    // what the NEXT model on the list costs, so nobody pays for it in a chat.
+    void probeAnUnmeasuredModel(cfg).catch(() => undefined);
     return stripEngineTag(aiResponse).trim();
   }
 

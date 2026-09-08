@@ -159,8 +159,25 @@ console.log('[Operator Chat] Handler initialized');
       // Join user-specific rooms AND sysops broadcast room
       socket.join(`user:${session.user.id}`);
       socket.join('sysops'); // Global sysops room for broadcasts
+
+      /*
+       * AND EVERY CHAT ALREADY RUNNING.
+       *
+       * A message goes to `page:<id>`, and a sysop joins that room when they
+       * TAKE a page - once, on that socket. Every reconnect since (a deploy,
+       * a dropped websocket, a reopened tab) produced a socket in `sysops` and
+       * in no page room at all, so the chat went silent while the board went
+       * on writing to a room nobody was in. The sysop, mid-conversation with
+       * the co-sysop: "he has only replied on my first message and its been
+       * minutes waiting on the second" - both replies were in the log, and in
+       * the database; the second was emitted into an empty room.
+       */
+      for (const [pageId] of activeChatSessions) {
+        socket.join(`page:${pageId}`);
+      }
+
       repository.updateSysopStatus(session.user.id, SysopAvailability.AVAILABLE, 'Online');
-console.log(`[Operator Chat] Sysop ${session.user.username} (ID:${session.user.id}) connected, joined sysops room`);
+console.log(`[Operator Chat] Sysop ${session.user.username} (ID:${session.user.id}) connected, joined sysops room and ${activeChatSessions.size} chat room(s)`);
     } else if (session?.user) {
 console.log(`[Operator Chat] Non-sysop user ${session.user.username} (secLevel:${session.user.secLevel}) connected`);
     } else {

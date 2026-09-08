@@ -50,6 +50,9 @@ interface NodeStatus {
   reservedFor: string | null;
 }
 
+/** Just the fields the diagnostic above reads. */
+type BBSSessionLike = { socketId?: string };
+
 export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof express.Router> {
   const router = express.Router();
 
@@ -319,9 +322,22 @@ export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof e
     // the kick now cross.
     const target = emitterForNodeId(nodeId, io);
     if (!target) {
+      // SAY WHAT WAS MISSING. "has no active connection" sent the sysop back
+      // to the browser console three times over; the board knows which of the
+      // three lookups came up empty and there is no reason not to say so.
+      const session = sessions.get(nodeId.toString()) as
+        (BBSSessionLike & { connectionEmitter?: unknown }) | undefined;
+      const detail = !session
+        ? 'no session'
+        : session.connectionEmitter
+          ? 'a registered emitter that is gone'
+          : session.socketId
+            ? `socket ${session.socketId}, which the server does not have`
+            : 'a session with no socket recorded';
+      console.warn(`[Node Control] Kick refused for node ${nodeId}: ${detail}`);
       return res.status(404).json({
         success: false,
-        message: `Node ${nodeId} has no active connection`,
+        message: `Node ${nodeId} has no active connection (${detail})`,
       });
     }
 

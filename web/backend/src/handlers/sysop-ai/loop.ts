@@ -23,6 +23,8 @@ export interface ToolLoopRequest {
   deadline: number;
   /** The longest ONE round trip may take, whatever is left of the deadline. */
   perRoundMs?: number;
+  /** How long the reply may be; the wait is mostly generation on a big model. */
+  maxTokens?: number;
   temperature?: number;
   /** POST the chat/completions body; returns the parsed response data. */
   post: (body: Record<string, unknown>, timeoutMs: number) => Promise<any>;
@@ -66,7 +68,9 @@ console.log('[Grumpy Bot] tool loop: out of time before the reply');
     const body: Record<string, unknown> = {
       model: req.model,
       messages,
-      max_tokens: 1000,
+      // The caller waits for every token a slow model generates, and a
+      // co-sysop answers in a line or three.
+      max_tokens: req.maxTokens ?? 400,
       temperature: req.temperature,
       ...(round < MAX_ROUNDS && definitions.length ? { tools: definitions, tool_choice: 'auto' } : {}),
     };

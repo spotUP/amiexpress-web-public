@@ -103,7 +103,45 @@ export function emitterForSession(
   if (!session) return null;
   const registered = (session as SessionWithEmitter).connectionEmitter;
   if (registered) return registered;
-  return liveSocket(session.socketId, io);
+
+  const byId = liveSocket(session.socketId, io);
+  if (byId) return byId;
+
+  /*
+   * THE SESSION'S OWN SOCKET, FOUND IN THE NAMESPACE.
+   *
+   * `session.socketId` is written by `setSession` and by the restore path, and
+   * a web caller whose socket changed by any OTHER route leaves it stale - at
+   * which point this module says "no live sink" about a caller who is plainly
+   * online. The sysop hit it twice trying to kick his own node: "POST
+   * /api/nodes/1/kick 404 (Not Found) ... Node 1 has no active connection",
+   * while the board's node list showed him on node 1.
+   *
+   * This is not a second source of truth: it asks the SAME namespace the same
+   * question, keyed on the session object itself, and writes the answer back
+   * so the next lookup is direct again.
+   */
+  const found = socketCarrying(session, io);
+  if (found) {
+    session.socketId = found.id;
+    return found;
+  }
+  return null;
+}
+
+/** The socket in the namespace whose session IS this one, or null. */
+function socketCarrying(session: BBSSession, io?: IOServer | null): Socket | null {
+  const sockets = io?.sockets?.sockets;
+  if (!sockets) return null;
+  for (const socket of sockets.values()) {
+    const carried = (socket as unknown as { session?: BBSSession }).session;
+    if (carried === session) return socket;
+    // A restored session is a NEW object on the same node for the same user,
+    // which is the case `===` misses.
+    if (carried && session.nodeId && carried.nodeId === session.nodeId
+      && carried.user?.id && carried.user.id === session.user?.id) return socket;
+  }
+  return null;
 }
 
 /** `{ emitter, session }` for a node number, or null. */

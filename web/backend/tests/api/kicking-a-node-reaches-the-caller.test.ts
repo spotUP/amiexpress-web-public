@@ -81,6 +81,46 @@ test('a telnet caller is kicked too - they never had a socket.io socket at all',
   expect(emitted).toContain('disconnect');
 });
 
+test('a web caller whose socket id went stale is still reached', async () => {
+  // The session says one socket; the namespace holds another carrying the same
+  // session. Live symptom: "Node 1 has no active connection" about a caller
+  // the board's own node list showed online.
+  const session: any = {
+    user: { id: 'u3', username: 'spot' }, nodeId: 3, connectionType: 'web',
+    socketId: 'a-socket-that-is-gone',
+  };
+  const emitted: string[] = [];
+  const socket: any = {
+    id: 'the-one-he-is-really-on',
+    session,
+    emit: (event: string) => emitted.push(event),
+    disconnect: () => emitted.push('disconnect'),
+  };
+  sessions.set('3', session);
+
+  const res = await request(app(ioWith('the-one-he-is-really-on', socket)))
+    .post('/api/nodes/3/kick').send({});
+
+  expect(res.status).toBe(200);
+  expect(emitted).toContain('disconnect');
+  // And the session now points at the socket it was found on.
+  expect(session.socketId).toBe('the-one-he-is-really-on');
+});
+
+test('a refusal says which of the three lookups came up empty', async () => {
+  const session: any = {
+    user: { id: 'u4', username: 'ghost' }, nodeId: 4, connectionType: 'web',
+    socketId: 'long-gone',
+  };
+  sessions.set('4', session);
+
+  const res = await request(app(ioWith('somebody-else', { id: 'somebody-else' })))
+    .post('/api/nodes/4/kick').send({});
+
+  expect(res.status).toBe(404);
+  expect(String(res.body.message)).toContain('long-gone');
+});
+
 test('a node nobody is on is still a 404', async () => {
   const res = await request(app(ioWith('x', {}))).post('/api/nodes/9/kick').send({});
 
