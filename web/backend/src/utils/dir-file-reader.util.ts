@@ -104,9 +104,11 @@ export function parseDirEntry(lines: string[], startIndex: number): DirFileEntry
   const dateField = fields.length >= 3 ? fields[2] : '';
 
   // express.e's own two-digit year: `ydt > year` compares them raw, with no
-  // century at all. A Date needs one, so the usual pivot - 80 and up is the
-  // 1900s, which puts a 1992 Amiga upload in 1992 and a 2026 one in 2026.
-  const century = (yy: number): number => (yy >= 80 ? 1900 + yy : 2000 + yy);
+  // century at all. A Date needs one, and express picks the century with
+  // TWODIGITYEARSWITCHOVER (axconsts.e:41) = 77: `IF year > 77 THEN
+  // 1900+year ELSE 2000+year` (MiscFuncs.e:434). This used the more familiar
+  // pivot of 80, which put a file stamped 78 or 79 in 2078 rather than 1978.
+  const century = (yy: number): number => (yy > 77 ? 1900 + yy : 2000 + yy);
 
   const MONTHS: { [key: string]: number } = {
     jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,

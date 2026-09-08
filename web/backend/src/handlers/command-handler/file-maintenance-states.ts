@@ -25,6 +25,7 @@ const FM_HANDLERS: Map<LoggedOnSubState, FMHandler> = new Map([
   [LoggedOnSubState.FM_ACTION_INPUT, FileMaintenanceHandler.handleActionInput],
   [LoggedOnSubState.FM_REMOVE_FLAG_INPUT, FileMaintenanceHandler.handleRemoveFlagInput],
   [LoggedOnSubState.FM_CONFIRM_DELETE, FileMaintenanceHandler.handleConfirmDeleteInput],
+  [LoggedOnSubState.FM_MOVE_CONF_INPUT, FileMaintenanceHandler.handleMoveConfInput],
   [LoggedOnSubState.FM_MOVE_DEST_INPUT, FileMaintenanceHandler.handleMoveDestInput],
 ]);
 
@@ -38,6 +39,7 @@ const ECHO_STATES = new Set<LoggedOnSubState>([
   LoggedOnSubState.FM_ACTION_INPUT,
   LoggedOnSubState.FM_REMOVE_FLAG_INPUT,
   LoggedOnSubState.FM_CONFIRM_DELETE,
+  LoggedOnSubState.FM_MOVE_CONF_INPUT,
   LoggedOnSubState.FM_MOVE_DEST_INPUT,
 ]);
 

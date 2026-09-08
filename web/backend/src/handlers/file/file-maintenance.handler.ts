@@ -28,6 +28,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import { getConferenceDir } from '../../utils/file-hold.util';
+import { conferenceNumbers } from '../../conferences/conference-paths';
 import { getStorageContext } from '../../storage/storage-context';
 import { usableAreasFor } from '../../storage/usable-areas';
 import { putUploadIntoPool, uploadObjectKey } from '../../storage/remote-upload';
@@ -524,12 +525,130 @@ console.log('[FM] Starting file maintenance');
     await this.continueSearch(socket, session, nextPos);
   }
 
+  /**
+   * A move asks for a CONFERENCE first, then a directory in it.
+   *
+   * express.e:27105 calls `getMoveConf(FALSE)` (express.e:27019) before it
+   * asks about directories at all, so a sysop can move a file out of the
+   * conference it was uploaded to. This port asked only "Enter destination
+   * directory number:" and then moved the file within
+   * `session.currentConf` - a cross-conference move, which is most of what FM
+   * Move is FOR, could not be expressed.
+   */
   private static async promptMoveDestination(
     socket: any,
     session: BBSSession
   ): Promise<void> {
-    socket.emit('ansi-output', 'Enter destination directory number: ');
+    socket.emit('ansi-output', '\r\nConference Number to move to (L to List): ');
+    session.subState = LoggedOnSubState.FM_MOVE_CONF_INPUT;
+  }
+
+  /**
+   * express.e:27019-27049, getMoveConf().
+   *
+   *   - empty input abandons the move
+   *   - `L` lists the conferences and asks again
+   *   - a number is clamped to the board's range, and refused with
+   *     "You do not have access to the requested conference" when the caller
+   *     cannot join it
+   */
+  static async handleMoveConfInput(
+    socket: any,
+    session: BBSSession,
+    input: string
+  ): Promise<void> {
+    const ctx = session.tempData.fmContext || {};
+    const answer = input.trim();
+    const nextPos = ctx.nextPos ?? (ctx.matchPos ?? 0) + 1;
+
+    socket.emit('ansi-output', '\r\n');
+
+    if (answer.length === 0) {
+      await this.afterAction(socket, session, nextPos);
+      return;
+    }
+
+    if (answer.toUpperCase() === 'L') {
+      await this.listConferencesForMove(socket, session);
+      socket.emit('ansi-output', '\r\nConference Number to move to (L to List): ');
+      session.subState = LoggedOnSubState.FM_MOVE_CONF_INPUT;
+      return;
+    }
+
+    const bbsDataPath = _config.get('dataDir');
+    const available = conferenceNumbers(bbsDataPath);
+    const highest = available.length > 0 ? Math.max(...available) : 1;
+
+    // express clamps rather than rejecting: `IF destConf<1 THEN destConf:=1`,
+    // `IF destConf>cmds.numConf THEN destConf:=cmds.numConf`.
+    let destConf = Number.parseInt(answer, 10);
+    if (Number.isNaN(destConf)) destConf = 1;
+    if (destConf < 1) destConf = 1;
+    if (destConf > highest) destConf = highest;
+
+    const { checkConfAccess } = require('../message/message-scan.handler');
+    if (!checkConfAccess(session.user, destConf)) {
+      socket.emit(
+        'ansi-output',
+        AnsiUtil.errorLine('You do not have access to the requested conference')
+      );
+      await this.afterAction(socket, session, nextPos);
+      return;
+    }
+
+    ctx.destConf = destConf;
+    // The DIRECTORY range is the DESTINATION conference's NDIRS, not the
+    // source's - express reads `readToolTypeInt(TOOLTYPE_CONF, destConf,
+    // 'NDIRS')` at express.e:27112.
+    const { getMaxDirs } = require('../../utils/max-dirs.util');
+    const destMaxDirs = await getMaxDirs(destConf, bbsDataPath);
+    ctx.destMaxDirs = destMaxDirs;
+    session.tempData.fmContext = ctx;
+
+    socket.emit(
+      'ansi-output',
+      `\r\nDirectory to move to: (1-${destMaxDirs}), (A)uto, (Enter)=abort? `
+    );
     session.subState = LoggedOnSubState.FM_MOVE_DEST_INPUT;
+  }
+
+  /**
+   * The conference list express shows for `L` (express.e:27030-27034, which
+   * renders it with the `~CL|` MCI).
+   *
+   * Names come from `ConfConfig.info` on disk, not from the mirror: that table
+   * is empty on the live board, and the row format matches the one the MESSAGE
+   * mover already prints for the same express procedure
+   * (`messaging-sysop.ts`, getMoveConf's msgbase branch).
+   *
+   * Only conferences the caller can actually join are listed - offering one he
+   * will then be refused is worse than not offering it.
+   */
+  private static async listConferencesForMove(
+    socket: any,
+    session: BBSSession
+  ): Promise<void> {
+    socket.emit(
+      'ansi-output',
+      '\r\n\x1b[32m                                 Conference List\x1b[0m\r\n\r\n'
+    );
+    try {
+      const bbsDataPath = _config.get('dataDir');
+      const { loadConfConfig } = require('../../services/conf-config.service');
+      const { checkConfAccess } = require('../message/message-scan.handler');
+      const onDisk = loadConfConfig(bbsDataPath);
+      const entries = onDisk?.entries ?? [];
+      entries.forEach((entry: { name: string }, index: number) => {
+        const conferenceId = index + 1;
+        if (!checkConfAccess(session.user, conferenceId)) return;
+        socket.emit(
+          'ansi-output',
+          `  ${String(conferenceId).padStart(3)} - ${entry.name}\r\n`
+        );
+      });
+    } catch (err) {
+      console.error('[FM] could not list conferences:', err);
+    }
   }
 
   static async handleMoveDestInput(
@@ -538,20 +657,38 @@ console.log('[FM] Starting file maintenance');
     input: string
   ): Promise<void> {
     const ctx = session.tempData.fmContext || {};
-    const maxDirs = ctx.maxDirs || 0;
-    const destDir = parseInt(input.trim(), 10);
+    // The DESTINATION conference's NDIRS bounds this, not the source's
+    // (express.e:27112). destConf is set by the step before this one.
+    const maxDirs = ctx.destMaxDirs || ctx.maxDirs || 0;
+    const destConf = ctx.destConf || session.currentConf || 1;
+    const answer = input.trim();
     const nextPos = ctx.nextPos ?? (ctx.matchPos ?? 0) + 1;
 
     socket.emit('ansi-output', '\r\n');
 
-    if (isNaN(destDir) || destDir < 1 || (maxDirs && destDir > maxDirs)) {
-      socket.emit('ansi-output', AnsiUtil.errorLine('Invalid destination directory'));
-      await this.redisplayPrompt(socket, session);
-      session.subState = LoggedOnSubState.FM_ACTION_INPUT;
+    // express.e:27118 - an empty answer abandons the move, it is not an error.
+    if (answer.length === 0) {
+      await this.afterAction(socket, session, nextPos);
       return;
     }
 
-    await this.performMove(socket, session, ctx, destDir);
+    let destDir: number;
+    if (answer[0] === 'A' || answer[0] === 'a') {
+      // express.e:27120-27138, `(A)uto`: walk the destination's directories
+      // from the highest down and take the first whose OWN newest entry is not
+      // newer than the file being moved, so the file lands where the board
+      // already keeps things of its age. Nothing matches -> DIR1.
+      destDir = await this.autoDestinationDir(destConf, maxDirs, ctx);
+    } else {
+      destDir = Number.parseInt(answer, 10);
+      // express.e:27140 - out of range abandons the move rather than erroring.
+      if (Number.isNaN(destDir) || destDir < 1 || (maxDirs && destDir > maxDirs)) {
+        await this.afterAction(socket, session, nextPos);
+        return;
+      }
+    }
+
+    await this.performMove(socket, session, ctx, destDir, destConf);
     await this.afterAction(socket, session, nextPos);
   }
 
@@ -644,11 +781,109 @@ console.log('[FM] Starting file maintenance');
     }
   }
 
+  /**
+   * express's `getDateCompareVal` (MiscFuncs.e:422-436), which is what makes
+   * two `mm-dd-yy` strings comparable:
+   *
+   *     year*10000 + month*100 + day
+   *
+   * with a two-digit year above TWODIGITYEARSWITCHOVER (axconsts.e:41, 77)
+   * meaning the 1900s. A file stamped 03-28-92 is 1992, not 2092.
+   */
+  private static dateCompareValue(dateStr: string): number {
+    const match = /^(\d{2})-(\d{2})-(\d{2})$/.exec((dateStr || '').trim());
+    if (!match) return 0;
+    const month = Number.parseInt(match[1], 10);
+    const day = Number.parseInt(match[2], 10);
+    const twoDigit = Number.parseInt(match[3], 10);
+    const year = twoDigit > 77 ? 1900 + twoDigit : 2000 + twoDigit;
+    return year * 10000 + month * 100 + day;
+  }
+
+  /** The `mm-dd-yy` field of a DIR line, or '' when the line has none. */
+  private static dateOfDirLine(line: string): string {
+    // express blanks column 13 before splitting, because the filename column
+    // is fixed-width and can run straight into the size (express.e:27204).
+    const spaced = line.length > 13 ? `${line.slice(0, 13)} ${line.slice(14)}` : line;
+    const fields = spaced.trim().split(/\s+/);
+    const candidate = fields.length > 2 ? fields[2] : '';
+    return /^\d{2}-\d{2}-\d{2}$/.test(candidate) ? candidate : '';
+  }
+
+  /**
+   * `(A)uto` - express.e:27121-27138.
+   *
+   * Walk the destination conference's directories from the highest number
+   * down, read the FIRST entry of each, and take the first directory whose
+   * newest file is not newer than the one being moved (`d1 >= d2`). A board
+   * that keeps DIR1 current and DIR8 ancient therefore files the move where
+   * things of its age already live. Nothing matches - or no directory has a
+   * readable date - and it is DIR1.
+   */
+  private static async autoDestinationDir(
+    destConf: number,
+    maxDirs: number,
+    ctx: any
+  ): Promise<number> {
+    const fileDate = this.dateCompareValue(ctx.currentFile?.uploadDateDisplay || '');
+    const bbsDataPath = _config.get('dataDir');
+    const conferencePath = getConferenceDir(destConf, bbsDataPath);
+
+    for (let candidate = maxDirs; candidate > 0; candidate -= 1) {
+      try {
+        const meta = this.getDirMeta(conferencePath, candidate, maxDirs);
+        if (!fs.existsSync(meta.path)) continue;
+        const firstLine = this.readDirFile(meta.path).find(
+          (line) => this.dateOfDirLine(line) !== ''
+        );
+        if (!firstLine) continue;
+        const dirDate = this.dateCompareValue(this.dateOfDirLine(firstLine));
+        if (fileDate >= dirDate) return candidate;
+      } catch (err) {
+        console.error(`[FM] auto-destination could not read DIR${candidate}:`, err);
+      }
+    }
+    return 1;
+  }
+
+  /**
+   * Put the entry where its date belongs, rather than at the end.
+   *
+   * express.e:27196-27230 walks the destination listing and splices the moved
+   * entry in front of the first entry OLDER than it, so the listing stays in
+   * the order the board maintains everywhere else. Appending - which is what
+   * this did - dropped every moved file to the bottom.
+   *
+   * An entry spans however many lines it has (a description continues on the
+   * lines after the header), so both sides move as a block.
+   */
+  private static spliceByDate(destLines: string[], entryLines: string[]): string[] {
+    const header = entryLines.find((line) => this.dateOfDirLine(line) !== '');
+    if (!header) return destLines.concat(entryLines);
+
+    const entryDate = this.dateCompareValue(this.dateOfDirLine(header));
+
+    for (let index = 0; index < destLines.length; index += 1) {
+      const lineDate = this.dateOfDirLine(destLines[index]);
+      if (lineDate === '') continue;
+      if (entryDate >= this.dateCompareValue(lineDate)) {
+        return [
+          ...destLines.slice(0, index),
+          ...entryLines,
+          ...destLines.slice(index),
+        ];
+      }
+    }
+
+    return destLines.concat(entryLines);
+  }
+
   private static async performMove(
     socket: any,
     session: BBSSession,
     ctx: any,
-    destDir: number
+    destDir: number,
+    destConf?: number
   ): Promise<void> {
     const { dirFilePath, currentFile } = ctx;
     if (!dirFilePath || !currentFile) {
@@ -657,9 +892,12 @@ console.log('[FM] Starting file maintenance');
     }
 
     const bbsDataPath = _config.get('dataDir');
-    const confNum = session.currentConf || 1;
+    // The DESTINATION conference, which is usually the point of a move.
+    // This used to be session.currentConf unconditionally, so the file could
+    // only ever land in another directory of the conference it was already in.
+    const confNum = destConf || session.currentConf || 1;
     const conferencePath = getConferenceDir(confNum, bbsDataPath);
-    const destMeta = this.getDirMeta(conferencePath, destDir, ctx.maxDirs);
+    const destMeta = this.getDirMeta(conferencePath, destDir, ctx.destMaxDirs || ctx.maxDirs);
     const destPath = destMeta.path;
 
     // The BYTES move first, then the listings follow them. A move into a
@@ -690,7 +928,10 @@ console.log('[FM] Starting file maintenance');
       ? this.readDirFile(destPath)
       : [];
 
-    const merged = destLines.concat(entryLines);
+    // express.e:27196-27230 scans the destination for the right POSITION and
+    // splices the entry in there; this appended, so a moved file always landed
+    // at the bottom of a listing the board otherwise keeps in date order.
+    const merged = this.spliceByDate(destLines, entryLines);
     fs.mkdirSync(path.dirname(destPath), { recursive: true });
     this.writeDirFile(destPath, merged);
 

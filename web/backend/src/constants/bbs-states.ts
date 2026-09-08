@@ -92,6 +92,7 @@ export enum LoggedOnSubState {
   FM_ACTION_INPUT = 'fm_action_input',                // D/M/V/Q action input
   FM_REMOVE_FLAG_INPUT = 'fm_remove_flag_input',      // Remove from flagged list Y/n
   FM_CONFIRM_DELETE = 'fm_confirm_delete',            // Confirm file deletion
+  FM_MOVE_CONF_INPUT = 'fm_move_conf_input',          // Move destination CONFERENCE input (express.e:27019 getMoveConf)
   FM_MOVE_DEST_INPUT = 'fm_move_dest_input',          // Move destination directory input
 
   // Command execution
