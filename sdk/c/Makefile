@@ -33,10 +33,10 @@ NDK  ?= /opt/homebrew/Cellar/m68k-amiga-elf-gcc/13.1.0/m68k-amiga-elf/sys-includ
 VC    = VBCC=$(VBCC) vc
 AMIGA_CFLAGS = +aos68k -c99 -DAMIGA -Iinclude -I"$(VBCC)/targets/m68k-amigaos/include" -I"$(NDK)"
 
-MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_doc ui_theme ui_settings json_lite ae_chunk ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve ae_request
+MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_theme ui_settings json_lite ae_chunk ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve
 AMIGA_OBJS = $(patsubst %,build/amiga/%.o,$(MODULES))
 
-.PHONY: all test amiga lib measure clean
+.PHONY: all test amiga lib measure settings clean
 
 all: test
 
@@ -44,7 +44,7 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request
+test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_input build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
@@ -56,7 +56,6 @@ test: build/test_ae_host build/test_ae_session build/test_ui_profile build/test_
 	./build/test_ui_doc
 	./build/test_ae_http
 	./build/test_ae_achieve
-	./build/test_ae_request
 
 build/test_ae_host: src/ae_host.c tests/test_ae_host.c include/ae_host.h
 	@mkdir -p build
@@ -105,10 +104,6 @@ build/test_ae_achieve: src/ae_achieve.c src/ae_http.c src/ae_net.c src/json_lite
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) -D_DEFAULT_SOURCE src/ae_achieve.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c tests/test_ae_achieve.c -o $@
 
-build/test_ae_request: src/ae_request.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c tests/test_ae_request.c include/ae_request.h include/ae_http.h
-	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) -D_DEFAULT_SOURCE src/ae_request.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c tests/test_ae_request.c -o $@
-
 # The generated table must match tokens.ts. Needs node; skipped where there
 # is none, because a C toolchain is not required to have one.
 .PHONY: check-themes
@@ -119,7 +114,7 @@ check-themes:
 # The 68K library and the two yardstick doors
 # ---------------------------------------------------------------------
 
-amiga: lib build/amiga/hello build/amiga/hello_box build/amiga/hello_list build/amiga/theme-picker build/amiga/achieve build/amiga/requests build/amiga/bench_repaint build/amiga/bench_repaint11
+amiga: lib build/amiga/hello build/amiga/hello_box build/amiga/hello_list build/amiga/theme-picker build/amiga/achieve build/amiga/bench_repaint build/amiga/bench_repaint11
 
 lib: build/amiga/libae.lib
 
@@ -174,13 +169,6 @@ build/amiga/achieve: examples/achieve/achieve.c build/amiga/libae.lib
 	@mkdir -p build/amiga
 	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
 
-# The global-requests door: reads and writes through ae_request, drawn with
-# the same widgets. Links the WHOLE library; make measure proves only what it
-# calls costs bytes.
-build/amiga/requests: examples/requests/requests.c build/amiga/libae.lib
-	@mkdir -p build/amiga
-	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
-
 build/amiga/bench_repaint: examples/bench/bench_repaint.c build/amiga/libae.lib
 	@mkdir -p build/amiga
 	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
@@ -202,6 +190,45 @@ measure: amiga
 probe: build/amiga/theme-picker
 	@cd ../.. && npx tsx --tsconfig web/backend/tsconfig.json dev/scripts/door-probe/repaint-cost.ts sdk/c/build/amiga/theme-picker --cols 80 2>/dev/null
 	@cd ../.. && npx tsx --tsconfig web/backend/tsconfig.json dev/scripts/door-probe/repaint-cost.ts sdk/c/build/amiga/theme-picker --cols 40 2>/dev/null
+
+# ---------------------------------------------------------------------------
+# door.settings.json, generated from the door's OWN declaration.
+#
+# A door registers in the admin automatically (the board scans BBSCmd .info at
+# boot). Its SETTINGS did not: those needed a hand-written
+# Doors/<door>/door.settings.json, so of 138 registered doors 8 had a form.
+#
+# The declaration now lives beside the code that reads the values
+# (examples/<door>/settings.c, using the AE_SETTINGS_* macros), and this
+# target emits the manifest the admin already knows how to read. Built for the
+# HOST: nothing has to run a 68K binary to learn what it can be told.
+#
+# Add a door by adding its name here and writing its settings.c.
+# Each entry is <example-dir>:<Doors-dir>. Explicit rather than clever: an
+# earlier version derived the destination by lowercasing and matching inside a
+# pipeline, and the nested shell case broke make outright.
+SETTINGS_DOORS = requests:REQUESTS
+
+.PHONY: settings
+settings:
+	@mkdir -p build/host
+	@for pair in $(SETTINGS_DOORS); do \
+	  src=`echo $$pair | cut -d: -f1`; \
+	  dst=`echo $$pair | cut -d: -f2`; \
+	  if [ ! -f examples/$$src/settings.c ]; then \
+	    echo "  settings: examples/$$src/settings.c missing - skipped"; \
+	    continue; \
+	  fi; \
+	  $(CC) -I include -o build/host/emit-$$src \
+	    tools/emit-door-settings.c src/ae_settings.c examples/$$src/settings.c -lm || exit 1; \
+	  if [ -d ../../Doors/$$dst ]; then \
+	    ./build/host/emit-$$src > ../../Doors/$$dst/door.settings.json || exit 1; \
+	    echo "  settings -> Doors/$$dst/door.settings.json"; \
+	  else \
+	    ./build/host/emit-$$src > build/host/$$src.door.settings.json || exit 1; \
+	    echo "  settings: no Doors/$$dst - wrote build/host/$$src.door.settings.json"; \
+	  fi; \
+	done
 
 clean:
 	rm -rf build
