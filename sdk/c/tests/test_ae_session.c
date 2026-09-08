@@ -26,6 +26,7 @@ typedef struct {
      * got through them. A board that leaves any of these NULL is a board that
      * does not answer that command - which is exactly what a classic
      * AmiExpress does for some of them, and the case worth testing. */
+    const char *conf_name;
     const char *conf_location;
     const char *msgbase;
     const char *last_read;
@@ -56,6 +57,7 @@ static int fake_transport(void *context, ae_field field, char *out, int cap)
         case AE_FIELD_SCREEN_COLS:   value = b->cols; break;
         case AE_FIELD_SCREEN_ROWS:   value = b->rows; break;
         case AE_FIELD_CONFERENCE:    value = b->conference; break;
+        case AE_FIELD_CONF_NAME:     value = b->conf_name; break;
         case AE_FIELD_CONF_LOCATION: value = b->conf_location; break;
         case AE_FIELD_MSGBASE_LOC:   value = b->msgbase; break;
         case AE_FIELD_LAST_READ:     value = b->last_read; break;
@@ -99,6 +101,7 @@ static fake_board a_board(void)
     b.cols = "132";
     b.rows = "50";
     b.conference = "7";
+    b.conf_name = "Coding";
     b.conf_location = "BBS:Conf7/";
     b.msgbase = "BBS:Conf7/MsgBase/";
     b.last_read = "141";
@@ -291,6 +294,8 @@ static void it_says_where_the_messages_are(void)
     fake_board b = a_board();
 
     assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    assert(ae_conf_name(&s, conf, (int)sizeof(conf)) > 0);
+    assert(strcmp(conf, "Coding") == 0);
     assert(ae_conf_location(&s, conf, (int)sizeof(conf)) > 0);
     assert(strcmp(conf, "BBS:Conf7/") == 0);
     assert(ae_msgbase_path(&s, base, (int)sizeof(base)) > 0);

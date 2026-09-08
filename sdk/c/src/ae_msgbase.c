@@ -1,224 +1,620 @@
-/*
- * ae_msgbase - the public feed, split. See ae_msgbase.h for what this is and
- * why the door does not read the message base itself.
+/* ae_msgbase.c - reading a conference's messages off the disk.
  *
- * Everything here is bounded and on the stack. Nothing allocates. The one
- * buffer of any size is AE_MSG_REPLY_MAX + 1 bytes, which is the wire's own
- * limit, and it is reused for every round trip.
+ * See ae_msgbase.h for why this reads files rather than asking the board.
+ * This file is the two hard parts: telling the two record layouts apart, and
+ * deciding what the caller may see.
+ *
+ * C89. ASCII only.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "ae_msgbase.h"
-#include "ae_session.h"
-#include "aedoor.h"
+#include "ae_dos.h"
 
-/* One reply, plus the NUL the transport always writes. */
-#define REPLY_BUF (AE_MSG_REPLY_MAX + 1)
+/* ---- the two layouts ---------------------------------------------------
+ *
+ * Ported from web/backend/src/services/msgheader-layout.ts, which is where
+ * this was worked out against 560 live records and two earlier wrong
+ * attempts. Field offsets:
+ *
+ *   AmiExpress  status(0) pad(1) msgNumb(2) toName(6) fromName(37)
+ *               subject(68) pad(99) msgDate(100) recv(104) extMsgNum(108)
+ *   this port   status(0) msgNumb(1) toName(5) fromName(36)
+ *               subject(67) msgDate(98) recv(102) extMsgNum(106) pad(108,109)
+ *
+ * The two do NOT differ by a constant offset - one pad moves in before
+ * msgNumb and another before msgDate - so nothing here may shift bytes; every
+ * field is taken from its own offset.
+ */
+
+#define AMIGA_NUM   2
+#define AMIGA_TO    6
+#define AMIGA_FROM  37
+#define AMIGA_SUBJ  68
+#define AMIGA_DATE  100
+#define AMIGA_RECV  104
+
+#define PORT_NUM    1
+#define PORT_TO     5
+#define PORT_FROM   36
+#define PORT_SUBJ   67
+#define PORT_DATE   98
+#define PORT_RECV   102
+
+#define NAME_WIDTH  31
+
+#define LAYOUT_AMIGA   0
+#define LAYOUT_PORT    1
+#define LAYOUT_UNKNOWN 2
+
+/* ---- module state ------------------------------------------------------
+ *
+ * A door reads one message base at a time, so this is a module, not a handle.
+ * Nothing here allocates; the paths are fixed buffers and the header walk
+ * carries one record.
+ */
+static char base_dir[AE_MSG_PATH_MAX];
+static char caller_name[AE_MSG_NAME_MAX];
+static int  caller_is_sysop;
+static long caller_pointer;
+static int  base_open;
+
+/* ---- small helpers ----------------------------------------------------- */
+
+static int same_name(const char *a, const char *b)
+{
+    /* Case-insensitive, as every name comparison on the board is: express.e
+     * matches confMailName without regard to case, and a caller who signs on
+     * as "Spot" must still see mail addressed to "spot". Written out rather
+     * than using strcasecmp, which is not C89 and is not in vbcc's library. */
+    int i = 0;
+    if (a == 0 || b == 0) return 0;
+    for (;;) {
+        char x = a[i];
+        char y = b[i];
+        if (x >= 'A' && x <= 'Z') x = (char)(x - 'A' + 'a');
+        if (y >= 'A' && y <= 'Z') y = (char)(y - 'A' + 'a');
+        if (x != y) return 0;
+        if (x == '\0') return 1;
+        i++;
+    }
+}
+
+static void copy_field(char *out, int cap, const unsigned char *record, int at)
+{
+    /* Only up to the NUL. The bytes after a name's terminator are UNDEFINED -
+     * on a real board they are leftovers, and a real toName there reads
+     * "eall\0\xf9\xfc\x0e". Copying the whole field would put that junk on
+     * screen. */
+    int i = 0;
+    int limit = (cap - 1 < NAME_WIDTH) ? cap - 1 : NAME_WIDTH;
+
+    while (i < limit && record[at + i] != '\0') {
+        out[i] = (char)record[at + i];
+        i++;
+    }
+    out[i] = '\0';
+}
 
 /**
- * One round trip, with the "is this board even answering" question resolved.
+ * A message number AmiExpress could have written.
  *
- * A classic AmiExpress's DEFAULT case (express.e:4221-4228) touches neither
- * msg.String nor msg.data, so the door reads back the request it wrote itself.
- * That echo IS the signal, and it is a better one than an empty reply: an
- * empty reply is what a board WITH the feed says when there is nothing more,
- * and the two need different sentences on screen.
- *
- * The theoretical false positive - a message body whose 190-byte chunk spells
- * exactly "BODY 103 2" - costs the caller a "this board does not answer the
- * message feed" line, not a wrong message.
- *
- * Returns bytes written, AE_MSG_ERR_CARRIER, or AE_MSG_ERR_NOHOST.
+ * express.e numbers from 1, so a zero is not a message number - it is what
+ * reading a LONG from the wrong offset gives you. This is the signal that
+ * actually separates the layouts.
  */
-static int ask(const char *request, char *out, int cap)
+static int plausible_number(long n)
 {
-    int got = ae_field_exchange((int)AE_FIELD_MSGQUERY, request, out, cap);
-
-    if (got < 0) return AE_MSG_ERR_CARRIER;
-    if (out[0] != '\0' && strcmp(out, request) == 0) return AE_MSG_ERR_NOHOST;
-    return got;
+    return n >= 1 && n <= 10000000L;
 }
 
-/** Copy at most `cap - 1` bytes and always terminate. */
-static void copy_field(char *dst, int cap, const char *src)
+/**
+ * A name field that STARTS where this layout says it does.
+ *
+ * Non-empty, and printable up to the NUL. The padding proves nothing - see
+ * copy_field - so only the part before the terminator is tested. An earlier
+ * version of the port's classifier tested a byte INSIDE the padding and
+ * called 480 perfectly ordinary records unidentifiable.
+ */
+static int name_at(const unsigned char *record, int at)
 {
-    int i;
-    for (i = 0; i < cap - 1 && src[i] != '\0'; i++) dst[i] = src[i];
-    dst[i] = '\0';
+    int i = 0;
+    while (i < NAME_WIDTH && record[at + i] != '\0') {
+        unsigned char c = record[at + i];
+        if (c < 0x20 || c > 0xFE) return 0;
+        i++;
+    }
+    return i > 0;
 }
 
-int ae_msg_split_row(char *line, ae_msg_row *out)
+/**
+ * One record's layout, with no knowledge of the file around it.
+ *
+ * Deliberately answers UNKNOWN rather than guessing: a record this port wrote
+ * has a plausible number at BOTH offsets - its real one at 1, and at 2 the
+ * same number shifted a byte with the first letter of toName carried into it.
+ * The pads are NOT part of the test; Amiga E does not clear structure
+ * padding, and requiring them clear called a whole live conference
+ * unidentifiable.
+ */
+static int classify_record(const unsigned char *record)
 {
-    char *field[5];
-    int found = 0;
-    char *p;
+    int amiga_shaped =
+        plausible_number(ae_dos_get_long(record + AMIGA_NUM))
+        && name_at(record, AMIGA_TO)
+        && name_at(record, AMIGA_FROM);
 
-    if (line == 0 || out == 0) return AE_MSG_ERR_ARGS;
+    int port_shaped =
+        plausible_number(ae_dos_get_long(record + PORT_NUM))
+        && name_at(record, PORT_TO)
+        && name_at(record, PORT_FROM);
 
-    memset(out, 0, sizeof *out);
+    if (amiga_shaped && !port_shaped) return LAYOUT_AMIGA;
+    if (port_shaped && !amiga_shaped) return LAYOUT_PORT;
+    return LAYOUT_UNKNOWN;
+}
 
-    /* Split in place, keeping the first five. A row with MORE is not an error:
-     * the format is append-only and a door built today must keep working
-     * against a board that grows a sixth field tomorrow. */
-    field[found++] = line;
-    p = line;
-    while (found < 5) {
-        char *bar = strchr(p, '|');
-        if (bar == 0) break;
-        *bar = '\0';
-        p = bar + 1;
-        field[found++] = p;
+/**
+ * Settle an undecidable record using the run of numbers before it.
+ *
+ * Message numbers ascend, so the reading that continues the run is the right
+ * one: after 2, a record reading `3` at one offset and `835` at the other is
+ * not ambiguous at all. `previous` is the last number this walk resolved.
+ *
+ * When the sequence cannot separate them either, the answer stays UNKNOWN and
+ * the caller falls back to the AmiExpress layout - which is what the port's
+ * own reader does, and what express.e itself wrote for every message before
+ * this port existed. Falling back costs a wrong number on screen in a case
+ * that has never been observed on this board; refusing to show the message
+ * would hide mail the board displays.
+ */
+static int settle_with_sequence(const unsigned char *record, int layout, long previous)
+{
+    long amiga_num;
+    long port_num;
+    long amiga_distance;
+    long port_distance;
+    long want;
+
+    if (layout != LAYOUT_UNKNOWN) return layout;
+
+    want = previous + 1;
+    amiga_num = ae_dos_get_long(record + AMIGA_NUM);
+    port_num  = ae_dos_get_long(record + PORT_NUM);
+
+    if (amiga_num < 1 && port_num < 1) return LAYOUT_UNKNOWN;
+    if (amiga_num < 1) return LAYOUT_PORT;
+    if (port_num < 1) return LAYOUT_AMIGA;
+
+    amiga_distance = amiga_num - want; if (amiga_distance < 0) amiga_distance = -amiga_distance;
+    port_distance  = port_num - want;  if (port_distance < 0)  port_distance = -port_distance;
+
+    if (amiga_distance == port_distance) return LAYOUT_UNKNOWN;
+    return (amiga_distance < port_distance) ? LAYOUT_AMIGA : LAYOUT_PORT;
+}
+
+/** Pull a record into a row, in whichever layout it turned out to be. */
+static void record_to_row(const unsigned char *record, int layout, ae_msg_row *out)
+{
+    int num_at  = (layout == LAYOUT_PORT) ? PORT_NUM  : AMIGA_NUM;
+    int to_at   = (layout == LAYOUT_PORT) ? PORT_TO   : AMIGA_TO;
+    int from_at = (layout == LAYOUT_PORT) ? PORT_FROM : AMIGA_FROM;
+    int subj_at = (layout == LAYOUT_PORT) ? PORT_SUBJ : AMIGA_SUBJ;
+    int date_at = (layout == LAYOUT_PORT) ? PORT_DATE : AMIGA_DATE;
+    int recv_at = (layout == LAYOUT_PORT) ? PORT_RECV : AMIGA_RECV;
+
+    out->number = ae_dos_get_long(record + num_at);
+    copy_field(out->to,      AE_MSG_NAME_MAX,    record, to_at);
+    copy_field(out->from,    AE_MSG_NAME_MAX,    record, from_at);
+    copy_field(out->subject, AE_MSG_SUBJECT_MAX, record, subj_at);
+    out->date = ae_dos_get_long(record + date_at);
+    out->recv = ae_dos_get_long(record + recv_at);
+    out->status = (char)record[0];
+
+    /* 'N' beats '*' beats '-': a new censored message is reported new, since
+     * that is the fact the caller is looking for in a list. */
+    if (caller_pointer >= 0 && out->number > caller_pointer) out->flag = 'N';
+    else if (out->status == AE_MSG_CENSORED) out->flag = '*';
+    else out->flag = '-';
+}
+
+int ae_msg_may_read(const ae_msg_row *row)
+{
+    if (row == 0) return 0;
+
+    /* Deleted is deleted, for everybody including the sysop: express.e's own
+     * reader refuses it before any access question (express.e:8890). */
+    if (row->status == AE_MSG_DELETED) return 0;
+
+    /* Public is public. EALL and ALL are both public and are not special
+     * here - EALL's access gate is on POSTING, at the board's compose prompt,
+     * not on reading. */
+    if (row->status == AE_MSG_PUBLIC || row->status == AE_MSG_CENSORED) return 1;
+
+    /* Private: sender, recipient, or a sysop (express.e:12343-12355). */
+    if (caller_is_sysop) return 1;
+    if (same_name(row->to, caller_name)) return 1;
+    if (same_name(row->from, caller_name)) return 1;
+    return 0;
+}
+
+/* ---- paths ------------------------------------------------------------- */
+
+/**
+ * Join the base directory and a file name into `out`.
+ *
+ * An Amiga path may end with '/' OR ':' - "BBS:" is a whole volume - and a
+ * separator must be added after neither. Getting this wrong produces
+ * "BBS:Conf3/MsgBase//HeaderFile", which AmigaDOS reads as a parent directory
+ * reference and not as the file that was meant.
+ */
+static int join_path(char *out, int cap, const char *name)
+{
+    int len = (int)strlen(base_dir);
+    int need = len + (int)strlen(name) + 2;
+
+    if (need > cap) return 0;
+
+    memcpy(out, base_dir, (size_t)len);
+    if (len > 0 && base_dir[len - 1] != '/' && base_dir[len - 1] != ':') {
+        out[len++] = '/';
     }
-    if (found < 5) return AE_MSG_ERR_ARGS;
+    strcpy(out + len, name);
+    return 1;
+}
 
-    /* The fifth field ends at the next '|' if the board sent more than five,
-     * so it is terminated here rather than left running into field six. */
-    {
-        char *bar = strchr(field[4], '|');
-        if (bar != 0) *bar = '\0';
+/* ---- dates -------------------------------------------------------------
+ *
+ * Civil date from a unix timestamp, without time.h. vbcc has localtime(), and
+ * calling it would be wrong here rather than merely heavy: an Amiga's system
+ * clock is already set to local time, so converting a unix stamp with a local
+ * timezone shifts it twice. This does the arithmetic in UTC, which is at
+ * worst a few hours from what the board shows and is never silently doubled.
+ *
+ * The algorithm is the standard days-to-civil one: shift the epoch to
+ * 0000-03-01 so that February - the month with the leap day - falls at the end
+ * of the year and the leap rule stops needing a special case in the middle.
+ */
+void ae_msg_date_string(long unix_seconds, char *out, int cap)
+{
+    static const char *MONTHS[12] = {
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    };
+    long days;
+    long era;
+    long doe;      /* day of era */
+    long yoe;      /* year of era */
+    long y;
+    long doy;      /* day of year, counting from March */
+    long mp;       /* month, 0 = March */
+    long d;
+    long m;
+    int i = 0;
+
+    if (out == 0 || cap < 8) { if (out && cap > 0) out[0] = '\0'; return; }
+    if (unix_seconds <= 0) { out[0] = '\0'; return; }
+
+    days = unix_seconds / 86400L;
+    days += 719468L;                        /* 1970-01-01 -> 0000-03-01 */
+
+    era = (days >= 0 ? days : days - 146096L) / 146097L;
+    doe = days - era * 146097L;
+    yoe = (doe - doe / 1460L + doe / 36524L - doe / 146096L) / 365L;
+    y   = yoe + era * 400L;
+    doy = doe - (365L * yoe + yoe / 4L - yoe / 100L);
+    mp  = (5L * doy + 2L) / 153L;
+    d   = doy - (153L * mp + 2L) / 5L + 1L;
+    m   = mp + (mp < 10L ? 3L : -9L);
+    if (m <= 2L) y += 1L;
+
+    out[i++] = (char)('0' + (int)((d / 10L) % 10L));
+    out[i++] = (char)('0' + (int)(d % 10L));
+    out[i++] = MONTHS[m - 1][0];
+    out[i++] = MONTHS[m - 1][1];
+    out[i++] = MONTHS[m - 1][2];
+    out[i++] = (char)('0' + (int)((y / 10L) % 10L));
+    out[i++] = (char)('0' + (int)(y % 10L));
+    out[i] = '\0';
+}
+
+/** A message number as the decimal file name its body lives under. */
+static void number_to_name(char *out, long number)
+{
+    char digits[16];
+    int n = 0;
+    int i = 0;
+
+    if (number <= 0) { out[0] = '0'; out[1] = '\0'; return; }
+    while (number > 0 && n < (int)sizeof(digits)) {
+        digits[n++] = (char)('0' + (int)(number % 10));
+        number /= 10;
+    }
+    while (n > 0) out[i++] = digits[--n];
+    out[i] = '\0';
+}
+
+/* ---- the header walk ---------------------------------------------------
+ *
+ * Every public function is one forward pass over HeaderFile, carrying a
+ * single 110-byte record and the previous resolved number. There is no index
+ * and no cache: a conference of a few hundred records is a few tens of KB,
+ * and the alternative is either an allocation or a stale view of a file other
+ * nodes are appending to while the door reads it.
+ */
+
+typedef int (*row_fn)(const ae_msg_row *row, void *context);
+
+static int walk(row_fn visit, void *context, long *unreadable_out)
+{
+    unsigned char record[AE_MSG_RECORD_SIZE];
+    char path[AE_MSG_PATH_MAX];
+    ae_file *f;
+    long previous = 0;
+    long unreadable = 0;
+    int rc;
+
+    if (unreadable_out) *unreadable_out = 0;
+    if (!base_open) return AE_MSG_ERR_NOBASE;
+    if (!join_path(path, (int)sizeof(path), "HeaderFile")) return AE_MSG_ERR_NOBASE;
+
+    f = ae_dos_open(path, AE_DOS_READ);
+    if (f == 0) return AE_MSG_ERR_NOBASE;
+
+    for (;;) {
+        ae_msg_row row;
+        int layout;
+
+        rc = ae_dos_read_full(f, record, AE_MSG_RECORD_SIZE);
+        if (rc == 0) break;          /* a clean end of file */
+        if (rc < 0) break;           /* truncated tail: stop, keep what we have */
+
+        layout = settle_with_sequence(record, classify_record(record), previous);
+        if (layout == LAYOUT_UNKNOWN) {
+            /* Fall back to AmiExpress, as the board's own reader does - but
+             * only when there is a usable number there. A record with no
+             * number at either offset is not a record. */
+            if (!plausible_number(ae_dos_get_long(record + AMIGA_NUM))) {
+                unreadable++;
+                continue;
+            }
+            layout = LAYOUT_AMIGA;
+        }
+
+        record_to_row(record, layout, &row);
+        if (row.number >= 1) previous = row.number;
+
+        if (visit && visit(&row, context) == 0) break;   /* the visitor is full */
     }
 
-    out->number = atol(field[0]);
-    copy_field(out->from, AE_MSG_NAME_MAX, field[1]);
-    copy_field(out->subject, AE_MSG_SUBJECT_MAX, field[2]);
-    copy_field(out->date, (int)sizeof out->date, field[3]);
-    out->flag = field[4][0] != '\0' ? field[4][0] : '-';
+    ae_dos_close(f);
+    if (unreadable_out) *unreadable_out = unreadable;
     return AE_MSG_OK;
+}
+
+/* ---- the public calls -------------------------------------------------- */
+
+int ae_msg_open(const char *dir, const char *caller, int sysop, long scan_pointer)
+{
+    char path[AE_MSG_PATH_MAX];
+    ae_file *f;
+
+    base_open = 0;
+    base_dir[0] = '\0';
+    caller_name[0] = '\0';
+    caller_is_sysop = 0;
+    caller_pointer = -1;
+
+    if (dir == 0 || dir[0] == '\0') return AE_MSG_ERR_ARGS;
+    if (strlen(dir) + 1 > sizeof(base_dir)) return AE_MSG_ERR_ARGS;
+
+    strcpy(base_dir, dir);
+    if (caller && caller[0] != '\0') {
+        strncpy(caller_name, caller, sizeof(caller_name) - 1);
+        caller_name[sizeof(caller_name) - 1] = '\0';
+    }
+    caller_is_sysop = sysop ? 1 : 0;
+    caller_pointer = scan_pointer;
+
+    /* Prove the base is there NOW rather than at the first listing, so a door
+     * can say "this conference has no messages yet" on the screen it is
+     * already drawing instead of half way through one. */
+    if (!join_path(path, (int)sizeof(path), "HeaderFile")) return AE_MSG_ERR_ARGS;
+    f = ae_dos_open(path, AE_DOS_READ);
+    if (f == 0) { base_dir[0] = '\0'; return AE_MSG_ERR_NOBASE; }
+    ae_dos_close(f);
+
+    base_open = 1;
+    return AE_MSG_OK;
+}
+
+typedef struct {
+    long total;
+    long unread;
+    long lowest;
+    long highest;
+} stat_walk;
+
+static int stat_visit(const ae_msg_row *row, void *context)
+{
+    stat_walk *s = (stat_walk *)context;
+
+    if (!ae_msg_may_read(row)) return 1;
+
+    s->total++;
+    if (row->flag == 'N') s->unread++;
+    if (s->lowest == 0 || row->number < s->lowest) s->lowest = row->number;
+    if (row->number > s->highest) s->highest = row->number;
+    return 1;
 }
 
 int ae_msg_stat_read(ae_msg_stat *out)
 {
-    char reply[REPLY_BUF];
-    char *field[4];
-    int found = 0;
-    char *p;
-    int got;
-    int i;
+    stat_walk s;
+    unsigned char stats[18];
+    char path[AE_MSG_PATH_MAX];
+    ae_file *f;
+    long unreadable = 0;
+    int rc;
 
     if (out == 0) return AE_MSG_ERR_ARGS;
-    memset(out, 0, sizeof *out);
+    memset(out, 0, sizeof(*out));
+    memset(&s, 0, sizeof(s));
 
-    got = ask("STAT", reply, (int)sizeof reply);
-    if (got < 0) return got;
-    if (got == 0) return AE_MSG_ERR_NOHOST;   /* it answered, but with nothing */
+    rc = walk(stat_visit, &s, &unreadable);
+    if (rc != AE_MSG_OK) return rc;
 
-    field[found++] = reply;
-    p = reply;
-    while (found < 4) {
-        char *bar = strchr(p, '|');
-        if (bar == 0) break;
-        *bar = '\0';
-        p = bar + 1;
-        field[found++] = p;
+    out->total = s.total;
+    out->unread = s.unread;
+    out->pointer = caller_pointer;
+    out->lowest = s.lowest;
+    out->unreadable = unreadable;
+    out->high = s.highest + 1;   /* the NEXT number, which is the convention */
+
+    /* MailStats, when it is there, is the board's own answer and wins for
+     * `high` - it is what express.e hands the next message. It is only 18
+     * bytes and a base can be missing it entirely (a fresh conference), in
+     * which case the walk's own count above stands. */
+    if (join_path(path, (int)sizeof(path), "MailStats")) {
+        f = ae_dos_open(path, AE_DOS_READ);
+        if (f != 0) {
+            if (ae_dos_read_full(f, stats, 18) == 1) {
+                long high = ae_dos_get_long(stats + 4);
+                if (high >= 1) out->high = high;
+            }
+            ae_dos_close(f);
+        }
     }
-    /* Four fields or it is not a STAT answer, whatever else it may be. */
-    if (found < 4) return AE_MSG_ERR_NOHOST;
-    for (i = 0; i < 3; i++) {
-        if (field[i][0] < '0' || field[i][0] > '9') return AE_MSG_ERR_NOHOST;
-    }
 
-    out->total = atol(field[0]);
-    out->unread = atol(field[1]);
-    out->pointer = atol(field[2]);
-    copy_field(out->conf, (int)sizeof out->conf, field[3]);
     return AE_MSG_OK;
+}
+
+typedef struct {
+    long first;
+    ae_msg_row *out;
+    int cap;
+    int filled;
+    /* For the tail window: how many readable rows there are in total, worked
+     * out by a first pass, so the second can start counting down to the last
+     * `cap` of them. */
+    long skip;
+    long seen;
+} list_walk;
+
+static int count_visit(const ae_msg_row *row, void *context)
+{
+    list_walk *l = (list_walk *)context;
+    if (ae_msg_may_read(row)) l->seen++;
+    return 1;
+}
+
+static int list_visit(const ae_msg_row *row, void *context)
+{
+    list_walk *l = (list_walk *)context;
+
+    if (!ae_msg_may_read(row)) return 1;
+    if (l->skip > 0) { l->skip--; return 1; }
+    if (l->first > 0 && row->number < l->first) return 1;
+
+    l->out[l->filled] = *row;
+    l->filled++;
+    return (l->filled < l->cap) ? 1 : 0;   /* 0 stops the walk */
 }
 
 int ae_msg_list(long first, ae_msg_row *out, int cap)
 {
-    char request[48];
-    char reply[REPLY_BUF];
-    /* Sent VERBATIM on the first trip, negative included: a negative `first`
-       asks the board for the last `count` rows (see xim/msgfeed.ts). After the
-       first reply `next` is a real message number and the paging is ordinary. */
-    long next = first;
-    int filled = 0;
-    int trips = 0;
+    list_walk l;
+    int rc;
 
     if (out == 0 || cap <= 0) return AE_MSG_ERR_ARGS;
 
-    while (filled < cap) {
-        char *p;
-        int got;
-        int had_complete_row;
+    memset(&l, 0, sizeof(l));
+    l.first = first;
+    l.out = out;
+    l.cap = cap;
 
-        sprintf(request, "LIST %ld %d", next, cap - filled);
-        got = ask(request, reply, (int)sizeof reply);
-        if (got == AE_MSG_ERR_CARRIER) return AE_MSG_ERR_CARRIER;
-        if (got == AE_MSG_ERR_NOHOST) {
-            /* Only the FIRST trip decides that. A board that answered rows and
-             * then echoed would be a board that changed mid-listing, which it
-             * cannot; treating a later one as "no host" would throw away rows
-             * the caller is already looking at. */
-            return trips == 0 ? AE_MSG_ERR_NOHOST : filled;
-        }
-        trips++;
-        if (got == 0) break;               /* the board has nothing more */
-
-        /* Asked BEFORE the split, which overwrites every '\n' with a NUL. A
-         * non-empty reply carrying no complete row would otherwise loop for
-         * ever: `next` never advances, so the same request goes out again. A
-         * malformed answer ends the listing; it does not hang the door. */
-        had_complete_row = strchr(reply, '\n') != 0;
-
-        p = reply;
-        while (*p != '\0' && filled < cap) {
-            char *end = strchr(p, '\n');
-            if (end == 0) break;           /* never a partial row - the board
-                                              truncates at a row boundary */
-            *end = '\0';
-            if (*p != '\0' && ae_msg_split_row(p, &out[filled]) == AE_MSG_OK) {
-                next = out[filled].number + 1;
-                filled++;
-            }
-            p = end + 1;
-        }
-
-        if (!had_complete_row) break;
+    if (first < 0) {
+        /* The tail window needs to know how many readable rows exist before
+         * it can say which is the (total - cap)th. Two passes over a few tens
+         * of KB, and no allocation - the alternative is holding every row. */
+        rc = walk(count_visit, &l, 0);
+        if (rc != AE_MSG_OK) return rc;
+        l.skip = l.seen - (long)cap;
+        if (l.skip < 0) l.skip = 0;
+        l.first = 0;
     }
 
-    return filled;
+    rc = walk(list_visit, &l, 0);
+    if (rc != AE_MSG_OK) return rc;
+    return l.filled;
+}
+
+typedef struct {
+    long want;
+    ae_msg_row *out;
+    int found;
+} find_walk;
+
+static int find_visit(const ae_msg_row *row, void *context)
+{
+    find_walk *fw = (find_walk *)context;
+
+    if (row->number != fw->want) return 1;
+    if (!ae_msg_may_read(row)) return 0;    /* found, but not for this caller */
+
+    *fw->out = *row;
+    fw->found = 1;
+    return 0;
+}
+
+int ae_msg_header(long number, ae_msg_row *out)
+{
+    find_walk fw;
+    int rc;
+
+    if (out == 0 || number < 1) return AE_MSG_ERR_ARGS;
+
+    fw.want = number;
+    fw.out = out;
+    fw.found = 0;
+
+    rc = walk(find_visit, &fw, 0);
+    if (rc != AE_MSG_OK) return rc;
+
+    /* "No such message" and "not yours" are the same answer on purpose: a
+     * door that told them apart would confirm that a message exists to
+     * somebody who may not see it. */
+    return fw.found ? AE_MSG_OK : AE_MSG_ERR_ARGS;
 }
 
 long ae_msg_body(long number, char *out, unsigned long cap)
 {
-    char request[48];
-    char reply[REPLY_BUF];
-    unsigned long written = 0;
-    long chunk = 0;
+    ae_msg_row row;
+    char name[16];
+    char path[AE_MSG_PATH_MAX];
+    ae_file *f;
+    long got;
 
     if (out == 0 || cap == 0) return AE_MSG_ERR_ARGS;
     out[0] = '\0';
-    if (number <= 0) return AE_MSG_ERR_ARGS;
+    if (number < 1) return AE_MSG_ERR_ARGS;
 
-    for (;;) {
-        int got;
-        unsigned long room;
-        unsigned long take;
+    /* The header decides visibility. Reading the body first and checking
+     * afterwards would already have put somebody's private mail in the
+     * caller's buffer. */
+    if (ae_msg_header(number, &row) != AE_MSG_OK) return AE_MSG_ERR_ARGS;
 
-        sprintf(request, "BODY %ld %ld", number, chunk);
-        got = ask(request, reply, (int)sizeof reply);
-        if (got == AE_MSG_ERR_CARRIER) return AE_MSG_ERR_CARRIER;
-        if (got == AE_MSG_ERR_NOHOST) return chunk == 0 ? AE_MSG_ERR_NOHOST : (long)written;
-        if (got == 0) break;               /* the whole body has arrived */
+    number_to_name(name, number);
+    if (!join_path(path, (int)sizeof(path), name)) return AE_MSG_ERR_ARGS;
 
-        room = cap - 1 - written;
-        if (room == 0) break;              /* the caller's buffer is full */
-        take = (unsigned long)got;
-        if (take > room) take = room;
+    f = ae_dos_open(path, AE_DOS_READ);
+    if (f == 0) return 0;    /* a header with no body file: real, and not an error */
 
-        memcpy(out + written, reply, (size_t)take);
-        written += take;
-        out[written] = '\0';
+    got = ae_dos_read(f, out, (long)(cap - 1));
+    ae_dos_close(f);
+    if (got < 0) return 0;
 
-        chunk++;
-        /* A body longer than any caller will read, and a stop that cannot be
-         * argued with if a board ever answers the same chunk for ever. */
-        if (chunk > 512) break;
-    }
-
-    return (long)written;
+    out[got] = '\0';
+    return got;
 }

@@ -134,6 +134,11 @@ int ae_conference(ae_session *s)
     return ask_int(s, AE_FIELD_CONFERENCE, 1);
 }
 
+int ae_conf_name(ae_session *s, char *out, int n)
+{
+    return ask(s, AE_FIELD_CONF_NAME, out, n);
+}
+
 int ae_conf_location(ae_session *s, char *out, int n)
 {
     return ask(s, AE_FIELD_CONF_LOCATION, out, n);

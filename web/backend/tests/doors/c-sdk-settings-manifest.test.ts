@@ -37,6 +37,7 @@ const SDK_C = path.join(REPO, 'sdk', 'c');
 /** Every door that declares its settings in C, and where its manifest ships. */
 const C_SDK_DOORS: Array<{ src: string; doorsDir: string }> = [
   { src: 'requests', doorsDir: 'REQUESTS' },
+  { src: 'subs', doorsDir: 'SUBS' },
 ];
 
 function haveCompiler(): boolean {

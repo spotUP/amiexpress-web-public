@@ -1,36 +1,43 @@
 /*
- * ae_msgbase - the current conference's PUBLIC message feed, for a C door.
+ * ae_msgbase - the current conference's messages, read off the disk.
  *
- * WHAT THIS IS NOT: a message-base parser. A 68K door could open
- * `<conf>/MsgBase/HeaderFile` and walk its 110-byte records - Doors/Conftop
- * and Doors/Request both do - and for a COUNT that is fine. For a discussion
- * reader it is wrong twice over:
+ * THIS REPLACES AN EARLIER MODULE THAT ASKED THE BOARD. That one sent
+ * AEW_MSGQUERY (10200) and rendered what came back, on the reasoning that the
+ * board should decode and the door should draw. The reasoning was sound and
+ * the conclusion is not available: AEW_MSGQUERY is this port's own invention,
+ * and a real Amiga AmiExpress answers no command that lists or reads a
+ * message. A door that wants messages opens <conf>/MsgBase/HeaderFile itself.
+ * Doors/Conftop and Doors/Request have always done exactly that.
  *
- *   1. This board's HeaderFiles hold TWO record layouts interleaved, and
- *      telling them apart needs a whole-file sequence pass
- *      (web/backend/src/services/msgheader-layout.ts). Conftop reading a
- *      message number at the wrong offset is a wrong statistic; a reader doing
- *      it puts the wrong person's name on somebody's post.
- *   2. A door reading the disk sees every message regardless of the caller's
- *      READ_PRIV_EALL / READ_PRIV_ALL. Making the door apply the caller's ACS
- *      would put the read filter in C on the wrong side of the trust boundary.
+ * So this module reads files, through ae_dos. The two objections the old
+ * header raised are still real, and are answered here rather than avoided:
  *
- * So the BOARD decodes and filters, and the DOOR renders. One XIM command
- * (AEW_MSGQUERY, 10200) answers in plain '|'-separated Latin-1 text; this
- * module is the splitter. The 110-byte record is parsed in exactly one place
- * on this board and it is not here.
+ *   1. TWO RECORD LAYOUTS, INTERLEAVED IN ONE FILE. This board's HeaderFiles
+ *      hold records AmiExpress wrote next to records this port wrote, and
+ *      telling them apart cannot be done record by record: a port record has
+ *      a plausible message number at BOTH offsets. It needs the file's
+ *      sequence - message numbers run in order, so the reading that continues
+ *      the run is the right one, and `1, 2, 3` beats `321, 578, 835`. That
+ *      pass is ported here from web/backend/src/services/msgheader-layout.ts,
+ *      which is where it was worked out, and it streams: one record in hand
+ *      and the previous number, so nothing allocates.
  *
- * A CLASSIC AmiExpress answers nothing to command 10200, which is not an
- * error - it is a board without this feature. That is AE_MSG_ERR_NOHOST, and
- * a door must say so rather than showing an empty list, which reads as
- * "nobody has posted here".
+ *   2. THE CALLER'S ACCESS. A door cannot evaluate the board's ACS tables, so
+ *      it cannot reproduce READ_PRIV_EALL / READ_PRIV_ALL exactly. What it
+ *      CAN do is what express.e itself does at the point of reading, which is
+ *      not an ACS question at all: the STATUS BYTE decides
+ *      (express.e:8929-8933), and a private message is shown only to its
+ *      sender, its recipient, or a sysop (express.e:12343-12355). That is the
+ *      rule implemented here. Sysop is a level threshold the sysop sets, not
+ *      a guess - see ae_msg_open.
  *
- * Every round trip goes through ae_field_exchange (aedoor.h). There is no
- * "#ifdef AMIGA" here: the transport file the Makefile picks IS the platform
- * mechanism, same as every other module in this SDK.
+ * WHAT THIS MODULE DOES NOT DO: write. Not one byte. Reading a base wrongly
+ * shows somebody the wrong name; writing it wrongly destroys mail, and the
+ * writer waits until the 110-byte round trip is proven against real
+ * Amiga-written files.
  *
- * Nothing allocates. Every buffer is the caller's or is on this module's
- * stack, bounded, and refuses to overflow.
+ * Nothing allocates. Every buffer is the caller's or is this module's own,
+ * bounded, and refuses to overflow.
  *
  * C89. ASCII only.
  */
@@ -44,86 +51,146 @@ extern "C" {
 
 #define AE_MSG_OK            0
 #define AE_MSG_ERR_ARGS     -1
-#define AE_MSG_ERR_CARRIER  -2
-#define AE_MSG_ERR_NOHOST   -3   /* a classic board: it answered nothing */
+#define AE_MSG_ERR_NOBASE   -2   /* no HeaderFile there, or it cannot be read */
 
-#define AE_MSG_SUBJECT_MAX 32
 #define AE_MSG_NAME_MAX    32
+#define AE_MSG_SUBJECT_MAX 32
+#define AE_MSG_PATH_MAX   256
 
-/*
- * The board's reply cap, and it is not a preference: it must equal
- * MSGQUERY_REPLY_MAX in web/backend/src/amiga-emulation/xim/msgfeed.ts.
- * The XIM string holds 198 usable bytes (FieldLengths.GENERIC_STRING); 190
- * leaves headroom for the terminator and for the backend's "bbs:" guard byte.
- * A door that paged on a different number would ask for chunks the board
- * never sends and would lose the tail of every body.
- */
-#define AE_MSG_REPLY_MAX 190
+/** The 110-byte on-disk record, AmiExpress layout. Named because the size is
+ *  arithmetic every caller would otherwise repeat. */
+#define AE_MSG_RECORD_SIZE 110
 
-/** One row of the feed. Message numbers ascend and are never renumbered. */
+/* The status byte, which is what decides public from private - never the
+ * recipient's name. express.e:10790-10794, 10868, 11930. */
+#define AE_MSG_PUBLIC    'P'
+#define AE_MSG_CENSORED  'p'
+#define AE_MSG_PRIVATE   'R'
+#define AE_MSG_DELETED   'D'
+
+/** One message's header. Dates are the board's own LONGs; the door formats. */
 typedef struct {
     long number;
+    char to[AE_MSG_NAME_MAX];
     char from[AE_MSG_NAME_MAX];
     char subject[AE_MSG_SUBJECT_MAX];
-    char date[10];                      /* ddmmmyy, as the board rendered it */
-    char flag;                          /* 'N' new, '*' censored, '-' ordinary */
+    long date;
+    long recv;                          /* 0 = the recipient has not read it */
+    char status;                        /* 'P' 'p' 'R' 'D', as on disk */
+    char flag;                          /* 'N' new, '*' censored, '-' plain */
 } ae_msg_row;
 
-/** What the conference looks like to THIS caller. */
+/** What the base looks like to THIS caller. */
 typedef struct {
-    long total;        /* public messages here that this caller may read */
-    long unread;       /* new for this caller, against his scan pointer */
-    long pointer;      /* his last-new-read; the door never writes it */
-    char conf[32];
+    long total;        /* messages here this caller may read */
+    long unread;       /* of those, new since his scan pointer */
+    long pointer;      /* the scan pointer he arrived with */
+    long lowest;       /* lowest message number present */
+    long high;         /* what MailStats calls highMsgNum: the NEXT number */
+    long unreadable;   /* records with no usable number at either offset */
 } ae_msg_stat;
 
 /**
- * Read the conference's headline numbers.
+ * Render a message's date as `08Sep26`, NUL-terminated. `out` needs 8 bytes.
  *
- * Returns AE_MSG_OK, or a negative AE_MSG_ERR_*. On AE_MSG_ERR_NOHOST the
- * board has no such command - a classic AmiExpress - and `out` is zeroed.
+ * msgDate and recv are UNIX seconds, not the Amiga's own day count - verified
+ * against a real Amiga-written HeaderFile, whose recv stamps read as 2023
+ * dates when taken as unix seconds and as nonsense taken any other way.
+ *
+ * Rendered as UTC. The board renders the same field in LOCAL time
+ * (msgfeed.ts's ddmmmyy, and formatMessageDate before it), so a message
+ * posted within a few hours of midnight can show a different day in the door
+ * than at the `R` prompt. Doing better needs a timezone, which AmigaDOS does
+ * not reliably have and which no door should invent; the alternative was
+ * calling localtime() on a machine whose clock is already local and shifting
+ * twice, which is worse and silent.
+ */
+void ae_msg_date_string(long unix_seconds, char *out, int cap);
+
+/**
+ * Point the module at a message base and say who is reading it.
+ *
+ * `dir` is what the board answered to ae_msgbase_path() - e.g.
+ * "BBS:Conf3/MsgBase/". A trailing slash is optional.
+ *
+ * `caller` is the name to match against `to` and `from` when deciding whether
+ * a private message is this caller's business. It must be the CONFERENCE mail
+ * name, which is not always the login name: a conference may be configured to
+ * use the caller's real name or internet name instead (express.e's
+ * confMailName). Case is ignored, as it is on the board.
+ *
+ * `sysop` non-zero means private mail addressed to other people is visible.
+ * The DOOR does not decide this - the caller of this function does, by
+ * comparing the board's answer for the caller's level against a threshold the
+ * sysop configured. A door that guessed would either leak mail or hide the
+ * sysop's own.
+ *
+ * `scan_pointer` is the caller's last-scanned message number, from
+ * ae_last_scanned(). Anything above it counts as new. Pass -1 when the board
+ * would not say, and nothing is reported as new rather than everything.
+ *
+ * Returns AE_MSG_OK, or AE_MSG_ERR_NOBASE when there is no readable
+ * HeaderFile there - which is a real answer for a brand-new conference and
+ * must be told apart from "no messages you may read".
+ */
+int ae_msg_open(const char *dir, const char *caller, int sysop, long scan_pointer);
+
+/**
+ * The base's headline numbers for this caller. One pass over HeaderFile.
+ *
+ * `total` and `unread` count only what this caller may read, because a
+ * conference that says "142 messages" and then lists 3 has told him nothing
+ * useful. `unreadable` is records the sequence pass could not resolve; a door
+ * should say so plainly rather than quietly showing fewer messages than the
+ * board would.
  */
 int ae_msg_stat_read(ae_msg_stat *out);
 
 /**
- * Fill up to `cap` rows starting at message number `first`, ascending.
+ * Fill up to `cap` rows, ascending by message number, skipping anything this
+ * caller may not read.
  *
- * `first` == 0 starts at the beginning. `first` < 0 starts `cap` rows back
- * from the END - the newest window, still delivered in plain ascending number
- * order, which is what a discussion door opens on. That is an ARGUMENT and not
- * a fourth verb, and it exists because message numbers are sparse: a door
- * cannot work out "the hundredth from the end" from a total and a highest
- * number, so without it a long conference would open on its oldest messages.
+ * `first` > 0 starts at that message number. `first` == 0 starts at the
+ * beginning. `first` < 0 returns the LAST `cap` readable messages - the
+ * newest window, still in ascending order, which is what a discussion door
+ * opens on. That is an argument rather than a second function because message
+ * numbers are sparse: a door cannot compute "the hundredth from the end" from
+ * a total and a highest number.
  *
- * Returns the number of rows filled - 0 is a legitimate answer and means the
- * conference has nothing more, NOT an error - or a negative AE_MSG_ERR_*.
- *
- * Pages internally: one XIM round trip per AE_MSG_REPLY_MAX bytes, which is
- * what the protocol costs. Every trip is ~45ms of emulation, so a door asks
- * for the window it is about to DRAW, not for two hundred rows it will not
- * show.
+ * Returns the number of rows filled - 0 is a legitimate answer meaning there
+ * is nothing more - or a negative AE_MSG_ERR_*.
  */
 int ae_msg_list(long first, ae_msg_row *out, int cap);
 
 /**
- * Append one message's body into `out`, NUL-terminated.
+ * Read one message's header by number, without its body.
  *
- * Returns the number of bytes written (0 for a message the caller may not
- * read, or one with an empty body), or a negative AE_MSG_ERR_*.
+ * Returns AE_MSG_OK, or AE_MSG_ERR_ARGS when there is no such message or the
+ * caller may not read it. Those two are deliberately the same answer: a door
+ * that distinguished them would tell a caller that a message he cannot see
+ * exists, which is how a message base leaks who is talking to whom.
+ */
+int ae_msg_header(long number, ae_msg_row *out);
+
+/**
+ * Read a message's body into `out`, NUL-terminated.
+ *
+ * The body is a file of its own named after the message number, holding text
+ * and nothing else - no header, no subject, LF-terminated lines. A message
+ * whose body file is missing is not an error: express.e's own scan skips
+ * those, and they occur on real boards.
+ *
+ * Returns the number of bytes written - 0 for an empty or missing body, or
+ * for a message the caller may not read - or a negative AE_MSG_ERR_*.
  */
 long ae_msg_body(long number, char *out, unsigned long cap);
 
 /**
- * Split one already-received row in place. Exposed because it is the part
- * worth testing on its own, and because a door that has its own paging can
- * reuse it.
- *
- * `line` is modified: the '|' separators become NULs. Returns AE_MSG_OK when
- * the row had at least the five fields v1 defines, AE_MSG_ERR_ARGS otherwise.
- * A row with MORE than five fields still parses - the format is append-only
- * and a door must never reject a row for carrying a field it does not know.
+ * Whether this caller may read this message. Exposed because it is the rule
+ * worth testing on its own, and because a door showing its own listing needs
+ * to ask the same question this module asks.
  */
-int ae_msg_split_row(char *line, ae_msg_row *out);
+int ae_msg_may_read(const ae_msg_row *row);
 
 #ifdef __cplusplus
 }

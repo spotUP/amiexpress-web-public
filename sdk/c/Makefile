@@ -122,15 +122,15 @@ build/test_ae_request: src/ae_request.c src/ae_http.c src/ae_net.c src/json_lite
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) -D_DEFAULT_SOURCE src/ae_request.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c tests/test_ae_request.c -o $@
 
-# The public-feed client, against a board this test plays itself: no emulator,
-# no BBS. ae_transport_native.c supplies ae_field_exchange and the hook the
-# test installs; with no hook it echoes the request back, which is what a
-# classic AmiExpress does to a command it has never heard of.
-build/test_ae_msgbase: src/ae_msgbase.c src/ae_transport_native.c \
+# ae_msgbase reads FILES now, not the board, so it links against ae_dos and no
+# longer needs the transport at all. Its fixtures are the two real HeaderFiles
+# already tracked under web/backend/tests/fixtures/msgheaders/, read relative
+# to sdk/c - which is why this test must be run from here.
+build/test_ae_msgbase: src/ae_msgbase.c src/ae_dos.c src/ae_dos_native.c \
                        tests/test_ae_msgbase.c include/ae_msgbase.h \
-                       include/ae_transport_native.h
+                       include/ae_dos.h
 	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) src/ae_msgbase.c src/ae_transport_native.c \
+	$(CC) $(HOST_CFLAGS) src/ae_msgbase.c src/ae_dos.c src/ae_dos_native.c \
 	    tests/test_ae_msgbase.c -o $@
 
 # The generated table must match tokens.ts. Needs node; skipped where there
@@ -249,7 +249,7 @@ probe: build/amiga/theme-picker
 # Each entry is <example-dir>:<Doors-dir>. Explicit rather than clever: an
 # earlier version derived the destination by lowercasing and matching inside a
 # pipeline, and the nested shell case broke make outright.
-SETTINGS_DOORS = requests:REQUESTS
+SETTINGS_DOORS = requests:REQUESTS subs:SUBS
 
 .PHONY: settings
 settings:

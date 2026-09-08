@@ -23,15 +23,21 @@
  *
  *   It does not WRITE a message. `P` and `R` hand "EALL" back with
  *   ae_return_command and exit; the board then runs its own express.e message
- *   entry, which is 1:1 with the real thing. A second editor in a door would
- *   be a second source of truth for message entry.
- *   It does not READ the message base. The board decodes and filters
- *   (AEW_MSGQUERY, see ae_msgbase.h) - two record layouts are interleaved in
- *   this board's HeaderFiles, and the caller's ACS cannot be enforced from
- *   inside a door.
+ *   entry. Writing is release 2, and it waits until the 110-byte record round
+ *   trip is proven - reading a base wrongly shows the wrong name, writing it
+ *   wrongly destroys mail.
  *   It does not MOVE the read pointer. Reading here marks nothing read; the
- *   count clears when the caller reads through `R`. One owner for the pointer,
- *   and it pushes callers into the board's real reader.
+ *   count clears when the caller reads through `R`. One owner for the pointer.
+ *
+ * IT DOES READ THE MESSAGE BASE ITSELF, off the disk, through ae_msgbase and
+ * ae_dos. An earlier version asked the board instead, over AEW_MSGQUERY - a
+ * command this port invented and no real AmiExpress answers, which made the
+ * door unusable on the machines it is meant for. The two objections to
+ * reading the disk were real and are answered rather than avoided: the
+ * interleaved record layouts are settled by a sequence pass ported from the
+ * board's own classifier, and visibility follows express.e's STATUS BYTE rule
+ * (public, or private and yours) rather than pretending to evaluate ACS. See
+ * ae_msgbase.h.
  *
  * ONE BINARY, TWO REGISTRATIONS. Under SUBS it draws the feed. Under any other
  * name - SUBSCAN - it prints a three-line digest and leaves, which is what a
@@ -66,12 +72,13 @@ static char session_storage[AE_SESSION_MIN_STORAGE];
 /*
  * The feed window this door holds.
  *
- * NOT the plan's 200, and the reason is measured rather than preferred: the
- * XIM string carries 190 bytes, a listing row is about forty, so the board
- * answers roughly four rows per round trip and each trip costs ~45ms of
- * emulation. Two hundred rows is fifty trips and better than two seconds
- * before the caller sees anything. A hundred is about half that, and the door
- * says on screen when the conference is longer than what it holds.
+ * This used to be a round-trip budget: the feed arrived over XIM at roughly
+ * four rows per message and ~45ms each, so the window was really a stopwatch.
+ * Reading the disk removes that entirely - a hundred records is 11KB and one
+ * pass - so what is left is a MEMORY budget. Each row is about 110 bytes of
+ * this door's own static storage, so two hundred is 22KB against an 8KB stack
+ * and whatever the board left; a hundred is the safe half, and the door says
+ * on screen when the conference is longer than what it holds.
  *
  * A sysop who wants a different trade-off sets FeedWindow in SUBS.cfg, which
  * the admin writes for him (Doors/SUBS/door.settings.json).
@@ -85,14 +92,45 @@ static int row_count;
 static int feed_window = ROWS_DEFAULT;
 static long feed_total;                 /* what the conference holds */
 static long feed_unread;
+static long feed_unreadable;            /* records no layout could explain */
 static char conf_name[32];
+
+/*
+ * The level at or above which a caller sees other people's private mail.
+ *
+ * The DOOR does not decide this and must not guess it. A door cannot evaluate
+ * the board's ACS tables, so express.e's ACS_SYSOP_READ is not available to
+ * it; what is available is the caller's level, and the sysop saying which
+ * level counts. 255 is the default because on an unconfigured board nobody
+ * reaches it, which fails towards showing too little rather than too much.
+ */
+#define SYSOP_LEVEL_DEFAULT 255
+static int sysop_level = SYSOP_LEVEL_DEFAULT;
 
 static char body[BODY_MAX];
 static char status_line[80];
 static char row_text[256];
 static char doc_title[64];
 
-typedef enum { FEED_OK, FEED_EMPTY, FEED_NOHOST, FEED_GONE } feed_state;
+/*
+ * FEED_NOBASE is not FEED_EMPTY, and the distinction is the caller's.
+ * "Nobody has posted here yet" invites him to; "this conference has no
+ * message base" tells him something is wrong with the board. The old name for
+ * this was FEED_NOHOST, from when a classic AmiExpress answering no XIM
+ * command was the failure that mattered. The door reads files now, so the
+ * failure that matters is a HeaderFile that is not there.
+ */
+typedef enum { FEED_OK, FEED_EMPTY, FEED_NOBASE, FEED_GONE } feed_state;
+
+/* The board session.
+ *
+ * A file-static like `screen` and `keys` beside it, rather than a local of
+ * main(): reading the message base needs to ask the board where that base is
+ * and who is calling, and those questions are asked from load_feed() and
+ * digest(), which are not main(). This door already keeps its screen and its
+ * key source here for the same reason.
+ */
+static ae_session session;
 
 static ui_screen screen;
 static ui_key_source keys;
@@ -207,6 +245,9 @@ static void config_load(const char *path)
         if (strcmp(line, "FeedWindow") == 0) {
             int n = atoi(value);
             if (n >= 10 && n <= ROWS_MAX) feed_window = n;
+        } else if (strcmp(line, "SysopLevel") == 0) {
+            int n = atoi(value);
+            if (n >= 1 && n <= 255) sysop_level = n;
         }
     }
     fclose(f);
@@ -241,13 +282,17 @@ static const char *feed_row(void *context, int index)
     if (index < 0 || index >= row_count) return "";
 
     if (is_wide) {
+        /* The date is a raw timestamp on disk now - the board used to hand it
+           over already rendered - so the door formats it. */
+        char when[8];
         int subject_cols = screen.cols - 34;
         if (subject_cols < 10) subject_cols = 10;
         if (subject_cols > 60) subject_cols = 60;
+        ae_msg_date_string(rows[index].date, when, (int)sizeof when);
         sprintf(row_text, "%5ld %-12.12s %-*.*s %-8.8s %c",
                 rows[index].number, rows[index].from,
                 subject_cols, subject_cols, rows[index].subject,
-                rows[index].date, rows[index].flag);
+                when, rows[index].flag);
     } else {
         /* 40 columns: 4 + 1 + 10 + 1 + 22 + 1 + 1 = 40, and the caret the list
            draws lives in the two cells before it - so the row is built for
@@ -264,34 +309,70 @@ static const char *feed_row(void *context, int index)
 
 /* ------------------------------------------------------------------- feed */
 
-/** Ask the board what this conference holds, and fill the window. */
+/**
+ * Find this conference's message base and tell ae_msgbase who is reading it.
+ *
+ * Two routes to the directory, because a board may answer either. MSGBASE_LOC
+ * (604) is the direct question and what ctop.e has always used. BB_CONFLOCAL
+ * (127) is the conference directory, and "MsgBase" under it is where
+ * express.e puts the default base when no MsgBases.info says otherwise
+ * (express.e:2068) - so an older board that answers only the second still
+ * works.
+ */
+static int open_base(void)
+{
+    char dir[256];
+    char caller[AE_MSG_NAME_MAX];
+    int level;
+
+    dir[0] = '\0';
+    if (ae_msgbase_path(&session, dir, (int)sizeof dir) <= 0 || dir[0] == '\0') {
+        char conf_dir[200];
+        if (ae_conf_location(&session, conf_dir, (int)sizeof conf_dir) <= 0) return 0;
+        if (conf_dir[0] == '\0') return 0;
+        sprintf(dir, "%.200s%sMsgBase", conf_dir,
+                (conf_dir[strlen(conf_dir) - 1] == '/' ||
+                 conf_dir[strlen(conf_dir) - 1] == ':') ? "" : "/");
+    }
+
+    caller[0] = '\0';
+    ae_user_name(&session, caller, (int)sizeof caller);
+
+    /* A board that will not say the level answers -1, and -1 is not a sysop.
+       Failing towards showing less is the only safe direction for a rule that
+       decides who reads other people's mail. */
+    level = ae_user_level(&session);
+
+    return ae_msg_open(dir, caller, level >= sysop_level,
+                       ae_last_scanned(&session)) == AE_MSG_OK;
+}
+
+/** Read what this conference holds, and fill the window. */
 static feed_state load_feed(void)
 {
     ae_msg_stat stat;
-    int rc;
     int got;
 
     row_count = 0;
     feed_total = 0;
     feed_unread = 0;
-    conf_name[0] = '\0';
+    feed_unreadable = 0;
 
-    rc = ae_msg_stat_read(&stat);
-    if (rc == AE_MSG_ERR_CARRIER) return FEED_GONE;
-    if (rc != AE_MSG_OK) return FEED_NOHOST;
+    if (!ae_carrier(&session)) return FEED_GONE;
+    if (!open_base()) return FEED_NOBASE;
+
+    if (ae_msg_stat_read(&stat) != AE_MSG_OK) return FEED_NOBASE;
 
     feed_total = stat.total;
     feed_unread = stat.unread;
-    strncpy(conf_name, stat.conf, sizeof conf_name - 1);
-    conf_name[sizeof conf_name - 1] = '\0';
+    feed_unreadable = stat.unreadable;
     if (stat.total <= 0) return FEED_EMPTY;
 
-    /* The NEWEST window, in ascending number order. A negative first is what
-       asks for the tail; message numbers are sparse, so the board is the only
-       thing that can work out where it starts. */
+    /* The NEWEST window, in ascending number order. A negative first asks for
+       the tail; message numbers are sparse, so counting back from the end is
+       the only way to find where the last hundred start. */
     got = ae_msg_list(-1, rows, feed_window);
-    if (got == AE_MSG_ERR_CARRIER) return FEED_GONE;
-    if (got < 0) return FEED_NOHOST;
+    if (got < 0) return FEED_NOBASE;
     row_count = got;
     return row_count > 0 ? FEED_OK : FEED_EMPTY;
 }
@@ -379,11 +460,15 @@ static void digest(void)
     char line[200];
     int got;
 
+    if (!open_base()) return;
     if (ae_msg_stat_read(&stat) != AE_MSG_OK) return;
     if (stat.total <= 0) return;
 
-    sprintf(line, "[INFO] %.30s: %ld public messages, %ld new for you.",
-            stat.conf[0] != '\0' ? stat.conf : "This conference",
+    conf_name[0] = '\0';
+    ae_conf_name(&session, conf_name, (int)sizeof conf_name);
+
+    sprintf(line, "[INFO] %.30s: %ld messages, %ld new for you.",
+            conf_name[0] != '\0' ? conf_name : "This conference",
             stat.total, stat.unread);
     ae_put(line, 1);
 
@@ -408,14 +493,18 @@ static int read_message(int index)
     if (index < 0 || index >= row_count) return 0;
 
     len = ae_msg_body(rows[index].number, body, sizeof body);
-    if (len == AE_MSG_ERR_CARRIER) return -1;
+    if (!ae_carrier(&session)) return -1;
     if (len <= 0) {
-        strcpy(body, "That message has no body the board will show.");
+        strcpy(body, "That message has no body on the board.");
     }
 
     if (wide) {
-        sprintf(doc_title, "#%ld  From %.20s  %.8s  To EALL",
-                rows[index].number, rows[index].from, rows[index].date);
+        /* The recipient is read from the message, not assumed to be EALL:
+           this door lists private mail the caller is party to as well. */
+        char when[8];
+        ae_msg_date_string(rows[index].date, when, (int)sizeof when);
+        sprintf(doc_title, "#%ld  From %.20s  %.8s  To %.20s",
+                rows[index].number, rows[index].from, when, rows[index].to);
     } else {
         sprintf(doc_title, "#%ld %.14s", rows[index].number, rows[index].from);
     }
@@ -511,7 +600,6 @@ static int name_is_subscan(const char *name)
 
 int main(int argc, char **argv)
 {
-    ae_session session;
     ui_list list;
     char theme_id[32];
     char launched_as[32];
@@ -573,6 +661,12 @@ int main(int argc, char **argv)
 
     config_load("SUBS.cfg");
 
+    /* The masthead wants the conference's name, which is the board's to say -
+       a message base is headers and bodies and does not know what it is
+       called. "" is fine; the masthead falls back to "SUBS". */
+    conf_name[0] = '\0';
+    ae_conf_name(&session, conf_name, (int)sizeof conf_name);
+
     /* The feed is a round trip per four rows, so say what is happening rather
        than leaving a black screen for a second. */
     ansi_clear(&screen.buf);
@@ -614,11 +708,13 @@ int main(int argc, char **argv)
             ansi_clear(&screen.buf);
             draw_masthead(conf_name[0] != '\0' && wide ? conf_name : "SUBS");
 
-            if (state == FEED_NOHOST) {
-                /* Not an error, and not the same sentence as an empty
-                   conference: this is what a classic AmiExpress gives. */
-                say(3, wide ? "This board does not answer the message feed."
-                            : "No message feed here.");
+            if (state == FEED_NOBASE) {
+                /* Not an error the caller caused, and not the same sentence
+                   as an empty conference: this one says the board has no
+                   message base here at all, which is a thing to tell a sysop
+                   about rather than an invitation to post. */
+                say(3, wide ? "This conference has no message base on the board."
+                            : "No message base here.");
                 say(5, "Press Q to leave.");
             } else if (state == FEED_EMPTY || row_count == 0) {
                 say(3, wide ? "Nobody has posted here yet. Press P and be first."

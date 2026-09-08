@@ -40,10 +40,13 @@ typedef enum {
     AE_FIELD_SCREEN_COLS    = 520,  /* BB_SCRWIDTH */
     AE_FIELD_SCREEN_ROWS    = 521,  /* BB_SCRHEIGHT */
     AE_FIELD_CONFERENCE     = 510,  /* BB_CONFNUM */
+    /* What the conference is CALLED, for a masthead. Not in the message base:
+     * a message base is headers and bodies and knows nothing about it. */
+    AE_FIELD_CONF_NAME      = 126,  /* BB_CONFNAME */
     /*
      * WHERE THE CALLER'S CONFERENCE AND ITS MESSAGES LIVE ON DISK.
      *
-     * These three are what let a door read a message base for itself rather
+     * These two are what let a door read a message base for itself rather
      * than asking the board to decode one for it - and they are ORDINARY
      * AmiExpress, not this port's inventions, which is the entire point. A
      * real AmiExpress answers no command that lists or reads a message; a
@@ -217,6 +220,16 @@ int ae_conference(ae_session *s);
  * bases in one conference are written down.
  */
 int ae_conf_location(ae_session *s, char *out, int n);
+
+/**
+ * The current conference's name, e.g. "Coding". "" when the board does not
+ * answer.
+ *
+ * It is NOT in the message base - a message base is headers and bodies and
+ * knows nothing about what the conference is called - so a door that wants it
+ * on a masthead asks the board.
+ */
+int ae_conf_name(ae_session *s, char *out, int n);
 
 /**
  * The current conference's DEFAULT message base directory, e.g.

@@ -10,7 +10,17 @@
       "default": 100,
       "min": 10,
       "max": 200,
-      "help": "How many of the NEWEST public messages the door loads when it opens. The board answers about four rows per XIM round trip and each trip costs roughly 45ms of emulation, so 100 is about a second to open and 200 is about two. Older messages are still read at the R prompt. A conference with more than this says so on screen."
+      "help": "How many of the newest messages the door keeps on screen at once. Each one costs about 110 bytes of the door's memory on the Amiga, so 200 is the ceiling."
+    },
+    {
+      "key": "sysopLevel",
+      "cfgKey": "SysopLevel",
+      "label": "Level that may read private mail",
+      "type": "number",
+      "default": 255,
+      "min": 1,
+      "max": 255,
+      "help": "A caller at or above this level sees private messages between other people, as a sysop does at the R prompt. The door cannot read the board's ACS tables, so this is the one access rule it must be told. At 255, nobody gets it unless you have level-255 callers."
     }
   ]
 }

@@ -112,6 +112,7 @@ describe('the C SDK', () => {
       // the door work on a real Amiga AmiExpress. All four are ordinary
       // AmiExpress numbers, so unlike AEW_THEME/AEW_MSGQUERY they sit BELOW
       // express.e's MAX_CMD and are pinned here rather than in the test below.
+      ['AE_FIELD_CONF_NAME', 'BB_CONFNAME'],
       ['AE_FIELD_CONF_LOCATION', 'BB_CONFLOCAL'],
       ['AE_FIELD_MSGBASE_LOC', 'MSGBASE_LOC'],
       ['AE_FIELD_LAST_READ', 'LAST_READ'],
