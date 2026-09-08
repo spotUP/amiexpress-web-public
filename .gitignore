@@ -247,6 +247,14 @@ temp_batch
 Node*/CLogBackup
 Node*/DLogBackup
 Node*/Answers
+# Lowercase, and AmiExpress's own rename artifacts. `Node*/Answers` matched
+# the tidy name and nothing else, so `Node2/answers` and a 183 KB
+# `Node2/.!99887!answers` - 52 caller e-mail addresses - were committed by the
+# bulk "restore Node0-40 for the Docker build" pass and sat in a PUBLIC repo.
+# git's ignore matching is case-sensitive; the board's filesystem is not.
+Node*/answers
+Node*/ANSWERS
+Node*/.!*
 *.backup
 *.backup-*
 bbsConfig.info.pre-*
