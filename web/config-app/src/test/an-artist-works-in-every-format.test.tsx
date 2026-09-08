@@ -60,6 +60,37 @@ const open = (onOpenPath = vi.fn()) => {
   return onOpenPath;
 };
 
+describe('the artist dialog keeps every tool the sysop has', () => {
+  beforeEach(() => { vi.clearAllMocks(); writes.length = 0; });
+
+  it('offers history, replacement and a way to drop their own version', async () => {
+    open();
+
+    // The things that were cut and are back: nothing here is sysop-only.
+    expect(await screen.findByRole('button', { name: /History/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Upload a drawing/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Download/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Drop mine/ })).toBeTruthy();
+  });
+
+  it('asks before a drawing wipes the codes the board runs', async () => {
+    const user = userEvent.setup();
+    open();
+
+    await user.upload(
+      await screen.findByLabelText('Upload a drawing') as HTMLInputElement,
+      new File([new Uint8Array([27, 91, 51, 49, 109])], 'title.ans'),
+    );
+
+    // Nothing is written until the artist says so.
+    expect(await screen.findByRole('button', { name: 'Write it' })).toBeTruthy();
+    expect(writes.filter(w => !String(w.body?.dryRun)).length).toBe(0);
+
+    await user.click(screen.getByRole('button', { name: 'Write it' }));
+    await waitFor(() => expect(writes.some(w => w.body?.dryRun !== true)).toBe(true));
+  });
+});
+
 describe('an artist with a screen open', () => {
   beforeEach(() => { vi.clearAllMocks(); writes.length = 0; });
 

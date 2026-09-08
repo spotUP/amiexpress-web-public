@@ -14,7 +14,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, Download, Upload } from 'lucide-react';
+import { Copy, Download, History, Trash2, Upload } from 'lucide-react';
 import { useRef } from 'react';
 
 import { apiClient, type ApiError } from '../api/client';
@@ -27,13 +27,17 @@ import { useNotification } from '../contexts/NotificationContext';
 import { screenToCanvas } from './screen-bytes';
 import { blankCanvas, createSurface, type EditorSurface } from './screen-editor-state';
 import type { ArtistTheme } from './use-my-theme';
-import { missingFormats, type MciReferenceShape, type ScreenIndexShape } from './screen-index-view';
+import { describeProblem, missingFormats, type MciReferenceShape, type ScreenIndexShape } from './screen-index-view';
+import { ScreenRevisionsPanel } from './ScreenRevisionsPanel';
+import { CodeChip } from '../components/CodeChip';
 
 interface ScreenFilePayload {
   content: string;
   format: 'ansi' | 'text' | 'petscii' | 'rip' | 'binary';
   bytes: number;
   mci?: MciReferenceShape[];
+  /** What the board thinks is wrong with these bytes, if anything. */
+  problems?: string[];
 }
 
 export interface ArtistScreenDialogProps {
@@ -56,7 +60,7 @@ export interface ArtistScreenDialogProps {
 
 export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, isNew = false, newDescription }: ArtistScreenDialogProps) {
   const queryClient = useQueryClient();
-  const { showSuccess, showError } = useNotification();
+  const { showSuccess, showError, confirm } = useNotification();
   const [editing, setEditing] = useState<EditorSurface | null>(null);
   /** Set when the bytes cannot be read as a screen at all. */
   const [undrawable, setUndrawable] = useState<string | null>(null);
@@ -64,6 +68,19 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
   const addFormatInput = useRef<HTMLInputElement | null>(null);
   /** Which format the artist is about to add, once they pick a file. */
   const [addingFormat, setAddingFormat] = useState<{ ext: string; label: string; path: string } | null>(null);
+  const [showRevisions, setShowRevisions] = useState(false);
+  /**
+   * What replacing this screen would do to its codes, from the board's own dry
+   * run, and what the artist chose about it.
+   *
+   * A screen is a program: `~CC_` runs a door, `~SS_` pulls in a logo. An ANSI
+   * editor writes none of them, so dropping a fresh drawing over a screen used
+   * to silently delete every code in it - the art painted and the keys stopped
+   * working. The board answers what would be carried; the artist decides.
+   */
+  const [carryVerdict, setCarryVerdict] = useState<{ carried: string[]; lost: string[]; uploadHasCodes?: boolean } | null>(null);
+  const [carryCodes, setCarryCodes] = useState<'none' | 'above' | 'below'>('above');
+  const [pendingUpload, setPendingUpload] = useState<{ bytes: string; name: string } | null>(null);
 
   // The same key the gallery card draws its thumbnail from, so a save repaints
   // the card rather than leaving yesterday's art on it.
@@ -169,9 +186,11 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
     });
 
   const writeBytes = useMutation({
-    mutationFn: ({ target, bytes }: { target: string; bytes: string }) =>
-      apiClient.putScreenFile(target, bytes, [target], { carryCodes: 'above' }),
+    mutationFn: ({ target, bytes, carry }: { target: string; bytes: string; carry?: 'none' | 'above' | 'below' }) =>
+      apiClient.putScreenFile(target, bytes, [target], { carryCodes: carry ?? 'above' }),
     onSuccess: async (_answer, { target }) => {
+      setPendingUpload(null);
+      setCarryVerdict(null);
       showSuccess(`Saved ${target.split('/').pop()}`);
       await queryClient.invalidateQueries({ queryKey: ['screen-index'] });
       await queryClient.invalidateQueries({ queryKey: ['screen-file', target] });
@@ -308,7 +327,17 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
                   const chosen = event.target.files?.[0];
                   event.target.value = '';
                   if (!chosen || !path) return;
-                  writeBytes.mutate({ target: path, bytes: await readAsBase64(chosen) });
+                  const bytes = await readAsBase64(chosen);
+                  setPendingUpload({ bytes, name: chosen.name });
+                  // A dry run: the board answers what it would carry and
+                  // writes nothing, so it is safe the moment a file is picked.
+                  try {
+                    const res = await apiClient.putScreenFile(path, bytes, [path], { carryCodes: 'above', dryRun: true });
+                    setCarryVerdict(((res.data?.targets ?? [])[0] ?? null) as typeof carryVerdict);
+                  } catch {
+                    // A verdict is an aid, not a gate.
+                    setCarryVerdict(null);
+                  }
                 }}
               />
             </>
@@ -334,7 +363,122 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
           >
             <Download size={14} /> Download
           </button>
+
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 underline"
+            onClick={() => setShowRevisions(open => !open)}
+          >
+            <History size={14} /> {showRevisions ? 'Hide history' : 'History'}
+          </button>
+
+          {mine && (
+            /* An artist may drop their own version so the board's art shows
+               again. It is their file, inside their theme, and the sandbox
+               already allows it - refusing here would be this page inventing
+               a rule the board does not have. */
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 underline text-status-danger"
+              onClick={async () => {
+                if (!path) return;
+                const ok = await confirm({
+                  title: 'Drop your version of this screen?',
+                  message: `${path.split('/').pop()} is backed up beside itself, then removed. Callers wearing ${theme.title} go back to the board's own art.`,
+                  confirmText: 'Drop it',
+                });
+                if (!ok) return;
+                try {
+                  await apiClient.deleteScreenFile(path);
+                  showSuccess('Dropped. The board\'s art shows again.');
+                  await queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+                  await queryClient.invalidateQueries({ queryKey: ['screen-themes'] });
+                  onClose();
+                } catch (error) {
+                  showError((error as Error).message);
+                }
+              }}
+            >
+              <Trash2 size={14} /> Drop mine
+            </button>
+          )}
         </div>
+      )}
+
+      {/* What a replacement would do to the screen's codes, before it happens. */}
+      {pendingUpload && (
+        <div className="mt-3 space-y-2 border border-border p-3 text-sm">
+          <p className="text-content-primary">Replace with {pendingUpload.name}?</p>
+          {carryVerdict && (carryVerdict.carried.length > 0 || carryVerdict.lost.length > 0) && (
+            <>
+              <p className="text-content-secondary">
+                This screen carries codes the board runs. Your drawing has none of its own.
+              </p>
+              {carryVerdict.carried.length > 0 && (
+                <p>Kept: {carryVerdict.carried.map(code => <CodeChip key={code}>{code}</CodeChip>)}</p>
+              )}
+              {carryVerdict.lost.length > 0 && (
+                <p className="text-status-warn">
+                  Lost unless you keep them: {carryVerdict.lost.map(code => <CodeChip key={code}>{code}</CodeChip>)}
+                </p>
+              )}
+              <label className="flex items-center gap-2">
+                <span className="text-content-secondary">Keep these codes</span>
+                <select
+                  className="input-field"
+                  aria-label="Keep these codes"
+                  value={carryCodes}
+                  onChange={event => setCarryCodes(event.target.value as 'none' | 'above' | 'below')}
+                >
+                  <option value="above">above the art</option>
+                  <option value="below">below the art</option>
+                  <option value="none">not at all</option>
+                </select>
+              </label>
+            </>
+          )}
+          <div className="flex gap-3">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => path && writeBytes.mutate({ target: path, bytes: pendingUpload.bytes, carry: carryCodes })}
+            >
+              Write it
+            </button>
+            <button
+              type="button"
+              className="underline text-content-secondary"
+              onClick={() => { setPendingUpload(null); setCarryVerdict(null); }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* The codes in this screen, and whether each still points at something. */}
+      {file?.mci && file.mci.length > 0 && (
+        <div className="mt-3 space-y-1 text-sm">
+          <h3 className="text-content-primary">Codes in this screen</h3>
+          <ul className="space-y-1">
+            {file.mci.map((ref, index) => (
+              <li key={`${ref.code}-${index}`} className="flex flex-wrap items-center gap-2">
+                <CodeChip>{`~${ref.code}_${ref.target ?? ''}`}</CodeChip>
+                {ref.resolves === false && <span className="text-status-danger">points at nothing</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {file?.problems && file.problems.length > 0 && (
+        <p className="mt-3 text-sm text-status-warn">
+          {file.problems.map(describeProblem).join('; ')}
+        </p>
+      )}
+
+      {showRevisions && path && (
+        <ScreenRevisionsPanel path={path} onClose={() => setShowRevisions(false)} />
       )}
     </Modal>
   );
