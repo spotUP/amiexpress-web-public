@@ -12,6 +12,22 @@ import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 const EMPTY_DOORS: Door[] = [];
 
 /**
+ * Per-command flags express.e's runCommand() reads straight off the
+ * command's own BBSCmd/SysCmd tooltype (express.e:4732-4804). These are
+ * boolean: presence on the icon is the "on" state, whatever value is
+ * stored - the same rule the raw tooltype table below already follows for
+ * every other flag on a door's .info.
+ */
+const COMMAND_FLAG_TOOLTYPES: Array<{ key: string; label: string; help: string }> = [
+  { key: 'SILENT', label: 'Silent', help: "Suppresses the command's normal banner and status output." },
+  { key: 'EXPERT_MODE', label: 'Expert Mode Only', help: 'Offered only to callers who have expert mode switched on.' },
+  { key: 'LOG_INPUTS', label: 'Log Inputs', help: "Logs this command's keystrokes." },
+  { key: 'QUICKMODE', label: 'Quick Mode', help: "Skipped when the caller's own quick flag (Q) is set." },
+  { key: 'TRAPON', label: 'Trap On', help: 'Traps errors and Ctrl-C while the command runs.' },
+  { key: 'SCRIPTCHECK', label: 'Script Check', help: 'Marks the command file as a script. Only takes effect for SIM/TIM/IIM/SUP doors.' },
+];
+
+/**
  * What the form can actually change.
  *
  * `description`, `runtime_env` and `time_limit` were on it and are not here.
@@ -287,6 +303,63 @@ export function DoorsPage() {
 
   const handleTooltypeRemove = (index: number) => {
     setTooltypes(tooltypes.filter((_, i) => i !== index));
+    setInfoDirty(true);
+  };
+
+  /**
+   * The named command flags read and write the SAME tooltype list the raw
+   * table below edits - there is no second path to the .info file. A flag is
+   * "on" when its key is present and not commented out; turning it off
+   * removes the row entirely, matching how the boolean tooltypes in
+   * bbsConfig.info are stored (presence, not a value).
+   */
+  const findCommandFlagIndex = (key: string) =>
+    tooltypes.findIndex((t) => t.key.toUpperCase() === key);
+
+  const isCommandFlagSet = (key: string): boolean => {
+    const idx = findCommandFlagIndex(key);
+    return idx !== -1 && !tooltypes[idx].commented;
+  };
+
+  const setCommandFlag = (key: string, checked: boolean) => {
+    const idx = findCommandFlagIndex(key);
+    if (checked) {
+      if (idx !== -1 && !tooltypes[idx].commented) return;
+      if (idx !== -1) {
+        const updated = [...tooltypes];
+        updated[idx] = { ...updated[idx], commented: false };
+        setTooltypes(updated);
+      } else {
+        setTooltypes([...tooltypes, { key, value: '', commented: false, originalLine: `${key}=` }]);
+      }
+    } else {
+      if (idx === -1) return;
+      setTooltypes(tooltypes.filter((_, i) => i !== idx));
+    }
+    setInfoDirty(true);
+  };
+
+  /** PASS_PARAMETERS and MIMICVER carry a real value, not just presence. */
+  const getCommandFlagValue = (key: string): string => {
+    const idx = findCommandFlagIndex(key);
+    return idx !== -1 ? tooltypes[idx].value : '';
+  };
+
+  const setCommandFlagValue = (key: string, value: string) => {
+    const idx = findCommandFlagIndex(key);
+    if (!value) {
+      if (idx === -1) return;
+      setTooltypes(tooltypes.filter((_, i) => i !== idx));
+      setInfoDirty(true);
+      return;
+    }
+    if (idx === -1) {
+      setTooltypes([...tooltypes, { key, value, commented: false, originalLine: `${key}=${value}` }]);
+    } else {
+      const updated = [...tooltypes];
+      updated[idx] = { ...updated[idx], value, commented: false };
+      setTooltypes(updated);
+    }
     setInfoDirty(true);
   };
 
@@ -692,6 +765,69 @@ export function DoorsPage() {
               <div className="mb-6 border-b border-border/40 pb-6">
                 <h3 className="text-lg text-accent mb-1">Door settings</h3>
                 <DoorSettingsForm command={editingInfoDoor.door_command} />
+              </div>
+
+              {/*
+                AmiExpress's own per-command switches (express.e:4732-4804
+                runCommand()) - SILENT, EXPERT_MODE, LOG_INPUTS, QUICKMODE,
+                TRAPON, SCRIPTCHECK, PASS_PARAMETERS, MIMICVER. These read and
+                write the SAME tooltype list as the raw table below; a sysop
+                used to have to know the exact tooltype spelling to set any of
+                them by hand.
+              */}
+              <div className="mb-6 border-b border-border/40 pb-6">
+                <h3 className="text-lg text-accent mb-1">Command Flags</h3>
+                <p className="text-content-secondary text-sm mb-4">
+                  Per-command switches AmiExpress reads from this command's own tooltypes.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {COMMAND_FLAG_TOOLTYPES.map((flag) => (
+                    <label key={flag.key} className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isCommandFlagSet(flag.key)}
+                        onChange={(e) => setCommandFlag(flag.key, e.target.checked)}
+                        className="mt-0.5 h-4 w-4 accent-accent"
+                      />
+                      <span>
+                        <span className="block text-content-primary text-sm">{flag.label}</span>
+                        <span className="block text-content-secondary text-xs">{flag.help}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <label htmlFor="door-flag-pass-params" className="label">Pass Parameters</label>
+                    <input
+                      id="door-flag-pass-params"
+                      type="number"
+                      value={getCommandFlagValue('PASS_PARAMETERS')}
+                      onChange={(e) => setCommandFlagValue('PASS_PARAMETERS', e.target.value)}
+                      className="input-field w-full"
+                      placeholder="blank = not set"
+                    />
+                    <p className="text-xs text-content-secondary mt-1">
+                      Only takes effect when INTERNAL is also set on this icon. 1 skips
+                      running the command entirely; any value above 0 also appends the
+                      caller's own command-line parameters.
+                    </p>
+                  </div>
+                  <div>
+                    <label htmlFor="door-flag-mimic-version" className="label">Mimic Version</label>
+                    <input
+                      id="door-flag-mimic-version"
+                      type="text"
+                      value={getCommandFlagValue('MIMICVER')}
+                      onChange={(e) => setCommandFlagValue('MIMICVER', e.target.value)}
+                      className="input-field w-full"
+                      placeholder="blank = not set"
+                    />
+                    <p className="text-xs text-content-secondary mt-1">
+                      The AmiExpress version this command reports itself as.
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <div className="mb-4 flex justify-between items-center">

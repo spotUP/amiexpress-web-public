@@ -266,6 +266,22 @@ export interface ConferenceConfig {
 }
 
 export interface Door {
+  /**
+   * Per-command flags (express.e:4732-4804 runCommand()), mirroring the
+   * backend Door type. NOT populated by GET /api/config/doors today - these
+   * live on the command's own .info tooltypes (SILENT, EXPERT_MODE,
+   * LOG_INPUTS, QUICKMODE, TRAPON, SCRIPTCHECK, PASS_PARAMETERS, MIMICVER)
+   * and the Doors page edits them there, through the same generic
+   * getInfoFile/updateInfoFile tooltype editor every other command flag uses.
+   */
+  silent?: boolean;
+  expert_only?: boolean;
+  log_inputs?: boolean;
+  quick_mode?: boolean;
+  trap_on?: boolean;
+  script_check?: boolean;
+  pass_params?: number;
+  mimic_version?: string;
   id: number;
 
   // Door Identity

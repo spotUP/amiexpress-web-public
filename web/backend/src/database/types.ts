@@ -563,6 +563,48 @@ export interface ConferenceConfig {
  * TOOLTYPE_SYSCMD, TOOLTYPE_BBSCMD from express.e
  */
 export interface Door {
+  /**
+   * Per-command flags (express.e:4732-4804 runCommand()).
+   *
+   * Each one is a real BBSCmd/SysCmd .info tooltype, checked with
+   * checkToolTypeExists/readToolType against the COMMAND's own icon - not a
+   * doors-table column. The admin's Doors page writes these through the
+   * generic .info tooltype editor (getInfoFile/updateInfoFile), the same path
+   * every other tooltype on a command's icon goes through; nothing here
+   * reads or writes them via a doors-table row.
+   */
+  /** SILENT - suppresses the command's normal banner/status output. */
+  silent?: boolean;
+  /** EXPERT_MODE - the command is offered only to callers in expert mode. */
+  expert_only?: boolean;
+  /**
+   * LOG_INPUTS - logs this command's keystrokes. express.e also honours a
+   * node-wide LOG_INPUTS on TOOLTYPE_NODE; either one turns logging on.
+   */
+  log_inputs?: boolean;
+  /** QUICKMODE - the command is skipped when the CALLER's quick flag (Q) is set. */
+  quick_mode?: boolean;
+  /** TRAPON - traps errors/Ctrl-C while the command runs. */
+  trap_on?: boolean;
+  /**
+   * SCRIPTCHECK - forces the Amiga FIBF_SCRIPT protection bit onto the
+   * command file so DOS treats it as a script. Only meaningful for the
+   * SIM/TIM/IIM/SUP door types; express.e ignores it for anything else.
+   */
+  script_check?: boolean;
+  /**
+   * PASS_PARAMETERS - an integer, not a boolean. Only meaningful when
+   * INTERNAL is also set on the same icon: 1 skips running the command
+   * entirely, and any value above 0 also appends the caller's original
+   * command-line parameters before re-dispatching.
+   */
+  pass_params?: number;
+  /**
+   * MIMICVER - a version string the command reports itself as, for callers
+   * or scripts that branch on the BBS's advertised version.
+   */
+  mimic_version?: string;
+
   id: number;
 
   // Door Identity
