@@ -229,7 +229,37 @@ async function createApp(session) {
         panel.setContent(rows.join('\n'));
         screen.render();
     };
-    const show = (lines) => { viewLines = lines; viewOffset = 0; inView = true; setHints(); paint(); };
+    /**
+     * While a view is open the MENU must not move.
+     *
+     * A blessed list with `keys: true` binds its own up/down at construction
+     * (blessed list.js:105-109) and acts on them whenever it has focus. The
+     * view scrolls with the same keys through `screen.key`, so BOTH ran: the
+     * caller scrolled the catalog and the menu cursor walked down behind it,
+     * so leaving the view landed on a different row than the one they opened.
+     * Reported by the sysop, 2026-09-08.
+     *
+     * Its listeners are taken off for the duration and put back on the way
+     * out - blur() is not enough, because `rewindFocus` hands focus back to
+     * the only focusable element on the screen, which is this list.
+     */
+    let restoreMenuKeys = null;
+    const takeKeysFromMenu = () => {
+        if (!restoreMenuKeys)
+            restoreMenuKeys = (0, blessed_helpers_1.borrowListKeys)(list);
+    };
+    const giveKeysBackToMenu = () => {
+        restoreMenuKeys?.();
+        restoreMenuKeys = null;
+    };
+    const show = (lines) => {
+        viewLines = lines;
+        viewOffset = 0;
+        inView = true;
+        takeKeysFromMenu();
+        setHints();
+        paint();
+    };
     const refreshMenu = () => {
         items = menuItems(state, compact);
         list.setItems(items.map((i) => ` ${s.ink(i.label)}`));
@@ -439,6 +469,9 @@ async function createApp(session) {
             inView = false;
             viewLines = [];
             panel.setContent('');
+            // The menu gets its keys - and the focus - back, on the row the
+            // caller opened, because it never moved while they were reading.
+            giveKeysBackToMenu();
             setHints();
             screen.render();
         });
