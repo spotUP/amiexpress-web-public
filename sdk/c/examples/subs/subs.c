@@ -1,18 +1,25 @@
 /*
- * SUBS - the public discussion in this conference, in C, on a 68K Amiga.
+ * SUBS - the messages in this conference, in C, on a 68K Amiga.
  *
  * A C*Base sysop's account of what made a C64 board feel alive: the traffic
  * was PUBLIC, it arrived in PLAIN NUMBER ORDER, and replies carried NO
  * QUOTING. On Ami-X the files were the point and messages were nearly always
  * private - "the system itself doesn't incite group discussion". The gap is
  * not capability: AmiExpress has had EALL since forever. What is missing is a
- * place where the public messages are the FIRST thing you see, with ONE key to
- * add to them.
+ * place where the messages are the FIRST thing you see, with ONE key to add to
+ * them.
+ *
+ * WHAT IT LISTS is everything this caller may read, by express.e's own rule -
+ * the public traffic, plus private mail he sent or received, plus everything
+ * if he is above SysopLevel. It was public-only when the board filtered the
+ * feed down to EALL for it; reading the base itself means the filter is the
+ * door's, and hiding a caller's own mail from a message reader would be a
+ * strange thing to do on purpose.
  *
  * That is this door, and its three constraints are deliberate:
  *
- *   PUBLIC BY DEFAULT. The only compose verb here is EALL. Writing a private
- *   message is what E at the prompt is for.
+ *   PUBLIC BY DEFAULT WHEN POSTING. The only compose verb here is EALL.
+ *   Writing a private message is what E at the prompt is for.
  *   PLAIN NUMBER ORDER. Sorted by message number, ascending, always. No
  *   threading, no score, no "hot", no reordering.
  *   NO QUOTING. A reply is a new public message with the same subject. There
@@ -384,15 +391,33 @@ static void build_status(void)
         status_line[0] = '\0';
         return;
     }
+    /* "public messages" was true when the board filtered the feed down to
+       EALL. The door reads the base itself now and lists private mail this
+       caller is party to as well, so the count is not a count of public
+       messages and saying so would be a lie the caller can check.
+       "press R at the prompt" is gone for the same kind of reason: R may BE
+       this door (Doors/SUBS/R.info.example), and a door advising a caller to
+       leave it and run itself is nonsense. */
     if (wide) {
         if (feed_unread > 0) {
-            sprintf(status_line, "[INFO] %ld public messages. %ld new for you - press R at the prompt.",
+            sprintf(status_line, "[INFO] %ld messages here. %ld new for you.",
                     feed_total, feed_unread);
         } else {
-            sprintf(status_line, "[INFO] %ld public messages, none new for you.", feed_total);
+            sprintf(status_line, "[INFO] %ld messages here, none new for you.", feed_total);
         }
     } else {
         sprintf(status_line, "[INFO] %ld msgs, %ld new", feed_total, feed_unread);
+    }
+
+    /* Records the layout pass could not explain. Never silently swallowed: a
+       door that quietly shows fewer messages than the board does is worse
+       than one that admits it could not read some. */
+    if (feed_unreadable > 0 && wide) {
+        char note[48];
+        sprintf(note, " %ld unreadable.", feed_unreadable);
+        if (strlen(status_line) + strlen(note) < sizeof status_line) {
+            strcat(status_line, note);
+        }
     }
 }
 
@@ -671,7 +696,7 @@ int main(int argc, char **argv)
        than leaving a black screen for a second. */
     ansi_clear(&screen.buf);
     draw_masthead("SUBS");
-    say(3, wide ? "Reading the public messages in this conference..." : "Reading the messages...");
+    say(3, wide ? "Reading the messages in this conference..." : "Reading the messages...");
     ui_screen_flush(&screen);
 
     state = load_feed();
@@ -717,7 +742,7 @@ int main(int argc, char **argv)
                             : "No message base here.");
                 say(5, "Press Q to leave.");
             } else if (state == FEED_EMPTY || row_count == 0) {
-                say(3, wide ? "Nobody has posted here yet. Press P and be first."
+                say(3, wide ? "Nothing here you can read yet. Press P and be first."
                             : "Nothing posted yet.");
                 say(5, wide ? "Press P to post, Q to leave." : "P post, Q leave.");
             } else {
