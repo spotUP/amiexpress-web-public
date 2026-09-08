@@ -139,6 +139,30 @@ static void door_flush(void *ctx)
     ui_screen_flush(&screen);
 }
 
+/* A confirm that survives the rail.
+ *
+ * ui_input_style_init defaults row to 1 - the masthead row - so a confirm
+ * passed a NULL style painted itself onto the branding, and the idle hook
+ * repainted the rail straight over it about five times a second. The prompt
+ * was there; it just lived for a frame ("it draws the prompt in the animated
+ * ///// lines so it goes away", reported 2026-09-08).
+ *
+ * The fix is the ROW, not the animation: the rail owns row 1 and keeps
+ * sliding, and a prompt belongs down by the status line where nothing else
+ * paints. Theme tokens too, because the default style is white-on-blue and
+ * this board is not.
+ */
+static void confirm_style(ui_input_style *st)
+{
+    ui_input_style_init(st);
+    st->row = screen.rows - 3;
+    st->left = 3;
+    st->cols = screen.cols - 6;
+    st->fg = UI_TOKEN(UI_T_INK);
+    st->bg = UI_TOKEN(UI_T_GROUND);
+    st->ink = UI_TOKEN(UI_T_ACCENT);
+}
+
 static int pushback = -1;
 static int wide;
 
@@ -433,7 +457,11 @@ static int post_flow(const char *question, const char *subject)
 {
     int yes;
 
-    yes = ui_confirm(&screen.buf, &keys, &pushback, 0, question, 1);
+    {
+        ui_input_style st;
+        confirm_style(&st);
+        yes = ui_confirm(&screen.buf, &keys, &pushback, &st, question, 1);
+    }
     if (yes < 0) return -1;
     if (yes == 0) {
         strcpy(status_line, "[INFO] Nothing posted.");
