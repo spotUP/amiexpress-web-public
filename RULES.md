@@ -727,3 +727,76 @@ before its first require.
 Both cost more than they look: the full backend suite could not finish, every
 run needed `--forceExit`, and 86 failing tests accumulated unseen because the
 run that would have shown them was killed at 25 minutes.
+
+### The shared tree tracks origin/main (2026-09-08)
+
+`main` in this working tree must equal `origin/main`. Land work by
+cherry-picking your own commits onto a worktree of `origin/main` and pushing
+from there — **never** by committing to this tree's `main`.
+
+It drifted to 158 commits behind `origin/main` and 143 ahead, and 91 of the
+100 commits `git cherry` called unique were already upstream under other
+hashes. Localhost was therefore serving code older than live, and a test on
+it proved nothing: a telnet logoff fix was tested against a board 90 commits
+older than the fix.
+
+**Before any local test, print three shas and compare them:**
+
+```
+git -C <tree> rev-parse --short HEAD          # the checkout
+git rev-parse --short origin/main             # what live will be
+curl -s localhost:<port>/health | jq -r .revision   # what is RUNNING
+```
+
+A dev stack keeps running the code it was **started** with: updating the tree
+under it changes nothing until it restarts, and a restart drops every
+connected caller — announce it on `thoughts/BOARD.md` first.
+
+Realigning a drifted shared tree: `git branch backup-<date>-shared-main`,
+commit every session's uncommitted work to `wip/shared-tree-<date>`, and only
+then `git reset --hard origin/main`. Never reset over someone else's
+uncommitted edits.
+
+### Localhost is never behind live (2026-09-08)
+
+The rule above says the shared tree tracks `origin/main`. This says what to do
+about it, because the drift is not noticed by looking at code - it is noticed
+by a sysop saying "the localhost admin ui seems very behind the live site",
+after testing against it for a day.
+
+**Three shas, and they must agree before any local test is worth anything:**
+
+```
+git rev-parse --short HEAD                            # this checkout
+git rev-parse --short origin/main                     # what live builds from
+curl -s https://bbs.uprough.net/health | jq -r .revision   # what live RUNS
+```
+
+Two more that catch the rest of it:
+
+- **The admin at :3001 serves a BUILT bundle**, not the source. A pull changes
+  nothing a browser sees until `npm --prefix web/config-app run build`. Check
+  `ls -la web/config-app/dist/assets/index-*.js` against the time of your last
+  edit: on 2026-09-08 it was seven hours stale while its author read the page.
+- **A dev backend keeps running the code it was STARTED with.** Updating the
+  tree under it changes nothing until it restarts.
+
+Whoever finds the drift fixes it in the same task, and pushes before they
+report - a fix that lives only in a worktree is a fix nobody has.
+
+### A worktree is a second checkout, and it lies about its dependencies (2026-09-08)
+
+Landing by cherry-pick puts work in `scratchpad/<name>` worktrees. Two costs,
+both paid on 2026-09-08:
+
+- **Disk**: seven of them, ~560 MB each, 4.2 GB. Remove yours in the task that
+  created it - `git worktree remove` the moment your push lands - and run
+  `git worktree prune` when a scratchpad directory has been cleaned up under
+  git's feet.
+- **Dependencies**: a worktree resolves `@amiexpress/terminal` and the SDK
+  through whatever node_modules it was shimmed with. After a rebase that
+  crosses a package change, its type-check fails on modules that exist -
+  `Cannot find module '@amiexpress/terminal'` - and the failure is the
+  worktree, not the code. Re-verify in the shared checkout after pulling
+  before you believe either answer, and never report a worktree's red as the
+  branch's red.
