@@ -27,6 +27,28 @@ import { usePushNotifications } from '../hooks/usePushNotifications';
  * evening of chasing the board before the sysop found the toggle - so the
  * page names the exact path rather than saying "check your settings".
  */
+/**
+ * What "with the browser closed" actually means, per platform.
+ *
+ * On Windows and Linux Chrome has "Continue running background apps when
+ * Google Chrome is closed" and honours it. macOS has NO such setting: quitting
+ * the browser ends its push connection, and everything sent meanwhile is
+ * delivered when it next starts - which is what "they only appeared when I
+ * clicked Chrome" looks like. Closing the last WINDOW is fine there; the app
+ * stays in the Dock and keeps receiving.
+ */
+function backgroundDeliveryHint(): string {
+  const platform = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+  if (/Mac OS X|Macintosh/.test(platform)) {
+    return 'If it appears only when you switch to the browser, the browser was not running: ' +
+      'on macOS a quit browser receives nothing until it starts again. Close the window rather ' +
+      'than quitting - the app stays in the Dock and keeps receiving.';
+  }
+  return 'If it appears only when you switch to the browser, the browser was not running in the ' +
+    'background: turn on "Continue running background apps when the browser is closed" in its ' +
+    'settings, or a page waits for the next launch.';
+}
+
 function operatingSystemNotificationPath(): string {
   const platform = typeof navigator === 'undefined' ? '' : navigator.userAgent;
   if (/Mac OS X|Macintosh/.test(platform)) {
@@ -175,10 +197,7 @@ export function NotificationsPage() {
                           : reachesThisBrowser
                             ? 'One of them was this browser. If nothing appeared, your operating system is ' +
                               `holding it back - ${operatingSystemNotificationPath()}. ` +
-                              'If it appears only when you switch to the browser, the browser was not ' +
-                              'running in the background: turn on "Continue running background apps when ' +
-                              'the browser is closed" in its system settings, or a page arrives when you ' +
-                              'next open it rather than when it happens.'
+                              backgroundDeliveryHint()
                             : 'None of them was THIS browser: the board is sending to a subscription this ' +
                               'browser no longer has, which the push service accepts and nothing draws. ' +
                               'Switch this browser off and on again above.'),
