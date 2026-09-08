@@ -582,3 +582,22 @@ Node*/Answers.old
 Doors/*/*.log
 Doors/*/logs/
 Doors/*/*/*.log
+
+# Caller data purged from history on 2026-09-08 (see
+# thoughts/shared/plans/2026-09-08-history-scrub.md). These files still exist
+# on a running board - the board needs them - they are simply never git's
+# business again. Without these rules the next bulk `git add` puts back
+# exactly what the rewrite removed.
+backup-2025-12-27/
+AmiXnet/Doors/REALNAMES.db
+AmiXnet/Doors/RealNames
+AmiXnet/Doors/RealNames.db.txt
+database.sqlite
+**/MsgBase
+**/Messages/*.msg
+user.keys
+User.keys
+user.misc
+User.misc
+Node*/DOOR.SYS
+Node*/DORINFO*.DEF
