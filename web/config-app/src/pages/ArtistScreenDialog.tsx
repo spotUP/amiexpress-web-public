@@ -22,6 +22,7 @@ import { Modal } from '../components/ui/Modal';
 import { ScreenEditor } from '../components/ScreenEditor';
 import { RipScreenEditor } from '../components/RipScreenEditor';
 import { PetsciiScreenPreview } from '../components/PetsciiScreenPreview';
+import { fanOutOptions } from './screen-write-plan';
 import { SkeletonRows } from '../components/ui/states';
 import { useNotification } from '../contexts/NotificationContext';
 import { screenToCanvas } from './screen-bytes';
@@ -157,10 +158,48 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
     },
   });
 
+  /*
+   * EVERY COPY THIS CARD STANDS FOR.
+   *
+   * A screen exists once per node, and this board keeps 41 separate
+   * `BBSTITLE.SEQ` files. The gallery shows one card for all of them - it
+   * dedupes by content and says "and 40 identical copies" - but this dialog
+   * wrote the ONE path behind that card. The sysop uploaded a PETSCII title,
+   * the write landed on `Node0/BBSTITLE.SEQ`, and the caller on node 1 was
+   * served `Node1/BBSTITLE.SEQ` from November: "i uploaded a petscii bbs
+   * title now but it doesnt display the ansi displays".
+   *
+   * `fanOutOptions` is the sysop page's own rule, and its `same-content`
+   * option is the honest default here: writing bytes that are already
+   * identical everywhere changes nothing that was not already the same.
+   *
+   * SCOPED TO WHAT THIS ACCOUNT MAY WRITE. An artist's twins are inside their
+   * theme; the board's copies are the sysop's. Sending a target the sandbox
+   * refuses would fail the whole write, so they are filtered here rather than
+   * discovered as a 403.
+   */
+  const writeTargets = useMemo((): string[] => {
+    if (!path) return [];
+    if (!index) return [path];
+    const screen = index.files?.[path]?.readBy?.[0]?.screen ?? '';
+    const identical = fanOutOptions(index, screen, path)
+      .find(option => option.choice === 'same-content')?.targets ?? [path];
+
+    const themeRoot = `themes/${theme.slug.toLowerCase()}/`;
+    const mineToWrite = (rel: string) => (theme.slug === 'default'
+      // The board's own screens: every copy that is already this file.
+      ? !rel.toLowerCase().startsWith('themes/')
+      : rel.toLowerCase().startsWith(themeRoot));
+
+    const scoped = identical.filter(mineToWrite);
+    return scoped.includes(path) ? scoped : [path];
+  }, [path, index, theme.slug]);
+
   const save = useMutation({
-    mutationFn: (base64: string) => apiClient.putScreenFile(path as string, base64, [path as string], { carryCodes: 'above' }),
+    mutationFn: (base64: string) =>
+      apiClient.putScreenFile(path as string, base64, writeTargets, { carryCodes: 'above' }),
     onSuccess: async () => {
-      showSuccess('Saved');
+      showSuccess(writeTargets.length > 1 ? `Saved ${writeTargets.length} copies` : 'Saved');
       await queryClient.invalidateQueries({ queryKey: ['screen-index'] });
       await queryClient.invalidateQueries({ queryKey: ['screen-file', path] });
     },
@@ -200,11 +239,13 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
 
   const writeBytes = useMutation({
     mutationFn: ({ target, bytes, carry }: { target: string; bytes: string; carry?: 'none' | 'above' | 'below' }) =>
-      apiClient.putScreenFile(target, bytes, [target], { carryCodes: carry ?? 'above' }),
+      apiClient.putScreenFile(target, bytes, target === path ? writeTargets : [target], { carryCodes: carry ?? 'above' }),
     onSuccess: async (_answer, { target }) => {
       setPendingUpload(null);
       setCarryVerdict(null);
-      showSuccess(`Saved ${target.split('/').pop()}`);
+      showSuccess(target === path && writeTargets.length > 1
+        ? `Saved ${target.split('/').pop()} - ${writeTargets.length} copies`
+        : `Saved ${target.split('/').pop()}`);
       await queryClient.invalidateQueries({ queryKey: ['screen-index'] });
       await queryClient.invalidateQueries({ queryKey: ['screen-file', target] });
       await queryClient.invalidateQueries({ queryKey: ['screen-themes'] });
@@ -345,7 +386,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
                   // A dry run: the board answers what it would carry and
                   // writes nothing, so it is safe the moment a file is picked.
                   try {
-                    const res = await apiClient.putScreenFile(path, bytes, [path], { carryCodes: 'above', dryRun: true });
+                    const res = await apiClient.putScreenFile(path, bytes, writeTargets, { carryCodes: 'above', dryRun: true });
                     setCarryVerdict(((res.data?.targets ?? [])[0] ?? null) as typeof carryVerdict);
                   } catch {
                     // A verdict is an aid, not a gate.

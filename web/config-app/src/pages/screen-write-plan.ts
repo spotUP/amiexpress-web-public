@@ -32,7 +32,10 @@ export function fanOutOptions(
   screen: string,
   openPath: string,
 ): FanOutOption[] {
-  const entry = index.screens.find(s => s.screen === screen);
+  // An index without its `screens` list is one a caller built for a narrower
+  // question - the studio's dialog holds files and nothing else. It has no
+  // resolutions, which is exactly what an empty list means here.
+  const entry = (index.screens ?? []).find(s => s.screen === screen);
   const resolved = (entry?.resolutions ?? [])
     .map(r => r.file)
     .filter((f): f is string => !!f);
