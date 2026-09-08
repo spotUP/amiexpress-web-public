@@ -703,6 +703,28 @@ export async function runPostAuthLogin(
     );
   }
 
+  /**
+   * express.e:28540 - `pagesAllowed := readToolTypeInt(TOOLTYPE_ACCESS,
+   * acsLevel, 'ACS.MAX_PAGES')`, set once per logon, immediately before the
+   * bulletin flow this line begins.
+   *
+   * Nothing in this port ever read ACS.MAX_PAGES, so `session.pagesAllowed`
+   * was permanently undefined: the O command could not enforce a page budget,
+   * and the "Sysop Pages Remaining" line on the stats screen
+   * (user-commands.handler.ts, express.e:25599) had nothing to show.
+   *
+   * -1 means unlimited and is what an absent tooltype yields, so a board that
+   * has never heard of MAX_PAGES keeps behaving exactly as it does today.
+   */
+  try {
+    const { getAcsValueInt, findAcsLevel } = require("../utils/acs-access-loader");
+    const acsLevel = findAcsLevel(session.user?.securityLevel ?? 0);
+    session.pagesAllowed = getAcsValueInt(acsLevel, "ACS.MAX_PAGES");
+  } catch (err) {
+    console.warn("[LOGIN] could not read ACS.MAX_PAGES:", err);
+    session.pagesAllowed = -1;
+  }
+
   // Begin bulletin flow.
   session.subState = LoggedOnSubState.DISPLAY_BULL;
   triggerSamiLogRefresh();

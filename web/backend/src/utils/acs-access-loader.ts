@@ -201,6 +201,28 @@ export function checkAcsPermission(acsLevel: number, permName: string): boolean 
 }
 
 /**
+ * The NUMBER an ACS entry carries, for the handful that are values rather
+ * than yes/no flags - `ACS.MAX_PAGES` above all.
+ *
+ * express reads these with `readToolTypeInt(TOOLTYPE_ACCESS, acsLevel, key)`,
+ * and the contract that matters is what an ABSENT key returns: -1
+ * (tooltypes.e:176-181). Every caller then tests `<> -1` for "unlimited", so
+ * defaulting to 0 here would silently mean "no pages at all for anyone".
+ *
+ * A present-but-unparseable value follows `Val()`, which yields 0.
+ */
+export function getAcsValueInt(acsLevel: number, permName: string): number {
+  if (acsLevel === -1) return -1;
+
+  const perms = acsLevelPermissions.get(acsLevel);
+  const entry = perms?.get(permName) ?? perms?.get(PERMISSION_ALIASES[permName] ?? '');
+  if (!entry || entry.value === undefined || entry.value === '') return -1;
+
+  const parsed = Number.parseInt(entry.value, 10);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+/**
  * Get all available ACS levels (sorted ascending).
  */
 export function getAvailableAcsLevels(): number[] {

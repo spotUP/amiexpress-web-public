@@ -202,57 +202,18 @@ console.log('[ENV] Mail');
 }
 
 /**
- * O Command - Page Sysop (Request Chat)
+ * The O command lives in `command-handler/page-sysop-command.ts`.
  *
- * From express.e:25372-25404:
- * PROC internalCommandO()
- *   - If pagesAllowed=0, fall back to commentToSYSOP()
- *   - Decrement pagesAllowed (if not -1 = unlimited)
- *   - Check ACS_PAGE_SYSOP permission
- *   - Set ENV_REQ_CHAT environment status
- *   - Call sysopPaged() to notify sysop
- *   - If sysop not available and no override: show message
- *   - If sysop available: call ccom() for chat session
- * ENDPROC result
+ * A `handlePageSysopCommand` used to be exported from here as well, with the
+ * correct express.e:25372-25404 gate in it - and it never ran. command.handler.ts
+ * imports this module on line 96 and page-sysop-command.ts on line 97, and the
+ * second import of the same name wins, so the copy WITHOUT the gate was the one
+ * the board used. The gate now lives in that single surviving handler, next to
+ * the operator-chat plumbing it guards.
  *
- * Allows user to page the sysop for a chat session.
+ * `handleCommentToSysopCommand` below stays here: the page handler calls it for
+ * express's out-of-pages redirect.
  */
-export function handlePageSysopCommand(socket: any, session: BBSSession): void {
-  // Check if pages are exhausted (pagesAllowed = 0)
-  if (session.pagesAllowed === 0) {
-    // Fall back to comment system
-console.log('[ENV] Mail');
-
-    if (!checkSecurity(session.user, ACSPermission.COMMENT_TO_SYSOP)) {
-      ErrorHandler.permissionDenied(socket, 'leave comments for sysop', {
-        nextState: LoggedOnSubState.DISPLAY_MENU
-      });
-      return;
-    }
-
-    // Redirect to comment system
-    handleCommentToSysopCommand(socket, session);
-    return;
-  }
-
-  // Decrement pages allowed (if not unlimited = -1)
-  if (session.pagesAllowed && session.pagesAllowed !== -1) {
-    session.pagesAllowed--;
-  }
-
-  // Check page permission
-  if (!checkSecurity(session.user, ACSPermission.PAGE_SYSOP)) {
-    ErrorHandler.permissionDenied(socket, 'page the sysop', {
-      nextState: LoggedOnSubState.DISPLAY_MENU
-    });
-    return;
-  }
-
-console.log('[ENV] Request Chat');
-
-  // Call sysop page system (from chat.handler.ts)
-  _startSysopPage(socket, session);
-}
 
 // OLM (Online Message) system is fully implemented in handlers/transfer/olm.handler.ts
 // express.e:25406-25503 - Complete 1:1 port with multi-node tracking, message editor,
