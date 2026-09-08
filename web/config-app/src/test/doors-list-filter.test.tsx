@@ -18,6 +18,7 @@ import type { ReactNode } from 'react';
 
 const base = {
   door_args: '', working_directory: '', priority: 'P0', door_options: [],
+  multi_node: true, stack: 0,
   max_security_level: 255, required_flags: '', time_limit: 0, memory_limit: 0,
   description: '', category: 'Games', enabled: true, has_settings: false,
   created_at: new Date(), updated_at: new Date(),
@@ -111,6 +112,29 @@ describe('filtering the doors list', () => {
 
     expect(screen.getByText('Global Requests')).toBeInTheDocument();
     expect(screen.queryByText('Card Lobby')).not.toBeInTheDocument();
+  });
+
+  it('shows the registration facts a misbehaving door is diagnosed from', async () => {
+    // A door that misbehaves is usually a door whose .info says something the
+    // sysop cannot see. CARDLOBBY ran as a 68K door out of a TypeScript
+    // directory on 2026-09-08 and the list showed neither the path nor
+    // anything else to go on.
+    renderPage();
+    await screen.findByText('Ganja Wars');
+
+    expect(screen.getByText('Path')).toBeInTheDocument();
+    expect(screen.getByText('Doors/REQUESTS/requests')).toBeInTheDocument();
+    expect(screen.getByText('Multi-node')).toBeInTheDocument();
+    expect(screen.getByText('Priority')).toBeInTheDocument();
+    expect(screen.getByText('Settings')).toBeInTheDocument();
+  });
+
+  it('says which doors are single-node, because that is a rule about callers', async () => {
+    renderPage();
+    await screen.findByText('Ganja Wars');
+
+    // Every door in the fixture is multi-node except the one that says so.
+    expect(screen.getAllByText('Multi').length).toBeGreaterThan(0);
   });
 
   it('says so when nothing matches, naming what was typed', async () => {

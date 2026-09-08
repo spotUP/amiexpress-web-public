@@ -494,6 +494,13 @@ console.log(`[DoorsAPI] getDoors() returned ${backendDoors.length} doors`);
         door_args: door.args || '',
         working_directory: '',
         priority: `P${door.priority || 0}`,
+        // Two more of the .info's own answers, because a door that misbehaves
+        // is usually a door whose registration says something the sysop
+        // cannot see. LOCATION is the pair that mattered on 2026-09-08 -
+        // CARDLOBBY ran as a 68K door out of a TypeScript directory - and
+        // MULTINODE decides whether a second caller may open it at all.
+        multi_node: door.multiNode !== false,
+        stack: door.stack ?? 0,
         // door_options stays empty on purpose. It is the doors TABLE's column
         // for per-door flags and has no source on disk - a door's flags are
         // its .info tooltypes, which the list already carries. Filling it with

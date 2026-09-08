@@ -298,6 +298,10 @@ export interface Door {
 
   // Door Options
   priority: string;  // P0-P4
+  /** MULTINODE - whether a second caller may open it while one is inside. */
+  multi_node?: boolean;
+  /** STACK - the 68K stack a door asks for; 0 for a door that needs none. */
+  stack?: number;
   door_options: string[];
   runtime_env: 'AMIGA_68K' | 'NATIVE_NODE' | 'BROWSER';
 

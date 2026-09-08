@@ -478,6 +478,52 @@ export function DoorsPage() {
       mono: true,
       width: '7rem',
     },
+    {
+      // LOCATION, which is what the board hands the runtime. A door that
+      // misbehaves is usually a door whose registration says something the
+      // sysop cannot see: CARDLOBBY ran as a 68K door out of a TypeScript
+      // directory on 2026-09-08 and the list showed nothing about it.
+      id: 'door_path',
+      header: 'Path',
+      value: (door) => door.door_path ?? '',
+      mono: true,
+      cell: (door) => (
+        <span className="block max-w-xs truncate text-content-secondary" title={door.door_path}>
+          {door.door_path}
+        </span>
+      ),
+    },
+    {
+      id: 'multi_node',
+      header: 'Multi-node',
+      value: (door) => (door.multi_node === false ? 0 : 1),
+      width: '8rem',
+      cell: (door) =>
+        door.multi_node === false ? (
+          <span className="text-content-muted" title="One caller at a time">Single</span>
+        ) : (
+          <span className="text-content-secondary" title="A second caller may open it too">Multi</span>
+        ),
+    },
+    {
+      id: 'priority',
+      header: 'Priority',
+      value: (door) => door.priority ?? '',
+      mono: true,
+      width: '6rem',
+    },
+    {
+      id: 'has_settings',
+      header: 'Settings',
+      value: (door) => (door.has_settings ? 1 : 0),
+      width: '7rem',
+      cell: (door) =>
+        door.has_settings ? (
+          <span className="text-content-secondary">Yes</span>
+        ) : (
+          <span className="text-content-muted">-</span>
+        ),
+    },
   ];
 
   return (
