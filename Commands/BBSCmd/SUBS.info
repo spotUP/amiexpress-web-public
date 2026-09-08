@@ -1,8 +1,8 @@
 BBSCMD=SUBS
-NAME=Subs - public discussion
+NAME=Subs - the messages in this conference
 TYPE=XIM
 LOCATION=Doors/SUBS/subs
-DESCRIPTION=Read and join the public discussion in this conference
+DESCRIPTION=Read the messages in this conference and join the discussion
 ACCESS=1
 MULTINODE=YES
 PRIORITY=SAME
