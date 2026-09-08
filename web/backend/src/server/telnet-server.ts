@@ -13,6 +13,7 @@
  */
 
 import { Server as NetServer, Socket } from 'net';
+import { ANSI_GRAPHICS_PROMPT } from '../services/login-connect.service';
 import { EventEmitter } from 'events';
 import { createSession, getNextAvailableNodeId, checkConnectionLimit, setSession } from './session-manager';
 import { LOCALHOST_IPS } from '../index';
@@ -905,7 +906,11 @@ console.log(`[Telnet] C64 terminal detected (${delProbeDetectedC64 ? 'DEL-probe'
           // so the user isn't stuck. Shouldn't happen in practice.
           connection.session.subState = LoggedOnSubState.ANSI_PROMPT;
           connection.session.tempData = { inputBuffer: '' };
-          connection.write('\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?');
+          // The same constant the real path emits (TP-12, divergence 35):
+          // this fallback used to print an older, differently-cased string,
+          // so the one screen a caller sees when the emitter is missing did
+          // not look like the board.
+          connection.write(ANSI_GRAPHICS_PROMPT);
         }
       }
     };

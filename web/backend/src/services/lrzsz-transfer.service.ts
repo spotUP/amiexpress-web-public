@@ -241,8 +241,13 @@ export class LrzszTransferManager {
       // in the browser) already emit spec-compliant ZCRCW, so running
       // the rewriter just makes it buffer the ZFILE chunk indefinitely
       // searching for a ZCRCE marker that never arrives.
+      //
+      // TP-12: TELNET, not "not web". SSH is a clean 8-bit stream with no
+      // IAC layer and no serial-line framing, so it inherited a workaround
+      // written for serial telnet clients and got the same indefinite
+      // buffering the browser was exempted from.
       const rewritten =
-        this.direction === 'upload' && this.transport.type !== 'web'
+        this.direction === 'upload' && this.transport.type === 'telnet'
           ? this.rewriteMuffintermZfile(data)
           : data;
       if (rewritten.length === 0) return; // buffering for fragmentation
@@ -347,7 +352,10 @@ export class LrzszTransferManager {
     // mTelnet, etc.) are tolerant ZMODEM parsers and EXPECT a fresh
     // ZRINIT in response to their ZRQINIT — suppressing it leaves
     // them stuck at "Waiting for OK to send".
-    const suppressDuplicates = this.transport.type === 'web';
+    // TP-12: everything that is not TELNET. SSH's parser is the client's
+    // own (SyncTerm, PuTTY + sz/rz, OpenSSH), reached over a clean 8-bit
+    // stream, and the tolerance this exempts is a serial-line telnet trait.
+    const suppressDuplicates = this.transport.type !== 'telnet';
     for (const part of parts) {
       if (part.length === 0) continue;
       if (suppressDuplicates && isLoneZrinit(part)) {
@@ -602,7 +610,10 @@ export class LrzszTransferManager {
     //      `C` + CAN abort sequence, and exits 128 before the
     //      browser's send_files() has a chance to emit ZFILE.
     //   -vv verbose to stderr
-    if (this.transport.type === 'web') {
+    // TP-12: not-telnet takes these. `-y` (overwrite) rather than `-r`
+    // (resume) is right wherever the sender is not a serial-line telnet
+    // client mid-stream, and SSH is not.
+    if (this.transport.type !== 'telnet') {
       return ['-b', '-y', '-t', '600', '-vv'];
     }
     return ['-b', '-r', '-t', '600', '-vv'];

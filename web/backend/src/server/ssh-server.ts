@@ -21,6 +21,8 @@ import { config } from '../config';
 import { DEFAULT_CONNECTION_BAUD } from '../constants/modem';
 import { ipBanManager } from '../security/ip-ban-manager';
 import { LoggedOnSubState } from '../constants/bbs-states';
+import { classifyTerminalType } from './telnet-server';
+import { ANSI_GRAPHICS_PROMPT } from '../services/login-connect.service';
 
 /**
  * SSH Connection
@@ -29,6 +31,8 @@ import { LoggedOnSubState } from '../constants/bbs-states';
 export class SSHConnection extends EventEmitter {
   private connection: Connection;
   private stream: any = null;
+  /** Written before the shell opened; flushed in order when it does. */
+  private pendingWrites: Buffer[] = [];
   public sessionId: string;
   public nodeId: number;
   public session: BBSSession | null = null;
@@ -60,9 +64,14 @@ export class SSHConnection extends EventEmitter {
    * never receives `ctx.username`. Do NOT add a credential check here
    * expecting it to gate BBS access — it wouldn't, and it would break
    * clients that connect SSH-as-transport with an arbitrary username.
+   *
+   * Pre-filling the BBS login from the SSH credentials, through the same
+   * `AuthenticationUseCase` the login loop uses, is a later feature and
+   * would be the only reason to make this handler care who the caller
+   * claims to be.
    */
   private handleAuthentication(ctx: any): void {
-    if (ctx.method === 'password' || ctx.method === 'none') {
+    if (ctx.method === 'password' || ctx.method === 'none' || ctx.method === 'keyboard-interactive') {
 console.log(`[SSH] Transport auth accepted (method=${ctx.method}, username=${ctx.username}); BBS login gates access`);
       ctx.accept();
     } else {
@@ -84,7 +93,42 @@ console.log(`[SSH] Connection ready on node ${this.nodeId}`);
         // Store terminal dimensions from PTY request
         this.terminalWidth = info.cols || 80;
         this.terminalHeight = info.rows || 24;
-console.log(`[SSH] PTY requested: ${this.terminalWidth}x${this.terminalHeight}`);
+console.log(`[SSH] PTY requested: ${this.terminalWidth}x${this.terminalHeight} term=${info.term}`);
+
+        /**
+         * TP-12. `info.term` is the SSH client's terminal type and it was
+         * read by nothing: an SSH caller was `unicodeCapable: false` for
+         * ever, so every blessed door drew in Amiga/ACS fallback mode
+         * (sdk/utils/blessed-helpers.ts reads `bbs.unicodeCapable`), and the
+         * wire charset predicate had no terminal to look at.
+         *
+         * Classified by the SAME `classifyTerminalType` telnet uses, and
+         * emitted with the SAME payload shape, so it flows through the one
+         * applier rather than a second copy of session init.
+         *
+         * PETSCII is NOT flipped here (non-goal, recorded): a `term` of
+         * `C64` is remembered and logged, and `petsciiMode` stays untouched
+         * - the graphics prompt is what turns PETSCII on, for every
+         * transport.
+         */
+        const termString = String(info.term || '').toUpperCase();
+        if (termString) {
+          const { isC64, isAmiga, unicodeCapable } = classifyTerminalType(termString);
+          this.emit('terminal-type', {
+            terminalType: termString,
+            isC64,
+            isAmiga,
+            unicodeCapable,
+            width: isC64 ? 40 : this.terminalWidth,
+            height: isC64 ? 25 : this.terminalHeight,
+          });
+        }
+
+        // A pty request carries the size too, and only `window-change` used
+        // to say so - an SSH caller who never resized their window stayed at
+        // the 80x24 default the session manager creates.
+        this.emit('window-size', this.terminalWidth, this.terminalHeight);
+
         if (typeof accept === 'function') {
           accept();
         }
@@ -104,6 +148,8 @@ console.log(`[SSH] Window resize: ${this.terminalWidth}x${this.terminalHeight}`)
       session.on('shell', (accept: () => void, reject: () => void) => {
 console.log(`[SSH] Shell requested on node ${this.nodeId}`);
         this.stream = accept();
+        // Anything the BBS said before the shell existed goes out first.
+        this.flushPendingWrites();
 
         // Forward data from client to BBS
         this.stream.on('data', (data: Buffer) => {
@@ -134,7 +180,26 @@ console.log(`[SSH] Exec request rejected: ${info.command}`);
   public write(data: string | Buffer): void {
     if (this.stream) {
       this.stream.write(data);
+      return;
     }
+    /**
+     * TP-12. This used to DISCARD anything written before the shell handler
+     * assigned `this.stream`, silently and with no error. The window is
+     * narrow - `'connection'` is emitted synchronously before any `'ready'`
+     * - but a write that vanishes is a defect whatever the window, and it
+     * is the only candidate the research could name for the ~478 bytes of
+     * FRONTEND screen that went missing on SSH during the parity walk.
+     */
+    this.pendingWrites.push(typeof data === 'string' ? Buffer.from(data, 'latin1') : data);
+  }
+
+  /** Everything written before the shell existed, in the order it was written. */
+  private flushPendingWrites(): void {
+    if (!this.stream || this.pendingWrites.length === 0) return;
+    const queued = this.pendingWrites;
+    this.pendingWrites = [];
+console.log(`[SSH] Flushing ${queued.length} write(s) queued before the shell opened`);
+    for (const chunk of queued) this.stream.write(chunk);
   }
 
   /**
@@ -309,7 +374,7 @@ console.log(`[SSH] BBS session created for node ${connection.nodeId}`);
       } else {
         session.subState = LoggedOnSubState.ANSI_PROMPT;
         session.tempData = { inputBuffer: '' };
-        connection.write('\r\nANSI, RIP, PETSCII or No graphics (A/r/p/n) [add Q to skip bulletins]?');
+        connection.write(ANSI_GRAPHICS_PROMPT);
       }
     });
 
