@@ -165,12 +165,22 @@ export function walk(entries: string | string[] = entryPoints(), root: string = 
   }
 
   const all: string[] = [];
+  // A VENDORED PROJECT IS NOT OUR CENSUS. `cpu/moira-source/` is an upstream
+  // checkout that carries its own package.json and tsconfig.json, and its
+  // `Runner/Bartman/dasm.ts` is upstream's disassembler - unreachable from
+  // this server by design and not ours to delete. Only the CENSUS skips these
+  // directories: `walk` above follows imports wherever they lead, so a
+  // vendored file the backend really does import still counts as reachable.
+  const isVendoredProject = (dir: string): boolean =>
+    fs.existsSync(path.join(dir, 'package.json')) || fs.existsSync(path.join(dir, 'tsconfig.json'));
   const collect = (dir: string): void => {
     for (const entryName of fs.readdirSync(dir)) {
       const full = path.join(dir, entryName);
       const stat = fs.statSync(full);
-      if (stat.isDirectory()) collect(full);
-      else if (/\.tsx?$/.test(entryName) && !/\.d\.ts$/.test(entryName)) all.push(full);
+      if (stat.isDirectory()) {
+        if (isVendoredProject(full)) continue;
+        collect(full);
+      } else if (/\.tsx?$/.test(entryName) && !/\.d\.ts$/.test(entryName)) all.push(full);
     }
   };
   collect(root);

@@ -38,8 +38,6 @@ const KNOWN_UNREACHABLE = new Set<string>([
   'src/amiga-emulation/xim/host-service.ts',
   'src/amigaguide/AmigaGuideParser.ts',
   'src/amigaguide/AmigaGuideViewer.ts',
-  'src/conferences/conference-directory-compaction.ts',
-  'src/conferences/conference-directory-plan.ts',
   'src/constants/security-levels.ts',
   'src/doors/door-path.util.ts',
   'src/doors/door-repo-manifest.ts',

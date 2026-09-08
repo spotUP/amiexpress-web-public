@@ -51,9 +51,28 @@ export interface DirectoryCompactionPlan {
   references: DirectoryReference[];
   /** Reasons a sysop should not run the move yet. */
   blockers: string[];
+  /**
+   * The subset of `blockers` that `compactConferenceDirectories` already
+   * deals with, listed here rather than recognised by their wording.
+   *
+   * Every blocker is still printed - a sysop reads all of them - but a mover
+   * that refused on the whole list would refuse every board that needs
+   * compacting at all: a skewed mapping collides with itself by definition
+   * (`Conf2` is wanted by conference 2 while conference 1 still holds it),
+   * and the entrypoint seeds `Conf1`..`Conf14` on every board, so the empty
+   * seeds are always in the way. A blocker class added later is NOT in this
+   * list and therefore stops the run, which is the safe default.
+   */
+  handledByMover: string[];
 }
 
 const isConfDir = (name: string) => /^Conf\d+$/i.test(name);
+
+/**
+ * The collision the mover handles for itself, by staging every rename through
+ * a temporary name before renaming any temporary into its target.
+ */
+const STAGING_BLOCKER = 'the move has to stage through a temporary name, in dependency order';
 
 function countFiles(dir: string): number {
   let n = 0;
@@ -172,14 +191,16 @@ export function planDirectoryCompaction(bbsRoot: string): DirectoryCompactionPla
   }
 
   const blockers: string[] = [];
+  const handledByMover: string[] = [];
   const wanted = new Map(moves.map(m => [m.to.toLowerCase(), m.conference]));
   for (const { conference, dir } of current) {
     const holder = wanted.get(dir.toLowerCase());
     if (holder !== undefined && holder !== conference) {
-      blockers.push(
+      const blocker =
         `${dir} is wanted by conference ${holder} and still held by conference ${conference} - ` +
-        'the move has to stage through a temporary name, in dependency order',
-      );
+        STAGING_BLOCKER;
+      blockers.push(blocker);
+      handledByMover.push(blocker);
     }
   }
   const pooled = references.filter(r => /^DLPATH\.\d+$/i.test(r.key));
@@ -195,13 +216,33 @@ export function planDirectoryCompaction(bbsRoot: string): DirectoryCompactionPla
     .map(e => e.name)
     .filter(name => !current.some(c => c.dir.toLowerCase() === name.toLowerCase()));
   if (strays.length > 0) {
-    blockers.push(
+    // HANDLED, and only because the mover checks the thing that matters: a
+    // stray standing on a wanted name is absorbed into the backup when it is
+    // EMPTY - which the entrypoint's seeded `Conf1`..`Conf14` always are - and
+    // refuses the whole run when it holds files. A stray nothing wants is not
+    // in the way at all.
+    const blocker =
       `${strays.join(', ')} look like conference directories but no conference points at them - ` +
-      'a rename would collide with them or bury data nobody is reading. Settle them first.',
-    );
+      'a rename would collide with them or bury data nobody is reading. Settle them first.';
+    blockers.push(blocker);
+    handledByMover.push(blocker);
   }
 
-  return { current, moves, references, blockers };
+  return { current, moves, references, blockers, handledByMover };
+}
+
+/**
+ * The blockers that actually STOP `compactConferenceDirectories` - every one
+ * the plan raised that `handledByMover` does not claim.
+ *
+ * On the live board that leaves exactly the pooled-area one, and it is the
+ * right one to stop for: a pooled file area's object-key prefix is built from
+ * the download path, so renaming the directory strands every object already in
+ * the bucket, and the local backup this tool takes cannot bring those back.
+ */
+export function stoppingBlockers(plan: DirectoryCompactionPlan): string[] {
+  const handled = new Set(plan.handledByMover ?? []);
+  return plan.blockers.filter((blocker) => !handled.has(blocker));
 }
 
 /** The plan as a sysop would read it. */
