@@ -135,6 +135,49 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
 
   const ulStartTime = Date.now();
 
+  /**
+   * Which protocol did the caller actually ask for?
+   *
+   * The menu at info-commands.handler.ts:600-628 offers ZMODEM, YMODEM, three
+   * XMODEMs and Punter, and records the answer in `user.protocol` - and every
+   * transfer went to lrzsz regardless, so the choice had no effect on anything.
+   * For a real Commodore that was not a cosmetic problem: a C64 cannot speak
+   * ZMODEM at all, and Punter is the only protocol it has.
+   *
+   * ZMODEM stays on lrzsz, which is the canonical implementation and carries
+   * the browser bridge. Everything else goes through TransferProtocolManager,
+   * which already knew how to run all four and had simply never been called.
+   */
+  const { getDefaultProtocol } = require('../../services/transfer-protocol.service');
+  const chosenProtocol = getDefaultProtocol(session);
+  if (chosenProtocol !== 'zmodem') {
+    const { TransferProtocolManager } = require('../../services/transfer-protocol.service');
+    const protocolManager = new TransferProtocolManager(
+      session,
+      { type: transport.type, send: transport.send },
+      { direction: 'upload', files: [playpen], protocol: chosenProtocol },
+    );
+    protocolManager.on('complete', async (result: any) => {
+      // The post-upload pipeline is the same one lrzsz's onComplete runs;
+      // a Punter upload must be filed exactly like a ZMODEM one.
+      const { runPostUpload } = require('../../services/post-upload.service');
+      await runPostUpload(socket, session, {
+        uploadStartTime: ulStartTime,
+        uploadedFiles: result?.filesTransferred ?? 0,
+        uploadedBytes: result?.bytesTransferred ?? 0,
+      });
+    });
+    // These callers are not async; the transfer runs on its own and reports
+    // through the 'complete' event above.
+    void protocolManager.start().catch((err: any) => {
+      console.error('[TRANSFER] protocol transfer failed to start:', err);
+      socket.emit('ansi-output', '\r\nTransfer could not be started.\r\n\r\n');
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      (session as any).menuPause = true;
+    });
+    return;
+  }
+
   // All transports go through lrzsz when available — web bridges
   // lrzsz output via the existing `transfer-raw:data` socket channel
   // to the browser-side zmodem.js Sentry.
@@ -395,6 +438,49 @@ export function startZmodemDownload(socket: any, session: BBSSession, files: str
   }
   const goodbyeAfter = !!(session as any)._downloadGoodbyeAfter;
   (session as any)._downloadGoodbyeAfter = undefined;
+
+  /**
+   * Which protocol did the caller actually ask for?
+   *
+   * The menu at info-commands.handler.ts:600-628 offers ZMODEM, YMODEM, three
+   * XMODEMs and Punter, and records the answer in `user.protocol` - and every
+   * transfer went to lrzsz regardless, so the choice had no effect on anything.
+   * For a real Commodore that was not a cosmetic problem: a C64 cannot speak
+   * ZMODEM at all, and Punter is the only protocol it has.
+   *
+   * ZMODEM stays on lrzsz, which is the canonical implementation and carries
+   * the browser bridge. Everything else goes through TransferProtocolManager,
+   * which already knew how to run all four and had simply never been called.
+   */
+  const { getDefaultProtocol } = require('../../services/transfer-protocol.service');
+  const chosenProtocol = getDefaultProtocol(session);
+  if (chosenProtocol !== 'zmodem') {
+    const { TransferProtocolManager } = require('../../services/transfer-protocol.service');
+    const protocolManager = new TransferProtocolManager(
+      session,
+      { type: transport.type, send: transport.send },
+      { direction: 'download', files: files, protocol: chosenProtocol },
+    );
+    protocolManager.on('complete', async (result: any) => {
+      socket.emit(
+        'ansi-output',
+        result?.success
+          ? '\r\nDownload complete.\r\n\r\n'
+          : '\r\nDownload aborted.\r\n\r\n',
+      );
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      (session as any).menuPause = true;
+    });
+    // These callers are not async; the transfer runs on its own and reports
+    // through the 'complete' event above.
+    void protocolManager.start().catch((err: any) => {
+      console.error('[TRANSFER] protocol transfer failed to start:', err);
+      socket.emit('ansi-output', '\r\nTransfer could not be started.\r\n\r\n');
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      (session as any).menuPause = true;
+    });
+    return;
+  }
 
   // All transports go through lrzsz (canonical Forsberg/Ohse) when
   // available. Web bridges sz output to the browser-side zmodem.js

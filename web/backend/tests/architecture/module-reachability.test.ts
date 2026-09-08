@@ -54,10 +54,6 @@ const KNOWN_UNREACHABLE = new Set<string>([
   'src/server/api-routes.ts',
   'src/server/file-routes.ts',
   'src/services/mrc-client.ts',
-  'src/services/punter-transfer.service.ts',
-  'src/services/transfer-protocol.service.ts',
-  'src/services/xmodem-transfer.service.ts',
-  'src/services/ymodem-transfer.service.ts',
   'src/utils/background-check.util.ts',
   'src/utils/diz-fallback.util.ts',
   'src/utils/file-io.util.ts',
@@ -66,7 +62,6 @@ const KNOWN_UNREACHABLE = new Set<string>([
   'src/utils/lha-list-parser.ts',
   'src/utils/multitop-generator.ts',
   'src/utils/string-util.ts',
-  'src/utils/transfer-protocol.util.ts',
 ]);
 
 const BACKEND = path.resolve(__dirname, '..', '..');
