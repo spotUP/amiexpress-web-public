@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Modal } from '../components/ui/Modal';
 import { DoorSettingsForm } from '../components/DoorSettingsForm';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Edit2, Trash2, Plus, X, FileCode, Save, Power, PowerOff, Upload, SlidersHorizontal } from 'lucide-react';
+import { Edit2, Trash2, Plus, X, FileCode, Save, Power, PowerOff, Search, Upload, SlidersHorizontal } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { Door } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
@@ -61,6 +61,7 @@ export function DoorsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDoor, setEditingDoor] = useState<Door | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [search, setSearch] = useState('');
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState<DoorFormData>({
     door_name: '',
@@ -377,6 +378,25 @@ export function DoorsPage() {
 
   const doors: Door[] = data?.data ?? EMPTY_DOORS;
 
+  // Filtering stays here; the table owns sorting. A board runs dozens of
+  // doors, and the sysop looking for one knows its command or its name - or
+  // only that it is a 68K door, which is what the type and runtime fields
+  // answer.
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return doors;
+    return doors.filter((door) =>
+      [
+        door.door_name,
+        door.door_command,
+        door.door_type,
+        door.runtime_env,
+        door.door_path,
+        door.enabled ? 'enabled' : 'disabled',
+      ].some((field) => String(field ?? '').toLowerCase().includes(term))
+    );
+  }, [doors, search]);
+
   const columns: DataTableColumn<Door>[] = [
     {
       id: 'enabled',
@@ -462,7 +482,18 @@ export function DoorsPage() {
 
   return (
     <div>
-      <div className="mb-4 flex justify-between items-center">
+      <div className="mb-4 flex flex-wrap justify-between items-center gap-3">
+        <div className="flex h-control items-center rounded border border-border bg-surface-0 px-2">
+          <Search size={14} className="text-content-muted" aria-hidden="true" />
+          <input
+            type="search"
+            placeholder="Filter by name, command, type or path"
+            aria-label="Filter doors"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-72 bg-transparent px-2 text-sm text-content-primary placeholder:text-content-muted focus:outline-none"
+          />
+        </div>
         <div className="flex items-center gap-2">
           <input
             ref={uploadInputRef}
@@ -488,13 +519,17 @@ export function DoorsPage() {
 
       <DataTable
         columns={columns}
-        rows={doors}
+        rows={filtered}
         getRowId={(door) => String(door.id)}
         initialSort={[{ id: 'door_name', desc: false }]}
         isLoading={isLoading}
         error={error as Error | null}
         onRetry={() => refetch()}
-        emptyMessage="No doors configured. Doors are the external programs and games on the command menu."
+        emptyMessage={
+          search.trim()
+            ? `No door matches "${search.trim()}".`
+            : 'No doors configured. Doors are the external programs and games on the command menu.'
+        }
         rowActions={(door) => (
           <>
             <button
@@ -524,6 +559,12 @@ export function DoorsPage() {
           </>
         )}
       />
+
+      <p className="mt-2 text-xs text-content-muted">
+        {filtered.length === doors.length
+          ? `${doors.length} doors`
+          : `${filtered.length} of ${doors.length} doors`}
+      </p>
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
