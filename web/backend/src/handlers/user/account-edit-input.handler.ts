@@ -7,8 +7,11 @@
 import { BBSSession, LoggedOnSubState } from '../../index';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { displayAccountPage0, displayAccountPage1 } from './account.handler';
-import { formatLongDate } from '../../utils/date-time.util';
+import { formatLongDate, formatLongTime } from '../../utils/date-time.util';
 import { TRACK_UPLOADS_BIT, TRACK_DOWNLOADS_BIT } from '../../utils/download-ratios.util';
+import { checkSecurity } from '../../utils/acs.util';
+import { ACSPermission } from '../../constants/acs-permissions';
+import { config } from '../../config';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 
@@ -95,6 +98,15 @@ export async function handleAccountEditInput(socket: any, session: BBSSession, k
 
   // ! - Credit Maintenance (express.e:21310-21312 -> creditMaintenance 21884)
   if (command === '!') {
+    // express.e:21892 - a remote caller needs ACS_CREDIT_ACCESS to enter at all
+    // (the web port has no local f6 console; every caller is remote).
+    if (!checkSecurity(session.user, ACSPermission.CREDIT_ACCESS)) {
+      socket.emit('ansi-output', '\r\n\x1b[31mYou do not have credit access.\x1b[0m\r\n');
+      socket.emit('ansi-output', '\x1b[32mPress any key...\x1b[0m');
+      return;
+    }
+    // express.e:21896 - checkLockAccounts gates the field edits, computed once.
+    session.tempData.creditEditable = accountsUnlocked(session);
     session.subState = LoggedOnSubState.CREDIT_MAINTENANCE_VIEW;
     displayCreditMaintenance(socket, session);
     return;
@@ -1125,6 +1137,11 @@ export async function handleCreditMaintenanceInput(socket: any, session: BBSSess
     return;
   }
 
+  // express.e:21972 - every edit and the save live inside `IF checkLock`. A
+  // remote sysop the LockAccounts allow-list does not name may view and exit,
+  // but changes and ~ save do nothing.
+  if (!session.tempData.creditEditable) return;
+
   switch (command) {
     // 1/2/3 - numeric field edits (express.e:21974-21986).
     case '1': socket.emit('ansi-output', '\x1b[8;22H'); session.tempData.creditFieldEdit = '1'; session.inputBuffer = ''; return;
@@ -1157,11 +1174,69 @@ async function saveCreditMaintenance(socket: any, session: BBSSession): Promise<
   try {
     socket.emit('ansi-output', '\x1b[17;2HSaving Account...');
     await db.updateUser(user.id, user);
+    writeCreditLog(user);
     session.tempData.creditChanges = false;
     session.tempData.changes = false;
   } catch (err) {
     console.error('Error saving credit maintenance:', err);
     socket.emit('ansi-output', '\r\n\x1b[31mCan\'t save account\x1b[0m\r\n');
+  }
+}
+
+/**
+ * Whether the LockAccounts allow-list lets this sysop EDIT (not just view).
+ * 1:1 port of express.e:21156 checkLockAccounts. Web callers are all remote,
+ * so the list always applies: absent file = anyone may edit; present file =
+ * only the sysop names (one name per line) may. An unreadable list locks,
+ * matching express.e's res=FALSE default.
+ */
+function accountsUnlocked(session: BBSSession): boolean {
+  const lockFile = path.join(config.getConfig().dataDir, 'LockAccounts');
+  if (!amigafs.existsSync(lockFile)) return true;
+  try {
+    const raw = amigafs.readFileSync(lockFile, 'utf8');
+    const content = typeof raw === 'string' ? raw : raw.toString('utf8');
+    const me = (session.user?.username || '').trim().toLowerCase();
+    return content
+      .split(/\r?\n/)
+      .map((l) => l.trim().toLowerCase())
+      .some((n) => n.length > 0 && n === me);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Append a credit change to the BBS CreditLog.
+ * 1:1 port of express.e:22013-22021 (the save-arm creditLog calls) + the
+ * creditLog() writer at express.e:9437 (append, create if absent).
+ */
+function writeCreditLog(user: any): void {
+  const now = new Date();
+  const date = formatLongDate(now);
+  const time = formatLongTime(now);
+  const slot = user.slotNumber ?? 0;
+  const name = user.username || '';
+
+  let line: string;
+  if ((user.creditDays || 0) === 0) {
+    line = `${date} ${time} ${name} [${slot}] CREDIT ACCOUNT INACTIVATED\n`;
+  } else {
+    const startStr = user.creditStartDate ? formatLongDate(new Date(user.creditStartDate * 1000)) : '';
+    const endStr = user.creditStartDate
+      ? formatLongDate(new Date((user.creditStartDate + (user.creditDays || 0) * 86400) * 1000))
+      : '';
+    const totalStr = user.creditTotalDate ? formatLongDate(new Date(user.creditTotalDate * 1000)) : '';
+    line =
+      `${date} ${time} ${name} [${slot}]\n` +
+      `\tDAYS ${user.creditDays || 0} AMOUNT ${user.creditAmount || 0} STARTDATE ${startStr} ENDDATE ${endStr}\n` +
+      `\tAMOUNT PAID TO DATE ${user.creditTotalToDate || 0} AS OF ${totalStr}\n`;
+  }
+
+  try {
+    amigafs.appendFileSync(path.join(config.getConfig().dataDir, 'CreditLog'), line);
+  } catch (err) {
+    console.error('Error writing CreditLog:', err);
   }
 }
 
@@ -1180,4 +1255,3 @@ function exitCreditMaintenance(socket: any, session: BBSSession): void {
     displayAccountPage1(socket, session.tempData.editingUser, session.tempData.editingSlot);
   }
 }
-

@@ -17,12 +17,33 @@ jest.mock('../../../src/handlers/user/account.handler', () => ({
 }));
 const updateUser = jest.fn().mockResolvedValue(undefined);
 jest.mock('../../../src/database', () => ({ db: { updateUser } }));
+// checkSecurity gates entry (ACS_CREDIT_ACCESS); amigafs backs the LockAccounts
+// allow-list and the CreditLog append. Both modules are imported at the top of
+// the handler, so their mock factories must not reference outer consts (TDZ) -
+// declare the jest.fn()s inline and retrieve them through the imports below.
+jest.mock('../../../src/utils/acs.util', () => ({ checkSecurity: jest.fn().mockReturnValue(true) }));
+jest.mock('../../../src/utils/amigafs', () => ({
+  existsSync: jest.fn().mockReturnValue(false),
+  readFileSync: jest.fn().mockReturnValue(''),
+  appendFileSync: jest.fn(),
+}));
 
 import { LoggedOnSubState } from '../../../src/constants/bbs-states';
+import { ACSPermission } from '../../../src/constants/acs-permissions';
+import { checkSecurity as checkSecurityImport } from '../../../src/utils/acs.util';
+import * as amigafsImport from '../../../src/utils/amigafs';
 import {
   displayCreditMaintenance,
   handleCreditMaintenanceInput,
+  handleAccountEditInput,
 } from '../../../src/handlers/user/account-edit-input.handler';
+
+const checkSecurity = checkSecurityImport as jest.Mock;
+const amigafs = {
+  existsSync: amigafsImport.existsSync as jest.Mock,
+  readFileSync: amigafsImport.readFileSync as jest.Mock,
+  appendFileSync: amigafsImport.appendFileSync as jest.Mock,
+};
 
 function makeSocket() {
   const output: string[] = [];
@@ -32,20 +53,23 @@ function makeSocket() {
   } as any;
 }
 
-function makeSession(userOverrides: any = {}) {
+function makeSession(userOverrides: any = {}, tempOverrides: any = {}) {
   return {
     subState: LoggedOnSubState.CREDIT_MAINTENANCE_VIEW,
     inputBuffer: '',
+    user: { username: 'sysop', secLevel: 255 },
     tempData: {
       accountEditing: true,
       page: 0,
       editingSlot: 3,
+      creditEditable: true, // set by the ! entry after checkLockAccounts
       editingUser: {
         id: 'u1', username: 'CreditGuy', slotNumber: 3,
         creditDays: 0, creditAmount: 0, creditStartDate: 0,
         creditTotalToDate: 0, creditTotalDate: 0, creditTracking: 0,
         ...userOverrides,
       },
+      ...tempOverrides,
     },
   } as any;
 }
@@ -55,7 +79,13 @@ async function type(socket: any, session: any, keys: string[]) {
   for (const k of keys) await handleCreditMaintenanceInput(socket, session, k);
 }
 
-beforeEach(() => updateUser.mockClear());
+beforeEach(() => {
+  updateUser.mockClear();
+  checkSecurity.mockClear().mockReturnValue(true);
+  amigafs.existsSync.mockClear().mockReturnValue(false);
+  amigafs.readFileSync.mockClear().mockReturnValue('');
+  amigafs.appendFileSync.mockClear();
+});
 
 describe('displayCreditMaintenance', () => {
   it('renders the screen with status and the numbered fields', () => {
@@ -144,5 +174,86 @@ describe('handleCreditMaintenanceInput', () => {
     await handleCreditMaintenanceInput(makeSocket(), session, '\t');
     expect(updateUser).not.toHaveBeenCalled();
     expect(session.subState).toBe(LoggedOnSubState.ACCOUNT_EDITOR_EDIT);
+  });
+
+  it('a locked sysop (LockAccounts) may view and exit but cannot change or save', async () => {
+    const session = makeSession({ creditDays: 30 }, { creditEditable: false });
+    await handleCreditMaintenanceInput(makeSocket(), session, 'T'); // terminate
+    await handleCreditMaintenanceInput(makeSocket(), session, '~'); // save
+    expect(session.tempData.editingUser.creditDays).toBe(30); // unchanged
+    expect(updateUser).not.toHaveBeenCalled();
+    // exit still works
+    await handleCreditMaintenanceInput(makeSocket(), session, '\t');
+    expect(session.subState).toBe(LoggedOnSubState.ACCOUNT_EDITOR_EDIT);
+  });
+});
+
+describe('express.e parity gates on the ! entry (handleAccountEditInput)', () => {
+  function editSession() {
+    return {
+      subState: LoggedOnSubState.ACCOUNT_EDITOR_EDIT,
+      inputBuffer: '',
+      user: { username: 'sysop', secLevel: 255 },
+      tempData: {
+        accountEditing: true, page: 0, editingSlot: 3,
+        editingUser: { id: 'u1', username: 'CreditGuy', slotNumber: 3, creditDays: 0, creditTracking: 0 },
+      },
+    } as any;
+  }
+
+  it('refuses entry without ACS_CREDIT_ACCESS (express.e:21892)', async () => {
+    checkSecurity.mockReturnValue(false);
+    const socket = makeSocket();
+    const session = editSession();
+    await handleAccountEditInput(socket, session, '!');
+    expect(checkSecurity).toHaveBeenCalledWith(session.user, ACSPermission.CREDIT_ACCESS);
+    expect(session.subState).not.toBe(LoggedOnSubState.CREDIT_MAINTENANCE_VIEW);
+    expect(socket.getOutput().toLowerCase()).toContain('credit access');
+  });
+
+  it('enters and computes an editable (unlocked) state when no LockAccounts file exists', async () => {
+    checkSecurity.mockReturnValue(true);
+    amigafs.existsSync.mockReturnValue(false);
+    const session = editSession();
+    await handleAccountEditInput(makeSocket(), session, '!');
+    expect(session.subState).toBe(LoggedOnSubState.CREDIT_MAINTENANCE_VIEW);
+    expect(session.tempData.creditEditable).toBe(true);
+  });
+
+  it('LockAccounts present and NOT naming the sysop => not editable (express.e:21156)', async () => {
+    checkSecurity.mockReturnValue(true);
+    amigafs.existsSync.mockReturnValue(true);
+    amigafs.readFileSync.mockReturnValue('someone\nanother\n');
+    const session = editSession();
+    await handleAccountEditInput(makeSocket(), session, '!');
+    expect(session.tempData.creditEditable).toBe(false);
+  });
+
+  it('LockAccounts naming the sysop => editable', async () => {
+    checkSecurity.mockReturnValue(true);
+    amigafs.existsSync.mockReturnValue(true);
+    amigafs.readFileSync.mockReturnValue('someone\nSYSOP\nanother\n');
+    const session = editSession();
+    await handleAccountEditInput(makeSocket(), session, '!');
+    expect(session.tempData.creditEditable).toBe(true);
+  });
+});
+
+describe('CreditLog (express.e:22013-22021)', () => {
+  it('appends an active-account line naming DAYS and AMOUNT on save', async () => {
+    const session = makeSession({ creditDays: 30, creditAmount: 2500, creditStartDate: 1_700_000_000 });
+    await handleCreditMaintenanceInput(makeSocket(), session, '~');
+    expect(amigafs.appendFileSync).toHaveBeenCalledTimes(1);
+    const [, line] = amigafs.appendFileSync.mock.calls[0];
+    expect(line).toContain('CreditGuy');
+    expect(line).toContain('DAYS 30');
+    expect(line).toContain('AMOUNT 2500');
+  });
+
+  it('logs INACTIVATED when the account has zero days', async () => {
+    const session = makeSession({ creditDays: 0 });
+    await handleCreditMaintenanceInput(makeSocket(), session, '~');
+    const [, line] = amigafs.appendFileSync.mock.calls[0];
+    expect(line).toContain('CREDIT ACCOUNT INACTIVATED');
   });
 });
