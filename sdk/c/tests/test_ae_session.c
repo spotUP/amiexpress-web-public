@@ -22,6 +22,14 @@ typedef struct {
     const char *cols;
     const char *rows;
     const char *conference;
+    /* Where the conference and its messages are, and how far this caller has
+     * got through them. A board that leaves any of these NULL is a board that
+     * does not answer that command - which is exactly what a classic
+     * AmiExpress does for some of them, and the case worth testing. */
+    const char *conf_location;
+    const char *msgbase;
+    const char *last_read;
+    const char *last_scanned;
     /** Every round trip fails from this one onward. */
     int fail_after;
     int asked;
@@ -48,6 +56,10 @@ static int fake_transport(void *context, ae_field field, char *out, int cap)
         case AE_FIELD_SCREEN_COLS:   value = b->cols; break;
         case AE_FIELD_SCREEN_ROWS:   value = b->rows; break;
         case AE_FIELD_CONFERENCE:    value = b->conference; break;
+        case AE_FIELD_CONF_LOCATION: value = b->conf_location; break;
+        case AE_FIELD_MSGBASE_LOC:   value = b->msgbase; break;
+        case AE_FIELD_LAST_READ:     value = b->last_read; break;
+        case AE_FIELD_LAST_SCANNED:  value = b->last_scanned; break;
         case AE_FIELD_THEME:         value = b->can_write ? b->theme : 0; break;
         default: value = 0; break;
     }
@@ -87,6 +99,10 @@ static fake_board a_board(void)
     b.cols = "132";
     b.rows = "50";
     b.conference = "7";
+    b.conf_location = "BBS:Conf7/";
+    b.msgbase = "BBS:Conf7/MsgBase/";
+    b.last_read = "141";
+    b.last_scanned = "138";
     b.can_write = 1;
     strcpy(b.theme, "classic");
     return b;
@@ -266,6 +282,74 @@ static void a_board_without_themes_says_so_rather_than_pretending(void)
     printf("  [OK] a board without themes says so rather than pretending\n");
 }
 
+static void it_says_where_the_messages_are(void)
+{
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    char conf[64];
+    char base[64];
+    fake_board b = a_board();
+
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    assert(ae_conf_location(&s, conf, (int)sizeof(conf)) > 0);
+    assert(strcmp(conf, "BBS:Conf7/") == 0);
+    assert(ae_msgbase_path(&s, base, (int)sizeof(base)) > 0);
+    assert(strcmp(base, "BBS:Conf7/MsgBase/") == 0);
+    printf("  [OK] it says where the conference and its messages are\n");
+}
+
+static void it_reads_the_callers_pointers(void)
+{
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    fake_board b = a_board();
+
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    assert(ae_last_read(&s) == 141);
+    assert(ae_last_scanned(&s) == 138);
+    printf("  [OK] it reads the caller's read and scan pointers\n");
+}
+
+static void a_pointer_of_zero_is_not_a_board_that_cannot_answer(void)
+{
+    /* The distinction this exists for: a caller who has read nothing here
+     * genuinely has pointer 0. If "0" and "the board did not say" were the
+     * same answer, a door could not tell a first-time visitor from a board
+     * that does not implement the command - and would mark every message in
+     * the conference new for somebody who has read them all. */
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    fake_board b = a_board();
+
+    b.last_read = "0";
+    b.last_scanned = 0;            /* this board does not answer at all */
+
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    assert(ae_last_read(&s) == 0);
+    assert(ae_last_scanned(&s) == -1);
+    printf("  [OK] a pointer of zero is not a board that cannot answer\n");
+}
+
+static void a_classic_board_leaves_the_paths_empty(void)
+{
+    /* A real AmiExpress answers BB_CONFLOCAL, and an old enough one may not
+     * answer 604. Either way the door must get "" and say so, rather than
+     * being handed whatever the previous round trip left in the buffer and
+     * opening a file named after it. */
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    char base[64];
+    fake_board b = a_board();
+
+    b.msgbase = 0;
+    strcpy(base, "left over from the last question");
+
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    assert(ae_msgbase_path(&s, base, (int)sizeof(base)) == 0);
+    assert(base[0] == '\0');
+    printf("  [OK] a board that will not say leaves the path empty\n");
+}
+
 int main(void)
 {
     printf("ae_session\n");
@@ -278,6 +362,10 @@ int main(void)
     a_closed_session_is_safe_to_use();
     a_door_can_read_and_change_the_theme();
     a_board_without_themes_says_so_rather_than_pretending();
+    it_says_where_the_messages_are();
+    it_reads_the_callers_pointers();
+    a_pointer_of_zero_is_not_a_board_that_cannot_answer();
+    a_classic_board_leaves_the_paths_empty();
     printf("ae_session: all passed\n");
     return 0;
 }

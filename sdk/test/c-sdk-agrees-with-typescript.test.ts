@@ -106,6 +106,16 @@ describe('the C SDK', () => {
       ['AE_FIELD_MENU_COMMAND', 'GET_CUSTOM_MSGBASE_MENUCMD'],
       ['AE_FIELD_THEME', 'AEW_THEME'],
       ['AE_FIELD_MSGQUERY', 'AEW_MSGQUERY'],
+      // Where the conference and its messages live, and how far this caller
+      // has read. These four are what let a door open a message base for
+      // itself instead of asking the board to decode one, which is what makes
+      // the door work on a real Amiga AmiExpress. All four are ordinary
+      // AmiExpress numbers, so unlike AEW_THEME/AEW_MSGQUERY they sit BELOW
+      // express.e's MAX_CMD and are pinned here rather than in the test below.
+      ['AE_FIELD_CONF_LOCATION', 'BB_CONFLOCAL'],
+      ['AE_FIELD_MSGBASE_LOC', 'MSGBASE_LOC'],
+      ['AE_FIELD_LAST_READ', 'LAST_READ'],
+      ['AE_FIELD_LAST_SCANNED', 'LAST_SCANNED'],
     ];
 
     for (const [cName, boardName] of pairs) {

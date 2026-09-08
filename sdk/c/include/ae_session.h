@@ -41,6 +41,40 @@ typedef enum {
     AE_FIELD_SCREEN_ROWS    = 521,  /* BB_SCRHEIGHT */
     AE_FIELD_CONFERENCE     = 510,  /* BB_CONFNUM */
     /*
+     * WHERE THE CALLER'S CONFERENCE AND ITS MESSAGES LIVE ON DISK.
+     *
+     * These three are what let a door read a message base for itself rather
+     * than asking the board to decode one for it - and they are ORDINARY
+     * AmiExpress, not this port's inventions, which is the entire point. A
+     * real AmiExpress answers no command that lists or reads a message; a
+     * door that wants messages opens <conf>/MsgBase/HeaderFile, and these say
+     * where that is. Doors/Conftop and Doors/Request already do exactly this.
+     *
+     * MSGBASE_LOC answers the conference's DEFAULT base. A conference with
+     * several (MsgBases.info: NMSGBASES, NAME.n, LOCATION.n - express.e:2048
+     * and ~2068) needs the door to read that file and resolve LOCATION.n
+     * itself; CONF_LOCATION is the directory to read it from.
+     *
+     * Both answer in String, so they need no entry in the transport's
+     * field_answers_in_data() - unlike the two pointers below.
+     */
+    AE_FIELD_CONF_LOCATION  = 127,  /* BB_CONFLOCAL */
+    AE_FIELD_MSGBASE_LOC    = 604,  /* GET_MSGBASE_LOC */
+    /*
+     * THE CALLER'S READ POINTERS - express.e:3963-3966, both answered in
+     * Data:
+     *
+     *     CASE LAST_READ    -> msg.data:=lastMsgReadConf
+     *     CASE LAST_SCANNED -> msg.data:=lastNewReadConf
+     *
+     * A door asks the BOARD for these rather than parsing <conf>/Conf.DB,
+     * whose 74-byte records are indexed by the caller's account SLOT - a
+     * number the door interface does not expose at all. Asking also stays
+     * right on a board that keeps its pointers somewhere else entirely.
+     */
+    AE_FIELD_LAST_READ      = 602,  /* LAST_READ */
+    AE_FIELD_LAST_SCANNED   = 603,  /* LAST_SCANNED */
+    /*
      * WHICH COMMAND NAME LAUNCHED THIS DOOR - express.e:3974-3975,
      * AstrCopy(msg.string, customMsgCmd, 200).
      *
@@ -173,6 +207,44 @@ int ae_user_is_ansi(ae_session *s);
 int ae_screen_cols(ae_session *s);
 int ae_screen_rows(ae_session *s);
 int ae_conference(ae_session *s);
+
+/**
+ * The current conference's directory, e.g. "BBS:Conf3/". "" when the board
+ * does not answer.
+ *
+ * A door needs this to read the conference's own files - MsgBases.info above
+ * all, which is the only place the names and locations of several message
+ * bases in one conference are written down.
+ */
+int ae_conf_location(ae_session *s, char *out, int n);
+
+/**
+ * The current conference's DEFAULT message base directory, e.g.
+ * "BBS:Conf3/MsgBase/". "" when the board does not answer.
+ *
+ * HeaderFile, MailStats, MailLock and the numbered body files all live here.
+ * On a conference with several bases this is base 1 and not necessarily the
+ * one the caller has joined - resolve LOCATION.n out of MsgBases.info for
+ * that, starting from ae_conf_location().
+ */
+int ae_msgbase_path(ae_session *s, char *out, int n);
+
+/**
+ * The highest message number this caller has READ in this conference
+ * (express.e's lastMsgReadConf), or -1 when the board does not answer.
+ *
+ * -1 and not 0, because 0 is a real answer: it is what a caller who has never
+ * read anything here has, and a door that could not ask must not silently
+ * treat every message as new.
+ */
+int ae_last_read(ae_session *s);
+
+/**
+ * The highest message number this caller has been SCANNED up to
+ * (lastNewReadConf), or -1 when the board does not answer. This is the one
+ * that decides what counts as new; ae_last_read is where he stopped reading.
+ */
+int ae_last_scanned(ae_session *s);
 
 /**
  * The caller's theme id ("classic", "uprough-neon", ...), or "" where the

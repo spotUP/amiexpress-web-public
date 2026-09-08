@@ -134,6 +134,31 @@ int ae_conference(ae_session *s)
     return ask_int(s, AE_FIELD_CONFERENCE, 1);
 }
 
+int ae_conf_location(ae_session *s, char *out, int n)
+{
+    return ask(s, AE_FIELD_CONF_LOCATION, out, n);
+}
+
+int ae_msgbase_path(ae_session *s, char *out, int n)
+{
+    return ask(s, AE_FIELD_MSGBASE_LOC, out, n);
+}
+
+int ae_last_read(ae_session *s)
+{
+    /* -1, not 0, for the same reason ae_user_level uses -1: zero is a real
+       answer here. A caller who has never read anything in this conference
+       genuinely has pointer 0, so a door that cannot ask must be able to tell
+       that apart from a board that will not say - otherwise it marks every
+       message in the conference new for somebody who has read them all. */
+    return ask_int(s, AE_FIELD_LAST_READ, -1);
+}
+
+int ae_last_scanned(ae_session *s)
+{
+    return ask_int(s, AE_FIELD_LAST_SCANNED, -1);
+}
+
 int ae_user_theme(ae_session *s, char *out, int n)
 {
     int got = ask(s, AE_FIELD_THEME, out, n);
