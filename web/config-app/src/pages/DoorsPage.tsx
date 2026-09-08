@@ -96,8 +96,13 @@ export function DoorsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, updates }: { id: number; updates: Partial<DoorFormData> }) =>
-      apiClient.updateDoor(id, updates),
+    mutationFn: ({ id, updates }: {
+      id: number;
+      // original_command is not a form field: it is the name the dialog opened
+      // on, which is how the server finds the door when the Command box holds
+      // a new one.
+      updates: Partial<DoorFormData> & { original_command?: string };
+    }) => apiClient.updateDoor(id, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['doors'] });
       showSuccess('Door updated successfully');
@@ -197,7 +202,14 @@ export function DoorsPage() {
     }
 
     if (editingDoor) {
-      updateMutation.mutate({ id: editingDoor.id, updates: formData });
+      // The command the dialog opened on identifies the door on disk, so the
+      // Command box is free to hold a new name: without this the save looked
+      // the door up by what was just typed, and renaming a command reported
+      // the new name as a door that does not exist.
+      updateMutation.mutate({
+        id: editingDoor.id,
+        updates: { ...formData, original_command: editingDoor.door_command },
+      });
     } else {
       createMutation.mutate(formData);
     }

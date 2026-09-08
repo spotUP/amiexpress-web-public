@@ -9,7 +9,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import * as fsSync from 'fs';
 import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
-import { applyDoorFieldsToTooltypes, applyEnabledToTooltypes, findDoorInfoFile, doorDisplayName, isDoorEnabled, doorNormalAccessLevel } from '../services/config-services/door-info-file.service';
+import { applyDoorFieldsToTooltypes, applyEnabledToTooltypes, findDoorInfoFile, doorDisplayName, isDoorEnabled, doorNormalAccessLevel, resolveRenamedInfoPath, DoorCommandRenameError } from '../services/config-services/door-info-file.service';
 import { doorDirectoryFor, readDoorSettingsView, writeDoorSettings, UnknownDoorSettingError } from '../doors/door-settings.service';
 import { listAcsLevels, acsLevelFilePath, tooltypesToFlags, flagsToTooltypes, ambiguouslyDeniedFlags, acsLevelServing } from '../services/config-services/acs-level-file.service';
 import { ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
@@ -661,12 +661,33 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
         return handleError(res, new Error('door_command is required to identify the door'));
       }
 
+      // The door being edited is the one the form OPENED on, not the value in
+      // the Command box: the sysop is allowed to change that box, and looking
+      // the door up by what they just typed made a rename impossible - the
+      // save went looking for a command that does not exist yet and reported
+      // the new name as missing. Worse, a new name that happened to match a
+      // DIFFERENT door's file edited that door instead.
+      const originalCommand = req.body?.original_command || command;
+
       // Disk first: the BBS scans Commands/BBSCmd/*.info, so that is what an
       // edit has to change. The database is a mirror and is updated after.
       const bbsRoot = config.get('dataDir');
-      const infoPath = findDoorInfoFile(bbsRoot, command);
+      const infoPath = findDoorInfoFile(bbsRoot, originalCommand);
       if (!infoPath) {
-        return handleError(res, new Error(`No .info file for command "${command}" in Commands/BBSCmd`));
+        return handleError(res, new Error(`No .info file for command "${originalCommand}" in Commands/BBSCmd`));
+      }
+
+      // A rename is a file move, because the file name is what makes a
+      // command a command. Resolved before anything is written, so a name the
+      // board cannot use leaves the door exactly as it was.
+      let renamedPath: string | null;
+      try {
+        renamedPath = resolveRenamedInfoPath(bbsRoot, infoPath, originalCommand, command);
+      } catch (renameError) {
+        if (renameError instanceof DoorCommandRenameError) {
+          return handleError(res, renameError);
+        }
+        throw renameError;
       }
 
       const backupPath = infoPath + '.backup';
@@ -679,7 +700,29 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
       if (typeof req.body?.enabled === 'boolean') {
         info.tooltypes = applyEnabledToTooltypes(info.tooltypes as any, req.body.enabled) as any;
       }
+      if (renamedPath) {
+        // The BBSCMD tooltype, where a door carries one, WINS over the file
+        // name (amiga-command-parser.util.ts:662). Renaming the file and
+        // leaving the tooltype behind would give the board two answers to
+        // "what is this command called" and it would keep using the old one.
+        const bbsCmd = (info.tooltypes as any[]).find(
+          (t: any) => String(t.key).toUpperCase() === 'BBSCMD'
+        );
+        if (bbsCmd) {
+          bbsCmd.value = command;
+          bbsCmd.originalLine = `${bbsCmd.commented ? '!' : ''}${bbsCmd.key}=${command}`;
+        }
+        info.filePath = renamedPath;
+      }
+
       writeInfoFile(info);
+
+      if (renamedPath && path.resolve(renamedPath) !== path.resolve(infoPath)) {
+        // Written first, removed second: an interrupted rename leaves the door
+        // registered twice, which the sysop can see and fix, rather than not
+        // at all.
+        fsSync.unlinkSync(infoPath);
+      }
 
       // getDoors() answers from a list built at startup, so without this the
       // door the sysop just edited reads back with its old tooltypes and the
@@ -700,7 +743,7 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
       // Mirror into the database when a row for this command exists. A missing
       // row is not an error: the door is defined on disk.
       try {
-        const existing = await configService.getDoorByCommand(command);
+        const existing = await configService.getDoorByCommand(originalCommand);
         if (existing) {
           await configService.updateDoor(existing.id, req.body, context);
         }
@@ -708,7 +751,11 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
         console.error('[config] door DB mirror failed (disk write succeeded):', mirrorError);
       }
 
-      sendResponse(res, { command, infoPath, backupPath }, 'Door updated');
+      sendResponse(
+        res,
+        { command, infoPath: renamedPath ?? infoPath, backupPath, renamedFrom: renamedPath ? originalCommand : undefined },
+        renamedPath ? `Door updated and renamed to ${command}` : 'Door updated'
+      );
     } catch (error) {
       handleError(res, error);
     }

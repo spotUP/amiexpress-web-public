@@ -282,6 +282,60 @@ export function findDoorInfoFile(bbsRoot: string, command: string): string | nul
 }
 
 /**
+ * A command name that can be a file name in Commands/BBSCmd.
+ *
+ * The name IS the file, so anything that could leave that directory - a
+ * separator, a `..`, a space that would not round-trip - is not a command.
+ */
+const COMMAND_NAME = /^[A-Za-z0-9_.-]{1,30}$/;
+
+/** A rename the board could not carry out, told to the sysop as typed. */
+export class DoorCommandRenameError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DoorCommandRenameError';
+  }
+}
+
+/**
+ * Where a door's registration has to move when the sysop renames its command.
+ *
+ * A command's identity on disk is the FILE NAME - `Commands/BBSCmd/REQ.info`
+ * is what makes REQ a command - so renaming one is a move, not a field edit.
+ * Returns null when nothing moves, and throws when the new name is not a name
+ * the board can use or is already taken by another door: overwriting that
+ * door's registration is how a board loses a command it never edited.
+ *
+ * A change of case alone is still a rename: `req` and `REQ` are one file on a
+ * case-insensitive volume and two on a case-sensitive one, and the sysop who
+ * typed the new case is the one who decides.
+ */
+export function resolveRenamedInfoPath(
+  bbsRoot: string,
+  currentInfoPath: string,
+  from: string,
+  to: string
+): string | null {
+  if (!to || to === from) return null;
+
+  if (!COMMAND_NAME.test(to)) {
+    throw new DoorCommandRenameError(
+      `"${to}" cannot be a command: a command is the name of its .info file, ` +
+      `so it may hold letters, digits, dot, dash and underscore only.`
+    );
+  }
+
+  const taken = findDoorInfoFile(bbsRoot, to);
+  if (taken && path.resolve(taken) !== path.resolve(currentInfoPath)) {
+    throw new DoorCommandRenameError(
+      `"${to}" is already a command on this board (${path.basename(taken)}).`
+    );
+  }
+
+  return path.join(path.dirname(currentInfoPath), `${to}.info`);
+}
+
+/**
  * The name to SHOW for a door, and therefore the name to write back.
  *
  * A command's `name` is its filename (wall.info -> WALL); its title lives in
