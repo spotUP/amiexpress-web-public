@@ -16,25 +16,38 @@ import * as path from 'path';
 
 const watcher = path.join(__dirname, '..', '..', '..', '..', 'deploy', 'watch-main.sh');
 
-/** `up-to-date`, `callers`, or `deploy`. */
-function decide(localSha: string, remoteSha: string, health: unknown, ignore = 'spot sysop'): string {
+/**
+ * `up-to-date`, `callers`, or `deploy`.
+ *
+ * The first argument is what the BOARD IS RUNNING, not what the checkout says.
+ * Comparing the checkout was the first version and it was wrong: the host sat
+ * with HEAD at a5f8b7d8b while the container served 5a0e4852d, and a watcher
+ * asking the checkout would have called that up to date for ever.
+ */
+function decide(runningSha: string, remoteSha: string, health: unknown, ignore = 'spot sysop'): string {
   const json = typeof health === 'string' ? health : JSON.stringify(health);
   return execFileSync('bash', [
     '-c',
     `DEPLOY_ROOT="$1" DEPLOY_IGNORE_CALLERS="$5" . "$1/deploy/watch-main.sh"; deploy_decision "$2" "$3" "$4"`,
     'bash',
     path.join(__dirname, '..', '..', '..', '..'),
-    localSha, remoteSha, json, ignore,
+    runningSha, remoteSha, json, ignore,
   ], { encoding: 'utf8' }).trim();
 }
 
 const online = (...users: string[]) => ({
   status: 'ok',
+  revision: 'whatever',
   callers: users.length,
   online: users.map((username, i) => ({ username, nodeId: i + 1, transport: 'web' })),
 });
 
 describe('the deploy timer', () => {
+  it('asks what the BOARD runs, not what the checkout says', () => {
+    // The live shape that caught this: checkout ahead, container behind.
+    expect(decide('5a0e4852d', 'a5f8b7d8b', online())).toBe('deploy');
+  });
+
   it('does nothing when the board is already on origin/main', () => {
     expect(decide('abc123', 'abc123', online())).toBe('up-to-date');
     // Even with a caller on: there is nothing to deploy.

@@ -25,12 +25,19 @@ DEPLOY_SCRIPT="${DEPLOY_SCRIPT:-$DEPLOY_ROOT/deploy/deploy.sh}"
 # shellcheck source=caller-guard.sh
 . "$DEPLOY_ROOT/deploy/caller-guard.sh"
 
-# What to do, given where the board is, where the repo is, and who is on.
+# What to do, given what the BOARD IS RUNNING, what the repo has, and who is on.
+#
+# The first argument is deliberately the running revision and not the checkout's
+# HEAD. They are different questions and I got it wrong first: the host's
+# checkout was reset to a5f8b7d8b while the container still served 5a0e4852d,
+# so a watcher comparing the checkout said "up-to-date" about a board running
+# older code - for ever, since nothing would move the checkout again. What the
+# timer is for is "is the board running main", and /health answers exactly that.
 #
 # Printed as one word so a test can drive it without a host, a docker or a
 # network: `up-to-date`, `callers`, or `deploy`.
 deploy_decision() {
-  LOCAL_SHA=${1:-}
+  RUNNING_SHA=${1:-}
   REMOTE_SHA=${2:-}
   HEALTH=${3:-}
 
@@ -39,7 +46,7 @@ deploy_decision() {
     echo "up-to-date"
     return 0
   fi
-  if [ "$LOCAL_SHA" = "$REMOTE_SHA" ]; then
+  if [ "$RUNNING_SHA" = "$REMOTE_SHA" ]; then
     echo "up-to-date"
     return 0
   fi
@@ -61,18 +68,21 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     exit 0   # a network blip is not a failure worth alarming systemd about
   }
 
-  LOCAL=$(git rev-parse HEAD)
   REMOTE=$(git rev-parse origin/main)
   HEALTH=$(curl -s --max-time 5 "$HEALTH_URL" || echo '')
+  # What the CONTAINER is serving, which is the only thing that answers "is the
+  # board running main". A board that does not answer has no revision, and that
+  # reads as a cold start below.
+  RUNNING=$(printf '%s' "$HEALTH" | sed -n 's/.*"revision":"\([0-9a-f]*\)".*/\1/p')
 
-  case "$(deploy_decision "$LOCAL" "$REMOTE" "$HEALTH")" in
+  case "$(deploy_decision "$RUNNING" "$REMOTE" "$HEALTH")" in
     up-to-date)
       exit 0 ;;
     callers)
       echo "watch: ${REMOTE:0:9} is waiting - somebody is on the board"
       exit 0 ;;
     deploy)
-      echo "watch: deploying ${REMOTE:0:9} (was ${LOCAL:0:9})"
+      echo "watch: deploying ${REMOTE:0:9} (board is on ${RUNNING:0:9})"
       exec "$DEPLOY_SCRIPT" ;;
   esac
 fi
