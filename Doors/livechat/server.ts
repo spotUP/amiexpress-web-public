@@ -85,6 +85,7 @@ import { createInputHistory } from './features/input-history';
 import { createFileSharing } from './features/file-sharing';
 import { createDrawingCanvas } from './features/drawing-canvas';
 import { createContextMenus } from './features/context-menus';
+import { chatMessagesFrom } from './features/message-history';
 import { createEnhancedVoiceChannel } from './features/voice-channel-ux';
 
 // Handlers
@@ -1605,6 +1606,9 @@ export async function createApp(session: DoorSession) {
     {
       isSysop,
       muteList: state.muteList,
+      bbs,
+      showPromptDialog,
+      messagesOf: (username: string) => chatMessagesFrom(state.messages, username),
       onFocusTile: (uid) => {
         const vg = (voiceChannel as any).videoGrid;
         if (!vg) return;

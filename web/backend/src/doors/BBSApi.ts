@@ -13,6 +13,7 @@
  */
 
 import * as fs from 'fs';
+import { appendUserNote } from '../utils/user-notes.util';
 import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
 import { Socket } from 'socket.io';
@@ -1112,6 +1113,19 @@ console.error(`[BBSApi] Error writing file ${filename}:`, error);
 console.error(`[BBSApi] Error reading .info file ${filename}:`, error);
       return null;
     }
+  }
+
+  /**
+   * Append a sysop note about `username` to that user's notes - the SAME store
+   * the account editor's `*` User Notes view reads (express.e userNotes,
+   * bbsLoc/userNotes/<slot>). Used by livechat's "Add note". Returns false if
+   * the user is unknown or has no slot.
+   */
+  async addUserNote(username: string, text: string): Promise<boolean> {
+    const target = await db.getUserByUsername(username);
+    if (!target?.slotNumber) return false;
+    const author = this.session?.user?.username ?? 'sysop';
+    return appendUserNote(target.slotNumber, author, text);
   }
 
   /**

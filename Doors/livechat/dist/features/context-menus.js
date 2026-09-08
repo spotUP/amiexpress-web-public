@@ -93,11 +93,38 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
                     s.render();
                     break;
                 case 'Add Note':
-                    asm(`Add note for ${cmt} (not implemented yet)`);
+                    if (!extras.bbs?.addUserNote || !extras.showPromptDialog) {
+                        asm(`{${door_theme_1.T.alert}-fg}Notes are unavailable.{/${door_theme_1.T.alert}-fg}`);
+                        break;
+                    }
+                    extras.showPromptDialog(`Note about ${cmt}:`, '', async (err, val) => {
+                        const note = (val || '').trim();
+                        if (err || !note)
+                            return;
+                        let ok = false;
+                        try {
+                            ok = await extras.bbs.addUserNote(cmt, note);
+                        }
+                        catch {
+                            ok = false;
+                        }
+                        asm(ok
+                            ? `Note saved for ${cmt}.`
+                            : `{${door_theme_1.T.alert}-fg}Could not save note for ${cmt}.{/${door_theme_1.T.alert}-fg}`);
+                        s.render();
+                    });
                     break;
-                case 'View History':
-                    asm(`Viewing message history for ${cmt} (not implemented yet)`);
+                case 'View History': {
+                    const history = extras.messagesOf ? extras.messagesOf(cmt) : [];
+                    if (history.length === 0) {
+                        asm(`No recent messages from ${cmt}.`);
+                        break;
+                    }
+                    asm(`{${door_theme_1.T.accent}-fg}--- recent messages from ${cmt} ---{/${door_theme_1.T.accent}-fg}`);
+                    for (const m of history.slice(-15))
+                        asm(`  ${m.content}`);
                     break;
+                }
                 // Mute, Ignore and Block all used to print a confirmation and do
                 // NOTHING - "their messages will be hidden" while the messages kept
                 // arriving. Choosing the same level again lifts it, which is the

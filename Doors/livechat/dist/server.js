@@ -85,6 +85,7 @@ const input_history_1 = require("./features/input-history");
 const file_sharing_1 = require("./features/file-sharing");
 const drawing_canvas_1 = require("./features/drawing-canvas");
 const context_menus_1 = require("./features/context-menus");
+const message_history_1 = require("./features/message-history");
 const voice_channel_ux_1 = require("./features/voice-channel-ux");
 // Handlers
 const room_socket_handlers_1 = require("./handlers/room-socket-handlers");
@@ -1385,6 +1386,9 @@ async function createApp(session) {
     const { contextMenu, showContextMenu, hideContextMenu } = (0, context_menus_1.createContextMenus)(screen, inputBox, showUserProfile, showDMPrompt, addSystemMessage, socket, {
         isSysop,
         muteList: state.muteList,
+        bbs,
+        showPromptDialog,
+        messagesOf: (username) => (0, message_history_1.chatMessagesFrom)(state.messages, username),
         onFocusTile: (uid) => {
             const vg = voiceChannel.videoGrid;
             if (!vg)

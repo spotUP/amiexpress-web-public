@@ -13,6 +13,7 @@ import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { config } from '../../config';
 import { findUserAnswerBlocks } from '../../utils/user-answers.util';
+import { getUserNotesPath, readUserNotes, saveUserNotes } from '../../utils/user-notes.util';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 
@@ -491,60 +492,7 @@ console.error('Error saving account:', err);
 }
 
 // ===== User Notes Functions - express.e:21679-21739 =====
-
-/**
- * Get user notes folder path
- * express.e:31797-31799 - defaults to bbsLoc/userNotes/
- */
-function getUserNotesFolder(): string {
-  // Use data directory for user notes
-  const dataDir = process.env.DATABASE_DIR || './data';
-  return path.join(dataDir, 'userNotes');
-}
-
-/**
- * Get user notes file path for a slot number
- * express.e:21701 - StringF(fname,'\s\d',userNotesFolder,hoozer.slotNumber)
- */
-function getUserNotesPath(slotNumber: number): string {
-  const folder = getUserNotesFolder();
-  return path.join(folder, slotNumber.toString());
-}
-
-/**
- * Read user notes from file
- */
-function readUserNotes(slotNumber: number): string | null {
-  try {
-    const notesPath = getUserNotesPath(slotNumber);
-    if (amigafs.existsSync(notesPath)) {
-      const content = amigafs.readFileSync(notesPath, 'utf8');
-      return typeof content === 'string' ? content : content.toString('utf8');
-    }
-  } catch (err) {
-    console.error('Error reading user notes:', err);
-  }
-  return null;
-}
-
-/**
- * Save user notes to file
- */
-function saveUserNotes(slotNumber: number, content: string): boolean {
-  try {
-    const folder = getUserNotesFolder();
-    // Create folder if it doesn't exist (express.e:21698-21700)
-    if (!amigafs.existsSync(folder)) {
-      amigafs.mkdirSync(folder, { recursive: true });
-    }
-    const notesPath = getUserNotesPath(slotNumber);
-    amigafs.writeFileSync(notesPath, content, 'utf8');
-    return true;
-  } catch (err) {
-    console.error('Error saving user notes:', err);
-    return false;
-  }
-}
+// (path/read/save moved to utils/user-notes.util.ts - shared with BBSApi.addUserNote)
 
 /**
  * Display user notes screen

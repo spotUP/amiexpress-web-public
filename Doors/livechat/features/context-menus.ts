@@ -3,6 +3,7 @@ import { PANEL_BORDER } from '../ui/theme';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { T } from '../door-theme';
+import type { Message } from '../types';
 
 export interface ContextMenuExtras {
   isSysop?: boolean;
@@ -12,6 +13,12 @@ export interface ContextMenuExtras {
   onToggleChannelExpand?: (channelName: string) => void;
   /** The user's mute list, so Mute/Ignore/Block actually do something. */
   muteList?: MuteList;
+  /** BBSApi - `addUserNote` persists a sysop note to the account-editor store. */
+  bbs?: { addUserNote?: (username: string, text: string) => Promise<boolean> };
+  /** The door's prompt dialog, for entering a note's text. */
+  showPromptDialog?: (prompt: string, def: string, cb: (err: any, val?: string) => void) => void;
+  /** This user's actual chat messages, for View History. */
+  messagesOf?: (username: string) => Message[];
 }
 
 export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void, sdp: (u: string) => void, asm: (m: string) => void, sock: any, extras: ContextMenuExtras = {}) {
@@ -104,11 +111,31 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           s.render();
           break;
         case 'Add Note':
-          asm(`Add note for ${cmt} (not implemented yet)`);
+          if (!extras.bbs?.addUserNote || !extras.showPromptDialog) {
+            asm(`{${T.alert}-fg}Notes are unavailable.{/${T.alert}-fg}`);
+            break;
+          }
+          extras.showPromptDialog(`Note about ${cmt}:`, '', async (err: any, val?: string) => {
+            const note = (val || '').trim();
+            if (err || !note) return;
+            let ok = false;
+            try { ok = await extras.bbs!.addUserNote!(cmt, note); } catch { ok = false; }
+            asm(ok
+              ? `Note saved for ${cmt}.`
+              : `{${T.alert}-fg}Could not save note for ${cmt}.{/${T.alert}-fg}`);
+            s.render();
+          });
           break;
-        case 'View History':
-          asm(`Viewing message history for ${cmt} (not implemented yet)`);
+        case 'View History': {
+          const history = extras.messagesOf ? extras.messagesOf(cmt) : [];
+          if (history.length === 0) {
+            asm(`No recent messages from ${cmt}.`);
+            break;
+          }
+          asm(`{${T.accent}-fg}--- recent messages from ${cmt} ---{/${T.accent}-fg}`);
+          for (const m of history.slice(-15)) asm(`  ${m.content}`);
           break;
+        }
         // Mute, Ignore and Block all used to print a confirmation and do
         // NOTHING - "their messages will be hidden" while the messages kept
         // arriving. Choosing the same level again lifts it, which is the
