@@ -55,9 +55,15 @@ describe('R13a - the /ws/terminal endpoint runs the pre-login', () => {
   let server: http.Server;
   let wss: { clients: Set<{ terminate: () => void }> };
   let port: number;
+  /** Every raw socket the server accepted, so teardown can destroy them. */
+  const sockets = new Set<{ destroy: () => void }>();
 
   beforeAll(async () => {
     server = http.createServer((_req, res) => { res.writeHead(404); res.end(); });
+    server.on('connection', (sock) => {
+      sockets.add(sock as never);
+      sock.on('close', () => sockets.delete(sock as never));
+    });
     // The PRODUCT'S handler, with index.ts's dependencies passed in.
     wss = attachWSTerminalServer(server, buildWsTerminalConnectionHandler({
       createSession: ((nodeId: number, init: Record<string, unknown>) => ({
@@ -73,13 +79,25 @@ describe('R13a - the /ws/terminal endpoint runs the pre-login', () => {
   });
 
   afterAll(async () => {
-    // `server.close()` waits for every live socket, and a ws client holds one
-    // open - so without this the hook hangs to jest's 60s limit and the SUITE
-    // fails while every test in it passed. Terminate the clients, then drop
-    // any keep-alive the runtime is still holding.
+    /*
+     * `server.close()` waits for every live socket, and an upgraded WebSocket
+     * holds one open indefinitely. Without this the hook runs to jest's 60s
+     * limit and the SUITE fails while every test in it passed - a failure that
+     * points at nothing, because the tests are all green.
+     *
+     * Terminating the ws clients is not enough on its own: the stray-path
+     * client never completes an upgrade, so it is not in `wss.clients` at all,
+     * and its raw socket is the one that keeps the server open. Hence the
+     * socket set - every connection the server accepted, destroyed by hand.
+     */
     for (const client of wss.clients) client.terminate();
+    for (const sock of sockets) { try { sock.destroy(); } catch { /* already gone */ } }
+    sockets.clear();
     (server as unknown as { closeAllConnections?: () => void }).closeAllConnections?.();
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await new Promise<void>((resolve) => {
+      const done = setTimeout(resolve, 2000);   // never hang the suite on teardown
+      server.close(() => { clearTimeout(done); resolve(); });
+    });
   });
 
   it('serves the connect banner and the graphics prompt to a real ws client', async () => {
