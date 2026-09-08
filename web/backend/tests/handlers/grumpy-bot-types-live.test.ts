@@ -484,4 +484,43 @@ describe('the chat is one stream', () => {
       mockHold = null;
     }
   }, 40000);
+
+  it('keeps typing dots through the think pause, right up to the first character of the reply', async () => {
+    // WHERE the window is closed, pinned. Stopping it when the MODEL returned
+    // looked right and left the caller staring at a dead line for the whole of
+    // botThinkTime afterwards - a second by default, and this board's sysop can
+    // raise it - which is the exact silence the dots exist to fill. The row is
+    // recorded at the top of sendBotMessageWithTyping, BEFORE that pause, so
+    // "the reply exists but nothing has been typed yet" is observable: a dot
+    // arriving after it is a dot the old placement could not have produced.
+    mockHold = { ms: THINKING_DOTS_AFTER_MS + 400, reply: 'no full stops in this one' };
+    try {
+      const w = makeWorld();
+      H.initOperatorChatHandler(w.io, w.repo);
+      await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
+      await untilTrue('the bot to finish its opening line', () => handedBack(w.seen));
+      // Raised only now, so the intro is not slowed down as well.
+      w.repo.updateConfig({ botThinkTime: 2500 } as any);
+
+      const botLines = () =>
+        w.repo.getChatMessages(w.session.tempData.pageId).filter((m: any) => m.senderId === 'bot');
+      const said = botLines().length;
+      await H.handleUserChatMessage(w.io, w.repo, w.session, 'something slow');
+      await untilTrue('the model to return and its line to be recorded', () => botLines().length > said);
+
+      const thinking = w.seen.length;
+      await untilTrue('a dot AFTER the model returned', () => w.seen.slice(thinking).some((c) => c === '.'));
+      // And nothing of the reply had been typed when it arrived.
+      const firstDot = w.seen.slice(thinking).findIndex((c) => c === '.');
+      expect(shown(w.seen.slice(thinking, thinking + firstDot))).not.toContain('no full stops');
+
+      // The whole run still ends clean: dots gone, reply typed from the margin.
+      await untilTrue('the reply to finish', () => handedBack(w.seen.slice(thinking)));
+      const shownNow = shown(w.seen.slice(thinking));
+      expect(shownNow.trimStart().startsWith('.')).toBe(false);
+      expect(shownNow.replace(/\s/g, '')).toContain('nofullstopsinthisone');
+    } finally {
+      mockHold = null;
+    }
+  }, 40000);
 });

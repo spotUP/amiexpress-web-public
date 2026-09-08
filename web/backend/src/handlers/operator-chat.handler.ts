@@ -1117,6 +1117,15 @@ async function sendBotMessageWithTyping(
   });
 
   if (thinkTime > 0) await new Promise<void>((r) => setTimeout(r, thinkTime));
+  // THE DOTS COME OFF HERE, and not a moment earlier. Stopping them when the
+  // model returned left the caller watching a dead line for the whole of
+  // `thinkTime` above - a second by default, more on a board that raised it -
+  // which is the exact silence the dots exist to fill. Before deliverToCaller
+  // and never inside it: the erase counts backspaces against what the window
+  // wrote, and a character of the reply typed first would be eaten by them.
+  // A chat with no window open has no canceller registered, so this is a
+  // no-op for the intro, the queued reply and the admin verdict.
+  cancelThinkingDots(chatSession);
   await deliverToCaller(io, chatSession, page, message, {
     typingSpeed: aiConfig?.botTypingSpeed,
     typoProbability: aiConfig?.botTypoProbability,
@@ -1295,18 +1304,22 @@ console.log('[Operator Chat] Bot busy, queuing message');
 
       // THE CALLER IS WATCHING A DEAD LINE WHILE THE MODEL THINKS - several
       // seconds of it, and a real sysop would have typed something. Dots
-      // start only if the wait runs long (thinking-dots.ts) and are rubbed
-      // out before a character of the reply is typed. `botBusy` above is what
-      // keeps this to one window at a time per chat: the next model call for
-      // this chat is only started from inside the `.then` below, after
-      // `stopDots()` has already run.
+      // start only if the wait runs long (thinking-dots.ts); they are rubbed
+      // out in sendBotMessageWithTyping, immediately before the first
+      // character of the reply, so the whole wait is covered. The handle
+      // below is only for the error path, where nothing is ever typed.
+      // `botBusy` above keeps this to one window at a time per chat: the next
+      // model call for this chat is only started from inside the `.then`,
+      // after the reply has been delivered.
       const dotReach = emitterForUserId(page.userId, io);
       const stopDots = dotReach
         ? startThinkingDots((bytes) => dotReach.emitter.emit('ansi-output', bytes), chatSession, pageId)
         : () => undefined;
 
       getGrumpySysopResponse(message, context, aiConfig).then(async botResponse => {
-        stopDots();
+        // No stop here: the window stays open across the record, the admin
+        // emit and the think sleep, because from the caller's side all of
+        // that is still waiting. sendBotMessageWithTyping ends it.
         context.messageHistory.push({ role: 'bot', content: botResponse });
         (chatSession as any).botMessageHistory = context.messageHistory;
         await sendBotMessageWithTyping(io, repository, pageId, botResponse, nodeId, page, aiConfig);
