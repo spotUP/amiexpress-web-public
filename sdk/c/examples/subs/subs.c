@@ -130,6 +130,15 @@ static void door_idle(void *ctx)
     ae_delay_ticks(10);   /* ten ticks is a fifth of a second on PAL */
 }
 
+/* The widgets that paint and then block (ui_input, ui_confirm, ui_doc) only
+   hold an ansi_buf, which is memory. This is how they get their prompt onto
+   the caller's screen before waiting for the answer to it. */
+static void door_flush(void *ctx)
+{
+    (void)ctx;
+    ui_screen_flush(&screen);
+}
+
 static int pushback = -1;
 static int wide;
 
@@ -531,6 +540,7 @@ int main(int argc, char **argv)
     keys.pending = door_pending;
     keys.settle = door_settle;
     keys.idle = door_idle;
+    keys.flush = door_flush;
     keys.ctx = 0;
 
     config_load("SUBS.cfg");

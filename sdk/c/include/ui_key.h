@@ -75,6 +75,22 @@ typedef struct ui_key_source {
      * Requires `pending`: without it there is no way to know when to stop.
      */
     void (*idle)(void *ctx);
+    /**
+     * Push everything drawn so far to the caller; may be NULL.
+     *
+     * A widget that PAINTS AND THEN BLOCKS - ui_input, ui_confirm, ui_doc -
+     * only ever receives an `ansi_buf`, which is memory. Without this it drew
+     * its prompt into that buffer and then waited for a key that the caller
+     * had no way of knowing was wanted: on the live board, pressing P in SUBS
+     * looked like it did nothing, and the next keystroke silently took the
+     * confirm's default (2026-09-08).
+     *
+     * Set it to whatever sends the door's screen - ui_screen_flush - and the
+     * widgets will call it after painting, before every blocking read. NULL
+     * keeps the old behaviour, which is only correct for a caller that never
+     * blocks on its own drawing.
+     */
+    void (*flush)(void *ctx);
     void *ctx;
 } ui_key_source;
 

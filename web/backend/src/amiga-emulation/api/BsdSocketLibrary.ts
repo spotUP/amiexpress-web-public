@@ -133,6 +133,20 @@ interface SocketState {
   tlsSocket?: any; // Will be set by AmiSSLLibrary
 }
 
+/**
+ * Strip the value from any credential-bearing header in a request dump.
+ *
+ * Matches the header NAME and replaces the rest of that line, so a multi-line
+ * request keeps every other header intact and still shows that the door
+ * authenticated - it just does not say with what.
+ */
+function redactCredentials(text: string): string {
+  return text.replace(
+    /^(Authorization|Proxy-Authorization|Cookie|X-Api-Key)\s*:\s*.*$/gim,
+    (_m, header: string) => `${header}: <redacted>`,
+  );
+}
+
 export class BsdSocketLibrary {
   private emulator: MoiraEmulator;
   private sockets: Map<number, SocketState> = new Map();
@@ -591,7 +605,17 @@ export class BsdSocketLibrary {
     }
 
     console.log(`[BsdSocketLibrary] send(fd=${fd}, len=${len})`);
-    console.log(`[BsdSocketLibrary] send data: ${buffer.toString('utf8').substring(0, 200)}`);
+    // Redact credentials before they reach the log.
+    //
+    // A 68K door authenticates with `Authorization: Board <id>.<secret>`, and
+    // this line printed the request verbatim - so the live board's own key sat
+    // in plaintext in docker logs and logs/backend.log, readable by anyone who
+    // could read either (found 2026-09-08 while debugging the REQUESTS door).
+    // The header still shows, because knowing whether the door SENT one is the
+    // whole diagnostic value; only the credential goes.
+    console.log(
+      `[BsdSocketLibrary] send data: ${redactCredentials(buffer.toString('utf8').substring(0, 200))}`,
+    );
 
     // Use TLS socket if available, otherwise regular socket
     const socket = state.tlsSocket || state.socket;

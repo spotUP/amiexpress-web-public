@@ -213,6 +213,8 @@ int ui_doc(ansi_buf *b, const ui_key_source *src, int *pushback,
 
         paint_page(b, st, title, text, top, total, rows);
 
+        /* The prompt is in a buffer until something sends it. */
+        if (src->flush) src->flush(src->ctx);
         key = ui_key_read(src, pushback);
         if (key < 0) return -1;         /* the caller went away */
 

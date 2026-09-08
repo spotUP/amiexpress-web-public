@@ -364,6 +364,7 @@ int main(int argc, char **argv)
     keys.pending = door_pending;
     keys.settle = door_settle;
     keys.idle = 0;
+    keys.flush = 0;
     keys.ctx = 0;
 
     if (!config_load(&config, "ACHIEVE.cfg")) {

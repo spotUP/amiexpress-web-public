@@ -257,6 +257,7 @@ int main(int argc, char **argv)
     keys.pending = door_pending;
     keys.settle = door_settle;
     keys.idle = 0;
+    keys.flush = 0;
     keys.ctx = 0;
 
     ui_list_init(&list);
@@ -290,6 +291,7 @@ int main(int argc, char **argv)
     anim.theme = &theme;
     anim.tick = &rail_tick;
     keys.idle = door_idle;
+    keys.flush = 0;
     keys.ctx = &anim;
     /* The primary colour carries the chrome, the same rule the TypeScript
        doors follow since 2026-09-03. */

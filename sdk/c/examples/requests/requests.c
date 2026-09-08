@@ -172,6 +172,95 @@ static int fetch_text(const char *path_and_query)
     return last_status;
 }
 
+/* ------------------------------------------------------------ detail render
+
+   The detail endpoint answers in the SAME machine format the listing uses -
+   a REQUEST|... header line, one pipe-delimited row, a blank line, then the
+   notes. That is right for the wire and wrong for a caller: shown raw it put
+   "|1|art|open|0|uprough|sysop|uPt0wN Logo||1788885144|1788885144" on the
+   screen (reported from the board 2026-09-08).
+
+   So the door renders it. Parsing here rather than through split_rows() is
+   deliberate: the list behind this view still owns rows[] and row_count, and
+   re-splitting would leave it pointing at the detail when the caller comes
+   back.
+
+   Unknown or missing fields simply do not print a line - the format is
+   append-only, so a row from a newer server must degrade, never mangle. */
+static char detail_body[LISTING_MAX];
+
+static void append_line(char *out, unsigned long cap, const char *text)
+{
+    unsigned long used = strlen(out);
+    unsigned long len = strlen(text);
+    if (used + len + 2 >= cap) return;
+    memcpy(out + used, text, len);
+    out[used + len] = '\n';
+    out[used + len + 1] = '\0';
+}
+
+/* Copy one pipe-delimited field; returns the start of the next, or NULL. */
+static const char *take_field(const char *p, char *out, unsigned long cap)
+{
+    unsigned long n = 0;
+    if (p == 0) { out[0] = '\0'; return 0; }
+    while (*p != '\0' && *p != '|' && *p != '\r' && *p != '\n') {
+        if (n + 1 < cap) out[n++] = *p;
+        p++;
+    }
+    out[n] = '\0';
+    if (*p == '|') return p + 1;
+    return 0;
+}
+
+static void format_detail(const char *raw)
+{
+    char f[10][128];
+    char line[256];
+    const char *p = raw;
+    int i;
+
+    detail_body[0] = '\0';
+    if (raw == 0 || raw[0] == '\0') return;
+
+    /* Line 1 is the REQUEST|... header: skip it. */
+    while (*p != '\0' && *p != '\n') p++;
+    if (*p == '\n') p++;
+
+    for (i = 0; i < 10; i++) f[i][0] = '\0';
+    for (i = 0; i < 10 && p != 0; i++) p = take_field(p, f[i], sizeof f[i]);
+
+    if (f[0][0] != '\0') {
+        sprintf(line, "#%.10s  %.12s  %.12s", f[0], f[1], f[2]);
+        append_line(detail_body, sizeof detail_body, line);
+        append_line(detail_body, sizeof detail_body, "");
+    }
+    if (f[6][0] != '\0') {
+        sprintf(line, "Title:   %.60s", f[6]);
+        append_line(detail_body, sizeof detail_body, line);
+    }
+    if (f[5][0] != '\0') {
+        if (f[4][0] != '\0') sprintf(line, "From:    %.24s@%.24s", f[5], f[4]);
+        else                 sprintf(line, "From:    %.24s", f[5]);
+        append_line(detail_body, sizeof detail_body, line);
+    }
+    if (f[3][0] != '\0') {
+        sprintf(line, "Votes:   %.10s", f[3]);
+        append_line(detail_body, sizeof detail_body, line);
+    }
+    sprintf(line, "Claimed: %s", f[7][0] != '\0' ? f[7] : "nobody yet");
+    append_line(detail_body, sizeof detail_body, line);
+
+    /* Whatever follows the blank line is the notes, and it is already prose. */
+    while (*p != '\0' && *p != '\n') p++;
+    if (*p == '\n') p++;
+    while (*p == '\r' || *p == '\n') p++;
+    if (*p != '\0') {
+        append_line(detail_body, sizeof detail_body, "");
+        append_line(detail_body, sizeof detail_body, p);
+    }
+}
+
 /** Fetch one detail page into `listing` for ui_doc; leaves it whole. */
 static int fetch_detail(long id)
 {
@@ -358,6 +447,15 @@ static void door_idle(void *ctx)
                           UI_TOKEN(UI_T_BAR), rail_tick);
     ui_screen_flush(&screen);
     ae_delay_ticks(10);   /* ten ticks is a fifth of a second on PAL */
+}
+
+/* The widgets that paint and then block (ui_input, ui_confirm, ui_doc) only
+   hold an ansi_buf, which is memory. This is how they get their prompt onto
+   the caller's screen before waiting for the answer to it. */
+static void door_flush(void *ctx)
+{
+    (void)ctx;
+    ui_screen_flush(&screen);
 }
 
 static char list_query[256];
@@ -587,6 +685,7 @@ int main(int argc, char **argv)
     keys.pending = door_pending;
     keys.settle = door_settle;
     keys.idle = door_idle;
+    keys.flush = door_flush;
     keys.ctx = 0;
 
     if (!config_load(&config, "REQUESTS.cfg")) {
@@ -706,8 +805,15 @@ int main(int argc, char **argv)
                 ds.fg = UI_TOKEN(UI_T_INK);
                 ds.bg = UI_TOKEN(UI_T_GROUND);
                 ds.ink = UI_TOKEN(UI_T_ACCENT);
+                /* The doc owns the whole screen: without this the list's
+                   frame and footer stayed underneath it, so the caller saw
+                   two boxes and two footers at once. */
+                ansi_clear(&screen.buf);
+                draw_masthead(list_title);
+                if (rc == 200) format_detail(listing);
                 dr = ui_doc(&screen.buf, &keys, &pushback, &ds, list_title,
-                            rc == 200 ? listing : "The server could not be reached.");
+                            rc == 200 ? detail_body
+                                      : "The server could not be reached.");
                 ui_screen_flush(&screen);
                 if (dr < 0) break;
                 full = 1;

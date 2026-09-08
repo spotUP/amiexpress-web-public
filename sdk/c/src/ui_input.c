@@ -62,6 +62,8 @@ int ui_input(ansi_buf *b, const ui_key_source *src, int *pushback,
         int key;
 
         paint(b, style, label, buf);
+        /* The prompt is in a buffer until something sends it. */
+        if (src->flush) src->flush(src->ctx);
         key = ui_key_read(src, pushback);
 
         if (key < 0) return -1;              /* the caller went away */
@@ -112,6 +114,8 @@ int ui_confirm(ansi_buf *b, const ui_key_source *src, int *pushback,
         ansi_text(b, style->row, style->left + 1, line, style->cols - 1);
         ansi_cursor(b, 0);
 
+        /* The prompt is in a buffer until something sends it. */
+        if (src->flush) src->flush(src->ctx);
         key = ui_key_read(src, pushback);
         if (key < 0) return -1;
 

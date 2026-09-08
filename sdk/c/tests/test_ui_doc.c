@@ -37,6 +37,7 @@ static ui_key_source source_for(typist *t)
     src.pending = typist_pending;
     src.settle = 0;
     src.idle = 0;
+    src.flush = 0;
     src.ctx = t;
     return src;
 }
