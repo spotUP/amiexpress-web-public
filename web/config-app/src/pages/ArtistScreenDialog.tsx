@@ -24,7 +24,7 @@ import { PetsciiScreenPreview } from '../components/PetsciiScreenPreview';
 import { SkeletonRows } from '../components/ui/states';
 import { useNotification } from '../contexts/NotificationContext';
 import { screenToCanvas } from './screen-bytes';
-import { createSurface, type EditorSurface } from './screen-editor-state';
+import { blankCanvas, createSurface, type EditorSurface } from './screen-editor-state';
 import type { ArtistTheme } from './use-my-theme';
 import type { MciReferenceShape, ScreenIndexShape } from './screen-index-view';
 
@@ -38,6 +38,14 @@ interface ScreenFilePayload {
 export interface ArtistScreenDialogProps {
   /** Board-relative path of the open screen, or null when the dialog is shut. */
   path: string | null;
+  /**
+   * The theme has no file here yet - the artist picked it off the checklist.
+   * There is nothing to fetch and nothing to read-only; open a blank screen
+   * and let Save create it.
+   */
+  isNew?: boolean;
+  /** What this slot is for, shown while the canvas is still empty. */
+  newDescription?: string;
   theme: ArtistTheme;
   index: ScreenIndexShape | undefined;
   onClose: () => void;
@@ -45,7 +53,7 @@ export interface ArtistScreenDialogProps {
   onOpenPath: (path: string) => void;
 }
 
-export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath }: ArtistScreenDialogProps) {
+export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, isNew = false, newDescription }: ArtistScreenDialogProps) {
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useNotification();
   const [editing, setEditing] = useState<EditorSurface | null>(null);
@@ -59,19 +67,31 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath }: 
   const { data: file, isLoading } = useQuery({
     queryKey: ['screen-file', path],
     queryFn: async () => (await apiClient.getScreenFile(path as string)).data as ScreenFilePayload,
-    enabled: !!path,
+    enabled: !!path && !isNew,
   });
 
-  /** Mine to change: the file sits inside this theme's own directory. */
-  const mine = !!path && index?.files?.[path]?.theme === theme.slug;
+  /** Mine to change: the file sits inside this theme's own directory - or it
+   *  does not exist yet and this theme is where it is about to. */
+  const mine = isNew || (!!path && index?.files?.[path]?.theme === theme.slug);
 
   useEffect(() => {
+    // Cleared FIRST, before any early return. Cleared only on the decoding
+    // path, one screen the browser could not read left the message set for
+    // every screen opened after it.
+    setUndrawable(null);
+
+    // A slot the theme has not drawn yet opens as an empty 80x25 canvas -
+    // which is what the artist asked for by clicking it on the checklist.
+    if (isNew) {
+      setEditing(createSurface(blankCanvas()));
+      return;
+    }
+
     if (!file || !mine || file.format === 'rip' || file.format === 'petscii') {
       setEditing(null);
       return;
     }
     let live = true;
-    setUndrawable(null);
     screenToCanvas(file.content)
       .then(canvas => { if (live) setEditing(createSurface(canvas)); })
       // A screen the browser cannot decode is a screen, not a crash: say so
@@ -79,7 +99,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath }: 
       // unhandled rejection and a dialog that stayed blank for ever.
       .catch(() => { if (live) setUndrawable('These bytes cannot be read as ANSI art.'); });
     return () => { live = false; };
-  }, [file, mine, path]);
+  }, [file, mine, path, isNew]);
 
   const redraw = useMutation({
     mutationFn: () => apiClient.copyScreenIntoTheme(theme.slug, path as string),
@@ -118,6 +138,13 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath }: 
     <Modal open={!!path} title={title} onClose={onClose} maxWidth="max-w-4xl">
       {isLoading && <SkeletonRows rows={4} />}
 
+      {isNew && (
+        <p className="text-sm text-content-secondary">
+          Nothing has been drawn here yet.{newDescription ? ` ${newDescription}.` : ''} Save
+          when you are happy and it becomes part of {theme.title}.
+        </p>
+      )}
+
       {file && !mine && (
         <div className="space-y-3">
           <p className="text-sm text-content-secondary">
@@ -136,31 +163,31 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath }: 
         </div>
       )}
 
-      {file && (
+      {(file || isNew) && (
         <div className="mt-3">
-          {file.format === 'rip' ? (
+          {file?.format === 'rip' ? (
             <RipScreenEditor
-              content={file.content}
+              content={file?.content ?? ''}
               filePath={path ?? undefined}
               readOnly={!mine}
               onSave={mine ? bytes => save.mutate(bytes) : undefined}
               onCancel={onClose}
             />
-          ) : file.format === 'petscii' ? (
+          ) : file?.format === 'petscii' ? (
             <PetsciiScreenPreview content={file.content} />
           ) : undrawable ? (
             <p className="text-sm text-status-warn">{undrawable}</p>
           ) : editing ? (
             <ScreenEditor
               surface={editing}
-              mci={file.mci ?? []}
+              mci={file?.mci ?? []}
               filePath={path ?? undefined}
               onChange={setEditing}
               onSave={base64 => save.mutate(base64)}
               onCancel={onClose}
             />
           ) : (
-            <ReadOnlyArt content={file.content} mci={file.mci ?? []} filePath={path} onClose={onClose} />
+            <ReadOnlyArt content={file?.content ?? ''} mci={file?.mci ?? []} filePath={path} onClose={onClose} />
           )}
         </div>
       )}

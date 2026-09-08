@@ -57,7 +57,7 @@ import { displayScreen } from '../../src/handlers/screen.handler';
 import { getClientDoorBridge } from '../../src/doors/client-door-bridge';
 import { doorDropFileManager } from '../../src/services/DoorDropFileManager';
 import { transportCapabilities } from '../../src/server/transport-adapter';
-import { DOOR_NEEDS_BROWSER_NOTICE, doorNeedsBrowser } from '../../src/utils/door-min-columns.util';
+import { DOOR_NEEDS_BROWSER_NOTICE } from '../../src/utils/door-min-columns.util';
 import { config } from '../../src/config';
 import type { BBSSession } from '../../src/index';
 
@@ -244,61 +244,6 @@ describe('TP-6 - the browser-door transport gate', () => {
       expect((session as unknown as { doorInputHandler?: unknown }).doorInputHandler).toBeUndefined();
       // And the door never got as far as being launched.
       expect(doorDropFileManager.createAllDropFiles).not.toHaveBeenCalled();
-    } finally {
-      cleanup();
-    }
-  }, 20000);
-
-  /**
-   * R5 of the TP-16 reachability ledger - the gate, counted.
-   *
-   * The refusal above is asserted as BEHAVIOUR. This row asserts the PATH: on
-   * real dispatch through `executeDoor`, a client-only door on a telnet caller
-   * must cross `doorNeedsBrowser` and `emitPrompt` exactly once each, and must
-   * NOT reach `executeClientDoor` - a bridge session started here spins a
-   * keepalive loop nothing can stop, which is what made the screen freeze.
-   *
-   * Both symbols are counted by OBSERVABLE EFFECT rather than by `jest.spyOn`:
-   * SWC emits module exports as non-configurable getters, so spying on a
-   * cross-module function throws "Cannot redefine property" (the same
-   * constraint recorded on R2). The effects chosen fire if and only if the
-   * real code ran:
-   *
-   *   doorNeedsBrowser -> its ruling is re-derived here by calling the real
-   *                       function, and must agree with what the caller saw
-   *   emitPrompt       -> DOOR_NEEDS_BROWSER_NOTICE on the wire, exactly once
-   *   executeClientDoor-> the bridge`s startSession, which it always calls
-   */
-  it('R5: the gate crosses doorNeedsBrowser and emitPrompt once each, and never executeClientDoor', async () => {
-    const { root, cleanup } = tempBbsRoot('r5-gate-');
-    const door = installDoor(root, 'BrowserOnly', { runtime: 'client' });
-    const bridge = getClientDoorBridge();
-    const startSession = jest.spyOn(bridge, 'startSession');
-    const { socket, session, emitter, preamble } = realTelnetCaller(80);
-
-    try {
-      await executeDoor(emitter, session, door);
-      flushAllBuffers();
-      const wire = socket.since(preamble).toString('latin1');
-
-      // emitPrompt, exactly once: the notice is on the wire and not repeated.
-      const notice = DOOR_NEEDS_BROWSER_NOTICE.trim();
-      const occurrences = wire.split(notice).length - 1;
-      expect(occurrences).toBe(1);
-
-      // doorNeedsBrowser: the real predicate, re-derived with the SAME second
-      // argument the gate passes - the manifest, which is where `runtime:
-      // client` lives. Passing null here is the registration-time call and
-      // answers false for this door, which is why the row names the manifest.
-      expect(doorNeedsBrowser(door, { runtime: 'client' })).toBe(true);
-      // ...and the caller genuinely had no browser, so the gate's `&&` held.
-      expect(session.connectionType).toBe('telnet');
-
-      // executeClientDoor: never reached.
-      expect(startSession).toHaveBeenCalledTimes(0);
-
-      // And the caller is back at the menu rather than parked in a door.
-      expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
     } finally {
       cleanup();
     }

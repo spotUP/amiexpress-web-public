@@ -70,7 +70,12 @@ export interface GalleryItem {
    * board's own art still showing through underneath. Absent in the board's
    * own view, where every card is the board's.
    */
-  badge?: { label: string; kind: 'mine' | 'theirs' };
+  badge?: { label: string; kind: 'mine' | 'theirs' | 'todo' };
+  /**
+   * A screen the theme has not drawn yet: there is no file to fetch, and the
+   * card is an invitation rather than a thumbnail.
+   */
+  placeholder?: boolean;
   /**
    * Which of the three formats this screen HAS, so an artist can see at a
    * glance how far along it is. A caller is served by extension - the loader
@@ -130,7 +135,8 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
    */
   const { data: fetched } = useQuery({
     queryKey: ['screen-file', item.path],
-    enabled: visible,
+    // A placeholder has no file behind it; asking would be a 404 per card.
+    enabled: visible && !item.placeholder,
     queryFn: async () => {
       await acquire();
       try {
@@ -158,12 +164,20 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
       className="text-left border border-border hover:border-border-strong p-2 space-y-1"
       onClick={() => onOpen(item.path)}
     >
-      <div className="h-32 overflow-hidden bg-black">
-        {content
-          ? <ScreenArt content={content} scale={0.28} />
-          // A card that is waiting looks like it is waiting. Blank black reads
-          // as an empty screen, which is a thing some of these actually are.
-          : <div className="h-full w-full animate-pulse bg-surface-2/40" />}
+      <div className={`h-32 overflow-hidden ${item.placeholder ? 'bg-surface-2' : 'bg-black'}`}>
+        {item.placeholder
+          // An invitation, not a thumbnail: there is no file yet, and the card
+          // exists so an artist can see the gap and click into it.
+          ? (
+            <div className="flex h-full w-full items-center justify-center border border-dashed border-border text-content-muted">
+              <span className="text-2xl leading-none">+</span>
+            </div>
+          )
+          : content
+            ? <ScreenArt content={content} scale={0.28} />
+            // A card that is waiting looks like it is waiting. Blank black reads
+            // as an empty screen, which is a thing some of these actually are.
+            : <div className="h-full w-full animate-pulse bg-surface-2/40" />}
       </div>
       <div className="text-xs">
         <span className="block text-content-primary truncate">{item.label}</span>
@@ -181,7 +195,9 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
             className={
               item.badge.kind === 'mine'
                 ? 'mt-1 inline-block px-1 rounded-sm bg-surface-3 text-content-primary'
-                : 'mt-1 inline-block px-1 rounded-sm border border-dashed border-border text-content-muted'
+                : item.badge.kind === 'todo'
+                  ? 'mt-1 inline-block px-1 rounded-sm border border-dashed border-accent text-accent'
+                  : 'mt-1 inline-block px-1 rounded-sm border border-dashed border-border text-content-muted'
             }
           >
             {item.badge.label}

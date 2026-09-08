@@ -20,12 +20,15 @@ import { SkeletonRows } from '../components/ui/states';
 import { ArtistScreenDialog } from './ArtistScreenDialog';
 import { ThemeStatusBar } from './ThemeStatusBar';
 import { buildGalleryItems, type ScreenIndexShape } from './screen-index-view';
+import { themeChecklist, themeProgress } from './theme-checklist';
 import { useMyTheme } from './use-my-theme';
 
 export function ArtistStudioPage() {
   const { theme, mine, select, isPreparing, error } = useMyTheme();
   const [openPath, setOpenPath] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  /** Everything, or only what is still to draw. */
+  const [todoOnly, setTodoOnly] = useState(false);
 
   // The same key and the same (unwrapped) shape the sysop's page caches under.
   const { data, isLoading } = useQuery({
@@ -48,12 +51,43 @@ export function ArtistStudioPage() {
     [data, theme],
   );
 
+  /**
+   * Every screen a finished theme has, drawn or not.
+   *
+   * The gallery alone showed only files that exist, so the screens with the
+   * most to gain - the ones the board has no art for at all - were invisible,
+   * and there was no way to start one.
+   */
+  const slots = useMemo(
+    () => (theme ? themeChecklist(data, theme.slug) : []),
+    [data, theme],
+  );
+  const progress = useMemo(() => themeProgress(slots), [slots]);
+  const undrawn = useMemo(() => slots.filter(slot => !slot.drawn), [slots]);
+  const slotByPath = useMemo(
+    () => new Map(slots.map(slot => [slot.path, slot] as const)),
+    [slots],
+  );
+
+  /** The undrawn slots as cards, so starting one is a click like any other. */
+  const todoItems = useMemo(
+    () => undrawn.map(slot => ({
+      path: slot.path,
+      label: slot.screen + (slot.conference ? ` - conference ${slot.conference}` : ''),
+      detail: slot.description || 'Not drawn yet',
+      placeholder: true,
+      badge: { label: 'Not drawn yet', kind: 'todo' as const },
+    })),
+    [undrawn],
+  );
+
   const shown = useMemo(() => {
+    const all = todoOnly ? todoItems : [...items, ...todoItems];
     const needle = search.trim().toLowerCase();
-    if (!needle) return items;
-    return items.filter(item =>
+    if (!needle) return all;
+    return all.filter(item =>
       item.label.toLowerCase().includes(needle) || item.path.toLowerCase().includes(needle));
-  }, [items, search]);
+  }, [items, todoItems, todoOnly, search]);
 
   const screenNames = useMemo(
     () => (data?.screens ?? []).map(entry => entry.screen),
@@ -85,10 +119,35 @@ export function ArtistStudioPage() {
     <div className="space-y-4">
       <ThemeStatusBar theme={theme} mine={mine} onSelect={select} screenNames={screenNames} />
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {/* The one number an artist wants, and where the work is. */}
+      <div className="space-y-2 border border-border p-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="text-content-primary">
+            {progress.drawn} of {progress.total} screens drawn
+          </p>
+          <p className="text-sm text-content-secondary">
+            {(['node', 'conf', 'board'] as const)
+              .map(scope => `${scope === 'conf' ? 'conference' : scope}: ${progress.byScope[scope].drawn}/${progress.byScope[scope].total}`)
+              .join('   ')}
+          </p>
+        </div>
+        <div className="h-2 w-full bg-surface-2" aria-hidden="true">
+          <div
+            className="h-full bg-accent"
+            style={{ width: `${progress.total ? Math.round((progress.drawn / progress.total) * 100) : 0}%` }}
+          />
+        </div>
         <p className="text-sm text-content-secondary">
-          Every screen a caller wearing {theme.title} is served. Click one to draw it.
+          Anything you do not draw falls back to the board's own art, so a theme
+          works from the first screen onwards.
         </p>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <label className="flex items-center gap-2 text-sm text-content-secondary">
+          <input type="checkbox" checked={todoOnly} onChange={event => setTodoOnly(event.target.checked)} />
+          Only what is still to draw ({undrawn.length})
+        </label>
         <input
           type="search"
           aria-label="Search screens"
@@ -105,6 +164,8 @@ export function ArtistStudioPage() {
         path={openPath}
         theme={theme}
         index={data}
+        isNew={!!openPath && slotByPath.get(openPath)?.drawn === false}
+        newDescription={openPath ? slotByPath.get(openPath)?.description : undefined}
         onClose={() => setOpenPath(null)}
         onOpenPath={setOpenPath}
       />

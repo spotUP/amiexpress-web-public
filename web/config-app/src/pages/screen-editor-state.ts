@@ -163,3 +163,15 @@ export function typeText(
 
   return settle(surface, surface.pending);
 }
+
+/**
+ * An empty 80x25 screen, for a slot the theme has not drawn yet.
+ *
+ * The board's own size: 80 columns is what every screen here is, and 25 rows
+ * is what a caller's terminal shows without scrolling. An artist starting a
+ * screen from the checklist gets this rather than a file dialog.
+ */
+export function blankCanvas(rows = 25, cols = 80): Cell[][] {
+  return Array.from({ length: rows }, () =>
+    Array.from({ length: cols }, () => ({ char: ' ', fg: 7, bg: 0 })));
+}

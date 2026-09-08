@@ -87,8 +87,11 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 const openTheCard = async (user: ReturnType<typeof userEvent.setup>) => {
-  const card = await screen.findByRole('button', { name: /BULL/ });
-  await user.click(card);
+  // The studio also offers every screen the theme has NOT drawn, so several
+  // cards carry this name. The one with art is the one without the badge.
+  const cards = await screen.findAllByRole('button', { name: /BULL/ });
+  const drawn = cards.find(card => !card.textContent?.includes('Not drawn yet'));
+  await user.click(drawn as HTMLElement);
 };
 
 describe('a board screen an artist has not redrawn', () => {

@@ -27,7 +27,8 @@ export {
   ScreenDirType,
   SCREEN_DIR_MAP,
 } from './screen-tables';
-import { ScreenDirType, SCREEN_DIR_MAP } from './screen-tables';
+import { ScreenDirType, SCREEN_DIR_MAP, getScreenFileName } from './screen-tables';
+export { getScreenFileName };
 
 
 /**
@@ -82,25 +83,6 @@ console.error(`[loadScreenFile] could not read SCREENS from ${infoPath}: ${(erro
 
   nodeScreenDirCache.set(infoPath, { stamp, dir });
   return dir;
-}
-
-/**
- * Get the actual screen file name for special screen types
- * Some screens use different file names (e.g., NODE_BULL -> BULL, CONF_BULL -> BULL)
- */
-export function getScreenFileName(screenName: string): string {
-  const upper = screenName.toUpperCase();
-  // NODE_BULL and CONF_BULL both use 'BULL' as the file name
-  if (upper === 'NODE_BULL' || upper === 'CONF_BULL') {
-    return 'BULL';
-  }
-  // DOWNLOADMSG, UPLOADMSG -> DownloadMsg, UploadMsg
-  if (upper === 'DOWNLOADMSG') return 'DownloadMsg';
-  if (upper === 'UPLOADMSG') return 'UploadMsg';
-  // express.e:6639-6641 — SCREEN_LOGON24 looks up 'Logon24hrs', not 'LOGON24'.
-  // Sysops with original reference-board files use that name.
-  if (upper === 'LOGON24') return 'Logon24hrs';
-  return screenName;
 }
 
 /**

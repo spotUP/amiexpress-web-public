@@ -108,3 +108,23 @@ export const SCREEN_DIR_MAP: Record<string, ScreenDirType> = {
    */
   'PRIVACY': ScreenDirType.GLOBAL,
 };
+
+/**
+ * The file name a screen is stored under, when it differs from its catalogue
+ * name (express.e:6544-6640).
+ *
+ * Moved here from `screen-resolution` so a browser can ask the question: the
+ * resolver reaches for `fs` and `path`, and the admin needs this to tell an
+ * artist which file to draw. Data has no dependencies; the resolver
+ * re-exports it, so nothing that imported it from there has to change.
+ */
+export function getScreenFileName(screenName: string): string {
+  const upper = screenName.toUpperCase();
+  // NODE_BULL and CONF_BULL both use 'BULL' as the file name
+  if (upper === 'NODE_BULL' || upper === 'CONF_BULL') return 'BULL';
+  if (upper === 'DOWNLOADMSG') return 'DownloadMsg';
+  if (upper === 'UPLOADMSG') return 'UploadMsg';
+  // express.e:6639-6641 - SCREEN_LOGON24 looks up 'Logon24hrs', not 'LOGON24'.
+  if (upper === 'LOGON24') return 'Logon24hrs';
+  return screenName;
+}
