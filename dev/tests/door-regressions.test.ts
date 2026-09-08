@@ -211,10 +211,11 @@ export async function arkanoidHighscorePathIsNotCwdRelative(): Promise<void> {
  * new invisible bar, and a removed one means the entry should go.
  */
 const THIN_BOX_BACKLOG: Record<string, number> = {
-  // Its four modal backdrops were fixed in 4a0d0aa29; these three are bars.
-  'Doors/bug-tracker/app.ts': 2,
-  'Doors/bug-tracker/dialogs.ts': 1,
-  'Doors/rip-browser/app.ts': 1,
+  // 2026-09-08: the four bug-tracker/rip-browser bars now pass border: undefined.
+  // grandmaster's remains - it is the arcade session's (c2) door and its box
+  // needs classifying (bar vs. input) before border: undefined is safe, so it
+  // is tracked here rather than changed from outside that lane.
+  'Doors/grandmaster/ui/mission-editor.ts': 1,
 };
 
 /** Every `.ts` under Doors/, excluding builds and dependencies. */

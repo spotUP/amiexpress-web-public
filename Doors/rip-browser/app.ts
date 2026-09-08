@@ -110,6 +110,7 @@ export async function execute(session: any) {
     left: 0,
     width: '100%-2',
     height: 1,
+    border: undefined,
     tags: true,
     content: '',
     style: S.bar.style,

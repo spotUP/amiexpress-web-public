@@ -186,6 +186,7 @@ export function showTextInput(ctx: DialogHost, title: string, defaultValue: stri
       left: 1,
       width: 56,
       height: 1,
+      border: undefined,
       content: `{${T.dim}-fg}Enter=Submit | ESC=Cancel{/}`,
       tags: true,
       style: { fg: T.dim, bg: T.ground },

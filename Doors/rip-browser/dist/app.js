@@ -126,6 +126,7 @@ async function execute(session) {
         left: 0,
         width: '100%-2',
         height: 1,
+        border: undefined,
         tags: true,
         content: '',
         style: S.bar.style,
