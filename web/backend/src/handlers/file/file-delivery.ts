@@ -112,6 +112,25 @@ export function negotiateBinaryForTransfer(session: BBSSession): boolean {
 }
 
 /**
+ * ...and IAC DONT/WONT BINARY when the transfer is over.
+ *
+ * express.e:15956-15959 does exactly this at the end of a transfer, and only
+ * the entry half was ported: a telnet caller stayed in BINARY for the rest of
+ * his call. A tolerant client never notices; a strict NVT one applies no
+ * CR/LF translation to the menu that follows and renders it as a staircase.
+ *
+ * Same channel as its opposite - `transferRawSendUnescaped`, never
+ * `transport.send`, which doubles 0xFF and would turn each IAC into IAC IAC.
+ */
+export function endBinaryAfterTransfer(session: BBSSession): boolean {
+  if ((session as any)?.connectionType !== 'telnet') return false;
+  const rawSend = (session as any).transferRawSendUnescaped;
+  if (typeof rawSend !== 'function') return false;
+  rawSend(Buffer.from([255, 254, 0, 255, 252, 0]));
+  return true;
+}
+
+/**
  * Send these files the only way this caller can receive them.
  *
  * ZMODEM re-fetches every pooled file at SEND time: the caller has been

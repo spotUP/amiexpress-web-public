@@ -174,14 +174,50 @@ function schedule(socket: IdleSocket, session: IdleSession, seconds: number, war
   armed.set(session as object, { socket, timer, warned, seconds });
 }
 
+/**
+ * express.e:28608-28610, verbatim. A timed-out caller is TOLD, and the three
+ * lines are the same three whether he timed out at the menu prompt or at the
+ * shortcut reader.
+ */
+export const TIMEOUT_GOODBYE = 'Input timeout\r\nGoodbye\r\n\r\nDisconnecting..\r\n';
+
+/**
+ * How the CallersLog records this logoff.
+ *
+ * `TIMEOUT_LC` on the board's icon makes an input timeout a DROPPED CALL
+ * (express.e:28607/:28626 set `lostCarrier`, and :8163-8166 then writes
+ * `Loss Carrier` where it would otherwise write `N`). Without it the line
+ * reads `Off Normally`, exactly as a caller who typed G.
+ */
+export function timeoutLogoffStat(): string {
+  try {
+    const { config } = require('../config');
+    const { getBoardConfig } = require('./bbs-config-file.service');
+    return getBoardConfig(config.get('dataDir'))?.timeout_lc ? 'Loss Carrier' : 'N';
+  } catch {
+    return 'N';
+  }
+}
+
 function hangUp(socket: IdleSocket, session: IdleSession): void {
   clear(session);
+
+  // TELL HIM. express.e:28608-28610 prints three lines before it goes; this
+  // used to send the bell and then cut the line without a word, which reads
+  // to a caller as the board crashing.
+  try { socket.emit('ansi-output', TIMEOUT_GOODBYE); } catch { /* the line is already gone */ }
+
   try {
     const { callersLogManager } = require('./CallersLogManager');
     if (session.nodeId !== undefined) {
-      callersLogManager.logActivity(session.nodeId, 'Inactivity timeout');
+      const stat = timeoutLogoffStat();
+      // The activity line says what happened; the logoff line is written by
+      // the disconnect path and carries the stat this decides.
+      callersLogManager.logActivity(session.nodeId, 'Input timeout');
+      (session as { timeoutLogoffStat?: string }).timeoutLogoffStat = stat;
     }
   } catch { /* the log is not worth failing the hang-up for */ }
+
   try { socket.disconnect(); } catch { /* already gone */ }
 }
 

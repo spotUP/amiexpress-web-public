@@ -33,6 +33,16 @@
  */
 export function endRawTransfer(session: any): void {
   if (!session) return;
+  // The other half of the BINARY negotiation (express.e:15956-15959). It
+  // belongs here for the reason this module exists: this is the ONE place
+  // every path that ends a transfer already goes through, and the entry half
+  // is called from three.
+  try {
+    const { endBinaryAfterTransfer } = require('../handlers/file/file-delivery');
+    endBinaryAfterTransfer(session);
+  } catch (error) {
+    console.error('[transfer] could not leave telnet BINARY mode:', error);
+  }
   session.transferRawActive = false;
   session.transferRawSink = undefined;
   session.transferManager = undefined;

@@ -192,6 +192,8 @@ export const SystemConfigSchema = z.object({
   new_user_password: z.string().max(200).optional(),
   // sz -L. 1024 is this board's MuffinTerm-safe default; 8192 is lrzsz's own.
   zmodem_packetlen: z.number().int().min(128).max(8192).optional(),
+  // express.e:31826 - count an input timeout as a dropped call in the log.
+  timeout_lc: z.boolean().optional(),
 
   // Accounts, uploads and file descriptions
   auto_deactivate_days: z.number().int().min(0).optional(),

@@ -212,6 +212,16 @@ export interface BBSConfigData {
    * should cost a tooltype and not a deploy.
    */
   zmodem_packetlen?: number;
+  /**
+   * `TIMEOUT_LC` (express.e:31826): is an input timeout a DROPPED CALL?
+   *
+   * With it set, express marks `lostCarrier` when a caller times out at the
+   * menu (express.e:28607, :28626), and the logoff line then reads
+   * `Off Loss Carrier` instead of `Off Normally` (express.e:8163-8166). It is
+   * how a sysop tells "he walked away" from "his modem gave up" when reading
+   * the CallersLog back.
+   */
+  timeout_lc?: boolean;
 
   // Accounts and uploads
   auto_deactivate_days?: number;
@@ -450,6 +460,7 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'AUTOVAL_PASSWORD': 'autoval_password',
   'NEWUSER_PASSWORD': 'new_user_password',           // ACP.e:2632 express.e:30013
   'ZMODEM_PACKETLEN': 'zmodem_packetlen',            // sz -L, this port's own knob
+  'TIMEOUT_LC': 'timeout_lc',                        // express.e:31826
 
   // Accounts, uploads and file descriptions
   'AUTO_DEACTIVATE_DAYS': 'auto_deactivate_days',
@@ -1088,6 +1099,7 @@ function getDefaultConfig(): BBSConfigData {
     autoval_password: '',
     new_user_password: '',
     zmodem_packetlen: 1024,
+    timeout_lc: false,
     auto_deactivate_days: 0,
     local_upload_path: '',
     filediz_syscmd: '',

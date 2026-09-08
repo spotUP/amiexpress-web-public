@@ -126,9 +126,10 @@ describe('a caller who stops typing', () => {
     jest.advanceTimersByTime(59_000);
     expect(socket.hangUps).toBe(0);
 
-    // 300s: gone.
+    // 300s: gone, with express's three lines after the bell.
     jest.advanceTimersByTime(1_000);
     expect(socket.hangUps).toBe(1);
+    expect(socket.wire.join('')).toContain('Disconnecting..');
     expect(isIdleTimeoutArmed(session)).toBe(false);
   });
 
@@ -160,8 +161,52 @@ describe('a caller who stops typing', () => {
     jest.advanceTimersByTime(59_000);
     expect(socket.hangUps).toBe(0);
     jest.advanceTimersByTime(1_000);
-    expect(socket.wire).toEqual([]);
+    // NO BELL - that is the property. The goodbye lines are sent whatever the
+    // timeout was (express.e:28608), so asserting an empty wire would be
+    // asserting the wrong thing.
+    expect(socket.wire.join('')).not.toContain(TIMEOUT_BELL);
+    expect(socket.wire.join('')).toContain('Input timeout');
     expect(socket.hangUps).toBe(1);
+  });
+});
+
+describe('what a timed-out caller is told, and what the log says', () => {
+  it('gets express\'s three lines instead of a silent hang-up', () => {
+    // express.e:28608-28610. The first version of this sent the bell and then
+    // cut the line without a word, which reads to a caller as a crash.
+    const socket = makeSocket();
+
+    armIdleTimeout(socket, { nodeId: 1, user: ordinaryUser });
+    jest.advanceTimersByTime(300_000);
+
+    const said = socket.wire.join('');
+    expect(said).toContain('Input timeout');
+    expect(said).toContain('Goodbye');
+    expect(said).toContain('Disconnecting..');
+    expect(socket.hangUps).toBe(1);
+  });
+
+  it('records Off Normally, unless the board sets TIMEOUT_LC', () => {
+    // express.e:8163-8166 - `lostCarrier` writes `Loss Carrier` where a normal
+    // logoff writes `N`, and express.e:28607 is what sets it for a timeout.
+    const { timeoutLogoffStat } = require('../../src/services/idle-timeout.service');
+
+    boardConfig.mockReturnValue({ idle_timeout: 5, timeout_lc: false });
+    expect(timeoutLogoffStat()).toBe('N');
+
+    boardConfig.mockReturnValue({ idle_timeout: 5, timeout_lc: true });
+    expect(timeoutLogoffStat()).toBe('Loss Carrier');
+  });
+
+  it('marks the session so the disconnect path writes that stat', () => {
+    boardConfig.mockReturnValue({ idle_timeout: 5, timeout_lc: true });
+    const socket = makeSocket();
+    const session: any = { nodeId: 1, user: ordinaryUser };
+
+    armIdleTimeout(socket, session);
+    jest.advanceTimersByTime(300_000);
+
+    expect(session.timeoutLogoffStat).toBe('Loss Carrier');
   });
 });
 

@@ -1189,7 +1189,11 @@ console.error('[LOGOFF] Error writing user disk files:', diskErr);
     const nodeId = session.nodeId || 0;
     try {
       // Write to CallersLog before cleanup
-      callersLogManager.logLogoff(nodeId, session.user.username);
+      // express.e:8163-8166 - `Loss Carrier` where the call was dropped, `N`
+      // where it ended normally. An idle timeout is the second unless the
+      // board's TIMEOUT_LC says it is the first (express.e:28607).
+      const logoffStat = (session as unknown as { timeoutLogoffStat?: string }).timeoutLogoffStat;
+      callersLogManager.logLogoff(nodeId, session.user.username, logoffStat || 'N');
 
       nodeFileManager.deleteNodeFiles(nodeId);
 console.log(`[LOGOFF] Node files deleted for node ${nodeId}: ${session.user.username}`);
