@@ -1389,73 +1389,20 @@ console.error("Failed to assign node to session:", error);
     hour12: true,
   });
 
-  // ===== /X NATIVE TELNET CONNECTION SEQUENCE (reference-board-style) =====
-  // Small delay to ensure socket is ready to receive data (fixes race condition after rebuilds)
+  // The connect banner now lives in login-connect.service's
+  // `emitConnectBanner`, called by `runPreLoginConnect` below - which
+  // telnet, SSH and /ws/terminal already call, and which printed nothing
+  // like it before. Web keeps the three-second pause after it (see
+  // `postBannerDelayMs`): a browser has no dial-up negotiation to fill and
+  // the pause is what makes the banner readable before the screen clears.
+  //
+  // Small delay to ensure the socket is ready to receive data (fixes a race
+  // after rebuilds).
   await new Promise((resolve) => setTimeout(resolve, 100));
 
 console.log(
     `[Connection] Starting welcome sequence for node ${nodeSession.nodeId}`
   );
-
-  // Simulate classic AmiExpress telnet connection messages
-  socket.emit(
-    "ansi-output",
-    "\r\n/X Native Telnet:  Searching for free node...\r\n"
-  );
-  socket.emit(
-    "ansi-output",
-    `/X Native Telnet:  Successful connection to node ${nodeSession.nodeId}\r\n`
-  );
-  socket.emit("ansi-output", "\r\nCONNECT 19200\r\n");
-  socket.emit("ansi-output", "**EMSI_IRQ8E08\r\n");
-
-  // express.e:29507-29512 - Welcome to {bbsName}, located in {location}
-  // Display banner AFTER EMSI but BEFORE pause so it's visible during the pause
-  const bbsName = diskConfig.bbs_name || bbsConfig.bbsName;
-  const location = diskConfig.location || bbsConfig.location;
-
-  // Blank line before banner
-  socket.emit("ansi-output", "\r\n");
-
-  if (location && location.length > 0) {
-    socket.emit(
-      "ansi-output",
-      `\x1b[0mWelcome to ${bbsName}, located in ${location}`
-    );
-  } else {
-    socket.emit("ansi-output", `\x1b[0mWelcome to ${bbsName}.`);
-  }
-
-  // express.e:29514-29515 - Running AmiExpress {version} Copyright...
-  const currentYear = getSystemTime().getFullYear();
-  socket.emit(
-    "ansi-output",
-    `\r\n\r\nRunning AmiExpress ${amiExpressVersion} Copyright (c) 2018-${currentYear} Darren Coles,\r\n`
-  );
-  socket.emit("ansi-output", `Web port ${webPortVersion} by Spot/Up Rough\r\n`);
-
-  // express.e:29516-29517 - Registration and node info.
-  //
-  // express.e:31991 reads REGKEY from bbsConfig.info and falls back to
-  // 'NONE'. AmiExpress is freeware and this port is free, so there is no
-  // registration name to print: the sysop's name is who the board actually
-  // belongs to. The REGKEY field is gone from the admin entirely; a board
-  // that carries the tooltype keeps it, for express.e's own banner.
-  const registeredTo = diskConfig.sysop_name || "NONE";
-  socket.emit(
-    "ansi-output",
-    `\r\nRegistered to ${registeredTo}. You are connected to Node ${nodeSession.nodeId} via web connection`
-  );
-
-  // express.e:29518-29522 - Connection timestamp
-  socket.emit("ansi-output", `\r\nConnection occurred at ${dateStr}.`);
-
-  // Blank line after banner
-  socket.emit("ansi-output", "\r\n");
-
-  // 3-second pause after banner (like real BBS connection negotiation)
-  // User can read the banner during this pause before screen clear
-  await new Promise((resolve) => setTimeout(resolve, 3000));
 
   // Create session using unified createSession function (same as telnet/SSH)
   // Use nodeSession.nodeId from node manager (NOT getNextAvailableNodeId which could differ)
@@ -1483,6 +1430,9 @@ console.log(
   );
   const connectResult = await runPreLoginConnect(socket, session, {
     socketId: socket.id,
+    // WEB_: the banner is followed by a readable pause here and nowhere
+    // else. Three seconds added to a telnet connect would be a regression.
+    postBannerDelayMs: 3000,
   });
   if (connectResult.passwordResetActive) return;
 
@@ -1643,6 +1593,24 @@ console.log(`[WEB] BBS accessible at http://localhost:${port}/`);
         setSession(conn.sessionId, session);
         // Reuse the same connection handler telnet/SSH use.
         setupTelnetSSHHandler(conn as unknown as TelnetConnection, "telnet", transportDeps);
+
+        /**
+         * ...and the same PRE-LOGIN, which this transport never ran
+         * (divergence 38). A /ws/terminal caller got no connect banner, no
+         * FRONTEND screen, no graphics prompt and no AREXX `login` trigger -
+         * only whatever the first keystroke happened to provoke. Same shape
+         * telnet uses (telnet-server.ts's connect path).
+         */
+        void (async () => {
+          try {
+            const { buildConnectionEmitter } = await import("./server/connection-emitter");
+            const { runPreLoginConnect } = await import("./services/login-connect.service");
+            const emitter = buildConnectionEmitter(conn as any);
+            await runPreLoginConnect(emitter as any, session, { socketId: conn.sessionId });
+          } catch (err) {
+console.error("[WS-Terminal] pre-login connect failed:", err);
+          }
+        })();
       });
     } catch (err) {
 console.error("[WS-Terminal] Failed to attach:", err);

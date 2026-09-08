@@ -45,8 +45,23 @@ export function listOnlineNodes(): OnlineNode[] {
       nodeNumber: nodeId,
       username: String(user.username ?? 'Unknown'),
       location: String(user.location ?? ''),
-      // express.e shows PRIVATE rather than a blank column.
-      ipAddress: String(user.ip ?? 'PRIVATE'),
+      /**
+       * The SESSION's address first (divergence 34).
+       *
+       * `user.ip` is a field of the user RECORD and is empty for a telnet
+       * or SSH caller, so the who's-online table - and the telnet front
+       * end's "Your Telnet Login Established from Host" line, which reads
+       * this list - said NOT AVAILABLE for exactly the two transports it
+       * names. `session.remoteAddress` is populated for both
+       * (telnet-server.ts, ssh-server.ts) and for web.
+       *
+       * express.e shows PRIVATE rather than a blank column.
+       */
+      ipAddress: String(
+        (session as { remoteAddress?: string }).remoteAddress
+          || user.ip
+          || 'PRIVATE',
+      ),
       status: 'active',
     });
   }

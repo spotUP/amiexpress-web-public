@@ -38,10 +38,19 @@ import type { LoginEmitter } from "../types/login-emitter";
 import { LoggedOnSubState } from "../constants/bbs-states";
 import { triggerSamiLogRefresh } from "./SamiLogService";
 import { arexxEngine } from "./arexx.service";
+import { config } from "../config";
+import { getSystemTime } from "../utils/date-time.util";
 
 export interface PreLoginConnectContext {
   /** Caller-provided socket id; used by AREXX login trigger. */
   socketId: string;
+  /**
+   * How long to hold after the connect banner, so a caller can read it
+   * before the screen clears. 3000 on web, which has no dial-up
+   * negotiation to fill; 0 everywhere else, where a stall would be a
+   * regression rather than parity.
+   */
+  postBannerDelayMs?: number;
 }
 
 export interface PreLoginConnectResult {
@@ -81,11 +90,87 @@ export interface PreLoginConnectResult {
 export const ANSI_GRAPHICS_PROMPT =
   "\r\nCOMMODORE 64: PRESS <DEL>\r\nANSI, RIP, PETSCII OR NO GRAPHICS (A/R/P/P8/N) [Q=SKIP BULLETINS]? ";
 
+/**
+ * The connect banner - express.e:29507-29522 - for EVERY transport.
+ *
+ * These eight lines were printed by `index.ts`'s web connection handler and
+ * by nothing else, so a telnet, SSH or /ws/terminal caller connected
+ * straight into the graphics prompt with no "Searching for free node", no
+ * CONNECT, no Welcome and no Connection-occurred line. The board looked
+ * like a different board depending on how you reached it.
+ *
+ * The three-second pause is the ONE thing that stays transport-specific:
+ * a browser has no dial-up negotiation to fill, and the pause is what makes
+ * the banner readable before the screen clears - while three seconds added
+ * to a telnet connect would be a regression, not parity. It is passed as
+ * `postBannerDelayMs`, 3000 from web and 0 from everything else.
+ *
+ * A real C64 never reaches here: telnet-server short-circuits to
+ * `handleC64Detected` without calling `runPreLoginConnect` at all.
+ */
+export async function emitConnectBanner(
+  emitter: LoginEmitter,
+  session: BBSSession,
+  postBannerDelayMs = 0,
+): Promise<void> {
+  const bbsConfig = config.getConfig();
+  const { loadBBSConfig } = await import("./bbs-config-file.service");
+  const diskConfig = loadBBSConfig(bbsConfig.dataDir);
+
+  // The AmiExpress version this board reports, kept in sync with
+  // xim/bbs-info.ts's EXPRESS_VERSION fallback.
+  const amiExpressVersion = "v5.6";
+  const webPortVersion = require("../../package.json").version || "1.0.0";
+
+  const nodeId = session.nodeId;
+  const bbsName = diskConfig.bbs_name || bbsConfig.bbsName;
+  const location = diskConfig.location || bbsConfig.location;
+  const registeredTo = diskConfig.sysop_name || "NONE";
+  const currentYear = getSystemTime().getFullYear();
+  const dateStr = getSystemTime().toLocaleString("en-US", {
+    weekday: "short", month: "short", day: "numeric", year: "numeric",
+    hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true,
+  });
+
+  const say = (text: string) => emitter.emit("ansi-output", text);
+
+  say("\r\n/X Native Telnet:  Searching for free node...\r\n");
+  say(`/X Native Telnet:  Successful connection to node ${nodeId}\r\n`);
+  say("\r\nCONNECT 19200\r\n");
+  say("**EMSI_IRQ8E08\r\n");
+  say("\r\n");
+  // express.e:29507-29512
+  say(location && location.length > 0
+    ? `\x1b[0mWelcome to ${bbsName}, located in ${location}`
+    : `\x1b[0mWelcome to ${bbsName}.`);
+  // express.e:29514-29515
+  say(`\r\n\r\nRunning AmiExpress ${amiExpressVersion} Copyright (c) 2018-${currentYear} Darren Coles,\r\n`);
+  say(`Web port ${webPortVersion} by Spot/Up Rough\r\n`);
+  // express.e:29516-29517. The line used to end "via web connection" on the
+  // one transport that prints it; naming the transport here would be the
+  // only byte that differed between them, so the node is what it names.
+  say(`\r\nRegistered to ${registeredTo}. You are connected to Node ${nodeId}`);
+  // express.e:29518-29522
+  say(`\r\nConnection occurred at ${dateStr}.`);
+  say("\r\n");
+
+  if (postBannerDelayMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, postBannerDelayMs));
+  }
+}
+
 export async function runPreLoginConnect(
   emitter: LoginEmitter,
   session: BBSSession,
   ctx: PreLoginConnectContext,
 ): Promise<PreLoginConnectResult> {
+  // 0. The connect banner, for every transport that reaches this service.
+  try {
+    await emitConnectBanner(emitter, session, ctx.postBannerDelayMs ?? 0);
+  } catch (err) {
+    console.error("[PreLoginConnect] connect banner failed:", err);
+  }
+
   // 1. Operator chat listeners — dynamic import to avoid a load-order
   // cycle with handlers that themselves import services from here.
   try {
