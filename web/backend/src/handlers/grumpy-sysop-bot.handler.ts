@@ -176,66 +176,10 @@ const FALLBACK_FREE_MODELS: string[] = [
 ];
 
 // BBS Help Knowledge Base (from AmiExpress wiki)
-const BBS_HELP_KNOWLEDGE = `
-=== AMIEXPRESS BBS COMMANDS ===
-
-MESSAGE COMMANDS:
-- R: Read messages (navigate, reply, delete)
-- E: Enter/post new message
-- MS: Mailscan - scan all conferences for new messages
-- <<  >>: Switch between message bases
-- ZOOM: Extract messages in ASCII or QWK format
-
-FILE COMMANDS:
-- F: File listings (browse files)
-- FR: Reverse file listings (newest first)
-- N: New files since date (or since last call)
-- D: Download files (initiate file transfer)
-- U: Upload files
-- RZ: Quick Zmodem upload
-- A: Alter flagged files list
-- Z: Zippy text search in files
-- FS: Full download/upload statistics
-
-DOOR GAMES:
-- Type "DOORS" to see list of installed door games/tools
-- Select door by number or name from the list
-- Includes TradeWars 2002, Legend of the Red Dragon, BRE, etc.
-
-CONFERENCE COMMANDS:
-- J: Join conference
-- JM: Join message base
-- < >: Navigate up/down conferences
-- CF: Conference configuration
-
-SYSTEM COMMANDS:
-- ?: Display menu (in expert mode)
-- ^: Extended help files
-- H: Help
-- B: Read bulletins
-- C: Comment to sysop
-- O: Operator page
-- W: Write/edit user parameters
-- S: Status (account info)
-- T: Time
-- M: Toggle ANSI/monochrome mode
-- X: Expert mode toggle
-- G: Goodbye/logoff
-- RL: Relogon
-- WHO: See who's online
-- OLM: Send online message to another user
-- Q: Quiet node (toggle visibility)
-- V: View text file
-- VER: Version info
-- VO: Voting booth
-
-TIPS:
-- Expert mode (X) hides menus, shows only prompts
-- Most commands work in ANSI color or monochrome
-- Upload/download ratios may limit file access
-- Use MS to scan all conferences quickly
-- Bulletins (B) contain important system info
-`;
+// The stock /X command list that lived here (BBS_HELP_KNOWLEDGE) is gone:
+// the board card (sysop-ai/board-card.ts) names THIS board's commands with
+// the meaning each has in the board's own BBSHelp.txt, and a generic list
+// beside it was a second source the model could pick over the first.
 
 /**
  * The personality with the names filled in: the co-sysop's own handle (the
@@ -572,7 +516,6 @@ console.log('[Grumpy Bot] No GROQ_API_KEY configured, skipping Groq');
       { role: 'system', content: systemPrompt },
       ...(context.boardCard ? [{ role: 'system', content: context.boardCard }] : []),
       ...(context.retrieved ? [{ role: 'system', content: context.retrieved }] : []),
-      { role: 'system', content: BBS_HELP_KNOWLEDGE },
       { role: 'system', content: `User context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes` },
       ...context.messageHistory.map(msg => ({
         role: msg.role === 'user' ? 'user' : 'assistant',
@@ -624,7 +567,7 @@ console.log('[Grumpy Bot] No GEMINI_API_KEY configured, skipping Gemini');
   if (geminiTimeout < 250) return null;
   try {
     const systemPrompt = personalityFor(aiConfig);
-    const fullPrompt = `${systemPrompt}\n\n${context.boardCard ? context.boardCard + '\n\n' : ''}${context.retrieved ? context.retrieved + '\n\n' : ''}${BBS_HELP_KNOWLEDGE}\n\nUser context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes\n\n${
+    const fullPrompt = `${systemPrompt}\n\n${context.boardCard ? context.boardCard + '\n\n' : ''}${context.retrieved ? context.retrieved + '\n\n' : ''}User context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes\n\n${
       context.messageHistory.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n')
     }\nUser: ${userMessage}\nAssistant:`;
 
@@ -743,7 +686,6 @@ console.log('[Grumpy Bot] No OpenRouter free models available');
       { role: 'system', content: systemPrompt },
       ...(context.boardCard ? [{ role: 'system', content: context.boardCard }] : []),
       ...(context.retrieved ? [{ role: 'system', content: context.retrieved }] : []),
-      { role: 'system', content: BBS_HELP_KNOWLEDGE },
       { role: 'system', content: `User context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes` },
       ...context.messageHistory.map(msg => ({
         role: msg.role === 'user' ? 'user' : 'assistant',

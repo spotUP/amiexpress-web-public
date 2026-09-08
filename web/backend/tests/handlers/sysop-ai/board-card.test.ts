@@ -36,7 +36,7 @@ function fixtureBoard(): string {
   fs.mkdirSync(cmdDir, { recursive: true });
   const templates = fs.readdirSync(path.join(REPO, 'Commands', 'BBSCmd')).filter((f) => f.endsWith('.info'));
   const template = path.join(REPO, 'Commands', 'BBSCmd', templates[0]!);
-  for (const [name, access, type] of [['F', '10', 'BBS'], ['DEL', '255', 'BBS'], ['TA', '10', 'XIM']] as const) {
+  for (const [name, access, type] of [['F', '10', 'BBS'], ['D', '10', 'BBS'], ['DEL', '255', 'BBS'], ['TA', '10', 'XIM']] as const) {
     const target = path.join(cmdDir, `${name}.info`);
     fs.copyFileSync(template, target);
     let info = parseInfoFile(target);
@@ -45,6 +45,11 @@ function fixtureBoard(): string {
     if (type === 'XIM') info = updateTooltype(info, 'LOCATION', 'Doors:TetrisAttack/ta', false);
     writeInfoFile(info);
   }
+  // The board's own `^` help, with the meaning of each command.
+  fs.writeFileSync(path.join(root, 'BBSHelp.txt'), [
+    '~', "      \x1b[36m'D' \x1b[35m- \x1b[33mDownload a file\x1b[0m", '             Enter filenames to download.', '',
+    "      \x1b[36m'F' \x1b[35m- \x1b[33mFile listings\x1b[0m", '             View the files in this conference.', '~',
+  ].join('\n'), 'latin1');
   const bulls = path.join(root, 'Conf1', 'Bulletins');
   fs.mkdirSync(bulls, { recursive: true });
   fs.writeFileSync(path.join(bulls, 'bull1.txt'), '\x1b[1;33mDowntime Friday 22:00 for the disk swap\x1b[0m\r\nMore text\r\n', 'latin1');
@@ -74,7 +79,7 @@ describe('the board card', () => {
     const root = fixtureBoard();
     const card = await buildBoardCard(caller(30), { bbsRoot: root, conferences, online, now: () => new Date('2026-09-08T00:30:00Z') });
 
-    expect(card.length).toBeLessThanOrEqual(BOARD_CARD_MAX_CHARS + 200);
+    expect(card.length).toBeLessThanOrEqual(BOARD_CARD_MAX_CHARS + 200);   // the fixture is far under it
     expect(card).toContain('you are the co-sysop, not the sysop');
     expect(card).toContain('callers online now: 1 - Knut@Node4');
     // The caller's own record.
@@ -90,15 +95,18 @@ describe('the board card', () => {
     expect(card).toContain('bull2: New: the Tetris Attack door');
     // Commands and doors from the icons on disk (live, unlike the boot-time
     // registry), within the caller's level; the icon's TYPE sorts them.
-    expect(card).toMatch(/built-in:\nF\b/);
-    expect(card).toMatch(/doors and programs \(1\):\nTA\b/);
+    // Each built-in with its meaning from the board's own help - so D is
+    // "Download a file" and F is "File listings", never the other way round.
+    expect(card).toContain('D (Download a file)');
+    expect(card).toContain('F (File listings)');
+    expect(card).toMatch(/doors and programs \(1\)[^\n]*:\nTA\b/);
     expect(card).not.toMatch(/\bDEL\b/);
   });
 
   it('a sysop-level caller sees the sysop-only door and command too', async () => {
     const root = fixtureBoard();
     const card = await buildBoardCard(caller(255), { bbsRoot: root, conferences, online });
-    expect(card).toMatch(/built-in:\n.*\bDEL\b/);
+    expect(card).toMatch(/\bDEL\b/);
   });
 
   it('a board with nothing readable still yields a card with the caller on it', async () => {
@@ -130,6 +138,14 @@ describe('the card reaches the model', () => {
       return { data: { choices: [{ message: { content: 'Read the card, kid.' } }] } };
     });
 
+    // The fixture board jest hands the backend has the icons but no
+    // BBSHelp.txt; the live board carries it on its volume. Seed it, so the
+    // meanings are on the card the way they are live.
+    const boardRoot = process.env.BBS_ROOT;
+    if (boardRoot && !fs.existsSync(path.join(boardRoot, 'BBSHelp.txt'))) {
+      fs.copyFileSync(path.join(REPO, 'BBSHelp.txt'), path.join(boardRoot, 'BBSHelp.txt'));
+    }
+
     const H = require('../../../src/handlers/operator-chat.handler');
     H.initOperatorChatHandler(io, repo);
     try {
@@ -147,7 +163,12 @@ describe('the card reaches the model', () => {
       // Built from the repo's own board files: a conference list with the
       // caller's marked, and the command icons' door list.
       expect(card).toMatch(/^1: .*\(the caller is here\)$/m);
-      expect(card).toMatch(/doors and programs \(\d+\):/);
+      expect(card).toMatch(/doors and programs \(\d+\)/);
+      // The real board's help gives the real meanings; the stock list is gone.
+      // On this board F is the AquaScan door (icon `f`); the letter still means what the help says.
+      expect(card).toMatch(/\bf \(File listings\)/i);
+      // (this board has no D icon - its downloads run through the lister doors - so D is pinned on the fixture above)
+      expect(systems.some((c: string) => c.includes('=== AMIEXPRESS BBS COMMANDS ==='))).toBe(false);
       // And the reply came back to the caller.
       expect(seen.join('')).toContain('Read the card, kid.');
     } finally {

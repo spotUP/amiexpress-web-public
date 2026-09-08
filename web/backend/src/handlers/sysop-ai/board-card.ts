@@ -23,6 +23,7 @@ import { readTooltypeMap } from '../../utils/info-file.util';
 import { listOnlineNodes } from '../../doors/who-is-online';
 import { conferenceDir } from '../../conferences/conference-paths';
 import { checkSecurity } from '../../utils/acs.util';
+import { chunkBbsHelp } from './corpus';
 import { ACSPermission } from '../../constants/acs-permissions';
 
 // DISK, NOT REGISTRIES. The in-memory door registry is filled once at boot
@@ -34,7 +35,10 @@ import { ACSPermission } from '../../constants/acs-permissions';
 // them src/index.ts, which starts the server - out of this module's imports.
 
 /** The card must fit beside the personality and the history on a small model. */
-export const BOARD_CARD_MAX_CHARS = 3500;
+// 6000: the picker prefers free models with 200k+ contexts, and a board with
+// a hundred doors needs the room for their meanings - the lines the trim
+// takes first are the door names that have none.
+export const BOARD_CARD_MAX_CHARS = 6000;
 
 export interface ConferenceOnCard { id: number; name: string; description?: string }
 
@@ -91,11 +95,43 @@ export function commandsOnDisk(bbsRoot: string, level: number): { internal: stri
   return { internal, external };
 }
 
+/**
+ * What each command MEANS, from the board's own `^` help (BBSHelp.txt):
+ * "'D' - Download a file", "'F' - File listings", "'N' - New files since.".
+ * A name alone let the model guess - it told the sysop D showed the file
+ * list (2026-09-08: "he believes i press d fo view file lists ... f, fr,
+ * nsu etc etc views filelists"). The meaning beside the name is the
+ * board's, in the board's words.
+ */
+export function commandMeanings(bbsRoot: string): Map<string, string> {
+  const out = new Map<string, string>();
+  try {
+    const file = path.join(bbsRoot, 'BBSHelp.txt');
+    if (!fs.existsSync(file)) return out;
+    for (const c of chunkBbsHelp(fs.readFileSync(file, 'latin1'))) {
+      const m = /^([^ ]{1,6}) - (.+)$/.exec(c.title);
+      if (m) out.set(m[1]!.toUpperCase(), m[2]!.replace(/\.$/, ''));
+    }
+  } catch { /* no help, no meanings */ }
+  return out;
+}
+
 function commandLines(bbsRoot: string, level: number): string[] {
   const { internal, external } = commandsOnDisk(bbsRoot, level);
+  // The meaning belongs to the LETTER, whatever runs it: on this board F is
+  // the AquaScan door, and it is still "File listings".
+  const meanings = commandMeanings(bbsRoot);
+  // Names with a meaning first: the trim eats the command list from its
+  // tail, and a bare door name is the least the model needs.
+  const withMeaning = (names: string[]) => [...names]
+    .sort((a, b) => Number(meanings.has(b.toUpperCase())) - Number(meanings.has(a.toUpperCase())) || a.localeCompare(b))
+    .map((name) => {
+      const m = meanings.get(name.toUpperCase());
+      return m ? `${name} (${m})` : name;
+    });
   const out: string[] = [];
-  if (internal.length) out.push('built-in:', ...fold(internal));
-  if (external.length) out.push(`doors and programs (${external.length}):`, ...fold(external));
+  if (internal.length) out.push('built-in - the command and what it does, from the board\'s own help:', ...fold(withMeaning(internal)));
+  if (external.length) out.push(`doors and programs (${external.length}) - what a letter does is from the board's own help:`, ...fold(withMeaning(external)));
   return out;
 }
 
