@@ -33,11 +33,11 @@ const PLANS_DIR = path.resolve(__dirname, '../../thoughts/shared/plans');
 const INDEX_PATH = path.join(PLANS_DIR, 'INDEX.md');
 const REGEN_CMD = 'ts-node -P dev/scripts/tsconfig.json dev/scripts/plan-index.ts';
 
-type Status = 'implemented' | 'in-progress' | 'not-started' | 'superseded' | 'unknown';
+type Status = 'partial' | 'not-started' | 'implemented' | 'superseded' | 'unknown';
 
-const STATUS_ORDER: Status[] = ['in-progress', 'not-started', 'unknown', 'implemented', 'superseded'];
+const STATUS_ORDER: Status[] = ['partial', 'not-started', 'unknown', 'implemented', 'superseded'];
 const STATUS_LABEL: Record<Status, string> = {
-  'in-progress': 'In progress',
+  partial: 'Partial — started, work remains (parked, not necessarily active)',
   'not-started': 'Not started',
   unknown: 'Needs triage (legacy status)',
   implemented: 'Implemented',
@@ -58,7 +58,7 @@ interface PlanRow {
 function normaliseStatus(raw: unknown): Status {
   const s = String(raw ?? '').trim().toLowerCase();
   if (s === 'implemented' || s === 'complete' || s === 'done') return 'implemented';
-  if (s === 'in-progress' || s === 'in progress' || s === 'partial' || s === 'wip') return 'in-progress';
+  if (s === 'partial' || s === 'in-progress' || s === 'in progress' || s === 'wip' || s === 'stalled') return 'partial';
   if (s === 'not-started' || s === 'not started' || s === 'todo') return 'not-started';
   if (s === 'superseded' || s === 'obsolete' || s === 'withdrawn' || s === 'abandoned') return 'superseded';
   // draft/final/none/empty: the plan is written but its landing state is unrecorded.

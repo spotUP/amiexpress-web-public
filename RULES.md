@@ -272,7 +272,8 @@ Plans in `thoughts/shared/plans/` kept drifting out of sync because status lived
 in the plan but the work landed in a commit elsewhere. Rules:
 
 - **Status lives in the plan's frontmatter — nowhere else.** Fields:
-  `status: implemented | in-progress | not-started | superseded`, plus
+  `status: implemented | partial | not-started | superseded` (`partial` =
+  started, work remains — parked, not a claim of active work), plus
   `landed: <sha/PR>` (REQUIRED once `implemented`) and optional
   `verify: <extended-regex>` (a pattern that must exist in the tracked tree
   once the plan is done — a cheap presence proof).
