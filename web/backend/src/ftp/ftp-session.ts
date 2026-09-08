@@ -37,7 +37,6 @@ export interface FtpDeps {
   releaseNode(sessionId: string): Promise<void>;
   /** express.e writes every FTP command to the CallersLog; so do we. */
   log(username: string, message: string, nodeId: number): void;
-  timeRemainingMinutes(user: FtpUser): number;
   /**
    * Turn the control connection into a TLS one, for `AUTH TLS`. Absent when
    * the board has no certificate, which is what makes `AUTH` answer 431.
@@ -941,7 +940,12 @@ export class FtpSession {
     this.user = user;
     this.nodeId = nodeId;
     this.pendingUser = null;
-    this.reply(230, `password accepted. Time remaining for today ${this.deps.timeRemainingMinutes(user)} mins.`);
+    // ftpd.e:1187 - `230 password accepted`, and nothing else. The clause
+    // this port added - "Time remaining for today N mins." - is not in
+    // express, and it told the sysop 0 minutes while he had no limit at all
+    // (2026-09-07). Nothing enforced that number either; it was only ever
+    // printed. The line says what express says.
+    this.reply(230, 'password accepted');
   }
 
   private close(): void {

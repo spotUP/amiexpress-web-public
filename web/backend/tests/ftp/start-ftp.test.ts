@@ -11,7 +11,6 @@ const deps: FtpDeps = {
   reserveNode: async () => 1,
   releaseNode: async () => undefined,
   log: () => undefined,
-  timeRemainingMinutes: () => 0,
 };
 
 test('a board that has not turned FTP on gets no listener', async () => {

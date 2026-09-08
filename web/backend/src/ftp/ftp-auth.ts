@@ -32,7 +32,6 @@ import { validateFilename } from '../utils/file-upload.util';
 import { DEFAULT_LISTING_DAYS, FtpFilesystem } from './ftp-filesystem';
 import { nodeManager } from '../services/node-manager.service';
 import { writeToCallersLog } from '../utils/download-logging.util';
-import { getTimeRemainingMinutes } from '../utils/time-tracking.util';
 import type { FtpDeps, FtpUser } from './ftp-session';
 
 /**
@@ -376,17 +375,5 @@ console.log(`[FTP] no FILE_ID.DIZ for ${request.filename}: ${error instanceof Er
       void writeToCallersLog(username, message, nodeId);
     },
 
-    timeRemainingMinutes(user: FtpUser): number {
-      // getTimeRemainingMinutes reads `session.user` and nothing else, and it
-      // is the ONE place express.e:28417's Div(timeTotal-timeUsed,60) lives -
-      // including the sysop's unlimited case.
-      //
-      // Its parameter type is taken from the function rather than imported:
-      // `BBSSession` is exported from `src/index.ts`, and importing that here
-      // would pull the whole server - listeners and all - into any module that
-      // touches FTP.
-      type SessionArg = Parameters<typeof getTimeRemainingMinutes>[0];
-      return getTimeRemainingMinutes({ user } as unknown as SessionArg);
-    },
   };
 }

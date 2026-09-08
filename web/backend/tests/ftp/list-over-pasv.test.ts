@@ -40,7 +40,6 @@ function deps(): FtpDeps {
     reserveNode: async () => 3,
     releaseNode: async () => undefined,
     log: () => undefined,
-    timeRemainingMinutes: () => 42,
     filesystem,
     // The whole ephemeral range would be wrong: the point of the setting is
     // that only a published range is reachable. A small one also proves the

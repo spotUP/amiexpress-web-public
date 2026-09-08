@@ -32,7 +32,6 @@ async function listen(over: Partial<FtpDeps> = {}, opts: { nodes?: boolean } = {
     },
     releaseNode: async sessionId => { released.push(sessionId); },
     log: (_username, message) => { logged.push(message); },
-    timeRemainingMinutes: () => 42,
     ...over,
   };
 
@@ -116,7 +115,7 @@ test('a good password is accepted, and the caller is told the time left', async 
 
   expect(await client.send('USER sysop')).toBe('331 Password required');
   expect(await client.send('PASS correct-horse')).toBe(
-    '230 password accepted. Time remaining for today 42 mins.'
+    '230 password accepted'
   );
   client.close();
 });

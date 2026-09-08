@@ -46,7 +46,6 @@ async function listen(over: Partial<FtpDeps> = {}): Promise<Rig> {
     reserveNode: async () => 3,
     releaseNode: async () => undefined,
     log: () => undefined,
-    timeRemainingMinutes: () => 42,
     filesystem: new FtpFilesystem({
       conferences: () => [{ conference_id: 1, name: 'General' }],
       canAccess: () => true,

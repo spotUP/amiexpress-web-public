@@ -62,7 +62,6 @@ async function listen(overrides: Partial<FtpDeps> = {}): Promise<Rig> {
     reserveNode: async () => 3,
     releaseNode: async () => undefined,
     log: () => undefined,
-    timeRemainingMinutes: () => 42,
     filesystem: makeFilesystem(),
     passivePorts: () => ({ first: 34_201, last: 34_210 }),
     passiveAddress: () => '127.0.0.1',

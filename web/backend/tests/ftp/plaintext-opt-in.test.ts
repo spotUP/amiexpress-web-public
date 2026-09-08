@@ -28,7 +28,6 @@ function deps(): FtpDeps {
     reserveNode: async () => 3,
     releaseNode: async () => undefined,
     log: () => undefined,
-    timeRemainingMinutes: () => 42,
   };
 }
 

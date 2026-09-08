@@ -30,7 +30,6 @@ function deps(): FtpDeps {
     reserveNode: async () => 3,
     releaseNode: async () => undefined,
     log: () => undefined,
-    timeRemainingMinutes: () => 42,
   };
 }
 
@@ -150,7 +149,7 @@ describe('who may talk to us in the clear', () => {
     secured.write('USER sysop\r\n');
     expect(await inside.next()).toBe('331 Password required');
     secured.write('PASS correct-horse\r\n');
-    expect(await inside.next()).toBe('230 password accepted. Time remaining for today 42 mins.');
+    expect(await inside.next()).toBe('230 password accepted');
 
     secured.destroy();
     await server.stop();
