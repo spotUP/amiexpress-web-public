@@ -1,6 +1,0 @@
-~SS_BBS:bulletins/bull6.txt| ~SP
-~CC_gl ~SP
-~CC_gwall
-~5SR_WORK:bbs/Screens/flt/flt ~SP
-~SS_BBS:screens/uprough.txt ~SP
-~SS_BBS:screens/quicknew.txt

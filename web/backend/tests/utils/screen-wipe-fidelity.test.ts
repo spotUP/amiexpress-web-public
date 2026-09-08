@@ -244,7 +244,10 @@ function cellDiff(a: TestTerminal, b: TestTerminal): string[] {
 // The real screens, through the pipeline that feeds getWipeFrames.
 // ---------------------------------------------------------------------------
 
-const REAL_SCREENS = ['Screens/MENU.TXT', 'Screens/MENU250.TXT', 'Conf1/Menu.txt'];
+// Screens the board READS: MENU is a conference screen, so the old
+// `Screens/MENU*.TXT` copies here were dead files the template stopped
+// carrying (2026-09-08).
+const REAL_SCREENS = ['Conf1/Menu.txt', 'Conf1/MENU250.TXT', 'Conf2/Menu.txt'];
 
 /**
  * What screen.handler hands `getWipeFrames`: the decoded file, wipe code

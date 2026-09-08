@@ -56,12 +56,12 @@ describe('BBSTITLE declares iCE colours and the board honours it', () => {
   });
 
   it('the artist\'s seventeen iCE glyphs are still in the file - the bytes were not edited', () => {
-    const bytes = fs.readFileSync(path.join(REPO_ROOT, 'Screens/BBSTITLE.txt'), 'latin1');
+    const bytes = fs.readFileSync(path.join(REPO_ROOT, 'Node1/BBSTITLE.txt'), 'latin1');
     expect((bytes.match(SGR_BLINK_RE) ?? []).length).toBe(17);
   });
 
   it('what the board reads for a caller has no SGR 5 left and paints those glyphs on bright black', () => {
-    const shown = readAmigaTextFileWithTransforms(path.join(REPO_ROOT, 'Screens/BBSTITLE.txt'));
+    const shown = readAmigaTextFileWithTransforms(path.join(REPO_ROOT, 'Node1/BBSTITLE.txt'));
     expect(shown.iceColors).toBe(true);
     expect(shown.text.match(SGR_BLINK_RE) ?? []).toEqual([]);
     expect((shown.text.match(/\x1b\[(?:0;)?33;100m\|/g) ?? []).length + (shown.text.match(/\x1b\[100m\|/g) ?? []).length)

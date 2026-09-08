@@ -254,12 +254,14 @@ describe('the editable subset, measured against this board', () => {
   });
 
   it('re-encodes their arguments from scratch, bar a known escaping quirk', () => {
-    // Measured 2026-09-07. Every 1M and 1U on this board re-encodes to its own
-    // bytes from the decoded values alone, EXCEPT the Conf*/BBSTITLE set,
-    // whose art program escaped a `!` that needs no escape. Both spellings
-    // mean the same character; the writer keeps the original bytes when the
-    // value has not changed, so this residue never reaches a file. It is
-    // measured here so a change in the escaping rules is a decision.
+    // Measured 2026-09-07, re-measured 2026-09-08 after the template stopped
+    // carrying the twelve dead Conf*/Screens/BBSTITLE.rip copies and the
+    // Screens/BBSTITLE.RIP twin (BBSTITLE is a node screen; nothing read
+    // them). Every 1M and 1U on this board re-encodes to its own bytes from
+    // the decoded values alone, EXCEPT two PLAYPOOL buttons. The writer keeps
+    // the original bytes when the value has not changed, so this residue never
+    // reaches a file. It is measured here so a change in the escaping rules is
+    // a decision.
     const residue: string[] = [];
     let seen = 0;
     for (const { rel, text } of corpus) {
@@ -274,14 +276,12 @@ describe('the editable subset, measured against this board', () => {
         }
       }
     }
-    expect(seen).toBeGreaterThan(1000); // 1,478 mouse fields and buttons, 2026-09-07
-    // Two classes, both benign, both named here so a third one is news:
-    // the 12 conference BBSTITLEs escape a `!` that needs no escape, and two
-    // PLAYPOOL buttons wrap their label across a line with a continuation.
-    // A continuation is layout, not content, so re-encoding drops it.
-    const known = (entry: string) =>
-      /BBSTITLE\.rip: /i.test(entry) || /PLAYPOOL\.RIP: /i.test(entry);
+    expect(seen).toBeGreaterThan(200); // 254 mouse fields and buttons, 2026-09-08 (1,478 before the dead copies went)
+    // One class, benign, named here so a second one is news: two PLAYPOOL
+    // buttons wrap their label across a line with a continuation. A
+    // continuation is layout, not content, so re-encoding drops it.
+    const known = (entry: string) => /PLAYPOOL\.RIP: /i.test(entry);
     expect(residue.filter(entry => !known(entry))).toEqual([]);
-    expect(residue.length).toBe(14);
+    expect(residue.length).toBe(2);
   });
 });
