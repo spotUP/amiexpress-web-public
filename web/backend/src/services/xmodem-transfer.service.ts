@@ -36,6 +36,12 @@ const ACK = CONTROL_CHARS.ACK;  // Positive acknowledgment
 const NAK = CONTROL_CHARS.NAK;  // Negative acknowledgment
 const CAN = CONTROL_CHARS.CAN;  // Cancel
 const C = 0x43;    // 'C' - CRC mode request
+
+/**
+ * Unanswered `C` handshakes before a receiver drops to checksum mode.
+ * A sender that predates CRC XMODEM never answers `C` at all.
+ */
+const CRC_HANDSHAKE_ATTEMPTS = 3;
 const SUB = CONTROL_CHARS.SUB;  // Padding byte (Ctrl-Z)
 
 export type XmodemMode = 'checksum' | 'crc' | '1k';
@@ -425,12 +431,40 @@ console.log(`[XMODEM] Sending block ${this.blockNumber} (${dataSize} bytes)`);
   /**
    * Send NAK for retry
    */
+  /**
+   * Throw away whatever is still buffered before answering.
+   *
+   * express drains the input queue at the top of BOTH `xmodem_put_ack` and
+   * `xmodem_put_nak` (xymodem.e:255-280) - `WHILE getcom(xym,0) <> NOINP` -
+   * and logs how many bytes it dumped. After a bad block the rest of that
+   * block is still arriving, and those bytes are not the next block: left in
+   * the buffer they are parsed as one, so a single line error turns into a
+   * cascade of sequence errors and the transfer dies on retries.
+   *
+   * Only safe because neither XMODEM-G nor YMODEM-G is implemented here.
+   * A streaming mode must NOT purge, since the sender never waits.
+   *
+   * Deliberately NOT done before an ACK, which is where express also does it.
+   * express drains a hardware serial queue, and at ACK time anything in it is
+   * genuinely stale; this reads a TCP buffer that may already hold the start
+   * of the NEXT block from a sender that streams ahead of the ACK. Purging
+   * there would throw away real data to fix nothing, since a compliant sender
+   * leaves nothing pending anyway.
+   */
+  private purgePendingInput(): void {
+    if (this.receiveBuffer.length > 0) {
+      console.log(`[XMODEM] Dumping ${this.receiveBuffer.length} stale byte(s) before answering`);
+      this.receiveBuffer = Buffer.alloc(0);
+    }
+  }
+
   private sendNak(): void {
     this.retryCount++;
     if (this.retryCount > this.maxRetries) {
       this.finish(false, 'Max retries exceeded');
       return;
     }
+    this.purgePendingInput();
     this.send(Buffer.from([NAK]));
     this.startTimeout();
   }
@@ -448,10 +482,22 @@ console.log('[XMODEM] Transfer cancelled by remote');
   /**
    * Cancel the transfer
    */
+  /**
+   * express.e's cancel, xymodem.e:309-326:
+   *
+   *     WHILE i<8  : putcom(xym, CAN)
+   *     WHILE i<10 : putcom(xym, 2)
+   *
+   * Eight CANs, not two. One or two can be swallowed by a noisy line or by a
+   * receiver mid-block, and a cancel a client does not see leaves the transfer
+   * hanging until it times out. The ten trailing bytes are what express sends
+   * after them.
+   */
   cancel(): void {
     if (!this.active) return;
     this.cancelled = true;
-    this.send(Buffer.from([CAN, CAN]));
+    this.send(Buffer.from(new Array(8).fill(CAN)));
+    this.send(Buffer.from(new Array(10).fill(0x02)));
     this.finish(false, 'Cancelled by user');
   }
 
@@ -530,6 +576,24 @@ console.log(`[XMODEM] Timeout, retry ${this.retryCount}/${this.maxRetries}`);
     if (this.direction === 'receive') {
       // Resend handshake
       if (this.state === 'waiting_start') {
+        /**
+         * Fall back from CRC to checksum, which this never did.
+         *
+         * A receiver asks for CRC by sending `C` and for the original
+         * 8-bit checksum by sending NAK - express picks between them in
+         * `xmodem_put_nak` (xymodem.e:283-300) on the FIRST block. A sender
+         * too old to understand `C` simply does not answer it, and this
+         * resent `C` until it ran out of retries and gave up. The transfer
+         * was impossible rather than slow.
+         *
+         * Three unanswered `C`s is the conventional point to drop down; the
+         * retry budget then continues from there in checksum mode.
+         */
+        if (this.useCRC && this.retryCount >= CRC_HANDSHAKE_ATTEMPTS) {
+          console.log('[XMODEM] No answer to CRC request, falling back to checksum');
+          this.useCRC = false;
+          this.mode = 'checksum';
+        }
         if (this.useCRC) {
           this.send(Buffer.from([C]));
         } else {

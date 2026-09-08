@@ -681,10 +681,22 @@ console.log('[YMODEM] Transfer cancelled by remote');
   /**
    * Cancel the transfer
    */
+  /**
+   * express.e's cancel, xymodem.e:309-326:
+   *
+   *     WHILE i<8  : putcom(xym, CAN)
+   *     WHILE i<10 : putcom(xym, 2)
+   *
+   * Eight CANs, not two. One or two can be swallowed by a noisy line or by a
+   * receiver mid-block, and a cancel a client does not see leaves the transfer
+   * hanging until it times out. The ten trailing bytes are what express sends
+   * after them.
+   */
   cancel(): void {
     if (!this.active) return;
     this.cancelled = true;
-    this.send(Buffer.from([CAN, CAN]));
+    this.send(Buffer.from(new Array(8).fill(CAN)));
+    this.send(Buffer.from(new Array(10).fill(0x02)));
     this.finish(false, 'Cancelled by user');
   }
 
