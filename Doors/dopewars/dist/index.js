@@ -39,6 +39,7 @@ const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const server_1 = require("./server");
 const app_1 = require("./app");
 const jamaica_1 = require("./config/jamaica");
+const settings_1 = require("./settings");
 exports.metadata = {
     name: 'GANJA WARS',
     version: '1.0.0',
@@ -49,14 +50,15 @@ exports.metadata = {
 const door = new bbs_door_sdk_1.ServerDoor(exports.metadata);
 door.onStart(async (ctx) => {
     const doorDir = path.join(__dirname, '..');
+    const settings = (0, settings_1.loadSettings)();
     const cfg = {
-        numTurns: 30,
-        startCash: 2000,
-        startDebt: 5500,
-        debtInterest: 10,
-        bankInterest: 5,
+        numTurns: settings.numTurns,
+        startCash: settings.startCash,
+        startDebt: settings.startDebt,
+        debtInterest: settings.debtInterest,
+        bankInterest: settings.bankInterest,
         discordWebhook: process.env.DOPEWARS_DISCORD_WEBHOOK ?? '',
-        notifyLivechat: true,
+        notifyLivechat: settings.notifyLivechat,
         theme: jamaica_1.JAMAICA_THEME,
     };
     const server = server_1.DopewarsServer.getInstance();

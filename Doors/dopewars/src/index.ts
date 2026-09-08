@@ -4,6 +4,7 @@ import { DopewarsServer } from './server';
 import { DopewarsConfig } from './types';
 import { createApp } from './app';
 import { JAMAICA_THEME } from './config/jamaica';
+import { loadSettings } from './settings';
 
 export const metadata = {
   name: 'GANJA WARS',
@@ -17,14 +18,15 @@ const door = new ServerDoor(metadata);
 
 door.onStart(async (ctx: DoorContext) => {
   const doorDir = path.join(__dirname, '..');
+  const settings = loadSettings();
   const cfg: DopewarsConfig = {
-    numTurns:       30,
-    startCash:      2000,
-    startDebt:      5500,
-    debtInterest:   10,
-    bankInterest:   5,
+    numTurns:       settings.numTurns,
+    startCash:      settings.startCash,
+    startDebt:      settings.startDebt,
+    debtInterest:   settings.debtInterest,
+    bankInterest:   settings.bankInterest,
     discordWebhook: process.env.DOPEWARS_DISCORD_WEBHOOK ?? '',
-    notifyLivechat: true,
+    notifyLivechat: settings.notifyLivechat,
     theme:          JAMAICA_THEME,
   };
 
