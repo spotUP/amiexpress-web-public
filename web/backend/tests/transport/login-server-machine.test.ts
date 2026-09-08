@@ -60,6 +60,23 @@ jest.mock('../../src/handlers/user/new-user.handler', () => ({
   startNewUserRegistration,
 }));
 
+/**
+ * R8's sentinel. The pipeline itself is another suite's subject
+ * (login-refuses-deleted-and-double-login.test.ts drives the real one); what
+ * this file has to prove is that the LOGIN LOOP reaches it, exactly once, on a
+ * successful password. Counting it at the module boundary is the only way -
+ * the loop reaches it through `await import(...)` inside the branch.
+ */
+const runPostAuthLogin = jest.fn(async (_socket: unknown, session: any) => {
+  session.state = BBSState.LOGGEDON;
+  session.subState = LoggedOnSubState.DISPLAY_BULL;
+  return { ok: true };
+});
+jest.mock('../../src/services/login-post.service', () => ({
+  ...jest.requireActual('../../src/services/login-post.service'),
+  runPostAuthLogin,
+}));
+
 const beginLogoff = jest.fn();
 jest.mock('../../src/server/logoff', () => ({
   ...jest.requireActual('../../src/server/logoff'),
@@ -226,6 +243,59 @@ describe('TP-9a - the server drives the login prompt for every transport', () =>
     expect(wire(socket)).toContain('Password: ');
     expect(wire(socket)).not.toContain('not used on this BBS');
     expect(startNewUserRegistration).not.toHaveBeenCalled();
+  });
+
+  /**
+   * R8 of the TP-16 reachability ledger - the login loop reaches the shared
+   * post-auth pipeline, exactly once.
+   *
+   * `runPostAuthLogin` is what makes a login a login: MULTICOM, the webhook,
+   * the forced password change, GDPR, the LOGON screen and the bulletin flow.
+   * Before TP-9a the three transports each had their own idea of what
+   * happened after a correct password, which is how a telnet caller could log
+   * in and never see a bulletin.
+   *
+   * Counted at the module boundary because the loop reaches it through
+   * `await import(...)` inside the branch - there is no prototype to spy and
+   * SWC's export getters refuse jest.spyOn (recorded on R2).
+   *
+   * The NEGATIVE arm is on the same path and matters as much: a WRONG password
+   * must not reach it. Without that, a loop that called the pipeline
+   * unconditionally would pass the first assertion.
+   */
+  it('R8: a correct password reaches runPostAuthLogin exactly once, a wrong one never', async () => {
+    const { container } = require('../../src/container');
+    const { AuthenticationUseCase } = require('../../src/services/use-cases/authentication.use-case');
+    const authenticate = jest.fn(async (_u: string, password: string) =>
+      password === 'letmein'
+        ? { success: true, user: KNOWN }
+        : { success: false, error: 'bad password' },
+    );
+    container.registerInstance(AuthenticationUseCase, { authenticate });
+
+    try {
+      // --- the correct password -------------------------------------------
+      const socket = makeSocket();
+      const session = loginSession('telnet');
+      await type(socket, session, 'sysop\r');
+      await type(socket, session, 'letmein\r');
+
+      expect(runPostAuthLogin).toHaveBeenCalledTimes(1);
+      // ...with the user the board looked up, not a re-read or a stub.
+      expect(runPostAuthLogin.mock.calls[0][2]).toEqual(KNOWN);
+
+      // --- a wrong one, on the same path ----------------------------------
+      runPostAuthLogin.mockClear();
+      const socket2 = makeSocket();
+      const session2 = loginSession('telnet');
+      await type(socket2, session2, 'sysop\r');
+      await type(socket2, session2, 'wrongpw\r');
+
+      expect(runPostAuthLogin).toHaveBeenCalledTimes(0);
+      expect(wire(socket2)).toContain('Invalid PassWord');
+    } finally {
+      container.registerInstance(AuthenticationUseCase, new AuthenticationUseCase());
+    }
   });
 
   /**
