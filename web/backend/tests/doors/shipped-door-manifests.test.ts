@@ -52,7 +52,13 @@ describe('shipped door manifests', () => {
   it.each(doorsWithManifests)('%s declares the command its package.json registers', doorName => {
     const doorDir = path.join(DOORS_DIR, doorName);
     const manifest = JSON.parse(fs.readFileSync(path.join(doorDir, 'door.settings.json'), 'utf8'));
-    const pkg = JSON.parse(fs.readFileSync(path.join(doorDir, 'package.json'), 'utf8'));
+
+    // Settings are no longer TypeScript-only: a 68K/C door (REQUESTS) declares
+    // a manifest too and has no package.json at all. There is nothing to
+    // compare against for those, so the pairing check does not apply.
+    const pkgPath = path.join(doorDir, 'package.json');
+    if (!fs.existsSync(pkgPath)) return;
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 
     const registered = pkg.bbsCommand || pkg.doorMetadata?.command;
     if (!registered) return; // not every door names its command in package.json

@@ -665,6 +665,21 @@ export async function initializeData(io?: SocketIOServer) {
     // Initialize doors (converts CommandDefinition from BBSCMD to Door objects)
     await initializeDoors();
 
+    // A 68K door reads a plain Key=value file beside its binary, not
+    // settings.json, so the admin form only reaches it once the cfg is
+    // rendered. Do it after the doors are known, and never let it stop boot.
+    try {
+      const { renderAllDoorCfgs } = require("../doors/door-settings.service");
+      const doorsRoot = path.join(
+        process.env.BBS_ROOT || process.env.BBS_DATA_DIR || config.get("dataDir"),
+        "Doors",
+      );
+      const n = renderAllDoorCfgs(doorsRoot);
+      if (n > 0) console.log(`[Init] rendered ${n} door cfg file(s) from saved settings`);
+    } catch (err: any) {
+      console.error(`[Init] door cfg render failed: ${err?.message || err}`);
+    }
+
     // Pre-populate door cache for instant DOORS/DOORMAN command response
     await initializeDoorCache();
 

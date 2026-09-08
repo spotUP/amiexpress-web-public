@@ -1,0 +1,50 @@
+{
+  "command": "REQUESTS",
+  "cfgFile": "REQUESTS.cfg",
+  "settings": [
+    {
+      "key": "host",
+      "cfgKey": "Host",
+      "label": "Door server host",
+      "type": "string",
+      "default": "doors.uprough.net",
+      "help": "Plain HTTP host serving /requests/v1. The 68K stack cannot do TLS, so this is http, not https."
+    },
+    {
+      "key": "port",
+      "cfgKey": "Port",
+      "label": "Port",
+      "type": "number",
+      "default": 80,
+      "min": 1,
+      "max": 65535,
+      "help": "80 for the live door server."
+    },
+    {
+      "key": "boardKey",
+      "cfgKey": "BoardKey",
+      "label": "Board key",
+      "type": "string",
+      "secret": true,
+      "default": "",
+      "help": "The board's key for the door server, in the form <board>.<secret>. Same key the achievements surface uses. Stored beside the door and never committed."
+    },
+    {
+      "key": "boardId",
+      "cfgKey": "BoardId",
+      "label": "Board id (optional)",
+      "type": "string",
+      "default": "",
+      "help": "Leave empty and the door takes the id from the key's own prefix."
+    },
+    {
+      "key": "timeout",
+      "cfgKey": "Timeout",
+      "label": "Request timeout (seconds)",
+      "type": "number",
+      "default": 10,
+      "min": 1,
+      "max": 120
+    }
+  ]
+}

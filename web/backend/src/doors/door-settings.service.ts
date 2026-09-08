@@ -49,11 +49,24 @@ export interface DoorSetting {
   min?: number;
   max?: number;
   secret?: boolean;
+  /**
+   * Render this value into the door's legacy cfg file under this key, when the
+   * manifest declares `cfgFile`. 68K/C doors cannot read settings.json - they
+   * read a plain `Key=value` file beside the binary - so this is the bridge.
+   */
+  cfgKey?: string;
 }
 
 export interface DoorSettingsManifest {
   command: string;
   settings: DoorSetting[];
+  /**
+   * Optional legacy config file (e.g. `REQUESTS.cfg`) rendered beside the door
+   * whenever its settings are saved. A 68K door reads that file, not
+   * settings.json, so without this the admin form and the door never meet.
+   * Bare filename only - never a path.
+   */
+  cfgFile?: string;
 }
 
 const SettingSchema = z.object({
@@ -66,6 +79,7 @@ const SettingSchema = z.object({
   min: z.number().optional(),
   max: z.number().optional(),
   secret: z.boolean().optional(),
+  cfgKey: z.string().min(1).max(64).optional(),
 }).refine(
   s => s.type !== 'choice' || (s.choices?.length ?? 0) > 0,
   { message: 'a choice needs choices' }
@@ -74,6 +88,9 @@ const SettingSchema = z.object({
 const ManifestSchema = z.object({
   command: z.string().min(1).max(50),
   settings: z.array(SettingSchema).max(100),
+  // Bare filename: no separators, no traversal. The cfg is written INSIDE the
+  // door directory and nowhere else.
+  cfgFile: z.string().min(1).max(64).regex(/^[A-Za-z0-9._-]+$/).optional(),
 });
 
 /** The door's declaration, or null when it has none - the normal case. */
@@ -246,5 +263,71 @@ export function writeDoorSettings(
   fs.writeFileSync(temp, JSON.stringify(out, null, 2) + '\n');
   fs.renameSync(temp, target);
 
+  // A 68K door reads a plain Key=value file, not settings.json. Render it now
+  // so saving in the admin actually reaches the door.
+  renderDoorCfg(doorDir);
+
   return out;
+}
+
+/**
+ * Render the door's legacy `Key=value` config file from its saved settings.
+ *
+ * Only does anything when the manifest declares `cfgFile`; returns the path
+ * written, or null. Values come from settings.json, falling back to each
+ * setting's declared default, so a door is configured the moment it is
+ * installed rather than only after a sysop opens the form.
+ *
+ * Written 0600 and atomically: it carries secrets (a board key), and a door
+ * that reads it mid-write would see half a file.
+ */
+export function renderDoorCfg(doorDir: string): string | null {
+  const manifest = readManifestFromDir(doorDir);
+  if (!manifest?.cfgFile) return null;
+
+  const values = readValuesFromDir(doorDir);
+  const lines: string[] = [];
+  for (const setting of manifest.settings) {
+    if (!setting.cfgKey) continue;
+    const raw = values[setting.key] ?? setting.default ?? '';
+    // One line per key, no quoting: that is the format these doors parse.
+    lines.push(`${setting.cfgKey}=${String(raw).replace(/[\r\n]/g, ' ')}`);
+  }
+
+  const target = path.join(doorDir, manifest.cfgFile);
+  const temp = `${target}.tmp`;
+  fs.writeFileSync(temp, lines.join('\n') + '\n', { mode: 0o600 });
+  fs.renameSync(temp, target);
+  return target;
+}
+
+/**
+ * Render every installed door legacy cfg from its saved settings.
+ *
+ * Run at startup. Rendering only on save is not enough: a freshly installed
+ * door must be configured from its declared defaults before anyone opens the
+ * admin, and the deploy re-syncs Doors/ from the image on every boot. The
+ * sysop settings.json survives that (it is not in the image, and the sync only
+ * adds), so the cfg is rebuilt from it here.
+ *
+ * Never throws: one malformed manifest must not stop the board booting.
+ */
+export function renderAllDoorCfgs(doorsRoot: string): number {
+  let rendered = 0;
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(doorsRoot);
+  } catch {
+    return 0;
+  }
+  for (const entry of entries) {
+    const doorDir = path.join(doorsRoot, entry);
+    try {
+      if (!fs.statSync(doorDir).isDirectory()) continue;
+      if (renderDoorCfg(doorDir)) rendered++;
+    } catch (err: any) {
+      console.error(`[doorSettings] cfg render failed for ${entry}: ${err?.message || err}`);
+    }
+  }
+  return rendered;
 }
