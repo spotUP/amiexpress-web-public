@@ -545,3 +545,17 @@ Doors/*/settings.json
 # and removed from the live board at the sysop's request; tracking it meant a
 # deploy would put it back.
 68klog.txt
+
+# Session and tool droppings (2026-09-08). Each of these turned up as
+# untracked in a shared checkout that four agents work in, where "is my tree
+# clean?" has to be answerable at a glance.
+.playwright-mcp/
+.claude/.deploy-status
+.claude/deploy-status.conf
+debug-*.log
+Doors/*.log
+web/backend/logs/
+web/backend/Node*/CallersLog
+# SQLite side files beside a backup - the database is the artifact, not these.
+*.db-shm
+*.db-wal
