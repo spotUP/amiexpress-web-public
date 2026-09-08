@@ -112,7 +112,7 @@ import {
   SmileyPickerState,
   getSelectedSmiley
 } from '../utils/smiley-picker.util';
-import { userSessions, socketToUser } from '../server/session-manager';
+import { userSessions, socketToUser, sessions } from '../server/session-manager';
 import { loadBBSConfig } from '../services/bbs-config-file.service';
 import { runExecuteOn } from '../services/batch-scheduler';
 import { mailOnSysopPage } from '../services/mail-notification.service';
@@ -945,6 +945,109 @@ console.log(`[Operator Chat] Page ${pageId}: re-linking session of ${page.userHa
 
   io.emit('operator:page-accepted', { pageId, sysopHandle });
 console.log(`[Operator Chat] Page ${pageId} accepted by ${sysopHandle}`);
+}
+
+/** What POST /api/nodes/:nodeId/chat (SV_CHAT) reports back to the admin. */
+export interface SysopChatResult {
+  success: boolean;
+  ended?: boolean;
+  queued?: boolean;
+  pageId?: string;
+  message: string;
+}
+
+/**
+ * SV_CHAT, the SYSOP-INITIATED direction - api/node-control-routes.ts:239-245
+ * used to 501 here.
+ *
+ * ACP.e:1005-1013 (`register()`/`sendMessage()`) is the message port ACP uses
+ * to send every SV_* command - SV_CHAT included - to a node's express.e
+ * process; it is generic across all of them, which is why it names no chat
+ * behaviour itself. The chat behaviour is in express.e, the node process ACP
+ * is talking to:
+ *   - express.e:1411-1412 - the node only acts on SV_CHAT at all
+ *     `IF logonType<>LOGON_TYPE_LOGGED_OFF` - nobody logged on is a no-op.
+ *   - express.e:7845-7862 - `chatF:=1; chatFlag:=Not(chatFlag)` - SV_CHAT is
+ *     a TOGGLE of the node's one chat flag, not a one-shot open. Turning ON
+ *     runs tranChat() or chat() (already ported: acceptPage() below plus
+ *     chat-stream.ts); turning OFF just stops - chat()'s own loop returns.
+ *
+ * This calls the SAME machinery the caller-initiated P (page sysop) command
+ * uses - acceptPage(), endChat(), activeChatSessions, pendingSysopAccepts -
+ * not a parallel chat. The only difference is how the PageRequest is made:
+ * a caller's P command creates one PENDING and waits for a sysop to accept
+ * it; here there is no page to wait for, so one is created and accepted (or
+ * queued) in the same call.
+ *
+ * TOGGLE OFF is by NODE, not by sysop: express.e has one console and one
+ * chatFlag per node, so a second SV_CHAT for a node that already has a live
+ * chat ends it, whichever sysop opened it.
+ *
+ * QUEUEING (caller inside a door): reuses `pendingSysopAccepts`, the exact
+ * map `operator:accept-page` fills when a human sysop accepts a caller's page
+ * while they are inside a door (see callerCanBeInterrupted's doc comment,
+ * below) - `checkPageTimeouts` already drains it once the caller is back at a
+ * prompt, and `activateGrumpyBot` already refuses to take a page this map
+ * holds. No new polling was written for this.
+ *
+ * UNIMPLEMENTED, and why: on the real Amiga, chat() runs INSIDE readChar, so
+ * a local F1 or an incoming SV_CHAT is always seen the instant it is set -
+ * AmigaDOS console I/O has no concept of a door owning the whole keyboard the
+ * way this port's DoorInputManager does, so express.e has no queueing
+ * behaviour for "caller is busy" to port. The queue used here is this port's
+ * own invention (already shipped for the caller-initiated side), reused
+ * rather than duplicated.
+ */
+export async function initiateSysopChat(
+  io: any,
+  repository: OperatorChatRepository,
+  nodeId: number,
+  sysopId: string,
+  sysopHandle: string,
+  sysopSessionId: string
+): Promise<SysopChatResult> {
+  // TOGGLE OFF: chatFlag:=Not(chatFlag), express.e:7852.
+  for (const [pageId, cs] of activeChatSessions) {
+    if (cs.userNodeId === nodeId && !(cs as any).ended) {
+      await endChat(io, repository, pageId);
+      return { success: true, ended: true, pageId, message: `Chat with node ${nodeId} ended` };
+    }
+  }
+
+  const callerSession = sessions.get(String(nodeId));
+  // express.e:1411-1412 - SV_CHAT only sets servercmd (and so only ever
+  // reaches the toggle above) `IF logonType<>LOGON_TYPE_LOGGED_OFF`.
+  if (!callerSession || !callerSession.user) {
+    return { success: false, message: `Node ${nodeId} has no caller logged on` };
+  }
+
+  const pageData: CreatePageRequest = {
+    userId: callerSession.user.id,
+    userHandle: callerSession.user.username,
+    nodeId,
+    conferenceId: callerSession.currentConf ?? 0,
+    conferenceName: callerSession.currentConfName || 'Main',
+    timeOnline: Math.floor((Date.now() - (callerSession.connectionStart || Date.now())) / 1000),
+    lastCommand: callerSession.commandText || 'SV_CHAT'
+  };
+  const pageRequest = repository.createPageRequest(pageData);
+
+  if (!callerCanBeInterrupted(callerSession)) {
+    pendingSysopAccepts.set(pageRequest.id, { sysopId, sysopHandle, sysopSessionId, at: Date.now() });
+    return {
+      success: true,
+      queued: true,
+      pageId: pageRequest.id,
+      message: `${callerSession.user.username} is inside a door; chat will open when they return to a prompt`
+    };
+  }
+
+  await acceptPage(io, repository, pageRequest.id, sysopId, sysopHandle, sysopSessionId);
+  return {
+    success: true,
+    pageId: pageRequest.id,
+    message: `Chat started with ${callerSession.user.username} on node ${nodeId}`
+  };
 }
 
 /**

@@ -9,14 +9,29 @@ jest.mock('../../src/server/session-manager', () => ({
   getSocketIdByNodeId: jest.fn().mockReturnValue(null),
 }));
 
+// POST /:nodeId/chat (SV_CHAT) delegates entirely to initiateSysopChat -
+// exercised end-to-end (real acceptPage()/endChat()/activeChatSessions) in
+// tests/handlers/operator-chat-sysop-initiated.test.ts. Mocked here so this
+// file stays a route-wiring test: status codes and response fields, not the
+// chat machinery.
+jest.mock('../../src/handlers/operator-chat.handler', () => ({
+  initiateSysopChat: jest.fn(),
+}));
+jest.mock('../../src/database', () => ({
+  db: { getOperatorChatRepository: jest.fn().mockReturnValue({}) },
+}));
+
 import express from 'express';
 import request from 'supertest';
 import { createNodeControlRouter } from '../../src/api/node-control-routes';
+import { initiateSysopChat } from '../../src/handlers/operator-chat.handler';
 import {
   resetAllNodeReservations,
   getNodeReservation,
   setNodeReservation,
 } from '../../src/services/node-reservation.service';
+
+const mockInitiateSysopChat = initiateSysopChat as jest.Mock;
 
 describe('Node Control Routes', () => {
   let app: express.Application;
@@ -34,6 +49,12 @@ describe('Node Control Routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetAllNodeReservations();
+    // Default: matches express.e:1411-1412 (SV_CHAT is a no-op with nobody
+    // logged on) — individual tests override with mockResolvedValueOnce.
+    mockInitiateSysopChat.mockResolvedValue({
+      success: false,
+      message: 'Node has no caller logged on',
+    });
   });
 
   describe('GET /api/nodes/status', () => {
@@ -154,10 +175,62 @@ describe('Node Control Routes', () => {
     });
   });
 
-  describe('POST /api/nodes/:nodeId/chat', () => {
-    it('returns 4xx for offline node', async () => {
+  describe('POST /api/nodes/:nodeId/chat (SV_CHAT, P2-8 — sysop-initiated, ACP.e:1005-1013/express.e:1411-1412,7845-7862)', () => {
+    // The route is a thin wire to initiateSysopChat (mocked above); the real
+    // behaviour — toggle on/off, the door-interrupt queue, the "no caller
+    // logged on" no-op — is exercised end-to-end in
+    // tests/handlers/operator-chat-sysop-initiated.test.ts.
+    it('is no longer a 501 stub: 200 + the pageId when initiateSysopChat opens a chat', async () => {
+      mockInitiateSysopChat.mockResolvedValueOnce({
+        success: true,
+        pageId: 'page-1',
+        message: 'Chat started with Caller on node 1',
+      });
+
+      const res = await request(app).post('/api/nodes/1/chat');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.command).toBe('SV_CHAT');
+      expect(res.body.pageId).toBe('page-1');
+      expect(mockInitiateSysopChat).toHaveBeenCalledWith(
+        expect.anything(), expect.anything(), 1, expect.any(String), expect.any(String), expect.any(String)
+      );
+    });
+
+    it('reports ended:true when the call toggled an existing chat off (chatFlag:=Not(chatFlag))', async () => {
+      mockInitiateSysopChat.mockResolvedValueOnce({
+        success: true,
+        ended: true,
+        pageId: 'page-1',
+        message: 'Chat with node 1 ended',
+      });
+
+      const res = await request(app).post('/api/nodes/1/chat');
+
+      expect(res.status).toBe(200);
+      expect(res.body.ended).toBe(true);
+    });
+
+    it('reports queued:true when the caller is inside a door', async () => {
+      mockInitiateSysopChat.mockResolvedValueOnce({
+        success: true,
+        queued: true,
+        pageId: 'page-1',
+        message: 'Caller is inside a door; chat will open when they return to a prompt',
+      });
+
+      const res = await request(app).post('/api/nodes/1/chat');
+
+      expect(res.status).toBe(200);
+      expect(res.body.queued).toBe(true);
+    });
+
+    it('returns 4xx (not 501) for a node with no caller logged on (express.e:1411-1412)', async () => {
       const res = await request(app).post('/api/nodes/99/chat');
       expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(res.status).not.toBe(501);
+      expect(res.body.success).toBe(false);
     });
   });
   describe('supervisor commands with nothing on the other end', () => {
@@ -165,6 +238,9 @@ describe('Node Control Routes', () => {
     // to it. Nine of the eleven Node Control buttons ended in that emit and the
     // route answered `{ success: true }` - so the sysop pressed Reinitialize
     // Modem and was told it had worked.
+    //
+    // SV_CHAT (P2-8) is no longer in this list: it is a real, implemented
+    // feature now (see the describe block above), not a dead button.
     const DEAD = [
       ['/api/nodes/1/uniconify', 'SV_UNICONIFY'],
       ['/api/nodes/1/sysop-login', 'SV_SYSOPLOG'],
@@ -172,7 +248,6 @@ describe('Node Control Routes', () => {
       ['/api/nodes/1/exit', 'SV_EXITNODE'],
       ['/api/nodes/1/offhook', 'SV_NODEOFFHOOK'],
       ['/api/nodes/1/init-modem', 'SV_INITMODEM'],
-      ['/api/nodes/1/chat', 'SV_CHAT'],
       ['/api/nodes/1/start', 'SV_STARTNODE'],
       ['/api/nodes/toggle-chat', 'SV_CHATTOGGLE'],
       ['/api/nodes/quiet-mode', 'SV_QUIETNODE'],

@@ -238,10 +238,52 @@ export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof e
 
   /**
    * POST /api/nodes/:nodeId/chat
-   * Initiate sysop chat (SV_CHAT: 157)
+   * Sysop-initiated chat (SV_CHAT: 157) - P2-8, express-parity-100 plan.
+   *
+   * This is a real original feature, not a stray button: ACP.e:1005-1013
+   * (register()/sendMessage(), the message port every SV_* command travels
+   * over) delivers it to the node's express.e process, which gates it on a
+   * caller being logged on (express.e:1411-1412) and then toggles its one
+   * chat flag (express.e:7845-7862, `chatFlag:=Not(chatFlag)`). See
+   * initiateSysopChat's doc comment in operator-chat.handler.ts for the full
+   * mapping - it reuses acceptPage()/endChat()/activeChatSessions, the same
+   * machinery the caller-initiated Page Sysop command already uses, rather
+   * than a parallel chat implementation.
    */
-  router.post('/:nodeId/chat', (_req: Request, res: Response) => {
-    return notImplemented(res, 'SV_CHAT', 'nothing subscribes to the supervisor channel, so the node never hears it');
+  router.post('/:nodeId/chat', async (req: Request, res: Response) => {
+    const nodeId = parseInt(req.params.nodeId);
+    const { initiateSysopChat } = require('../handlers/operator-chat.handler');
+    const { db } = require('../database');
+    const repository = db.getOperatorChatRepository();
+    const authUser = (req as any).user as { userId?: string; username?: string } | undefined;
+    const sysopId = authUser?.userId || 'sysop';
+    const sysopHandle = authUser?.username || 'Sysop';
+    // No live socket.io session backs a plain REST call; the same synthetic
+    // id shape the co-sysop bot already uses ('grumpy-bot-session') stands in
+    // - acceptPage()/endChat() only use it to try to join an admin socket to
+    // the page room, which is a no-op when the id resolves to nothing.
+    const sysopSessionId = `admin:${sysopId}`;
+
+    const result = await initiateSysopChat(io, repository, nodeId, sysopId, sysopHandle, sysopSessionId);
+
+    if (!result.success) {
+      return res.status(404).json({
+        success: false,
+        command: 'SV_CHAT',
+        message: result.message,
+        timestamp: getSystemTime().toISOString(),
+      });
+    }
+
+    return res.json({
+      success: true,
+      command: 'SV_CHAT',
+      message: result.message,
+      pageId: result.pageId,
+      ended: result.ended ?? false,
+      queued: result.queued ?? false,
+      timestamp: getSystemTime().toISOString(),
+    });
   });
 
   /**
