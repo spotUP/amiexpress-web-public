@@ -318,8 +318,19 @@ export class BatchDownloadHandler {
     // "Do you leave without them?" prompt actually drives the logoff.
     if (session.tempData?.pendingGoodbye) {
       const pendingParams = session.tempData.pendingGoodbyeParams || 'Y';
+      const wasPartUpload = !!session.tempData.pendingGoodbyePartUpload;
       delete session.tempData.pendingGoodbye;
       delete session.tempData.pendingGoodbyeParams;
+      delete session.tempData.pendingGoodbyePartUpload;
+      if (answer === 'Y' && wasPartUpload) {
+        // express.e:25056 - partUploadOK returning SUCCESS falls through to
+        // checkFlagged, so answering Y here resumes the SAME logoff and must
+        // not ask about the partial uploads a second time.
+        session.tempData.partUploadAcknowledged = true;
+        const { handleGoodbyeCommand } = require('../commands/system-commands.handler');
+        handleGoodbyeCommand(socket, session, pendingParams);
+        return;
+      }
       if (answer === 'Y') {
         const { handleGoodbyeCommand } = require('../commands/system-commands.handler');
         handleGoodbyeCommand(socket, session, pendingParams);

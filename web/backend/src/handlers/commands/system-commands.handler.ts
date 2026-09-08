@@ -38,6 +38,39 @@ export function setSystemCommandsDependencies(deps: {
  * Handle G command - Goodbye/Logoff
  * 1:1 port from express.e:25047-25075 internalCommandG()
  */
+/**
+ * The caller's own unfinished uploads, as express counts them.
+ *
+ * cleanPlayPen files an aborted upload as `<name>@<slot>` in the conference's
+ * PartUpload directory - or `@<node>-<slot>` when the sysop sets ownPartFiles -
+ * and express.e:17583's `getUN()` reads that suffix back to decide whose it is.
+ * Anything belonging to somebody else is not this caller's business.
+ */
+export function partUploadsForCaller(session: BBSSession): string[] {
+  const slot = session.user?.slotNumber;
+  if (!slot) return [];
+
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const { config } = require('../../config');
+    const { getConferenceDir } = require('../../utils/file-hold.util');
+    const dir = path.join(
+      getConferenceDir(session.currentConf || 1, config.get('dataDir')),
+      'PartUpload',
+    );
+    if (!fs.existsSync(dir)) return [];
+
+    const mine = new RegExp(`@(?:\\d+-)?${slot}$`);
+    return fs.readdirSync(dir).filter((name: string) => mine.test(name));
+  } catch (err) {
+    // A board with no PartUpload directory has no partial uploads, and a
+    // failure to look must never block a logoff.
+    console.warn('[GOODBYE] could not check PartUpload:', err);
+    return [];
+  }
+}
+
 export async function handleGoodbyeCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
   // express.e:25050-25055 - Parse parameters
   const parsedParams = ParamsUtil.parse(params);
@@ -56,9 +89,33 @@ export async function handleGoodbyeCommand(socket: any, session: BBSSession, par
   }
 
   if (!auto) {
-    // express.e:25057-25064 - Check for partial uploads and flagged files
-    // partUploadOK() - For web version, we don't have partial uploads
-    // checkFlagged() - Check if user has flagged files for download
+    /**
+     * express.e:25056 - `IF partUploadOK(0)=RESULT_ABORT THEN RETURN`, before
+     * the flagged-files question.
+     *
+     * `partUploadOK` (express.e:17525) walks `<conf>/PartUpload/`, matches each
+     * name's `@<slot>` suffix against the caller, and on a hit says "There are
+     * some incompleted uploads of yours" and asks whether to leave anyway.
+     *
+     * The note that used to sit here - "For web version, we don't have partial
+     * uploads" - was true only because nothing ever created them: cleanPlayPen,
+     * which is what files a partial upload into PartUpload, had no callers
+     * until it was wired into the post-upload pipeline. Now that aborted
+     * uploads land there, this question has something to ask about, and a
+     * caller who hangs up without it silently abandons a resumable upload.
+     */
+    if (!session.tempData?.partUploadAcknowledged && partUploadsForCaller(session).length > 0) {
+      session.tempData = session.tempData || {};
+      session.tempData.pendingGoodbye = true;
+      session.tempData.pendingGoodbyePartUpload = true;
+      session.tempData.pendingGoodbyeParams = params;
+      socket.emit('ansi-output', '\r\nThere are some incompleted uploads of yours\r\n');
+      socket.emit('ansi-output', 'Would you like to leave anyway (Y/N)? ');
+      session.subState = LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM;
+      return;
+    }
+
+    // express.e:25057-25064 - checkFlagged(): flagged files not downloaded.
 
     const flaggedCount = session.flagManager?.getCount
       ? session.flagManager.getCount()

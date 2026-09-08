@@ -38,6 +38,27 @@ export class CallersLogManager {
   }
 
   /**
+   * Which nodes have a CallersLog, and where each one is.
+   *
+   * express.e:24479-24487 walks Node0, Node1, ... and stops at the first one
+   * with no log file, which is also how it decides what to offer the sysop.
+   */
+  public availableLogs(): Array<{ nodeId: number; path: string }> {
+    const found: Array<{ nodeId: number; path: string }> = [];
+    for (let nodeId = 0; nodeId < 100; nodeId += 1) {
+      const logPath = this.getLogPath(nodeId);
+      if (!fs.existsSync(logPath)) break;
+      found.push({ nodeId, path: logPath });
+    }
+    return found;
+  }
+
+  /** The log file for one node, whether or not it exists. */
+  public logPathFor(nodeId: number): string {
+    return this.getLogPath(nodeId);
+  }
+
+  /**
    * Ensure Node{n}/ directory exists
    */
   private ensureNodeDir(nodeId: number): void {

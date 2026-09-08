@@ -140,10 +140,39 @@ console.log('[ENV] Sysop');
   // express.e:24469 - aePuts('\b\n')
   socket.emit('ansi-output', '\r\n');
 
-  // WEB_: express.e:24473-24507 opens BBS:Node{N}/Callerslog for each node, displays
-  // a numbered list of nodes that have logs, and prompts for node selection before
-  // calling displayCallersLog(). Since logs are stored in the DB (not per-node flat
-  // files), we display recent caller activity directly without the node-selection step.
+  /**
+   * express.e:24473-24507 - which node's log?
+   *
+   * The note that used to sit here said this deployment is "single-node and
+   * logs go to the database, not per-node flat files", so the node-selection
+   * loop was replaced by a flat query. Both halves of that are wrong: the
+   * board writes Node{N}/CallersLog through CallersLogManager on every login,
+   * logoff, upload and download, and those files are what a real AmiExpress
+   * and every door read. The sysop could see a database summary and never the
+   * log the board actually keeps.
+   *
+   * `CL <n>` goes straight to that node, as express does with a parameter.
+   */
+  const { callersLogManager } = require('../../services/CallersLogManager');
+  const available = callersLogManager.availableLogs();
+
+  const requested = params.trim().split(/\s+/)[0];
+  if (requested && /^\d+$/.test(requested)) {
+    await displayNodeCallersLog(socket, session, Number.parseInt(requested, 10));
+    return;
+  }
+
+  if (available.length > 0) {
+    for (const entry of available) {
+      socket.emit('ansi-output', `${entry.nodeId} - Callerslog for Node ${entry.nodeId}\r\n`);
+    }
+    socket.emit('ansi-output', '\r\nWhich node to view? ');
+    session.subState = LoggedOnSubState.CALLERSLOG_NODE_INPUT;
+    return;
+  }
+
+  // No per-node logs on this board yet: fall back to the database summary
+  // this command used to show unconditionally.
   socket.emit('ansi-output', 'Recent caller activity:\r\n');
   socket.emit('ansi-output', '\r\n');
 
@@ -347,4 +376,62 @@ console.log('[ENV] Sysop');
 
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
+}
+
+/**
+ * Show one node's CallersLog, or express's refusal.
+ *
+ * express.e:24498-24506: it re-opens the file, echoes the same
+ * `<n> - Callerslog for Node <n>` header it listed, then displays it; a node
+ * with no log gets "Not a valid node!".
+ *
+ * The file holds Amiga text, so it is read as latin1: reading it as UTF-8
+ * turns every high-bit byte into U+FFFD.
+ */
+export async function displayNodeCallersLog(
+  socket: any,
+  session: BBSSession,
+  nodeId: number,
+): Promise<void> {
+  const fs = require('fs');
+  const { callersLogManager } = require('../../services/CallersLogManager');
+  const logPath = callersLogManager.logPathFor(nodeId);
+
+  if (!fs.existsSync(logPath)) {
+    socket.emit('ansi-output', '\r\nNot a valid node!\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.menuPause = true;
+    return;
+  }
+
+  socket.emit('ansi-output', `${nodeId} - Callerslog for Node ${nodeId}\r\n`);
+  try {
+    const text = fs.readFileSync(logPath, 'latin1');
+    socket.emit('ansi-output', text.replace(/\r?\n/g, '\r\n'));
+  } catch (err) {
+    console.error('[CL] could not read the callers log:', err);
+    socket.emit('ansi-output', '\r\nCould not read that log.\r\n');
+  }
+
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  session.menuPause = true;
+}
+
+/** The answer to "Which node to view?" (express.e:24490-24495). */
+export async function handleCallersLogNodeInput(
+  socket: any,
+  session: BBSSession,
+  input: string,
+): Promise<void> {
+  const answer = input.trim();
+  socket.emit('ansi-output', '\r\n');
+
+  // express.e:24491 - an empty answer just returns.
+  if (answer.length === 0) {
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.menuPause = true;
+    return;
+  }
+
+  await displayNodeCallersLog(socket, session, Number.parseInt(answer, 10));
 }

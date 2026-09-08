@@ -3181,6 +3181,13 @@ console.log(' In file upload state - canceling upload');
   }
 
   // Handle batch download confirmation
+  // express.e:24490 - "Which node to view?" for the CL command.
+  if (session.subState === LoggedOnSubState.CALLERSLOG_NODE_INPUT) {
+    const { handleCallersLogNodeInput } = require('./commands/sysop-commands.handler');
+    await handleCallersLogNodeInput(socket, session, data.trim());
+    return;
+  }
+
   if (session.subState === LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM) {
     const { BatchDownloadHandler } = require('./transfer/batch-download.handler');
     await BatchDownloadHandler.handleBatchConfirm(socket, session, data.trim());
