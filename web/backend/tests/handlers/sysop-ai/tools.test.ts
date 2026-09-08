@@ -268,3 +268,60 @@ describe('through the real chat', () => {
     }
   });
 });
+
+/**
+ * The picker prefers the model that has actually been fast, and a tool
+ * answer is never thrown away for a canned line.
+ *
+ * 2026-09-08: the picker ranked by context length, chose a 1M-context model
+ * that took 23.7 s, and the next message spent its budget on a tool round
+ * and fell through to the rule-based bot - which answered a question it had
+ * never read ("first we see [AI] then [RB]?").
+ */
+describe('the model picker learns what is fast', () => {
+  const { rankFreeModels, noteModelCost, modelCostMs, resetModelCosts } = require('../../../src/handlers/grumpy-sysop-bot.handler');
+  const free = (id: string, ctx: number) => ({ id, name: id, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools'], context_length: ctx });
+  const catalogue = [free('slow/huge-context', 1000000), free('quick/small', 32000), free('untried/medium', 128000)];
+
+  beforeEach(resetModelCosts);
+  afterAll(resetModelCosts);
+
+  it('an untried model is optimistic, a measured one is what it measured', () => {
+    expect(modelCostMs('untried/medium')).toBe(6000);
+    noteModelCost('quick/small', 1200, true);
+    expect(modelCostMs('quick/small')).toBe(1200);
+    // The average moves with each call rather than jumping.
+    noteModelCost('quick/small', 2200, true);
+    expect(modelCostMs('quick/small')).toBe(1600);
+  });
+
+  it('the fast model rises above the big-context one that was slow', () => {
+    noteModelCost('slow/huge-context', 23700, true);
+    noteModelCost('quick/small', 1200, true);
+    expect(rankFreeModels(catalogue as any)[0]).toBe('quick/small');
+    expect(rankFreeModels(catalogue as any).indexOf('slow/huge-context')).toBe(2);
+  });
+
+  it('a model that failed wears a minute of penalty for ten minutes, then does not', () => {
+    const now = Date.now();
+    noteModelCost('quick/small', 1200, false);
+    expect(modelCostMs('quick/small', now)).toBe(61200);
+    expect(modelCostMs('quick/small', now + 11 * 60 * 1000)).toBe(1200);
+  });
+});
+
+describe('a tool answer outlives a slow model', () => {
+  it('the loop hands back what the board said, even when the model never wrote a reply', async () => {
+    const ctx = ctxFor(30, []);
+    let asked = 0;
+    const post = async () => {
+      asked++;
+      // The model asks a tool, then never answers - it runs out of time.
+      if (asked === 1) return { choices: [{ message: { content: null, tool_calls: [{ id: 'c1', function: { name: 'read_bulletin', arguments: '{"number":1}' } }] } }] };
+      return { choices: [{ message: { content: null } }] };
+    };
+    const result = await askWithTools({ model: 'm', messages: [], tools: toolsFor(ctx.session), ctx, deadline: Date.now() + 20000, post });
+    expect(result.text).toBeNull();
+    expect(result.toolResults.join('\n')).toContain('Downtime Friday');
+  });
+});

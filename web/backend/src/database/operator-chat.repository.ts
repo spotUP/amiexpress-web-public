@@ -205,7 +205,7 @@ export class OperatorChatRepository {
     } catch (e) { /* Column already exists */ }
     // K5 (2026-09-08): the AI co-sysop's name, its tools, the time-grant cap, the RAWG key.
     try {
-      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN ai_sysop_name TEXT DEFAULT 'Agnus'`);
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN ai_sysop_name TEXT DEFAULT 'Kevin'`);
     } catch (e) { /* Column already exists */ }
     try {
       this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN ai_tools_enabled INTEGER DEFAULT 1`);
@@ -215,6 +215,12 @@ export class OperatorChatRepository {
     } catch (e) { /* Column already exists */ }
     try {
       this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN rawg_api_key TEXT DEFAULT ''`);
+    } catch (e) { /* Column already exists */ }
+    try {
+      // The co-sysop was called Agnus for a few hours on 2026-09-08 before the
+      // sysop named him Kevin. A board still carrying the old default takes the
+      // new one; a board whose sysop chose a name keeps it.
+      this.db.exec(`UPDATE operator_chat_config SET ai_sysop_name = 'Kevin' WHERE ai_sysop_name = 'Agnus'`);
     } catch (e) { /* Column already exists */ }
 
     // Push notification subscriptions table
@@ -555,7 +561,7 @@ ntfyTopic: row.ntfy_topic || '',
       botTypingSpeed: row.bot_typing_speed ?? 40,
       botTypoProbability: row.bot_typo_probability ?? 0.04,
       botThinkTime: row.bot_think_time ?? 1000,
-      aiSysopName: (row.ai_sysop_name || 'Agnus') as string,
+      aiSysopName: (row.ai_sysop_name || 'Kevin') as string,
       aiToolsEnabled: (row.ai_tools_enabled ?? 1) === 1,
       aiTimeGrantCapMinutes: row.ai_time_grant_cap_minutes ?? 30,
       rawgApiKey: row.rawg_api_key || '',
@@ -647,7 +653,7 @@ ntfyTopic: row.ntfy_topic || '',
       merged.botTypingSpeed ?? 40,
       merged.botTypoProbability ?? 0.04,
       merged.botThinkTime ?? 1000,
-      (merged.aiSysopName || 'Agnus').slice(0, 30),
+      (merged.aiSysopName || 'Kevin').slice(0, 30),
       merged.aiToolsEnabled === false ? 0 : 1,
       Math.max(0, Math.min(600, Number(merged.aiTimeGrantCapMinutes ?? 30))),
       merged.rawgApiKey ?? ''

@@ -31,6 +31,13 @@ export interface ToolLoopResult {
   afters: Array<() => Promise<void>>;
   /** For the log and the tests: what was asked. */
   calls: Array<{ name: string; args: Record<string, unknown>; outcome: string }>;
+  /**
+   * What the board answered, in order. When the model runs out of time
+   * before it writes its reply, this is still a true answer to the caller's
+   * question - better than the rule-based bot's guess at a question it never
+   * read (grumpy-sysop-bot.handler.ts, the tool-loop fallback).
+   */
+  toolResults: string[];
 }
 
 function parseArgs(raw: unknown): Record<string, unknown> {
@@ -42,13 +49,14 @@ export async function askWithTools(req: ToolLoopRequest): Promise<ToolLoopResult
   const messages = [...req.messages];
   const afters: Array<() => Promise<void>> = [];
   const calls: ToolLoopResult['calls'] = [];
+  const toolResults: string[] = [];
   const definitions = toolDefinitions(req.tools);
 
   for (let round = 0; round <= MAX_ROUNDS; round++) {
     const left = req.deadline - Date.now();
     if (left < 500) {
 console.log('[Grumpy Bot] tool loop: out of time before the reply');
-      return { text: null, afters, calls };
+      return { text: null, afters, calls, toolResults };
     }
     const body: Record<string, unknown> = {
       model: req.model,
@@ -59,12 +67,12 @@ console.log('[Grumpy Bot] tool loop: out of time before the reply');
     };
     const data = await req.post(body, left);
     const message = data?.choices?.[0]?.message;
-    if (!message) return { text: null, afters, calls };
+    if (!message) return { text: null, afters, calls, toolResults };
 
     const toolCalls: any[] = Array.isArray(message.tool_calls) ? message.tool_calls : [];
     if (toolCalls.length === 0 || round === MAX_ROUNDS) {
       const text = typeof message.content === 'string' && message.content.trim() ? message.content : null;
-      return { text, afters, calls };
+      return { text, afters, calls, toolResults };
     }
 
     // The assistant's turn, tool calls and all, then one tool message per call.
@@ -75,6 +83,7 @@ console.log('[Grumpy Bot] tool loop: out of time before the reply');
       const { outcome, result } = await runTool(req.ctx, name, args);
       calls.push({ name, args, outcome });
       if (result.after) afters.push(result.after);
+      if (outcome === 'ok') toolResults.push(result.content);
       await auditToolCall(req.ctx.io, {
         pageId: req.ctx.page.id,
         userId: String(req.ctx.session.user?.id ?? ''),
@@ -88,5 +97,5 @@ console.log('[Grumpy Bot] tool loop: out of time before the reply');
       messages.push({ role: 'tool', tool_call_id: call?.id ?? name, content: asData(result.content) });
     }
   }
-  return { text: null, afters, calls };
+  return { text: null, afters, calls, toolResults };
 }

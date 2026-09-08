@@ -250,6 +250,12 @@ console.log(`[Operator Chat] Page ${page.id}: a line for ${page.userHandle} has 
       }
       emit(chatReturnBytes(chatSession));
     }
+    // AND A BLANK LINE: the co-sysop presses return twice too, so the caller
+    // can see the turn has come back to them ("the sysop also needs to press
+    // enter twice to show me that its my turn to type" - sysop, 2026-09-08).
+    // The caller's own send already ends this way: the second return is what
+    // sent it.
+    emit(chatReturnBytes(chatSession));
   };
   const prev: Promise<void> = (chatSession as any).delivery ?? Promise.resolve();
   const next = prev.then(run, run);

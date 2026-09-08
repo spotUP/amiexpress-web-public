@@ -967,15 +967,15 @@ async function sendBotMessageWithTyping(
 }
 
 
-/** The AI co-sysop's handle on the board - the admin's, default Agnus. */
+/** The AI co-sysop's handle on the board - the admin's, default Kevin. */
 function botName(repository: OperatorChatRepository): string {
-  try { return (repository.getConfig().aiSysopName || 'Agnus').slice(0, 30); } catch { return 'Agnus'; }
+  try { return (repository.getConfig().aiSysopName || 'Kevin').slice(0, 30); } catch { return 'Kevin'; }
 }
 
 /** The bot's engine and typing settings, from the board's operator-chat config. */
 function aiConfigFrom(config: OperatorChatConfig): AIProviderConfig {
   return {
-    botName: (config.aiSysopName || 'Agnus').slice(0, 30),
+    botName: (config.aiSysopName || 'Kevin').slice(0, 30),
     sysopName: loadBBSConfig(bbsRoot).sysop_name || 'the sysop',
     budgetMs: config.aiToolsEnabled === false ? undefined : TOOL_AI_BUDGET_MS,
     provider: config.aiEnabled ? config.aiProvider : 'rule-based',

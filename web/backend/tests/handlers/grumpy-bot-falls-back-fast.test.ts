@@ -1,5 +1,5 @@
 /**
- * When the AI cannot answer, GrumpyBot answers NOW.
+ * When the AI cannot answer, the co-sysop says so NOW.
  *
  * Sysop, live, 2026-09-07: "if the ai openrouter bot fails grumpy sysop
  * should take over directly there is a long delay now". Two causes, both
@@ -37,11 +37,14 @@ beforeEach(() => {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-it('with no API key anywhere, no request leaves the box and the rule-based reply is immediate', async () => {
+/** With the rule-based bot gone (2026-09-08), no provider means one honest line. */
+const NO_PROVIDER = /ask me again in a minute/;
+
+it('with no API key anywhere, no request leaves the box and the answer is immediate', async () => {
   const t0 = Date.now();
   const reply = await getGrumpySysopResponse('hello', context as any, { ...base });
 
-  expect(reply.startsWith('[RB] ')).toBe(true);
+  expect(reply).toMatch(NO_PROVIDER);
   expect(mocked.get).not.toHaveBeenCalled();
   expect(mocked.post).not.toHaveBeenCalled();
   expect(Date.now() - t0).toBeLessThan(200);
@@ -55,11 +58,11 @@ it('a key that every model refuses is given two tries, not the whole model list'
 
   const reply = await getGrumpySysopResponse('hello', context as any, { ...base, openRouterApiKey: 'sk-or-v1-test' });
 
-  expect(reply.startsWith('[RB] ')).toBe(true);
+  expect(reply).toMatch(NO_PROVIDER);
   expect(mocked.post.mock.calls.length).toBeLessThanOrEqual(2);
 });
 
-it('a provider that hangs is cut off at the cascade budget and GrumpyBot takes over', async () => {
+it('a provider that hangs is cut off at the cascade budget, and the caller is told at once', async () => {
   mocked.get.mockResolvedValue({ data: { data: [{ id: 'free-0', pricing: { prompt: '0', completion: '0' } }] } } as any);
   // A call that only ends when axios's own timeout fires: honour the
   // timeout the handler asked for, as the real client would.
@@ -72,7 +75,7 @@ it('a provider that hangs is cut off at the cascade budget and GrumpyBot takes o
     ...base, openRouterApiKey: 'sk-or-v1-test', groqApiKey: 'gsk-test', budgetMs: 600,
   });
 
-  expect(reply.startsWith('[RB] ')).toBe(true);
+  expect(reply).toMatch(NO_PROVIDER);
   expect(Date.now() - t0).toBeLessThan(1500);
   expect(DEFAULT_AI_BUDGET_MS).toBe(8000);
 });

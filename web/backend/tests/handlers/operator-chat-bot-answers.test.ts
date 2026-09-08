@@ -59,7 +59,8 @@ const plain = (chunks: string[]) =>
   chunks.join('').replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\x1b[78]/g, '');
 
 /** How a bot line announces itself, whichever engine wrote it. */
-const BOT_REPLY = /\[(AI|RB)\]/;
+/** With one engine there is no tag; a reply is a reply. */
+const BOT_REPLY = /\S/;
 
 describe('the grumpy bot answers a caller', () => {
   it('and the caller reads their own line before the reply', async () => {
@@ -70,7 +71,7 @@ describe('the grumpy bot answers a caller', () => {
     const paged = await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
     expect(paged.success).toBe(true);
     await wait(3000);                                  // past the 1s timeout, and the opening line
-    expect(w.repo.getPageRequest(w.session.tempData.pageId)!.sysopHandle).toBe('Agnus');   // the admin's name, default Agnus (K5)
+    expect(w.repo.getPageRequest(w.session.tempData.pageId)!.sysopHandle).toBe('Kevin');   // the admin's name, default Kevin (K5)
 
     // The caller types their line as the chat branch drives it, then return.
     for (const ch of 'hello grumpy') H.callerTypedChar(w.io, w.session, ch);
@@ -84,10 +85,8 @@ describe('the grumpy bot answers a caller', () => {
     // chat branch as they typed (express.e:6172, 6138); what arrives now is
     // the reply, a character at a time, the sysop colour first (6164-6167).
     expect(w.seen[before]).toMatch(/^\x1b\[36m.$/);
-    // EITHER TAG. The bot answers `[AI] ...` when the provider cascade
-    // returns something and `[RB] ...` when it falls back to the rule-based
-    // replies (grumpy-sysop-bot.handler.ts:861,870). Which engine served the
-    // line is a configuration detail; what this test is about is that a reply
+    // A reply is a reply: the engine tags went with the rule-based bot
+    // (2026-09-08), and what matters is that something came back.
     // came at all, without the caller pressing a key.
     expect(text).toMatch(BOT_REPLY);
   });

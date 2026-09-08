@@ -905,8 +905,8 @@ export function OperatorChatSettingsPage() {
             {/* The co-sysop's name */}
             <div>
               <label className="block text-sm font-medium text-content-primary mb-1">AI Co-Sysop Name</label>
-              <input type="text" maxLength={30} {...register('aiSysopName')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded" placeholder="Agnus" />
-              <p className="text-xs text-content-secondary mt-1">The handle it answers pages under: the start line, the message sender, how it introduces itself. Default Agnus.</p>
+              <input type="text" maxLength={30} {...register('aiSysopName')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded" placeholder="Kevin" />
+              <p className="text-xs text-content-secondary mt-1">The handle it answers pages under: the start line, the message sender, how it introduces itself. Default Kevin.</p>
             </div>
 
             {/* Tools */}

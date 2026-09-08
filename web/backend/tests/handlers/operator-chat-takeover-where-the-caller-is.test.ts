@@ -39,7 +39,8 @@ const plain = (chunks: string[]) =>
 
 /** Every intro GrumpyBot can open with (grumpy-sysop-bot.handler.ts:886-). */
 const INTRO = /is AFK|isn't answering|sysop is off doing|didn't answer your page/;
-const BOT_REPLY = /\[(AI|RB)\]/;
+/** With one engine there is no tag; a reply is a reply. */
+const BOT_REPLY = /\S/;
 
 interface World {
   repo: OperatorChatRepository;

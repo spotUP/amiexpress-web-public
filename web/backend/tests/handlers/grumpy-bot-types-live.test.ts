@@ -56,18 +56,19 @@ describe('the typing plan', () => {
   });
 });
 
-describe('the engine tag', () => {
-  it('is stripped from a model line, however many times it was copied', () => {
+describe('the engine tags, now that there is one engine', () => {
+  it('are still stripped - from a model line, and from the rows a board recorded while they were in use', () => {
     expect(stripEngineTag('[AI] [AI] *grumble* OH, real mature.')).toBe('*grumble* OH, real mature.');
     expect(stripEngineTag('[RB] Read the docs.')).toBe('Read the docs.');
     expect(stripEngineTag('No tag here')).toBe('No tag here');
   });
-  it('is added exactly once, in front, by us', async () => {
+  it('are never added: with no provider reachable the co-sysop says so, plainly', async () => {
     const reply = await getGrumpySysopResponse('hi', {
       userHandle: 'Caller', nodeId: 1, conferenceName: 'General', timeOnline: 5,
       messageHistory: [{ role: 'bot', content: '[RB] [RB] earlier line' }],
-    }, { provider: 'rule-based' });
-    expect(reply).toMatch(/^\[RB\] (?!\[)/);
+    }, { provider: 'openrouter', openRouterApiKey: '', budgetMs: 500 });
+    expect(reply).not.toMatch(/^\[(AI|RB)\]/);
+    expect(reply).toContain('ask me again in a minute');
   });
 });
 
@@ -124,7 +125,7 @@ describe('the chat is one stream', () => {
     expect(all).not.toContain('\x1b[?1000h');
     expect(all).not.toMatch(/\x1b\[\d+;\d+H/);
     // express.e:6085-6087, the built-in start line, in the colour that was current.
-    expect(all).toContain('\r\n\r\nThis is Agnus, How can I help you??\r\n\r\n');   // the co-sysop's admin-set handle, default Agnus
+    expect(all).toContain('\r\n\r\nThis is Kevin, How can I help you??\r\n\r\n');   // the co-sysop's admin-set handle, default Kevin
     // The opening line is a message: saved, and typed after the start line.
     const messages = w.repo.getChatMessages(pageId);
     expect(messages.length).toBe(1);
@@ -168,7 +169,8 @@ describe('the chat is one stream', () => {
     expect(reply.filter((c) => c.startsWith('\x1b[36m')).length).toBe(1);
     const said = w.repo.getChatMessages(w.session.tempData.pageId).filter((m: any) => m.senderId === 'bot').pop()!.message as string;
     expect(shown(reply).replace(/\s/g, '')).toContain(said.replace(/\s/g, ''));
-    expect(reply[reply.length - 1]).toBe('\r\n');
+    // Return twice: the line ends, then a blank line hands the turn back.
+    expect(reply.slice(-2)).toEqual(['\r\n', '\r\n']);
   });
 
   it('past 78 columns the half-typed word moves to the next line (express.e:6181-6223)', () => {
