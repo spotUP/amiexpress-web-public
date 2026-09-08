@@ -109,17 +109,28 @@ export function formatLongDateTime(date: Date): string {
 }
 
 /**
- * Format date/time in Unix ctime format ("Mon Jan 07 14:32:00 2026").
+ * Format date/time the way express does: "Mon Jan 07 14:32:00 2026".
  * 1:1 port of MiscFuncs.e:343-364 formatCDateTime().
  *
- * Express.e callers feed this into screens / display via ~CT etc.; the
- * format exactly matches the C `ctime()` output so any door reading the
- * stamp via the standard Amiga API gets a familiar string.
+ * It LOOKS like C's ctime and is not built like it. MiscFuncs.e:361 assembles
+ * the string out of the AmigaDOS pieces:
  *
- * Audit H-CDateTime flagged the previous shape (`date.toISOString()` →
- * "2026-01-07T14:32:00.000Z") as incorrect — useful for logs but wrong
- * for the AmigaOS-compat surface. Use `date.toISOString()` directly
- * elsewhere if you need ISO 8601.
+ *   StringF(outDateStr,'\s[3] \s[3] \s[2] \s \d\s',
+ *           daystr, datestr+3, datestr, timestr, century, datestr+7)
+ *
+ * with FORMAT_DOS, where daystr="Monday", datestr="07-Jan-26",
+ * timestr="14:32:00" - so the day of month is the FIRST TWO CHARACTERS OF THE
+ * DOS DATE, which is zero-padded. C's ctime pads it with a space instead
+ * ("Jan  7"), and this used to copy C rather than express: a door asking for
+ * DT_STAMP_LASTON got a day the real board never writes.
+ *
+ * Exactly 24 characters, which is what fits WarOLM's `%-24.24s` field.
+ *
+ * Audit H-CDateTime flagged the shape before that (`date.toISOString()`) as
+ * wrong for the AmigaOS-compat surface. Use `date.toISOString()` directly
+ * elsewhere if you need ISO 8601, and `formatLongDateTime` for express's
+ * OTHER date format ("Mon 07-Jan-2026 14:32:00", MiscFuncs.e:320-341) - the
+ * two are not interchangeable and both are express's.
  *
  * @param date - Date to format
  * @returns "DDD MMM DD HH:MM:SS YYYY"
@@ -131,8 +142,9 @@ export function formatCDateTime(date: Date): string {
 
   const dayName = dayNames[date.getDay()];
   const month = monthNames[date.getMonth()];
-  // Day-of-month: ctime uses space-padded, not zero-padded ('Jan  7' not 'Jan 07').
-  const day = String(date.getDate()).padStart(2, ' ');
+  // MiscFuncs.e:361 takes `\s[2]` of the FORMAT_DOS date string, which is
+  // "07-Jan-26" - zero-padded, not the space-padded day C's ctime writes.
+  const day = String(date.getDate()).padStart(2, '0');
   const hours = String(date.getHours()).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
   const seconds = String(date.getSeconds()).padStart(2, '0');

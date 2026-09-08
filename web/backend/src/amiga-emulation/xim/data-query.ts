@@ -19,26 +19,21 @@ import { ximLogger } from '../../utils/XIMLogger';
 import { debugLog } from '../../utils/debug-log';
 import * as amigafs from '../../utils/amigafs';
 import { checkSecurity } from '../../utils/acs.util';
+import { formatCDateTime } from '../../utils/date-time.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 
-const DATE_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const DATE_WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-
-/**
- * Format a Date as express.e's formatCDateTime output:
- * "Wkd DD-Mmm-YYYY HH:MM:SS" — 24 characters, fits WarOLM's `%-24.24s`
- * field and every other door that embeds the string in a fixed slot.
+/*
+ * The date a door is handed is express's, from one place.
+ *
+ * This file used to carry a `formatCDateTime` of its own that produced
+ * "Wkd DD-Mmm-YYYY HH:MM:SS" - which is express's OTHER format,
+ * formatLongDateTime (MiscFuncs.e:320-341). DT_STAMP_LASTON and
+ * DT_STAMP_CTIME (express.e:3769, :3775) call formatCDateTime, which is
+ * MiscFuncs.e:343-364 and reads "Mon Jan 07 14:32:00 2026". Two functions of
+ * the same name disagreeing about which format they are is how a door comes
+ * to parse a date the real board never sends; both are 24 characters, so
+ * WarOLM's `%-24.24s` field is satisfied either way and nothing complained.
  */
-function formatCDateTime(d: Date): string {
-  const wkd = DATE_WEEKDAYS[d.getDay()];
-  const day = d.getDate().toString().padStart(2, '0');
-  const mon = DATE_MONTHS[d.getMonth()];
-  const yr  = d.getFullYear().toString().padStart(4, '0');
-  const hh  = d.getHours().toString().padStart(2, '0');
-  const mm  = d.getMinutes().toString().padStart(2, '0');
-  const ss  = d.getSeconds().toString().padStart(2, '0');
-  return `${wkd} ${day}-${mon}-${yr} ${hh}:${mm}:${ss}`;
-}
 
 export class XIMDataQueryHandler {
   private emulator: MoiraEmulator;

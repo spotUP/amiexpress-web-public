@@ -6,7 +6,7 @@ import { AREXXContext, AREXXScript } from '../types';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { AREXXFileIO } from './arexx-file-io';
 import { callersLogManager } from './CallersLogManager';
-import { getSystemTime } from '../utils/date-time.util';
+import { formatCDateTime, formatLongDateTime, getSystemTime } from '../utils/date-time.util';
 import { doorScreenWidth } from '../amiga-emulation/xim/screen-width.util';
 
 /**
@@ -1868,6 +1868,20 @@ console.error('BBSCREATEDROPFILE error:', error);
       const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       return `${days[d.getDay()]} ${pad2(d.getDate())}-${months[d.getMonth()]}-${d.getFullYear()}`;
     };
+    /**
+     * The stored last-login, as a Date.
+     *
+     * `user.lastLogin` is Unix SECONDS in this board's database
+     * (amiga-emulation/xim/data-query.ts says so where it reads the same
+     * field). `new Date(seconds)` reads them as MILLISECONDS, which put every
+     * AREXX door's "last on" in January 1970.
+     */
+    const lastLoginDate = (raw: unknown): Date | null => {
+      if (raw === undefined || raw === null || raw === '') return null;
+      if (typeof raw === 'number') return new Date(raw * 1000);
+      const parsed = new Date(raw as string);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    };
     const calcSize = (bytes: number): string => {
       // express.e calcSizeText (MiscFuncs.e:3336-3370) — divide by
       // 1024 until <1024, append lowercase unit.
@@ -1898,8 +1912,15 @@ console.error('BBSCREATEDROPFILE error:', error);
       case 141: return String(session?.nodeId ?? 1);                                   //   both return node ID as string
       case 140: return String(session?.taskPri ?? 0);                                  // BB_TASKPRI (bbs-info.ts:267)
       case 142: return safeChatFlag();                                                 // BB_CHATFLAG (express.e:1376, 3751, 6924)
-      case 144: return formatTime(new Date());                                         // DT_STAMP_CTIME — current time HH:MM:SS
-      case 145: return formatDate(new Date()) + ' ' + formatTime(new Date());          // DT_CURR_TIME — full date+time
+      // express.e:3775 answers DT_STAMP_CTIME with formatCDateTime, the whole
+      // stamp ("Mon Jan 07 14:32:00 2026"), and :3772 answers DT_CURR_TIME
+      // with `StringF('\d', getSystemTime())` - the raw seconds, not a
+      // rendered date. These two used to answer "14:32:00" and a date-and-time
+      // string of their own, so the same field id meant different things
+      // depending on whether a door came through AREXX or XIM
+      // (amiga-emulation/xim/data-query.ts answers both the express way).
+      case 144: return formatCDateTime(getSystemTime());                                // DT_STAMP_CTIME (express.e:3775)
+      case 145: return String(Math.floor(getSystemTime().getTime() / 1000));            // DT_CURR_TIME (express.e:3772)
       case 147: { // BB_PCONFLOCAL — previous-conf local path (express.e prevConf)
         const prev = session?.previousConf ?? session?.lastConf ?? session?.currentConf ?? 1;
         return `BBS:Conf${prev}/`;
@@ -1992,9 +2013,10 @@ console.error('BBSCREATEDROPFILE error:', error);
       case 906: return String(callsToday);                                             // DT_CALLEDTODAY
 
       // --- Time -------------------------------------------------------
-      case 113: return user.lastLogin                                                  // DT_TIMELASTON (express.e:5317 formatLongDateTime)
-        ? formatDate(new Date(user.lastLogin)) + ' ' + formatTime(new Date(user.lastLogin))
-        : 'Never';
+      case 113: {                                                                      // DT_TIMELASTON (express.e:5317 formatLongDateTime)
+        const when = lastLoginDate(user.lastLogin);
+        return when ? formatLongDateTime(when) : 'Never';
+      }
       // Time fields return raw SECONDS. Aedoc4 §Cap1101114-116 says
       // "in seconds"; express.e:3595-3614 returns the raw
       // `loggedOnUser.timeUsed` / `timeLimit` / `timeTotal` fields
@@ -2010,9 +2032,12 @@ console.error('BBSCREATEDROPFILE error:', error);
       case 115: return String(user.timeLimit ?? 3600);                                  // DT_TIMELIMIT — seconds total allowed
       case 116: return String(user.timeTotal ?? user.timeLimit ?? 3600);                // DT_TIMETOTAL — seconds total daily allowance
       case 125: return String(Math.floor((session?.timeRemaining ?? 0) / 60));         // DT_TIMEOUT — minutes remaining
-      case 143: return user.lastLogin                                                  // DT_STAMP_LASTON
-        ? formatDate(new Date(user.lastLogin)) + ' ' + formatTime(new Date(user.lastLogin))
-        : '';
+      case 143: {                                                                      // DT_STAMP_LASTON (express.e:3769 formatCDateTime)
+        // NOT formatLongDateTime: :3769 calls formatCDateTime, which is the
+        // other of express's two date formats. This answered the long one.
+        const when = lastLoginDate(user.lastLogin);
+        return when ? formatCDateTime(when) : '';
+      }
 
       // --- Bytes ------------------------------------------------------
       case 117: return String(uploadBytes);                                            // DT_BYTESUPLOAD (express.e:5353 formatBCD)

@@ -142,35 +142,44 @@ describe('Date/Time Utility Functions', () => {
   });
 
   describe('formatCDateTime', () => {
-    // Audit H-CDateTime: this used to return ISO 8601, but the spec
-    // (MiscFuncs.e:343-364) is Unix ctime — "DDD MMM DD HH:MM:SS YYYY"
-    // with a space-padded (not zero-padded) day of month. Tests below
-    // run in the local timezone the test machine is in; we assert
-    // structure, not the exact numbers, so the suite stays portable.
+    // MiscFuncs.e:343-364. It looks like C's ctime and is not built like it:
+    // :361 assembles the string from the AmigaDOS pieces, and the day of month
+    // is `\s[2]` of the FORMAT_DOS date "07-Jan-26" - zero-padded. C pads it
+    // with a space ("Jan  7"), and this port used to copy C, so a door asking
+    // for DT_STAMP_LASTON was handed a day the real board never writes.
+    // Tests run in the machine's local timezone, so structure is asserted
+    // rather than an absolute instant.
 
-    it('should produce the ctime "DDD MMM DD HH:MM:SS YYYY" shape', () => {
+    it('is express\'s "DDD MMM DD HH:MM:SS YYYY"', () => {
       const date = new Date(2026, 0, 7, 14, 32, 15); // Jan 7, 2026, 14:32:15 local
-      const result = formatCDateTime(date);
-      // ctime example output: "Wed Jan  7 14:32:15 2026"
-      expect(result).toMatch(/^[A-Z][a-z]{2} [A-Z][a-z]{2} [ 1-3]\d \d{2}:\d{2}:\d{2} \d{4}$/);
-      // Year should be 2026 (last 4 chars).
-      expect(result.endsWith(' 2026')).toBe(true);
-      // Time component fixed.
-      expect(result.includes(' 14:32:15 ')).toBe(true);
+
+      expect(formatCDateTime(date)).toBe('Wed Jan 07 14:32:15 2026');
     });
 
-    it('uses a SPACE-padded (not zero-padded) day of month', () => {
-      const date = new Date(2026, 0, 7, 0, 0, 0); // 7th — single-digit day
-      const result = formatCDateTime(date);
-      // " 7" with leading space, NEVER "07"
-      expect(result).toMatch(/[A-Z][a-z]{2}  7 /);
-      expect(result).not.toMatch(/[A-Z][a-z]{2} 07 /);
+    it('zero-pads the day, because the DOS date string it is cut from does', () => {
+      expect(formatCDateTime(new Date(2026, 0, 7, 0, 0, 0))).toMatch(/Jan 07 /);
+      // C's ctime writes "Jan  7"; express does not, and a door parsing a
+      // fixed field would read the wrong column.
+      expect(formatCDateTime(new Date(2026, 0, 7, 0, 0, 0))).not.toMatch(/Jan {2}7 /);
     });
 
-    it('two-digit day stays two digits (no leading space stripped)', () => {
-      const date = new Date(2026, 0, 25, 0, 0, 0); // Jan 25
-      const result = formatCDateTime(date);
-      expect(result).toMatch(/Jan 25 /);
+    it('two-digit day stays two digits', () => {
+      expect(formatCDateTime(new Date(2026, 0, 25, 0, 0, 0))).toMatch(/Jan 25 /);
+    });
+
+    it('is 24 characters, which is what fits a door\'s fixed field', () => {
+      // WarOLM embeds it with `%-24.24s`; a longer string is silently cut.
+      expect(formatCDateTime(new Date(2026, 0, 7, 14, 32, 15))).toHaveLength(24);
+      expect(formatCDateTime(new Date(1995, 11, 25, 9, 0, 0))).toHaveLength(24);
+    });
+
+    it('is NOT formatLongDateTime, which is express\'s other date', () => {
+      // MiscFuncs.e:320-341 vs :343-364. The XIM data query used to answer
+      // DT_STAMP_CTIME with this one under the other one's name.
+      const date = new Date(2026, 0, 7, 14, 32, 15);
+
+      expect(formatLongDateTime(date)).toBe('Wed 07-Jan-2026 14:32:15');
+      expect(formatCDateTime(date)).not.toBe(formatLongDateTime(date));
     });
   });
 
