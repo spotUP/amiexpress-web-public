@@ -447,8 +447,15 @@ const BACKUP_NAME = /(\.bak\b|\.old\b|\.orig\b|\.stale\b|\.backup|~$|\.save\b|\.
  * Left unmarked, seeding a theme copied the bulletin into it, and a theme copy
  * WINS the global screen walk - so the leaderboards froze at the moment the
  * theme was made (measured on the live board, 2026-09-08).
+ *
+ * `quicknew.txt` is here for the same reason, found by auditing the whole
+ * class after that bug rather than waiting for it to bite twice: the batch
+ * jobs redirect a door's stdout over it every run (see command.handler's
+ * EXEC_QUICKNEW comment), and a theme seeded today would serve last week's
+ * new-files list for ever. Content cannot catch it - the file is whatever
+ * door the sysop pointed the batch at.
  */
-const RUNTIME_NAME = /^(callerslog.*|lastc\.txt|achievetop\.txt|.*\.log)$/i;
+const RUNTIME_NAME = /^(callerslog.*|lastc\.txt|achievetop\.txt|quicknew\.txt|.*\.log)$/i;
 
 /**
  * Signatures of the tools that WRITE screens on this board.
@@ -464,6 +471,11 @@ const RUNTIME_NAME = /^(callerslog.*|lastc\.txt|achievetop\.txt|.*\.log)$/i;
 const RUNTIME_CONTENT: { marker: RegExp; tool: string }[] = [
   { marker: /MultiTop/i, tool: 'MultiTop-II' },
   { marker: /l\s*AST\s*c\s*ALLERS|LAST CALLERS/i, tool: 'a last-callers generator' },
+  // S-AmiLog's record table (SamiLogService.generateRecordStats). Unlike its
+  // weekly sibling it signs nothing - the "Last Callers" marker above catches
+  // that one - and the batch writes it to a path the SYSOP names, so there is
+  // no filename to match on either. This header IS the signature.
+  { marker: /^\s*Area\s+Record\s+Date\s*$/m, tool: 'S-AmiLog record stats' },
 ];
 
 function classifyGenerated(
