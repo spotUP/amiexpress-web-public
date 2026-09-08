@@ -91,12 +91,34 @@ function isCommodoreHardware(session: BBSSession): boolean {
 /**
  * Get the appropriate protocol for a session based on terminal type
  */
+/**
+ * Stored preferences that are not protocols.
+ *
+ * `W` offers a seventh option, "WebSocket (Browser)", and stores `websocket` -
+ * a value `TransferProtocol` has never had a member for, so it matched nothing
+ * here and the caller silently got whatever the transport default was. What he
+ * was choosing is real, though: the browser's own ZMODEM, over the socket.
+ * So it resolves to ZMODEM rather than being dropped.
+ *
+ * NOT on real Commodore hardware. A C64 cannot do ZMODEM - the sysop's
+ * standing rule, and the reason Punter exists here - so a stored `websocket`
+ * on that session falls through to the transport's own answer below, which
+ * gives it Punter.
+ */
+const PREFERENCE_ALIASES: Record<string, TransferProtocol> = {
+  websocket: 'zmodem',
+};
+
 export function getDefaultProtocol(session: BBSSession): TransferProtocol {
   // If user has a stored protocol preference, use it
   if (session.user?.protocol) {
     const userProtocol = session.user.protocol.toLowerCase();
     if (userProtocol in PROTOCOL_NAMES) {
       return userProtocol as TransferProtocol;
+    }
+    const alias = PREFERENCE_ALIASES[userProtocol];
+    if (alias && !isCommodoreHardware(session)) {
+      return alias;
     }
     // Try to match by ID
     const protocolId = parseInt(userProtocol);

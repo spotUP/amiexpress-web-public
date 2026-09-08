@@ -36,6 +36,28 @@ describe('the default protocol', () => {
     expect(getDefaultProtocol({ ...petsciiBrowser, user: { protocol: 'punter' } })).toBe('punter');
     expect(getDefaultProtocol({ ...realC64, user: { protocol: 'zmodem' } })).toBe('zmodem');
   });
+
+  /**
+   * P3-4, transfer row 4. `W` offers a seventh option, "WebSocket (Browser)",
+   * and stores `websocket` - a value TransferProtocol has no member for, so it
+   * matched nothing and the caller silently got the transport default. What he
+   * picked is real (the browser's own ZMODEM over the socket), so it resolves.
+   */
+  it('reads a stored "websocket" as the browser ZMODEM it means', () => {
+    expect(getDefaultProtocol({ ...ansiBrowser, user: { protocol: 'websocket' } })).toBe('zmodem');
+    expect(getDefaultProtocol({ ...petsciiBrowser, user: { protocol: 'websocket' } })).toBe('zmodem');
+  });
+
+  it('does NOT read it that way on real Commodore hardware', () => {
+    // A C64 cannot do ZMODEM - the sysop's standing rule, and the reason
+    // Punter is here at all. The alias must not smuggle it in.
+    expect(getDefaultProtocol({ ...realC64, user: { protocol: 'websocket' } })).toBe('punter');
+  });
+
+  it('leaves a preference nobody recognises to the transport', () => {
+    expect(getDefaultProtocol({ ...ansiBrowser, user: { protocol: 'carrier-pigeon' } })).toBe('zmodem');
+    expect(getDefaultProtocol({ ...realC64, user: { protocol: 'carrier-pigeon' } })).toBe('punter');
+  });
 });
 
 describe('the protocols on offer', () => {

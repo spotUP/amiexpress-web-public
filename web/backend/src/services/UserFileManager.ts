@@ -532,6 +532,19 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
     return map[zoomType] || 0;
   }
 
+  /**
+   * The four names this port knows, and a slot number for everything else.
+   *
+   * `xferProtocol` is an INDEX into the BOARD's own XprTypes list
+   * (express.e:15618, :11388), not a global protocol id - so what slot 8 means
+   * depends on the board an account came from, and naming it would be
+   * inventing a fact. Slots outside the four we can name round-trip as
+   * `/X <n>`: `intToProtocol` writes that, this reads it back, and an imported
+   * account keeps the number it arrived with.
+   *
+   * Before this, every unknown slot read as `/X Zmodem` and was written back
+   * as 0 on the next save - a one-way, silent loss of the caller's setting.
+   */
   private protocolToInt(protocol: string): number {
     const map: { [key: string]: number } = {
       '/X Zmodem': 0,
@@ -539,7 +552,15 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
       'Ymodem': 2,
       'Xmodem': 3,
     };
-    return map[protocol] || 0;
+    if (protocol in map) return map[protocol];
+    const slot = /^\/X (\d+)$/.exec(String(protocol ?? '').trim());
+    if (slot) {
+      const index = Number(slot[1]);
+      // The field is an INT on disk; a number that would not survive the write
+      // is not a slot that board had either.
+      if (Number.isInteger(index) && index >= 0 && index <= 32767) return index;
+    }
+    return 0;
   }
 
   private screenTypeToInt(screenType: string): number {
@@ -570,6 +591,7 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
     return map[value] || 'QWK';
   }
 
+  /** The other direction. See `protocolToInt` for why `/X <n>` exists. */
   private intToProtocol(value: number): string {
     const map: { [key: number]: string } = {
       0: '/X Zmodem',
@@ -577,7 +599,9 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
       2: 'Ymodem',
       3: 'Xmodem',
     };
-    return map[value] || '/X Zmodem';
+    if (value in map) return map[value];
+    if (Number.isInteger(value) && value > 0) return `/X ${value}`;
+    return '/X Zmodem';
   }
 
   private intToScreenType(value: number): string {
