@@ -282,8 +282,10 @@ export function usePushNotifications() {
     if (!registration) return;
     await registration.showNotification('Test Notification', {
       body: 'Push notifications are working!',
-      icon: '/favicon.ico',
-      badge: '/favicon.ico',
+      // Relative, so it resolves against the admin's own base. `/favicon.ico`
+      // is not served by this board and answered 404 on every notification.
+      icon: `${import.meta.env.BASE_URL}icon.svg`,
+      badge: `${import.meta.env.BASE_URL}icon.svg`,
       tag: 'test'
     });
   }, [state.isSubscribed]);

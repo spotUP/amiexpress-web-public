@@ -64,7 +64,12 @@ vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
   if (url.includes('/validation')) return envelope({ blocking: [], advisory: [], publishable: true, coverage: { provided: 2, total: 44 } });
   if (url.includes('/api/themes')) return envelope(themes);
   if (url.includes('/api/mci')) return envelope({ codes: [] });
-  if (url.includes('/config/users')) return envelope({ users: [] });
+  // Level-100 accounts: one owns a theme already, one does not.
+  if (url.includes('/config/users')) return envelope([
+    { username: 'tango', secLevel: 100 },
+    { username: 'jucke', secLevel: 100 },
+    { username: 'ordinary', secLevel: 50 },
+  ]);
   return envelope(index);
 }));
 
@@ -117,6 +122,30 @@ describe('a sysop in the artist studio', () => {
     // from the Themes tab.
     expect(screen.queryByRole('button', { name: /send for review/i })).toBeNull();
     expect(screen.getByRole('button', { name: /check/i })).toBeTruthy();
+  });
+
+  /*
+   * A theme is made the first time an account opens the studio, so an artist
+   * who never has cannot be audited: "i can't impersonate jucke for example
+   * there are no themes for him". The sysop can start one for them.
+   */
+  it('offers to start a theme for a level-100 account that has none', async () => {
+    const user = userEvent.setup();
+    render(<ArtistStudioPage />, { wrapper });
+
+    const picker = await screen.findByLabelText('Artist with no theme');
+    const offered = Array.from(picker.querySelectorAll('option')).map(o => o.textContent);
+
+    // tango owns one already; jucke does not; a level-50 caller is not an artist.
+    expect(offered).toContain('jucke');
+    expect(offered).not.toContain('tango');
+    expect(offered).not.toContain('ordinary');
+
+    await user.selectOptions(picker, 'jucke');
+
+    await waitFor(() => expect(
+      writes.some(write => write.startsWith('POST') && write.includes('/api/themes')),
+    ).toBe(true));
   });
 
   it('draws that artist gallery, not the board own', async () => {

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- The admin's own mark: a terminal, because that is what this configures.
+       An SVG rather than an .ico so it is text in the repo, and it is served
+       from the admin's own base (/admin/icon.svg) - the Vite template's
+       /vite.svg and the /favicon.ico the notifications asked for were both
+       404 on the live board. -->
+  <rect width="64" height="64" rx="8" fill="#101418"/>
+  <rect x="6" y="10" width="52" height="40" rx="4" fill="#0b0e11" stroke="#3aa0ff" stroke-width="2"/>
+  <path d="M14 22 l8 6 -8 6" fill="none" stroke="#3aa0ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="26" y="32" width="16" height="3" rx="1.5" fill="#3aa0ff"/>
+  <rect x="22" y="54" width="20" height="3" rx="1.5" fill="#3aa0ff"/>
+</svg>

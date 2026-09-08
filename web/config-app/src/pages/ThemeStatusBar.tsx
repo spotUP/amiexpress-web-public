@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ShieldCheck, Monitor, Send, Eye } from 'lucide-react';
 
 import { apiClient } from '../api/client';
+import { artistThemeSlug, artistThemeTitle, nextFreeSlug } from './artist-theme';
 import { Modal } from '../components/ui/Modal';
 import { SkeletonRows } from '../components/ui/states';
 import { ScreenPreviewPanel } from '../components/ScreenPreviewPanel';
@@ -48,6 +49,8 @@ export interface ThemeStatusBarProps {
   onSelect: (slug: string) => void;
   /** The screens the board can display, for the preview picker. */
   screenNames: string[];
+  /** Sysop only: the accounts that could own a theme and do not yet. */
+  artistsWithoutATheme?: string[];
   /**
    * The open theme belongs to somebody else, so this is an audit.
    *
@@ -58,7 +61,9 @@ export interface ThemeStatusBarProps {
   auditing?: boolean;
 }
 
-export function ThemeStatusBar({ theme, choices, onSelect, screenNames, auditing }: ThemeStatusBarProps) {
+export function ThemeStatusBar({
+  theme, choices, onSelect, screenNames, auditing, artistsWithoutATheme = [],
+}: ThemeStatusBarProps) {
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useNotification();
   const [checking, setChecking] = useState(false);
@@ -70,6 +75,35 @@ export function ThemeStatusBar({ theme, choices, onSelect, screenNames, auditing
     queryFn: () => apiClient.getScreenThemeValidation(theme.slug),
   });
   const report = (data as { data?: ThemeValidation } | undefined)?.data;
+
+  /*
+   * A THEME AN ARTIST HAS NOT ASKED FOR YET.
+   *
+   * One is made the first time that account opens the studio - so an artist
+   * who never has cannot be audited, and the sysop found exactly that:
+   * "all level 100 users should have a copy of the default theme to start
+   * from. but they dont, i can't impersonate jucke for example". The server
+   * lets a sysop name the owner, so the sysop can start it for them; it is
+   * seeded from the board like any other.
+   */
+  const startForArtist = useMutation({
+    retry: false,
+    mutationFn: async (username: string) => {
+      const taken = new Set(choices.map(entry => entry.slug));
+      return apiClient.createScreenTheme({
+        slug: nextFreeSlug(artistThemeSlug(username), taken),
+        title: artistThemeTitle(username),
+        author: username,
+        owner: username,
+        widths: [80],
+      });
+    },
+    onSuccess: async (_answer, username) => {
+      showSuccess(`${username} has a theme to draw in`);
+      await queryClient.invalidateQueries({ queryKey: ['screen-themes'] });
+    },
+    onError: (error: Error) => showError(error.message),
+  });
 
   const sendForReview = useMutation({
     mutationFn: () => apiClient.updateScreenTheme(theme.slug, { status: 'review' }),
@@ -128,6 +162,28 @@ export function ThemeStatusBar({ theme, choices, onSelect, screenNames, auditing
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {artistsWithoutATheme.length > 0 && (
+            <div className="flex items-center gap-2">
+              <label htmlFor="start-for-artist" className="sr-only">Artist with no theme</label>
+              <select
+                id="start-for-artist"
+                className="input-field"
+                defaultValue=""
+                disabled={startForArtist.isPending}
+                onChange={event => {
+                  const username = event.target.value;
+                  event.target.value = '';
+                  if (username) startForArtist.mutate(username);
+                }}
+              >
+                <option value="">Start a theme for...</option>
+                {artistsWithoutATheme.map(username => (
+                  <option key={username} value={username}>{username}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button type="button" className="btn-secondary inline-flex items-center gap-1"
             onClick={() => setChecking(true)}>
             <ShieldCheck size={16} /> Check

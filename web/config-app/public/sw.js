@@ -26,8 +26,8 @@ self.addEventListener('push', (event) => {
   let data = {
     title: 'Operator Page',
     body: 'Someone is paging the sysop',
-    icon: '/favicon.ico',
-    badge: '/favicon.ico',
+    icon: 'icon.svg',
+    badge: 'icon.svg',
     tag: 'operator-page',
     data: {}
   };
@@ -42,8 +42,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: data.icon || '/favicon.ico',
-    badge: data.badge || '/favicon.ico',
+    icon: data.icon || 'icon.svg',
+    badge: data.badge || 'icon.svg',
     tag: data.tag || 'operator-page',
     data: data.data || {},
     requireInteraction: true, // Keep notification visible until user interacts

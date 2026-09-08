@@ -185,8 +185,10 @@ export function createPageNotificationPayload(
   return {
     title: 'Operator Page Request',
     body: `${userHandle} @Node${nodeId} is paging you from ${conferenceName}`,
-    icon: '/favicon.ico',
-    badge: '/favicon.ico',
+    // The admin's own icon, under its own base. `/favicon.ico` is not served
+    // by this board - every notification asked for it and got a 404.
+    icon: '/admin/icon.svg',
+    badge: '/admin/icon.svg',
     tag: `page-${pageId}`, // Replaces existing notifications with same tag
     data: {
       pageId,

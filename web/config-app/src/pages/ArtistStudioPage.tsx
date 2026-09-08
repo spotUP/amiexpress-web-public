@@ -33,6 +33,21 @@ const SCOPE_LABEL = {
 
 export function ArtistStudioPage() {
   const { theme, choices, select, isPreparing, error, auditing, sysop } = useMyTheme();
+
+  /*
+   * WHO COULD OWN A THEME AND DOES NOT YET.
+   *
+   * A theme is made the first time an account opens this page, so an artist
+   * who never has cannot be audited by the sysop: "all level 100 users should
+   * have a copy of the default theme to start from. but they dont't i can't
+   * impersonate jucke for example there are no themes for him?". The sysop
+   * gets a way to start one for them; nobody else asks for the user list.
+   */
+  const { data: userList } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => apiClient.getUsers(),
+    enabled: sysop,
+  });
   const [openPath, setOpenPath] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   /** Everything, or only what is still to draw. */
@@ -99,6 +114,20 @@ export function ArtistStudioPage() {
       item.label.toLowerCase().includes(needle) || item.path.toLowerCase().includes(needle));
   }, [items, todoItems, todoOnly, search]);
 
+  const artistsWithoutATheme = useMemo(() => {
+    if (!sysop) return [];
+    const owners = new Set(choices.map(entry => entry.owner.trim().toLowerCase()).filter(Boolean));
+    const users = ((userList as { data?: unknown } | undefined)?.data ?? []) as
+      Array<{ username?: string; secLevel?: number }>;
+    return users
+      // The level the admin itself is gated on: an account that can reach the
+      // screens page is an account that can own a theme.
+      .filter(user => (user.secLevel ?? 0) >= 100)
+      .map(user => (user.username ?? '').trim())
+      .filter(username => username && !owners.has(username.toLowerCase()))
+      .sort((a, b) => a.localeCompare(b));
+  }, [sysop, choices, userList]);
+
   const screenNames = useMemo(
     () => (data?.screens ?? []).map(entry => entry.screen),
     [data],
@@ -137,6 +166,7 @@ export function ArtistStudioPage() {
         onSelect={select}
         screenNames={screenNames}
         auditing={auditing}
+        artistsWithoutATheme={artistsWithoutATheme}
       />
 
       {/* The one number an artist wants, and where the work is. */}
