@@ -6,6 +6,7 @@ import * as path from 'path';
 import { db } from '../database';
 import { QWKPacket, QWKMessage, FTNMessage } from '../types';
 import { getSystemTime } from '../utils/date-time.util';
+import { config } from '../config';
 
 export class QWKManager {
   private qwkPath: string;
@@ -282,9 +283,27 @@ console.error('Error parsing QWK message:', error);
     const timestamp = getSystemTime().toISOString().slice(0, 10).replace(/-/g, '');
     const filename = `${this.bbsId}${timestamp}.QWK`;
 
-    // Generate QWK packet (simplified)
+    /**
+     * CONTROL.DAT, built to qwk.e's layout by the function that has been
+     * sitting here unused. Board identity comes from the board's own config;
+     * the conference list is the set this packet actually carries, which is
+     * what a reader uses to name each message's conference.
+     */
+    // bbsName and sysopName are what this board's config actually carries;
+    // location and phone are Fido-era CONTROL.DAT fields it has no setting
+    // for, and a reader tolerates them being blank.
+    const control = this.createControlDat(
+      config.get('bbsName') || 'AmiExpress BBS',
+      '',
+      '',
+      config.get('sysopName') || 'Sysop',
+      userId,
+      conferences.map((id) => ({ id, name: `Conference ${id}` })),
+      messages.length,
+    );
+
     const packetPath = path.join(this.qwkPath, filename);
-    await this.writeQWKPacket(packetPath, messages);
+    await this.writeQWKPacket(packetPath, messages, control);
 
     // Create packet record
     const packetId = await db.createQWKPacket({
@@ -300,8 +319,25 @@ console.error('Error parsing QWK message:', error);
     return filename;
   }
 
-  // Write QWK packet file (proper QWK format implementation)
-  private async writeQWKPacket(filePath: string, messages: QWKMessage[]): Promise<void> {
+  /**
+   * Write the packet a QWK reader can actually open.
+   *
+   * A .QWK file is a ZIP archive, and CONTROL.DAT inside it is what every
+   * reader opens first: it names the board, the user and the conferences, and
+   * without it the packet is refused outright.
+   *
+   * This wrote MESSAGES.DAT's bytes straight into a file called `.QWK` - not
+   * an archive, and with no CONTROL.DAT anywhere, though `createControlDat`
+   * had been written to qwk.e's layout and sat here calling nothing. The ZOOM
+   * command announced "Pack Method 1) LHA, 2) ZIP" and produced neither, so
+   * every packet this board has generated was unreadable by the readers it
+   * exists to serve.
+   */
+  private async writeQWKPacket(
+    filePath: string,
+    messages: QWKMessage[],
+    control?: Buffer,
+  ): Promise<void> {
     const fs = require('fs');
     const buffers: Buffer[] = [];
 
@@ -335,9 +371,15 @@ console.error('Error parsing QWK message:', error);
       buffers.push(messageBuffer);
     }
 
-    // Write complete packet
-    const packetBuffer = Buffer.concat(buffers);
-    fs.writeFileSync(filePath, packetBuffer);
+    // MESSAGES.DAT is the header, the index and the message bodies together.
+    const messagesDat = Buffer.concat(buffers);
+
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip();
+    // CONTROL.DAT first: it is the file a reader looks for.
+    zip.addFile('CONTROL.DAT', control ?? Buffer.alloc(0));
+    zip.addFile('MESSAGES.DAT', messagesDat);
+    zip.writeZip(filePath);
   }
 
   // Create QWK header buffer

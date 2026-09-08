@@ -4825,11 +4825,15 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       handleWriteUserParamsCommand(socket, session);
       return;
 
-    // WHO command removed - should use BBSCMD door instead (WHO.info  DOORS:RTW/RTW)
-    // See express.e:26094-26103 - calls who(0) which launches door
-    // case 'WHO': // Node Information (internalCommandWHO) - express.e:26094-26103
-    //   handleWhoCommand(socket, session);
-    //   return;
+    case 'WHO': // Node Information (internalCommandWHO) - express.e:26094-26102
+      // The comment that used to sit here said WHO "should use a BBSCMD door
+      // instead ... calls who(0) which launches door". express.e:24204's
+      // `who(opt)` is an ordinary internal procedure that walks the node ports
+      // and prints them - it launches nothing. And WHD, right below, is the
+      // SAME procedure with opt=1: the board shipped the detailed variant and
+      // hid the plain one, from one function in express.
+      handleWhoCommand(socket, session);
+      return;
 
     case 'WHD': // Who's Online - Detailed (internalCommandWHD) - express.e:26104-26112
       handleWhoDetailedCommand(socket, session);
@@ -4975,9 +4979,14 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       await handleConferenceFlagsCommand(socket, session);
       return;
 
-    case 'Q': // Quiet Mode Toggle (internalCommandQ) - express.e:25504-25516
-      handleQuietModeCommand(socket, session);
-      return;
+    // (audit B-5) A second `case 'Q'` sat here and could never run: switch
+    // dispatch takes the first match, which is the express.e:25505-25515 1:1
+    // implementation above (handleQuietCommand, transfer/olm.handler). This
+    // one routed to a stale handleQuietModeCommand alias.
+    //
+    // It was removed from command-handler/command-execution.ts - a DIFFERENT
+    // live dispatcher - and left here, in the file server/initialization.ts
+    // actually wires. That is the shape of half the findings in this audit.
 
 
     case '?': // Show Menu in Expert Mode (internalCommandQuestionMark) - express.e:24594-24599

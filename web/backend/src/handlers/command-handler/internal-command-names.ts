@@ -39,6 +39,7 @@ export const INTERNAL_COMMAND_NAMES: readonly string[] = [
   'VER',
   'W',
   'WHD',
+  'WHO',
   'X',
   'Z',
   'ZOOM',

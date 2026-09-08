@@ -565,10 +565,13 @@ console.error('[parseMciCodes] Error getting message base descriptions:', error)
   // boundary so a regex is the simplest match.
   parsed = parsed.replace(/~CR\./g, () => '');
 
-  // ~NSF - non-stop flag (sets nonStopText to suppress further pauses).
+  // ~NSF - non-stop flag. Through setNonStopMode, which owns both halves of
+  // express's single nonStopDisplayFlag; setting `nonStopText` alone left the
+  // pause prompts reading the other one.
   parsed = parsed.replace(/~NSF/g, () => {
     if (session) {
-      session.nonStopText = true;
+      const { setNonStopMode } = require('../utils/flag-pause.util');
+      setNonStopMode(session, true);
     }
     return '';
   });

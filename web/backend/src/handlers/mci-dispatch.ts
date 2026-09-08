@@ -375,7 +375,11 @@ console.error('[parseMciCodes] Error getting message base name:', error);
     // pause prompts for this file render.
     NS: () => {
       if (session) {
-        session.nonStopText = true;
+        // Both halves of express's single nonStopDisplayFlag: setting only
+        // `nonStopText` left every pause prompt reading the other one, so ~NS
+        // suppressed nothing at all.
+        const { setNonStopMode } = require('../utils/flag-pause.util');
+        setNonStopMode(session, true);
       }
       return '';
     },
