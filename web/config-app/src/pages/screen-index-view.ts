@@ -33,7 +33,9 @@ export interface ScreenReaderShape {
   screenTypeName?: string;
   /** The levels this variant actually serves - "20-29", "30 and above". */
   serves?: string;
-  via: 'resolved' | 'variant' | 'include';
+  via: 'resolved' | 'variant' | 'include' | 'shadowed';
+  /** The theme covering this file, when `via` is `shadowed`. */
+  shadowedBy?: string;
 }
 
 /** The artist's own credits, from the file's SAUCE record. */
@@ -315,6 +317,11 @@ export function describeReader(
   // An include is read THROUGH the screen, so say so in those words - "LOGON
   // in node 0 - included by it" made the reader guess what "it" was.
   if (reader.via === 'include') return `Included by ${reader.screen} in ${where}${tail}`;
+  // A theme covers the board's screen; it does not delete it. Say who still
+  // reads this file rather than leaving a sysop to read "shadowed" as "dead".
+  if (reader.via === 'shadowed') {
+    return `${reader.screen} in ${where}${tail} - for callers not wearing ${reader.shadowedBy ?? 'this theme'}`;
+  }
 
   return `${reader.screen} in ${where}${tail}`;
 }

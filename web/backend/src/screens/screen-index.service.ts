@@ -58,7 +58,16 @@ export interface ScreenReader {
   /** What the BOARD calls that type, from ScreenTypes.info - "Amiga Ansi". */
   screenTypeName?: string;
   /** How it is reached: the file the loader picks, a variant of it, or an include. */
-  via: 'resolved' | 'variant' | 'include';
+  via: 'resolved' | 'variant' | 'include' | 'shadowed';
+  /**
+   * The theme covering this file, when `via` is `shadowed`.
+   *
+   * Set only in a THEMED index: the theme answers first, so the board's own
+   * screen is not what a caller wearing it sees - but it is still what every
+   * other caller sees, and calling it read by nothing is how a sysop is told
+   * their main menu is dead.
+   */
+  shadowedBy?: string;
   /**
    * The security levels this variant actually serves, as a range.
    *
@@ -1040,6 +1049,21 @@ export function buildScreenIndex(baseDir: string, themeSlug?: string): ScreenInd
         return Number.isFinite(top) ? `${level}-${top - 1}` : `${level} and above`;
       };
 
+      /*
+       * A THEME does not delete the board's screen, it covers it.
+       *
+       * In a themed index the theme's directories are walked first and answer
+       * first, so the walk below used to stop there and the board's own
+       * `Conf1/MENU250.TXT` was claimed by nobody - reported to the sysop as
+       * "No screen on this board reads this file", about the main menu every
+       * caller not wearing the theme is served. Measured on the live board:
+       * selecting a theme moved 100 files from read to unread.
+       *
+       * So the walk carries on into the board's directories after a theme has
+       * answered, and what it finds there is `shadowed`: read, by every caller
+       * who is not wearing this theme.
+       */
+      let shadowedBy: string | undefined;
       let floor = Number.POSITIVE_INFINITY;
       for (const location of locations) {
         const matched = variantsIn(location.dir);
@@ -1063,13 +1087,26 @@ export function buildScreenIndex(baseDir: string, themeSlug?: string): ScreenInd
             securityLevel: level,
             screenType: variant.screenType,
             screenTypeName: variant.screenType ? typeNames[variant.screenType] : undefined,
-            serves: servesRange(level, next, floor),
-            via: found && path.relative(baseDir, found) === rel ? 'resolved' : 'variant',
+            serves: servesRange(level, next, shadowedBy ? Number.POSITIVE_INFINITY : floor),
+            via: shadowedBy
+              ? 'shadowed'
+              : found && path.relative(baseDir, found) === rel ? 'resolved' : 'variant',
+            ...(shadowedBy ? { shadowedBy } : {}),
           }]);
         }
 
-        floor = Math.min(floor, ...matched.map(m => m.securityLevel ?? 0));
-        if (matched.some(m => m.securityLevel === undefined)) break;
+        // Under a theme the board's own levels start again from the top: the
+        // theme's floor bounds nothing a caller without the theme sees.
+        if (!shadowedBy) floor = Math.min(floor, ...matched.map(m => m.securityLevel ?? 0));
+        if (matched.some(m => m.securityLevel === undefined)) {
+          // A theme that answers everybody stops nothing: the board's own copy
+          // underneath is still what every other caller is served. Mark what
+          // follows as shadowed and keep walking; the board's directories stop
+          // the walk for real.
+          if (!location.themed) break;
+          shadowedBy = shadowedBy ?? themeSlug;
+          floor = Number.POSITIVE_INFINITY;
+        }
       }
       if (found) resolvedPaths.add(path.relative(baseDir, found));
 

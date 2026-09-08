@@ -1811,6 +1811,10 @@ export function ScreenFilesPage() {
                 <p className="text-sm text-status-warn">
                   No screen on this board reads this file - at any security level,
                   in any screen type, and no other screen includes it.
+                  {theme !== 'default' && (
+                    <> Looked at through <span className="font-mono">{theme}</span>; the board&apos;s
+                    own view may read it.</>
+                  )}
                 </p>
               )
             )}

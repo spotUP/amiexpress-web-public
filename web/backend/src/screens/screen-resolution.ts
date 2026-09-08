@@ -120,7 +120,19 @@ export function getScreenDirType(screenName: string): ScreenDirType | null {
  * root). Screens/ trails the board root only until the files that live there
  * are moved; it is not a fallback for the other two scopes.
  */
-export interface SearchLocation { dir: string; desc: string }
+export interface SearchLocation {
+  dir: string;
+  desc: string;
+  /**
+   * Set on a THEME's directory, never on the board's own.
+   *
+   * The theme is an overlay: it answers first, and what it answers for is
+   * still there underneath for every caller not wearing it. The index has to
+   * tell the two apart, or a board screen a theme covers is reported as read
+   * by nothing - which is what the sysop was told about their own main menus.
+   */
+  themed?: true;
+}
 
 /**
  * The theme's mirror of one scope, when the theme has that directory.
@@ -159,7 +171,7 @@ function themeLocation(
 
   const dir = path.join(root, scope);
   if (!fs.existsSync(dir)) return null;
-  return { dir, desc: `${entry.slug}: ${desc}` };
+  return { dir, desc: `${entry.slug}: ${desc}`, themed: true };
 }
 
 /**
