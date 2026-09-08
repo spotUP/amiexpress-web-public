@@ -69,11 +69,11 @@ class GameStateManager {
             const before = beforeStacks[player.userId] ?? player.stack;
             const delta = player.stack - before;
             callbacks.updateStatsAfterHand(profile, delta, pot);
-            profile.wallet.chips += lib_1.ACTIVITY_REWARD;
-            profile.wallet.lifetimeEarned += lib_1.ACTIVITY_REWARD;
+            profile.wallet.chips += (0, lib_1.settings)().activityReward;
+            profile.wallet.lifetimeEarned += (0, lib_1.settings)().activityReward;
             if (delta > 0) {
-                profile.wallet.chips += lib_1.WIN_REWARD;
-                profile.wallet.lifetimeEarned += lib_1.WIN_REWARD;
+                profile.wallet.chips += (0, lib_1.settings)().winReward;
+                profile.wallet.lifetimeEarned += (0, lib_1.settings)().winReward;
             }
             callbacks.handleAchievementUnlocks(profile);
         });
@@ -749,11 +749,11 @@ class GameStateManager {
             const before = beforeStacks[player.userId] ?? player.stack;
             const delta = player.stack - before;
             callbacks.updateStatsAfterHand(profile, delta, winnings);
-            profile.wallet.chips += lib_1.ACTIVITY_REWARD;
-            profile.wallet.lifetimeEarned += lib_1.ACTIVITY_REWARD;
+            profile.wallet.chips += (0, lib_1.settings)().activityReward;
+            profile.wallet.lifetimeEarned += (0, lib_1.settings)().activityReward;
             if (delta > 0) {
-                profile.wallet.chips += lib_1.WIN_REWARD;
-                profile.wallet.lifetimeEarned += lib_1.WIN_REWARD;
+                profile.wallet.chips += (0, lib_1.settings)().winReward;
+                profile.wallet.lifetimeEarned += (0, lib_1.settings)().winReward;
             }
             callbacks.handleAchievementUnlocks(profile);
         });

@@ -4,7 +4,7 @@
  * All constants, themes, catalogs, and configuration data
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PROFILES_KEY = exports.LOBBY_KEY = exports.LOBBY_BULLETINS = exports.ACHIEVEMENTS = exports.GAME_CATALOG = exports.UNO_ACTION_BUTTON_ORDER = exports.UNO_ACTION_BUTTON_STYLES = exports.ACTION_BUTTON_ORDER = exports.ACTION_BUTTON_STYLES = exports.UI_THEME = exports.ANSI_TAGS = exports.PokerAction = exports.BOT_NAMES = exports.MAX_ACTIVITY_EVENTS = exports.REFRESH_INTERVAL_MS = exports.WEEKLY_BULLETIN_NUMBER = exports.WIN_REWARD = exports.ACTIVITY_REWARD = exports.ENTRY_FEE_RATE = exports.WEEK_MS = exports.DAILY_COOLDOWN_MS = exports.DAILY_BONUS = exports.STARTING_CHIPS = exports.CHIP_NAME = void 0;
+exports.PROFILES_KEY = exports.LOBBY_KEY = exports.LOBBY_BULLETINS = exports.ACHIEVEMENTS = exports.GAME_CATALOG = exports.UNO_ACTION_BUTTON_ORDER = exports.UNO_ACTION_BUTTON_STYLES = exports.ACTION_BUTTON_ORDER = exports.ACTION_BUTTON_STYLES = exports.UI_THEME = exports.ANSI_TAGS = exports.PokerAction = exports.BOT_NAMES = exports.MAX_ACTIVITY_EVENTS = exports.REFRESH_INTERVAL_MS = exports.WEEKLY_BULLETIN_NUMBER = exports.WIN_REWARD = exports.ACTIVITY_REWARD = exports.ENTRY_FEE_RATE = exports.WEEK_MS = exports.DAILY_RESET_MS = exports.DAILY_COOLDOWN_MS = exports.DAILY_BONUS = exports.STARTING_CHIPS = exports.CHIP_NAME = void 0;
 exports.activeTheme = activeTheme;
 exports.applyTheme = applyTheme;
 const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
@@ -12,6 +12,9 @@ exports.CHIP_NAME = 'BBS Chips';
 exports.STARTING_CHIPS = 1000;
 exports.DAILY_BONUS = 200;
 exports.DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+/** How often the daily stats buckets roll over. Not the bonus cooldown,
+ *  which the sysop sets - a one-hour bonus must not reset the day. */
+exports.DAILY_RESET_MS = 24 * 60 * 60 * 1000;
 exports.WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 exports.ENTRY_FEE_RATE = 0.02;
 exports.ACTIVITY_REWARD = 5;

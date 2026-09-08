@@ -14,10 +14,9 @@ import {
   type PlayerProfile,
   type LastHandSummary,
   type UnoActionType,
-  type UnoColor,
-  ACTIVITY_REWARD,
-  WIN_REWARD,
+  type UnoColor,
   CHIP_NAME,
+  settings,
   PokerAction,
   calculateRake,
   getCurrentBet,
@@ -104,11 +103,11 @@ export class GameStateManager {
       const before = beforeStacks[player.userId] ?? player.stack;
       const delta = player.stack - before;
       callbacks.updateStatsAfterHand(profile, delta, pot);
-      profile.wallet.chips += ACTIVITY_REWARD;
-      profile.wallet.lifetimeEarned += ACTIVITY_REWARD;
+      profile.wallet.chips += settings().activityReward;
+      profile.wallet.lifetimeEarned += settings().activityReward;
       if (delta > 0) {
-        profile.wallet.chips += WIN_REWARD;
-        profile.wallet.lifetimeEarned += WIN_REWARD;
+        profile.wallet.chips += settings().winReward;
+        profile.wallet.lifetimeEarned += settings().winReward;
       }
       callbacks.handleAchievementUnlocks(profile);
     });
@@ -972,12 +971,12 @@ export class GameStateManager {
       const delta = player.stack - before;
 
       callbacks.updateStatsAfterHand(profile, delta, winnings);
-      profile.wallet.chips += ACTIVITY_REWARD;
-      profile.wallet.lifetimeEarned += ACTIVITY_REWARD;
+      profile.wallet.chips += settings().activityReward;
+      profile.wallet.lifetimeEarned += settings().activityReward;
 
       if (delta > 0) {
-        profile.wallet.chips += WIN_REWARD;
-        profile.wallet.lifetimeEarned += WIN_REWARD;
+        profile.wallet.chips += settings().winReward;
+        profile.wallet.lifetimeEarned += settings().winReward;
       }
 
       callbacks.handleAchievementUnlocks(profile);

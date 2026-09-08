@@ -14,6 +14,9 @@ export const CHIP_NAME = 'BBS Chips';
 export const STARTING_CHIPS = 1000;
 export const DAILY_BONUS = 200;
 export const DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+/** How often the daily stats buckets roll over. Not the bonus cooldown,
+ *  which the sysop sets - a one-hour bonus must not reset the day. */
+export const DAILY_RESET_MS = 24 * 60 * 60 * 1000;
 export const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 export const ENTRY_FEE_RATE = 0.02;
 export const ACTIVITY_REWARD = 5;

@@ -7,13 +7,12 @@ import { CardEngine, PokerEngine, pokerCardsToCards } from '@amiexpress/bbs-door
 import type { DoorSession, LobbyState, PlayerProfile, StatBucket, TablePlayer, GameDefinition } from './types';
 import {
   ANSI_TAGS,
-  STARTING_CHIPS,
   BOT_NAMES,
-  ENTRY_FEE_RATE,
   GAME_CATALOG,
   LOBBY_BULLETINS,
   WEEKLY_BULLETIN_NUMBER,
 } from './constants';
+import { settings } from './settings';
 
 const cardEngine = new CardEngine();
 
@@ -188,8 +187,8 @@ export const initProfile = (session: DoorSession): PlayerProfile => ({
   userId: String(session.user.id),
   username: session.user.username,
   wallet: {
-    chips: STARTING_CHIPS,
-    lifetimeEarned: STARTING_CHIPS,
+    chips: settings().startingChips,
+    lifetimeEarned: settings().startingChips,
     lifetimeSpent: 0,
     lastDailyGrant: 0,
   },
@@ -269,7 +268,7 @@ export const buildBotName = (seat: number): string => {
 };
 
 export const calculateEntryFee = (buyIn: number): number => {
-  return Math.max(1, Math.floor(buyIn * ENTRY_FEE_RATE));
+  return Math.max(1, Math.floor(buyIn * settings().entryFeeRate));
 };
 
 export const calculateRake = (bigBlind: number): { percent: number; cap: number } => {

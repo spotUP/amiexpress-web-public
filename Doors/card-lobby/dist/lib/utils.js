@@ -8,6 +8,7 @@ exports.buildWeeklyBulletin = exports.getPlayerBet = exports.getCurrentBet = exp
 exports.wrapTagged = wrapTagged;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const constants_1 = require("./constants");
+const settings_1 = require("./settings");
 const cardEngine = new bbs_door_sdk_1.CardEngine();
 const ansiToBlessedTags = (value) => value.replace(/\x1b\[([0-9;]+)m/g, (_match, codes) => {
     const parts = String(codes).split(';');
@@ -172,8 +173,8 @@ const initProfile = (session) => ({
     userId: String(session.user.id),
     username: session.user.username,
     wallet: {
-        chips: constants_1.STARTING_CHIPS,
-        lifetimeEarned: constants_1.STARTING_CHIPS,
+        chips: (0, settings_1.settings)().startingChips,
+        lifetimeEarned: (0, settings_1.settings)().startingChips,
         lifetimeSpent: 0,
         lastDailyGrant: 0,
     },
@@ -258,7 +259,7 @@ const buildBotName = (seat) => {
 };
 exports.buildBotName = buildBotName;
 const calculateEntryFee = (buyIn) => {
-    return Math.max(1, Math.floor(buyIn * constants_1.ENTRY_FEE_RATE));
+    return Math.max(1, Math.floor(buyIn * (0, settings_1.settings)().entryFeeRate));
 };
 exports.calculateEntryFee = calculateEntryFee;
 const calculateRake = (bigBlind) => {

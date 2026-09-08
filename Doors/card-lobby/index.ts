@@ -75,13 +75,11 @@ import {
   UNO_ACTION_BUTTON_STYLES,
   UNO_ACTION_BUTTON_ORDER,
   CHIP_NAME,
-  STARTING_CHIPS,
-  DAILY_BONUS,
-  DAILY_COOLDOWN_MS,
+  DAILY_RESET_MS,
+  settings,
+  dailyBonusCooldownMs,
+  loadSettings,
   WEEK_MS,
-  ENTRY_FEE_RATE,
-  ACTIVITY_REWARD,
-  WIN_REWARD,
   WEEKLY_BULLETIN_NUMBER,
   REFRESH_INTERVAL_MS,
   MAX_ACTIVITY_EVENTS,
@@ -128,6 +126,9 @@ export { metadata } from './lib/metadata';
 const door = new ServerDoor(doorMetadata);
 
 door.onStart(async (ctx: DoorContext) => {
+  // Once per launch: what the sysop set in the admin reaches the next player
+  // without a backend restart.
+  loadSettings();
   const app = new CardLobbyApp(ctx as any);
   await app.run();
 });
@@ -866,18 +867,18 @@ export class CardLobbyApp {
   private maybeGrantDailyBonus(): void {
     if (!this.currentProfile) return;
     const now = Date.now();
-    if (now - this.currentProfile.wallet.lastDailyGrant < DAILY_COOLDOWN_MS) return;
+    if (now - this.currentProfile.wallet.lastDailyGrant < dailyBonusCooldownMs()) return;
 
-    this.currentProfile.wallet.chips += DAILY_BONUS;
-    this.currentProfile.wallet.lifetimeEarned += DAILY_BONUS;
+    this.currentProfile.wallet.chips += settings().dailyBonusChips;
+    this.currentProfile.wallet.lifetimeEarned += settings().dailyBonusChips;
     this.currentProfile.wallet.lastDailyGrant = now;
-    this.pushNotice(`Daily bonus: +${DAILY_BONUS} ${CHIP_NAME}`);
+    this.pushNotice(`Daily bonus: +${settings().dailyBonusChips} ${CHIP_NAME}`);
   }
 
   private maybeResetBuckets(): void {
     if (!this.lobby) return;
     const now = Date.now();
-    if (now - this.lobby.lastDailyReset >= DAILY_COOLDOWN_MS) {
+    if (now - this.lobby.lastDailyReset >= DAILY_RESET_MS) {
       Object.values(this.profiles).forEach((profile) => {
         profile.stats.daily = initStatsBucket();
       });

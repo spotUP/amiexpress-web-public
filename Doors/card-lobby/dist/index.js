@@ -35,6 +35,9 @@ Object.defineProperty(exports, "metadata", { enumerable: true, get: function () 
  */
 const door = new bbs_door_sdk_1.ServerDoor(metadata_1.metadata);
 door.onStart(async (ctx) => {
+    // Once per launch: what the sysop set in the admin reaches the next player
+    // without a backend restart.
+    (0, lib_1.loadSettings)();
     const app = new CardLobbyApp(ctx);
     await app.run();
 });
@@ -688,18 +691,18 @@ class CardLobbyApp {
         if (!this.currentProfile)
             return;
         const now = Date.now();
-        if (now - this.currentProfile.wallet.lastDailyGrant < lib_1.DAILY_COOLDOWN_MS)
+        if (now - this.currentProfile.wallet.lastDailyGrant < (0, lib_1.dailyBonusCooldownMs)())
             return;
-        this.currentProfile.wallet.chips += lib_1.DAILY_BONUS;
-        this.currentProfile.wallet.lifetimeEarned += lib_1.DAILY_BONUS;
+        this.currentProfile.wallet.chips += (0, lib_1.settings)().dailyBonusChips;
+        this.currentProfile.wallet.lifetimeEarned += (0, lib_1.settings)().dailyBonusChips;
         this.currentProfile.wallet.lastDailyGrant = now;
-        this.pushNotice(`Daily bonus: +${lib_1.DAILY_BONUS} ${lib_1.CHIP_NAME}`);
+        this.pushNotice(`Daily bonus: +${(0, lib_1.settings)().dailyBonusChips} ${lib_1.CHIP_NAME}`);
     }
     maybeResetBuckets() {
         if (!this.lobby)
             return;
         const now = Date.now();
-        if (now - this.lobby.lastDailyReset >= lib_1.DAILY_COOLDOWN_MS) {
+        if (now - this.lobby.lastDailyReset >= lib_1.DAILY_RESET_MS) {
             Object.values(this.profiles).forEach((profile) => {
                 profile.stats.daily = (0, lib_1.initStatsBucket)();
             });
