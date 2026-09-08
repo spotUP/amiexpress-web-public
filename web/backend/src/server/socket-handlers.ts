@@ -47,6 +47,7 @@ import { handleCommand } from '../handlers/command.handler';
 import { sendChatMessage, acceptChat } from '../handlers/chat/chat.handler';
 import { handleChatModeInput } from '../utils/chat-mode-input.util';
 import { classifyTerminalInput, clearPauseHandler, commandPieces } from './terminal-input';
+import { disarmIdleTimeout } from '../services/idle-timeout.service';
 import { initializeSecurity } from '../utils/security.util';
 import { triggerSamiLogRefresh, updateStoreFromCallersLog } from '../services/SamiLogService';
 import { BBSPaths } from '../utils/bbs-paths.util';
@@ -986,6 +987,11 @@ export async function releaseSessionResources(
   emitter: any,
   session: BBSSession,
 ): Promise<void> {
+  // The clock stops with the line. TP-13b's "the same three a byte transport
+  // releases" is now four; a timer left armed on a dead session would fire
+  // into a closed socket a few minutes after the caller had gone.
+  disarmIdleTimeout(session as never);
+
   if (session.nodeId) {
     try {
       const { multicomManager } = require('../nodes/MulticomManager.js');

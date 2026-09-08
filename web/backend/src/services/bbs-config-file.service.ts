@@ -70,6 +70,14 @@ export interface BBSConfigData {
   default_time_limit?: number;
   max_session_time?: number;
   idle_timeout?: number;
+  /**
+   * ACP.e:2660 - `NO_TIMEOUT` on the board's icon sets
+   * `sopt.toggles[TOGGLES_NOTIMEOUT]`, which express.e:2185 reads as "never
+   * time an input out on this board". Absent means off, which is the only way
+   * a tooltype boolean can be written: every icon that predates the key would
+   * otherwise read as having opted in.
+   */
+  no_timeout?: boolean;
 
   // New User Defaults
   new_user_sec_level?: number;
@@ -309,6 +317,7 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'DEFAULT_TIME_LIMIT': 'default_time_limit',
   'MAX_SESSION_TIME': 'max_session_time',
   'IDLE_TIMEOUT': 'idle_timeout',
+  'NO_TIMEOUT': 'no_timeout',                       // ACP.e:2660 express.e:2185
 
   // New User Defaults
   'NEW_USER_SEC_LEVEL': 'new_user_sec_level',
@@ -985,6 +994,7 @@ function getDefaultConfig(): BBSConfigData {
     default_time_limit: -1,
     max_session_time: -1,
     idle_timeout: 10,
+    no_timeout: false,
     new_user_sec_level: 30,
     new_user_time_limit: -1,
     new_user_chat_limit: -1,

@@ -35,6 +35,7 @@
  * at one end or the other.
  */
 import type { BBSSession } from '../index';
+import { noteCallerActivity } from '../services/idle-timeout.service';
 
 /** Which of the two pause accumulators a decision belongs to. */
 export type PauseKind = 'check' | 'flag';
@@ -129,6 +130,14 @@ const BUFFER_FIELD = { check: 'checkPauseBuffer', flag: 'flagPauseBuffer' } as c
  */
 export function clearPauseHandler(session: BBSSession, which: PauseKind, ran: (line: string) => void): void {
   const state = session as unknown as PauseState;
+
+  // THE CALLER IS STILL THERE. express restarts the input timeout on every
+  // keystroke that is not itself a timeout (express.e:2232-2234); this is the
+  // one pipeline every transport's input passes through, so it is the one
+  // place that can say so. Before the transfer sink and before the pause
+  // accumulators on purpose: bytes fed to a ZMODEM receiver are the caller
+  // typing too.
+  noteCallerActivity(session as never);
   if (state[HANDLER_FIELD[which]] === ran) state[HANDLER_FIELD[which]] = undefined;
 }
 
@@ -191,6 +200,14 @@ export function classifyTerminalInput(
   opts: { deliversKeyEvents?: boolean } = {},
 ): InputDecision {
   const state = session as unknown as PauseState;
+
+  // THE CALLER IS STILL THERE. express restarts the input timeout on every
+  // keystroke that is not itself a timeout (express.e:2232-2234); this is the
+  // one pipeline every transport's input passes through, so it is the one
+  // place that can say so. Before the transfer sink and before the pause
+  // accumulators on purpose: bytes fed to a ZMODEM receiver are the caller
+  // typing too.
+  noteCallerActivity(session as never);
 
   if (state.transferRawActive) {
     const sink = state.transferRawSink || state.transferManager?.handleInput;

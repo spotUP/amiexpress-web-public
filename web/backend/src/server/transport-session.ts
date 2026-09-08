@@ -24,6 +24,7 @@
 import type { Server as IOServer } from "socket.io";
 import { BBSState, LoggedOnSubState } from "../constants/bbs-states";
 import { buildConnectionEmitter, flushPendingPetscii } from "./connection-emitter";
+import { armIdleTimeout } from '../services/idle-timeout.service';
 import {
   registerConnectionEmitter,
   unregisterConnectionEmitter,
@@ -127,6 +128,10 @@ console.log(
       // immediately AND again on 'ready', for a connection whose session is
       // attached late. Re-registering the same pair is idempotent.
       registerConnectionEmitter(connection.session, emitter);
+      // ...and start the input timeout on the same event, for the same
+      // reason: this is the first moment a byte-transport session exists and
+      // has something to be hung up with. services/idle-timeout.service.ts.
+      armIdleTimeout(emitter as never, connection.session as never);
       // For telnet, TelnetConnection.write (telnet-server.ts:433)
       // already doubles IAC (0xFF) bytes per RFC 854. Adding a SECOND
       // doubling layer here turned each input 0xFF into 0xFF 0xFF 0xFF

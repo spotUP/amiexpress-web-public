@@ -80,6 +80,7 @@ import { decideAdminSocket } from "./server/admin-socket";
 import { launchChatOnlyLiveChat } from "./server/chat-only-launch";
 import { displaySystemBulletins } from "./server/database-helpers";
 import { initializeData } from "./server/initialization";
+import { armIdleTimeout } from "./services/idle-timeout.service";
 import {
   sessions,
   userSessions,
@@ -1418,6 +1419,18 @@ console.log(
     connectionBaud: DEFAULT_CONNECTION_BAUD
   });
   setSession(socket.id, session); // Use helper to store by nodeId
+
+  // THE INPUT TIMEOUT STARTS AT CONNECT, not at the first keystroke: express
+  // times a caller out at the username prompt as readily as at the menu - the
+  // timeout is an argument to every lineInput, the logon ones included
+  // (express.e:2170). services/idle-timeout.service.ts.
+  armIdleTimeout(socket as never, session as never);
+
+  // THE INPUT TIMEOUT STARTS AT CONNECT, not at the first keystroke: express
+  // times a caller out at the username prompt as readily as at the menu
+  // (express.e:2170's timeout is passed by every lineInput, the logon ones
+  // included). services/idle-timeout.service.ts.
+  armIdleTimeout(socket as never, session as never);
 
   // CRITICAL: Register all socket event handlers IMMEDIATELY after session setup
   // This MUST happen BEFORE any output is sent (including ANSI prompt)

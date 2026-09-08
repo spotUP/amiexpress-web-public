@@ -50,6 +50,8 @@ export const SystemConfigSchema = z.object({
   default_time_limit: z.number().int().min(-1).max(1440).optional(),
   max_session_time: z.number().int().min(-1).max(1440).optional(),
   idle_timeout: z.number().int().min(1).max(60).optional(),
+  // ACP.e:2660 - the board-wide switch express reads at every prompt.
+  no_timeout: z.boolean().optional(),
 
   // New User Defaults
   new_user_sec_level: z.number().int().min(1).max(255).optional(),
