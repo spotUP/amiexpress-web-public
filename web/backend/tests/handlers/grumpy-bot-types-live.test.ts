@@ -28,6 +28,7 @@ import { registerConnectionEmitter } from '../../src/server/session-emitter-regi
 import { userSessions } from '../../src/server/session-manager';
 import { planNaturalTyping, applyTypingPlan, stripEngineTag, getGrumpySysopResponse } from '../../src/handlers/grumpy-sysop-bot.handler';
 import { THINKING_DOTS_AFTER_MS } from '../../src/handlers/operator-chat/thinking-dots';
+import { LoggedOnSubState } from '../../src/constants/bbs-states';
 
 /**
  * HOLDING THE MODEL BACK, so a reply is slow enough to be worth dots.
@@ -219,9 +220,11 @@ describe('the chat is one stream', () => {
     expect(all).not.toMatch(/\x1b\[\d+;\d+H/);
     // express.e:6085-6087, the built-in start line, in the colour that was
     // current. Read through shown(), because the start line is TYPED now -
-    // same framing, same text, but the raw stream carries the sysop colour
-    // and one chunk per character.
-    expect(shown(w.seen)).toContain('\r\n\r\nThis is Kevin, How can I help you??\r\n\r\n');   // the co-sysop's admin-set handle, default Kevin
+    // same text, same framing, but the raw stream carries the sysop colour
+    // and one chunk per character. THREE returns above it, counted, not
+    // `toContain`ed: the old assertion asked for two and so never noticed
+    // when routing the line through the typing path quietly ate one.
+    expect(shown(w.seen)).toContain('\r\n\r\n\r\nThis is Kevin, How can I help you??\r\n\r\n');   // the co-sysop's admin-set handle, default Kevin
     // The opening line is a message: saved, and typed after the start line.
     const messages = w.repo.getChatMessages(pageId);
     expect(messages.length).toBe(1);
@@ -230,9 +233,16 @@ describe('the chat is one stream', () => {
     const text = shown(w.seen);
     expect(text.indexOf('How can I help you??')).toBeLessThan(text.search(INTRO));
     expect(text.replace(/\s/g, '')).toContain(messages[0].message.replace(/\s/g, ''));
-    // One character per chunk, and the sysop colour ONCE, on the first (6164-6167).
-    const startAt = w.seen.findIndex((c) => c.startsWith('\x1b[36m'));
-    expect(startAt).toBeGreaterThan(0);
+    // One character per chunk, and the sysop colour ONCE, on the first
+    // (6164-6167) - of the INTRO. The greeting types too now, so the first
+    // \x1b[36m in the whole stream is its `T`, and looking there would leave
+    // the intro - the line this test is named for - unwatched. The search
+    // starts after the hint, which is the board talking and resets the
+    // colour between the two.
+    const hintAt = w.seen.findIndex((c) => c.includes('press return twice to send'));
+    expect(hintAt).toBeGreaterThan(0);
+    const startAt = hintAt + 1 + w.seen.slice(hintAt + 1).findIndex((c) => c.startsWith('\x1b[36m'));
+    expect(startAt).toBeGreaterThan(hintAt);
     expect(w.seen[startAt]).toMatch(/^\x1b\[36m.$/);
     const typed = w.seen.slice(startAt + 1, startAt + 20);
     for (const c of typed) expect(c).toMatch(/^(.|\r\n|\x08 \x08)$/);
@@ -541,5 +551,58 @@ describe('the chat is one stream', () => {
     // The hint arrives whole.
     await untilTrue('the hint', () => shown(w.seen).includes('press return twice to send'));
     expect(w.seen.some((chunk) => chunk.includes('press return twice to send'))).toBe(true);
+  }, 40000);
+
+  it("carries the sysop colour into the line after the board's hint", async () => {
+    // THE GREETING TAUGHT THE LINE MODEL A LIE. Typing the greeting sets the
+    // line's lastSender to 'sysop'; the hint under it is the BOARD talking
+    // and resets the terminal with \x1b[0m. Emit that reset without telling
+    // the line model and the intro - same speaker as the greeting, as far as
+    // the model knows - is typed with no colour at all, in whatever the
+    // reset left. Every SGR the chat sends goes through the line model.
+    const w = makeWorld();
+    H.initOperatorChatHandler(w.io, w.repo);
+    await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
+    // The hint, and then the first thing the co-sysop types under it - which
+    // is all this needs, and all it waits for. untilTyped() would do, but it
+    // cannot match a message that wrapped at 78 columns (its bare() drops
+    // escapes and whitespace, not the BS-space-BS rub-out) and so silently
+    // spends its whole 12s deadline whenever a long intro comes up.
+    const hintIndex = () => w.seen.findIndex((c) => c.includes('press return twice to send'));
+    const typedAfterHint = () => {
+      const at = hintIndex();
+      return at < 0 ? undefined : w.seen.slice(at + 1).find((c) => /[^\s]/.test(c.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')));
+    };
+    await untilTrue('the hint, and the co-sysop speaking under it', () => typedAfterHint() !== undefined);
+
+    expect(hintIndex()).toBeGreaterThan(0);
+    expect(typedAfterHint()).toMatch(/^\x1b\[36m/);
+  }, 40000);
+
+  it('puts the caller in the chat before the greeting has finished typing, not after', async () => {
+    // The greeting types for a second or more, and acceptPage awaits it. Send
+    // the re-link and the accepted events AFTER that await and the caller
+    // spends the whole greeting in their pre-chat subState: their keys go to
+    // the menu they paged from - a menu command can start under the greeting -
+    // and chatOfSession finds no chat, so they can neither type into it nor
+    // /quit it. The window used to be a microsecond; typing made it seconds.
+    const w = makeWorld();
+    // Read the subState AT each emit rather than polling for it: a poll races
+    // the very window under test and would pass on a slow machine by luck.
+    const at: Array<{ chunk: string; subState: unknown; pageId: unknown }> = [];
+    const push = w.seen.push.bind(w.seen);
+    (w.seen as any).push = (...chunks: string[]) => {
+      for (const chunk of chunks) at.push({ chunk, subState: w.session.subState, pageId: w.session.tempData?.pageId });
+      return push(...chunks);
+    };
+    H.initOperatorChatHandler(w.io, w.repo);
+    await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
+    await untilTrue('the greeting to arrive', () => shown(w.seen).includes('How can I help you'));
+
+    // The greeting's first character - the colour switch rides on it.
+    const firstChar = at.find((r) => r.chunk === '\x1b[36mT');
+    expect(firstChar).toBeDefined();
+    expect(firstChar!.subState).toBe(LoggedOnSubState.OPERATOR_CHAT_ACTIVE);
+    expect(firstChar!.pageId).toBe(w.session.tempData.pageId);
   }, 40000);
 });

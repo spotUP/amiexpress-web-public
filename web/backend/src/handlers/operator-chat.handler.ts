@@ -125,7 +125,7 @@ import { report } from '../achievements/reporter';
 const bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
 
 // Active chat sessions (in-memory)
-import { activeChatSessions, deliverToCaller, chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER } from './operator-chat/chat-stream';
+import { activeChatSessions, deliverToCaller, deliverGreeting, chatResetColourBytes, chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER } from './operator-chat/chat-stream';
 import { startThinkingDots } from './operator-chat/thinking-dots';
 // The caller's half of the chat lives in ./operator-chat/chat-stream; these stay importable from here.
 export { chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER };
@@ -892,12 +892,59 @@ console.error(`[Operator Chat] Failed to join sysop socket to page room ${pageId
     });
   }
 
-  // express.e chat() 5885-5915: a blank line, the StartChat screen or
-  // "This is <sysop>, How can I help you??", then the sysop's colour. The
-  // chat continues in the stream the caller was already in.
   const targetRoom = `user:${page.userId}`;
   const reach = emitterForUserId(page.userId, io);
   const callerNow = userSessions.get(String(page.userId));
+
+  // THE CALLER IS IN THE CHAT BEFORE A WORD OF IT IS TYPED. All of this sat
+  // under the greeting while that was one synchronous emit - a microsecond of
+  // daylight. The greeting types now, seconds of it, and for every one of them
+  // the caller was still in the subState they paged from: keys to the menu (a
+  // command could start UNDER the greeting on the "you may continue using the
+  // system" path), and chatOfSession, which reads tempData.pageId, found no
+  // chat to type into or /quit. The greeting is the first thing the chat says,
+  // not the thing it waits for; the caller's keys are MEANT to interleave with
+  // it onto express's one shared line (chat-stream.ts:266-268).
+  io.to(targetRoom).emit('operator:chat-accepted', { pageId, sysopHandle });
+
+  // THE SESSION IS RE-LINKED FROM THE PAGE ROW, not trusted to still carry the
+  // link. `tempData.pageId` was where the page lived, and `tempData` is
+  // scratch that twelve command paths wipe (`session.tempData = undefined`):
+  // a caller who ran one menu command between paging and the accept had no
+  // link left, this block did nothing, the chat screen appeared and every
+  // keystroke still went to the menu. The row says who the page belongs to;
+  // the session is theirs; the link is written again here.
+  if (!callerNow) {
+console.log(`[Operator Chat] Page ${pageId}: no session for user ${page.userId} to switch into the chat - keystrokes will not reach it`);
+  } else {
+    if (callerNow.tempData?.pageId !== pageId) {
+console.log(`[Operator Chat] Page ${pageId}: re-linking session of ${page.userHandle} (tempData.pageId was ${callerNow.tempData?.pageId ?? 'unset'} - the caller moved on since paging)`);
+    }
+    if (callerNow.tempData?.dotIntervalId) {
+      clearInterval(callerNow.tempData.dotIntervalId);
+      delete callerNow.tempData.dotIntervalId;
+    }
+    callerNow.tempData = { ...(callerNow.tempData || {}), pageId };
+    callerNow.subState = LoggedOnSubState.OPERATOR_CHAT_ACTIVE;
+    callerNow.inputBuffer = '';
+  }
+
+  // Notify sysop
+  io.to(sysopSessionId).emit('operator:chat-started', {
+    pageId,
+    userHandle: page.userHandle,
+    nodeId: page.nodeId,
+    conferenceId: page.conferenceId,
+    conferenceName: page.conferenceName,
+    timeOnline: page.timeOnline,
+    lastCommand: page.lastCommand
+  });
+
+  io.emit('operator:page-accepted', { pageId, sysopHandle });
+
+  // express.e chat() 5885-5915: a blank line, the StartChat screen or
+  // "This is <sysop>, How can I help you??", then the sysop's colour. The
+  // chat continues in the stream the caller was already in.
   if (!reach) {
 console.log(`[Operator Chat] Page ${pageId} (${page.userHandle}@Node${page.nodeId}): accepted by ${sysopHandle} but NO EMITTER reaches user ${page.userId} - ${userSessions.has(String(page.userId)) ? 'session is known but its socket is gone' : 'no session in userSessions'}. The chat screen went nowhere.`);
   } else {
@@ -913,21 +960,11 @@ console.log(`[Operator Chat] Page ${pageId}: StartChat screen not shown (${(err 
     }
     // express.e:6085-6087 prints cmds.sysopName, in whatever colour is
     // current; the sysop colour comes after (6092-6094), and here it comes
-    // with the first character the sysop sends, as the line model does it.
+    // with the first character the sysop sends, as the line model does it -
+    // which is why the greeting is typed through the stream and not emitted
+    // whole. A human sysop's opening is the same board line, said the same way.
     const startName = sysopId === 'bot' ? sysopHandle : (loadBBSConfig(bbsRoot).sysop_name || sysopHandle);
-    if (!shown) {
-      // THE ONE BOT LINE THAT USED TO BE PASTED. Everything the co-sysop says
-      // afterwards types a character at a time, so a greeting that arrived
-      // whole read as a glitch; same speaker, same route. This branch is the
-      // board introducing whoever answered, human sysop or bot, and
-      // deliverToCaller paces it the way either would type - but with no
-      // typos: a slip in an introduction reads as a bug, not as character.
-      reach.emitter.emit('ansi-output', '\r\n');
-      await deliverToCaller(io, chatSession, page, `This is ${startName}, How can I help you??`, {
-        typingSpeed: aiConfigFrom(repository.getConfig()).botTypingSpeed,
-        typoProbability: 0,
-      });
-    }
+    if (!shown) await deliverGreeting(io, chatSession, page, startName, aiConfigFrom(repository.getConfig()).botTypingSpeed);
     // WHAT EXPRESS NEVER SAID. chat() tells the caller nothing: it ends on
     // CTRL-C if they hold ACS_BREAK_CHAT (express.e:6118) or when the SYSOP
     // presses F1, BBSHelp.txt has no chat section, and a board that wanted to
@@ -940,50 +977,11 @@ console.log(`[Operator Chat] Page ${pageId}: StartChat screen not shown (${(err 
     // greeting - and a sysop who writes a StartChat screen replaces the
     // greeting entirely and can say it their own way. CTRL-C is not gated on
     // ACS_BREAK_CHAT here: a caller who cannot leave a chat nobody else is
-    // in would be trapped.
-    if (sysopId === 'bot') reach.emitter.emit('ansi-output', `\x1b[0m(type, then press return twice to send. /quit or CTRL-C leaves the chat.)\r\n\r\n`);
+    // in would be trapped. The board is not the sysop, so its colour reset
+    // goes through the line model, or the next line types with no colour.
+    if (sysopId === 'bot') reach.emitter.emit('ansi-output', `${chatResetColourBytes(chatSession)}(type, then press return twice to send. /quit or CTRL-C leaves the chat.)\r\n\r\n`);
   }
 
-  io.to(targetRoom).emit('operator:chat-accepted', {
-    pageId,
-    sysopHandle
-  });
-
-  // THE SESSION IS RE-LINKED FROM THE PAGE ROW, not trusted to still carry the
-  // link. `tempData.pageId` was where the page lived, and `tempData` is
-  // scratch that twelve command paths wipe (`session.tempData = undefined`):
-  // a caller who ran one menu command between paging and the accept had no
-  // link left, this block did nothing, the chat screen appeared and every
-  // keystroke still went to the menu. The row says who the page belongs to;
-  // the session is theirs; the link is written again here.
-  const userSession = userSessions.get(String(page.userId));
-  if (!userSession) {
-console.log(`[Operator Chat] Page ${pageId}: no session for user ${page.userId} to switch into the chat - keystrokes will not reach it`);
-  } else {
-    if (userSession.tempData?.pageId !== pageId) {
-console.log(`[Operator Chat] Page ${pageId}: re-linking session of ${page.userHandle} (tempData.pageId was ${userSession.tempData?.pageId ?? 'unset'} - the caller moved on since paging)`);
-    }
-    if (userSession.tempData?.dotIntervalId) {
-      clearInterval(userSession.tempData.dotIntervalId);
-      delete userSession.tempData.dotIntervalId;
-    }
-    userSession.tempData = { ...(userSession.tempData || {}), pageId };
-    userSession.subState = LoggedOnSubState.OPERATOR_CHAT_ACTIVE;
-    userSession.inputBuffer = '';
-  }
-
-  // Notify sysop
-  io.to(sysopSessionId).emit('operator:chat-started', {
-    pageId,
-    userHandle: page.userHandle,
-    nodeId: page.nodeId,
-    conferenceId: page.conferenceId,
-    conferenceName: page.conferenceName,
-    timeOnline: page.timeOnline,
-    lastCommand: page.lastCommand
-  });
-
-  io.emit('operator:page-accepted', { pageId, sysopHandle });
 console.log(`[Operator Chat] Page ${pageId} accepted by ${sysopHandle}`);
 }
 

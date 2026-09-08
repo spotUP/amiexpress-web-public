@@ -109,6 +109,24 @@ export function chatReturnBytes(chatSession: ChatSession): string {
   return '\r\n';
 }
 
+/**
+ * THE BOARD'S OWN VOICE - neither speaker's: the terminal put back to plain,
+ * and the line model told that nobody is mid-turn any more.
+ *
+ * The hint under the greeting raw-emitted `\x1b[0m` and told the line model
+ * nothing. That was harmless while the greeting was a raw emit too: nobody had
+ * spoken, so the co-sysop's first typed character still carried the cyan. The
+ * moment the greeting went through the line model (2026-09-08) the model
+ * believed the sysop was mid-turn, emitted no colour for the intro underneath,
+ * and the intro arrived in whatever the reset had left - no colour at all.
+ * Every SGR this chat sends comes from here, so the model cannot be lied to
+ * again by the next line of board prose someone drops into the stream.
+ */
+export function chatResetColourBytes(chatSession: ChatSession): string {
+  chatLineOf(chatSession).lastSender = null;
+  return '\x1b[0m';
+}
+
 /** The chat the caller's session is in, or null. */
 function chatOfSession(session: BBSSession): ChatSession | null {
   const pageId = session.tempData?.pageId;
@@ -320,6 +338,36 @@ console.log(`[Operator Chat] Page ${page.id}: a line for ${page.userHandle} has 
   const next = prev.then(run, run);
   (chatSession as any).delivery = next.catch(() => undefined);
   return next;
+}
+
+/**
+ * express.e chat():6085-6094 - "This is <sysop>, How can I help you??", the
+ * board naming whoever answered the page. Three returns above it (one the
+ * caller's stream already got, two of its own) and two below.
+ *
+ * IT IS TYPED, like every other line that speaker sends. It was the one line
+ * emitted whole, and a greeting that arrived instantly above a conversation
+ * that types a character at a time read as a glitch. The two blank lines are
+ * carried as the message's OWN line breaks rather than emitted around it, so
+ * they are paced, serialised and cancelled with the greeting: a caller who
+ * quits mid-greeting takes all of it with him, blank lines included.
+ *
+ * Never with typos, whatever the board's typo setting says - a slip in an
+ * introduction reads as a bug rather than as character. That rule lives here,
+ * not at the call site, because the next persona given an opening line would
+ * otherwise have to remember it.
+ */
+export async function deliverGreeting(
+  io: any,
+  chatSession: ChatSession,
+  page: PageRequest,
+  startName: string,
+  typingSpeed?: number
+): Promise<void> {
+  await deliverToCaller(io, chatSession, page, `\n\nThis is ${startName}, How can I help you??`, {
+    typingSpeed,
+    typoProbability: 0,
+  });
 }
 
 /**
