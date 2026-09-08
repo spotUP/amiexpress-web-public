@@ -115,273 +115,302 @@ export function startZmodemUpload(socket: any, session: BBSSession): void {
 console.error('[ZMODEM] Failed to ensure playpen:', err);
   }
 
-  // Web sessions don't have `transferRawSend` populated on the session —
-  // that's a telnet/SSH-only field installed by setupTelnetSSHHandler.
-  // For web, lrzsz output must bridge over the `transfer-raw:data`
-  // socket channel directly. `getTransferTransport` falls back to a
-  // no-op placeholder when `transferRawSend` is missing; the
-  // `if (!transport.send)` check below is dead because functions are
-  // truthy. So we explicitly install the socket-emit sender for web
-  // here, regardless of what the helper returned.
-  // (RZ command at transfer-misc-commands.handler.ts:126-128 builds its
-  // own real sender for the same reason — this was the U-command bug
-  // that made browser Sentry never see the ZRINIT and time out at 30s.)
-  const transport = getTransferTransport(session);
-  if (transport.type === 'web') {
-    transport.send = (buf: Uint8Array | Buffer) => socket.emit('transfer-raw:data', Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
-  } else if (!transport.send) {
-    transport.send = (buf: Uint8Array | Buffer) => socket.emit('transfer-raw:data', Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
-  }
-
-  const ulStartTime = Date.now();
-
   /**
-   * Which protocol did the caller actually ask for?
+   * express.e:19018 - `zresume := resumeStuff()`, before the receive.
    *
-   * The menu at info-commands.handler.ts:600-628 offers ZMODEM, YMODEM, three
-   * XMODEMs and Punter, and records the answer in `user.protocol` - and every
-   * transfer went to lrzsz regardless, so the choice had no effect on anything.
-   * For a real Commodore that was not a cosmetic problem: a C64 cannot speak
-   * ZMODEM at all, and Punter is the only protocol it has.
+   * This is the U command, which is express's uLFType=0 path and the one
+   * resumeStuff was written for; the RZ handler already calls it, having noted
+   * that as a deliberate divergence. So the two entry points were exactly
+   * INVERTED from express: RZ offered the caller his partials and U, the
+   * command express actually offers them from, did not.
    *
-   * ZMODEM stays on lrzsz, which is the canonical implementation and carries
-   * the browser bridge. Everything else goes through TransferProtocolManager,
-   * which already knew how to run all four and had simply never been called.
+   * It matters now in a way it did not before today: cleanPlayPen had no
+   * callers, so `<conf>/PartUpload/` was always empty and resumeStuff had
+   * nothing to offer whoever asked. With aborted uploads filed there, a caller
+   * who reconnects and types U is offered the rest of his transfer.
    */
-  const { getDefaultProtocol } = require('../../services/transfer-protocol.service');
-  const chosenProtocol = getDefaultProtocol(session);
-  if (chosenProtocol !== 'zmodem') {
-    const { TransferProtocolManager } = require('../../services/transfer-protocol.service');
-    const protocolManager = new TransferProtocolManager(
-      session,
-      { type: transport.type, send: transport.send },
-      { direction: 'upload', files: [playpen], protocol: chosenProtocol },
-    );
-    protocolManager.on('complete', async (result: any) => {
-      // The post-upload pipeline is the same one lrzsz's onComplete runs;
-      // a Punter upload must be filed exactly like a ZMODEM one.
-      const { runPostUpload } = require('../../services/post-upload.service');
-      await runPostUpload(socket, session, {
-        uploadStartTime: ulStartTime,
-        uploadedFiles: result?.filesTransferred ?? 0,
-        uploadedBytes: result?.bytesTransferred ?? 0,
-      });
-    });
-    // These callers are not async; the transfer runs on its own and reports
-    // through the 'complete' event above.
-    void protocolManager.start().catch((err: any) => {
-      console.error('[TRANSFER] protocol transfer failed to start:', err);
-      socket.emit('ansi-output', '\r\nTransfer could not be started.\r\n\r\n');
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      (session as any).menuPause = true;
+  {
+    const { startResumeStuff } = require('../../services/resume-stuff.service');
+    const { config: appConfigForResume } = require('../../config');
+    startResumeStuff(socket, session, playpen, appConfigForResume, (resumeResult: any) => {
+      if (resumeResult?.resumed > 0) {
+        socket.emit('ansi-output', `\r\n${resumeResult.resumed} partial file(s) restored to playpen.\r\n`);
+      }
+      continueUpload();
     });
     return;
   }
 
-  // All transports go through lrzsz when available — web bridges
-  // lrzsz output via the existing `transfer-raw:data` socket channel
-  // to the browser-side zmodem.js Sentry.
-  {
-    const { isLrzszAvailable, LrzszTransferManager } = require('../../services/lrzsz-transfer.service');
-    if (isLrzszAvailable()) {
-      const lrzManager = new LrzszTransferManager({
+  /** The receive itself, once any partials have been offered. */
+  function continueUpload(): void {
+    // Web sessions don't have `transferRawSend` populated on the session —
+    // that's a telnet/SSH-only field installed by setupTelnetSSHHandler.
+    // For web, lrzsz output must bridge over the `transfer-raw:data`
+    // socket channel directly. `getTransferTransport` falls back to a
+    // no-op placeholder when `transferRawSend` is missing; the
+    // `if (!transport.send)` check below is dead because functions are
+    // truthy. So we explicitly install the socket-emit sender for web
+    // here, regardless of what the helper returned.
+    // (RZ command at transfer-misc-commands.handler.ts:126-128 builds its
+    // own real sender for the same reason — this was the U-command bug
+    // that made browser Sentry never see the ZRINIT and time out at 30s.)
+    const transport = getTransferTransport(session);
+    if (transport.type === 'web') {
+      transport.send = (buf: Uint8Array | Buffer) => socket.emit('transfer-raw:data', Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
+    } else if (!transport.send) {
+      transport.send = (buf: Uint8Array | Buffer) => socket.emit('transfer-raw:data', Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
+    }
+
+    const ulStartTime = Date.now();
+
+    /**
+     * Which protocol did the caller actually ask for?
+     *
+     * The menu at info-commands.handler.ts:600-628 offers ZMODEM, YMODEM, three
+     * XMODEMs and Punter, and records the answer in `user.protocol` - and every
+     * transfer went to lrzsz regardless, so the choice had no effect on anything.
+     * For a real Commodore that was not a cosmetic problem: a C64 cannot speak
+     * ZMODEM at all, and Punter is the only protocol it has.
+     *
+     * ZMODEM stays on lrzsz, which is the canonical implementation and carries
+     * the browser bridge. Everything else goes through TransferProtocolManager,
+     * which already knew how to run all four and had simply never been called.
+     */
+    const { getDefaultProtocol } = require('../../services/transfer-protocol.service');
+    const chosenProtocol = getDefaultProtocol(session);
+    if (chosenProtocol !== 'zmodem') {
+      const { TransferProtocolManager } = require('../../services/transfer-protocol.service');
+      const protocolManager = new TransferProtocolManager(
         session,
-        transport: { type: transport.type, send: transport.send },
-        direction: 'upload',
-        paths: [playpen],
-        onComplete: async (ok: boolean, detail: any) => {
-          if (!ok) {
-            socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
-            session.subState = LoggedOnSubState.DISPLAY_MENU;
-            session.menuPause = true;
-            return;
-          }
-          // Route through the SAME post-upload pipeline as the RZ command
-          // (transfer-misc-commands.handler.ts:177-279). Previously this
-          // handler only emitted the stats banner and stopped — files
-          // landed in playpen but never got DIZ-extracted, given a
-          // description, moved to FILES/LCFILES, appended to DIRn /
-          // FILES.BBS, or logged. Express.e:19053+ runs the post-upload
-          // body unconditionally regardless of how the receive started,
-          // so U-command and RZ-command must converge here.
-          const received: string[] = detail?.received || [];
-          const fsSync = require('fs');
-          const pathMod = require('path');
-          const { db } = require('../../database');
-          const { config: appConfig } = require('../../config');
-          const { handleDizExtractionAndDescription, handleUploadBatchComplete } =
-            require('../../server/file-socket-handlers');
-
-          // Target file area: prefer what displayUploadInterface already
-          // resolved (file.handler.ts:720 sets session.tempData.fileArea
-          // = uploadArea via the conference's upload-path Tooltype). Only
-          // fall back to db.getFileAreas if tempData was cleared somehow
-          // — the express.e flow always commits the area at U-command
-          // entry, not at upload completion.
-          let fileArea: any = (session.tempData as any)?.fileArea || null;
-          if (!fileArea) {
-            try {
-              const areas = await db.getFileAreas(session.currentConf);
-              fileArea = Array.isArray(areas) && areas.length > 0 ? areas[0] : null;
-            } catch (err: any) {
-              console.error('[ZMODEM-UL] getFileAreas fallback failed:', err?.message || err);
-            }
-          }
-          if (!fileArea) {
-            socket.emit('ansi-output', '\r\n\x1b[31mError: no upload area for this conference\x1b[0m\r\n\r\n');
-            session.subState = LoggedOnSubState.DISPLAY_MENU;
-            session.menuPause = true;
-            return;
-          }
-
-          if (received.length === 0) {
-            // No files received — short-circuit to the stats-only banner +
-            // runPostUpload so the user still gets the express.e-style
-            // completion line and the menu prompt fires. Express.e:19127
-            // emits "Time increased" then drops back to the main loop.
-            await handleUploadBatchComplete(socket, session);
-            return;
-          }
-
-          // Synthesize the uploadContext that processFileUpload installs
-          // for HTTP uploads. webUploadMode=true routes processBatchFile
-          // through handleDizExtractionAndDescription. Multi-file batches
-          // queue in pendingZmodemFiles and walk one-at-a-time after each
-          // description completes (state machine in command.handler.ts
-          // advances on Enter-Enter, see UPLOAD_DESC_INPUT branch).
-          session.tempData = {
-            uploadMode: true,
-            fileArea,
-            uploadSessionId: `u-zmodem-${Date.now()}`,
-            uploadBatch: [],
-            uploadCount: received.length,
-            uploadStartTime: ulStartTime,
-            webUploadMode: true,
-            batchUpload: false,
-            currentUploadIndex: 0,
-            filesProcessedCount: 0,
-            uploadedFiles: 0,
-            uploadedBytes: 0,
-            skipDizExtraction: false,
-            pendingZmodemFiles: received.slice(1).map((fp: string) => ({
-              path: fp,
-              name: pathMod.basename(fp),
-            })),
-          } as any;
-
-          const firstPath = received[0];
-          let firstSize = 0;
-          try { firstSize = fsSync.statSync(firstPath).size; } catch (_) { /* ignore */ }
-          const firstName = pathMod.basename(firstPath);
-          try {
-            await handleDizExtractionAndDescription(socket, session, {
-              filename: firstName,
-              originalname: firstName,
-              size: firstSize,
-              path: firstPath,
-            }, appConfig);
-            // Only set UPLOAD_DESC_INPUT if the batch is still active.
-            // When all files have FILE_ID.DIZ the recursive chain clears
-            // tempData and sets subState=DISPLAY_MENU before returning here.
-            if (session.tempData) {
-              session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
-            }
-          } catch (err: any) {
-            console.error('[ZMODEM-UL] handleDizExtractionAndDescription failed:', err?.message || err);
-            socket.emit('ansi-output', '\r\nUpload pipeline failed.\r\n\r\n');
-            session.subState = LoggedOnSubState.DISPLAY_MENU;
-            session.menuPause = true;
-          }
-        },
-      });
-      (session as any).transferRawActive = true;
-      (session as any).transferRawSink = (buf: Buffer) => lrzManager.handleInput(buf);
-      (session as any).transferManager = lrzManager;
-      // Park in FILES_UPLOAD; see transfer-misc-commands.handler.ts:RZ
-      // path comment for rationale.
-      session.subState = LoggedOnSubState.FILES_UPLOAD;
-      socket.emit('ansi-output', `\r\nReady to receive via ZMODEM (lrzsz). Send with sz now.\r\n`);
-      // Divergence 20: this path sent NO IAC BINARY at all, while the
-      // download path and the RZ path both did - so an upload started with
-      // `U` on telnet ran under NVT rules and CRC-failed on any subpacket
-      // carrying 0x0D. Same helper, same bytes, all three sites.
-      negotiateBinaryForTransfer(session);
-      if (transport.type === 'web') {
-        let fired = false;
-        const start = () => { if (fired) return; fired = true; lrzManager.start(); };
-        socket.once('transfer-raw:start', () => start());
-        socket.once('transfer-raw:cancel', () => {
-          if (fired) return;
-          fired = true;
-          socket.emit('ansi-output', '\r\nUpload cancelled.\r\n\r\n');
-          session.subState = LoggedOnSubState.DISPLAY_MENU;
-          session.menuPause = true;
+        { type: transport.type, send: transport.send },
+        { direction: 'upload', files: [playpen], protocol: chosenProtocol },
+      );
+      protocolManager.on('complete', async (result: any) => {
+        // The post-upload pipeline is the same one lrzsz's onComplete runs;
+        // a Punter upload must be filed exactly like a ZMODEM one.
+        const { runPostUpload } = require('../../services/post-upload.service');
+        await runPostUpload(socket, session, {
+          uploadStartTime: ulStartTime,
+          uploadedFiles: result?.filesTransferred ?? 0,
+          uploadedBytes: result?.bytesTransferred ?? 0,
         });
-        setTimeout(() => {
-          if (!fired) {
-            fired = true;
-            socket.emit('ansi-output', '\r\nUpload timed out (no file picked).\r\n\r\n');
-            session.subState = LoggedOnSubState.DISPLAY_MENU;
-            session.menuPause = true;
-          }
-        }, 120000);
-        socket.emit('transfer-raw:init', { direction: 'upload', paths: [playpen] });
-      } else {
-        lrzManager.start();
-      }
+      });
+      // These callers are not async; the transfer runs on its own and reports
+      // through the 'complete' event above.
+      void protocolManager.start().catch((err: any) => {
+        console.error('[TRANSFER] protocol transfer failed to start:', err);
+        socket.emit('ansi-output', '\r\nTransfer could not be started.\r\n\r\n');
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        (session as any).menuPause = true;
+      });
       return;
     }
-    console.warn('[ZMODEM-UL] lrzsz not installed, falling back to zmodem.js (may not interoperate)');
-  }
 
-  const manager = new ZmodemTransferManager({
-    session,
-    transport,
-    direction: 'upload',
-    paths: [playpen],
-    onComplete: (ok, detail) => {
-      if (!ok) {
-        socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = true;
+    // All transports go through lrzsz when available — web bridges
+    // lrzsz output via the existing `transfer-raw:data` socket channel
+    // to the browser-side zmodem.js Sentry.
+    {
+      const { isLrzszAvailable, LrzszTransferManager } = require('../../services/lrzsz-transfer.service');
+      if (isLrzszAvailable()) {
+        const lrzManager = new LrzszTransferManager({
+          session,
+          transport: { type: transport.type, send: transport.send },
+          direction: 'upload',
+          paths: [playpen],
+          onComplete: async (ok: boolean, detail: any) => {
+            if (!ok) {
+              socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
+              session.subState = LoggedOnSubState.DISPLAY_MENU;
+              session.menuPause = true;
+              return;
+            }
+            // Route through the SAME post-upload pipeline as the RZ command
+            // (transfer-misc-commands.handler.ts:177-279). Previously this
+            // handler only emitted the stats banner and stopped — files
+            // landed in playpen but never got DIZ-extracted, given a
+            // description, moved to FILES/LCFILES, appended to DIRn /
+            // FILES.BBS, or logged. Express.e:19053+ runs the post-upload
+            // body unconditionally regardless of how the receive started,
+            // so U-command and RZ-command must converge here.
+            const received: string[] = detail?.received || [];
+            const fsSync = require('fs');
+            const pathMod = require('path');
+            const { db } = require('../../database');
+            const { config: appConfig } = require('../../config');
+            const { handleDizExtractionAndDescription, handleUploadBatchComplete } =
+              require('../../server/file-socket-handlers');
+
+            // Target file area: prefer what displayUploadInterface already
+            // resolved (file.handler.ts:720 sets session.tempData.fileArea
+            // = uploadArea via the conference's upload-path Tooltype). Only
+            // fall back to db.getFileAreas if tempData was cleared somehow
+            // — the express.e flow always commits the area at U-command
+            // entry, not at upload completion.
+            let fileArea: any = (session.tempData as any)?.fileArea || null;
+            if (!fileArea) {
+              try {
+                const areas = await db.getFileAreas(session.currentConf);
+                fileArea = Array.isArray(areas) && areas.length > 0 ? areas[0] : null;
+              } catch (err: any) {
+                console.error('[ZMODEM-UL] getFileAreas fallback failed:', err?.message || err);
+              }
+            }
+            if (!fileArea) {
+              socket.emit('ansi-output', '\r\n\x1b[31mError: no upload area for this conference\x1b[0m\r\n\r\n');
+              session.subState = LoggedOnSubState.DISPLAY_MENU;
+              session.menuPause = true;
+              return;
+            }
+
+            if (received.length === 0) {
+              // No files received — short-circuit to the stats-only banner +
+              // runPostUpload so the user still gets the express.e-style
+              // completion line and the menu prompt fires. Express.e:19127
+              // emits "Time increased" then drops back to the main loop.
+              await handleUploadBatchComplete(socket, session);
+              return;
+            }
+
+            // Synthesize the uploadContext that processFileUpload installs
+            // for HTTP uploads. webUploadMode=true routes processBatchFile
+            // through handleDizExtractionAndDescription. Multi-file batches
+            // queue in pendingZmodemFiles and walk one-at-a-time after each
+            // description completes (state machine in command.handler.ts
+            // advances on Enter-Enter, see UPLOAD_DESC_INPUT branch).
+            session.tempData = {
+              uploadMode: true,
+              fileArea,
+              uploadSessionId: `u-zmodem-${Date.now()}`,
+              uploadBatch: [],
+              uploadCount: received.length,
+              uploadStartTime: ulStartTime,
+              webUploadMode: true,
+              batchUpload: false,
+              currentUploadIndex: 0,
+              filesProcessedCount: 0,
+              uploadedFiles: 0,
+              uploadedBytes: 0,
+              skipDizExtraction: false,
+              pendingZmodemFiles: received.slice(1).map((fp: string) => ({
+                path: fp,
+                name: pathMod.basename(fp),
+              })),
+            } as any;
+
+            const firstPath = received[0];
+            let firstSize = 0;
+            try { firstSize = fsSync.statSync(firstPath).size; } catch (_) { /* ignore */ }
+            const firstName = pathMod.basename(firstPath);
+            try {
+              await handleDizExtractionAndDescription(socket, session, {
+                filename: firstName,
+                originalname: firstName,
+                size: firstSize,
+                path: firstPath,
+              }, appConfig);
+              // Only set UPLOAD_DESC_INPUT if the batch is still active.
+              // When all files have FILE_ID.DIZ the recursive chain clears
+              // tempData and sets subState=DISPLAY_MENU before returning here.
+              if (session.tempData) {
+                session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
+              }
+            } catch (err: any) {
+              console.error('[ZMODEM-UL] handleDizExtractionAndDescription failed:', err?.message || err);
+              socket.emit('ansi-output', '\r\nUpload pipeline failed.\r\n\r\n');
+              session.subState = LoggedOnSubState.DISPLAY_MENU;
+              session.menuPause = true;
+            }
+          },
+        });
+        (session as any).transferRawActive = true;
+        (session as any).transferRawSink = (buf: Buffer) => lrzManager.handleInput(buf);
+        (session as any).transferManager = lrzManager;
+        // Park in FILES_UPLOAD; see transfer-misc-commands.handler.ts:RZ
+        // path comment for rationale.
+        session.subState = LoggedOnSubState.FILES_UPLOAD;
+        socket.emit('ansi-output', `\r\nReady to receive via ZMODEM (lrzsz). Send with sz now.\r\n`);
+        // Divergence 20: this path sent NO IAC BINARY at all, while the
+        // download path and the RZ path both did - so an upload started with
+        // `U` on telnet ran under NVT rules and CRC-failed on any subpacket
+        // carrying 0x0D. Same helper, same bytes, all three sites.
+        negotiateBinaryForTransfer(session);
+        if (transport.type === 'web') {
+          let fired = false;
+          const start = () => { if (fired) return; fired = true; lrzManager.start(); };
+          socket.once('transfer-raw:start', () => start());
+          socket.once('transfer-raw:cancel', () => {
+            if (fired) return;
+            fired = true;
+            socket.emit('ansi-output', '\r\nUpload cancelled.\r\n\r\n');
+            session.subState = LoggedOnSubState.DISPLAY_MENU;
+            session.menuPause = true;
+          });
+          setTimeout(() => {
+            if (!fired) {
+              fired = true;
+              socket.emit('ansi-output', '\r\nUpload timed out (no file picked).\r\n\r\n');
+              session.subState = LoggedOnSubState.DISPLAY_MENU;
+              session.menuPause = true;
+            }
+          }, 120000);
+          socket.emit('transfer-raw:init', { direction: 'upload', paths: [playpen] });
+        } else {
+          lrzManager.start();
+        }
         return;
       }
-      socket.emit('ansi-output', '\r\n\r\nFile Uploading Complete...\r\n');
-      const received = detail?.received || [];
-      const ulFileCount = received.length;
-      let totalBytes = 0;
-      try {
-        const fsSync = require('fs');
-        for (const fp of received) { try { totalBytes += fsSync.statSync(fp).size; } catch (_) {} }
-      } catch (_) {}
-      const bytesKB = Math.floor(totalBytes / 1024);
-      const ulTTTM  = Math.max(1, Math.round((Date.now() - ulStartTime) / 1000));
-      const cps     = totalBytes > 0 ? Math.round(totalBytes / ulTTTM) : 0;
-      const baud    = Math.max(1, Math.floor(((session as any).baudRate || 115200) / 10));
-      const eff     = Math.floor((cps * 100) / baud);
-      socket.emit('ansi-output', ` ${ulFileCount} file(s), ${bytesKB}k bytes, ${Math.floor(ulTTTM/60)} minute(s). ${ulTTTM%60} second(s), ${cps} cps, ${eff}% efficiency.\r\n\r\n`);
-      let peff = (ulFileCount > 0 && ulTTTM > 0) ? Math.floor((ulTTTM * 3) / 2) + 60 : 0;
-      socket.emit('ansi-output', `Time increased by ${Math.floor(peff/60)} mins.\r\n\r\n`);
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      session.menuPause = true;
-    },
-  });
+      console.warn('[ZMODEM-UL] lrzsz not installed, falling back to zmodem.js (may not interoperate)');
+    }
 
-  (session as any).transferRawActive = true;
-  (session as any).transferRawSink = (buf: Buffer) => manager.handleInput(buf);
-  (session as any).transferRawSend = transport.send;
-  (session as any).transferManager = manager;
-
-  if (transport.type === 'web') {
-    socket.emit('transfer-raw:init', {
+    const manager = new ZmodemTransferManager({
+      session,
+      transport,
       direction: 'upload',
       paths: [playpen],
+      onComplete: (ok, detail) => {
+        if (!ok) {
+          socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
+          session.subState = LoggedOnSubState.DISPLAY_MENU;
+          session.menuPause = true;
+          return;
+        }
+        socket.emit('ansi-output', '\r\n\r\nFile Uploading Complete...\r\n');
+        const received = detail?.received || [];
+        const ulFileCount = received.length;
+        let totalBytes = 0;
+        try {
+          const fsSync = require('fs');
+          for (const fp of received) { try { totalBytes += fsSync.statSync(fp).size; } catch (_) {} }
+        } catch (_) {}
+        const bytesKB = Math.floor(totalBytes / 1024);
+        const ulTTTM  = Math.max(1, Math.round((Date.now() - ulStartTime) / 1000));
+        const cps     = totalBytes > 0 ? Math.round(totalBytes / ulTTTM) : 0;
+        const baud    = Math.max(1, Math.floor(((session as any).baudRate || 115200) / 10));
+        const eff     = Math.floor((cps * 100) / baud);
+        socket.emit('ansi-output', ` ${ulFileCount} file(s), ${bytesKB}k bytes, ${Math.floor(ulTTTM/60)} minute(s). ${ulTTTM%60} second(s), ${cps} cps, ${eff}% efficiency.\r\n\r\n`);
+        let peff = (ulFileCount > 0 && ulTTTM > 0) ? Math.floor((ulTTTM * 3) / 2) + 60 : 0;
+        socket.emit('ansi-output', `Time increased by ${Math.floor(peff/60)} mins.\r\n\r\n`);
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        session.menuPause = true;
+      },
     });
-  } else {
-    socket.emit('ansi-output', `\r\nReady to receive via ZMODEM. Send with rz now.\r\n`);
-  }
 
-  manager.start();
+    (session as any).transferRawActive = true;
+    (session as any).transferRawSink = (buf: Buffer) => manager.handleInput(buf);
+    (session as any).transferRawSend = transport.send;
+    (session as any).transferManager = manager;
+
+    if (transport.type === 'web') {
+      socket.emit('transfer-raw:init', {
+        direction: 'upload',
+        paths: [playpen],
+      });
+    } else {
+      socket.emit('ansi-output', `\r\nReady to receive via ZMODEM. Send with rz now.\r\n`);
+    }
+
+    manager.start();
+  }
 }
 
 export function startZmodemDownload(
