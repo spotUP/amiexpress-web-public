@@ -559,3 +559,18 @@ web/backend/Node*/CallersLog
 # SQLite side files beside a backup - the database is the artifact, not these.
 *.db-shm
 *.db-wal
+
+# The rest of the board's own runtime state (2026-09-08). The rules above have
+# listed CallersLog, CLogBackup, DLogBackup and Answers for a long time - and
+# 536 such files were TRACKED anyway, because .gitignore does not apply to a
+# file already in the index. Untracked in the same commit as this block, so
+# `git status` can be clean on a machine that runs the board.
+Node*/CallersLog.back
+Node*/ErrorLog
+Node*/StartUpLog
+Node*/UDLog
+Node*/UDLog-
+Node*/Answers.old
+Doors/*/*.log
+Doors/*/logs/
+Doors/*/*/*.log
