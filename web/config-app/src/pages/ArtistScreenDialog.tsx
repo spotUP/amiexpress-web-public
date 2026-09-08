@@ -195,6 +195,17 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
     return scoped.includes(path) ? scoped : [path];
   }, [path, index, theme.slug]);
 
+  /**
+   * The file is not there YET.
+   *
+   * A format strip lists the versions a screen could have, and one of them is
+   * often missing - a bulletin with `.txt` and no `.seq`. Opening it asked the
+   * board for a file that does not exist and showed nothing at all, because
+   * the route answered a refusal rather than "not found" and the dialog had
+   * nowhere to put either. Now it says so, and points at the way to make one.
+   */
+  const missingFile = !isLoading && !file && !isNew && !!path;
+
   const save = useMutation({
     mutationFn: (base64: string) =>
       apiClient.putScreenFile(path as string, base64, writeTargets, { carryCodes: 'above' }),
@@ -264,6 +275,14 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
         <p className="text-sm text-content-secondary">
           Nothing has been drawn here yet.{newDescription ? ` ${newDescription}.` : ''} Save
           when you are happy and it becomes part of {theme.title}.
+        </p>
+      )}
+
+      {missingFile && (
+        <p className="text-sm text-content-secondary" data-testid="screen-not-there">
+          Nothing is drawn at <span className="font-mono">{path}</span> yet. Use
+          &ldquo;Upload a drawing&rdquo; on the version that does exist, or the
+          format buttons above, to make one.
         </p>
       )}
 

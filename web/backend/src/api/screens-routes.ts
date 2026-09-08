@@ -248,6 +248,22 @@ screensRouter.get('/file', (req: Request, res: Response) => {
   const rel = String(req.query.path || '');
   const full = resolveScreenPath(rel);
   if (!full) {
+    /*
+     * TWO DIFFERENT ANSWERS, and they used to share one.
+     *
+     * `resolveScreenPath` returns null both for a path that climbs out of the
+     * board AND for one that is perfectly legitimate but does not exist yet -
+     * it resolves through the case-insensitive Amiga layer, which answers null
+     * for a missing file. Both came back as 400 "Path outside the board root",
+     * so asking for a format a screen has not got yet - `Conf4/bull20.seq`,
+     * while adding a PETSCII version to a bulletin that has only `.txt` -
+     * read as a security refusal. The sysop reported it as an upload failure,
+     * which it was not.
+     */
+    const contained = containedScreenPath(rel);
+    if (contained) {
+      return res.status(404).json({ success: false, error: `No screen file at ${rel}` });
+    }
     return res.status(400).json({ success: false, error: 'Path outside the board root' });
   }
 
