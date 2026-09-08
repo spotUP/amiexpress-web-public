@@ -178,7 +178,7 @@ export function ArtistStudioPage() {
         />
       </div>
 
-      <ScreenGallery items={shown} isLoading={isLoading} onOpen={setOpenPath} />
+      <ScreenGallery items={shown} isLoading={isLoading} onOpen={setOpenPath} theme={theme.slug} />
 
       <ArtistScreenDialog
         path={openPath}

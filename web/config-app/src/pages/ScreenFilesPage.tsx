@@ -305,8 +305,11 @@ export function ScreenFilesPage() {
   });
 
   const { data: file } = useQuery({
-    queryKey: ['screen-file', openFile],
-    queryFn: async () => (await apiClient.getScreenFile(openFile as string)).data,
+    // Through the theme being VIEWED: a theme's own file is read by nothing in
+    // the board's index, which is why every redrawn screen used to claim "No
+    // screen on this board reads this file".
+    queryKey: ['screen-file', openFile, theme],
+    queryFn: async () => (await apiClient.getScreenFile(openFile as string, theme)).data,
     enabled: !!openFile,
   });
 
@@ -777,7 +780,7 @@ export function ScreenFilesPage() {
         row.previewPath
           ? (
             <div className="h-16 w-28 overflow-hidden bg-black">
-              <ScreenThumbnail path={row.previewPath} scale={0.14} className="h-full" />
+              <ScreenThumbnail path={row.previewPath} scale={0.14} className="h-full" theme={theme} />
             </div>
           )
           // A screen that resolves nowhere has nothing to draw, and saying so
@@ -1077,6 +1080,7 @@ export function ScreenFilesPage() {
                   || item.path.toLowerCase().includes(query.trim().toLowerCase()))
               : galleryItems}
             onOpen={setOpenFile}
+            theme={theme}
           />
         </div>
       ),

@@ -19,8 +19,8 @@ import { ScreenArt } from './ScreenArt';
  * a board of 872 screens never holds more canvases than fit on a screen.
  */
 export function ScreenThumbnail({
-  path, scale = 0.28, className,
-}: { path: string; scale?: number; className?: string }) {
+  path, scale = 0.28, className, theme,
+}: { path: string; scale?: number; className?: string; theme?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [seen, setSeen] = useState(false);
   const [onScreen, setOnScreen] = useState(false);
@@ -49,8 +49,8 @@ export function ScreenThumbnail({
   // The SAME key the file panel uses, so a repair that invalidates the file
   // redraws the thumbnail, and opening a screen costs no second fetch.
   const { data } = useQuery({
-    queryKey: ['screen-file', path],
-    queryFn: async () => (await apiClient.getScreenFile(path)).data,
+    queryKey: ['screen-file', path, theme ?? 'default'],
+    queryFn: async () => (await apiClient.getScreenFile(path, theme)).data,
     enabled: seen,
   });
 

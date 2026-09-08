@@ -53,17 +53,23 @@ describe('opening a screen in the studio', () => {
 
   it('draws it even though the gallery card fetched it first', async () => {
     // The card ALWAYS gets there first in the studio - it is the only way in.
-    // Both readers cache ['screen-file', path], so if they disagree about the
-    // shape the dialog decodes `undefined` and every screen reports itself
-    // unreadable. This is that collision, in one QueryClient.
+    // Both readers cache ['screen-file', path, theme], so if they disagree
+    // about the shape the dialog decodes `undefined` and every screen reports
+    // itself unreadable. This is that collision, in one QueryClient.
     const client = new QueryClient({ defaultOptions: { ...QUERY_DEFAULTS, queries: { ...QUERY_DEFAULTS.queries, retry: false } } });
     const both = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
     const item = { path: 'Themes/skope/Board/BULL.TXT', label: 'BULL', detail: '' };
 
-    const view = render(<ScreenGallery items={[item]} onOpen={vi.fn()} />, { wrapper: both });
-    await waitFor(() => expect(client.getQueryData(['screen-file', item.path])).toBeTruthy());
+    // The gallery is given the SAME theme the dialog carries, because that is
+    // what the studio does - and the theme is part of the key, since the same
+    // path read through two themes has different readers.
+    const view = render(
+      <ScreenGallery items={[item]} onOpen={vi.fn()} theme={theme.slug} />,
+      { wrapper: both },
+    );
+    await waitFor(() => expect(client.getQueryData(['screen-file', item.path, theme.slug])).toBeTruthy());
     view.unmount();
 
     render(<ArtistScreenDialog path={item.path} theme={theme} index={index} onClose={vi.fn()} onOpenPath={vi.fn()} />, { wrapper: both });

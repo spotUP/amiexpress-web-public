@@ -133,10 +133,14 @@ interface ScreenGalleryProps {
   onOpen: (path: string) => void;
   /** Draw placeholder cards while the board's index is on its way. */
   isLoading?: boolean;
+  /** The theme this gallery is looking through, which the file route needs. */
+  theme?: string;
 }
 
 /** One card. Draws nothing until it is scrolled to. */
-function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: string) => void }) {
+function GalleryCard(
+  { item, onOpen, theme }: { item: GalleryItem; onOpen: (path: string) => void; theme?: string },
+) {
   const ref = useRef<HTMLButtonElement>(null);
   const [visible, setVisible] = useState(false);
 
@@ -176,7 +180,9 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
    * react-query does not limit concurrency of its own.
    */
   const { data: fetched } = useQuery({
-    queryKey: ['screen-file', item.path],
+    // The theme is part of the KEY because it is part of the ANSWER: the same
+    // path read through two themes has different readers.
+    queryKey: ['screen-file', item.path, theme ?? 'default'],
     // A placeholder has no file behind it; asking would be a 404 per card.
     enabled: visible && !item.placeholder,
     queryFn: async () => {
@@ -188,7 +194,7 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
         // second read `undefined` and tried to decode it - which is why every
         // screen in the studio said "These bytes cannot be read as ANSI art".
         // One key, one shape.
-        const res = await apiClient.getScreenFile(item.path);
+        const res = await apiClient.getScreenFile(item.path, theme);
         return (res.data ?? null) as { content?: string } | null;
       } catch {
         return null;
@@ -272,7 +278,7 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
   );
 }
 
-export function ScreenGallery({ items, onOpen, isLoading = false }: ScreenGalleryProps) {
+export function ScreenGallery({ items, onOpen, isLoading = false, theme }: ScreenGalleryProps) {
   // The index is one request for the whole board - 891 files with their
   // readers, their SAUCE and their problems - so the page has a real wait
   // before there is anything to draw.
@@ -303,7 +309,7 @@ export function ScreenGallery({ items, onOpen, isLoading = false }: ScreenGaller
       className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
     >
       {items.map(item => (
-        <GalleryCard key={item.path} item={item} onOpen={onOpen} />
+        <GalleryCard key={item.path} item={item} onOpen={onOpen} theme={theme} />
       ))}
     </div>
   );

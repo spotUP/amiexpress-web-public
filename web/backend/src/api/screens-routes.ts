@@ -274,8 +274,17 @@ screensRouter.get('/file', (req: Request, res: Response) => {
    * by nothing, and the panel said so in as many words: "No screen on this
    * board reads this file." Reported by the sysop looking at Conf2/bull20.txt,
    * which the index knows is CONF_BULL in conference 2 at level 20 and above.
+   *
+   * THROUGH THE THEME THE CALLER IS LOOKING WITH. A theme's own file is read
+   * by nothing in the BOARD's index - the board's walk never enters a theme
+   * directory - so every screen an artist had redrawn said "No screen on this
+   * board reads this file", about the very file callers wearing that theme are
+   * served. Reported by the sysop on Themes/test/Conf/1/bull20.txt,
+   * 2026-09-08, which the themed index credits to CONF_BULL in conference 1.
    */
-  const indexed = getScreenIndex(baseDir).files[facts.relPath];
+  const requestedTheme = String(req.query.theme || '').trim().toLowerCase();
+  const themeSlug = requestedTheme && requestedTheme !== 'default' ? requestedTheme : undefined;
+  const indexed = getScreenIndex(baseDir, themeSlug).files[facts.relPath];
 
   return sendOk(res, {
     ...facts,

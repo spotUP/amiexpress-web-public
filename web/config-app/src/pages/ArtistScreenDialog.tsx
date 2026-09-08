@@ -87,8 +87,8 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
   // The PAYLOAD, unwrapped here - ScreenFilesPage caches this key the same
   // way, and one key holding two shapes is how the New theme button vanished.
   const { data: file, isLoading } = useQuery({
-    queryKey: ['screen-file', path],
-    queryFn: async () => (await apiClient.getScreenFile(path as string)).data as ScreenFilePayload,
+    queryKey: ['screen-file', path, theme.slug],
+    queryFn: async () => (await apiClient.getScreenFile(path as string, theme.slug)).data as ScreenFilePayload,
     enabled: !!path && !isNew,
   });
 

@@ -402,8 +402,17 @@ class ApiClient {
     });
   }
 
-  async getScreenFile(filePath: string) {
-    return this.request<ApiResponse>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}`);
+  /**
+   * One screen file, and who reads it THROUGH THE GIVEN THEME.
+   *
+   * Without the theme the board's own index answers, and a theme's own file is
+   * read by nothing there - the board's walk never enters a theme directory -
+   * so every screen an artist had redrawn claimed "No screen on this board
+   * reads this file".
+   */
+  async getScreenFile(filePath: string, theme?: string) {
+    const themeQuery = theme && theme !== 'default' ? `&theme=${encodeURIComponent(theme)}` : '';
+    return this.request<ApiResponse>(`${API_BASE}/screens/file?path=${encodeURIComponent(filePath)}${themeQuery}`);
   }
 
   /**
