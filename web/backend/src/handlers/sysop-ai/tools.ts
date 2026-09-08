@@ -145,7 +145,7 @@ export const CALLER_TOOLS: SysopTool[] = [
   },
   {
     name: 'search_demozoo',
-    description: 'Ask Demozoo, the demoscene database: a production (demo, intro, musicdisk) by title, a group or scener by name, or a party by name.',
+    description: 'Ask Demozoo, the demoscene database. kind=group answers with a group\'s aliases, members, subgroups, links and recent releases - use it for ANY demoscene or BBS group or handle (Up Rough, Spaceballs, Razor 1911, a scener\'s name). kind=production for a demo, intro, musicdisk or ASCII by title. kind=party for a demoparty. This is the right tool for the scene; lookup_game is not.',
     parameters: { type: 'object', properties: { kind: { type: 'string', enum: ['production', 'group', 'party'] }, query: { type: 'string' } }, required: ['kind', 'query'], additionalProperties: false },
     tier: 'caller',
     async run(_ctx, args) {
@@ -161,7 +161,7 @@ export const CALLER_TOOLS: SysopTool[] = [
   },
   {
     name: 'lookup_game',
-    description: 'What is known about a game (any platform): release, platforms, genre, a summary.',
+    description: 'A COMMERCIAL VIDEO GAME by title (any platform): release date, platforms, genre, a summary. Not for demoscene groups, sceners, demos or BBS software - those are search_demozoo. If the name is a scene group, asking here returns unrelated retail games that happen to share a word.',
     parameters: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'], additionalProperties: false },
     tier: 'caller',
     async run(ctx, args) {
