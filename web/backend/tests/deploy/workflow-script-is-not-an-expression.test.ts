@@ -68,7 +68,11 @@ describe('a workflow script never becomes an over-long expression', () => {
   it('finds the deploy script to check', () => {
     const deploy = blockScalars('deploy-hetzner.yml');
     expect(deploy.length).toBeGreaterThan(0);
-    expect(deploy.some((b) => b.body.includes('docker compose'))).toBe(true);
+    // The deploy ITSELF moved to `deploy/deploy.sh` on 2026-09-08, when a
+    // billing failure stopped Actions and took the only copy of the caller
+    // guard, the backup and the rollback with it. What is left in the
+    // workflow is the call - so that is what this looks for now.
+    expect(deploy.some((b) => b.body.includes('deploy/deploy.sh'))).toBe(true);
   });
 
   it.each(workflowFiles)('%s keeps every interpolated block under the cap', (file) => {
