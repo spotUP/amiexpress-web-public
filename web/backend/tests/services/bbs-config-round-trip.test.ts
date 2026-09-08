@@ -14,7 +14,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { loadBBSConfig, saveBBSConfig, getConfigTooltypeKeys, normalizeConfigValueCase } from '../../src/services/bbs-config-file.service';
+import { loadBBSConfig, saveBBSConfig, getConfigTooltypeKeys, normalizeConfigValueCase, declaredFieldType } from '../../src/services/bbs-config-file.service';
 import type { BBSConfigData } from '../../src/services/bbs-config-file.service';
 
 const REPO_ROOT = path.join(__dirname, '..', '..', '..', '..');
@@ -162,11 +162,21 @@ describe('bbsConfig.info round trip', () => {
     for (const field of Object.keys(keys)) {
       if (NOT_ROUND_TRIPPED.has(field)) continue;
 
+      // What to write depends on the field's TYPE, and the reader answers that
+      // question the same way twice: the default first, then the schema for a
+      // field that has none. `http_port` is the field with none - a string
+      // sample went in, the reader parsed it as the number it is, and the
+      // round trip reported a loss that was really this generator guessing.
       const current = baseline[field];
+      const declared = declaredFieldType(field);
       let written: unknown;
-      if (typeof current === 'number') written = 7;
-      else if (typeof current === 'boolean') written = !current;
-      else written = `rt-${field}`;
+      if (typeof current === 'number' || (current === undefined && declared === 'number')) {
+        written = 7;
+      } else if (typeof current === 'boolean' || (current === undefined && declared === 'boolean')) {
+        written = !current;
+      } else {
+        written = `rt-${field}`;
+      }
 
       const fresh = makeRoot();
       try {

@@ -329,7 +329,10 @@ export interface SystemConfig {
   // HTTP Server Settings (TOOLTYPE_XFERLIB, express.e:15002-15006, 15019-15027)
   http_enabled: boolean;
   http_host: string;
-  http_port: number;
+  /** express's HTTPPORT. Absent on a board that never set one - express
+   * computes 20000+node for an empty tooltype (express.e:15713), which no
+   * board-wide value can say. Nothing here binds it. */
+  http_port?: number;
 
   // BBS Server Ports
   telnet_port: number;         // Telnet server port (default: 64128)

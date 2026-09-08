@@ -128,7 +128,10 @@ export const SystemConfigSchema = z.object({
   ftp_port: z.number().int().min(1).max(65535).optional(),
   ftp_data_ports: z.string().max(500).optional(),
 
-  // HTTP Server (TOOLTYPE_XFERLIB, express.e:15002-15006)
+  // HTTP Server. http_enabled is this port's own web-terminal switch
+  // (server/web-terminal-gate.ts); http_port is express's HTTPPORT
+  // (TOOLTYPE_BBSCONFIG, express.e:15707), exported for a real Amiga board
+  // and bound by nothing here.
   http_enabled: z.boolean().optional(),
   http_port: z.number().int().min(1).max(65535).optional(),
 

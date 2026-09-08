@@ -1,6 +1,7 @@
 import * as os from 'os';
 import * as path from 'path';
 import { getConfigTooltypeKeys, loadBBSConfig } from '../../src/services/bbs-config-file.service';
+import { SystemConfigSchema } from '../../src/services/config.schemas';
 
 /**
  * The admin form shows the tooltype each field writes to, so a sysop can
@@ -65,17 +66,28 @@ describe('config tooltype keys', () => {
   });
 });
 
-describe('every mapped field has a default', () => {
+describe('every mapped field has a type', () => {
   it('so loadBBSConfig can tell a number from a boolean from a string', () => {
-    // loadBBSConfig infers a field's TYPE from `typeof` its default. Without
-    // one, a number comes back as a string (login-post.service.ts:351 tests
-    // for a number and never matched) and a boolean comes back as '' or '1'.
+    // loadBBSConfig reads a field's TYPE off `typeof` its default first.
+    // Without one, a number used to come back as a string
+    // (login-post.service.ts:351 tests for a number and never matched) and a
+    // boolean as '' or '1'.
+    //
+    // A default is no longer the ONLY way to answer that question, because one
+    // field cannot have a sensible one: `http_port` is express's HTTPPORT, and
+    // an empty HTTPPORT means 20000+node (express.e:15713), which no
+    // board-wide default can say. So the rule is now: a default, OR a type the
+    // schema declares - and the schema is the object the API already validates
+    // writes against, not a second opinion.
     const defaults = loadBBSConfig(path.join(os.tmpdir(), 'no-such-bbs-root-for-defaults'));
-    const missing = Object.keys(getConfigTooltypeKeys()).filter(
-      (field) => (defaults as Record<string, unknown>)[field] === undefined
+    const shape = SystemConfigSchema.shape as Record<string, unknown>;
+
+    const untyped = Object.keys(getConfigTooltypeKeys()).filter(
+      (field) =>
+        (defaults as Record<string, unknown>)[field] === undefined && shape[field] === undefined
     );
 
     // Jest's expect takes no message, so the report goes in the value.
-    expect(missing.join(', ')).toBe('');
+    expect(untyped.join(', ')).toBe('');
   });
 });

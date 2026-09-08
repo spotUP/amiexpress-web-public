@@ -1707,7 +1707,13 @@ export function SystemConfigPage() {
                 {...register('http_port', { min: 1, max: 65535, valueAsNumber: true })}
                 className="input-field w-full"
               />
-              <p className="text-xs text-content-secondary mt-1">Default 3001 in this stack; adjust if port conflicts arise.</p>
+              <p className="text-xs text-content-secondary mt-1">
+                Exported as HTTPPORT for a real AmiExpress board, where it is the
+                port of the HTTP transfer protocol. Nothing on this board binds
+                it: files are served over the board's own download endpoints.
+                Leave it blank unless you carry this configuration to an Amiga -
+                blank is what AmiExpress reads as "port 20000 plus the node".
+              </p>
             </div>
 
             <div>

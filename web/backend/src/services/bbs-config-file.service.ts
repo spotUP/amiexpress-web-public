@@ -13,6 +13,7 @@ import { InfoFileWriteError, parseInfoFile, updateTooltype, writeInfoFile } from
 import type { SystemConfig } from '../database/types';
 import { isSensitiveField } from '../utils/secrets-encryption.util';
 import { getSystemTime } from '../utils/date-time.util';
+import { SystemConfigSchema } from './config.schemas';
 
 export interface BBSConfigData {
   // EXECUTE_ON_* hooks - a command the board runs when something happens.
@@ -420,7 +421,16 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   // HTTP_HOST was never a bbsConfig tooltype. express.e:15002 reads HTTPHOST
   // out of the PROTOCOL icon (TOOLTYPE_XFERLIB), per protocol, which is the
   // Protocols page's business and cannot be one board-wide field.
-  'HTTPPORT': 'http_port',          // express.e:15707, and the node icon at :15708
+  // express.e:15707, and the node icon at :15708. Kept so a board carried back
+  // to a real Amiga keeps the setting - NOT because anything here binds it.
+  // HTTPPORT is the port of express's HTTP TRANSFER protocol (httpd.e:558): a
+  // one-shot server opened for a single download or upload by a caller whose
+  // xferProtocol is HTTP, and closed on Ctrl-C or carrier loss. This port does
+  // not implement that protocol - it serves files over its own always-on
+  // endpoints instead (handlers/file/file-delivery.ts:194), the same call the
+  // parity plan's scope decision 4 records. An empty HTTPPORT means 20000+node
+  // to express, so the field is left blank rather than defaulted.
+  'HTTPPORT': 'http_port',
 
   // BBS Server Ports
   'TELNET_PORT': 'telnet_port',
@@ -514,6 +524,43 @@ function isInvertedTooltype(tooltypeName: string): boolean {
 function isInvertedField(fieldName: string): boolean {
   const tooltypeName = REVERSE_TOOLTYPE_MAP[fieldName];
   return tooltypeName !== undefined && isInvertedTooltype(tooltypeName);
+}
+
+/**
+ * What TYPE a configuration field is, according to the schema that validates it.
+ *
+ * The reader used to answer this question with `typeof getDefaultConfig()[f]`,
+ * which makes a field's type a side effect of whether somebody gave it a
+ * default. Every field that has one reads the same as before - the default is
+ * still asked first - but a field with NO default used to come back as a
+ * string, silently, whatever the schema and the column said. `http_port` is
+ * the first such field and the reason this exists: its default was removed
+ * because express computes 20000+node for an empty HTTPPORT (express.e:15713)
+ * and no board-wide default can say that.
+ *
+ * `SystemConfigSchema` is the same object the API validates writes against, so
+ * this adds no second opinion about what a field is.
+ */
+export type DeclaredFieldType = 'boolean' | 'number' | 'string' | undefined;
+
+export function declaredFieldType(fieldName: string): DeclaredFieldType {
+  const shape = SystemConfigSchema.shape as Record<string, unknown>;
+  let node: any = shape[fieldName];
+
+  // Unwrap the wrappers a field may be declared through - `.optional()`,
+  // `.default()`, `.nullable()` - until the base type is reached. Bounded, so
+  // a schema shape this does not understand cannot spin.
+  for (let depth = 0; node && depth < 8; depth++) {
+    const typeName = node?._def?.typeName;
+    if (typeName === 'ZodBoolean') return 'boolean';
+    if (typeName === 'ZodNumber') return 'number';
+    if (typeName === 'ZodString' || typeName === 'ZodEnum' || typeName === 'ZodLiteral') return 'string';
+    // A union (`z.string().or(z.literal(''))`) is only ever string-shaped here.
+    if (typeName === 'ZodUnion') return 'string';
+    node = node?._def?.innerType ?? node?._def?.schema;
+  }
+
+  return undefined;
 }
 
 /**
@@ -757,12 +804,22 @@ console.log('[BBSConfig] bbsConfig.info not found, using defaults');
         continue;
       }
 
-      // Parse value based on field type
-      if (typeof getDefaultConfig()[fieldName] === 'boolean') {
+      // Parse value based on field type.
+      //
+      // The DEFAULT answers first, because that is what every field here has
+      // always been read through. The SCHEMA answers for a field that has no
+      // default: `typeof undefined` is neither 'boolean' nor 'number', so such
+      // a field used to fall through to the string branch and a sysop's
+      // HTTPPORT=20001 came back as the string '20001' against a column and a
+      // form that both say number.
+      const declared = declaredFieldType(fieldName);
+      const fromDefault = typeof getDefaultConfig()[fieldName];
+
+      if (fromDefault === 'boolean' || (fromDefault === 'undefined' && declared === 'boolean')) {
         // Boolean flag: presence = true, or = FALSE for the handful stored
         // as their negative.
         (config as any)[fieldName] = !isInvertedTooltype(key);
-      } else if (typeof getDefaultConfig()[fieldName] === 'number') {
+      } else if (fromDefault === 'number' || (fromDefault === 'undefined' && declared === 'number')) {
         // Numeric value
         const num = parseInt(rawValue, 10);
         if (!isNaN(num)) {
@@ -1080,7 +1137,11 @@ function getDefaultConfig(): BBSConfigData {
     // switch exists to turn it off, and a default of false meant a fresh
     // install came up dark on the web with no clue why.
     http_enabled: true,
-    http_port: 80,
+    // http_port has NO default on purpose. Its tooltype is express's HTTPPORT,
+    // and express.e:15713 says an empty HTTPPORT means 20000+node - a value no
+    // board-wide field can hold, and never 80. Writing 80 here put a key in
+    // every board's file that said something express does not mean. Absent is
+    // the honest state, and the writer skips undefined.
     telnet_port: 2323,
     ssh_port: 2222,
     quiet_join: false,
