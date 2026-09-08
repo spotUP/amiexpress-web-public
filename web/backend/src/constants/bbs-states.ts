@@ -176,6 +176,7 @@ export enum LoggedOnSubState {
   USER_NOTES_VIEW = 'user_notes_view',                      // User notes view/edit - express.e:21679-21739
   CONF_ACCOUNTING_VIEW = 'conf_accounting_view',            // Conference accounting - express.e:22045-22250
   CREDIT_MAINTENANCE_VIEW = 'credit_maintenance_view',      // Credit maintenance - express.e:21884-22042
+  USER_ANSWERS_VIEW = 'user_answers_view',                  // New-user questionnaire answers (read-only) - express.e:21319-21326
 
   // Chat operations
   CHAT_PAGE_SYSOP = 'chat_page_sysop',

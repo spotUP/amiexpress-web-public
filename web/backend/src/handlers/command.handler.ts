@@ -659,6 +659,12 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
       await handleCreditMaintenanceInput(socket, session, data);
       return;
 
+    // User Answers (express.e:21319-21326) - read-only; any key returns.
+    case LoggedOnSubState.USER_ANSWERS_VIEW:
+      const { handleUserAnswersInput } = require('./user/account-edit-input.handler');
+      handleUserAnswersInput(socket, session, data);
+      return;
+
     // Forward message states (express.e forwardMSG:9807-9871)
     case LoggedOnSubState.FORWARD_MESSAGE_TO:
       if (data === '\r' || data === '\n') {
