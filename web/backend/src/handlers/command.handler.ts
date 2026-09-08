@@ -1948,8 +1948,14 @@ function endPasswordMask(socket: any, session: BBSSession): void {
           await startNewUserRegistration(socket, session, wanted);
           return;
         }
-        session.loginRetryCount = (session.loginRetryCount || 0) + 1;
-        if (session.loginRetryCount >= 5) {
+        // express.e:29610-29637 keeps TWO counters, and this is the first of
+        // them: `retryCount`, in-session, capped at 5, bumped by a username
+        // that is not found and by declining the new-user prompt. The second
+        // is `userMisc.invalidAttempts`, which is persisted on the account and
+        // governs lockout. Sharing one counter between them meant a few
+        // mistyped usernames spent the caller's password attempts.
+        session.usernameRetryCount = (session.usernameRetryCount || 0) + 1;
+        if (session.usernameRetryCount >= 5) {
           const { beginLogoff } = require('../server/logoff');
           beginLogoff(socket, session, { message: '\r\nToo Many Errors, Goodbye!\r\n' });
           return;
@@ -1993,6 +1999,24 @@ function endPasswordMask(socket: any, session: BBSSession): void {
 
             const { getMaxPasswordFails } = require('../services/password-policy.util');
             const maxFails = getMaxPasswordFails();
+
+            // express.e:1008-1016 counts the failure on the ACCOUNT and locks
+            // it there. Until now this port counted only in the session, so
+            // `accountLocked` - which login already honours at
+            // login-post.service.ts (express.e:29775) - could never be set by
+            // anything except a sysop editing the account by hand: a real gate
+            // that nothing could trip, and a lockout a caller escaped by
+            // hanging up.
+            try {
+              const failedUser = await getDatabase().getUserByUsername(username);
+              if (failedUser?.slotNumber && failedUser.slotNumber > 0) {
+                const { userDatabaseManager } = require('../services/UserDatabaseManager');
+                userDatabaseManager.recordPasswordFailure(failedUser.slotNumber, maxFails);
+              }
+            } catch (err) {
+              // A failure to record must never block the login flow itself.
+              console.warn('[AUTH] Could not record password failure:', err);
+            }
             if (maxFails >= 0 && session.loginRetryCount >= maxFails) {
               // express.e:29152-29213 — try the email-based password reset
               // flow first (parity with web). If MAIL_ON_PWD_FAIL is
