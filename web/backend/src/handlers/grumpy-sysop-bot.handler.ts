@@ -13,6 +13,7 @@
  */
 
 import axios from 'axios';
+import { loadModelCosts, saveModelCosts } from './sysop-ai/model-cost-store';
 import { askWithTools } from './sysop-ai/loop';
 import type { SysopTool, ToolContext } from './sysop-ai/tools';
 import { getSystemTime } from '../utils/date-time.util';
@@ -90,6 +91,21 @@ function cfgDeadline(aiConfig: AIProviderConfig): number {
 export const TOOL_AI_BUDGET_MS = 35000;
 
 /**
+ * The longest ONE round trip to a model may take.
+ *
+ * The tool loop handed each round whatever was left of the 35-second budget,
+ * so a single slow model could spend all of it on its first answer - measured
+ * at 21.4 s for `nvidia/nemotron-3.5-lightning:free` on a five-word prompt -
+ * and the loop then ran out before the model could use what the tool told it.
+ * The caller waited half a minute for the fallback line.
+ *
+ * Capped, a slow model is abandoned at twelve seconds, its cost is recorded
+ * against it, and the next-ranked model - a second, in the measured case -
+ * answers inside the same budget.
+ */
+export const PER_ROUND_MS = 12000;
+
+/**
  * WHICH FREE MODEL ANSWERS FASTEST - measured, not guessed.
  *
  * The picker ranked free tool-capable models by CONTEXT LENGTH, which says
@@ -105,7 +121,41 @@ export const TOOL_AI_BUDGET_MS = 35000;
  * another. Nothing here touches the network.
  */
 interface ModelCost { ewmaMs: number; failedAt?: number }
-const modelCost = new Map<string, ModelCost>();
+/**
+ * REMEMBERED ACROSS RESTARTS.
+ *
+ * This map used to be the only copy, and the board deployed twenty-eight
+ * times on the day it was written - so every measurement was thrown away
+ * several times a day and the picker went back to trying a model measured at
+ * 21.4 s as though it were fast. See `model-cost-store.ts` for the numbers.
+ */
+let modelCostCache: Map<string, ModelCost> | undefined;
+/**
+ * Read LAZILY, never at import.
+ *
+ * `config.get('dataDir')` is set while the board starts, and this module is
+ * reached by `require` from the chat handler - so reading the file at import
+ * time would read whatever the default happened to be and quietly answer
+ * "nothing measured yet", which is the bug this file exists to fix.
+ */
+function costs(): Map<string, ModelCost> {
+  if (!modelCostCache) modelCostCache = loadModelCosts();
+  return modelCostCache;
+}
+
+/**
+ * Writing is debounced: a tool round notes a cost twice a message, and the
+ * file is a cache, not a ledger. Unref'd so it can never hold the process up.
+ */
+let costFlush: NodeJS.Timeout | undefined;
+function rememberCosts(): void {
+  if (costFlush) return;
+  costFlush = setTimeout(() => {
+    costFlush = undefined;
+    saveModelCosts(costs());
+  }, 2000);
+  costFlush.unref?.();
+}
 /** An untried model is assumed this fast - good enough to be tried early. */
 const UNTRIED_MS = 6000;
 /** How long a model that failed or timed out stays at the back. */
@@ -113,20 +163,24 @@ const PENALTY_MS = 10 * 60 * 1000;
 
 /** Record what a call to `model` cost, in milliseconds; `ok` false marks a failure. */
 export function noteModelCost(model: string, ms: number, ok: boolean): void {
-  const prev = modelCost.get(model);
+  const prev = costs().get(model);
   const ewmaMs = prev ? Math.round(prev.ewmaMs * 0.6 + ms * 0.4) : ms;
-  modelCost.set(model, { ewmaMs, failedAt: ok ? undefined : Date.now() });
+  costs().set(model, { ewmaMs, failedAt: ok ? undefined : Date.now() });
+  rememberCosts();
 }
 
 /** What this model is expected to cost right now - a failure is worn for ten minutes. */
 export function modelCostMs(model: string, now = Date.now()): number {
-  const c = modelCost.get(model);
+  const c = costs().get(model);
   if (!c) return UNTRIED_MS;
   return c.failedAt && now - c.failedAt < PENALTY_MS ? c.ewmaMs + 60000 : c.ewmaMs;
 }
 
 /** Test seam. */
-export function resetModelCosts(): void { modelCost.clear(); }
+export function resetModelCosts(): void {
+  modelCostCache = new Map();
+  if (costFlush) { clearTimeout(costFlush); costFlush = undefined; }
+}
 
 function remainingBudget(aiConfig: AIProviderConfig, ownTimeoutMs: number): number {
   if (aiConfig.deadline === undefined) return ownTimeoutMs;
@@ -486,6 +540,7 @@ console.log(`[Grumpy Bot] Trying OpenRouter (${freeModel}) with ${context.tools.
         tools: context.tools.list,
         ctx: context.tools.ctx,
         deadline: cfgDeadline(aiConfig),
+        perRoundMs: PER_ROUND_MS,
         temperature: aiConfig.temperature,
         post: async (body, timeoutMs) => (await axios.post('https://openrouter.ai/api/v1/chat/completions', body, { headers, timeout: timeoutMs })).data,
       });

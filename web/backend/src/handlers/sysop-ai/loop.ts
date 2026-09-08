@@ -21,6 +21,8 @@ export interface ToolLoopRequest {
   ctx: ToolContext;
   /** Absolute ms timestamp the whole reply must be in by. */
   deadline: number;
+  /** The longest ONE round trip may take, whatever is left of the deadline. */
+  perRoundMs?: number;
   temperature?: number;
   /** POST the chat/completions body; returns the parsed response data. */
   post: (body: Record<string, unknown>, timeoutMs: number) => Promise<any>;
@@ -39,6 +41,9 @@ export interface ToolLoopResult {
    */
   toolResults: string[];
 }
+
+/** The cap when a caller names none - the same number the bot handler uses. */
+const DEFAULT_PER_ROUND_MS = 12000;
 
 function parseArgs(raw: unknown): Record<string, unknown> {
   if (raw && typeof raw === 'object') return raw as Record<string, unknown>;
@@ -65,7 +70,12 @@ console.log('[Grumpy Bot] tool loop: out of time before the reply');
       temperature: req.temperature,
       ...(round < MAX_ROUNDS && definitions.length ? { tools: definitions, tool_choice: 'auto' } : {}),
     };
-    const data = await req.post(body, left);
+    // ONE ROUND MAY NOT SPEND THE WHOLE BUDGET. A model measured at 21.4 s
+    // used to take all 35 s of a tool reply on its first answer and leave
+    // nothing for the round that reads the tool's result - so the caller
+    // waited half a minute and got the fallback line. Abandoned at the cap,
+    // its cost is recorded and a faster model answers inside the same budget.
+    const data = await req.post(body, Math.min(left, req.perRoundMs ?? DEFAULT_PER_ROUND_MS));
     const message = data?.choices?.[0]?.message;
     if (!message) return { text: null, afters, calls, toolResults };
 
