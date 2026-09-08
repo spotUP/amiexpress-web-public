@@ -24,8 +24,12 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 process.env.SKIP_DB_INIT = '1';
+// Importing screen.handler pulls in src/index.ts, which otherwise binds the
+// telnet and :3001 listeners - EADDRINUSE against a running dev server, landing
+// on whichever test is executing when the async listen fails (index.ts:1608).
+process.env.SKIP_SERVER_START = '1';
 
-import { displayScreen } from '../../src/handlers/screen.handler';
+import { displayScreen, parseMciCodes } from '../../src/handlers/screen.handler';
 
 interface Emit {
   event: string;
@@ -80,5 +84,63 @@ describe('screen include-depth cap on the ANSI ~SS_ arm', () => {
 
     // (2) The include TOKEN itself never reaches the terminal, at any depth.
     expect(wire).not.toContain('~SS_');
+  });
+});
+
+/**
+ * The OTHER include mechanism: the socket-less `{{DISPLAY_FILE}}` path
+ * (screen.handler.ts:964). It runs for the admin preview - and, on the board,
+ * for any screen carrying a WIPE code, because a wipe disables inline mode
+ * (`mciSocket = undefined`, screen.handler.ts:2067) and routes the render
+ * through this path instead of the capped inline walker.
+ *
+ * Its recursion cap is the `includeDepth` option, and that option used to
+ * default to Infinity - so a wipe screen naming itself via `~SS_` recursed
+ * here until the process died, the SAME self-reference the inline walker is
+ * guarded against. The default is now `MAX_SCREEN_INCLUDE_DEPTH`, the one
+ * bound both mechanisms share; the preview still passes an explicit 1.
+ */
+describe('screen include-depth cap on the {{DISPLAY_FILE}} (socket-less / wipe) arm', () => {
+  it('parseMciCodes bounds a self-include when no includeDepth is passed', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'include-depth-df-'));
+    const selfPath = path.join(dir, 'SELF.TXT');
+    // First line is the include so allowMCI arms; MARK is the tail that each
+    // level contributes to the built string as the recursion unwinds.
+    fs.writeFileSync(selfPath, `~SS_${selfPath}\nMARK\n`, 'latin1');
+
+    const session: any = { nodeId: 0, currentConf: 0 };
+    // No socket -> the {{DISPLAY_FILE}} path; no options -> the DEFAULT cap.
+    // Without the fix this call never returns.
+    const result = await parseMciCodes(
+      fs.readFileSync(selfPath, 'latin1'),
+      session,
+    );
+
+    // The placeholder was fully resolved - no unexpanded include is left,
+    // and the raw token never survived into the built string.
+    expect(result.parsed).not.toContain('{{DISPLAY_FILE');
+    expect(result.parsed).not.toContain('~SS_');
+    // Bounded, not infinite: MARK appears a capped number of times (one per
+    // expanded level), never unbounded.
+    const marks = result.parsed.split('MARK').length - 1;
+    expect(marks).toBeGreaterThan(0);
+    expect(marks).toBeLessThanOrEqual(9);
+  });
+
+  it('a WIPE screen that includes itself still terminates on the board path', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'include-depth-wipe-'));
+    const selfPath = path.join(dir, 'SELF.TXT');
+    // ~WM (matrix wipe) on its own first line disables inline mode; the wipe
+    // is stripped, leaving ~SS_<self> as the first line so MCI still arms.
+    fs.writeFileSync(selfPath, `~WM\n~SS_${selfPath}\nDONE\n`, 'latin1');
+
+    const emits: Emit[] = [];
+    const socket = makeSocket(emits);
+    const session: any = { nodeId: 0, currentConf: 0 };
+
+    // Terminates instead of recursing until the process dies (the regression).
+    await displayScreen(socket, session, selfPath);
+
+    expect(wireText(emits)).not.toContain('~SS_');
   });
 });

@@ -648,19 +648,27 @@ export async function parseMciCodes(
   socket?: any,  // When provided, execute inline (express.e outdata=NIL mode)
   options?: {
     /**
-     * How many levels of `~SS_`/`~SR_` include to expand. Undefined means
-     * "as many as the screens name", which is what the board does and what
-     * every existing caller gets.
+     * How many levels of `~SS_`/`~SR_` include to expand on the `{{DISPLAY_FILE}}`
+     * (socket-less) path. Undefined means `MAX_SCREEN_INCLUDE_DEPTH` - the SAME
+     * bound the inline walker's `displayIncludedScreen` uses, so a
+     * self-referential sysop screen is stopped whichever include mechanism
+     * runs it.
      *
-     * Only the admin's preview passes a number. A preview renders a screen
-     * nobody has approved yet, on a request from a browser, and an include
-     * chain is a walk over paths the requester chose - so it is bounded there
-     * and nowhere else.
+     * This was once `Infinity`, on the reasoning that the board is always
+     * bounded by the inline walker and only the preview needs a cap. That
+     * held until a WIPE screen: a wipe disables inline mode on the board
+     * (`mciSocket = undefined`, below), so a board render whose first line is a
+     * wipe code AND names itself via `~SS_` took this path with no bound and
+     * recursed until the process died. Defaulting to the inline cap closes it.
+     *
+     * The admin's preview still passes an explicit `1` (a preview renders a
+     * screen nobody approved yet, on a request from a browser, so its include
+     * chain is a walk over paths the requester chose).
      */
     includeDepth?: number;
   }
 ): Promise<{ parsed: string; commands: string[]; hasPause: boolean; slowmo?: number; slowmoCount?: number; inlineEmitted?: boolean; pendingInlineContent?: string }> {
-  const includeDepth = options?.includeDepth ?? Number.POSITIVE_INFINITY;
+  const includeDepth = options?.includeDepth ?? MAX_SCREEN_INCLUDE_DEPTH;
   let parsed = content;
   const commandsToExecute: string[] = [];
   let hasPause = false;
