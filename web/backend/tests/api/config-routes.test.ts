@@ -128,13 +128,17 @@ describe('Config Routes', () => {
       }
     });
 
-    // REGKEY is gone: AmiExpress is freeware and this port is free, so the
-    // API has no registration name to hand out, masked or otherwise.
-    it('does not serve a registration key at all', async () => {
+    // REGKEY is the name VER prints (express.e:25696), not a licence and not
+    // a secret, so the API hands it out in the clear like bbs_name. What it
+    // must never do is mask it - a masked value read back and saved would
+    // write '***' into the board file as the board's own name.
+    it('serves the registration name in the clear, never masked', async () => {
       const res = await request(app).get('/api/config/system');
       if (res.status === 200) {
         const data = res.body.data ?? res.body;
-        expect(data.reg_key).toBeUndefined();
+        if (data.reg_key !== undefined && data.reg_key !== null && data.reg_key !== '') {
+          expect(data.reg_key).not.toBe('***');
+        }
       }
     });
   });

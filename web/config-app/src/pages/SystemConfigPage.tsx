@@ -458,6 +458,24 @@ export function SystemConfigPage() {
             </div>
 
             <div>
+              <label htmlFor="reg_key" className="label">
+                Registered To
+              </label>
+              <TooltypeKey field="reg_key" />
+              <input
+                id="reg_key"
+                type="text"
+                {...register('reg_key')}
+                className="input-field w-full"
+              />
+              <p className="text-sm text-content-secondary mt-2">
+                The name VER prints - "Registered to Up Rough." Left empty, VER
+                keeps this port's own line. express.e reads the same tooltype at
+                :31991 and prints it at :25696.
+              </p>
+            </div>
+
+            <div>
               <label htmlFor="location" className="label">
                 Location
               </label>

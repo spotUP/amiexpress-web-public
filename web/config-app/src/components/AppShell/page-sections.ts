@@ -52,8 +52,8 @@ export const SYSTEM_CONFIG_SECTIONS: PageSection[] = [
   {
     name: 'Basic Information',
     category: 'General',
-    fields: ['bbs_name', 'sysop_name', 'location', 'email', 'website'],
-    keywords: ['board name', 'sysop', 'address', 'contact'],
+    fields: ['bbs_name', 'sysop_name', 'reg_key', 'location', 'email', 'website'],
+    keywords: ['board name', 'sysop', 'address', 'contact', 'registered to', 'registration name', 'regkey'],
   },
   {
     name: 'Security Settings',

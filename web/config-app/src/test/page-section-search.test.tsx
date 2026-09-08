@@ -53,6 +53,18 @@ describe('a section is a searchable destination', () => {
     expect(sectionsMatching('system', 'max_nodes').map((s) => s.name)).toEqual(['System Limits']);
   });
 
+  it('finds the name VER prints, which a sysop looks for by that phrase', () => {
+    // REGKEY lives under a heading that says nothing about registration, and
+    // the sysop who wants VER to say their board's name searches for the
+    // sentence they saw, not for the tooltype.
+    expect(sectionsMatching('system', 'registered to').map((s) => s.name)).toEqual([
+      'Basic Information',
+    ]);
+    expect(sectionsMatching('system', 'reg_key').map((s) => s.name)).toEqual([
+      'Basic Information',
+    ]);
+  });
+
   it('finds a section by a word in neither its heading nor its keys', () => {
     expect(sectionsMatching('system', 'passive').map((s) => s.name)).toEqual([
       'FTP Server Settings',

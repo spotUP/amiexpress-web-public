@@ -29,6 +29,8 @@ export interface SystemConfig {
   // Identity
   bbs_name: string;
   sysop_name: string;
+  /** REGKEY - the name VER prints: "Registered to <name>." */
+  reg_key: string;
   location: string;
   phone: string;
   email: string;
