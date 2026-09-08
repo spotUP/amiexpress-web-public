@@ -94,7 +94,20 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
 
   /** Mine to change: the file sits inside this theme's own directory - or it
    *  does not exist yet and this theme is where it is about to. */
-  const mine = isNew || (!!path && index?.files?.[path]?.theme === theme.slug);
+  /*
+   * Whether this file is the one THIS theme owns.
+   *
+   * For `default` - the board's own screens - the file to edit is the board's,
+   * which carries no theme at all. Comparing it to the slug called every board
+   * screen "somebody else's" and offered "Redraw this in The board's own
+   * screens", which would have copied the board's art into a theme that IS the
+   * board. Whoever may open `default` may edit its files: the sandbox decides
+   * that, and it refuses the write if they may not.
+   */
+  const mine = isNew
+    || (!!path && (theme.slug === 'default'
+      ? !index?.files?.[path]?.theme
+      : index?.files?.[path]?.theme === theme.slug));
 
   useEffect(() => {
     // Cleared FIRST, before any early return. Cleared only on the decoding

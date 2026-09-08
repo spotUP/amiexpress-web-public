@@ -68,7 +68,9 @@ export function ArtistStudioPage() {
         // and screens nothing reads are the sysop's business.
         showGenerated: false,
         showUnread: false,
-        ownedBy: theme.slug,
+        // The board's own view has no "yours" and "theirs": every screen is
+        // the board's, which is the thing being edited.
+        ownedBy: theme.slug === 'default' ? undefined : theme.slug,
         // A sysop auditing an artist's studio is not looking at their own art.
         ownedLabel: auditing ? `Redrawn by ${theme.owner || 'the artist'}` : 'Yours',
       })
@@ -83,8 +85,14 @@ export function ArtistStudioPage() {
    * most to gain - the ones the board has no art for at all - were invisible,
    * and there was no way to start one.
    */
+  /*
+   * The checklist is a list of what a THEME still has to redraw. The board is
+   * not redrawing itself: its own missing screens are the sysop's business and
+   * the Screen files page is where they are managed, so `default` gets the
+   * gallery and no slots.
+   */
   const slots = useMemo(
-    () => (theme ? themeChecklist(data, theme.slug) : []),
+    () => (theme && theme.slug !== 'default' ? themeChecklist(data, theme.slug) : []),
     [data, theme],
   );
   const progress = useMemo(() => themeProgress(slots), [slots]);

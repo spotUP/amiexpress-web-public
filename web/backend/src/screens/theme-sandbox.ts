@@ -16,6 +16,10 @@
 import * as path from 'path';
 
 import { readThemeRegistry, themeDirectory, type ThemeEntry } from './theme-registry';
+import { resolveNodeScreenDir } from './screen-resolution';
+import { conferenceDir } from '../conferences/conference-paths';
+import { conferenceNumbers } from '../conferences/conference-paths';
+import * as fs from 'fs';
 
 export interface ScreenWriter {
   username?: string;
@@ -51,10 +55,60 @@ export function ownedThemes(bbsRoot: string, writer: ScreenWriter): ThemeEntry[]
  */
 export function writableRoots(bbsRoot: string, writer: ScreenWriter): string[] {
   if (isSysop(writer)) return [path.resolve(bbsRoot)];
-  return ownedThemes(bbsRoot, writer)
+
+  const owned = ownedThemes(bbsRoot, writer);
+  const roots = owned
     .map(theme => themeDirectory(bbsRoot, theme))
     .filter((dir): dir is string => dir !== null)
     .map(dir => path.resolve(dir));
+
+  // THE BOARD'S OWN SCREENS, when this account owns the `default` entry.
+  //
+  // `default` is the board itself and has no directory of its own, so
+  // `themeDirectory` answers null for it and an artist given it could write
+  // nothing. The sysop asked for exactly this: "while developing amiexpress
+  // the sysop needs to be able to edit the default theme as well, also tango
+  // needs to be able to do it as he will make it".
+  //
+  // The grant is the ART, not the board: the global screen tree, each node's
+  // screen directory when it is a shared one, and each conference's Screens/.
+  // A conference's own directory and a node's own directory are NOT granted -
+  // they hold message bases, caller logs and the board's runtime state, and a
+  // theme owner has no business writing those. A screen the board keeps
+  // directly in `Conf<n>/` stays the sysop's to edit.
+  if (owned.some(theme => themeDirectory(bbsRoot, theme) === null)) {
+    roots.push(...boardScreenRoots(bbsRoot));
+  }
+
+  return roots;
+}
+
+/** The directories the board keeps ART in - never its state. */
+export function boardScreenRoots(bbsRoot: string): string[] {
+  const roots = new Set<string>([path.resolve(bbsRoot, 'Screens')]);
+
+  // A node whose SCREENS tooltype points somewhere shared - `Screens/Node/` on
+  // this board - draws from there; a node with no tooltype draws from its own
+  // directory, which is state as well as art and is left out.
+  let nodeIds: number[] = [];
+  try {
+    nodeIds = fs.readdirSync(bbsRoot)
+      .filter(entry => /^Node\d+$/.test(entry))
+      .map(entry => parseInt(entry.slice(4), 10));
+  } catch { /* no board here; the empty list is the answer */ }
+
+  for (const id of nodeIds) {
+    const screens = path.resolve(resolveNodeScreenDir(bbsRoot, id));
+    if (screens !== path.resolve(bbsRoot, `Node${id}`)) roots.add(screens);
+  }
+
+  try {
+    for (const id of conferenceNumbers(bbsRoot)) {
+      roots.add(path.resolve(conferenceDir(bbsRoot, id), 'Screens'));
+    }
+  } catch { /* no conferences readable; the screens tree still stands */ }
+
+  return [...roots];
 }
 
 /**

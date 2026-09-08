@@ -86,7 +86,22 @@ export function useMyTheme(): {
    * it is not a theme anybody draws in - the registry answers with an empty
    * `dir` and the copy route refuses it.
    */
-  const choices = sysop ? themes.filter(entry => entry.dir.trim() !== '') : mine;
+  /*
+   * `default` IS a thing to draw in, for whoever may.
+   *
+   * It is the board's own screens and has no directory of its own, so it was
+   * filtered out of the picker - which left the sysop unable to edit the
+   * board's art from the studio at all: "while developing amiexpress the
+   * sysop needs to be able to edit the default theme as well, also tango
+   * needs to be able to do it as he will make it".
+   *
+   * A sysop always may; anybody else may when the registry names them as its
+   * OWNER, which is the same rule every other theme uses, and the board grants
+   * that account the ART directories only (`theme-sandbox.boardScreenRoots`).
+   */
+  const choices = sysop
+    ? themes.filter(entry => entry.dir.trim() !== '' || entry.slug === 'default')
+    : themes.filter(entry => entry.mine);
 
   const create = useMutation({
     // Never retried. The admin retries mutations once by default, which is

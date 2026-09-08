@@ -104,8 +104,10 @@ describe('a sysop in the artist studio', () => {
     // Whose theme each one is, so a sysop picks the right studio to stand in.
     expect(offered.some(label => label.includes("tango's theme") && label.includes('tango'))).toBe(true);
     expect(offered.some(label => label.includes('Neon'))).toBe(true);
-    // The board's own screens are not a theme anybody draws in.
-    expect(offered.some(label => label.includes('The board'))).toBe(false);
+    // The board's own screens ARE offered to a sysop since 2026-09-08 - "the
+    // sysop needs to be able to edit the default theme as well" - and they are
+    // the entry with no directory of its own.
+    expect(offered.some(label => label.includes('The board'))).toBe(true);
     // No theme is minted for a sysop who owns none.
     expect(writes.filter(write => write.includes('/api/themes'))).toEqual([]);
   });
