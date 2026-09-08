@@ -17,6 +17,7 @@ import { isUserEditState, handleUserEditInput } from './user-edit-states';
 import { isFileMaintState, handleFileMaintInput } from './file-maintenance-states';
 import { isConfMaintState, handleConfMaintInput } from './conference-maint-states';
 import { isVotingState, handleVotingInput } from './voting-states';
+import { handleAmigaGuideInput } from '../commands/amigaguide-commands.handler';
 
 /**
  * Result of state routing
@@ -51,6 +52,12 @@ export async function routeStateInput(
   if (isUserEditState(subState)) {
     const handled = await handleUserEditInput(socket, session, data);
     return { handled, continueProcessing: false };
+  }
+
+  // The AmigaGuide viewer owns the keyboard while it is up.
+  if (subState === LoggedOnSubState.AG_VIEW) {
+    await handleAmigaGuideInput(socket, session, data);
+    return { handled: true, continueProcessing: false };
   }
 
   // Try File Maintenance states (FM_*)

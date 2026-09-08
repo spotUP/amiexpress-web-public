@@ -6,7 +6,7 @@
  * nothing imports, and the live dispatcher `handlers/command.handler.ts` kept
  * the old behaviour. The fixes were real, their tests passed, and the board did
  * not change. Phase 0 of the plan deleted sixteen of those files and wired up
- * a seventeenth; twenty-one are unreachable today, each with its reason below.
+ * four more; nineteen are unreachable today, each with its reason below.
  *
  * This is the ratchet. The known-dead files are listed below WITH THE REASON
  * each one is still there, and the list may only shrink: delete a file and
@@ -26,7 +26,7 @@ import { walk, entryPoints } from '../../dev-scripts/module-reachability';
  * it, and the list never shrinks. Every row therefore says what it is waiting
  * for, and a row whose reason has been settled is a row to act on.
  *
- * Phase 0 of the parity plan deleted sixteen of these
+ * Phase 0 of the parity plan deleted sixteen of these and wired up four
  * (thoughts/shared/plans/2026-09-08-express-parity-100.md). Shrink this map;
  * never grow it.
  */
@@ -51,12 +51,6 @@ const KNOWN_UNREACHABLE = new Map<string, string>([
   ['src/amiga-emulation/session/lifecycle/index.ts', 'emulator: barrel nothing imports'],
   ['src/amiga-emulation/structures/UserStructures.ts', 'emulator: struct layouts, needs an XIM-level audit before deletion'],
   ['src/amiga-emulation/xim/host-service.ts', 'emulator: XIM host surface with no importer'],
-
-  // A COMPLETE FEATURE NOBODY OPENED. The parser and the viewer work; no
-  // command serves a .guide file, and Doors/* ships plenty of them. Wire a
-  // command or delete the pair - the sysop's call, not the tool's.
-  ['src/amigaguide/AmigaGuideParser.ts', 'unwired feature: .guide viewer, awaiting the sysop - wire a command or delete both'],
-  ['src/amigaguide/AmigaGuideViewer.ts', 'unwired feature: .guide viewer, awaiting the sysop - wire a command or delete both'],
 
   ['src/doors/door-path.util.ts', 'one helper, reached only by the unreachable amiga-emulation/doorHandler.ts'],
   ['src/doors/door-repo-manifest.ts', 'reached only by tests; whether the door repo still wants a manifest builder is open'],

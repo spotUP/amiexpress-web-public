@@ -13,6 +13,7 @@
  * fails when the two disagree. Add a case, run the tests, add it here.
  */
 export const INTERNAL_COMMAND_NAMES: readonly string[] = [
+  'AG',
   'D',
   'DS',
   'DB',

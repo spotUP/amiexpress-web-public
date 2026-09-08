@@ -256,6 +256,7 @@ export enum LoggedOnSubState {
   FONT_SELECTION = 'font_selection',                  // Font selection menu
 
   // Voting Booth operations
+  AG_VIEW = 'ag_view',                                // AmigaGuide viewer has the keyboard
   VO_TOPIC_SELECT = 'vo_topic_select',                // Vote topic selection
   VO_ANSWER_INPUT = 'vo_answer_input',                // Vote answer input
   VO_MENU_CHOICE = 'vo_menu_choice',                  // Vote menu choice

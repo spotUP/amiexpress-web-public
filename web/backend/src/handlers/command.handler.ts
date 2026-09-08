@@ -5045,6 +5045,12 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       return;
 
     // === CUSTOM WEB COMMANDS (Not in express.e) ===
+    case 'AG': { // AmigaGuide reader - a door's own documentation, on the board
+      const { handleAmigaGuideCommand } = require('./commands/amigaguide-commands.handler');
+      await handleAmigaGuideCommand(socket, session, params);
+      return;
+    }
+
     case 'DOORS': // Door Games Menu - lists doors with arrow key navigation
       await displayDoorMenu(socket, session, params);
       return;
