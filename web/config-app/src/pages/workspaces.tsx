@@ -23,7 +23,9 @@ import { ConferencesPage } from './ConferencesPage';
 import { DrivesPage } from './DrivesPage';
 import { ComputersPage } from './ComputersPage';
 import { ScreenTypesPage } from './ScreenTypesPage';
+import { useAuth } from '../contexts/AuthContext';
 import { ScreenFilesPage } from './ScreenFilesPage';
+import { ArtistStudioPage } from './ArtistStudioPage';
 import { ScreenThemesPage } from './ScreenThemesPage';
 import { QuestionnairePage } from './QuestionnairePage';
 import { LanguagesPage } from './LanguagesPage';
@@ -150,13 +152,27 @@ export function OperatorChatWorkspace() {
  * artist moves between "which themes exist" and "the files in mine" constantly,
  * and two nav entries made that a navigation problem.
  */
+/** The board's own rule for who configures it, as theme-sandbox spells it. */
+const SYSOP_LEVEL = 255;
+
 const SCREEN_TABS: TabDefinition[] = [
   { id: 'files', label: 'Screen files', render: () => <ScreenFilesPage /> },
   { id: 'themes', label: 'Themes', render: () => <ScreenThemesPage /> },
   { id: 'questionnaire', label: 'Questionnaire', render: () => <QuestionnairePage /> },
 ];
 
+/**
+ * Two audiences, two views of one subject.
+ *
+ * A sysop configures the board's screens: the tables, the door art, the codes,
+ * the duplicates, the list of what nothing reads. An artist redraws a theme,
+ * and the sandbox already refuses them everything else - so the tabs were a
+ * menu of 403s wrapped around the handful of files they may touch. The sysop,
+ * 2026-09-08: "only sysops should see files with no art in them etc".
+ */
 export function ScreensWorkspace() {
+  const { secLevel } = useAuth();
+  if (secLevel < SYSOP_LEVEL) return <ArtistStudioPage />;
   return <TabbedWorkspace tabs={SCREEN_TABS} defaultTab="files" />;
 }
 
