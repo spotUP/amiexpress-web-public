@@ -125,12 +125,20 @@ describe('what the screen must not touch', () => {
     // `2a 18 41 18 44` is five bytes a compressed archive can produce by
     // chance. Screening the whole stream for them would hold a caller's file
     // hostage waiting for a subpacket terminator that never comes, so the
-    // screen only looks between a ZRINIT and the ZFILE that answers it.
-    const { manager, toCaller, toChild } = makeManager(() => true);
+    // screen stops looking once a ZFILE has been ACCEPTED - data is what
+    // follows an accepted file, and nothing else may be read as a frame.
+    //
+    // This used to accept the file by SKIPPING it, which is the one case
+    // where data does NOT follow: after a ZSKIP the sender's next move is
+    // another ZFILE, and the screen now stays armed for it. Screening only
+    // the first file of a batch is what let two duplicates onto the live
+    // board on 2026-09-08 - see the batch tests at the bottom of this file.
+    const { manager, toCaller, toChild } = makeManager(() => false);
 
-    manager.handleInput(zfileFrame('FIRST.LHA')); // consumes the one ZFILE
+    manager.handleInput(zfileFrame('FIRST.LHA')); // accepted: data follows
     await flush();
     toCaller.length = 0;
+    toChild.length = 0;
 
     const data = Buffer.concat([
       Buffer.from([0x2a, 0x18, 0x43, 0x18, 0x44]), // ZBIN32 ZFILE by accident
@@ -177,5 +185,94 @@ describe('what the screen must not touch', () => {
 
     expect(Buffer.concat(toChild)).toEqual(frame);
     expect(toCaller).toEqual([]);
+  });
+});
+
+/**
+ * The live failure of 2026-09-08, and the reason it looked like the duplicate
+ * check was broken when the check itself was fine.
+ *
+ * The screen answers ZSKIP ITSELF - rz never sees the frame. So rz does not
+ * advance, and never emits the fresh ZRINIT that `processStdoutChunk` re-arms
+ * `expectingZfile` on. Every file after the first was forwarded unscreened.
+ * On the board a batch of three refused ABS_PD1.LHA and then took
+ * ABS-PLC2.LHA and ABS-DRIN.LHA in full, both duplicates; the sysop saw a
+ * ZSKIP in the log for a name he had not sent last and concluded, reasonably,
+ * that nothing was being checked.
+ *
+ * express asks zmdupecheck at EVERY ZFILE (zmodem.e:2571).
+ */
+describe('every file in the batch, not just the first', () => {
+  /** rz's ZRINIT as a hex header - what re-arms the screen in normal flow. */
+  const zrinit = (): Buffer => Buffer.concat([
+    Buffer.from([0x2a, 0x2a, 0x18, 0x42]),
+    Buffer.from('0100000023', 'ascii'),
+    Buffer.from([0x0d, 0x8a, 0x11]),
+  ]);
+
+  function askedNames(isDuplicate: (n: string) => boolean) {
+    const asked: string[] = [];
+    const made = makeManager((name) => { asked.push(name); return isDuplicate(name); });
+    return { ...made, asked };
+  }
+
+  it('keeps screening after it has skipped one - no ZRINIT comes back', async () => {
+    // THE REGRESSION. Both are duplicates; both must be refused. Before the
+    // fix the second was never even asked about, because the ZSKIP that
+    // refused the first is what stopped rz advancing.
+    const { manager, asked, toChild } = askedNames(() => true);
+
+    manager.handleInput(zfileFrame('FIRST.LHA'));
+    await flush();
+    manager.handleInput(zfileFrame('SECOND.LHA'));
+    await flush();
+
+    expect(asked).toEqual(['FIRST.LHA', 'SECOND.LHA']);
+    expect(toChild).toEqual([]); // neither reached rz
+  });
+
+  it('still screens the next file after one was ACCEPTED and rz asked again', async () => {
+    // The path that always worked, pinned so the fix cannot break it: a file
+    // that is forwarded transfers, and rz's own ZRINIT re-arms the screen.
+    const { manager, asked } = askedNames((name) => name === 'SECOND.LHA');
+
+    manager.handleInput(zfileFrame('FIRST.LHA'));
+    await flush();
+    (manager as any).processStdoutChunk(zrinit());
+    await flush();
+    manager.handleInput(zfileFrame('SECOND.LHA'));
+    await flush();
+
+    expect(asked).toEqual(['FIRST.LHA', 'SECOND.LHA']);
+  });
+
+  it('re-arms on a ZRINIT that shares its chunk with rz chatter', async () => {
+    // `isLoneZrinit` caps the chunk at 28 bytes, so a ZRINIT arriving with
+    // anything after it is not "lone". The arming must not depend on that.
+    const { manager, asked } = askedNames((name) => name === 'SECOND.LHA');
+
+    manager.handleInput(zfileFrame('FIRST.LHA'));
+    await flush();
+    (manager as any).processStdoutChunk(
+      Buffer.concat([zrinit(), Buffer.from('rz: ready for the next one\r\n', 'ascii')])
+    );
+    await flush();
+    manager.handleInput(zfileFrame('SECOND.LHA'));
+    await flush();
+
+    expect(asked).toEqual(['FIRST.LHA', 'SECOND.LHA']);
+  });
+
+  it('refuses the third as readily as the first', async () => {
+    // The live batch was three files. Nothing about the count may matter.
+    const { manager, asked, toChild } = askedNames(() => true);
+
+    for (const name of ['ABS_PD1.LHA', 'ABS-PLC2.LHA', 'ABS-DRIN.LHA']) {
+      manager.handleInput(zfileFrame(name));
+      await flush();
+    }
+
+    expect(asked).toEqual(['ABS_PD1.LHA', 'ABS-PLC2.LHA', 'ABS-DRIN.LHA']);
+    expect(toChild).toEqual([]);
   });
 });

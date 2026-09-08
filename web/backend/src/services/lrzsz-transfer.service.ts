@@ -417,6 +417,17 @@ export class LrzszTransferManager {
           this.skippedFiles.push(found.name);
           console.log(`[lrzsz upload] duplicate ${found.name} - answering ZSKIP`);
           this.sendZskip();
+          // ARM FOR THE NEXT FILE. A ZSKIP invites the sender's next ZFILE
+          // exactly as a ZRINIT does, and this screen answered it ITSELF -
+          // rz never saw the frame, so rz never advances and never emits the
+          // fresh ZRINIT that `processStdoutChunk` re-arms on. Without this
+          // line only the FIRST file of a batch is ever screened, and the
+          // moment that one is skipped every remaining file is forwarded
+          // unchecked: on the live board a batch of three refused
+          // ABS_PD1.LHA and then took ABS-PLC2.LHA and ABS-DRIN.LHA, both
+          // duplicates, in full. express asks zmdupecheck at EVERY ZFILE
+          // (zmodem.e:2571), not at the first one.
+          this.expectingZfile = true;
           return;
         }
         this.forwardToChild(frame);
@@ -598,6 +609,14 @@ export class LrzszTransferManager {
       if (buf[0] !== 0x2a || buf[1] !== 0x2a || buf[2] !== 0x18 || buf[3] !== 0x42) return false;
       return buf[4] === 0x30 && buf[5] === 0x31;
     };
+    // ARMING is a different question from SUPPRESSION, and must not borrow
+    // `isLoneZrinit`'s 28-byte cap: a ZRINIT that arrives with rz chatter
+    // after it is still rz saying "send me a file", and if that does not
+    // re-arm the screen the next file in the batch goes unchecked.
+    const startsWithZrinit = (buf: Buffer): boolean =>
+      buf.length >= 6 &&
+      buf[0] === 0x2a && buf[1] === 0x2a && buf[2] === 0x18 && buf[3] === 0x42 &&
+      buf[4] === 0x30 && buf[5] === 0x31;
 
     // Split at ZMODEM hex-header boundaries (`**\x18B`) so each
     // initial header is delivered to the peer as its own frame.
@@ -632,7 +651,7 @@ export class LrzszTransferManager {
       if (part.length === 0) continue;
       // A ZRINIT is the receiver saying "send me a file", so a ZFILE may now
       // arrive - and only now. See `expectingZfile`.
-      if (isLoneZrinit(part)) this.expectingZfile = true;
+      if (startsWithZrinit(part)) this.expectingZfile = true;
       if (suppressDuplicates && isLoneZrinit(part)) {
         if (this.zrinitForwarded) {
           if (process.env.LRZSZ_DEBUG) {
