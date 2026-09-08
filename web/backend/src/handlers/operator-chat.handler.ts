@@ -26,6 +26,7 @@ import {
 } from '../types/operator-chat.types';
 import { OperatorChatRepository } from '../database/operator-chat.repository';
 import { BBSSession } from '../index';
+import { operatorChatUrl } from '../utils/admin-base-url.util';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import {
   emitterForUserId,
@@ -633,7 +634,7 @@ console.error('[Operator Chat] Socket.IO notification failed:', error);
   if (config.discordWebhook) {
     try {
       const timeOnlineStr = formatDuration(page.timeOnline);
-      const authUrl = `${process.env.BASE_URL || 'http://localhost:3001'}/admin/operator-chat?token=${page.token}`;
+      const authUrl = operatorChatUrl(page.token);
 
       // Build content with optional @mention
       const mention = config.discordUserId ? `<@${config.discordUserId}> ` : '';
@@ -674,7 +675,7 @@ console.error('[Operator Chat] Discord notification failed:', error);
         message: `${page.userHandle} on N${page.nodeId} in ${page.conferenceName} — ${page.lastCommand}`,
         sound: 'persistent',
         priority: 1,
-        url: `${process.env.BASE_URL || 'http://localhost:3001'}/admin/operator-chat`,
+        url: operatorChatUrl(),
         url_title: 'Open Operator Chat',
       }, { timeout: 5000 });
       notificationUpdates.pushover = true;
@@ -710,7 +711,7 @@ console.error('[Operator Chat] Gotify notification failed:', error);
           'Title': `Operator Page — ${page.userHandle}`,
           'Priority': 'urgent',
           'Tags': 'bell',
-          'Click': `${process.env.BASE_URL || 'http://localhost:3001'}/admin/operator-chat`,
+          'Click': operatorChatUrl(),
         },
         timeout: 5000,
       });
@@ -732,7 +733,7 @@ console.error('[Operator Chat] ntfy.sh notification failed:', error);
       const subscriptions = repository.getAllPushSubscriptions();
 
       if (subscriptions.length > 0) {
-        const authUrl = `${process.env.BASE_URL || 'http://localhost:3001'}/admin/operator-chat?token=${page.token}`;
+        const authUrl = operatorChatUrl(page.token);
         const payload = createPageNotificationPayload(
           page.userHandle,
           page.nodeId,

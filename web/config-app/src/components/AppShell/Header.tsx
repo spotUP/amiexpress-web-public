@@ -8,12 +8,13 @@
  */
 
 import { Link, useLocation } from 'react-router-dom';
-import { AlignJustify, Rows, PhoneCall } from 'lucide-react';
+import { AlignJustify, Rows, PhoneCall, BellOff } from 'lucide-react';
 import { useDensity } from '../../hooks/useDensity';
 import { NODE_BACKGROUND_POLL_MS, useNodeStatus, useSessionStats } from '../../hooks/useBoardData';
 import { useRealtime } from '../../realtime/RealtimeProvider';
 import { formatClockTime, formatDuration, formatRelativeTime } from '../../lib/format';
 import { StatusDot } from '../ui/StatusDot';
+import { usePushNotifications } from '../../hooks/usePushNotifications';
 import { navItemForPath } from './nav-config';
 
 export function Header() {
@@ -27,6 +28,8 @@ export function Header() {
   const onlineNodes = nodeStatus?.onlineNodes ?? 0;
   const totalNodes = nodeStatus?.totalNodes ?? 0;
   const uptime = sessionStats?.data?.uptime;
+
+  const push = usePushNotifications();
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-surface-1 px-5">
@@ -49,6 +52,52 @@ export function Header() {
             <PhoneCall size={14} aria-hidden="true" className="text-status-warn" />
             {pendingPages === 1 ? '1 caller waiting' : `${pendingPages} callers waiting`}
           </Link>
+        )}
+
+        {/*
+          * DESKTOP NOTIFICATIONS, OFF BY DEFAULT AND INVISIBLE UNTIL NOW.
+          *
+          * The board has sent a Web Push on every sysop page since the
+          * feature shipped, and the live board had ZERO subscriptions - so
+          * every one was a no-op. The switch existed, buried in Operator Chat
+          * Settings under "Notification Settings", and the sysop reasonably
+          * concluded the feature did not exist: "can the browser push
+          * notifications be made browser wide so i dont have to keep the
+          * admin page open".
+          *
+          * It already is browser-wide - a service worker push arrives with
+          * every tab closed. It just had to be switched on once. A board with
+          * no subscription looks exactly like a broken one from the sysop's
+          * chair, so the state now says so where he cannot miss it, beside
+          * the callers-waiting pill that follows him around the app.
+          *
+          * Shown ONLY when the browser can do it and he has not enabled it.
+          * Once subscribed this disappears - a permanent badge for a working
+          * feature is noise.
+          */}
+        {push.isSupported && !push.isSubscribed && push.permission !== 'denied' && (
+          <button
+            type="button"
+            onClick={() => { void push.subscribe(); }}
+            disabled={push.loading}
+            title="Get a desktop notification when a caller pages you, even with this page closed"
+            className="flex h-control items-center gap-2 rounded border border-status-warn/40 bg-status-warn/10 px-3 text-xs text-content-primary transition-colors hover:bg-status-warn/20 disabled:opacity-50"
+          >
+            <BellOff size={14} aria-hidden="true" className="text-status-warn" />
+            Desktop notifications off
+          </button>
+        )}
+
+        {/* Permission refused at the browser level - we cannot fix that from
+            here, and a button that cannot work is worse than a sentence. */}
+        {push.isSupported && push.permission === 'denied' && (
+          <span
+            title="Your browser is blocking notifications for this site. Allow them in the browser's site settings, then reload."
+            className="flex h-control items-center gap-2 rounded border border-border bg-surface-2 px-3 text-xs text-content-muted"
+          >
+            <BellOff size={14} aria-hidden="true" />
+            Notifications blocked by the browser
+          </span>
         )}
 
         <div className="flex items-center gap-3 rounded border border-border bg-surface-2 px-3 py-1.5 text-xs">

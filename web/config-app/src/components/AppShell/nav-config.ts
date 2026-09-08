@@ -72,7 +72,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: '', label: 'Overview', icon: LayoutDashboard, minLevel: 100, description: 'The state of the board at a glance' },
       { path: 'activity', label: 'Activity', icon: Zap, minLevel: 255, description: 'Live feed of logons, doors and transfers' },
       { path: 'nodes', label: 'Nodes', icon: Monitor, minLevel: 255, description: 'Live nodes, supervisor commands and per-node settings', keywords: ['Node Control'] },
-      { path: 'operator-chat', label: 'Operator Chat', icon: MessageSquare, minLevel: 255, description: 'Answer a caller paging the sysop', keywords: ['Operator Chat Settings', 'Paging Hours', 'Away Messages'] },
+      { path: 'operator-chat', label: 'Operator Chat', icon: MessageSquare, minLevel: 255, description: 'Answer a caller paging the sysop', keywords: ['Operator Chat Settings', 'Paging Hours', 'Away Messages', 'Notification', 'Notifications', 'Notification Settings', 'Push', 'Push Notifications', 'Desktop Notifications', 'Browser Notifications', 'Alerts', 'Sound', 'Email', 'Webhook', 'VAPID', 'Subscribe', 'Page Sysop'] },
     ],
   },
   {
