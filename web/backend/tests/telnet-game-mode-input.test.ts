@@ -61,15 +61,28 @@ describe('the game-mode gate in the character path', () => {
     expect(characterPathStandsAside({ connectionType: 'telnet' })).toBe(false);
   });
 
-  it('is what socket-handlers.ts actually asks', () => {
-    // A rule nothing reads is the shape of the original bug, so this checks
-    // the gate in the source is the one tested above.
-    const { readFileSync } = require('fs');
-    const { join } = require('path');
-    const source = readFileSync(
-      join(__dirname, '..', 'src', 'server', 'socket-handlers.ts'), 'utf8',
-    );
-    expect(source).toContain('if (session.gameModeEnabled && deliversKeyEvents(session)) {');
+  it('is what the input pipeline actually does', () => {
+    // A rule nothing reads is the shape of the original bug, so this drives
+    // the gate rather than reading for it.
+    //
+    // It used to read socket-handlers.ts for the literal line
+    // `if (session.gameModeEnabled && deliversKeyEvents(session)) {`, and
+    // went red when TP-8 moved the gate into the ONE input pipeline both
+    // transports now share (`server/terminal-input.ts`) - the behaviour did
+    // not change, the file did. `classifyTerminalInput` is what
+    // socket-handlers.ts and transport-session.ts both call, and what they
+    // pass for `deliversKeyEvents` is `deliversKeyEvents(session)` and
+    // `false` respectively.
+    const { classifyTerminalInput } = require('../src/server/terminal-input');
+    const ask = (session: any) =>
+      classifyTerminalInput(session, 'x', { deliversKeyEvents: deliversKeyEvents(session) });
+
+    // A browser in game mode: the character path stands aside, and says why.
+    expect(ask({ gameModeEnabled: true, connectionType: 'web' }))
+      .toEqual({ kind: 'swallow', why: 'game-mode' });
+    // Telnet has no key events to stand aside FOR, so its characters go on.
+    expect(ask({ gameModeEnabled: true, connectionType: 'telnet' }).kind).not.toBe('swallow');
+    expect(ask({ gameModeEnabled: false, connectionType: 'web' }).kind).not.toBe('swallow');
   });
 });
 

@@ -181,19 +181,85 @@ describe('appendCtopRecord: appends records to existing file', () => {
 
 // ─── 4. Static wiring check ───────────────────────────────────────────────────
 
-describe('file-socket-handlers: wired to appendCtopRecord', () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, '..', 'src', 'server', 'file-socket-handlers.ts'),
-    'utf8'
-  );
+/**
+ * These two used to read `file-socket-handlers.ts` as TEXT and assert that
+ * the string `appendCtopRecord` and a literal
+ * `!foundDupe && fileStatus === 'active'` appeared in it. Both went red the
+ * moment the filing moved into `services/upload-filing.service.ts`, where
+ * the same rule is written as a `!duplicate` guard nested in
+ * `status === 'active'` - the behaviour was never lost, only the spelling.
+ *
+ * A pin on source text cannot tell those apart. These drive the real
+ * `fileUploadedFile` and look at the file the Conftop-II door reads.
+ */
+describe('an upload files a ctop record; a duplicate files none', () => {
+  const uploader = { username: 'SPOT', location: 'OSLO' };
+  let board: string;
+  let conference: string;
 
-  test('imports appendCtopRecord from ctop-updater.util', () => {
-    expect(src).toMatch(/appendCtopRecord/);
-    expect(src).toMatch(/ctop-updater\.util/);
+  const ctopSize = (): number => {
+    try {
+      return fs.statSync(path.join(conference, 'ctop.data')).size;
+    } catch {
+      return 0;
+    }
+  };
+
+  /** One upload through the real service, duplicate or not. */
+  async function fileOne(duplicate: boolean): Promise<void> {
+    jest.resetModules();
+    jest.doMock('../src/database', () => ({
+      db: {
+        query: jest.fn().mockResolvedValue({ rows: duplicate ? [{ id: 1, filename: 'ART.LHA' }] : [] }),
+        createFileEntry: jest.fn().mockResolvedValue(undefined),
+      },
+    }));
+    jest.doMock('../src/storage/storage-context', () => ({ getStorageContext: () => null }));
+    jest.doMock('../src/config', () => ({ config: { get: (key: string) => (key === 'dataDir' ? board : 'the sysop') } }));
+    jest.doMock('../src/utils/file-hold.util', () => ({
+      getConferenceDir: () => conference,
+      moveUploadedFile: jest.fn(),
+    }));
+    const { fileUploadedFile } = require('../src/services/upload-filing.service');
+    await fileUploadedFile({
+      filename: 'ART.LHA',
+      size: 4242,
+      description: 'a picture',
+      fileArea: { id: 1, dlPath: conference },
+      conferenceId: 1,
+      nodeId: 1,
+      uploader,
+      initialStatus: 'active',
+      marker: 'P',
+      addSentBy: false,
+    });
+  }
+
+  beforeEach(() => {
+    board = fs.mkdtempSync(path.join(os.tmpdir(), 'ctop-board-'));
+    conference = path.join(board, 'Conf1');
+    fs.mkdirSync(conference, { recursive: true });
   });
 
-  test('only calls appendCtopRecord for non-duplicate active uploads', () => {
-    // The guard must include both conditions
-    expect(src).toMatch(/!foundDupe && fileStatus === ['"]active['"]/);
+  afterEach(() => {
+    jest.resetModules();
+    fs.rmSync(board, { recursive: true, force: true });
+  });
+
+  test('a new upload appends one 66-byte record after the header', async () => {
+    await fileOne(false);
+
+    expect(ctopSize()).toBe(CTOP_HEADER_SIZE + CTOP_RECORD_SIZE);
+    const data = fs.readFileSync(path.join(conference, 'ctop.data'));
+    const record = data.subarray(CTOP_HEADER_SIZE);
+    expect(record.toString('latin1', 0, 4)).toBe('SPOT');
+    expect(record.toString('latin1', 32, 36)).toBe('OSLO');
+    expect(record.readInt32BE(62)).toBe(4242);
+  });
+
+  test('a duplicate appends nothing - it goes to the sysop directory instead', async () => {
+    await fileOne(true);
+
+    expect(ctopSize()).toBe(0);
   });
 });

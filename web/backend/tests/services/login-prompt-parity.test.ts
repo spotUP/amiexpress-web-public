@@ -46,9 +46,39 @@ describe("telnet/SSH parity — multi-step pre-login flows", () => {
       expect(body).toMatch(/crypto\.randomBytes/);
     });
 
-    it("no-ops when called on web (web has its own socket handler)", () => {
-      const body = adapterSrc.match(/function\s+promptPasswordReset[\s\S]*?\n\}/)?.[0];
-      expect(body).toMatch(/session\.connectionType\s*===\s*["']web["']/);
+    it("drives WEB too - TP-9b deleted the browser's own reset handler", async () => {
+      // This asserted the opposite, by reading the function's source for
+      // `session.connectionType === 'web'`. That early return existed while
+      // auth-socket-handlers.ts had a `password-reset-input` handler of its
+      // own - the browser's login editor under another name - and TP-9b
+      // deleted it. One loop drives web, telnet and SSH now, so a pin on the
+      // old spelling was pinning a bug: a web caller who hit the excessive
+      // failure would have been answered by nothing at all.
+      const { promptPasswordReset } = require("../../src/services/login-prompt.service");
+      const said: string[] = [];
+      // The ansi buffer attaches a disconnect listener to whatever it is
+      // given, so the fake needs `on` as well as `emit`.
+      const emitter: any = {
+        id: 'web-caller',
+        emit: (_event: string, payload: unknown) => said.push(String(payload)),
+        on: () => undefined,
+        once: () => undefined,
+        removeListener: () => undefined,
+      };
+      const session: any = { connectionType: "web", passwordResetUsername: "spot" };
+
+      const flow = promptPasswordReset(emitter, session);
+      await Promise.resolve();
+
+      expect(said.join("")).toContain("Excessive Password Failure");
+      expect(said.join("")).toContain("send a reset code");
+      expect(session.passwordResetState).toBe("await_confirm");
+      expect(typeof session.loginInputHandler).toBe("function");
+
+      // Decline, so the flow finishes rather than being left open.
+      session.loginInputHandler("n");
+      session.loginInputHandler("\r");
+      await flow;
     });
 
     it("telnet/SSH failure path calls promptPasswordReset before PWFAIL", () => {
