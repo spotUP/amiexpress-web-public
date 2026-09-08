@@ -87,6 +87,24 @@ function manifestCommand(doorDir: string): string | null {
  */
 const DECLARED_ALIASES = new Map<string, string>([
   ['irc.info', 'LIVECHAT'],
+  /*
+   * SUBSCAN is the SAME BINARY as SUBS under a second name, on purpose: it is
+   * how one door tells its full screen from the three-line digest a
+   * conference bulletin runs, because AmigaDOS hands a door one argument and
+   * that argument is the node number. The door asks the board which name
+   * launched it (GET_CUSTOM_MSGBASE_MENUCMD, 605).
+   *
+   * So the admin drawing SUBS's settings form under SUBSCAN is CORRECT rather
+   * than crossed - both registrations run one binary that reads one SUBS.cfg,
+   * and a sysop who changes FeedWindow under either name has changed it for
+   * both. This is the opposite of the GWWALL case below, where two commands
+   * pointed at two different doors and the form edited the wrong one.
+   *
+   * It was invisible until 2026-09-08 only because Doors/SUBS was deleted
+   * from the working tree at the time; manifestCommand() answers null for a
+   * door directory that is not there, so the check skipped it entirely.
+   */
+  ['subscan.info', 'SUBS'],
 ]);
 
 function doorIsTypeScript(doorDir: string): boolean {
