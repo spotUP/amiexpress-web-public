@@ -27,7 +27,7 @@ import {
   type MciCodeShape, type MciFamilyShape, type CarryVerdict,
 } from './screen-mci';
 import {
-  duplicateGroups, describeGroup, type DuplicateGroup,
+  duplicateGroups, describeGroup, partitionDuplicates, type DuplicateGroup,
 } from './screen-duplicates';
 import {
   toScreenRows, filterScreenRows,
@@ -741,6 +741,12 @@ export function ScreenFilesPage() {
    * from an annoyance into 800 files nobody can maintain by hand.
    */
   const duplicates = useMemo(() => (data ? duplicateGroups(data) : []), [data]);
+  // The Duplicates tab shows the REAL exceptions - screens whose content drifted
+  // across their copies - and auto-collapses the identical-across-nodes groups
+  // (the expected "one screen on N nodes") into a summary line. `showAllDuplicates`
+  // reveals those on demand.
+  const [showAllDuplicates, setShowAllDuplicates] = useState(false);
+  const { drifted, identicalCount } = useMemo(() => partitionDuplicates(duplicates), [duplicates]);
 
   const duplicateColumns: DataTableColumn<DuplicateGroup>[] = [
     { id: 'name', header: 'Screen', value: row => row.name, sortable: true, mono: true },
@@ -1238,26 +1244,43 @@ export function ScreenFilesPage() {
     },
     {
       id: 'duplicates',
-      label: `Duplicates ${duplicates.length}`,
+      label: `Duplicates ${drifted.length}`,
       render: () => (
         <div className="space-y-2 text-sm">
           <p className="text-content-secondary">
-            One row per screen NAME, not per file: this board holds{' '}
-            {data ? Object.keys(data.files).length : 0} screen files and most of
-            them are copies of each other. A row that says "all the same" can be
-            edited once and written to every copy; a row that says versions
-            differ is one somebody edited a few copies of.
+            The REAL exceptions: screens whose content DRIFTED across their
+            copies - somebody edited a few nodes and the rest fell behind. The
+            {' '}{identicalCount}{' '}screens that are identical across their nodes
+            are the expected "one screen on N nodes" and are auto-collapsed out of
+            this list; the board shares them, one edit reaching every copy.
           </p>
           <p className="text-content-secondary">
             Click a row to open the copy that callers actually see.
           </p>
+          {(identicalCount > 0 || showAllDuplicates) && (
+            <p className="text-content-secondary">
+              {showAllDuplicates
+                ? `Showing all ${duplicates.length} duplicate groups.`
+                : `${identicalCount} more ${identicalCount === 1 ? 'screen is' : 'screens are'} identical across their nodes (auto-collapsible; hidden).`}
+              {' '}
+              <button
+                type="button"
+                className="underline text-content-secondary hover:text-content-primary"
+                onClick={() => setShowAllDuplicates(v => !v)}
+              >
+                {showAllDuplicates ? 'show only drift' : 'show all'}
+              </button>
+            </p>
+          )}
           <DataTable
             columns={duplicateColumns}
-            rows={duplicates.filter(g =>
+            rows={(showAllDuplicates ? duplicates : drifted).filter(g =>
               !query.trim() || g.name.toLowerCase().includes(query.trim().toLowerCase()))}
             getRowId={item => item.name}
             initialSort={[{ id: 'copies', desc: true }]}
-            emptyMessage="Every screen on this board exists exactly once."
+            emptyMessage={showAllDuplicates
+              ? 'Every screen on this board exists exactly once.'
+              : 'No drift: every duplicated screen is identical across its copies.'}
             onRowClick={item => {
               // Both: the file is what opens, and the SCREEN is what makes the
               // fan-out able to offer sharing - pointing every node at one

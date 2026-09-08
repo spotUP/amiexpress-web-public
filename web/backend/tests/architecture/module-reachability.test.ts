@@ -55,7 +55,6 @@ const KNOWN_UNREACHABLE = new Set<string>([
   'src/handlers/examples/modern-handler.example.ts',
   'src/handlers/operations/navigation-quick.handler.ts',
   'src/nodes/index.ts',
-  'src/screens/rip-document.ts',
   'src/server/api-routes.ts',
   'src/server/file-routes.ts',
   'src/services/mrc-client.ts',
@@ -64,7 +63,6 @@ const KNOWN_UNREACHABLE = new Set<string>([
   'src/services/xmodem-transfer.service.ts',
   'src/services/ymodem-transfer.service.ts',
   'src/utils/background-check.util.ts',
-  'src/utils/clean-playpen.util.ts',
   'src/utils/diz-fallback.util.ts',
   'src/utils/file-io.util.ts',
   'src/utils/format-util.ts',
@@ -78,6 +76,17 @@ const BACKEND = path.resolve(__dirname, '..', '..');
 const relative = (file: string): string => path.relative(BACKEND, file);
 
 describe('every file under src is reachable from an entry point', () => {
+  it('counts the admin UI as an entry point, not just the server', () => {
+    // web/config-app imports backend modules through the `@bbs/screens/*` and
+    // `@bbs/config-services/*` aliases. src/screens/rip-document.ts is live in
+    // the RIP screen editor and reached by no backend entry point at all; the
+    // first version of this tool called it dead, and deleting it on that
+    // verdict would have broken the editor.
+    const reachable = new Set([...walk().reachable].map(relative));
+
+    expect(reachable.has(path.join('src', 'screens', 'rip-document.ts'))).toBe(true);
+  });
+
   it('has no unreachable file that is not already known', () => {
     const found = walk().unreachable.map(relative);
 

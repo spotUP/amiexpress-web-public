@@ -150,6 +150,29 @@ export function duplicateGroups(index: ScreenIndexShape): DuplicateGroup[] {
 }
 
 /**
+ * A REAL exception: the same screen name holds more than one content across its
+ * copies, so somebody edited a few and the rest drifted. A uniform group (one
+ * version, however many copies) is not an exception - it is the expected "one
+ * screen on N nodes" the board collapses by sharing, so it is auto-collapsed
+ * out of the Duplicates view rather than listed among the things to reconcile.
+ */
+export function isDrift(group: DuplicateGroup): boolean {
+  return group.versions.length > 1;
+}
+
+/**
+ * Split the duplicate groups into the drifted exceptions (what the Duplicates
+ * tab shows) and a count of the identical-across-nodes groups it hides.
+ */
+export function partitionDuplicates(groups: DuplicateGroup[]): {
+  drifted: DuplicateGroup[];
+  identicalCount: number;
+} {
+  const drifted = groups.filter(isDrift);
+  return { drifted, identicalCount: groups.length - drifted.length };
+}
+
+/**
  * One line about a group, for a row a sysop reads rather than counts.
  *
  * "93 copies in 5 versions" is the maintenance problem stated; "80 copies, all

@@ -666,14 +666,81 @@ console.warn(`[UserDatabaseManager] updateUserMiscAfterPasswordChange: no misc r
     diskData.misc.pwdLastUpdated = nowSecs;
     diskData.misc.forcePwdReset = 0;
 
-    const miscBuffer = this.serializeUserMisc(diskData.misc);
+    this.writeUserMisc(slotNumber, diskData.misc);
+console.log(`[UserDatabaseManager] Cleared forcePwdReset and updated pwdLastUpdated for slot ${slotNumber}`);
+  }
+
+  /** One place that writes a misc record back to its slot. */
+  private writeUserMisc(slotNumber: number, misc: UserMiscStruct): void {
+    const miscBuffer = this.serializeUserMisc(misc);
     const fd = fs.openSync(this.userMiscPath, 'r+');
     try {
       fs.writeSync(fd, miscBuffer, 0, miscBuffer.length, slotNumber * this.USERMISC_SIZE);
     } finally {
       fs.closeSync(fd);
     }
-console.log(`[UserDatabaseManager] Cleared forcePwdReset and updated pwdLastUpdated for slot ${slotNumber}`);
+  }
+
+  /**
+   * Count a wrong password against the account, and lock it when the board
+   * says to. express.e:1008-1016:
+   *
+   *     userMisc.invalidAttempts := userMisc.invalidAttempts + 1
+   *     maxAttempts := readToolTypeInt(..., 'MAX_PASSWORD_FAILS')
+   *     IF maxAttempts >= 0
+   *       IF userMisc.invalidAttempts >= maxAttempts
+   *         userMisc.accountLocked := TRUE
+   *         userMisc.invalidAttempts := 0
+   *
+   * The counter is on the USER and it is persisted, which is the whole point:
+   * express's lockout survives hanging up and dialling back. This port counted
+   * failures in the session instead, so `accountLocked` - which login already
+   * honours (`login-post.service.ts`, express.e:29775) - could never be set by
+   * anything but a sysop editing the account by hand. The gate was real and
+   * nothing could ever trip it.
+   *
+   * A negative `maxFails` means no locking at all, which is what a board with
+   * no MAX_PASSWORD_FAILS tooltype gets: `readToolTypeInt` returns -1 when the
+   * key is absent (tooltypes.e:181), and express tests `maxAttempts >= 0`.
+   *
+   * @returns whether the account is locked as a result.
+   */
+  recordPasswordFailure(slotNumber: number, maxFails: number): boolean {
+    if (!fs.existsSync(this.userMiscPath)) return false;
+
+    const diskData = this.readUserFromDisk(slotNumber);
+    if (!diskData) {
+console.warn(`[UserDatabaseManager] recordPasswordFailure: no misc record for slot ${slotNumber}`);
+      return false;
+    }
+
+    diskData.misc.invalidAttempts = (diskData.misc.invalidAttempts || 0) + 1;
+
+    let locked = false;
+    if (maxFails >= 0 && diskData.misc.invalidAttempts >= maxFails) {
+      diskData.misc.accountLocked = 1;
+      // express zeroes the counter as it locks, so a sysop who unlocks the
+      // account does not hand it back one failure from locking again.
+      diskData.misc.invalidAttempts = 0;
+      locked = true;
+    }
+
+    this.writeUserMisc(slotNumber, diskData.misc);
+    return locked;
+  }
+
+  /**
+   * A correct password clears the count. express.e:1018 - the ELSE branch of
+   * the same comparison, `userMisc.invalidAttempts := 0`.
+   */
+  clearPasswordFailures(slotNumber: number): void {
+    if (!fs.existsSync(this.userMiscPath)) return;
+
+    const diskData = this.readUserFromDisk(slotNumber);
+    if (!diskData || !diskData.misc.invalidAttempts) return;
+
+    diskData.misc.invalidAttempts = 0;
+    this.writeUserMisc(slotNumber, diskData.misc);
   }
 }
 

@@ -88,6 +88,33 @@ export function entryPoints(root: string = SRC): string[] {
       if (/\.tsx?$/.test(name)) entries.push(path.join(scripts, name));
     }
   }
+  entries.push(...crossPackageEntries(root));
+  return entries;
+}
+
+/**
+ * Backend modules the ADMIN UI imports.
+ *
+ * `web/config-app` reaches into this package through a path alias -
+ * `@bbs/screens/*` and `@bbs/config-services/*` (its tsconfig.json and
+ * vite.config.ts) - so a file can be live in the browser while no backend
+ * entry point touches it. `src/screens/rip-document.ts` is exactly that: the
+ * RIP screen editor imports it, and the first version of this tool called it
+ * dead. Deleting it on that verdict would have broken the editor.
+ *
+ * Read from the aliased DIRECTORIES rather than by parsing the config-app's
+ * imports: those directories are the shared surface by declaration, and a file
+ * in one is reachable to anything that adds an import tomorrow.
+ */
+export function crossPackageEntries(root: string = SRC): string[] {
+  const shared = [path.join(root, 'screens'), path.join(root, 'services', 'config-services')];
+  const entries: string[] = [];
+  for (const dir of shared) {
+    if (!fs.existsSync(dir)) continue;
+    for (const name of fs.readdirSync(dir)) {
+      if (/\.tsx?$/.test(name) && !/\.d\.ts$/.test(name)) entries.push(path.join(dir, name));
+    }
+  }
   return entries;
 }
 
@@ -149,7 +176,7 @@ export function walk(entries: string | string[] = entryPoints(), root: string = 
 if (require.main === module) {
   const result = walk();
   const rel = (file: string) => path.relative(BACKEND, file);
-  console.log(`entry points: ${entryPoints().length} (src/index.ts + src/scripts/*)`);
+  console.log(`entry points: ${entryPoints().length} (src/index.ts, src/scripts/*, and the @bbs/* surface the admin UI imports)`);
   console.log(`reachable: ${result.reachable.size}`);
   console.log(`UNREACHABLE: ${result.unreachable.length}`);
   let deadLines = 0;

@@ -68,6 +68,7 @@ export type PostAuthResult =
       terminated:
         | "reserved-node"
         | "lockout"
+        | "deleted-account"
         | "already-on-another-node"
         | "account-locked"
         | "pwd-change-denied"
@@ -402,6 +403,75 @@ export async function runPostAuthLogin(
   const miscAccountLocked = diskMisc ? diskMisc.misc.accountLocked : 0;
   const miscForcePwdReset = diskMisc ? diskMisc.misc.forcePwdReset : 0;
   const miscPwdLastUpdated = diskMisc ? diskMisc.misc.pwdLastUpdated : 0;
+
+  /**
+   * express.e:29701-29711 - a deleted account.
+   *
+   * Deleting a user does not remove the record: the sysop's DELETE sets
+   * `slotNumber := 0` (express.e:21365) and leaves the row where it was. So
+   * the account still authenticates, still has a password, and express refuses
+   * it at exactly this point in the logon - after the credentials are
+   * accepted, before anything is loaded - with one line and a disconnect.
+   *
+   * This port had the guard nowhere. A deleted user could log in.
+   *
+   * It comes BEFORE the lockout check because that is express's order: 29701
+   * then 29775.
+   */
+  if (!user.slotNumber || user.slotNumber === 0) {
+    emitter.emit("ansi-output", "\r\nThat account has been deleted.\r\n");
+    beginLogoff(emitter as any, session, { message: "" });
+    return { ok: false, terminated: "deleted-account" };
+  }
+
+  /**
+   * express.e:29715-29727 - the same account on two nodes at once.
+   *
+   *     stat := checkUserOnLine(1)
+   *     IF stat = FALSE
+   *       callersLog('User <name> already on another node!')
+   *       IF displayScreen(SCREEN_ONENODE) = FALSE
+   *         aePuts('You are already logged into another node!')
+   *       state := STATE_LOGGING_OFF
+   *
+   * `userAlreadyOnNode` has been sitting imported at the top of this file,
+   * fully written and documented, and never called - so on a 24-node board one
+   * account could hold every node it could open a connection to.
+   *
+   * Between the deleted-account gate (29701) and the lockout (29775), which is
+   * express's order.
+   */
+  {
+    const alreadyOn = userAlreadyOnNode(
+      appConfig.get('dataDir'),
+      user.username,
+      session.nodeId ?? 0,
+    );
+    if (alreadyOn !== null) {
+      try {
+        const { callersLogManager } = require("./CallersLogManager");
+        callersLogManager.logActivity(
+          session.nodeId || 1,
+          `User ${user.username} already on another node!`,
+        );
+      } catch (err) {
+        console.warn("[LOGIN] could not log already-on-another-node:", err);
+      }
+
+      // express falls back to a line of its own when the board has no ONENODE
+      // screen, rather than showing nothing.
+      const shown = await displayScreen(emitter as any, session, "ONENODE", false);
+      if (!shown) {
+        emitter.emit(
+          "ansi-output",
+          "\r\nYou are already logged into another node!\r\n",
+        );
+      }
+
+      beginLogoff(emitter as any, session, { message: "" });
+      return { ok: false, terminated: "already-on-another-node" };
+    }
+  }
 
   // express.e:29775-29782 — accountLocked.
   if (miscAccountLocked) {
