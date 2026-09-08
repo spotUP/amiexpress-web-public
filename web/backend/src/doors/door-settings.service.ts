@@ -55,6 +55,17 @@ export interface DoorSetting {
    * read a plain `Key=value` file beside the binary - so this is the bridge.
    */
   cfgKey?: string;
+  /**
+   * Take this value from the board's own system config when the door has none
+   * of its own, naming the system_config column to read.
+   *
+   * The board already holds the achievements board key - encrypted at rest and
+   * decrypted on read - and REQUESTS needs exactly that key. Without this a
+   * sysop had to find the secret in one admin page and paste it into another,
+   * which is both a chore and a second copy of a secret. The door's own value
+   * still wins if one is set.
+   */
+  fromSystemConfig?: string;
 }
 
 export interface DoorSettingsManifest {
@@ -80,6 +91,7 @@ const SettingSchema = z.object({
   max: z.number().optional(),
   secret: z.boolean().optional(),
   cfgKey: z.string().min(1).max(64).optional(),
+  fromSystemConfig: z.string().min(1).max(64).optional(),
 }).refine(
   s => s.type !== 'choice' || (s.choices?.length ?? 0) > 0,
   { message: 'a choice needs choices' }
@@ -211,7 +223,8 @@ export class UnknownDoorSettingError extends Error {
  */
 export function writeDoorSettings(
   doorDir: string,
-  incoming: Record<string, string | number | boolean>
+  incoming: Record<string, string | number | boolean>,
+  resolveSystemValue?: SystemValueResolver,
 ): Record<string, string | number | boolean> {
   const manifest = readManifestFromDir(doorDir);
   if (!manifest) {
@@ -265,7 +278,7 @@ export function writeDoorSettings(
 
   // A 68K door reads a plain Key=value file, not settings.json. Render it now
   // so saving in the admin actually reaches the door.
-  renderDoorCfg(doorDir);
+  renderDoorCfg(doorDir, resolveSystemValue);
 
   return out;
 }
@@ -281,7 +294,12 @@ export function writeDoorSettings(
  * Written 0600 and atomically: it carries secrets (a board key), and a door
  * that reads it mid-write would see half a file.
  */
-export function renderDoorCfg(doorDir: string): string | null {
+export type SystemValueResolver = (systemConfigKey: string) => string | undefined;
+
+export function renderDoorCfg(
+  doorDir: string,
+  resolveSystemValue?: SystemValueResolver,
+): string | null {
   const manifest = readManifestFromDir(doorDir);
   if (!manifest?.cfgFile) return null;
 
@@ -289,7 +307,21 @@ export function renderDoorCfg(doorDir: string): string | null {
   const lines: string[] = [];
   for (const setting of manifest.settings) {
     if (!setting.cfgKey) continue;
-    const raw = values[setting.key] ?? setting.default ?? '';
+    // Precedence: what the sysop set for THIS door, then the board's own
+    // system config, then the declared default. The door's own value wins so
+    // a board can point one door at a different server without moving the
+    // board-wide secret.
+    let fromBoard: string | undefined;
+    const own = values[setting.key];
+    const ownIsEmpty = own === undefined || own === null || own === '';
+    if (ownIsEmpty && setting.fromSystemConfig && resolveSystemValue) {
+      try {
+        fromBoard = resolveSystemValue(setting.fromSystemConfig);
+      } catch {
+        fromBoard = undefined; // a broken config read must not blank the cfg
+      }
+    }
+    const raw = (ownIsEmpty ? (fromBoard ?? setting.default ?? '') : own) ?? '';
     // One line per key, no quoting: that is the format these doors parse.
     lines.push(`${setting.cfgKey}=${String(raw).replace(/[\r\n]/g, ' ')}`);
   }
@@ -312,7 +344,10 @@ export function renderDoorCfg(doorDir: string): string | null {
  *
  * Never throws: one malformed manifest must not stop the board booting.
  */
-export function renderAllDoorCfgs(doorsRoot: string): number {
+export function renderAllDoorCfgs(
+  doorsRoot: string,
+  resolveSystemValue?: SystemValueResolver,
+): number {
   let rendered = 0;
   let entries: string[];
   try {
@@ -324,7 +359,7 @@ export function renderAllDoorCfgs(doorsRoot: string): number {
     const doorDir = path.join(doorsRoot, entry);
     try {
       if (!fs.statSync(doorDir).isDirectory()) continue;
-      if (renderDoorCfg(doorDir)) rendered++;
+      if (renderDoorCfg(doorDir, resolveSystemValue)) rendered++;
     } catch (err: any) {
       console.error(`[doorSettings] cfg render failed for ${entry}: ${err?.message || err}`);
     }

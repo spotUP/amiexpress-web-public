@@ -27,7 +27,8 @@
       "type": "string",
       "secret": true,
       "default": "",
-      "help": "The board's key for the door server, in the form <board>.<secret>. Same key the achievements surface uses. Stored beside the door and never committed."
+      "help": "The board's key for the door server, in the form <board>.<secret>. Left blank, the door uses the board's own achievements board key from System Config - you do not need to paste it here.",
+      "fromSystemConfig": "achievements_board_key"
     },
     {
       "key": "boardId",

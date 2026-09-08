@@ -670,11 +670,25 @@ export async function initializeData(io?: SocketIOServer) {
     // rendered. Do it after the doors are known, and never let it stop boot.
     try {
       const { renderAllDoorCfgs } = require("../doors/door-settings.service");
+      // Hand a door the board's own secrets. A setting may declare
+      // fromSystemConfig, and REQUESTS' board key does: the board already
+      // holds the achievements board key (encrypted at rest, decrypted on
+      // read), so a sysop should not have to find it in one admin page and
+      // paste it into another. The door's own value still wins if set.
+      const resolveSystemValue = (key: string): string | undefined => {
+        try {
+          const cfg = (db as any)?.getConfigRepository?.()?.getSystemConfig?.();
+          const value = cfg ? (cfg as any)[key] : undefined;
+          return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+        } catch {
+          return undefined;
+        }
+      };
       const doorsRoot = path.join(
         process.env.BBS_ROOT || process.env.BBS_DATA_DIR || config.get("dataDir"),
         "Doors",
       );
-      const n = renderAllDoorCfgs(doorsRoot);
+      const n = renderAllDoorCfgs(doorsRoot, resolveSystemValue);
       if (n > 0) console.log(`[Init] rendered ${n} door cfg file(s) from saved settings`);
     } catch (err: any) {
       console.error(`[Init] door cfg render failed: ${err?.message || err}`);

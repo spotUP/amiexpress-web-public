@@ -590,7 +590,20 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
         return handleError(res, new Error('Expected an object of setting values'));
       }
 
-      writeDoorSettings(doorDir, incoming);
+      // Same resolver the startup render uses: a setting may take its value
+      // from the board's own system config (REQUESTS' board key does). Without
+      // passing it here, saving anything in the form would re-render the cfg
+      // with that field blank and quietly unconfigure the door.
+      const resolveSystemValue = (key: string): string | undefined => {
+        try {
+          const cfg = (database as any)?.getConfigRepository?.()?.getSystemConfig?.();
+          const value = cfg ? (cfg as any)[key] : undefined;
+          return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
+        } catch {
+          return undefined;
+        }
+      };
+      writeDoorSettings(doorDir, incoming, resolveSystemValue);
       sendResponse(res, readDoorSettingsView(doorDir), `${command} settings saved`);
     } catch (error) {
       if (error instanceof UnknownDoorSettingError) {

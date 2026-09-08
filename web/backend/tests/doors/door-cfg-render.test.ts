@@ -121,3 +121,66 @@ describe('door cfg rendering - the bridge to a 68K door', () => {
     expect(keys).toEqual(expect.arrayContaining(['Host', 'Port', 'BoardKey', 'Timeout']));
   });
 });
+
+describe('a door takes the board\'s own secret when it has none of its own', () => {
+  let root: string;
+  let doorDir: string;
+  const BOARD_KEY = 'uprough.board-secret';
+  const resolver = (key: string) =>
+    key === 'achievements_board_key' ? BOARD_KEY : undefined;
+
+  function cfg(): string[] {
+    return fs
+      .readFileSync(path.join(doorDir, 'REQUESTS.cfg'), 'utf8')
+      .split('\n')
+      .filter(Boolean);
+  }
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'doorsys-'));
+    doorDir = path.join(root, 'REQUESTS');
+    fs.mkdirSync(doorDir, { recursive: true });
+    const m = manifest();
+    (m.settings.find((x: any) => x.key === 'boardKey') as any).fromSystemConfig =
+      'achievements_board_key';
+    fs.writeFileSync(path.join(doorDir, MANIFEST_FILE), JSON.stringify(m));
+  });
+
+  afterEach(() => {
+    try { fs.rmSync(root, { recursive: true, force: true }); } catch { /* best effort */ }
+  });
+
+  it("uses the board's key when the door has none - no pasting required", () => {
+    renderDoorCfg(doorDir, resolver);
+    expect(cfg()).toContain(`BoardKey=${BOARD_KEY}`);
+  });
+
+  it("the door's own value still wins when one is set", () => {
+    writeDoorSettings(doorDir, { boardKey: 'other.key' }, resolver);
+    expect(cfg()).toContain('BoardKey=other.key');
+  });
+
+  it('saving other settings does NOT blank the board-supplied key', () => {
+    // The regression this guards: writeDoorSettings re-renders the cfg, so
+    // without the resolver a save would quietly unconfigure the door.
+    writeDoorSettings(doorDir, { host: 'elsewhere.example' }, resolver);
+    const lines = cfg();
+    expect(lines).toContain('Host=elsewhere.example');
+    expect(lines).toContain(`BoardKey=${BOARD_KEY}`);
+  });
+
+  it('falls back to the declared default when the board has nothing either', () => {
+    renderDoorCfg(doorDir, () => undefined);
+    expect(cfg()).toContain('BoardKey=');
+  });
+
+  it('a throwing resolver must not blank the cfg', () => {
+    renderDoorCfg(doorDir, () => { throw new Error('config unavailable'); });
+    expect(cfg()).toContain('Host=doors.uprough.net');
+  });
+
+  it('renderAllDoorCfgs passes the resolver through', () => {
+    expect(renderAllDoorCfgs(root, resolver)).toBe(1);
+    expect(cfg()).toContain(`BoardKey=${BOARD_KEY}`);
+  });
+});
