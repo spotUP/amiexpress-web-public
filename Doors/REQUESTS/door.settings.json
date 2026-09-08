@@ -26,9 +26,9 @@
       "label": "Board key",
       "type": "string",
       "secret": true,
+      "fromSystemConfig": "achievements_board_key",
       "default": "",
-      "help": "The board's key for the door server, in the form <board>.<secret>. Left blank, the door uses the board's own achievements board key from System Config - you do not need to paste it here.",
-      "fromSystemConfig": "achievements_board_key"
+      "help": "The board's key for the door server, in the form <board>.<secret>. Left blank, the door uses the board's own achievements board key from System Config - you do not need to paste it here."
     },
     {
       "key": "boardId",

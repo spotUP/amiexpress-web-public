@@ -77,6 +77,13 @@ int ae_settings_emit_manifest(FILE *out, const ae_settings_table *t) {
     /* `secret` before `default` so a reader meets the warning first. */
     if (s->secret) fputs(",\n      \"secret\": true", out);
 
+    /* Where the value comes from when the door has none: the backend reads
+       this and falls back to the board's own system config. */
+    if (s->from_system_config && s->from_system_config[0]) {
+      fputs(",\n      \"fromSystemConfig\": ", out);
+      emit_json_string(out, s->from_system_config);
+    }
+
     fputs(",\n      \"default\": ", out);
     switch (s->type) {
       case AE_SET_NUMBER: emit_number(out, s->def_num); break;

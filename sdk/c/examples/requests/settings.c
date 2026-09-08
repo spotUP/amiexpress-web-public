@@ -17,8 +17,8 @@ AE_SETTINGS_BEGIN(REQUESTS, "REQUESTS.cfg")
     "Plain HTTP host serving /requests/v1. The 68K stack cannot do TLS, so this is http, not https.")
   AE_SETTING_INT_RANGE("port", "Port", 80, 1, 65535, "Port",
     "80 for the live door server.")
-  AE_SETTING_SECRET("boardKey", "Board key", "BoardKey",
-    "The board's key for the door server, in the form <board>.<secret>. Same key the achievements surface uses. Stored beside the door and never committed.")
+  AE_SETTING_SECRET_SYS("boardKey", "Board key", "BoardKey", "achievements_board_key",
+    "The board's key for the door server, in the form <board>.<secret>. Left blank, the door uses the board's own achievements board key from System Config - you do not need to paste it here.")
   AE_SETTING_STR_HELP("boardId", "Board id (optional)", "", "BoardId",
     "Leave empty and the door takes the id from the key's own prefix.")
   AE_SETTING_INT_RANGE("timeout", "Request timeout (seconds)", 10, 1, 120, "Timeout", NULL)

@@ -67,6 +67,13 @@ typedef struct {
   double      max_v;
   int         secret;     /* never echoed back to the admin       */
   const ae_setting_choice *choices;  /* CHOICE only, NULL-terminated */
+  /* Take the value from the board's system config when the door has none of
+     its own, naming the system_config column. The board already holds the
+     achievements board key; REQUESTS needs exactly that key, and a sysop
+     should not have to copy a secret between two admin pages.
+     Last member on purpose: every macro above predates it and C zero-fills
+     what an initializer does not name. */
+  const char *from_system_config;
 } ae_setting;
 
 typedef struct {
@@ -91,6 +98,11 @@ typedef struct {
 
 #define AE_SETTING_SECRET(key, label, cfgkey, help)                           \
   { key, cfgkey, label, AE_SET_STRING, "", 0, 0, help, 0, 0, 0, 1, NULL },
+
+/* A secret the BOARD can supply. `syskey` names the system_config column used
+   when the door has no value of its own. */
+#define AE_SETTING_SECRET_SYS(key, label, cfgkey, syskey, help)               \
+  { key, cfgkey, label, AE_SET_STRING, "", 0, 0, help, 0, 0, 0, 1, NULL, syskey },
 
 #define AE_SETTING_INT(key, label, def, cfgkey)                               \
   { key, cfgkey, label, AE_SET_NUMBER, NULL, (double)(def), 0, NULL, 0, 0, 0, 0, NULL },
