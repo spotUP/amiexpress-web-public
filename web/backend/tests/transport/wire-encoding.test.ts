@@ -290,11 +290,24 @@ describe('TP-5 - the wire encoder, and the charset a payload came from', () => {
   });
 
   it('BBSTITLE is 13894 bytes on the wire, not 14134', () => {
+    // Never a silent skip: say which file is wrong and why the pin cannot be
+    // measured in this checkout. PRESENT IS NOT ENOUGH - on 2026-09-08 this
+    // file was on disk at ZERO bytes (a screen killed mid-write; the intact
+    // 14,023-byte copy was still at Node1/BBSTITLE.TXT and was restored from
+    // it). An existence-only guard let that through as "Expected 13894,
+    // Received 0", which reads like a drifted pin rather than a truncated
+    // screen and cost a round of chasing the encoder instead of the file.
     if (!fs.existsSync(BBSTITLE)) {
-      // Never a silent skip: say which file is missing and why the pin cannot
-      // be measured in this checkout.
       throw new Error(
         `The controller's pin needs the real screen: ${BBSTITLE} is absent from this checkout.`,
+      );
+    }
+    const onDisk = fs.statSync(BBSTITLE).size;
+    if (onDisk === 0) {
+      throw new Error(
+        `The controller's pin needs the real screen: ${BBSTITLE} is on disk but EMPTY. ` +
+        `A 0-byte screen is a kill mid-write, not a valid board file - restore it ` +
+        `(Node1/BBSTITLE.TXT carries the same art) rather than adjusting this pin.`,
       );
     }
     // The file's TEXT bytes, which is what reaches the wire: BBSTITLE now

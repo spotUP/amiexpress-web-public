@@ -188,6 +188,7 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'modem-speed',
   'network-pong',
   'olm-quiet-status',
+  'operator:accept-queued',
   'operator:active-chats',
   'operator:bot-activated',
   'operator:chat-accepted',
@@ -561,7 +562,11 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // and `prompt-forced-pwd-change`. Nothing emits them; a ruling for a name
     // nothing sends is a claim about nothing.
     // 244 as of 2026-09-07: `petscii-palette` ruled (web-only).
-    expect(ruled.length).toBe(244);
+    // 245 as of 2026-09-08: `operator:accept-queued` ruled (web-only) - the
+    // notice a sysop gets when they accept a page while the caller is inside a
+    // door. It reached main unruled; the arm-A count pin caught it, and the
+    // fix was the ruling, not the number.
+    expect(ruled.length).toBe(245);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -608,7 +613,11 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       // 113 as of TP-9b: the four login-editor cues are gone with the editor.
       // 114 (2026-09-07): `petscii-palette`, the browser's palette choice
       // answered to its own request - a canvas concern by construction.
-      'web-only': 114,
+      // 115 (2026-09-08): `operator:accept-queued`, the sysop's own notice
+      // that a page they accepted is held until the caller leaves the door.
+      // Structured payload for the operator console; the byte-transport
+      // answer is TP-10's ansi-output push, like every operator name here.
+      'web-only': 115,
       'not-transport': 104,
     });
   });
@@ -657,7 +666,14 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // performs, and the name left arm A with it. Union 246 -> 245.
     // 152 as of 2026-09-07: `petscii-palette` (server/preference-socket-handlers.ts)
     // landed unruled and this pin caught it a push later.
-    expect(fromA.length).toBe(152);
+    //
+    // 153 as of 2026-09-08: `operator:accept-queued`
+    // (handlers/operator-chat.handler.ts:246), the notice a sysop gets when
+    // they accept a page while the caller is inside a door. It landed UNRULED
+    // and this pin caught it the same way - the fix was to rule it in
+    // transport-event-rulings.ts (web-only, like every other operator-chat
+    // control name), not to move this number on its own.
+    expect(fromA.length).toBe(153);
     // 86 from sdk/, 14 from Doors/, `ansi-output` in both. The plan records the
     // Doors arm as 0; that was a zsh `nomatch` artefact and the module header
     // records the correction.

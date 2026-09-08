@@ -1179,6 +1179,21 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "operator page a telnet caller must actually SEE is an ansi-output push and " +
     "is TP-10's work.",
   },
+  "operator:accept-queued": {
+    kind: "web-only",
+    note:
+    "Operator-chat control channel, emitted at " +
+    "handlers/operator-chat.handler.ts:246 on the SYSOP's own socket when " +
+    "they accept a page while the caller is inside a door: the accept is " +
+    "remembered in pendingSysopAccepts and replayed when the caller is back " +
+    "at a prompt, so the sysop is told it is queued rather than being asked " +
+    "to watch the node. Browser consumer: " +
+    "web/config-app/src/pages/OperatorChatPage.tsx. A byte terminal cannot " +
+    "render the structured payload; the operator page a telnet caller must " +
+    "actually SEE is an ansi-output push and is TP-10's work. Same class and " +
+    "same reason as operator:error and operator:page-accepted beside it - " +
+    "this one simply landed unruled, and the arm-A census pin caught it.",
+  },
   "operator:error": {
     kind: "web-only",
     note:
