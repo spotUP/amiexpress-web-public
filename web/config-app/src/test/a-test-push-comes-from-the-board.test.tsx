@@ -35,6 +35,12 @@ vi.mock('../hooks/usePushNotifications', () => ({
     isSubscribed: true,
     loading: false,
     error: null,
+    diagnostics: {
+      workerState: 'active',
+      workerScope: 'https://board.example/admin/',
+      hasBrowserSubscription: true,
+      endpointHost: 'fcm.googleapis.com',
+    },
     subscribe: vi.fn(),
     unsubscribe: vi.fn(),
     testNotification: vi.fn(async () => true),
@@ -109,5 +115,20 @@ describe('a test push from the board', () => {
     await waitFor(() =>
       expect(screen.getByTestId('push-from-board')).toHaveTextContent('The board did not answer.')
     );
+  });
+});
+
+describe('what this browser reports about itself', () => {
+  it('names the worker, the permission and the browser subscription', async () => {
+    post.mockResolvedValue({ data: { data: { sent: 1, failed: 0, subscriptions: 1 } } });
+    render(<NotificationsPage />);
+
+    const facts = await screen.findByTestId('push-diagnostics');
+
+    // Four answers to "the board says it sent one and nothing appeared", read
+    // off the page instead of asked for one at a time over chat.
+    expect(facts).toHaveTextContent('granted');
+    expect(facts).toHaveTextContent('active');
+    expect(facts).toHaveTextContent('fcm.googleapis.com');
   });
 });

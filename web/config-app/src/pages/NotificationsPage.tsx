@@ -165,6 +165,37 @@ export function NotificationsPage() {
             {pushed === 'sending' ? 'Asking the board to send one...' : pushed}
           </p>
         )}
+
+        {/* What this browser reports about itself.
+            "The board sent one and nothing appeared" has four possible
+            answers the sysop cannot see: no worker installed, a worker that
+            never activated, a subscription the board holds and the browser
+            does not, and a permission that is not what the page thinks. They
+            are read here instead of asked for one at a time. */}
+        {push.isSupported && (
+          <dl
+            className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-1 text-xs text-content-muted"
+            data-testid="push-diagnostics"
+          >
+            <dt>Browser permission</dt>
+            <dd className="text-content-secondary">{push.permission}</dd>
+
+            <dt>Service worker</dt>
+            <dd className="text-content-secondary">
+              {push.diagnostics.workerState === 'none'
+                ? 'none installed - nothing can be drawn'
+                : push.diagnostics.workerState}
+              {push.diagnostics.workerScope ? ` (${push.diagnostics.workerScope})` : ''}
+            </dd>
+
+            <dt>Subscription in this browser</dt>
+            <dd className="text-content-secondary">
+              {push.diagnostics.hasBrowserSubscription
+                ? `yes, through ${push.diagnostics.endpointHost}`
+                : 'none - the board may still hold an old one'}
+            </dd>
+          </dl>
+        )}
       </section>
 
       {/* The board-wide half: which events notify, the VAPID server keys, and

@@ -14,6 +14,42 @@ interface PushState {
   permission: NotificationPermission | 'unsupported';
   loading: boolean;
   error: string | null;
+  /**
+   * What this browser reports about itself, in the sysop's own words.
+   *
+   * Every question in "the board says it sent one and nothing appeared" is
+   * answered by four values the sysop cannot see: whether a worker is
+   * installed and ACTIVE, what scope it claims, whether a subscription exists
+   * in the browser (not just a row in the board's database), and what the
+   * permission actually is. Two evenings went into asking for these one at a
+   * time over chat.
+   */
+  diagnostics: PushDiagnostics;
+}
+
+export interface PushDiagnostics {
+  /** 'none' when nothing is registered - the usual reason nothing is drawn. */
+  workerState: 'none' | 'installing' | 'waiting' | 'active' | 'unknown';
+  workerScope: string | null;
+  /** The browser's own subscription, which is the one that must exist. */
+  hasBrowserSubscription: boolean;
+  endpointHost: string | null;
+}
+
+const NO_DIAGNOSTICS: PushDiagnostics = {
+  workerState: 'unknown',
+  workerScope: null,
+  hasBrowserSubscription: false,
+  endpointHost: null,
+};
+
+/** What a registration is doing right now, named the way the sysop reads it. */
+function describeWorker(registration: ServiceWorkerRegistration | null | undefined): PushDiagnostics['workerState'] {
+  if (!registration) return 'none';
+  if (registration.active) return 'active';
+  if (registration.waiting) return 'waiting';
+  if (registration.installing) return 'installing';
+  return 'unknown';
 }
 
 interface VapidResponse {
@@ -77,7 +113,8 @@ export function usePushNotifications() {
     isSubscribed: false,
     permission: 'unsupported',
     loading: true,
-    error: null
+    error: null,
+    diagnostics: NO_DIAGNOSTICS
   });
 
   const [vapidPublicKey, setVapidPublicKey] = useState<string | null>(null);
@@ -130,7 +167,13 @@ export function usePushNotifications() {
           isEnabled: true,
           isSubscribed: !!subscription,
           permission: Notification.permission,
-          loading: false
+          loading: false,
+          diagnostics: {
+            workerState: describeWorker(registration),
+            workerScope: registration?.scope ?? null,
+            hasBrowserSubscription: !!subscription,
+            endpointHost: subscription ? new URL(subscription.endpoint).host : null,
+          }
         }));
       } catch (error) {
         console.error('[Push] Error checking support:', error);
@@ -219,7 +262,13 @@ export function usePushNotifications() {
         ...prev,
         isSubscribed: true,
         permission: 'granted',
-        loading: false
+        loading: false,
+        diagnostics: {
+          workerState: describeWorker(registration),
+          workerScope: registration.scope,
+          hasBrowserSubscription: true,
+          endpointHost: new URL(subscriptionJson.endpoint as string).host,
+        }
       }));
 
       console.log('[Push] Subscribed successfully');
