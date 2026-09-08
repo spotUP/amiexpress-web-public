@@ -292,11 +292,23 @@ export function resetLineCount(session: Session): void {
 }
 
 /**
- * Set non-stop mode
+ * Set non-stop mode.
+ *
+ * express has ONE flag, `nonStopDisplayFlag` (express.e:120). The pager tests
+ * it - `IF(nonStopDisplayFlag=FALSE) THEN lineCount++` (express.e:5190) - and
+ * the door API both sets it and reports it back (BB_NONSTOPTEXT,
+ * express.e:3875-3876 and :4037).
+ *
+ * This port split that in two: `session.tempData.nonStopDisplayFlag` for the
+ * pager, `session.nonStopText` for doors, XIM and AREXX. They are one flag in
+ * express and they must move together, so this function owns both - which is
+ * how `~NS` came to suppress nothing: it set the door-facing half while every
+ * pause prompt read the other.
  */
 export function setNonStopMode(session: Session, enabled: boolean): void {
   if (!session.tempData) {
     session.tempData = {};
   }
   session.tempData.nonStopDisplayFlag = enabled;
+  (session as unknown as { nonStopText?: boolean }).nonStopText = enabled;
 }
