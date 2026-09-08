@@ -156,14 +156,30 @@ describe('TP-2 - the telnet/SSH entry point, driven directly', () => {
     const session = loggedOnSession(13);
     connection.session = session;
     const { deps, releaseSession, sessions } = makeDeps();
-    sessions.set(connection.sessionId, session);
+    // Keyed the way session-manager keys it: `setSession` stores by
+    // `nodeId.toString()` and by nothing else.
+    sessions.set(String(connection.nodeId), session);
 
     setupTelnetSSHHandler(connection as unknown as TelnetConnection, 'telnet', deps);
     connection.emit('close');
 
-    expect(sessions.has(connection.sessionId)).toBe(false);
     expect(releaseSession).toHaveBeenCalledTimes(1);
     expect(releaseSession).toHaveBeenCalledWith(connection.sessionId);
+
+    /**
+     * This used to assert `sessions.has(connection.sessionId) === false`
+     * after planting the session under that id itself - and it passed
+     * because the close handler ran `sessions.delete(connection.sessionId)`,
+     * a line that could never match a key on the real board. TP-13b deleted
+     * it and routed the close through `endTransportSession`, which finalises
+     * the session the way a browser's disconnect does and removes it through
+     * `deleteSession`, resolving by node.
+     *
+     * The map a real board reads is keyed by node, and this handler does not
+     * reach into it directly any more; the teardown is asserted end to end in
+     * tests/transport/session-lifecycle.test.ts.
+     */
+    expect(sessions.has(connection.sessionId)).toBe(false);
   });
 
   it('nothing new runs on import', () => {

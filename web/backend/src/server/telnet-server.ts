@@ -804,7 +804,13 @@ console.log('[Telnet Server] Stopped');
      * This is NOT an idle-caller timeout: keepalives are answered by the
      * TCP stack, so a caller sitting and reading a screen is untouched.
      */
-    socket.setKeepAlive(true, 60000);
+    // Guarded because not every caller of this handler brings a real
+    // `net.Socket`: the PETSCII-port and model-reset suites drive it with a
+    // fake that has `write` and `on` and nothing else, and a socket with no
+    // keepalive simply cannot have one set.
+    if (typeof (socket as any).setKeepAlive === 'function') {
+      socket.setKeepAlive(true, 60000);
+    }
 
     if (!ipBanManager.allowConnection(remoteAddress)) {
       console.warn(`[Telnet Server] Connection attempt blocked for ${remoteAddress} (suspicious activity)`);
