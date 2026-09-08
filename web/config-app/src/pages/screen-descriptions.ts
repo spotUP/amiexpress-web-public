@@ -52,6 +52,7 @@ export const SCREEN_DESCRIPTIONS: Record<string, string> = {
   STARTCHAT: 'Shown to the caller when the sysop starts a chat',
   ENDCHAT: 'Shown to the caller when the chat ends',
   PRIVACY: 'The privacy notice every new caller is shown before signing up',
+  ACHIEVETOP: 'The achievement leaderboard, shown at login - the board writes it',
   MAILSCAN: 'Shown while mail is scanned',
   LANGUAGES: 'The language chooser',
   INTERNETNAMES: 'Explains the internet name prompt',
