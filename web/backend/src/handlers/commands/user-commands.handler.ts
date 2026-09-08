@@ -9,6 +9,7 @@
  */
 
 import * as fs from 'fs';
+import { negotiateBinaryForTransfer } from '../file/file-delivery';
 import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { AnsiUtil } from '../../utils/ansi.util';
@@ -257,6 +258,11 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       // path comment for rationale.
       session.subState = LoggedOnSubState.FILES_UPLOAD;
       socket.emit('ansi-output', `\r\nReady to receive via ZMODEM (lrzsz). Send with sz now.\r\n`);
+      // Divergence 20: this path sent NO IAC BINARY at all, while the
+      // download path and the RZ path both did - so an upload started with
+      // `U` on telnet ran under NVT rules and CRC-failed on any subpacket
+      // carrying 0x0D. Same helper, same bytes, all three sites.
+      negotiateBinaryForTransfer(session);
       if (transport.type === 'web') {
         let fired = false;
         const start = () => { if (fired) return; fired = true; lrzManager.start(); };
@@ -448,14 +454,10 @@ export function startZmodemDownload(socket: any, session: BBSSession, files: str
       // CRITICAL: send via transferRawSendUnescaped, NOT transport.send
       // (which is transferRawSend and DOUBLES every 0xFF byte — would
       // turn each IAC into IAC IAC and break the negotiation).
-      const rawSend = (session as any).transferRawSendUnescaped;
-      console.log(`[ZMODEM-DL ${ctxId}] BINARY negotiation: transport.type=${transport.type} hasRawSend=${!!rawSend}`);
-      if (transport.type === 'telnet' && rawSend) {
-        rawSend(Buffer.from([255, 251, 0, 255, 253, 0]));
-        console.log(`[ZMODEM-DL ${ctxId}] BINARY negotiation: sent IAC WILL/DO BINARY (8 bytes)`);
-      } else {
-        console.log(`[ZMODEM-DL ${ctxId}] BINARY negotiation: SKIPPED (condition false)`);
-      }
+      // One copy of this, in file-delivery.ts - the upload paths need the
+      // same bytes and one of them was sending none (divergence 20).
+      const negotiated = negotiateBinaryForTransfer(session);
+      console.log(`[ZMODEM-DL ${ctxId}] BINARY negotiation: ${negotiated ? 'sent IAC WILL/DO BINARY (6 bytes)' : 'SKIPPED (not telnet, or no raw sender)'}`);
       console.log(`[ZMODEM-DL ${ctxId}] using lrzsz, spawning sz`);
       if (transport.type === 'web') {
         const startLrzsz = (() => {

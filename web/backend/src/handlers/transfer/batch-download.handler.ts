@@ -9,6 +9,7 @@ import { Socket } from 'socket.io';
 import { config } from '../../config';
 import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
+import { deliverFilesToCaller } from '../file/file-delivery';
 import { checkSecurity, getACSConfig, ToggleFlags } from '../../utils/acs.util';
 import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../../constants/command-results';
 import { ACSPermission } from '../../constants/acs-permissions';
@@ -347,34 +348,45 @@ export class BatchDownloadHandler {
     // Initiate batch download - express.e:20236-20250
     socket.emit('ansi-output', '\r\n\x1b[32mInitiating batch download...\x1b[0m\r\n\r\n');
 
-    // Emit download events for browser to handle
-    for (const fileInfo of downloadList) {
-      // Support both formats: name (flagManager) and filename (file selector)
-      const fileName = fileInfo.name || fileInfo.filename;
-      const confNum = fileInfo.confNum || fileInfo.areaId || session.currentConf || 1;
-      const dirNum = fileInfo.dirNum || 1;
-      const filePath = fileInfo.fullPath || fileInfo.path;
+    /**
+     * TP-11. This used to emit the browser's `download-file` trigger per
+     * file whatever the transport was, print "Check your browser downloads"
+     * and book the statistics - so a telnet caller was told the transfer
+     * finished while not one byte had been sent. The single-file path had
+     * been fixed years earlier; this one never was.
+     *
+     * The decision is `deliverFilesToCaller`'s now, and the completion text
+     * and the accounting follow what it answers.
+     */
+    const route = await deliverFilesToCaller(socket, session, downloadList, {
+      onBeforeHandoff: async () => {
+        for (const fileInfo of downloadList) {
+          const isFree = this.isFreeDownload(fileInfo);
+          await this.updateDownloadStats(session, fileInfo, isFree);
+          await this.updateConferenceDownloadStats(session, fileInfo, isFree);
+        }
+      },
+    });
 
-      const downloadUrl = `/api/download/${confNum}/${dirNum}/${encodeURIComponent(fileName)}`;
-
-      // Emit download-file event for each file
-      socket.emit('download-file', {
-        filename: fileName,
-        size: fileInfo.size,
-        url: downloadUrl,
-        path: filePath
-      });
-
-      socket.emit('ansi-output', `\x1b[32m-> Downloading: ${fileName}\x1b[0m\r\n`);
-
-      // Update download statistics for each file
-      const isFree = this.isFreeDownload(fileInfo);
-      await this.updateDownloadStats(session, fileInfo, isFree);
-      await this.updateConferenceDownloadStats(session, fileInfo, isFree);
+    if (route === 'refused') {
+      // Nothing was sent, so nothing is booked and no flag is cleared: the
+      // caller can try again from a client that can receive.
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
     }
 
-    socket.emit('ansi-output', `\r\n\x1b[32m[OK] Batch download complete! ${downloadList.length} file(s) queued.\x1b[0m\r\n`);
-    socket.emit('ansi-output', '\x1b[36mCheck your browser downloads.\x1b[0m\r\n');
+    if (route === 'zmodem') {
+      socket.emit('ansi-output', `\r\n\x1b[32mSENDING ${downloadList.length} FILE(S) VIA ZMODEM\x1b[0m\r\n`);
+    } else {
+      for (const fileInfo of downloadList) {
+        socket.emit('ansi-output', `\x1b[32m-> Downloading: ${fileInfo.name || fileInfo.filename}\x1b[0m\r\n`);
+        const isFree = this.isFreeDownload(fileInfo);
+        await this.updateDownloadStats(session, fileInfo, isFree);
+        await this.updateConferenceDownloadStats(session, fileInfo, isFree);
+      }
+      socket.emit('ansi-output', `\r\n\x1b[32m[OK] Batch download complete! ${downloadList.length} file(s) queued.\x1b[0m\r\n`);
+      socket.emit('ansi-output', '\x1b[36mCheck your browser downloads.\x1b[0m\r\n');
+    }
 
     // Clear flags after successful batch download - express.e:20249
     if (session.flagManager) {

@@ -1,0 +1,173 @@
+/**
+ * HOW A FILE REACHES THIS CALLER - one answer, for every download path.
+ *
+ * TP-11 of thoughts/shared/plans/2026-09-03-ssh-telnet-parity.md.
+ *
+ * `download.handler.ts` has read `session.connectionType` and routed
+ * telnet/SSH callers to ZMODEM since the fix whose comment says the BBS
+ * "used to fake-complete the transfer in 1 second without actually sending
+ * bytes". The BATCH path never got that fix: it emitted the browser's
+ * `download-file` trigger per file, printed "Batch download complete! N
+ * file(s) queued. / Check your browser downloads.", and booked the download
+ * statistics - while zero bytes moved and a telnet caller sat looking at a
+ * lie.
+ *
+ * The fix is not a second copy of the branch. Both paths call
+ * `deliverFilesToCaller`, which is the only place that decides, and the
+ * completion text and the statistics are chosen from what it returns.
+ */
+import { Socket } from 'socket.io';
+import { BBSSession } from '../../index';
+import { getStorageContext } from '../../storage/storage-context';
+import { rematerialise, storageFailureText } from '../../storage/remote-download';
+
+/**
+ * What actually happened to the caller's files.
+ *
+ * `refused` is not reachable from today's three transports - web takes the
+ * HTTP trigger, telnet and SSH take ZMODEM - and exists because a transport
+ * that can do NEITHER must say so rather than book statistics for bytes it
+ * never sent. That was the whole defect on the batch path.
+ */
+export type DeliveryRoute = 'zmodem' | 'http' | 'refused';
+
+/** What this transport can never receive. */
+export const NO_TRANSFER_NOTICE =
+  'THIS TRANSFER NEEDS A WEB BROWSER OR A ZMODEM CLIENT';
+
+/** The least a caller has to know about a file to send it. */
+export interface DeliverableFile {
+  name?: string;
+  filename?: string;
+  size: number;
+  fullPath?: string;
+  path?: string;
+  confNum?: number;
+  areaId?: number;
+  dirNum?: number;
+}
+
+export interface DeliverOptions {
+  /**
+   * Runs after the paths are resolved and BEFORE the handoff to ZMODEM.
+   *
+   * The statistics are booked there on purpose - "the ZMODEM transfer is
+   * async and the user could disconnect; record intent now so per-user
+   * totals stay accurate" - and NOT when nothing could be resolved, which
+   * is what keeps a refusal from booking anything.
+   */
+  onBeforeHandoff?: () => Promise<void> | void;
+}
+
+/** The name a file goes by, whichever of the two shapes it arrived in. */
+export const fileNameOf = (file: DeliverableFile): string =>
+  String(file.name ?? file.filename ?? '');
+
+/** The path a file lives at, whichever of the two shapes it arrived in. */
+export const filePathOf = (file: DeliverableFile): string | undefined =>
+  file.fullPath ?? file.path;
+
+/**
+ * Which way this caller's files can travel.
+ *
+ * A session with no `connectionType` is the browser: `session-manager.ts`
+ * creates web sessions and the field is only moved off `'web'` by the
+ * telnet and SSH servers.
+ */
+export function deliveryRouteFor(session: BBSSession | null | undefined): DeliveryRoute {
+  const transport = (session as any)?.connectionType;
+  if (transport === 'telnet' || transport === 'ssh') return 'zmodem';
+  if (transport === 'web' || transport === undefined || transport === null) return 'http';
+  return 'refused';
+}
+
+/**
+ * IAC WILL/DO BINARY, before any ZMODEM transfer on a telnet caller.
+ *
+ * express.e:15891-15896. Without it the client applies NVT rules (CR->CRLF,
+ * NUL stripping) to binary frames and the receiver gets a CRC error on every
+ * subpacket that happens to contain 0x0D.
+ *
+ * It goes out through `transferRawSendUnescaped`, NEVER `transport.send`:
+ * the latter doubles every 0xFF, which would turn each IAC into IAC IAC and
+ * break the negotiation it is performing.
+ *
+ * Returns whether the bytes went out, so a caller can log it.
+ */
+export function negotiateBinaryForTransfer(session: BBSSession): boolean {
+  if ((session as any)?.connectionType !== 'telnet') return false;
+  const rawSend = (session as any).transferRawSendUnescaped;
+  if (typeof rawSend !== 'function') return false;
+  rawSend(Buffer.from([255, 251, 0, 255, 253, 0]));
+  return true;
+}
+
+/**
+ * Send these files the only way this caller can receive them.
+ *
+ * ZMODEM re-fetches every pooled file at SEND time: the caller has been
+ * sitting at the download prompt since the paths were resolved, and another
+ * node's fetch can evict a clean cached copy in that window -
+ * `startZmodemDownload` existsSync-checks each path and would otherwise tell
+ * the caller "files not found" about a file the bucket still holds.
+ *
+ * Answers `'refused'` - having said why on the caller's screen - when the
+ * transport can receive neither, and when nothing could be resolved to send.
+ * In both cases `onBeforeHandoff` never runs, so nothing is booked.
+ */
+export async function deliverFilesToCaller(
+  socket: Socket,
+  session: BBSSession,
+  files: DeliverableFile[],
+  opts: DeliverOptions = {},
+): Promise<DeliveryRoute> {
+  const route = deliveryRouteFor(session);
+
+  if (route === 'refused') {
+    socket.emit('ansi-output', `\r\n${NO_TRANSFER_NOTICE}\r\n\r\n`);
+    return 'refused';
+  }
+
+  if (route === 'zmodem') {
+    const { startZmodemDownload } = require('../commands/user-commands.handler');
+    const storage = getStorageContext();
+    const paths: string[] = [];
+
+    for (const file of files) {
+      if (!filePathOf(file)) continue;
+      try {
+        paths.push(await rematerialise(file as any, storage));
+      } catch (error) {
+console.error('[Download] re-fetch before transfer failed:', error);
+        socket.emit('ansi-output', `\r\n[X] ${fileNameOf(file)}: ${storageFailureText(error)}\r\n\r\n`);
+        return 'refused';
+      }
+    }
+
+    if (paths.length === 0) {
+      socket.emit('ansi-output', '\r\nNo file paths to send.\r\n\r\n');
+      return 'refused';
+    }
+
+    await opts.onBeforeHandoff?.();
+    startZmodemDownload(socket, session, paths);
+    return 'zmodem';
+  }
+
+  // The browser's DOM download trigger, one event per file. `batchIndex` and
+  // `batchTotal` are what the frontend shows as progress through a batch.
+  files.forEach((file, index) => {
+    const name = fileNameOf(file);
+    const confNum = file.confNum ?? file.areaId ?? (session as any)?.currentConf ?? 1;
+    const dirNum = file.dirNum ?? 1;
+    socket.emit('download-file', {
+      filename: name,
+      size: file.size,
+      url: `/api/download/${confNum}/${dirNum}/${encodeURIComponent(name)}`,
+      path: filePathOf(file),
+      batchIndex: index,
+      batchTotal: files.length,
+    });
+  });
+  return 'http';
+}

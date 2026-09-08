@@ -15,6 +15,7 @@
 import { Socket } from 'socket.io';
 import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
+import { deliverFilesToCaller, deliveryRouteFor } from './file-delivery';
 import { checkSecurity, getACSConfig, ToggleFlags } from '../../utils/acs.util';
 import { updateDownloadStats, creditAccountTrackDownloads } from '../../utils/download-ratios.util';
 import { logDownload } from '../../utils/download-logging.util';
@@ -542,55 +543,35 @@ export class DownloadHandler {
     // transfer in 1 second without actually sending bytes. Route
     // through startZmodemDownload so MuffinTerm / SyncTerm / mTelnet
     // negotiate ZMODEM and receive the files for real.
-    const transport = (session as any).connectionType;
-    if (transport === 'telnet' || transport === 'ssh') {
-      const { startZmodemDownload } = require('../commands/user-commands.handler');
-
-      // Fetch every pooled file again at SEND time. The caller has been
-      // sitting at the download prompt since these paths were resolved, and
-      // another node's fetch can evict a clean cached copy in that window -
-      // startZmodemDownload existsSync-checks each path and would tell the
-      // caller "files not found" about a file the bucket still holds.
-      const storage = getStorageContext();
-      const paths: string[] = [];
-      for (const file of fileList) {
-        if (!file?.fullPath) continue;
-        try {
-          paths.push(await rematerialise(file, storage));
-        } catch (error) {
-console.error('[Download] re-fetch before transfer failed:', error);
-          socket.emit('ansi-output', `\r\n[X] ${file.name}: ${storageFailureText(error)}\r\n\r\n`);
-          session.subState = LoggedOnSubState.DISPLAY_MENU;
-          session.tempData = undefined;
-          return;
-        }
-      }
-
-      if (paths.length === 0) {
-        socket.emit('ansi-output', '\r\nNo file paths to send.\r\n\r\n');
+    // How the files travel is ONE decision, in file-delivery.ts, and the
+    // batch path (F+D) makes the same one. The comment this branch used to
+    // carry lives there.
+    if (deliveryRouteFor(session) === 'zmodem') {
+      (session as any)._downloadGoodbyeAfter = goodbyeAfter;
+      const route = await deliverFilesToCaller(socket, session, fileList, {
+        // Persist download stats for each file before handing off - the
+        // ZMODEM transfer is async and the user could disconnect; record
+        // intent now so per-user totals stay accurate.
+        onBeforeHandoff: async () => {
+          if (!session.user) return;
+          for (const fileInfo of fileList) {
+            try {
+              const isFree = this.isFreeDownload(fileInfo);
+              await logDownload(session.user, fileInfo.name, fileInfo.size, isFree, session.nodeId || 0);
+              await updateDownloadStats(session.user, fileInfo.size, isFree);
+              await this.persistDownloadStats(session);
+              await this.updateConferenceDownloadStats(session, fileInfo, isFree);
+              doorDropFileManager.updateDownloadBytesToday(session.nodeId || 0, fileInfo.size);
+            } catch (err) {
+              console.warn('[download] pre-transfer stats failed:', err);
+            }
+          }
+        },
+      });
+      if (route !== 'zmodem') {
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         session.tempData = undefined;
-        return;
       }
-      // Persist download stats for each file before handing off — the
-      // ZMODEM transfer is async and the user could disconnect; record
-      // intent now so per-user totals stay accurate.
-      if (session.user) {
-        for (const fileInfo of fileList) {
-          try {
-            const isFree = this.isFreeDownload(fileInfo);
-            await logDownload(session.user, fileInfo.name, fileInfo.size, isFree, session.nodeId || 0);
-            await updateDownloadStats(session.user, fileInfo.size, isFree);
-            await this.persistDownloadStats(session);
-            await this.updateConferenceDownloadStats(session, fileInfo, isFree);
-            doorDropFileManager.updateDownloadBytesToday(session.nodeId || 0, fileInfo.size);
-          } catch (err) {
-            console.warn('[download] pre-transfer stats failed:', err);
-          }
-        }
-      }
-      (session as any)._downloadGoodbyeAfter = goodbyeAfter;
-      startZmodemDownload(socket, session, paths);
       return;
     }
 
@@ -598,19 +579,13 @@ console.error('[Download] re-fetch before transfer failed:', error);
     let totalBytes  = 0;
 
     // express.e:20247 downloadFiles(finalList, dtfsize, TRUE)
-    // In web mode: send download-file socket events for each file
+    // The browser's triggers go out through the same one decision the
+    // ZMODEM branch above uses, so `download-file` is emitted in exactly
+    // one place in this codebase (TP-11's success criterion).
+    await deliverFilesToCaller(socket, session, fileList);
+
     for (let i = 0; i < fileList.length; i++) {
       const fileInfo = fileList[i];
-      const downloadUrl = `/api/download/${fileInfo.confNum}/${fileInfo.dirNum}/${encodeURIComponent(fileInfo.name)}`;
-
-      socket.emit('download-file', {
-        filename:   fileInfo.name,
-        size:       fileInfo.size,
-        url:        downloadUrl,
-        path:       fileInfo.fullPath,
-        batchIndex: i,
-        batchTotal: fileList.length,
-      });
 
       if (session.user) {
         const isFree = this.isFreeDownload(fileInfo);

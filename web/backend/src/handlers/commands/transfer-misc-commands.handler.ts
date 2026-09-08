@@ -5,6 +5,7 @@
  */
 
 import { BBSSession, LoggedOnSubState } from '../../index';
+import { negotiateBinaryForTransfer } from '../file/file-delivery';
 import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { EnvStat } from '../../constants/env-codes';
@@ -302,10 +303,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       //   IAC DO   BINARY  = 255 253 0
       // Use transferRawSendUnescaped to bypass the 0xFF-doubler in
       // sender — IAC negotiation must reach the wire byte-for-byte.
-      const rawSendUL = (session as any).transferRawSendUnescaped;
-      if (transportType === 'telnet' && rawSendUL) {
-        rawSendUL(Buffer.from([255, 251, 0, 255, 253, 0]));
-      }
+      negotiateBinaryForTransfer(session);
       // Web: arm browser Sentry before lrzsz writes its first byte.
       // Frontend `transfer-raw:init` handler calls beginZmodem() which
       // constructs the Sentry and (for upload) sends ZRQINIT back via
