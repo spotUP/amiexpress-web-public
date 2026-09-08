@@ -159,6 +159,38 @@ function readArt(p: string): string | undefined {
   }
 }
 
+/**
+ * Every copy of the bulletin a theme already holds.
+ *
+ * A theme created after the first bulletin was written got the file copied
+ * into `Themes/<slug>/Board/`, and a theme copy WINS the global screen walk -
+ * so the leaderboards froze at the moment the theme was made. Marking the
+ * file generated stops the NEXT theme taking one; the copies already out
+ * there have to be kept fresh, and this finds them.
+ *
+ * Only ones that EXIST are returned. Creating a copy in a theme that does not
+ * want one would be the same shadowing bug from the other direction.
+ */
+export function themedBulletinCopies(baseDir: string): string[] {
+  const themesDir = path.join(baseDir, 'Themes');
+  let slugs: string[];
+  try {
+    slugs = fs.readdirSync(themesDir);
+  } catch {
+    return [];
+  }
+  const found: string[] = [];
+  for (const slug of slugs) {
+    const copy = path.join(themesDir, slug, 'Board', `${ACHIEVE_BULLETIN_SCREEN}.txt`);
+    try {
+      if (fs.statSync(copy).isFile()) found.push(copy);
+    } catch {
+      /* not this theme */
+    }
+  }
+  return found;
+}
+
 function removeQuietly(p: string): void {
   try {
     fs.unlinkSync(p);
@@ -202,6 +234,7 @@ export async function refreshAchievementsBulletin(
 
   if (!deps.api.enabled()) {
     removeQuietly(paths.file);
+    for (const copy of themedBulletinCopies(deps.baseDir())) removeQuietly(copy);
     return 'removed';
   }
 
@@ -219,6 +252,7 @@ export async function refreshAchievementsBulletin(
   const board = boardRes.body?.rows ?? [];
   if (global.length === 0 && board.length === 0) {
     removeQuietly(paths.file);
+    for (const copy of themedBulletinCopies(deps.baseDir())) removeQuietly(copy);
     return 'removed';
   }
 
@@ -228,6 +262,13 @@ export async function refreshAchievementsBulletin(
   });
   fs.mkdirSync(path.dirname(paths.file), { recursive: true });
   fs.writeFileSync(paths.file, text, 'latin1');
+  for (const copy of themedBulletinCopies(deps.baseDir())) {
+    try {
+      fs.writeFileSync(copy, text, 'latin1');
+    } catch {
+      /* one unwritable theme must not cost the board its bulletin */
+    }
+  }
   return 'written';
 }
 

@@ -437,8 +437,18 @@ const BACKUP_NAME = /(\.bak\b|\.old\b|\.orig\b|\.stale\b|\.backup|~$|\.save\b|\.
  *
  * `Bulletins/lastc.txt` stays: Super-AmiLog (`Utils/lastcallers`) signs it in
  * the art, and RUNTIME_CONTENT's last-callers marker catches it too.
+ *
+ * `AchieveTop.txt` is here by NAME, against this module's usual rule, because
+ * the name IS the evidence: achievements/bulletin.ts owns it and rewrites it
+ * every fifteen minutes, and unlike `bull6.txt` beside `bull9.txt` there is no
+ * hand-drawn file it could be confused with. Content would not do - a sysop
+ * who fills the `AchieveTop.Header` slot replaces the strap a marker would
+ * look for. Its `.Header` and `.Tailer` are art and must not match.
+ * Left unmarked, seeding a theme copied the bulletin into it, and a theme copy
+ * WINS the global screen walk - so the leaderboards froze at the moment the
+ * theme was made (measured on the live board, 2026-09-08).
  */
-const RUNTIME_NAME = /^(callerslog.*|lastc\.txt|.*\.log)$/i;
+const RUNTIME_NAME = /^(callerslog.*|lastc\.txt|achievetop\.txt|.*\.log)$/i;
 
 /**
  * Signatures of the tools that WRITE screens on this board.

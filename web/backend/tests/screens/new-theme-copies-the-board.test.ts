@@ -63,6 +63,10 @@ beforeEach(() => {
   write('Node1/BBSTITLE.txt', 'the title\r\n');
   write('Node2/BBSTITLE.txt', 'the title\r\n');
   write('Screens/BULL.TXT.bak', 'an old copy nobody edits\r\n');
+  // The achievements bulletin: written by the board every fifteen minutes,
+  // with an art slot beside it.
+  write('Screens/AchieveTop.txt', 'the leaderboards as they stood at 08:41\r\n');
+  write('Screens/AchieveTop.Header', 'the board own masthead\r\n');
 
   clearThemeRegistryCache();
   invalidateScreenIndex();
@@ -111,6 +115,33 @@ test('a leftover the board does not read is not copied', async () => {
   await create({ owner: 'skope' });
 
   expect(fs.existsSync(themeFile('neon', path.join('Board', 'BULL.TXT.bak')))).toBe(false);
+});
+
+/**
+ * A theme copy WINS the global screen walk, so a copy of a file the board
+ * rewrites every fifteen minutes freezes it at the moment the theme was made.
+ * Measured on the live board 2026-09-08: the sysop seeded a theme a minute
+ * after the first achievements bulletin appeared and the leaderboards stopped
+ * moving.
+ */
+test('the achievements bulletin is not copied - the board rewrites it', async () => {
+  await create({ owner: 'skope' });
+
+  expect(fs.existsSync(themeFile('neon', path.join('Board', 'AchieveTop.txt')))).toBe(false);
+});
+
+/**
+ * Its art slot is not a screen either way, and that is right rather than a
+ * gap: the board produces ONE bulletin, so its furniture is the board's, not
+ * per-theme. An artist who wants the leaderboards drawn their way edits the
+ * board's slot.
+ */
+test('its art slot stays with the board - one bulletin, one set of furniture', async () => {
+  await create({ owner: 'skope' });
+
+  expect(fs.existsSync(themeFile('neon', path.join('Board', 'AchieveTop.Header')))).toBe(false);
+  expect(fs.readFileSync(path.join(root, 'Screens', 'AchieveTop.Header'), 'latin1'))
+    .toBe('the board own masthead\r\n');
 });
 
 test('an owner the board does not have is refused, and no theme is made', async () => {

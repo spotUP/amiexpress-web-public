@@ -15,6 +15,7 @@ import {
   bulletinRow,
   refreshAchievementsBulletin,
   renderAchievementsBulletin,
+  themedBulletinCopies,
   _resetBulletinRunningForTests,
 } from '../../src/achievements/bulletin';
 import type { BulletinDeps } from '../../src/achievements/bulletin';
@@ -199,6 +200,53 @@ describe('refreshAchievementsBulletin', () => {
     const api = stubApi(lb('global', []), lb('board:x', []));
     await expect(refreshAchievementsBulletin(deps(dir, api))).resolves.toBe('removed');
     expect(fs.existsSync(paths.file)).toBe(false);
+  });
+
+  /**
+   * A theme copy WINS the global screen walk.
+   *
+   * The sysop seeded a theme a minute after the first bulletin was written,
+   * the seeder copied the file in, and the live board's leaderboards froze at
+   * the moment the theme was made. Marking the file generated stops the next
+   * theme taking one; a copy already out there has to be kept fresh.
+   */
+  test('rewrites the copy a theme already holds, so the theme cannot freeze it', async () => {
+    const dir = tempBoard();
+    const themed = path.join(dir, 'Themes', 'ansiguy', 'Board', 'AchieveTop.txt');
+    fs.mkdirSync(path.dirname(themed), { recursive: true });
+    fs.writeFileSync(themed, 'frozen at seed time');
+
+    const api = stubApi(lb('global', rows(2, 'w')), lb('board:x', rows(2, 'b')));
+    await refreshAchievementsBulletin(deps(dir, api));
+
+    expect(fs.readFileSync(themed, 'latin1')).toContain('w1');
+    expect(fs.readFileSync(themed, 'latin1')).toBe(fs.readFileSync(bulletinPaths(dir).file, 'latin1'));
+  });
+
+  test('never CREATES a copy in a theme that does not carry one', async () => {
+    const dir = tempBoard();
+    const bare = path.join(dir, 'Themes', 'tango', 'Board');
+    fs.mkdirSync(bare, { recursive: true });
+
+    const api = stubApi(lb('global', rows(2, 'w')), lb('board:x', rows(2, 'b')));
+    await refreshAchievementsBulletin(deps(dir, api));
+
+    expect(fs.existsSync(path.join(bare, 'AchieveTop.txt'))).toBe(false);
+    expect(themedBulletinCopies(dir)).toHaveLength(0);
+  });
+
+  test('a board that turns achievements off loses the themed copies too', async () => {
+    const dir = tempBoard();
+    const themed = path.join(dir, 'Themes', 'ansiguy', 'Board', 'AchieveTop.txt');
+    fs.mkdirSync(path.dirname(themed), { recursive: true });
+    fs.writeFileSync(themed, 'yesterday');
+    fs.mkdirSync(path.dirname(bulletinPaths(dir).file), { recursive: true });
+    fs.writeFileSync(bulletinPaths(dir).file, 'yesterday');
+
+    const api = stubApi(lb('global', rows(1, 'w')), lb('board:x', rows(1, 'b')), /* enabled */ false);
+    await expect(refreshAchievementsBulletin(deps(dir, api))).resolves.toBe('removed');
+    expect(fs.existsSync(themed)).toBe(false);
+    expect(fs.existsSync(bulletinPaths(dir).file)).toBe(false);
   });
 
   test('picks up the sysop art slots beside the file it writes', async () => {
