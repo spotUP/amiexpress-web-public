@@ -1225,6 +1225,32 @@ export function buildScreenIndex(baseDir: string, themeSlug?: string): ScreenInd
     frontier = next;
   }
 
+  /*
+   * THE ART A GENERATED SCREEN SPLICES IN.
+   *
+   * `Screens/AchieveTop.txt` is written by the board every fifteen minutes and
+   * is therefore nobody's to draw - but it is drawn AROUND two files that are:
+   * `AchieveTop.Header` above the leaderboards and `.Tailer` below them
+   * (`achievements/bulletin.ts`), the same slot shape `Conf<n>/Conftop.Header`
+   * has. Nothing in the catalogue names them, so the index called them read by
+   * nothing and the studio hid them - which is why the sysop could not restyle
+   * his own achievements bulletin.
+   *
+   * They are credited to the screen they belong to, keyed off the file the
+   * board generates: `<X>.Header` beside a `<X>.txt` that some screen reads is
+   * read by that screen, once removed.
+   */
+  for (const [rel, itsReaders] of [...readers.entries()]) {
+    const dir = path.dirname(rel);
+    const stem = path.basename(rel).replace(/\.[^.]+$/, '');
+    for (const suffix of ['.Header', '.Tailer']) {
+      const artRel = path.join(dir, `${stem}${suffix}`);
+      if (readers.has(artRel)) continue;
+      if (!fs.existsSync(path.join(baseDir, artRel))) continue;
+      readers.set(artRel, itsReaders.map(r => ({ ...r, via: 'include' as const })));
+    }
+  }
+
   // Everything else under a screen directory. Listed, never hidden: a file
   // nothing reads is exactly what a sysop wants to find - but "nothing reads
   // it" now means no screen, at any security level, in any screen type, and no

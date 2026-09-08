@@ -146,3 +146,48 @@ describe('art a screen pulls in by path', () => {
     expect(progress.byScope.files.drawn).toBe(0);
   });
 });
+
+/**
+ * The frame around a screen the board writes IS an artist's work.
+ *
+ * `AchieveTop.txt` is regenerated every fifteen minutes, so the checklist
+ * excludes it - but the board splices `AchieveTop.Header` above the two
+ * leaderboards and `.Tailer` below them, and a theme's own pair now wins over
+ * the board's. Without slots for those, the sysop had no way to restyle his
+ * achievements bulletin: "start by making the achievement bulletings editable
+ * and add support in the ansi studio".
+ */
+describe('the art around a generated screen', () => {
+  it('is offered, even though the screen itself is not', () => {
+    const slots = themeChecklist(undefined, 'neon');
+    const names = slots.map(s => s.screen);
+
+    expect(names).not.toContain('ACHIEVETOP');
+    expect(names).toContain('AchieveTop.Header');
+    expect(names).toContain('AchieveTop.Tailer');
+  });
+
+  it('lands where the board reads a theme\'s own copy', () => {
+    const header = themeChecklist(undefined, 'neon').find(s => s.screen === 'AchieveTop.Header');
+
+    expect(header?.path).toBe('Themes/neon/Board/AchieveTop.Header');
+    expect(header?.scope).toBe('board');
+    expect(header?.description).toMatch(/above/i);
+  });
+
+  it('counts as drawn once the theme holds it', () => {
+    const index = {
+      builtAt: '', unused: [], screens: [], conferences: [],
+      files: {
+        'Themes/neon/Board/AchieveTop.Header': {
+          relPath: 'Themes/neon/Board/AchieveTop.Header', bytes: 10, format: 'ansi',
+          sha256: 'a', mci: [], theme: 'neon',
+        },
+      },
+    } as unknown as ScreenIndexShape;
+
+    const slots = themeChecklist(index, 'neon');
+    expect(slots.find(s => s.screen === 'AchieveTop.Header')?.drawn).toBe(true);
+    expect(slots.find(s => s.screen === 'AchieveTop.Tailer')?.drawn).toBe(false);
+  });
+});

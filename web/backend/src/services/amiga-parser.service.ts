@@ -7,7 +7,8 @@
  * Reference: reference-boardBBS (~/Downloads/BBS_COPY)
  */
 
-import * as fs from 'fs/promises';
+import * as fs from 'fs/promises';
+import { SCREEN_EXTENSIONS as SHARED_SCREEN_EXTENSIONS } from '../screens/screen-tables';
 import * as path from 'path';
 import { InfoFileParser } from './info-file-parser';
 // The user-file format has one owner; the importer reads another board's
@@ -20,7 +21,10 @@ import { readTooltypeMap } from '../utils/info-file.util';
  * screen-index.service.ts's own list). The extension IS the routing: `.GR` is
  * the graphics variant, `.SEQ` is PETSCII.
  */
-const SCREEN_EXTENSIONS = ['.txt', '.gr', '.ibm', '.seq', '.rip', '.ans', '.asc'];
+// THE list, from the table that owns it: four copies of this array meant
+// four answers to "is this a screen", and the `.Header`/`.Tailer` art was a
+// screen to one of them and not to the others.
+const SCREEN_EXTENSIONS = SHARED_SCREEN_EXTENSIONS;
 // The AmiExpress on-disk header layout, which is NOT MessageIndexManager's -
 // see amiga-msgheader.ts for the two alignment pads and why they matter here.
 import { parseConfDb } from './amiga-confbase';

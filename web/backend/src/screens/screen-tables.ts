@@ -23,7 +23,20 @@
  * screens before it can share them, and a second copy of the list is how the
  * two would come to disagree about `.asc`.
  */
-export const SCREEN_EXTENSIONS = ['.txt', '.gr', '.ibm', '.seq', '.rip', '.ans', '.asc'];
+export const SCREEN_EXTENSIONS = [
+  '.txt', '.gr', '.ibm', '.seq', '.rip', '.ans', '.asc',
+  /*
+   * `.Header` and `.Tailer` are ART the board splices into a screen it writes
+   * itself: `Screens/AchieveTop.Header` above the achievements leaderboard and
+   * `.Tailer` below it, `Conf<n>/Conftop.Header` the same for the conference
+   * top. The generated file between them is off limits - it is rewritten every
+   * fifteen minutes - but these two are exactly the parts a designer owns, and
+   * calling them "not screen files" meant nothing could list, open or draw
+   * them. Asked for 2026-09-08: "start by making the achievement bulletins
+   * editable and add support in the ansi studio".
+   */
+  '.header', '.tailer',
+];
 
 export function isScreenFile(name: string): boolean {
   if (name.endsWith('.backup')) return false;
@@ -149,5 +162,11 @@ export function getScreenFileName(screenName: string): string {
   if (upper === 'UPLOADMSG') return 'UploadMsg';
   // express.e:6639-6641 - SCREEN_LOGON24 looks up 'Logon24hrs', not 'LOGON24'.
   if (upper === 'LOGON24') return 'Logon24hrs';
+  // This port's own: `achievements/bulletin.ts` writes `AchieveTop.txt` and
+  // splices `AchieveTop.Header`/`.Tailer` around it. The loader finds a screen
+  // case-insensitively, so the catalogue name worked - but anything that
+  // BUILDS a path from it (the studio's checklist, offering the artist a place
+  // to draw) wrote `ACHIEVETOP.Header`, which is not what the board reads.
+  if (upper === 'ACHIEVETOP') return 'AchieveTop';
   return screenName;
 }

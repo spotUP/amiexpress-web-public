@@ -131,15 +131,25 @@ test('the achievements bulletin is not copied - the board rewrites it', async ()
 });
 
 /**
- * Its art slot is not a screen either way, and that is right rather than a
- * gap: the board produces ONE bulletin, so its furniture is the board's, not
- * per-theme. An artist who wants the leaderboards drawn their way edits the
- * board's slot.
+ * ITS ART SLOT COMES WITH THE THEME - changed 2026-09-08.
+ *
+ * The generated bulletin is still the board's and is never copied. The
+ * FURNITURE around it is a designer's work, and it is now per-theme: the
+ * refresher renders each theme's copy with that theme's own
+ * `AchieveTop.Header`/`.Tailer`, falling back to the board's where a theme has
+ * none (`achievements/bulletin.ts`). The sysop asked for exactly that: "start
+ * by making the achievement bulletings editable and add support in the ansi
+ * studio". So a new theme starts with the board's art, as it does for every
+ * other screen, and the artist edits their copy.
  */
-test('its art slot stays with the board - one bulletin, one set of furniture', async () => {
+test('its art slot comes along, so the theme can draw its own furniture', async () => {
   await create({ owner: 'skope' });
 
-  expect(fs.existsSync(themeFile('neon', path.join('Board', 'AchieveTop.Header')))).toBe(false);
+  expect(fs.readFileSync(themeFile('neon', path.join('Board', 'AchieveTop.Header')), 'latin1'))
+    .toBe('the board own masthead\r\n');
+  // The generated bulletin itself is still not copied.
+  expect(fs.existsSync(themeFile('neon', path.join('Board', 'AchieveTop.txt')))).toBe(false);
+  // And the board keeps its own.
   expect(fs.readFileSync(path.join(root, 'Screens', 'AchieveTop.Header'), 'latin1'))
     .toBe('the board own masthead\r\n');
 });

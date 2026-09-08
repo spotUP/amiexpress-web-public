@@ -116,6 +116,32 @@ export function themeChecklist(
   }
 
   /*
+   * THE FURNITURE AROUND A SCREEN THE BOARD WRITES.
+   *
+   * `AchieveTop.txt` is regenerated every fifteen minutes and is excluded
+   * above - drawing it is wasted work. What a designer DOES own is the pair
+   * spliced around it: `AchieveTop.Header` over the two leaderboards and
+   * `.Tailer` under them. A theme's own pair now wins over the board's
+   * (`achievements/bulletin.ts`), so these are real slots, and without them
+   * the sysop had no way to restyle his achievements bulletin at all.
+   */
+  for (const [screen, dirType] of Object.entries(SCREEN_DIR_MAP)) {
+    if (!isBoardWritten(`${getScreenFileName(screen)}.txt`)) continue;
+    const scope = scopeOf(dirType);
+    if (scope !== 'board') continue;
+    for (const [suffix, where] of [['Header', 'above'], ['Tailer', 'below']] as const) {
+      const path = `${root}/${SCOPE_DIR.board}/${getScreenFileName(screen)}.${suffix}`;
+      slots.push({
+        screen: `${getScreenFileName(screen)}.${suffix}`,
+        scope: 'board',
+        description: `Your art ${where} the ${describeScreen(screen).toLowerCase() || screen}`,
+        path,
+        drawn: drawnAt.has(path.toLowerCase().replace(/\.(txt|gr|ans|asc|ibm)$/i, '')),
+      });
+    }
+  }
+
+  /*
    * The logos.
    *
    * A screen the catalogue names is one slot; the art a screen PULLS IN is

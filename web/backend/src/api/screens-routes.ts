@@ -16,6 +16,7 @@
  */
 
 import express, { Request, Response, NextFunction } from 'express';
+import { SCREEN_EXTENSIONS as SHARED_SCREEN_EXTENSIONS } from '../screens/screen-tables';
 
 import type { AuthRequest } from '../middleware/auth.middleware';
 import { isSysop, mayWriteScreen, writableRoots } from '../screens/theme-sandbox';
@@ -1267,7 +1268,10 @@ screensRouter.post('/share', (req: Request, res: Response) => {
     `${nodes.length} node${nodes.length === 1 ? '' : 's'} now read ${sharedDirRel}`);
 });
 
-const SCREEN_EXTENSIONS = ['.txt', '.gr', '.ibm', '.seq', '.rip', '.ans', '.asc'];
+// THE list, from the table that owns it: four copies of this array meant
+// four answers to "is this a screen", and the `.Header`/`.Tailer` art was a
+// screen to one of them and not to the others.
+const SCREEN_EXTENSIONS = SHARED_SCREEN_EXTENSIONS;
 
 function isScreenFileName(name: string): boolean {
   const lower = name.toLowerCase();

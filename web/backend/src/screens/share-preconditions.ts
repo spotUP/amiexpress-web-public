@@ -17,6 +17,7 @@
  */
 
 import * as fs from 'fs';
+import { SCREEN_EXTENSIONS as SHARED_SCREEN_EXTENSIONS } from './screen-tables';
 import * as path from 'path';
 import { screenFileFacts } from './screen-index.service';
 
@@ -32,7 +33,10 @@ export interface ShareCheck {
   nodeHasNoScreens: boolean;
 }
 
-const SCREEN_EXTENSIONS = ['.txt', '.gr', '.ibm', '.seq', '.rip', '.ans', '.asc'];
+// THE list, from the table that owns it: four copies of this array meant
+// four answers to "is this a screen", and the `.Header`/`.Tailer` art was a
+// screen to one of them and not to the others.
+const SCREEN_EXTENSIONS = SHARED_SCREEN_EXTENSIONS;
 
 function screenFilesIn(dir: string): Map<string, string> {
   const found = new Map<string, string>();

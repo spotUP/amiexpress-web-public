@@ -172,6 +172,20 @@ function readArt(p: string): string | undefined {
  * want one would be the same shadowing bug from the other direction.
  */
 export function themedBulletinCopies(baseDir: string): string[] {
+  return themedBulletins(baseDir).map(t => t.file);
+}
+
+/**
+ * Each theme's copy of the bulletin, and the art THAT theme frames it with.
+ *
+ * The board splices `Screens/AchieveTop.Header` above the leaderboards and
+ * `.Tailer` below them. A theme is a set of screens a caller wears, so a theme
+ * gets to draw its own pair - `Themes/<slug>/Board/AchieveTop.Header` - and
+ * falls back to the board's where it has none, exactly as every other screen
+ * in a theme does. Asked for on 2026-09-08: "start by making the achievement
+ * bulletings editable".
+ */
+export function themedBulletins(baseDir: string): Array<{ slug: string; file: string; header: string; tailer: string }> {
   const themesDir = path.join(baseDir, 'Themes');
   let slugs: string[];
   try {
@@ -179,14 +193,21 @@ export function themedBulletinCopies(baseDir: string): string[] {
   } catch {
     return [];
   }
-  const found: string[] = [];
+  const found: Array<{ slug: string; file: string; header: string; tailer: string }> = [];
   for (const slug of slugs) {
-    const copy = path.join(themesDir, slug, 'Board', `${ACHIEVE_BULLETIN_SCREEN}.txt`);
+    const dir = path.join(themesDir, slug, 'Board');
+    const copy = path.join(dir, `${ACHIEVE_BULLETIN_SCREEN}.txt`);
     try {
-      if (fs.statSync(copy).isFile()) found.push(copy);
+      if (!fs.statSync(copy).isFile()) continue;
     } catch {
-      /* not this theme */
+      continue; // not this theme
     }
+    found.push({
+      slug,
+      file: copy,
+      header: path.join(dir, `${ACHIEVE_BULLETIN_SCREEN}.Header`),
+      tailer: path.join(dir, `${ACHIEVE_BULLETIN_SCREEN}.Tailer`),
+    });
   }
   return found;
 }
@@ -256,15 +277,31 @@ export async function refreshAchievementsBulletin(
     return 'removed';
   }
 
-  const text = renderAchievementsBulletin(global, board, deps.boardName(), deps.now(), {
-    header: readArt(paths.header),
-    tailer: readArt(paths.tailer),
-  });
+  const boardArt = { header: readArt(paths.header), tailer: readArt(paths.tailer) };
+  const text = renderAchievementsBulletin(global, board, deps.boardName(), deps.now(), boardArt);
   fs.mkdirSync(path.dirname(paths.file), { recursive: true });
   fs.writeFileSync(paths.file, text, 'latin1');
-  for (const copy of themedBulletinCopies(deps.baseDir())) {
+
+  /*
+   * EACH THEME GETS ITS OWN RENDER, not a copy of the board's.
+   *
+   * Writing the board's text into every theme meant a theme could hold the
+   * file and never influence it: an artist could draw `AchieveTop.Header` in
+   * their theme and callers wearing it would still see the board's furniture.
+   * The leaderboard rows are the same everywhere - they are the board's facts
+   * - and the art around them is the theme's.
+   */
+  for (const theme of themedBulletins(deps.baseDir())) {
+    const themeHeader = readArt(theme.header) ?? boardArt.header;
+    const themeTailer = readArt(theme.tailer) ?? boardArt.tailer;
+    const themed = themeHeader === boardArt.header && themeTailer === boardArt.tailer
+      ? text
+      : renderAchievementsBulletin(global, board, deps.boardName(), deps.now(), {
+        header: themeHeader,
+        tailer: themeTailer,
+      });
     try {
-      fs.writeFileSync(copy, text, 'latin1');
+      fs.writeFileSync(theme.file, themed, 'latin1');
     } catch {
       /* one unwritable theme must not cost the board its bulletin */
     }
