@@ -9,7 +9,7 @@
  */
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ShieldCheck, Monitor, Send } from 'lucide-react';
+import { ShieldCheck, Monitor, Send, Eye } from 'lucide-react';
 
 import { apiClient } from '../api/client';
 import { Modal } from '../components/ui/Modal';
@@ -40,14 +40,25 @@ const STATUS_LABEL: Record<ArtistTheme['status'], string> = {
 
 export interface ThemeStatusBarProps {
   theme: ArtistTheme;
-  /** Every theme this artist owns; a switcher appears only when there are two. */
-  mine: ArtistTheme[];
+  /**
+   * The themes this account may work in - an artist's own, every one for a
+   * sysop. A switcher appears only when there are two.
+   */
+  choices: ArtistTheme[];
   onSelect: (slug: string) => void;
   /** The screens the board can display, for the preview picker. */
   screenNames: string[];
+  /**
+   * The open theme belongs to somebody else, so this is an audit.
+   *
+   * "Send for review" is the ARTIST's move - it hands their draft to the
+   * sysop. A sysop standing in the artist's studio publishes from the Themes
+   * tab instead, and sending their own theme to themselves is not a thing.
+   */
+  auditing?: boolean;
 }
 
-export function ThemeStatusBar({ theme, mine, onSelect, screenNames }: ThemeStatusBarProps) {
+export function ThemeStatusBar({ theme, choices, onSelect, screenNames, auditing }: ThemeStatusBarProps) {
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useNotification();
   const [checking, setChecking] = useState(false);
@@ -74,7 +85,7 @@ export function ThemeStatusBar({ theme, mine, onSelect, screenNames }: ThemeStat
       <div className="flex flex-wrap items-center justify-between gap-3 border border-border p-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            {mine.length > 1 ? (
+            {choices.length > 1 ? (
               <>
                 <label htmlFor="artist-theme" className="sr-only">Theme</label>
                 <select
@@ -83,8 +94,11 @@ export function ThemeStatusBar({ theme, mine, onSelect, screenNames }: ThemeStat
                   value={theme.slug}
                   onChange={event => onSelect(event.target.value)}
                 >
-                  {mine.map(entry => (
-                    <option key={entry.slug} value={entry.slug}>{entry.title}</option>
+                  {choices.map(entry => (
+                    <option key={entry.slug} value={entry.slug}>
+                      {/* Whose theme it is, for the sysop picking one to audit. */}
+                      {entry.mine || !entry.owner ? entry.title : `${entry.title} - ${entry.owner}`}
+                    </option>
                   ))}
                 </select>
               </>
@@ -94,6 +108,14 @@ export function ThemeStatusBar({ theme, mine, onSelect, screenNames }: ThemeStat
             <span className="px-1 rounded-sm bg-surface-3 text-content-secondary text-sm">
               {STATUS_LABEL[theme.status]}
             </span>
+            {auditing && (
+              <span
+                data-testid="auditing-banner"
+                className="inline-flex items-center gap-1 px-1 rounded-sm border border-dashed border-accent text-accent text-sm"
+              >
+                <Eye size={14} /> {theme.owner ? `${theme.owner}'s theme` : 'Somebody else\u2019s theme'} - you are editing their files
+              </span>
+            )}
           </div>
           <p className="text-sm text-content-secondary">
             {report
@@ -114,7 +136,7 @@ export function ThemeStatusBar({ theme, mine, onSelect, screenNames }: ThemeStat
             onClick={() => setPreviewing(true)}>
             <Monitor size={16} /> Preview
           </button>
-          {theme.status === 'draft' && (
+          {theme.status === 'draft' && !auditing && (
             <button type="button" className="btn-primary inline-flex items-center gap-1"
               disabled={sendForReview.isPending}
               onClick={() => sendForReview.mutate()}>

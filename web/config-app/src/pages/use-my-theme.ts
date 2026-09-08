@@ -41,14 +41,29 @@ const SLUG_ATTEMPTS = 3;
 
 export function useMyTheme(): {
   theme: ArtistTheme | null;
-  mine: ArtistTheme[];
+  /** The themes this account may work in - its own, or every one for a sysop. */
+  choices: ArtistTheme[];
   select: (slug: string) => void;
   isPreparing: boolean;
   error: Error | null;
+  /**
+   * True when the open theme belongs to somebody else.
+   *
+   * A sysop asked to be able to stand in an artist's studio: "as a sysop i
+   * need to be able to personate a user/artist in the ansi studio to audit and
+   * fix issues in their themes". The board already allows the writes - a
+   * sysop's `writableRoots` is the board root - so this is the view, and the
+   * flag is what tells the page to say whose work it is showing.
+   */
+  auditing: boolean;
+  /** True for a sysop: they are visiting, not waiting for a theme of their own. */
+  sysop: boolean;
 } {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, secLevel } = useAuth();
   const username = String((user as { username?: string } | null)?.username ?? '').trim();
+  /** The board's own level for "may administer" - the same number App.tsx gates on. */
+  const sysop = secLevel >= 255;
   const [chosen, setChosen] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
   /** One create per browser tab, whatever React does with effects. */
@@ -64,6 +79,14 @@ export function useMyTheme(): {
   const payload = (data as { data?: ThemesPayload } | undefined)?.data;
   const themes = payload?.themes ?? [];
   const mine = themes.filter(entry => entry.mine);
+  /*
+   * A sysop stands in ANY artist's studio.
+   *
+   * `default` is the board's own screens and has no directory of its own, so
+   * it is not a theme anybody draws in - the registry answers with an empty
+   * `dir` and the copy route refuses it.
+   */
+  const choices = sysop ? themes.filter(entry => entry.dir.trim() !== '') : mine;
 
   const create = useMutation({
     // Never retried. The admin retries mutations once by default, which is
@@ -92,6 +115,9 @@ export function useMyTheme(): {
 
   useEffect(() => {
     if (!isFetched || !username) return;
+    // A sysop is not an artist. Opening the studio to audit somebody's work
+    // must not mint a theme in the sysop's name on the way in.
+    if (sysop) return;
     if (mine.length > 0 || creating.current) return;
     if (attempts.current >= SLUG_ATTEMPTS) return;
 
@@ -99,15 +125,21 @@ export function useMyTheme(): {
     attempts.current += 1;
     const taken = new Set(themes.map(entry => entry.slug));
     create.mutate(nextFreeSlug(artistThemeSlug(username), taken));
-  }, [isFetched, username, mine.length, themes, create]);
+  }, [isFetched, sysop, username, mine.length, themes, create]);
 
-  const theme = mine.find(entry => entry.slug === chosen) ?? pickArtistTheme(mine);
+  const theme = choices.find(entry => entry.slug === chosen)
+    // A sysop with nothing chosen lands on their own theme when they have one,
+    // so the tab opens on their work rather than on a stranger's.
+    ?? pickArtistTheme(sysop && mine.length > 0 ? mine : choices);
 
   return {
     theme,
-    mine,
+    choices,
     select: setChosen,
-    isPreparing: !isFetched || (mine.length === 0 && error === null),
+    // A sysop who owns no theme is not waiting for one to be made.
+    isPreparing: !isFetched || (!sysop && mine.length === 0 && error === null),
     error,
+    auditing: theme !== null && !theme.mine,
+    sysop,
   };
 }

@@ -32,7 +32,7 @@ const SCOPE_LABEL = {
 } as const;
 
 export function ArtistStudioPage() {
-  const { theme, mine, select, isPreparing, error } = useMyTheme();
+  const { theme, choices, select, isPreparing, error, auditing, sysop } = useMyTheme();
   const [openPath, setOpenPath] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   /** Everything, or only what is still to draw. */
@@ -54,9 +54,11 @@ export function ArtistStudioPage() {
         showGenerated: false,
         showUnread: false,
         ownedBy: theme.slug,
+        // A sysop auditing an artist's studio is not looking at their own art.
+        ownedLabel: auditing ? `Redrawn by ${theme.owner || 'the artist'}` : 'Yours',
       })
       : []),
-    [data, theme],
+    [data, theme, auditing],
   );
 
   /**
@@ -117,15 +119,25 @@ export function ArtistStudioPage() {
         <h1 className="text-content-primary">Screens</h1>
         {isPreparing
           ? <p className="text-sm text-content-secondary">Setting up your theme from the board&apos;s screens</p>
-          : <p className="text-sm text-content-secondary">No theme yet.</p>}
-        <SkeletonRows rows={4} />
+          : sysop
+            // A sysop is not given a theme on arrival; the board has none to
+            // stand in yet, and the Themes tab is where one is made.
+            ? <p className="text-sm text-content-secondary">No theme on this board yet. Make one on the Themes tab, or an artist gets theirs the first time they open this page.</p>
+            : <p className="text-sm text-content-secondary">No theme to work in yet.</p>}
+        {!sysop && <SkeletonRows rows={4} />}
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <ThemeStatusBar theme={theme} mine={mine} onSelect={select} screenNames={screenNames} />
+      <ThemeStatusBar
+        theme={theme}
+        choices={choices}
+        onSelect={select}
+        screenNames={screenNames}
+        auditing={auditing}
+      />
 
       {/* The one number an artist wants, and where the work is. */}
       <div className="space-y-2 border border-border p-3">

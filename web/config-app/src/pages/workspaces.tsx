@@ -158,6 +158,11 @@ const SYSOP_LEVEL = 255;
 const SCREEN_TABS: TabDefinition[] = [
   { id: 'files', label: 'Screen files', render: () => <ScreenFilesPage /> },
   { id: 'themes', label: 'Themes', render: () => <ScreenThemesPage /> },
+  // The artist's own view of any theme. "as a sysop i need to be able to
+  // personate a user/artist in the ansi studio to audit and fix issues in
+  // their themes" - so a sysop gets the SAME page an artist gets, with every
+  // theme in its picker, rather than a second tool that could disagree with it.
+  { id: 'studio', label: 'Artist studio', render: () => <ArtistStudioPage /> },
   { id: 'questionnaire', label: 'Questionnaire', render: () => <QuestionnairePage /> },
 ];
 

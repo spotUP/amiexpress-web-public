@@ -417,6 +417,13 @@ export interface GalleryBuildOptions {
    * still the board's.
    */
   ownedBy?: string;
+  /**
+   * What to call the theme's own art.
+   *
+   * "Yours" for the artist whose theme it is; a sysop auditing somebody else's
+   * studio is not looking at their own work and should not be told they are.
+   */
+  ownedLabel?: string;
 }
 
 /**
@@ -495,7 +502,7 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
         ...(opts.ownedBy
           ? {
             badge: file.theme === opts.ownedBy
-              ? { label: 'Yours', kind: 'mine' as const }
+              ? { label: opts.ownedLabel ?? 'Yours', kind: 'mine' as const }
               : { label: "Board's - not redrawn yet", kind: 'theirs' as const },
           }
           : {}),

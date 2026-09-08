@@ -57,8 +57,14 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-const bar = (over: Partial<ArtistTheme> = {}, mine?: ArtistTheme[]) => (
-  <ThemeStatusBar theme={theme(over)} mine={mine ?? [theme(over)]} onSelect={vi.fn()} screenNames={['BULL']} />
+const bar = (over: Partial<ArtistTheme> = {}, choices?: ArtistTheme[]) => (
+  <ThemeStatusBar
+    theme={theme(over)}
+    choices={choices ?? [theme(over)]}
+    onSelect={vi.fn()}
+    screenNames={['BULL']}
+    auditing={over.mine === false}
+  />
 );
 
 describe('an artist\'s theme, above the gallery', () => {
