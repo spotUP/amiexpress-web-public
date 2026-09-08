@@ -499,3 +499,33 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
     .sort((a, b) => a.sortKey.localeCompare(b.sortKey))
     .map(({ sortKey: _sortKey, ...item }) => item);
 }
+
+/** Which of the three formats this screen does NOT have yet, with the path
+ *  each one would be created at. Shared: the sysop's page and the artist's
+ *  studio both offer to add a format, and two copies of this list is how the
+ *  two would come to disagree about what a screen can be. */
+/**
+ * The formats this screen could have and does not.
+ *
+ * "there is no way to upload/complete a screen with .seq/.rip in the screen
+ * editor admin ui?" - there was not: the strip listed only the variants on
+ * disk, and Replace wrote onto the open file's own path. A screen the loader
+ * can serve three ways (`<stem>.txt`, `<stem>.seq`, `<stem>.rip`,
+ * screen.handler:1217-1234) needs the two it lacks offered right where the
+ * one it has is shown.
+ */
+export function missingFormats(openPath: string | null, siblings: string[]): Array<{ ext: string; label: string; path: string }> {
+  if (!openPath) return [];
+  const dir = openPath.slice(0, openPath.lastIndexOf('/') + 1);
+  const base = openPath.slice(openPath.lastIndexOf('/') + 1);
+  const stem = base.replace(/\.(txt|seq|rip|gr|ibm|ans)$/i, '');
+  const have = new Set([openPath, ...siblings].map(p => p.toLowerCase().replace(/^.*\./, '')));
+  const all = [
+    { ext: 'txt', label: 'ANSI / text' },
+    { ext: 'seq', label: 'PETSCII' },
+    { ext: 'rip', label: 'RIP' },
+  ];
+  return all
+    .filter(f => !have.has(f.ext) && !(f.ext === 'txt' && (have.has('gr') || have.has('ibm') || have.has('ans'))))
+    .map(f => ({ ...f, path: `${dir}${stem}.${f.ext}` }));
+}

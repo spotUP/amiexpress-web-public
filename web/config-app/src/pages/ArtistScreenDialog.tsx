@@ -12,9 +12,10 @@
  * theme, which copies the screen (and its security variants, and its .seq and
  * .rip twins) and reopens on the copy, editable.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy } from 'lucide-react';
+import { Copy, Download, Upload } from 'lucide-react';
+import { useRef } from 'react';
 
 import { apiClient, type ApiError } from '../api/client';
 import { Modal } from '../components/ui/Modal';
@@ -26,7 +27,7 @@ import { useNotification } from '../contexts/NotificationContext';
 import { screenToCanvas } from './screen-bytes';
 import { blankCanvas, createSurface, type EditorSurface } from './screen-editor-state';
 import type { ArtistTheme } from './use-my-theme';
-import type { MciReferenceShape, ScreenIndexShape } from './screen-index-view';
+import { missingFormats, type MciReferenceShape, type ScreenIndexShape } from './screen-index-view';
 
 interface ScreenFilePayload {
   content: string;
@@ -59,6 +60,10 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
   const [editing, setEditing] = useState<EditorSurface | null>(null);
   /** Set when the bytes cannot be read as a screen at all. */
   const [undrawable, setUndrawable] = useState<string | null>(null);
+  const replaceInput = useRef<HTMLInputElement | null>(null);
+  const addFormatInput = useRef<HTMLInputElement | null>(null);
+  /** Which format the artist is about to add, once they pick a file. */
+  const [addingFormat, setAddingFormat] = useState<{ ext: string; label: string; path: string } | null>(null);
 
   // The same key the gallery card draws its thumbnail from, so a save repaints
   // the card rather than leaving yesterday's art on it.
@@ -132,6 +137,50 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
     onError: (error: Error) => showError(error.message),
   });
 
+  /**
+   * The screen's other formats, and the ones it does not have.
+   *
+   * A caller is served by EXTENSION - the loader looks for `<stem>.rip` on a
+   * RIP terminal, `<stem>.seq` on a C64 and the text file otherwise - so a
+   * theme with only `.txt` shows the board's own art to two thirds of the
+   * board. An artist has to be able to draw all three, which is why these
+   * controls are here and not only on the sysop's page.
+   */
+  const siblings = useMemo(() => {
+    if (!path || !index?.files) return [];
+    const dir = path.slice(0, path.lastIndexOf('/') + 1);
+    const stem = (path.slice(path.lastIndexOf('/') + 1)).replace(/\.(txt|seq|rip|gr|ibm|ans)$/i, '').toLowerCase();
+    return Object.keys(index.files).filter(rel => {
+      if (!rel.toLowerCase().startsWith(dir.toLowerCase())) return false;
+      const name = rel.slice(rel.lastIndexOf('/') + 1);
+      return name.replace(/\.(txt|seq|rip|gr|ibm|ans)$/i, '').toLowerCase() === stem;
+    });
+  }, [path, index]);
+
+  const missing = useMemo(() => (isNew ? [] : missingFormats(path, siblings)), [path, siblings, isNew]);
+
+  /** Bytes, never text, all the way through. */
+  const readAsBase64 = (chosen: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+      reader.readAsDataURL(chosen);
+    });
+
+  const writeBytes = useMutation({
+    mutationFn: ({ target, bytes }: { target: string; bytes: string }) =>
+      apiClient.putScreenFile(target, bytes, [target], { carryCodes: 'above' }),
+    onSuccess: async (_answer, { target }) => {
+      showSuccess(`Saved ${target.split('/').pop()}`);
+      await queryClient.invalidateQueries({ queryKey: ['screen-index'] });
+      await queryClient.invalidateQueries({ queryKey: ['screen-file', target] });
+      await queryClient.invalidateQueries({ queryKey: ['screen-themes'] });
+      if (target !== path) onOpenPath(target);
+    },
+    onError: (error: Error) => showError(error.message),
+  });
+
   const title = path ? path.split('/').pop() ?? path : '';
 
   return (
@@ -163,6 +212,50 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
         </div>
       )}
 
+      {/* Every format this screen has, and the ones it does not. A caller is
+          served by extension, so this is the difference between a theme that
+          covers the board and one that covers a third of it. */}
+      {!isNew && (file || siblings.length > 0) && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          {siblings.map(sibling => (
+            <button
+              key={sibling}
+              type="button"
+              aria-pressed={sibling === path}
+              className={`px-2 py-1 border ${sibling === path
+                ? 'border-border-strong text-content-primary'
+                : 'border-border text-content-secondary'}`}
+              onClick={() => onOpenPath(sibling)}
+            >
+              {formatLabel(sibling)}
+            </button>
+          ))}
+          {mine && missing.map(gap => (
+            <button
+              key={gap.ext}
+              type="button"
+              className="px-2 py-1 border border-dashed border-border text-content-secondary"
+              onClick={() => { setAddingFormat(gap); addFormatInput.current?.click(); }}
+            >
+              + {gap.label}
+            </button>
+          ))}
+          <input
+            ref={addFormatInput}
+            type="file"
+            aria-label="Add a format"
+            className="hidden"
+            onChange={async event => {
+              const chosen = event.target.files?.[0];
+              event.target.value = '';
+              if (!chosen || !addingFormat) return;
+              writeBytes.mutate({ target: addingFormat.path, bytes: await readAsBase64(chosen) });
+              setAddingFormat(null);
+            }}
+          />
+        </div>
+      )}
+
       {(file || isNew) && (
         <div className="mt-3">
           {file?.format === 'rip' ? (
@@ -191,8 +284,69 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
           )}
         </div>
       )}
+
+      {!isNew && file && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+          {mine && (
+            <>
+              {/* Most ANSI artists draw in PabloDraw or Moebius and bring the
+                  file in. Without this the studio could only edit what it
+                  could draw itself. */}
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 underline"
+                onClick={() => replaceInput.current?.click()}
+              >
+                <Upload size={14} /> Upload a drawing
+              </button>
+              <input
+                ref={replaceInput}
+                type="file"
+                aria-label="Upload a drawing"
+                className="hidden"
+                onChange={async event => {
+                  const chosen = event.target.files?.[0];
+                  event.target.value = '';
+                  if (!chosen || !path) return;
+                  writeBytes.mutate({ target: path, bytes: await readAsBase64(chosen) });
+                }}
+              />
+            </>
+          )}
+          {/* Through the API CLIENT, never an <a href>: these endpoints are
+              behind the same auth as everything else and a link cannot carry
+              an Authorization header, which is why Download once answered
+              {"error":"Access token required"}. */}
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 underline"
+            onClick={async () => {
+              if (!path) return;
+              try {
+                await apiClient.downloadFile(
+                  `/api/screens/file?path=${encodeURIComponent(path)}&download=1`,
+                  path.split('/').pop() ?? 'screen',
+                );
+              } catch (error) {
+                showError(`Download failed: ${(error as Error).message}`);
+              }
+            }}
+          >
+            <Download size={14} /> Download
+          </button>
+        </div>
+      )}
     </Modal>
   );
+}
+
+/** `BBSTITLE.SEQ` -> `PETSCII`, for a tab an artist can read. */
+function formatLabel(filePath: string): string {
+  const lower = filePath.toLowerCase();
+  if (lower.endsWith('.seq')) return 'PETSCII';
+  if (lower.endsWith('.rip')) return 'RIP';
+  if (lower.endsWith('.gr')) return 'Amiga ANSI';
+  return 'ANSI / text';
 }
 
 /**
