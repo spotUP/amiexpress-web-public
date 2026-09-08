@@ -571,6 +571,60 @@ Never stub implementations that silently break features. Fix completely or don't
 
 Conventional commits: `feat:`, `fix:`, `chore:`, `docs:`. Examples: `feat(sdk): add neo-blessed`, `fix(backend): door state bug`.
 
+### The shared checkout tracks origin/main. Always.
+
+`~/Code/amiexpress-web` is what localhost runs and what several
+sessions read. It is a MIRROR of `origin/main`, never a place work
+accumulates.
+
+On 2026-09-08 it was found 143 commits ahead and 157 behind: every session
+had been committing to the local `main` and then landing the same work from
+a worktree of `origin/main`, so the shared tree drifted for days. Localhost
+ran days-old code while live ran current, tests failed for reasons that were
+in nobody's diff, and about a hundred commits looked unlanded when they were
+the same work under different hashes. A stale checkout is also one careless
+`git checkout .` from real loss.
+
+The rules that keep it a mirror:
+
+1. **Never commit to `main` in the shared checkout.** Work is committed in
+   your own worktree, cut from `origin/main`, and pushed from there.
+2. **Fast-forward the shared checkout after every push**, yours or anyone's:
+   `git -C ~/Code/amiexpress-web fetch origin && git -C ... merge --ff-only origin/main`.
+   If it refuses, the tree has drifted - fix that before anything else.
+3. **Before you start a task, check the drift** and say so on
+   `thoughts/BOARD.md` if it is not zero:
+   `git rev-list --count origin/main..HEAD` (behind) and `HEAD..origin/main`
+   (ahead - must be 0).
+4. **Never `git reset --hard` the shared checkout to fix drift without
+   parking what is in it first**: commit the dirty tree to a `wip/…` branch
+   (or a backup ref) and say where it is on the BOARD. Two other sessions may
+   have uncommitted work in that tree.
+5. **A deploy is not done until localhost matches.** After the deploy lands,
+   fast-forward the shared checkout, rebuild what the change touches (sdk,
+   packages/terminal, web/frontend, web/config-app) and restart the dev stack.
+   `curl -s https://bbs.uprough.net/health` names the live revision;
+   `git rev-parse HEAD` must be the same commit.
+
+### Worktrees are landed and removed in the task that made them
+
+A worktree exists to land one change. When its commits are on `origin/main`,
+remove it in the same task - `git worktree list` should hold the shared
+checkout and nothing older than the work in flight. A worktree left behind
+holds a stale copy of the board's data directories and is another place a
+door or a test can write to by accident.
+
+### Never run a second board against the live volume
+
+`docker run -v amiexpress-bbs-data:/app/data amiexpress-bbs …` starts a
+board with the LIVE database and the live `Doors/` tree. Six of those were
+found still running on 2026-09-08, three days after a smoke test: one of
+them accepted a caller's operator page with three-day-old code, wrote the
+chat rows, and left the real board's caller stuck at the paging dots. Test
+against a copy of the volume or against localhost - never the live one - and
+tear the container down in the task that started it (`docker ps --filter
+volume=amiexpress-bbs-data` must show only `amiexpress-bbs`).
+
 ---
 
 ## Safety
