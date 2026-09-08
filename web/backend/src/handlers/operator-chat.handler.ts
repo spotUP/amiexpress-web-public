@@ -232,11 +232,24 @@ console.log(`[Operator Chat] Sysop ${session.user.username} set status to ${data
 
       const target = repository.getPageRequest(data.pageId);
       const callerSession = target ? userSessions.get(String(target.userId)) : null;
-      if (callerSession && !callerCanBeInterrupted(callerSession)) {
-console.log(`[Operator Chat] Page ${data.pageId}: ${session.user.username} tried to accept while ${target!.userHandle} is inside a door (subState=${callerSession.subState}) - refused, the caller would never see it`);
-        socket.emit('operator:error', { message: `${target!.userHandle} is inside a door right now and would not see the chat. Try again when they are back at a prompt.` });
+      if (target && callerSession && !callerCanBeInterrupted(callerSession)) {
+        // QUEUED, NOT REFUSED. A chat begun under a door is painted over and
+        // typed into by nobody (see callerCanBeInterrupted), so the accept
+        // waits for the caller to come back - the same one-second retry the
+        // bot's own deferral uses. The sysop said yes once; the board
+        // remembers it instead of asking them to watch the node.
+        pendingSysopAccepts.set(data.pageId, {
+          sysopId: session.user.id, sysopHandle: session.user.username,
+          sysopSessionId: socket.id, at: Date.now(),
+        });
+console.log(`[Operator Chat] Page ${data.pageId}: ${session.user.username} accepted while ${target.userHandle} is inside a door (subState=${callerSession.subState}) - held until they are back at a prompt`);
+        socket.emit('operator:accept-queued', {
+          pageId: data.pageId, userHandle: target.userHandle,
+          message: `${target.userHandle} is inside a door. The chat will open the moment they are back at a prompt.`,
+        });
         return;
       }
+      pendingSysopAccepts.delete(data.pageId);
       await acceptPage(io, repository, data.pageId, session.user.id, session.user.username, socket.id);
     });
 
@@ -874,8 +887,20 @@ console.log(`[Operator Chat] Page ${pageId}: StartChat screen not shown (${(err 
     // with the first character the sysop sends, as the line model does it.
     const startName = sysopId === 'bot' ? sysopHandle : (loadBBSConfig(bbsRoot).sysop_name || sysopHandle);
     if (!shown) reach.emitter.emit('ansi-output', `\r\n\r\nThis is ${startName}, How can I help you??\r\n\r\n`);
-    // The co-sysop answers a MESSAGE, and the caller has to know how one ends.
-    if (sysopId === 'bot') reach.emitter.emit('ansi-output', `\x1b[0m(type, press return twice to send; /quit ends the chat)\r\n\r\n`);
+    // WHAT EXPRESS NEVER SAID. chat() tells the caller nothing: it ends on
+    // CTRL-C if they hold ACS_BREAK_CHAT (express.e:6118) or when the SYSOP
+    // presses F1, BBSHelp.txt has no chat section, and a board that wanted to
+    // explain put it in Node<n>/StartChat.txt - which this board does not
+    // ship. A caller was told by the sysop, or not at all.
+    //
+    // That silence does not survive the port: the co-sysop answers the page,
+    // so nobody is there to end the chat for the caller, and a message has
+    // to be handed over deliberately. One line says both, once, after the
+    // greeting - and a sysop who writes a StartChat screen replaces the
+    // greeting entirely and can say it their own way. CTRL-C is not gated on
+    // ACS_BREAK_CHAT here: a caller who cannot leave a chat nobody else is
+    // in would be trapped.
+    if (sysopId === 'bot') reach.emitter.emit('ansi-output', `\x1b[0m(type, then press return twice to send. /quit or CTRL-C leaves the chat.)\r\n\r\n`);
   }
 
   io.to(targetRoom).emit('operator:chat-accepted', {
@@ -1292,6 +1317,24 @@ async function checkPageTimeouts(io: any, repository: OperatorChatRepository): P
 console.log(`[Operator Chat] Checking ${pending.length} pending pages, timeout=${config.pageTimeout}s`);
   }
 
+  // A sysop's accept that was waiting for the caller to leave a door: theirs
+  // first, and the bot does not take a page a human has claimed.
+  for (const [pageId, queued] of pendingSysopAccepts) {
+    const page = repository.getPageRequest(pageId);
+    if (!page || page.status !== PageStatus.PENDING || now - queued.at > QUEUED_ACCEPT_TTL_MS) {
+      pendingSysopAccepts.delete(pageId);
+      if (page?.status === PageStatus.PENDING) {
+console.log(`[Operator Chat] Page ${pageId}: ${queued.sysopHandle}'s queued accept lapsed after ${Math.round(QUEUED_ACCEPT_TTL_MS / 60000)} minutes`);
+      }
+      continue;
+    }
+    const callerSession = userSessions.get(String(page.userId));
+    if (!callerSession || !callerCanBeInterrupted(callerSession)) continue;
+    pendingSysopAccepts.delete(pageId);
+console.log(`[Operator Chat] Page ${pageId}: ${page.userHandle} is back at a prompt - opening ${queued.sysopHandle}'s chat`);
+    await acceptPage(io, repository, pageId, queued.sysopId, queued.sysopHandle, queued.sysopSessionId);
+  }
+
   for (const page of pending) {
     const elapsed = now - page.createdAt.getTime();
     const timeoutMs = config.pageTimeout * 1000;
@@ -1323,6 +1366,16 @@ function callerCanBeInterrupted(session: BBSSession | null | undefined): boolean
   return session.subState !== LoggedOnSubState.DOOR_RUNNING;
 }
 
+/**
+ * A sysop said yes while the caller was inside a door: the accept waits here
+ * until they are back at a prompt. Kept in memory - a restart drops it, and
+ * the caller's page is still pending for the bot or for another accept.
+ */
+interface QueuedAccept { sysopId: string; sysopHandle: string; sysopSessionId: string; at: number }
+const pendingSysopAccepts = new Map<string, QueuedAccept>();
+/** How long a queued accept waits for a caller to leave a door before it lapses. */
+const QUEUED_ACCEPT_TTL_MS = 15 * 60 * 1000;
+
 /** Pages whose takeover was logged as deferred, so the retry does not log once a second. */
 const deferredTakeovers = new Set<string>();
 /** Pages whose takeover is in progress, so the prompt's end and the retry cannot both accept. */
@@ -1344,6 +1397,9 @@ async function activateGrumpyBot(
   const page = repository.getPageRequest(pageId);
   if (!page || page.status !== PageStatus.PENDING) return page?.sysopId === 'bot';
   if (takeoversInFlight.has(pageId)) return false;
+  // A human said yes and is waiting for this caller to leave a door; the
+  // co-sysop does not take the page out from under them.
+  if (pendingSysopAccepts.has(pageId)) return false;
 
   // The caller's session, by user id; the socket room is the fallback for a
   // session the map has lost.
@@ -1704,6 +1760,7 @@ export async function handleUserCancelPage(
 
   // Update page status to cancelled
   repository.updatePageStatus(pageId, PageStatus.TIMEOUT);
+  pendingSysopAccepts.delete(pageId);
 
   // Reset session state
   session.subState = LoggedOnSubState.DISPLAY_MENU;

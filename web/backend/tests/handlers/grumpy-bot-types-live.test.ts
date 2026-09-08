@@ -29,6 +29,41 @@ import { userSessions } from '../../src/server/session-manager';
 import { planNaturalTyping, applyTypingPlan, stripEngineTag, getGrumpySysopResponse } from '../../src/handlers/grumpy-sysop-bot.handler';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Wait for what the caller is meant to see, not for a fixed number of
+ * milliseconds. The bot TYPES its lines a character at a time, so "3.5
+ * seconds should be enough" is a race that loses on a loaded machine - this
+ * suite failed that way on 2026-09-08 while the rest of the tree was
+ * rebuilding. Polls to a generous deadline and returns as soon as it is
+ * there.
+ */
+async function until(seen: string[], re: RegExp, ms = 12000): Promise<string> {
+  const plain = () => seen.join('').replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (re.test(plain())) return plain();
+    await wait(50);
+  }
+  return plain();
+}
+
+/**
+ * Wait until a whole line the board RECORDED has been typed to the caller.
+ * `until(INTRO)` returns on the intro's first words - the bot is still
+ * typing the rest - so anything asserting the full message must wait for
+ * the full message. Compared without whitespace, because the shared line
+ * wraps at 78 columns.
+ */
+async function untilTyped(seen: string[], text: () => string | undefined, ms = 12000): Promise<void> {
+  const bare = (v: string) => v.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\s/g, '');
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const want = text();
+    if (want && bare(seen.join('')).includes(bare(want))) return;
+    await wait(50);
+  }
+}
 const INTRO = /is AFK|isn't answering|sysop is off doing|didn't answer your page/;
 
 describe('the typing plan', () => {
@@ -115,8 +150,8 @@ describe('the chat is one stream', () => {
     const w = makeWorld();
     H.initOperatorChatHandler(w.io, w.repo);
     await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
-    await wait(3500);
     const pageId = w.session.tempData.pageId;
+    await untilTyped(w.seen, () => w.repo.getChatMessages(pageId)[0]?.message as string | undefined);
     const all = w.seen.join('');
 
     // Nothing of the old split screen.
@@ -273,9 +308,13 @@ describe('the chat is one stream', () => {
     const w = makeWorld();
     H.initOperatorChatHandler(w.io, w.repo);
     await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
-    await wait(2500);
+    await until(w.seen, /press return twice to send/);
     const all = w.seen.join('');
+    // Both ways out, because express named neither and no sysop is here to
+    // end the chat for the caller (express.e:6118 CTRL-C, F1 for the sysop).
     expect(all.indexOf('How can I help you??')).toBeLessThan(all.indexOf('press return twice to send'));
+    const hint = all.slice(all.indexOf('press return twice to send'));
+    expect(hint).toContain('/quit or CTRL-C leaves the chat');
   });
 
   it("the caller's key is in the caller's colour even when no chat is found for the session", () => {

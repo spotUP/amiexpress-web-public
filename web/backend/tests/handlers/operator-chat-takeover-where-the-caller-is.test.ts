@@ -200,7 +200,73 @@ describe('GrumpyBot arrives where the caller is', () => {
     expect(w.repo.getChatMessages(pageId).map((m: any) => m.message)).toContain('are you there');
   });
 
-  it('refuses a sysop accept while the caller is inside a door, and says so', async () => {
+  it("holds a sysop's accept while the caller is inside a door, and opens it the moment they are back", async () => {
+    const H = fresh();
+    const w = makeWorld({ pageTimeout: 3600 });          // the bot must not race the sysop
+    H.initOperatorChatHandler(w.io, w.repo);
+    await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
+    const pageId = w.session.tempData.pageId;
+    w.session.subState = LoggedOnSubState.DOOR_RUNNING;
+    w.session.doorInputHandler = () => {};
+
+    const handlers: Record<string, (d: any) => Promise<void>> = {};
+    const told: any[] = [];
+    const sysopSocket: any = {
+      id: 'sysop-sock', session: { user: { id: 'u-sysop', username: 'Spot', secLevel: 255 }, nodeId: 0 },
+      on(ev: string, fn: any) { handlers[ev] = fn; },
+      emit(ev: string, d: any) { told.push({ ev, d }); }, join() {},
+    };
+    w.connectionHandler!(sysopSocket);
+    await handlers['operator:accept-page']({ pageId });
+
+    // Held: nothing accepted, the sysop is told it is waiting, not refused.
+    expect(w.repo.getPageRequest(pageId)!.status).toBe('pending');
+    expect(told.map((t) => t.ev)).toContain('operator:accept-queued');
+    expect(told.find((t) => t.ev === 'operator:accept-queued').d.message).toMatch(/inside a door/);
+    expect(told.map((t) => t.ev)).not.toContain('operator:error');
+    expect(plain(w.seen)).not.toContain('How can I help you');
+
+    // The door exits: the retry opens the chat, as the sysop, not as the bot.
+    w.session.doorInputHandler = null;
+    w.session.subState = LoggedOnSubState.DISPLAY_MENU;
+    await wait(2200);
+
+    const page = w.repo.getPageRequest(pageId)!;
+    expect(page.status).toBe('accepted');
+    expect(page.sysopId).toBe('u-sysop');
+    expect(page.sysopHandle).toBe('Spot');
+    expect(w.session.subState).toBe(LoggedOnSubState.OPERATOR_CHAT_ACTIVE);
+    expect(plain(w.seen)).toMatch(/This is [^,]+, How can I help you\?\?/);
+  });
+
+  it('the co-sysop does not take a page a human has already claimed', async () => {
+    const H = fresh();
+    const w = makeWorld({ pageTimeout: 1 });             // the bot would take it at once
+    H.initOperatorChatHandler(w.io, w.repo);
+    await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
+    const pageId = w.session.tempData.pageId;
+    w.session.subState = LoggedOnSubState.DOOR_RUNNING;
+    w.session.doorInputHandler = () => {};
+
+    const handlers: Record<string, (d: any) => Promise<void>> = {};
+    const sysopSocket: any = {
+      id: 'sysop-sock', session: { user: { id: 'u-sysop', username: 'Spot', secLevel: 255 }, nodeId: 0 },
+      on(ev: string, fn: any) { handlers[ev] = fn; }, emit() {}, join() {},
+    };
+    w.connectionHandler!(sysopSocket);
+    await handlers['operator:accept-page']({ pageId });
+    await wait(2600);                                   // well past the bot's timeout
+
+    expect(w.repo.getPageRequest(pageId)!.status).toBe('pending');
+    expect(plain(w.seen)).not.toMatch(INTRO);
+
+    w.session.doorInputHandler = null;
+    w.session.subState = LoggedOnSubState.DISPLAY_MENU;
+    await wait(2200);
+    expect(w.repo.getPageRequest(pageId)!.sysopId).toBe('u-sysop');
+  });
+
+  it('an old refusal path is gone: an accept during a door is never refused', async () => {
     const H = fresh();
     const w = makeWorld({ pageTimeout: 60 });
     H.initOperatorChatHandler(w.io, w.repo);
@@ -219,7 +285,7 @@ describe('GrumpyBot arrives where the caller is', () => {
     await handlers['operator:accept-page']({ pageId });
 
     expect(w.repo.getPageRequest(pageId)!.status).toBe('pending');
-    expect(errors.map((e) => e.message).join(' ')).toMatch(/inside a door/);
+    expect(errors).toEqual([]);                          // held, not refused
     expect(plain(w.seen)).not.toContain('How can I help you');
   });
 
