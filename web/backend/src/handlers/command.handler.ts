@@ -2247,7 +2247,7 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
     const { getDatabase } = require('./command-handler/dependency-injection');
     const db = getDatabase();
     const repository = db?.getOperatorChatRepository();
-    const { callerTypedChar, callerBackspaced, callerPressedReturn } = require('./operator-chat.handler');
+    const { callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered } = require('./operator-chat.handler');
 
     // express.e chat() 6101-6223: the caller's keys go onto the ONE shared
     // line and back to their own terminal as pressed (6172), in the caller's
@@ -2274,7 +2274,6 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
       session.inputBuffer = '';
 
       callerPressedReturn(socket.server, session);
-      if (!input) return;
 
       if (input.toUpperCase() === '/QUIT' || input.toUpperCase() === '/END') {
         await handleUserQuitChat(socket.server, repository, session, socket);
@@ -2282,12 +2281,14 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
       }
 
       if (input.toUpperCase() === '/HELP') {
-        emitText(socket, '\x1b[36m/quit ends the chat; so does CTRL-C.\x1b[0m\r\n');
+        emitText(socket, '\x1b[36mType, press return twice to send. /quit or CTRL-C ends the chat.\x1b[0m\r\n');
         return;
       }
 
-      // The line is on the screen already and ended; this hands it over.
-      await handleUserChatMessage(socket.server, repository, session, input);
+      // Return twice sends: a line with text is kept, an empty line hands
+      // over what was kept as one message (see callerLineEntered).
+      const { send } = callerLineEntered(session, input);
+      if (send) await handleUserChatMessage(socket.server, repository, session, send);
     }
     // Backspace - real-time transmission
     else if (data === '\x7f' || data === '\b') {

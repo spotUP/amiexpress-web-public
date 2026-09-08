@@ -209,6 +209,24 @@ describe('the chat is one stream', () => {
     expect(tail).not.toMatch(/\[(RB|AI)\]/);
   });
 
+  it('return twice sends: a line with text is kept, an empty line hands over what was kept as one message', () => {
+    const session: any = { user: { id: 'u', username: 'Knut', secLevel: 30 } };
+    expect(H.callerLineEntered(session, 'hello there')).toEqual({});
+    expect(H.callerLineEntered(session, 'second line  ')).toEqual({});
+    expect(H.callerLineEntered(session, '')).toEqual({ send: 'hello there\nsecond line' });
+    expect(H.callerLineEntered(session, '')).toEqual({});           // nothing kept: just a blank line
+    expect(H.callerLineEntered(session, '   ')).toEqual({});        // whitespace is an empty line
+  });
+
+  it('the start of a bot chat tells the caller how to send', async () => {
+    const w = makeWorld();
+    H.initOperatorChatHandler(w.io, w.repo);
+    await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
+    await wait(2500);
+    const all = w.seen.join('');
+    expect(all.indexOf('How can I help you??')).toBeLessThan(all.indexOf('press return twice to send'));
+  });
+
   it("the caller's key is in the caller's colour even when no chat is found for the session", () => {
     const w = makeWorld();
     w.session.tempData = {};
