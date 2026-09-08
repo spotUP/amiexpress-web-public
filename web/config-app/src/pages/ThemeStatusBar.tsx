@@ -79,7 +79,7 @@ export function ThemeStatusBar({ theme, mine, onSelect, screenNames }: ThemeStat
                 <label htmlFor="artist-theme" className="sr-only">Theme</label>
                 <select
                   id="artist-theme"
-                  className="input"
+                  className="input-field"
                   value={theme.slug}
                   onChange={event => onSelect(event.target.value)}
                 >

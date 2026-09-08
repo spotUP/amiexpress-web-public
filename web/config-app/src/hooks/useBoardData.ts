@@ -15,6 +15,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '../contexts/AuthContext';
 import { apiClient } from '../api/client';
 import { useRealtime } from '../realtime/RealtimeProvider';
 import type {
@@ -40,8 +41,28 @@ const STATS_POLL_MS = 30_000;
  * happens, so the poll is only a safety net and can be slow. With the socket
  * down it is the only thing keeping the screen honest, so it speeds up.
  */
+/** The board's own rule for who may see it, as routes-setup spells it. */
+const SYSOP_LEVEL = 255;
+
 const DEGRADED_NODE_POLL_MS = 3_000;
 const DEGRADED_STATS_POLL_MS = 15_000;
+
+/**
+ * `/api/nodes`, `/api/stats` and `/api/admin-permissions` are all mounted
+ * behind `requireSysop()` (server/routes-setup.ts). An artist reaching the
+ * admin is a level-100 account, so every one of these polls answered 403 -
+ * one every three seconds, for as long as the tab stayed open, with the
+ * console full of them. The sysop hit exactly that on their first visit to
+ * the artist studio.
+ *
+ * Asking is not free and the answer is known in advance, so the query does
+ * not run at all. It is the SERVER's rule mirrored once, here, rather than in
+ * every component that happens to mount one of these hooks.
+ */
+function useMayPollBoard(): boolean {
+  const { secLevel } = useAuth();
+  return secLevel >= SYSOP_LEVEL;
+}
 
 function usePollInterval(liveRate: number, degradedRate: number): number {
   const { status } = useRealtime();
@@ -54,6 +75,7 @@ function usePollInterval(liveRate: number, degradedRate: number): number {
  * is actually on screen watches at the foreground rate.
  */
 export function useNodeStatus(liveInterval: number = NODE_POLL_MS) {
+  const enabled = useMayPollBoard();
   const refetchInterval = usePollInterval(liveInterval, DEGRADED_NODE_POLL_MS);
 
   return useQuery<NodeStatusResponse>({
@@ -62,6 +84,8 @@ export function useNodeStatus(liveInterval: number = NODE_POLL_MS) {
       const response = await apiClient.get<NodeStatusResponse>('/api/nodes/status');
       return response.data;
     },
+    // The server refuses this to anyone but a sysop; do not ask.
+    enabled,
     refetchInterval,
   });
 }
@@ -69,6 +93,7 @@ export function useNodeStatus(liveInterval: number = NODE_POLL_MS) {
 export const NODE_BACKGROUND_POLL_MS = 60_000;
 
 export function useSystemStats() {
+  const enabled = useMayPollBoard();
   const refetchInterval = usePollInterval(STATS_POLL_MS, DEGRADED_STATS_POLL_MS);
 
   return useQuery<ApiResponse<SystemStats>>({
@@ -77,11 +102,14 @@ export function useSystemStats() {
       const response = await apiClient.get<ApiResponse<SystemStats>>('/api/stats/system');
       return response.data;
     },
+    // The server refuses this to anyone but a sysop; do not ask.
+    enabled,
     refetchInterval,
   });
 }
 
 export function useSessionStats() {
+  const enabled = useMayPollBoard();
   const refetchInterval = usePollInterval(STATS_POLL_MS, DEGRADED_STATS_POLL_MS);
 
   return useQuery<ApiResponse<SessionStats>>({
@@ -90,11 +118,14 @@ export function useSessionStats() {
       const response = await apiClient.get<ApiResponse<SessionStats>>('/api/stats/session');
       return response.data;
     },
+    // The server refuses this to anyone but a sysop; do not ask.
+    enabled,
     refetchInterval,
   });
 }
 
 export function useLastCallers(limit = 8) {
+  const enabled = useMayPollBoard();
   const refetchInterval = usePollInterval(STATS_POLL_MS, DEGRADED_STATS_POLL_MS);
 
   return useQuery<ApiResponse<Caller[]>>({
@@ -103,6 +134,8 @@ export function useLastCallers(limit = 8) {
       const response = await apiClient.get<ApiResponse<Caller[]>>(`/api/stats/last-callers?limit=${limit}`);
       return response.data;
     },
+    // The server refuses this to anyone but a sysop; do not ask.
+    enabled,
     refetchInterval,
   });
 }

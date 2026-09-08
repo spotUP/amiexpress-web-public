@@ -40,12 +40,27 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/** The board's own rule for who configures it (server/routes-setup.ts). */
+const SYSOP_LEVEL = 255;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => readStoredUser());
   const [isLoading, setIsLoading] = useState(true);
   const [adminPerms, setAdminPerms] = useState<Record<string, number>>({});
 
-  const loadPerms = useCallback(async () => {
+  /**
+   * The permission table, which only a sysop may read.
+   *
+   * `/api/admin-permissions` is mounted behind `requireSysop()`, so asking as
+   * anyone else is a 403 with a console line beside it - which is what an
+   * artist reaching the screen studio actually saw on their first visit. The
+   * answer is known from the caller's own level, so the question is not asked.
+   */
+  const loadPerms = useCallback(async (level: number) => {
+    if (level < SYSOP_LEVEL) {
+      setAdminPerms({});
+      return;
+    }
     try {
       const data = await apiClient.getAdminPermissions();
       if (data?.perms) setAdminPerms(data.perms);
@@ -70,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(fetched);
       persistUser(fetched);
       // Load admin permissions after confirming auth
-      await loadPerms();
+      await loadPerms(fetched?.secLevel ?? 0);
     } catch (error: any) {
       const isAuthError = error.message?.includes('401') ||
                           error.message?.includes('403') ||
@@ -142,7 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(data.user);
       persistUser(data.user);
       // Load permissions immediately after login so the sidebar is correct on first render
-      await loadPerms();
+      await loadPerms(data.user?.secLevel ?? 0);
     }
     return data?.user ?? null;
   };

@@ -92,7 +92,7 @@ export function ArtistStudioPage() {
         <input
           type="search"
           aria-label="Search screens"
-          className="input w-56"
+          className="input-field w-56"
           placeholder="Search"
           value={search}
           onChange={event => setSearch(event.target.value)}
