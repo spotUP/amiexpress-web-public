@@ -81,6 +81,33 @@ export interface LrzszTransferOptions {
   }) => void;
 }
 
+/**
+ * `sz -L`, in bytes: the board's `ZMODEM_PACKETLEN`, or the 1024 this port has
+ * always used.
+ *
+ * NOT lrzsz's 8192. That was tried and it broke MuffinTerm - its receive
+ * buffer overflowed at about 30KB - which is why the number was hardcoded low
+ * in the first place. Making it a tooltype gives the throughput back to a
+ * board whose callers all run SyncTerm or NetRunner, without deciding for the
+ * board that has one MuffinTerm caller left.
+ *
+ * Read at spawn, so a sysop's edit takes effect on the next transfer.
+ */
+export function zmodemPacketLength(): number {
+  const FALLBACK = 1024;
+  try {
+    const { config } = require('../config');
+    const { getBoardConfig } = require('./bbs-config-file.service');
+    const configured = Number(getBoardConfig(config.get('dataDir'))?.zmodem_packetlen);
+    if (!Number.isFinite(configured) || configured <= 0) return FALLBACK;
+    // The bounds are lrzsz's own: a subpacket smaller than 128 bytes is all
+    // header, and 8192 is the largest it will send.
+    return Math.min(Math.max(Math.floor(configured), 128), 8192);
+  } catch {
+    return FALLBACK;
+  }
+}
+
 export class LrzszTransferManager {
   private session: BBSSession;
   private transport: LrzszTransport;
@@ -832,7 +859,7 @@ export class LrzszTransferManager {
       // ZACKs so sz hung at 0 bytes/6 errors. Streaming with bounded
       // subpacket size (no window) lets MuffinTerm keep up via its
       // own subpacket CRC validation.
-      return ['-b', '-o', '-L', '1024', '-vv', ...this.paths];
+      return ['-b', '-o', '-L', String(zmodemPacketLength()), '-vv', ...this.paths];
     }
     // rz upload args. Web vs telnet/SSH differ because the browser
     // zmodem.js Send session does NOT implement ZRPOS handling — the
