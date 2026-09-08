@@ -184,6 +184,10 @@ console.warn(`[ConferenceConfigService] Conf${i}.info not found, skipping`);
           // values here meant the form could not show what the board does.
           free_downloads: fromDisk.free_downloads,
           exclude_ftp: fromDisk.exclude_ftp,
+          ftpdirname: fromDisk.ftpdirname,
+          ftp_dir_days: fromDisk.ftp_dir_days,
+          no_ftp_uploads: fromDisk.no_ftp_uploads,
+          no_ftp_uploads_text: fromDisk.no_ftp_uploads_text,
           private_conf: fromDisk.private_conf,
           read_only: fromDisk.read_only,
           menu_prompt: fromDisk.menu_prompt,
@@ -348,7 +352,8 @@ console.error('[ConferenceConfigService] Conference list refresh failed (disk is
     if (validated.private_conf !== undefined) confInfoUpdates.privateConf = validated.private_conf;
     if (validated.read_only !== undefined) confInfoUpdates.readOnly = validated.read_only;
     const conf = validated as Record<string, unknown>;
-    for (const field of ['free_downloads', 'use_username', 'use_realname', 'use_internetname']) {
+    for (const field of ['free_downloads', 'use_username', 'use_realname', 'use_internetname',
+      'ftpdirname', 'ftp_dir_days', 'no_ftp_uploads', 'no_ftp_uploads_text']) {
       if (conf[field] !== undefined) confInfoUpdates[field] = conf[field];
     }
 

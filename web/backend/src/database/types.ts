@@ -527,6 +527,14 @@ export interface ConferenceConfig {
   no_new_files: boolean;
   free_downloads: boolean;
   exclude_ftp: boolean;
+  /** FTPDIRNAME - the conference's name over FTP (express.e:28948). */
+  ftpdirname?: string;
+  /** FTP_DIR_DAYS - how far back an FTP listing reaches (ftpd.e:1160). */
+  ftp_dir_days?: number;
+  /** NO_FTP_UPLOADS present - FTP uploads refused here (express.e:28955). */
+  no_ftp_uploads?: boolean;
+  /** What NO_FTP_UPLOADS holds - the refusal the caller reads. */
+  no_ftp_uploads_text?: string;
   private_conf: boolean;
   read_only: boolean;
   menu_prompt: string;

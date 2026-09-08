@@ -84,10 +84,38 @@ export function boardFtpFilesystem(root?: string): FtpFilesystem {
 
       return onDisk.entries.map((entry, index) => {
         const conferenceId = index + 1;
+        // The conference's own icon, for the two tooltypes express reads
+        // here. It is the same sibling `<root>/Conf2.info` that listingDays
+        // and listsDirectories below already read.
+        let icon: ReturnType<typeof readTooltypeMap> | undefined;
+        try {
+          icon = readTooltypeMap(`${conferenceDir(bbsRoot, conferenceId)}.info`);
+        } catch {
+          // No icon is not an error - the conference keeps its defaults.
+        }
+
         return {
           conference_id: conferenceId,
-          name: entry.name,
-          exclude_ftp: flags.get(conferenceId)?.exclude_ftp ?? false,
+          /**
+           * `FTPDIRNAME` (express.e:28948): the name the conference wears
+           * over FTP, falling back to its board name. A board whose
+           * conference is called `Uploads/Incoming` cannot be browsed under
+           * that name - conferenceDirectoryName strips the slash, as express
+           * does with removeSlashes - and FTPDIRNAME is how a sysop gives it
+           * a name that survives.
+           */
+          name: icon?.get('FTPDIRNAME')?.trim() || entry.name,
+          /**
+           * `EXCLUDE_FTP` (express.e:28947) is on the ICON, and it was read
+           * only from the mirror. On the live board `conference_config` has
+           * zero rows - the paragraph above this says so about the tree
+           * itself - so a conference the sysop had excluded on disk was
+           * served over FTP anyway. The icon decides; the mirror stays as an
+           * overlay for a board whose icon predates the flag.
+           */
+          exclude_ftp: icon?.has('EXCLUDE_FTP')
+            ? (icon.get('EXCLUDE_FTP') ?? '').trim() !== '0'
+            : (flags.get(conferenceId)?.exclude_ftp ?? false),
           ndirs: flags.get(conferenceId)?.ndirs,
         };
       });

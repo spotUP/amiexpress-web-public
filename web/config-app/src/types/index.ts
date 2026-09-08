@@ -217,6 +217,10 @@ export interface ConferenceConfig {
   // Conference Settings
   force_newscan: boolean;
   exclude_ftp: boolean;
+  ftpdirname?: string;
+  ftp_dir_days?: number;
+  no_ftp_uploads?: boolean;
+  no_ftp_uploads_text?: string;
   private_conf: boolean;
   read_only: boolean;
 

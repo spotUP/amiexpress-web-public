@@ -288,6 +288,14 @@ export const ConferenceConfigSchema = z.object({
   exclude_ftp: z.boolean().optional(),
   private_conf: z.boolean().optional(),
   read_only: z.boolean().optional(),
+  // The three FTP settings express reads from this icon and nothing here
+  // could set: the name the conference wears over FTP (express.e:28948), how
+  // far back a listing reaches (ftpd.e:1160), and whether uploads are
+  // refused, with the sentence the caller is shown (express.e:28955).
+  ftpdirname: z.string().max(200).optional(),
+  ftp_dir_days: z.number().int().min(0).max(3650).optional(),
+  no_ftp_uploads: z.boolean().optional(),
+  no_ftp_uploads_text: z.string().max(200).optional(),
   menu_prompt: z.string().max(200).optional(),
   confdb_shared: z.number().int().min(0).optional(),
   use_username: z.boolean().optional(),

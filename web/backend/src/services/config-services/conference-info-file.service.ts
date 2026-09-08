@@ -25,6 +25,11 @@ export const CONFERENCE_FIELD_TOOLTYPES: Record<string, string> = {
   // underscore, is a key AmiExpress has never looked for.
   menu_prompt: 'MENU_PROMPT',
   confdb_shared: 'CONFDB_SHARED',
+  // The name the conference wears over FTP, and how far back an FTP listing
+  // reaches. express.e:28948 and ftpd.e:1160 read both from this icon; the
+  // FTP server reads them from it too, and nothing could set them.
+  ftpdirname: 'FTPDIRNAME',
+  ftp_dir_days: 'FTP_DIR_DAYS',
 };
 
 /**
@@ -79,6 +84,16 @@ export const CONFERENCE_TOOLTYPES_AMIEXPRESS_IGNORES: Record<string, string> = {
  */
 export const CONFERENCE_DATABASE_ONLY_FIELDS = [] as const;
 
+/**
+ * `NO_FTP_UPLOADS` is the one tooltype here that is a flag AND a value: its
+ * PRESENCE blocks FTP uploads into the conference, and whatever it holds is
+ * the refusal the caller is shown (express.e:28955-28960 - empty falls back
+ * to a default sentence). Neither map above can say that, so it gets two
+ * admin fields writing one tooltype: the checkbox decides whether the key
+ * exists, the text decides what it says.
+ */
+export const NO_FTP_UPLOADS_TOOLTYPE = 'NO_FTP_UPLOADS';
+
 export const MAX_FILE_AREAS = 16;
 
 /** Upper-cased tooltypes, as both sides index them. */
@@ -108,6 +123,13 @@ export interface ConferenceInfoFields {
   use_username: boolean;
   use_realname: boolean;
   use_internetname: boolean;
+  ftpdirname: string;
+  /** How far back an FTP listing reaches, in days. 10 when unset, 0 for no bound. */
+  ftp_dir_days: number;
+  /** Whether NO_FTP_UPLOADS is on the icon at all. */
+  no_ftp_uploads: boolean;
+  /** What NO_FTP_UPLOADS holds - the refusal the caller reads. May be empty. */
+  no_ftp_uploads_text: string;
   /** DLPATH.1 .. DLPATH.16, keyed 1-based. */
   dlpaths: Record<number, string>;
   /** ULPATH.1 .. ULPATH.16, keyed 1-based. */
@@ -162,6 +184,14 @@ export function readConferenceFields(toolTypes: ToolTypes): ConferenceInfoFields
     use_username: flagIsSet(toolTypes, 'USERNAME'),
     use_realname: flagIsSet(toolTypes, 'REALNAME'),
     use_internetname: flagIsSet(toolTypes, 'INTERNETNAME'),
+    ftpdirname: toolTypes.get('FTPDIRNAME') ?? '',
+    // ftpd.e:1160 - ten days when the tooltype is absent, and `0` is the
+    // sysop asking for no bound at all, so 0 cannot be the fallback.
+    ftp_dir_days: number('FTP_DIR_DAYS', 10),
+    // Presence, not truthiness: a bare NO_FTP_UPLOADS blocks uploads and
+    // shows the default sentence, which is the commonest way it is written.
+    no_ftp_uploads: toolTypes.has(NO_FTP_UPLOADS_TOOLTYPE),
+    no_ftp_uploads_text: toolTypes.get(NO_FTP_UPLOADS_TOOLTYPE) ?? '',
     dlpaths,
     ulpaths,
   };
@@ -203,6 +233,19 @@ export function applyConferenceFields(toolTypes: ToolTypes, updates: ConferenceF
     } else {
       toolTypes.delete(key);
     }
+  }
+
+  // NO_FTP_UPLOADS: the checkbox owns the key, the text owns its value, and
+  // editing the text alone must not create the key on a conference that
+  // allows uploads.
+  if (updates.no_ftp_uploads !== undefined) {
+    if (updates.no_ftp_uploads) {
+      toolTypes.set(NO_FTP_UPLOADS_TOOLTYPE, updates.no_ftp_uploads_text ?? toolTypes.get(NO_FTP_UPLOADS_TOOLTYPE) ?? '');
+    } else {
+      toolTypes.delete(NO_FTP_UPLOADS_TOOLTYPE);
+    }
+  } else if (updates.no_ftp_uploads_text !== undefined && toolTypes.has(NO_FTP_UPLOADS_TOOLTYPE)) {
+    toolTypes.set(NO_FTP_UPLOADS_TOOLTYPE, updates.no_ftp_uploads_text);
   }
 
   if (updates.storagedrives) {

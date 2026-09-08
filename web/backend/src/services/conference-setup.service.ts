@@ -495,6 +495,11 @@ console.log(`[ConferenceSetup] Updated ConfConfig.info: NCONFS=${Math.max(curren
     use_username: boolean;
     use_realname: boolean;
     use_internetname: boolean;
+    /** FTPDIRNAME, FTP_DIR_DAYS and NO_FTP_UPLOADS - the FTP server's own. */
+    ftpdirname: string;
+    ftp_dir_days: number;
+    no_ftp_uploads: boolean;
+    no_ftp_uploads_text: string;
     dlpaths: { [key: number]: string };
     ulpaths: { [key: number]: string };
     /** STORAGEDRIVE.n - which drive each directory's files live on, 0 = local. */
@@ -532,6 +537,10 @@ console.log(`[ConferenceSetup] Updated ConfConfig.info: NCONFS=${Math.max(curren
       use_username: updates.use_username,
       use_realname: updates.use_realname,
       use_internetname: updates.use_internetname,
+      ftpdirname: updates.ftpdirname,
+      ftp_dir_days: updates.ftp_dir_days,
+      no_ftp_uploads: updates.no_ftp_uploads,
+      no_ftp_uploads_text: updates.no_ftp_uploads_text,
       storagedrives: updates.storagedrives,
       dlpaths: updates.dlpaths,
       ulpaths: updates.ulpaths,

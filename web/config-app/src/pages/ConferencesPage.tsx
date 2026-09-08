@@ -22,6 +22,14 @@ interface ConferenceFormData {
   max_access_level: number;
   force_newscan: boolean;
   exclude_ftp: boolean;
+  /** FTPDIRNAME - the name this conference wears over FTP. */
+  ftpdirname: string;
+  /** FTP_DIR_DAYS - how far back an FTP listing reaches. */
+  ftp_dir_days: number;
+  /** NO_FTP_UPLOADS - whether the tooltype is on the icon at all. */
+  no_ftp_uploads: boolean;
+  /** What NO_FTP_UPLOADS holds: the refusal an FTP caller reads. */
+  no_ftp_uploads_text: string;
   private_conf: boolean;
   read_only: boolean;
 }
@@ -66,6 +74,10 @@ export function ConferencesPage() {
     max_access_level: 255,
     force_newscan: false,
     exclude_ftp: false,
+    ftpdirname: '',
+    ftp_dir_days: 10,
+    no_ftp_uploads: false,
+    no_ftp_uploads_text: '',
     private_conf: false,
     read_only: false,
   });
@@ -172,7 +184,11 @@ export function ConferencesPage() {
       min_access_level: 0,
       max_access_level: 255,
       force_newscan: false,
-      exclude_ftp: false,
+    exclude_ftp: false,
+      ftpdirname: '',
+      ftp_dir_days: 10,
+      no_ftp_uploads: false,
+      no_ftp_uploads_text: '',
       private_conf: false,
       read_only: false,
     });
@@ -231,6 +247,12 @@ export function ConferencesPage() {
       max_access_level: conf.max_access_level,
       force_newscan: conf.force_newscan,
       exclude_ftp: conf.exclude_ftp,
+      ftpdirname: conf.ftpdirname ?? '',
+      // ftpd.e:1160 - ten days is express's default, and 0 means no bound,
+      // so a stored 0 must survive the fallback.
+      ftp_dir_days: conf.ftp_dir_days ?? 10,
+      no_ftp_uploads: conf.no_ftp_uploads ?? false,
+      no_ftp_uploads_text: conf.no_ftp_uploads_text ?? '',
       private_conf: conf.private_conf,
       read_only: conf.read_only,
     });
@@ -650,6 +672,66 @@ export function ConferencesPage() {
                     />
                     <span className="text-content-primary">Exclude FTP</span>
                   </label>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="ftpdirname" className="label">FTP Directory Name</label>
+                      <input
+                        id="ftpdirname"
+                        type="text"
+                        value={formData.ftpdirname}
+                        onChange={(e) => setFormData({ ...formData, ftpdirname: e.target.value })}
+                        placeholder={formData.name || 'Conference name'}
+                        className="input-field w-full"
+                      />
+                      <p className="text-sm text-content-secondary mt-1">
+                        The name this conference wears over FTP. Empty uses the conference name.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label htmlFor="ftp_dir_days" className="label">FTP Listing Days</label>
+                      <input
+                        id="ftp_dir_days"
+                        type="number"
+                        min="0"
+                        max="3650"
+                        value={formData.ftp_dir_days}
+                        onChange={(e) => setFormData({ ...formData, ftp_dir_days: parseInt(e.target.value) || 0 })}
+                        className="input-field w-full"
+                      />
+                      <p className="text-sm text-content-secondary mt-1">
+                        How far back an FTP listing reaches. 0 lists everything.
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.no_ftp_uploads}
+                      onChange={(e) => setFormData({ ...formData, no_ftp_uploads: e.target.checked })}
+                      className="form-checkbox h-5 w-5 text-accent"
+                    />
+                    <span className="text-content-primary">Block FTP Uploads</span>
+                  </label>
+
+                  {formData.no_ftp_uploads && (
+                    <div>
+                      <label htmlFor="no_ftp_uploads_text" className="label">Upload Refusal Message</label>
+                      <input
+                        id="no_ftp_uploads_text"
+                        type="text"
+                        value={formData.no_ftp_uploads_text}
+                        onChange={(e) => setFormData({ ...formData, no_ftp_uploads_text: e.target.value })}
+                        placeholder="Not expecting any uploads"
+                        className="input-field w-full"
+                      />
+                      <p className="text-sm text-content-secondary mt-1">
+                        What an FTP caller is told when he tries to upload here.
+                      </p>
+                    </div>
+                  )}
 
                   <label className="flex items-center space-x-2 cursor-pointer">
                     <input
