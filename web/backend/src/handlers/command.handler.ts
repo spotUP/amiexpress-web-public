@@ -651,6 +651,13 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
       await handleConferenceAccountingInput(socket, session, data);
       return;
 
+    // Credit Maintenance (express.e:21884-22042) - the handler owns its own
+    // digit-buffering for the numeric field edits, like conf accounting.
+    case LoggedOnSubState.CREDIT_MAINTENANCE_VIEW:
+      const { handleCreditMaintenanceInput } = require('./user/account-edit-input.handler');
+      await handleCreditMaintenanceInput(socket, session, data);
+      return;
+
     // Forward message states (express.e forwardMSG:9807-9871)
     case LoggedOnSubState.FORWARD_MESSAGE_TO:
       if (data === '\r' || data === '\n') {

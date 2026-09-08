@@ -42,6 +42,12 @@ function fieldToColumn(field: string): string {
     byteLimit: 'bytelimit',
     userFlags: 'userflags',
     baud: 'baud',
+    creditDays: 'credit_days',
+    creditAmount: 'credit_amount',
+    creditStartDate: 'credit_start_date',
+    creditTotalToDate: 'credit_total_to_date',
+    creditTotalDate: 'credit_total_date',
+    creditTracking: 'credit_tracking',
     gdprConsentAt: 'gdpr_consent_at',
     gdprNoticeVersion: 'gdpr_notice_version',
     gdprConsentSource: 'gdpr_consent_source',
@@ -233,6 +239,14 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
       topDownloadCPS: safeNumber(user.topdownloadcps, 0),
       byteLimit: safeNumber(user.bytelimit, 0),
       userFlags: safeNumber(user.userflags, 0),
+      // Credit-account fields — mirror of the binary user.data struct so the
+      // web runtime and the ! Credit Maintenance editor can see/edit credit.
+      creditDays: safeNumber(user.credit_days, 0),
+      creditAmount: safeNumber(user.credit_amount, 0),
+      creditStartDate: safeNumber(user.credit_start_date, 0),
+      creditTotalToDate: safeNumber(user.credit_total_to_date, 0),
+      creditTotalDate: safeNumber(user.credit_total_date, 0),
+      creditTracking: safeNumber(user.credit_tracking, 0),
       fontPreference: user.fontpreference || 'TopazPlus_a1200',  // Web font preference
       // Which sixteen colours his PETSCII screen is painted with. Only the
       // 80-column screen has a choice: a C64 is a VIC-II by construction, and

@@ -7,6 +7,8 @@
 import { BBSSession, LoggedOnSubState } from '../../index';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { displayAccountPage0, displayAccountPage1 } from './account.handler';
+import { formatLongDate } from '../../utils/date-time.util';
+import { TRACK_UPLOADS_BIT, TRACK_DOWNLOADS_BIT } from '../../utils/download-ratios.util';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
 
@@ -91,10 +93,10 @@ export async function handleAccountEditInput(socket: any, session: BBSSession, k
     return;
   }
 
-  // ! - Credit Maintenance (express.e:21310-21312)
+  // ! - Credit Maintenance (express.e:21310-21312 -> creditMaintenance 21884)
   if (command === '!') {
-    socket.emit('ansi-output', '\r\n\x1b[33mCredit maintenance not implemented in web version.\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[32mPress any key...\x1b[0m');
+    session.subState = LoggedOnSubState.CREDIT_MAINTENANCE_VIEW;
+    displayCreditMaintenance(socket, session);
     return;
   }
 
@@ -1008,3 +1010,174 @@ function exitConferenceAccounting(socket: any, session: BBSSession): void {
     displayAccountPage1(socket, session.tempData.editingUser, session.tempData.editingSlot);
   }
 }
+
+// ===== Credit Maintenance - express.e:21884-22042 creditMaintenance() =====
+
+/** Seconds since the Unix epoch, as express.e getSystemDate() returns. */
+function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
+/** A credit date field (unix seconds) as a display string; 0 is blank. */
+function creditDateStr(seconds: number): string {
+  if (!seconds) return '';
+  return formatLongDate(new Date(seconds * 1000));
+}
+
+/**
+ * Display the Credit Maintenance screen.
+ * 1:1 port of express.e:21898-21953.
+ *
+ * Deviation from express.e: no checkLockAccounts() gate and no creditLog()
+ * (the web port has neither) - the whole account editor is already sysop-gated
+ * behind command "1", the same as displayConferenceAccounting.
+ */
+export function displayCreditMaintenance(socket: any, session: BBSSession): void {
+  const user = session.tempData.editingUser;
+
+  const days = user.creditDays || 0;
+  const amount = user.creditAmount || 0;
+  const totalToDate = user.creditTotalToDate || 0;
+  const totalDate = user.creditTotalDate || 0;
+  const startDate = user.creditStartDate || 0;
+  const tracking = user.creditTracking || 0;
+
+  // Days remaining (express.e:21942-21947).
+  let remain = 0;
+  if (startDate !== 0 && days !== 0) {
+    remain = Math.floor(startDate / 86400) + days - Math.floor(nowSeconds() / 86400);
+  }
+  // Ending date = start + days (express.e:21937).
+  const endDate = startDate === 0 ? 0 : startDate + days * 86400;
+
+  const upYesNo = (tracking & TRACK_UPLOADS_BIT) ? 'Yes' : 'No ';
+  const dnYesNo = (tracking & TRACK_DOWNLOADS_BIT) ? 'Yes' : 'No ';
+
+  socket.emit('ansi-output', '\x1b[2J');
+  socket.emit('ansi-output', '\x1b[2;1H                      \x1b[33mACCOUNT CREDIT MAINTENANCE\x1b[0m');
+  socket.emit('ansi-output', `\x1b[4;2H\x1b[0m[${String(user.slotNumber ?? 0).padStart(4, '0')}] ${(user.username || '').substring(0, 32)}`);
+
+  socket.emit('ansi-output', '\x1b[6;2H\x1b[33mCREDIT STATUS \x1b[0m');
+  socket.emit('ansi-output', days === 0 ? '\x1b[37mINACTIVE      \x1b[0m' : '\x1b[32mACTIVE        \x1b[0m');
+
+  socket.emit('ansi-output', `\x1b[8;2H\x1b[33m1.>\x1b[32m Days Credited  \x1b[33m[\x1b[0m${String(days).padStart(7)}\x1b[33m]\x1b[0m`);
+  socket.emit('ansi-output', `\x1b[9;2H\x1b[33m2.>\x1b[32m Amount Paid    \x1b[33m[\x1b[0m${String(amount).padStart(7)}\x1b[33m]\x1b[0m`);
+  socket.emit('ansi-output', `\x1b[10;2H\x1b[33m3.>\x1b[32m Amount Paid to Date \x1b[33m[\x1b[0m${String(totalToDate).padStart(7)}\x1b[33m]\x1b[32m as of \x1b[0m${creditDateStr(totalDate)}`);
+  socket.emit('ansi-output', `\x1b[11;2H\x1b[33m4.> \x1b[32mTrack Uploads   \x1b[0m${upYesNo} \x1b[32m Beginning Date \x1b[0m${creditDateStr(startDate)}`);
+  socket.emit('ansi-output', `\x1b[12;2H\x1b[33m5.> \x1b[32mTrack Downloads \x1b[0m${dnYesNo} \x1b[32m Ending Date    \x1b[0m${creditDateStr(endDate)}`);
+  socket.emit('ansi-output', `\x1b[13;2H\x1b[33m   \x1b[32m Days Remaining. \x1b[0m${String(remain).padStart(7)}`);
+
+  socket.emit('ansi-output', '\x1b[15;2H\x1b[33mX\x1b[36m=\x1b[0mEXIT \x1b[33mR\x1b[36m=\x1b[0mRESET/SET BEGINNING DATE \x1b[33mT\x1b[36m=\x1b[0mTERMINATE CREDIT ACCOUNT \x1b[0m');
+  socket.emit('ansi-output', '\x1b[16;2H\x1b[33mU\x1b[36m=\x1b[0mUPDATE CREDIT TOTAL \x1b[33m~\x1b[36m=\x1b[0mSAVE ACCOUNT \x1b[33m<TAB>\x1b[36m=\x1b[0mCONT\x1b[0m');
+  socket.emit('ansi-output', '\x1b[17;2H');
+}
+
+/**
+ * Handle Credit Maintenance input.
+ * 1:1 port of express.e:21965-22010.
+ */
+export async function handleCreditMaintenanceInput(socket: any, session: BBSSession, key: string): Promise<void> {
+  const user = session.tempData.editingUser;
+  const command = key.toUpperCase();
+
+  // Save-confirmation on exit (express.e checkChanges).
+  if (session.tempData.creditExitPending) {
+    if (command === 'Y') {
+      await saveCreditMaintenance(socket, session);
+    }
+    session.tempData.creditExitPending = false;
+    exitCreditMaintenance(socket, session);
+    return;
+  }
+
+  // Field-edit mode (1/2/3): buffer digits, commit on ENTER (express.e numberInput).
+  if (session.tempData.creditFieldEdit) {
+    if (key === '\r' || key === '\n') {
+      const field = session.tempData.creditFieldEdit;
+      const value = parseInt(session.inputBuffer || '0', 10) || 0;
+      session.inputBuffer = '';
+      if (field === '1') user.creditDays = value;
+      else if (field === '2') user.creditAmount = value;
+      else if (field === '3') { user.creditTotalToDate = value; user.creditTotalDate = nowSeconds(); }
+      session.tempData.creditFieldEdit = undefined;
+      session.tempData.creditChanges = true;
+      displayCreditMaintenance(socket, session);
+    } else if (key === '\x7f' || key === '\b') {
+      if (session.inputBuffer?.length) {
+        session.inputBuffer = session.inputBuffer.slice(0, -1);
+        socket.emit('ansi-output', '\b \b');
+      }
+    } else if (key >= '0' && key <= '9') {
+      session.inputBuffer = (session.inputBuffer || '') + key;
+      socket.emit('ansi-output', key);
+    }
+    return;
+  }
+
+  // TAB / X - exit, with a save prompt if there are changes (express.e:21966-21969).
+  if (key === '\t' || command === 'X') {
+    if (session.tempData.creditChanges) {
+      socket.emit('ansi-output', '\r\n\x1b[33mYou have unsaved changes. Save before exiting? (Y/N): \x1b[0m');
+      session.tempData.creditExitPending = true;
+      return;
+    }
+    exitCreditMaintenance(socket, session);
+    return;
+  }
+
+  switch (command) {
+    // 1/2/3 - numeric field edits (express.e:21974-21986).
+    case '1': socket.emit('ansi-output', '\x1b[8;22H'); session.tempData.creditFieldEdit = '1'; session.inputBuffer = ''; return;
+    case '2': socket.emit('ansi-output', '\x1b[9;22H'); session.tempData.creditFieldEdit = '2'; session.inputBuffer = ''; return;
+    case '3': socket.emit('ansi-output', '\x1b[10;27H'); session.tempData.creditFieldEdit = '3'; session.inputBuffer = ''; return;
+    // 4/5 - toggle tracking bits (express.e:21987-21992).
+    case '4': user.creditTracking = (user.creditTracking || 0) ^ TRACK_UPLOADS_BIT; session.tempData.creditChanges = true; displayCreditMaintenance(socket, session); return;
+    case '5': user.creditTracking = (user.creditTracking || 0) ^ TRACK_DOWNLOADS_BIT; session.tempData.creditChanges = true; displayCreditMaintenance(socket, session); return;
+    // U - roll the amount paid into the running total (express.e:21993-21996).
+    case 'U': user.creditTotalToDate = (user.creditTotalToDate || 0) + (user.creditAmount || 0); user.creditTotalDate = nowSeconds(); session.tempData.creditChanges = true; displayCreditMaintenance(socket, session); return;
+    // R - reset/set the beginning date to now (express.e:21997-21999).
+    case 'R': user.creditStartDate = nowSeconds(); session.tempData.creditChanges = true; displayCreditMaintenance(socket, session); return;
+    // T - terminate: zero the days (express.e:22000-22002).
+    case 'T': user.creditDays = 0; session.tempData.creditChanges = true; displayCreditMaintenance(socket, session); return;
+    // ~ - save the account (express.e:22003-22036).
+    case '~': await saveCreditMaintenance(socket, session); displayCreditMaintenance(socket, session); return;
+  }
+}
+
+/**
+ * Persist credit changes (express.e:22003-22036 save arm).
+ * express.e:22005 - a credited-but-unstarted account gets its start date now.
+ */
+async function saveCreditMaintenance(socket: any, session: BBSSession): Promise<void> {
+  const { db } = require('../../database');
+  const user = session.tempData.editingUser;
+  if ((user.creditDays || 0) > 0 && (user.creditStartDate || 0) === 0) {
+    user.creditStartDate = nowSeconds();
+  }
+  try {
+    socket.emit('ansi-output', '\x1b[17;2HSaving Account...');
+    await db.updateUser(user.id, user);
+    session.tempData.creditChanges = false;
+    session.tempData.changes = false;
+  } catch (err) {
+    console.error('Error saving credit maintenance:', err);
+    socket.emit('ansi-output', '\r\n\x1b[31mCan\'t save account\x1b[0m\r\n');
+  }
+}
+
+/** Exit Credit Maintenance, back to the account editor (express.e:21312 displayAccount). */
+function exitCreditMaintenance(socket: any, session: BBSSession): void {
+  session.tempData.creditFieldEdit = undefined;
+  session.tempData.creditChanges = undefined;
+  session.tempData.creditExitPending = undefined;
+  session.inputBuffer = '';
+
+  session.subState = LoggedOnSubState.ACCOUNT_EDITOR_EDIT;
+  const page = session.tempData.page || 0;
+  if (page === 0) {
+    displayAccountPage0(socket, session.tempData.editingUser, session.tempData.editingSlot);
+  } else {
+    displayAccountPage1(socket, session.tempData.editingUser, session.tempData.editingSlot);
+  }
+}
+

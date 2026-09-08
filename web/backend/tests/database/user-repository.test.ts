@@ -253,4 +253,54 @@ describe('UserRepository', () => {
       expect(user).toBeNull();
     });
   });
+
+  // Credit-account fields — before this mirror wiring the users table had no
+  // credit columns: updateUser({creditDays}) built `UPDATE users SET
+  // creditdays=?` and threw "no such column", so the ! Credit Maintenance
+  // editor could never persist, and mapUserFromDb never read credit so the
+  // web runtime always saw creditDays=0.
+  describe('credit fields (DB mirror)', () => {
+    it('defaults every credit field to 0 for a new user', async () => {
+      const id = await repo.createUser(makeUserData());
+      const user = await repo.getUserById(id);
+      expect(user!.creditDays).toBe(0);
+      expect(user!.creditAmount).toBe(0);
+      expect(user!.creditStartDate).toBe(0);
+      expect(user!.creditTotalToDate).toBe(0);
+      expect(user!.creditTotalDate).toBe(0);
+      expect(user!.creditTracking).toBe(0);
+    });
+
+    it('round-trips edited credit fields through updateUser -> getUserById', async () => {
+      const id = await repo.createUser(makeUserData());
+      const start = 1_700_000_000; // unix seconds
+      await repo.updateUser(id, {
+        creditDays: 30,
+        creditAmount: 2500,
+        creditStartDate: start,
+        creditTotalToDate: 5000,
+        creditTotalDate: start + 86400,
+        creditTracking: 3, // both TRACK bits (downloads=1 | uploads=2)
+      });
+
+      const user = await repo.getUserById(id);
+      expect(user!.creditDays).toBe(30);
+      expect(user!.creditAmount).toBe(2500);
+      expect(user!.creditStartDate).toBe(start);
+      expect(user!.creditTotalToDate).toBe(5000);
+      expect(user!.creditTotalDate).toBe(start + 86400);
+      expect(user!.creditTracking).toBe(3);
+    });
+
+    it('a partial credit update leaves other credit fields untouched', async () => {
+      const id = await repo.createUser(makeUserData());
+      await repo.updateUser(id, { creditDays: 12, creditAmount: 300 });
+      await repo.updateUser(id, { creditDays: 0 }); // T = Terminate: zero days only
+
+      const user = await repo.getUserById(id);
+      expect(user!.creditDays).toBe(0);
+      expect(user!.creditAmount).toBe(300); // untouched by the days-only write
+    });
+  });
+
 });

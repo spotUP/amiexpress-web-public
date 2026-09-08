@@ -460,6 +460,37 @@ console.log('✓ Added slotnumber column');
 console.log('✓ Added internetname column');
       }
 
+      // Credit-account fields — express.e user struct creditDays..creditTracking.
+      // The truth is the binary user.data (UserFileManager writes them at
+      // offsets 350-357); these mirror them so the web runtime (download-ratios,
+      // the ! Credit Maintenance editor) can read and write credit at all.
+      // creditStartDate/creditTotalDate are unix seconds; creditTracking is a
+      // bit field (bit1=downloads, bit2=uploads).
+      if (!columnNames.includes('credit_days')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN credit_days INTEGER DEFAULT 0');
+console.log('✓ Added credit_days column');
+      }
+      if (!columnNames.includes('credit_amount')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN credit_amount INTEGER DEFAULT 0');
+console.log('✓ Added credit_amount column');
+      }
+      if (!columnNames.includes('credit_start_date')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN credit_start_date INTEGER DEFAULT 0');
+console.log('✓ Added credit_start_date column');
+      }
+      if (!columnNames.includes('credit_total_to_date')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN credit_total_to_date INTEGER DEFAULT 0');
+console.log('✓ Added credit_total_to_date column');
+      }
+      if (!columnNames.includes('credit_total_date')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN credit_total_date INTEGER DEFAULT 0');
+console.log('✓ Added credit_total_date column');
+      }
+      if (!columnNames.includes('credit_tracking')) {
+        this.db.exec('ALTER TABLE users ADD COLUMN credit_tracking INTEGER DEFAULT 0');
+console.log('✓ Added credit_tracking column');
+      }
+
       // Populate slotnumber for any user where it is 0 or NULL.
       // express.e:29624 — slotNumber is the permanent 1-indexed user.data slot.
       // After the migration above, existing rows are 0; assign sequential slots

@@ -15,8 +15,10 @@ export interface DownloadRequest {
   conference?: number;
 }
 
-const TRACK_DOWNLOADS_BIT = 1;
-const TRACK_UPLOADS_BIT = 2;
+// express.e credit-tracking bit field. Exported so the ! Credit Maintenance
+// editor toggles the same bits this ratio logic reads (one source of truth).
+export const TRACK_DOWNLOADS_BIT = 1;
+export const TRACK_UPLOADS_BIT = 2;
 
 const MAX_INT = 0x7fffffff;
 
