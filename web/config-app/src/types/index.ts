@@ -163,6 +163,12 @@ export interface NodeConfig {
    *  default, `<bbsLoc>/Node<N>/`. Many nodes can share one directory. */
   screens: string;
   capitol_files: boolean;
+  /** LOG_HOST - write the caller's address into the CallersLog (express.e:16048). */
+  log_host?: boolean;
+  /** SHOWPWFAIL - log the password actually typed (express.e:30030). */
+  show_password_fails?: boolean;
+  /** USERNUMBER_LOGIN - a caller may log on by slot number (express.e:29598). */
+  usernumber_login?: boolean;
   telnet: boolean;
   ftp: boolean;
   sysop_chat_color: number;

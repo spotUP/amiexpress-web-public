@@ -2476,6 +2476,10 @@ console.error('Error creating indexes:', error);
     return this.userRepo!.getUserByUsername(...args);
   }
 
+  async getUserBySlotNumber(...args: Parameters<UserRepository['getUserBySlotNumber']>) {
+    return this.userRepo!.getUserBySlotNumber(...args);
+  }
+
   async getUserByRealname(...args: Parameters<UserRepository['getUserByRealname']>) {
     return this.userRepo!.getUserByRealname(...args);
   }

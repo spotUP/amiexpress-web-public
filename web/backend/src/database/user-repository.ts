@@ -148,6 +148,23 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
   }
 
   /**
+   * Lookup a user by SLOT NUMBER, for boards that let callers log on by it.
+   *
+   * express.e:29598 - with USERNUMBER_LOGIN on the node's icon, a numeric
+   * answer at the name prompt is a slot and is loaded with `loadAccount(userNum,
+   * ...)` rather than looked up as a name. Slot 0 is a deleted account
+   * (express.e:21365), so it is never a valid logon.
+   */
+  async getUserBySlotNumber(slotNumber: number): Promise<User | null> {
+    if (!Number.isInteger(slotNumber) || slotNumber < 1) return null;
+
+    const user = this.get<any>('SELECT * FROM users WHERE slotnumber = ?', [slotNumber]);
+    if (!user) return null;
+
+    return this.mapUserFromDb(user);
+  }
+
+  /**
    * Lookup a user by realName — express.e:11505-11514 findUserFromName
    * with NAME_TYPE_REALNAME. Used by captureRealAndInternetNames'
    * uniqueness check (express.e:28184 "Already in use!, try another.")

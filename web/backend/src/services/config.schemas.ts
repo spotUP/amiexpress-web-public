@@ -216,6 +216,11 @@ export const NodeConfigSchema = z.object({
   door_log: z.boolean().optional(),
   ud_log: z.boolean().optional(),
   log_host: z.boolean().optional(),
+  // The other two node switches this board now honours: SHOWPWFAIL
+  // (express.e:30030) and USERNUMBER_LOGIN (express.e:29598). Serving a field
+  // the schema does not declare means a save silently drops it.
+  show_password_fails: z.boolean().optional(),
+  usernumber_login: z.boolean().optional(),
   telnet: z.boolean().optional(),
   ftp: z.boolean().optional(),
   disable_quick_logons: z.boolean().optional(),

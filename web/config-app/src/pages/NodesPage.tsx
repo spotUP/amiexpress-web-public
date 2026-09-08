@@ -216,6 +216,63 @@ export function NodesPage() {
         ),
     },
     {
+      key: 'log_host',
+      // LOG_HOST, express.e:16048 - write the caller's address into the CallersLog.
+      header: 'Log Host',
+      render: (row) =>
+        editingNode === row.nodeNumber ? (
+          <label className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              checked={formData.log_host ?? row.config?.log_host ?? false}
+              onChange={(e) => setFormData({ ...formData, log_host: e.target.checked })}
+              className="w-4 h-4"
+            />
+            <span className="text-sm text-content-primary">Logged</span>
+          </label>
+        ) : (
+          <span className="text-content-primary">{row.config?.log_host ? 'Logged' : 'Not logged'}</span>
+        ),
+    },
+    {
+      key: 'show_password_fails',
+      // SHOWPWFAIL, express.e:30030 - log what was typed instead of (xxxx).
+      header: 'Show Password Fails',
+      render: (row) =>
+        editingNode === row.nodeNumber ? (
+          <label className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              checked={formData.show_password_fails ?? row.config?.show_password_fails ?? false}
+              onChange={(e) => setFormData({ ...formData, show_password_fails: e.target.checked })}
+              className="w-4 h-4"
+            />
+            <span className="text-sm text-content-primary">Shown</span>
+          </label>
+        ) : (
+          <span className="text-content-primary">{row.config?.show_password_fails ? 'Shown' : 'Masked'}</span>
+        ),
+    },
+    {
+      key: 'usernumber_login',
+      // USERNUMBER_LOGIN, express.e:29598 - a caller may type his slot number.
+      header: 'User Number Logon',
+      render: (row) =>
+        editingNode === row.nodeNumber ? (
+          <label className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              checked={formData.usernumber_login ?? row.config?.usernumber_login ?? false}
+              onChange={(e) => setFormData({ ...formData, usernumber_login: e.target.checked })}
+              className="w-4 h-4"
+            />
+            <span className="text-sm text-content-primary">Allowed</span>
+          </label>
+        ) : (
+          <span className="text-content-primary">{row.config?.usernumber_login ? 'Allowed' : 'Name only'}</span>
+        ),
+    },
+    {
       key: 'capitol',
       header: 'Capitol Files',
       render: (row) =>

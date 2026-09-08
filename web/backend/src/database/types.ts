@@ -432,6 +432,10 @@ export interface NodeConfig {
   door_log: boolean;
   ud_log: boolean;
   log_host: boolean;
+  /** SHOWPWFAIL - log the password a caller actually typed (express.e:30030). */
+  show_password_fails?: boolean;
+  /** USERNUMBER_LOGIN - a caller may type his slot number (express.e:29598). */
+  usernumber_login?: boolean;
 
   // Network Settings
   telnet: boolean;

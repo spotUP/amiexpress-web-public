@@ -1915,6 +1915,38 @@ function endPasswordMask(socket: any, session: BBSSession): void {
          * The prompt text and the R/C semantics are the web path's, so both
          * transports ask the same question in the same words.
          */
+        /**
+         * express.e:29598 - USERNUMBER_LOGIN.
+         *
+         *     userNum := Val(userName)
+         *     IF checkToolTypeExists(TOOLTYPE_NODE, node, 'USERNUMBER_LOGIN')
+         *        AND (userNum > 0)
+         *       loadAccount(userNum, ...)
+         *
+         * A board with the tooltype set lets a caller type his slot number
+         * instead of his name, which is how regulars log on quickly. The
+         * tooltype had no reader here, so a number was looked up as a NAME,
+         * found nothing, and the caller was offered a new account.
+         */
+        if (typed.length > 0 && /^\d+$/.test(typed)) {
+          const { nodeFlag } = require('../utils/node-tooltypes.util');
+          if (nodeFlag(session.nodeId || 1, 'USERNUMBER_LOGIN')) {
+            const bySlot = await getDatabase().getUserBySlotNumber(Number.parseInt(typed, 10));
+            if (bySlot) {
+              // The rest of the login speaks in names.
+              session.tempData.loginUsername = bySlot.username;
+              session.tempData.loginPhase = 'password';
+              // The same three steps the name path takes below: the mask
+              // switch, the browser's echo suppression, and the prompt.
+              // Setting only the first would echo the password.
+              session.maskInput = true;
+              socket.emit('mask-input', true);
+              emitPrompt(socket, '\r\nPassword: ');
+              return;
+            }
+          }
+        }
+
         if (typed.length > 0) {
           const existing = await getDatabase().getUserByUsername(typed);
           if (!existing) {
@@ -2000,7 +2032,15 @@ function endPasswordMask(socket: any, session: BBSSession): void {
             // Web mirrors this at auth-socket-handlers.ts; aligning the
             // two transports per the unification plan.
             const { callersLogManager: clm } = require('../services/CallersLogManager');
-            clm.logActivity(session.nodeId || 1, '\tPassword Failure (xxxx)');
+            // express.e:30030 - SHOWPWFAIL on the node's icon logs what was
+            // actually typed; without it the attempt is masked. A sysop turns
+            // it on to see whether a caller is fumbling his own password or
+            // somebody is guessing.
+            const { nodeFlag } = require('../utils/node-tooltypes.util');
+            const failureText = nodeFlag(session.nodeId || 1, 'SHOWPWFAIL')
+              ? `\tPassword Failure (${password})`
+              : '\tPassword Failure (xxxx)';
+            clm.logActivity(session.nodeId || 1, failureText);
             session.loginRetryCount = (session.loginRetryCount || 0) + 1;
 
             const { getMaxPasswordFails } = require('../services/password-policy.util');

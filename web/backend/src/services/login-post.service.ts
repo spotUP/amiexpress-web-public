@@ -369,6 +369,26 @@ export async function runPostAuthLogin(
       1,
       user.location || "Unknown",
     );
+
+    /**
+     * express.e:16048 - LOG_HOST on the node's icon adds the caller's address
+     * to the CallersLog, right after the logon line:
+     *
+     *     '\tTelnet login address: <hostName> (<hostIP>)'
+     *
+     * It is off by default because it writes where a caller connects from into
+     * a log a sysop may share, and on when a sysop is chasing someone. Nothing
+     * in this port read the tooltype, so it could be set and do nothing.
+     */
+    const { nodeFlag } = require("../utils/node-tooltypes.util");
+    if (nodeFlag(nodeId, "LOG_HOST")) {
+      const hostIp = (session as any).remoteAddress || "unknown";
+      const hostName = (session as any).connectionHostname || hostIp;
+      callersLogManager.logActivity(
+        nodeId,
+        `\tTelnet login address: ${hostName} (${hostIp})`,
+      );
+    }
   } catch (error) {
     console.error(`[LOGIN] Error writing node files:`, error);
   }
