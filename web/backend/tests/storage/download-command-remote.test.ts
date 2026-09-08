@@ -286,13 +286,9 @@ describe('the file still being there at send time', () => {
     expect(await rematerialise(found, ctx)).toBe(found.fullPath);
   });
 
-  it('is what the telnet transfer builds its paths from', () => {
-    const source = fs.readFileSync(
-      path.join(__dirname, '..', '..', 'src', 'handlers', 'file', 'download.handler.ts'),
-      'utf8'
-    );
-    const branch = source.match(/const \{ startZmodemDownload \}[\s\S]*?startZmodemDownload\(socket/);
-    expect(branch).not.toBeNull();
-    expect(branch![0]).toMatch(/await rematerialise\(file, storage\)/);
-  });
+  // What the telnet transfer builds its paths from is
+  // tests/storage/zmodem-send-refetches.test.ts, which drives
+  // deliverFilesToCaller. This used to be a match against download.handler.ts's
+  // source; the decision moved to file-delivery.ts and the pin went red over a
+  // refactor that changed nothing it was protecting.
 });

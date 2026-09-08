@@ -8,6 +8,7 @@
  * tests/health-revision.test.ts, which tests app.ts's /health revision
  * wiring via source-grep for exactly that reason).
  */
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -50,8 +51,15 @@ describe('repo-revision', () => {
   });
 
   describe('getRepoRevision', () => {
-    it('falls back to "unknown" outside a built image (no /app/.git-sha on a dev machine)', () => {
-      expect(getRepoRevision()).toBe('unknown');
+    // A dev machine used to report "unknown", because /app/.git-sha exists
+    // only inside the built image. That made the one check that catches a
+    // stale localhost - compare the checkout's revision with origin/main and
+    // with live /health - impossible to run against the dev server, so the
+    // module reads the checkout's own HEAD when the image file is absent.
+    it("names the checkout's own HEAD when there is no built image", () => {
+      const head = execSync('git rev-parse HEAD', { cwd: __dirname }).toString().trim();
+
+      expect(getRepoRevision()).toBe(head);
     });
 
     it('memoizes the result across calls', () => {
@@ -64,8 +72,11 @@ describe('repo-revision', () => {
       const a = getRepoRevision();
       _clearRepoRevisionCacheForTests();
       const b = getRepoRevision();
-      expect(b).toBe(a); // same underlying source (/app/.git-sha absent here) -> same value
-      expect(b).toBe('unknown');
+
+      // Same underlying source, so the same value - and a real revision, not
+      // the "unknown" that says the module found nothing to read.
+      expect(b).toBe(a);
+      expect(b).toMatch(/^[0-9a-f]{40}$/);
     });
   });
 });

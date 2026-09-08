@@ -677,6 +677,9 @@ export async function initializeData(io?: SocketIOServer) {
       // paste it into another. The door's own value still wins if set.
       const resolveSystemValue = (key: string): string | undefined => {
         try {
+          // config-source-ok: the values a door may borrow this way are the
+          // board's secrets - the achievements board key - which live
+          // encrypted in the database and have no bbsConfig.info half.
           const cfg = (db as any)?.getConfigRepository?.()?.getSystemConfig?.();
           const value = cfg ? (cfg as any)[key] : undefined;
           return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
