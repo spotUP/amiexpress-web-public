@@ -272,23 +272,54 @@ export function usePushNotifications() {
     }
   }, []);
 
-  // Test notification (for debugging)
-  const testNotification = useCallback(async () => {
-    if (!state.isSubscribed) {
-      return;
-    }
+  /**
+   * Draw a notification now, and SAY what happened.
+   *
+   * This had three silent exits - not subscribed, no registration, and any
+   * throw at all, since the page calls it as `void testNotification()`. So a
+   * sysop who pressed it got nothing: no notification, no error, nothing in
+   * the console. "i cant send a test desktop notification in the admin ui".
+   *
+   * It now asks for permission if it has none, registers the worker if the
+   * browser has none (the file ships as of this session), and reports the
+   * reason through the same `error` the page already shows.
+   */
+  const testNotification = useCallback(async (): Promise<boolean> => {
+    setState(prev => ({ ...prev, error: null }));
+    try {
+      if (!('serviceWorker' in navigator)) {
+        throw new Error('This browser cannot show desktop notifications.');
+      }
 
-    const registration = await existingRegistration();
-    if (!registration) return;
-    await registration.showNotification('Test Notification', {
-      body: 'Push notifications are working!',
-      // Relative, so it resolves against the admin's own base. `/favicon.ico`
-      // is not served by this board and answered 404 on every notification.
-      icon: `${import.meta.env.BASE_URL}icon.svg`,
-      badge: `${import.meta.env.BASE_URL}icon.svg`,
-      tag: 'test'
-    });
-  }, [state.isSubscribed]);
+      let permission = Notification.permission;
+      if (permission === 'default') permission = await Notification.requestPermission();
+      setState(prev => ({ ...prev, permission }));
+      if (permission !== 'granted') {
+        throw new Error(
+          "Your browser is blocking notifications for this site. Allow them in the browser's site settings, then reload.",
+        );
+      }
+
+      const registration = (await existingRegistration()) ?? (await registerServiceWorker());
+      if (!registration) {
+        throw new Error('The service worker could not be registered, so there is nothing to draw with.');
+      }
+
+      await registration.showNotification('AmiExpress', {
+        body: 'This is what a caller paging you looks like.',
+        // Relative, so it resolves against the admin's own base. `/favicon.ico`
+        // is not served by this board and answered 404 on every notification.
+        icon: `${import.meta.env.BASE_URL}icon.svg`,
+        badge: `${import.meta.env.BASE_URL}icon.svg`,
+        tag: 'test',
+      });
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The test notification could not be shown.';
+      setState(prev => ({ ...prev, error: message }));
+      return false;
+    }
+  }, [registerServiceWorker]);
 
   return {
     ...state,

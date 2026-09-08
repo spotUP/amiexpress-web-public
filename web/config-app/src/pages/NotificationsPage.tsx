@@ -12,6 +12,7 @@
  * writing those keys and one place to fix a bug in them. What this page adds
  * is the half that was never a form at all: THIS browser's subscription.
  */
+import { useState } from 'react';
 import { Bell, BellOff, BellRing, Send } from 'lucide-react';
 
 import { usePushNotifications } from '../hooks/usePushNotifications';
@@ -19,6 +20,8 @@ import { OperatorChatSettingsPage } from './OperatorChatSettingsPage';
 
 export function NotificationsPage() {
   const push = usePushNotifications();
+  /** What the last test did, so pressing it is never silent. */
+  const [tested, setTested] = useState<'drawn' | null>(null);
 
   return (
     <div className="space-y-8">
@@ -76,20 +79,32 @@ export function NotificationsPage() {
 
             {/* Proof, rather than a promise: the board draws a real
                 notification through the same service worker a page uses. */}
-            {push.isSubscribed && (
-              <button
-                type="button"
-                className="btn-secondary inline-flex items-center gap-1"
-                onClick={() => { void push.testNotification(); }}
-              >
-                <Send size={14} /> Send a test notification
-              </button>
-            )}
+            {/* Offered whether or not a subscription exists: this draws a
+                notification locally, which answers "will I see one at all" -
+                a different question from "is the board allowed to send me
+                one", and the one a sysop is really asking. */}
+            <button
+              type="button"
+              className="btn-secondary inline-flex items-center gap-1"
+              onClick={async () => {
+                setTested(null);
+                if (await push.testNotification()) setTested('drawn');
+              }}
+            >
+              <Send size={14} /> Send a test notification
+            </button>
           </div>
         )}
 
         {push.error && (
           <p className="text-sm text-status-warn" data-testid="push-error">{push.error}</p>
+        )}
+
+        {tested === 'drawn' && !push.error && (
+          <p className="text-sm text-content-secondary" data-testid="push-tested">
+            Sent. If nothing appeared, your operating system is holding it back -
+            check its notification settings for this browser.
+          </p>
         )}
       </section>
 
