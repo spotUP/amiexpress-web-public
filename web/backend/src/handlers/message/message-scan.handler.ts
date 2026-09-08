@@ -10,6 +10,7 @@ import { ACSPermission } from '../../constants/acs-permissions';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
+import { parseInfoFile } from '../../utils/info-file.util';
 import {
   loadMsgPointers,
   updateScanPointer,
@@ -164,13 +165,34 @@ export function checkConfAccess(user: any, conferenceId: number): boolean {
     return false;
   }
 
-  // express.e:8511-8512 - Area-based access (confAccess holds an area name
-  // instead of per-conf X/_ flags; access = TOOLTYPE_AREA on the conference
-  // .info lists this user's area). Not yet implemented in the web version —
-  // fail CLOSED (deny) is the safe default, but log loudly so a sysop using
-  // the area-name access model can see why access is denied instead of it
-  // failing silently. Tracked for real implementation.
-console.warn(`[checkConfAccess] Area-name access model not implemented — denying conference ${conferenceId} for user "${user.username ?? '<unknown>'}" (confAccess="${user.confAccess}"). Set per-conf X/_ flags to use this conference.`);
+  // express.e:8511-8512 - area-name access: confAccess is an AREA NAME whose
+  // icon (Access/AREA.<name>.info) carries a `Conf.<n>` tooltype for every
+  // conference it grants. This is the path a board with more than nine
+  // conferences takes - the X/_ string caps at nine (axobjects.e), so uprough's
+  // fourteen live here. checkToolTypeExists(TOOLTYPE_AREA, area, "Conf.N").
+  return areaGrantsConference(user.confAccess, conferenceId);
+}
+
+/**
+ * Does the area named `areaName` grant conference `conferenceId`? Reads the
+ * area's icon tooltypes and looks for `Conf.<n>` (case-insensitive; a disabled
+ * or parenthesised tooltype has a different key and is naturally excluded).
+ * express.e:8511-8512 checkToolTypeExists(TOOLTYPE_AREA, area, "Conf.N").
+ */
+function areaGrantsConference(areaName: string, conferenceId: number): boolean {
+  const area = (areaName || '').trim();
+  if (!area) return false;
+  const areaFile = path.join(config.getConfig().dataDir, 'Access', `AREA.${area}.info`);
+  const want = `CONF.${conferenceId}`;
+  try {
+    // A commented tooltype (the `(CONF.<NUM>)` template, or a disabled grant)
+    // is not a grant - express.e's checkToolTypeExists skips them.
+    for (const tt of parseInfoFile(areaFile).tooltypes) {
+      if (!tt.commented && tt.key.trim().toUpperCase() === want) return true;
+    }
+  } catch {
+    // No area icon, or unreadable -> no grant (fail closed).
+  }
   return false;
 }
 
