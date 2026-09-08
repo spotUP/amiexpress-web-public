@@ -50,6 +50,28 @@ export enum ToolTypeLevel {
   SYSCMD = 'SYSCMD'          // Global sysop command
 }
 
+/**
+ * Spellings a TYPE tooltype carries that are not the enum's own name.
+ *
+ * The installer writes `TYPE=typescript` (door-installer.ts:132) and the admin
+ * offers the same word in its Door Type list, but the enum member is `TS` - so
+ * the lookup below missed and every one of those doors was registered as SIM,
+ * a 68K door. The board then looked for a 68K executable inside the door's
+ * directory, found none, and the door exited the moment a caller ran it:
+ * "LOCATION points to directory /app/data/bbs/Doors/card-lobby but no matching
+ * executable found". Reported from the board 2026-09-08 as "cardlobby exits on
+ * the live server".
+ *
+ * It also made the admin's round trip lossy: the API served the misparsed
+ * `SIM`, the form saved back what it had been shown, and a door's own .info
+ * lost the type it was installed with.
+ */
+const TYPE_ALIASES: Record<string, DoorType> = {
+  TYPESCRIPT: DoorType.TS,
+  NODE: DoorType.TS,
+  JS: DoorType.TS,
+};
+
 export interface CommandDefinition {
   name: string;
   type: DoorType;
@@ -677,7 +699,9 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
   let type = DoorType.SIM;
   const typeStr = tooltypes.get('TYPE');
   if (typeStr) {
-    type = (DoorType[typeStr.toUpperCase() as keyof typeof DoorType]) || DoorType.SIM;
+    const spelled = typeStr.toUpperCase();
+    type = TYPE_ALIASES[spelled]
+      ?? (DoorType[spelled as keyof typeof DoorType]) ?? DoorType.SIM;
   }
 
   // Build command definition - normalize Amiga paths to Unix
