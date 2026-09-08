@@ -15,6 +15,39 @@ import { isSensitiveField } from '../utils/secrets-encryption.util';
 import { getSystemTime } from '../utils/date-time.util';
 
 export interface BBSConfigData {
+  // EXECUTE_ON_* hooks - a command the board runs when something happens.
+  /** Run when a caller finishes logging on (EXECUTE_ON_LOGON). */
+  execute_on_logon?: string;
+  /** As above, without waiting for it (EXECUTE_ASYNC_ON_LOGON). */
+  execute_async_on_logon?: string;
+  /** Run when a caller logs off (EXECUTE_ON_LOGOFF). */
+  execute_on_logoff?: string;
+  /** As above, without waiting for it (EXECUTE_ASYNC_ON_LOGOFF). */
+  execute_async_on_logoff?: string;
+  /** Run when a new account is created (EXECUTE_ON_NEW_USER). */
+  execute_on_new_user?: string;
+  /** As above, without waiting for it (EXECUTE_ASYNC_ON_NEW_USER). */
+  execute_async_on_new_user?: string;
+  /** Run when a file finishes uploading (EXECUTE_ON_UPLOAD). */
+  execute_on_upload?: string;
+  /** As above, without waiting for it (EXECUTE_ASYNC_ON_UPLOAD). */
+  execute_async_on_upload?: string;
+  /** Run when a caller connects (EXECUTE_ON_CONNECT). */
+  execute_on_connect?: string;
+  /** As above, without waiting for it (EXECUTE_ASYNC_ON_CONNECT). */
+  execute_async_on_connect?: string;
+  /** Run when a node's status changes (EXECUTE_ON_STATUS_CHANGE). */
+  execute_on_status_change?: string;
+  /** As above, without waiting for it (EXECUTE_ASYNC_ON_STATUS_CHANGE). */
+  execute_async_on_status_change?: string;
+  /** Run when a caller leaves a comment for the sysop (EXECUTE_ON_SYSOP_COMMENT). */
+  execute_on_sysop_comment?: string;
+  /** As above, without waiting for it (EXECUTE_ASYNC_ON_SYSOP_COMMENT). */
+  execute_async_on_sysop_comment?: string;
+  /** Run when a caller pages the sysop (EXECUTE_ON_SYSOP_PAGE). */
+  execute_on_sysop_page?: string;
+  /** As above, without waiting for it (EXECUTE_ASYNC_ON_SYSOP_PAGE). */
+  execute_async_on_sysop_page?: string;
   // Identity
   bbs_name?: string;
   sysop_name?: string;
@@ -211,6 +244,26 @@ export function normalizeConfigValueCase(field: string, value: string): string {
  * Tooltype name mapping (AmiExpress format → internal field name)
  */
 const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
+  // The EXECUTE_ON_* / EXECUTE_ASYNC_ON_* hooks (express.e:6666-6744).
+  // batch-scheduler.ts has always run these; nothing could set them, so a
+  // sysop had to write them into bbsConfig.info by hand. Listed here so they
+  // travel through the same reader, writer and schema as every other setting.
+  'EXECUTE_ON_LOGON': 'execute_on_logon',
+  'EXECUTE_ASYNC_ON_LOGON': 'execute_async_on_logon',
+  'EXECUTE_ON_LOGOFF': 'execute_on_logoff',
+  'EXECUTE_ASYNC_ON_LOGOFF': 'execute_async_on_logoff',
+  'EXECUTE_ON_NEW_USER': 'execute_on_new_user',
+  'EXECUTE_ASYNC_ON_NEW_USER': 'execute_async_on_new_user',
+  'EXECUTE_ON_UPLOAD': 'execute_on_upload',
+  'EXECUTE_ASYNC_ON_UPLOAD': 'execute_async_on_upload',
+  'EXECUTE_ON_CONNECT': 'execute_on_connect',
+  'EXECUTE_ASYNC_ON_CONNECT': 'execute_async_on_connect',
+  'EXECUTE_ON_STATUS_CHANGE': 'execute_on_status_change',
+  'EXECUTE_ASYNC_ON_STATUS_CHANGE': 'execute_async_on_status_change',
+  'EXECUTE_ON_SYSOP_COMMENT': 'execute_on_sysop_comment',
+  'EXECUTE_ASYNC_ON_SYSOP_COMMENT': 'execute_async_on_sysop_comment',
+  'EXECUTE_ON_SYSOP_PAGE': 'execute_on_sysop_page',
+  'EXECUTE_ASYNC_ON_SYSOP_PAGE': 'execute_async_on_sysop_page',
   // Identity
   'BBS_NAME': 'bbs_name',
   'SYSOP_NAME': 'sysop_name',

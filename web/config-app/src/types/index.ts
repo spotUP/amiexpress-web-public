@@ -145,7 +145,24 @@ export interface SystemConfig {
 
   // File Management (additional)
   filediz_syscmd: string;
-  max_desclines: number;
+  max_desclines: number;
+  // EXECUTE_ON_* / EXECUTE_ASYNC_ON_* hooks (express.e:6666-6744).
+  execute_on_logon?: string;
+  execute_async_on_logon?: string;
+  execute_on_logoff?: string;
+  execute_async_on_logoff?: string;
+  execute_on_new_user?: string;
+  execute_async_on_new_user?: string;
+  execute_on_upload?: string;
+  execute_async_on_upload?: string;
+  execute_on_connect?: string;
+  execute_async_on_connect?: string;
+  execute_on_status_change?: string;
+  execute_async_on_status_change?: string;
+  execute_on_sysop_comment?: string;
+  execute_async_on_sysop_comment?: string;
+  execute_on_sysop_page?: string;
+  execute_async_on_sysop_page?: string;
   hold_access_level: number;
   local_upload_path: string;
 

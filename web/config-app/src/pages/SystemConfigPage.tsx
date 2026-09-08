@@ -48,6 +48,21 @@ const LOG_RETENTION_PRESETS = [
   { value: 365, label: '1 year' },
 ];
 
+/**
+ * The events express fires a command on (express.e:6666-6744), in the order a
+ * sysop meets them: connecting, logging on, and so forth.
+ */
+const EVENT_HOOKS: Array<{ field: string; when: string }> = [
+  { field: 'connect', when: 'a caller connects' },
+  { field: 'logon', when: 'a caller finishes logging on' },
+  { field: 'new_user', when: 'a new account is created' },
+  { field: 'upload', when: 'a file finishes uploading' },
+  { field: 'sysop_page', when: 'a caller pages you' },
+  { field: 'sysop_comment', when: 'a caller leaves you a comment' },
+  { field: 'status_change', when: "a node's status changes" },
+  { field: 'logoff', when: 'a caller logs off' },
+];
+
 export function SystemConfigPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError, showWarning, confirm } = useNotification();
@@ -1157,6 +1172,50 @@ export function SystemConfigPage() {
               <label htmlFor="upload_check_dupe" className="text-sm text-content-primary">
                 Check for Duplicate Uploads
               </label>
+            </div>
+
+            {/*
+              EXECUTE_ON_* / EXECUTE_ASYNC_ON_* (express.e:6666-6744).
+              batch-scheduler.ts has run these since it was written; nothing
+              could set them, so a sysop had to edit bbsConfig.info by hand.
+              The async variant does not make the board wait for the command.
+            */}
+            <div className="md:col-span-2">
+              <h3 className="text-content-primary font-semibold mb-1">Event Commands</h3>
+              <p className="text-sm text-content-secondary mb-3">
+                A command the board runs when something happens. Leave blank for nothing.
+                An asynchronous command runs without the board waiting for it.
+              </p>
+              <div className="space-y-4">
+                {EVENT_HOOKS.map(({ field, when }) => (
+                  <div key={field} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor={`execute_on_${field}`} className="label">
+                        When {when}
+                      </label>
+                      <TooltypeKey field={`execute_on_${field}`} />
+                      <input
+                        id={`execute_on_${field}`}
+                        type="text"
+                        {...register(`execute_on_${field}` as keyof SystemConfig)}
+                        className="input-field w-full"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor={`execute_async_on_${field}`} className="label">
+                        …and without waiting
+                      </label>
+                      <TooltypeKey field={`execute_async_on_${field}`} />
+                      <input
+                        id={`execute_async_on_${field}`}
+                        type="text"
+                        {...register(`execute_async_on_${field}` as keyof SystemConfig)}
+                        className="input-field w-full"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div>

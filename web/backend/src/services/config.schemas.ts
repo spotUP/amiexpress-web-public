@@ -182,7 +182,27 @@ export const SystemConfigSchema = z.object({
   auto_deactivate_days: z.number().int().min(0).optional(),
   local_upload_path: z.string().max(500).optional(),
   filediz_syscmd: z.string().max(500).optional(),   // express.e:19258
-  max_desclines: z.number().int().min(1).max(100).optional()   // express.e:348
+  max_desclines: z.number().int().min(1).max(100).optional(),   // express.e:348
+
+  // EXECUTE_ON_* / EXECUTE_ASYNC_ON_* (express.e:6666-6744). batch-scheduler
+  // has always run these; without them here a save would drop whatever the
+  // sysop typed.
+  execute_on_logon: z.string().max(500).optional(),
+  execute_async_on_logon: z.string().max(500).optional(),
+  execute_on_logoff: z.string().max(500).optional(),
+  execute_async_on_logoff: z.string().max(500).optional(),
+  execute_on_new_user: z.string().max(500).optional(),
+  execute_async_on_new_user: z.string().max(500).optional(),
+  execute_on_upload: z.string().max(500).optional(),
+  execute_async_on_upload: z.string().max(500).optional(),
+  execute_on_connect: z.string().max(500).optional(),
+  execute_async_on_connect: z.string().max(500).optional(),
+  execute_on_status_change: z.string().max(500).optional(),
+  execute_async_on_status_change: z.string().max(500).optional(),
+  execute_on_sysop_comment: z.string().max(500).optional(),
+  execute_async_on_sysop_comment: z.string().max(500).optional(),
+  execute_on_sysop_page: z.string().max(500).optional(),
+  execute_async_on_sysop_page: z.string().max(500).optional(),
 });
 
 export const NodeConfigSchema = z.object({
