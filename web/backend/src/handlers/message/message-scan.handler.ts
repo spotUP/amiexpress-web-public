@@ -342,13 +342,8 @@ interface ConfScanResult {
  * express.e:11651-11735 searchNewMail. Replaces getMessagesForConfScan and
  * countNewMessages, which walked the same headers twice with two copies of
  * the rule.
- *
- * EXPORTED so the AEW_MSGQUERY handler (amiga-emulation/xim/msgfeed.ts) can
- * ask this question instead of growing the third copy this function exists to
- * prevent. Nothing about the scan changes: that caller drops the private
- * messages and intersects the rest with what the caller's ACS lets it show.
  */
-export async function scanConferenceForNewMail(
+async function scanConferenceForNewMail(
   userId: string,
   conferenceId: number,
   messageBaseId: number,
@@ -756,8 +751,34 @@ console.warn('[advanceConferenceScan] no confScanState found');
       // express.e:28097 - joinConf called with FORCE_MAILSCAN_SKIP when mscan=FALSE
       if (!mscan) continue;
 
-      // express.e:11670: inside searchNewMail, print header per conf
-      socket.emit('ansi-output', `\x1b[32mScanning Conference\x1b[33m: \x1b[0m${confName} - `);
+      // express.e:11668-11679, inside searchNewMail.
+      //
+      // The conference line is printed ONCE, gated on msgBaseNum=1; each pass
+      // then names its own message base, so a conference with several of them
+      // reads
+      //
+      //   Scanning Conference: Uptown -
+      //    Message Base: General - No mail today!
+      //    Message Base: Elite - ...
+      //
+      // This port printed the conference line inside the per-base loop with no
+      // gate and never named a base, so every pass repeated an identical
+      // header and nothing told the caller which base each result belonged to.
+      // The fix predates the 2026-05-04 rewrite of this module and did not
+      // survive it (audit D-11).
+      if (mbIdx === 0) {
+        socket.emit('ansi-output', `\x1b[32mScanning Conference\x1b[33m: \x1b[0m${confName} - `);
+      }
+
+      // express.e:11673-11679 - the base's own name, when the board declared
+      // one. `name` always has a value (the loader substitutes a label);
+      // `declaredName` is what MsgBases.info actually carries.
+      const declaredName = (msgBase as any).declaredName ?? '';
+      if (declaredName.length > 0) {
+        // express.e:11676 - the newline goes after the CONFERENCE line only.
+        if (mbIdx === 0) socket.emit('ansi-output', '\r\n');
+        socket.emit('ansi-output', ` \x1b[32mMessage Base\x1b[33m: \x1b[0m${declaredName} - `);
+      }
 
       // ONE walk - the messages to offer and the counters to announce come
       // from the same pass. express.e:11706 uses confMailName (the per-conf

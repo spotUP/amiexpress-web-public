@@ -20,6 +20,13 @@ export interface MessageBase {
   useRealName?: boolean;   // REALNAME.n tooltype
   useInternetName?: boolean; // INTERNETNAME.n tooltype
   extSend?: boolean;       // EXTSEND.n tooltype
+  /**
+   * NAME.n exactly as MsgBases.info declares it - '' when it declares none.
+   * `name` above substitutes a label so a list has something to show;
+   * express.e:11675 prints its "Message Base:" line only when the board
+   * actually named the base, so the two cannot be one field.
+   */
+  declaredName?: string;
 }
 
 export class MessageBaseLoaderService {
@@ -223,6 +230,12 @@ export class MessageBaseLoaderService {
         id: this.nextId++,
         conferenceId: confId,
         name: name || `Message Base ${msgBaseNum}`,
+        // What the board actually declared, which is '' when MsgBases.info
+        // carries no NAME.n. `name` above substitutes a label so a list has
+        // something to show; express prints its "Message Base:" line ONLY
+        // when the name exists (express.e:11675), so the two cannot be the
+        // same field.
+        declaredName: name,
         location,
         useRealName: flags.useRealName,
         useInternetName: flags.useInternetName,

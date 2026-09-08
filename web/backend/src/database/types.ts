@@ -173,6 +173,14 @@ export interface Conference {
 export interface MessageBase {
   id: number;
   name: string;
+  /**
+   * NAME.n exactly as MsgBases.info declares it - '' when it declares none.
+   *
+   * `name` falls back to "Message Base <n>" so a list has a label; the mail
+   * scan needs to know whether the board named the base at all, because
+   * express.e:11675 prints its "Message Base:" line only when it did.
+   */
+  declaredName?: string;
   conferenceId: number;
   created: Date;
   updated: Date;
