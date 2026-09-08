@@ -41,6 +41,25 @@
  */
 import { AnsiToPetsciiTransducer, PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
 
+/*
+ * SKIPPED, not failed, where this door's own dependencies are not installed.
+ *
+ * The import chain below reaches better-sqlite3 out of
+ * Doors/grandmaster/node_modules. A git worktree does not get that directory,
+ * so the suite dies at load with "Cannot find module 'better-sqlite3'" and
+ * jest reports a FAILED suite - a red that says nothing about this door and
+ * sends whoever ran it looking for a regression that is not there. It has
+ * already cost two diagnostic passes.
+ *
+ * A skip states the real situation: these tests need `npm install` in
+ * Doors/grandmaster, and in the main checkout they run.
+ */
+const fs = require('fs');
+const grandmasterDepsInstalled = fs.existsSync(
+  require('path').join(__dirname, '../../../../../Doors/grandmaster/node_modules/better-sqlite3'),
+);
+const describeIfInstalled = grandmasterDepsInstalled ? describe : describe.skip;
+
 const { execFileSync } = require('child_process');
 const path = require('path');
 
@@ -110,7 +129,7 @@ function paintedRows(screen: number[]): number[] {
 
 jest.setTimeout(120000);
 
-describe('GRANDMASTER on a 40-column PETSCII caller', () => {
+describeIfInstalled('GRANDMASTER on a 40-column PETSCII caller', () => {
   it('the menu is on the glass before anything is chosen', () => {
     const run = driveAt40([{ key: ENTER, wait: 700 }]);
     expect(run.errors).toEqual([]);

@@ -37,17 +37,56 @@ describe('BBSApi installed-door lookup', () => {
     expect(repo.getInstallByCommand('ACCV103')?.name).toBe('Account Editor');
   });
 
-  it('does not import the catalog service any more', () => {
+  it('does not BUILD the list from the catalog service', () => {
     // The door list moved to door-list.ts on 2026-08-31 (phase B), taking
     // the door_installs import with it. The rule this pins is unchanged:
     // the list is built from door_installs, never from the retired
     // door_catalog service. Both files are checked so neither can quietly
     // reacquire it.
+    //
+    // WHAT CHANGED, 2026-09-08: this used to forbid the STRING
+    // 'door-catalog.service' anywhere in door-list.ts, and bdde95215 then had
+    // to put a bare `import './door-catalog.service';` back - not to build
+    // anything with, but for its side effect. A door runs in its own context
+    // and cannot import backend paths, so DOORMAN's getCatalogSvc() finds the
+    // catalogue by scanning require.cache for that key. Nothing imported it,
+    // so the cache never held it, and DOORMAN's owner-mode browse degraded to
+    // an empty list that looked like an empty repository.
+    //
+    // So the pin is on the PROPERTY rather than on the text: no VALUE may be
+    // imported from the catalog service, which is what "built from it" would
+    // look like. A bare side-effect import is not that, and is required.
+    //
+    // Stated as an ALLOWLIST rather than a list of forbidden import spellings.
+    // The first attempt at this matched `import {x} from` and `import x from`
+    // and let `const c = require(...)` and `import * as c from` straight
+    // through - and a rule that has to enumerate every syntax for "use" is one
+    // that will be wrong again the next time somebody writes a different one.
+    // Every line naming the catalog service must be a comment or the bare
+    // import; anything else is a use, whatever it looks like.
     const read = (file: string) => fs.readFileSync(
       path.join(__dirname, '..', '..', 'src', 'doors', file), 'utf-8');
+
+    const uses = read('door-list.ts')
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => /door-catalog\.service/.test(line))
+      .filter(line => !line.startsWith('*') && !line.startsWith('//') && !line.startsWith('/*'))
+      .filter(line => !/^import\s+['"]\.\/door-catalog\.service['"];?$/.test(line));
+
+    expect(uses).toEqual([]);
     expect(read('BBSApi.ts')).not.toMatch(/door-catalog\.service/);
-    expect(read('door-list.ts')).not.toMatch(/door-catalog\.service/);
     expect(read('door-list.ts')).toMatch(/door-installs\.repository/);
+  });
+
+  it('keeps the catalog service in require.cache for DOORMAN', () => {
+    // The other half of the same rule, and the one that actually broke: the
+    // bare import must STAY. It has no named binding on purpose - a named
+    // import nothing used would be elided by the compiler and DOORMAN's
+    // catalogue browse would go quietly empty again (bdde95215).
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'src', 'doors', 'door-list.ts'), 'utf-8');
+    expect(source).toMatch(/^import\s+['"]\.\/door-catalog\.service['"];?\s*$/m);
   });
 
   it('overlays all five catalog fields onto the door object', () => {
