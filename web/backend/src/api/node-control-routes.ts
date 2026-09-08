@@ -56,18 +56,24 @@ export function createNodeControlRouter(io: SocketIOServer): ReturnType<typeof e
   /**
    * Helper: Validate node exists and return socket ID
    */
+  /*
+   * A node is valid when the board HAS a session on it.
+   *
+   * This used to demand a socket.io socket id as well, from a map that holds
+   * web sockets and nothing else - the same map the kick handler below stopped
+   * using for exactly that reason. So every telnet and SSH node failed here
+   * before the handler could reach it, and a web caller who had reconnected
+   * could fail on either side of the disagreement. What can actually be
+   * reached is the emitter registry's question, and the handlers ask it.
+   */
   function validateNode(nodeId: number): { success: boolean; socketId?: string; error?: string } {
     const session = sessions.get(nodeId.toString());
     if (!session) {
       return { success: false, error: `Node ${nodeId} not found or offline` };
     }
 
-    const socketId = getSocketIdByNodeId(nodeId);
-    if (!socketId) {
-      return { success: false, error: `Node ${nodeId} has no active socket connection` };
-    }
-
-    return { success: true, socketId };
+    // Still reported when there is one, for the log line; never required.
+    return { success: true, socketId: getSocketIdByNodeId(nodeId) };
   }
 
   /**

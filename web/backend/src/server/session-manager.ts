@@ -268,6 +268,20 @@ console.error('[Session Manager] CRITICAL: Tried to set session without nodeId!'
   // Store the mapping: socket.id → nodeId
   socketToNodeId.set(socketId, nodeId);
 
+  /*
+   * AND ON THE SESSION ITSELF, so the board has ONE answer to "which socket is
+   * this caller on".
+   *
+   * `socketToNodeId` was updated here on every (re)connect while
+   * `session.socketId` was not, and the two are read by different callers: the
+   * admin's node-control guard asks the map, and the session-emitter registry
+   * asks the session. A web caller who had reconnected passed the guard and
+   * then had no emitter, which is exactly what the sysop hit trying to kick
+   * himself off node 1 - "POST /api/nodes/1/kick 404" - while the map said the
+   * node was there.
+   */
+  (session as { socketId?: string }).socketId = socketId;
+
   // Store the session: nodeId → session
   sessions.set(nodeId.toString(), session);
 
