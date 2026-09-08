@@ -7,7 +7,7 @@
  */
 process.env.SKIP_DB_INIT = '1';
 
-import { chatIsLive, activeChatSessions, callerTypedChar, CHAT_COLOR_USER }
+import { chatIsLive, activeChatSessions, callerTypedChar, cancelThinkingDots, CHAT_COLOR_USER }
   from '../../src/handlers/operator-chat/chat-stream';
 import { registerConnectionEmitter } from '../../src/server/session-emitter-registry';
 import { userSessions } from '../../src/server/session-manager';
@@ -129,6 +129,50 @@ describe('the dots the co-sysop types while it thinks', () => {
     jest.advanceTimersByTime(THINKING_DOTS_AFTER_MS + 300);
     stop();
     expect(jest.getTimerCount()).toBe(0);
+  });
+
+  /**
+   * ONE SLOT PER CHAT, so two windows on one chat cannot both be live.
+   *
+   * The slot was single-shot and unguarded while nothing called
+   * `startThinkingDots` at all. The handler calls it now, once per model call,
+   * and `botBusy` is what keeps those one at a time - but a slot that strands
+   * a window the moment that guard is wrong leaves dots on the caller's line
+   * with nothing holding the function that erases them.
+   */
+  describe('a second window on the same chat', () => {
+    it("rubs out the first one's dots instead of stranding them", () => {
+      const seen: string[] = [];
+      const chatSession = fakeChat('p1');
+      startThinkingDots((b) => seen.push(b), chatSession, 'p1', { gapMs: () => 300 });
+      jest.advanceTimersByTime(THINKING_DOTS_AFTER_MS + 300 * 2);
+      expect(seen.join('')).toBe('...');
+      seen.length = 0;
+
+      startThinkingDots((b) => seen.push(b), chatSession, 'p1', { gapMs: () => 300 });
+
+      // The first window's three dots come off the line as the second opens.
+      expect(seen.join('')).toBe('\b \b'.repeat(3));
+      // And only the second one is still ticking.
+      expect(jest.getTimerCount()).toBe(1);
+    });
+
+    it('is the one the chat can still cancel afterwards', () => {
+      const seen: string[] = [];
+      const chatSession = fakeChat('p1');
+      const first = startThinkingDots((b) => seen.push(b), chatSession, 'p1', { gapMs: () => 300 });
+      startThinkingDots((b) => seen.push(b), chatSession, 'p1', { gapMs: () => 300 });
+      // The stranded window's stop, arriving late, must not empty the slot the
+      // live window is registered in.
+      first();
+      jest.advanceTimersByTime(THINKING_DOTS_AFTER_MS + 300 * 2);
+      seen.length = 0;
+
+      cancelThinkingDots(chatSession);
+
+      expect(seen.join('')).toBe('\b \b'.repeat(3));
+      expect(jest.getTimerCount()).toBe(0);
+    });
   });
 
   /**

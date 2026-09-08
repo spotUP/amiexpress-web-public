@@ -28,7 +28,7 @@
  * more cleverly is not the fix.
  */
 import type { ChatSession } from '../../types/operator-chat.types';
-import { chatIsLive, setThinkingDotsCanceller } from './chat-stream';
+import { chatIsLive, setThinkingDotsCanceller, clearThinkingDotsCanceller, cancelThinkingDots } from './chat-stream';
 
 /** Under this, the caller sees nothing. */
 export const THINKING_DOTS_AFTER_MS = 1200;
@@ -62,7 +62,7 @@ export function startThinkingDots(
     if (stopped) return;
     stopped = true;
     if (timer) { clearTimeout(timer); timer = null; }
-    setThinkingDotsCanceller(chatSession, null);
+    clearThinkingDotsCanceller(chatSession, stop);
     // Rub out exactly what was written. A chat that has ended gets nothing:
     // its caller is somewhere else and those bytes would land there.
     if (written > 0 && chatIsLive(chatSession, pageId)) emit('\b \b'.repeat(written));
@@ -75,7 +75,7 @@ export function startThinkingDots(
       // Nothing to erase into a chat that is over, but the slot must not keep
       // holding a stop() for a chat that has moved on.
       stopped = true;
-      setThinkingDotsCanceller(chatSession, null);
+      clearThinkingDotsCanceller(chatSession, stop);
       return;
     }
     emit('.');
@@ -83,6 +83,11 @@ export function startThinkingDots(
     timer = setTimeout(tick, gapMs());
   };
 
+  // ONE WINDOW AT A TIME. The slot holds a single `stop`, so a second window
+  // opened on the same chat would strand the first: its dots left standing on
+  // the line, and nothing holding the function that erases them. Stopping the
+  // previous one first rubs its dots out and hands the slot over cleanly.
+  cancelThinkingDots(chatSession);
   // Registered before the first dot: a caller who types inside the silent
   // threshold ends the window too, and erases the nothing it wrote.
   setThinkingDotsCanceller(chatSession, stop);

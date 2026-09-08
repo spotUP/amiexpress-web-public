@@ -27,6 +27,36 @@ import { OperatorChatRepository } from '../../src/database/operator-chat.reposit
 import { registerConnectionEmitter } from '../../src/server/session-emitter-registry';
 import { userSessions } from '../../src/server/session-manager';
 import { planNaturalTyping, applyTypingPlan, stripEngineTag, getGrumpySysopResponse } from '../../src/handlers/grumpy-sysop-bot.handler';
+import { THINKING_DOTS_AFTER_MS } from '../../src/handlers/operator-chat/thinking-dots';
+
+/**
+ * HOLDING THE MODEL BACK, so a reply is slow enough to be worth dots.
+ *
+ * Nothing on the real path is reliably slower than THINKING_DOTS_AFTER_MS
+ * without going out to a network: `botThinkTime` is spent AFTER the reply
+ * already exists (the /quit-while-thinking test below leans on that), and a
+ * provider with no key answers at once by design. So the model call itself is
+ * held here, and only for the test that sets `mockHold` - every other test in
+ * this file, including the one that asserts the real no-provider reply, goes
+ * through `jest.requireActual`.
+ *
+ * A factory and not `jest.spyOn`: @swc/jest emits each export as a
+ * non-configurable getter, and spying on one throws "Cannot redefine
+ * property". The `mock` prefix is what lets the hoisted factory close over it.
+ */
+let mockHold: { ms: number; reply: string } | null = null;
+jest.mock('../../src/handlers/grumpy-sysop-bot.handler', () => {
+  const actual = jest.requireActual('../../src/handlers/grumpy-sysop-bot.handler');
+  return {
+    ...actual,
+    getGrumpySysopResponse: async (...args: unknown[]) => {
+      if (!mockHold) return (actual as any).getGrumpySysopResponse(...args);
+      const { ms, reply } = mockHold;
+      await new Promise((r) => setTimeout(r, ms));
+      return reply;
+    },
+  };
+});
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -389,5 +419,69 @@ describe('the chat is one stream', () => {
     // TYPES it one at a time, after a page timeout and a first reply. The
     // waits above are all conditions, so this bound is only reached on a real
     // failure - it is not a sleep.
+  }, 40000);
+
+  it('shows the caller it is thinking when the reply is slow, and rubs it out', async () => {
+    // The reply is held back past the dot threshold, so the caller sees dots;
+    // by the time the reply has been typed they are gone again. The held
+    // reply contains no full stop, so a chunk that is exactly '.' can only be
+    // a thinking dot.
+    mockHold = { ms: THINKING_DOTS_AFTER_MS + 900, reply: 'no full stops in this one' };
+    try {
+      const w = makeWorld();
+      H.initOperatorChatHandler(w.io, w.repo);
+      await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
+      await untilTrue('the bot to finish its opening line', () => handedBack(w.seen));
+
+      const before = w.seen.length;
+      await H.handleUserChatMessage(w.io, w.repo, w.session, 'something slow');
+      await untilTrue('the dots to appear', () => w.seen.slice(before).some((c) => c === '.'));
+      // And bare: a raw \x1b[36m on a dot would leave line.lastSender saying
+      // `user` while the terminal stood in the sysop's cyan, so the caller's
+      // next key would come out cyan - verbatim the bug callerTypedChar was
+      // fixed for ("sometimes i get the sysop cyan when i type", 2026-09-08).
+      expect(w.seen.slice(before).join('')).not.toContain('\x1b[36m.');
+
+      await untilTrue('the reply to finish', () => handedBack(w.seen.slice(before)));
+      const shownNow = shown(w.seen.slice(before));
+      // Every dot the board typed while thinking was rubbed out: what is left is
+      // the reply, and a run of leading dots would be the bug.
+      expect(shownNow.trimStart().startsWith('.')).toBe(false);
+      expect(shownNow.replace(/\s/g, '')).toContain('nofullstopsinthisone');
+    } finally {
+      mockHold = null;
+    }
+  }, 40000);
+
+  it('a caller who quits while the co-sysop is thinking takes its dots with him', async () => {
+    // CTRL-C (express.e:6118) and /quit both end the chat through endChat, and
+    // both used to leave the thinking dots standing on the line above
+    // "Ending Chat." - the window self-stopped, so nothing leaked, but nothing
+    // rubbed the dots out either.
+    mockHold = { ms: THINKING_DOTS_AFTER_MS + 1500, reply: 'never typed' };
+    try {
+      const w = makeWorld();
+      H.initOperatorChatHandler(w.io, w.repo);
+      await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
+      await untilTrue('the bot to finish its opening line', () => handedBack(w.seen));
+
+      const before = w.seen.length;
+      await H.handleUserChatMessage(w.io, w.repo, w.session, 'something slow');
+      await untilTrue('the dots to appear', () => w.seen.slice(before).some((c) => c === '.'));
+
+      await H.handleUserQuitChat(w.io, w.repo, w.session, w.socket);
+      const text = shown(w.seen.slice(before));
+      expect(text).toContain('Ending Chat.');
+      // Nothing of the thinking window is left ahead of the end-of-chat line.
+      expect(text.slice(0, text.indexOf('Ending Chat.'))).not.toContain('.');
+
+      // And the held reply, arriving after the chat is gone, types nothing -
+      // no dot of its own either.
+      const after = w.seen.length;
+      await wait(2500);
+      expect(w.seen.slice(after).some((c) => c === '.')).toBe(false);
+    } finally {
+      mockHold = null;
+    }
   }, 40000);
 });

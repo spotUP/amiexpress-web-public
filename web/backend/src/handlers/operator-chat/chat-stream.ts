@@ -139,9 +139,21 @@ function emitToCaller(io: any, session: BBSSession, bytes: string): void {
  */
 type ChatWithDots = ChatSession & { thinkingDotsStop?: (() => void) | null };
 
-/** Called by `thinking-dots` alone: `null` when its dots are over. */
-export function setThinkingDotsCanceller(chatSession: ChatSession, cancel: (() => void) | null): void {
+/** Called by `thinking-dots` alone, when a window opens. */
+export function setThinkingDotsCanceller(chatSession: ChatSession, cancel: () => void): void {
   (chatSession as ChatWithDots).thinkingDotsStop = cancel;
+}
+
+/**
+ * Called by `thinking-dots` alone, when a window closes - and ONLY if the slot
+ * still holds that window's own `stop`. There is one slot per chat, so a
+ * window that ended late (a chat that had already moved on, say) would
+ * otherwise empty the slot belonging to the window that replaced it, and the
+ * caller's next key would find nothing to cancel and type into live dots.
+ */
+export function clearThinkingDotsCanceller(chatSession: ChatSession, cancel: () => void): void {
+  const cs = chatSession as ChatWithDots;
+  if (cs.thinkingDotsStop === cancel) cs.thinkingDotsStop = null;
 }
 
 /** End any thinking window this chat is in, erasing its dots. */

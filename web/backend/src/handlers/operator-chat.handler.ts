@@ -125,9 +125,10 @@ import { report } from '../achievements/reporter';
 const bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
 
 // Active chat sessions (in-memory)
-import { activeChatSessions, deliverToCaller, chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER } from './operator-chat/chat-stream';
+import { activeChatSessions, deliverToCaller, chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER } from './operator-chat/chat-stream';
+import { startThinkingDots } from './operator-chat/thinking-dots';
 // The caller's half of the chat lives in ./operator-chat/chat-stream; these stay importable from here.
-export { chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER };
+export { chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER };
 
 // Track active paging dot intervals by pageId (for reliable cleanup)
 const activePagingIntervals = new Map<string, NodeJS.Timeout>();
@@ -1292,7 +1293,20 @@ console.log('[Operator Chat] Bot busy, queuing message');
       const config = repository.getConfig();
       const aiConfig = aiConfigFrom(config);
 
+      // THE CALLER IS WATCHING A DEAD LINE WHILE THE MODEL THINKS - several
+      // seconds of it, and a real sysop would have typed something. Dots
+      // start only if the wait runs long (thinking-dots.ts) and are rubbed
+      // out before a character of the reply is typed. `botBusy` above is what
+      // keeps this to one window at a time per chat: the next model call for
+      // this chat is only started from inside the `.then` below, after
+      // `stopDots()` has already run.
+      const dotReach = emitterForUserId(page.userId, io);
+      const stopDots = dotReach
+        ? startThinkingDots((bytes) => dotReach.emitter.emit('ansi-output', bytes), chatSession, pageId)
+        : () => undefined;
+
       getGrumpySysopResponse(message, context, aiConfig).then(async botResponse => {
+        stopDots();
         context.messageHistory.push({ role: 'bot', content: botResponse });
         (chatSession as any).botMessageHistory = context.messageHistory;
         await sendBotMessageWithTyping(io, repository, pageId, botResponse, nodeId, page, aiConfig);
@@ -1302,6 +1316,8 @@ console.log('[Operator Chat] Bot busy, queuing message');
         // Process any queued messages
         processBotQueue(io, repository, pageId, chatSession as any);
       }).catch(err => {
+        // A model that throws must not leave its dots standing on the line.
+        stopDots();
 console.error('[Operator Chat] Bot response error:', err);
         (chatSession as any).botBusy = false;
       });
@@ -1335,6 +1351,12 @@ console.error('[Operator Chat] Bot response error:', err);
 async function endChat(io: any, repository: OperatorChatRepository, pageId: string): Promise<void> {
   const chatSession = activeChatSessions.get(pageId);
   if (!chatSession) return;
+
+  // BEFORE the chat is marked ended, so the backspaces still reach the caller:
+  // `stop()` erases nothing into a chat `chatIsLive` has already written off.
+  // CTRL-C (command.handler, express.e:6118) and /quit both land here, and
+  // both used to leave a row of dots sitting above "Ending Chat.".
+  cancelThinkingDots(chatSession);
 
   repository.updatePageStatus(pageId, PageStatus.ENDED);
   await logChatTranscript(repository, chatSession);
