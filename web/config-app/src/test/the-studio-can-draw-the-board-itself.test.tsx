@@ -128,12 +128,19 @@ describe('the board\'s own screens, in the studio', () => {
     themes.themes = registry;
   });
 
-  it('show no redraw checklist for the board itself', async () => {
+  /*
+   * The board is not redrawing itself, so it gets no list of screens still to
+   * do - but it DOES get the art around the screens it writes, which exists
+   * nowhere else. Two slots, both undrawn on a board that has never had them.
+   */
+  it('offer only the art around what the board writes', async () => {
     const user = userEvent.setup();
     render(<ArtistStudioPage />, { wrapper });
 
     await user.selectOptions(await screen.findByLabelText('Theme'), 'default');
 
-    await waitFor(() => expect(screen.getByText(/0 of 0 screens drawn/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/0 of 2 screens drawn/i)).toBeTruthy());
+    expect(screen.getByText('AchieveTop.Header')).toBeTruthy();
+    expect(screen.getByText('AchieveTop.Tailer')).toBeTruthy();
   });
 });

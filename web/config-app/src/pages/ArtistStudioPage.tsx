@@ -84,6 +84,11 @@ export function ArtistStudioPage() {
    * The gallery alone showed only files that exist, so the screens with the
    * most to gain - the ones the board has no art for at all - were invisible,
    * and there was no way to start one.
+   *
+   * `default` is the board itself and gets no "still to redraw" list - but it
+   * DOES get the art around the screens the board writes, which exists nowhere
+   * else and which the sysop went looking for: "i cant find the achievement
+   * frames in ansi studio".
    */
   /*
    * The checklist is a list of what a THEME still has to redraw. The board is
@@ -92,7 +97,7 @@ export function ArtistStudioPage() {
    * gallery and no slots.
    */
   const slots = useMemo(
-    () => (theme && theme.slug !== 'default' ? themeChecklist(data, theme.slug) : []),
+    () => (theme ? themeChecklist(data, theme.slug) : []),
     [data, theme],
   );
   const progress = useMemo(() => themeProgress(slots), [slots]);

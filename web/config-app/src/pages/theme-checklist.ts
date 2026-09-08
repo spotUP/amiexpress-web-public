@@ -68,6 +68,19 @@ export function themeChecklist(
   index: ScreenIndexShape | undefined,
   themeSlug: string,
 ): ThemeSlot[] {
+  /*
+   * THE BOARD'S OWN SCREENS ARE NOT A THEME TO FILL IN.
+   *
+   * `default` IS the board, so a checklist of "screens still to redraw" is
+   * meaningless there - the board's missing screens are the sysop's business
+   * and the Screen files page is where they are managed. With ONE exception,
+   * and it is the reason this branch exists: the art around a screen the board
+   * WRITES. `Screens/AchieveTop.Header` and `.Tailer` do not exist on this
+   * board at all, and with no slot there is no way to make them - the sysop
+   * went looking and found nothing: "i cant find the achievement frames in
+   * ansi studio tell me exactly where to find them".
+   */
+  const boardsOwn = themeSlug === 'default';
   const conferences = (index?.conferences ?? []).map(c => c.id);
   const files = index?.files ?? {};
   const root = `Themes/${themeSlug}`;
@@ -80,6 +93,8 @@ export function themeChecklist(
   );
 
   const slots: ThemeSlot[] = [];
+  /** Where a board-scope file lives: in the theme, or in the board itself. */
+  const boardDir = boardsOwn ? 'Screens' : `${root}/${SCOPE_DIR.board}`;
   const push = (screen: string, scope: 'node' | 'conf' | 'board', conference?: number) => {
     const file = getScreenFileName(screen);
     const dir = scope === 'conf'
@@ -95,6 +110,37 @@ export function themeChecklist(
       drawn: drawnAt.has(path.toLowerCase().replace(/\.(txt|gr|ans|asc|ibm)$/i, '')),
     });
   };
+
+  /*
+   * THE FURNITURE AROUND A SCREEN THE BOARD WRITES.
+   *
+   * `AchieveTop.txt` is regenerated every fifteen minutes and is excluded
+   * above - drawing it is wasted work. What a designer DOES own is the pair
+   * spliced around it: `AchieveTop.Header` over the two leaderboards and
+   * `.Tailer` under them. A theme's own pair now wins over the board's
+   * (`achievements/bulletin.ts`), so these are real slots, and without them
+   * the sysop had no way to restyle his achievements bulletin at all.
+   */
+  for (const [screen, dirType] of Object.entries(SCREEN_DIR_MAP)) {
+    if (!isBoardWritten(`${getScreenFileName(screen)}.txt`)) continue;
+    const scope = scopeOf(dirType);
+    if (scope !== 'board') continue;
+    for (const [suffix, where] of [['Header', 'above'], ['Tailer', 'below']] as const) {
+      const path = `${boardDir}/${getScreenFileName(screen)}.${suffix}`;
+      slots.push({
+        screen: `${getScreenFileName(screen)}.${suffix}`,
+        scope: 'board',
+        description: `Your art ${where} the ${describeScreen(screen).toLowerCase() || screen}`,
+        path,
+        drawn: drawnAt.has(path.toLowerCase().replace(/\.(txt|gr|ans|asc|ibm)$/i, '')),
+      });
+    }
+  }
+
+
+  // The board draws no catalogue slots - only the art above, which the loop
+  // above has already produced.
+  if (boardsOwn) return slots;
 
   for (const [screen, dirType] of Object.entries(SCREEN_DIR_MAP)) {
     // A screen the BOARD writes is not a slot. `ACHIEVETOP` is the
@@ -113,32 +159,6 @@ export function themeChecklist(
     // artist sees the screen exists rather than a list that grows under them.
     if (conferences.length === 0) push(screen, 'conf', 1);
     else for (const id of conferences) push(screen, 'conf', id);
-  }
-
-  /*
-   * THE FURNITURE AROUND A SCREEN THE BOARD WRITES.
-   *
-   * `AchieveTop.txt` is regenerated every fifteen minutes and is excluded
-   * above - drawing it is wasted work. What a designer DOES own is the pair
-   * spliced around it: `AchieveTop.Header` over the two leaderboards and
-   * `.Tailer` under them. A theme's own pair now wins over the board's
-   * (`achievements/bulletin.ts`), so these are real slots, and without them
-   * the sysop had no way to restyle his achievements bulletin at all.
-   */
-  for (const [screen, dirType] of Object.entries(SCREEN_DIR_MAP)) {
-    if (!isBoardWritten(`${getScreenFileName(screen)}.txt`)) continue;
-    const scope = scopeOf(dirType);
-    if (scope !== 'board') continue;
-    for (const [suffix, where] of [['Header', 'above'], ['Tailer', 'below']] as const) {
-      const path = `${root}/${SCOPE_DIR.board}/${getScreenFileName(screen)}.${suffix}`;
-      slots.push({
-        screen: `${getScreenFileName(screen)}.${suffix}`,
-        scope: 'board',
-        description: `Your art ${where} the ${describeScreen(screen).toLowerCase() || screen}`,
-        path,
-        drawn: drawnAt.has(path.toLowerCase().replace(/\.(txt|gr|ans|asc|ibm)$/i, '')),
-      });
-    }
   }
 
   /*

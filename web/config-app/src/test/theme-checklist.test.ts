@@ -191,3 +191,32 @@ describe('the art around a generated screen', () => {
     expect(slots.find(s => s.screen === 'AchieveTop.Tailer')?.drawn).toBe(false);
   });
 });
+
+/**
+ * The BOARD's own frame, which exists nowhere else.
+ *
+ * `default` is the board, so it gets no list of screens still to redraw - but
+ * `Screens/AchieveTop.Header` and `.Tailer` are not on this board at all, and
+ * with no slot there is no way to make them. The sysop went looking and found
+ * nothing: "i cant find the achievement frames in ansi studio tell me exactly
+ * where to find them".
+ */
+describe('the board\'s own screens in the studio', () => {
+  it('offer the art around what the board writes, and nothing else', () => {
+    const slots = themeChecklist(undefined, 'default');
+
+    expect(slots.map(s => s.screen).sort()).toEqual(['AchieveTop.Header', 'AchieveTop.Tailer']);
+  });
+
+  it('point at the board\'s own directory, not a theme\'s', () => {
+    const header = themeChecklist(undefined, 'default').find(s => s.screen === 'AchieveTop.Header');
+
+    expect(header?.path).toBe('Screens/AchieveTop.Header');
+  });
+
+  it('still give a theme its own copy of the same art', () => {
+    const header = themeChecklist(undefined, 'neon').find(s => s.screen === 'AchieveTop.Header');
+
+    expect(header?.path).toBe('Themes/neon/Board/AchieveTop.Header');
+  });
+});
