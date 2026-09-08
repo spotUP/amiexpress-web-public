@@ -1011,6 +1011,21 @@ console.log(`[DISCONNECT] finalizeDisconnectCleanup: no userId, session.nodeId=$
     pendingDisconnects.delete(userId);
   }
 
+  // OFF THE BOARD FIRST, THEN THE PAPERWORK.
+  //
+  // Everything below - the callers log, SAmiLog, the achievements, the
+  // LOGOFF BATCHES - is bookkeeping about a caller who has already gone, and
+  // the batches run doors: `runLogoffBatches` awaited a whole 68K emulator
+  // (ByteKillHandler, 2026-09-08 05:28) while this session still sat in the
+  // `sessions` map. /health counts that map, so the board reported a caller
+  // who had closed his browser - and the deploy guard refused to deploy for
+  // him. A door that hangs or throws left him there for ever.
+  //
+  // The maps are the board's answer to "who is on"; they are cleared here,
+  // before anything that can be slow or throw. The bookkeeping below holds
+  // its own `session` object and needs no map entry.
+  forgetSession(session, socketId, userId);
+
   // Log user logout if they were logged in (express.e:9493 callersLog)
   if (session.user) {
     await callersLog(session.user.id, session.user.username, 'Logged off');
@@ -1163,32 +1178,37 @@ console.error(`[LOGOFF] Error deleting node files:`, error);
   // holding this very machine, and they are valid against nothing else.
   disposePetsciiSessionModel(session);
 
-  // Clean up session storage
-  if (userId) {
-    for (const [id, uid] of socketToUser.entries()) {
-      if (uid === userId) {
-        socketToUser.delete(id);
-      }
-    }
-    if (session.nodeId) {
-      for (const [id, nodeId] of socketToNodeId.entries()) {
-        if (nodeId === session.nodeId) {
-          socketToNodeId.delete(id);
-        }
-      }
-    }
-    userSessions.delete(userId);
-    if (session.nodeId) {
-console.log(`[DISCONNECT] Deleting session for node ${session.nodeId} from sessions map`);
-      sessions.delete(session.nodeId.toString());
-console.log(`[DISCONNECT] Sessions map now has ${sessions.size} entries`);
-    }
-  } else {
+  triggerSamiLogRefresh();
+}
+
+/**
+ * Take a session out of every map that says a caller is on the board.
+ *
+ * `sessions` (nodeId -> session) is what WHO and /health read, `userSessions`
+ * is what a cross-session push resolves through, and the two socket maps are
+ * how a socket finds either. A session left in any of them is a caller the
+ * board believes is still here.
+ */
+export function forgetSession(session: BBSSession, socketId: string, userId: string): void {
+  if (!userId) {
 console.log(`[DISCONNECT] No userId, calling deleteSession for socket ${socketId}`);
     deleteSession(socketId);
+    return;
   }
-
-  triggerSamiLogRefresh();
+  for (const [id, uid] of socketToUser.entries()) {
+    if (uid === userId) socketToUser.delete(id);
+  }
+  if (session.nodeId) {
+    for (const [id, nodeId] of socketToNodeId.entries()) {
+      if (nodeId === session.nodeId) socketToNodeId.delete(id);
+    }
+  }
+  userSessions.delete(userId);
+  if (session.nodeId) {
+console.log(`[DISCONNECT] Deleting session for node ${session.nodeId} from sessions map`);
+    sessions.delete(session.nodeId.toString());
+console.log(`[DISCONNECT] Sessions map now has ${sessions.size} entries`);
+  }
 }
 
 function resolveTransferPath(session: any, amigaPath: string): string | null {
