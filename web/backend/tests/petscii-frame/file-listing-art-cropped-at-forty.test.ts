@@ -153,16 +153,13 @@ async function runFileListRaw(session: any): Promise<string[]> {
   // FILE_ID.DIZ shown to a 40-column caller. The record BLOCK renders the
   // index's prose description; the LIST row carries no description at all.
   //
-  // AND NOTHING IN `src/` CALLS `dizBlockFor` (parity audit, 2026-09-08,
-  // ledger item P0-3b). This block builds the pipeline by hand, so what it
-  // pins is the LADDER's behaviour, not a screen any caller can reach today:
-  // at 40 columns the live surfaces are the LIST row (no description) and the
-  // RECORD block, which squeezes and word-wraps the description to two rows -
-  // so a wide DIZ is not cropped there, it is not shown at all. Wiring the
-  // ladder in is SP7 of the C64 file-view design and needs the sysop's call on
-  // when the fallback fires; until then `src/utils/diz-fallback.util.ts` is
-  // parked rather than deleted, and this comment is here so the next reader
-  // does not mistake a green suite for a reachable feature.
+  // THIS BLOCK BUILDS THE PIPELINE BY HAND, and did so for a reason worth
+  // recording: until 2026-09-08 nothing in `src/` called `dizBlockFor` at all,
+  // so what this suite pinned was a ladder no caller could reach. SP7 wired it
+  // - `FileListingHandler.showFileRecord` falls back to the ladder for a record
+  // with no indexed metadata and no group - and
+  // `tests/handlers/file-record-diz-fallback.test.ts` drives THAT surface. What
+  // stays here is the ladder's own arithmetic on a known DIZ.
   const { readDirFile } = require('../../src/utils/dir-file-reader.util');
   const { dizBlockFor } = require('../../src/utils/diz-fallback.util');
   const { dizTextOf } = require('../../src/services/file-index.service');

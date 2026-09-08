@@ -624,8 +624,17 @@ console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
     entry: DirFileEntry,
     ordinal: number,
   ): Promise<void> {
-    const layout = getFileViewLayout(config.get('dataDir'));
+    const bbsRoot = config.get('dataDir');
+    const layout = getFileViewLayout(bbsRoot);
     const columns = sessionColumns(session);
+
+    // WHAT THE INDEX KNOWS. `lookupFileFacts` was written for this surface in
+    // SP4 and had no caller: reading it needs the board's group-tag
+    // fingerprint, which `file-facts.service.ts` now caches. A board that has
+    // never run `build-file-index.ts` gets null here and loses nothing it had.
+    const { factsForRecord } = require('../../services/file-facts.service');
+    const { db } = require('../../database');
+    const facts = await factsForRecord(db, session.currentConf, entry.filename.trim(), bbsRoot);
 
     const fields: FileRecordFields = {
       num: ordinal,
@@ -635,13 +644,61 @@ console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
       flag: entry.statusMarker,
       isNew: this.isNewToCaller(entry, session),
       date: entry.uploadDateDisplay,
-      desc: entry.description,
+      desc: facts?.description ?? entry.description,
+      version: facts?.version ?? null,
+      group: facts?.release_group ?? null,
+      author: facts?.author ?? null,
     };
 
     socket.emit('ansi-output', '\r\n');
+
+    // THE DIZ FALLBACK (SP7 of the C64 file view, decision 14). "For a record
+    // with no metadata and no group - the DIZ art is all there is." So it
+    // fires exactly there: nothing indexed, no group, and a DIZ to show. The
+    // ladder squeezes prose, reflows what is still too wide and crops art at
+    // the screen edge, and `DIZ_ART_SKIP=YES` on the command's .info replaces
+    // a cropped picture with one line (decision 15).
+    const dizRows = this.dizFallbackRows(entry, facts, fields, columns, session);
+    if (dizRows.length > 0) {
+      for (const row of dizRows) socket.emit('ansi-output', row + '\r\n');
+      // The description has been shown, as the DIZ. Leaving it in the block
+      // as well would print it twice, squeezed the second time.
+      fields.desc = null;
+    }
+
     for (const row of renderFileBlock(fields, layout.record, columns)) {
       await this.emitTemplateRow(socket, session, row);
     }
+  }
+
+  /**
+   * The DIZ block for a record that has nothing else, or nothing at all.
+   *
+   * Empty means "do not fall back": there is metadata, or a group, or there
+   * is no DIZ, or the caller is not narrow - at 80 columns the record view is
+   * unchanged and the DIR file's own rows are what a caller sees.
+   */
+  private static dizFallbackRows(
+    entry: DirFileEntry,
+    facts: unknown | null,
+    fields: FileRecordFields,
+    columns: number,
+    session: Session,
+  ): string[] {
+    if (!isNarrow(session)) return [];
+    if (facts) return [];
+    if ((fields.group ?? '').trim() !== '') return [];
+
+    const { dizTextOf } = require('../../services/file-index.service');
+    const diz = String(dizTextOf(entry) ?? '');
+    if (diz.trim() === '') return [];
+
+    const { dizBlockFor, dizArtSkipEnabled } = require('../../utils/diz-fallback.util');
+    const { commandCache } = require('../command-execution.handler');
+    // The switch is the COMMAND's, per the design: a sysop who would rather
+    // see nothing than half a picture sets it on `FI.info`.
+    const registration = commandCache.bbscmd.get('FI');
+    return dizBlockFor(diz.split('\n'), columns, dizArtSkipEnabled(registration));
   }
 
   /**

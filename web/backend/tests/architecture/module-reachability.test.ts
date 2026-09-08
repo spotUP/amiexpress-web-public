@@ -5,8 +5,8 @@
  * running server does not import: `handlers/command-handler/*` is a barrel
  * nothing imports, and the live dispatcher `handlers/command.handler.ts` kept
  * the old behaviour. The fixes were real, their tests passed, and the board did
- * not change. Phase 0 of the plan deleted sixteen of those files; twenty-two
- * are unreachable today, each with its reason below.
+ * not change. Phase 0 of the plan deleted sixteen of those files and wired up
+ * a seventeenth; twenty-one are unreachable today, each with its reason below.
  *
  * This is the ratchet. The known-dead files are listed below WITH THE REASON
  * each one is still there, and the list may only shrink: delete a file and
@@ -73,14 +73,6 @@ const KNOWN_UNREACHABLE = new Map<string, string>([
   ['src/handlers/examples/modern-handler.example.ts', 'documentation: the example src/handlers/examples/README.md walks through, for a DI pattern the live handlers do use'],
   ['src/nodes/index.ts', 'barrel: every consumer imports NodeStatusManager/MulticomManager directly'],
 
-  // PARKED BY DECISION, 2026-09-08 (ledger item P0-3b). The DIZ fallback
-  // ladder is designed behaviour with no live surface to hang on: at 40
-  // columns the file view shows a list row with no description, or a record
-  // block that squeezes the description to two rows, so a wide FILE_ID.DIZ is
-  // never cropped there - it is never shown. Wiring it is SP7 of the C64
-  // file-view design and needs the sysop's word on when the fallback fires.
-  // Until then this is the only copy of that design and must not be deleted.
-  ['src/utils/diz-fallback.util.ts', 'parked by decision: the DIZ ladder has no live surface yet - see ledger P0-3b'],
 ]);
 
 const BACKEND = path.resolve(__dirname, '..', '..');
