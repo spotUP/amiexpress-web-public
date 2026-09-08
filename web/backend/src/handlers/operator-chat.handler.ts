@@ -915,7 +915,19 @@ console.log(`[Operator Chat] Page ${pageId}: StartChat screen not shown (${(err 
     // current; the sysop colour comes after (6092-6094), and here it comes
     // with the first character the sysop sends, as the line model does it.
     const startName = sysopId === 'bot' ? sysopHandle : (loadBBSConfig(bbsRoot).sysop_name || sysopHandle);
-    if (!shown) reach.emitter.emit('ansi-output', `\r\n\r\nThis is ${startName}, How can I help you??\r\n\r\n`);
+    if (!shown) {
+      // THE ONE BOT LINE THAT USED TO BE PASTED. Everything the co-sysop says
+      // afterwards types a character at a time, so a greeting that arrived
+      // whole read as a glitch; same speaker, same route. This branch is the
+      // board introducing whoever answered, human sysop or bot, and
+      // deliverToCaller paces it the way either would type - but with no
+      // typos: a slip in an introduction reads as a bug, not as character.
+      reach.emitter.emit('ansi-output', '\r\n');
+      await deliverToCaller(io, chatSession, page, `This is ${startName}, How can I help you??`, {
+        typingSpeed: aiConfigFrom(repository.getConfig()).botTypingSpeed,
+        typoProbability: 0,
+      });
+    }
     // WHAT EXPRESS NEVER SAID. chat() tells the caller nothing: it ends on
     // CTRL-C if they hold ACS_BREAK_CHAT (express.e:6118) or when the SYSOP
     // presses F1, BBSHelp.txt has no chat section, and a board that wanted to

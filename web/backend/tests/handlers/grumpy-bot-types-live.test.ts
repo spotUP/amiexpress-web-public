@@ -217,8 +217,11 @@ describe('the chat is one stream', () => {
     expect(all).not.toMatch(/\x1b\[\d+;\d+r/);
     expect(all).not.toContain('\x1b[?1000h');
     expect(all).not.toMatch(/\x1b\[\d+;\d+H/);
-    // express.e:6085-6087, the built-in start line, in the colour that was current.
-    expect(all).toContain('\r\n\r\nThis is Kevin, How can I help you??\r\n\r\n');   // the co-sysop's admin-set handle, default Kevin
+    // express.e:6085-6087, the built-in start line, in the colour that was
+    // current. Read through shown(), because the start line is TYPED now -
+    // same framing, same text, but the raw stream carries the sysop colour
+    // and one chunk per character.
+    expect(shown(w.seen)).toContain('\r\n\r\nThis is Kevin, How can I help you??\r\n\r\n');   // the co-sysop's admin-set handle, default Kevin
     // The opening line is a message: saved, and typed after the start line.
     const messages = w.repo.getChatMessages(pageId);
     expect(messages.length).toBe(1);
@@ -522,5 +525,21 @@ describe('the chat is one stream', () => {
     } finally {
       mockHold = null;
     }
+  }, 40000);
+
+  it('types its greeting instead of pasting it, and still prints the hint at once', async () => {
+    // The greeting was the ONE bot line emitted whole while every line after
+    // it typed, which reads as a glitch. The hint below it is the BOARD
+    // talking, not the sysop, and stays instant.
+    const w = makeWorld();
+    H.initOperatorChatHandler(w.io, w.repo);
+    await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
+    await untilTrue('the greeting to arrive', () => shown(w.seen).includes('How can I help you'));
+
+    // Typed means one character per emit, not one emit carrying the sentence.
+    expect(w.seen.some((chunk) => chunk.includes('How can I help you'))).toBe(false);
+    // The hint arrives whole.
+    await untilTrue('the hint', () => shown(w.seen).includes('press return twice to send'));
+    expect(w.seen.some((chunk) => chunk.includes('press return twice to send'))).toBe(true);
   }, 40000);
 });
