@@ -981,7 +981,11 @@ const recentConnections: Map<string, number[]> = new Map();
 const MAX_CONNECTIONS_PER_IP = parseInt(process.env.BBS_MAX_CONNECTIONS_PER_IP || '30', 10);
 const CONNECTION_WINDOW = parseInt(process.env.BBS_CONNECTION_WINDOW_MS || '60000', 10);
 
-export const LOCALHOST_IPS = ["127.0.0.1", "::1", "::ffff:127.0.0.1"];
+// Moved to constants/localhost-ips.ts: importing it from here booted the
+// whole board in any test that touched TelnetServer. Re-exported so existing
+// importers keep working, and imported so this file can still use it.
+import { LOCALHOST_IPS } from "./constants/localhost-ips";
+export { LOCALHOST_IPS };
 
 function checkConnectionLimit(ip: string): boolean {
   // Always skip rate limiting for loopback/internal addresses
@@ -1455,7 +1459,27 @@ console.log(
 // ===== SERVER STARTUP =====
 // Initialize database and start server
 // IMPORTANT: Database must be initialized BEFORE accepting connections
-(async () => {
+//
+// IMPORTING THIS MODULE UNDER JEST MUST NOT START THE BOARD.
+//
+// This was a bare `(async () => { ... })()` - the board booted as an import
+// side effect, and 53 files import something from here. Any suite that
+// touched one of them started the HTTP, telnet and SSH servers, loaded the
+// database and ran initializeData.
+//
+// The failure that exposed it: the boot is ASYNCHRONOUS, so when it threw
+// (`initOperatorChatHandler is not a function`) the rejection surfaced
+// against whichever test happened to be running at that moment - a DIFFERENT
+// test on every run. tests/transport went red on entry-parity, then R1, then
+// R2b, none of which had anything to do with it. The worst shape of failure
+// to chase, because the red test is never the guilty one.
+//
+// The `throw error` guard below is what made it a flake rather than a
+// run-killer: it stopped `process.exit(1)` taking the whole jest worker down
+// (which read as "no tests work") but left an unhandled async rejection
+// looking for a victim. Not booting at all is the fix; that guard stays for
+// anything that calls `startBBS()` deliberately.
+export async function startBBS(): Promise<void> {
   try {
 console.log("Initializing database and loading data...");
     await initializeData(io);
@@ -1752,4 +1776,9 @@ console.error("[ERROR] Failed to start server:", error);
     }
     process.exit(1);
   }
-})();
+}
+
+// A real board boots on import, exactly as before. A test does not.
+if (process.env.JEST_WORKER_ID === undefined && process.env.NODE_ENV !== "test") {
+  void startBBS();
+}

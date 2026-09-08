@@ -16,7 +16,7 @@ import { Server as NetServer, Socket } from 'net';
 import { ANSI_GRAPHICS_PROMPT } from '../services/login-connect.service';
 import { EventEmitter } from 'events';
 import { createSession, getNextAvailableNodeId, checkConnectionLimit, setSession } from './session-manager';
-import { LOCALHOST_IPS } from '../index';
+import { LOCALHOST_IPS } from '../constants/localhost-ips';
 import { BBSSession } from '../index';
 import { config } from '../config';
 import { DEFAULT_CONNECTION_BAUD } from '../constants/modem';
