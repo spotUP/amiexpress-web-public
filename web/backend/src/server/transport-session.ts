@@ -393,12 +393,37 @@ console.log(
     );
     // Cleanup session
     if (connection.session) {
+      const session = connection.session;
+
       // TP-10: the emitter dies with the connection. A push that resolves a
-      // stale emitter would write into a closed socket and, worse, would look
-      // to the sysop like it had been delivered. TP-13b moves this call into
-      // `endTransportSession` with the rest of the teardown.
-      unregisterConnectionEmitter(connection.session);
-      deps.sessions.delete(connection.sessionId);
+      // stale emitter would write into a closed socket and, worse, would
+      // look to the sysop like it had been delivered.
+      unregisterConnectionEmitter(session);
+
+      /**
+       * TP-13b: the SAME finalize the browser reaches.
+       *
+       * This handler used to do two things, and one of them did nothing:
+       * `sessions.delete(connection.sessionId)` could never match, because
+       * the map is keyed by `nodeId.toString()` and the id is
+       * `telnet-<node>-<ts>`. So a telnet caller's session was never logged
+       * off - no `Logged off` in the CallersLog, no SAmiLog store update, no
+       * logoff batches, no EXECUTE_ON_LOGOFF, no MAIL_ON_LOGOFF, no command
+       * history, no user or node files written. `deleteSession` resolves
+       * through `socketToNodeId`, which telnet and SSH both populate.
+       */
+      void (async () => {
+        try {
+          const { endTransportSession } = require('./socket-handlers');
+          const { releaseAnsiBuffer } = require('../utils/ansi-buffer.util');
+          await endTransportSession(emitter, session, connection.sessionId);
+          // Divergence 30: the buffer's own cleanup listens for
+          // 'disconnect', which no byte transport ever emits.
+          releaseAnsiBuffer(connection.sessionId);
+        } catch (err) {
+          console.error(`[${type.toUpperCase()}] Session teardown failed:`, err);
+        }
+      })();
     }
     // Release node back to available pool
     if (connection.nodeId !== undefined) {

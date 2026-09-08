@@ -795,6 +795,17 @@ console.log('[Telnet Server] Stopped');
     // Reduce input latency (especially noticeable under modem emulation)
     socket.setNoDelay(true);
 
+    /**
+     * TP-13b. A half-open connection - a laptop that slept, a router that
+     * dropped the flow - held its node until the OS default TCP keepalive
+     * noticed, which is two hours on Linux. Probing after a minute means a
+     * dead line frees its node in minutes instead.
+     *
+     * This is NOT an idle-caller timeout: keepalives are answered by the
+     * TCP stack, so a caller sitting and reading a screen is untouched.
+     */
+    socket.setKeepAlive(true, 60000);
+
     if (!ipBanManager.allowConnection(remoteAddress)) {
       console.warn(`[Telnet Server] Connection attempt blocked for ${remoteAddress} (suspicious activity)`);
       socket.write('Too many requests. Try again later.\r\n');

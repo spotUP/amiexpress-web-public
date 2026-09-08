@@ -174,14 +174,33 @@ export function getAnsiBuffer(socket: Socket): AnsiBuffer {
 
   // Clean up on disconnect
   socket.on('disconnect', () => {
-    const buf = bufferMap.get(socketId);
-    if (buf) {
-      buf.flush(); // Flush any pending data
-      bufferMap.delete(socketId);
-    }
+    releaseAnsiBuffer(socketId);
   });
 
   return buffer;
+}
+
+/**
+ * Flush what a connection's buffer still holds and forget it.
+ *
+ * TP-13b, divergence 30. The registration above listens for `'disconnect'`,
+ * which is not in the connection emitter's transport event set and which
+ * nothing ever emits for a byte transport - so every telnet and SSH caller
+ * left a buffer in this module map for the life of the process, holding
+ * whatever had not been flushed when the line dropped. The close handler
+ * calls this directly.
+ */
+export function releaseAnsiBuffer(socketId: string): boolean {
+  const buf = bufferMap.get(socketId);
+  if (!buf) return false;
+  buf.flush(); // Whatever it was still holding goes out first.
+  bufferMap.delete(socketId);
+  return true;
+}
+
+/** How many connections still hold a buffer. For tests and diagnostics. */
+export function ansiBufferCount(): number {
+  return bufferMap.size;
 }
 
 /**

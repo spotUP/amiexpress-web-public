@@ -279,7 +279,19 @@ console.warn('[SSH Server] Or manually: ssh-keygen -t rsa -b 4096 -f data/ssh/ss
       try {
         this.server = new SSHServer({
           hostKeys: this.hostKeys,
-        }, this.handleConnection.bind(this));
+          /**
+           * TP-13b. A half-open SSH connection - a laptop that slept, a
+           * router that dropped the flow - held its node until the OS TCP
+           * keepalive noticed, which is hours by default. ssh2 pings the
+           * client every 60 s and gives up after three unanswered, so the
+           * node comes back in about three minutes.
+           *
+           * This is NOT an idle-caller timeout: a caller sitting at a
+           * prompt answers these pings and is left alone.
+           */
+          keepaliveInterval: 60000,
+          keepaliveCountMax: 3,
+        } as any, this.handleConnection.bind(this));
 
         this.server.on('error', this.handleError.bind(this));
 

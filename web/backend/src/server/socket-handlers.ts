@@ -9,6 +9,7 @@
  */
 
 import { Server as SocketIOServer, Socket } from 'socket.io';
+import { emitterForUserId } from './session-emitter-registry';
 import { keyBytesFor } from './composed-key';
 import { config } from '../config';
 import { db } from '../database';
@@ -930,28 +931,8 @@ console.log(`[DISCONNECT] Sysop kicked user, skipping grace period`);
       return;
     }
 
-    // Clear node from MULTICOM manager
-    if (session.nodeId) {
-      try {
-        const { multicomManager } = require('../nodes/MulticomManager.js');
-        multicomManager.clearNode(session.nodeId);
-        console.error(`[DISCONNECT] Cleared node ${session.nodeId} from MULTICOM`);
-      } catch (error) {
-        console.error(`[DISCONNECT] Failed to clear node from MULTICOM:`, error);
-      }
-    }
-
-    // Handle internode chat cleanup if user was in chat
-    if (session.subState === LoggedOnSubState.CHAT) {
-      const { handleChatDisconnect } = require('../handlers/chat/internode-chat.handler');
-      await handleChatDisconnect(socket, session);
-    }
-
-    // Handle group chat room cleanup if user was in a room
-    if (session.subState === LoggedOnSubState.CHAT_ROOM) {
-      const { handleRoomDisconnect } = require('../handlers/chat/group-chat.handler');
-      await handleRoomDisconnect(socket, session);
-    }
+    // The same three a byte transport releases (TP-13b), one copy.
+    await releaseSessionResources(socket, session);
 
     const userId = session.user?.id ? String(session.user.id) : '';
     if (userId) {
@@ -992,14 +973,75 @@ console.log(`[DISCONNECT] Scheduled logoff for user ${userId} in ${DISCONNECT_GR
   });
 }
 
-async function finalizeDisconnectCleanup(socket: Socket, session: BBSSession, socketId: string): Promise<void> {
+/**
+ * What a connection releases before its session is finalised.
+ *
+ * TP-13b. The web disconnect handler did these three inline and the byte
+ * transports did none of them: a telnet caller who dropped while in a chat
+ * left the room holding a ghost, and their node stayed in MULTICOM. One
+ * copy, called by both.
+ */
+export async function releaseSessionResources(
+  emitter: any,
+  session: BBSSession,
+): Promise<void> {
+  if (session.nodeId) {
+    try {
+      const { multicomManager } = require('../nodes/MulticomManager.js');
+      multicomManager.clearNode(session.nodeId);
+    } catch (error) {
+      console.error(`[DISCONNECT] Failed to clear node from MULTICOM:`, error);
+    }
+  }
+
+  if (session.subState === LoggedOnSubState.CHAT) {
+    const { handleChatDisconnect } = require('../handlers/chat/internode-chat.handler');
+    await handleChatDisconnect(emitter, session);
+  }
+
+  if (session.subState === LoggedOnSubState.CHAT_ROOM) {
+    const { handleRoomDisconnect } = require('../handlers/chat/group-chat.handler');
+    await handleRoomDisconnect(emitter, session);
+  }
+}
+
+/**
+ * A byte transport's session ends here - the same finalize the browser
+ * reaches, with the same resource release in front of it.
+ *
+ * There is no grace period: `restore-session` is registered only inside
+ * `registerSocketHandlers`, which `setupTelnetSSHHandler` never calls, so a
+ * telnet or SSH caller has no reconnect path to wait for. Waiting would
+ * hold their node for nothing.
+ */
+export async function endTransportSession(
+  emitter: any,
+  session: BBSSession,
+  sessionKey: string,
+): Promise<void> {
+  await releaseSessionResources(emitter, session);
+  await finalizeDisconnectCleanup(emitter, session, sessionKey);
+}
+
+export async function finalizeDisconnectCleanup(socket: Socket, session: BBSSession, socketId: string): Promise<void> {
   const userId = session.user?.id ? String(session.user.id) : '';
 
   if (userId) {
-    const stillConnected = Array.from(socketToUser.values()).includes(userId);
-console.log(`[DISCONNECT] finalizeDisconnectCleanup: userId=${userId}, stillConnected=${stillConnected}, socketToUser.size=${socketToUser.size}`);
+    /**
+     * Is this user still on the board somewhere ELSE?
+     *
+     * TP-13b. This used to ask `socketToUser`, which holds WEB sockets only
+     * (login-post.service fills it for socket.io callers), so a caller
+     * logged in on both a browser and a telnet line had the telnet logoff
+     * silently skipped - no CallersLog line, no logoff batches, no node
+     * files written. The registry answers for every transport, and the
+     * session it finds has to be a DIFFERENT one from the session ending.
+     */
+    const elsewhere = emitterForUserId(userId);
+    const stillConnected = !!elsewhere && elsewhere.session !== session;
+console.log(`[DISCONNECT] finalizeDisconnectCleanup: userId=${userId}, stillConnected=${stillConnected}`);
     if (stillConnected) {
-console.log(`[DISCONNECT] Cleanup skipped for user ${userId} - active socket detected`);
+console.log(`[DISCONNECT] Cleanup skipped for user ${userId} - this user is live on another connection`);
       pendingDisconnects.delete(userId);
       return;
     }
