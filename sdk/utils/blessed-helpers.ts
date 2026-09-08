@@ -1634,3 +1634,45 @@ export function bindKeys(
     }
   };
 }
+
+/**
+ * Take a list's own arrow keys away while something else is reading them.
+ *
+ * A blessed List built with `keys: true` binds up/down/j/k at CONSTRUCTION
+ * (blessed's list.js) and acts on them whenever it has focus. A door that
+ * opens a scrollable panel over its menu and scrolls it with `screen.key`
+ * therefore moves BOTH: the panel scrolls and the menu cursor walks behind
+ * it, so leaving the panel lands on a different row than the one that was
+ * opened. Reported against the ACHIEVE door on 2026-09-08, and it is a
+ * property of the pattern rather than of that door.
+ *
+ * `blur()` does not do it: `Screen.rewindFocus` hands focus back to the
+ * previous visible element, which on a one-list screen is the list again.
+ *
+ * Returns the restore function. Restoring re-attaches the listeners in
+ * order and gives the list its focus back, on the row it was left on.
+ *
+ *     const restore = borrowListKeys(list);   // panel opens
+ *     ...
+ *     restore();                              // panel closes
+ */
+export function borrowListKeys(list: unknown): () => void {
+  const target = list as {
+    listeners?: (event: string) => Array<(...args: unknown[]) => void>;
+    removeAllListeners?: (event: string) => unknown;
+    on?: (event: string, handler: (...args: unknown[]) => void) => unknown;
+    focus?: () => unknown;
+  } | null;
+  const saved = (target?.listeners?.('keypress') ?? []).slice();
+  target?.removeAllListeners?.('keypress');
+  let restored = false;
+  return (): void => {
+    if (restored) return;
+    restored = true;
+    for (const handler of saved) target?.on?.('keypress', handler);
+    // Only if it is not already the focused element: `focus()` blurs the
+    // current one first, and blurring the list we are restoring is how a
+    // restored menu ended up ignoring its own arrow keys.
+    if ((target as { focused?: boolean } | null)?.focused !== true) target?.focus?.();
+  };
+}
