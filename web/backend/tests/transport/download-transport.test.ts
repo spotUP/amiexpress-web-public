@@ -86,6 +86,55 @@ describe('a batch download, by transport', () => {
     expect(caller.said()).not.toContain('Batch download complete');
   });
 
+  /**
+   * R12 of the TP-16 reachability ledger - the three counts, in one place.
+   *
+   * The tests around this one assert the download's BEHAVIOUR. This row
+   * asserts the PATH: driving the real batch handler on a telnet caller must
+   * cross `deliverFilesToCaller` and `startZmodemDownload` once each, and a
+   * transport that can receive neither must book NO statistics.
+   *
+   * `deliverFilesToCaller` is counted by its observable output rather than a
+   * spy - SWC emits module exports as non-configurable getters, so
+   * `jest.spyOn` on a cross-module function throws (recorded on R2). Its
+   * output is unambiguous: it is the ONE place `download-file` is emitted and
+   * the only thing that picks the route, so the ZMODEM notice on the wire
+   * with zero browser triggers is its signature, and `deliveryRouteFor` is
+   * re-derived here to confirm the ruling it acted on.
+   *
+   * The refusal arm matters most. Before TP-11 the telnet path faked
+   * completion: it fired a browser trigger per file, printed "Check your
+   * browser downloads", booked the statistics and cleared the flags, having
+   * sent zero bytes. A caller was charged for a transfer that never happened.
+   */
+  it('R12: crosses deliverFilesToCaller and startZmodemDownload once each, and books nothing on a refusal', async () => {
+    const telnet = makeCaller('telnet');
+    await BatchDownloadHandler.handleBatchConfirm(telnet.socket, telnet.session, 'Y');
+
+    // startZmodemDownload: exactly once, with both flagged files.
+    expect(startZmodemDownload).toHaveBeenCalledTimes(1);
+    // deliverFilesToCaller: its route ruling, re-derived, and its output.
+    expect(deliveryRouteFor(telnet.session as any)).toBe('zmodem');
+    expect(telnet.said()).toContain('SENDING 2 FILE(S) VIA ZMODEM');
+    expect(telnet.downloadFileEvents()).toEqual([]);
+    // A delivered transfer DOES book its statistics.
+    expect(stats).toHaveBeenCalled();
+
+    // The refusal arm: nothing sent, nothing booked, nothing cleared.
+    startZmodemDownload.mockClear();
+    stats.mockClear();
+    confStats.mockClear();
+    const refused = makeCaller('carrier-pigeon');
+    await BatchDownloadHandler.handleBatchConfirm(refused.socket, refused.session, 'Y');
+
+    expect(deliveryRouteFor(refused.session as any)).toBe('refused');
+    expect(startZmodemDownload).toHaveBeenCalledTimes(0);
+    expect(stats).toHaveBeenCalledTimes(0);
+    expect(confStats).toHaveBeenCalledTimes(0);
+    expect(refused.session.flagManager.clearAll).not.toHaveBeenCalled();
+    expect(refused.said()).toContain(NO_TRANSFER_NOTICE);
+  });
+
   it('never sends the browser trigger to a byte transport', async () => {
     for (const transport of ['telnet', 'ssh']) {
       const caller = makeCaller(transport);

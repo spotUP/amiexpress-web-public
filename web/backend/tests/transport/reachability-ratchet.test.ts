@@ -25,7 +25,7 @@ const LEDGER = path.resolve(
 );
 
 /** Lower this when a row is earned. Never raise it. */
-const OPEN_MAX = 12;
+const OPEN_MAX = 11;
 const TOTAL_IDS = 19;
 
 describe('TP-16 reachability ratchet', () => {
