@@ -102,6 +102,31 @@ describe('unlock notices', () => {
     }
   });
 
+  it('an unlock earned AT the prompt starts on a line of its own', async () => {
+    // The caller is sitting at "Menu (56 mins. left): " - a prompt ends
+    // mid-line with no newline after it. Written straight out, the toast's
+    // top edge began inside the prompt text and the box came out broken
+    // (screenshot from the board, 2026-09-08).
+    const session = makeSession({ subState: LoggedOnSubState.READ_COMMAND });
+    const emitter = { emit: jest.fn() };
+    registerConnectionEmitter(session, emitter as any);
+    userSessions.set('u-caller', session);
+    try {
+      expect(deliverNotice(null, 'u-caller', 'unlock', unlock)).toBe('shown');
+
+      const written = emitter.emit.mock.calls
+        .filter((c: unknown[]) => c[0] === 'ansi-output')
+        .map((c: unknown[]) => String(c[1]))
+        .join('');
+
+      // Whatever else it draws, it must break the line before drawing it.
+      expect(written.startsWith('\r\n')).toBe(true);
+      expect(written).toContain('Century');
+    } finally {
+      unregisterConnectionEmitter(session);
+    }
+  });
+
   it('an unlock earned at the prompt is shown at once and not again at the next menu', async () => {
     const session = makeSession({ subState: LoggedOnSubState.READ_COMMAND });
     const emitter = { emit: jest.fn() };

@@ -106,7 +106,22 @@ export function deliverNotice(io: unknown, userId: string, kind: 'unlock' | 'lin
   try {
     const live = emitterForUserId(userId, io as any);
     if (live && atThePrompt(live.session as unknown as NoticeSession)) {
-      live.emitter.emit('ansi-output', noticeBytes(live.session as unknown as NoticeSession, toToast(kind, unlock)));
+      // Start on a line of our own.
+      //
+      // This path fires while the caller is sitting AT the prompt, and a
+      // prompt ends mid-line with no newline after it - so a toast written
+      // straight out begins at whatever column the cursor happened to be in,
+      // and the box's top edge starts inside "Menu (56 mins. left): ".
+      // Reported from the board 2026-09-08 with a screenshot of exactly that.
+      //
+      // The menu path (drainAchievementNotices) does not need this: it runs
+      // after the menu's own newline and before the prompt is written.
+      // One write, not two: the newline belongs to the same toast, and a
+      // second emit is a second packet on a byte transport for no reason.
+      live.emitter.emit(
+        'ansi-output',
+        '\r\n' + noticeBytes(live.session as unknown as NoticeSession, toToast(kind, unlock)),
+      );
       return 'shown';
     }
   } catch (err) {
