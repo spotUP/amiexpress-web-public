@@ -1,0 +1,10 @@
+# /etc/systemd/system/bbs-backup-alert.service
+# Pulled in by OnFailure= on bbs-backup.service and bbs-backup-check.service,
+# so a hard crash (OOM, killed, disk full before the script could log) still
+# raises the alarm.
+[Unit]
+Description=Raise the AmiExpress BBS backup alarm
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/bbs-backup-alert.sh raise "a bbs-backup unit failed - run: systemctl status bbs-backup.service bbs-backup-check.service"

@@ -1,0 +1,11 @@
+# /etc/systemd/system/bbs-backup-check.service
+# The watchdog for the failure an exit code cannot report: the backup that never
+# ran at all.
+[Unit]
+Description=Check that a recent AmiExpress BBS snapshot exists and is complete
+OnFailure=bbs-backup-alert.service
+
+[Service]
+Type=oneshot
+Environment=BBS_BACKUP_DEST=/var/backups/bbs
+ExecStart=/usr/local/sbin/bbs-backup-check.sh
