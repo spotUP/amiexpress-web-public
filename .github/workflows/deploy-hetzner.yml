@@ -395,8 +395,24 @@
                 HEALTH=$(curl -s --max-time 5 http://127.0.0.1:3001/health || echo '')
                 CALLERS=$(printf '%s' "$HEALTH" | sed -n 's/.*"callers":\([0-9]*\).*/\1/p')
                 CALLERS=${CALLERS:-0}
-                if [ "$CALLERS" -gt 0 ] 2>/dev/null; then
-                  echo "== $CALLERS caller(s) are on the board =="
+                # WHO IS ON THAT A DEPLOY MUST NOT THROW OFF.
+                #
+                # The sysop's own session is not one of them. Counting it meant
+                # every push run refused while he waited for his fix - exit 78,
+                # image built, container never recreated. "its always ok to
+                # force when spot or the sysop is online" (2026-09-08).
+                #
+                # The rule lives in `deploy/caller-guard.sh` so it can be
+                # executed by a test rather than only by this workflow; see
+                # tests/deploy/the-caller-guard-lets-the-sysop-through.test.ts.
+                . ./deploy/caller-guard.sh
+                OTHERS=$(callers_to_protect "$HEALTH" "${DEPLOY_IGNORE_CALLERS:-spot sysop}")
+
+                if [ "$CALLERS" -gt 0 ] && [ "$OTHERS" -le 0 ] 2>/dev/null; then
+                  echo "== only the sysop is on the board; deploying =="
+                  printf '%s' "$HEALTH" | tr ',' '\n' | grep -i 'username' || true
+                elif [ "$CALLERS" -gt 0 ] 2>/dev/null; then
+                  echo "== $CALLERS caller(s) are on the board, $OTHERS of them not the sysop =="
                   printf '%s' "$HEALTH" | tr ',' '\n' | grep -i 'username' || true
                   if [ "$FORCE_DEPLOY" = "true" ]; then
                     echo "== force=true: deploying anyway, they will be disconnected =="
