@@ -13,7 +13,7 @@
  * a list of slots - drawn or not - each knowing the path its file belongs at
  * inside the theme, so a blank one can be started with a click.
  */
-import { SCREEN_DIR_MAP, ScreenDirType, getScreenFileName } from '@bbs/screens/screen-tables';
+import { SCREEN_DIR_MAP, ScreenDirType, getScreenFileName, isBoardWritten } from '@bbs/screens/screen-tables';
 import { describeScreen } from './screen-descriptions';
 import type { ScreenIndexShape } from './screen-index-view';
 
@@ -90,6 +90,13 @@ export function themeChecklist(
   };
 
   for (const [screen, dirType] of Object.entries(SCREEN_DIR_MAP)) {
+    // A screen the BOARD writes is not a slot. `ACHIEVETOP` is the
+    // leaderboard, rewritten every fifteen minutes by the achievements
+    // bulletin: an artist who drew it would watch their work disappear, and a
+    // theme copy of it froze live's leaderboards once already. The sysop's own
+    // art slots for that screen are `AchieveTop.Header` / `.Tailer`, which the
+    // board splices in and never overwrites.
+    if (isBoardWritten(`${getScreenFileName(screen)}.txt`)) continue;
     const scope = scopeOf(dirType);
     if (scope !== 'conf') {
       push(screen, scope);

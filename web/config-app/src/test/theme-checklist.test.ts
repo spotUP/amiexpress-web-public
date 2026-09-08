@@ -71,3 +71,26 @@ describe('what a complete theme is', () => {
     expect(progress.byScope.conf.total).toBeGreaterThan(0);
   });
 });
+
+/**
+ * The board writes its own leaderboard; an artist must not be asked to draw it.
+ *
+ * `ACHIEVETOP` is in the screen catalogue because the login sequence displays
+ * it, but `achievements/bulletin.ts` rewrites the file every fifteen minutes.
+ * Offering it as a slot invites an artist to spend an evening on a screen that
+ * is overwritten before they log out - and a theme copy of it froze the live
+ * board's leaderboards once already.
+ */
+describe('screens the board writes for itself', () => {
+  it('are not slots an artist is asked to draw', () => {
+    const slots = themeChecklist(undefined, 'neon');
+    expect(slots.some(slot => slot.screen === 'ACHIEVETOP')).toBe(false);
+  });
+
+  it('leaves every hand-drawn screen in the list', () => {
+    const slots = themeChecklist(undefined, 'neon');
+    expect(slots.some(slot => slot.screen === 'BBSTITLE')).toBe(true);
+    expect(slots.some(slot => slot.screen === 'LOGON')).toBe(true);
+    expect(slots.some(slot => slot.screen === 'BULL')).toBe(true);
+  });
+});

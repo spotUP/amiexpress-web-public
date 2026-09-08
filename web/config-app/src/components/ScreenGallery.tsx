@@ -40,6 +40,7 @@ function release(): void {
     inFlight--;
   }
 }
+import { PetsciiScreenPreview } from './PetsciiScreenPreview';
 import { ScreenArt } from './ScreenArt';
 
 /**
@@ -84,6 +85,47 @@ export interface GalleryItem {
    * two thirds of the board cannot show properly.
    */
   formats?: { ansi: boolean; petscii: boolean; rip: boolean };
+  /**
+   * WHAT THIS FILE IS, so the thumbnail is drawn by the renderer that can read
+   * it. Every card used to go through the CP437 ANSI canvas, so a `.seq` - a
+   * file of C64 screen codes - came out as noise, and a `.rip` as its own
+   * drawing commands in text. Absent means text or ANSI, the common case.
+   */
+  format?: 'ansi' | 'text' | 'petscii' | 'rip';
+}
+
+/**
+ * One card's picture, drawn by whatever can read the file.
+ *
+ * The gallery had ONE renderer - the CP437 ANSI canvas - for every screen on
+ * the board, so the formats that are not CP437 were shown as noise: a `.seq`
+ * is C64 screen codes and a `.rip` is drawing commands. The sysop, looking at
+ * the studio: "the petscii previews dont display correctly in the admin ui
+ * make them on par with how it displays in the bbs".
+ *
+ * PETSCII is drawn by the board's own surface (`PetsciiScreenPreview` ->
+ * `PetsciiCanvas`), which is the component the terminal draws a C64 caller
+ * with, so the thumbnail and the caller see the same screen.
+ *
+ * RIP has no thumbnail. Its picture needs the vendored RIPtermJS interpreter
+ * and a canvas per card, and a gallery is hundreds of cards; naming the format
+ * is honest, and the card still opens into the RIP editor which does draw it.
+ */
+function Thumbnail({ content, format }: { content: string; format?: GalleryItem['format'] }) {
+  if (format === 'petscii') {
+    return <PetsciiScreenPreview content={content} className="h-full w-full" />;
+  }
+  if (format === 'rip') {
+    return (
+      <div
+        data-testid="rip-thumbnail"
+        className="flex h-full w-full items-center justify-center text-xs text-content-muted"
+      >
+        RIP graphics - open to view
+      </div>
+    );
+  }
+  return <ScreenArt content={content} scale={0.28} />;
 }
 
 interface ScreenGalleryProps {
@@ -174,7 +216,7 @@ function GalleryCard({ item, onOpen }: { item: GalleryItem; onOpen: (path: strin
             </div>
           )
           : content
-            ? <ScreenArt content={content} scale={0.28} />
+            ? <Thumbnail content={content} format={item.format} />
             // A card that is waiting looks like it is waiting. Blank black reads
             // as an empty screen, which is a thing some of these actually are.
             : <div className="h-full w-full animate-pulse bg-surface-2/40" />}

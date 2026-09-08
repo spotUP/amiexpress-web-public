@@ -110,6 +110,29 @@ export const SCREEN_DIR_MAP: Record<string, ScreenDirType> = {
 };
 
 /**
+ * Files the BOARD writes, by name.
+ *
+ * `AchieveTop.txt` is rewritten every fifteen minutes by
+ * `achievements/bulletin.ts`, `quicknew.txt` by whichever door the sysop's
+ * batch redirects into it, `CallersLog` and `lastc.txt` as callers come and
+ * go. They live in screen directories and end in `.txt`, so nothing about
+ * their shape says they are not art - but drawing one is drawing something
+ * that is overwritten before the artist has closed the editor.
+ *
+ * It lives HERE, in the table with no I/O, because two readers need it and a
+ * second copy is how they would come to disagree: the screen index (which
+ * marks the FILES it finds `runtime`) and the studio's theme checklist (which
+ * offers SLOTS for screens whose file does not exist yet, so it has nothing to
+ * classify - only the name).
+ */
+export const BOARD_WRITTEN_NAME = /^(callerslog.*|lastc\.txt|achievetop\.txt|quicknew\.txt|.*\.log)$/i;
+
+/** True when the board writes this file for itself, so no artist should draw it. */
+export function isBoardWritten(fileName: string): boolean {
+  return BOARD_WRITTEN_NAME.test(fileName);
+}
+
+/**
  * The file name a screen is stored under, when it differs from its catalogue
  * name (express.e:6544-6640).
  *

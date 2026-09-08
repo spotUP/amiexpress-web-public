@@ -21,6 +21,7 @@ import {
   ScreenDirType, SCREEN_DIR_MAP, getScreenDirType, getScreenFileName,
   resolveNodeScreenDir, screenSearchLocations, isScreenFile,
 } from './screen-resolution';
+import { BOARD_WRITTEN_NAME } from './screen-tables';
 import { countMciCodes, scanMciCodes } from './mci-catalog';
 import { readScreenFlags } from './screen-flags';
 import { parseMciReferences, type MciReference } from './mci-references';
@@ -455,7 +456,7 @@ const BACKUP_NAME = /(\.bak\b|\.old\b|\.orig\b|\.stale\b|\.backup|~$|\.save\b|\.
  * new-files list for ever. Content cannot catch it - the file is whatever
  * door the sysop pointed the batch at.
  */
-const RUNTIME_NAME = /^(callerslog.*|lastc\.txt|achievetop\.txt|quicknew\.txt|.*\.log)$/i;
+const RUNTIME_NAME = BOARD_WRITTEN_NAME;   // the one copy, in screen-tables
 
 /**
  * Signatures of the tools that WRITE screens on this board.

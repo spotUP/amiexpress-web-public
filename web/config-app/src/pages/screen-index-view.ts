@@ -486,6 +486,11 @@ export function buildGalleryItems(index: ScreenIndexShape, opts: GalleryBuildOpt
           ? `${file.sauce.title || 'untitled'} by ${file.sauce.author}`
           : undefined,
         problem: (file.problems?.length ?? 0) > 0,
+        // WHAT THIS FILE IS, so the card draws it with the right renderer. A
+        // `.seq` fed to the CP437 canvas is a wall of noise - which is what
+        // every PETSCII card in the gallery was ("the petscii previews dont
+        // display correctly in the admin ui", sysop).
+        format: file.format,
         formats: formatsPresent(file.relPath, index.files),
         ...(opts.ownedBy
           ? {
