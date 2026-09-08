@@ -66,6 +66,22 @@ describe('closing a doc modal', () => {
     expect(caller.focused).toBe(true);
   });
 
+  it('displays and closes without spewing diagnostics to the console', () => {
+    // Regression: a `[DocModal/diag]` TEMPORARY trace was left in shipping code,
+    // logging on every open and every close key - noise on every door's stdout.
+    screen = makeScreen();
+    const modal = makeModal(screen);
+    const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      modal.display();
+      press((screen as any)._focused, 'escape');
+      const spew = spy.mock.calls.map((c) => String(c[0])).filter((s) => s.includes('[DocModal/diag]'));
+      expect(spew).toEqual([]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('is closed by a key even after something else stole focus', () => {
     // The real failure: a menu closing behind the modal pulled focus back to
     // the menu bar, so Escape went there instead. A modal must still be
