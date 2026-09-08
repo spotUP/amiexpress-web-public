@@ -65,4 +65,57 @@ describe('shipped door manifests', () => {
 
     expect(manifest.command.toUpperCase()).toBe(String(registered).toUpperCase());
   });
+
+  /**
+   * A manifest with nothing reading it is a form that edits into the void.
+   *
+   * card-lobby and dopewars landed exactly that way on 2026-09-08: both
+   * declared six settings, the admin drew both forms, and neither door's
+   * source called the SDK - every value the sysop typed was saved and
+   * ignored. It is invisible from the admin, which shows a form either way.
+   *
+   * A TypeScript door reads through `readDoorSettings` /
+   * `readDoorSettingOverrides`. A 68K door cannot: the board renders its
+   * `.cfg` from the same manifest and the door parses that, so its proof is
+   * that the C source names the cfg keys it declares.
+   */
+  it.each(doorsWithManifests)('%s reads the settings it declares', doorName => {
+    const doorDir = path.join(DOORS_DIR, doorName);
+    const manifest = JSON.parse(fs.readFileSync(path.join(doorDir, 'door.settings.json'), 'utf8'));
+
+    if (manifest.cfgFile) {
+      // The 68K route: the board writes <cfgFile>, the door parses it. Its
+      // source has to name each cfgKey, or that key reaches nothing.
+      const source = cSourceFor(manifest.command);
+      expect(source).not.toBeNull();
+      for (const setting of manifest.settings) {
+        const cfgKey = setting.cfgKey ?? setting.key;
+        expect(source).toContain(cfgKey);
+      }
+      return;
+    }
+
+    // The TypeScript route: something under the door reads the SDK.
+    expect(typescriptSourcesUnder(doorDir).some(file => /readDoorSetting/.test(file))).toBe(true);
+  });
 });
+
+/** Every .ts of a door's own, without its dependencies or its build output. */
+function typescriptSourcesUnder(dir: string, found: string[] = []): string[] {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === 'tests') continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) typescriptSourcesUnder(full, found);
+    else if (entry.name.endsWith('.ts')) found.push(fs.readFileSync(full, 'utf8'));
+  }
+  return found;
+}
+
+/** A C door's source, which lives in the SDK's examples rather than beside it. */
+function cSourceFor(command: string): string | null {
+  const dir = path.join(__dirname, '../../../../sdk/c/examples', String(command).toLowerCase());
+  if (!fs.existsSync(dir)) return null;
+  const sources = fs.readdirSync(dir).filter(name => name.endsWith('.c'));
+  if (sources.length === 0) return null;
+  return sources.map(name => fs.readFileSync(path.join(dir, name), 'utf8')).join('\n');
+}
