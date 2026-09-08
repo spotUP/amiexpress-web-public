@@ -38,6 +38,23 @@ const plain = (chunks: string[]) =>
   chunks.join('').replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\x1b[78]/g, '').replace(/\x1b%G/g, '');
 
 /** Every intro GrumpyBot can open with (grumpy-sysop-bot.handler.ts:886-). */
+/**
+ * Wait for the thing itself, not for a guess at how long it takes.
+ *
+ * The bot TYPES its lines one character at a time, behind a page timeout, so a
+ * fixed sleep passes on an idle machine and fails on a loaded one - this suite
+ * was red in the shared tree on 2026-09-08 for no other reason. The deadline
+ * is generous because it is only reached on a real failure.
+ */
+async function until(what: string, ok: () => boolean, ms = 15000): Promise<void> {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (ok()) return;
+    await wait(25);
+  }
+  throw new Error(`timed out after ${ms}ms waiting for: ${what}`);
+}
+
 const INTRO = /is AFK|isn't answering|sysop is off doing|didn't answer your page/;
 /** With one engine there is no tag; a reply is a reply. */
 const BOT_REPLY = /\S/;
@@ -294,14 +311,16 @@ describe('GrumpyBot arrives where the caller is', () => {
     const w = makeWorld({ pageTimeout: 1, web: true, userId: 'u-web' });
     H.initOperatorChatHandler(w.io, w.repo);
     await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
-    await wait(3200);
+    await until('the bot to introduce itself to the web caller',
+      () => INTRO.test(plain(w.seen)));
 
     expect(plain(w.seen)).toMatch(INTRO);
     expect(w.session.subState).toBe(LoggedOnSubState.OPERATOR_CHAT_ACTIVE);
 
     const before = w.seen.length;
     await H.handleUserChatMessage(w.io, w.repo, w.session, 'hello from the browser');
-    await wait(2500);
+    await until('a reply to reach the browser',
+      () => plain(w.seen.slice(before)).trim().length > 0);
     const text = plain(w.seen.slice(before));
     // The caller's line went out as they typed it; what arrives is the reply.
     expect(text).toMatch(BOT_REPLY);

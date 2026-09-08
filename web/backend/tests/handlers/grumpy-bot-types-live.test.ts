@@ -64,6 +64,34 @@ async function untilTyped(seen: string[], text: () => string | undefined, ms = 1
     await wait(50);
   }
 }
+/**
+ * Wait on a condition rather than on a guess at how long the bot needs.
+ *
+ * The interleave test slept `wait(4000)` for two replies the bot TYPES a
+ * character at a time, and was red in the shared tree because one of them had
+ * not been recorded yet on a loaded worker. Nothing about the assertion needed
+ * a fixed pace.
+ */
+/**
+ * The bot finishes a line with return twice - the line ends, then a blank line
+ * hands the turn back. That pair is the only reliable "it has stopped typing"
+ * signal, and waiting for it is what these tests actually mean by their sleeps.
+ */
+function handedBack(chunks: string[]): boolean {
+  return chunks.length >= 2 &&
+    chunks[chunks.length - 1] === '\r\n' &&
+    chunks[chunks.length - 2] === '\r\n';
+}
+
+async function untilTrue(what: string, ok: () => boolean, ms = 15000): Promise<void> {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (ok()) return;
+    await wait(50);
+  }
+  throw new Error(`timed out after ${ms}ms waiting for: ${what}`);
+}
+
 const INTRO = /is AFK|isn't answering|sysop is off doing|didn't answer your page/;
 
 describe('the typing plan', () => {
@@ -181,7 +209,10 @@ describe('the chat is one stream', () => {
     const w = makeWorld();
     H.initOperatorChatHandler(w.io, w.repo);
     await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
-    await wait(3500);
+    // The page timeout, the bot's opening line typed out, and the blank line
+    // that hands the turn back. Sleeping 3500ms for it passed on an idle
+    // machine and failed on a loaded one.
+    await untilTrue('the bot to finish its opening line', () => handedBack(w.seen));
 
     const before = w.seen.length;
     // The caller types "ok", corrects, types more, presses return - as the
@@ -198,7 +229,8 @@ describe('the chat is one stream', () => {
     // Now the bot answers: the colour switches back once, then characters.
     const b2 = w.seen.length;
     await H.handleUserChatMessage(w.io, w.repo, w.session, 'oi');
-    await wait(3500);
+    await untilTrue('the reply to finish and hand the turn back',
+      () => handedBack(w.seen.slice(b2)));
     const reply = w.seen.slice(b2);
     expect(reply[0]).toMatch(/^\x1b\[36m.$/);
     expect(reply.filter((c) => c.startsWith('\x1b[36m')).length).toBe(1);
@@ -206,7 +238,10 @@ describe('the chat is one stream', () => {
     expect(shown(reply).replace(/\s/g, '')).toContain(said.replace(/\s/g, ''));
     // Return twice: the line ends, then a blank line hands the turn back.
     expect(reply.slice(-2)).toEqual(['\r\n', '\r\n']);
-  });
+    // 40s for the same reason as the interleave test: the bot TYPES its reply
+    // one character at a time. Every wait above is a condition, so this is
+    // only reached on a real failure.
+  }, 40000);
 
   it('past 78 columns the half-typed word moves to the next line (express.e:6181-6223)', () => {
     const cs: any = { line: { text: '', lastSender: 'sysop' } };
@@ -329,11 +364,20 @@ describe('the chat is one stream', () => {
     const w = makeWorld();
     H.initOperatorChatHandler(w.io, w.repo);
     await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
-    await wait(1300);
+    const botLines = () =>
+      w.repo.getChatMessages(w.session.tempData.pageId).filter((m: any) => m.senderId === 'bot');
+    // The page timeout, then the bot takes it and records its opening line.
+    await untilTrue('the bot to take the page', () => botLines().length >= 1);
     await H.handleUserChatMessage(w.io, w.repo, w.session, 'hello');
-    await wait(4000);
+    // Its answer is the second: the point of the test is that the second
+    // waits for the first, so wait for there to BE a second.
+    await untilTrue('the second bot line', () => botLines().length >= 2);
+    // RECORDED is not TYPED. The assertion below looks for both messages in
+    // the caller's stream, in order, so wait for the second one to finish
+    // arriving a character at a time - see untilTyped.
+    await untilTyped(w.seen, () => botLines()[1]?.message);
     const text = shown(w.seen).replace(/\s+/g, ' ');
-    const messages = w.repo.getChatMessages(w.session.tempData.pageId).filter((m: any) => m.senderId === 'bot').map((m: any) => m.message as string);
+    const messages = botLines().map((m: any) => m.message as string);
     expect(messages.length).toBe(2);
     let cursor = 0;
     for (const m of messages) {
@@ -341,5 +385,9 @@ describe('the chat is one stream', () => {
       expect(at).toBeGreaterThanOrEqual(cursor);
       cursor = at + 1;
     }
-  });
+    // 40s, not the file's 20s: the second reply is ~440 characters and the bot
+    // TYPES it one at a time, after a page timeout and a first reply. The
+    // waits above are all conditions, so this bound is only reached on a real
+    // failure - it is not a sleep.
+  }, 40000);
 });

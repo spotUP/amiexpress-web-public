@@ -366,6 +366,16 @@ export function stopOperatorChatHandler(): void {
     clearInterval(pageTimeoutChecker);
     pageTimeoutChecker = null;
   }
+  // AND THE CHATS THEMSELVES. A bot reply is typed by an `await sleep` loop
+  // inside deliverToCaller - there is no timer handle to clear - and the only
+  // thing that stops it is its own `live()` guard, which asks whether this
+  // chat is still the one in `activeChatSessions`. Leaving the map populated
+  // left a bot typing after the handler had been stopped, and because the
+  // caller is looked up by user id, its characters landed in whatever session
+  // registered that id NEXT. In the suites that is the following test's
+  // output array, which is why a different test failed on every run of
+  // grumpy-bot-types-live. Stopping the handler stops its chats.
+  activeChatSessions.clear();
 }
 
 /**

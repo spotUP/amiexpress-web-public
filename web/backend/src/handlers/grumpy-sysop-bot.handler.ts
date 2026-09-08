@@ -273,10 +273,11 @@ interface OpenRouterModel {
  * FREE MODELS ONLY - the sysop's rule (2026-09-08: "never paid models"). A
  * model is eligible when OpenRouter lists it at zero price for both prompt
  * and completion. The tool loop needs `tools` among its supported
- * parameters, and the picker prefers those, largest context first, so the
- * board card and the help fit. A name typed into the admin is used only if
- * it passes the same check; otherwise it is refused, with a log line, and
- * the picker's choice is used.
+ * parameters, and the picker prefers those, then the fastest MEASURED round
+ * trip, and among models nothing has measured yet the SMALLER context - see
+ * rankFreeModels for why that sign, and why it used to be the other way. A
+ * name typed into the admin is used only if it passes the same check;
+ * otherwise it is refused, with a log line, and the picker's choice is used.
  */
 export const isFreeModel = (m: OpenRouterModel): boolean =>
   parseFloat(m.pricing?.prompt || '1') === 0 && parseFloat(m.pricing?.completion || '1') === 0;
@@ -287,7 +288,7 @@ let knownFreeModels = new Map<string, OpenRouterModel>();
 /** The ids that also support tools. */
 let toolModels = new Set<string>();
 
-/** Tool-capable first, then the largest context, then the rest. */
+/** Tool-capable first, then the fastest measured, then the SMALLER context. */
 export function rankFreeModels(models: OpenRouterModel[], now = Date.now()): string[] {
   return models
     .filter(isFreeModel)

@@ -27,6 +27,24 @@ import { userSessions } from '../../src/server/session-manager';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Wait for the thing itself, not for a guess at how long it takes.
+ *
+ * These drive a reply the bot TYPES one character at a time, behind a page
+ * timeout and a think time. A fixed `wait(2500)` passed on an idle machine and
+ * failed on a loaded one - both of this suite's tests were red in the shared
+ * tree on 2026-09-08, in whichever order they ran, for no reason but that.
+ * The deadline is generous because it is only ever reached on a real failure.
+ */
+async function until(what: string, ok: () => boolean, timeoutMs = 15000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (ok()) return;
+    await wait(25);
+  }
+  throw new Error(`timed out after ${timeoutMs}ms waiting for: ${what}`);
+}
+
 function makeWorld() {
   const db = new Database(':memory:');
   const repo = new OperatorChatRepository(db);
@@ -70,7 +88,9 @@ describe('the grumpy bot answers a caller', () => {
 
     const paged = await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
     expect(paged.success).toBe(true);
-    await wait(3000);                                  // past the 1s timeout, and the opening line
+    // The 1s page timeout, then the bot takes it and says its opening line.
+    await until('the bot to take the page',
+      () => w.repo.getPageRequest(w.session.tempData.pageId)?.sysopId === 'bot');
     expect(w.repo.getPageRequest(w.session.tempData.pageId)!.sysopHandle).toBe('Kevin');   // the admin's name, default Kevin (K5)
 
     // The caller types their line as the chat branch drives it, then return.
@@ -78,7 +98,7 @@ describe('the grumpy bot answers a caller', () => {
     H.callerPressedReturn(w.io, w.session);
     const before = w.seen.length;
     await H.handleUserChatMessage(w.io, w.repo, w.session, 'hello grumpy');
-    await wait(2500);
+    await until('a reply to reach the caller', () => plain(w.seen.slice(before)).trim().length > 0);
     const text = plain(w.seen.slice(before));
 
     // The caller's own line, and the return that ended it, went out from the
@@ -100,7 +120,8 @@ describe('the grumpy bot answers a caller', () => {
         H.initOperatorChatHandler(w.io, w.repo);
         await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
         pageId = w.session.tempData.pageId;
-        await wait(3000);
+        await until('the bot to take the page',
+          () => w.repo.getPageRequest(pageId)?.sysopId === 'bot');
         done();
       });
     });
@@ -119,8 +140,12 @@ describe('the grumpy bot answers a caller', () => {
         reg2.registerConnectionEmitter(w.session, { emit: (e: string, d: unknown) => { if (e === 'ansi-output') w.seen.push(String(d)); } });
         sm2.userSessions.set('u-caller', w.session);
         const H2 = require('../../src/handlers/operator-chat.handler');
+        // The restart this simulates is a BOOT: the board runs
+        // initOperatorChatHandler on the way up (index.ts), and the handler
+        // needs it. Leaving it out tested a process that had never started.
+        H2.initOperatorChatHandler(w.io, w.repo);
         await H2.handleUserChatMessage(w.io, w.repo, w.session, 'still there?');
-        await wait(2500);
+        await until('the revived chat to answer', () => plain(w.seen.slice(before)).trim().length > 0);
         done();
       });
     });

@@ -65,8 +65,19 @@ describe('free models only', () => {
     { id: 'free/tools-medium', name: 'Medium', pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools'], context_length: 32000 },
     { id: 'free/thinker-think', name: 'Think', pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools'], context_length: 900000 },
   ];
-  it('a paid model is never ranked, tool-capable free models come first, largest context first', () => {
-    expect(rankFreeModels(catalogue as any)).toEqual(['free/tools-large', 'free/tools-medium', 'free/small']);
+  it('a paid model is never ranked, tool-capable free models come first, and the SMALLER context breaks the tie', () => {
+    // The tie-break used to be the LARGER context, and this expectation still
+    // said so after `321f5c970` inverted it on purpose: every model nothing
+    // has measured yet costs the same 6,000 ms guess, so with sixteen untried
+    // tool-capable models the board reached for the biggest thing on the list
+    // - a 1M-token, 550B-parameter model for a two-line chat reply, one of
+    // them measured at 21.4 s. Context length says nothing about speed, but
+    // the sign of the correlation is not neutral, so the guess leans small.
+    // See rankFreeModels in grumpy-sysop-bot.handler.ts for the live log.
+    //
+    // `free/thinker-think` is absent because a `think` model is filtered out
+    // by name, and `free/small` is last because it has no tools at all.
+    expect(rankFreeModels(catalogue as any)).toEqual(['free/tools-medium', 'free/tools-large', 'free/small']);
   });
   it('an admin name that is paid, or unknown, is refused; a free one is used', () => {
     primeModelCatalogue(catalogue as any);
