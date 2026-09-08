@@ -21,6 +21,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { getSystemTime, formatLongDate, formatLongTime } from '../utils/date-time.util';
+import { getBoardConfig } from './bbs-config-file.service';
+import { config as appConfig } from '../config';
 
 export class CallersLogManager {
   private bbsRoot: string;
@@ -28,6 +30,26 @@ export class CallersLogManager {
   constructor() {
     // BBS: points to project root
     this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../..');
+  }
+
+  /**
+   * P3-2: SYS_DONT_SAVE_STATE (ACP.e:3091-3093 NO_SAVESTATE tooltype;
+   * axSetupTool/helpText.e:265 "Do not save the last callers, uploads,
+   * downloads information."). Real AmiExpress gates a separate process's
+   * (ACP.e) acp.dat cache with this flag - this port has no such process,
+   * so the toggle instead suppresses the three categories the tooltype
+   * names when they are written to this file: callers (logLogin), uploads
+   * (logFileUpload) and downloads (logFileDownload). Everything else this
+   * class logs (commands, doors, chat, conference joins, logoff) is
+   * unaffected, matching express.e's own CallersLog write - which this
+   * toggle never gated at all.
+   */
+  private isStateSaveDisabled(): boolean {
+    try {
+      return !!getBoardConfig(appConfig.get('dataDir')).dont_save_state;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -123,8 +145,12 @@ console.error(`[CallersLog] Error writing to Node${nodeId}/CallersLog:`, error);
    * Per express.e displayUserToCallersLog(), this writes a divider then user info
    */
   logLogin(nodeId: number, username: string, slotNumber: number = 1, location: string = 'Unknown'): void {
-    // Write divider before login entry (express.e:16029)
+    // Write divider before login entry (express.e:16029) - a session
+    // boundary marker other tooling (ByteKillHandler) parses, carrying no
+    // caller identity, so it is kept even with SYS_DONT_SAVE_STATE set.
     this.writeDivider(nodeId);
+    // P3-2: SYS_DONT_SAVE_STATE suppresses the "last callers" entry itself.
+    if (this.isStateSaveDisabled()) return;
     // Format: DD-Mon-YYYY (HH:MM) [slot] username (connectString) location
     // express.e uses formatLongDate + formatLongTime, similar to our format
     const timestamp = this.formatTimestamp();
@@ -187,6 +213,8 @@ console.error(`[CallersLog] Error writing to Node${nodeId}/CallersLog:`, error);
    * Log file upload
    */
   logFileUpload(nodeId: number, filename: string, area: string): void {
+    // P3-2: SYS_DONT_SAVE_STATE suppresses upload history.
+    if (this.isStateSaveDisabled()) return;
     this.appendLog(nodeId, `Upload: ${filename} to ${area}`);
   }
 
@@ -194,6 +222,8 @@ console.error(`[CallersLog] Error writing to Node${nodeId}/CallersLog:`, error);
    * Log file download
    */
   logFileDownload(nodeId: number, filename: string): void {
+    // P3-2: SYS_DONT_SAVE_STATE suppresses download history.
+    if (this.isStateSaveDisabled()) return;
     this.appendLog(nodeId, `Download: ${filename}`);
   }
 

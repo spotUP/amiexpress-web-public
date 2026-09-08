@@ -1113,7 +1113,24 @@ export function loadScreenFile(
 
   // express.e:6551-6558 - Some screen types use different file names
   // NODE_BULL and CONF_BULL both look for 'BULL' files in their respective directories
-  const actualFileName = getScreenFileName(screenName);
+  //
+  // P3-3 / SYS_DEFAULT_MENU: express.e:6558-6562 falls back to
+  // `defaultMenuName` (express.e:31823-31824 DEFAULT_MENUNAME, itself
+  // defaulting to 'MENU' when blank) whenever there is no per-conference
+  // menu override. getScreenFileName only maps a FIXED set of catalogue
+  // names (NODE_BULL, LOGON24, ...); MENU's target filename is
+  // configurable, so it is resolved here instead, where the session's
+  // board config is reachable.
+  const actualFileName = screenName.toUpperCase() === 'MENU'
+    ? (() => {
+      try {
+        const { getBoardConfig } = require('../services/bbs-config-file.service');
+        return getBoardConfig(baseDir).default_menu?.trim() || 'MENU';
+      } catch {
+        return 'MENU';
+      }
+    })()
+    : getScreenFileName(screenName);
   const screenBaseNoExt = actualFileName.replace(/\.[^/.]+$/, ''); // strip extension for security search
   if (actualFileName !== screenName) {
     screenDebug(`[loadScreenFile] Screen ${screenName} uses file name: ${actualFileName}`);

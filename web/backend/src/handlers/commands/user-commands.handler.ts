@@ -723,8 +723,11 @@ console.log('[ENV] User Statistics');
     socket.emit('ansi-output', `\x1b[32mUser Number\x1b[33m:\x1b[0m ${user.slotNumber}\r\n`);
   }
 
-  // Area Name (express.e:25554-25556) - only if CONFRELATIVE=FALSE
-  if (user.conferenceAccess) {
+  // Area Name (express.e:25554-25556) - only if TOGGLES_CONFRELATIVE=FALSE.
+  // P3-1: this used to show unconditionally; SYS_RELATIVE_CONFS (relative
+  // conference numbering) hides the absolute area name because it would
+  // give away the caller's true (non-relative) conference position.
+  if (user.conferenceAccess && !getConfRelativeToggle(session)) {
     socket.emit('ansi-output', `\x1b[32mArea Name  \x1b[33m:\x1b[0m ${user.conferenceAccess}\r\n`);
   }
 
@@ -906,19 +909,20 @@ function getInverse(cn: number, user: any, confRelative: boolean): number {
 }
 
 /**
- * Read the CONFRELATIVE toggle from bbsConfig.info.
- * In express.e this is sopt.toggles[TOGGLES_CONFRELATIVE] set by ACP.
- * We store it as the CONFRELATIVE tooltype in bbsConfig.info.
+ * P3-1: Read the SYS_RELATIVE_CONFS toggle from bbsConfig.info.
+ * In express.e this is sopt.toggles[TOGGLES_CONFRELATIVE], set by
+ * ACP.e:2698-2703 from the RELATIVE_CONFERENCES tooltype. The setup tool
+ * writes that same key name to bbsConfig.info (axSetupTool/frmSettingsEdit.e:696),
+ * so it is read through the shared bbs-config-file.service (relative_confs)
+ * rather than a bespoke tooltype name/parse of this file.
  * Returns false if not found (default = absolute numbering).
  */
 function getConfRelativeToggle(session: BBSSession): boolean {
   try {
     const { config } = require('../../config');
-    const { parseInfoFile } = require('../../utils/amiga-command-parser.util');
+    const { getBoardConfig } = require('../../services/bbs-config-file.service');
     const bbsRoot = (session as any).bbsPath || config.get('dataDir') || process.cwd();
-    const bbsConfigPath = require('path').join(bbsRoot, 'bbsConfig.info');
-    const tooltypes = parseInfoFile(bbsConfigPath);
-    return tooltypes.has('CONFRELATIVE');
+    return !!getBoardConfig(bbsRoot).relative_confs;
   } catch {
     return false;
   }

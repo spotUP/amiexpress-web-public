@@ -137,6 +137,29 @@ export interface BBSConfigData {
   convert_to_mb?: boolean;
   // express.e:sopt.toggles[TOGGLES_CREDITBYKB] — count UL/DL bytes in kilobytes instead of bytes
   credit_by_kb?: boolean;
+  // SYS_RELATIVE_CONFS (axSetupTool/frmSettingsEdit.e:250,696 writes
+  // RELATIVE_CONFERENCES). ACP.e:2698-2703 sets sopt.toggles[TOGGLES_CONFRELATIVE]
+  // from it; express.e:5593,5613,8563,8572,25554 read that toggle to number
+  // conferences relative to the caller's own access instead of absolutely.
+  // P3-1.
+  relative_confs?: boolean;
+  // SYS_DEFAULT_MENU (express.e:31823-31824 DEFAULT_MENUNAME, falls back to
+  // 'MENU' when blank/absent). The fallback screen name used for SCREEN_MENU
+  // when no per-conference/~SM_ override is active (express.e:6558-6562).
+  // P3-3.
+  default_menu?: string;
+  // SYS_DONT_SAVE_STATE (ACP.e:3091-3093 NO_SAVESTATE tooltype on the ACP
+  // icon; axSetupTool/helpText.e:265 "Do not save the last callers,
+  // uploads, downloads information."). On real AmiExpress this gates a
+  // SEPARATE process's (ACP.e, the sysop console) acp.dat cache of the
+  // last 5 callers/uploads/downloads per node (ACP.e:3404 loadState,
+  // :3457 saveState) - express.e's own CallersLog write is never gated by
+  // it. This port has no separate ACP process or acp.dat; the
+  // caller/upload/download history it DOES persist to disk is
+  // CallersLogManager's Node{n}/CallersLog, so the toggle is honoured
+  // there instead: when set, the three categories the tooltype names
+  // (callers, uploads, downloads) are not written. P3-2.
+  dont_save_state?: boolean;
 
   // Logging
   debug_mode?: boolean;
@@ -366,6 +389,17 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   // still read it on a real Amiga.
   // express.e sopt.toggles[TOGGLES_CREDITBYKB] — counts UL/DL in KB instead of bytes
   'CREDIT_BY_KBYTES': 'credit_by_kb',  // ACP.e:3030 - CREDITBYKB is an index (axcommon.e:385)
+  // ACP.e:2698 sets sopt.toggles[TOGGLES_CONFRELATIVE] from this key on the
+  // CONFCONFIG icon; axSetupTool writes the same key name to bbsConfig.info
+  // (frmSettingsEdit.e:696) so it is read from the one config file this port
+  // keeps. P3-1.
+  'RELATIVE_CONFERENCES': 'relative_confs',
+  // express.e:31823 DEFAULT_MENUNAME. P3-3.
+  'DEFAULT_MENUNAME': 'default_menu',
+  // ACP.e:3092 NO_SAVESTATE (on the ACP icon in real AmiExpress; this port
+  // keeps every system tooltype in bbsConfig.info instead - see the field
+  // comment above). P3-2.
+  'NO_SAVESTATE': 'dont_save_state',
 
   // Logging
   'DEBUG_MODE': 'debug_mode',
@@ -999,6 +1033,12 @@ function getDefaultConfig(): BBSConfigData {
     ssh_port: 2222,
     quiet_join: false,
     convert_to_mb: false,
+    // ACP.e:2698-2703 - absent means absolute conference numbering.
+    relative_confs: false,
+    // ACP.e:3091 persistState:=TRUE by default; the tooltype only ever
+    // turns saving OFF, never on, so absent means "do save" like real
+    // AmiExpress.
+    dont_save_state: false,
     debug_mode: false,
     log_level: 'info',
     log_retention_days: 90,
@@ -1021,6 +1061,9 @@ function getDefaultConfig(): BBSConfigData {
     local_upload_path: '',
     filediz_syscmd: '',
     max_desclines: 15,   // express.e:348 — DEF max_desclines=15
+    // express.e:31824 - blank/absent falls back to 'MENU' at the read site
+    // (menu.ts), matching StrLen(defaultMenuName)=0 THEN StrCopy(...,'MENU').
+    default_menu: '',
   };
 }
 
