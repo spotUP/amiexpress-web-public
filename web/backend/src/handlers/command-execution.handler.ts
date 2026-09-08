@@ -19,6 +19,7 @@ import { checkSecurity } from '../utils/acs.util';
 import { ACSPermission } from '../constants/acs-permissions';
 import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler, higherAccess } from '../utils/error-handling.util';
+import { DISABLED_ACCESS_LEVEL } from '../services/config-services/door-info-file.service';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { BBSSession } from '../index';
@@ -430,6 +431,25 @@ async function runCommand(
     // silently exactly as a privcmd invocation does.
     if (!session.executingScreenCommand) {
       higherAccess(socket);
+
+      // A door the admin SWITCHED OFF is not a door the caller is too junior
+      // for, and telling a level-255 sysop that his own board requires higher
+      // access sends him looking for a permission problem that does not exist.
+      // Turning a door off parks its ACCESS at DISABLED_ACCESS_LEVEL and
+      // remembers the real level in DRACCESS (door-info-file.service.ts:53-65),
+      // so the admin goes on showing "Min level 30" for a command nobody can
+      // run. Reported from the board 2026-09-08: "cardlobby is set to access
+      // level 30 but i get command requires higher access my user is 255" -
+      // its registration read ACCESS=32767, DRACCESS=30.
+      //
+      // Additive, like the rest of this refusal: express.e's sentence still
+      // comes first and unchanged.
+      if (requiredAccess === DISABLED_ACCESS_LEVEL) {
+        socket.emit(
+          'ansi-output',
+          `[INFO] ${cmd.toUpperCase()} is switched OFF in the admin, not restricted by level.\r\n`
+        );
+      }
     }
     return RESULT_NOT_ALLOWED;
   }
