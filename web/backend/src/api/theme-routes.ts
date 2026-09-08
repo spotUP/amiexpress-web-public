@@ -24,7 +24,7 @@ import { validateTheme } from '../screens/theme-validation';
 // it without importing this router - re-exported because tests and callers name
 // it here.
 import { themeTargetFor } from '../screens/theme-target-path';
-import { seedThemeFromBoard } from '../screens/theme-seeding';
+import { copyScreenIntoTheme, seedThemeFromBoard } from '../screens/theme-seeding';
 import { userFileManager } from '../services/UserFileManager';
 export { themeTargetFor };
 import { liveThemeRegressions } from '../screens/theme-live-check';
@@ -437,13 +437,17 @@ themesRouter.post('/:slug/copy', (req: Request, res: Response) => {
     return refuse(res, 409, `${theme.title} already has ${target} - edit it in the screen editor`);
   }
 
-  fs.mkdirSync(path.dirname(destination), { recursive: true });
-  // Bytes, never text: a screen carries Amiga high-bit art and a UTF-8 round
-  // trip turns each of those into three replacement bytes.
-  fs.copyFileSync(source, destination);
+  // The screen, not one of its files: the security variants and the .seq/.rip
+  // twins come too, or the theme shadows the board's sysop bulletin the moment
+  // it is redrawn and the publish gate refuses it.
+  const result = copyScreenIntoTheme(bbsRoot, theme, from);
+  const files = result.copied.length;
 
   ok(res, {
     from,
     to: path.join(theme.dir, target),
-  }, `Copied into ${theme.title} - edit it in the screen editor`);
+    target,
+    copied: result.copied,
+    kept: result.kept,
+  }, `Copied into ${theme.title} - ${files} file${files === 1 ? '' : 's'}, edit it in the screen editor`);
 });

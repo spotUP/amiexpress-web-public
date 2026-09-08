@@ -24,8 +24,16 @@ import * as path from 'path';
 
 import { getScreenIndex } from './screen-index.service';
 import { themeTargetFor } from './theme-target-path';
+import { variantSetFor } from './theme-variant-set';
 import { themeDirectory } from './theme-registry';
 import type { ThemeEntry } from './theme-registry';
+
+/** What one "redraw this" did: the files that landed, and the artist's own. */
+export interface ThemeCopyResult {
+  copied: Array<{ from: string; to: string; target: string }>;
+  /** Already the artist's - never overwritten. */
+  kept: Array<{ target: string }>;
+}
 
 export interface ThemeSeedResult {
   /** Files written into the theme. */
@@ -66,11 +74,9 @@ export function seedThemeFromBoard(bbsRoot: string, theme: ThemeEntry): ThemeSee
       if (!resolution.file) continue;
       const dir = path.dirname(resolution.file);
 
-      // The resolved file AND every security variant beside it. `variants`
-      // holds bare names in the directory the screen resolved from.
-      const names = resolution.variants?.length
-        ? resolution.variants
-        : [path.basename(resolution.file)];
+      // The resolved file AND every variant beside it - one rule, shared with
+      // the copy route an artist presses "redraw this" on.
+      const names = variantSetFor(index, resolution.file).map(rel => path.basename(rel));
 
       for (const name of names) {
         const relative = path.join(dir, name);
@@ -108,5 +114,58 @@ export function seedThemeFromBoard(bbsRoot: string, theme: ThemeEntry): ThemeSee
   }
 
   result.screens = screensSeeded.size;
+  return result;
+}
+
+/**
+ * Redraw ONE board screen inside a theme: the file, and its variants with it.
+ *
+ * "Redraw this" means the screen, not one of its three files. A theme that
+ * takes `BULL.TXT` and leaves `BULL255.TXT` behind covers the sysop's
+ * bulletin with everybody's, and a theme that takes the `.TXT` and leaves the
+ * `.SEQ` serves a C64 caller the board's art under the theme's name. Both are
+ * the shadowing `theme-validation` rule 5 refuses to publish.
+ *
+ * Never overwrites: what the artist has already drawn is theirs, and is
+ * reported back rather than replaced.
+ */
+export function copyScreenIntoTheme(
+  bbsRoot: string,
+  theme: ThemeEntry,
+  boardRelPath: string,
+): ThemeCopyResult {
+  const result: ThemeCopyResult = { copied: [], kept: [] };
+  const themeRoot = themeDirectory(bbsRoot, theme);
+  if (!themeRoot) return result;
+
+  const index = getScreenIndex(bbsRoot);
+
+  for (const relative of variantSetFor(index, boardRelPath)) {
+    // A leftover or a file the board rewrites for itself is not art - the same
+    // rule the seeder applies. The file actually asked for is exempt: an
+    // artist who opens something and presses redraw meant that file.
+    if (relative !== boardRelPath && index.files[relative]?.generated) continue;
+
+    const target = themeTargetFor(relative);
+    if (!target) continue;
+
+    const source = path.join(bbsRoot, relative);
+    const destination = path.join(themeRoot, target);
+    if (fs.existsSync(destination)) {
+      result.kept.push({ target });
+      continue;
+    }
+
+    try {
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      // Bytes, never text: a screen carries Amiga high-bit art and a UTF-8
+      // round trip turns each of those into three replacement bytes.
+      fs.copyFileSync(source, destination);
+    } catch {
+      continue; // one unreadable variant must not cost the artist the screen
+    }
+    result.copied.push({ from: relative, to: path.join(theme.dir, target), target });
+  }
+
   return result;
 }
