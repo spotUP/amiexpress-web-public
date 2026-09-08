@@ -368,11 +368,22 @@ export async function getConferenceStats(conferenceId: number, messageBaseId: nu
       WHERE conference_id = $1 AND message_base_id = $2
     `, [conferenceId, messageBaseId]);
 
+    // How many users the conference is SIZED for. express.e:22706 takes it
+    // from the length of the conference database file; this port keeps it as
+    // `conferences.max_users`, which is what Conference Maintenance's D
+    // option writes (express.e:22845-22853, "Size in records"). Without it
+    // that screen had nothing to divide by and invented a denominator.
+    const capacityResult = await db.query(
+      `SELECT max_users FROM conferences WHERE id = $1`,
+      [conferenceId]
+    );
+
     return {
       messageCount: parseInt(msgResult.rows[0].count),
       lowestMsgNum: parseInt(msgResult.rows[0].lowest),
       highestMsgNum: parseInt(msgResult.rows[0].highest),
-      userCount: parseInt(userResult.rows[0].count)
+      userCount: parseInt(userResult.rows[0].count),
+      capacity: parseInt(capacityResult.rows[0]?.max_users ?? 0) || 0
     };
   } catch (error) {
     console.error('[getConferenceStats] Error:', error);
@@ -380,6 +391,7 @@ export async function getConferenceStats(conferenceId: number, messageBaseId: nu
       messageCount: 0,
       lowestMsgNum: 0,
       highestMsgNum: 0,
+      capacity: 0,
       userCount: 0
     };
   }

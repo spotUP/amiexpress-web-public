@@ -638,6 +638,33 @@ console.log(`[NM KICK] Set sysopKicked=true on session for node ${nodeNum}, node
  * @param socket - Socket.IO socket
  * @param session - Current BBS session
  */
+/**
+ * The message base a Conference Maintenance ordinal names.
+ *
+ * `cmMsgBase` counts 1..n WITHIN a conference - express.e's `msgBase`, which
+ * is what `-`/`+` step and what the header prints as "1.2". Every other layer
+ * of this port takes the message base's own id (`mail_stats.message_base_id`,
+ * the scan pointers, `joinConference`), and the loader hands out those ids
+ * SEQUENTIALLY ACROSS ALL CONFERENCES - so base 1 of conference 2 is id 3, not
+ * id 1.
+ *
+ * The two were used interchangeably here: the menu looked the base up by
+ * `mb.id === ordinal` (so on any conference past the first it found nothing,
+ * and the header lost its "conf.base" form and its name), and B and C wrote
+ * the next/lowest message number of whatever base happened to hold that id -
+ * another conference's. This is the one place that translates.
+ */
+function cmMessageBase(conf: number, ordinal: number): {
+  bases: any[];
+  base: any | undefined;
+  /** What every other layer means by "message base". */
+  id: number;
+} {
+  const bases = _messageBases.filter(mb => mb.conferenceId === conf);
+  const base = bases[ordinal - 1];
+  return { bases, base, id: base?.id ?? ordinal };
+}
+
 export async function handleConferenceMaintenanceCommand(socket: any, session: BBSSession): Promise<void> {
   // Check sysop security - express.e:24844
   if (!checkSecurity(session.user, ACSPermission.SYSOP_COMMANDS)) {
@@ -669,20 +696,24 @@ async function displayConferenceMaintenanceMenu(socket: any, session: BBSSession
 
   // Get conference and message base info
   const conference = _conferences.find(c => c.id === conf);
-  const messageBase = _messageBases.find(mb => mb.conferenceId === conf && mb.id === msgBase);
+  const { bases, base: messageBase, id: msgBaseId } = cmMessageBase(conf, msgBase);
 
-  // Get statistics
-  const stats = await _getConferenceStats(conf, msgBase);
-  const mailStat = await _getMailStatFile(conf, msgBase);
+  // Get statistics. These take the base's own id, not the ordinal.
+  const stats = await _getConferenceStats(conf, msgBaseId);
+  const mailStat = await _getMailStatFile(conf, msgBaseId);
 
-  // Build conference string (express.e:22709-22716)
-  const msgBaseCount = _messageBases.filter(mb => mb.conferenceId === conf).length;
+  // Build conference string (express.e:22713-22720)
+  const msgBaseCount = bases.length;
   let confStr: string;
   let confTitle: string;
 
   if (msgBaseCount > 1 && messageBase) {
     confStr = `${conf}.${msgBase}`;
-    confTitle = `${conference?.name || `Conf ${conf}`} - ${messageBase.name}`;
+    // express.e:22714 getMsgBaseName - the name the board DECLARED. `name`
+    // carries a substituted "Message Base <n>" label for lists; express
+    // prints what MsgBases.info says and nothing when it says nothing.
+    const declared = messageBase.declaredName ?? messageBase.name ?? '';
+    confTitle = `${conference?.name || `Conf ${conf}`} - ${declared}`;
   } else {
     confStr = `${conf}`;
     confTitle = conference?.name || `Conference ${conf}`;
@@ -716,16 +747,33 @@ async function displayConferenceMaintenanceMenu(socket: any, session: BBSSession
   emitText(socket, `\x1b[9;40H\x1b[33mA.>\x1b[32m Reset Voting Booth\x1b[0m\r\n`);
   emitText(socket, `\x1b[10;40H\x1b[33mB.>\x1b[32m Next   Msg # \x1b[0m${String(mailStat.highMsgNum || 0).padStart(8)}\r\n`);
   emitText(socket, `\x1b[11;40H\x1b[33mC.>\x1b[32m Lowest Msg # \x1b[0m${String(mailStat.lowestKey || 0).padStart(8)}\r\n`);
-  emitText(socket, `\x1b[12;40H\x1b[33mD.>\x1b[32m Capacity \x1b[0m${String(stats.userCount).padStart(4)} \x1b[32mUsers\x1b[0m\r\n`);
+  // express.e:22741 prints the conference DATABASE's capacity in records
+  // (`Div(FileLength(confDb), SIZEOF confBase)`), and :22743-22756 the share
+  // of it in use. This printed the USER COUNT as the capacity and then
+  // divided that same count by a hardcoded 1000, so a board of twelve users
+  // read "Capacity 12 Users / 1.2% In use" whatever the sysop had set - and
+  // option D, which sets the capacity, changed neither number.
+  const capacity = Number(stats.capacity ?? 0);
+  emitText(socket, `\x1b[12;40H\x1b[33mD.>\x1b[32m Capacity \x1b[0m${String(capacity).padStart(4)} \x1b[32mUsers\x1b[0m\r\n`);
 
-  // Calculate percentage in use - express.e:22752-22765
-  const totalUsers = stats.userCount;
-  const capacity = 1000; // Default capacity
-  let pctInUse = capacity > 0 ? (totalUsers / capacity * 100).toFixed(1) : '0.0';
-  const pctColor = parseFloat(pctInUse) >= 90 ? '\x1b[31m' : '\x1b[33m'; // Red if >= 90%, yellow otherwise
-  emitText(socket, `\x1b[13;44H${pctColor}${pctInUse}% In use    \x1b[0m\r\n`);
+  // Percentage in use - express.e:22743-22757, including its >100% branch and
+  // its red-above-90 colouring.
+  const totalUsers = Number(stats.userCount ?? 0);
+  const pct = capacity > 0 ? (totalUsers * 100) / capacity : 0;
+  if (pct > 100) {
+    emitText(socket, `\x1b[13;44H\x1b[31m>100% In use    \x1b[0m\r\n`);
+  } else {
+    const colour = pct < 90 ? '\x1b[33m' : '\x1b[31m';
+    emitText(socket, `\x1b[13;44H${colour}${pct.toFixed(1)}% In use \x1b[0m\r\n`);
+  }
 
-  // Dir cache options - express.e:22767-22774 (disabled for web)
+  // Dir cache options - express.e:22759-22766.
+  //
+  // EXEMPT, and inert on purpose: E and F toggle and rebuild RAM: dir caches
+  // through AmigaDOS `LIST`/`COPY` into `RAM:DirCaches`, which is an AmigaDOS
+  // filesystem this port does not have. The lines are drawn so the screen
+  // matches, the state always reads Disabled, and F is not offered - express
+  // itself blanks that line when caching is off.
   emitText(socket, `\x1b[14;40H\x1b[33mE.>\x1b[32m Ram Dir Cache(s) \x1b[0mDisabled\r\n`);
   emitText(socket, `\x1b[15;40H\x1b[33m                        \r\n`);
 
@@ -751,6 +799,8 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
   const choice = input.trim().toUpperCase();
   const conf = session.tempData.cmConf;
   const msgBase = session.tempData.cmMsgBase;
+  // The ordinal names a base; the pointer helpers take that base's id.
+  const { id: msgBaseId } = cmMessageBase(conf, msgBase);
 
   // Handle choice - express.e:22781-22944
   switch (choice) {
@@ -766,7 +816,7 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
 
     case '3': // Reset New Mail Scan Pointers - express.e:22797-22799
       emitText(socket, `\x1b[18;2H\x1b[K \x1b[33mResetting new mail scan pointers...\x1b[0m`);
-      await _resetNewMailScanPointers(conf, msgBase);
+      await _resetNewMailScanPointers(conf, msgBaseId);
       emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;32m[OK]\x1b[0m New mail scan pointers reset for all users\r\n`);
       await new Promise(r => setTimeout(r, 1200));
       await displayConferenceMaintenanceMenu(socket, session);
@@ -774,7 +824,7 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
 
     case '4': // Reset Last Message Read Pointers - express.e:22800-22802
       emitText(socket, `\x1b[18;2H\x1b[K \x1b[33mResetting last message read pointers...\x1b[0m`);
-      await _resetLastMessageReadPointers(conf, msgBase);
+      await _resetLastMessageReadPointers(conf, msgBaseId);
       emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;32m[OK]\x1b[0m Last message read pointers reset for all users\r\n`);
       await new Promise(r => setTimeout(r, 1200));
       await displayConferenceMaintenanceMenu(socket, session);
@@ -877,9 +927,12 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
         const db = getDatabase();
         // Reset messages posted counter for all users in this conference
         // express.e:22833-22835 calls updateAllUsers(conf, msgBase, UPDATE_MESSAGES_POSTED, 0)
+        // express.e:22827 updateAllUsers(conf, msgBase, ...) walks the conf
+        // database of ONE message base. Without the second half of that key
+        // this reset every base in the conference.
         await db.run(
-          `UPDATE conf_base SET messages_posted = 0 WHERE conference_id = $1`,
-          [confId]
+          `UPDATE conf_base SET messages_posted = 0 WHERE conference_id = $1 AND message_base_id = $2`,
+          [confId, msgBaseId]
         );
         emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;32m[OK]\x1b[0m Messages posted counters reset for all users\r\n`);
         await new Promise(r => setTimeout(r, 1200));
@@ -984,14 +1037,18 @@ export async function handleCMNumericInput(socket: any, session: BBSSession, inp
   const value = parseInt(input.trim());
   const conf = session.tempData.cmConf;
   const msgBase = session.tempData.cmMsgBase;
+  // B and C write mail_stats, which is keyed by the base's id - writing the
+  // ordinal there set the next/lowest message number of a DIFFERENT
+  // conference's base on every conference past the first.
+  const { id: msgBaseId } = cmMessageBase(conf, msgBase);
 
   if (!isNaN(value) && value >= 0) {
     const db = getDatabase();
 
     if (field === 'HIGH_MSG') {
-      await _updateMessageNumberRange(conf, msgBase, undefined, value);
+      await _updateMessageNumberRange(conf, msgBaseId, undefined, value);
     } else if (field === 'LOW_MSG') {
-      await _updateMessageNumberRange(conf, msgBase, value, undefined);
+      await _updateMessageNumberRange(conf, msgBaseId, value, undefined);
     } else if (field === 'RATIO') {
       // express.e:22781-22788 - Update ratio for conference
       await db.run(
@@ -1039,6 +1096,11 @@ export async function handleCMConfirmInput(socket: any, session: BBSSession, inp
   const isYes = (answer === 'Y' || answer === 'YES');
   const action = session.tempData.cmAction;
   const confId = session.tempData.cmConf || session.currentConf || 1;
+  // express.e:22803-22823 hand updateAllUsers the conference AND the message
+  // base; conf_base is keyed by both, and these updates named only the
+  // conference - so setting a default on one base set it on every base of
+  // that conference.
+  const { id: msgBaseId } = cmMessageBase(confId, session.tempData.cmMsgBase || 1);
 
   // Map action to friendly name
   const actionNames: Record<string, string> = {
@@ -1060,13 +1122,13 @@ export async function handleCMConfirmInput(socket: any, session: BBSSession, inp
         // UPDATE_NEW_MAIL_SCAN sets/clears MAIL_SCAN_MASK (bit 7, value 128)
         if (isYes) {
           await db.run(
-            `UPDATE conf_base SET scan_flags = scan_flags | 128 WHERE conference_id = $1`,
-            [confId]
+            `UPDATE conf_base SET scan_flags = scan_flags | 128 WHERE conference_id = $1 AND message_base_id = $2`,
+            [confId, msgBaseId]
           );
         } else {
           await db.run(
-            `UPDATE conf_base SET scan_flags = scan_flags & ~128 WHERE conference_id = $1`,
-            [confId]
+            `UPDATE conf_base SET scan_flags = scan_flags & ~128 WHERE conference_id = $1 AND message_base_id = $2`,
+            [confId, msgBaseId]
           );
         }
         break;
@@ -1075,13 +1137,13 @@ export async function handleCMConfirmInput(socket: any, session: BBSSession, inp
         // UPDATE_NEW_FILE_SCAN sets/clears FILE_SCAN_MASK (bit 6, value 64)
         if (isYes) {
           await db.run(
-            `UPDATE conf_base SET scan_flags = scan_flags | 64 WHERE conference_id = $1`,
-            [confId]
+            `UPDATE conf_base SET scan_flags = scan_flags | 64 WHERE conference_id = $1 AND message_base_id = $2`,
+            [confId, msgBaseId]
           );
         } else {
           await db.run(
-            `UPDATE conf_base SET scan_flags = scan_flags & ~64 WHERE conference_id = $1`,
-            [confId]
+            `UPDATE conf_base SET scan_flags = scan_flags & ~64 WHERE conference_id = $1 AND message_base_id = $2`,
+            [confId, msgBaseId]
           );
         }
         break;
@@ -1090,13 +1152,13 @@ export async function handleCMConfirmInput(socket: any, session: BBSSession, inp
         // UPDATE_DEFAULT_ZOOM_FLAG sets/clears ZOOM_SCAN_MASK (bit 1, value 2)
         if (isYes) {
           await db.run(
-            `UPDATE conf_base SET scan_flags = scan_flags | 2 WHERE conference_id = $1`,
-            [confId]
+            `UPDATE conf_base SET scan_flags = scan_flags | 2 WHERE conference_id = $1 AND message_base_id = $2`,
+            [confId, msgBaseId]
           );
         } else {
           await db.run(
-            `UPDATE conf_base SET scan_flags = scan_flags & ~2 WHERE conference_id = $1`,
-            [confId]
+            `UPDATE conf_base SET scan_flags = scan_flags & ~2 WHERE conference_id = $1 AND message_base_id = $2`,
+            [confId, msgBaseId]
           );
         }
         break;
