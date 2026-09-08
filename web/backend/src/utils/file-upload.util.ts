@@ -4,107 +4,140 @@
  */
 
 import { formatLongDate } from './date-time.util';
-import { db } from '../database';
-import { getRootConferenceDir } from './file-hold.util';
 
-// checkForFile() - express.e:18408-18453
-// Returns true if file exists (duplicate), false if safe to upload
+/**
+ * express.e:18408-18445 `checkForFile` - may this name come up at all?
+ *
+ * TRUE means REFUSE (express's `RESULT_FAILURE`); FALSE means the name is
+ * free (`RESULT_SUCCESS`). express asks five questions and NOT ONE OF THEM
+ * TOUCHES A DATABASE:
+ *
+ *   1. illegal characters                          express.e:18412-18413
+ *   2. the FILESNOTALLOWED list, line by line      express.e:18416-18419 (checkOurList, :18382)
+ *   3. `<confDir>/LcFiles/<name>`                  express.e:18421-18426
+ *   4. every `DLPATH.n` of THIS conference         express.e:18428-18439
+ *   5. every `ULPATH.n` of THIS conference         express.e:18440-18447
+ *
+ * This port used to ask SQL instead: `file_entries` joined to `file_areas`,
+ * and `SELECT value FROM system_config WHERE key LIKE 'DLPATH.%'`. The second
+ * one cannot work - `system_config` is a WIDE single-row table, not a
+ * key/value one - so every call threw `SQLITE_ERROR: no such column: value`,
+ * `uploadIsDuplicate` caught it, and the ZFILE was accepted. The caller
+ * uploaded the file in full and the board then filed it as a duplicate into
+ * HOLD, which is exactly the behaviour express answers at the ZFILE to avoid.
+ * DLPATH.n and ULPATH.n are CONFERENCE tooltypes (`Conf<n>.info`), never
+ * board-wide settings, which is why no such row could ever have existed.
+ *
+ * `bbsRoot` now defaults to the board rather than being optional. It was
+ * optional, and `command.handler.ts` called without it: every filesystem
+ * check sat behind `if (bbsDataPath)`, so that path asked the broken query
+ * and nothing else.
+ */
 export async function checkForFile(
   filename: string,
   currentConf: number,
-  bbsDataPath?: string
+  bbsDataPath?: string,
+  nodeId: number = 0
 ): Promise<boolean> {
-  const fs = require('fs/promises');
-  const path = require('path');
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const { config } = require('../config');
+  const { conferenceDownloadDirs, conferenceUploadDirs } =
+    require('../conferences/conference-paths') as typeof import('../conferences/conference-paths');
 
-  // Check for illegal characters (express.e:18410-18411)
+  const bbsRoot = bbsDataPath || config.get('dataDir');
+
+  // 1. Illegal characters - express.e:18412-18413, in express's own order.
   const illegalChars = ['%', '#', '?', ' ', '/', '(', ')', ':', '*'];
   for (const char of illegalChars) {
-    if (filename.includes(char)) {
-      return true; // File not allowed (has illegal chars)
-    }
+    if (filename.includes(char)) return true;
   }
 
-  // Check if file already exists in database for this conference
-  // This checks all file areas in the current conference
-  const existingFile = await db.query(
-    `SELECT f.id
-     FROM file_entries f
-     JOIN file_areas fa ON f.areaid = fa.id
-     WHERE fa.conferenceid = $1
-     AND LOWER(f.filename) = LOWER($2)
-     LIMIT 1`,
-    [currentConf, filename]
-  );
+  // 2. The sysop's own list of names never to accept - express.e:18416-18419.
+  // FILESNOTALLOWED is a NODE tooltype naming a FILE (ACP.e:2665, and
+  // axSetupTool/frmNodeEdit.e:873 is what writes it); the file holds one name
+  // per line and the match is whole-line and case-insensitive, which is what
+  // `StriCmp` does at express.e:18400 after /X 4 dropped pattern matching.
+  if (nameIsOnTheNotAllowedList(filename, nodeId, bbsRoot)) return true;
 
-  if (existingFile.rows.length > 0) {
-    return true; // Duplicate found
+  // 3. LcFiles - express.e:18421-18426. express skips this while an LCFILES
+  // transfer is in progress (`lcFileXfr`); this port has no local-file
+  // transfer, so the check always applies, which is the caller-upload case.
+  const { conferenceDir } =
+    require('../conferences/conference-paths') as typeof import('../conferences/conference-paths');
+  const lcFilesPath = path.join(conferenceDir(bbsRoot, currentConf), 'LcFiles', filename);
+  if (existsCaseInsensitively(lcFilesPath)) return true;
+
+  // 4 and 5. Every download and upload directory THIS conference declares -
+  // express.e:18428-18447. The conference's own icon is the authority; a path
+  // built as `Conf<n>` reads the directory of a conference that may have been
+  // deleted (see conferences/conference-paths.ts).
+  for (const dir of [...conferenceDownloadDirs(bbsRoot, currentConf), ...conferenceUploadDirs(bbsRoot, currentConf)]) {
+    if (existsCaseInsensitively(path.join(dir, filename))) return true;
   }
 
-  // Check LCFILES directory (express.e:18424-18428)
-  if (bbsDataPath) {
-    const confNum = currentConf.toString().padStart(2, '0');
-    const rootLcfilesPath = path.join(
-      getRootConferenceDir(currentConf, bbsDataPath),
-      'LCFILES',
-      filename
-    );
-    const fallbackLcfilesPath = path.join(
-      bbsDataPath,
-      'BBS',
-      `Conf${confNum}`,
-      'LCFILES',
-      filename
-    );
-    const lcfilesPaths = [rootLcfilesPath];
-    if (fallbackLcfilesPath !== rootLcfilesPath) {
-      lcfilesPaths.push(fallbackLcfilesPath);
-    }
+  return false;
+}
 
-    for (const candidatePath of lcfilesPaths) {
-      try {
-        await fs.access(candidatePath);
-console.log(`[checkForFile] Duplicate found in LCFILES: ${filename}`);
-        return true; // File exists in LCFILES
-      } catch {
-        // File doesn't exist in this LCFILES candidate, continue checking
-      }
-    }
+/**
+ * AmigaDOS is case-insensitive, and `fileExists` at express.e:18425 is asking
+ * an AmigaDOS `Lock`. A duplicate that differs only in case is the same file
+ * to the board it came from, so a case-sensitive host filesystem must not let
+ * `dupe.lha` past a check that `DUPE.LHA` would have caught.
+ */
+function existsCaseInsensitively(candidate: string): boolean {
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
 
-    // Check DLPATH.1, DLPATH.2, etc. from config (express.e:18431-18439)
-    // Get download paths from system config
-    const dlPathConfig = await db.query(
-      `SELECT value FROM system_config WHERE key LIKE 'DLPATH.%'`
-    );
-    for (const row of dlPathConfig.rows) {
-      const dlPath = path.join(bbsDataPath, row.value, filename);
-      try {
-        await fs.access(dlPath);
-console.log(`[checkForFile] Duplicate found in DLPATH: ${filename}`);
-        return true; // File exists in download path
-      } catch {
-        // File doesn't exist in this path, continue
-      }
-    }
-
-    // Check ULPATH.1, ULPATH.2, etc. from config (express.e:18440-18448)
-    // Get upload paths from system config
-    const ulPathConfig = await db.query(
-      `SELECT value FROM system_config WHERE key LIKE 'ULPATH.%'`
-    );
-    for (const row of ulPathConfig.rows) {
-      const ulPath = path.join(bbsDataPath, row.value, filename);
-      try {
-        await fs.access(ulPath);
-console.log(`[checkForFile] Duplicate found in ULPATH: ${filename}`);
-        return true; // File exists in upload path
-      } catch {
-        // File doesn't exist in this path, continue
-      }
-    }
+  try {
+    if (fs.existsSync(candidate)) return true;
+  } catch {
+    /* an unreadable path is not a match */
   }
 
-  return false; // File is safe to upload
+  const wanted = path.basename(candidate).toLowerCase();
+  try {
+    return fs.readdirSync(path.dirname(candidate)).some((entry) => entry.toLowerCase() === wanted);
+  } catch {
+    // A directory that is not there holds no duplicate.
+    return false;
+  }
+}
+
+/**
+ * express's `checkOurList` - express.e:18382-18406.
+ *
+ * A list file that cannot be opened means "no list", and express returns
+ * RESULT_SUCCESS for it (:18387-18389): a missing DUPE_LIST must never refuse
+ * every upload on the board.
+ */
+export function nameIsOnTheNotAllowedList(filename: string, nodeId: number, bbsRoot: string): boolean {
+  const fs = require('fs') as typeof import('fs');
+  const { nodeTooltype } = require('./node-tooltypes.util') as typeof import('./node-tooltypes.util');
+  const { BBSPaths } = require('./bbs-paths.util') as typeof import('./bbs-paths.util');
+
+  const listSetting = (nodeTooltype(nodeId, 'FILESNOTALLOWED') ?? '').trim();
+  if (listSetting.length === 0) return false;
+
+  let listPath = listSetting;
+  try {
+    if (listSetting.includes(':')) listPath = new BBSPaths(bbsRoot).resolveAmigaPath(listSetting);
+  } catch {
+    return false;
+  }
+
+  let contents: string;
+  try {
+    contents = fs.readFileSync(listPath, 'latin1');
+  } catch {
+    return false; // express.e:18387 - no list, nothing refused
+  }
+
+  const wanted = filename.toLowerCase();
+  return contents
+    .split(/\r?\n/)
+    .map((line) => line.trim().toLowerCase())
+    .some((line) => line.length > 0 && line === wanted);
 }
 
 // Validate filename for upload (express.e:19218-19231)

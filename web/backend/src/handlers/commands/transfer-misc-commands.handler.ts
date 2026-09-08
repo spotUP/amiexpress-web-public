@@ -188,6 +188,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
           filename: name,
           conferenceId: session.currentConf,
           bbsRoot: appCfg.get('dataDir'),
+          nodeId: session.nodeId || 0,
         });
       },
         onComplete: async (ok: boolean, detail: any) => {

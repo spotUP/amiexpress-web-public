@@ -47,6 +47,12 @@ export interface DuplicateQuestion {
   bbsRoot: string;
   /** Nodes to look through for a staged copy. */
   nodes?: number;
+  /**
+   * The node this caller is on. `FILESNOTALLOWED` is a NODE tooltype
+   * (ACP.e:2665), so the list express checks is the one on the icon of the
+   * node the upload is happening on, not a board-wide list.
+   */
+  nodeId?: number;
 }
 
 /**
@@ -62,6 +68,6 @@ export async function uploadIsDuplicate(question: DuplicateQuestion): Promise<bo
   const filename = path.basename(String(question.filename ?? '').replace(/\\/g, '/')).trim();
   if (filename.length === 0) return false;
 
-  if (await checkForFile(filename, question.conferenceId, question.bbsRoot)) return true;
+  if (await checkForFile(filename, question.conferenceId, question.bbsRoot, question.nodeId ?? 0)) return true;
   return nameIsInAPlaypen(filename, question.bbsRoot, question.nodes);
 }

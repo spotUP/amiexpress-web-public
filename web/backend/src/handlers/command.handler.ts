@@ -2875,8 +2875,12 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
       return;
     }
 
-    // Check for duplicates (express.e:17685-17689)
-    const isDuplicate = await checkForFile(input, session.currentConf);
+    // Check for duplicates (express.e:17685-17689). The node goes in because
+    // FILESNOTALLOWED lives on the node's icon (ACP.e:2665); the board root is
+    // checkForFile's own default now, which is what this call was missing -
+    // without it every filesystem check sat behind an `if (bbsDataPath)` and
+    // this prompt could only ever answer from the database.
+    const isDuplicate = await checkForFile(input, session.currentConf, undefined, session.nodeId || 0);
     if (isDuplicate) {
       emitText(socket, 'File Exists, or has a symbol (#?*).\r\n');
       emitText(socket, `\r\nFileName ${session.tempData.uploadCount}: `);

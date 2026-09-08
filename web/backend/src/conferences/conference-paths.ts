@@ -159,6 +159,34 @@ export function conferenceAmigaPath(bbsRoot: string, conferenceNumber: number, .
  * caller DLPATH.1.
  */
 export function conferenceDownloadDirs(bbsRoot: string, conferenceNumber: number): string[] {
+  return conferencePathDirs(bbsRoot, conferenceNumber, 'DLPATH');
+}
+
+/**
+ * The directories a conference's UPLOADS are staged into - `ULPATH.1..16` in
+ * the same icon, read exactly as the download side reads `DLPATH`.
+ *
+ * express.e:18440-18447 walks these in `checkForFile`, which is why this
+ * exists: a file already sitting in an upload directory is a duplicate, and
+ * answering that question needs the same resolver downloads use rather than a
+ * second guess at where a conference keeps its files.
+ */
+export function conferenceUploadDirs(bbsRoot: string, conferenceNumber: number): string[] {
+  return conferencePathDirs(bbsRoot, conferenceNumber, 'ULPATH');
+}
+
+/**
+ * The shared walk behind both.
+ *
+ * ONE DELIBERATE DIVERGENCE FROM express, recorded rather than hidden:
+ * express stops at the first tooltype that does not read
+ * (`WHILE readToolType(...)`, express.e:18432 and :18441), so a board with
+ * `DLPATH.1` and `DLPATH.3` and no `DLPATH.2` loses the third directory. This
+ * walks 1..16 and skips the gap, which is what the download and FTP sides of
+ * this port have always done. A superset can only make a duplicate check
+ * stricter, never looser, and one resolver beats two.
+ */
+function conferencePathDirs(bbsRoot: string, conferenceNumber: number, prefix: 'DLPATH' | 'ULPATH'): string[] {
   const iconPath = `${conferenceDir(bbsRoot, conferenceNumber)}.info`;
 
   let tooltypes: Map<string, string>;
@@ -174,7 +202,7 @@ export function conferenceDownloadDirs(bbsRoot: string, conferenceNumber: number
 
   const resolved: string[] = [];
   for (let index = 1; index <= 16; index++) {
-    const value = tooltypes.get(`DLPATH.${index}`)?.trim();
+    const value = tooltypes.get(`${prefix}.${index}`)?.trim();
     if (!value) continue;
     try {
       const host = value.includes(':')
