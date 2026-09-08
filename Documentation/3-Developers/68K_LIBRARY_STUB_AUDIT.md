@@ -50,6 +50,14 @@ door is actually seen to need it: `SetFileDate`, `SetFileSize`, `CompareDates`,
 if a door reads a `.info`'s tooltypes directly. Everything else waits for a
 LEDGER hit.
 
+## Runtime sweep, 2026-09-08 (the 34 present-locally doors)
+
+`ledger-sweep.sh --ids <34>`: **64 LVOs seen, all real, 0 backlog** — confirms
+the present doors need nothing we lack. Hottest: aedoor `WriteStr` (365k), exec
+`GetMsg`/`ReplyMsg` (167k each), `AllocMem`, `WaitPort`, `Forbid` — the door
+message loop, all implemented. 0 backlog here is the missing corpus, not a
+complete emulator.
+
 ## How to redo this properly
 
 1. In a corpus-populated environment: `dev/scripts/door-corpus/ledger-sweep.sh N`
