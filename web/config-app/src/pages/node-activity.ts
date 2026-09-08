@@ -56,6 +56,10 @@ const EXACT: Record<string, string> = {
   operator_chat_active: 'Chatting with the sysop',
   chat: 'In chat',
 
+  // AG_VIEW arrived with the AmigaGuide viewer (ae5c99e51) and had no rule,
+  // which is what the "every state the board can be in" test is for.
+  ag_view: 'Reading a guide',
+
   exec_quicknew: 'Looking for new files',
   view_file_input: 'Viewing a file',
   batch_download_confirm: 'Downloading',

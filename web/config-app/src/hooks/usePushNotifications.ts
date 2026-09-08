@@ -22,6 +22,37 @@ interface VapidResponse {
 }
 
 /**
+ * Where the service worker lives.
+ *
+ * The admin is served under `/admin/` (vite `base`), so a bare `/sw.js` is a
+ * 404 - and it was, on the live board, for every caller: the file was also
+ * gitignored and never shipped at all. `import.meta.env.BASE_URL` is that
+ * base, so this follows the app wherever it is mounted.
+ */
+const SERVICE_WORKER_URL = `${import.meta.env.BASE_URL}sw.js`;
+
+/**
+ * The registration this app already has, or nothing - WITHOUT waiting.
+ *
+ * `navigator.serviceWorker.ready` never resolves when no worker is
+ * registered. It does not reject and it does not time out: the promise simply
+ * never settles. The mount-time check awaited it, so on a board whose worker
+ * had never been registered the hook sat at `loading: true, isSupported:
+ * false` for ever - and the header's "Desktop notifications off" button, which
+ * renders only when `isSupported`, could never appear. The only call that
+ * registered the worker was behind that button. The sysop, 2026-09-08: "do i
+ * need to screenshot to prove that there is no switch visible".
+ */
+async function existingRegistration(): Promise<ServiceWorkerRegistration | undefined> {
+  try {
+    return (await navigator.serviceWorker.getRegistration(SERVICE_WORKER_URL))
+      ?? (await navigator.serviceWorker.getRegistration());
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Convert a base64 string to Uint8Array for VAPID key
  */
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -86,9 +117,12 @@ export function usePushNotifications() {
 
         setVapidPublicKey(publicKey);
 
-        // Check current subscription
-        const registration = await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.getSubscription();
+        // Check current subscription. No worker registered yet is the NORMAL
+        // first visit, and it means "not subscribed" - not "wait for ever".
+        const registration = await existingRegistration();
+        const subscription = registration
+          ? await registration.pushManager.getSubscription()
+          : null;
 
         setState(prev => ({
           ...prev,
@@ -119,7 +153,7 @@ export function usePushNotifications() {
     }
 
     try {
-      const registration = await navigator.serviceWorker.register('/sw.js');
+      const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL);
       console.log('[Push] Service worker registered');
       return registration;
     } catch (error) {
@@ -151,14 +185,18 @@ export function usePushNotifications() {
         return false;
       }
 
-      // Register service worker if not already
-      let registration: ServiceWorkerRegistration | null = await navigator.serviceWorker.ready;
+      // Register the worker if this browser has none. Awaiting `ready` FIRST
+      // was the deadlock: with nothing registered it never resolves, so the
+      // registration below was never reached.
+      let registration: ServiceWorkerRegistration | null = (await existingRegistration()) ?? null;
       if (!registration) {
         registration = await registerServiceWorker();
         if (!registration) {
           throw new Error('Failed to register service worker');
         }
       }
+      // Now that one EXISTS, waiting for it to activate is safe.
+      await navigator.serviceWorker.ready;
 
       // Subscribe to push
       // Convert Uint8Array to ArrayBuffer for applicationServerKey
@@ -202,8 +240,8 @@ export function usePushNotifications() {
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
+      const registration = await existingRegistration();
+      const subscription = registration ? await registration.pushManager.getSubscription() : null;
 
       if (subscription) {
         // Unsubscribe from push manager
@@ -240,7 +278,8 @@ export function usePushNotifications() {
       return;
     }
 
-    const registration = await navigator.serviceWorker.ready;
+    const registration = await existingRegistration();
+    if (!registration) return;
     await registration.showNotification('Test Notification', {
       body: 'Push notifications are working!',
       icon: '/favicon.ico',

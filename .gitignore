@@ -120,6 +120,13 @@ public
 # Vite uses public/ for static assets - un-ignore frontend public directory
 !web/frontend/public/
 !web/frontend/public/**
+# ... and the ADMIN's, which the Gatsby `public` rule above had been eating
+# since the day it was written. `web/config-app/public/sw.js` is the push
+# service worker: never committed, so never in the build context, so never in
+# the image, so /admin/sw.js answered 404 on the live board and desktop
+# notifications could not be switched on by anybody.
+!web/config-app/public/
+!web/config-app/public/**
 # But ignore font backups (not needed in production)
 web/frontend/public/fonts/backups/
 
