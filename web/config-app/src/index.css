@@ -1,3 +1,5 @@
+@import './styles/tokens.css';
+
 /*
  * THE C64 CHARACTER ROM, for the PETSCII previews.
  *
@@ -17,6 +19,11 @@
  * relative from there points at `assets/fonts/...`, which is nowhere. Vite
  * rewrites this one to the real emitted URL under whatever base the admin is
  * served from.
+ *
+ * IT SITS AFTER THE @import DELIBERATELY. CSS requires `@import` to precede
+ * every other rule; declared above it, this face made `./styles/tokens.css`
+ * invalid, the browser dropped it, and the admin rendered with no design
+ * tokens at all - "the admin page turned white now?".
  */
 @font-face {
   font-family: 'PetMe64';
@@ -26,7 +33,6 @@
   font-display: block;
 }
 
-@import './styles/tokens.css';
 
 @font-face {
   font-family: 'Topaz_a1200';
