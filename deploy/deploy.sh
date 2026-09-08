@@ -31,10 +31,28 @@ LOCK_FILE="${DEPLOY_LOCK:-/var/lock/amiexpress-deploy.lock}"
 
 if [ "${DEPLOY_LOCK_HELD:-}" != "1" ]; then
   export DEPLOY_LOCK_HELD=1
-  exec flock --nonblock "$LOCK_FILE" "$0" "$@" || {
+  # NOT `exec flock ... || { ... }`. `exec` REPLACES this shell with flock, so
+  # the `||` branch after it is unreachable: when the lock was held, flock
+  # exited 1, nothing was printed, and the deploy looked to its caller like a
+  # command that had simply finished. On 2026-09-08 that cost an hour - a
+  # deploy reported success (the caller had piped it through `tail`, whose exit
+  # status won), the board did not move, and the container was 35 minutes older
+  # than the deploy that claimed to have built it. A deploy that silently does
+  # nothing and reports success is worse than one that fails loudly.
+  #
+  # `--conflict-exit-code` makes 75 mean "the lock was held" and nothing else,
+  # so the deploy's OWN exit status still reaches the caller unchanged. Without
+  # it, flock returns 1 both for a held lock and for a deploy that failed, and
+  # the two are not the same thing to whoever is reading the log.
+  # `|| lock_status=$?` and not a bare call: `set -e` is on, so a bare
+  # non-zero flock would kill this shell before the next line could read $?,
+  # and the message would go missing all over again by a different route.
+  lock_status=0
+  flock --nonblock --conflict-exit-code 75 "$LOCK_FILE" "$0" "$@" || lock_status=$?
+  if [ "$lock_status" -eq 75 ]; then
     echo "another deploy holds $LOCK_FILE - not starting a second one" >&2
-    exit 75
-  }
+  fi
+  exit "$lock_status"
 fi
 
 cd "$DEPLOY_ROOT"
