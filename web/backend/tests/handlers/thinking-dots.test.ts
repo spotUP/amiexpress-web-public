@@ -7,7 +7,10 @@
  */
 process.env.SKIP_DB_INIT = '1';
 
-import { chatIsLive, activeChatSessions } from '../../src/handlers/operator-chat/chat-stream';
+import { chatIsLive, activeChatSessions, callerTypedChar, CHAT_COLOR_USER }
+  from '../../src/handlers/operator-chat/chat-stream';
+import { registerConnectionEmitter } from '../../src/server/session-emitter-registry';
+import { userSessions } from '../../src/server/session-manager';
 
 function fakeChat(pageId: string): any {
   const chatSession: any = { pageId, line: { text: '', lastSender: null }, messages: [] };
@@ -105,5 +108,80 @@ describe('the dots the co-sysop types while it thinks', () => {
     const afterFirst = seen.join('');
     stop();
     expect(seen.join('')).toBe(afterFirst);
+  });
+
+  /**
+   * THE COLOUR IS GONE ON PURPOSE. It used to emit `\x1b[36m` with the first
+   * dot, straight to the wire - which left the terminal in sysop cyan while
+   * `line.lastSender` still said `user`, and the caller's next keystroke then
+   * rendered cyan. Bare dots, and no SGR of any kind.
+   */
+  it('types no colour of its own - the line model would never learn of it', () => {
+    const { seen } = armed();
+    jest.advanceTimersByTime(THINKING_DOTS_AFTER_MS + 300 * 2);
+    expect(seen.join('')).toBe('...');
+    expect(seen.join('')).not.toContain('\x1b');
+  });
+
+  it('leaves no timer running once it is stopped', () => {
+    const { stop } = armed();
+    expect(jest.getTimerCount()).toBe(1);
+    jest.advanceTimersByTime(THINKING_DOTS_AFTER_MS + 300);
+    stop();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  /**
+   * THE LINE IS SHARED, so a caller who types during the thinking window would
+   * have had the dots' backspaces rub out his OWN characters - off the screen
+   * but still in `line.text`. His first key ends the window instead. Driven
+   * through the real `callerTypedChar` so what is proved is the wiring.
+   */
+  describe('the caller types while it is thinking', () => {
+    function caller(pageId: string, seen: string[]) {
+      const session: any = { user: { id: 'u-dots' }, tempData: { pageId } };
+      registerConnectionEmitter(session, {
+        emit: (event: string, data: unknown) => { if (event === 'ansi-output') seen.push(String(data)); },
+      } as any);
+      userSessions.set('u-dots', session);
+      return session;
+    }
+    afterEach(() => userSessions.delete('u-dots'));
+
+    it('rubs the dots out before the echo, and keeps the caller his character', () => {
+      const seen: string[] = [];
+      const chatSession = fakeChat('p1');
+      const session = caller('p1', seen);
+      startThinkingDots((b) => seen.push(b), chatSession, 'p1', { gapMs: () => 300 });
+
+      jest.advanceTimersByTime(THINKING_DOTS_AFTER_MS + 300 * 2);
+      expect(seen.join('')).toBe('...');
+
+      callerTypedChar({}, session, 'a');
+
+      // Three dots, three erases, THEN the caller's own character in his own
+      // colour. Erase first or the backspaces eat the 'a'.
+      expect(seen.join('')).toBe('...' + '\b \b'.repeat(3) + `\x1b[${CHAT_COLOR_USER}ma`);
+      expect(chatSession.line.text).toBe('a');
+      expect(jest.getTimerCount()).toBe(0);
+    });
+
+    it('types no further dots, and does not erase a second time', () => {
+      const seen: string[] = [];
+      const chatSession = fakeChat('p1');
+      const session = caller('p1', seen);
+      const stop = startThinkingDots((b) => seen.push(b), chatSession, 'p1', { gapMs: () => 300 });
+
+      jest.advanceTimersByTime(THINKING_DOTS_AFTER_MS + 300 * 2);
+      callerTypedChar({}, session, 'a');
+      seen.length = 0;
+
+      jest.advanceTimersByTime(300 * 10);
+      stop();
+      callerTypedChar({}, session, 'b');
+
+      // Nothing but the second key's echo: no dot, and no second rub-out.
+      expect(seen.join('')).toBe('b');
+    });
   });
 });

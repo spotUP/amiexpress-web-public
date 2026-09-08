@@ -119,6 +119,36 @@ function emitToCaller(io: any, session: BBSSession, bytes: string): void {
   const reach = emitterForUserId(session.user!.id, io);
   if (reach) reach.emitter.emit('ansi-output', bytes);
 }
+
+/**
+ * THE THINKING DOTS ARE CANCELLED BY THE CALLER'S OWN KEYS.
+ *
+ * `thinking-dots.ts` types dots while the co-sysop thinks and rubs them out by
+ * backspacing over exactly what it wrote. This line is SHARED: the caller's
+ * keys are echoed onto it the moment they are pressed (6172), and a caller
+ * waiting for an answer is precisely a caller who keeps typing. Dots followed
+ * by `abc` would be rubbed out AS `abc` - the caller's characters gone from
+ * the screen, still in `line.text`, and the dots left standing. So the
+ * caller's first key ENDS the thinking window, while the screen still ends in
+ * dots and the backspaces still land on them.
+ *
+ * The slot lives in this module because this module owns the chat session's
+ * scratch (`chatLineOf` above). `thinking-dots` fills it and empties it again
+ * when it stops; the caller's three paths below empty it. That also keeps the
+ * dependency one-way - `thinking-dots` reads this module, never the reverse.
+ */
+type ChatWithDots = ChatSession & { thinkingDotsStop?: (() => void) | null };
+
+/** Called by `thinking-dots` alone: `null` when its dots are over. */
+export function setThinkingDotsCanceller(chatSession: ChatSession, cancel: (() => void) | null): void {
+  (chatSession as ChatWithDots).thinkingDotsStop = cancel;
+}
+
+/** End any thinking window this chat is in, erasing its dots. */
+export function cancelThinkingDots(chatSession: ChatSession | null | undefined): void {
+  const cancel = chatSession ? (chatSession as ChatWithDots).thinkingDotsStop : null;
+  if (cancel) cancel();
+}
 /**
  * THE CALLER'S SIDE of the stream, called from the chat branch of
  * command.handler for every key: the character goes onto the shared line and
@@ -126,6 +156,9 @@ function emitToCaller(io: any, session: BBSSession, bytes: string): void {
  */
 export function callerTypedChar(io: any, session: BBSSession, ch: string): void {
   const cs = chatOfSession(session);
+  // The dots come off the screen BEFORE this key is echoed onto it: their
+  // backspaces have to land on the dots, not on the caller's own character.
+  if (cs) cancelThinkingDots(cs);
   // Chat or no chat, the caller's own key is in the caller's colour: a bare
   // character inherited whatever was current - the bot's cyan, after its line
   // ("sometimes i get the sysop cyan when i type", 2026-09-08).
@@ -133,10 +166,12 @@ export function callerTypedChar(io: any, session: BBSSession, ch: string): void 
 }
 export function callerBackspaced(io: any, session: BBSSession): void {
   const cs = chatOfSession(session);
+  if (cs) cancelThinkingDots(cs);
   emitToCaller(io, session, cs ? chatBackspaceBytes(cs) : '\b \b');
 }
 export function callerPressedReturn(io: any, session: BBSSession): void {
   const cs = chatOfSession(session);
+  if (cs) cancelThinkingDots(cs);
   emitToCaller(io, session, cs ? chatReturnBytes(cs) : '\r\n');
 }
 
