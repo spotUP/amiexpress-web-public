@@ -22,11 +22,17 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 
-const get = vi.fn(async () => ({ data: { enabled: true, publicKey: 'BFakeKeyForTests_' + 'A'.repeat(70) } }));
-const post = vi.fn(async () => ({ data: {} }));
+const get = vi.fn(async (_url: string) => ({
+  data: { enabled: true, publicKey: 'BFakeKeyForTests_' + 'A'.repeat(70) },
+}));
+const post = vi.fn(async (_url: string, _body?: unknown) => ({ data: {} }));
 
 vi.mock('../api/client', () => ({
-  apiClient: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a), delete: vi.fn() },
+  apiClient: {
+    get: (url: string) => get(url),
+    post: (url: string, body?: unknown) => post(url, body),
+    delete: vi.fn(),
+  },
 }));
 
 const staleUnsubscribe = vi.fn(async () => true);
@@ -102,9 +108,9 @@ describe('switching this browser on', () => {
     expect(staleUnsubscribe).toHaveBeenCalled();
     expect(subscribe).toHaveBeenCalled();
 
-    const sent = post.mock.calls.find(([url]) => url === '/api/config/push/subscribe');
+    const sent = post.mock.calls.find((call) => call[0] === '/api/config/push/subscribe');
     expect(sent).toBeDefined();
-    expect((sent![1] as any).subscription.endpoint).toBe(fresh.endpoint);
+    expect((sent![1] as { subscription: { endpoint: string } }).subscription.endpoint).toBe(fresh.endpoint);
   });
 
   it("asks for THIS app's worker by URL, not for whatever the profile has", async () => {
@@ -115,9 +121,9 @@ describe('switching this browser on', () => {
 
     // A subscription minted at another scope never receives what /admin/sw.js
     // is sent, and the board cannot tell the difference.
-    const asked = getRegistration.mock.calls.filter(([url]) => typeof url === 'string');
+    const asked = getRegistration.mock.calls.filter((call) => typeof call[0] === 'string');
     expect(asked.length).toBeGreaterThan(0);
-    expect(String(asked[asked.length - 1][0])).toContain('sw.js');
+    expect(String(asked[asked.length - 1]![0])).toContain('sw.js');
   });
 
   it('reports the new endpoint back to the page, so the tails can be compared', async () => {

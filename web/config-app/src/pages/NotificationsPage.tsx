@@ -17,6 +17,27 @@ import { Bell, BellOff, BellRing, Send } from 'lucide-react';
 
 import { apiClient } from '../api/client';
 import { usePushNotifications } from '../hooks/usePushNotifications';
+
+/**
+ * Where the operating system keeps the switch that overrides everything.
+ *
+ * A site can hold permission, a worker can draw a notification and the call
+ * can resolve, and macOS still shows nothing because Chrome itself is muted
+ * at the system level. Nothing in the web platform reports that - it cost an
+ * evening of chasing the board before the sysop found the toggle - so the
+ * page names the exact path rather than saying "check your settings".
+ */
+function operatingSystemNotificationPath(): string {
+  const platform = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+  if (/Mac OS X|Macintosh/.test(platform)) {
+    return 'System Settings > Notifications > your browser: "Allow Notifications" must be on, ' +
+      'the style must be Banners or Alerts, and Focus must be off';
+  }
+  if (/Windows/.test(platform)) {
+    return 'Settings > System > Notifications: your browser must be allowed, and Focus assist off';
+  }
+  return "your system's notification settings for this browser";
+}
 import { OperatorChatSettingsPage } from './OperatorChatSettingsPage';
 
 export function NotificationsPage() {
@@ -153,7 +174,11 @@ export function NotificationsPage() {
                             'switch it off and on again above.'
                           : reachesThisBrowser
                             ? 'One of them was this browser. If nothing appeared, your operating system is ' +
-                              'holding it back - check its notification settings for this browser.'
+                              `holding it back - ${operatingSystemNotificationPath()}. ` +
+                              'If it appears only when you switch to the browser, the browser was not ' +
+                              'running in the background: turn on "Continue running background apps when ' +
+                              'the browser is closed" in its system settings, or a page arrives when you ' +
+                              'next open it rather than when it happens.'
                             : 'None of them was THIS browser: the board is sending to a subscription this ' +
                               'browser no longer has, which the push service accepts and nothing draws. ' +
                               'Switch this browser off and on again above.'),
@@ -181,7 +206,7 @@ export function NotificationsPage() {
         {tested === 'drawn' && !push.error && (
           <p className="text-sm text-content-secondary" data-testid="push-tested">
             Drawn by this browser. If nothing appeared, your operating system is
-            holding it back - check its notification settings for this browser.
+            holding it back - {operatingSystemNotificationPath()}.
           </p>
         )}
 

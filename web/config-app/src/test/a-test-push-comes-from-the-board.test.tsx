@@ -89,6 +89,33 @@ describe('a test push from the board', () => {
     expect(screen.getByTestId('push-from-board')).toHaveTextContent('One of them was this browser');
   });
 
+  it('names the operating system path when the message did reach this browser', async () => {
+    // "check its notification settings" is what cost an evening: macOS mutes a
+    // browser at the system level while the site's permission still reads
+    // granted, and nothing in the web platform reports it.
+    const realAgent = navigator.userAgent;
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/152.0.0.0',
+    });
+    post.mockResolvedValue({
+      data: { data: { sent: 1, failed: 0, subscriptions: 1, endpoints: [
+        { tail: 'THIS-BROWSER', success: true },
+      ] } },
+    });
+
+    try {
+      render(<NotificationsPage />);
+      await press();
+
+      await waitFor(() =>
+        expect(screen.getByTestId('push-from-board')).toHaveTextContent('Allow Notifications')
+      );
+    } finally {
+      Object.defineProperty(navigator, 'userAgent', { configurable: true, value: realAgent });
+    }
+  });
+
   it('says when the board is sending to a subscription this browser does not have', async () => {
     // The push service answers 201 for an endpoint whose worker is gone, so
     // the board reports success and nothing is ever drawn. This is the case
