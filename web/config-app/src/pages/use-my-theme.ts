@@ -99,8 +99,29 @@ export function useMyTheme(): {
    * OWNER, which is the same rule every other theme uses, and the board grants
    * that account the ART directories only (`theme-sandbox.boardScreenRoots`).
    */
+  const boardsOwn: ArtistTheme = {
+    slug: 'default',
+    title: "The board's own screens",
+    status: 'live',
+    dir: '',
+    owner: '',
+    screens: null,
+    mine: true,
+  };
+
+  /*
+   * A sysop is always offered the board's own screens, whether or not the
+   * registry has a row for them.
+   *
+   * `default` is the board itself; most boards have no `TYPE.n=default` line
+   * at all (this one does not), so requiring the row would have shown the
+   * sysop nothing. A row is only needed to hand the board's art to SOMEBODY
+   * ELSE - its `OWNER.n` is what the sandbox grants on, and the row's own
+   * title wins over this one when it exists.
+   */
+  const registered = themes.filter(entry => entry.dir.trim() !== '' || entry.slug === 'default');
   const choices = sysop
-    ? themes.filter(entry => entry.dir.trim() !== '' || entry.slug === 'default')
+    ? (registered.some(entry => entry.slug === 'default') ? registered : [boardsOwn, ...registered])
     : themes.filter(entry => entry.mine);
 
   const create = useMutation({

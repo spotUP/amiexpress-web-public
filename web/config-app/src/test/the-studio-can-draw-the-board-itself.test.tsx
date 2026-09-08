@@ -109,6 +109,25 @@ describe('the board\'s own screens, in the studio', () => {
     await waitFor(() => expect(screen.queryByText(/Redraw this in/i)).toBeNull());
   });
 
+  /*
+   * Most boards have no `TYPE.n=default` row - this one does not, which is why
+   * the picker showed the sysop nothing until the entry was synthesised. A row
+   * is only needed to hand the board's art to somebody who is not a sysop.
+   */
+  it('are offered even when the registry has no row for them', async () => {
+    const registry = themes.themes;
+    themes.themes = registry.filter(
+      entry => (entry as { slug?: string }).slug !== 'default',
+    );
+
+    render(<ArtistStudioPage />, { wrapper });
+    const picker = await screen.findByLabelText('Theme');
+    const offered = Array.from(picker.querySelectorAll('option')).map(o => o.textContent ?? '');
+
+    expect(offered.some(label => label.includes("The board's own screens"))).toBe(true);
+    themes.themes = registry;
+  });
+
   it('show no redraw checklist for the board itself', async () => {
     const user = userEvent.setup();
     render(<ArtistStudioPage />, { wrapper });

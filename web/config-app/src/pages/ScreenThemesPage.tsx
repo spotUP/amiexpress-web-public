@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Check, Send, Eye, Palette, Copy, Monitor, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Plus, Check, Send, Eye, Palette, Copy, Monitor, ShieldCheck, AlertTriangle, UserCog } from 'lucide-react';
 
 import { apiClient } from '../api/client';
 import { Modal } from '../components/ui/Modal';
@@ -186,6 +186,39 @@ export function ScreenThemesPage() {
     onError: (err: Error) => showError(`Could not change the status: ${err.message}`),
   });
 
+  /*
+   * WHO MAY DRAW A THEME - including the board's own screens.
+   *
+   * The owner was settable only while CREATING a theme, so a theme created
+   * without one (this board's `tango` has `OWNER.0` empty) could never be
+   * handed to anybody, and the board's own screens - `default`, the entry that
+   * has no directory - could not be handed to the artist drawing them: "also
+   * tango needs to be able to do it as he will make it". The server has always
+   * allowed a sysop to set an owner; there was no way to ask.
+   */
+  const ownerMutation = useMutation({
+    mutationFn: ({ slug, owner }: { slug: string; owner: string }) =>
+      apiClient.updateScreenTheme(slug, { owner }),
+    onSuccess: (_result, variables) => {
+      invalidate();
+      showSuccess(variables.owner
+        ? `"${variables.slug}" is ${variables.owner}'s to draw`
+        : `"${variables.slug}" has no owner now`);
+    },
+    onError: (err: Error) => showError(`Could not change the owner: ${err.message}`),
+  });
+
+  async function handOver(theme: ScreenTheme) {
+    const owner = window.prompt(
+      theme.dir === ''
+        ? "Which account may draw the board's own screens? (empty for nobody but sysops)"
+        : `Which account owns "${theme.title}"? (empty for nobody)`,
+      theme.owner,
+    );
+    if (owner === null) return;
+    ownerMutation.mutate({ slug: theme.slug, owner: owner.trim() });
+  }
+
   const copyMutation = useMutation({
     mutationFn: ({ slug, boardPath }: { slug: string; boardPath: string }) =>
       apiClient.copyScreenIntoTheme(slug, boardPath),
@@ -328,6 +361,18 @@ export function ScreenThemesPage() {
           {canCreate && row.status !== 'live' && row.dir !== '' && (
             <button type="button" onClick={() => makeLive(row)} className="p-1 rounded hover:bg-surface-3 text-content-secondary hover:text-content-primary transition-colors" title="Publish">
               <Check size={16} />
+            </button>
+          )}
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => handOver(row)}
+              className="p-1 rounded hover:bg-surface-3 text-content-secondary hover:text-content-primary transition-colors"
+              title={row.dir === ''
+                ? "Choose who may draw the board's own screens"
+                : 'Choose who owns this theme'}
+            >
+              <UserCog size={16} />
             </button>
           )}
           {canCreate && row.status === 'live' && row.slug !== defaultSlug && (
