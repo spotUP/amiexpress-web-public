@@ -266,6 +266,25 @@ Global rule: no emojis anywhere. BBS terminal output specifically uses ASCII tok
 
 Max 10KB / 100-120 lines. Current state + 1-2 recent sessions only. No analysis, code, disassembly, or traces — archive those to `Documentation/` or `thoughts/shared/handoffs/`. Check: `wc -c handoff.md` < 10000.
 
+### 13a. Plans Index — one source, generated, self-checking
+
+Plans in `thoughts/shared/plans/` kept drifting out of sync because status lived
+in the plan but the work landed in a commit elsewhere. Rules:
+
+- **Status lives in the plan's frontmatter — nowhere else.** Fields:
+  `status: implemented | in-progress | not-started | superseded`, plus
+  `landed: <sha/PR>` (REQUIRED once `implemented`) and optional
+  `verify: <extended-regex>` (a pattern that must exist in the tracked tree
+  once the plan is done — a cheap presence proof).
+- **`thoughts/shared/plans/INDEX.md` is GENERATED — never hand-edit it.**
+  Regenerate: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/plan-index.ts`.
+- **Landing a plan flips its frontmatter in the SAME change** that lands the
+  work: set `status: implemented` + `landed:`, then regenerate INDEX.md.
+- **Drift is caught, not trusted:** `plan-index.ts --check` exits non-zero when
+  a plan claims `implemented` without `landed`/with its `verify` pattern absent,
+  when a not-implemented plan's `verify` pattern IS present, or when INDEX.md is
+  stale. Run it before pushing plan/status changes.
+
 ### 14. Fix Root Causes — in the right layer
 
 Global rule applies: fix the root cause, never a workaround. Project-specific layering: if the issue is in the SDK or BBS core, fix it *there* — not in the door. Workarounds hide bugs, compound across 100s of doors, and break DRY. Workflow: identify issue → is it SDK / BBS? → yes: fix in `sdk/` or `web/backend/`; no: fix in the door.
@@ -570,6 +589,25 @@ Never stub implementations that silently break features. Fix completely or don't
 ## Git
 
 Conventional commits: `feat:`, `fix:`, `chore:`, `docs:`. Examples: `feat(sdk): add neo-blessed`, `fix(backend): door state bug`.
+
+### Claim a plan's items before you work them, in a commit
+
+Several sessions share this checkout, and `thoughts/BOARD.md` IS NOT A LOCK -
+it is gitignored, so a worktree or a fresh clone cannot see it at all.
+
+Every plan with an execution ledger carries a `## Claims` table. Before
+writing any code:
+
+1. Add a row naming the IDs you will do and yourself.
+2. **Commit and push that row first.** An uncommitted claim is not a claim.
+3. Tick the items and delete your row when the work lands.
+4. A row older than a day with nothing landed is stale - take it and say so.
+
+One owner per ID; if two rows name the same ID, whoever pushed first holds it.
+
+READ THE LEDGER'S TICKS, NOT JUST THE PLAN. On 2026-09-08 a lane was picked
+for delegation to three agents that was already 24 of 42 complete - the plan
+listed the work, the ledger recorded it done, and only the ledger was right.
 
 ### The shared checkout tracks origin/main. Always.
 
