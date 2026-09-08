@@ -245,18 +245,41 @@ export function usePushNotifications() {
         return false;
       }
 
-      // Register the worker if this browser has none. Awaiting `ready` FIRST
-      // was the deadlock: with nothing registered it never resolves, so the
-      // registration below was never reached.
-      let registration: ServiceWorkerRegistration | null = (await existingRegistration()) ?? null;
+      // Subscribe through THIS app's own worker, always.
+      //
+      // `existingRegistration` falls back to any registration the profile
+      // happens to have, which is right for reading state and wrong for
+      // subscribing: a subscription minted at another scope never receives
+      // what /admin/sw.js is sent, and the board cannot tell - the push
+      // service accepts every send to it. `/admin/sw.js` was 404 until
+      // 2026-09-08 14:52 (68b8bda6b shipped the file; .gitignore's bare
+      // `public` rule had swallowed it), so the subscription this board was
+      // holding was minted 28 minutes EARLIER, against a worker that is not
+      // this one. Every page since has been sent, successfully, to nothing.
+      let registration = await navigator.serviceWorker.getRegistration(SERVICE_WORKER_URL);
       if (!registration) {
-        registration = await registerServiceWorker();
+        registration = (await registerServiceWorker()) ?? undefined;
         if (!registration) {
           throw new Error('Failed to register service worker');
         }
       }
       // Now that one EXISTS, waiting for it to activate is safe.
       await navigator.serviceWorker.ready;
+
+      // A browser hands back the subscription it already has rather than
+      // minting a fresh one, and refuses outright when the application server
+      // key has changed. Dropping it first is what makes "switch off and on
+      // again" actually produce a new endpoint - which is the whole repair
+      // for an orphaned subscription.
+      const stale = await registration.pushManager.getSubscription();
+      if (stale) {
+        try {
+          await stale.unsubscribe();
+        } catch {
+          // A subscription the browser will not drop is still better
+          // replaced than left in the way; subscribe() decides.
+        }
+      }
 
       // Subscribe to push
       // Convert Uint8Array to ArrayBuffer for applicationServerKey
