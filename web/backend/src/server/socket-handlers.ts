@@ -68,6 +68,7 @@ const DISCONNECT_GRACE_MS = 15000;
 export { enableGameMode, disableGameMode } from '../services/game-mode.service';
 import { deliversKeyEvents } from '../services/key-event-capable';
 import { reportLogout } from '../achievements/sites';
+import { endRawTransfer } from '../utils/raw-transfer-teardown.util';
 
 /**
  * Convert special key names to their corresponding characters or escape sequences
@@ -1275,19 +1276,24 @@ console.error('[socket-handlers] resolveTransferPath failed:', err);
 }
 
 function cleanupTransfer(session: any) {
-  const transfer = session?.transfer;
-  if (!transfer) return;
-  try {
-    if (transfer.stream && typeof transfer.stream.destroy === 'function') {
-      transfer.stream.destroy();
+  if (!session) return;
+  const transfer = session.transfer;
+  // The stream half only exists for the browser transport. It used to guard
+  // the WHOLE function with an early return, so a session with no
+  // `session.transfer` - every telnet and SSH caller - left the raw input
+  // routing wired to a finished transfer. Destroy the stream if there is one;
+  // tear the routing down either way.
+  if (transfer) {
+    try {
+      if (transfer.stream && typeof transfer.stream.destroy === 'function') {
+        transfer.stream.destroy();
+      }
+    } catch (_) {
+      /* ignore */
     }
-  } catch (_) {
-    /* ignore */
+    session.transfer = undefined;
   }
-  session.transfer = undefined;
-  session.transferRawActive = false;
-  session.transferRawSink = undefined;
-  session.transferManager = undefined;
+  endRawTransfer(session);
   session.transferRawSend = undefined;
 }
 

@@ -26,6 +26,7 @@ import { isFileRestricted } from '../../utils/file-restriction.util';
 import * as path from 'path';
 import { formatLongDateTime, formatLongDate } from '../../utils/date-time.util';
 import { loadMsgPointers, saveMsgPointers } from '../../utils/message-pointers.util';
+import { endRawTransfer } from '../../utils/raw-transfer-teardown.util';
 
 interface Conference {
   id: number;
@@ -186,6 +187,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         { direction: 'upload', files: [playpen], protocol: chosenProtocol },
       );
       protocolManager.on('complete', async (result: any) => {
+        endRawTransfer(session);
         // The post-upload pipeline is the same one lrzsz's onComplete runs;
         // a Punter upload must be filed exactly like a ZMODEM one.
         const { runPostUpload } = require('../../services/post-upload.service');
@@ -218,6 +220,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
           direction: 'upload',
           paths: [playpen],
           onComplete: async (ok: boolean, detail: any) => {
+            endRawTransfer(session);
             if (!ok) {
               socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
               session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -368,6 +371,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       direction: 'upload',
       paths: [playpen],
       onComplete: (ok, detail) => {
+        endRawTransfer(session);
         if (!ok) {
           socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
           session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -508,6 +512,7 @@ export function startZmodemDownload(
       { direction: 'download', files: files, protocol: chosenProtocol },
     );
     protocolManager.on('complete', async (result: any) => {
+      endRawTransfer(session);
       socket.emit(
         'ansi-output',
         result?.success
@@ -542,6 +547,7 @@ export function startZmodemDownload(
         direction: 'download',
         paths: files,
         onComplete: async (ok: boolean, detail: any) => {
+          endRawTransfer(session);
           console.log(`[ZMODEM-DL ${ctxId}] lrzsz onComplete ok=${ok} exit=${detail.exitCode} signal=${detail.signal}`);
           // Book the download now that it is known to have happened, not
           // when it was merely intended. express.e:15437's `IF sentsize`.
@@ -620,6 +626,7 @@ export function startZmodemDownload(
     direction: 'download',
     paths: files,
     onComplete: async (ok, detail) => {
+      endRawTransfer(session);
       console.log(`[ZMODEM-DL ${ctxId}] onComplete ok=${ok} sent=${JSON.stringify(detail?.sent || [])}`);
       // express.e:20249 clearFlagItems — see comment in lrzsz onComplete
       // above; same clear applies to the zmodem.js fallback path.

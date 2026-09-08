@@ -16,6 +16,7 @@ import { ZmodemTransferManager, TransferTransport } from '../../services/zmodem-
 import * as path from 'path';
 import { formatLongDateTime } from '../../utils/date-time.util';
 import { report } from '../../achievements/reporter';
+import { endRawTransfer } from '../../utils/raw-transfer-teardown.util';
 
 // Dependencies (injected)
 let _setEnvStat: any;
@@ -177,6 +178,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         direction: 'upload',
         paths: [playpen],
         onComplete: async (ok: boolean, detail: any) => {
+          endRawTransfer(session);
           if (!ok) {
             socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
             session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -362,6 +364,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
     direction: 'upload',
     paths: [playpen],
     onComplete: async (ok, detail) => {
+      endRawTransfer(session);
       // Fallback path: zmodem.js JS implementation (used when lrzsz isn't
       // installed AND for web's RZ entry point). Delegates to the same
       // shared post-upload pipeline as the lrzsz onComplete above, so
