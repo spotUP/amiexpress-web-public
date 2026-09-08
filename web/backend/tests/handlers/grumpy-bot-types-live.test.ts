@@ -188,6 +188,35 @@ describe('the chat is one stream', () => {
     expect(cs2.line.text).toBe('');
   });
 
+  it('a reply that was still thinking when the caller quit is never typed - not on the next page either', async () => {
+    const w = makeWorld();
+    // A think time the /quit can land inside: the reply is generated, then
+    // waits, then types. The wait is where the leak lived (2026-09-08 07:05).
+    w.repo.updateConfig({ botThinkTime: 1500 } as any);
+    H.initOperatorChatHandler(w.io, w.repo);
+    await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
+    await wait(3500);
+    await H.handleUserChatMessage(w.io, w.repo, w.session, 'what is After by Art?');
+    await wait(300);                                   // the reply exists and is thinking
+    const before = w.seen.length;
+    await H.handleUserQuitChat(w.io, w.repo, w.session, w.socket);
+    await wait(3500);                                  // well past the think time
+    const after = w.seen.slice(before).join('');
+    expect(after).toContain('Ending Chat.');
+    // Nothing in the bot's colour after the chat ended - no leaked reply.
+    const tail = after.slice(after.indexOf('Ending Chat.'));
+    expect(tail).not.toContain('\x1b[36m');
+    expect(tail).not.toMatch(/\[(RB|AI)\]/);
+  });
+
+  it("the caller's key is in the caller's colour even when no chat is found for the session", () => {
+    const w = makeWorld();
+    w.session.tempData = {};
+    const before = w.seen.length;
+    H.callerTypedChar(w.io, w.session, 'o');
+    expect(w.seen.slice(before)).toEqual(['\x1b[33mo']);
+  });
+
   it('two lines for one caller never interleave: the second waits for the first', async () => {
     const w = makeWorld();
     H.initOperatorChatHandler(w.io, w.repo);

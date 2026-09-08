@@ -1060,7 +1060,10 @@ function emitToCaller(io: any, session: BBSSession, bytes: string): void {
  */
 export function callerTypedChar(io: any, session: BBSSession, ch: string): void {
   const cs = chatOfSession(session);
-  emitToCaller(io, session, cs ? chatCharBytes(cs, 'user', ch) : ch);
+  // Chat or no chat, the caller's own key is in the caller's colour: a bare
+  // character inherited whatever was current - the bot's cyan, after its line
+  // ("sometimes i get the sysop cyan when i type", 2026-09-08).
+  emitToCaller(io, session, cs ? chatCharBytes(cs, 'user', ch) : `\x1b[${CHAT_COLOR_USER}m${ch}`);
 }
 export function callerBackspaced(io: any, session: BBSSession): void {
   const cs = chatOfSession(session);
@@ -1093,7 +1096,14 @@ async function deliverToCaller(
 console.log(`[Operator Chat] Page ${page.id}: a line for ${page.userHandle} has NO EMITTER for user ${page.userId} - saved and shown to the admin, not to the caller`);
       return;
     }
-    const emit = (bytes: string) => { if (bytes) reach.emitter.emit('ansi-output', bytes); };
+    // EVERY emit checks the chat is still the live one. A reply is generated
+    // and then thinks for a while before it types; a /quit inside that pause
+    // found nothing in flight to wait for, the chat was gone, and the typing
+    // began anyway - on top of the caller's NEXT page ("old chat leaking in
+    // here", 2026-09-08 07:05). The chat that owns this line is either the one
+    // in the map or over.
+    const live = () => activeChatSessions.get(page.id) === chatSession && !(chatSession as any).ended;
+    const emit = (bytes: string) => { if (bytes && live()) reach.emitter.emit('ansi-output', bytes); };
 
     // The message's own line breaks are returns; the shared line wraps itself.
     const lines = text.replace(/\r/g, '').split('\n');
@@ -1104,7 +1114,9 @@ console.log(`[Operator Chat] Page ${page.id}: a line for ${page.userHandle} has 
     const scale = plannedMs > MAX_DELIVERY_MS ? MAX_DELIVERY_MS / plannedMs : 1;
 
     for (const plan of plans) {
+      if (!live()) return;
       for (const event of plan) {
+        if (!live()) return;
         if (event.kind === 'char') emit(chatCharBytes(chatSession, 'sysop', event.ch));
         else if (event.kind === 'backspace') emit(chatBackspaceBytes(chatSession));
         else if (event.ms * scale >= 1) await sleep(event.ms * scale);
@@ -1336,6 +1348,7 @@ async function endChat(io: any, repository: OperatorChatRepository, pageId: stri
 
   const page = repository.getPageRequest(pageId);
   io.to(`page:${pageId}`).emit('operator:chat-ended', { pageId });
+  (chatSession as any).ended = true;
   activeChatSessions.delete(pageId);
 console.log(`[Operator Chat] Chat session ${pageId} ended`);
   if (!page) return;
