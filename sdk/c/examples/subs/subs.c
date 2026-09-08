@@ -750,8 +750,15 @@ int main(int argc, char **argv)
                 ui_list_draw(&list, &screen.buf);
                 if (feed_total > (long)row_count) {
                     char note[80];
+                    /* NOT "older messages are at the R prompt", which this
+                       said until 2026-09-08 and which is wrong twice over:
+                       inside this door R is Reply, and on a board that
+                       installs R.info the R prompt IS this door. It was the
+                       same stale advice the status line carried, in a second
+                       place nobody looked. The window is a setting, so the
+                       sentence names the setting. */
                     sprintf(note, wide
-                            ? "Showing the latest %d of %ld. Older messages are at the R prompt."
+                            ? "Showing the latest %d of %ld. FeedWindow in the door settings holds more."
                             : "Latest %d of %ld.",
                             row_count, feed_total);
                     say(list.top + list.height, note);
