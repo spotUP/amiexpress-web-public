@@ -67,6 +67,9 @@ const EXACT: Record<string, string> = {
   join_conf_input: 'Changing conference',
   gdpr_backfill: 'Signing up',
   user_stats_menu: 'Checking their statistics',
+  // express.e:21884-22042. A sysop's screen, not a caller's - but it is a
+  // node in that state and the list has to say something true about it.
+  credit_maintenance_view: 'Looking at file credits',
   font_selection: 'Editing their settings',
 };
 

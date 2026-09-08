@@ -276,12 +276,24 @@ describe('the editable subset, measured against this board', () => {
         }
       }
     }
-    expect(seen).toBeGreaterThan(200); // 254 mouse fields and buttons, 2026-09-08 (1,478 before the dead copies went)
-    // One class, benign, named here so a second one is news: two PLAYPOOL
-    // buttons wrap their label across a line with a continuation. A
-    // continuation is layout, not content, so re-encoding drops it.
-    const known = (entry: string) => /PLAYPOOL\.RIP: /i.test(entry);
+    expect(seen).toBeGreaterThan(200); // 254 in a clean checkout, 2026-09-08
+
+    /*
+     * The CLASSES of residue, never how many files carry them.
+     *
+     * Two are known and benign: an art program escaped a `!` in the BBSTITLE
+     * set that needs no escape, and two PLAYPOOL buttons wrap their label
+     * across a line with a continuation, which is layout rather than content.
+     * A third class is news, and that is what this asserts.
+     *
+     * The COUNT was pinned here until 2026-09-08 and was wrong the moment it
+     * was written: it counts copies of the same art, and how many copies a
+     * checkout has depends on how many node directories it happens to carry -
+     * 2 in the worktree it was measured in, 14 in the shared one. That is a
+     * property of the disk, not of the encoder.
+     */
+    const known = (entry: string) =>
+      /BBSTITLE\.rip: /i.test(entry) || /PLAYPOOL\.RIP: /i.test(entry);
     expect(residue.filter(entry => !known(entry))).toEqual([]);
-    expect(residue.length).toBe(2);
   });
 });
