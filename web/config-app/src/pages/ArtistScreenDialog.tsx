@@ -182,8 +182,29 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, is
     if (!path) return [];
     if (!index) return [path];
     const screen = index.files?.[path]?.readBy?.[0]?.screen ?? '';
-    const identical = fanOutOptions(index, screen, path)
-      .find(option => option.choice === 'same-content')?.targets ?? [path];
+    const options = fanOutOptions(index, screen, path);
+
+    /*
+     * EVERY COPY OF THE SCREEN, not only the ones that still match this file.
+     *
+     * `same-content` covers the copies that are byte-identical to the one
+     * being edited - which is exactly wrong once a copy has DIVERGED. The
+     * sysop uploaded a PETSCII title, it landed on `Node0/BBSTITLE.SEQ`, and
+     * from then on that file matched nothing: the next upload fanned out to
+     * itself alone, and the board went on serving the other 46 copies. He
+     * said it twice - "the bbs still reads the old bbs title petscii".
+     *
+     * So the target set is the union: every file the SCREEN resolves to (what
+     * the board actually reads, per node and conference) plus every file that
+     * is still identical to this one (the copies no resolution names, like a
+     * `Conf<n>/Screens/` twin). Re-converging a screen is the point of
+     * editing it here.
+     */
+    const identical = [...new Set([
+      path,
+      ...(options.find(option => option.choice === 'all-copies')?.targets ?? []),
+      ...(options.find(option => option.choice === 'same-content')?.targets ?? []),
+    ])];
 
     const themeRoot = `themes/${theme.slug.toLowerCase()}/`;
     const mineToWrite = (rel: string) => (theme.slug === 'default'

@@ -32,7 +32,11 @@ const index = {
   builtAt: '', unused: [], conferences: [], bulletins: [], callersByLevel: {},
   screens: [{
     screen: 'BBSTITLE', dirType: 'node', missingScopes: 0, duplicateGroups: [],
-    resolutions: [{ scope: 'node', id: 1, file: 'Node1/BBSTITLE.SEQ', variants: [] }],
+    resolutions: [
+      { scope: 'node', id: 0, file: 'Node0/BBSTITLE.SEQ', variants: [] },
+      { scope: 'node', id: 1, file: 'Node1/BBSTITLE.SEQ', variants: [] },
+      { scope: 'node', id: 2, file: 'Node2/BBSTITLE.SEQ', variants: [] },
+    ],
   }],
   files: {
     'Node0/BBSTITLE.SEQ': file('Node0/BBSTITLE.SEQ', 'same'),
@@ -107,6 +111,48 @@ describe('saving a screen that every node keeps its own copy of', () => {
     // Never somebody's theme: those bytes are theirs, and the sandbox would
     // refuse the whole write.
     expect(targets).not.toContain('Themes/neon/Node/BBSTITLE.SEQ');
+  });
+
+  /*
+   * THE SECOND UPLOAD, after the first one diverged.
+   *
+   * `same-content` covers the copies byte-identical to the file being edited,
+   * which is exactly wrong once one has diverged: the sysop's first PETSCII
+   * title landed on `Node0/BBSTITLE.SEQ` alone, and from then on that file
+   * matched nothing, so the next upload fanned out to itself and the board
+   * went on serving the other 46 copies - "the bbs still reads the old bbs
+   * title petscii i have changed it in the default theme".
+   */
+  it('re-converges a screen whose copies have already drifted apart', async () => {
+    const drifted = {
+      ...index,
+      files: {
+        ...index.files,
+        // What the earlier upload left behind: this one is nobody's twin.
+        'Node0/BBSTITLE.SEQ': file('Node0/BBSTITLE.SEQ', 'already-different'),
+      },
+    };
+    const user = userEvent.setup();
+    render(
+      <ArtistScreenDialog
+        path="Node0/BBSTITLE.SEQ"
+        theme={boardTheme}
+        index={drifted as unknown as ScreenIndexShape}
+        onClose={vi.fn()}
+        onOpenPath={vi.fn()}
+      />,
+      { wrapper },
+    );
+
+    const chooser = await screen.findByLabelText('Upload a drawing');
+    await user.upload(chooser, new File([new Uint8Array([0x93, 0x43])], 'title.seq'));
+
+    await waitFor(() => expect(writes.length).toBeGreaterThan(0));
+    const targets = targetsOf(writes[0].body);
+    // Red before: just Node0, for ever.
+    expect(targets).toContain('Node1/BBSTITLE.SEQ');
+    expect(targets).toContain('Node2/BBSTITLE.SEQ');
+    expect(targets).toContain('Node0/BBSTITLE.SEQ');
   });
 
   it('an artist writes only inside their own theme', async () => {
