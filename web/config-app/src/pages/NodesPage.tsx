@@ -152,7 +152,7 @@ export function NodesPage() {
           <input
             type="number"
             value={formData.priority ?? row.config?.priority ?? 0}
-            onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) })}
+            onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value, 10) || 0 })}
             min="-1"
             max="20"
             className="input-field w-full"
@@ -302,7 +302,7 @@ export function NodesPage() {
               max="37"
               value={formData.sysop_chat_color ?? row.config?.sysop_chat_color ?? 32}
               onChange={(e) =>
-                setFormData({ ...formData, sysop_chat_color: parseInt(e.target.value) })
+                setFormData({ ...formData, sysop_chat_color: parseInt(e.target.value, 10) || 0 })
               }
               className="input-field w-20"
             />
@@ -313,7 +313,7 @@ export function NodesPage() {
               max="37"
               value={formData.user_chat_color ?? row.config?.user_chat_color ?? 36}
               onChange={(e) =>
-                setFormData({ ...formData, user_chat_color: parseInt(e.target.value) })
+                setFormData({ ...formData, user_chat_color: parseInt(e.target.value, 10) || 0 })
               }
               className="input-field w-20"
             />

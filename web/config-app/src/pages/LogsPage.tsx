@@ -289,7 +289,7 @@ export function LogsPage() {
             <select
               id="logs-line-count"
               value={lineCount}
-              onChange={(e) => setLineCount(parseInt(e.target.value))}
+              onChange={(e) => setLineCount(parseInt(e.target.value, 10) || 0)}
               className="input-field w-full"
             >
               <option value="100">Last 100</option>

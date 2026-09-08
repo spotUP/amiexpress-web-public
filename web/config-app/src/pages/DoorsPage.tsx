@@ -615,7 +615,7 @@ export function DoorsPage() {
                     min="0"
                     max="255"
                     value={formData.min_security_level}
-                    onChange={(e) => setFormData({ ...formData, min_security_level: parseInt(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, min_security_level: parseInt(e.target.value, 10) || 0 })}
                     className="input-field w-full"
                     required
                   />

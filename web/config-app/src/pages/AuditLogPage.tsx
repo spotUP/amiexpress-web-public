@@ -48,7 +48,7 @@ export function AuditLogPage() {
             <select
               id="audit-limit-results"
               value={limit}
-              onChange={(e) => setLimit(parseInt(e.target.value))}
+              onChange={(e) => setLimit(parseInt(e.target.value, 10) || 0)}
               className="input-field w-full"
             >
               <option value="25">25 entries</option>

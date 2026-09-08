@@ -485,9 +485,13 @@ export function UsersPage() {
                     min="0"
                     max="255"
                     value={formData.secLevel}
-                    onChange={(e) =>
-                      setFormData({ ...formData, secLevel: parseInt(e.target.value, 10) })
-                    }
+                    onChange={(e) => {
+                      // parseInt('') is NaN: clearing the field to type a new
+                      // level must not put NaN into state and have the browser
+                      // reject its own value.
+                      const parsed = parseInt(e.target.value, 10);
+                      setFormData({ ...formData, secLevel: Number.isNaN(parsed) ? 0 : parsed });
+                    }}
                     className="input-field w-full"
                     required
                   />

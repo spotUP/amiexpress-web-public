@@ -560,7 +560,7 @@ export function ConferencesPage() {
                     min="1"
                     max="16"
                     value={formData.ndirs}
-                    onChange={(e) => setFormData({ ...formData, ndirs: parseInt(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, ndirs: parseInt(e.target.value, 10) || 0 })}
                     className="input-field w-full"
                     required
                   />
@@ -674,7 +674,7 @@ export function ConferencesPage() {
                     min="0"
                     max="255"
                     value={formData.min_access_level}
-                    onChange={(e) => setFormData({ ...formData, min_access_level: parseInt(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, min_access_level: parseInt(e.target.value, 10) || 0 })}
                     className="input-field w-full"
                     required
                   />
@@ -688,7 +688,7 @@ export function ConferencesPage() {
                     min="0"
                     max="255"
                     value={formData.max_access_level}
-                    onChange={(e) => setFormData({ ...formData, max_access_level: parseInt(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, max_access_level: parseInt(e.target.value, 10) || 0 })}
                     className="input-field w-full"
                     required
                   />
@@ -739,7 +739,7 @@ export function ConferencesPage() {
                         min="0"
                         max="3650"
                         value={formData.ftp_dir_days}
-                        onChange={(e) => setFormData({ ...formData, ftp_dir_days: parseInt(e.target.value) || 0 })}
+                        onChange={(e) => setFormData({ ...formData, ftp_dir_days: parseInt(e.target.value, 10) || 0 })}
                         className="input-field w-full"
                       />
                       <p className="text-sm text-content-secondary mt-1">
@@ -875,7 +875,7 @@ export function ConferencesPage() {
                         type="number"
                         min="0"
                         value={formData.confdb_shared}
-                        onChange={(e) => setFormData({ ...formData, confdb_shared: parseInt(e.target.value) || 0 })}
+                        onChange={(e) => setFormData({ ...formData, confdb_shared: parseInt(e.target.value, 10) || 0 })}
                         className="input-field w-full"
                       />
                       <p className="text-sm text-content-secondary mt-1">

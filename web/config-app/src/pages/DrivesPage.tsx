@@ -978,7 +978,7 @@ export function DrivesPage() {
                   min="0"
                   max="255"
                   value={formData.drive_number}
-                  onChange={(e) => setFormData({ ...formData, drive_number: parseInt(e.target.value) })}
+                  onChange={(e) => setFormData({ ...formData, drive_number: parseInt(e.target.value, 10) || 0 })}
                   className="input-field w-full"
                   required
                   disabled={editingDrive?.kind === 's3'}
