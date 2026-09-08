@@ -82,3 +82,113 @@ describe('starting an upload with U', () => {
     expect(typeof startResumeStuff.mock.calls[0][4]).toBe('function');
   });
 });
+
+/**
+ * express prints no banner when the receiver starts.
+ *
+ * express.e:17795 answers the "Okay: (Enter) to Start" prompt with
+ * `aePuts('\b\n\b\n')` - two newlines - and then starts the receiver. This
+ * port added "Ready to receive via ZMODEM (lrzsz). Send with sz now." at four
+ * sites, which no AmiExpress ever printed. A caller on a real Amiga terminal
+ * sees the ZRQINIT and starts; the sentence was ours.
+ *
+ * These drive the real path with the transfer services stubbed, so what is
+ * asserted is what reaches the caller's terminal.
+ */
+describe('the bytes the caller sees when the receiver starts', () => {
+  function moduleWithStubbedTransfers() {
+    jest.resetModules();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'upload-quiet-'));
+    process.env.BBS_ROOT = root;
+    process.env.BBS_DATA_DIR = root;
+
+    const startResumeStuff = jest.fn();
+    jest.doMock('../../src/services/resume-stuff.service', () => ({
+      ...jest.requireActual('../../src/services/resume-stuff.service'),
+      startResumeStuff,
+    }));
+
+    // Neither transfer engine may actually run: this is about the terminal.
+    const start = jest.fn();
+    jest.doMock('../../src/services/lrzsz-transfer.service', () => ({
+      isLrzszAvailable: () => true,
+      LrzszTransferManager: class {
+        start = start;
+        handleInput() { /* nothing arrives in this test */ }
+      },
+    }));
+    jest.doMock('../../src/services/zmodem-transfer.service', () => ({
+      ZmodemTransferManager: class {
+        start = start;
+        handleInput() { /* nothing arrives in this test */ }
+      },
+    }));
+
+    const handler = require('../../src/handlers/commands/user-commands.handler');
+    return { handler, startResumeStuff };
+  }
+
+  /** `socket()` above is scoped to the other describe; this is the same shape. */
+  function testSocket() {
+    return {
+      id: 'u', emit: jest.fn(),
+      on: jest.fn(function (this: unknown) { return this; }),
+      once: jest.fn(function (this: unknown) { return this; }),
+      off: jest.fn(function (this: unknown) { return this; }),
+      removeListener: jest.fn(function (this: unknown) { return this; }),
+      join: jest.fn(function (this: unknown) { return this; }),
+    } as any;
+  }
+
+  function textSentTo(s: any): string {
+    return s.emit.mock.calls
+      .filter((c: unknown[]) => c[0] === 'ansi-output')
+      .map((c: unknown[]) => String(c[1]))
+      .join('');
+  }
+
+  /** Run the U path all the way through the resume step, as a caller does. */
+  function runUpload(transportType: 'web' | 'telnet') {
+    const { handler, startResumeStuff } = moduleWithStubbedTransfers();
+    const s = testSocket();
+    const session: any = {
+      nodeId: 1, currentConf: 1, tempData: {}, transport: transportType,
+      user: { slotNumber: 3, username: 'spot' },
+    };
+
+    handler.startZmodemUpload(s, session);
+    const afterResume = startResumeStuff.mock.calls[0][4] as (...a: unknown[]) => void;
+
+    // The web path arms a 120-SECOND "no file picked" timer
+    // (user-commands.handler.ts:379). On real timers that handle keeps jest
+    // alive for two minutes after the last assertion, so the clock is faked
+    // for the call and the timer discarded with it.
+    jest.useFakeTimers();
+    try {
+      afterResume(false);
+    } finally {
+      jest.clearAllTimers();
+      jest.useRealTimers();
+    }
+
+    return textSentTo(s);
+  }
+
+  it('says nothing at all to a telnet caller', () => {
+    expect(runUpload('telnet')).not.toContain('Ready to receive');
+  });
+
+  it('says nothing at all to a web caller', () => {
+    expect(runUpload('web')).not.toContain('Ready to receive');
+  });
+
+  it('never mentions the tool that happens to be doing the receiving', () => {
+    // `lrzsz`, `sz` and `rz` are implementation detail. express names none of
+    // them, and a caller has no use for the name of a program on our host.
+    for (const transportType of ['telnet', 'web'] as const) {
+      const out = runUpload(transportType);
+      expect(out).not.toMatch(/lrzsz/i);
+      expect(out).not.toMatch(/Send with (sz|rz) now/i);
+    }
+  });
+});

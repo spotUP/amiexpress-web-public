@@ -322,7 +322,9 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       // mid-transfer corrupted the wire and rz aborted with code 128.
       // onComplete restores subState=DISPLAY_MENU when rz exits.
       session.subState = LoggedOnSubState.FILES_UPLOAD;
-      socket.emit('ansi-output', `\r\nReady to receive via ZMODEM (lrzsz). Send with sz now.\r\n`);
+      // express.e:17795 prints `\b\n\b\n` after the Okay prompt and
+      // nothing else - command.handler.ts:3050 already emits those two
+      // newlines. A "Ready to receive" banner was ours, not express's.
       // express.e:15891-15896 — negotiate IAC BINARY before ZMODEM so
       // the client doesn't apply NVT rules to file data. Without this,
       // outbound CR / NUL / 0xFF bytes get transformed, causing CRC
@@ -431,13 +433,15 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
   (session as any).transferRawSend = sender;
   (session as any).transferManager = manager;
 
+  // Only the browser bridge needs telling; a byte transport's own client is
+  // already listening for the ZRQINIT. express.e:17795 prints two newlines
+  // after the Okay prompt and nothing else, and command.handler.ts:3050
+  // emits those - the banner that used to live here was ours.
   if (transportType === 'web') {
     socket.emit('transfer-raw:init', {
       direction: 'upload',
       paths: [playpen],
     });
-  } else {
-    socket.emit('ansi-output', `\r\nReady to receive via ZMODEM. Send with rz now.\r\n`);
   }
 
   manager.start();

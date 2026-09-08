@@ -357,7 +357,9 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         // Park in FILES_UPLOAD; see transfer-misc-commands.handler.ts:RZ
         // path comment for rationale.
         session.subState = LoggedOnSubState.FILES_UPLOAD;
-        socket.emit('ansi-output', `\r\nReady to receive via ZMODEM (lrzsz). Send with sz now.\r\n`);
+        // express.e:17795 prints `\b\n\b\n` after the Okay prompt and
+        // nothing else - command.handler.ts:3050 already emits those two
+        // newlines. A "Ready to receive" banner was ours, not express's.
         // Divergence 20: this path sent NO IAC BINARY at all, while the
         // download path and the RZ path both did - so an upload started with
         // `U` on telnet ran under NVT rules and CRC-failed on any subpacket
@@ -430,13 +432,13 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
     (session as any).transferRawSend = transport.send;
     (session as any).transferManager = manager;
 
+    // See the RZ path: only the browser bridge is told, and express prints
+    // no banner here at all.
     if (transport.type === 'web') {
       socket.emit('transfer-raw:init', {
         direction: 'upload',
         paths: [playpen],
       });
-    } else {
-      socket.emit('ansi-output', `\r\nReady to receive via ZMODEM. Send with rz now.\r\n`);
     }
 
     manager.start();
