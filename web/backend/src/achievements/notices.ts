@@ -34,6 +34,8 @@ export interface NoticeSession {
   /** 40 (a C64) or 80 (the web terminal's wide PETSCII screen). Absent = 40. */
   petsciiColumns?: number;
   terminalType?: string;
+  /** The web terminal renders Unicode box-drawing; telnet/Amiga do not. */
+  unicodeCapable?: boolean;
 }
 
 export interface NoticeDeps {
@@ -62,7 +64,10 @@ export function noticeBytes(session: NoticeSession, notice: AchievementNotice): 
   // C64's 40-column screen whenever the session still carried the width the
   // browser reported before the caller answered P.
   const width = petscii ? doorScreenWidth(session, 40) : (session.screenWidth ?? 80);
-  return renderAchievementToast(notice, width, { petscii, bare: true }) + '\r\n';
+  // Box-drawing only for a caller that renders it; telnet/Amiga get the ASCII
+  // frame. `=== true` keeps an unknown terminal on ASCII (no mojibake).
+  const unicode = session.unicodeCapable === true;
+  return renderAchievementToast(notice, width, { petscii, bare: true, unicode }) + '\r\n';
 }
 
 /** True when a toast may be drawn on this session right now. */
