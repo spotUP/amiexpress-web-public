@@ -21,7 +21,8 @@ import { checkSecurity, getACSConfig, ToggleFlags } from '../utils/acs.util';
 import { checkDownloadRatios, updateDownloadStats } from '../utils/download-ratios.util';
 import { resolveFile } from '../handlers/transfer/batch-download.handler';
 import { loadConfConfig } from '../services/conf-config.service';
-import { fileUploadedFile } from '../services/upload-filing.service';
+import { fileUploadedFile, areaForConference } from '../services/upload-filing.service';
+import { extractAndReadDiz } from '../utils/file-diz.util';
 import { registerFtpCaller, releaseFtpCaller } from './ftp-presence';
 import { conferenceDir, conferenceDownloadDirs } from '../conferences/conference-paths';
 import { getNodeWorkDir, getPlaypenDir } from '../utils/bbs-paths.util';
@@ -204,9 +205,15 @@ export function boardFtpDeps(): FtpDeps {
         };
       }
 
-      const areas = await db.getFileAreas(conferenceId);
-      if (!areas || areas.length === 0) {
-        return { code: 550, text: 'Cant upload here', logAs: 'No upload area for' };
+      // WHERE THE CONFERENCE PUTS FILES, not whether the SQL mirror has a
+      // row for it. `file_areas` on this board is seed data - four demo rows
+      // for two conferences out of fourteen - so this refused every FTP
+      // upload into conferences 3 and up with "Cant upload here", while the
+      // menu accepted them. ftpd.e:1447 refuses when the conference has
+      // nowhere to put a file, and that is what the icon's DLPATH says.
+      const dlPath = conferenceDownloadDirs(config.get('dataDir'), conferenceId)[0];
+      if (!dlPath) {
+        return { code: 550, text: 'Cant upload here', logAs: 'No upload directory for' };
       }
 
       // The tooltype is presence-semantics, like every other boolean on this
@@ -281,16 +288,37 @@ export function boardFtpDeps(): FtpDeps {
         marker = 'N';
       }
 
-      const areas = await db.getFileAreas(request.conferenceId);
-      const area = areas[0];
+      // WHAT THE FILE SAYS ABOUT ITSELF. A menu upload extracts FILE_ID.DIZ
+      // (express.e:19258-19285) and catalogues that; an FTP upload was
+      // catalogued as "Uploaded over FTP by <user>", which tells the next
+      // caller nothing. Same extractor, same ten-second bound; the
+      // placeholder stays only when the archive carries no DIZ, since an
+      // FTP caller has no prompt to type a description at.
+      let description = `Uploaded over FTP by ${request.user.username}`;
+      try {
+        const dizLines = await Promise.race([
+          extractAndReadDiz(playpenPath, nodeWorkDir, [], 10),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000)),
+        ]);
+        if (dizLines && dizLines.length > 0) {
+          description = dizLines.join('\n');
+console.log(`[FTP] FILE_ID.DIZ used for ${request.filename} (${dizLines.length} lines)`);
+        }
+      } catch (error) {
+console.log(`[FTP] no FILE_ID.DIZ for ${request.filename}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
+      // The area the board implies, created from the conference's own icons
+      // when the mirror has none - the same one the menu upload files into.
+      const area = await areaForConference(request.conferenceId, config.get('dataDir'));
       const nodeConfig = db.getConfigRepository().getNodeConfig(request.nodeId || 1);
 
       const outcome = await fileUploadedFile({
         playpenPath,
         filename: request.filename,
         size: bytes,
-        description: `Uploaded over FTP by ${request.user.username}`,
-        fileArea: area as never,
+        description,
+        fileArea: area,
         conferenceId: request.conferenceId,
         nodeId: request.nodeId || 1,
         uploader: {

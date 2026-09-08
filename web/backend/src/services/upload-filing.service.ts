@@ -33,16 +33,85 @@
  *     claiming HOLD points a sysop at a file that is not there.
  */
 import * as fs from 'fs';
+import * as path from 'path';
 
 import { config } from '../config';
 import { db } from '../database';
 import { getConferenceDir, moveUploadedFile } from '../utils/file-hold.util';
+import { conferenceDownloadDirs, conferenceDir } from '../conferences/conference-paths';
+import { loadConfConfig } from './conf-config.service';
 import { getSystemTime } from '../utils/date-time.util';
 import { writeUploadToDirFile } from '../utils/dir-file.util';
 import { pooledUploadArea, putUploadIntoPool } from '../storage/remote-upload';
 import type { RemoteLocation } from '../storage/remote-areas';
 import { getStorageContext } from '../storage/storage-context';
 import { storageFailureText } from '../storage/remote-download';
+
+/**
+ * WHERE THE BYTES GO: the conference's own DLPATH, not the SQL row.
+ *
+ * express.e:15264 moves an upload into the area's DLPATH, and on this board
+ * that path lives in `Conf<n>.info` - `Conf2.info` says
+ * `DLPATH.1=BBS:Conf3/Files` and means it. The `file_areas` table is a
+ * mirror that was never filled in: four seeded demo rows covering two of
+ * fourteen conferences, with paths (`/files/general`) that exist nowhere. An
+ * upload filed against those was saved by `moveToFiles` falling back to
+ * `<conf>/Files`, and a caller in conference 3 had no row at all.
+ *
+ * So the area's `dlPath` is used when it is really set, and otherwise the
+ * conference's first DLPATH decides - the same directory
+ * `conferenceDownloadDirs` gives the download side, so the two halves agree
+ * by rule instead of by both falling back to the same place.
+ */
+export function destinationFor(
+  fileArea: { dlPath?: string } | null | undefined,
+  conferenceId: number,
+  bbsRoot: string
+): string | undefined {
+  const configured = fileArea?.dlPath?.trim();
+  if (configured && configured !== process.cwd()) return configured;
+  return conferenceDownloadDirs(bbsRoot, conferenceId)[0];
+}
+
+/**
+ * The catalogue area for a conference, CREATED FROM THE BOARD if the mirror
+ * has none.
+ *
+ * `file_entries.areaid` is `NOT NULL REFERENCES file_areas(id)`, so a file
+ * cannot be catalogued without an area - and `file_areas` on this board is
+ * seed data: four demo rows ("General Files", `/files/general`) covering two
+ * conferences out of fourteen. A caller uploading into any other conference
+ * could not be catalogued at all.
+ *
+ * The board itself knows what the area is: the conference's name in
+ * `ConfConfig.info` and its first `DLPATH` in `Conf<n>.info`. So the row is
+ * derived from those the first time a conference needs one, and every upload
+ * and listing after it has a real area to belong to. The disk stays the
+ * truth; the table catches up with it.
+ */
+export async function areaForConference(
+  conferenceId: number,
+  bbsRoot: string
+): Promise<{ id: number; dlPath?: string } & Record<string, unknown>> {
+  const existing = await db.getFileAreas(conferenceId);
+  if (existing.length > 0) return existing[0] as never;
+
+  const dlPath = conferenceDownloadDirs(bbsRoot, conferenceId)[0]
+    ?? path.join(conferenceDir(bbsRoot, conferenceId), 'Files');
+  const named = loadConfConfig(bbsRoot)?.entries?.[conferenceId - 1]?.name?.trim();
+  const name = named || `Conference ${conferenceId}`;
+  const id = await db.createFileArea({
+    name,
+    description: `Files in ${name}`,
+    path: dlPath,
+    conferenceId,
+    maxFiles: 0,
+    uploadAccess: 0,
+    downloadAccess: 0,
+  } as never);
+console.log(`[Filing] Conference ${conferenceId} had no file area; created "${name}" (id ${id}) at ${dlPath} from the board's own icons`);
+  return { id, dlPath, name, conferenceId } as never;
+}
 
 /** What a caller is told, and by which of the two front ends. */
 export type FilingNotice =
@@ -64,8 +133,15 @@ export interface FilingRequest {
   filename: string;
   size: number;
   description: string;
-  /** The area this upload belongs to, with its `dlPath` and `id`. */
-  fileArea: { id: number; dlPath?: string } & Record<string, unknown>;
+  /**
+   * The catalogue area this upload belongs to, when the board has one. It may
+   * be ABSENT: `file_areas` is a mirror, and on this board it holds seeded
+   * demo rows for two conferences out of fourteen ("General Files",
+   * `/files/general`), so a caller uploading anywhere else has no row at all.
+   * Where the bytes go is decided by the conference's own icon either way -
+   * see `destinationFor`.
+   */
+  fileArea?: ({ id?: number; dlPath?: string } & Record<string, unknown>) | null;
   conferenceId: number;
   nodeId: number;
   uploader: { username: string; location?: string };
@@ -103,9 +179,17 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
   let marker: FilingOutcome['marker'] = request.marker;
 
   // 1. The duplicate check, BEFORE the move. See the header.
+  //
+  // The area this file belongs to: the caller's, or the one the board
+  // implies (see areaForConference). Either way it exists by the time the
+  // duplicate check runs, which is what `file_entries.areaid` requires.
+  const area = request.fileArea?.id
+    ? request.fileArea
+    : await areaForConference(request.conferenceId, config.get('dataDir'));
+  const areaId = area.id as number;
   const existing = await db.query(
     'SELECT id, filename FROM file_entries WHERE LOWER(filename) = $1 AND areaid = $2',
-    [request.filename.toLowerCase(), request.fileArea.id]
+    [request.filename.toLowerCase(), areaId]
   );
   const duplicate = existing.rows.length > 0;
   if (duplicate) {
@@ -127,7 +211,7 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
   // downloads from, so a file bound for one never goes to the pool.
   const pooledArea =
     request.playpenPath && status === 'active'
-      ? pooledUploadArea(request.fileArea as never, storage)
+      ? pooledUploadArea(area as never, storage)
       : null;
 
   try {
@@ -159,7 +243,7 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
         status,
         request.conferenceId,
         config.get('dataDir'),
-        request.fileArea.dlPath
+        destinationFor(area, request.conferenceId, config.get('dataDir'))
       );
     }
   } catch (error) {
@@ -181,7 +265,7 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
           status,
           request.conferenceId,
           config.get('dataDir'),
-          request.fileArea.dlPath
+          destinationFor(area, request.conferenceId, config.get('dataDir'))
         );
       } catch (holdError) {
         // 4. Neither the pool nor HOLD has it. Catalogue nothing.
@@ -212,7 +296,7 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
       uploader: request.uploader.username,
       uploadDate: getSystemTime(),
       downloads: 0,
-      areaId: request.fileArea.id,
+      areaId: areaId,
       fileIdDiz: request.description,
       rating: undefined,
       votes: undefined,
