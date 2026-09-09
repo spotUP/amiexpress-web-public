@@ -44,10 +44,13 @@ class DataManager {
         this.usersCache = null;
         this.achievementsCache = null;
         this.partiesCache = null;
+        // No fallback here: undefined lets the SDK default decide (volume in
+        // prod, cwd in dev). A hardcoded cwd fallback is what kept WHIP data
+        // on the container layer, wiped by every redeploy.
         this.storage = new core_1.Storage({
             doorName: 'whip',
             global: true,
-        }, storageBaseDir ?? process.cwd());
+        }, storageBaseDir);
     }
     // Cache invalidation methods
     invalidateProjectsCache() {

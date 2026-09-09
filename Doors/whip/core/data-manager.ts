@@ -54,12 +54,15 @@ export class DataManager {
   private partiesCache: Party[] | null = null;
 
   constructor(storageBaseDir?: string) {
+    // No fallback here: undefined lets the SDK default decide (volume in
+    // prod, cwd in dev). A hardcoded cwd fallback is what kept WHIP data
+    // on the container layer, wiped by every redeploy.
     this.storage = new Storage(
       {
         doorName: 'whip',
         global: true,
       },
-      storageBaseDir ?? process.cwd()
+      storageBaseDir
     );
   }
 
