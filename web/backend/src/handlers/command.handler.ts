@@ -68,6 +68,7 @@ import {
   setSystemCommandsDependencies
 } from './commands/system-commands.handler';
 import { WebhookCommandsHandler } from './commands/webhook-commands.handler';
+import { DiscordLinkCommandsHandler } from './commands/discord-link-commands.handler';
 import {
   handleTimeCommand,
   handleNewFilesCommand,
@@ -5012,6 +5013,10 @@ console.error(' ERROR in handleLiveChatCommand:', error);
 
     case 'WEBHOOK': // Webhook Management (SYSOP) - Custom web command
       await WebhookCommandsHandler.handleWebhookCommand(socket, session);
+      return;
+
+    case 'LINKDISCORD': // Discord link code (WHIP mirror bot) - WEB_: no express.e counterpart
+      await DiscordLinkCommandsHandler.handleLinkDiscordCommand(socket, session);
       return;
 
     case 'G': // Goodbye/Logoff (internalCommandG) - express.e:25047-25075

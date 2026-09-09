@@ -27,6 +27,8 @@ import { createConfigRouter } from '../api/config-routes';
 import { createBatchRouter } from '../api/batch-routes';
 import { createImportRouter } from '../handlers/admin/import.handler';
 import { createChatRouter } from '../api/chat-routes';
+import { createWhipRouter } from '../api/whip-routes';
+import { authenticateServiceToken } from '../middleware/service-auth.middleware';
 import { createStatisticsRouter } from '../api/statistics-routes';
 import { createNodeControlRouter } from '../api/node-control-routes';
 import { enhancePrompt, analyzePrompt, enhanceAudioDescription, analyzeAudioDescription, generateGame } from '../handlers/admin/wizard.handler';
@@ -178,6 +180,10 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // ===== Batch Editor API - Sysop-only =====
   const batchRouter = createBatchRouter();
   app.use('/api/batches', authenticateToken(db), requireSysop(), batchRouter);
+
+  // ===== WHIP mirror bot API - service-token (shared secret, not a user JWT)
+  const whipRouter = createWhipRouter(db);
+  app.use('/api/whip', authenticateServiceToken, whipRouter);
 
   // ===== Import/Export API - Sysop-only Routes =====
   const importRouter = createImportRouter(db);

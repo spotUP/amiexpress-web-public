@@ -39,6 +39,7 @@ import { SessionRepository } from './database/session-repository';
 import { ChatRepository } from './database/chat-repository';
 import { BulletinRepository } from './database/bulletin-repository';
 import { WebhookRepository } from './database/webhook-repository';
+import { DiscordLinkRepository } from './database/discord-link.repository';
 import { ConfigRepository } from './database/config-repository';
 import { getSystemTime } from './utils/date-time.util';
 
@@ -78,6 +79,7 @@ export class Database {
   private chatRepo?: ChatRepository;
   private bulletinRepo?: BulletinRepository;
   private webhookRepo?: WebhookRepository;
+  private discordLinkRepo?: DiscordLinkRepository;
   private configRepo?: ConfigRepository;
   private operatorChatRepo?: any; // OperatorChatRepository
 
@@ -127,6 +129,7 @@ console.log('✓ Foreign keys enabled');
       this.chatRepo = new ChatRepository(this.db);
       this.bulletinRepo = new BulletinRepository(this.db);
       this.webhookRepo = new WebhookRepository(this.db);
+      this.discordLinkRepo = new DiscordLinkRepository(this.db);
       this.configRepo = new ConfigRepository(this.db);
 
       // Lazy load operator chat repository to avoid circular dependency
@@ -244,6 +247,7 @@ console.log(`[Database] Restored from backup: ${backupPath}`);
       this.chatRepo = new ChatRepository(this.db);
       this.bulletinRepo = new BulletinRepository(this.db);
       this.webhookRepo = new WebhookRepository(this.db);
+      this.discordLinkRepo = new DiscordLinkRepository(this.db);
       this.configRepo = new ConfigRepository(this.db);
 
       const { OperatorChatRepository } = require('./database/operator-chat.repository');
@@ -1649,6 +1653,16 @@ console.error('Error running migrations:', error);
         console.log('[OK] Added tier_filter column to webhooks');
       }
 
+      // Discord link table (WHIP mirror bot): one row per linked Discord
+      // account, mapping it to exactly one BBS user and back.
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS user_discord_links (
+          discord_id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL UNIQUE,
+          linked_at INTEGER DEFAULT (strftime('%s', 'now'))
+        )
+      `);
+
       // ===== Configuration Tables =====
 
       // System Configuration (Singleton - TOOLTYPE_BBSCONFIG)
@@ -2938,6 +2952,27 @@ console.error(`[Database] Failed to update disk misc for slot ${slotNumber}:`, e
 
   async getWebhooksByTrigger(...args: Parameters<WebhookRepository['getWebhooksByTrigger']>) {
     return this.webhookRepo!.getWebhooksByTrigger(...args);
+  }
+
+  // Discord link methods (WHIP mirror bot) - delegate to DiscordLinkRepository
+  async getDiscordLinkByDiscordId(...args: Parameters<DiscordLinkRepository['getByDiscordId']>) {
+    return this.discordLinkRepo!.getByDiscordId(...args);
+  }
+
+  async getDiscordLinkByUserId(...args: Parameters<DiscordLinkRepository['getByUserId']>) {
+    return this.discordLinkRepo!.getByUserId(...args);
+  }
+
+  async linkDiscord(...args: Parameters<DiscordLinkRepository['link']>) {
+    return this.discordLinkRepo!.link(...args);
+  }
+
+  async unlinkDiscordByDiscordId(...args: Parameters<DiscordLinkRepository['unlinkByDiscordId']>) {
+    return this.discordLinkRepo!.unlinkByDiscordId(...args);
+  }
+
+  async unlinkDiscordByUserId(...args: Parameters<DiscordLinkRepository['unlinkByUserId']>) {
+    return this.discordLinkRepo!.unlinkByUserId(...args);
   }
 
   // Logging methods
