@@ -29,6 +29,7 @@ import {
   searchFiles, fileDetail, fileRandom, listingStats, listingFacts,
 } from './external/doorrepo';
 import { lookupGame } from './external/games';
+import { askScene, sceneRandom, sceneLatest, checkLink } from './external/dooranswer';
 
 /** The slice of the board's database the sysop-grade tools use; injectable. */
 export interface ToolDatabase {
@@ -207,8 +208,28 @@ export const CALLER_TOOLS: SysopTool[] = [
     },
   },
   {
-    name: 'lookup_game',
-    description: 'A COMMERCIAL VIDEO GAME by title (any platform): release date, platforms, genre, a summary. Not for demoscene groups, sceners, demos or BBS software - those are search_demozoo. If the name is a scene group, asking here returns unrelated retail games that happen to share a word.',    parameters: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'], additionalProperties: false },
+    name: 'ask_scene',
+    description: 'The wider scene beyond our own archives: a demo/intro/musicdisk by title, a demoparty, an ANSI/ASCII logo, a film, "surprise me", latest arrivals, "is this download link alive". kind=search needs query; kind=random and kind=latest need nothing; kind=check needs an https URL. Not for scene groups/handles (search_demozoo), retail games (lookup_game), or our doors/files (search_doors/search_files). Answers carry their source - quote it.',
+    parameters: { type: 'object', properties: { kind: { type: 'string', enum: ['search', 'random', 'latest', 'check'] }, query: { type: 'string' } }, required: ['kind'], additionalProperties: false },
+    tier: 'caller',
+    async run(_ctx, args) {
+      switch (String(args.kind)) {
+        case 'search': {
+          const q = str(args.query, 80);
+          return { content: q ? await askScene(q) : 'What should I look up?' };
+        }
+        case 'random': return { content: await sceneRandom() };
+        case 'latest': return { content: await sceneLatest() };
+        case 'check': {
+          const q = str(args.query, 500);
+          return { content: q ? await checkLink(q) : 'Which URL? An https one.' };
+        }
+        default: return { content: 'kind must be search, random, latest or check.' };
+      }
+    },
+  },
+  {
+    name: 'lookup_game',    description: 'A COMMERCIAL VIDEO GAME by title (any platform): release date, platforms, genre, a summary. Not for demoscene groups, sceners, demos or BBS software - those are search_demozoo. If the name is a scene group, asking here returns unrelated retail games that happen to share a word.',    parameters: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'], additionalProperties: false },
     tier: 'caller',
     async run(ctx, args) {
       return { content: await lookupGame(str(args.title, 80), ctx.rawgKey) };
