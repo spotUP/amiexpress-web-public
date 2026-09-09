@@ -193,20 +193,25 @@ async function showProjectEditor(
       }
     });
 
-    // Buttons
+    // Buttons - bordered like the SDK ConfirmModal: the borderless shape
+    // never painted in the task editor (screenshot, 2026-09-09), so both
+    // editors share the proven shape.
     const saveBtn = createButton({
       parent: modal,
       top: 19,
       left: 17,
-      width: 12,
+      width: 14,
       height: 3,
-      content: ' Save ',
+      content: '[ Save ]',
       align: 'center',
+      valign: 'middle',
+      border: { type: 'line' },
       keys: true,
       mouse: true,
       style: {
         fg: T.ink,
         bg: T.ok,
+        border: { fg: T.ok },
         focus: { bg: 'lightgreen', fg: T.ground },
         hover: { bg: 'lightgreen', fg: T.ground }
       }
@@ -216,15 +221,18 @@ async function showProjectEditor(
       parent: modal,
       top: 19,
       left: 40,
-      width: 12,
+      width: 14,
       height: 3,
-      content: ' Cancel ',
+      content: '[ Cancel ]',
       align: 'center',
+      valign: 'middle',
+      border: { type: 'line' },
       keys: true,
       mouse: true,
       style: {
         fg: T.ink,
         bg: T.alert,
+        border: { fg: T.alert },
         focus: { bg: 'lightred', fg: T.ground },
         hover: { bg: 'lightred', fg: T.ground }
       }

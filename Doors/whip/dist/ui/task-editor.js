@@ -150,37 +150,44 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
                 border: { fg: door_theme_1.T.accent },
             }
         });
-        // Buttons
+        // Buttons - bordered height-3 like the SDK ConfirmModal: borderless
+        // 1-row buttons never painted (reported with a screenshot, 2026-09-09).
         const saveBtn = (0, blessed_helpers_1.createButton)({
             parent: modal,
-            top: 19,
+            top: 18,
             left: 15,
-            width: 12,
-            height: 1,
-            content: ' Save ',
+            width: 14,
+            height: 3,
+            content: '[ Save ]',
             align: 'center',
+            valign: 'middle',
+            border: { type: 'line' },
             keys: true,
             mouse: true,
             style: {
                 fg: door_theme_1.T.ink,
                 bg: door_theme_1.T.ok,
+                border: { fg: door_theme_1.T.ok },
                 focus: { bg: 'lightgreen', fg: door_theme_1.T.ground },
                 hover: { bg: 'lightgreen', fg: door_theme_1.T.ground }
             }
         });
         const cancelBtn = (0, blessed_helpers_1.createButton)({
             parent: modal,
-            top: 19,
+            top: 18,
             left: 38,
-            width: 12,
-            height: 1,
-            content: ' Cancel ',
+            width: 14,
+            height: 3,
+            content: '[ Cancel ]',
             align: 'center',
+            valign: 'middle',
+            border: { type: 'line' },
             keys: true,
             mouse: true,
             style: {
                 fg: door_theme_1.T.ink,
                 bg: door_theme_1.T.alert,
+                border: { fg: door_theme_1.T.alert },
                 focus: { bg: 'lightred', fg: door_theme_1.T.ground },
                 hover: { bg: 'lightred', fg: door_theme_1.T.ground }
             }

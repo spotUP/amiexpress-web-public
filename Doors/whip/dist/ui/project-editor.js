@@ -161,20 +161,25 @@ async function showProjectEditor(screen, project, user, dataManager, isNew, bbsA
                 border: { fg: door_theme_1.T.accent },
             }
         });
-        // Buttons
+        // Buttons - bordered like the SDK ConfirmModal: the borderless shape
+        // never painted in the task editor (screenshot, 2026-09-09), so both
+        // editors share the proven shape.
         const saveBtn = (0, blessed_helpers_1.createButton)({
             parent: modal,
             top: 19,
             left: 17,
-            width: 12,
+            width: 14,
             height: 3,
-            content: ' Save ',
+            content: '[ Save ]',
             align: 'center',
+            valign: 'middle',
+            border: { type: 'line' },
             keys: true,
             mouse: true,
             style: {
                 fg: door_theme_1.T.ink,
                 bg: door_theme_1.T.ok,
+                border: { fg: door_theme_1.T.ok },
                 focus: { bg: 'lightgreen', fg: door_theme_1.T.ground },
                 hover: { bg: 'lightgreen', fg: door_theme_1.T.ground }
             }
@@ -183,15 +188,18 @@ async function showProjectEditor(screen, project, user, dataManager, isNew, bbsA
             parent: modal,
             top: 19,
             left: 40,
-            width: 12,
+            width: 14,
             height: 3,
-            content: ' Cancel ',
+            content: '[ Cancel ]',
             align: 'center',
+            valign: 'middle',
+            border: { type: 'line' },
             keys: true,
             mouse: true,
             style: {
                 fg: door_theme_1.T.ink,
                 bg: door_theme_1.T.alert,
+                border: { fg: door_theme_1.T.alert },
                 focus: { bg: 'lightred', fg: door_theme_1.T.ground },
                 hover: { bg: 'lightred', fg: door_theme_1.T.ground }
             }

@@ -184,20 +184,24 @@ async function showTaskEditor(
       }
     });
 
-    // Buttons
+    // Buttons - bordered height-3 like the SDK ConfirmModal: borderless
+    // 1-row buttons never painted (reported with a screenshot, 2026-09-09).
     const saveBtn = createButton({
       parent: modal,
-      top: 19,
+      top: 18,
       left: 15,
-      width: 12,
-      height: 1,
-      content: ' Save ',
+      width: 14,
+      height: 3,
+      content: '[ Save ]',
       align: 'center',
+      valign: 'middle',
+      border: { type: 'line' },
       keys: true,
       mouse: true,
       style: {
         fg: T.ink,
         bg: T.ok,
+        border: { fg: T.ok },
         focus: { bg: 'lightgreen', fg: T.ground },
         hover: { bg: 'lightgreen', fg: T.ground }
       }
@@ -205,17 +209,20 @@ async function showTaskEditor(
 
     const cancelBtn = createButton({
       parent: modal,
-      top: 19,
+      top: 18,
       left: 38,
-      width: 12,
-      height: 1,
-      content: ' Cancel ',
+      width: 14,
+      height: 3,
+      content: '[ Cancel ]',
       align: 'center',
+      valign: 'middle',
+      border: { type: 'line' },
       keys: true,
       mouse: true,
       style: {
         fg: T.ink,
         bg: T.alert,
+        border: { fg: T.alert },
         focus: { bg: 'lightred', fg: T.ground },
         hover: { bg: 'lightred', fg: T.ground }
       }
