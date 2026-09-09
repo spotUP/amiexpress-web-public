@@ -965,7 +965,12 @@ console.log(`[Operator Chat] Page ${pageId}: StartChat screen not shown (${(err 
     // which is why the greeting is typed through the stream and not emitted
     // whole. A human sysop's opening is the same board line, said the same way.
     const startName = sysopId === 'bot' ? sysopHandle : (loadBBSConfig(bbsRoot).sysop_name || sysopHandle);
-    if (!shown) await deliverGreeting(io, chatSession, page, startName, aiConfigFrom(repository.getConfig()).botTypingSpeed);
+    // A bot persona greets in its own voice right after this (its persona
+    // greeting), so the board's generic greeting would double up: human
+    // sysops keep the express.e line, bots skip straight to the hint.
+    if (!shown && sysopId !== 'bot') {
+      await deliverGreeting(io, chatSession, page, startName, aiConfigFrom(repository.getConfig()).botTypingSpeed);
+    }
     // WHAT EXPRESS NEVER SAID. chat() tells the caller nothing: it ends on
     // CTRL-C if they hold ACS_BREAK_CHAT (express.e:6118) or when the SYSOP
     // presses F1, BBSHelp.txt has no chat section, and a board that wanted to

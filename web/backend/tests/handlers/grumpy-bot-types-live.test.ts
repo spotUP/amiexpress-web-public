@@ -219,26 +219,21 @@ describe('the chat is one stream', () => {
     expect(all).not.toContain('\x1b[?1000h');
     expect(all).not.toMatch(/\x1b\[\d+;\d+H/);
     // express.e:6085-6087, the built-in start line, in the colour that was
-    // current. Read through shown(), because the start line is TYPED now -
-    // same text, same framing, but the raw stream carries the sysop colour
-    // and one chunk per character. THREE returns above it, counted, not
-    // `toContain`ed: the old assertion asked for two and so never noticed
-    // when routing the line through the typing path quietly ate one.
-    expect(shown(w.seen)).toContain('\r\n\r\n\r\nThis is Kevin, How can I help you??\r\n\r\n');   // the co-sysop's admin-set handle, default Kevin
-    // The opening line is a message: saved, and typed after the start line.
+    // current - for a HUMAN answer. A bot persona greets in its own voice,
+    // so the generic line is skipped and the opening line is the first
+    // thing typed. THREE returns above it are gone with it.
+    expect(shown(w.seen)).not.toContain('How can I help you??');
+    // The opening line is a message: saved, and the first thing typed.
     const messages = w.repo.getChatMessages(pageId);
     expect(messages.length).toBe(1);
     expect(messages[0].senderId).toBe('bot');
     expect(messages[0].message).toMatch(INTRO);
     const text = shown(w.seen);
-    expect(text.indexOf('How can I help you??')).toBeLessThan(text.search(INTRO));
     expect(text.replace(/\s/g, '')).toContain(messages[0].message.replace(/\s/g, ''));
     // One character per chunk, and the sysop colour ONCE, on the first
-    // (6164-6167) - of the INTRO. The greeting types too now, so the first
-    // \x1b[36m in the whole stream is its `T`, and looking there would leave
-    // the intro - the line this test is named for - unwatched. The search
-    // starts after the hint, which is the board talking and resets the
-    // colour between the two.
+    // (6164-6167) - of the INTRO, which is now the first typed line. The
+    // search starts after the hint, which is the board talking and resets
+    // the colour between the two.
     const hintAt = w.seen.findIndex((c) => c.includes('press return twice to send'));
     expect(hintAt).toBeGreaterThan(0);
     const startAt = hintAt + 1 + w.seen.slice(hintAt + 1).findIndex((c) => c.startsWith('\x1b[36m'));
@@ -390,7 +385,8 @@ describe('the chat is one stream', () => {
     const all = w.seen.join('');
     // Both ways out, because express named neither and no sysop is here to
     // end the chat for the caller (express.e:6118 CTRL-C, F1 for the sysop).
-    expect(all.indexOf('How can I help you??')).toBeLessThan(all.indexOf('press return twice to send'));
+    // No generic greeting precedes it for a bot answer.
+    expect(all).not.toContain('How can I help you??');
     const hint = all.slice(all.indexOf('press return twice to send'));
     expect(hint).toContain('/quit or CTRL-C leaves the chat');
   });
@@ -537,17 +533,21 @@ describe('the chat is one stream', () => {
     }
   }, 40000);
 
-  it('types its greeting instead of pasting it, and still prints the hint at once', async () => {
-    // The greeting was the ONE bot line emitted whole while every line after
-    // it typed, which reads as a glitch. The hint below it is the BOARD
-    // talking, not the sysop, and stays instant.
+  it('types its opening line instead of pasting it, and still prints the hint at once', async () => {
+    // The generic greeting is gone for bot answers; the persona's own
+    // opening line is the first thing typed. It must still arrive one
+    // character per emit, while the hint below it is the BOARD talking
+    // and stays instant.
     const w = makeWorld();
     H.initOperatorChatHandler(w.io, w.repo);
     await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
-    await untilTrue('the greeting to arrive', () => shown(w.seen).includes('How can I help you'));
+    await untilTrue('the opening line to be saved', () => (w.repo.getChatMessages(w.session.tempData.pageId) ?? []).length > 0);
+    const opening = w.repo.getChatMessages(w.session.tempData.pageId)[0].message as string;
+    const head = opening.slice(0, 20);
 
     // Typed means one character per emit, not one emit carrying the sentence.
-    expect(w.seen.some((chunk) => chunk.includes('How can I help you'))).toBe(false);
+    await untilTrue('the opening line to finish typing', () => shown(w.seen).includes(head));
+    expect(w.seen.some((chunk) => chunk.includes(head) && chunk.length > head.length + 10)).toBe(false);
     // The hint arrives whole.
     await untilTrue('the hint', () => shown(w.seen).includes('press return twice to send'));
     expect(w.seen.some((chunk) => chunk.includes('press return twice to send'))).toBe(true);
@@ -579,10 +579,10 @@ describe('the chat is one stream', () => {
     expect(typedAfterHint()).toMatch(/^\x1b\[36m/);
   }, 40000);
 
-  it('puts the caller in the chat before the greeting has finished typing, not after', async () => {
-    // The greeting types for a second or more, and acceptPage awaits it. Send
+  it('puts the caller in the chat before the opening line has finished typing, not after', async () => {
+    // The opening line types for a second or more, and acceptPage awaits it. Send
     // the re-link and the accepted events AFTER that await and the caller
-    // spends the whole greeting in their pre-chat subState: their keys go to
+    // spends the whole opening line in their pre-chat subState: their keys go to
     // the menu they paged from - a menu command can start under the greeting -
     // and chatOfSession finds no chat, so they can neither type into it nor
     // /quit it. The window used to be a microsecond; typing made it seconds.
@@ -597,10 +597,11 @@ describe('the chat is one stream', () => {
     };
     H.initOperatorChatHandler(w.io, w.repo);
     await H.handlePageSysop(w.socket, w.session, w.io, w.repo);
-    await untilTrue('the greeting to arrive', () => shown(w.seen).includes('How can I help you'));
+    await untilTrue('the opening line to be saved', () => (w.repo.getChatMessages(w.session.tempData.pageId) ?? []).length > 0);
+    const opening = w.repo.getChatMessages(w.session.tempData.pageId)[0].message as string;
 
-    // The greeting's first character - the colour switch rides on it.
-    const firstChar = at.find((r) => r.chunk === '\x1b[36mT');
+    // The opening line's first character - the colour switch rides on it.
+    const firstChar = at.find((r) => r.chunk === `\x1b[36m${opening[0]}`);
     expect(firstChar).toBeDefined();
     expect(firstChar!.subState).toBe(LoggedOnSubState.OPERATOR_CHAT_ACTIVE);
     expect(firstChar!.pageId).toBe(w.session.tempData.pageId);

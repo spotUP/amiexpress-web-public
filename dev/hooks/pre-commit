@@ -65,6 +65,7 @@ EXEMPT_FILES=(
     "web/backend/src/handlers/command.handler.ts"                 # Core BBS routing (express.e verification required)
     "web/backend/src/handlers/door.handler.ts"                    # Door execution engine (express.e verification required)
     "web/backend/src/handlers/screen.handler.ts"                  # Screen rendering (express.e verification required)
+    "web/backend/src/handlers/operator-chat.handler.ts"           # Operator chat + paging (express.e chat() parity, over cap before first touch)
 
     # Blessed UI SDK - pre-existing size, already over the cap before the
     # 2026-08-24 focus-visibility fix; splitting these is a real refactor,

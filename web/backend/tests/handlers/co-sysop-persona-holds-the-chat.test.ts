@@ -130,8 +130,9 @@ describe('the co-sysop the caller chose is the one that picks up', () => {
     // And it reaches the caller's screen, a character at a time, so the wait
     // is for the last of them rather than for the row.
     await until('the reply to finish typing to the caller', () => plain(w.seen).includes(reply));
-    // The board's own start line names whoever picked up.
-    expect(plain(w.seen)).toContain('This is SABLE, How can I help you??');
+    // The persona greets in its own voice, so the board's generic start
+    // line is skipped for bot answers (it doubled the greeting).
+    expect(plain(w.seen)).not.toContain('This is SABLE, How can I help you??');
   });
 
   it("uses the BOARD's default when the caller has not chosen", async () => {
