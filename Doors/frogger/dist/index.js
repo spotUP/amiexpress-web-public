@@ -793,7 +793,7 @@ async function saveScoreAndReturn(name) {
             name,
             score: gameData.score,
             level: gameData.level,
-        });
+        }, { bbs: doorContext?.bbs });
         gameData.highscores = await server_1.rpcHandlers.getHighscores();
     }
     catch {

@@ -505,7 +505,7 @@ async function handleNameEntryInput(key: InputKey): Promise<void> {
         name: gameData.playerName,
         score: gameData.score,
         level: gameData.level,
-      });
+      }, { bbs: doorContext?.bbs });
     } catch {
       /* ignore */
     }

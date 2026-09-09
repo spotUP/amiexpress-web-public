@@ -57,6 +57,24 @@ describe('door events that reach webhooks', () => {
     expect(sent.map((s) => s.trigger)).toEqual(['door_score', 'door_score', 'door_score']);
   });
 
+  it('routes bug-tracker and mail-composer events to the announcement trigger', () => {
+    emit('bug_created', 'Reported bug #12 "Login fails on C64" [high]');
+    emit('bug_updated', 'Updated bug #12 "Login fails on C64"');
+    emit('bug_closed', 'Fixed bug #11 "ANSI art offset"');
+    emit('bug_commented', 'Commented on bug #12 "Login fails on C64"');
+    emit('mail_sent', 'Sent mail to sysop "Hello"');
+
+    expect(sent.map((s) => s.trigger)).toEqual([
+      'door_announcement',
+      'door_announcement',
+      'door_announcement',
+      'door_announcement',
+      'door_announcement',
+    ]);
+    expect(sent[0].data.door).toBe('CARDLOBBY');
+    expect(sent[0].data.message).toContain('bug #12');
+  });
+
   it('leaves an unmapped event in LiveChat', () => {
     // A door can emit anything; only the names the board maps go out.
     emit('project_created');

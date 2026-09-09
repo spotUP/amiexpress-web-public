@@ -512,7 +512,7 @@ async function handleNameEntryInput(key) {
                 name: gameData.playerName,
                 score: gameData.score,
                 wave: gameData.wave,
-            });
+            }, { bbs: doorContext?.bbs });
         }
         catch {
             /* ignore */

@@ -24,7 +24,7 @@ export interface DoorSession {
   args?: string[];
 }
 
-export type BugCategory = 'system-commands' | 'doors' | 'general' | 'ui' | 'network' | 'security';
+export type BugCategory = 'system-commands' | 'doors' | 'general' | 'ui' | 'network' | 'security' | 'feature';
 export type BugPriority = 'low' | 'medium' | 'high' | 'critical';
 export type BugStatus = 'new' | 'acknowledged' | 'in-progress' | 'fixed' | 'closed' | 'wont-fix';
 
@@ -89,6 +89,7 @@ export const CATEGORIES: { value: BugCategory; label: string }[] = [
   { value: 'ui', label: 'User Interface' },
   { value: 'network', label: 'Network/Connectivity' },
   { value: 'security', label: 'Security' },
+  { value: 'feature', label: 'Feature Request' },
 ];
 
 export const PRIORITIES: { value: BugPriority; label: string; color: string }[] = [

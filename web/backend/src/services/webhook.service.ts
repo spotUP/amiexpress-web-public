@@ -392,6 +392,30 @@ console.error(`[Webhook] Failed to send to ${webhook.name}:`, error.message);
         if (data.isPersonalBest) fields.push({ name: 'Personal Best', value: 'Yes!', inline: true });
         break;
 
+      case WebhookTrigger.DOOR_ANNOUNCEMENT:
+        color = 0x00cc99; // Teal
+        title = `📣 ${data.door || 'Door'} Announcement`;
+        description = data.message
+          ? `${data.username ?? 'Someone'} — ${data.message}`
+          : `${data.username ?? 'Someone'} posted an announcement`;
+        fields = [];
+        if (data.username) fields.push({ name: 'User', value: String(data.username), inline: true });
+        if (data.door) fields.push({ name: 'Door', value: String(data.door), inline: true });
+        break;
+
+      case WebhookTrigger.ACHIEVEMENT_UNLOCKED:
+        color = 0xffd700; // Gold
+        title = '🏅 Achievement Unlocked';
+        description = data.name
+          ? `${data.username ?? 'Someone'} unlocked "${data.name}"`
+          : `${data.username ?? 'Someone'} unlocked an achievement`;
+        fields = [];
+        if (data.username) fields.push({ name: 'Player', value: String(data.username), inline: true });
+        if (data.name) fields.push({ name: 'Achievement', value: String(data.name), inline: true });
+        if (data.tier) fields.push({ name: 'Tier', value: String(data.tier), inline: true });
+        if (data.points !== undefined) fields.push({ name: 'Points', value: String(data.points), inline: true });
+        break;
+
       default:
         color = 0x808080; // Gray
         title = '📢 BBS Event';
@@ -589,6 +613,26 @@ console.error(`[Webhook] Failed to send to ${webhook.name}:`, error.message);
         if (data.level !== undefined) fields.push({ title: 'Level', value: String(data.level), short: true });
         if (data.mode) fields.push({ title: 'Mode', value: data.mode, short: true });
         if (data.rank !== undefined) fields.push({ title: 'Rank', value: `#${data.rank}`, short: true });
+        break;
+
+      case WebhookTrigger.DOOR_ANNOUNCEMENT:
+        emoji = ':mega:';
+        title = `${data.door || 'Door'} Announcement`;
+        fields = [
+          { title: 'User', value: data.message ? `${data.username || 'Someone'} — ${data.message}` : (data.username || 'Someone'), short: false },
+        ];
+        if (data.door) fields.push({ title: 'Door', value: String(data.door), short: true });
+        break;
+
+      case WebhookTrigger.ACHIEVEMENT_UNLOCKED:
+        emoji = ':medal:';
+        title = 'Achievement Unlocked';
+        fields = [
+          { title: 'Player', value: data.username || 'Someone', short: true },
+        ];
+        if (data.name) fields.push({ title: 'Achievement', value: String(data.name), short: true });
+        if (data.tier) fields.push({ title: 'Tier', value: String(data.tier), short: true });
+        if (data.points !== undefined) fields.push({ title: 'Points', value: String(data.points), short: true });
         break;
 
       default:

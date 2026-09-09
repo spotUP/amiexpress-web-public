@@ -385,6 +385,16 @@ async function clearDraft(username, ctx) {
 async function sendMessage(bbs, message) {
     try {
         await bbs.postMessage(message.to, message.subject, message.content);
+        // Board webhooks the sysop subscribed to `door_announcement`
+        // (web/backend/src/services/bbs-event-emitter.ts) - the same bridge
+        // grandmaster's score broadcast uses. Best-effort: the mail is sent,
+        // an announcement is never worth a crash.
+        try {
+            bbs.emitCustomEvent?.('mail_sent', `Sent mail to ${message.to} "${message.subject}"`, { to: message.to, subject: message.subject });
+        }
+        catch (announceErr) {
+            console.error('Failed to announce mail event:', announceErr);
+        }
         return true;
     }
     catch (error) {

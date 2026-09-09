@@ -132,7 +132,7 @@ export const rpcHandlers = {
     /**
      * Save a new high score if it qualifies
      */
-    saveHighscore: async (params) => {
+    saveHighscore: async (params, session) => {
         const { name, score, level, maxPercent } = params;
         // Validate input.
         //
@@ -172,6 +172,21 @@ export const rpcHandlers = {
         }
         // Save
         saveHighscores(scores);
+        try {
+            if (session?.bbs?.emitCustomEvent) {
+                const parts = [`Score: ${score.toLocaleString('en-US')}`, `Level: ${level}`];
+                parts.push(`Rank: #${rank + 1}`);
+                session.bbs.emitCustomEvent('score_submitted', parts.join(' | '), {
+                    name: newEntry.name,
+                    score,
+                    level,
+                    rank: rank + 1,
+                });
+            }
+        }
+        catch (e) {
+            console.error('[Super Qix Server] Failed to broadcast score event:', e);
+        }
         return { success: true, rank: rank + 1 }; // 1-based rank for display
     },
     /**

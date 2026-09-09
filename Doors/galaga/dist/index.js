@@ -506,7 +506,7 @@ async function handleNameEntryInput(key) {
                     name: gameData.playerName,
                     score: gameData.score,
                     stage: gameData.stage,
-                });
+                }, { bbs: doorContext?.bbs });
             }
             catch {
                 /* continue */

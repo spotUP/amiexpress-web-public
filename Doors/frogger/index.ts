@@ -887,7 +887,7 @@ async function saveScoreAndReturn(name: string): Promise<void> {
       name,
       score: gameData.score,
       level: gameData.level,
-    });
+    }, { bbs: doorContext?.bbs });
     gameData.highscores = await rpcHandlers.getHighscores();
   } catch {
     // A high score that cannot be written is not worth losing the door over.

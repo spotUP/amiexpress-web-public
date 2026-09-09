@@ -66,7 +66,7 @@ exports.rpcHandlers = {
     getHighscores: async () => {
         return loadHighscores();
     },
-    saveHighscore: async (params) => {
+    saveHighscore: async (params, session) => {
         const scores = loadHighscores();
         const newScore = {
             name: params.name.toUpperCase().substring(0, 3),
@@ -78,6 +78,23 @@ exports.rpcHandlers = {
         scores.sort((a, b) => b.score - a.score);
         const topScores = scores.slice(0, 10);
         saveHighscores(topScores);
+        try {
+            if (session?.bbs?.emitCustomEvent) {
+                const rank = topScores.indexOf(newScore) + 1; // 0 -> fell off the board
+                const parts = [`Score: ${params.score.toLocaleString('en-US')}`, `Stage: ${params.stage}`];
+                if (rank > 0)
+                    parts.push(`Rank: #${rank}`);
+                session.bbs.emitCustomEvent('score_submitted', parts.join(' | '), {
+                    name: newScore.name,
+                    score: params.score,
+                    stage: params.stage,
+                    rank: rank > 0 ? rank : undefined,
+                });
+            }
+        }
+        catch (e) {
+            console.error('[Galaga Server] Failed to broadcast score event:', e);
+        }
     },
 };
 //# sourceMappingURL=server.js.map

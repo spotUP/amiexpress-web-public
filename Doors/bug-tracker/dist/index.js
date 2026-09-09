@@ -7,8 +7,8 @@ import { ServerDoor } from "@amiexpress/bbs-door-sdk";
 // app.ts
 import {
   createScreen,
-  createBox as createBox2,
-  createList as createList2,
+  createBox as createBox3,
+  createList as createList3,
   DoorInputManager
 } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 
@@ -429,7 +429,8 @@ var CATEGORIES = [
   { value: "general", label: "General System" },
   { value: "ui", label: "User Interface" },
   { value: "network", label: "Network/Connectivity" },
-  { value: "security", label: "Security" }
+  { value: "security", label: "Security" },
+  { value: "feature", label: "Feature Request" }
 ];
 var PRIORITIES = [
   { value: "low", label: "Low", color: "gray" },
@@ -653,6 +654,174 @@ async function sendWebhook(storage, event, bug) {
 
 // app.ts
 import * as path2 from "path";
+
+// board-announce.ts
+function emit(bbs, eventType, message, data) {
+  try {
+    bbs?.emitCustomEvent?.(eventType, message, data);
+  } catch (err) {
+    console.error("[BugTracker] Failed to announce board event:", err);
+  }
+}
+function facts(bug) {
+  return {
+    bugId: bug.id,
+    title: bug.title,
+    priority: bug.priority,
+    status: bug.status,
+    category: bug.category
+  };
+}
+function announceBugCreated(bbs, bug) {
+  emit(bbs, "bug_created", `Reported bug #${bug.id} "${bug.title}" [${bug.priority}]`, facts(bug));
+}
+function announceBugCommented(bbs, bug, isInternal) {
+  if (isInternal) return;
+  emit(bbs, "bug_commented", `Commented on bug #${bug.id} "${bug.title}"`, facts(bug));
+}
+function announceBugEdited(bbs, bug) {
+  emit(bbs, "bug_updated", `Updated bug #${bug.id} "${bug.title}"`, facts(bug));
+}
+function announceStatusChanged(bbs, bug, label) {
+  const boardEvent = bug.status === "closed" || bug.status === "fixed" ? "bug_closed" : "bug_updated";
+  emit(bbs, boardEvent, `${label} bug #${bug.id} "${bug.title}"`, facts(bug));
+}
+function announceAssigned(bbs, bug, assignee) {
+  const message = assignee ? `Assigned bug #${bug.id} "${bug.title}" to ${assignee}` : `Unassigned bug #${bug.id} "${bug.title}"`;
+  const data = assignee ? { ...facts(bug), assignee } : facts(bug);
+  emit(bbs, "bug_updated", message, data);
+}
+function announceDeleted(bbs, bugId, title) {
+  emit(bbs, "bug_updated", `Deleted bug #${bugId} "${title}"`, { bugId, title });
+}
+
+// webhook-settings.ts
+import {
+  createBox as createBox2,
+  createList as createList2
+} from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
+function showWebhookSettings(host) {
+  if (!host.isSysop) return;
+  host.setView("settings");
+  host.clear();
+  const webhooks = host.storage.getWebhooks();
+  createBox2({
+    parent: host.main,
+    top: 0,
+    left: host.panelLeft(),
+    width: host.panelWidth(),
+    height: host.chromeH(),
+    border: host.panelBorder(),
+    label: " Webhook Settings ",
+    style: {
+      fg: T.ink,
+      bg: T.ground,
+      border: { fg: T.warn }
+    },
+    content: host.stripText(` ${webhooks.length} webhook(s) configured | Notifications for bug events`, ` WEBHOOKS ${webhooks.length}`),
+    tags: true,
+    focusable: false,
+    mouse: false,
+    clickable: false
+  });
+  const listItems = webhooks.map((w) => {
+    const status = w.enabled ? `{${T.ok}-fg}[ON]{/}` : `{${T.alert}-fg}[OFF]{/}`;
+    const urlCol = host.narrow() ? Math.max(8, host.screenWidth() - 16) : 50;
+    return `${status} ${w.type.toUpperCase().padEnd(8)} ${w.url.substring(0, urlCol)}${w.url.length > urlCol ? "..." : ""}`;
+  });
+  if (listItems.length === 0) {
+    listItems.push(`{${T.dim}-fg}No webhooks configured - press A to add one{/}`);
+  }
+  const webhookList = createList2({
+    parent: host.main,
+    top: host.chromeH(),
+    left: host.panelLeft(),
+    width: host.panelWidth(),
+    height: host.bodyH(),
+    border: host.panelBorder(),
+    label: " Webhooks ",
+    style: {
+      fg: T.ink,
+      bg: T.ground,
+      border: { fg: T.accent },
+      selected: { fg: T.selectionInk, bg: T.accent },
+      item: { fg: T.ink, bg: T.ground }
+    },
+    items: listItems,
+    tags: true,
+    keys: true,
+    vi: true,
+    mouse: true,
+    padding: { left: 1 }
+  });
+  createBox2({
+    parent: host.main,
+    bottom: 0,
+    left: host.panelLeft(),
+    width: host.panelWidth(),
+    height: host.chromeH(),
+    border: host.panelBorder(),
+    style: {
+      fg: T.dim,
+      bg: T.ground,
+      border: { fg: T.dim }
+    },
+    content: host.stripText(` {${T.accent}-fg}[A]{/} Add   {${T.accent}-fg}[D]{/} Delete   {${T.accent}-fg}[T]{/} Toggle   {${T.alert}-fg}[ESC]{/} Back`, ` {${T.accent}-fg}A{/} add  {${T.accent}-fg}D{/} del  {${T.accent}-fg}T{/} toggle  {${T.alert}-fg}ESC{/} back`),
+    tags: true,
+    focusable: false,
+    mouse: false,
+    clickable: false
+  });
+  webhookList.focus();
+  host.onKey(["a", "A"], () => {
+    if (host.getView() === "settings") {
+      showAddWebhook(host);
+    }
+  });
+  host.onKey(["d", "D"], () => {
+    if (host.getView() === "settings" && webhooks.length > 0) {
+      const idx = webhookList.selected || 0;
+      host.storage.removeWebhook(idx);
+      showWebhookSettings(host);
+    }
+  });
+  host.onKey(["t", "T"], () => {
+    if (host.getView() === "settings" && webhooks.length > 0) {
+      const idx = webhookList.selected || 0;
+      webhooks[idx].enabled = !webhooks[idx].enabled;
+      host.storage.save();
+      showWebhookSettings(host);
+    }
+  });
+  host.onKey(["escape"], () => {
+    if (host.getView() === "settings") {
+      setImmediate(() => host.back());
+    }
+  });
+  host.render();
+}
+function showAddWebhook(host) {
+  host.select("Webhook Type", ["Discord", "Slack", "Generic"], (typeIdx) => {
+    if (typeIdx === -1) {
+      showWebhookSettings(host);
+      return;
+    }
+    const type = ["discord", "slack", "generic"][typeIdx];
+    host.input("Webhook URL", "", false, (url) => {
+      if (url && url.trim()) {
+        host.storage.addWebhook({
+          enabled: true,
+          url: url.trim(),
+          type,
+          events: ["create", "update", "close", "comment"]
+        });
+      }
+      showWebhookSettings(host);
+    });
+  });
+}
+
+// app.ts
 var BugTrackerApp = class {
   session;
   // Public because dialogs.ts draws on it. A private member cannot satisfy
@@ -798,7 +967,7 @@ var BugTrackerApp = class {
     });
   }
   createLayout() {
-    this.headerBox = createBox2({
+    this.headerBox = createBox3({
       parent: this.screen,
       top: 0,
       left: 0,
@@ -815,7 +984,7 @@ var BugTrackerApp = class {
       mouse: false,
       clickable: false
     });
-    const mastheadRow = createBox2({
+    const mastheadRow = createBox3({
       parent: this.headerBox,
       top: 0,
       left: 0,
@@ -830,7 +999,7 @@ var BugTrackerApp = class {
       content: "",
       style: S.bar.style
     });
-    this.mainContainer = createBox2({
+    this.mainContainer = createBox3({
       parent: this.screen,
       top: this.chromeH,
       left: 0,
@@ -846,7 +1015,7 @@ var BugTrackerApp = class {
       mouse: false,
       clickable: false
     });
-    this.footerBox = createBox2({
+    this.footerBox = createBox3({
       parent: this.screen,
       bottom: 0,
       left: 0,
@@ -890,7 +1059,7 @@ var BugTrackerApp = class {
     this.clearMain();
     const stats = this.storage.getStats();
     const openBugs = stats.byStatus.new + stats.byStatus.acknowledged + stats.byStatus["in-progress"];
-    createBox2({
+    createBox3({
       parent: this.mainContainer,
       top: 0,
       left: this.panelLeft,
@@ -931,7 +1100,7 @@ var BugTrackerApp = class {
     }
     menuLabels.push("[Q] Quit");
     menuActions.push(() => this.quit());
-    const menuList = createList2({
+    const menuList = createList3({
       parent: this.mainContainer,
       ...this.pairPrimary({ top: this.chromeH, left: 1, width: "48%", height: this.bodyH }),
       border: this.panelBorder(),
@@ -1002,7 +1171,7 @@ var BugTrackerApp = class {
       `{${T.warn}-fg}Medium: ${stats.byPriority.medium}{/}`,
       `{${T.dim}-fg}Low: ${stats.byPriority.low}{/}`
     ];
-    createBox2({
+    createBox3({
       parent: this.mainContainer,
       ...this.pairSecondary({ top: this.chromeH, right: 1, width: "48%", height: this.bodyH }),
       border: this.panelBorder(),
@@ -1021,7 +1190,7 @@ var BugTrackerApp = class {
       mouse: false,
       clickable: false
     });
-    createBox2({
+    createBox3({
       parent: this.mainContainer,
       bottom: 0,
       left: this.panelLeft,
@@ -1079,7 +1248,7 @@ var BugTrackerApp = class {
       "open": "Open Bugs",
       "critical": "Critical/High"
     };
-    createBox2({
+    createBox3({
       parent: this.mainContainer,
       top: 0,
       left: this.panelLeft,
@@ -1108,7 +1277,7 @@ var BugTrackerApp = class {
     if (listItems.length === 0) {
       listItems.push(`{${T.dim}-fg}No bugs found - press N to create one{/}`);
     }
-    const bugList = createList2({
+    const bugList = createList3({
       parent: this.mainContainer,
       top: this.chromeH,
       left: this.panelLeft,
@@ -1140,7 +1309,7 @@ var BugTrackerApp = class {
       },
       padding: { left: 1 }
     });
-    createBox2({
+    createBox3({
       parent: this.mainContainer,
       bottom: 0,
       left: this.panelLeft,
@@ -1198,7 +1367,7 @@ var BugTrackerApp = class {
     const categoryInfo = CATEGORIES.find((c) => c.value === bug.category);
     const createdDate = new Date(bug.createdAt).toLocaleDateString();
     const updatedDate = new Date(bug.updatedAt).toLocaleDateString();
-    createBox2({
+    createBox3({
       parent: this.mainContainer,
       top: 0,
       left: this.panelLeft,
@@ -1239,7 +1408,7 @@ var BugTrackerApp = class {
     if (bug.tags.length > 0) {
       detailContent.push("", `{${T.accent}-fg}Tags:{/} ${bug.tags.join(", ")}`);
     }
-    const detailBox = createBox2({
+    const detailBox = createBox3({
       parent: this.mainContainer,
       ...this.pairPrimary({ top: this.chromeH, left: 1, width: "68%", height: 12 }),
       border: this.panelBorder(),
@@ -1278,7 +1447,7 @@ var BugTrackerApp = class {
     }
     actionLabels.push("[ESC] Back");
     actionHandlers.push(() => this.showBugList());
-    const actionList = createList2({
+    const actionList = createList3({
       parent: this.mainContainer,
       ...this.pairSecondary({ top: this.chromeH, right: 1, width: "28%", height: 12 }),
       border: this.panelBorder(),
@@ -1310,7 +1479,7 @@ var BugTrackerApp = class {
     if (commentItems.length === 0) {
       commentItems.push(`{${T.dim}-fg}No comments yet - press C to add one{/}`);
     }
-    createBox2({
+    createBox3({
       parent: this.mainContainer,
       top: 15,
       left: this.panelLeft,
@@ -1332,7 +1501,7 @@ var BugTrackerApp = class {
       mouse: true,
       padding: { left: 1, right: 1 }
     });
-    createBox2({
+    createBox3({
       parent: this.mainContainer,
       bottom: 0,
       left: this.panelLeft,
@@ -1407,7 +1576,7 @@ var BugTrackerApp = class {
       { name: "Expected Behavior", value: "" },
       { name: "Actual Behavior", value: "" }
     ];
-    createBox2({
+    createBox3({
       parent: this.mainContainer,
       top: 0,
       left: this.panelLeft,
@@ -1442,7 +1611,7 @@ var BugTrackerApp = class {
         return `{bold}${field.name.substring(0, nameCol).padEnd(nameCol)}{/} ${displayValue}`;
       });
     };
-    const fieldList = createList2({
+    const fieldList = createList3({
       parent: this.mainContainer,
       top: this.chromeH,
       left: this.panelLeft,
@@ -1465,7 +1634,7 @@ var BugTrackerApp = class {
       alwaysScroll: true,
       padding: { left: 1, right: 1 }
     });
-    createBox2({
+    createBox3({
       parent: this.mainContainer,
       bottom: 0,
       left: this.panelLeft,
@@ -1536,6 +1705,7 @@ var BugTrackerApp = class {
         attachments: []
       });
       sendWebhook(this.storage, "create", bug);
+      announceBugCreated(this.session.bbs, bug);
       this.showMessage("Success", `Bug #${bug.id} created successfully!`, () => {
         this.showBugDetail(bug.id);
       });
@@ -1566,7 +1736,7 @@ var BugTrackerApp = class {
     const openBugs = stats.byStatus.new + stats.byStatus.acknowledged + stats.byStatus["in-progress"];
     const closedBugs = stats.byStatus.fixed + stats.byStatus.closed + stats.byStatus["wont-fix"];
     const openPct = stats.total > 0 ? Math.round(openBugs / stats.total * 100) : 0;
-    createBox2({
+    createBox3({
       parent: this.mainContainer,
       top: 0,
       left: this.panelLeft,
@@ -1623,7 +1793,7 @@ var BugTrackerApp = class {
       "{bold}Status Breakdown:{/bold}",
       ...statusLines
     ];
-    const analyticsBox = createBox2({
+    const analyticsBox = createBox3({
       parent: this.mainContainer,
       top: this.chromeH,
       left: this.panelLeft,
@@ -1644,7 +1814,7 @@ var BugTrackerApp = class {
       mouse: true,
       padding: { left: 1, right: 1 }
     });
-    createBox2({
+    createBox3({
       parent: this.mainContainer,
       bottom: 0,
       left: this.panelLeft,
@@ -1671,126 +1841,34 @@ var BugTrackerApp = class {
     this.screen.render();
   }
   // ============================================================================
-  // Webhook Settings (Sysop only)
+  // Webhook Settings (Sysop only) - the view lives in webhook-settings.ts;
+  // this is the host wiring. Board announcements live in board-announce.ts.
   // ============================================================================
   showWebhookSettings() {
     if (!this.isSysop) return;
-    this.currentView = "settings";
-    this.clearMain();
-    const webhooks = this.storage.getWebhooks();
-    createBox2({
-      parent: this.mainContainer,
-      top: 0,
-      left: this.panelLeft,
-      width: this.panelWidth,
-      height: this.chromeH,
-      border: this.panelBorder(),
-      label: " Webhook Settings ",
-      style: {
-        fg: T.ink,
-        bg: T.ground,
-        border: { fg: T.warn }
+    showWebhookSettings({
+      screen: this.screen,
+      main: this.mainContainer,
+      storage: this.storage,
+      isSysop: this.isSysop,
+      getView: () => this.currentView,
+      setView: (view) => {
+        this.currentView = view;
       },
-      content: this.stripText(` ${webhooks.length} webhook(s) configured | Notifications for bug events`, ` WEBHOOKS ${webhooks.length}`),
-      tags: true,
-      focusable: false,
-      mouse: false,
-      clickable: false
-    });
-    const listItems = webhooks.map((w, idx) => {
-      const status = w.enabled ? `{${T.ok}-fg}[ON]{/}` : `{${T.alert}-fg}[OFF]{/}`;
-      const urlCol = this.layout.narrow ? Math.max(8, this.screenWidth - 16) : 50;
-      return `${status} ${w.type.toUpperCase().padEnd(8)} ${w.url.substring(0, urlCol)}${w.url.length > urlCol ? "..." : ""}`;
-    });
-    if (listItems.length === 0) {
-      listItems.push(`{${T.dim}-fg}No webhooks configured - press A to add one{/}`);
-    }
-    const webhookList = createList2({
-      parent: this.mainContainer,
-      top: this.chromeH,
-      left: this.panelLeft,
-      width: this.panelWidth,
-      height: this.bodyH,
-      border: this.panelBorder(),
-      label: " Webhooks ",
-      style: {
-        fg: T.ink,
-        bg: T.ground,
-        border: { fg: T.accent },
-        selected: { fg: T.selectionInk, bg: T.accent },
-        item: { fg: T.ink, bg: T.ground }
-      },
-      items: listItems,
-      tags: true,
-      keys: true,
-      vi: true,
-      mouse: true,
-      padding: { left: 1 }
-    });
-    createBox2({
-      parent: this.mainContainer,
-      bottom: 0,
-      left: this.panelLeft,
-      width: this.panelWidth,
-      height: this.chromeH,
-      border: this.panelBorder(),
-      style: {
-        fg: T.dim,
-        bg: T.ground,
-        border: { fg: T.dim }
-      },
-      content: this.stripText(` {${T.accent}-fg}[A]{/} Add   {${T.accent}-fg}[D]{/} Delete   {${T.accent}-fg}[T]{/} Toggle   {${T.alert}-fg}[ESC]{/} Back`, ` {${T.accent}-fg}A{/} add  {${T.accent}-fg}D{/} del  {${T.accent}-fg}T{/} toggle  {${T.alert}-fg}ESC{/} back`),
-      tags: true,
-      focusable: false,
-      mouse: false,
-      clickable: false
-    });
-    webhookList.focus();
-    this.registerKey(["a", "A"], () => {
-      if (this.currentView === "settings") {
-        this.showAddWebhook();
-      }
-    });
-    this.registerKey(["d", "D"], () => {
-      if (this.currentView === "settings" && webhooks.length > 0) {
-        const idx = webhookList.selected || 0;
-        this.storage.removeWebhook(idx);
-        this.showWebhookSettings();
-      }
-    });
-    this.registerKey(["t", "T"], () => {
-      if (this.currentView === "settings" && webhooks.length > 0) {
-        const idx = webhookList.selected || 0;
-        webhooks[idx].enabled = !webhooks[idx].enabled;
-        this.storage.save();
-        this.showWebhookSettings();
-      }
-    });
-    this.registerKey(["escape"], () => {
-      if (this.currentView === "settings") {
-        setImmediate(() => this.showMainMenu());
-      }
-    });
-    this.screen.render();
-  }
-  showAddWebhook() {
-    this.showSelector("Webhook Type", ["Discord", "Slack", "Generic"], (typeIdx) => {
-      if (typeIdx === -1) {
-        this.showWebhookSettings();
-        return;
-      }
-      const type = ["discord", "slack", "generic"][typeIdx];
-      this.showTextInput("Webhook URL", "", false, (url) => {
-        if (url && url.trim()) {
-          this.storage.addWebhook({
-            enabled: true,
-            url: url.trim(),
-            type,
-            events: ["create", "update", "close", "comment"]
-          });
-        }
-        this.showWebhookSettings();
-      });
+      clear: () => this.clearMain(),
+      panelLeft: () => this.panelLeft,
+      panelWidth: () => this.panelWidth,
+      chromeH: () => this.chromeH,
+      bodyH: () => this.bodyH,
+      panelBorder: () => this.panelBorder(),
+      screenWidth: () => this.screenWidth,
+      narrow: () => this.layout.narrow,
+      stripText: (wide, short) => this.stripText(wide, short),
+      onKey: (keys, handler) => this.registerKey(keys, handler),
+      select: (title, items, callback) => this.showSelector(title, items, callback),
+      input: (title, defaultValue, multiline, callback) => this.showTextInput(title, defaultValue, multiline, callback),
+      back: () => this.showMainMenu(),
+      render: () => this.screen.render()
     });
   }
   // ============================================================================
@@ -1804,7 +1882,7 @@ var BugTrackerApp = class {
     const openBugs = stats.byStatus.new + stats.byStatus.acknowledged + stats.byStatus["in-progress"];
     const fixedBugs = stats.byStatus.fixed;
     const closedBugs = stats.byStatus.closed + stats.byStatus["wont-fix"];
-    createBox2({
+    createBox3({
       parent: this.mainContainer,
       top: 0,
       left: this.panelLeft,
@@ -1839,7 +1917,7 @@ var BugTrackerApp = class {
       () => this.showUserReport(),
       () => this.showMainMenu()
     ];
-    const toolList = createList2({
+    const toolList = createList3({
       parent: this.mainContainer,
       top: this.chromeH,
       left: this.panelLeft,
@@ -1861,7 +1939,7 @@ var BugTrackerApp = class {
       mouse: true,
       padding: { left: 1 }
     });
-    createBox2({
+    createBox3({
       parent: this.mainContainer,
       bottom: 0,
       left: this.panelLeft,
@@ -2064,7 +2142,7 @@ var BugTrackerApp = class {
     this.currentView = "stats";
     this.clearMain();
     const userCount = Object.keys(userStats).length;
-    createBox2({
+    createBox3({
       parent: this.mainContainer,
       top: 0,
       left: this.panelLeft,
@@ -2096,7 +2174,7 @@ var BugTrackerApp = class {
     if (userCount === 0) {
       lines.push(`{${T.dim}-fg}No user activity yet{/}`);
     }
-    const reportBox = createBox2({
+    const reportBox = createBox3({
       parent: this.mainContainer,
       top: this.chromeH,
       left: this.panelLeft,
@@ -2117,7 +2195,7 @@ var BugTrackerApp = class {
       mouse: true,
       padding: { left: 1, right: 1 }
     });
-    createBox2({
+    createBox3({
       parent: this.mainContainer,
       bottom: 0,
       left: this.panelLeft,
@@ -2171,6 +2249,7 @@ var BugTrackerApp = class {
         const bug = this.storage.getBug(bugId);
         if (bug) {
           sendWebhook(this.storage, "comment", bug);
+          announceBugCommented(this.session.bbs, bug, isInternal);
         }
       }
       this.showBugDetail(bugId);
@@ -2185,6 +2264,7 @@ var BugTrackerApp = class {
         const updatedBug = this.storage.getBug(bugId);
         if (updatedBug) {
           sendWebhook(this.storage, "update", updatedBug);
+          announceBugEdited(this.session.bbs, updatedBug);
         }
       }
       this.showBugDetail(bugId);
@@ -2198,14 +2278,28 @@ var BugTrackerApp = class {
         if (bug) {
           const event = bug.status === "closed" || bug.status === "fixed" ? "close" : "update";
           sendWebhook(this.storage, event, bug);
+          announceStatusChanged(this.session.bbs, bug, STATUSES[idx].label);
         }
       }
       this.showBugDetail(bugId);
     });
   }
   showAssignBug(bugId) {
-    const bugs = this.storage.getBugs();
+    void this.showAssignBugAsync(bugId);
+  }
+  async showAssignBugAsync(bugId) {
     const knownUsers = /* @__PURE__ */ new Set();
+    try {
+      const boardUsers = await this.session.bbs?.getUserList?.();
+      if (Array.isArray(boardUsers)) {
+        for (const u of boardUsers) {
+          const name = u?.username || u?.name || (typeof u === "string" ? u : null);
+          if (name) knownUsers.add(name);
+        }
+      }
+    } catch {
+    }
+    const bugs = this.storage.getBugs();
     bugs.forEach((b) => {
       if (b.reporter) knownUsers.add(b.reporter);
       if (b.assignee) knownUsers.add(b.assignee);
@@ -2227,14 +2321,20 @@ var BugTrackerApp = class {
       if (idx === 0) {
         this.storage.updateBug(bugId, { assignee: null });
         const bug = this.storage.getBug(bugId);
-        if (bug) sendWebhook(this.storage, "update", bug);
+        if (bug) {
+          sendWebhook(this.storage, "update", bug);
+          announceAssigned(this.session.bbs, bug, null);
+        }
         this.showMessage("Updated", "Bug unassigned.", () => this.showBugDetail(bugId));
       } else if (idx === 1) {
         this.showTextInput("Enter Username", "", false, (assignee) => {
           if (assignee && assignee.trim()) {
             this.storage.updateBug(bugId, { assignee: assignee.trim() });
             const bug = this.storage.getBug(bugId);
-            if (bug) sendWebhook(this.storage, "update", bug);
+            if (bug) {
+              sendWebhook(this.storage, "update", bug);
+              announceAssigned(this.session.bbs, bug, assignee.trim());
+            }
             this.showMessage("Assigned", `Bug assigned to ${assignee.trim()}.`, () => this.showBugDetail(bugId));
           } else {
             this.showBugDetail(bugId);
@@ -2244,7 +2344,10 @@ var BugTrackerApp = class {
         const selectedUser = userList[idx - 2];
         this.storage.updateBug(bugId, { assignee: selectedUser });
         const bug = this.storage.getBug(bugId);
-        if (bug) sendWebhook(this.storage, "update", bug);
+        if (bug) {
+          sendWebhook(this.storage, "update", bug);
+          announceAssigned(this.session.bbs, bug, selectedUser);
+        }
         this.showMessage("Assigned", `Bug assigned to ${selectedUser}.`, () => this.showBugDetail(bugId));
       }
     });
@@ -2255,6 +2358,7 @@ var BugTrackerApp = class {
     this.showConfirm(`Delete Bug #${bugId}?`, `Are you sure you want to delete "${bug.title}"?`, (confirmed) => {
       if (confirmed) {
         this.storage.deleteBug(bugId);
+        announceDeleted(this.session.bbs, bugId, bug.title);
         this.showMessage("Deleted", `Bug #${bugId} has been deleted.`, () => {
           this.showBugList();
         });

@@ -562,7 +562,7 @@ async function handleNameEntryInput(key) {
                     name: gameData.playerName,
                     score: gameData.score,
                     level: gameData.level,
-                });
+                }, { bbs: doorContext?.bbs });
             }
             catch {
                 // Failed to save, continue anyway

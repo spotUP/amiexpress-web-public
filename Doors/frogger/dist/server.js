@@ -81,7 +81,7 @@ exports.rpcHandlers = {
     /**
      * Save a new high score
      */
-    saveHighscore: async (params) => {
+    saveHighscore: async (params, session) => {
         const scores = loadHighscores();
         // Add new score
         const newScore = {
@@ -96,6 +96,23 @@ exports.rpcHandlers = {
         // Keep top 10
         const topScores = scores.slice(0, 10);
         saveHighscores(topScores);
+        try {
+            if (session?.bbs?.emitCustomEvent) {
+                const rank = topScores.indexOf(newScore) + 1; // 0 -> fell off the board
+                const parts = [`Score: ${params.score.toLocaleString('en-US')}`, `Level: ${params.level}`];
+                if (rank > 0)
+                    parts.push(`Rank: #${rank}`);
+                session.bbs.emitCustomEvent('score_submitted', parts.join(' | '), {
+                    name: newScore.name,
+                    score: params.score,
+                    level: params.level,
+                    rank: rank > 0 ? rank : undefined,
+                });
+            }
+        }
+        catch (e) {
+            console.error('[Frogger Server] Failed to broadcast score event:', e);
+        }
     },
 };
 //# sourceMappingURL=server.js.map

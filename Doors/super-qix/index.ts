@@ -1104,7 +1104,7 @@ async function handleNameEntryInput(key: InputKey): Promise<void> {
           score: gameData.score,
           level: gameData.level,
           maxPercent: Math.floor(gameData.claimedPercent),
-        });
+        }, { bbs: doorContext?.bbs });
       } catch {
         // Continue anyway
       }

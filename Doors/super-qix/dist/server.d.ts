@@ -37,6 +37,20 @@ export declare function getSettingsPath(): string;
 /** Told by the door whenever the screen changes. */
 export declare function setMusicState(state: GameState): void;
 /**
+ * Slice of the hybrid-door session object the RPC bridge passes as the
+ * handler's second argument (door.handler.ts builds it with `bbs` set to
+ * the BBSApi). Only emitCustomEvent is used here; everything else is
+ * irrelevant to this door.
+ */
+interface DoorSessionLike {
+    user?: {
+        username?: string;
+    };
+    bbs?: {
+        emitCustomEvent?: (eventType: string, message: string, data?: Record<string, any>) => void;
+    };
+}
+/**
  * RPC Handlers for client-server communication
  */
 export declare const rpcHandlers: {
@@ -52,7 +66,7 @@ export declare const rpcHandlers: {
         score: number;
         level: number;
         maxPercent: number;
-    }) => Promise<{
+    }, session?: DoorSessionLike) => Promise<{
         success: boolean;
         rank: number;
     }>;

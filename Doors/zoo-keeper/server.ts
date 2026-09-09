@@ -38,6 +38,19 @@ function saveHighscores(scores: HighScore[]): void {
 }
 
 /**
+ * Slice of the hybrid-door session object the RPC bridge passes as the
+ * handler's second argument (door.handler.ts builds it with `bbs` set to
+ * the BBSApi). Only emitCustomEvent is used here; everything else is
+ * irrelevant to this door.
+ */
+interface DoorSessionLike {
+  user?: { username?: string };
+  bbs?: {
+    emitCustomEvent?: (eventType: string, message: string, data?: Record<string, any>) => void;
+  };
+}
+
+/**
  * RPC Handlers for client-server communication
  */
 export const rpcHandlers = {
@@ -51,7 +64,7 @@ export const rpcHandlers = {
   /**
    * Save a new high score if it qualifies
    */
-  saveHighscore: async (params: { name: string; score: number; level: number }): Promise<{ success: boolean; rank: number }> => {
+  saveHighscore: async (params: { name: string; score: number; level: number }, session?: DoorSessionLike): Promise<{ success: boolean; rank: number }> => {
     const { name, score, level } = params;
 
     // Validate input
@@ -92,6 +105,22 @@ export const rpcHandlers = {
 
     // Save
     saveHighscores(scores);
+
+    try {
+      if (session?.bbs?.emitCustomEvent) {
+        const parts = [`Score: ${score.toLocaleString('en-US')}`, `Level: ${level}`];
+        parts.push(`Rank: #${rank + 1}`);
+
+        session.bbs.emitCustomEvent('score_submitted', parts.join(' | '), {
+          name: newEntry.name,
+          score,
+          level,
+          rank: rank + 1,
+        });
+      }
+    } catch (e) {
+      console.error('[Zoo Keeper Server] Failed to broadcast score event:', e);
+    }
 
     return { success: true, rank: rank + 1 };  // 1-based rank for display
   },

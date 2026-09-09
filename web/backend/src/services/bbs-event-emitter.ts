@@ -238,12 +238,21 @@ console.log('[BBSEventEmitter] Initialized with Socket.IO server');
     // left the board. The SDK's announcer (sdk/core/announce.ts) emits
     // these names, and this map is the other half of that contract - a
     // name here and not there reaches LiveChat and stops.
+    //
+    // The bug_* and mail_sent names are the same deal for non-game doors:
+    // bug-tracker and mail-composer emit them, and the sysop's
+    // door_announcement subscription decides whether they leave the board.
     const WEBHOOK_EVENT_TRIGGERS: Record<string, string> = {
       score: 'door_score',
       score_submitted: 'door_score',
       match_result: 'door_score',
       door_opened: 'door_announcement',
       door_started: 'door_announcement',
+      bug_created: 'door_announcement',
+      bug_updated: 'door_announcement',
+      bug_closed: 'door_announcement',
+      bug_commented: 'door_announcement',
+      mail_sent: 'door_announcement',
     };
 
     const webhookTrigger = WEBHOOK_EVENT_TRIGGERS[data.eventType];
