@@ -68,21 +68,35 @@ describe('zen discovery', () => {
 });
 
 describe('zen failover', () => {
-  it('a dead best model rotates: the next message tries the next one', async () => {
+  it('failures rotate the pool: the next message meets the next best', async () => {
     primeZenCatalogue(['muse-spark-1.2-contributor-free', 'mimo-v2.5-free']);
-    mocked.post.mockRejectedValueOnce(Object.assign(new Error('socket hang up'), { response: undefined }));
-    mocked.post.mockResolvedValue(chatOk('Second brain here.'));
+    mocked.post.mockRejectedValue(Object.assign(new Error('socket hang up'), { response: undefined }));
     const first = await getGrumpySysopResponse('hello', context as any, zenCfg());
-    // First message: zen fails, openrouter/groq/gemini have no keys -> persona fallback.
+    // Every leg keyless except zen, zen's three attempts all die -> persona fallback.
     expect(first).toMatch(/ask me again in a minute/);
+    mocked.post.mockResolvedValue(chatOk('Second brain here.'));
     const second = await getGrumpySysopResponse('hello again', context as any, zenCfg());
     expect(second).toContain('Second brain here.');
     const models = mocked.post.mock.calls.map((c) => (c[1] as any).model);
-    expect(models[0]).toBe('muse-spark-1.2-contributor-free');
-    expect(models[1]).toBe('mimo-v2.5-free');
+    // Message one: A, B, A (three attempts, rotating). Message two: B first.
+    expect(models.slice(0, 3)).toEqual(
+      ['muse-spark-1.2-contributor-free', 'mimo-v2.5-free', 'muse-spark-1.2-contributor-free']);
+    expect(models[3]).toBe('mimo-v2.5-free');
   });
-  it('a zen 429 yields to openrouter instead of hopping zen models', async () => {
+  it('a dead best model fails over silently inside one reply', async () => {
     primeZenCatalogue(['muse-spark-1.2-contributor-free', 'mimo-v2.5-free']);
+    mocked.post.mockRejectedValueOnce(err429());
+    mocked.post.mockResolvedValue(chatOk('Second brain here.'));
+    const reply = await getGrumpySysopResponse('hello', context as any, zenCfg());
+    expect(reply).toContain('Second brain here.');
+    const zenModels = mocked.post.mock.calls
+      .filter((c) => String(c[0]).includes('opencode.ai'))
+      .map((c) => (c[1] as any).model);
+    expect(zenModels).toEqual(['muse-spark-1.2-contributor-free', 'mimo-v2.5-free']);
+  });
+  it('exhausted zen models fall through to openrouter in the same reply', async () => {
+    primeZenCatalogue(['mimo-v2.5-free']);
+    mocked.get.mockResolvedValue({ data: { data: [] } } as any);
     mocked.post.mockImplementation((url: string) => {
       if (String(url).includes('opencode.ai')) return Promise.reject(err429());
       return Promise.resolve(chatOk('OpenRouter saved the chat.'));
@@ -90,8 +104,6 @@ describe('zen failover', () => {
     const reply = await getGrumpySysopResponse('hello', context as any,
       zenCfg({ provider: 'zen', openRouterApiKey: 'sk-or-v1-test' }));
     expect(reply).toContain('OpenRouter saved the chat.');
-    const zenCalls = mocked.post.mock.calls.filter((c) => String(c[0]).includes('opencode.ai'));
-    expect(zenCalls.length).toBe(1);
   });
   it('an all-429 night ends in the honest jammed line', async () => {
     primeZenCatalogue(['mimo-v2.5-free']);

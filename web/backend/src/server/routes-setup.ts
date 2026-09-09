@@ -28,7 +28,8 @@ import { createBatchRouter } from '../api/batch-routes';
 import { createImportRouter } from '../handlers/admin/import.handler';
 import { createChatRouter } from '../api/chat-routes';
 import { createWhipRouter } from '../api/whip-routes';
-import { authenticateServiceToken } from '../middleware/service-auth.middleware';
+import { createBotDataRouter } from '../api/bot-data-routes';
+import { authenticateServiceToken, authenticateBotToken } from '../middleware/service-auth.middleware';
 import { createStatisticsRouter } from '../api/statistics-routes';
 import { createNodeControlRouter } from '../api/node-control-routes';
 import { enhancePrompt, analyzePrompt, enhanceAudioDescription, analyzeAudioDescription, generateGame } from '../handlers/admin/wizard.handler';
@@ -184,6 +185,14 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // ===== WHIP mirror bot API - service-token (shared secret, not a user JWT)
   const whipRouter = createWhipRouter(db);
   app.use('/api/whip', authenticateServiceToken, whipRouter);
+
+  // ===== WEB_BOT_DATA chatbot reads - per-bot service tokens, GET only.
+  // bbsRoot is projectRoot here (see below); mounted before its
+  // declaration, so resolve the same way. Mounted bare of JWT: the bot
+  // token is the auth.
+  app.use('/api/bot/v1', authenticateBotToken, createBotDataRouter(db, {
+    bbsRoot: process.env.BBS_ROOT ? path.resolve(process.env.BBS_ROOT) : path.resolve(__dirname, '../../../..'),
+  }));
 
   // ===== Bot plugin admin API - sysop JWT like every other /api/config route
   const { createBotPluginRouter } = require('../api/bot-plugin-routes');

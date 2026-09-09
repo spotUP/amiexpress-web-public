@@ -717,11 +717,6 @@ console.log('[Grumpy Bot] No ZEN_API_KEY configured, skipping Zen');
   }
   const callTimeout = remainingBudget(aiConfig, 10000);
   if (callTimeout < 250) return null;
-  const model = aiConfig.modelName || await getZenModel(Math.min(callTimeout, 5000));
-  if (!model) {
-console.log('[Grumpy Bot] No Zen free models available');
-    return null;
-  }
 
   const systemPrompt = personalityFor(aiConfig);
   const messages = [
@@ -739,7 +734,7 @@ console.log('[Grumpy Bot] No Zen free models available');
   const post = async (body: unknown, timeoutMs: number) =>
     (await axios.post(`${ZEN_BASE}/chat/completions`, body, { headers, timeout: timeoutMs })).data;
 
-  const plainCall = async (): Promise<string | null> => {
+  const plainCall = async (model: string): Promise<string | null> => {
     const response = await axios.post(
       `${ZEN_BASE}/chat/completions`,
       { model, messages, max_tokens: CHAT_REPLY_TOKENS, temperature: aiConfig.temperature },
@@ -750,6 +745,21 @@ console.log('[Grumpy Bot] No Zen free models available');
     return content ?? null;
   };
 
+  // Silent failover inside one reply: best-first, up to three brains, the
+  // caller hears nothing about the switching. A failure rotates the model
+  // to the back, so the next attempt (and the next message) meets the next
+  // best. Zen 429s are per-model upstreams, not one shared pool, so the
+  // next model is a real second chance.
+  // An admin-pinned model gets one attempt: retrying the same brain is
+  // just the same refusal twice.
+  const maxAttempts = aiConfig.modelName ? 1 : 3;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (remainingBudget(aiConfig, 1000) < 250) break;
+    const model = aiConfig.modelName || await getZenModel(Math.min(remainingBudget(aiConfig, 5000), 5000));
+    if (!model) {
+console.log('[Grumpy Bot] No Zen free models available');
+      return null;
+    }
   try {
     if (context.tools && context.tools.list.length > 0 && !zenPlainOnly.has(model)) {
 console.log(`[Grumpy Bot] Trying Zen (${model}) with ${context.tools.list.length} tools...`);
@@ -770,38 +780,37 @@ console.log('[Grumpy Bot] No reply from the model, but the board answered - send
         return `Straight from the board, since I am typing slowly today:\n${result.toolResults.join('\n')}`;
       }
       rotateZenModels();
-      return null;
+      continue;
     }
 console.log(`[Grumpy Bot] Trying Zen (${model})...`);
-    const plain = await plainCall();
-    if (!plain) rotateZenModels();
-    return plain;
+    const plain = await plainCall(model);
+    if (plain) return plain;
+    rotateZenModels();
   } catch (error: any) {
 console.error('[Grumpy Bot] Zen failed:', error.message);
     if (isRateLimit(error)) {
-      // A 429 is the whole shared pool, not this model: hopping models
-      // replays the same refusal. Yield to the next cascade leg at once.
+      // Per-model upstream, not the whole pool: note it for an honest
+      // fallback if everything dies, and try the next brain silently.
       noteCascadeRateLimited();
       rotateZenModels();
-      return null;
+      continue;
     }
     if (context.tools && context.tools.list.length > 0 && isToolRejection(error)) {
 console.log(`[Grumpy Bot] Zen model ${model} refuses tools - plain completion instead`);
       zenPlainOnly.add(model);
       try {
-        const plain = await plainCall();
-        if (!plain) rotateZenModels();
-        return plain;
+        const plain = await plainCall(model);
+        if (plain) return plain;
       } catch (retryError: any) {
 console.error('[Grumpy Bot] Zen plain retry failed:', retryError.message);
         if (isRateLimit(retryError)) noteCascadeRateLimited();
-        rotateZenModels();
-        return null;
       }
     }
     rotateZenModels();
-    return null;
+    continue;
   }
+  }
+  return null;
 }
 
 /**
