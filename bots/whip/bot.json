@@ -1,0 +1,24 @@
+{
+  "id": "whip",
+  "name": "WHIP Discord mirror",
+  "version": "0.2.0",
+  "description": "Use WHIP project management from Discord: link, read commands, live activity feed.",
+  "composeService": "whip-bot",
+  "healthPort": 3099,
+  "healthPath": "/health",
+  "nav": {
+    "path": "bots/whip",
+    "label": "WHIP Bot",
+    "icon": "bot",
+    "minLevel": 255
+  },
+  "configSchema": [
+    { "key": "DISCORD_BOT_TOKEN", "label": "Bot token", "secret": true },
+    { "key": "DISCORD_GUILD_ID", "label": "Guild ID" },
+    { "key": "WHIP_SERVICE_TOKEN", "label": "Service token (matches board)", "secret": true },
+    { "key": "WHIP_API_URL", "label": "Board URL", "default": "http://bbs:3001" },
+    { "key": "WHIP_BBS_USER", "label": "Feed bridge user" },
+    { "key": "WHIP_BBS_PASSWORD", "label": "Feed bridge password", "secret": true },
+    { "key": "DISCORD_FEED_CHANNEL_ID", "label": "Feed channel ID" }
+  ]
+}

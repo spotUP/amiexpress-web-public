@@ -25,6 +25,11 @@ export async function defaultsApiUrl(): Promise<void> {
   assert.strictEqual(loadConfig({ ...rest }).apiUrl, 'http://localhost:3001');
 }
 
+export async function defaultsHealthPort(): Promise<void> {
+  assert.strictEqual(loadConfig({ ...full }).healthPort, 3099);
+  assert.strictEqual(loadConfig({ ...full, HEALTH_PORT: '1234' }).healthPort, 1234);
+}
+
 export async function missingVarThrows(): Promise<void> {
   for (const name of ['DISCORD_BOT_TOKEN', 'DISCORD_GUILD_ID', 'WHIP_SERVICE_TOKEN']) {
     const env = { ...full };

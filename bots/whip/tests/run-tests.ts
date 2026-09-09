@@ -5,7 +5,7 @@
 
 /* eslint-disable no-console */
 
-const TEST_MODULES = ['./config.test', './whip-api.test', './feed.test'];
+const TEST_MODULES = ['./config.test', './whip-api.test', './feed.test', './health.test'];
 
 const realLog = console.log;
 console.log = () => {};

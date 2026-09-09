@@ -15,11 +15,14 @@ import {
   Routes,
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
+  type Interaction,
+  type SlashCommandSubcommandBuilder,
   type TextChannel,
 } from 'discord.js';
 import { loadConfig, type BotConfig } from './config';
 import { WhipApiClient, WhipApiError } from './whip-api';
 import { startFeed } from './feed';
+import { createHealthState, startHealthServer, type HealthState } from './health';
 
 const linkCommand = new SlashCommandBuilder()
   .setName('link')
@@ -31,8 +34,8 @@ const linkCommand = new SlashCommandBuilder()
 const whipCommand = new SlashCommandBuilder()
   .setName('whip')
   .setDescription('Read WHIP projects, tasks, leaderboard, and more')
-  .addSubcommand((sub) => sub.setName('projects').setDescription('List WHIP projects'))
-  .addSubcommand((sub) =>
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) => sub.setName('projects').setDescription('List WHIP projects'))
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
     sub
       .setName('tasks')
       .setDescription('List tasks in a project')
@@ -40,20 +43,20 @@ const whipCommand = new SlashCommandBuilder()
         opt.setName('project').setDescription('Project id (see /whip projects)').setRequired(true)
       )
   )
-  .addSubcommand((sub) =>
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
     sub
       .setName('my-tasks')
       .setDescription('List tasks assigned to you (or to another user)')
       .addStringOption((opt) => opt.setName('user').setDescription('BBS user id').setRequired(false))
   )
-  .addSubcommand((sub) => sub.setName('leaderboard').setDescription('Show the WHIP leaderboard'))
-  .addSubcommand((sub) =>
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) => sub.setName('leaderboard').setDescription('Show the WHIP leaderboard'))
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
     sub
       .setName('achievements')
       .setDescription('Show achievements (defaults to your linked BBS user)')
       .addStringOption((opt) => opt.setName('user').setDescription('BBS user id').setRequired(false))
   )
-  .addSubcommand((sub) => sub.setName('parties').setDescription('List upcoming parties'));
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) => sub.setName('parties').setDescription('List upcoming parties'));
 
 export async function registerCommands(botToken: string, guildId: string, clientId: string): Promise<void> {
   const rest = new REST({ version: '10' }).setToken(botToken);
@@ -215,18 +218,20 @@ async function handleWhip(interaction: ChatInputCommandInteraction, api: WhipApi
   }
 }
 
-function maybeStartFeed(client: Client, config: BotConfig, apiUrl: string): void {
+function maybeStartFeed(client: Client, config: BotConfig, apiUrl: string, health: HealthState): void {
   if (!config.feedChannelId) return; // Feed stays silent when unset.
   if (!config.bbsUser || !config.bbsPassword) {
     console.warn('[whip-bot] DISCORD_FEED_CHANNEL_ID is set but WHIP_BBS_USER/WHIP_BBS_PASSWORD are missing; feed disabled');
     return;
   }
+  health.feedEnabled = true;
   const { feedChannelId, bbsUser, bbsPassword } = config;
   startFeed({
     apiUrl,
     bbsUser,
     bbsPassword,
     post: async (line) => {
+      health.lastFeedEventAt = new Date().toISOString();
       const channel = await client.channels.fetch(feedChannelId);
       if (channel?.isTextBased()) {
         await (channel as TextChannel).send(line);
@@ -242,17 +247,28 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const api = new WhipApiClient(config.apiUrl, config.serviceToken);
   const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+  const health = createHealthState();
+
+  // Health endpoint for compose + admin status probe. Fail-soft like the
+  // feed: a taken port must not keep the bot offline.
+  try {
+    await startHealthServer('whip', health, config.healthPort);
+    console.log(`[whip-bot] Health on :${config.healthPort}/health`);
+  } catch (err) {
+    console.warn('[whip-bot] Health endpoint unavailable, bot stays up:', (err as Error)?.message ?? err);
+  }
 
   client.once('ready', async () => {
     console.log(`[whip-bot] Logged in as ${client.user?.tag}`);
+    health.discordReady = true;
     if (client.user) {
       await registerCommands(config.botToken, config.guildId, client.user.id);
       console.log('[whip-bot] Slash commands registered');
     }
-    maybeStartFeed(client, config, config.apiUrl);
+    maybeStartFeed(client, config, config.apiUrl, health);
   });
 
-  client.on('interactionCreate', async (interaction) => {
+  client.on('interactionCreate', async (interaction: Interaction) => {
     if (!interaction.isChatInputCommand()) return;
     try {
       if (interaction.commandName === 'link') {

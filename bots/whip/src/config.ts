@@ -8,11 +8,10 @@ export interface BotConfig {
   guildId: string;
   apiUrl: string;
   serviceToken: string;
-  /** Bridge BBS account the feed socket logs in with (POST /api/chat/login). */
   bbsUser?: string;
   bbsPassword?: string;
-  /** Feed stays silent when unset. */
   feedChannelId?: string;
+  healthPort: number;
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -37,5 +36,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): BotConfig {
     bbsUser: optional(env, 'WHIP_BBS_USER'),
     bbsPassword: optional(env, 'WHIP_BBS_PASSWORD'),
     feedChannelId: optional(env, 'DISCORD_FEED_CHANNEL_ID'),
+    healthPort: env.HEALTH_PORT ? Number(env.HEALTH_PORT) || 3099 : 3099,
   };
 }

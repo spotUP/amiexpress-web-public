@@ -177,6 +177,9 @@ data/*.db
 data/*.sqlite
 data/*.sqlite3
 
+# Bot plugin secrets (per-bot env files written by the admin UI)
+data/bots/
+
 # Door runtime data (can grow very large)
 web/backend/data/doors/
 

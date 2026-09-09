@@ -185,6 +185,10 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   const whipRouter = createWhipRouter(db);
   app.use('/api/whip', authenticateServiceToken, whipRouter);
 
+  // ===== Bot plugin admin API - sysop JWT like every other /api/config route
+  const { createBotPluginRouter } = require('../api/bot-plugin-routes');
+  app.use('/api/config/bots', authenticateToken(db), requireSysop(), createBotPluginRouter(db));
+
   // ===== Import/Export API - Sysop-only Routes =====
   const importRouter = createImportRouter(db);
   app.use('/api/import', authenticateToken(db), requireSysop(), importRouter);
