@@ -75,54 +75,58 @@ export function CoSysopPersonasPage() {
     else showError(j.message);
   };
 
+  const inputCls = "w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded focus:outline-none focus:ring-2 focus:ring-accent text-sm";
+  const selectCls = "w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded focus:outline-none focus:ring-2 focus:ring-accent text-sm";
+  const textareaCls = "w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded focus:outline-none focus:ring-2 focus:ring-accent text-sm";
+
   return (
     <div className="p-6 max-w-5xl">
-      <h1 className="text-2xl font-bold flex items-center gap-2"><Bot className="w-7 h-7" />Co-Sysop Personas</h1>
+      <h1 className="text-2xl font-bold text-content-primary flex items-center gap-2"><Bot className="w-7 h-7" />Co-Sysop Personas</h1>
       <p className="text-sm text-content-secondary mt-1">The builder composes the system prompt so every persona inherits the voice rules. No prompt box.</p>
 
       <div className="mt-6 grid grid-cols-2 gap-6">
         <div className="space-y-3">
-          <h2 className="font-semibold">Board personas</h2>
+          <h2 className="font-semibold text-content-primary">Board personas</h2>
           {data?.board?.length ? data.board.map((p: any) => (
-            <div key={p.slug} className="border rounded p-2 flex justify-between">
-              <div><div className="font-mono text-sm">{p.handle} — {p.name}</div><div className="text-xs text-content-secondary">{p.blurb}</div></div>
-              <button onClick={() => del.mutate(p.slug)} className="text-status-danger"><Trash2 className="w-4 h-4" /></button>
+            <div key={p.slug} className="bg-surface-1 border border-border rounded p-3 flex justify-between items-start">
+              <div><div className="font-mono text-sm text-content-primary">{p.handle} — {p.name}</div><div className="text-xs text-content-secondary">{p.blurb}</div></div>
+              <button onClick={() => del.mutate(p.slug)} className="text-status-danger hover:text-status-danger/80 p-1"><Trash2 className="w-4 h-4" /></button>
             </div>
           )) : <div className="text-sm text-content-secondary">None yet.</div>}
-          <h2 className="font-semibold mt-4">Presets (cannot be deleted)</h2>
-          <div className="text-xs space-y-1">{data?.presets?.map((p:any) => <div key={p.slug} className="font-mono">{p.handle} — {p.blurb}</div>)}</div>
+          <h2 className="font-semibold mt-4 text-content-primary">Presets (cannot be deleted)</h2>
+          <div className="text-xs space-y-1 bg-surface-1 border border-border rounded p-3">{data?.presets?.map((p:any) => <div key={p.slug} className="font-mono text-content-primary">{p.handle} — <span className="text-content-secondary">{p.blurb}</span></div>)}</div>
         </div>
 
-        <div className="space-y-3 border rounded p-3 bg-surface-1">
-          <h2 className="font-semibold flex items-center gap-2"><Plus className="w-4 h-4" />Builder</h2>
-          <input placeholder="Handle (SCENE ALIAS, <=30)" value={form.handle} onChange={e=>setForm({...form, handle:e.target.value})} className="w-full px-2 py-1 border rounded text-sm" />
-          <input placeholder="Name (full human name)" value={form.name} onChange={e=>setForm({...form, name:e.target.value})} className="w-full px-2 py-1 border rounded text-sm" />
-          <select value={form.trade} onChange={e=>setForm({...form, trade:e.target.value})} className="w-full px-2 py-1 border rounded text-sm">{TRADES.map(t=><option key={t} value={t}>{t}</option>)}</select>
+        <div className="space-y-3 bg-surface-1 border border-border rounded-lg p-4">
+          <h2 className="font-semibold text-content-primary flex items-center gap-2"><Plus className="w-4 h-4" />Builder</h2>
+          <input placeholder="Handle (SCENE ALIAS, <=30)" value={form.handle} onChange={e=>setForm({...form, handle:e.target.value})} className={inputCls} />
+          <input placeholder="Name (full human name)" value={form.name} onChange={e=>setForm({...form, name:e.target.value})} className={inputCls} />
+          <select value={form.trade} onChange={e=>setForm({...form, trade:e.target.value})} className={selectCls}>{TRADES.map(t=><option key={t} value={t}>{t}</option>)}</select>
           <div className="grid grid-cols-2 gap-2 text-xs">
-            <select value={form.temperament.warmth} onChange={e=>setForm({...form, temperament:{...form.temperament, warmth:e.target.value as any}})} className="border rounded px-1 py-1"><option value="warm">warm</option><option value="cold">cold</option></select>
-            <select value={form.temperament.patience} onChange={e=>setForm({...form, temperament:{...form.temperament, patience:e.target.value as any}})} className="border rounded px-1 py-1"><option value="patient">patient</option><option value="impatient">impatient</option></select>
-            <select value={form.temperament.length} onChange={e=>setForm({...form, temperament:{...form.temperament, length:e.target.value as any}})} className="border rounded px-1 py-1"><option value="terse">terse</option><option value="verbose">verbose</option></select>
-            <select value={form.temperament.register} onChange={e=>setForm({...form, temperament:{...form.temperament, register:e.target.value as any}})} className="border rounded px-1 py-1"><option value="slangy">slangy</option><option value="formal">formal</option></select>
+            <select value={form.temperament.warmth} onChange={e=>setForm({...form, temperament:{...form.temperament, warmth:e.target.value as any}})} className={selectCls}><option value="warm">warm</option><option value="cold">cold</option></select>
+            <select value={form.temperament.patience} onChange={e=>setForm({...form, temperament:{...form.temperament, patience:e.target.value as any}})} className={selectCls}><option value="patient">patient</option><option value="impatient">impatient</option></select>
+            <select value={form.temperament.length} onChange={e=>setForm({...form, temperament:{...form.temperament, length:e.target.value as any}})} className={selectCls}><option value="terse">terse</option><option value="verbose">verbose</option></select>
+            <select value={form.temperament.register} onChange={e=>setForm({...form, temperament:{...form.temperament, register:e.target.value as any}})} className={selectCls}><option value="slangy">slangy</option><option value="formal">formal</option></select>
           </div>
-          <input placeholder="Catchphrase" value={form.catchphrase} onChange={e=>setForm({...form, catchphrase:e.target.value})} className="w-full px-2 py-1 border rounded text-sm" />
-          <input placeholder="Always brings up" value={form.alwaysBringsUp} onChange={e=>setForm({...form, alwaysBringsUp:e.target.value})} className="w-full px-2 py-1 border rounded text-sm" />
-          <input placeholder="Refuses to discuss" value={form.refusesToDiscuss} onChange={e=>setForm({...form, refusesToDiscuss:e.target.value})} className="w-full px-2 py-1 border rounded text-sm" />
-          <textarea placeholder="Opening lines (one per line, blank=generated)" value={form.openingLines} onChange={e=>setForm({...form, openingLines:e.target.value})} className="w-full px-2 py-1 border rounded text-sm" rows={2} />
-          <textarea placeholder="Fallback lines (one per line)" value={form.fallbackLines} onChange={e=>setForm({...form, fallbackLines:e.target.value})} className="w-full px-2 py-1 border rounded text-sm" rows={2} />
+          <input placeholder="Catchphrase" value={form.catchphrase} onChange={e=>setForm({...form, catchphrase:e.target.value})} className={inputCls} />
+          <input placeholder="Always brings up" value={form.alwaysBringsUp} onChange={e=>setForm({...form, alwaysBringsUp:e.target.value})} className={inputCls} />
+          <input placeholder="Refuses to discuss" value={form.refusesToDiscuss} onChange={e=>setForm({...form, refusesToDiscuss:e.target.value})} className={inputCls} />
+          <textarea placeholder="Opening lines (one per line, blank=generated)" value={form.openingLines} onChange={e=>setForm({...form, openingLines:e.target.value})} className={textareaCls} rows={2} />
+          <textarea placeholder="Fallback lines (one per line)" value={form.fallbackLines} onChange={e=>setForm({...form, fallbackLines:e.target.value})} className={textareaCls} rows={2} />
           <div className="flex gap-2">
-            <button onClick={()=>save.mutate()} className="px-3 py-1 bg-accent text-white rounded text-sm flex items-center gap-1"><Send className="w-3 h-3" />Save</button>
-            <button onClick={compose} className="px-3 py-1 border rounded text-sm flex items-center gap-1"><Eye className="w-3 h-3" />Preview prompt</button>
+            <button onClick={()=>save.mutate()} className="px-3 py-2 bg-accent hover:bg-accent/80 text-content-inverse rounded text-sm flex items-center gap-1"><Send className="w-3 h-3" />Save</button>
+            <button onClick={compose} className="px-3 py-2 bg-surface-0 border border-border text-content-primary hover:border-accent rounded text-sm flex items-center gap-1"><Eye className="w-3 h-3" />Preview prompt</button>
           </div>
-          <div className="border-t pt-2">
-            <div className="text-xs font-medium">Describe it and let the board write it</div>
-            <textarea placeholder="a Finnish tracker musician who only wants to talk about Protracker..." value={describeText} onChange={e=>setDescribeText(e.target.value)} className="w-full px-2 py-1 border rounded text-sm mt-1" rows={2} />
-            <button onClick={describe} className="mt-1 px-3 py-1 bg-surface-0 border rounded text-sm flex items-center gap-1"><Wand2 className="w-3 h-3" />Generate fields</button>
+          <div className="border-t border-border pt-3">
+            <div className="text-xs font-medium text-content-primary">Describe it and let the board write it</div>
+            <textarea placeholder="a Finnish tracker musician who only wants to talk about Protracker..." value={describeText} onChange={e=>setDescribeText(e.target.value)} className={`${textareaCls} mt-1`} rows={2} />
+            <button onClick={describe} className="mt-2 px-3 py-2 bg-surface-0 border border-border text-content-primary hover:border-accent rounded text-sm flex items-center gap-1"><Wand2 className="w-3 h-3" />Generate fields</button>
           </div>
-          <div className="border-t pt-2">
-            <div className="text-xs font-medium">Try it (one exchange, no caller paged)</div>
-            <input value={tryMessage} onChange={e=>setTryMessage(e.target.value)} className="w-full px-2 py-1 border rounded text-sm mt-1" />
-            <button onClick={tryIt} className="mt-1 px-3 py-1 border rounded text-sm">Try</button>
-            {tryReply && <div className="text-xs mt-1 p-1 bg-surface-0 border rounded">{tryReply}</div>}
+          <div className="border-t border-border pt-3">
+            <div className="text-xs font-medium text-content-primary">Try it (one exchange, no caller paged)</div>
+            <input value={tryMessage} onChange={e=>setTryMessage(e.target.value)} className={`${inputCls} mt-1`} />
+            <button onClick={tryIt} className="mt-2 px-3 py-2 bg-surface-0 border border-border text-content-primary hover:border-accent rounded text-sm">Try</button>
+            {tryReply && <div className="text-xs mt-2 p-2 bg-surface-0 border border-border rounded text-content-primary">{tryReply}</div>}
           </div>
         </div>
       </div>
