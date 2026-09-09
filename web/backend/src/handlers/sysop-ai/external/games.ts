@@ -24,8 +24,7 @@ export function setGamesFetcher(f: ((url: string) => Promise<any>) | null): void
   fetcher = f ?? (async (url) => (await axios.get(url, { timeout: TIMEOUT, headers: { 'User-Agent': UA, Accept: 'application/json' } })).data);
 }
 
-export async function lookupGame(title: string, rawgKey?: string): Promise<string> {
-  const q = title.trim().slice(0, 80);
+export async function lookupGame(title: string, rawgKey?: string): Promise<string> {  const q = title.trim().slice(0, 80);
   if (!q) return 'Which game?';
   return cachedLookup(`game:${rawgKey ? 'rawg' : 'wiki'}:${q.toLowerCase()}`, async () => {
     if (rawgKey) {
@@ -41,4 +40,52 @@ export async function lookupGame(title: string, rawgKey?: string): Promise<strin
     if (page?.extract) return `${page.title}${page.description ? ` - ${page.description}` : ''}: ${String(page.extract).slice(0, 900)} ${page.content_urls?.desktop?.page ?? ''}`;
     return `Nothing known about a game called "${q}".`;
   });
+}
+
+/**
+ * Forced RAWG pre-fetch (2026-09-10): the models answer game questions
+ * from training weights and never call lookup_game (zero calls in 72h of
+ * live logs while the other tools fired), so a stored RAWG key sat unused.
+ * Game-looking messages get one RAWG lookup up front and the hits ride
+ * the prompt as context - this works even for models without tool support.
+ *
+ * Conservative by design: a cue that does not fire leaves the old behavior
+ * (the model may still call the tool); a cue that fires on a non-game
+ * costs one cached lookup and contributes nothing when RAWG knows no rows.
+ */
+const GAME_CUES = [
+  /\bgames?\b/i,
+  /\bgaming\b/i,
+  /\bvideogames?\b/i,
+  /\bvideo games?\b/i,
+  /\bplaystation\b/i,
+  /\bps[1-5]\b/i,
+  /\bxbox\b/i,
+  /\bnintendo\b/i,
+  /\bsega\b/i,
+  /\batari\b/i,
+  /\bamiga games?\b/i,
+  /\bmetacritic\b/i,
+  /who (made|developed|published|created)/i,
+  /when (was|were|did).{0,50}(releas|come out|publish|launch)/i,
+  /release date/i,
+];
+
+export function looksLikeGameQuestion(message: string): boolean {
+  return GAME_CUES.some((re) => re.test(message));
+}
+
+const MISS_PREFIXES = ['Nothing known about a game', 'No answer from the net', 'Which game?'];
+
+/** RAWG card for the prompt, or undefined when there is nothing worth saying. Never throws. */
+export async function gameCardFor(message: string, rawgKey?: string): Promise<string | undefined> {
+  if (!looksLikeGameQuestion(message)) return undefined;
+  if (!rawgKey) return undefined;
+  try {
+    const text = await lookupGame(message, rawgKey);
+    if (!MISS_PREFIXES.some((p) => text.startsWith(p))) return `RAWG games database:\n${text}`;
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }

@@ -36,6 +36,7 @@ import { getGrumpySysopResponse, getGrumpyBotIntroMessage, planNaturalTyping, ty
 import { buildBoardCard } from './sysop-ai/board-card';
 import { resolvePersona, personaByHandle, promptFor } from './sysop-ai/personas';
 import { retrieve, retrievedAsPrompt } from './sysop-ai/corpus';
+import { gameCardFor } from './sysop-ai/external/games';
 import { toolsFor, type ToolContext } from './sysop-ai/tools';
 import { confirmPendingAdmin } from './sysop-ai/admin-tool';
 import { TOOL_AI_BUDGET_MS } from './grumpy-sysop-bot.handler';
@@ -93,8 +94,7 @@ console.error(`[Operator Chat] Page ${pageId}: a scheduled action failed:`, err)
 }
 
 /** The board's own help on this message, for this caller - or nothing. */
-function retrievedFor(message: string, chatSession: ChatSession): string | undefined {
-  try {
+function retrievedFor(message: string, chatSession: ChatSession): string | undefined {  try {
     const caller = userSessions.get(String(chatSession.userId));
     const chunks = retrieve(message, { bbsRoot, repoRoot: path.join(__dirname, '../../../..') }, caller?.user?.secLevel ?? 0, caller?.currentConf, 3);
     return retrievedAsPrompt(chunks);
@@ -102,6 +102,26 @@ function retrievedFor(message: string, chatSession: ChatSession): string | undef
 console.log(`[Operator Chat] retrieval skipped (${(err as Error).message})`);
     return undefined;
   }
+}
+
+/**
+ * Prompt context for one message: the board's own retrieval plus a forced
+ * RAWG card when the message looks like a game question (2026-09-10 - the
+ * models answer games from weights and never call lookup_game, so the
+ * stored key only works when it rides the prompt). Either half may be
+ * absent; absent halves contribute nothing.
+ */
+async function retrievedWithGames(
+  message: string,
+  chatSession: ChatSession,
+  repository: OperatorChatRepository
+): Promise<string | undefined> {
+  const card = await gameCardFor(
+    message,
+    repository.getConfig().rawgApiKey || process.env.RAWG_API_KEY || undefined
+  );
+  const parts = [retrievedFor(message, chatSession), card].filter((p): p is string => !!p);
+  return parts.length ? parts.join('\n\n') : undefined;
 }
 import {
   renderPicker,
@@ -1216,12 +1236,12 @@ function aiConfigForHandle(handle: string, repository: OperatorChatRepository): 
 /**
  * Process bot message queue — respond to messages that arrived while bot was typing
  */
-function processBotQueue(
+async function processBotQueue(
   io: any,
   repository: OperatorChatRepository,
   pageId: string,
   chatSession: any
-): void {
+): Promise<void> {
   const session = activeChatSessions.get(pageId);
   if (!session) return;
 
@@ -1241,7 +1261,7 @@ function processBotQueue(
     timeOnline: Math.floor((Date.now() - page.createdAt.getTime()) / 1000),
     messageHistory: chatSession.botMessageHistory || [],
     boardCard: chatSession.boardCard as string | undefined,
-    retrieved: retrievedFor(lastMsg, chatSession),
+    retrieved: await retrievedWithGames(lastMsg, chatSession, repository),
     tools: toolsForChat(io, repository, page, chatSession),
     afters: [] as Array<() => Promise<void>>,
   };
@@ -1348,7 +1368,7 @@ console.log('[Operator Chat] Bot busy, queuing message');
         timeOnline: Math.floor((Date.now() - page.createdAt.getTime()) / 1000),
         messageHistory: (chatSession as any).botMessageHistory || [],
         boardCard: (chatSession as any).boardCard as string | undefined,
-        retrieved: retrievedFor(message, chatSession),
+        retrieved: await retrievedWithGames(message, chatSession as any, repository),
         tools: toolsForChat(io, repository, page, chatSession),
         afters: [] as Array<() => Promise<void>>,
       };
