@@ -302,6 +302,12 @@ const HEALTH_SECTIONS: PageSection[] = [
   { name: 'Deployment', fields: [], keywords: ['deploy', 'container', 'image', 'build', 'version'] },
 ];
 
+const BOT_SECTIONS: PageSection[] = [
+  { name: 'Status', fields: [], keywords: ['start', 'stop', 'restart', 'running', 'health', 'uptime'] },
+  { name: 'Configuration', fields: [], keywords: ['token', 'guild', 'channel', 'bridge', 'secret', 'link'] },
+  { name: 'Logs', fields: [], keywords: ['log', 'tail', 'error', 'output'] },
+];
+
 export const PAGE_SECTIONS: Record<string, PageSection[]> = {
   system: SYSTEM_CONFIG_SECTIONS,
   notifications: NOTIFICATION_SECTIONS,
@@ -312,6 +318,7 @@ export const PAGE_SECTIONS: Record<string, PageSection[]> = {
   'lookup-tables': LOOKUP_SECTIONS,
   'config-files': CONFIG_FILE_SECTIONS,
   health: HEALTH_SECTIONS,
+  'bots/whip': BOT_SECTIONS,
 };
 
 /** The query parameter a search result uses to open one section on its page. */

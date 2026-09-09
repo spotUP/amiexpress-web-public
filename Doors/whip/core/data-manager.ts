@@ -5,6 +5,44 @@ import type { Party } from '../types/party';
 import { getDefaultAchievements } from './achievements';
 import { getDefaultParties } from './party-calendar';
 
+/**
+ * Single ownership for WHIP data.
+ *
+ * WHIP storage is whole-file JSON with no locking, and DataManager keeps
+ * in-memory caches that never invalidate - so two instances (the BBS door
+ * and the Discord bot's backend service, same process) would serve stale
+ * reads and overwrite each other's writes. There is exactly one instance
+ * per process below, and every read-modify-write mutation runs serialized
+ * through runExclusive. Reads stay lock-free: on one thread, a read
+ * between two serialized writes always sees a complete snapshot.
+ *
+ * Re-entrancy rule: runExclusive callbacks must never call runExclusive
+ * again - the inner call would queue behind the outer one's completion
+ * while the outer one waits for the inner one. Leaf save*() methods stay
+ * unlocked for exactly this reason; the mutators above them hold the lock.
+ */
+let sharedInstance: DataManager | null = null;
+let sharedBaseDir: string | undefined;
+
+export function getSharedDataManager(storageBaseDir?: string): DataManager {
+  if (!sharedInstance || (storageBaseDir !== undefined && storageBaseDir !== sharedBaseDir)) {
+    sharedInstance = new DataManager(storageBaseDir);
+    sharedBaseDir = storageBaseDir;
+  }
+  return sharedInstance;
+}
+
+let writeChain: Promise<void> = Promise.resolve();
+
+export function runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+  const run = writeChain.then(fn, fn);
+  writeChain = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
+}
+
 export class DataManager {
   private storage: Storage;
 
@@ -15,11 +53,14 @@ export class DataManager {
   private achievementsCache: Record<string, Achievement> | null = null;
   private partiesCache: Party[] | null = null;
 
-  constructor() {
-    this.storage = new Storage({
-      doorName: 'whip',
-      global: true
-    });
+  constructor(storageBaseDir?: string) {
+    this.storage = new Storage(
+      {
+        doorName: 'whip',
+        global: true,
+      },
+      storageBaseDir ?? process.cwd()
+    );
   }
 
   // Cache invalidation methods
@@ -70,29 +111,35 @@ export class DataManager {
   }
 
   async addProject(project: Project): Promise<void> {
-    const projects = await this.loadProjects();
-    projects.push(project);
-    await this.saveProjects(projects);
+    return runExclusive(async () => {
+      const projects = await this.loadProjects();
+      projects.push(project);
+      await this.saveProjects(projects);
+    });
   }
 
   async updateProject(project: Project): Promise<void> {
-    const projects = await this.loadProjects();
-    const index = projects.findIndex(p => p.id === project.id);
-    if (index >= 0) {
-      projects[index] = project;
-      await this.saveProjects(projects);
-    }
+    return runExclusive(async () => {
+      const projects = await this.loadProjects();
+      const index = projects.findIndex(p => p.id === project.id);
+      if (index >= 0) {
+        projects[index] = project;
+        await this.saveProjects(projects);
+      }
+    });
   }
 
   async deleteProject(id: string): Promise<void> {
-    const projects = await this.loadProjects();
-    const filtered = projects.filter(p => p.id !== id);
-    await this.saveProjects(filtered);
+    return runExclusive(async () => {
+      const projects = await this.loadProjects();
+      const filtered = projects.filter(p => p.id !== id);
+      await this.saveProjects(filtered);
 
-    // Also delete all tasks for this project
-    const tasks = await this.loadTasks();
-    const filteredTasks = tasks.filter(t => t.projectId !== id);
-    await this.saveTasks(filteredTasks);
+      // Also delete all tasks for this project
+      const tasks = await this.loadTasks();
+      const filteredTasks = tasks.filter(t => t.projectId !== id);
+      await this.saveTasks(filteredTasks);
+    });
   }
 
   // Tasks
@@ -124,24 +171,30 @@ export class DataManager {
   }
 
   async addTask(task: Task): Promise<void> {
-    const tasks = await this.loadTasks();
-    tasks.push(task);
-    await this.saveTasks(tasks);
+    return runExclusive(async () => {
+      const tasks = await this.loadTasks();
+      tasks.push(task);
+      await this.saveTasks(tasks);
+    });
   }
 
   async updateTask(task: Task): Promise<void> {
-    const tasks = await this.loadTasks();
-    const index = tasks.findIndex(t => t.id === task.id);
-    if (index >= 0) {
-      tasks[index] = task;
-      await this.saveTasks(tasks);
-    }
+    return runExclusive(async () => {
+      const tasks = await this.loadTasks();
+      const index = tasks.findIndex(t => t.id === task.id);
+      if (index >= 0) {
+        tasks[index] = task;
+        await this.saveTasks(tasks);
+      }
+    });
   }
 
   async deleteTask(id: string): Promise<void> {
-    const tasks = await this.loadTasks();
-    const filtered = tasks.filter(t => t.id !== id);
-    await this.saveTasks(filtered);
+    return runExclusive(async () => {
+      const tasks = await this.loadTasks();
+      const filtered = tasks.filter(t => t.id !== id);
+      await this.saveTasks(filtered);
+    });
   }
 
   // Users
@@ -163,41 +216,47 @@ export class DataManager {
   }
 
   async createUser(userId: string, handle: string): Promise<UserStats> {
-    const users = await this.loadUsers();
+    return runExclusive(async () => {
+      const users = await this.loadUsers();
 
-    const newUser: UserStats = {
-      userId,
-      handle,
-      points: 0,
-      level: 'lamer',
-      rank: 0,
-      tasksCompleted: 0,
-      projectsCreated: 0,
-      achievements: [],
-      joinedAt: new Date().toISOString(),
-      lastActiveAt: new Date().toISOString()
-    };
+      const newUser: UserStats = {
+        userId,
+        handle,
+        points: 0,
+        level: 'lamer',
+        rank: 0,
+        tasksCompleted: 0,
+        projectsCreated: 0,
+        achievements: [],
+        joinedAt: new Date().toISOString(),
+        lastActiveAt: new Date().toISOString()
+      };
 
-    users[userId] = newUser;
-    await this.saveUsers(users);
-    return newUser;
+      users[userId] = newUser;
+      await this.saveUsers(users);
+      return newUser;
+    });
   }
 
   async updateUser(user: UserStats): Promise<void> {
-    const users = await this.loadUsers();
-    users[user.userId] = user;
-    await this.saveUsers(users);
+    return runExclusive(async () => {
+      const users = await this.loadUsers();
+      users[user.userId] = user;
+      await this.saveUsers(users);
+    });
   }
 
   async updateRankings(): Promise<void> {
-    const users = await this.loadUsers();
-    const sorted = Object.values(users).sort((a, b) => b.points - a.points);
+    return runExclusive(async () => {
+      const users = await this.loadUsers();
+      const sorted = Object.values(users).sort((a, b) => b.points - a.points);
 
-    sorted.forEach((user, index) => {
-      user.rank = index + 1;
+      sorted.forEach((user, index) => {
+        user.rank = index + 1;
+      });
+
+      await this.saveUsers(users);
     });
-
-    await this.saveUsers(users);
   }
 
   // Achievements
@@ -230,23 +289,29 @@ export class DataManager {
   }
 
   async addParty(party: Party): Promise<void> {
-    const parties = await this.loadParties();
-    parties.push(party);
-    await this.saveParties(parties);
+    return runExclusive(async () => {
+      const parties = await this.loadParties();
+      parties.push(party);
+      await this.saveParties(parties);
+    });
   }
 
   async updateParty(party: Party): Promise<void> {
-    const parties = await this.loadParties();
-    const index = parties.findIndex(p => p.id === party.id);
-    if (index >= 0) {
-      parties[index] = party;
-      await this.saveParties(parties);
-    }
+    return runExclusive(async () => {
+      const parties = await this.loadParties();
+      const index = parties.findIndex(p => p.id === party.id);
+      if (index >= 0) {
+        parties[index] = party;
+        await this.saveParties(parties);
+      }
+    });
   }
 
   async deleteParty(id: string): Promise<void> {
-    const parties = await this.loadParties();
-    const filtered = parties.filter(p => p.id !== id);
-    await this.saveParties(filtered);
+    return runExclusive(async () => {
+      const parties = await this.loadParties();
+      const filtered = parties.filter(p => p.id !== id);
+      await this.saveParties(filtered);
+    });
   }
 }

@@ -29,6 +29,8 @@ export const ADMIN_SECTIONS: AdminSectionPerm[] = [
   { key: 'session-logs', label: 'Session Logs',  defaultMinLevel: 255 },
   { key: 'audit',      label: 'Audit Log',       defaultMinLevel: 255 },
   { key: 'import-export', label: 'Import/Export',defaultMinLevel: 255 },
+  // SysopRoute guards by first path segment, so bot pages share one key.
+  { key: 'bots',       label: 'Bots',            defaultMinLevel: 255 },
 ];
 
 const PERMS_FILE = 'AdminPermissions.json';

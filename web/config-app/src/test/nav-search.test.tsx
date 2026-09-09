@@ -233,3 +233,33 @@ describe('Sidebar search field', () => {
     expect(screen.getByText(/No destinations match/)).toBeInTheDocument();
   });
 });
+
+describe('plugin destinations', () => {
+  it('hides uninstalled bot plugins, shows installed ones', () => {
+    const without = pathsOf(navItemsForLevel(255, {}, new Set()));
+    expect(without).not.toContain('bots/whip');
+
+    const withWhip = pathsOf(navItemsForLevel(255, {}, new Set(['whip'])));
+    expect(withWhip).toContain('bots/whip');
+  });
+
+  it('shows plugin destinations when installation state is unknown', () => {
+    // A failed registry fetch must not strand a setup flow.
+    expect(pathsOf(navItemsForLevel(255, {}))).toContain('bots/whip');
+  });
+
+  it('still gates plugin destinations by security level', () => {
+    expect(pathsOf(navItemsForLevel(100, {}, new Set(['whip'])))).not.toContain('bots/whip');
+  });
+
+  it('honours first-segment live permissions for nested destinations', () => {
+    // SysopRoute guards by first segment ('bots'), so roles do too.
+    expect(pathsOf(navItemsForLevel(255, { bots: 255 }, new Set(['whip'])))).toContain('bots/whip');
+    expect(pathsOf(navItemsForLevel(100, { bots: 100 }, new Set(['whip'])))).toContain('bots/whip');
+  });
+
+  it('finds the bot page by search', () => {
+    const labels = labelsOf(filterNavGroups(navItemsForLevel(255, {}, new Set(['whip'])), 'discord'));
+    expect(labels).toContain('WHIP Bot');
+  });
+});

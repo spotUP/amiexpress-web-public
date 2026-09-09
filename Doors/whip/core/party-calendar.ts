@@ -1,6 +1,7 @@
 import * as xml2js from 'xml2js';
 import type { Party } from '../types/party';
 import type { DataManager } from './data-manager';
+import { runExclusive } from './data-manager';
 
 const PARTY_FEED_URL = 'https://www.demoparty.net/demoparties.xml';
 const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -149,7 +150,9 @@ export class PartyCalendar {
     const merged = this.mergeParties(localParties, scrapedParties);
     console.log('[PartyCalendar] Merged party list:', merged.length, 'parties');
 
-    await this.dataManager.saveParties(merged);
+    // Serialized with every other writer: a party edit landing mid-merge
+    // would otherwise be overwritten by the merged snapshot.
+    await runExclusive(() => this.dataManager.saveParties(merged));
 
     this.lastFetchTime = now;
   }

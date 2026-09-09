@@ -28,6 +28,7 @@ import {
 } from './pages/workspaces';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { CoSysopPersonasPage } from './pages/CoSysopPersonasPage';
+import { BotPage } from './pages/BotPage';
 
 /**
  * The heavy leaves. Session Logs pulls in xterm and Import and Export pulls in
@@ -112,6 +113,11 @@ function App() {
         <Route path="operator-chat" element={<SysopRoute><OperatorChatWorkspace /></SysopRoute>} />
         <Route path="operator-chat/personas" element={<SysopRoute><CoSysopPersonasPage /></SysopRoute>} />
         <Route path="notifications" element={<SysopRoute><NotificationsPage /></SysopRoute>} />
+
+        {/* Bot plugins — one static route per bot (WHIP first). The generic
+            BotPage renders from the manifest; uninstalled bots get an empty
+            state, and the sidebar hides them, so non-bot sysops see nothing. */}
+        <Route path="bots/whip" element={<SysopRoute><BotPage pluginId="whip" /></SysopRoute>} />
 
         {/* People — sysop-only */}
         <Route path="users" element={<SysopRoute><UsersPage /></SysopRoute>} />

@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PartyCalendar = void 0;
 exports.getDefaultParties = getDefaultParties;
 const xml2js = __importStar(require("xml2js"));
+const data_manager_1 = require("./data-manager");
 const PARTY_FEED_URL = 'https://www.demoparty.net/demoparties.xml';
 const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 function getDefaultParties() {
@@ -163,7 +164,9 @@ class PartyCalendar {
         // Merge: keep user-added parties, update/add scraped ones
         const merged = this.mergeParties(localParties, scrapedParties);
         console.log('[PartyCalendar] Merged party list:', merged.length, 'parties');
-        await this.dataManager.saveParties(merged);
+        // Serialized with every other writer: a party edit landing mid-merge
+        // would otherwise be overwritten by the merged snapshot.
+        await (0, data_manager_1.runExclusive)(() => this.dataManager.saveParties(merged));
         this.lastFetchTime = now;
     }
     mergeParties(local, scraped) {

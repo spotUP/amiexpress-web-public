@@ -145,7 +145,7 @@ describe('plugin config', () => {
     process.env.PLUGIN_DATA_DIR = dir;
     try {
       writePluginConfig(manifest, { DISCORD_BOT_TOKEN: 'tok', DISCORD_GUILD_ID: 'guild', EXTRA: 'dropped' });
-      const file = path.join(dir, 'bots', 'whip.env');
+      const file = path.join(dir, 'whip.env');
       expect(fs.readFileSync(file, 'utf8')).toContain('DISCORD_BOT_TOKEN=tok');
       expect(fs.readFileSync(file, 'utf8')).not.toContain('EXTRA');
       const mode = fs.statSync(file).mode & 0o777;

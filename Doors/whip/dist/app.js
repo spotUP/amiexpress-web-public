@@ -39,7 +39,7 @@ class WhipApp {
             debug: false,
             debugName: 'WHIP'
         });
-        this.dataManager = new data_manager_1.DataManager();
+        this.dataManager = (0, data_manager_1.getSharedDataManager)();
         this.achievementManager = new achievements_1.AchievementManager(this.dataManager);
         this.partyCalendar = new party_calendar_1.PartyCalendar(this.dataManager);
         this.bbsApi = session.bbs;

@@ -44,6 +44,11 @@ thoughts
 history
 tmp
 temp
+# Agent/session scratch (worktrees, scratchpads) - never part of an image.
+# The bot image build tried to tar another session's live worktree here.
+.claude/
+.scratchpad/
+scratchpad/
 coverage
 .nyc_output
 __tests__

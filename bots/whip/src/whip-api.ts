@@ -76,9 +76,17 @@ export interface WhipAchievement {
 }
 
 export interface WhipAchievements {
+  userId: string;
+  handle: string;
   unlocked: WhipAchievement[];
   locked: WhipAchievement[];
   totalPoints: number;
+}
+
+export interface WhipUserTasks {
+  userId: string;
+  handle: string;
+  tasks: WhipTask[];
 }
 
 export interface WhipParty {
@@ -88,8 +96,39 @@ export interface WhipParty {
   location: string;
 }
 
+export interface WhipUser {
+  userId: string;
+  handle: string;
+}
+
+export interface CreateProjectInput {
+  name: string;
+  type: string;
+  status?: string;
+  description?: string;
+  actorUserId: string;
+  discordId?: string;
+}
+
+export interface CreateTaskInput {
+  projectId: string;
+  title: string;
+  category?: string;
+  priority?: string;
+  points?: number;
+  description?: string;
+  assignedTo?: string;
+  actorUserId: string;
+  discordId?: string;
+}
+
+export interface MoveTaskResult {
+  task: WhipTask;
+  unlocked: string[];
+}
+
 export interface RequestConfig {
-  method: 'get' | 'post';
+  method: 'get' | 'post' | 'patch' | 'delete';
   url: string;
   headers: Record<string, string>;
   params?: Record<string, string>;
@@ -184,14 +223,22 @@ export class WhipApiClient {
     return envelopeData<WhipTask[]>(res.status, res.data);
   }
 
-  async listUserTasks(userId: string): Promise<WhipTask[]> {
+  async getTask(id: string): Promise<WhipTask> {
     const res = await this.request({
+      method: 'get',
+      url: `/api/whip/tasks/${encodeURIComponent(id)}`,
+      headers: this.headers(),
+    });
+    return envelopeData<WhipTask>(res.status, res.data);
+  }
+
+  async listUserTasks(userId: string): Promise<WhipUserTasks> {    const res = await this.request({
       method: 'get',
       url: '/api/whip/my-tasks',
       headers: this.headers(),
       params: { userId },
     });
-    return envelopeData<WhipTask[]>(res.status, res.data);
+    return envelopeData<WhipUserTasks>(res.status, res.data);
   }
 
   async leaderboard(): Promise<WhipLeaderboardEntry[]> {
@@ -211,5 +258,86 @@ export class WhipApiClient {
   async listParties(): Promise<WhipParty[]> {
     const res = await this.request({ method: 'get', url: '/api/whip/parties', headers: this.headers() });
     return envelopeData<WhipParty[]>(res.status, res.data);
+  }
+
+  async listUsers(): Promise<WhipUser[]> {
+    const res = await this.request({ method: 'get', url: '/api/whip/users', headers: this.headers() });
+    return envelopeData<WhipUser[]>(res.status, res.data);
+  }
+
+  private writeBody(input: Record<string, unknown>, actorUserId: string, discordId?: string): Record<string, unknown> {
+    return { ...input, actorUserId, ...(discordId ? { discordId } : {}) };
+  }
+
+  async createProject(input: CreateProjectInput): Promise<WhipProject> {
+    const { actorUserId, discordId, ...fields } = input;
+    const res = await this.request({
+      method: 'post',
+      url: '/api/whip/projects',
+      headers: this.headers(),
+      data: this.writeBody(fields, actorUserId, discordId),
+    });
+    return envelopeData<WhipProject>(res.status, res.data);
+  }
+
+  async updateProject(id: string, patch: Record<string, unknown>, actorUserId: string, discordId?: string): Promise<WhipProject> {
+    const res = await this.request({
+      method: 'patch',
+      url: `/api/whip/projects/${encodeURIComponent(id)}`,
+      headers: this.headers(),
+      data: this.writeBody(patch, actorUserId, discordId),
+    });
+    return envelopeData<WhipProject>(res.status, res.data);
+  }
+
+  async deleteProject(id: string, actorUserId: string, discordId?: string): Promise<void> {
+    const res = await this.request({
+      method: 'delete',
+      url: `/api/whip/projects/${encodeURIComponent(id)}`,
+      headers: this.headers(),
+      data: this.writeBody({}, actorUserId, discordId),
+    });
+    envelopeData<unknown>(res.status, res.data);
+  }
+
+  async createTask(input: CreateTaskInput): Promise<WhipTask> {
+    const { projectId, actorUserId, discordId, ...fields } = input;
+    const res = await this.request({
+      method: 'post',
+      url: '/api/whip/tasks',
+      headers: this.headers(),
+      data: this.writeBody({ projectId, ...fields }, actorUserId, discordId),
+    });
+    return envelopeData<WhipTask>(res.status, res.data);
+  }
+
+  async updateTask(id: string, patch: Record<string, unknown>, actorUserId: string, discordId?: string): Promise<WhipTask> {
+    const res = await this.request({
+      method: 'patch',
+      url: `/api/whip/tasks/${encodeURIComponent(id)}`,
+      headers: this.headers(),
+      data: this.writeBody(patch, actorUserId, discordId),
+    });
+    return envelopeData<WhipTask>(res.status, res.data);
+  }
+
+  async deleteTask(id: string, actorUserId: string, discordId?: string): Promise<void> {
+    const res = await this.request({
+      method: 'delete',
+      url: `/api/whip/tasks/${encodeURIComponent(id)}`,
+      headers: this.headers(),
+      data: this.writeBody({}, actorUserId, discordId),
+    });
+    envelopeData<unknown>(res.status, res.data);
+  }
+
+  async moveTask(id: string, status: string, actorUserId: string, discordId?: string): Promise<MoveTaskResult> {
+    const res = await this.request({
+      method: 'post',
+      url: `/api/whip/tasks/${encodeURIComponent(id)}/move`,
+      headers: this.headers(),
+      data: this.writeBody({ status }, actorUserId, discordId),
+    });
+    return envelopeData<MoveTaskResult>(res.status, res.data);
   }
 }

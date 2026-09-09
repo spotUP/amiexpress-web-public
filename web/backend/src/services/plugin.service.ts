@@ -58,14 +58,24 @@ function bbsRoot(): string {
 }
 
 function botsDir(): string {
-  // PLUGIN_BOTS_DIR is the test seam: a fixture bots/ tree.
+  // Manifests ship with the image (bots/ is COPYd), so they resolve from
+  // the backend CODE tree in every environment - never from the data
+  // volume. PLUGIN_BOTS_DIR is the test seam: a fixture bots/ tree.
   if (process.env.PLUGIN_BOTS_DIR) return process.env.PLUGIN_BOTS_DIR;
-  return path.join(bbsRoot(), 'bots');
+  return path.join(path.resolve(__dirname, '../../../..'), 'bots');
 }
 
 function dataDir(): string {
+  // Plugin env files live on the SHARED volume both backend and sidecars
+  // see: <volume>/bots in prod (BBS_DATA_DIR is <volume>/bbs),
+  // ./data/bots in a dev checkout. The bot reads the same path
+  // (BOT_ENV_FILE default), so admin writes and bot boots never disagree.
   if (process.env.PLUGIN_DATA_DIR) return process.env.PLUGIN_DATA_DIR;
-  return path.join(bbsRoot(), 'data');
+  const bbsData = process.env.BBS_DATA_DIR;
+  if (bbsData && path.basename(bbsData) === 'bbs') {
+    return path.join(path.dirname(bbsData), 'bots');
+  }
+  return path.join(bbsRoot(), 'data', 'bots');
 }
 
 function isValidManifest(raw: any): raw is PluginManifest {
@@ -238,7 +248,7 @@ export async function pluginLogs(
 }
 
 function pluginEnvFile(manifest: PluginManifest): string {
-  return path.join(dataDir(), 'bots', `${manifest.id}.env`);
+  return path.join(dataDir(), `${manifest.id}.env`);
 }
 
 export function readPluginConfig(manifest: PluginManifest): Array<{ key: string; label: string; secret: boolean; value: string; set: boolean }> {
@@ -259,10 +269,18 @@ export function readPluginConfig(manifest: PluginManifest): Array<{ key: string;
 export function writePluginConfig(manifest: PluginManifest, values: Record<string, string>): void {
   const file = pluginEnvFile(manifest);
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  // Merge over the stored file: the form only sends touched fields, and an
+  // empty string means "leave the stored value alone", never "erase it".
+  // There is deliberately no way to unset a key from the UI - secrets stay
+  // put unless replaced.
+  const stored = parseEnvFile(file);
+  for (const [key, value] of Object.entries(values)) {
+    if (typeof value === 'string' && value.length > 0) stored[key] = value;
+  }
   const keys = manifest.configSchema.map((f) => f.key);
   const lines = keys
-    .filter((k) => typeof values[k] === 'string' && values[k].length > 0)
-    .map((k) => `${k}=${values[k]}`);
+    .filter((k) => stored[k] !== undefined && stored[k].length > 0)
+    .map((k) => `${k}=${stored[k]}`);
   fs.writeFileSync(file, lines.length > 0 ? lines.join('\n') + '\n' : '', { mode: 0o600 });
   try {
     fs.chmodSync(file, 0o600);

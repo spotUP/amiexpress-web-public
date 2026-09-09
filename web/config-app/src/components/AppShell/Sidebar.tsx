@@ -5,10 +5,11 @@
  * beside the active destination. Action lives in blue.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, LogOut, Search, User, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { apiClient } from '../../api/client';
 import { ADMIN_BASE, navItemsForLevel, groupForPath, filterNavGroups } from './nav-config';
 import { SECTION_PARAM, sectionsMatching } from './page-sections';
 
@@ -20,7 +21,28 @@ export function Sidebar() {
 
   // A collapsed group opens itself when the current page lives inside it, so
   // you are never looking at a sidebar that hides where you are.
-  const levelGroups = navItemsForLevel(user?.secLevel ?? 0, adminPerms);
+  // Plugin destinations additionally need their plugin installed: the ids
+  // come from the backend registry via plain fetch (no query provider is
+  // guaranteed here), and a failed fetch shows everything (the page itself
+  // renders the not-installed state) rather than stranding a setup flow.
+  const [installedPlugins, setInstalledPlugins] = useState<Set<string> | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    apiClient
+      .getBotPlugins()
+      .then((res: any) => {
+        if (cancelled) return;
+        const list = res?.data ?? res ?? [];
+        setInstalledPlugins(new Set((Array.isArray(list) ? list : []).map((p: any) => p.id)));
+      })
+      .catch(() => {
+        if (!cancelled) setInstalledPlugins(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const levelGroups = navItemsForLevel(user?.secLevel ?? 0, adminPerms, installedPlugins);
   const activeGroupTitle = groupForPath(location.pathname)?.title;
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(

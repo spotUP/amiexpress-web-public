@@ -580,6 +580,35 @@ class ApiClient {
     return this.request<ApiResponse>(`${API_BASE}/config/doors`);
   }
 
+  // Bot plugins (WHIP mirror first): registry, status, logs, actions, config.
+  async getBotPlugins() {
+    return this.request<ApiResponse>(`${API_BASE}/config/bots`);
+  }
+
+  async getBotStatus(id: string) {
+    return this.request<ApiResponse>(`${API_BASE}/config/bots/${encodeURIComponent(id)}/status`);
+  }
+
+  async getBotLogs(id: string, lines = 200, search = '') {
+    const params = new URLSearchParams({ lines: String(lines) });
+    if (search) params.set('search', search);
+    return this.request<ApiResponse>(`${API_BASE}/config/bots/${encodeURIComponent(id)}/logs?${params}`);
+  }
+
+  async botAction(id: string, action: 'start' | 'stop' | 'restart') {
+    return this.request<ApiResponse>(`${API_BASE}/config/bots/${encodeURIComponent(id)}/${action}`, {
+      method: 'POST',
+    });
+  }
+
+  async getBotConfig(id: string) {
+    return this.request<ApiResponse>(`${API_BASE}/config/bots/${encodeURIComponent(id)}/config`);
+  }
+
+  async setBotConfig(id: string, values: Record<string, string>) {
+    return this.putJson<ApiResponse>(`${API_BASE}/config/bots/${encodeURIComponent(id)}/config`, { values });
+  }
+
   async getDoor(id: number) {
     return this.request<ApiResponse>(`${API_BASE}/config/doors/${id}`);
   }

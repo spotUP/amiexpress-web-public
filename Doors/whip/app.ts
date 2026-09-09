@@ -4,7 +4,7 @@ import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { DoorSession, MenuSelection } from './types/session';
 import type { UserStats } from './types/user';
 import type { Project } from './types/project';
-import { DataManager } from './core/data-manager';
+import { DataManager, getSharedDataManager } from './core/data-manager';
 import { AchievementManager } from './core/achievements';
 import { PartyCalendar } from './core/party-calendar';
 import { calculateLevel } from './core/gamification';
@@ -51,7 +51,7 @@ export class WhipApp {
       debugName: 'WHIP'
     });
 
-    this.dataManager = new DataManager();
+    this.dataManager = getSharedDataManager();
     this.achievementManager = new AchievementManager(this.dataManager);
     this.partyCalendar = new PartyCalendar(this.dataManager);
     this.bbsApi = session.bbs;

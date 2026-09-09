@@ -58,6 +58,13 @@ export interface NavItem {
    * routes/legacy-routes.ts - so a sysop hunting the old name still finds it.
    */
   keywords?: string[];
+  /**
+   * Bot plugin id that owns this destination (bots/<id>/bot.json). The
+   * Sidebar hides plugin destinations whose plugin is not installed - a
+   * sysop who runs no bots never sees them, while the static route stays
+   * so nav-routes.test.ts keeps passing.
+   */
+  plugin?: string;
 }
 
 export interface NavGroup {
@@ -120,6 +127,12 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: 'import-export', label: 'Import and Export', icon: ArrowUpDown, minLevel: 255, description: 'Move configuration in and out' },
     ],
   },
+  {
+    title: 'Bots',
+    items: [
+      { path: 'bots/whip', label: 'WHIP Bot', icon: Bot, minLevel: 255, plugin: 'whip', description: 'WHIP Discord mirror: status, logs and configuration', keywords: ['Discord', 'WHIP', 'Bot', 'Mirror', 'Link'] },
+    ],
+  },
 ];
 
 /** Flat view, for the header title and the breadcrumb. */
@@ -138,13 +151,28 @@ export function hardcodedMinLevel(path: string): number {
  * Filter nav items/groups to only those the given security level can see.
  * Uses live permissions when available, otherwise falls back to hardcoded minLevel.
  * A missing minLevel defaults to 255 (sysop-only).
+ *
+ * Plugin destinations additionally need their plugin installed: pass the ids
+ * from GET /api/config/bots, and anything whose plugin is absent is hidden.
+ * Omitted (undefined) means "unknown, show" - the page itself renders the
+ * not-installed state, so a backend hiccup never strands a setup flow.
+ *
+ * Live perms are keyed by first path segment (SysopRoute looks up 'bots' for
+ * 'bots/whip'), so nested destinations check their own path first, then the
+ * segment the guard will actually enforce.
  */
-export function navItemsForLevel(secLevel: number, perms?: Record<string, number>): NavGroup[] {
+export function navItemsForLevel(
+  secLevel: number,
+  perms?: Record<string, number>,
+  installedPlugins?: Set<string>
+): NavGroup[] {
   return NAV_GROUPS
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
-        const minLevel = perms?.[item.path] ?? item.minLevel ?? 255;
+        if (item.plugin && installedPlugins && !installedPlugins.has(item.plugin)) return false;
+        const segment = item.path.split('/')[0];
+        const minLevel = perms?.[item.path] ?? (segment !== item.path ? perms?.[segment] : undefined) ?? item.minLevel ?? 255;
         return secLevel >= minLevel;
       }),
     }))

@@ -245,6 +245,11 @@ async function showProjectEditor(screen, project, user, dataManager, isNew, bbsA
             }
             if (isNew) {
                 await dataManager.addProject(project);
+                // projectsCreated feeds the project-starter/organizer/production-house
+                // achievements; nothing ever incremented it, so all three were
+                // unreachable until now.
+                user.projectsCreated = (user.projectsCreated ?? 0) + 1;
+                await dataManager.updateUser(user);
                 if (bbsApi?.emitCustomEvent) {
                     bbsApi.emitCustomEvent('project_created', `Created ${project.type} project "${project.name}"`, {
                         projectId: project.id, projectName: project.name, projectType: project.type

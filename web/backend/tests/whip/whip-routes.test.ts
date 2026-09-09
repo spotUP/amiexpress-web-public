@@ -60,7 +60,8 @@ describe('WHIP bot routes', () => {
     const byProject = await request(app).get('/api/whip/tasks').query({ projectId: 'p1' }).set(auth);
     expect(byProject.body.data.map((t: any) => t.id).sort()).toEqual(['t1', 't2']);
     const byUser = await request(app).get('/api/whip/my-tasks').query({ userId: 'u1' }).set(auth);
-    expect(byUser.body.data.map((t: any) => t.id).sort()).toEqual(['t1', 't3']);
+    expect(byUser.body.data.handle).toBe('spot');
+    expect(byUser.body.data.tasks.map((t: any) => t.id).sort()).toEqual(['t1', 't3']);
   });
 
   it('requires query parameters', async () => {
@@ -76,6 +77,7 @@ describe('WHIP bot routes', () => {
 
   it('splits achievements into unlocked and locked', async () => {
     const res = await request(app).get('/api/whip/achievements/u1').set(auth);
+    expect(res.body.data.handle).toBe('spot');
     expect(res.body.data.unlocked.map((a: any) => a.id)).toEqual(['first-release']);
     expect(res.body.data.locked.map((a: any) => a.id)).toEqual(['getting-started']);
     expect(res.body.data.totalPoints).toBe(10);
@@ -86,6 +88,13 @@ describe('WHIP bot routes', () => {
     const res = await request(app).get('/api/whip/parties').set(auth);
     expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0]).toMatchObject({ id: 'revision-2026' });
+  });
+
+  it('serves one task and 404s ghosts', async () => {
+    const res = await request(app).get('/api/whip/tasks/t1').set(auth);
+    expect(res.status).toBe(200);
+    expect(res.body.data.title).toBe('Fix the scroller');
+    expect((await request(app).get('/api/whip/tasks/ghost').set(auth)).status).toBe(404);
   });
 
   it('verifies a link code once, then reports the link', async () => {

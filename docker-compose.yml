@@ -210,6 +210,39 @@ services:
       retries: 3
       start_period: 120s
 
+  # WHIP Discord mirror bot (plugin). NOT started by default: the admin
+  # Bot page (or `docker compose up -d whip-bot`) starts it once the sysop
+  # has filled its config there. Reads secrets from the admin-written
+  # volume file, never from the image; shares the bbs-data volume
+  # read-only so it sees the same WHIP JSON the board does.
+  whip-bot:
+    build:
+      context: .
+      dockerfile: bots/whip/Dockerfile
+    container_name: amiexpress-whip-bot
+    hostname: amiexpress-whip-bot
+    restart: unless-stopped
+    depends_on:
+      - bbs
+    volumes:
+      - bbs-data:/app/data:ro
+    networks:
+      - default
+      - doorserver-net
+    environment:
+      - NODE_ENV=production
+      - WHIP_API_URL=http://bbs:3001
+      - BOT_ENV_FILE=/app/data/bots/whip.env
+      - HEALTH_PORT=3099
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3099/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    profiles:
+      - bots
+
 networks:
   # Shared with the amiexpress-doorserver stack so the bbs container can
   # reach the doorserver container by service DNS. Created once on the host

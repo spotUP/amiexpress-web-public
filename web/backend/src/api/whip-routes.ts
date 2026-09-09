@@ -11,7 +11,7 @@
 import express, { Request, Response } from 'express';
 import { getSystemTime } from '../utils/date-time.util';
 import type { Database } from '../database';
-import { whipService } from '../services/whip.service';
+import { whipService, WhipWriteError, type WhipActor } from '../services/whip.service';
 import { discordLinkService } from '../services/discord-link.service';
 
 interface ApiResponse<T = any> {
@@ -91,8 +91,20 @@ export function createWhipRouter(database: Database): ReturnType<typeof express.
     }
   });
 
-  router.get('/my-tasks', async (req: Request, res: Response) => {
-    const userId = req.query.userId;
+  router.get('/tasks/:id', async (req: Request, res: Response) => {
+    try {
+      const task = await whipService.getTask(req.params.id);
+      if (!task) {
+        sendError(res, 'Unknown task', 404);
+        return;
+      }
+      sendResponse(res, task);
+    } catch (error) {
+      sendError(res, error instanceof Error ? error.message : 'Failed to load task', 500);
+    }
+  });
+
+  router.get('/my-tasks', async (req: Request, res: Response) => {    const userId = req.query.userId;
     if (typeof userId !== 'string' || !userId) {
       sendError(res, 'userId query parameter is required', 400);
       return;
@@ -132,6 +144,90 @@ export function createWhipRouter(database: Database): ReturnType<typeof express.
       sendError(res, error instanceof Error ? error.message : 'Failed to load parties', 500);
     }
   });
+
+  router.get('/users', async (_req: Request, res: Response) => {
+    try {
+      sendResponse(res, await whipService.listUsers());
+    } catch (error) {
+      sendError(res, error instanceof Error ? error.message : 'Failed to load users', 500);
+    }
+  });
+
+  // ---- Writes (bot Phase 2). Every write names its acting BBS user; when
+  // discordId is present the link must agree with actorUserId, so a linked
+  // account can never write as somebody else. ----
+  const resolveActor = async (req: Request): Promise<WhipActor> => {
+    const { actorUserId, discordId } = req.body ?? {};
+    if (typeof actorUserId !== 'string' || !actorUserId) {
+      throw new WhipWriteError('actorUserId is required', 400);
+    }
+    if (discordId !== undefined) {
+      if (typeof discordId !== 'string' || !discordId) throw new WhipWriteError('discordId must be a string', 400);
+      const link = await database.getDiscordLinkByDiscordId(discordId);
+      if (!link || link.userId !== actorUserId) {
+        throw new WhipWriteError('discordId is not linked to actorUserId', 403);
+      }
+    }
+    const user = await database.getUserById(actorUserId);
+    if (!user) throw new WhipWriteError('Unknown actorUserId', 404);
+    return { userId: user.id, username: user.username, gdprConsented: !!user.gdprConsentAt };
+  };
+
+  const write = (handler: (req: Request, actor: WhipActor) => Promise<unknown>, message?: string) => {
+    return async (req: Request, res: Response) => {
+      try {
+        const actor = await resolveActor(req);
+        sendResponse(res, await handler(req, actor), message);
+      } catch (error) {
+        if (error instanceof WhipWriteError) {
+          sendError(res, error.message, error.statusCode);
+          return;
+        }
+        sendError(res, error instanceof Error ? error.message : 'Write failed', 500);
+      }
+    };
+  };
+
+  router.post('/projects', write(async (req, actor) => whipService.createProject(req.body ?? {}, actor), 'Project created'));
+  router.patch(
+    '/projects/:id',
+    write(async (req, actor) => whipService.updateProject(req.params.id, req.body ?? {}, actor), 'Project updated')
+  );
+  router.delete(
+    '/projects/:id',
+    write(async (req, actor) => {
+      await whipService.deleteProject(req.params.id, actor);
+      return { deleted: req.params.id };
+    }, 'Project deleted')
+  );
+
+  router.post(
+    '/tasks',
+    write(async (req, actor) => {
+      const { projectId, ...input } = req.body ?? {};
+      if (typeof projectId !== 'string' || !projectId) throw new WhipWriteError('projectId is required', 400);
+      return whipService.createTask(projectId, input, actor);
+    }, 'Task created')
+  );
+  router.patch(
+    '/tasks/:id',
+    write(async (req, actor) => whipService.updateTask(req.params.id, req.body ?? {}, actor), 'Task updated')
+  );
+  router.delete(
+    '/tasks/:id',
+    write(async (req, actor) => {
+      await whipService.deleteTask(req.params.id, actor);
+      return { deleted: req.params.id };
+    }, 'Task deleted')
+  );
+  router.post(
+    '/tasks/:id/move',
+    write(async (req, actor) => {
+      const { status } = req.body ?? {};
+      if (typeof status !== 'string') throw new WhipWriteError('status is required', 400);
+      return whipService.moveTask(req.params.id, status, actor);
+    }, 'Task moved')
+  );
 
   return router;
 }
