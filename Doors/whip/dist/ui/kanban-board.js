@@ -39,6 +39,18 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
         screen.alloc();
         let currentColumn = 0;
         let tasks = await dataManager.getTasksForProject(project.id);
+        // Open modal dialogs under this counter; the keyHandler below ignores
+        // everything while it is non-zero (see the guard there).
+        let modalDepth = 0;
+        async function withModal(fn) {
+            modalDepth++;
+            try {
+                return await fn();
+            }
+            finally {
+                modalDepth--;
+            }
+        }
         // Drag and drop state
         let dragState = {
             active: false,
@@ -379,6 +391,13 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
             // Ignore keys during drag
             if (dragState.active)
                 return;
+            // Ignore keys while a modal dialog is open. Modals (edit, create,
+            // move picker, delete confirm) register their own screen keys, but
+            // declined keys still bubble here: picking a move destination with
+            // Enter opened the edit dialog on top of the move, and Escape in a
+            // title field closed the board behind the dialog (2026-09-09).
+            if (modalDepth > 0)
+                return;
             if (key.name === 'left' || key.name === 'right') {
                 if (key.name === 'left') {
                     currentColumn = Math.max(0, currentColumn - 1);
@@ -396,19 +415,19 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                         if (columnTasks.length > 0) {
                             const selectedIndex = columnLists[currentColumn].selected || 0;
                             const task = columnTasks[selectedIndex];
-                            await (0, task_editor_1.editTask)(screen, task, user, dataManager, achievementManager, project, bbsApi);
+                            await withModal(() => (0, task_editor_1.editTask)(screen, task, user, dataManager, achievementManager, project, bbsApi));
                             await updateLists(true);
                         }
                         break;
                     case 'n':
-                        await (0, task_editor_1.createTask)(screen, project, user, dataManager, bbsApi);
+                        await withModal(() => (0, task_editor_1.createTask)(screen, project, user, dataManager, bbsApi));
                         await updateLists(true);
                         break;
                     case 'm':
                         if (columnTasks.length > 0) {
                             const selectedIndex = columnLists[currentColumn].selected || 0;
                             const task = columnTasks[selectedIndex];
-                            const newStatus = await selectMoveDestination(screen);
+                            const newStatus = await withModal(() => selectMoveDestination(screen));
                             if (newStatus) {
                                 await moveTask(screen, task, newStatus, dataManager, achievementManager, user, project, bbsApi);
                                 await updateLists(true);
@@ -419,7 +438,7 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                         if (columnTasks.length > 0) {
                             const selectedIndex = columnLists[currentColumn].selected || 0;
                             const task = columnTasks[selectedIndex];
-                            const confirmed = await (0, confirm_delete_1.confirmDelete)(screen, 'task', task.title);
+                            const confirmed = await withModal(() => (0, confirm_delete_1.confirmDelete)(screen, 'task', task.title));
                             if (confirmed) {
                                 await dataManager.deleteTask(task.id);
                                 if (bbsApi?.emitCustomEvent) {
