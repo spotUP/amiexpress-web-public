@@ -2748,6 +2748,134 @@ console.log(`[Config API] Operator chat config updated by ${context.username}`);
   });
 
   // ============================================
+  // Co-sysop Personas (2026-09-08, s.9) - the admin does not offer a prompt box.
+  // ============================================
+
+  router.get('/operator-chat/personas', async (_req: Request, res: Response) => {
+    try {
+      const { PRESET_PERSONAS, PERSONA_TRADES } = require('../handlers/sysop-ai/personas');
+      const repo = database.getOperatorChatRepository();
+      const board = repo.listPersonas();
+      sendResponse(res, { presets: PRESET_PERSONAS, board, trades: PERSONA_TRADES });
+    } catch (error) { handleError(res, error); }
+  });
+
+  router.put('/operator-chat/personas', async (req: Request, res: Response) => {
+    try {
+      const { personaFromDraft, DEFAULT_TEMPERAMENT } = require('../handlers/sysop-ai/persona-composer');
+      const draft = req.body || {};
+      const persona = personaFromDraft(draft);
+      // StoredPersona keeps the builder's own fields so the form can be
+      // reopened (test expects alwaysBringsUp/trade to round-trip).
+      const stored = {
+        slug: persona.slug, handle: persona.handle, name: persona.name, blurb: persona.blurb,
+        trade: String(draft.trade || '').trim(),
+        temperament: draft.temperament || DEFAULT_TEMPERAMENT,
+        catchphrase: String(draft.catchphrase || '').trim(),
+        alwaysBringsUp: String(draft.alwaysBringsUp || '').trim(),
+        refusesToDiscuss: String(draft.refusesToDiscuss || '').trim(),
+        systemPrompt: persona.systemPrompt,
+        openingLines: persona.openingLines,
+        fallbackLines: persona.fallbackLines,
+      };
+      const repo = database.getOperatorChatRepository();
+      const saved = repo.savePersona(stored as any);
+      sendResponse(res, saved);
+    } catch (error) { handleError(res, error); }
+  });
+
+  router.post('/operator-chat/personas/compose', async (req: Request, res: Response) => {
+    try {
+      const { composePersonaPrompt } = require('../handlers/sysop-ai/persona-composer');
+      const prompt = composePersonaPrompt(req.body);
+      sendResponse(res, { systemPrompt: prompt });
+    } catch (error) { handleError(res, error); }
+  });
+
+  router.post('/operator-chat/personas/describe', async (req: Request, res: Response) => {
+    try {
+      const description = String(req.body?.description ?? '').trim();
+      if (!description) { res.status(400).json({ success: false, message: 'description is required', timestamp: getSystemTime().toISOString() }); return; }
+      const { describePersonaPrompt, parseDescribedPersona } = require('../handlers/sysop-ai/persona-composer');
+      const prompt = describePersonaPrompt(description);
+      // One model call, reusing the board's own configured model (s.9). Mocked to
+      // throw in tests, which is the path worth pinning: the form left empty.
+      let raw: string | null = null;
+      try {
+        const repo = database.getOperatorChatRepository();
+        const cfg = repo.getConfig();
+        // Prefer the board's configured openrouter key/model; fall back to env.
+        const key = cfg.openRouterApiKey || process.env.OPENROUTER_API_KEY || '';
+        if (!key) throw new Error('no key');
+        const axios = require('axios').default || require('axios');
+        const resp = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
+          model: cfg.aiModelName || 'openai/gpt-4o-mini',
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 600,
+        }, { headers: { Authorization: `Bearer ${key}` }, timeout: 8000 });
+        raw = resp.data?.choices?.[0]?.message?.content ?? null;
+      } catch { raw = null; }
+      // If the model did not answer or answered with prose, leave the form empty.
+      let draft = null;
+      if (raw) {
+        try { draft = parseDescribedPersona(raw); } catch { draft = null; }
+        // If raw exists but is not JSON (mock throws before here, raw stays null), draft stays null.
+        // If raw is prose, parse returns null - the builder stays empty.
+      }
+      if (!draft) { sendResponse(res, { draft: null }, 'Could not parse a persona from that description - fill it in yourself.'); return; }
+      sendResponse(res, { draft });
+    } catch (error) { handleError(res, error); }
+  });
+
+  router.post('/operator-chat/personas/try', async (req: Request, res: Response) => {
+    try {
+      const { message, draft, slug } = req.body || {};
+      if (!message || typeof message !== 'string' || !message.trim()) { res.status(400).json({ success: false, message: 'message is required', timestamp: getSystemTime().toISOString() }); return; }
+      let persona: any = null;
+      if (draft && typeof draft === 'object' && draft.handle) {
+        const { personaFromDraft } = require('../handlers/sysop-ai/persona-composer');
+        persona = personaFromDraft(draft);
+      } else if (slug && typeof slug === 'string' && slug.trim()) {
+        const { personaBySlug } = require('../handlers/sysop-ai/personas');
+        persona = personaBySlug(slug);
+        if (!persona) {
+          try { persona = database.getOperatorChatRepository().getPersona(slug) as any; } catch { /* not board */ }
+        }
+        if (!persona) { res.status(400).json({ success: false, message: 'unknown persona', timestamp: getSystemTime().toISOString() }); return; }
+      } else { res.status(400).json({ success: false, message: 'draft or slug is required', timestamp: getSystemTime().toISOString() }); return; }
+      // No model in tests (axios mocked to throw) - the persona's own fallback is the voice.
+      let reply: string;
+      try {
+        const repo = database.getOperatorChatRepository();
+        const cfg = repo.getConfig();
+        const { getGrumpySysopResponse } = require('../handlers/grumpy-sysop-bot.handler');
+        // Build a minimal AI config that carries the persona's voice.
+        const { promptFor } = require('../handlers/sysop-ai/personas');
+        const aiConfig = {
+          provider: 'openrouter' as const,
+          botName: persona.handle,
+          systemPrompt: promptFor(persona),
+          groqApiKey: cfg.groqApiKey, geminiApiKey: cfg.geminiApiKey, openRouterApiKey: cfg.openRouterApiKey,
+          botTypingSpeed: cfg.botTypingSpeed, botTypoProbability: cfg.botTypoProbability, botThinkTime: 0,
+        };
+        reply = await getGrumpySysopResponse(String(message), { userHandle: 'Tester', nodeId: 1, conferenceName: 'Test', timeOnline: 0, messageHistory: [] } as any, aiConfig);
+      } catch {
+        const { fallbackLineFor } = require('../handlers/sysop-ai/personas');
+        reply = fallbackLineFor(persona);
+      }
+      sendResponse(res, { handle: persona.handle, reply });
+    } catch (error) { handleError(res, error); }
+  });
+
+  router.delete('/operator-chat/personas/:slug', async (req: Request, res: Response) => {
+    try {
+      const repo = database.getOperatorChatRepository();
+      const ok = repo.deletePersona(String(req.params.slug));
+      sendResponse(res, { deleted: ok });
+    } catch (error) { handleError(res, error); }
+  });
+
+  // ============================================
   // Push Notification Routes
   // ============================================
 

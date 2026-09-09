@@ -53,6 +53,7 @@ function fieldToColumn(field: string): string {
     gdprConsentSource: 'gdpr_consent_source',
     deletedAt: 'deleted_at',
     erasedAt: 'erased_at',
+    aiPersona: 'ai_persona',
   };
   return map[field] || field.toLowerCase();
 }
@@ -275,6 +276,7 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
       // "no preference", which resolves to the board default and then to the
       // board's own screens. NOT the same preference as themePreference above.
       screenTheme: user.screentheme || '',
+      aiPersona: user.ai_persona || '',
       gdprConsentAt: user.gdpr_consent_at || undefined,
       gdprNoticeVersion: user.gdpr_notice_version || undefined,
       gdprConsentSource: user.gdpr_consent_source || undefined,

@@ -34,6 +34,7 @@ import {
 } from '../server/session-emitter-registry';
 import { getGrumpySysopResponse, getGrumpyBotIntroMessage, planNaturalTyping, type AIProviderConfig, DEFAULT_AI_CONFIG } from './grumpy-sysop-bot.handler';
 import { buildBoardCard } from './sysop-ai/board-card';
+import { resolvePersona, personaByHandle, promptFor } from './sysop-ai/personas';
 import { retrieve, retrievedAsPrompt } from './sysop-ai/corpus';
 import { toolsFor, type ToolContext } from './sysop-ai/tools';
 import { confirmPendingAdmin } from './sysop-ai/admin-tool';
@@ -1109,10 +1110,13 @@ async function sendBotMessageWithTyping(
   const thinkTime = aiConfig?.botThinkTime ?? 1000;
 
   // Save to DB + emit to admin socket immediately
+  // The sender is the persona that took the page (s.2: pinned by handle), not the
+  // config's aiSysopName - a Random roll would otherwise record `Kevin` for every line.
+  const personaHandle = (page as any)?.sysopHandle || (chatSession as any)?.personaHandle || aiConfig?.botName || botName(repository);
   const saved = repository.addChatMessage({
     pageId,
     senderId: 'bot',
-    senderHandle: botName(repository),
+    senderHandle: String(personaHandle).slice(0, 30),
     senderType: 'sysop',
     message,
     timestamp: getSystemTime(),
@@ -1148,16 +1152,43 @@ function botName(repository: OperatorChatRepository): string {
   try { return (repository.getConfig().aiSysopName || 'Kevin').slice(0, 30); } catch { return 'Kevin'; }
 }
 
+function extraPersonas(repository: OperatorChatRepository): any[] {
+  try { return repository.listPersonas(); } catch { return []; }
+}
+
+function personaForPage(page: PageRequest, repository: OperatorChatRepository): any {
+  const caller = userSessions.get(String(page.userId))?.user?.aiPersona ?? '';
+  const boardDefault = (repository.getConfig().aiPersona ?? '') as string;
+  const extra = extraPersonas(repository);
+  return resolvePersona({ callerChoice: caller, boardDefault, extra });
+}
+
+function personaFromHandle(handle: string, repository: OperatorChatRepository): any | null {
+  if (!handle) return null;
+  const p = personaByHandle(handle);
+  if (p) return p;
+  try {
+    const stored = repository.getPersonaByHandle(handle);
+    if (stored) return stored as any;
+  } catch { /* no DB */ }
+  return null;
+}
+
 /** The bot's engine and typing settings, from the board's operator-chat config. */
-function aiConfigFrom(config: OperatorChatConfig): AIProviderConfig {
+function aiConfigFrom(config: OperatorChatConfig, persona?: any): AIProviderConfig {
+  // A persona's prompt WITH voice rules (s.2, s.9); a hand-written aiSystemPrompt
+  // keeps winning and overrides that persona's prompt but keeps its handle/fallback.
+  const personaPrompt = persona ? promptFor(persona) : undefined;
+  const systemPrompt = (config.aiSystemPrompt || '').trim() !== '' ? config.aiSystemPrompt : (personaPrompt ?? undefined);
+  const botNameFromPersona = persona?.handle ? String(persona.handle).slice(0, 30) : undefined;
   return {
-    botName: (config.aiSysopName || 'Kevin').slice(0, 30),
+    botName: botNameFromPersona ?? (config.aiSysopName || 'Kevin').slice(0, 30),
     sysopName: loadBBSConfig(bbsRoot).sysop_name || 'the sysop',
     budgetMs: config.aiToolsEnabled === false ? undefined : TOOL_AI_BUDGET_MS,
     provider: config.aiEnabled ? config.aiProvider : 'rule-based',
     modelName: config.aiModelName,
     temperature: config.aiTemperature,
-    systemPrompt: config.aiSystemPrompt,
+    systemPrompt,
     groqApiKey: config.groqApiKey,
     geminiApiKey: config.geminiApiKey,
     openRouterApiKey: config.openRouterApiKey,
@@ -1165,6 +1196,16 @@ function aiConfigFrom(config: OperatorChatConfig): AIProviderConfig {
     botTypoProbability: config.botTypoProbability,
     botThinkTime: config.botThinkTime,
   };
+}
+
+function aiConfigForPage(page: PageRequest, repository: OperatorChatRepository): AIProviderConfig {
+  const persona = personaForPage(page, repository);
+  return aiConfigFrom(repository.getConfig(), persona);
+}
+
+function aiConfigForHandle(handle: string, repository: OperatorChatRepository): AIProviderConfig {
+  const p = personaFromHandle(handle, repository);
+  return aiConfigFrom(repository.getConfig(), p ?? undefined);
 }
 
 /**
@@ -1203,8 +1244,8 @@ function processBotQueue(
   chatSession.botMessageHistory = context.messageHistory;
 
   chatSession.botBusy = true;
-  const config = repository.getConfig();
-const aiConfig = aiConfigFrom(config);
+  const pageForPersona = repository.getPageRequest(pageId);
+  const aiConfig = pageForPersona ? aiConfigForHandle(pageForPersona.sysopHandle || (chatSession as any).personaHandle || '', repository) : aiConfigFrom(repository.getConfig());
 
       getGrumpySysopResponse(lastMsg, context, aiConfig).then(async botResponse => {
     context.messageHistory.push({ role: 'bot', content: botResponse });
@@ -1270,7 +1311,7 @@ async function sendChatMessage(
     if (heldPage && tools) {
       const verdict = await confirmPendingAdmin(tools.ctx, message);
       if (verdict) {
-        const aiConfig = aiConfigFrom(repository.getConfig());
+        const aiConfig = heldPage ? aiConfigForHandle(heldPage.sysopHandle || '', repository) : aiConfigFrom(repository.getConfig());
         (chatSession as any).botBusy = true;
         try {
           (chatSession as any).botMessageHistory = [...((chatSession as any).botMessageHistory || []), { role: 'user', content: message }, { role: 'bot', content: verdict }];
@@ -1309,8 +1350,7 @@ console.log('[Operator Chat] Bot busy, queuing message');
       context.messageHistory.push({ role: 'user', content: message });
       (chatSession as any).botMessageHistory = context.messageHistory;
 
-      const config = repository.getConfig();
-      const aiConfig = aiConfigFrom(config);
+      const aiConfig = page ? aiConfigForHandle(page.sysopHandle || (chatSession as any).personaHandle || '', repository) : aiConfigFrom(repository.getConfig());
 
       // THE CALLER IS WATCHING A DEAD LINE WHILE THE MODEL THINKS - several
       // seconds of it, and a real sysop would have typed something. Dots
@@ -1614,7 +1654,9 @@ console.log(`[Operator Chat] Page ${pageId}: caller is back at a prompt (subStat
     }
 console.log(`[Operator Chat] Page ${pageId}: ${reason} - GrumpyBot takes it`);
 
-    await acceptPage(io, repository, pageId, 'bot', botName(repository), 'grumpy-bot-session');
+    // WHO ANSWERS THIS PAGE: the caller's choice -> board default -> Kevin, rolled once and pinned by handle (s.2).
+    const persona = personaForPage(page, repository);
+    await acceptPage(io, repository, pageId, 'bot', persona.handle, 'grumpy-bot-session');
 
     const chatSession = activeChatSessions.get(pageId);
     if (!chatSession) {
@@ -1641,12 +1683,13 @@ console.log(`[Operator Chat] WARNING: No chat session found to mark as bot-contr
       } catch (err) {
 console.log(`[Operator Chat] Page ${pageId}: no board card (${(err as Error).message})`);
       }
-      const intro = getGrumpyBotIntroMessage();
+      const intro = getGrumpyBotIntroMessage(persona.handle);
       (chatSession as any).isBotControlled = true;
       (chatSession as any).botMessageHistory = [{ role: 'bot', content: intro }];
       (chatSession as any).botBusy = true;
+      (chatSession as any).personaHandle = persona.handle;
       const accepted = repository.getPageRequest(pageId) ?? page;
-      void sendBotMessageWithTyping(io, repository, pageId, intro, accepted.nodeId, accepted, aiConfigFrom(repository.getConfig()))
+      void sendBotMessageWithTyping(io, repository, pageId, intro, accepted.nodeId, accepted, aiConfigFrom(repository.getConfig(), persona))
         .catch((err) => console.error(`[Operator Chat] Page ${pageId}: the bot's opening line failed:`, err))
         .finally(() => {
           (chatSession as any).botBusy = false;
@@ -1829,6 +1872,7 @@ function reviveBotChat(repository: OperatorChatRepository, pageId: string): Chat
   };
   (chatSession as any).isBotControlled = true;
   (chatSession as any).botMessageHistory = [];
+  (chatSession as any).personaHandle = chatSession.sysopHandle;
   activeChatSessions.set(pageId, chatSession);
   const revivedCaller = userSessions.get(String(page.userId));
   if (revivedCaller) {

@@ -78,7 +78,7 @@ import {
 const BOARD = path.resolve(__dirname, '../../../../..');
 
 /** The commands onboarding runs, in the order a caller meets the board. */
-const ONBOARDING = ['SCREENTHEME', 'THEME', 'ACHIEVE'] as const;
+const ONBOARDING = ['SCREENTHEME', 'THEME', 'COSYSOP', 'ACHIEVE'] as const;
 
 /** Every `Node<n>` that serves a caller - one with its own Logon.txt. */
 const nodeDirs = (): string[] =>
@@ -98,7 +98,7 @@ const scriptsOf = (dir: string): string[] =>
 const textOf = (file: string): string => fs.readFileSync(file).toString('latin1');
 
 describe('the questionnaire the board ships', () => {
-  it('offers all three onboarding commands, in every node, in order', () => {
+  it('offers all four onboarding commands, in every node, in order', () => {
     const wrong: string[] = [];
     for (const dir of nodeDirs()) {
       for (const file of scriptsOf(dir)) {

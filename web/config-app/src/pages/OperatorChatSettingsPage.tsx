@@ -32,6 +32,7 @@ interface OperatorChatConfig {
   aiProvider: 'groq' | 'gemini' | 'openrouter' | 'rule-based';
   aiModelName: string;
   aiSysopName: string;
+  aiPersona: string;
   aiToolsEnabled: boolean;
   aiTimeGrantCapMinutes: number;
   rawgApiKey: string;
@@ -121,6 +122,16 @@ export function OperatorChatSettingsPage({ only }: { only?: SettingsAudience } =
   const { data: acsLevels } = useQuery({
     queryKey: ['acs-levels'],
     queryFn: () => apiClient.getAcsLevels(),
+  });
+
+  const { data: personaList } = useQuery({
+    queryKey: ['operator-chat-personas'],
+    queryFn: async () => {
+      const res = await fetch('/api/config/operator-chat/personas', { headers: { Authorization: `Bearer ${readAdminToken()}` } });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json.data as { presets: Array<{ slug: string; handle: string; blurb: string }>; board: Array<{ slug: string; handle: string; blurb: string }>; trades: string[] };
+    },
   });
 
   const { register, watch, getValues, setValue, formState } = useForm<OperatorChatConfig>({
@@ -947,6 +958,22 @@ export function OperatorChatSettingsPage({ only }: { only?: SettingsAudience } =
               <label className="block text-sm font-medium text-content-primary mb-1">AI Co-Sysop Name</label>
               <input type="text" maxLength={30} {...register('aiSysopName')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded" placeholder="Kevin" />
               <p className="text-xs text-content-secondary mt-1">The handle it answers pages under: the start line, the message sender, how it introduces itself. Default Kevin.</p>
+            </div>
+
+            {/* Board default persona (s.2) */}
+            <div>
+              <label className="block text-sm font-medium text-content-primary mb-1">Board Default Co-Sysop</label>
+              <select {...register('aiPersona')} className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded">
+                <option value="">Kevin — the grumpy veteran (default)</option>
+                <option value="random">Random — a different one every time someone pages</option>
+                {personaList?.presets?.filter((p) => p.slug !== 'kevin').map((p) => (
+                  <option key={p.slug} value={p.slug}>{p.handle} — {p.blurb}</option>
+                ))}
+                {personaList?.board?.map((p) => (
+                  <option key={`board-${p.slug}`} value={p.slug}>{p.handle} (board) — {p.blurb}</option>
+                ))}
+              </select>
+              <p className="text-xs text-content-secondary mt-1">Who answers when a caller has not chosen. Empty is Kevin. A persona the sysop wrote appears here after it is saved.</p>
             </div>
 
             {/* Tools */}

@@ -15,6 +15,7 @@ import {
   SysopAvailability,
   OperatorChatConfig
 } from '../types/operator-chat.types';
+import { PRESET_PERSONAS, PRESET_SLUGS, normalizeHandle, normalizeSlug } from '../handlers/sysop-ai/personas';
 
 /**
  * A list of security levels, whatever shape the caller sent.
@@ -222,6 +223,11 @@ export class OperatorChatRepository {
       // new one; a board whose sysop chose a name keeps it.
       this.db.exec(`UPDATE operator_chat_config SET ai_sysop_name = 'Kevin' WHERE ai_sysop_name = 'Agnus'`);
     } catch (e) { /* Column already exists */ }
+    try {
+      // Board default persona (s.2): '' = Kevin, 'random', or a slug. Empty is
+      // what every board has today.
+      this.db.exec(`ALTER TABLE operator_chat_config ADD COLUMN ai_persona TEXT DEFAULT ''`);
+    } catch (e) { /* Column already exists */ }
 
     // Push notification subscriptions table
     this.db.exec(`
@@ -236,6 +242,28 @@ export class OperatorChatRepository {
         last_used INTEGER
       )
     `);
+
+    // Co-sysop personas the SYSOP wrote (s.9) - slug/handle are unique across presets + board together.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS operator_chat_personas (
+        slug TEXT PRIMARY KEY,
+        handle TEXT NOT NULL,
+        name TEXT NOT NULL DEFAULT '',
+        blurb TEXT NOT NULL DEFAULT '',
+        trade TEXT NOT NULL DEFAULT '',
+        temperament TEXT NOT NULL DEFAULT '{}',
+        catchphrase TEXT NOT NULL DEFAULT '',
+        always_brings_up TEXT NOT NULL DEFAULT '',
+        refuses_to_discuss TEXT NOT NULL DEFAULT '',
+        system_prompt TEXT NOT NULL,
+        opening_lines TEXT NOT NULL DEFAULT '[]',
+        fallback_lines TEXT NOT NULL DEFAULT '[]',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `);
+    this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_personas_handle ON operator_chat_personas (handle COLLATE NOCASE)`);
+    this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_personas_slug ON operator_chat_personas (slug COLLATE NOCASE)`);
 
     // Create indexes
     this.db.exec(`
@@ -565,6 +593,7 @@ ntfyTopic: row.ntfy_topic || '',
       aiToolsEnabled: (row.ai_tools_enabled ?? 1) === 1,
       aiTimeGrantCapMinutes: row.ai_time_grant_cap_minutes ?? 30,
       rawgApiKey: row.rawg_api_key || '',
+      aiPersona: (row.ai_persona || '') as string,
     };
   }
 
@@ -615,7 +644,8 @@ ntfyTopic: row.ntfy_topic || '',
         ai_sysop_name = ?,
         ai_tools_enabled = ?,
         ai_time_grant_cap_minutes = ?,
-        rawg_api_key = ?
+        rawg_api_key = ?,
+        ai_persona = ?
       WHERE id = 1
     `).run(
       merged.enabled ? 1 : 0,
@@ -656,7 +686,8 @@ ntfyTopic: row.ntfy_topic || '',
       (merged.aiSysopName || 'Kevin').slice(0, 30),
       merged.aiToolsEnabled === false ? 0 : 1,
       Math.max(0, Math.min(600, Number(merged.aiTimeGrantCapMinutes ?? 30))),
-      merged.rawgApiKey ?? ''
+      merged.rawgApiKey ?? '',
+      (merged.aiPersona || '').trim().slice(0, 30)
     );
   }
 
@@ -786,4 +817,88 @@ ntfyTopic: row.ntfy_topic || '',
     ).get(sysopId) as any;
     return row.count > 0;
   }
+
+  // ============================================
+  // Co-sysop personas the SYSOP wrote (s.9)
+  // ============================================
+
+  private personaRowToStored(row: any): StoredPersona {
+    return {
+      slug: row.slug,
+      handle: row.handle,
+      name: row.name || '',
+      blurb: row.blurb || '',
+      trade: row.trade || '',
+      temperament: JSON.parse(row.temperament || '{}'),
+      catchphrase: row.catchphrase || '',
+      alwaysBringsUp: row.always_brings_up || '',
+      refusesToDiscuss: row.refuses_to_discuss || '',
+      systemPrompt: row.system_prompt || '',
+      openingLines: JSON.parse(row.opening_lines || '[]'),
+      fallbackLines: JSON.parse(row.fallback_lines || '[]'),
+    } as StoredPersona;
+  }
+
+  listPersonas(): StoredPersona[] {
+    const rows = this.db.prepare('SELECT * FROM operator_chat_personas ORDER BY handle COLLATE NOCASE').all() as any[];
+    return rows.map((r) => this.personaRowToStored(r));
+  }
+
+  getPersona(slug: string): StoredPersona | null {
+    const row = this.db.prepare('SELECT * FROM operator_chat_personas WHERE slug = ? COLLATE NOCASE').get(slug) as any;
+    return row ? this.personaRowToStored(row) : null;
+  }
+
+  getPersonaByHandle(handle: string): StoredPersona | null {
+    const row = this.db.prepare('SELECT * FROM operator_chat_personas WHERE handle = ? COLLATE NOCASE').get(handle) as any;
+    return row ? this.personaRowToStored(row) : null;
+  }
+
+  savePersona(persona: StoredPersona): StoredPersona {
+    const slug = normalizeSlug(persona.slug || persona.handle);
+    const handle = normalizeHandle(persona.handle);
+    if (!slug || !handle) throw new Error('persona needs a slug and a handle');
+    // Presets cannot be overwritten and board handles must be unique across both.
+    if (PRESET_SLUGS.includes(slug as any)) throw new Error(`"${slug}" is a built-in persona and cannot be overwritten`);
+    if (PRESET_PERSONAS.some((p) => p.handle.toLowerCase() === handle.toLowerCase())) throw new Error(`handle "${handle}" is a built-in persona and cannot be used`);
+    const existingHandle = this.db.prepare('SELECT slug FROM operator_chat_personas WHERE handle = ? COLLATE NOCASE AND slug != ? COLLATE NOCASE').get(handle, slug) as any;
+    if (existingHandle) throw new Error(`handle "${handle}" already exists`);
+    const now = Date.now();
+    const existing = this.db.prepare('SELECT slug FROM operator_chat_personas WHERE slug = ? COLLATE NOCASE').get(slug) as any;
+    const temperament = JSON.stringify(persona.temperament ?? {});
+    const opening = JSON.stringify(persona.openingLines ?? []);
+    const fallback = JSON.stringify(persona.fallbackLines ?? []);
+    if (existing) {
+      this.db.prepare(`UPDATE operator_chat_personas SET handle=?, name=?, blurb=?, trade=?, temperament=?, catchphrase=?, always_brings_up=?, refuses_to_discuss=?, system_prompt=?, opening_lines=?, fallback_lines=?, updated_at=? WHERE slug=? COLLATE NOCASE`)
+        .run(handle, persona.name || '', persona.blurb || '', persona.trade || '', temperament, persona.catchphrase || '', persona.alwaysBringsUp || '', persona.refusesToDiscuss || '', persona.systemPrompt || '', opening, fallback, now, slug);
+    } else {
+      this.db.prepare(`INSERT INTO operator_chat_personas (slug, handle, name, blurb, trade, temperament, catchphrase, always_brings_up, refuses_to_discuss, system_prompt, opening_lines, fallback_lines, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(slug, handle, persona.name || '', persona.blurb || '', persona.trade || '', temperament, persona.catchphrase || '', persona.alwaysBringsUp || '', persona.refusesToDiscuss || '', persona.systemPrompt || '', opening, fallback, now, now);
+    }
+    return this.getPersona(slug)!;
+  }
+
+  deletePersona(slug: string): boolean {
+    const norm = normalizeSlug(slug);
+    if (PRESET_SLUGS.includes(norm as any)) throw new Error('a built-in persona cannot be deleted');
+    const res = this.db.prepare('DELETE FROM operator_chat_personas WHERE slug = ? COLLATE NOCASE').run(norm);
+    return res.changes > 0;
+  }
 }
+
+export interface StoredPersona {
+  slug: string;
+  handle: string;
+  name: string;
+  blurb: string;
+  trade: string;
+  temperament: PersonaTemperament;
+  catchphrase: string;
+  alwaysBringsUp: string;
+  refusesToDiscuss: string;
+  systemPrompt: string;
+  openingLines: string[];
+  fallbackLines: string[];
+}
+
+export type PersonaTemperament = import('../handlers/sysop-ai/persona-composer').PersonaTemperament;

@@ -86,6 +86,8 @@ export interface User {
   themePreference?: string; // Door colour theme (web extension); 'classic' is the board as it was
   editorType?: number;     // 0=line, 1=simple, 2=fullscreen (express.e loggedOnUser.editorType)
   internetName?: string;   // Internet/email name (express.e loggedOnUserMisc.internetName)
+  /** Co-sysop persona slug the caller chose - '' for board default, 'random', or a preset/board slug. */
+  aiPersona?: string;
   // WEB_: GDPR consent metadata (ISO-8601 timestamp, notice semver, capture point)
   gdprConsentAt?: string;
   gdprNoticeVersion?: string;

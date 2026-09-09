@@ -374,10 +374,44 @@ const FALLBACK_FREE_MODELS: string[] = [
  * powers he wields are the caller's, never his own.
  */
 function personalityFor(aiConfig: AIProviderConfig): string {
+  // A persona's prompt already carries VOICE_RULES via promptFor(); a
+  // hand-written aiSystemPrompt (design s.2) overrides the persona's prompt
+  // but keeps the handle/fallback, so we never invent one here.
   const base = aiConfig.systemPrompt || GRUMPY_SYSOP_PERSONALITY;
   const name = (aiConfig.botName || 'Kevin').slice(0, 30);
   const sysop = aiConfig.sysopName || 'the sysop';
   return `${base}\n\nYour handle on this board is ${name}. You are the CO-SYSOP; the sysop is ${sysop}, and you answer pages when ${sysop} does not. Sign nothing, introduce yourself as ${name} when asked, and never claim to be ${sysop}.`;
+}
+
+function fallbackForPersona(aiConfig?: AIProviderConfig): string {
+  // WITH NO MODEL REACHABLE the persona answers in ITS OWN voice (design s.6).
+  // The handle on aiConfig is the pin; extra personas are not needed here
+  // because the presets carry the voice, and a board persona's fallback is
+  // its own line - the page row already stores the handle that chose it.
+  try {
+    const handle = (aiConfig?.botName || '').trim();
+    if (handle) {
+      const { personaByHandle } = require('./sysop-ai/personas');
+      const p = personaByHandle(handle);
+      if (p) {
+        const { fallbackLineFor } = require('./sysop-ai/personas');
+        return fallbackLineFor(p);
+      }
+      // Board personas are not in PRESET_PERSONAS; try the DB's own rows too.
+      try {
+        const { getDatabase } = require('./command-handler/dependency-injection');
+        const db = getDatabase();
+        const repo = db.getOperatorChatRepository();
+        const stored = repo.getPersonaByHandle(handle);
+        if (stored) {
+          const { fallbackLineFor: f2 } = require('./sysop-ai/personas');
+          // stored row already has the same shape, cast to Persona
+          return f2(stored as any);
+        }
+      } catch { /* no DB in this process */ }
+    }
+  } catch { /* persona lookup is best-effort */ }
+  return 'My connection to the outside world just dropped - ask me again in a minute.';
 }
 
 const GRUMPY_SYSOP_PERSONALITY = `You are a veteran BBS co-sysop from the 1990s helping run an Amiga-based bulletin board system. Your personality:
@@ -798,9 +832,10 @@ console.log('[Grumpy Bot] Using AI response');
   //
   // When no provider answers, the co-sysop says so, once, in his own voice.
   // A caller told the truth can ask again; a caller told a non-sequitur
-  // thinks the board is broken.
+  // thinks the board is broken. The persona's own line (s.6) is what is
+  // remembered: a persona without its own would start talking like Kevin.
 console.log('[Grumpy Bot] No provider answered - saying so');
-  return 'My connection to the outside world just dropped - ask me again in a minute.';
+  return fallbackForPersona(cfg);
 }
 
 export const DEFAULT_AI_CONFIG: AIProviderConfig = {
@@ -814,9 +849,24 @@ export const DEFAULT_AI_CONFIG: AIProviderConfig = {
 };
 
 /**
- * Initialize message when bot takes over
+ * Initialize message when bot takes over - the persona's own opening line (s.6).
  */
-export function getGrumpyBotIntroMessage(): string {
+export function getGrumpyBotIntroMessage(botName?: string): string {
+  if (botName) {
+    try {
+      const { personaByHandle, openingLineFor } = require('./sysop-ai/personas');
+      const p = personaByHandle(botName);
+      if (p) return openingLineFor(p);
+      try {
+        const { getDatabase } = require('./command-handler/dependency-injection');
+        const stored = getDatabase().getOperatorChatRepository().getPersonaByHandle(botName);
+        if (stored) {
+          const { openingLineFor: o2 } = require('./sysop-ai/personas');
+          return o2(stored as any);
+        }
+      } catch { /* no DB */ }
+    } catch { /* best-effort */ }
+  }
   const intros = [
     "Looks like the real sysop is off doing... whatever it is sysops do. Lucky you, you get ME instead.",
     "Great, the sysop isn't answering. Guess I'M your tech support now. This is just PERFECT.",

@@ -153,6 +153,8 @@ export interface OperatorChatConfig {
   aiToolsEnabled: boolean;         // May it look things up and act (tool loop)
   aiTimeGrantCapMinutes: number;   // grant_time cap per caller per day
   rawgApiKey: string;              // RAWG key for lookup_game; empty = Wikipedia only
+  // Co-sysop personas (2026-09-08, s.2) - board default. '' = Kevin, 'random', or a slug.
+  aiPersona: string;
 }
 
 /**

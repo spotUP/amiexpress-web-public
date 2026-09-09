@@ -1,0 +1,28 @@
+{
+  "name": "cosysop-persona",
+  "version": "1.0.0",
+  "description": "Choose which co-sysop answers when you page",
+  "main": "dist/index.js",
+  "bbsCommand": "COSYSOP",
+  "doorType": "TS",
+  "runtime": "server",
+  "doorPattern": "runDoor",
+  "accessLevel": 0,
+  "author": "AmiExpress Team",
+  "keywords": [
+    "bbs",
+    "door",
+    "co-sysop",
+    "persona",
+    "chat"
+  ],
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

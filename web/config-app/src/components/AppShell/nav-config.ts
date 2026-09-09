@@ -22,6 +22,7 @@ import {
   Bell,
   ArrowUpDown,
   Boxes,
+  Bot,
   DoorOpen,
   FileText,
   FolderOpen,
@@ -74,6 +75,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: 'activity', label: 'Activity', icon: Zap, minLevel: 255, description: 'Live feed of logons, doors and transfers' },
       { path: 'nodes', label: 'Nodes', icon: Monitor, minLevel: 255, description: 'Live nodes, supervisor commands and per-node settings', keywords: ['Node Control'] },
       { path: 'operator-chat', label: 'Operator Chat', icon: MessageSquare, minLevel: 255, description: 'Answer a caller paging the sysop', keywords: ['Operator Chat Settings', 'Paging Hours', 'Away Messages', 'Quiet Hours', 'AI Bot', 'Quick Replies', 'Page Sysop'] },
+      { path: 'operator-chat/personas', label: 'Co-Sysop Personas', icon: Bot, minLevel: 255, description: 'Who answers a page — the cast and the builder', keywords: ['personas', 'co-sysop', 'builder'] },
       // Its own destination since 2026-09-08. The switches were spread over a
       // header badge and three sections two thirds of the way down operator
       // chat settings: "i think all notification settings deserves its own

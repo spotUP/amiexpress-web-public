@@ -784,8 +784,58 @@ console.log('[BBSApi] Mouse events disabled');
     });
   }
 
+  // ---- Co-sysop personas (2026-09-08, s.2 + s.3) ----
+
+  /** Every persona this caller may pick - presets plus the sysop's own. */
+  listCoSysopPersonas(): Array<{ slug: string; handle: string; name: string; blurb: string }> {
+    try {
+      const { allPersonas } = require('../handlers/sysop-ai/personas');
+      const { db } = require('../database');
+      let extra: any[] = [];
+      try { extra = db.getOperatorChatRepository().listPersonas(); } catch { /* table not yet migrated */ }
+      return allPersonas(extra).map((p: any) => ({ slug: p.slug, handle: p.handle, name: p.name, blurb: p.blurb }));
+    } catch {
+      const { PRESET_PERSONAS } = require('../handlers/sysop-ai/personas');
+      return PRESET_PERSONAS.map((p: any) => ({ slug: p.slug, handle: p.handle, name: p.name, blurb: p.blurb }));
+    }
+  }
+
+  /** The slug the caller chose - '' for the board's, 'random', or a persona slug. */
+  getCoSysopPersona(): string {
+    return (this.session.user?.aiPersona ?? '') as string;
+  }
+
   /**
-   * Wear a screen theme. Answers the slug that is actually in force.
+   * Remember which co-sysop answers this caller's pages. Answers the slug
+   * actually in force: a slug nothing recognises is REFUSED, because a stored
+   * preference the chat would not honour is a caller who pages and gets a
+   * stranger while the picker says otherwise.
+   */
+  async setCoSysopPersona(slug: string): Promise<string> {
+    const raw = String(slug ?? '').trim().toLowerCase();
+    // '' and 'random' are choices, not personas - the board answers with them.
+    if (raw === '' || raw === 'random') {
+      if (this.session.user) {
+        const { db } = require('../database');
+        await db.updateUser(this.session.user.id, { aiPersona: raw });
+        this.session.user.aiPersona = raw;
+      }
+      return raw;
+    }
+    // Anything else must be a persona the board knows - preset or the sysop's own.
+    const roster = this.listCoSysopPersonas();
+    const wanted = roster.find((p) => p.slug.toLowerCase() === raw);
+    if (!wanted) return this.getCoSysopPersona();
+    if (this.session.user) {
+      const { db } = require('../database');
+      await db.updateUser(this.session.user.id, { aiPersona: wanted.slug });
+      this.session.user.aiPersona = wanted.slug;
+    }
+    return wanted.slug;
+  }
+
+  /**
+    * Wear a screen theme. Answers the slug that is actually in force.
    *
    * Refusing rather than storing an unwearable slug is the point: a stored
    * preference the loader will not honour is a caller who sees the default

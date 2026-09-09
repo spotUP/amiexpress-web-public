@@ -491,6 +491,13 @@ console.log('✓ Added credit_total_date column');
 console.log('✓ Added credit_tracking column');
       }
 
+      if (!columnNames.includes('ai_persona')) {
+        // The co-sysop a caller chose: '', a preset slug, or 'random' (s.2).
+        // Per-caller display preference, like screenTheme - see co-sysop-personas-design.md.
+        this.db.exec("ALTER TABLE users ADD COLUMN ai_persona TEXT DEFAULT ''");
+console.log('✓ Added ai_persona column');
+      }
+
       // Populate slotnumber for any user where it is 0 or NULL.
       // express.e:29624 — slotNumber is the permanent 1-indexed user.data slot.
       // After the migration above, existing rows are 0; assign sequential slots
