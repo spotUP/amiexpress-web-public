@@ -1,0 +1,47 @@
+/**
+ * Kanban cards show the whole title, wrapped on word boundaries, with the
+ * priority/points/assignee meta on its own row - never the old truncated
+ * single line ("BBS Re.. [L] 10").
+ */
+import assert from 'assert';
+import { wrapTitle, formatKanbanCard } from '../ui/kanban-board';
+
+const task: any = {
+  id: 't1', projectId: 'p1', title: 'BBS Releases API for chatbots',
+  category: 'code', status: 'todo', priority: 'legend', points: 10, description: '',
+};
+
+export async function wrapsOnWordBoundaries(): Promise<void> {
+  const rows = wrapTitle('BBS Releases API for chatbots', 12);
+  assert.deepStrictEqual(rows, ['BBS Releases', 'API for', 'chatbots']);
+}
+
+export async function hyphenatesOnlyOversizeWords(): Promise<void> {
+  const rows = wrapTitle('Supercalifragilistic', 8);
+  assert.deepStrictEqual(rows, ['Superca-', 'lifragi-', 'listic']);
+  for (const row of rows.slice(0, -1)) {
+    assert.ok(row.endsWith('-'), 'split rows carry a hyphen');
+    assert.ok(row.length <= 8, 'rows fit the width');
+  }
+}
+
+export async function shortTitlesStayWhole(): Promise<void> {
+  assert.deepStrictEqual(wrapTitle('test', 12), ['test']);
+  assert.deepStrictEqual(wrapTitle('', 12), ['']);
+}
+
+export async function cardPutsMetaOnItsOwnRow(): Promise<void> {
+  const card = formatKanbanCard(task, 30, 'spot');
+  const rows = card.split('\n');
+  assert.ok(rows.length >= 2, 'title plus meta row');
+  assert.ok(rows[rows.length - 1].includes('[L]'), 'priority initial on the meta row');
+  assert.ok(rows[rows.length - 1].includes('10 pts'), 'points on the meta row');
+  assert.ok(rows[rows.length - 1].includes('spot'), 'assignee on the meta row');
+  assert.ok(rows.slice(0, -1).join(' ').includes('BBS Releases API for chatbots'), 'full title above');
+  assert.ok(!card.includes('..'), 'no truncation dots');
+}
+
+export async function cardWithoutAssigneeOmitsIt(): Promise<void> {
+  const card = formatKanbanCard(task, 30);
+  assert.ok(!card.includes('·'), 'no dangling separator without assignee');
+}

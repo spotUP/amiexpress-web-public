@@ -3,6 +3,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.wrapTitle = wrapTitle;
+exports.formatKanbanCard = formatKanbanCard;
 exports.showKanbanBoard = showKanbanBoard;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
@@ -32,6 +34,58 @@ const COLUMN_LABELS = {
     'testing': 'TESTING',
     'done': 'DONE'
 };
+/**
+ * Word-wrap a task title to the column width: breaks on spaces, and only
+ * splits inside a word with a trailing hyphen when the word itself is wider
+ * than the column. Pure, so the wrapping is unit-tested, not eyeballed.
+ */
+function wrapTitle(title, width) {
+    const lines = [];
+    const words = title.split(/\s+/).filter((w) => w.length > 0);
+    if (words.length === 0)
+        return [''];
+    let current = '';
+    const push = () => {
+        if (current.length > 0)
+            lines.push(current);
+        current = '';
+    };
+    for (const word of words) {
+        if (word.length > width) {
+            // A word wider than the column: hard-split with hyphens.
+            push();
+            let rest = word;
+            while (rest.length > width) {
+                lines.push(rest.slice(0, width - 1) + '-');
+                rest = rest.slice(width - 1);
+            }
+            current = rest;
+            continue;
+        }
+        const candidate = current.length === 0 ? word : `${current} ${word}`;
+        if (candidate.length > width) {
+            push();
+            current = word;
+        }
+        else {
+            current = candidate;
+        }
+    }
+    push();
+    return lines;
+}
+/**
+ * One task as a multi-line card: full wrapped title rows, then the meta
+ * row (priority, points, assignee). Replaces the old single-line
+ * truncated form ("BBS Re.. [L] 10"), which left six readable characters.
+ */
+function formatKanbanCard(task, width, assigneeHandle) {
+    const priorityInitial = task.priority[0].toUpperCase();
+    const priorityColor = (0, gamification_1.getPriorityColor)(task.priority);
+    const titleRows = wrapTitle(task.title, Math.max(4, width));
+    const meta = `{${priorityColor}-fg}[${priorityInitial}]{/${priorityColor}-fg} ${task.points} pts${assigneeHandle ? ` {gray-fg}· ${assigneeHandle}{/}` : ''}`;
+    return [...titleRows, meta].join('\n');
+}
 async function showKanbanBoard(screen, project, user, dataManager, achievementManager, bbsApi) {
     return new Promise(async (resolve) => {
         screen.program.enableMouse();
@@ -188,18 +242,17 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
             if (immediate) {
                 isUpdating = true;
                 tasks = await dataManager.getTasksForProject(project.id);
+                const users = await dataManager.loadUsers().catch(() => ({}));
+                const handleOf = (userId) => {
+                    if (!userId)
+                        return undefined;
+                    return users[userId]?.handle;
+                };
                 for (let i = 0; i < COLUMNS.length; i++) {
                     const status = COLUMNS[i];
                     const columnTasks = tasks.filter(t => t.status === status);
-                    const maxTitleLen = Math.max(8, colWidth - 12);
-                    const items = columnTasks.map(task => {
-                        const priorityInitial = task.priority[0].toUpperCase();
-                        const priorityColor = (0, gamification_1.getPriorityColor)(task.priority);
-                        const title = task.title.length > maxTitleLen
-                            ? task.title.substring(0, maxTitleLen - 2) + '..'
-                            : task.title;
-                        return `${title} {${priorityColor}-fg}[${priorityInitial}]{/${priorityColor}-fg} ${task.points}`;
-                    });
+                    const cardWidth = Math.max(8, colWidth - 2);
+                    const items = columnTasks.map(task => formatKanbanCard(task, cardWidth, handleOf(task.assignedTo)));
                     // Clear items first, then set new ones to ensure proper refresh
                     columnLists[i].clearItems();
                     columnLists[i].setItems(items.length > 0 ? items : []);
