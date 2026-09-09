@@ -52,6 +52,11 @@ export function createWhipRouter(database: Database): ReturnType<typeof express.
       sendError(res, 'Unknown, expired, or already-used code. Run LINKDISCORD on the BBS for a fresh one.', 404);
       return;
     }
+    try {
+      await whipService.ensureUser(redeemed.userId, redeemed.username);
+    } catch (error) {
+      console.error('[WHIP link]ensureUser failed (link itself succeeded):', error);
+    }
     sendResponse(res, redeemed, `Linked to ${redeemed.username}`);
   });
 

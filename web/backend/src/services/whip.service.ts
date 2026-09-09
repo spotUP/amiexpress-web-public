@@ -261,6 +261,16 @@ class WhipService {
     return Object.values(users).map((u: any) => ({ userId: u.userId, handle: u.handle }));
   }
 
+  /**
+   * Ensure WHIP stats exist, mirroring the door's first-entry creation.
+   * Called on /link so a freshly linked account never hits "Unknown user"
+   * on reads; harmless when stats already exist.
+   */
+  async ensureUser(userId: string, username: string): Promise<void> {
+    const dm = sharedDm();
+    await ensureWhipUser(dm, { userId, username, gdprConsented: false });
+  }
+
   // ---- Writes (bot Phase 2). Every mutation runs serialized through the
   // shared DataManager; events mirror the door's own wording so LiveChat
   // and webhooks cannot tell door and bot apart. ----

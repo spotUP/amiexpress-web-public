@@ -19,6 +19,7 @@ delete process.env.WHIP_DOOR_DIST_DIR;
 
 import { createWhipRouter } from '../../src/api/whip-routes';
 import { authenticateServiceToken } from '../../src/middleware/service-auth.middleware';
+import { discordLinkService } from '../../src/services/discord-link.service';
 import { bbsEventEmitter } from '../../src/services/bbs-event-emitter';
 
 process.env.WHIP_SERVICE_TOKEN = 'test-write-token';
@@ -177,8 +178,20 @@ describe('WHIP write routes', () => {
     expect(events.map((e) => e.data.eventType)).toContain('project_deleted');
   });
 
-  it('lists users for assign selects', async () => {
-    // ensureWhipUser creates stats on first write, so the actor exists.
+  it('linking provisions WHIP stats so reads never say Unknown user', async () => {
+    const freshId = uid('fresh');
+    db.db
+      .prepare('INSERT INTO users (id, username, passwordhash, realname) VALUES (?, ?, ?, ?)')
+      .run(freshId, uid('Fresh'), 'x', 'Fresh');
+    const { code } = discordLinkService.issueCode(freshId, 'Fresh');
+    const linked = await request(app).post('/api/whip/link').set(auth).send({ code, discordId: 'd-fresh' });
+    expect(linked.status).toBe(200);
+    const ach = await request(app).get(`/api/whip/achievements/${freshId}`).set(auth);
+    expect(ach.status).toBe(200);
+    expect(ach.body.data.handle).toBe('Fresh');
+  });
+
+  it('lists users for assign selects', async () => {    // ensureWhipUser creates stats on first write, so the actor exists.
     await request(app).post('/api/whip/projects').set(auth).send({ ...actor(), name: 'Roster', type: 'demo' });
     const res = await request(app).get('/api/whip/users').set(auth);
     expect(res.status).toBe(200);
