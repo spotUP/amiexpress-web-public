@@ -80,7 +80,7 @@ interface ChatContext {
  * AI configuration from OperatorChatConfig
  */
 export interface AIProviderConfig {
-  provider: 'groq' | 'gemini' | 'openrouter' | 'rule-based';
+  provider: 'groq' | 'gemini' | 'openrouter' | 'zen' | 'rule-based';
   /**
    * The three below belong to the AI providers, not to the bot.
    *
@@ -98,6 +98,7 @@ export interface AIProviderConfig {
   groqApiKey?: string;
   geminiApiKey?: string;
   openRouterApiKey?: string;
+  zenApiKey?: string;
   /**
    * The whole AI cascade - every provider, every retry, the model discovery
    * - gets THIS long in total before the rule-based reply goes out. The
@@ -396,14 +397,15 @@ const MODEL_CACHE_DURATION = 3600000; // 1 hour in milliseconds
 /**
  * Hardcoded fallback free models when the OpenRouter model discovery API
  * returns nothing (API format change, network issue, etc.).
- * Kept current as of 2026-09-04.
+ * Refreshed against the live /models endpoint 2026-09-10 (the previous
+ * list had zero overlap with what OpenRouter actually serves free).
  */
 const FALLBACK_FREE_MODELS: string[] = [
-  'google/gemma-2-9b-it:free',
-  'meta-llama/llama-3.2-3b-instruct:free',
-  'microsoft/phi-3.5-mini-instruct:free',
-  'mistralai/mistral-7b-instruct:free',
-  'cognitivecomputations/dolphin-2.9.1-llama-3.1-8b:free',
+  'nvidia/nemotron-3.5-lightning:free',
+  'google/gemma-4-26b-a4b-it:free',
+  'poolside/laguna-s-2.1:free',
+  'liquid/lfm-2.5-2.6b:free',
+  'cohere/north-mini-code:free',
 ];
 
 // BBS Help Knowledge Base (from AmiExpress wiki)
@@ -599,6 +601,210 @@ console.error('[Grumpy Bot] Gemini failed:', error instanceof Error ? error.mess
 }
 
 /**
+ * OpenCode Zen (https://opencode.ai/zen) - OpenAI-compatible
+ * chat/completions with free models, auto-discovered like OpenRouter.
+ *
+ * Zen's /models answers keyless with bare {id} rows (no pricing or
+ * parameter flags), so "free" is an id suffix and tool support is assumed
+ * then verified: the tool loop is attempted, and a tools-shaped API error
+ * falls back to a plain completion for that model from then on. Added
+ * 2026-09-10 as a cascade leg beside OpenRouter (which stays): when one
+ * 429s, the other is tried before the persona fallback goes out.
+ */
+export const ZEN_BASE = 'https://opencode.ai/zen/v1';
+
+/** Free Zen ids worth preferring: the muse-spark family has proven
+ *  tool-calling chat on this board's own agents. */
+const ZEN_PREFERRED_FREE = ['muse-spark-1.3-contributor-free', 'muse-spark-1.2-contributor-free'];
+
+/** Free Zen ids, probed live 2026-09-10, for when discovery fails. */
+const FALLBACK_ZEN_FREE_MODELS: string[] = [
+  'muse-spark-1.3-contributor-free',
+  'muse-spark-1.2-contributor-free',
+  'deepseek-v4-flash-free',
+  'mimo-v2.5-free',
+  'ling-3.0-flash-fin-free',
+  'nemotron-3-ultra-free',
+  'nemotron-3.5-lightning-free',
+];
+
+let cachedZenModels: string[] = [];
+let lastZenDiscovery = 0;
+/** Zen models whose tool calls the API refused: plain completions only. */
+const zenPlainOnly = new Set<string>();
+
+export function rankZenModels(ids: string[]): string[] {
+  const pref = (id: string) => {
+    const i = ZEN_PREFERRED_FREE.indexOf(id);
+    return i === -1 ? ZEN_PREFERRED_FREE.length : i;
+  };
+  return [...new Set(ids.filter((id) => id.toLowerCase().includes('free')))]
+    .sort((a, b) => pref(a) - pref(b) || (a < b ? -1 : 1));
+}
+
+/** Test seam: what a Zen discovery would have returned. */
+export function primeZenCatalogue(ids: string[]): void {
+  cachedZenModels = rankZenModels(ids);
+  lastZenDiscovery = Date.now();
+}
+/** Test seam: forget cached Zen state. */
+export function resetZenCatalogue(): void {
+  cachedZenModels = [];
+  lastZenDiscovery = 0;
+  zenPlainOnly.clear();
+}
+
+/**
+ * Fail over: the failed model goes to the back, the next-best is tried on
+ * the next message. Round-robin, not drop - a 429 is transient, and dropping
+ * would shrink the pool to nothing until the next hourly discovery.
+ */
+function rotateZenModels(): void {
+  const failed = cachedZenModels.shift();
+  if (failed !== undefined) cachedZenModels.push(failed);
+}
+
+async function discoverZenModels(timeoutMs: number): Promise<string[]> {
+  try {
+    const response = await axios.get(`${ZEN_BASE}/models`, { timeout: timeoutMs });
+    const ids: string[] = (response.data?.data ?? []).map((m: any) => m.id).filter(Boolean);
+    const ranked = rankZenModels(ids);
+console.log(`[Grumpy Bot] Discovered ${ranked.length} free Zen models:`, ranked.slice(0, 5));
+    return ranked;
+  } catch (error) {
+console.error('[Grumpy Bot] Failed to discover Zen models:', error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
+async function getZenModel(timeoutMs: number): Promise<string | null> {
+  const now = Date.now();
+  if (cachedZenModels.length > 0 && (now - lastZenDiscovery) < MODEL_CACHE_DURATION) {
+console.log('[Grumpy Bot] Using cached Zen model:', cachedZenModels[0]);
+    return cachedZenModels[0];
+  }
+console.log('[Grumpy Bot] Discovering Zen models...');
+  const ranked = await discoverZenModels(timeoutMs);
+  if (ranked.length === 0) {
+console.log('[Grumpy Bot] No Zen models from API, trying hardcoded fallback list');
+    cachedZenModels = [...FALLBACK_ZEN_FREE_MODELS];
+    lastZenDiscovery = now;
+    return cachedZenModels[0] ?? null;
+  }
+  cachedZenModels = ranked;
+  lastZenDiscovery = now;
+  return ranked[0];
+}
+
+const isRateLimit = (error: any): boolean => error?.response?.status === 429;
+const isToolRejection = (error: any): boolean =>
+  error?.response?.status === 400 && /tool|function/i.test(String(error?.response?.data?.error?.message ?? ''));
+
+/** Why the cascade died, for an honest fallback line (reset per message). */
+let lastCascadeNote: 'rate-limited' | null = null;
+function noteCascadeRateLimited(): void { lastCascadeNote = 'rate-limited'; }
+
+/** Said when every provider answered 429: the models are jammed, not the
+ *  board's data, not the net. Never blames "the outside". */
+export const ZEN_RATE_LIMITED_LINE =
+  'The AI line is jammed - the free models are all busy. Ask me again in a minute and I will look it up.';
+
+async function getZenResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
+  const apiKey = aiConfig.zenApiKey || process.env.ZEN_API_KEY;
+  if (!apiKey) {
+console.log('[Grumpy Bot] No ZEN_API_KEY configured, skipping Zen');
+    return null;
+  }
+  const callTimeout = remainingBudget(aiConfig, 10000);
+  if (callTimeout < 250) return null;
+  const model = aiConfig.modelName || await getZenModel(Math.min(callTimeout, 5000));
+  if (!model) {
+console.log('[Grumpy Bot] No Zen free models available');
+    return null;
+  }
+
+  const systemPrompt = personalityFor(aiConfig);
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...(context.boardCard ? [{ role: 'system', content: context.boardCard }] : []),
+    ...(context.retrieved ? [{ role: 'system', content: context.retrieved }] : []),
+    { role: 'system', content: `User context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes` },
+    ...context.messageHistory.map(msg => ({
+      role: msg.role === 'user' ? 'user' : 'assistant',
+      content: msg.content
+    })),
+    { role: 'user', content: userMessage }
+  ];
+  const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+  const post = async (body: unknown, timeoutMs: number) =>
+    (await axios.post(`${ZEN_BASE}/chat/completions`, body, { headers, timeout: timeoutMs })).data;
+
+  const plainCall = async (): Promise<string | null> => {
+    const response = await axios.post(
+      `${ZEN_BASE}/chat/completions`,
+      { model, messages, max_tokens: CHAT_REPLY_TOKENS, temperature: aiConfig.temperature },
+      { headers, timeout: remainingBudget(aiConfig, 10000) },
+    );
+    const content = response.data.choices[0]?.message?.content;
+    if (content) console.log('[Grumpy Bot] SUCCESS - Using Zen response');
+    return content ?? null;
+  };
+
+  try {
+    if (context.tools && context.tools.list.length > 0 && !zenPlainOnly.has(model)) {
+console.log(`[Grumpy Bot] Trying Zen (${model}) with ${context.tools.list.length} tools...`);
+      const result = await askWithTools({
+        model, messages, tools: context.tools.list, ctx: context.tools.ctx,
+        deadline: cfgDeadline(aiConfig), perRoundMs: PER_ROUND_MS,
+        maxTokens: CHAT_REPLY_TOKENS, temperature: aiConfig.temperature, post,
+      });
+      (context.afters ??= []).push(...result.afters);
+      if (result.calls.length) console.log(`[Grumpy Bot] tools used: ${result.calls.map((c) => `${c.name}:${c.outcome}`).join(', ')}`);
+      if (result.text) {
+console.log('[Grumpy Bot] SUCCESS - Using Zen response (tool loop)');
+        return result.truncated ? withContinuation(result.text) : result.text;
+      }
+      const answered = result.calls.filter((c) => c.outcome === 'ok');
+      if (answered.length > 0 && result.toolResults.length > 0) {
+console.log('[Grumpy Bot] No reply from the model, but the board answered - sending the tool result');
+        return `Straight from the board, since I am typing slowly today:\n${result.toolResults.join('\n')}`;
+      }
+      rotateZenModels();
+      return null;
+    }
+console.log(`[Grumpy Bot] Trying Zen (${model})...`);
+    const plain = await plainCall();
+    if (!plain) rotateZenModels();
+    return plain;
+  } catch (error: any) {
+console.error('[Grumpy Bot] Zen failed:', error.message);
+    if (isRateLimit(error)) {
+      // A 429 is the whole shared pool, not this model: hopping models
+      // replays the same refusal. Yield to the next cascade leg at once.
+      noteCascadeRateLimited();
+      rotateZenModels();
+      return null;
+    }
+    if (context.tools && context.tools.list.length > 0 && isToolRejection(error)) {
+console.log(`[Grumpy Bot] Zen model ${model} refuses tools - plain completion instead`);
+      zenPlainOnly.add(model);
+      try {
+        const plain = await plainCall();
+        if (!plain) rotateZenModels();
+        return plain;
+      } catch (retryError: any) {
+console.error('[Grumpy Bot] Zen plain retry failed:', retryError.message);
+        if (isRateLimit(retryError)) noteCascadeRateLimited();
+        rotateZenModels();
+        return null;
+      }
+    }
+    rotateZenModels();
+    return null;
+  }
+}
+
+/**
  * Tier 3: OpenRouter (Free models with auto-discovery)
  */
 async function discoverFreeModels(timeoutMs: number): Promise<string[]> {
@@ -773,6 +979,10 @@ console.error('[Grumpy Bot] OpenRouter failed:', error.message);
 console.error('[Grumpy Bot] Status:', error.response.status);
 console.error('[Grumpy Bot] Data:', JSON.stringify(error.response.data));
     }
+    // A 429 is the shared pool refusing, not the board's data and not the
+    // net: the cascade yields to Zen at once (model-hopping replays the
+    // same refusal), and the fallback line says jammed, never "outside".
+    if (error?.response?.status === 429) noteCascadeRateLimited();
 
     // If this model failed, try the next one - but not every model on the
     // list, and never past the deadline. The caller is waiting.
@@ -797,16 +1007,21 @@ console.log('[Grumpy Bot] Trying next OpenRouter model...');
 async function getAIResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
   const preferred = aiConfig.provider || 'openrouter';
 
-  // Ordered cascade: preferred first, then rest as fallback
-  const cascade: Array<'groq' | 'gemini' | 'openrouter'> =
-    preferred === 'groq' ? ['groq', 'gemini', 'openrouter'] :
-    preferred === 'gemini' ? ['gemini', 'groq', 'openrouter'] :
-    ['openrouter', 'groq', 'gemini'];
+  // Ordered cascade: preferred first, then the rest with Zen ahead of
+  // OpenRouter - either way a Zen failure falls back to OpenRouter and an
+  // OpenRouter 429 falls forward to Zen before Groq/Gemini are tried.
+  const cascade: Array<'groq' | 'gemini' | 'openrouter' | 'zen'> =
+    preferred === 'groq' ? ['groq', 'zen', 'gemini', 'openrouter'] :
+    preferred === 'gemini' ? ['gemini', 'zen', 'groq', 'openrouter'] :
+    preferred === 'zen' ? ['zen', 'openrouter', 'groq', 'gemini'] :
+    ['openrouter', 'zen', 'groq', 'gemini'];
 
+  lastCascadeNote = null;
   for (const provider of cascade) {
     let response: string | null = null;
     if (provider === 'groq') response = await getGroqResponse(userMessage, context, aiConfig);
     else if (provider === 'gemini') response = await getGeminiResponse(userMessage, context, aiConfig);
+    else if (provider === 'zen') response = await getZenResponse(userMessage, context, aiConfig);
     else if (provider === 'openrouter') response = await getOpenRouterResponse(userMessage, context, aiConfig);
     if (response) return response;
   }
@@ -879,11 +1094,11 @@ console.log('[Grumpy Bot] Using AI response');
   // Its personality was never its own either: the voice is the system prompt
   // the model is given, so nothing was lost by deleting it.
   //
-  // When no provider answers, the co-sysop says so, once, in his own voice.
-  // A caller told the truth can ask again; a caller told a non-sequitur
-  // thinks the board is broken. The persona's own line (s.6) is what is
-  // remembered: a persona without its own would start talking like Kevin.
+  // When every provider answered 429 the models are jammed, not the
+  // board's data and not the net: one honest line instead of a persona
+  // fallback that blames "the outside".
 console.log('[Grumpy Bot] No provider answered - saying so');
+  if (lastCascadeNote === 'rate-limited') return ZEN_RATE_LIMITED_LINE;
   return stripMarkdown(stripEmojis(fallbackForPersona(cfg)));
 }
 

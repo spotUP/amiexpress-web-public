@@ -136,7 +136,7 @@ export interface OperatorChatConfig {
   ntfyUrl?: string;                // ntfy server URL (default https://ntfy.sh)
   // AI bot configuration
   aiEnabled: boolean;              // Enable AI bot on timeout
-  aiProvider: 'groq' | 'gemini' | 'openrouter' | 'rule-based'; // AI provider
+  aiProvider: 'groq' | 'gemini' | 'openrouter' | 'zen' | 'rule-based'; // AI provider
   aiModelName: string;             // Override model name (empty = provider default)
   aiTemperature: number;           // Temperature 0-2 (default 0.9)
   aiSystemPrompt: string;          // Override system prompt/personality
@@ -144,6 +144,7 @@ export interface OperatorChatConfig {
   groqApiKey: string;              // GROQ_API_KEY
   geminiApiKey: string;            // GEMINI_API_KEY
   openRouterApiKey: string;        // OPENROUTER_API_KEY
+  zenApiKey: string;               // ZEN_API_KEY (OpenCode Zen)
   // Bot typing behaviour
   botTypingSpeed: number;          // Base ms per character (default 40, range 5-200)
   botTypoProbability: number;      // Chance of typo per character 0-1 (default 0.04)

@@ -1217,6 +1217,7 @@ function aiConfigFrom(config: OperatorChatConfig, persona?: any): AIProviderConf
     groqApiKey: config.groqApiKey,
     geminiApiKey: config.geminiApiKey,
     openRouterApiKey: config.openRouterApiKey,
+    zenApiKey: (config as any).zenApiKey,
     botTypingSpeed: config.botTypingSpeed,
     botTypoProbability: config.botTypoProbability,
     botThinkTime: config.botThinkTime,

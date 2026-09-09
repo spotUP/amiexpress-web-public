@@ -2855,7 +2855,7 @@ console.log(`[Config API] Operator chat config updated by ${context.username}`);
           provider: 'openrouter' as const,
           botName: persona.handle,
           systemPrompt: promptFor(persona),
-          groqApiKey: cfg.groqApiKey, geminiApiKey: cfg.geminiApiKey, openRouterApiKey: cfg.openRouterApiKey,
+          groqApiKey: cfg.groqApiKey, geminiApiKey: cfg.geminiApiKey, openRouterApiKey: cfg.openRouterApiKey, zenApiKey: (cfg as any).zenApiKey,
           botTypingSpeed: cfg.botTypingSpeed, botTypoProbability: cfg.botTypoProbability, botThinkTime: 0,
         };
         reply = await getGrumpySysopResponse(String(message), { userHandle: 'Tester', nodeId: 1, conferenceName: 'Test', timeOnline: 0, messageHistory: [] } as any, aiConfig);
