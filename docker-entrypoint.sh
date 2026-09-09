@@ -817,10 +817,20 @@ else
         # the volume has and the image does not - door databases, logs - is
         # left alone. The excludes keep the image's copies of those from
         # landing on top of live data.
+        #
+        # Doors/*/data/ is runtime data by definition: WHIP tasks, bug
+        # reports, lobby state, high scores. The image ships SAMPLES of
+        # those, and without this exclude every boot overwrote the live
+        # board's data with the samples (a sysop's WHIP task list was reset
+        # by a deploy on 2026-09-09 - the container-local copy made it
+        # worse, but the sync would have clobbered a volume copy too).
+        # Fresh boards simply start empty; every door defaults missing
+        # files.
         if ! (cd "$DEFAULT_DATA_DIR/$sync_dir" && tar cf - \
                 --exclude='*.db' --exclude='*.db-journal' \
                 --exclude='*.db-wal' --exclude='*.db-shm' \
                 --exclude='*.sqlite' --exclude='*.sqlite3' \
+                --exclude='*/data/*' \
                 --exclude='*.log' .) \
              | (cd "$BBS_DATA_DIR/$sync_dir" && tar xf -); then
             echo "[Entrypoint] ERROR: failed to sync $sync_dir from image" >&2

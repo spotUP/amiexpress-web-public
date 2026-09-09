@@ -8,14 +8,34 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { StorageAPI, StorageOptions } from './types';
 
+/**
+ * Where door data roots when the caller does not say. Same rule as the
+ * bot plugin env files: BBS_DATA_DIR=<volume>/bbs means the volume root,
+ * everything else means the process cwd (dev checkouts, tests, doors run
+ * outside the board).
+ */
+export function defaultBaseDir(): string {
+  const bbsData = process.env.BBS_DATA_DIR;
+  if (bbsData && path.basename(bbsData) === 'bbs') {
+    return path.dirname(bbsData);
+  }
+  return process.cwd();
+}
+
 export class Storage implements StorageAPI {
   private storageDir: string;
 
-  constructor(options: StorageOptions, baseDir: string = process.cwd()) {
+  constructor(options: StorageOptions, baseDir?: string) {
     const { doorName, userId, global } = options;
 
-    // Build storage path
-    let storagePath = path.join(baseDir, 'data', 'doors', doorName);
+    // Build storage path. The default is volume-aware: inside the production
+    // container door JSON lived at <cwd>/data (the image layer) and every
+    // redeploy wiped it - a sysop's WHIP tasks vanished with a deploy
+    // (2026-09-09). With BBS_DATA_DIR=<volume>/bbs the base becomes the
+    // volume root, so data/doors/<door> survives recreates. Anywhere else
+    // (dev checkout, tests) behaves exactly as before.
+    const base = baseDir ?? defaultBaseDir();
+    let storagePath = path.join(base, 'data', 'doors', doorName);
 
     if (!global && userId) {
       storagePath = path.join(storagePath, 'users', userId);
