@@ -29,6 +29,10 @@ export class WhipApp {
   private currentUser!: UserStats;
   private exited = false;
   private bbsApi: any; // BBS API for event emission
+  // Last project created or boarded, per session. Creating a project used
+  // to leave the session nowhere, so the next Kanban opened Backlog (or a
+  // picker) and a task made in a hurry "vanished" - it was in Backlog.
+  private lastProjectId?: string;
 
   constructor(session: DoorSession) {
     this.session = session;
@@ -196,13 +200,18 @@ export class WhipApp {
       );
 
       // Show success message
-      this.showMessage('Task created! View in Kanban [K]');
+      this.showMessage('Task created in Backlog! View in Kanban [K]');
       await this.sleep(2000);
     }
   }
 
   private async showNewProject(): Promise<void> {
-    await createProject(this.screen, this.currentUser, this.dataManager, this.bbsApi);
+    const project = await createProject(this.screen, this.currentUser, this.dataManager, this.bbsApi);
+    if (project) {
+      this.lastProjectId = project.id;
+      this.showMessage(`Project "${project.name}" created! Open it in Kanban [K]`);
+      await this.sleep(2000);
+    }
   }
 
   private async showProjectList(): Promise<void> {
@@ -231,6 +240,17 @@ export class WhipApp {
       return;
     }
 
+    // Reopen where the session already was - a project just created, or a
+    // board just left. Otherwise the picker, which defaults to Backlog.
+    if (this.lastProjectId) {
+      const last = projects.find(p => p.id === this.lastProjectId);
+      if (last) {
+        await this.showKanbanBoard(last);
+        return;
+      }
+      this.lastProjectId = undefined;
+    }
+
     // Otherwise, show project selection
     // For MVP, we'll show the project list and let user select
     const selectedProject = await showProjectList(
@@ -247,6 +267,7 @@ export class WhipApp {
   }
 
   private async showKanbanBoard(project: Project): Promise<void> {
+    this.lastProjectId = project.id;
     await showKanbanBoard(
       this.screen,
       project,

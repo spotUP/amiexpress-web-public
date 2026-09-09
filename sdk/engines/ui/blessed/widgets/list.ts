@@ -74,6 +74,12 @@ export class List extends Element {
     // Update content
     this._updateContent();
 
+    // A preselected index must be visible from the first paint, not just
+    // tracked: without this a short list (WHIP's assignee picker) paints
+    // row zero while selected points elsewhere (2026-09-09). select() only
+    // emits 'select item', which nothing listens for this early.
+    this.select(this.selected);
+
     this.on('attach', () => {
       if (this.wrapItemsEnabled) {
         this._updateContent();
@@ -468,9 +474,13 @@ export class List extends Element {
       }
     }
 
-    // Final fallback
+    // Final fallback: the requested height, when the layout is not computed
+    // yet (constructor time). The old constant 10 meant a short list never
+    // scrolled to a preselected row on its first paint.
     if (visibleHeight <= 0) {
-      visibleHeight = 10; // Reasonable default
+      const optH = typeof this.options.height === 'number' ? this.options.height : 0;
+      const optBorder = this.options.border ? 2 : 0;
+      visibleHeight = optH > optBorder ? optH - optBorder : 10;
     }
 
     // Get total content lines

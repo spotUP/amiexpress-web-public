@@ -30,9 +30,47 @@ async function editTask(screen, task, user, dataManager, achievementManager, pro
     await showTaskEditor(screen, task, user, dataManager, false, project, bbsApi);
 }
 async function showTaskEditor(screen, task, user, dataManager, isNew, project, bbsApi) {
+    // Assignee picker source. Loaded here (not in the dialog body) because
+    // the dialog builds synchronously; a board the user never opened has no
+    // WHIP users yet, so this is allowed to be empty.
+    let knownUsers = {};
+    try {
+        knownUsers = await dataManager.loadUsers();
+    }
+    catch {
+        knownUsers = {};
+    }
+    // Handle per id for the picker; unknown ids stay selectable so an edit
+    // can never silently unassign.
+    const handleOf = (userId) => {
+        if (!userId)
+            return null;
+        const found = Object.values(knownUsers).find((u) => u.userId === userId);
+        return found ? found.handle : null;
+    };
+    const assigneeOptions = [
+        { label: '(Unassigned)', userId: null },
+        ...Object.values(knownUsers)
+            .map((u) => ({ label: u.handle, userId: u.userId }))
+            .sort((a, b) => a.label.localeCompare(b.label)),
+    ];
+    const currentHandle = handleOf(task.assignedTo);
+    if (task.assignedTo && !currentHandle) {
+        assigneeOptions.push({ label: `(Unknown: ${task.assignedTo})`, userId: task.assignedTo });
+    }
+    let selectedAssignee = 0;
+    if (task.assignedTo) {
+        const idx = assigneeOptions.findIndex((o) => o.userId === task.assignedTo);
+        if (idx !== -1)
+            selectedAssignee = idx;
+    }
     return new Promise((resolve) => {
         screen.program.enableMouse();
-        // Modal container
+        // Modal container - the project name rides in the label, so a task can
+        // never silently land somewhere unexpected (a new task opened from the
+        // Backlog quick action used to look identical to one opened on a real
+        // project, and the task "vanished" - it was in Backlog all along).
+        const projectName = project?.name ?? '';
         const modal = blessed_1.default.box({
             parent: screen,
             top: 'center',
@@ -44,7 +82,7 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
                 border: { fg: door_theme_1.T.accentAlt },
                 bg: door_theme_1.T.ground
             },
-            label: isNew ? ' New Task ' : ' Edit Task ',
+            label: `${isNew ? ' New Task' : ' Edit Task'}${projectName ? ` - ${projectName} ` : ' '}`,
             tags: true,
         });
         // Title input - bordered textbox with label on border (WORKING PATTERN)
@@ -72,7 +110,7 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
             top: 5,
             left: 1,
             width: '48%',
-            height: 9,
+            height: 7,
             border: { type: 'line' },
             label: ' Category ',
             tags: true,
@@ -105,6 +143,30 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
             focusable: true,
             items: PRIORITIES,
             selected: PRIORITIES.indexOf(task.priority),
+            style: {
+                border: { fg: door_theme_1.T.accent },
+                selected: { bg: door_theme_1.T.accent, fg: door_theme_1.T.ground },
+                item: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground },
+                bg: door_theme_1.T.ground
+            },
+        });
+        // Assignee list - left column under Category. The door never had a way
+        // to assign at all: new tasks silently took the creator.
+        const assigneeList = blessed_1.default.list({
+            parent: modal,
+            top: 12,
+            left: 1,
+            width: '48%',
+            height: 3,
+            border: { type: 'line' },
+            label: ' Assignee ',
+            tags: true,
+            keys: true,
+            vi: true,
+            mouse: true,
+            focusable: true,
+            items: assigneeOptions.map((o) => o.label),
+            selected: selectedAssignee,
             style: {
                 border: { fg: door_theme_1.T.accent },
                 selected: { bg: door_theme_1.T.accent, fg: door_theme_1.T.ground },
@@ -207,6 +269,7 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
             task.priority = PRIORITIES[priorityList.selected];
             task.points = parseInt(pointsInput.getValue()) || 10;
             task.description = descInput.getValue();
+            task.assignedTo = assigneeOptions[assigneeList.selected]?.userId ?? undefined;
             if (!task.title.trim()) {
                 const msg = blessed_1.default.message({
                     parent: screen,
@@ -247,7 +310,7 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
         // navigation is off and the dialog advances focus itself down this ring -
         // which is also why a focus TRAP is not used here: a trap suppresses
         // screen-level key handlers, and this dialog's keys live on the screen.
-        const focusables = [titleInput, categoryList, priorityList, pointsInput, descInput, saveBtn, cancelBtn];
+        const focusables = [titleInput, categoryList, priorityList, assigneeList, pointsInput, descInput, saveBtn, cancelBtn];
         const advanceFrom = (current) => {
             if (closed)
                 return;

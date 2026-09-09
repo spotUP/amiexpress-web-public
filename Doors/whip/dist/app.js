@@ -151,12 +151,17 @@ class WhipApp {
             // Open task editor for new task in Backlog project
             await (0, task_editor_1.createTask)(this.screen, backlogProject, this.currentUser, this.dataManager, this.bbsApi);
             // Show success message
-            this.showMessage('Task created! View in Kanban [K]');
+            this.showMessage('Task created in Backlog! View in Kanban [K]');
             await this.sleep(2000);
         }
     }
     async showNewProject() {
-        await (0, project_editor_1.createProject)(this.screen, this.currentUser, this.dataManager, this.bbsApi);
+        const project = await (0, project_editor_1.createProject)(this.screen, this.currentUser, this.dataManager, this.bbsApi);
+        if (project) {
+            this.lastProjectId = project.id;
+            this.showMessage(`Project "${project.name}" created! Open it in Kanban [K]`);
+            await this.sleep(2000);
+        }
     }
     async showProjectList() {
         await (0, project_list_1.showProjectList)(this.screen, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi);
@@ -174,6 +179,16 @@ class WhipApp {
             await this.showKanbanBoard(projects[0]);
             return;
         }
+        // Reopen where the session already was - a project just created, or a
+        // board just left. Otherwise the picker, which defaults to Backlog.
+        if (this.lastProjectId) {
+            const last = projects.find(p => p.id === this.lastProjectId);
+            if (last) {
+                await this.showKanbanBoard(last);
+                return;
+            }
+            this.lastProjectId = undefined;
+        }
         // Otherwise, show project selection
         // For MVP, we'll show the project list and let user select
         const selectedProject = await (0, project_list_1.showProjectList)(this.screen, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi);
@@ -182,6 +197,7 @@ class WhipApp {
         }
     }
     async showKanbanBoard(project) {
+        this.lastProjectId = project.id;
         await (0, kanban_board_1.showKanbanBoard)(this.screen, project, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi);
     }
     async showMyTasks() {
