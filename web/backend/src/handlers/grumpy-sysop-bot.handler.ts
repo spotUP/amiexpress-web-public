@@ -125,11 +125,12 @@ export const PER_ROUND_MS = 12000;
 /**
  * How long the co-sysop's reply may be.
  *
- * 1 000 tokens of budget is 1 000 tokens a slow model may spend generating,
- * and the caller waits for every one of them. The bot answers in a line or
- * three; the tool loop gets the same cap for the same reason.
+ * The caller waits for every generated token, and the voice rules say less
+ * is more - a one-liner gets a one-liner. 150 tokens is ~110 words, room for
+ * three sentences and no room for an essay; the prompt asks for short, this
+ * makes long impossible. Same cap for the tool loop's reply for the same reason.
  */
-export const CHAT_REPLY_TOKENS = 400;
+export const CHAT_REPLY_TOKENS = 150;
 
 /**
  * WHICH FREE MODEL ANSWERS FASTEST - measured, not guessed.
