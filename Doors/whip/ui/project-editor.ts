@@ -247,7 +247,12 @@ async function showProjectEditor(
       screen.render();
     };
 
+    // Double-submit guard, same as the task editor: one project object
+    // saved twice shows up duplicated under one id.
+    let saving = false;
     const save = async () => {
+      if (saving) return;
+      saving = true;
       project.name = nameInput.getValue();
       project.type = PROJECT_TYPES[typeList.selected!] as ProjectType;
       project.status = PROJECT_STATUSES[statusList.selected!] as ProjectStatus;
@@ -261,6 +266,7 @@ async function showProjectEditor(
       }
 
       if (!project.name.trim()) {
+        saving = false;
         const msg = blessed.message({
           parent: screen,
           top: 'center',

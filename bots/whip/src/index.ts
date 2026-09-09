@@ -344,13 +344,15 @@ async function handleWhip(interaction: ChatInputCommandInteraction, api: WhipApi
       case 'task-edit': {
         const id = interaction.options.getString('id', true).trim();
         const patch: Record<string, unknown> = {};
-        for (const key of ['title', 'description', 'category', 'priority', 'points', 'assign'] as const) {
+        for (const key of ['title', 'description', 'category', 'priority', 'points'] as const) {
           const value = interaction.options.getString(key, false);
-          if (value !== null) patch[key === 'assign' ? 'assignedTo' : key] = key === 'points' ? value : value.trim();
+          if (value !== null) patch[key] = key === 'points' ? value : value.trim();
         }
+        const assignRaw = interaction.options.getString('assign', false);
         const actor = await requireLinkedUser(interaction, api);
         if (!actor) return;
         try {
+          if (assignRaw !== null) patch.assignedTo = await resolveAssignee(api, assignRaw.trim(), actor.userId);
           if (patch.points !== undefined) patch.points = parsePoints(patch.points as string);
           const task = await api.updateTask(id, patch, actor.userId, interaction.user.id);
           await interaction.editReply({ content: `Updated **${task.title}**.` });
@@ -441,6 +443,25 @@ function writeErrorMessage(err: unknown): string {
   return err instanceof WhipApiError ? err.message : 'WHIP request failed.';
 }
 
+/**
+ * Assignee as typed: a handle resolves to its user id, a raw id passes
+ * through, blank means the backend default (the creator). Unknown handles
+ * are rejected with the user list, not silently dropped.
+ */
+async function resolveAssignee(api: WhipApiClient, raw: string, fallbackUserId: string): Promise<string> {
+  if (!raw) return fallbackUserId;
+  try {
+    const users = await api.listUsers();
+    const hit = users.find((u) => u.handle.toLowerCase() === raw.toLowerCase() || u.userId === raw);
+    if (hit) return hit.userId;
+    const known = users.map((u) => u.handle).join(', ') || 'nobody yet';
+    throw new WhipApiError(`Unknown user "${raw}". Known: ${known}.`, 400);
+  } catch (err) {
+    if (err instanceof WhipApiError) throw err;
+    return fallbackUserId;
+  }
+}
+
 async function completeTask(
   api: WhipApiClient,
   taskId: string,
@@ -520,12 +541,14 @@ async function handleModalSubmit(interaction: any, api: WhipApiClient, parsed: {
   try {
     if (parsed && parsed.action === 'newtask') {
       const fields = interaction.fields;
+      const assigneeRaw = fields.getTextInputValue('assignee').trim();
       const task = await api.createTask({
         projectId: parsed.taskId,
         title: fields.getTextInputValue('title').trim(),
         category: fields.getTextInputValue('category').trim() || undefined,
         points: parsePoints(fields.getTextInputValue('points')),
         description: fields.getTextInputValue('description'),
+        assignedTo: await resolveAssignee(api, assigneeRaw, actor.userId),
         actorUserId: actor.userId,
         discordId: actor.discordId,
       });

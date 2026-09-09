@@ -50,7 +50,7 @@ export async function buttonsCarryTaskIds(): Promise<void> {
 export async function modalsCarryContext(): Promise<void> {
   const task = buildNewTaskModal('p9').toJSON() as any;
   assert.ok(task.custom_id.endsWith(':p9'), 'task modal remembers its project');
-  assert.strictEqual(task.components.length, 4, 'title, category, points, description');
+  assert.strictEqual(task.components.length, 5, 'title, category, points, assignee, description');
   const project = buildNewProjectModal().toJSON() as any;
   assert.strictEqual(project.components.length, 3, 'name, type, description');
 }

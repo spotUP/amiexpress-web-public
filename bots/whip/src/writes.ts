@@ -100,10 +100,16 @@ export function buildNewTaskModal(projectId: string): ModalBuilder {
     .setLabel('Description')
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(false);
+  const assignee = new TextInputBuilder()
+    .setCustomId('assignee')
+    .setLabel('Assignee (handle, optional)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false);
   modal.addComponents(
     new ActionRowBuilder<TextInputBuilder>().addComponents(title),
     new ActionRowBuilder<TextInputBuilder>().addComponents(category),
     new ActionRowBuilder<TextInputBuilder>().addComponents(points),
+    new ActionRowBuilder<TextInputBuilder>().addComponents(assignee),
     new ActionRowBuilder<TextInputBuilder>().addComponents(description)
   );
   return modal;

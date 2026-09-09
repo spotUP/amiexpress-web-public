@@ -213,7 +213,13 @@ async function showProjectEditor(screen, project, user, dataManager, isNew, bbsA
             screen.remove(modal);
             screen.render();
         };
+        // Double-submit guard, same as the task editor: one project object
+        // saved twice shows up duplicated under one id.
+        let saving = false;
         const save = async () => {
+            if (saving)
+                return;
+            saving = true;
             project.name = nameInput.getValue();
             project.type = PROJECT_TYPES[typeList.selected];
             project.status = PROJECT_STATUSES[statusList.selected];
@@ -226,6 +232,7 @@ async function showProjectEditor(screen, project, user, dataManager, isNew, bbsA
                 project.partyId = upcomingParties[partyIndex - 1].id;
             }
             if (!project.name.trim()) {
+                saving = false;
                 const msg = blessed_1.default.message({
                     parent: screen,
                     top: 'center',
