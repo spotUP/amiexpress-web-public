@@ -61,6 +61,9 @@ import {
   buildTaskButtons,
   parseAction,
   parsePoints,
+  projectChoices,
+  taskChoices,
+  userChoices,
 } from './writes';
 
 const linkCommand = new SlashCommandBuilder()
@@ -79,53 +82,53 @@ const whipCommand = new SlashCommandBuilder()
       .setName('tasks')
       .setDescription('List tasks in a project')
       .addStringOption((opt) =>
-        opt.setName('project').setDescription('Project id (see /whip projects)').setRequired(true)
+        opt.setName('project').setDescription('Project — start typing to pick').setRequired(true).setAutocomplete(true)
       )
   )
   .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
     sub
       .setName('my-tasks')
       .setDescription('List tasks assigned to you (or to another user)')
-      .addStringOption((opt) => opt.setName('user').setDescription('BBS user id').setRequired(false))
+      .addStringOption((opt) => opt.setName('user').setDescription('BBS user — start typing to pick').setRequired(false).setAutocomplete(true))
   )
   .addSubcommand((sub: SlashCommandSubcommandBuilder) => sub.setName('leaderboard').setDescription('Show the WHIP leaderboard'))
   .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
     sub
       .setName('achievements')
       .setDescription('Show achievements (defaults to your linked BBS user)')
-      .addStringOption((opt) => opt.setName('user').setDescription('BBS user id').setRequired(false))
+      .addStringOption((opt) => opt.setName('user').setDescription('BBS user — start typing to pick').setRequired(false).setAutocomplete(true))
   )
   .addSubcommand((sub: SlashCommandSubcommandBuilder) => sub.setName('parties').setDescription('List upcoming parties'))
   .addSubcommand((sub: SlashCommandSubcommandBuilder) => sub.setName('help').setDescription('How to use this bot'))
   .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
     sub.setName('task').setDescription('Show one task with action buttons')
-      .addStringOption((opt) => opt.setName('id').setDescription('Task id').setRequired(true))
+      .addStringOption((opt) => opt.setName('id').setDescription('Task id — start typing to pick').setRequired(true).setAutocomplete(true))
   )
   .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
     sub.setName('task-new').setDescription('Create a task (form)')
-      .addStringOption((opt) => opt.setName('project').setDescription('Project id').setRequired(true))
+      .addStringOption((opt) => opt.setName('project').setDescription('Project id — start typing to pick').setRequired(true).setAutocomplete(true))
   )
   .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
     sub.setName('task-edit').setDescription('Edit a task (only given fields change)')
-      .addStringOption((opt) => opt.setName('id').setDescription('Task id').setRequired(true))
+      .addStringOption((opt) => opt.setName('id').setDescription('Task id — start typing to pick').setRequired(true).setAutocomplete(true))
       .addStringOption((opt) => opt.setName('title').setDescription('New title').setRequired(false))
       .addStringOption((opt) => opt.setName('description').setDescription('New description').setRequired(false))
       .addStringOption((opt) => opt.setName('category').setDescription('code, music, gfx, design, effects, engine, 3d, bug').setRequired(false))
       .addStringOption((opt) => opt.setName('priority').setDescription('lamer, scener, elite, legend').setRequired(false))
       .addStringOption((opt) => opt.setName('points').setDescription('Points').setRequired(false))
-      .addStringOption((opt) => opt.setName('assign').setDescription('BBS user id to assign to').setRequired(false))
+      .addStringOption((opt) => opt.setName('assign').setDescription('BBS user to assign to — start typing to pick').setRequired(false).setAutocomplete(true))
   )
   .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
     sub.setName('task-delete').setDescription('Delete a task (asks first)')
-      .addStringOption((opt) => opt.setName('id').setDescription('Task id').setRequired(true))
+      .addStringOption((opt) => opt.setName('id').setDescription('Task id — start typing to pick').setRequired(true).setAutocomplete(true))
   )
   .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
     sub.setName('task-complete').setDescription('Complete a task, awarding points')
-      .addStringOption((opt) => opt.setName('id').setDescription('Task id').setRequired(true))
+      .addStringOption((opt) => opt.setName('id').setDescription('Task id — start typing to pick').setRequired(true).setAutocomplete(true))
   )
   .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
     sub.setName('task-move').setDescription('Move a task to another column')
-      .addStringOption((opt) => opt.setName('id').setDescription('Task id').setRequired(true))
+      .addStringOption((opt) => opt.setName('id').setDescription('Task id — start typing to pick').setRequired(true).setAutocomplete(true))
       .addStringOption((opt) =>
         opt.setName('status').setDescription('Column').setRequired(true)
           .addChoices(
@@ -141,7 +144,7 @@ const whipCommand = new SlashCommandBuilder()
   )
   .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
     sub.setName('project-delete').setDescription('Delete a project and its tasks (asks first)')
-      .addStringOption((opt) => opt.setName('id').setDescription('Project id').setRequired(true))
+      .addStringOption((opt) => opt.setName('id').setDescription('Project id — start typing to pick').setRequired(true).setAutocomplete(true))
   )
   .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
     sub.setName('users').setDescription('List BBS users for assigning tasks')
@@ -459,7 +462,38 @@ async function moveTaskTo(
   return `Moved **${result.task.title}** to ${result.task.status}.`;
 }
 
-/** Component + modal traffic (buttons, selects, forms). True when consumed. */
+/** Autocomplete for every id-typed option: type two letters, pick. */
+async function handleAutocomplete(interaction: any, api: WhipApiClient): Promise<void> {
+  const focused = interaction.options.getFocused(true);
+  const query = String(focused.value ?? '');
+  try {
+    let sub = '';
+    try {
+      sub = interaction.options.getSubcommand();
+    } catch {
+      sub = '';
+    }
+    if (focused.name === 'project' || (focused.name === 'id' && sub === 'project-delete')) {
+      const projects = await api.listProjects();
+      await interaction.respond(projectChoices(projects, query));
+    } else if (focused.name === 'id') {
+      const tasks = await api.listAllTasks();
+      await interaction.respond(taskChoices(tasks, query));
+    } else if (focused.name === 'user' || focused.name === 'assign') {
+      const users = await api.listUsers();
+      await interaction.respond(userChoices(users, query));
+    } else {
+      await interaction.respond([]);
+    }
+  } catch {
+    // Autocomplete must never error visibly; empty list beats a failure.
+    try {
+      await interaction.respond([]);
+    } catch {
+      // Already answered or gone.
+    }
+  }
+}
 async function handleWriteComponent(interaction: any, api: WhipApiClient): Promise<boolean> {
   const parsed = parseAction(interaction.customId ?? '');
   if (!parsed && !isNewProjectModal(interaction)) return false;
@@ -653,6 +687,10 @@ async function main(): Promise<void> {
 
   client.on('interactionCreate', async (interaction: Interaction) => {
     try {
+      if (interaction.isAutocomplete()) {
+        await handleAutocomplete(interaction, api);
+        return;
+      }
       if (interaction.isChatInputCommand()) {
         if (interaction.commandName === 'link') {
           await handleLink(interaction, api);

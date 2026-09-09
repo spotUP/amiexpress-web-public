@@ -90,8 +90,17 @@ describe('WHIP bot routes', () => {
     expect(res.body.data[0]).toMatchObject({ id: 'revision-2026' });
   });
 
-  it('serves one task and 404s ghosts', async () => {
-    const res = await request(app).get('/api/whip/tasks/t1').set(auth);
+  it('serves all tasks with project names for autocomplete', async () => {
+    const res = await request(app).get('/api/whip/tasks/all').set(auth);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(3);
+    expect(res.body.data.find((t: any) => t.id === 't1')).toMatchObject({
+      title: 'Fix the scroller',
+      projectName: 'Desert Dream',
+    });
+  });
+
+  it('serves one task and 404s ghosts', async () => {    const res = await request(app).get('/api/whip/tasks/t1').set(auth);
     expect(res.status).toBe(200);
     expect(res.body.data.title).toBe('Fix the scroller');
     expect((await request(app).get('/api/whip/tasks/ghost').set(auth)).status).toBe(404);

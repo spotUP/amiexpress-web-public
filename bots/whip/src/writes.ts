@@ -143,3 +143,52 @@ export function parsePoints(raw: string | null | undefined): number | undefined 
   if (!Number.isFinite(n) || n < 0) throw new Error('Points must be a non-negative number.');
   return n;
 }
+
+export interface Choice {
+  name: string;
+  value: string;
+}
+
+const MAX_CHOICES = 25;
+const MAX_NAME = 100;
+
+function matches(haystack: string, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return haystack.toLowerCase().includes(q);
+}
+
+function capName(name: string): string {
+  return name.length > MAX_NAME ? name.slice(0, MAX_NAME - 1) + '…' : name;
+}
+
+/** Autocomplete sources. Pure: filter here, fetch in index.ts. */
+export function projectChoices(
+  projects: Array<{ id: string; name: string; status: string; taskCounts: { total: number; done: number } }>,
+  query: string
+): Choice[] {
+  return projects
+    .filter((p) => matches(`${p.name} ${p.id}`, query))
+    .slice(0, MAX_CHOICES)
+    .map((p) => ({ name: capName(`${p.name} (${p.status}, ${p.taskCounts.done}/${p.taskCounts.total})`), value: p.id }));
+}
+
+export function taskChoices(
+  tasks: Array<{ id: string; title: string; status: string; projectName?: string; projectId?: string }>,
+  query: string
+): Choice[] {
+  return tasks
+    .filter((t) => matches(`${t.title} ${t.projectName ?? t.projectId ?? ''} ${t.status}`, query))
+    .slice(0, MAX_CHOICES)
+    .map((t) => ({
+      name: capName(`${t.title} [${t.status}]${t.projectName ? ` — ${t.projectName}` : ''}`),
+      value: t.id,
+    }));
+}
+
+export function userChoices(users: Array<{ userId: string; handle: string }>, query: string): Choice[] {
+  return users
+    .filter((u) => matches(`${u.handle} ${u.userId}`, query))
+    .slice(0, MAX_CHOICES)
+    .map((u) => ({ name: capName(u.handle), value: u.userId }));
+}

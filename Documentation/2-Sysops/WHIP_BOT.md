@@ -1,7 +1,17 @@
 # WHIP Discord mirror bot — sysop setup
 
-Full WHIP use from Discord: link, read commands, live activity feed.
+Full WHIP use from Discord: link, reads, writes, live activity feed.
 Plan: `thoughts/shared/plans/2026-09-09-whip-discord-bot.md`.
+
+## 0. What users get
+
+- `/link` + `/whip help` (also answered on mention/DM), reads: `projects`,
+  `tasks`, `task`, `my-tasks`, `leaderboard`, `achievements`, `parties`,
+  `users`; writes: `task-new`, `task-edit`, `task-delete`, `task-complete`,
+  `task-move`, `project-new`, `project-delete` — with buttons, a move
+  select, delete confirms, and creation modals. Completing awards points,
+  checks achievements, and posts to the feed exactly like the door.
+- Writes require a linked account; links are verified on every write.
 
 ## 1. Discord application (5 min, Discord Developer Portal)
 

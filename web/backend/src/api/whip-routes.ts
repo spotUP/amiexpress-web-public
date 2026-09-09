@@ -91,6 +91,16 @@ export function createWhipRouter(database: Database): ReturnType<typeof express.
     }
   });
 
+  // Before /tasks/:id: exact match wins, but keep the specific path first
+  // anyway so a project literally named "all" can never shadow the list.
+  router.get('/tasks/all', async (_req: Request, res: Response) => {
+    try {
+      sendResponse(res, await whipService.listAllTasks());
+    } catch (error) {
+      sendError(res, error instanceof Error ? error.message : 'Failed to load tasks', 500);
+    }
+  });
+
   router.get('/tasks/:id', async (req: Request, res: Response) => {
     try {
       const task = await whipService.getTask(req.params.id);

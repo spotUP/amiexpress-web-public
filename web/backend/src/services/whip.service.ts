@@ -207,6 +207,13 @@ class WhipService {
     return (await dm.getTask(id)) ?? null;
   }
 
+  async listAllTasks(): Promise<Array<WhipTask & { projectName: string }>> {
+    const dm = sharedDm();
+    const [tasks, projects] = await Promise.all([dm.loadTasks(), dm.loadProjects()]);
+    const names = new Map(projects.map((p: any) => [p.id, p.name]));
+    return tasks.map((t: any) => ({ ...t, projectName: names.get(t.projectId) ?? t.projectId }));
+  }
+
   async listUserTasks(userId: string): Promise<WhipUserTasks> {
     const dm = sharedDm();
     const [tasks, user] = await Promise.all([dm.getTasksForUser(userId), dm.getUser(userId)]);

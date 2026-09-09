@@ -232,7 +232,13 @@ export class WhipApiClient {
     return envelopeData<WhipTask>(res.status, res.data);
   }
 
-  async listUserTasks(userId: string): Promise<WhipUserTasks> {    const res = await this.request({
+  /** Every task with its project name: autocomplete source. */
+  async listAllTasks(): Promise<Array<WhipTask & { projectName: string }>> {
+    const res = await this.request({ method: 'get', url: '/api/whip/tasks/all', headers: this.headers() });
+    return envelopeData<Array<WhipTask & { projectName: string }>>(res.status, res.data);
+  }
+
+    async listUserTasks(userId: string): Promise<WhipUserTasks> {    const res = await this.request({
       method: 'get',
       url: '/api/whip/my-tasks',
       headers: this.headers(),
