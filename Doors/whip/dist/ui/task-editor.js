@@ -9,7 +9,7 @@ const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helper
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const uuid_1 = require("uuid");
 const door_theme_1 = require("../door-theme");
-const CATEGORIES = ['code', 'music', 'gfx', 'design', 'effects', 'engine', '3d'];
+const CATEGORIES = ['code', 'music', 'gfx', 'design', 'effects', 'engine', '3d', 'bug'];
 const PRIORITIES = ['lamer', 'scener', 'elite', 'legend'];
 async function createTask(screen, project, user, dataManager, bbsApi) {
     const newTask = {
@@ -185,7 +185,11 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
                 hover: { bg: 'lightred', fg: door_theme_1.T.ground }
             }
         });
+        let closed = false;
         const cleanup = () => {
+            if (closed)
+                return;
+            closed = true;
             screen.off('keypress', keyHandler);
             screen.remove(modal);
             screen.render();
@@ -231,13 +235,47 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
         };
         saveBtn.on('press', () => { save(); });
         cancelBtn.on('press', () => { cleanup(); resolve(); });
+        // Tab order for the dialog. WHIP runs with focusKeys:false (arrows must
+        // never yank focus out of its lists), so the screen's default Tab
+        // navigation is off and the dialog advances focus itself down this ring -
+        // which is also why a focus TRAP is not used here: a trap suppresses
+        // screen-level key handlers, and this dialog's keys live on the screen.
+        const focusables = [titleInput, categoryList, priorityList, pointsInput, descInput, saveBtn, cancelBtn];
+        const advanceFrom = (current) => {
+            if (closed)
+                return;
+            const i = focusables.indexOf(current);
+            focusables[(i + 1) % focusables.length].focus();
+            screen.render();
+        };
+        const retreatFrom = (current) => {
+            if (closed)
+                return;
+            const i = focusables.indexOf(current);
+            focusables[(i - 1 + focusables.length) % focusables.length].focus();
+            screen.render();
+        };
+        // Enter in a text field advances to the next field (the textbox consumes
+        // Enter as submit); Enter on a focused button presses it. Ctrl+Enter
+        // saves from anywhere.
+        titleInput.on('submit', () => advanceFrom(titleInput));
+        pointsInput.on('submit', () => advanceFrom(pointsInput));
+        descInput.on('submit', () => advanceFrom(descInput));
         const keyHandler = (ch, key) => {
+            if (closed)
+                return;
             if (key.name === 'escape') {
                 cleanup();
                 resolve();
             }
             else if (key.name === 'enter' && key.ctrl) {
                 save();
+            }
+            else if (key.name === 'tab') {
+                if (key.shift)
+                    retreatFrom(screen.getFocused());
+                else
+                    advanceFrom(screen.getFocused());
             }
         };
         screen.on('keypress', keyHandler);

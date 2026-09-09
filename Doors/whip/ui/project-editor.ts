@@ -230,7 +230,10 @@ async function showProjectEditor(
       }
     });
 
+    let closed = false;
     const cleanup = () => {
+      if (closed) return;
+      closed = true;
       screen.off('keypress', keyHandler);
       screen.remove(modal);
       screen.render();
@@ -287,9 +290,34 @@ async function showProjectEditor(
     saveBtn.on('press', () => { save(); });
     cancelBtn.on('press', () => { cleanup(); resolve(null); });
 
+    // Tab order for the dialog - same trap-free ring as the task editor:
+    // WHIP's focusKeys:false turns off the screen default, and a focus trap
+    // would suppress this dialog's screen-level keys, so the ring lives here.
+    const focusables: any[] = [nameInput, typeList, statusList, partyList, descInput, saveBtn, cancelBtn];
+    const advanceFrom = (current: any) => {
+      if (closed) return;
+      const i = focusables.indexOf(current);
+      focusables[(i + 1) % focusables.length].focus();
+      screen.render();
+    };
+    const retreatFrom = (current: any) => {
+      if (closed) return;
+      const i = focusables.indexOf(current);
+      focusables[(i - 1 + focusables.length) % focusables.length].focus();
+      screen.render();
+    };
+
+    nameInput.on('submit', () => advanceFrom(nameInput));
+    descInput.on('submit', () => advanceFrom(descInput));
+
     const keyHandler = (ch: any, key: any) => {
+      if (closed) return;
       if (key.name === 'escape') { cleanup(); resolve(null); }
       else if (key.name === 'enter' && key.ctrl) { save(); }
+      else if (key.name === 'tab') {
+        if (key.shift) retreatFrom(screen.getFocused());
+        else advanceFrom(screen.getFocused());
+      }
     };
 
     screen.on('keypress', keyHandler);

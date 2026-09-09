@@ -15,7 +15,7 @@ export interface Project {
   currentSize?: number;
 }
 
-export type TaskCategory = 'code' | 'music' | 'gfx' | 'design' | 'effects' | 'engine' | '3d';
+export type TaskCategory = 'code' | 'music' | 'gfx' | 'design' | 'effects' | 'engine' | '3d' | 'bug';
 export type TaskStatus = 'todo' | 'in-progress' | 'testing' | 'done';
 export type TaskPriority = 'lamer' | 'scener' | 'elite' | 'legend';
 

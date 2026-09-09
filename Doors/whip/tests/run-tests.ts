@@ -7,7 +7,7 @@
 
 /* eslint-disable no-console */
 
-const TEST_MODULES = ['./opens.test', './confirm-delete.test', './field-labels.test'];
+const TEST_MODULES = ['./opens.test', './confirm-delete.test', './field-labels.test', './task-dialog-tab.test'];
 
 const realLog = console.log;
 console.log = () => {};
