@@ -24,6 +24,10 @@ import { conferencesFromDisk, commandsOnDisk, callerLines } from './board-card';
 import { tierAllows, tierOf, remainingToday, spendToday, SYSOP_LEVEL, type Tier } from './fences';
 import { emitterForNodeId } from '../../server/session-emitter-registry';
 import { searchProductions, searchGroups, searchParties } from './external/demozoo';
+import {
+  searchDoors, doorDetail, doorRandom, doorStats,
+  searchFiles, fileDetail, fileRandom, listingStats, listingFacts,
+} from './external/doorrepo';
 import { lookupGame } from './external/games';
 
 /** The slice of the board's database the sysop-grade tools use; injectable. */
@@ -160,9 +164,51 @@ export const CALLER_TOOLS: SysopTool[] = [
     },
   },
   {
+    name: 'search_doors',
+    description: 'The Up Rough door archive: BBS doors by keyword (name, author, group, description, DIZ). kind=search needs query; kind=detail needs an archive name like MST-CM20.LHA; kind=random needs nothing; kind=stats gives archive totals. Use it for "find me a door about X", "tell me about door Y", "surprise me".',
+    parameters: { type: 'object', properties: { kind: { type: 'string', enum: ['search', 'detail', 'random', 'stats'] }, query: { type: 'string' } }, required: ['kind'], additionalProperties: false },
+    tier: 'caller',
+    async run(_ctx, args) {
+      switch (String(args.kind)) {
+        case 'search': {
+          const q = str(args.query, 80);
+          return { content: q ? await searchDoors(q) : 'What should I look up?' };
+        }
+        case 'detail': {
+          const q = str(args.query, 40);
+          return { content: q ? await doorDetail(q) : 'Which archive? Like MST-CM20.LHA.' };
+        }
+        case 'random': return { content: await doorRandom() };
+        case 'stats': return { content: await doorStats() };
+        default: return { content: 'kind must be search, detail, random or stats.' };
+      }
+    },
+  },
+  {
+    name: 'search_files',
+    description: 'The BBS file listing: files by filename/description keyword. kind=search needs query; kind=detail needs a numeric file id; kind=random needs nothing; kind=stats gives listing totals; kind=facts gives span, first art-DIZ, peaks and records. Use it for "find files about X", "tell me about file N", "surprise me", "how big is the listing".',
+    parameters: { type: 'object', properties: { kind: { type: 'string', enum: ['search', 'detail', 'random', 'stats', 'facts'] }, query: { type: 'string' } }, required: ['kind'], additionalProperties: false },
+    tier: 'caller',
+    async run(_ctx, args) {
+      switch (String(args.kind)) {
+        case 'search': {
+          const q = str(args.query, 80);
+          return { content: q ? await searchFiles(q) : 'What should I look up?' };
+        }
+        case 'detail': {
+          const q = str(args.query, 20);
+          return { content: q ? await fileDetail(q) : 'Which file id?' };
+        }
+        case 'random': return { content: await fileRandom() };
+        case 'stats': return { content: await listingStats() };
+        case 'facts': return { content: await listingFacts() };
+        default: return { content: 'kind must be search, detail, random, stats or facts.' };
+      }
+    },
+  },
+  {
     name: 'lookup_game',
-    description: 'A COMMERCIAL VIDEO GAME by title (any platform): release date, platforms, genre, a summary. Not for demoscene groups, sceners, demos or BBS software - those are search_demozoo. If the name is a scene group, asking here returns unrelated retail games that happen to share a word.',
-    parameters: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'], additionalProperties: false },
+    description: 'A COMMERCIAL VIDEO GAME by title (any platform): release date, platforms, genre, a summary. Not for demoscene groups, sceners, demos or BBS software - those are search_demozoo. If the name is a scene group, asking here returns unrelated retail games that happen to share a word.',    parameters: { type: 'object', properties: { title: { type: 'string' } }, required: ['title'], additionalProperties: false },
     tier: 'caller',
     async run(ctx, args) {
       return { content: await lookupGame(str(args.title, 80), ctx.rawgKey) };
