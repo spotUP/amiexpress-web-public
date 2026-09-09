@@ -32,6 +32,8 @@ export interface ToolLoopRequest {
 
 export interface ToolLoopResult {
   text: string | null;
+  /** True when the model stopped for length, not for finishing. */
+  truncated: boolean;
   afters: Array<() => Promise<void>>;
   /** For the log and the tests: what was asked. */
   calls: Array<{ name: string; args: Record<string, unknown>; outcome: string }>;
@@ -62,8 +64,8 @@ export async function askWithTools(req: ToolLoopRequest): Promise<ToolLoopResult
   for (let round = 0; round <= MAX_ROUNDS; round++) {
     const left = req.deadline - Date.now();
     if (left < 500) {
-console.log('[Grumpy Bot] tool loop: out of time before the reply');
-      return { text: null, afters, calls, toolResults };
+console.log('[Tool loop] tool loop: out of time before the reply');
+      return { text: null, truncated: false, afters, calls, toolResults };
     }
     const body: Record<string, unknown> = {
       model: req.model,
@@ -81,12 +83,12 @@ console.log('[Grumpy Bot] tool loop: out of time before the reply');
     // its cost is recorded and a faster model answers inside the same budget.
     const data = await req.post(body, Math.min(left, req.perRoundMs ?? DEFAULT_PER_ROUND_MS));
     const message = data?.choices?.[0]?.message;
-    if (!message) return { text: null, afters, calls, toolResults };
+    if (!message) return { text: null, truncated: false, afters, calls, toolResults };
 
     const toolCalls: any[] = Array.isArray(message.tool_calls) ? message.tool_calls : [];
     if (toolCalls.length === 0 || round === MAX_ROUNDS) {
       const text = typeof message.content === 'string' && message.content.trim() ? message.content : null;
-      return { text, afters, calls, toolResults };
+      return { text, truncated: message.finish_reason === 'length', afters, calls, toolResults };
     }
 
     // The assistant's turn, tool calls and all, then one tool message per call.
@@ -111,5 +113,5 @@ console.log('[Grumpy Bot] tool loop: out of time before the reply');
       messages.push({ role: 'tool', tool_call_id: call?.id ?? name, content: asData(result.content) });
     }
   }
-  return { text: null, afters, calls, toolResults };
+  return { text: null, truncated: false, afters, calls, toolResults };
 }

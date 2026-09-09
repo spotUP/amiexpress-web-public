@@ -19,6 +19,14 @@ import type { SysopTool, ToolContext } from './sysop-ai/tools';
 import { getSystemTime } from '../utils/date-time.util';
 
 /**
+ * A reply the model did not finish is marked, never silently cut: the next
+ * caller message continues from the truncated history, so "go on" works.
+ */
+export function withContinuation(text: string): string {
+  return `${text.trimEnd()}\n…(more coming - say "go on")`;
+}
+
+/**
  * BBS is ASCII only - no emojis. The terminal cannot render them and they
  * break PETSCII/ANSI art. Only ASCII smileys like :-) :-( ;-) :-D are allowed.
  * This strips any emoji the model slips in (VOICE_RULES forbids them, but
@@ -33,6 +41,23 @@ function stripEmojis(text: string): string {
     .replace(/[\uFE0F\uFE0E\u200D]/gu, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
+}
+
+/**
+ * BBS is plain text - no markdown either. The model wraps titles in
+ * **bold** and *italics* that arrive on the terminal as literal asterisks
+ * ("*The Swedish Booze Elite*", photographed 2026-09-09). Paired markers
+ * come off; lone characters stay, scene handles use them deliberately.
+ */
+export function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*(\S[^*]*\S|\S)\*\*/g, '$1')
+    .replace(/__(\S[^_]*\S|\S)__/g, '$1')
+    .replace(/\*(\S[^*]*\S|\S)\*/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^>\s?/gm, '')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)');
 }
 
 interface ChatContext {
@@ -126,11 +151,13 @@ export const PER_ROUND_MS = 12000;
  * How long the co-sysop's reply may be.
  *
  * The caller waits for every generated token, and the voice rules say less
- * is more - a one-liner gets a one-liner. 150 tokens is ~110 words, room for
- * three sentences and no room for an essay; the prompt asks for short, this
- * makes long impossible. Same cap for the tool loop's reply for the same reason.
+ * is more - a one-liner gets a one-liner. 250 tokens is room for a real
+ * answer and no room for an essay; the prompt asks for short, this makes
+ * long unlikely, and withContinuation() marks the rare cut instead of
+ * leaving a sentence hanging mid-word. Same cap for the tool loop's reply
+ * for the same reason.
  */
-export const CHAT_REPLY_TOKENS = 150;
+export const CHAT_REPLY_TOKENS = 250;
 
 /**
  * WHICH FREE MODEL ANSWERS FASTEST - measured, not guessed.
@@ -695,7 +722,7 @@ console.log(`[Grumpy Bot] Trying OpenRouter (${freeModel}) with ${context.tools.
       if (result.calls.length) console.log(`[Grumpy Bot] tools used: ${result.calls.map((c) => `${c.name}:${c.outcome}`).join(', ')}`);
       if (result.text) {
 console.log('[Grumpy Bot] SUCCESS - Using OpenRouter response (tool loop)');
-        return result.text;
+        return result.truncated ? withContinuation(result.text) : result.text;
       }
       // THE BOARD ALREADY ANSWERED. When the model asked a tool and then ran
       // out of time before writing its reply, the cascade used to fall
@@ -729,11 +756,12 @@ console.log(`[Grumpy Bot] Trying OpenRouter (${freeModel})...`);
     );
 
     const content = response.data.choices[0]?.message?.content;
+    const cutOff = response.data.choices[0]?.finish_reason === 'length';
     noteModelCost(freeModel, Date.now() - plainStartedAt, Boolean(content));
     cachedFreeModels = rankFreeModels([...knownFreeModels.values()]);
     if (content) {
 console.log('[Grumpy Bot] SUCCESS - Using OpenRouter response');
-      return content;
+      return cutOff ? withContinuation(content) : content;
     }
     return null;
   } catch (error: any) {
@@ -837,7 +865,7 @@ console.log('[Grumpy Bot] Using AI response');
     // The caller has their answer; the board spends the quiet moment learning
     // what the NEXT model on the list costs, so nobody pays for it in a chat.
     void probeAnUnmeasuredModel(cfg).catch(() => undefined);
-    return stripEmojis(stripEngineTag(aiResponse).trim());
+    return stripMarkdown(stripEmojis(stripEngineTag(aiResponse).trim()));
   }
 
   // NO CANNED BOT BEHIND THIS. There used to be a rule-based responder - a
@@ -853,7 +881,7 @@ console.log('[Grumpy Bot] Using AI response');
   // thinks the board is broken. The persona's own line (s.6) is what is
   // remembered: a persona without its own would start talking like Kevin.
 console.log('[Grumpy Bot] No provider answered - saying so');
-  return stripEmojis(fallbackForPersona(cfg));
+  return stripMarkdown(stripEmojis(fallbackForPersona(cfg)));
 }
 
 export const DEFAULT_AI_CONFIG: AIProviderConfig = {
