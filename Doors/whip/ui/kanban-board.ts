@@ -28,6 +28,17 @@ const COMPACT_HINTS: readonly FooterHint[] = [
   { key: 'Ent', does: 'Edit' },
   { key: 'Q', does: 'Back' },
 ];
+const CARRY_HINTS: readonly FooterHint[] = [
+  { key: 'Arrows', does: 'Carry' },
+  { key: 'Enter', does: 'Drop' },
+  { key: 'E', does: 'Edit' },
+  { key: 'ESC', does: 'Cancel' },
+];
+const COMPACT_CARRY_HINTS: readonly FooterHint[] = [
+  { key: 'Arr', does: 'Carry' },
+  { key: 'Ent', does: 'Drop' },
+  { key: 'ESC', does: 'Cancel' },
+];
 
 const COLUMNS: TaskStatus[] = ['todo', 'in-progress', 'testing', 'done'];
 const COLUMN_LABELS: Record<TaskStatus, string> = {
@@ -83,11 +94,15 @@ export function wrapTitle(title: string, width: number): string[] {
 export function formatKanbanCard(
   task: Task,
   width: number,
-  assigneeHandle?: string
+  assigneeHandle?: string,
+  carried = false
 ): string {
   const priorityInitial = task.priority[0].toUpperCase();
   const priorityColor = getPriorityColor(task.priority);
-  const titleRows = wrapTitle(task.title, Math.max(4, width));
+  // A carried task shows its grip: the marker eats its own cells so the
+  // wrap width shrinks by exactly that much.
+  const titleRows = wrapTitle(task.title, Math.max(4, carried ? width - 3 : width));
+  if (carried && titleRows.length > 0) titleRows[0] = `>> ${titleRows[0]}`;
   const meta = `{${priorityColor}-fg}[${priorityInitial}]{/${priorityColor}-fg} ${task.points} pts${
     assigneeHandle ? ` {gray-fg}· ${assigneeHandle}{/}` : ''
   }`;
@@ -121,6 +136,12 @@ export async function showKanbanBoard(
         modalDepth--;
       }
     }
+
+    // Keyboard carry: Enter grabs the task under the cursor, arrows move
+    // the cursor (left/right carry the task along, unsaved), Enter drops
+    // (one persisted move with full side effects), ESC puts it back.
+    // E keeps the old Enter job (edit).
+    let carried: { task: Task; fromStatus: TaskStatus } | null = null;
 
     // Drag and drop state
     let dragState: {
@@ -242,8 +263,11 @@ export async function showKanbanBoard(
       clickable: false,
     });
 
-    // The whole chrome from the door's ONE call.
-    const chrome = attachWhipChrome({
+    // The whole chrome from the door's ONE call. Reattached with carry
+    // hints while a task is held (see setCarryMode): the SDK owns the
+    // footer row, so the hints change by reattaching, not by painting
+    // over it.
+    let chrome = attachWhipChrome({
       screen,
       header,
       footer,
@@ -255,6 +279,20 @@ export async function showKanbanBoard(
       // damage whichever one happened to be focused at attach time.
       glitch: () => columnLists[currentColumn],
     });
+
+    const setCarryMode = (on: boolean) => {
+      chrome.stop();
+      chrome = attachWhipChrome({
+        screen,
+        header,
+        footer,
+        title: `KANBAN: ${project.name}${partyInfo}`,
+        hints: on ? CARRY_HINTS : HINTS,
+        compactHints: on ? COMPACT_CARRY_HINTS : COMPACT_HINTS,
+        glitch: () => columnLists[currentColumn],
+      });
+      screen.render();
+    };
 
     // Debounce timer for navigation updates
     let updateTimeout: NodeJS.Timeout | null = null;
@@ -279,33 +317,8 @@ export async function showKanbanBoard(
       if (immediate) {
         isUpdating = true;
         tasks = await dataManager.getTasksForProject(project.id);
-        const users = await dataManager.loadUsers().catch(() => ({} as Record<string, UserStats>));
-        const handleOf = (userId: string | undefined): string | undefined => {
-          if (!userId) return undefined;
-          return users[userId]?.handle;
-        };
-
-        for (let i = 0; i < COLUMNS.length; i++) {
-          const status = COLUMNS[i];
-          const columnTasks = tasks.filter(t => t.status === status);
-
-          const cardWidth = Math.max(8, colWidth - 2);
-          const items = columnTasks.map(task => formatKanbanCard(task, cardWidth, handleOf(task.assignedTo)));
-
-          // Clear items first, then set new ones to ensure proper refresh
-          columnLists[i].clearItems();
-          columnLists[i].setItems(items.length > 0 ? items : []);
-        }
-
-        // The header is not repainted here any more: the chrome's masthead
-        // owns that row and redraws itself.
-
-        for (let i = 0; i < COLUMNS.length; i++) {
-          columnBoxes[i].style.border.fg = i === currentColumn ? 'yellow' : 'cyan';
-        }
-
-        columnLists[currentColumn].focus();
-        screen.render();
+        handlesById = await loadHandles();
+        paintLists();
         isUpdating = false;
       } else {
         updateTimeout = setTimeout(async () => {
@@ -314,6 +327,45 @@ export async function showKanbanBoard(
         }, 50);
         updateListsImmediate();
       }
+    };
+
+    /** Handle per id for card meta rows. Refreshed on every reload. */
+    let handlesById: Record<string, string> = {};
+    const loadHandles = async (): Promise<Record<string, string>> => {
+      try {
+        const users = await dataManager.loadUsers();
+        const map: Record<string, string> = {};
+        for (const u of Object.values(users)) {
+          if (u?.userId && u?.handle) map[u.userId] = u.handle;
+        }
+        return map;
+      } catch {
+        return {};
+      }
+    };
+
+    /** Repaint columns from the in-memory task list (no reload). */
+    const paintLists = () => {
+      for (let i = 0; i < COLUMNS.length; i++) {
+        const status = COLUMNS[i];
+        const columnTasks = tasks.filter(t => t.status === status);
+
+        const cardWidth = Math.max(8, colWidth - 2);
+        const items = columnTasks.map(task =>
+          formatKanbanCard(task, cardWidth, handlesById[task.assignedTo ?? ''], carried?.task.id === task.id)
+        );
+
+        // Clear items first, then set new ones to ensure proper refresh
+        columnLists[i].clearItems();
+        columnLists[i].setItems(items.length > 0 ? items : []);
+      }
+
+      for (let i = 0; i < COLUMNS.length; i++) {
+        columnBoxes[i].style.border.fg = i === currentColumn ? 'yellow' : 'cyan';
+      }
+
+      columnLists[currentColumn].focus();
+      screen.render();
     };
 
     await updateLists(true);
@@ -332,6 +384,9 @@ export async function showKanbanBoard(
 
     // Start drag operation
     const startDrag = (colIndex: number, itemIndex: number, x: number, y: number) => {
+      // Keyboard carry and mouse drag never mix: drop (Enter) or cancel
+      // (ESC) first.
+      if (carried) return;
       const columnTasks = tasks.filter(t => t.status === COLUMNS[colIndex]);
       if (itemIndex >= columnTasks.length) return;
 
@@ -512,7 +567,14 @@ export async function showKanbanBoard(
         } else {
           currentColumn = Math.min(COLUMNS.length - 1, currentColumn + 1);
         }
-        updateLists(false);
+        if (carried) {
+          // Carry along, unsaved: the drop persists, ESC restores. Paint
+          // only - a reload would discard the carried (unsaved) status.
+          carried.task.status = COLUMNS[currentColumn];
+          paintLists();
+        } else {
+          updateLists(false);
+        }
         return;
       }
 
@@ -521,6 +583,25 @@ export async function showKanbanBoard(
 
         switch (key.name) {
         case 'enter':
+          if (carried) {
+            const { task, fromStatus } = carried;
+            carried = null;
+            setCarryMode(false);
+            if (task.status !== fromStatus) {
+              await moveTask(screen, task, task.status, dataManager, achievementManager, user, project, bbsApi);
+            }
+            await updateLists(true);
+          } else if (columnTasks.length > 0) {
+            const selectedIndex = columnLists[currentColumn].selected || 0;
+            const task = columnTasks[selectedIndex];
+            carried = { task, fromStatus: task.status };
+            setCarryMode(true);
+            paintLists();
+          }
+          break;
+
+        case 'e':
+        case 'E':
           if (columnTasks.length > 0) {
             const selectedIndex = columnLists[currentColumn].selected || 0;
             const task = columnTasks[selectedIndex];
@@ -574,6 +655,13 @@ export async function showKanbanBoard(
 
         case 'q':
         case 'escape':
+          if (carried) {
+            carried.task.status = carried.fromStatus;
+            carried = null;
+            setCarryMode(false);
+            paintLists();
+            break;
+          }
           cleanup();
           resolve();
           break;
