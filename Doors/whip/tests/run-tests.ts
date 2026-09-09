@@ -7,7 +7,7 @@
 
 /* eslint-disable no-console */
 
-const TEST_MODULES = ['./opens.test', './confirm-delete.test', './field-labels.test', './task-dialog-tab.test', './task-dialog-buttons.test', './kanban-move.test', './kanban-format.test', './kanban-carry.test'];
+const TEST_MODULES = ['./opens.test', './confirm-delete.test', './field-labels.test', './task-dialog-tab.test', './task-dialog-buttons.test', './task-dialog-project.test', './kanban-move.test', './kanban-format.test', './kanban-carry.test'];
 
 const realLog = console.log;
 console.log = () => {};

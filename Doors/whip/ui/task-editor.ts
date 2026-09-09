@@ -88,6 +88,27 @@ async function showTaskEditor(
     const idx = assigneeOptions.findIndex((o) => o.userId === task.assignedTo);
     if (idx !== -1) selectedAssignee = idx;
   }
+  // Project picker source. Same shape as the assignee picker above: the
+  // door pinned every task to the project whose board opened the dialog,
+  // so a quick-task could never choose a project and a Backlog task could
+  // never move out (2026-09-10). The dialog now chooses.
+  let allProjects: Project[] = [];
+  try {
+    allProjects = await dataManager.loadProjects();
+  } catch {
+    allProjects = [];
+  }
+  if (allProjects.length === 0 && project) allProjects = [project];
+  const projectOptions: Array<{ label: string; id: string }> =
+    allProjects.map((p) => ({ label: p.name, id: p.id }));
+  if (task.projectId && !projectOptions.some((o) => o.id === task.projectId)) {
+    projectOptions.push({ label: `(Unknown: ${task.projectId})`, id: task.projectId });
+  }
+  let selectedProject = 0;
+  if (task.projectId) {
+    const idx = projectOptions.findIndex((o) => o.id === task.projectId);
+    if (idx !== -1) selectedProject = idx;
+  }
   return new Promise((resolve) => {
     screen.program.enableMouse();
 
@@ -95,19 +116,21 @@ async function showTaskEditor(
     // never silently land somewhere unexpected (a new task opened from the
     // Backlog quick action used to look identical to one opened on a real
     // project, and the task "vanished" - it was in Backlog all along).
-    const projectName = project?.name ?? '';
+    // The label follows the Project picker below, so it stays true.
+    const labelFor = (name: string) =>
+      `${isNew ? ' New Task' : ' Edit Task'}${name ? ` - ${name} ` : ' '}`;
     const modal = blessed.box({
       parent: screen,
       top: 'center',
       left: 'center',
       width: 68,
-      height: 22,
+      height: 24,
       border: { type: 'line' },
       style: {
         border: { fg: T.accentAlt },
         bg: T.ground
       },
-      label: `${isNew ? ' New Task' : ' Edit Task'}${projectName ? ` - ${projectName} ` : ' '}`,
+      label: labelFor(project?.name ?? projectOptions[selectedProject]?.label ?? ''),
       tags: true,
     });
 
@@ -134,10 +157,10 @@ async function showTaskEditor(
     // Category list
     const categoryList = blessed.list({
       parent: modal,
-      top: 5,
+      top: 4,
       left: 1,
       width: '48%',
-      height: 7,
+      height: 5,
       border: { type: 'line' },
       label: ' Category ',
       tags: true,
@@ -158,10 +181,10 @@ async function showTaskEditor(
     // Priority list
     const priorityList = blessed.list({
       parent: modal,
-      top: 5,
+      top: 4,
       left: '50%',
       right: 1,
-      height: 6,
+      height: 5,
       border: { type: 'line' },
       label: ' Priority ',
       tags: true,
@@ -179,11 +202,42 @@ async function showTaskEditor(
       },
     } as any);
 
-    // Assignee list - left column under Category. The door never had a way
+    // Project list - full width under Category/Priority. New tasks used to
+    // be pinned to the opening project with no choice; edits could never
+    // re-home, so Backlog tasks were stuck (2026-09-10).
+    const projectList = blessed.list({
+      parent: modal,
+      top: 9,
+      left: 1,
+      right: 1,
+      height: 4,
+      border: { type: 'line' },
+      label: ' Project ',
+      tags: true,
+      keys: true,
+      vi: true,
+      mouse: true,
+      focusable: true,
+      items: projectOptions.map((o) => o.label),
+      selected: selectedProject,
+      style: {
+        border: { fg: T.accent },
+        selected: { bg: T.accent, fg: T.ground },
+        item: { fg: T.ink, bg: T.ground },
+        bg: T.ground
+      },
+    } as any);
+    const refreshLabel = () => {
+      const name = projectOptions[projectList.selected!]?.label ?? '';
+      modal.options.label = labelFor(name);
+    };
+    projectList.on('select', refreshLabel);
+
+    // Assignee list - left column under Project. The door never had a way
     // to assign at all: new tasks silently took the creator.
     const assigneeList = blessed.list({
       parent: modal,
-      top: 12,
+      top: 13,
       left: 1,
       width: '48%',
       height: 3,
@@ -207,7 +261,7 @@ async function showTaskEditor(
     // Points input - bordered textbox
     const pointsInput = blessed.textbox({
       parent: modal,
-      top: 12,
+      top: 13,
       left: '50%',
       right: 1,
       height: 3,
@@ -227,7 +281,7 @@ async function showTaskEditor(
     // Description input - bordered textbox
     const descInput = blessed.textbox({
       parent: modal,
-      top: 15,
+      top: 16,
       left: 1,
       right: 1,
       height: 3,
@@ -248,7 +302,7 @@ async function showTaskEditor(
     // 1-row buttons never painted (reported with a screenshot, 2026-09-09).
     const saveBtn = createButton({
       parent: modal,
-      top: 18,
+      top: 19,
       left: 15,
       width: 14,
       height: 3,
@@ -269,7 +323,7 @@ async function showTaskEditor(
 
     const cancelBtn = createButton({
       parent: modal,
-      top: 18,
+      top: 19,
       left: 38,
       width: 14,
       height: 3,
@@ -312,6 +366,11 @@ async function showTaskEditor(
       task.points = parseInt(pointsInput.getValue()) || 10;
       task.description = descInput.getValue();
       task.assignedTo = assigneeOptions[assigneeList.selected!]?.userId ?? undefined;
+      const fromProjectId = task.projectId;
+      const chosenProject = projectOptions[projectList.selected!];
+      if (chosenProject) task.projectId = chosenProject.id;
+      const projectNameOf = (id: string | undefined) =>
+        projectOptions.find((o) => o.id === id)?.label ?? id ?? '';
 
       if (!task.title.trim()) {
         saving = false;
@@ -337,12 +396,27 @@ async function showTaskEditor(
         await dataManager.addTask(task);
         if (bbsApi?.emitCustomEvent && project) {
           bbsApi.emitCustomEvent('task_created', `Created ${task.category} task "${task.title}"`, {
-            projectId: project.id, taskId: task.id, taskCategory: task.category
+            projectId: task.projectId, taskId: task.id, taskCategory: task.category
           });
         }
       } else {
         task.updatedAt = new Date().toISOString();
         await dataManager.updateTask(task);
+        // Re-homing an edit is the backlog-to-project move the door never
+        // had: say so on the feed, with both ends, like a status move does.
+        if (task.projectId !== fromProjectId && bbsApi?.emitCustomEvent) {
+          bbsApi.emitCustomEvent(
+            'task_moved',
+            `Moved task "${task.title}" from ${projectNameOf(fromProjectId)} to ${projectNameOf(task.projectId)}`,
+            {
+              projectId: task.projectId,
+              projectName: projectNameOf(task.projectId),
+              taskId: task.id,
+              fromProjectId,
+              toProjectId: task.projectId
+            }
+          );
+        }
       }
 
       cleanup();
@@ -357,7 +431,7 @@ async function showTaskEditor(
     // navigation is off and the dialog advances focus itself down this ring -
     // which is also why a focus TRAP is not used here: a trap suppresses
     // screen-level key handlers, and this dialog's keys live on the screen.
-    const focusables: any[] = [titleInput, categoryList, priorityList, assigneeList, pointsInput, descInput, saveBtn, cancelBtn];
+    const focusables: any[] = [titleInput, categoryList, priorityList, projectList, assigneeList, pointsInput, descInput, saveBtn, cancelBtn];
     const advanceFrom = (current: any) => {
       if (closed) return;
       const i = focusables.indexOf(current);
@@ -382,6 +456,11 @@ async function showTaskEditor(
       if (closed) return;
       if (key.name === 'escape') { cleanup(); resolve(); }
       else if (key.name === 'enter' && key.ctrl) { save(); }
+      else if ((key.name === 'up' || key.name === 'down') && screen.getFocused() === projectList) {
+        // Arrows move the list's own selection without firing 'select';
+        // the label follows a tick later, after the widget had its turn.
+        setTimeout(refreshLabel, 0);
+      }
       else if (key.name === 'tab') {
         if (key.shift) retreatFrom(screen.getFocused());
         else advanceFrom(screen.getFocused());
