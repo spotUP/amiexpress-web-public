@@ -76,6 +76,24 @@ describe('wikipedia', () => {
     expect(a).toContain('Manfred Trenz');
     expect(seen.some((u) => u.includes('q=Turrican'))).toBe(true);
   });
+  it('a near-miss full phrase joins the subject article instead of stopping', async () => {
+    setWikipediaFetcher(async (url) => {
+      if (url.includes('search/page')) {
+        const q = new URL(url).searchParams.get('q');
+        if (q === 'who made turrican') {
+          return { pages: [{ key: 'Turrican_II:_The_Final_Fight', title: 'Turrican II: The Final Fight' }] };
+        }
+        return { pages: [{ key: 'Turrican_(video_game)', title: 'Turrican (video game)' }] };
+      }
+      if (url.includes('Turrican_II')) {
+        return { title: 'Turrican II: The Final Fight', extract: 'Turrican II is a 1991 game developed by Factor 5.' };
+      }
+      return { title: 'Turrican (video game)', extract: 'Turrican is a 1990 game designed by Manfred Trenz.' };
+    });
+    const a = await askWikipedia('who made turrican');
+    expect(a).toContain('Factor 5');
+    expect(a).toContain('Manfred Trenz');
+  });
   it('a summary that 404s falls through to the next hit', async () => {
     setWikipediaFetcher(async (url) => {
       if (url.includes('search/page')) {

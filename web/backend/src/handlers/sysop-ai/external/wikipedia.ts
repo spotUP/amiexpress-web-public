@@ -63,59 +63,82 @@ export async function wikipediaSummary(title: string): Promise<string> {
   });
 }
 
-/** Search, then summarize the top hit: one call answers "what is X".
+/** Search, then summarize: one call answers "what is X".
  *
- * A question-shaped query ("Turrican video game developer") often matches
- * nothing verbatim while its subject ("Turrican") has an article: on a
- * miss the likely subject - the first significant word - is tried next,
- * and a summary that fails falls through to the next hit. Only when every
- * step misses does the caller hear "nothing". Live case 2026-09-10. */
+ * A question-shaped query ("who made Turrican") matches *something*
+ * verbatim (Turrican II) while its subject ("Turrican") owns the article
+ * that names the designer: stopping at the first usable summary answers
+ * with the wrong article. So every distinct subject word gets its own
+ * best summary, and different articles are joined - the model then holds
+ * both the stub and the attribution. Only when every step misses does the
+ * caller hear "nothing". Live cases 2026-09-10. */
 const WIKI_STOPWORDS = new Set([
   'who', 'what', 'when', 'where', 'which', 'how', 'why', 'is', 'are', 'was',
   'were', 'be', 'by', 'for', 'the', 'a', 'an', 'of', 'on', 'in', 'to', 'did',
   'do', 'does', 'made', 'make', 'about',
 ]);
 
+async function bestSummary(t: string): Promise<
+  { status: 'hit'; key: string; text: string; also: string[] } | { status: 'empty' } | { status: 'failed' }
+> {
+  let pages: any[] = [];
+  try {
+    const data = await fetcher(`${WIKI}/search/page?q=${encodeURIComponent(t)}&limit=3`);
+    pages = data?.pages ?? [];
+  } catch {
+    return { status: 'failed' };
+  }
+  // Exact title first, then title containing the subject, then rank order.
+  const subject = t.split(/\s+/).find((w) => !WIKI_STOPWORDS.has(w.toLowerCase())) ?? t;
+  const ordered = [...pages].sort((a, b) => {
+    const score = (p: any) => {
+      const title = String(p.title ?? '').toLowerCase();
+      if (title === t.toLowerCase() || title === subject.toLowerCase()) return 0;
+      if (title.includes(subject.toLowerCase())) return 1;
+      return 2;
+    };
+    return score(a) - score(b);
+  });
+  for (const top of ordered.slice(0, 3)) {
+    try {
+      const key = ((top.key ?? top.title ?? '') as string).replace(/ /g, '_');
+      const s: any = await fetcher(`${WIKI}/page/summary/${encodeURIComponent(key)}`);
+      if (!s?.extract) continue;
+      const kind = s.description ? ` (${s.description})` : '';
+      const also = ordered.filter((pp) => pp !== top).slice(0, 2).map((pp) => pp.title).filter(Boolean);
+      return { status: 'hit', key: key.toLowerCase(), also, text: `${s.title ?? top.title}${kind}\n${String(s.extract).slice(0, 700)}` };
+    } catch {
+      continue;
+    }
+  }
+  // Summaries failing while search worked is absence, not outage: the
+  // outage case is the search itself throwing (status failed above).
+  return { status: 'empty' };
+}
+
 export async function askWikipedia(query: string): Promise<string> {
   const q = query.trim().slice(0, 80);
   if (!q) return 'What should I look up?';
   return cachedLookup(`wiki:ask:${q.toLowerCase()}`, async () => {
     const words = q.split(/\s+/).filter((w) => !WIKI_STOPWORDS.has(w.toLowerCase()));
-    const tries = [q, ...(words.length > 1 ? [words[0]] : [])];
-    let threw = 0;
-    let ran = 0;
+    const tries = [q, ...(words[0] && words[0].toLowerCase() !== q.toLowerCase() ? [words[0]] : [])];
+    const found: Array<{ key: string; text: string; also: string[] }> = [];
+    let failed = 0;
     for (const t of tries) {
-      let pages: any[] = [];
-      try {
-        ran++;
-        const data = await fetcher(`${WIKI}/search/page?q=${encodeURIComponent(t)}&limit=3`);
-        pages = data?.pages ?? [];
-      } catch {
-        threw++;
+      const r = await bestSummary(t);
+      if (r.status === 'failed') {
+        failed++;
         continue;
       }
-      for (const top of pages.slice(0, 3)) {
-        let s: any = null;
-        try {
-          ran++;
-          s = await fetcher(`${WIKI}/page/summary/${encodeURIComponent(((top.key ?? top.title ?? '') as string).replace(/ /g, '_'))}`);
-        } catch {
-          threw++;
-          continue;
-        }
-        if (!s?.extract) continue;
-        const kind = s.description ? ` (${s.description})` : '';
-        const summary = `${s.title ?? top.title}${kind}\n${String(s.extract).slice(0, 900)}`;
-        if (top === pages[0] && pages.length > 1) {
-          const also = pages.slice(1, 3).map((p) => p.title).join(', ');
-          return `${summary}\nAlso matches: ${also}.`;
-        }
-        return summary;
-      }
+      if (r.status === 'hit' && !found.some((f) => f.key === r.key)) found.push(r);
     }
-    // Every fetch threw: the net failed, which is not the same as the
-    // article missing. The model must see the difference (grounding rules).
-    if (threw > 0 && threw === ran) return 'No answer from the net right now (Wikipedia unreachable).';
-    return `Wikipedia has nothing about "${q}".`;
+    if (!found.length) {
+      // Every search threw: the net failed, which is not the same as the
+      // article missing. The model must see the difference (grounding rules).
+      if (failed === tries.length) return 'No answer from the net right now (Wikipedia unreachable).';
+      return `Wikipedia has nothing about "${q}".`;
+    }
+    const also = found[0].also.filter((a) => !found.some((f) => f.text.startsWith(a)));
+    return found.map((f) => f.text).join('\n') + (also.length ? `\nAlso matches: ${also.join(', ')}.` : '');
   });
 }
