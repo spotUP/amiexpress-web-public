@@ -1230,6 +1230,23 @@ class ApiClient {
     });
   }
 
+  // Bulls Menu (Bulls.CFG for the 68K Bulls door)
+  async getBullsConfig() {
+    return this.request<{ raw: string; entries: Array<{ line: number; title: string; file: string }>; problems: Array<{ line: number; kind: string; message: string }> }>(
+      `${API_BASE}/config/bulls`
+    );
+  }
+
+  async saveBullsConfig(raw: string) {
+    return this.request<{ raw: string; entries: Array<{ line: number; title: string; file: string }>; problems: Array<{ line: number; kind: string; message: string }> }>(
+      `${API_BASE}/config/bulls`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ raw }),
+      }
+    );
+  }
+
   // Screen Revisions
   /**
    * The three revision calls answer with the API ENVELOPE, like every other

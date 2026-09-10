@@ -12,6 +12,7 @@ import { SystemConfigPage } from './pages/SystemConfigPage';
 import { DoorsPage } from './pages/DoorsPage';
 import { AdminRolesPage } from './pages/AdminRolesPage';
 import { SpriteManagerPage } from './pages/SpriteManagerPage';
+import { BullsInfoPage } from './pages/BullsInfoPage';
 import { AuditLogPage } from './pages/AuditLogPage';
 import { SecurityPage } from './pages/SecurityPage';
 import { UsersPage } from './pages/UsersPage';
@@ -128,6 +129,7 @@ function App() {
         <Route path="conferences" element={<SysopRoute><ConferencesWorkspace /></SysopRoute>} />
         <Route path="doors" element={<SysopRoute><DoorsPage /></SysopRoute>} />
         <Route path="sprite-manager" element={<SysopRoute><SpriteManagerPage /></SysopRoute>} />
+        <Route path="bulls" element={<SysopRoute><BullsInfoPage /></SysopRoute>} />
 
         {/* System — sysop-only */}
         <Route path="system" element={<SysopRoute><SystemConfigPage /></SysopRoute>} />
