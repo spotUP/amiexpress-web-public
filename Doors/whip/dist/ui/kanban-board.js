@@ -182,7 +182,10 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                 border: { type: 'line' },
                 label: ` ${label} `,
                 style: {
-                    border: { fg: i === currentColumn ? 'yellow' : 'cyan' },
+                    // Theme tokens, not literals: the old yellow/cyan ignored the
+                    // caller's theme. Active is T.ink - full-brightness text, white
+                    // on classic, the white focus border asked for 2026-09-10.
+                    border: { fg: i === currentColumn ? door_theme_1.T.ink : door_theme_1.T.chrome },
                     bg: door_theme_1.T.ground
                 },
                 focusable: false,
@@ -263,7 +266,7 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
         let isUpdating = false;
         const updateListsImmediate = () => {
             for (let i = 0; i < COLUMNS.length; i++) {
-                columnBoxes[i].style.border.fg = i === currentColumn ? 'yellow' : 'cyan';
+                columnBoxes[i].style.border.fg = i === currentColumn ? door_theme_1.T.ink : door_theme_1.T.chrome;
             }
             columnLists[currentColumn].focus();
             screen.render();
@@ -318,7 +321,7 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                 columnLists[i].setItems(items.length > 0 ? items : []);
             }
             for (let i = 0; i < COLUMNS.length; i++) {
-                columnBoxes[i].style.border.fg = i === currentColumn ? 'yellow' : 'cyan';
+                columnBoxes[i].style.border.fg = i === currentColumn ? door_theme_1.T.ink : door_theme_1.T.chrome;
             }
             columnLists[currentColumn].focus();
             screen.render();
@@ -384,10 +387,10 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                     columnBoxes[i].style.border.fg = 'green';
                 }
                 else if (i === currentColumn) {
-                    columnBoxes[i].style.border.fg = 'yellow';
+                    columnBoxes[i].style.border.fg = door_theme_1.T.ink;
                 }
                 else {
-                    columnBoxes[i].style.border.fg = 'cyan';
+                    columnBoxes[i].style.border.fg = door_theme_1.T.chrome;
                 }
             }
             screen.render();
@@ -427,7 +430,7 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
             else {
                 // Dropped on same column or outside - just refresh to reset borders
                 for (let i = 0; i < COLUMNS.length; i++) {
-                    columnBoxes[i].style.border.fg = i === currentColumn ? 'yellow' : 'cyan';
+                    columnBoxes[i].style.border.fg = i === currentColumn ? door_theme_1.T.ink : door_theme_1.T.chrome;
                 }
                 screen.render();
             }

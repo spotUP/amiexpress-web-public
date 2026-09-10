@@ -211,7 +211,10 @@ export async function showKanbanBoard(
         border: { type: 'line' },
         label: ` ${label} `,
         style: {
-          border: { fg: i === currentColumn ? 'yellow' : 'cyan' },
+          // Theme tokens, not literals: the old yellow/cyan ignored the
+          // caller's theme. Active is T.ink - full-brightness text, white
+          // on classic, the white focus border asked for 2026-09-10.
+          border: { fg: i === currentColumn ? T.ink : T.chrome },
           bg: T.ground
         },
         focusable: false,
@@ -300,7 +303,7 @@ export async function showKanbanBoard(
 
     const updateListsImmediate = () => {
       for (let i = 0; i < COLUMNS.length; i++) {
-        columnBoxes[i].style.border.fg = i === currentColumn ? 'yellow' : 'cyan';
+        columnBoxes[i].style.border.fg = i === currentColumn ? T.ink : T.chrome;
       }
       columnLists[currentColumn].focus();
       screen.render();
@@ -361,7 +364,7 @@ export async function showKanbanBoard(
       }
 
       for (let i = 0; i < COLUMNS.length; i++) {
-        columnBoxes[i].style.border.fg = i === currentColumn ? 'yellow' : 'cyan';
+        columnBoxes[i].style.border.fg = i === currentColumn ? T.ink : T.chrome;
       }
 
       columnLists[currentColumn].focus();
@@ -433,9 +436,9 @@ export async function showKanbanBoard(
         if (i === targetCol && targetCol !== dragState.fromColumn) {
           columnBoxes[i].style.border.fg = 'green';
         } else if (i === currentColumn) {
-          columnBoxes[i].style.border.fg = 'yellow';
+          columnBoxes[i].style.border.fg = T.ink;
         } else {
-          columnBoxes[i].style.border.fg = 'cyan';
+          columnBoxes[i].style.border.fg = T.chrome;
         }
       }
 
@@ -479,7 +482,7 @@ export async function showKanbanBoard(
       } else {
         // Dropped on same column or outside - just refresh to reset borders
         for (let i = 0; i < COLUMNS.length; i++) {
-          columnBoxes[i].style.border.fg = i === currentColumn ? 'yellow' : 'cyan';
+          columnBoxes[i].style.border.fg = i === currentColumn ? T.ink : T.chrome;
         }
         screen.render();
       }
