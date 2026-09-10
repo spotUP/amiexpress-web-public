@@ -740,9 +740,10 @@ console.log(`[Grumpy Bot] Trying Cerebras (${model})...`);
     );
 
     const content = response.data.choices[0]?.message?.content;
+    const cutOff = response.data.choices[0]?.finish_reason === 'length';
     if (content) {
 console.log('[Grumpy Bot] SUCCESS - Using Cerebras response');
-      return content;
+      return cutOff ? withContinuation(content) : content;
     }
     return null;
   } catch (error) {
@@ -804,9 +805,10 @@ console.log(`[Grumpy Bot] Trying Groq (${model})...`);
     );
 
     const content = response.data.choices[0]?.message?.content;
+    const cutOff = response.data.choices[0]?.finish_reason === 'length';
     if (content) {
 console.log('[Grumpy Bot] SUCCESS - Using Groq response');
-      return content;
+      return cutOff ? withContinuation(content) : content;
     }
     return null;
   } catch (error) {
@@ -857,9 +859,10 @@ console.log(`[Grumpy Bot] Trying Gemini (${model})...`);
     );
 
     const content = response.data.choices[0]?.message?.content;
+    const cutOff = response.data.choices[0]?.finish_reason === 'length';
     if (content) {
 console.log('[Grumpy Bot] SUCCESS - Using Gemini response');
-      return content;
+      return cutOff ? withContinuation(content) : content;
     }
     return null;
   } catch (error) {
@@ -1066,6 +1069,26 @@ export const ZEN_FAILED_LINE =
 export const ZEN_UNCONFIGURED_LINE =
   'No AI key is set up on this board yet, so I am on fallback lines - tell the sysop, then ask me again.';
 
+/** Answered without waking any model: punctuation noise, "idk" and the like
+ *  cost a full cascade today ("......." burned 35 seconds of model budget
+ *  for nothing, live 2026-09-10). Short nudge, no tools, no lists. */
+export const LOW_CONTENT_NUDGE = "Still here - what's on your mind?";
+
+const LOW_CONTENT_PHRASES = new Set([
+  'i dont know', "i don't know", 'dont know', "don't know",
+  'idk', 'dunno', 'dunno lol', 'hmm', 'uh', 'erm', 'uhh',
+]);
+
+/** True when there is nothing to answer: punctuation-only noise or a bare
+ *  shrug. Longer small-talk ("i want to talk random stuff") still goes to
+ *  the model under the prompt's small-talk rules. */
+export function isLowContentMessage(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (t === '') return true;
+  if (/^[.\s…?!,\-~*]+$/.test(t)) return true;
+  return LOW_CONTENT_PHRASES.has(t);
+}
+
 async function getZenResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
   return getUpstreamResponse('zen', userMessage, context, aiConfig);
 }
@@ -1119,8 +1142,10 @@ console.log(`[Grumpy Bot] No ${kind === 'go' ? 'GO_API_KEY' : 'ZEN_API_KEY'} con
       { headers, timeout: remainingBudget(aiConfig, 10000) },
     );
     const content = response.data.choices[0]?.message?.content;
+    const cutOff = response.data.choices[0]?.finish_reason === 'length';
     if (content) console.log(`[Grumpy Bot] SUCCESS - Using ${label} response`);
-    return content ?? null;
+    if (!content) return null;
+    return cutOff ? withContinuation(content) : content;
   };
 
   // Silent failover inside one reply: best-first, up to three brains, the
@@ -1557,8 +1582,18 @@ console.log('[Grumpy Bot] No provider answered - saying so');
     rotateModelPools();
     if (!lastCascadeNote) lastCascadeNote = 'failed';
   }
-  if (lastCascadeNote === 'rate-limited') return ZEN_RATE_LIMITED_LINE;
-  if (lastCascadeNote === 'failed') return ZEN_FAILED_LINE;
+  // One failure, one line - but never the SAME line twice running. Two
+  // identical outages back to back used to read out the identical sentence
+  // verbatim ("My brain misfired", twice in a row, live 2026-09-10), which
+  // reads as a stuck bot rather than a down provider. A repeat falls back
+  // to the persona's own line instead - still honest (the generic one is
+  // connection trouble), just not identical. Unconfigured stays stable: no
+  // keys is a standing condition, not an event.
+  const lastBotLine = [...context.messageHistory].reverse()
+    .find(m => m.role === 'bot' || (m as { role: string }).role === 'assistant')?.content;
+  const repeat = (line: string) => lastBotLine === line;
+  if (lastCascadeNote === 'rate-limited' && !repeat(ZEN_RATE_LIMITED_LINE)) return ZEN_RATE_LIMITED_LINE;
+  if (lastCascadeNote === 'failed' && !repeat(ZEN_FAILED_LINE)) return ZEN_FAILED_LINE;
   if (lastCascadeNote === 'unconfigured') return ZEN_UNCONFIGURED_LINE;
   return stripMarkdown(stripEmojis(fallbackForPersona(cfg)));
 }

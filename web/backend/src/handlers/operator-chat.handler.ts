@@ -1374,6 +1374,21 @@ console.log('[Operator Chat] Bot busy, queuing message');
     (chatSession as any).botBusy = true;
     const page = repository.getPageRequest(pageId);
     if (page) {
+      // Content-free messages (".......", "idk") get the nudge without
+      // waking any model: no cascade, no tools, no 146-door dumps. The lines
+      // still enter history so the conversation reads straight.
+      const { isLowContentMessage, LOW_CONTENT_NUDGE } = require('./grumpy-sysop-bot.handler');
+      if (isLowContentMessage(message)) {
+        try {
+          (chatSession as any).botMessageHistory = [...((chatSession as any).botMessageHistory || []), { role: 'user', content: message }, { role: 'bot', content: LOW_CONTENT_NUDGE }];
+          const nudgeConfig = aiConfigForHandle(page.sysopHandle || (chatSession as any).personaHandle || '', repository);
+          await sendBotMessageWithTyping(io, repository, pageId, LOW_CONTENT_NUDGE, nodeId, page, nudgeConfig);
+        } finally {
+          (chatSession as any).botBusy = false;
+        }
+        io.to(`page:${pageId}`).emit('operator:message', { ...saved, timestamp: saved.timestamp.getTime() });
+        return;
+      }
       const context = {
         userHandle: page.userHandle,
         nodeId: page.nodeId,

@@ -129,7 +129,12 @@ export const CALLER_TOOLS: SysopTool[] = [
     tier: 'caller',
     async run(ctx) {
       const { external } = commandsOnDisk(ctx.bbsRoot, ctx.session.user?.secLevel ?? 0);
-      return { content: external.length ? `${external.length} doors/programs: ${external.join(', ')}` : 'No doors are available to this caller.' };
+      if (!external.length) return { content: 'No doors are available to this caller.' };
+      // Capped like search_files: a 146-door board once dumped its whole
+      // menu into one reply ("146 doors/programs: ..."). Ten names plus a
+      // count is what a caller can use; the model asks narrower next.
+      const shown = external.slice(0, 10).join(', ');
+      return { content: `${external.length} doors/programs: ${shown}${external.length > 10 ? ` (+${external.length - 10} more)` : ''}` };
     },
   },
   {
