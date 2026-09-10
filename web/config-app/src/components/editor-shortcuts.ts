@@ -14,8 +14,10 @@
  *   would eat typing, so Alt it is.
  * - Cursor: arrows (existing behaviour, now in every mode), Home/End row
  *   ends, PageUp/PageDown ten rows, Delete erases the cell.
- * - Deliberately absent (no counterpart here): clipboard (the browser owns
- *   Ctrl+C/X/V and there is no canvas clipboard op), F-keys (Moebius font
+ * - Clipboard: Alt+C/X/V copy/cut/paste through the SDK's own
+ *   copySelection/pasteSelection - an editor clipboard, not the system one,
+ *   so the browser keeps Ctrl+C/X/V and nothing leaves the canvas.
+ * - Deliberately absent (no counterpart here): F-keys (Moebius font
  *   slots), H/J/K/L charlist, Q insert, Alt+Numpad ascii entry, Alt+arrows
  *   row/column ops, Alt+letter menu ops, Ctrl+arrows.
  */
@@ -40,6 +42,9 @@ export type EditorShortcut =
   | { action: 'row'; edge: 'start' | 'end' }
   | { action: 'page'; dy: number }
   | { action: 'delete' }
+  | { action: 'copy' }
+  | { action: 'cut' }
+  | { action: 'paste' }
   | { action: 'none' };
 
 const DIGIT_INDEX: Record<string, number> = {
@@ -66,6 +71,9 @@ export function editorShortcut(ev: ShortcutKey): EditorShortcut {
 
   if (ev.altKey && !ev.ctrlKey && !ev.metaKey && ev.code) {
     if (ev.code in DIGIT_INDEX) return { action: 'bg', index: DIGIT_INDEX[ev.code] };
+    if (ev.code === 'KeyC') return { action: 'copy' };
+    if (ev.code === 'KeyX') return { action: 'cut' };
+    if (ev.code === 'KeyV') return { action: 'paste' };
     const tool = ALT_TOOLS[ev.code];
     if (tool) {
       if (ev.shiftKey && ev.code === 'KeyB') return { action: 'tool', tool: 'box-fill' };

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Undo2, Redo2, Save, X, Download, Upload } from 'lucide-react';
 import type { DrawingTool } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
 import { AnsiCanvas } from './AnsiCanvas';
@@ -6,6 +6,7 @@ import { ANSI_COLOR_NAMES, ANSI_PALETTE } from '../utils/ansi-palette';
 import { canvasToScreen } from '../pages/screen-bytes';
 import {
   pointerToCanvas, typeCharacter, typeText, undo, redo, type EditorSurface, selectionHighlightRuns,
+  copySelectedRegion, pasteRegion, cutSelectedRegion, type ClipboardRegion,
 } from '../pages/screen-editor-state';
 import { getSelection } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/tools/drawing-tools';
 import { findMciTokens, type MciToken, type MciReferenceShape } from '../pages/mci-tokens';
@@ -93,6 +94,11 @@ export function ScreenEditor({
 }: ScreenEditorProps) {
   const [cursor, setCursor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [pickingCode, setPickingCode] = useState(false);
+  /** What Alt+C/X lifted: stamped back down by Alt+V at the cursor. A ref,
+   *  not state - the canvas shows it only after a paste, which re-renders
+   *  through onChange anyway. Dies with the dialog, like a real clipboard
+   *  dies with the program. */
+  const clipboard = useRef<ClipboardRegion | null>(null);
   /** A code already on the canvas, opened for changing rather than adding. */
   const [editingToken, setEditingToken] = useState<MciToken | null>(null);
 
@@ -140,6 +146,18 @@ export function ScreenEditor({
             return;
           case 'delete':
             onChange?.(typeCharacter(surface, cursor.x, cursor.y, ' '));
+            return;
+          case 'copy':
+            clipboard.current = copySelectedRegion(surface);
+            return;
+          case 'cut': {
+            const cut = cutSelectedRegion(surface);
+            clipboard.current = cut.region;
+            if (cut.region) onChange?.(cut.surface);
+            return;
+          }
+          case 'paste':
+            if (clipboard.current) onChange?.(pasteRegion(surface, cursor.x, cursor.y, clipboard.current));
             return;
         }
       }
@@ -222,6 +240,7 @@ export function ScreenEditor({
       <p className="text-xs text-content-secondary">
         Shortcuts: Alt+D/L/B/E/F/S/T/P tools (Shift for filled shapes), Ctrl+Digit foreground,
         Alt+Digit background, Ctrl+Z / Ctrl+Shift+Z undo/redo, arrows/Home/End/PageUp/PageDown/Delete move.
+        Alt+S then drag selects; Alt+C/X/V copies, cuts and pastes at the cursor.
       </p>
 
       <div className="flex flex-wrap items-start gap-6 text-sm">

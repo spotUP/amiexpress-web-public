@@ -22,6 +22,7 @@ import { EditorState } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/cor
 import { cloneCanvas } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/canvas';
 import {
   handleDrawEvent, paintCell, snapshotUndoState, undoDrawing, redoDrawing,
+  copySelection, pasteSelection, getSelectionBounds,
 } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/tools/drawing-tools';
 
 export interface EditorSurface {
@@ -213,4 +214,63 @@ export function selectionHighlightRuns(sel: SelectionShape | null): HighlightRun
     y: rect.y1 + r,
     length: rect.x2 - rect.x1 + 1,
   }));
+}
+
+/**
+ * The editor clipboard: what Alt+C lifted, waiting for Alt+V.
+ *
+ * A rect of cells exactly as they were - character, colours, blink. The
+ * SDK's own copy/paste pair owns the shapes (`drawing-tools.ts:752`); these
+ * only carry them through surfaces the way the undo history's EditorState
+ * is carried.
+ */
+export type ClipboardRegion = Cell[][];
+
+/**
+ * Lift the select tool's committed rect into the clipboard. Null when
+ * nothing is selected - Alt+C with no marquee is a no-op, not an error.
+ * A clone: scribbling on the clipboard never touches the canvas.
+ */
+export function copySelectedRegion(surface: EditorSurface): ClipboardRegion | null {
+  return copySelection(surface.state);
+}
+
+/**
+ * Stamp the clipboard at a cell. One undo step, through the SDK's own
+ * paste (`drawing-tools.ts:760` snapshots before writing). Clipped at the
+ * canvas edge by `pasteCanvas` - pasting past the border loses the
+ * overhang, it does not grow the screen.
+ */
+export function pasteRegion(
+  surface: EditorSurface,
+  x: number,
+  y: number,
+  region: ClipboardRegion,
+): EditorSurface {
+  const state = apply(surface);
+  pasteSelection(state, x, y, region);
+  return settle(surface, surface.pending);
+}
+
+/**
+ * Lift the committed rect AND blank its cells: Alt+X. One undo step for
+ * both halves - snapshot first, then clear, so Ctrl+Z restores the art
+ * with the region back where it was.
+ */
+export function cutSelectedRegion(surface: EditorSurface): {
+  surface: EditorSurface;
+  region: ClipboardRegion | null;
+} {
+  const region = copySelection(surface.state);
+  const bounds = getSelectionBounds(surface.state);
+  if (!region || !bounds) return { surface, region: null };
+
+  const state = apply(surface);
+  snapshotUndoState(state);
+  for (let y = bounds.y1; y <= bounds.y2; y++) {
+    for (let x = bounds.x1; x <= bounds.x2; x++) {
+      state.setCanvasCell(x, y, { char: ' ', fg: 7, bg: 0 });
+    }
+  }
+  return { surface: settle(surface, surface.pending), region };
 }
