@@ -92,3 +92,24 @@ export async function non404ErrorsRethrow(): Promise<void> {
   });
   await assert.rejects(() => resolveDiscordIdentity(api, 'discord-9', 'spotUP'));
 }
+
+export async function buttonPressWithNoOptionsResolvesPresser(): Promise<void> {
+  // A button interaction carries no options bag: the presser IS the
+  // identity (live 2026-09-11: Move… crashed reading getString of
+  // undefined). resolveUserId is imported for this; resolveDiscordIdentity
+  // is stubbed at the api level like the rest of this file.
+  const { resolveUserId } = await import('../src/index');
+  const api = stubApi({ linkStatus: async () => ({ userId: 'u-sysop' }) });
+  const buttonInteraction = {
+    options: undefined,
+    user: { id: 'discord-1', username: 'spotUP' },
+    reply: async () => {},
+    editReply: async () => {},
+    deferred: false,
+    replied: false,
+  };
+  assert.deepStrictEqual(
+    await resolveUserId(buttonInteraction as any, api),
+    { userId: 'u-sysop', discordId: 'discord-1' },
+  );
+}

@@ -253,13 +253,16 @@ export async function resolveDiscordIdentity(
 }
 
 /** Resolve an explicit `user` option, else the caller's Discord identity.
- *  Null = told the user already (unknown, or ambiguous). */
-async function resolveUserId(
+ *  Null = told the user already (unknown, or ambiguous). Button and select
+ *  interactions carry no options bag — the presser IS the identity there —
+ *  so the option read is optional (live 2026-09-11: Move… crashed on
+ *  `options.getString of undefined`). */
+export async function resolveUserId(
   interaction: ChatInputCommandInteraction,
   api: WhipApiClient,
   optionName = 'user',
 ): Promise<DiscordIdentity | null> {
-  const explicit = interaction.options.getString(optionName, false);
+  const explicit = interaction.options?.getString?.(optionName, false) ?? null;
   const found = await resolveDiscordIdentity(api, interaction.user.id, interaction.user.username, explicit);
   if (found && 'ambiguous' in found) {
     await replyError(
