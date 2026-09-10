@@ -20,7 +20,7 @@ import * as path from 'path';
 const guard = path.join(__dirname, '..', '..', '..', '..', 'deploy', 'caller-guard.sh');
 
 /** What the guard says: how many callers a deploy would be rude to. */
-function toProtect(health: unknown, names = 'spot sysop'): number {
+function toProtect(health: unknown, names = 'spot sysop discord-bridge'): number {
   const json = typeof health === 'string' ? health : JSON.stringify(health);
   const out = execFileSync('sh', [
     '-c',
@@ -53,6 +53,13 @@ describe('who stops a deploy', () => {
     expect(toProtect(online({ username: 'tango' }))).toBe(1);
     expect(toProtect(online({ username: 'sysop' }, { username: 'tango' }))).toBe(1);
     expect(toProtect(online({ username: 'jucke' }, { username: 'tango' }))).toBe(2);
+  });
+
+  it('the discord bridge never stops a deploy', () => {
+    expect(toProtect(online({ username: 'discord-bridge' }))).toBe(0);
+    expect(toProtect(online({ username: 'sysop' }, { username: 'discord-bridge' }))).toBe(0);
+    expect(toProtect(online({ username: 'Discord-Bridge' }))).toBe(0);
+    expect(toProtect(online({ username: 'discord-bridge' }, { username: 'tango' }))).toBe(1);
   });
 
   it('an FTP caller does, even though /health does not name them', () => {
