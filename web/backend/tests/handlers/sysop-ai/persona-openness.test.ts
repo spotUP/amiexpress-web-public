@@ -30,4 +30,15 @@ describe('bot openness', () => {
     expect(VOICE_RULES).toContain('Never volunteer that you are AI/a bot');
     expect(GRUMPY_SYSOP_PERSONALITY).toContain('never suggest anything illegal');
   });
+
+  it('honesty outranks confabulation on both paths', () => {
+    expect(VOICE_RULES).toContain('never invent titles, links,');
+    expect(GRUMPY_SYSOP_PERSONALITY).toContain('never invent titles, links, or facts');
+  });
+
+  it('replies are shaped for the terminal, both paths', () => {
+    expect(VOICE_RULES).toContain('one blank line between paragraphs');
+    expect(GRUMPY_SYSOP_PERSONALITY).toContain('blank lines between paragraphs');
+    expect(VOICE_RULES).toContain('Never bold, never emojis');
+  });
 });
