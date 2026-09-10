@@ -313,3 +313,33 @@ describe('keyed provider catalogues', () => {
     );
   });
 });
+
+describe('tool loops on the plain legs', () => {
+  const toolsCtx = { ...context, tools: { list: [{ name: 'who_is_online', description: 'x', parameters: {}, tier: 'caller', run: async () => ({ content: 'Nobody else is online.' }) }], ctx: {} } };
+  it('groq uses tools when the caller has them', async () => {
+    primeKeyedCatalogue('groq', ['llama-3.3-70b-versatile']);
+    mocked.post.mockImplementation(async (url: string, body: any) => {
+      const calls = body?.messages?.length ?? 0;
+      if (body?.tools && !body.messages.some((m: any) => m.role === 'tool')) {
+        return { data: { choices: [{ message: { content: null, tool_calls: [{ id: 'c1', function: { name: 'who_is_online', arguments: '{}' } }] } }] } };
+      }
+      void calls;
+      return { data: { choices: [{ message: { content: 'Only you, kid.' } }] } };
+    });
+    const reply = await getGrumpySysopResponse('who is online', toolsCtx as any, {
+      provider: 'groq', modelName: '', temperature: 0.9, systemPrompt: '', groqApiKey: 'gsk-test',
+    });
+    expect(reply).toContain('Only you, kid.');
+  });
+  it('a groq tool-loop 400 falls back to plain instead of dying', async () => {
+    primeKeyedCatalogue('groq', ['llama-3.3-70b-versatile']);
+    const err400 = Object.assign(new Error('Bad request'),
+      { response: { status: 400, data: { error: { message: 'tools rejected' } } } });
+    mocked.post.mockRejectedValueOnce(err400);
+    mocked.post.mockResolvedValue({ data: { choices: [{ message: { content: 'Plain Groq here.' } }] } });
+    const reply = await getGrumpySysopResponse('hello', toolsCtx as any, {
+      provider: 'groq', modelName: '', temperature: 0.9, systemPrompt: '', groqApiKey: 'gsk-test',
+    });
+    expect(reply).toContain('Plain Groq here.');
+  });
+});

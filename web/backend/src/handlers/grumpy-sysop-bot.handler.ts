@@ -613,6 +613,50 @@ export async function keyedModelFor(
 }
 
 /**
+ * One tool-loop attempt for the plain legs (Groq, Gemini, Cerebras).
+ *
+ * The 2026-09-10 chats proved the cost of legs without tools: Groq
+ * answered "try the news conferences" while a texttv_page call away sat
+ * the actual headlines. All three vendors speak OpenAI chat completions,
+ * so the same loop fits. Never throws: a failed loop notes 429s and
+ * yields to the leg's plain call.
+ */
+async function toolLoopText(
+  label: string,
+  post: (body: unknown, timeoutMs: number) => Promise<any>,
+  model: string,
+  messages: unknown[],
+  context: ChatContext,
+  aiConfig: AIProviderConfig,
+): Promise<string | null> {
+  if (!context.tools || context.tools.list.length === 0) return null;
+  try {
+console.log(`[Grumpy Bot] Trying ${label} (${model}) with ${context.tools.list.length} tools...`);
+    const result = await askWithTools({
+      model, messages: messages as any, tools: context.tools.list, ctx: context.tools.ctx,
+      deadline: cfgDeadline(aiConfig), perRoundMs: PER_ROUND_MS,
+      maxTokens: CHAT_REPLY_TOKENS, temperature: aiConfig.temperature, post,
+    });
+    (context.afters ??= []).push(...result.afters);
+    if (result.calls.length) console.log(`[Grumpy Bot] tools used: ${result.calls.map((c) => `${c.name}:${c.outcome}`).join(', ')}`);
+    if (result.text) {
+console.log(`[Grumpy Bot] SUCCESS - Using ${label} response (tool loop)`);
+      return result.truncated ? withContinuation(result.text) : result.text;
+    }
+    const answered = result.calls.filter((c) => c.outcome === 'ok');
+    if (answered.length > 0 && result.toolResults.length > 0) {
+console.log('[Grumpy Bot] No reply from the model, but the board answered - sending the tool result');
+      return `Straight from the board, since I am typing slowly today:\n${result.toolResults.join('\n')}`;
+    }
+    return null;
+  } catch (error: any) {
+    if (isRateLimit(error)) noteCascadeRateLimited();
+console.log(`[Grumpy Bot] ${label} tool loop failed, plain instead (${error instanceof Error ? error.message : error})`);
+    return null;
+  }
+}
+
+/**
  * Tier 1b: Cerebras (fast, free, OpenAI-compatible).
  *
  * Same shape as the Groq leg (plain completions, no tool loop): the free
@@ -644,13 +688,18 @@ console.log('[Grumpy Bot] No CEREBRAS_API_KEY configured, skipping Cerebras');
     ];
 
     const model = await keyedModelFor('cerebras', aiConfig);
+    const headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
+    const post = async (body: unknown, timeoutMs: number) =>
+      (await axios.post('https://api.cerebras.ai/v1/chat/completions', body, { headers, timeout: timeoutMs })).data;
+    const tooled = await toolLoopText('Cerebras', post, model, messages, context, aiConfig);
+    if (tooled) return tooled;
 console.log(`[Grumpy Bot] Trying Cerebras (${model})...`);
 
     const response = await axios.post(
       'https://api.cerebras.ai/v1/chat/completions',
       { model, messages, max_tokens: CHAT_REPLY_TOKENS, temperature: aiConfig.temperature },
       {
-        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        headers,
         timeout,
       }
     );
@@ -695,6 +744,14 @@ console.log('[Grumpy Bot] No GROQ_API_KEY configured, skipping Groq');
     ];
 
     const model = await keyedModelFor('groq', aiConfig);
+    const groqHeaders = {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    };
+    const tooled = await toolLoopText('Groq',
+      async (body, timeoutMs) => (await axios.post('https://api.groq.com/openai/v1/chat/completions', body, { headers: groqHeaders, timeout: timeoutMs })).data,
+      model, messages, context, aiConfig);
+    if (tooled) return tooled;
 console.log(`[Grumpy Bot] Trying Groq (${model})...`);
 
     const response = await axios.post(
@@ -706,10 +763,7 @@ console.log(`[Grumpy Bot] Trying Groq (${model})...`);
         temperature: aiConfig.temperature,
       },
       {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers: groqHeaders,
         timeout: groqTimeout
       }
     );
@@ -721,6 +775,7 @@ console.log('[Grumpy Bot] SUCCESS - Using Groq response');
     }
     return null;
   } catch (error) {
+    if ((error as any)?.response?.status === 429) noteCascadeRateLimited();
 console.error('[Grumpy Bot] Groq failed:', error instanceof Error ? error.message : error);
     return null;
   }
@@ -737,35 +792,43 @@ console.log('[Grumpy Bot] No GEMINI_API_KEY configured, skipping Gemini');
   if (geminiTimeout < 250) return null;
   try {
     const systemPrompt = personalityFor(aiConfig);
-    const fullPrompt = `${systemPrompt}\n\n${context.boardCard ? context.boardCard + '\n\n' : ''}${context.retrieved ? context.retrieved + '\n\n' : ''}User context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes\n\n${
-      context.messageHistory.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n')
-    }\nUser: ${userMessage}\nAssistant:`;
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...(context.boardCard ? [{ role: 'system', content: context.boardCard }] : []),
+      ...(context.retrieved ? [{ role: 'system', content: context.retrieved }] : []),
+      { role: 'system', content: `User context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes` },
+      ...context.messageHistory.map(msg => ({
+        role: msg.role === 'user' ? 'user' : 'assistant',
+        content: msg.content
+      })),
+      { role: 'user', content: userMessage }
+    ];
 
     const model = await keyedModelFor('gemini', aiConfig);
+    const geminiHeaders = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+    const tooled = await toolLoopText('Gemini',
+      async (body, timeoutMs) => (await axios.post('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', body, { headers: geminiHeaders, timeout: timeoutMs })).data,
+      model, messages, context, aiConfig);
+    if (tooled) return tooled;
 console.log(`[Grumpy Bot] Trying Gemini (${model})...`);
 
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+      { model, messages, max_tokens: CHAT_REPLY_TOKENS, temperature: aiConfig.temperature },
       {
-        contents: [{ parts: [{ text: fullPrompt }] }],
-        generationConfig: {
-          maxOutputTokens: 150,
-          temperature: aiConfig.temperature,
-        }
-      },
-      {
-        headers: { 'Content-Type': 'application/json' },
+        headers: geminiHeaders,
         timeout: geminiTimeout
       }
     );
 
-    const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const content = response.data.choices[0]?.message?.content;
     if (content) {
 console.log('[Grumpy Bot] SUCCESS - Using Gemini response');
       return content;
     }
     return null;
   } catch (error) {
+    if ((error as any)?.response?.status === 429) noteCascadeRateLimited();
 console.error('[Grumpy Bot] Gemini failed:', error instanceof Error ? error.message : error);
     return null;
   }
