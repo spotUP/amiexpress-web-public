@@ -286,6 +286,7 @@ static int fetch_page(int page)
     char path[128];
     char plain[8192];
     int rc;
+    int attempts;
 
     page_num = 0;
     page_title[0] = '\0';
@@ -307,8 +308,21 @@ static int fetch_page(int page)
     body[0] = '\0';
     body_truncated = 0;
     memset(&resp, 0, sizeof resp);
-    rc = ae_http_get(&target, path, &resp, collect, 0);
-    if (rc != AE_HTTP_OK) { last_fetch_err = -100 + rc; return last_fetch_err; }
+    /* Live 2026-09-10: the reply sometimes never arrives even though the
+       request left (transient - a full 2 KB reply got through minutes
+       earlier on the same path). One attempt would report the glitch as
+       the truth; three attempts 15 s apart still fail fast enough to be
+       honest, and the last error is the one reported. */
+    for (rc = AE_HTTP_ERR_READ, attempts = 0; attempts < 3; attempts++) {
+        body_len = 0;
+        body[0] = '\0';
+        body_truncated = 0;
+        memset(&resp, 0, sizeof resp);
+        rc = ae_http_get(&target, path, &resp, collect, 0);
+        if (rc == AE_HTTP_OK) break;
+        last_fetch_err = -100 + rc;
+    }
+    if (rc != AE_HTTP_OK) return last_fetch_err;
     if (resp.status != 200) return resp.status;
 
     if (texttv_pick_body(body, plain, sizeof plain) != 0) return -1;
