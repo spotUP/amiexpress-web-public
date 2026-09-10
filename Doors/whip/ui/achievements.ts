@@ -3,6 +3,7 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { UserStats, Achievement } from '../types/user';
 import type { DataManager } from '../core/data-manager';
 import { attachWhipMenu, type WhipMenuBar } from './menu';
+import { bindBoxScroll } from './scroll-keys';
 import type { MenuSelection } from '../types/session';
 import { T } from '../door-theme';
 import { attachWhipChrome, type FooterHint } from './chrome';
@@ -92,6 +93,11 @@ export async function showAchievements(
       label: ' Achievements ',
       scrollable: true,
       alwaysScroll: true,
+      scrollbar: {
+        ch: '|',
+        track: { ch: ':', style: { fg: T.dim, bg: T.ground } },
+        style: { fg: T.accent, bg: T.ground },
+      },
       mouse: true,
       keys: true,
       vi: true,
@@ -130,6 +136,10 @@ export async function showAchievements(
 
     content.setContent(contentText);
     content.focus();
+
+    // Arrow/wheel scrolling: no widget binds it, so the door drives the
+    // pane like the timeline drives its selection (ui/scroll-keys.ts).
+    const unbindScroll = bindBoxScroll(screen, content);
 
     // Footer - NOT focusable
     const instructions = createBox({
@@ -188,6 +198,7 @@ export async function showAchievements(
       // First: a rail timer still writing after these widgets are gone would
       // paint into a screen that no longer holds them.
       chrome.stop();
+      unbindScroll();
       if (menu) {
         menu.destroy();
         menu = null;

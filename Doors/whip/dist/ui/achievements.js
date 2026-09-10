@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.showAchievements = showAchievements;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const menu_1 = require("./menu");
+const scroll_keys_1 = require("./scroll-keys");
 const door_theme_1 = require("../door-theme");
 const chrome_1 = require("./chrome");
 /** The keys this screen answers to, and the same keys shortened for 40 columns. */
@@ -76,6 +77,11 @@ async function showAchievements(screen, currentUser, dataManager, onNavigate) {
             label: ' Achievements ',
             scrollable: true,
             alwaysScroll: true,
+            scrollbar: {
+                ch: '|',
+                track: { ch: ':', style: { fg: door_theme_1.T.dim, bg: door_theme_1.T.ground } },
+                style: { fg: door_theme_1.T.accent, bg: door_theme_1.T.ground },
+            },
             mouse: true,
             keys: true,
             vi: true,
@@ -110,6 +116,9 @@ async function showAchievements(screen, currentUser, dataManager, onNavigate) {
         }
         content.setContent(contentText);
         content.focus();
+        // Arrow/wheel scrolling: no widget binds it, so the door drives the
+        // pane like the timeline drives its selection (ui/scroll-keys.ts).
+        const unbindScroll = (0, scroll_keys_1.bindBoxScroll)(screen, content);
         // Footer - NOT focusable
         const instructions = (0, blessed_helpers_1.createBox)({
             fixed: true,
@@ -161,6 +170,7 @@ async function showAchievements(screen, currentUser, dataManager, onNavigate) {
             // First: a rail timer still writing after these widgets are gone would
             // paint into a screen that no longer holds them.
             chrome.stop();
+            unbindScroll();
             if (menu) {
                 menu.destroy();
                 menu = null;

@@ -89,6 +89,18 @@ export function wrapTitle(title: string, width: number): string[] {
 }
 
 /**
+ * Column geometry for a screen width (2026-09-10): four equal columns
+ * across the full width, so a widened terminal spreads the board
+ * instead of leaving it narrow. Pure - the board recomputes it on
+ * resize; the probe is width in, widths out.
+ */
+export function columnGeometry(screenWidth: number): { totalWidth: number; colWidth: number; leftOf: (i: number) => number } {
+  const totalWidth = Math.max(40, screenWidth - 1);
+  const colWidth = Math.max(10, Math.floor(totalWidth / 4));
+  return { totalWidth, colWidth, leftOf: (i: number) => i * colWidth };
+}
+
+/**
  * One task as a multi-line card: full wrapped title rows, then the meta
  * row (priority, points, assignee). Replaces the old single-line
  * truncated form ("BBS Re.. [L] 10"), which left six readable characters.
@@ -204,10 +216,10 @@ export async function showKanbanBoard(
       clickable: false,
     });
 
-    // Column containers - calculate width based on screen width
-    // Leave 1 char margin on right to ensure border is visible
-    const totalWidth = screen.width - 1;
-    const colWidth = Math.floor(totalWidth / 4);
+    // Column containers - full width, recomputed on resize so a
+    // widened terminal spreads the board (2026-09-10). paintLists
+    // re-wraps cards from the same numbers, so one relayout covers all.
+    let { colWidth } = columnGeometry(screen.width);
     const columnBoxes: any[] = [];
     const columnLists: any[] = [];
     const leftMargin = 0;
@@ -392,15 +404,29 @@ export async function showKanbanBoard(
 
     // Get column index from screen X position
     const getColumnFromX = (x: number): number => {
+      const geo = columnGeometry(screen.width);
       for (let i = 0; i < COLUMNS.length; i++) {
-        const colLeft = leftMargin + (i * colWidth);
-        const colRight = colLeft + colWidth;
+        const colLeft = leftMargin + geo.leftOf(i);
+        const colRight = colLeft + geo.colWidth;
         if (x >= colLeft && x < colRight) {
           return i;
         }
       }
       return -1;
     };
+
+    // A widened (or narrowed) terminal re-lays the columns instead of
+    // leaving them at their opening width with dead space beside them.
+    const relayout = (): void => {
+      const geo = columnGeometry(screen.width);
+      colWidth = geo.colWidth;
+      for (let i = 0; i < COLUMNS.length; i++) {
+        columnBoxes[i].left = leftMargin + geo.leftOf(i);
+        columnBoxes[i].width = geo.colWidth;
+      }
+      paintLists();
+    };
+    screen.on('resize', relayout);
 
     // Start drag operation
     const startDrag = (colIndex: number, itemIndex: number, x: number, y: number) => {
@@ -577,6 +603,7 @@ export async function showKanbanBoard(
       if (updateTimeout) clearTimeout(updateTimeout);
       screen.off('keypress', keyHandler);
       screen.off('mouse', mouseHandler);
+      screen.off('resize', relayout);
       columnLists.forEach(list => list.off('mouse', elementMouseHandler));
       if (dragState.ghost) screen.remove(dragState.ghost);
       screen.remove(header);

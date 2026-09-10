@@ -2,11 +2,53 @@ import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { UserStats } from '../types/user';
 import type { DataManager } from '../core/data-manager';
-import { getLevelStars, getLevelColor, formatPoints } from '../core/gamification';
+import { getLevelColor, formatPoints } from '../core/gamification';
 import { attachWhipMenu, type WhipMenuBar } from './menu';
+import { bindBoxScroll } from './scroll-keys';
 import type { MenuSelection } from '../types/session';
 import { T } from '../door-theme';
 import { attachWhipChrome, type FooterHint } from './chrome';
+
+/**
+ * One leaderboard row, single visual line (2026-09-10).
+ *
+ * Rows used to run 77-85 visible cells in a 76-cell pane: every row
+ * wrapped, the star meter tore columns apart, and the current user got
+ * a full-width inverse block nobody needed (the <- YOU marker says it).
+ * Columns are sized to a 76 budget with room to spare; the marker stays,
+ * the block goes.
+ */
+export const LEADERBOARD_HEADER = 'RANK HANDLE        LEVEL  POINTS TASKS PROJ ACHV';
+
+export function formatLeaderboardRow(
+  rank: number,
+  handle: string,
+  level: string,
+  levelColor: string,
+  points: string,
+  tasks: number,
+  projects: number,
+  achievs: string,
+  isYou: boolean
+): string {
+  const levelText = level.toUpperCase().substring(0, 5);
+  const levelCell =
+    `{${levelColor}-fg}${levelText}{/${levelColor}-fg}` + ' '.repeat(Math.max(0, 6 - levelText.length));
+  const cells =
+    `#${rank}`.padEnd(4) +
+    handle.substring(0, 12).padEnd(13) +
+    levelCell +
+    points.substring(0, 6).padStart(7) +
+    String(tasks).substring(0, 4).padStart(5) +
+    String(projects).substring(0, 4).padStart(5) +
+    achievs.substring(0, 6).padStart(7);
+  return cells + (isYou ? ` {${T.accent}-fg}<- YOU{/${T.accent}-fg}` : '');
+}
+
+/** Visible cells, tags excluded - the number the pane width must cover. */
+export function visibleLength(row: string): number {
+  return row.replace(/\{[^}]*\}/g, '').length;
+}
 
 /** The keys this screen answers to, and the same keys shortened for 40 columns. */
 const HINTS: readonly FooterHint[] = [
@@ -65,7 +107,7 @@ export async function showLeaderboard(
       left: 1,
       width: '98%',
       height: 2,
-      content: ' {bold}RANK  HANDLE          LEVEL      POINTS  TASKS  PROJECTS  ACHIEVEMENTS{/bold}\n' +
+      content: ` {bold}${LEADERBOARD_HEADER}{/bold}\n` +
                ' ' + '='.repeat(tableHeaderWidth - 2),  // Dynamic separator width
       style: { fg: T.accent, bg: T.ground },
       tags: true,
@@ -86,6 +128,11 @@ export async function showLeaderboard(
       label: ' Leaderboard ',
       scrollable: true,
       alwaysScroll: true,
+      scrollbar: {
+        ch: '|',
+        track: { ch: ':', style: { fg: T.dim, bg: T.ground } },
+        style: { fg: T.accent, bg: T.ground },
+      },
       mouse: true,
       keys: true,
       vi: true,
@@ -101,31 +148,21 @@ export async function showLeaderboard(
       const user = sortedUsers[i];
       const isCurrentUser = user.userId === currentUser.userId;
       const levelColor = getLevelColor(user.level);
-      const levelStars = getLevelStars(user.level);
 
-      // Format rank with padding
-      const rank = `#${user.rank}`.padEnd(6);
-
-      // Format handle with padding
-      const handle = user.handle.substring(0, 14).padEnd(16);
-
-      // Format level with stars
-      const level = `${user.level.toUpperCase()} (${levelStars})`.padEnd(11);
-
-      // Format points
-      const points = formatPoints(user.points).padStart(7);
-
-      // Format stats
-      const tasks = user.tasksCompleted.toString().padStart(5);
-      const projects = user.projectsCreated.toString().padStart(9);
-      const achievs = `${user.achievements.length}/${totalAchievements}`.padStart(13);
-
-      const line = `${isCurrentUser ? '{inverse}' : ''} ${rank} ${handle} {${levelColor}-fg}${level}{/${levelColor}-fg} ${points}  ${tasks}  ${projects}  ${achievs}${isCurrentUser ? '  <- YOU' : ''}${isCurrentUser ? '{/inverse}' : ''}\n`;
-      content += line;
+      const line = formatLeaderboardRow(
+        user.rank, user.handle, user.level, levelColor,
+        formatPoints(user.points), user.tasksCompleted, user.projectsCreated,
+        `${user.achievements.length}/${totalAchievements}`,
+        isCurrentUser
+      );
+      content += `${line}\n`;
     }
 
     table.setContent(content);
     table.focus();
+
+    // Arrow/wheel scrolling, same as achievements (ui/scroll-keys.ts).
+    const unbindScroll = bindBoxScroll(screen, table);
 
     // Footer - NOT focusable
     const instructions = createBox({
@@ -184,6 +221,7 @@ export async function showLeaderboard(
       // First: a rail timer still writing after these widgets are gone would
       // paint into a screen that no longer holds them.
       chrome.stop();
+      unbindScroll();
       if (menu) {
         menu.destroy();
         menu = null;

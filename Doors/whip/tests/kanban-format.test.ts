@@ -4,7 +4,7 @@
  * single line ("BBS Re.. [L] 10").
  */
 import assert from 'assert';
-import { wrapTitle, formatKanbanCard } from '../ui/kanban-board';
+import { wrapTitle, formatKanbanCard, columnGeometry } from '../ui/kanban-board';
 
 const task: any = {
   id: 't1', projectId: 'p1', title: 'BBS Releases API for chatbots',
@@ -68,4 +68,20 @@ export async function selectedCardInvertsWithoutGrip(): Promise<void> {
     assert.ok(row.startsWith('{inverse}') && row.endsWith('{/inverse}'), `selected row inverted: ${row}`);
   }
   assert.ok(!card.includes('>>'), 'selection is not a grip');
+}
+
+export async function columnsSpanTheWidth(): Promise<void> {
+  // 80-column board: four ~19-wide columns across ~79.
+  let geo = columnGeometry(80);
+  assert.strictEqual(geo.colWidth, 19);
+  assert.strictEqual(geo.leftOf(0), 0);
+  assert.strictEqual(geo.leftOf(3), 57);
+  assert.ok(geo.leftOf(3) + geo.colWidth <= 79, 'last column ends inside');
+  // Widened terminal: columns grow, none stranded narrow.
+  geo = columnGeometry(160);
+  assert.strictEqual(geo.colWidth, 39);
+  assert.strictEqual(geo.leftOf(3), 117);
+  // Absurd input clamps instead of collapsing.
+  geo = columnGeometry(20);
+  assert.ok(geo.colWidth >= 10, 'minimum usable width');
 }
