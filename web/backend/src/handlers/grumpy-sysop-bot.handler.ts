@@ -81,7 +81,7 @@ interface ChatContext {
  * AI configuration from OperatorChatConfig
  */
 export interface AIProviderConfig {
-  provider: 'groq' | 'gemini' | 'openrouter' | 'zen' | 'go' | 'rule-based';
+  provider: 'groq' | 'gemini' | 'openrouter' | 'zen' | 'go' | 'cerebras' | 'rule-based';
   /**
    * The three below belong to the AI providers, not to the bot.
    *
@@ -97,6 +97,7 @@ export interface AIProviderConfig {
   temperature?: number;
   systemPrompt?: string;
   groqApiKey?: string;
+  cerebrasApiKey?: string;
   geminiApiKey?: string;
   openRouterApiKey?: string;
   zenApiKey?: string;
@@ -500,6 +501,62 @@ CRITICAL: Be concise. Typing at 2400 baud is slow, so you don't waste bytes.`;
  * Tries providers in order: Groq → Gemini → OpenRouter
  * Falls back to rule-based if all fail
  */
+
+/**
+ * Tier 1b: Cerebras (fast, free, OpenAI-compatible).
+ *
+ * Same shape as the Groq leg (plain completions, no tool loop): the free
+ * tier is for short chat replies, and a second fast leg doubles the
+ * keyless-adjacent surface when OpenRouter 429s. Added 2026-09-10 from the
+ * free-model survey; default model from their dashboard rotation.
+ */
+async function getCerebrasResponse(userMessage: string, context: ChatContext, aiConfig: AIProviderConfig): Promise<string | null> {
+  const apiKey = aiConfig.cerebrasApiKey || process.env.CEREBRAS_API_KEY;
+  if (!apiKey) {
+console.log('[Grumpy Bot] No CEREBRAS_API_KEY configured, skipping Cerebras');
+    return null;
+  }
+  const timeout = remainingBudget(aiConfig, 8000);
+  if (timeout < 250) return null;
+
+  try {
+    const systemPrompt = personalityFor(aiConfig);
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...(context.boardCard ? [{ role: 'system', content: context.boardCard }] : []),
+      ...(context.retrieved ? [{ role: 'system', content: context.retrieved }] : []),
+      { role: 'system', content: `User context: ${context.userHandle} on node ${context.nodeId}, ${context.conferenceName}, online ${Math.floor(context.timeOnline / 60)} minutes` },
+      ...context.messageHistory.map(msg => ({
+        role: msg.role === 'user' ? 'user' : 'assistant',
+        content: msg.content
+      })),
+      { role: 'user', content: userMessage }
+    ];
+
+    const model = aiConfig.modelName || 'llama-3.1-8b';
+console.log(`[Grumpy Bot] Trying Cerebras (${model})...`);
+
+    const response = await axios.post(
+      'https://api.cerebras.ai/v1/chat/completions',
+      { model, messages, max_tokens: CHAT_REPLY_TOKENS, temperature: aiConfig.temperature },
+      {
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        timeout,
+      }
+    );
+
+    const content = response.data.choices[0]?.message?.content;
+    if (content) {
+console.log('[Grumpy Bot] SUCCESS - Using Cerebras response');
+      return content;
+    }
+    return null;
+  } catch (error) {
+    if ((error as any)?.response?.status === 429) noteCascadeRateLimited();
+console.error('[Grumpy Bot] Cerebras failed:', error instanceof Error ? error.message : error);
+    return null;
+  }
+}
 
 /**
  * Tier 1: Groq (Fast, Free, Llama 3.1)
@@ -1164,12 +1221,13 @@ async function getAIResponse(userMessage: string, context: ChatContext, aiConfig
   // upstreams (Zen, Go) ahead of OpenRouter - either way a Zen/Go failure
   // falls back to OpenRouter and an OpenRouter 429 falls forward to Zen
   // before Groq/Gemini are tried.
-  const cascade: Array<'groq' | 'gemini' | 'openrouter' | 'zen' | 'go'> =
-    preferred === 'groq' ? ['groq', 'zen', 'go', 'gemini', 'openrouter'] :
-    preferred === 'gemini' ? ['gemini', 'zen', 'go', 'groq', 'openrouter'] :
-    preferred === 'zen' ? ['zen', 'go', 'openrouter', 'groq', 'gemini'] :
-    preferred === 'go' ? ['go', 'zen', 'openrouter', 'groq', 'gemini'] :
-    ['openrouter', 'zen', 'go', 'groq', 'gemini'];
+  const cascade: Array<'groq' | 'gemini' | 'openrouter' | 'zen' | 'go' | 'cerebras'> =
+    preferred === 'groq' ? ['groq', 'zen', 'go', 'gemini', 'cerebras', 'openrouter'] :
+    preferred === 'gemini' ? ['gemini', 'zen', 'go', 'groq', 'cerebras', 'openrouter'] :
+    preferred === 'zen' ? ['zen', 'go', 'openrouter', 'groq', 'gemini', 'cerebras'] :
+    preferred === 'go' ? ['go', 'zen', 'openrouter', 'groq', 'gemini', 'cerebras'] :
+    preferred === 'cerebras' ? ['cerebras', 'groq', 'zen', 'go', 'openrouter', 'gemini'] :
+    ['openrouter', 'zen', 'go', 'groq', 'gemini', 'cerebras'];
 
   lastCascadeNote = null;
   const hasKeys = Boolean(
@@ -1177,6 +1235,7 @@ async function getAIResponse(userMessage: string, context: ChatContext, aiConfig
     || aiConfig.goApiKey || process.env.GO_API_KEY
     || aiConfig.openRouterApiKey || process.env.OPENROUTER_API_KEY
     || aiConfig.groqApiKey || process.env.GROQ_API_KEY
+    || aiConfig.cerebrasApiKey || process.env.CEREBRAS_API_KEY
     || aiConfig.geminiApiKey || process.env.GEMINI_API_KEY,
   );
   for (const provider of cascade) {
@@ -1185,6 +1244,7 @@ async function getAIResponse(userMessage: string, context: ChatContext, aiConfig
     else if (provider === 'gemini') response = await getGeminiResponse(userMessage, context, aiConfig);
     else if (provider === 'zen') response = await getZenResponse(userMessage, context, aiConfig);
     else if (provider === 'go') response = await getGoResponse(userMessage, context, aiConfig);
+    else if (provider === 'cerebras') response = await getCerebrasResponse(userMessage, context, aiConfig);
     else if (provider === 'openrouter') response = await getOpenRouterResponse(userMessage, context, aiConfig);
     if (response) return response;
   }

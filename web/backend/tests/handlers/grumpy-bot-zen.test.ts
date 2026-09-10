@@ -235,3 +235,31 @@ describe('opencode go', () => {
     expect(reply).toContain('OpenRouter after Go.');
   });
 });
+
+describe('cerebras', () => {
+  const cbCfg = (over: Partial<AIProviderConfig> = {}): AIProviderConfig => ({
+    provider: 'cerebras', modelName: '', temperature: 0.9, systemPrompt: '',
+    cerebrasApiKey: 'csk-test', ...over,
+  });
+  it('skips silently without a key', async () => {
+    const reply = await getGrumpySysopResponse('hello', context as any,
+      { provider: 'cerebras', temperature: 0.9, systemPrompt: '' });
+    expect(reply).toBe(ZEN_UNCONFIGURED_LINE);
+    expect(mocked.post).not.toHaveBeenCalled();
+  });
+  it('answers plainly with a key', async () => {
+    mocked.post.mockResolvedValue(chatOk('Fast answer.'));
+    const reply = await getGrumpySysopResponse('hello', context as any, cbCfg());
+    expect(reply).toContain('Fast answer.');
+    expect(mocked.post).toHaveBeenCalledWith(
+      'https://api.cerebras.ai/v1/chat/completions',
+      expect.objectContaining({ model: 'llama-3.1-8b' }),
+      expect.anything(),
+    );
+  });
+  it('a cerebras 429 notes the jam, and the line says jammed', async () => {
+    mocked.post.mockRejectedValue(err429());
+    const reply = await getGrumpySysopResponse('hello', context as any, cbCfg());
+    expect(reply).toBe(ZEN_RATE_LIMITED_LINE);
+  });
+});
