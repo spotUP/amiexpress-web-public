@@ -75,10 +75,32 @@ export function createWhipRouter(database: Database): ReturnType<typeof express.
     sendResponse(res, { userId: link.userId });
   });
 
+  // Which BBS user (if any) owns this handle. Case-insensitive, like the
+  // login prompt. Ensures WHIP stats so a fresh match never hits
+  // "Unknown user" on reads. The Discord bot's username matching starts
+  // here; LINKDISCORD stays the explicit override.
+  router.get('/resolve', async (req: Request, res: Response) => {
+    const handle = req.query.handle;
+    if (typeof handle !== 'string' || !handle.trim()) {
+      sendError(res, 'handle query parameter is required', 400);
+      return;
+    }
+    try {
+      const user = await database.getUserByUsername(handle.trim());
+      if (!user) {
+        sendError(res, `No BBS user called "${handle.trim()}"`, 404);
+        return;
+      }
+      await whipService.ensureUser(String(user.id), user.username);
+      sendResponse(res, { userId: String(user.id), username: user.username });
+    } catch (error) {
+      sendError(res, error instanceof Error ? error.message : 'Failed to resolve user', 500);
+    }
+  });
+
   router.get('/projects', async (_req: Request, res: Response) => {
     try {
-      sendResponse(res, await whipService.listProjects());
-    } catch (error) {
+      sendResponse(res, await whipService.listProjects());    } catch (error) {
       sendError(res, error instanceof Error ? error.message : 'Failed to load projects', 500);
     }
   });
@@ -165,6 +187,27 @@ export function createWhipRouter(database: Database): ReturnType<typeof express.
       sendResponse(res, await whipService.listUsers());
     } catch (error) {
       sendError(res, error instanceof Error ? error.message : 'Failed to load users', 500);
+    }
+  });
+
+  // The Discord handle a user claims ("my Discord name" in the WHIP door).
+  // Empty clears it. Over-long input is refused, never silently cut.
+  router.patch('/users/:id', async (req: Request, res: Response) => {
+    const { discordName } = req.body ?? {};
+    if (typeof discordName !== 'string') {
+      sendError(res, 'discordName must be a string', 400);
+      return;
+    }
+    if (discordName.trim().length > 32) {
+      sendError(res, 'discordName is at most 32 characters', 400);
+      return;
+    }
+    try {
+      sendResponse(res, await whipService.setDiscordName(req.params.id, discordName));
+    } catch (error) {
+      const missing = error instanceof Error && error.message.startsWith('Unknown user');
+      sendError(res, error instanceof Error ? error.message : 'Failed to set Discord name',
+        missing ? 404 : 500);
     }
   });
 
