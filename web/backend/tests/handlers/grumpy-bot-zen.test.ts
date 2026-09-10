@@ -343,3 +343,33 @@ describe('tool loops on the plain legs', () => {
     expect(reply).toContain('Plain Groq here.');
   });
 });
+
+describe('faked tool calls in replies', () => {
+  it('strips the block and keeps the rest', async () => {
+    const { stripFakeToolCalls } = await import('../../src/handlers/grumpy-sysop-bot.handler');
+    expect(stripFakeToolCalls('Here: <tool_call>search_x</tool_call> done.')).toBe('Here:  done.');
+  });
+  it('an all-fake reply fails the cascade instead of showing stage directions', async () => {
+    primeZenCatalogue(['mimo-v2.5-free']);
+    mocked.post.mockResolvedValue({ data: { choices: [{ message: { content: '<tool_call>ask_scene</tool_call>' } }] } });
+    const reply = await getGrumpySysopResponse('show me a logo', context as any, zenCfg());
+    expect(reply).not.toContain('tool_call');
+    expect(reply).toMatch(/ask me again in a minute/i);
+  });
+});
+
+describe('faked tool calls rotate the pools', () => {
+  it('an all-fake reply moves the junk model to the back', async () => {
+    primeZenCatalogue(['aa-junk-free', 'zz-good-free']);
+    mocked.post.mockImplementation(async (url: string, body: any) => {
+      if ((body?.model ?? '').includes('junk')) {
+        return { data: { choices: [{ message: { content: '<tool_call>x</tool_call>' } }] } };
+      }
+      return { data: { choices: [{ message: { content: 'Real answer here.' } }] } };
+    });
+    const first = await getGrumpySysopResponse('hi', context as any, zenCfg());
+    expect(first).toMatch(/ask me again in a minute/i);
+    const second = await getGrumpySysopResponse('hi again', context as any, zenCfg());
+    expect(second).toContain('Real answer here.');
+  });
+});

@@ -500,10 +500,16 @@ CRITICAL: Be concise. Typing at 2400 baud is slow, so you don't waste bytes.`;
 // Massively expanded response database for natural, varied conversations
 
 /**
- * Multi-tier AI Response System
- * Tries providers in order: Groq → Gemini → OpenRouter
- * Falls back to rule-based if all fail
+ * Small free models sometimes roleplay tool use in TEXT - a <tool_call>
+ * block in the reply - instead of calling through the loop. Nothing
+ * executes it (tools only run in askWithTools), so the caller would read
+ * stage directions. Strip the block: remainder stands, emptiness fails
+ * the cascade on to the next leg. Live 2026-09-10, asciiarena ask.
  */
+const FAKE_TOOL_CALL = /<tool_call>[\s\S]*?(<\/tool_call>|$)/gi;
+export function stripFakeToolCalls(text: string): string {
+  return text.replace(FAKE_TOOL_CALL, '').replace(/\n{3,}/g, '\n\n').trim();
+}
 
 /**
  * Keyed providers with model catalogues (Groq, Gemini, Cerebras).
@@ -937,6 +943,13 @@ function rotateZenModels(): void {
 function rotateGoModels(): void {
   const failed = cachedGoModels.shift();
   if (failed !== undefined) cachedGoModels.push(failed);
+}
+
+/** Test seam + junk recovery: rotate every round-robin pool so the next
+ *  message meets the next-best brain everywhere. */
+export function rotateModelPools(): void {
+  rotateZenModels();
+  rotateGoModels();
 }
 
 async function discoverZenModels(timeoutMs: number): Promise<string[]> {
@@ -1477,12 +1490,15 @@ export async function getGrumpySysopResponse(
   };
 
   const aiResponse = await getAIResponse(userMessage, untaggedHistory(context), cfg);
-  if (aiResponse) {
-console.log('[Grumpy Bot] Using AI response');
+  const cleaned = aiResponse ? stripFakeToolCalls(aiResponse) : null;
+  if (cleaned && cleaned !== aiResponse) {
+console.log('[Grumpy Bot] Stripped a faked tool-call block from the reply');
+  }
+  if (cleaned) {console.log('[Grumpy Bot] Using AI response');
     // The caller has their answer; the board spends the quiet moment learning
     // what the NEXT model on the list costs, so nobody pays for it in a chat.
     void probeAnUnmeasuredModel(cfg).catch(() => undefined);
-    return stripMarkdown(stripEmojis(stripEngineTag(aiResponse).trim()));
+    return stripMarkdown(stripEmojis(stripEngineTag(cleaned.trim())));
   }
 
   // NO CANNED BOT BEHIND THIS. There used to be a rule-based responder - a
@@ -1498,6 +1514,15 @@ console.log('[Grumpy Bot] Using AI response');
   // and the net were never the patient. Only rule-based (the admin turned
   // the AI off) keeps the persona's own line.
 console.log('[Grumpy Bot] No provider answered - saying so');
+  // A reply that was ONLY a faked tool call leaves nothing to say - but
+  // its model must not lead again next message, or every retry roleplays
+  // the same block. Rotate, and record the death: the cascade returned
+  // text, so its tried-and-died default never ran, and without this the
+  // persona fallback would answer for a failure.
+  if (aiResponse && !cleaned) {
+    rotateModelPools();
+    if (!lastCascadeNote) lastCascadeNote = 'failed';
+  }
   if (lastCascadeNote === 'rate-limited') return ZEN_RATE_LIMITED_LINE;
   if (lastCascadeNote === 'failed') return ZEN_FAILED_LINE;
   if (lastCascadeNote === 'unconfigured') return ZEN_UNCONFIGURED_LINE;
