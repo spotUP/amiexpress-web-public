@@ -248,7 +248,9 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // ===== Bulls Menu API - Sysop-only (Bulls.CFG for the 68K Bulls door) =====
   const { createBullsRouter } = require('../api/bulls-routes');
   app.use('/api/config/bulls', authenticateToken(db), requireSysop(), createBullsRouter(
-    process.env.BBS_ROOT ? path.resolve(process.env.BBS_ROOT) : path.resolve(__dirname, '../../../..'),
+    process.env.BBS_DATA_DIR ? path.resolve(process.env.BBS_DATA_DIR)
+      : process.env.BBS_ROOT ? path.resolve(process.env.BBS_ROOT)
+      : path.resolve(__dirname, '../../../..'),
   ));
 
   // ===== Chat API - Public Routes (for web chat authentication) =====

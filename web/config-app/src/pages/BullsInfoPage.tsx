@@ -35,11 +35,17 @@ export function BullsInfoPage() {
     setLoading(true);
     setStatus(null);
     try {
-      const data = await apiClient.getBullsConfig();
-      if (data) {
+      // The client returns the raw envelope ({success, data}); sibling
+      // pages read handler-style raw bodies, so tolerate both shapes -
+      // an unshaped error body crashed this page on first open (2026-09-10).
+      const res: any = await apiClient.getBullsConfig();
+      const data = res?.data ?? res;
+      if (data && Array.isArray(data.entries)) {
         setEntries(data.entries);
-        setProblems(data.problems);
-        setRaw(data.raw);
+        setProblems(Array.isArray(data.problems) ? data.problems : []);
+        setRaw(typeof data.raw === 'string' ? data.raw : '');
+      } else {
+        setStatus(`Error: ${res?.message ?? 'unexpected response'}`);
       }
     } catch (e: unknown) {
       setStatus(`Error: ${e instanceof Error ? e.message : 'Failed'}`);
@@ -71,12 +77,15 @@ export function BullsInfoPage() {
     setSaving(true);
     setStatus(null);
     try {
-      const data = await apiClient.saveBullsConfig(raw);
-      if (data) {
+      const res: any = await apiClient.saveBullsConfig(raw);
+      const data = res?.data ?? res;
+      if (data && Array.isArray(data.entries)) {
         setEntries(data.entries);
-        setProblems(data.problems);
-        const left = data.problems.length;
+        setProblems(Array.isArray(data.problems) ? data.problems : []);
+        const left = (Array.isArray(data.problems) ? data.problems : []).length;
         setStatus(left ? `Saved with ${left} problem${left === 1 ? '' : 's'} flagged below.` : 'Saved, no problems.');
+      } else {
+        setStatus(`Error: ${res?.message ?? 'unexpected response'}`);
       }
     } catch (e: unknown) {
       setStatus(`Error: ${e instanceof Error ? e.message : 'Save failed'}`);
