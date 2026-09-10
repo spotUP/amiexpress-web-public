@@ -124,4 +124,23 @@ describe('zen failover', () => {
     const reply = await getGrumpySysopResponse('hello', withTools as any, zenCfg());
     expect(reply).toContain('Plain answer.');
   });
+  it('any 400 on a tool attempt retries plain, even without the word tools', async () => {
+    primeZenCatalogue(['mimo-v2.5-free']);
+    const vague400 = Object.assign(new Error('Bad request'),
+      { response: { status: 400, data: { error: { message: 'something about the request' } } } });
+    mocked.post.mockRejectedValueOnce(vague400);
+    mocked.post.mockResolvedValueOnce(chatOk('Plain anyway.'));
+    const withTools = { ...context, tools: { list: [{ name: 'who_is_online' }], ctx: {} } };
+    const reply = await getGrumpySysopResponse('hello', withTools as any, zenCfg());
+    expect(reply).toContain('Plain anyway.');
+  });
+  it('a refused key (401) fails fast without burning attempts', async () => {
+    primeZenCatalogue(['muse-spark-1.2-contributor-free', 'mimo-v2.5-free']);
+    mocked.post.mockRejectedValue(Object.assign(new Error('Unauthorized'),
+      { response: { status: 401, data: { error: { message: 'invalid key' } } } }));
+    const reply = await getGrumpySysopResponse('hello', context as any, zenCfg());
+    expect(reply).toMatch(/ask me again in a minute/);
+    const zenCalls = mocked.post.mock.calls.filter((c) => String(c[0]).includes('opencode.ai'));
+    expect(zenCalls.length).toBe(1);
+  });
 });

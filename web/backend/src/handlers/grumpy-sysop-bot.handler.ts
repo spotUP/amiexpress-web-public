@@ -788,6 +788,16 @@ console.log(`[Grumpy Bot] Trying Zen (${model})...`);
     rotateZenModels();
   } catch (error: any) {
 console.error('[Grumpy Bot] Zen failed:', error.message);
+    if (error?.response) {
+console.error('[Grumpy Bot] Zen status:', error.response.status);
+console.error('[Grumpy Bot] Zen data:', JSON.stringify(error.response.data)?.slice(0, 500));
+    }
+    if (error?.response?.status === 401) {
+      // The key itself is refused: every model would answer the same.
+      // Loud, once, then the cascade moves on - never burn attempts.
+console.error('[Grumpy Bot] Zen key refused (401) - check ZEN_API_KEY');
+      return null;
+    }
     if (isRateLimit(error)) {
       // Per-model upstream, not the whole pool: note it for an honest
       // fallback if everything dies, and try the next brain silently.
@@ -795,8 +805,16 @@ console.error('[Grumpy Bot] Zen failed:', error.message);
       rotateZenModels();
       continue;
     }
-    if (context.tools && context.tools.list.length > 0 && isToolRejection(error)) {
+    if (context.tools && context.tools.list.length > 0 && error?.response?.status === 400) {
+      // Any 400 on a tool-loop attempt retries plain: live evidence
+      // (2026-09-10, deepseek 400) is that some Zen models refuse the
+      // tools shape without saying "tools" in the error. A plain body is
+      // shaped differently, so the retry is meaningful, not a replay.
+      if (isToolRejection(error)) {
 console.log(`[Grumpy Bot] Zen model ${model} refuses tools - plain completion instead`);
+      } else {
+console.log(`[Grumpy Bot] Zen model ${model} 400 on tools - plain completion instead`);
+      }
       zenPlainOnly.add(model);
       try {
         const plain = await plainCall(model);
