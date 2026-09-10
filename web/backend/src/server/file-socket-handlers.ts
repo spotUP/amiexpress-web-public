@@ -115,6 +115,11 @@ export async function handleDizExtractionAndDescription(
 ): Promise<boolean> {
   const uploadContext = getUploadContext(session, socket);
   if (!uploadContext) {
+    // T17 (2026-09-08): this silent return skips the whole prompt below —
+    // a caller whose context went missing sees no rename prompt, no DIZ
+    // question, nothing. Log it so the runtime log answers "did the prompt
+    // even arm?" instead of leaving a gap.
+    console.warn(`[DIZ] no upload context for "${data.originalname || data.filename}" — skipping DIZ/description AND rename prompt`);
     return false;
   }
 
