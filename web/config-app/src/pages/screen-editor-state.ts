@@ -175,3 +175,42 @@ export function blankCanvas(rows = 25, cols = 80): Cell[][] {
   return Array.from({ length: rows }, () =>
     Array.from({ length: cols }, () => ({ char: ' ', fg: 7, bg: 0 })));
 }
+
+export interface HighlightRun {
+  x: number;
+  y: number;
+  length: number;
+}
+
+interface SelectionShape {
+  startPoint: { line: number; col: number } | null;
+  endPoint: { line: number; col: number } | null;
+  bounds: { x1: number; y1: number; x2: number; y2: number } | null;
+}
+
+/**
+ * The select-tool marquee as highlight runs, for AnsiCanvas. Live drag
+ * points first, the committed bounds after mouse-up, nothing when no
+ * selection exists. The tool tracked all of this internally and never
+ * showed it (sysop, 2026-09-10: select appeared dead).
+ */
+export function selectionHighlightRuns(sel: SelectionShape | null): HighlightRun[] {
+  if (!sel) return [];
+  // Committed bounds first: on mouse-up they hold exactly what the live
+  // points described, and the points go stale the moment the next drag
+  // has not yet started. Live points only while no bounds exist.
+  const rect = sel.bounds ?? (sel.startPoint && sel.endPoint
+    ? {
+        x1: Math.min(sel.startPoint.col, sel.endPoint.col),
+        y1: Math.min(sel.startPoint.line, sel.endPoint.line),
+        x2: Math.max(sel.startPoint.col, sel.endPoint.col),
+        y2: Math.max(sel.startPoint.line, sel.endPoint.line),
+      }
+    : null);
+  if (!rect) return [];
+  return Array.from({ length: rect.y2 - rect.y1 + 1 }, (_, r) => ({
+    x: rect.x1,
+    y: rect.y1 + r,
+    length: rect.x2 - rect.x1 + 1,
+  }));
+}
