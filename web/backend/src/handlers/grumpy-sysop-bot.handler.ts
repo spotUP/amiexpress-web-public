@@ -28,6 +28,27 @@ export function withContinuation(text: string): string {
 }
 
 /**
+ * A reply that ends mid-thought with finish_reason 'stop': small models do
+ * cut off, and nothing marks it today (live 2026-09-10: "about Turrican:
+ * **", end of message). An unclosed tag or a trailing colon, comma, quote
+ * or opener is never how a finished reply ends - mark it so the caller
+ * knows to ask on instead of reading a cliffhanger as an answer.
+ */
+export function looksCutOff(text: string): boolean {
+  const t = text.trimEnd();
+  // An opening tag with no closer: strip the balanced pairs, anything
+  // tag-like left is cut off mid-markup.
+  const unbalanced = t
+    .replace(/<title>[\s\S]*?<\/title\s*>/gi, '')
+    .replace(/<colou?r(\s+[a-z])?\s*>[\s\S]*?<\/colou?r(\s+[a-z])?\s*>/gi, '');
+  if (/<(title|colou?r)\b/i.test(unbalanced)) return true;
+  // A trailing '**' alone is a closed bold, not a cut - unless a colon
+  // opened it ("about Turrican: **", live 2026-09-10).
+  if (/:\s*\*\*$/.test(t)) return true;
+  return /[:,\[("']$/.test(t);
+}
+
+/**
  * BBS is ASCII only - no emojis. The terminal cannot render them and they
  * break PETSCII/ANSI art. Only ASCII smileys like :-) :-( ;-) :-D are allowed.
  * This strips any emoji the model slips in (VOICE_RULES forbids them, but
@@ -1500,7 +1521,15 @@ console.log('[Grumpy Bot] Stripped a faked tool-call block from the reply');
     // The caller has their answer; the board spends the quiet moment learning
     // what the NEXT model on the list costs, so nobody pays for it in a chat.
     void probeAnUnmeasuredModel(cfg).catch(() => undefined);
-    return stripMarkdown(stripEmojis(stripEngineTag(cleaned.trim())));
+    // Cutoff is judged on the raw reply: stripMarkdown would eat a trailing
+    // '**' and hide exactly the evidence this looks for.
+    const cut = looksCutOff(cleaned);
+    const reply = stripMarkdown(stripEmojis(stripEngineTag(cleaned.trim())));
+    if (cut) {
+console.log('[Grumpy Bot] Reply looks cut off mid-thought - marking continuation');
+      return withContinuation(reply);
+    }
+    return reply;
   }
 
   // NO CANNED BOT BEHIND THIS. There used to be a rule-based responder - a

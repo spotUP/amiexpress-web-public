@@ -373,3 +373,20 @@ describe('faked tool calls rotate the pools', () => {
     expect(second).toContain('Real answer here.');
   });
 });
+
+describe('cutoff marking', () => {
+  it('marks replies that end mid-thought', async () => {
+    const { looksCutOff } = await import('../../src/handlers/grumpy-sysop-bot.handler');
+    expect(looksCutOff("here's what turned up about Turrican: **")).toBe(true);
+    expect(looksCutOff('unclosed <title>row')).toBe(true);
+    expect(looksCutOff('three callers:')).toBe(true);
+    expect(looksCutOff('All done.')).toBe(false);
+    expect(looksCutOff('Ask **me** again')).toBe(false);
+  });
+  it('a cut reply goes out with the continuation marker', async () => {
+    primeZenCatalogue(['mimo-v2.5-free']);
+    mocked.post.mockResolvedValue({ data: { choices: [{ message: { content: 'From the board: stuff, more:' } }] } });
+    const reply = await getGrumpySysopResponse('hi', context as any, zenCfg());
+    expect(reply).toContain('go on');
+  });
+});
