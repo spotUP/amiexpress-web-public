@@ -82,6 +82,16 @@ describe('the dots the co-sysop types while it thinks', () => {
     expect(seen.join('')).toBe('\b \b'.repeat(dots));
   });
 
+  it('keeps the dots when the reply types after them', () => {
+    const { seen, stop } = armed();
+    jest.advanceTimersByTime(THINKING_DOTS_AFTER_MS + 300 * 4);
+    seen.length = 0;
+
+    stop(true);
+
+    expect(seen.join('')).toBe('');
+  });
+
   it('writes nothing when the reply beats the threshold', () => {
     const { seen, stop } = armed();
     jest.advanceTimersByTime(500);

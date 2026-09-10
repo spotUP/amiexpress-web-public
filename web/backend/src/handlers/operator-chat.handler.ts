@@ -1161,15 +1161,15 @@ async function sendBotMessageWithTyping(
   });
 
   if (thinkTime > 0) await new Promise<void>((r) => setTimeout(r, thinkTime));
-  // THE DOTS COME OFF HERE, and not a moment earlier. Stopping them when the
+  // THE DOTS STAY ON HERE, and not a moment earlier. Stopping them when the
   // model returned left the caller watching a dead line for the whole of
   // `thinkTime` above - a second by default, more on a board that raised it -
   // which is the exact silence the dots exist to fill. Before deliverToCaller
-  // and never inside it: the erase counts backspaces against what the window
-  // wrote, and a character of the reply typed first would be eaten by them.
+  // and never inside it. The dots are kept and the reply types after them
+  // (sysop, 2026-09-10); erasing read as the bot taking its thinking back.
   // A chat with no window open has no canceller registered, so this is a
   // no-op for the intro, the queued reply and the admin verdict.
-  cancelThinkingDots(chatSession);
+  cancelThinkingDots(chatSession, true);
   await deliverToCaller(io, chatSession, page, message, {
     typingSpeed: aiConfig?.botTypingSpeed,
     typoProbability: aiConfig?.botTypoProbability,

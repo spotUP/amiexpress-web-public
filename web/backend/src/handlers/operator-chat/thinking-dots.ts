@@ -14,7 +14,8 @@
  * `chatSession.line.text`, and a dot recorded as line text would corrupt the
  * reply's 78-column wrapping and sit in the transcript. These are raw bytes,
  * rubbed out with raw backspaces, and the line model never learns they
- * happened.
+ * happened. A reply keeps them and types after (stop(true)); everything
+ * else erases.
  *
  * WHICH IS ALSO WHY THEY CARRY NO COLOUR. A raw `\x1b[36m` would leave the
  * terminal in sysop cyan while `line.lastSender` still said `user`, so the
@@ -58,14 +59,16 @@ export function startThinkingDots(
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
 
-  const stop = (): void => {
+  const stop = (keepDots = false): void => {
     if (stopped) return;
     stopped = true;
     if (timer) { clearTimeout(timer); timer = null; }
     clearThinkingDotsCanceller(chatSession, stop);
-    // Rub out exactly what was written. A chat that has ended gets nothing:
-    // its caller is somewhere else and those bytes would land there.
-    if (written > 0 && chatIsLive(chatSession, pageId)) emit('\b \b'.repeat(written));
+    // A reply keeps the dots and types after them (sysop, 2026-09-10):
+    // rubbing them out read as the bot taking its thinking back. Anything
+    // else - the caller's key, a quit, the chat ending - still erases, so a
+    // dead chat leaves no dots stranded on the line.
+    if (!keepDots && written > 0 && chatIsLive(chatSession, pageId)) emit('\b \b'.repeat(written));
     written = 0;
   };
 

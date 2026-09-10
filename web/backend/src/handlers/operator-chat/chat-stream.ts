@@ -207,10 +207,10 @@ function emitToCaller(io: any, session: BBSSession, bytes: string): void {
  * when it stops; the caller's three paths below empty it. That also keeps the
  * dependency one-way - `thinking-dots` reads this module, never the reverse.
  */
-type ChatWithDots = ChatSession & { thinkingDotsStop?: (() => void) | null };
+type ChatWithDots = ChatSession & { thinkingDotsStop?: ((keepDots?: boolean) => void) | null };
 
 /** Called by `thinking-dots` alone, when a window opens. */
-export function setThinkingDotsCanceller(chatSession: ChatSession, cancel: () => void): void {
+export function setThinkingDotsCanceller(chatSession: ChatSession, cancel: (keepDots?: boolean) => void): void {
   (chatSession as ChatWithDots).thinkingDotsStop = cancel;
 }
 
@@ -221,15 +221,16 @@ export function setThinkingDotsCanceller(chatSession: ChatSession, cancel: () =>
  * otherwise empty the slot belonging to the window that replaced it, and the
  * caller's next key would find nothing to cancel and type into live dots.
  */
-export function clearThinkingDotsCanceller(chatSession: ChatSession, cancel: () => void): void {
+export function clearThinkingDotsCanceller(chatSession: ChatSession, cancel: (keepDots?: boolean) => void): void {
   const cs = chatSession as ChatWithDots;
   if (cs.thinkingDotsStop === cancel) cs.thinkingDotsStop = null;
 }
 
-/** End any thinking window this chat is in, erasing its dots. */
-export function cancelThinkingDots(chatSession: ChatSession | null | undefined): void {
+/** End any thinking window on this chat. A reply keeps the dots and types
+ *  after them; everything else (keys, quit, end) erases. */
+export function cancelThinkingDots(chatSession: ChatSession | null | undefined, keepDots = false): void {
   const cancel = chatSession ? (chatSession as ChatWithDots).thinkingDotsStop : null;
-  if (cancel) cancel();
+  if (cancel) cancel(keepDots);
 }
 /**
  * THE CALLER'S SIDE of the stream, called from the chat branch of
