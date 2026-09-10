@@ -11,7 +11,7 @@ import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
 import { conferenceDir } from '../conferences/conference-paths';
-import { tryNativeTtiFile } from '../teletext/render-native';
+import { looksNativeTti, renderNativeTti, type NativeRender } from '@amiexpress/bbs-door-sdk/teletext/render-native';
 
 import type { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
@@ -309,6 +309,23 @@ function isTeletextFile(filePath: string): boolean {
 function isNativeTtiName(filePath: string): boolean {
   const ext = path.extname(filePath).toLowerCase();
   return ext === '.tti';
+}
+
+/**
+ * Read, validate and render a native .tti file in one go for the loader
+ * arms above. Null when anything is off (missing, not packets,
+ * unrenderable) - every caller falls through to .ttx/.txt on null, never
+ * serving packet bytes raw. Exported for the render-contract tests.
+ */
+export function tryNativeTtiFile(absPath: string): NativeRender | null {
+  let text: string;
+  try {
+    text = fs.readFileSync(absPath, 'latin1');
+  } catch {
+    return null;
+  }
+  if (!looksNativeTti(text)) return null;
+  return renderNativeTti(text);
 }
 
 function getConferenceScreensCandidates(baseDir: string, relConfNum: number): Array<{ dir: string; desc: string }> {

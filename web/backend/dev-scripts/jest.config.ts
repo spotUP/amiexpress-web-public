@@ -57,6 +57,8 @@ module.exports = {
       '<rootDir>/../../sdk/engines/ui/ansi-editor/core/cp437.ts',
     '^@amiexpress/bbs-door-sdk/petscii$': '<rootDir>/../../sdk/petscii/index.ts',
     '^@amiexpress/bbs-door-sdk/petscii/frame$': '<rootDir>/../../sdk/petscii/frame/index.ts',
+    '^@amiexpress/bbs-door-sdk/teletext/render-native$': '<rootDir>/../../sdk/teletext/render-native.ts',
+    '^@amiexpress/bbs-door-sdk/teletext/tti-lexer$': '<rootDir>/../../sdk/teletext/tti-lexer.ts',
     '^@amiexpress/bbs-door-sdk/common/run-diff$': '<rootDir>/../../sdk/common/run-diff.ts',
     // The terminal's key policy, from source: no runner exists for the
     // terminal package itself, and the game-mode stuck-key regression

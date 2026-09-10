@@ -6,7 +6,8 @@
  * unparseable returns null so the loader falls through instead of serving
  * packet bytes raw. Frozen frames (Marco grammar); live pages change hourly.
  */
-import { renderNativeTti, looksNativeTti, tryNativeTtiFile } from '../../src/teletext/render-native';
+import { renderNativeTti, looksNativeTti } from '@amiexpress/bbs-door-sdk/teletext/render-native';
+import { tryNativeTtiFile } from '../../src/handlers/screen.handler';
 
 const DH_PAGE = [
   'DE,Double height test',

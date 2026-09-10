@@ -75,14 +75,15 @@ describe('findSecurityScreen - teletext slot', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  test('a non-packet .tti does not take the native slot', () => {
-    // An ANSI file wearing the extension must not shadow the .ttx twin.
+  test('a non-packet .tti still takes the security slot (loader falls back)', () => {
+    // The slot answers paths; validation and rendering happen in the
+    // loader, which falls through to the .ttx twin for non-packets.
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ttx-native-'));
     fs.writeFileSync(path.join(dir, 'NAT.ttx'), 'ansi teletext');
     fs.writeFileSync(path.join(dir, 'NAT.tti'), 'just some ANSI text\n');
     const found = findSecurityScreen(path.join(dir, 'NAT'), 0, null, false, false, false, true);
     expect(found).not.toBeNull();
-    expect(found!.toLowerCase().endsWith('.ttx')).toBe(true);
+    expect(found!.toLowerCase().endsWith('.tti')).toBe(true);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 

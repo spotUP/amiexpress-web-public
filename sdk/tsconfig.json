@@ -20,6 +20,7 @@
     "index.ts",
     "settings.ts",
     "petscii/**/*",
+    "teletext/**/*",
     "common/**/*",
     "server/**/*",
     "client/**/*",

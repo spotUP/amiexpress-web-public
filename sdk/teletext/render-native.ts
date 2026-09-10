@@ -8,11 +8,10 @@
  * subset, no truecolor. What comes out is ordinary ANSI the display
  * path serves like any screen, on every transport.
  *
- * Pure except for reading nothing: pass the file text in, get ANSI or
- * null (unparseable stays unserved - packet bytes as ANSI would be
- * noise, and the loader falls through to .ttx/.txt).
+ * Pure and I/O-free (no fs, no network): pass the file text in, get ANSI
+ * or null. File reads live with the callers (backend loader, admin
+ * importer). Stays importable from browser bundles for the editor layer.
  */
-import * as fs from 'fs';
 import { importTti } from './marco/tti/index';
 import { compileRow } from './marco/compile/index';
 import { processPage } from './marco/state-machine/state-machine';
@@ -28,31 +27,6 @@ export interface NativeRender {
 /** True when text smells like native packet TTI (DE/PN/OL records). */
 export function looksNativeTti(text: string): boolean {
   return /^(DE|PN|SC|CT|PS|OL|FL|SP|CO),/m.test(text);
-}
-
-/** File-level detection for the loader's security slot (read + sniff). */
-export function looksNativeTtiFile(absPath: string): boolean {
-  try {
-    return looksNativeTti(fs.readFileSync(absPath, 'latin1'));
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Read, validate and render a native .tti file in one go for the loader
- * arms. Null when anything is off (missing, not packets, unrenderable) -
- * the caller falls through to .ttx/.txt.
- */
-export function tryNativeTtiFile(absPath: string): NativeRender | null {
-  let text: string;
-  try {
-    text = fs.readFileSync(absPath, 'latin1');
-  } catch {
-    return null;
-  }
-  if (!looksNativeTti(text)) return null;
-  return renderNativeTti(text);
 }
 
 export function renderNativeTti(text: string): NativeRender | null {

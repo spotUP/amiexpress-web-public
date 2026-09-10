@@ -103,6 +103,24 @@
       "require": "./dist/petscii/frame/index.js",
       "default": "./dist/petscii/frame/index.js"
     },
+    "./teletext": {
+      "types": "./dist/teletext/index.d.ts",
+      "import": "./dist-esm/teletext/index.js",
+      "require": "./dist/teletext/index.js",
+      "default": "./dist/teletext/index.js"
+    },
+    "./teletext/render-native": {
+      "types": "./dist/teletext/render-native.d.ts",
+      "import": "./dist-esm/teletext/render-native.js",
+      "require": "./dist/teletext/render-native.js",
+      "default": "./dist/teletext/render-native.js"
+    },
+    "./teletext/tti-lexer": {
+      "types": "./dist/teletext/tti-lexer.d.ts",
+      "import": "./dist-esm/teletext/tti-lexer.js",
+      "require": "./dist/teletext/tti-lexer.js",
+      "default": "./dist/teletext/tti-lexer.js"
+    },
     "./engines/ui/arcade": {
       "types": "./dist/engines/ui/arcade/index.d.ts",
       "import": "./dist-esm/engines/ui/arcade/index.js",

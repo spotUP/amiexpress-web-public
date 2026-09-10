@@ -8,7 +8,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { findCaseInsensitive } from './amigafs';
-import { looksNativeTtiFile } from '../teletext/render-native';
 
 // Default extensions if ScreenTypes.info not available
 const DEFAULT_SCREEN_TYPE_EXTENSIONS = ['.TXT.GR', '.IBM'];
@@ -130,25 +129,18 @@ console.log(`[SCREEN] Found RIP screen: ${resolved}`);
     }
 
     // WEB_ extension over express.e - teletext sessions prefer native
-    // packet .TTI first (validated: an ANSI file wearing the extension
-    // must not shadow), then ANSI .TTX, both ahead of the user screen
-    // type. A teletext session is never simultaneously PETSCII or RIP
-    // on this BBS (the T branch clears both), so this slot only fires
-    // when neither of theirs did.
+    // packet .TTI first, then ANSI .TTX, both ahead of the user screen
+    // type. Validation and rendering happen in the loader (which falls
+    // back to the twin on unparseable packets); this slot answers paths.
+    // A teletext session is never simultaneously PETSCII or RIP on this
+    // BBS (the T branch clears both), so this slot only fires when
+    // neither of theirs did.
     if (texttvMode) {
       const ttiPath = `${basePath}.TTI`;
       const resolvedTti = resolveCaseInsensitivePath(ttiPath);
       if (resolvedTti) {
-        let native = false;
-        try {
-          native = looksNativeTtiFile(resolvedTti);
-        } catch {
-          native = false;
-        }
-        if (native) {
 console.log(`[SCREEN] Found native teletext screen: ${resolvedTti}`);
-          return resolvedTti;
-        }
+        return resolvedTti;
       }
       const ttxPath = `${basePath}.TTX`;
       const resolved = resolveCaseInsensitivePath(ttxPath);
