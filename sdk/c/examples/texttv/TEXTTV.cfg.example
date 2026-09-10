@@ -1,0 +1,9 @@
+# TEXTTV - SVT Text-TV client config.
+# Missing file is defaults, not an error: the door fetches /api/texttv
+# from the board's backend over plain HTTP (api.texttv.nu is HTTPS-only
+# and the 68K stack cannot do TLS).
+Host=bbs.uprough.net
+Port=3001
+Timeout=15
+StartPage=100
+Favorites=100,300
