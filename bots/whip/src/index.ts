@@ -40,10 +40,12 @@ import {
 } from 'discord.js';
 import { loadConfig, type BotConfig } from './config';
 import { WhipApiClient, WhipApiError } from './whip-api';
+import { BoardApiClient, BoardApiError, type BoardText } from './board-api';
 import { startFeedResilient } from './feed';
 import { createHealthState, startHealthServer, type HealthState } from './health';
 import {
   formatAchievements,
+  formatBoardText,
   formatLeaderboard,
   formatParties,
   formatProjects,
@@ -148,6 +150,14 @@ const whipCommand = new SlashCommandBuilder()
   )
   .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
     sub.setName('users').setDescription('List BBS users for assigning tasks')
+  )
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) => sub.setName('board').setDescription('Board card'))
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) => sub.setName('online').setDescription('Who is on the board right now'))
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) => sub.setName('new').setDescription('Latest conference traffic'))
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) => sub.setName('top').setDescription('Top callers'))
+  .addSubcommand((sub: SlashCommandSubcommandBuilder) =>
+    sub.setName('finduser').setDescription('Look up a BBS user by handle')
+      .addStringOption((opt) => opt.setName('name').setDescription('Handle').setRequired(true))
   );
 
 export async function registerCommands(botToken: string, guildId: string, clientId: string): Promise<void> {
@@ -306,6 +316,8 @@ export function buildHelpText(): string {
     '',
     '**Change the board.** `/whip task-new` and `/whip project-new` open forms. On a task: Complete, Move, Delete buttons. Or in text: `/whip task-complete`, `/whip task-move`, `/whip task-edit`, `/whip task-delete`, `/whip project-delete`.',
     '',
+    '**Ask about the board.** `/whip board` — the board card. `/whip online` — who is on. `/whip new` — latest traffic. `/whip top` — top callers. `/whip finduser name:<handle>` — look a caller up.',
+    '',
     '**Follow along.** The feed channel posts completions, new projects, and achievements as they happen in the door.',
     '',
     '**Out.** `/link` with a LINKDISCORD code locks your Discord account to your BBS user (no one can borrow the name); ask the sysop to unlink you if stuck.',
@@ -336,7 +348,11 @@ async function handleMessage(message: Message): Promise<void> {
   }
 }
 
-async function handleWhip(interaction: ChatInputCommandInteraction, api: WhipApiClient): Promise<void> {
+async function handleWhip(
+  interaction: ChatInputCommandInteraction,
+  api: WhipApiClient,
+  board: BoardApiClient | null,
+): Promise<void> {
   const sub = interaction.options.getSubcommand();
   if (sub === 'help') {
     await interaction.reply({ content: buildHelpText(), ephemeral: true });
@@ -403,8 +419,32 @@ async function handleWhip(interaction: ChatInputCommandInteraction, api: WhipApi
         await interaction.editReply({ embeds: [embed] });
         break;
       }
-      case 'task': {
-        const task = await api.getTask(interaction.options.getString('id', true).trim());
+      case 'board': {
+        await boardEmbed(interaction, 'Board', (b) => b.boardInfo(), board);
+        break;
+      }
+      case 'online': {
+        await boardEmbed(interaction, 'Online now', (b) => b.whoOnline(), board);
+        break;
+      }
+      case 'new': {
+        await boardEmbed(interaction, 'Latest traffic', (b) => b.recentMessages(1, 5), board);
+        break;
+      }
+      case 'top': {
+        await boardEmbed(interaction, 'Top callers', (b) => b.topCallers(5), board);
+        break;
+      }
+      case 'finduser': {
+        const name = interaction.options.getString('name', true).trim();
+        await boardEmbed(interaction, `User ${name}`, async (b) => {
+          const exact = await b.userLookup(name);
+          if (!exact.text.startsWith('No user called')) return exact;
+          return b.userSearch(name, 5);
+        }, board);
+        break;
+      }
+      case 'task': {        const task = await api.getTask(interaction.options.getString('id', true).trim());
         const embed = new EmbedBuilder().setTitle(task.title);
         embed.setDescription(
           `${formatTaskLine(task)}${task.description ? `\n\n${task.description}` : ''}\n\`${task.id}\``
@@ -499,9 +539,38 @@ async function handleWhip(interaction: ChatInputCommandInteraction, api: WhipApi
         await replyError(interaction, `Unknown subcommand: ${sub}`);
     }
   } catch (err) {
+    if (err instanceof BoardApiError) {
+      const message = err.status === 403
+        ? 'The bot is not allowed to read that. Ask the sysop to widen its token.'
+        : `Board request failed: ${err.message}`;
+      await replyError(interaction, message);
+      return;
+    }
     const message = err instanceof WhipApiError ? `WHIP request failed: ${err.message}` : 'WHIP request failed.';
     await replyError(interaction, message);
   }
+}
+
+/**
+ * The board client or a told user. Board subcommands need BOARD_DATA_TOKEN;
+ * without it they say so instead of failing on an undefined client.
+ */
+function needBoard(interaction: Repliable, board: BoardApiClient | null): board is BoardApiClient {
+  if (board) return true;
+  void replyError(interaction, 'Board reads are not configured on this bot. Ask the sysop to set BOARD_DATA_TOKEN.');
+  return false;
+}
+
+async function boardEmbed(
+  interaction: ChatInputCommandInteraction,
+  title: string,
+  read: (board: BoardApiClient) => Promise<BoardText>,
+  board: BoardApiClient | null,
+): Promise<void> {
+  if (!needBoard(interaction, board)) return;
+  const embed = new EmbedBuilder().setTitle(title);
+  embed.setDescription(formatBoardText(await read(board)));
+  await interaction.editReply({ embeds: [embed] });
 }
 
 /** Resolved actor or null (already told the user). The Discord id travels
@@ -753,6 +822,7 @@ function maybeStartFeed(client: Client, config: BotConfig, apiUrl: string, healt
 async function main(): Promise<void> {
   const config = loadConfig();
   const api = new WhipApiClient(config.apiUrl, config.serviceToken);
+  const board = config.boardToken ? new BoardApiClient(config.apiUrl, config.boardToken) : null;
   const client = new Client({
     // Guilds (commands) + GuildMessages/DirectMessages (mention and DM
     // detection). None of these is privileged: the bot never asks for
@@ -800,7 +870,7 @@ async function main(): Promise<void> {
         if (interaction.commandName === 'link') {
           await handleLink(interaction, api);
         } else if (interaction.commandName === 'whip') {
-          await handleWhip(interaction, api);
+          await handleWhip(interaction, api, board);
         }
         return;
       }

@@ -19,6 +19,11 @@ export async function loadsFullConfig(): Promise<void> {
   assert.strictEqual(cfg.serviceToken, 'svc');
 }
 
+export async function boardTokenOptional(): Promise<void> {
+  assert.strictEqual(loadConfig({ ...full }).boardToken, undefined);
+  assert.strictEqual(loadConfig({ ...full, BOARD_DATA_TOKEN: 'bot-sec' }).boardToken, 'bot-sec');
+}
+
 export async function defaultsApiUrl(): Promise<void> {
   const { WHIP_API_URL: _drop, ...rest } = full;
   void _drop;

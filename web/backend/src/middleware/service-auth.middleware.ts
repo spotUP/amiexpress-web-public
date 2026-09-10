@@ -43,9 +43,10 @@ export function authenticateServiceToken(req: Request, res: Response, next: Next
 /**
  * WEB_BOT_DATA tokens - one secret per chatbot, minted by the sysop.
  *
- * `BOT_DATA_TOKENS="botid:secret,other:secret2/whip,board"` - comma
- * pairs of id and secret with an optional third segment naming the read
- * domains the token may use (default: all). A token is a sysop-trusted
+ * `BOT_DATA_TOKENS="botid:secret,other:secret2:whip+board"` - comma
+ * separated id:secret pairs with an optional third colon segment naming
+ * the read domains the token may use, `+` (or space) separated (default:
+ * all). Bearer sends the SECRET only. A token is a sysop-trusted
  * READER: every /api/bot/v1 route is a GET, and revocation is removing
  * the pair and restarting. Comparison is constant-time per candidate.
  */

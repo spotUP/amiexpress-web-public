@@ -12,6 +12,22 @@ import type {
   WhipTask,
   WhipUserTasks,
 } from './whip-api';
+import type { BoardText } from './board-api';
+
+/**
+ * A board-API read for an embed description. The text arrives capped
+ * server-side; Discord caps descriptions at 4096, so cut there with the
+ * overflow noted rather than letting the API call fail. A truncated
+ * server result says how to narrow it.
+ */
+const DISCORD_DESCRIPTION_MAX = 4096;
+
+export function formatBoardText(result: BoardText): string {
+  const tail = result.truncated ? '\n…more on the board' : '';
+  const body = result.text + tail;
+  if (body.length <= DISCORD_DESCRIPTION_MAX) return body;
+  return body.slice(0, DISCORD_DESCRIPTION_MAX - 1) + '…';
+}
 
 /** "2026-09-17" -> "today" | "tomorrow" | "in Nd" | "Nd ago" | "". */
 export function relativeDay(dateStr: string, nowMs: number = Date.now()): string {
