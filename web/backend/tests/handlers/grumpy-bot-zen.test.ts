@@ -141,6 +141,16 @@ describe('zen failover', () => {
     const reply = await getGrumpySysopResponse('hello', withTools as any, zenCfg());
     expect(reply).toContain('Plain anyway.');
   });
+  it('a 500 on a tool attempt retries plain without remembering', async () => {
+    primeZenCatalogue(['mimo-v2.5-free']);
+    const err500 = Object.assign(new Error('Internal server error'),
+      { response: { status: 500, data: { error: { message: 'Internal server error' } } } });
+    mocked.post.mockRejectedValueOnce(err500);
+    mocked.post.mockResolvedValueOnce(chatOk('Plain after 500.'));
+    const withTools = { ...context, tools: { list: [{ name: 'who_is_online' }], ctx: {} } };
+    const reply = await getGrumpySysopResponse('hello', withTools as any, zenCfg());
+    expect(reply).toContain('Plain after 500.');
+  });
   it('a refused key (401) fails fast without burning attempts', async () => {
     primeZenCatalogue(['muse-spark-1.2-contributor-free', 'mimo-v2.5-free']);
     mocked.post.mockRejectedValue(Object.assign(new Error('Unauthorized'),

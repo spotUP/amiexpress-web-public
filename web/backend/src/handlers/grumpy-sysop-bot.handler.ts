@@ -920,17 +920,21 @@ console.error(`[Grumpy Bot] ${label} key refused (401) - check ${kind === "go" ?
       rotate();
       continue;
     }
-    if (context.tools && context.tools.list.length > 0 && error?.response?.status === 400) {
-      // Any 400 on a tool-loop attempt retries plain: live evidence
-      // (2026-09-10, deepseek 400) is that some Zen models refuse the
-      // tools shape without saying "tools" in the error. A plain body is
+    if (context.tools && context.tools.list.length > 0 && (
+      error?.response?.status === 400 || error?.response?.status === 500
+    )) {
+      // A 400 or 500 on a tool-loop attempt retries plain: live evidence
+      // (2026-09-10, deepseek 400, muse-spark 500s with 44 tools) is that
+      // some upstream models choke on the tools shape. A plain body is
       // shaped differently, so the retry is meaningful, not a replay.
+      // Unlike a 400 refusal the 500 is not remembered: a busy model may
+      // take tools fine on the next message.
       if (isToolRejection(error)) {
 console.log(`[Grumpy Bot] ${label} model ${model} refuses tools - plain completion instead`);
       } else {
-console.log(`[Grumpy Bot] ${label} model ${model} 400 on tools - plain completion instead`);
+console.log(`[Grumpy Bot] ${label} model ${model} ${error?.response?.status} on tools - plain completion instead`);
       }
-      plainOnly.add(model);
+      if (error?.response?.status === 400) plainOnly.add(model);
       try {
         const plain = await plainCall(model);
         if (plain) return plain;
