@@ -14,9 +14,12 @@
  *   would eat typing, so Alt it is.
  * - Cursor: arrows (existing behaviour, now in every mode), Home/End row
  *   ends, PageUp/PageDown ten rows, Delete erases the cell.
- * - Clipboard: Alt+C/X/V copy/cut/paste through the SDK's own
- *   copySelection/pasteSelection - an editor clipboard, not the system one,
- *   so the browser keeps Ctrl+C/X/V and nothing leaves the canvas.
+ * - Clipboard: Alt+C/X/V everywhere; Cmd+C/X/V too on the Mac, where
+ *   Option+letter types special characters and every program cuts with
+ *   Command. The component lets a real page-text selection through first,
+ *   so Cmd+C on highlighted help text still copies the text.
+ * - Delete: both Delete and Backspace erase the cell. Mac keyboards have
+ *   no forward-delete key - the key labelled Delete sends Backspace.
  * - Deliberately absent (no counterpart here): F-keys (Moebius font
  *   slots), H/J/K/L charlist, Q insert, Alt+Numpad ascii entry, Alt+arrows
  *   row/column ops, Alt+letter menu ops, Ctrl+arrows.
@@ -65,6 +68,12 @@ export function editorShortcut(ev: ShortcutKey): EditorShortcut {
     const k = ev.key.toLowerCase();
     if (k === 'z') return ev.shiftKey ? { action: 'redo' } : { action: 'undo' };
     if (k === 'y') return { action: 'redo' };
+    // Mac hands: Cmd+C/X/V cut and paste like every native program. Ctrl
+    // does the same on Linux/Windows, where the browser cannot spare Cmd.
+    // (Cmd+letter tools stay Alt-only: Cmd+S/T/D/F/P belong to the browser.)
+    if (k === 'c') return { action: 'copy' };
+    if (k === 'x') return { action: 'cut' };
+    if (k === 'v') return { action: 'paste' };
     if (ev.code && ev.code in DIGIT_INDEX) return { action: 'fg', index: DIGIT_INDEX[ev.code] };
     return { action: 'none' };
   }
@@ -93,7 +102,9 @@ export function editorShortcut(ev: ShortcutKey): EditorShortcut {
       case 'End': return { action: 'row', edge: 'end' };
       case 'PageUp': return { action: 'page', dy: -10 };
       case 'PageDown': return { action: 'page', dy: 10 };
-      case 'Delete': return { action: 'delete' };
+      case 'Delete':
+      case 'Backspace':
+        return { action: 'delete' };
       default: return { action: 'none' };
     }
   }

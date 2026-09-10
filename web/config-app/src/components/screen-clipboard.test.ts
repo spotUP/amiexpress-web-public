@@ -29,6 +29,16 @@ describe('editorShortcut clipboard keys', () => {
     expect(editorShortcut({ key: 'v', code: 'KeyV', altKey: true })).toEqual({ action: 'paste' });
     expect(editorShortcut({ key: 's', code: 'KeyS', altKey: true })).toEqual({ action: 'tool', tool: 'select' });
   });
+  it('maps Cmd/Ctrl+C/X/V for Mac hands', () => {
+    expect(editorShortcut({ key: 'c', code: 'KeyC', metaKey: true })).toEqual({ action: 'copy' });
+    expect(editorShortcut({ key: 'x', code: 'KeyX', metaKey: true })).toEqual({ action: 'cut' });
+    expect(editorShortcut({ key: 'v', code: 'KeyV', metaKey: true })).toEqual({ action: 'paste' });
+    expect(editorShortcut({ key: 'c', code: 'KeyC', ctrlKey: true })).toEqual({ action: 'copy' });
+  });
+  it('erases with Backspace as well as Delete', () => {
+    expect(editorShortcut({ key: 'Delete' })).toEqual({ action: 'delete' });
+    expect(editorShortcut({ key: 'Backspace' })).toEqual({ action: 'delete' });
+  });
 });
 
 describe('copy/paste/cut regions', () => {

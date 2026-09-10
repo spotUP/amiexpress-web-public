@@ -123,8 +123,27 @@ export function ScreenEditor({
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
 
+      // Highlighted page text belongs to the browser: Cmd+C on selected
+      // help text copies the text, it does not lift canvas cells. (Alt+C
+      // has no browser meaning and always means the canvas.)
+      if ((event.ctrlKey || event.metaKey) && !event.altKey
+        && ['c', 'x', 'v'].includes(event.key.toLowerCase())) {
+        const pageSelection = window.getSelection();
+        if (pageSelection && !pageSelection.isCollapsed) return;
+      }
+
       // Moebius shortcuts first: undo/redo, colours, tools, cursor. Typing
       // and text-mode keys fall through to the branch below.
+      // Backspace in Type mode keeps its typer's meaning (erase behind,
+      // step back) rather than the shortcut table's cell-erase.
+      if (surface.tool === 'text' && event.key === 'Backspace'
+        && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+        const x = Math.max(0, cursor.x - 1);
+        onChange?.(typeCharacter(surface, x, cursor.y, ' '));
+        setCursor({ x, y: cursor.y });
+        return;
+      }
       const sc = editorShortcut(event);
       if (sc.action !== 'none') {
         event.preventDefault();
@@ -189,11 +208,7 @@ export function ScreenEditor({
       if (event.ctrlKey || event.metaKey || event.altKey) return;
 
       if (event.key === 'Enter') { setCursor(c => ({ x: 0, y: Math.min(rows - 1, c.y + 1) })); }
-      else if (event.key === 'Backspace') {
-        const x = Math.max(0, cursor.x - 1);
-        onChange?.(typeCharacter(surface, x, cursor.y, ' '));
-        setCursor({ x, y: cursor.y });
-      } else if (event.key.length === 1) {
+      else if (event.key.length === 1) {
         onChange?.(typeCharacter(surface, cursor.x, cursor.y, event.key));
         setCursor(c => ({ ...c, x: Math.min(cols - 1, c.x + 1) }));
       } else {
@@ -265,7 +280,8 @@ export function ScreenEditor({
         Shortcuts: Alt+D/L/B/E/F/S/T/P tools (Shift for filled shapes), Ctrl+Digit foreground,
         Alt+Digit background, Ctrl+Z / Ctrl+Shift+Z undo/redo, arrows/Home/End/PageUp/PageDown/Delete move.
         Alt+S then drag selects; Alt+C/X copies/cuts to the system clipboard as text (and colours internally),
-        Alt+V pastes it back at the cursor - click where you want it first.
+        Alt+V pastes it back at the cursor - click where you want it first. On a Mac, Cmd+C/X/V does the
+        same, and the Delete-labelled key erases the cell.
       </p>
 
       <div className="flex flex-wrap items-start gap-6 text-sm">
