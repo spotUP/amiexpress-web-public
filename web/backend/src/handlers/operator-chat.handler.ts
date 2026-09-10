@@ -532,12 +532,12 @@ console.error('[Operator Chat] MAIL_ON_SYSOP_PAGE failed:', err)
     if (session.user?.id) {
       socket.join(`user:${session.user.id}`);
       // Also ensure the user session is mapped for direct lookup (critical for grumpy bot)
-      if (!userSessions.has(session.user.id)) {
-        userSessions.set(session.user.id, session);
+      if (!userSessions.has(String(session.user.id))) {
+        userSessions.set(String(session.user.id), session);
 console.log(`[Operator Chat] Added user ${session.user.id} to userSessions map`);
       }
       // Also map socket to user for lookup
-      socketToUser.set(socket.id, session.user.id);
+      socketToUser.set(socket.id, String(session.user.id));
       // Verify room membership
       const rooms = Array.from(socket.rooms || []);
 console.log(`[Operator Chat] User ${session.user.username} (socket ${socket.id}) joined rooms: ${rooms.join(', ')}`);

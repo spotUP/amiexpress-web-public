@@ -187,6 +187,6 @@ describe('the same account logging in twice', () => {
       lastLoginBeforeUpdate: new Date(0),
     });
 
-    expect(userAlreadyOnNode).toHaveBeenCalledWith(expect.any(String), 'spot', 4);
+    expect(userAlreadyOnNode).toHaveBeenCalledWith(expect.any(String), 'spot', 4, expect.any(Function));
   });
 });

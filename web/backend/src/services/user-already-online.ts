@@ -43,14 +43,35 @@ export function boardNodeIds(bbsRoot: string): number[] {
  * case-insensitively, trimmed, and after the C string's NUL padding is gone -
  * `node<n>.user` is a fixed-width binary record, so a raw === would answer no
  * for every caller.
+ *
+ * Ghost guard (2026-09-10): a name match with no live session behind it is
+ * a stale record, not a second login. Node files delete at clean logoff,
+ * but a missed teardown (or a kick whose disconnect never fired) leaves
+ * the file behind, and the next login - on a fresh node, excluding only
+ * itself - is refused against its OWN previous session. The liveness
+ * check is injected (never imported: this module stays disk-first, and
+ * after a boot sweep there are no records without sessions anyway, so
+ * the invariant "runtime record implies live session" holds).
  */
+export interface NodeUserFiles {
+  readNodeUserFile(nodeId: number): { name?: string } | null;
+  deleteNodeFiles(nodeId: number): void;
+}
+
 export function userAlreadyOnNode(
   bbsRoot: string,
   username: string,
-  exceptNodeId: number
+  exceptNodeId: number,
+  isLive?: (nodeId: number) => boolean,
+  onStale?: (nodeId: number) => void,
+  files?: NodeUserFiles
 ): number | null {
   const wanted = String(username ?? '').replace(/\0/g, '').trim().toLowerCase();
   if (wanted === '') return null;
+  // The file store answers reads AND collects stale files. Default is
+  // the singleton (production behavior unchanged); tests hand a
+  // manager rooted at a temp board.
+  const store: NodeUserFiles = files ?? nodeFileManager;
 
   for (const nodeId of boardNodeIds(bbsRoot)) {
     if (nodeId === exceptNodeId) continue;
@@ -60,13 +81,25 @@ export function userAlreadyOnNode(
 
     let record: { name?: string } | null = null;
     try {
-      record = nodeFileManager.readNodeUserFile(nodeId) as { name?: string } | null;
+      record = store.readNodeUserFile(nodeId);
     } catch {
       continue; // an unreadable record must not refuse a legitimate login
     }
 
     const there = String(record?.name ?? '').replace(/\0/g, '').trim().toLowerCase();
-    if (there !== '' && there === wanted) return nodeId;
+    if (there === '' || there !== wanted) continue;
+    // Name matches: refuse only if something is actually there. A stale
+    // file with no session behind it is cleaned up best-effort so the
+    // next login does not trip over it again.
+    if (isLive && !isLive(nodeId)) {
+      try {
+        (onStale ?? ((id) => store.deleteNodeFiles(id)))(nodeId);
+      } catch {
+        // Best-effort: the miss below already unblocks this login.
+      }
+      continue;
+    }
+    return nodeId;
   }
 
   return null;

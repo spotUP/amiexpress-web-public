@@ -336,8 +336,10 @@ export async function runPostAuthLogin(
       `[SESSION-MIGRATION] User ${user.id} logged in on socket ${emitter.id}`,
     );
     sessions.delete(emitter.id);
-    userSessions.set(user.id, session);
-    socketToUser.set(emitter.id, user.id);
+    // String keys: Map distinguishes 5 from "5", and every lookup
+    // and delete below uses the string form (ghost sessions, 2026-09-10).
+    userSessions.set(String(user.id), session);
+    socketToUser.set(emitter.id, String(user.id));
     try {
       (emitter as any).join?.("user:" + String(user.id));
     } catch {
@@ -466,6 +468,10 @@ export async function runPostAuthLogin(
       appConfig.get('dataDir'),
       user.username,
       session.nodeId ?? 0,
+      // Liveness: a name match with no session object behind it is a
+      // stale node file from a missed teardown, not a second login
+      // (ghosts, 2026-09-10 - the infant refusal was its own file).
+      (nodeId) => sessions.has(String(nodeId)),
     );
     if (alreadyOn !== null) {
       try {

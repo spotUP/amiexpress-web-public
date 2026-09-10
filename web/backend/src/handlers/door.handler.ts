@@ -917,7 +917,7 @@ console.error('[launchAmigaDoor] Error routing door input:', err);
       const { setSession, userSessions } = require('../server/session-manager');
       setSession(socket.id, session);
       if ((session as any).user?.id) {
-        userSessions.set((session as any).user.id, session);
+        userSessions.set(String((session as any).user.id), session);
       }
     } catch (err) {
 console.error('[launchAmigaDoor] Unable to persist session for door input:', err);
@@ -948,7 +948,7 @@ console.error('[launchAmigaDoor] Unable to persist session for door input:', err
       const { setSession, userSessions } = require('../server/session-manager');
       setSession(socket.id, session);
       if ((session as any).user?.id) {
-        userSessions.set((session as any).user.id, session);
+        userSessions.set(String((session as any).user.id), session);
       }
     } catch (_) {
       /* ignore */
@@ -3250,7 +3250,7 @@ console.error('[executeAmigaDoor] Error routing door input:', err);
 console.log(`[executeAmigaDoor] Before setSession: inDoorManager=${session.inDoorManager}, handler=${!!session.doorInputHandler}`);
       setSession(socket.id, session);
       if ((session as any).user?.id) {
-        userSessions.set((session as any).user.id, session);
+        userSessions.set(String((session as any).user.id), session);
       }
       // Verify session was stored correctly
       const verifySession = getSession(socket.id);
@@ -3330,7 +3330,7 @@ console.log(`[executeAmigaDoor] Door execution completed`);
       const { setSession, userSessions } = require('../server/session-manager');
       setSession(socket.id, session);
       if ((session as any).user?.id) {
-        userSessions.set((session as any).user.id, session);
+        userSessions.set(String((session as any).user.id), session);
       }
     } catch {
       /* ignore */
@@ -3500,7 +3500,7 @@ console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);
       const { setSession, userSessions } = require('../server/session-manager');
       setSession(socket.id, session);
       if ((session as any).user?.id) {
-        userSessions.set((session as any).user.id, session);
+        userSessions.set(String((session as any).user.id), session);
       }
     } catch {
       /* ignore */
