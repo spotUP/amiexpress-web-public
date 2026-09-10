@@ -341,7 +341,8 @@ export async function deliverToCaller(
   chatSession: ChatSession,
   page: PageRequest,
   text: string,
-  pace: { typingSpeed?: number; typoProbability?: number } | null
+  pace: { typingSpeed?: number; typoProbability?: number } | null,
+  opts?: { prefixReturn?: boolean }
 ): Promise<void> {
   // Model markup (<title>, <color>) becomes terminal SGR here, once, for
   // every sender - the wrap counting below then sees visible columns only.
@@ -361,9 +362,13 @@ console.log(`[Operator Chat] Page ${page.id}: a line for ${page.userHandle} has 
     const live = () => chatIsLive(chatSession, page.id);
     const emit = (bytes: string) => { if (bytes && live()) reach.emitter.emit('ansi-output', bytes); };
 
+    // Kept thinking dots occupy the line's first cells, so a reply typed
+    // after them wraps early (2026-09-10). Start it on a fresh line; the
+    // dots stay standing above, as decided.
+    if (opts?.prefixReturn) emit(chatReturnBytes(chatSession));
+
     // The message's own line breaks are returns; the shared line wraps itself.
-    const lines = painted.replace(/\r/g, '').split('\n');
-    const plans = lines.map((line) =>
+    const lines = painted.replace(/\r/g, '').split('\n');    const plans = lines.map((line) =>
       pace ? planNaturalTyping(line, pace) : [...line].map((ch) => ({ kind: 'char', ch }) as const)
     );
     const plannedMs = plans.flat().reduce((sum, e) => sum + (e.kind === 'pause' ? e.ms : 0), 0);

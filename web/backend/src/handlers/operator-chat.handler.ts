@@ -152,7 +152,7 @@ const bbsRoot = process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.join(__
 
 // Active chat sessions (in-memory)
 import { activeChatSessions, deliverToCaller, deliverGreeting, chatResetColourBytes, chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER } from './operator-chat/chat-stream';
-import { startThinkingDots } from './operator-chat/thinking-dots';
+import { startThinkingDots, thinkingDotsShown, clearThinkingDotsShown } from './operator-chat/thinking-dots';
 // The caller's half of the chat lives in ./operator-chat/chat-stream; these stay importable from here.
 export { chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER };
 
@@ -1170,10 +1170,15 @@ async function sendBotMessageWithTyping(
   // A chat with no window open has no canceller registered, so this is a
   // no-op for the intro, the queued reply and the admin verdict.
   cancelThinkingDots(chatSession, true);
+  // ...but after them, on a fresh line: kept dots occupy the line's first
+  // cells and the reply would wrap early (2026-09-10). The count is
+  // consumed here so a dotless reply never inherits it.
+  const dotsStanding = thinkingDotsShown(chatSession);
+  clearThinkingDotsShown(chatSession);
   await deliverToCaller(io, chatSession, page, message, {
     typingSpeed: aiConfig?.botTypingSpeed,
     typoProbability: aiConfig?.botTypoProbability,
-  });
+  }, { prefixReturn: dotsStanding > 0 });
 }
 
 

@@ -121,16 +121,16 @@ describe('the dots the co-sysop types while it thinks', () => {
   });
 
   /**
-   * THE COLOUR IS GONE ON PURPOSE. It used to emit `\x1b[36m` with the first
-   * dot, straight to the wire - which left the terminal in sysop cyan while
-   * `line.lastSender` still said `user`, and the caller's next keystroke then
-   * rendered cyan. Bare dots, and no SGR of any kind.
+   * Cyan dots, each self-reset (2026-09-10): the sysop wants them cyan
+   * like his texts. The old removal is superseded - that failure was
+   * the missing reset, not the colour. Pinned: cyan, reset after
+   * every dot, never bold, rub-out math unchanged (codes zero-width).
    */
-  it('types no colour of its own - the line model would never learn of it', () => {
+  it('types cyan dots that reset themselves', () => {
     const { seen } = armed();
     jest.advanceTimersByTime(THINKING_DOTS_AFTER_MS + 300 * 2);
-    expect(seen.join('')).toBe('...');
-    expect(seen.join('')).not.toContain('\x1b');
+    expect(seen.join('')).toBe('\x1b[0;36m.\x1b[0m'.repeat(3));
+    expect(seen.join('')).not.toContain('\x1b[1;');
   });
 
   it('leaves no timer running once it is stopped', () => {
@@ -156,7 +156,7 @@ describe('the dots the co-sysop types while it thinks', () => {
       const chatSession = fakeChat('p1');
       startThinkingDots((b) => seen.push(b), chatSession, 'p1', { gapMs: () => 300 });
       jest.advanceTimersByTime(THINKING_DOTS_AFTER_MS + 300 * 2);
-      expect(seen.join('')).toBe('...');
+      expect(seen.join('')).toBe('\x1b[0;36m.\x1b[0m'.repeat(3));
       seen.length = 0;
 
       startThinkingDots((b) => seen.push(b), chatSession, 'p1', { gapMs: () => 300 });
@@ -209,13 +209,13 @@ describe('the dots the co-sysop types while it thinks', () => {
       startThinkingDots((b) => seen.push(b), chatSession, 'p1', { gapMs: () => 300 });
 
       jest.advanceTimersByTime(THINKING_DOTS_AFTER_MS + 300 * 2);
-      expect(seen.join('')).toBe('...');
+      expect(seen.join('')).toBe('\x1b[0;36m.\x1b[0m'.repeat(3));
 
       callerTypedChar({}, session, 'a');
 
       // Three dots, three erases, THEN the caller's own character in his own
       // colour. Erase first or the backspaces eat the 'a'.
-      expect(seen.join('')).toBe('...' + '\b \b'.repeat(3) + `\x1b[${CHAT_COLOR_USER}ma`);
+      expect(seen.join('')).toBe('\x1b[0;36m.\x1b[0m'.repeat(3) + '\b \b'.repeat(3) + `\x1b[${CHAT_COLOR_USER}ma`);
       expect(chatSession.line.text).toBe('a');
       expect(jest.getTimerCount()).toBe(0);
     });
