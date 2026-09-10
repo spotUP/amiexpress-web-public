@@ -1526,6 +1526,13 @@ console.log(`[OK] Achievements flusher started (${achievementsNow().enabled ? "r
     startAchievementsBulletin();
 console.log("[OK] Achievements bulletin refresher started");
 
+    // The news bulletins (Bulletins/bull7.txt news, bull8.txt sport): SVT
+    // Text-TV headlines via texttv.nu, refreshed hourly. WHIP task
+    // 8f358f41. A dead fetch keeps yesterday's file, never a blank one.
+    const { startNewsBulletins } = await import("./services/news-bulletins");
+    startNewsBulletins();
+console.log("[OK] News bulletins refresher started");
+
     // Initialize web push notifications with database config
     const { initWebPush } = await import("./utils/web-push.util");
     // config-source-ok: the VAPID push keys are database-only - express.e has
