@@ -36,7 +36,7 @@ import { ANSI_GRAPHICS_PROMPT } from '../../src/services/login-connect.service';
 jest.setTimeout(60000);
 
 /** The sentinel step 01 reads until - the prompt's own last characters. */
-const STEP_01_SENTINEL = 'A/R/P/P8/N';
+const STEP_01_SENTINEL = 'A/R/P/P8/T/N';
 
 const deps = (): TransportSessionDeps => ({
   io: {} as never,

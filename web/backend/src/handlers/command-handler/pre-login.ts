@@ -144,6 +144,7 @@ export function applyGraphicsAnswer(socket: any, session: BBSSession, answer: st
   const hasN = answer.includes('N'); // No graphics
   const hasR = answer.includes('R'); // RIP mode
   const hasP = answer.includes('P'); // PETSCII mode
+  const hasT = answer.includes('T'); // Teletext mode (WEB_: no express.e counterpart)
   // `P8` is the WIDE PETSCII screen: the same Commodore glyphs and the same
   // byte transport, on this board's 80-column canvas. The mode is CHOSEN
   // here and never detected - nothing on the wire tells a C128-at-80 from a
@@ -158,6 +159,7 @@ export function applyGraphicsAnswer(socket: any, session: BBSSession, answer: st
     // PETSCII mode takes priority (40x25, .seq screens)
     session.petsciiMode = true;
     session.ripMode = false;
+    session.texttvMode = false;
     session.ansiEnabled = true; // PETSCII still needs ANSI color codes
     session.petsciiColumns = wantsWide ? 80 : 40;
     session.screenWidth = session.petsciiColumns;
@@ -186,11 +188,39 @@ console.log(`[PETSCII] PETSCII mode enabled - setting terminal to ${session.pets
       rows: 25,
       palette: session.petsciiColumns === 80 ? 'vdc' : 'vic',
     });
+  } else if (hasT && transportCapabilities(session).teletext) {
+    // WEB_: teletext session mode (T answer at the graphics prompt). The web
+    // terminal swaps to the TDAText face with a teletext palette on the
+    // `texttv-mode` event below; .tti screens are preferred once Phase B
+    // lands, .txt renders in teletext style until then. Geometry stays the
+    // web terminal's 80x24 so pagination matches what xterm shows.
+    session.texttvMode = true;
+    session.petsciiMode = false;
+    session.ripMode = false;
+    session.ansiEnabled = true;
+    session.screenWidth = 80;
+    session.screenHeight = 24;
+console.log('[TEXTTV] Teletext mode enabled - TDAText font, .tti screens preferred');
+    socket.emit('texttv-mode', { enabled: true });
+  } else if (hasT) {
+    // WEB_: answering T on a byte transport. Same shape as the R fallback
+    // below: no teletext renderer there (the palette and face are browser
+    // concerns), so fall back to ANSI and say so once, in the C64-legible
+    // uppercase the graphics prompt itself uses.
+    session.texttvMode = false;
+    session.petsciiMode = false;
+    session.ripMode = false;
+    session.ansiEnabled = true;
+    session.screenWidth = 80;
+    session.screenHeight = 24;
+console.log('[TEXTTV] Teletext requested on a transport with no renderer - falling back to ANSI');
+    socket.emit(getOutputEvent(session), '\r\nTELETEXT NEEDS A WEB BROWSER - USING ANSI\r\n');
   } else if (hasR && transportCapabilities(session).rip) {
     // express.e:29545 - RIP mode: .rip screens served first, framed by
     // displayScreen with \x1b[1!..\x1b[2! for the web terminal's canvas.
     session.ripMode = true;
     session.petsciiMode = false;
+    session.texttvMode = false;
     session.ansiEnabled = true; // RIP includes ANSI support
     session.screenWidth = 80;
     session.screenHeight = 24;
@@ -209,6 +239,7 @@ console.log('[RIP] RIP graphics mode enabled - .rip screens preferred');
     // would let the notice land AFTER the screen that follows it.
     session.ripMode = false;
     session.petsciiMode = false;
+    session.texttvMode = false;
     session.ansiEnabled = true;
     session.screenWidth = 80;
     session.screenHeight = 24;
@@ -219,6 +250,7 @@ console.log('[RIP] RIP requested on a transport with no rasteriser - falling bac
     session.ansiEnabled = !hasN;
     session.petsciiMode = false;
     session.ripMode = false;
+    session.texttvMode = false;
     session.screenWidth = 80;
     session.screenHeight = 24;
   }
@@ -249,6 +281,7 @@ console.log('📋 Graphics prompt response:', answer || '(empty = ANSI)');
     // Determine graphics mode string for logging
     let graphicsMode = 'None';
     if (session.petsciiMode) graphicsMode = 'PETSCII (40x25)';
+    else if (session.texttvMode) graphicsMode = 'TELETEXT (80x24)';
     else if (session.ripMode) graphicsMode = 'RIP (640x350)';
     else if (session.ansiEnabled) graphicsMode = 'ANSI';
 console.log('[GRAPHICS] Mode set:', graphicsMode);

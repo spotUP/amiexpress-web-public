@@ -39,7 +39,7 @@ jest.setTimeout(60000);
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const SCREEN = path.join(REPO_ROOT, 'Screens', 'BBSTITLE.TXT');
-const STEP_01_SENTINEL = 'A/R/P/P8/N';
+const STEP_01_SENTINEL = 'A/R/P/P8/T/N';
 
 const deps = (): TransportSessionDeps => ({
   io: {} as never,

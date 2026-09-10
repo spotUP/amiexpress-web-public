@@ -76,6 +76,21 @@
   font-display: block;
 }
 
+/* Teletext session mode (T answer at the graphics prompt). TDAText by
+ * Dmitry Tretyakov, SIL Open Font License 1.1 (see
+ * public/fonts/TDAText-OFL-LICENSE.txt) - the only teletext contender
+ * with the Swedish glyphs SVT Text TV needs (åäöÅÄÖ probed present).
+ * woff2 first, ttf fallback for older browsers.
+ */
+@font-face {
+  font-family: 'TDAText';
+  src: url('/fonts/TDAText.woff2') format('woff2'),
+       url('/fonts/TDAText.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
 
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;

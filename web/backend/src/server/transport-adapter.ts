@@ -103,6 +103,11 @@ export interface TransportCapabilities {
    * rasteriser (`handlers/screen.handler.ts:1862-1869`).
    */
   readonly rip: boolean;
+  /**
+   * Teletext is rendered by the caller's terminal (TDAText font + palette).
+   * Web only; a byte transport keeps the ANSI the board emits.
+   */
+  readonly teletext: boolean;
 }
 
 /**
@@ -126,7 +131,7 @@ export function transportCapabilities(
   session: Pick<BBSSession, "connectionType"> | null | undefined,
 ): TransportCapabilities {
   const web = session?.connectionType === "web";
-  return { bytes: !web, events: web, keyEvents: web, browser: web, rip: web };
+  return { bytes: !web, events: web, keyEvents: web, browser: web, rip: web, teletext: web };
 }
 
 /**

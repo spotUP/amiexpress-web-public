@@ -34,6 +34,18 @@ import { readCookieFont, writeCookieFont } from './session-cookie';
 export const DEFAULT_BBS_FONT = 'TopazPlus_a1200';
 
 /**
+ * Teletext session mode face (T answer at the graphics prompt). TDAText,
+ * OFL-1.1 (web/frontend/public/fonts/TDAText-OFL-LICENSE.txt).
+ *
+ * Deliberately NOT in BBS_FONTS: the mode is session state, not a
+ * preference. Keeping it out of the allowlist means the pre-login cache
+ * can never open the board in it, and the font picker never offers it -
+ * so applyFont's cache write below is a no-op for it even without the
+ * flag. The flag exists so that stays true if anyone ever lists it.
+ */
+export const TELETEXT_FONT = 'TDAText';
+
+/**
  * Every font the BBS ships and the picker can select. Used to validate the
  * cached value: a stale or hand-edited localStorage entry must never be
  * able to render the board in a font that does not exist.
@@ -206,8 +218,11 @@ const applyGenerations = new WeakMap<FontTarget, number>();
  * `fontSize` is the CALIBRATED size (mobile measures its own); omit it to
  * leave the terminal's current size alone rather than forcing the desktop
  * default.
+ *
+ * `cacheFont` is false for session modes (teletext): the face belongs to
+ * this session only and must not become the next connect's pre-login font.
  */
-export async function applyFont(term: FontTarget, font: string, fontSize?: number): Promise<void> {
+export async function applyFont(term: FontTarget, font: string, fontSize?: number, cacheFont = true): Promise<void> {
   const generation = (applyGenerations.get(term) ?? 0) + 1;
   applyGenerations.set(term, generation);
   await waitForFontFace(font);
@@ -226,5 +241,5 @@ export async function applyFont(term: FontTarget, font: string, fontSize?: numbe
   term.options.lineHeight = lineHeightFor(font);
   // A changed family already fired the measure; an unchanged one did not.
   if (!familyChanged) forceRemeasure(term);
-  writeCachedFont(font);
+  if (cacheFont) writeCachedFont(font);
 }

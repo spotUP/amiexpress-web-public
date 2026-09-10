@@ -436,6 +436,10 @@ export interface BBSSession {
   /** Per-session ANSI->PETSCII transducer for real C64 callers (connection-emitter.ts). Lazily created; shared by every emitter built for the connection so cursor/charset/reverse state never forks. */
   petsciiTransducer?: import("@amiexpress/bbs-door-sdk/petscii").AnsiToPetsciiTransducer;
   ripMode?: boolean; // Whether RIP graphics mode is enabled (640x350, .rip files)
+  // WEB_: teletext mode (T answer at the graphics prompt). TDAText font +
+  // teletext palette in the web terminal; plain ANSI on byte transports.
+  // Pure boolean like ripMode - no render ctx, cleared per-session.
+  texttvMode?: boolean; // Whether teletext display mode is enabled
   terminalType?: "c64" | "modern" | "unknown"; // Terminal type: C64 (raw PETSCII), modern (Unicode PUA), or unknown
   screenWidth?: number; // The board's column MODEL (40 for C64, 80 for modern) - what its screens and doors are drawn for
   wireWidth?: number; // The caller's REAL terminal width, from NAWS / the PTY size. Not reset by the graphics prompt; the wire fold reads THIS, not screenWidth.

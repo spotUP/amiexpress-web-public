@@ -23,7 +23,7 @@ import { bootBoard, type BootedBoard } from '../support/booted-board';
 
 jest.setTimeout(180000);
 
-const GRAPHICS_PROMPT = 'A/R/P/P8/N';
+const GRAPHICS_PROMPT = 'A/R/P/P8/T/N';
 
 function stripTelnetNegotiation(raw: Buffer): Buffer {
   const out: number[] = [];

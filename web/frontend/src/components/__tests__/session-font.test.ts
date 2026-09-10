@@ -119,6 +119,16 @@ describe('applying a font to a terminal', () => {
     await applyFont(term, 'Topaz_a500', 14);
     expect(term.options.fontSize).toBe(14);
   });
+
+  it('a session-mode face applies without becoming the cached font', async () => {
+    // Teletext mode (TELETEXT_FONT): the face belongs to this session only.
+    // The next connect's pre-login window must open in the board font.
+    const term = { options: {} as Record<string, any> };
+    await applyFont(term, 'TDAText', 16, false);
+    expect(term.options.fontFamily).toBe(fontFamilyFor('TDAText'));
+    expect(window.localStorage.getItem(FONT_CACHE_KEY)).toBeNull();
+    expect(readCachedFont()).toBeNull();
+  });
 });
 
 /**

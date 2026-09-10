@@ -26,6 +26,7 @@ import {
 } from '../utils/terminal-zoom';
 import {
   DEFAULT_BBS_FONT,
+  TELETEXT_FONT,
   applyFont,
   fontFamilyFor,
   lineHeightFor,
@@ -432,6 +433,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const gamepadManagerRef = useRef<GamepadManager | null>(null);
   const musicPlayerRef = useRef<HTMLAudioElement | null>(null);  // Background music player (for doors like GRANDMASTER)
   const mouseTrackingDisabledRef = useRef<boolean>(false); // Ctrl+Shift+M toggle state
+  // Teletext session mode (T answer at the graphics prompt, `texttv-mode`
+  // event below). The face and palette belong to this session only: the
+  // previous theme is remembered for the restore, and the mode flag keeps
+  // font-preference / set-font from clobbering the look mid-session.
+  const texttvModeRef = useRef<boolean>(false);
+  const texttvPrevThemeRef = useRef<any>(null);
 
   // Preload all Amiga fonts on mount to prevent mixed rendering when switching fonts
   useEffect(() => {
@@ -441,7 +448,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       { family: 'Topaz_a1200', url: '/fonts/Topaz_a1200_v1.0.ttf' },
       { family: 'Topaz_a500', url: '/fonts/Topaz_a500_v1.0.ttf' },
       { family: 'mosoul', url: '/fonts/mOsOul_v1.0.ttf' },
-      { family: 'PetMe64', url: '/fonts/PetMe64.ttf' }
+      { family: 'PetMe64', url: '/fonts/PetMe64.ttf' },
+      { family: 'TDAText', url: '/fonts/TDAText.woff2' }
     ];
 
     const loadFonts = async () => {
@@ -2017,6 +2025,17 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.on('disconnect', (reason: string) => {
       console.log('[DISCONNECT] Client disconnected, reason:', reason);
+      // A teletext session ends with its socket: drop the mode flag so a
+      // later font-preference on this terminal is honoured, and give the
+      // terminal its previous palette back (the face follows via the
+      // server's font-preference on the next login).
+      if (texttvModeRef.current) {
+        texttvModeRef.current = false;
+        if (texttvPrevThemeRef.current !== null) {
+          try { term.options.theme = texttvPrevThemeRef.current; } catch { /* terminal may be disposed */ }
+          texttvPrevThemeRef.current = null;
+        }
+      }
 
       // Log disconnect event for debugging
       console.log('[DISCONNECT] Disconnect details:', {
@@ -2333,6 +2352,29 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // screen is a C128's VDC unless the caller has said otherwise.
       setPetsciiPalette(shape.palette === 'vic' ? 'vic' : shape.cols === 80 ? 'vdc' : 'vic');
       ensurePetsciiSession(shape.cols === 80 ? 80 : 40);
+    });
+
+    // Teletext session mode (T answer at the graphics prompt). Stays on the
+    // xterm surface - unlike PETSCII there is no canvas, only a face and a
+    // palette. The face applies uncached (session-font.ts: TELETEXT_FONT is
+    // outside BBS_FONTS and cacheFont=false) so the next connect's
+    // pre-login window never opens in it.
+    socket.on('texttv-mode', (data: { enabled: boolean }) => {
+      if (data?.enabled) {
+        console.log('[Terminal] Teletext mode on - TDAText face, teletext palette');
+        texttvModeRef.current = true;
+        if (texttvPrevThemeRef.current === null) texttvPrevThemeRef.current = term.options.theme;
+        term.options.theme = XTERM_CONFIG.teletextTheme;
+        void applyFont(term, TELETEXT_FONT, fontSizeRef.current, false);
+      } else {
+        console.log('[Terminal] Teletext mode off - restoring session face');
+        texttvModeRef.current = false;
+        if (texttvPrevThemeRef.current !== null) {
+          term.options.theme = texttvPrevThemeRef.current;
+          texttvPrevThemeRef.current = null;
+        }
+        void applyFont(term, readCachedFont() ?? DEFAULT_BBS_FONT, fontSizeRef.current);
+      }
     });
 
     // Terminal resize handler (PETSCII mode uses 40x25)
@@ -2801,6 +2843,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     socket.on('set-font', (fontName: string) => {
       console.log('[Font] Received set-font event:', fontName);
+      // A teletext session owns its face (TDAText + palette, `texttv-mode`
+      // above) - an explicit pick waits until the mode ends with it.
+      if (texttvModeRef.current) return;
       // One owner: utils/session-font.ts holds the stack, the line-height
       // map and the cache. xterm never shows a PETSCII session any more
       // (the canvas does), so the pick goes straight to xterm. The
@@ -2812,6 +2857,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Handle font preference loaded from database on login
     socket.on('font-preference', (data: { font: string }) => {
       console.log('[Font Preference] Received saved preference:', data.font);
+      // A teletext session owns its face - the server preference applies
+      // once the mode ends (or never, if the caller stays in T all night).
+      if (texttvModeRef.current) return;
       // The server preference is the owner of the session font; this
       // arrives after login-success AND after session-restored (both emit
       // get-font-preference). It applies to xterm only - a 'P' session

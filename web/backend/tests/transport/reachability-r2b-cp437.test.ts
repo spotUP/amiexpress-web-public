@@ -33,7 +33,7 @@ import { fromCharset } from '../../src/utils/output-pacing';
 
 jest.setTimeout(60000);
 
-const STEP_01_SENTINEL = 'A/R/P/P8/N';
+const STEP_01_SENTINEL = 'A/R/P/P8/T/N';
 
 /** A framed box in CP437: the double-line corners and the three shade blocks. */
 const CP437_ART = Buffer.from([

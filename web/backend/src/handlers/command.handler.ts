@@ -1616,7 +1616,7 @@ console.log(' Graphics prompt response:', answer || '(empty = ANSI)');
           emitText(socket, `PETSCII: SIMULATING ${columns === 80 ? 'C128 DISPLAY (80X25)' : 'C64 DISPLAY (40X25)'}\r\n`);
         }
 
-console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.ripMode ? 'RIP' : session.ansiEnabled ? 'ANSI' : 'None');
+console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.texttvMode ? 'TELETEXT' : session.ripMode ? 'RIP' : session.ansiEnabled ? 'ANSI' : 'None');
 
         // express.e:29548-29550 — Not(STEALTH_MODE) path: doSystemPassword() before BBSTITLE.
         // STEALTH_MODE is a per-node tooltype (Node{N}.info) that suppresses the

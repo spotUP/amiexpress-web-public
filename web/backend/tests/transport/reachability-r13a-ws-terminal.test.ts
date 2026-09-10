@@ -42,7 +42,7 @@ import type { TransportSessionDeps } from '../../src/server/transport-session';
 
 jest.setTimeout(60000);
 
-const STEP_01_SENTINEL = 'A/R/P/P8/N';
+const STEP_01_SENTINEL = 'A/R/P/P8/T/N';
 
 const deps = (): TransportSessionDeps => ({
   io: {} as never,

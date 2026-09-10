@@ -86,9 +86,13 @@ export interface PreLoginConnectResult {
  * who types it gets the C64's 40-column screen, which is the honest answer:
  * their terminal IS the screen, and no byte on the wire could make it 80
  * columns wide.
+ *
+ * T (2026-09-10, WEB_) is TELETEXT session mode: TDAText face + teletext
+ * palette in the web terminal, plain ANSI on byte transports (with a
+ * fallback notice, same shape as R). No express.e counterpart.
  */
 export const ANSI_GRAPHICS_PROMPT =
-  "\r\nCOMMODORE 64: PRESS <DEL>\r\nANSI, RIP, PETSCII OR NO GRAPHICS (A/R/P/P8/N) [Q=SKIP BULLETINS]? ";
+  "\r\nCOMMODORE 64: PRESS <DEL>\r\nANSI, RIP, PETSCII, TELETEXT OR NO GRAPHICS (A/R/P/P8/T/N) [Q=SKIP BULLETINS]? ";
 
 /**
  * The connect banner - express.e:29507-29522 - for EVERY transport.
