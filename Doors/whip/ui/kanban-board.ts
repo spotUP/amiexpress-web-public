@@ -97,7 +97,8 @@ export function formatKanbanCard(
   task: Task,
   width: number,
   assigneeHandle?: string,
-  carried = false
+  carried = false,
+  selected = false
 ): string {
   const priorityInitial = task.priority[0].toUpperCase();
   const priorityColor = getPriorityColor(task.priority);
@@ -105,13 +106,16 @@ export function formatKanbanCard(
   // its own cells so the wrap width shrinks by exactly that much, and
   // every row inverts - a held card reads nothing like a merely
   // selected one, the keyboard equivalent of the drag ghost (2026-09-10).
+  // A selected (not carried) card inverts the same way: the list widget
+  // highlights only the first visual row of a multi-row item, which left
+  // the rest of the title and the meta row dark (screenshot, 2026-09-10).
   const titleRows = wrapTitle(task.title, Math.max(4, carried ? width - 3 : width));
   if (carried && titleRows.length > 0) titleRows[0] = `>> ${titleRows[0]}`;
   const meta = `{${priorityColor}-fg}[${priorityInitial}]{/${priorityColor}-fg} ${task.points} pts${
     assigneeHandle ? ` {gray-fg}· ${assigneeHandle}{/}` : ''
   }`;
   const rows = [...titleRows, meta];
-  if (!carried) return rows.join('\n');
+  if (!carried && !selected) return rows.join('\n');
   return rows.map((row) => `{inverse}${row}{/inverse}`).join('\n');
 }
 
@@ -364,8 +368,15 @@ export async function showKanbanBoard(
         const columnTasks = tasks.filter(t => t.status === status);
 
         const cardWidth = Math.max(8, colWidth - 2);
-        const items = columnTasks.map(task =>
-          formatKanbanCard(task, cardWidth, handlesById[task.assignedTo ?? ''], carried?.task.id === task.id)
+        const sel = columnLists[i].selected || 0;
+        const items = columnTasks.map((task, idx) =>
+          formatKanbanCard(
+            task, cardWidth, handlesById[task.assignedTo ?? ''],
+            carried?.task.id === task.id,
+            // Selected rows invert whole: the widget highlights only the
+            // first visual row of a multi-row card (2026-09-10).
+            idx === sel && i === currentColumn
+          )
         );
 
         // Clear items first, then set new ones to ensure proper refresh

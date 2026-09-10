@@ -91,19 +91,22 @@ function wrapTitle(title, width) {
  * row (priority, points, assignee). Replaces the old single-line
  * truncated form ("BBS Re.. [L] 10"), which left six readable characters.
  */
-function formatKanbanCard(task, width, assigneeHandle, carried = false) {
+function formatKanbanCard(task, width, assigneeHandle, carried = false, selected = false) {
     const priorityInitial = task.priority[0].toUpperCase();
     const priorityColor = (0, gamification_1.getPriorityColor)(task.priority);
     // A carried task shows its grip AND its held state: the marker eats
     // its own cells so the wrap width shrinks by exactly that much, and
     // every row inverts - a held card reads nothing like a merely
     // selected one, the keyboard equivalent of the drag ghost (2026-09-10).
+    // A selected (not carried) card inverts the same way: the list widget
+    // highlights only the first visual row of a multi-row item, which left
+    // the rest of the title and the meta row dark (screenshot, 2026-09-10).
     const titleRows = wrapTitle(task.title, Math.max(4, carried ? width - 3 : width));
     if (carried && titleRows.length > 0)
         titleRows[0] = `>> ${titleRows[0]}`;
     const meta = `{${priorityColor}-fg}[${priorityInitial}]{/${priorityColor}-fg} ${task.points} pts${assigneeHandle ? ` {gray-fg}· ${assigneeHandle}{/}` : ''}`;
     const rows = [...titleRows, meta];
-    if (!carried)
+    if (!carried && !selected)
         return rows.join('\n');
     return rows.map((row) => `{inverse}${row}{/inverse}`).join('\n');
 }
@@ -323,7 +326,11 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                 const status = COLUMNS[i];
                 const columnTasks = tasks.filter(t => t.status === status);
                 const cardWidth = Math.max(8, colWidth - 2);
-                const items = columnTasks.map(task => formatKanbanCard(task, cardWidth, handlesById[task.assignedTo ?? ''], carried?.task.id === task.id));
+                const sel = columnLists[i].selected || 0;
+                const items = columnTasks.map((task, idx) => formatKanbanCard(task, cardWidth, handlesById[task.assignedTo ?? ''], carried?.task.id === task.id, 
+                // Selected rows invert whole: the widget highlights only the
+                // first visual row of a multi-row card (2026-09-10).
+                idx === sel && i === currentColumn));
                 // Clear items first, then set new ones to ensure proper refresh
                 columnLists[i].clearItems();
                 columnLists[i].setItems(items.length > 0 ? items : []);

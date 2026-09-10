@@ -59,3 +59,13 @@ export async function carriedCardInvertsEveryRow(): Promise<void> {
   }
   assert.ok(rows[0].includes('>>'), 'the grip survives the inversion');
 }
+
+export async function selectedCardInvertsWithoutGrip(): Promise<void> {
+  const card = formatKanbanCard(task, 30, 'spot', false, true);
+  const rows = card.split('\n');
+  assert.ok(rows.length >= 2, 'title plus meta row');
+  for (const row of rows) {
+    assert.ok(row.startsWith('{inverse}') && row.endsWith('{/inverse}'), `selected row inverted: ${row}`);
+  }
+  assert.ok(!card.includes('>>'), 'selection is not a grip');
+}
