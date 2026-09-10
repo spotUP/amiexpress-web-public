@@ -23,6 +23,7 @@ import { z } from 'zod';
 // bundle and its audio engine, and a settings read has no business loading
 // Tone.js.
 import { resolveDoorDirectory } from './door-list';
+import { resolvePath as resolveTruePath } from '../utils/amigafs';
 
 /**
  * The two file names, and the shape, are the contract with the SDK
@@ -254,8 +255,15 @@ export interface DoorSettingsView {
 export function doorDirectoryFor(bbsRoot: string, door: { path?: string; location?: string; command?: string }): string | null {
   const { resolvedPath } = resolveDoorDirectory(bbsRoot, door as any);
   if (!resolvedPath) return null;
+  // A LOCATION's case is the author's, not the disk's (Bulls registers
+  // Doors/EmP_Tools/Bulls; the volume holds Doors/emp_tools). The resolver
+  // above matches case-insensitively but hands back the candidate spelling,
+  // and every plain-fs call below would then miss on a case-sensitive
+  // volume — the admin's Door settings section silently vanishing. Resolve
+  // to the true on-disk spelling first.
+  const real = resolveTruePath(resolvedPath) ?? resolvedPath;
   try {
-    return fs.statSync(resolvedPath).isDirectory() ? resolvedPath : path.dirname(resolvedPath);
+    return fs.statSync(real).isDirectory() ? real : path.dirname(real);
   } catch {
     return null;
   }
