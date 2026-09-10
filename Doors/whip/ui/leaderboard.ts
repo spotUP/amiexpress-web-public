@@ -3,6 +3,8 @@ import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { UserStats } from '../types/user';
 import type { DataManager } from '../core/data-manager';
 import { getLevelStars, getLevelColor, formatPoints } from '../core/gamification';
+import { attachWhipMenu, type WhipMenuBar } from './menu';
+import type { MenuSelection } from '../types/session';
 import { T } from '../door-theme';
 import { attachWhipChrome, type FooterHint } from './chrome';
 
@@ -19,7 +21,8 @@ const COMPACT_HINTS: readonly FooterHint[] = [
 export async function showLeaderboard(
   screen: Screen,
   currentUser: UserStats,
-  dataManager: DataManager
+  dataManager: DataManager,
+  onNavigate?: (sel: MenuSelection) => void
 ): Promise<void> {
   return new Promise(async (resolve) => {
     screen.program.enableMouse();
@@ -30,11 +33,15 @@ export async function showLeaderboard(
     const users = await dataManager.loadUsers();
     const sortedUsers = Object.values(users).sort((a, b) => b.points - a.points);
 
+    // Menu bar row (ui/menu.ts): header and table slide down one row
+    // when it is up, and stay put below 60 columns.
+    const barH = screen.width >= 60 ? 1 : 0;
+
     // Header - NOT focusable
     const header = createBox({
       fixed: true,
       parent: screen,
-      top: 0,
+      top: barH,
       left: 0,
       width: '100%',
       height: 3,
@@ -54,7 +61,7 @@ export async function showLeaderboard(
     const tableHeader = createBox({
       fixed: true,
       parent: screen,
-      top: 3,
+      top: barH + 3,
       left: 1,
       width: '98%',
       height: 2,
@@ -71,10 +78,10 @@ export async function showLeaderboard(
     const table = createBox({
       fixed: true,
       parent: screen,
-      top: 5,
+      top: barH + 5,
       left: 1,
       width: '98%',
-      height: '100%-8',
+      height: `100%-${barH + 8}`,
       border: { type: 'line' },
       label: ' Leaderboard ',
       scrollable: true,
@@ -164,10 +171,23 @@ export async function showLeaderboard(
 
     screen.on('keypress', keyHandler);
 
+    // Menu picks leave this screen for wherever the app loop sends them.
+    let menu: WhipMenuBar | null = null;
+    const pickFromBar = (value: MenuSelection) => {
+      onNavigate?.(value);
+      cleanup();
+      resolve();
+    };
+    menu = attachWhipMenu(screen, pickFromBar, () => table.focus());
+
     const cleanup = () => {
       // First: a rail timer still writing after these widgets are gone would
       // paint into a screen that no longer holds them.
       chrome.stop();
+      if (menu) {
+        menu.destroy();
+        menu = null;
+      }
       screen.off('keypress', keyHandler);
       screen.remove(header);
       screen.remove(tableHeader);

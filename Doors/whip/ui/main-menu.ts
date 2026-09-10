@@ -1,7 +1,7 @@
 import { createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { MenuBar } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { attachWhipMenu, type WhipMenuBar } from './menu';
 import type { UserStats } from '../types/user';
 import type { MenuSelection } from '../types/session';
 import type { DataManager } from '../core/data-manager';
@@ -45,66 +45,16 @@ export async function showMainMenu(
       : null;
 
     // ========================================================================
-    // MENU BAR - the SDK's grouped bar (mouse, arrows, Enter, ESC).
-    // Nine flat buttons became six dropdowns: the groups are where new
-    // features land from here instead of squeezing another key onto the
-    // row. Hidden below 60 columns, where the footer hints carry the
-    // same keys. Escape off the bar hands focus back to the list.
+    // MENU BAR - shared helper (ui/menu.ts). Built after the list so
+    // Escape can hand focus back to it; barH comes straight from the
+    // width so the header below lands right with or without the bar.
     // ========================================================================
-    const menuGroups: Array<{ label: string; entries: Array<{ label: string; value: MenuSelection }> }> = [
-      { label: 'Task', entries: [
-        { label: '[T] Quick Task', value: 'quick-task' },
-        { label: '[M] My Tasks', value: 'my-tasks' },
-      ] },
-      { label: 'Project', entries: [
-        { label: '[N] New Project', value: 'new-project' },
-        { label: '[V] View All', value: 'view-projects' },
-      ] },
-      { label: 'Board', entries: [
-        { label: '[K] Kanban', value: 'kanban' },
-      ] },
-      { label: 'Party', entries: [
-        { label: '[P] Timeline', value: 'parties' },
-      ] },
-      { label: 'Stars', entries: [
-        { label: '[L] Leaderboard', value: 'leaderboard' },
-        { label: '[A] Achievements', value: 'achievements' },
-      ] },
-      { label: 'Me', entries: [
-        { label: '[D] Profile', value: 'my-profile' },
-      ] },
-      { label: 'Quit', entries: [
-        { label: '[Q] Quit', value: 'quit' },
-      ] },
-    ];
-    let menuBar: MenuBar | null = null;
+    const barH = screen.width >= 60 ? 1 : 0;
+    let menu: WhipMenuBar | null = null;
     const pickFromBar = (value: MenuSelection) => {
       cleanup();
       resolve(value);
     };
-    if (screen.width >= 60) {
-      menuBar = new MenuBar({
-        screen,
-        items: menuGroups.map((g) => ({
-          label: g.label,
-          items: g.entries.map((e) => ({
-            label: e.label,
-            action: () => pickFromBar(e.value),
-          })),
-        })),
-        style: {
-          bg: T.ground,
-          fg: T.ink,
-          hover: { bg: T.accent, fg: T.ground },
-        },
-      });
-      // One Escape leaves the menus entirely: back to the list, never
-      // stranded on the bar (the SDK emits exit for exactly this).
-      menuBar.on('exit', () => list.focus());
-    }
-    // Narrow screens skip the bar (footer hints carry the same keys) and
-    // everything above slides up one row - no empty row 0.
-    const barH = menuBar ? 1 : 0;
 
     // ========================================================================
     // HEADER - the chrome's masthead (NOT focusable)
@@ -305,6 +255,10 @@ export async function showMainMenu(
     // Focus the list
     list.focus();
 
+    // The bar goes up once the list exists for Escape to return to.
+    menu = attachWhipMenu(screen, pickFromBar, () => list.focus());
+    screen.render();
+
     // Keyboard handler for direct shortcuts
     const keyHandler = (ch: any, key: any) => {
       const keyName = key.name.toUpperCase();
@@ -333,12 +287,9 @@ export async function showMainMenu(
       chrome.stop();
       screen.off('keypress', keyHandler);
       list.removeAllListeners('select');
-      if (menuBar) {
-        // Close before destroy: hide() releases the focus trap, and
-        // destroy() alone would skip that release on a live trap.
-        menuBar.closeAll();
-        menuBar.destroy();
-        menuBar = null;
+      if (menu) {
+        menu.destroy();
+        menu = null;
       }
       screen.remove(header);
       screen.remove(mainContainer);

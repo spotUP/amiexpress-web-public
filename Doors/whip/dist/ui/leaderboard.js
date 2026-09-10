@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.showLeaderboard = showLeaderboard;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const gamification_1 = require("../core/gamification");
+const menu_1 = require("./menu");
 const door_theme_1 = require("../door-theme");
 const chrome_1 = require("./chrome");
 /** The keys this screen answers to, and the same keys shortened for 40 columns. */
@@ -14,7 +15,7 @@ const COMPACT_HINTS = [
     { key: 'Up/Dn', does: 'Scroll' },
     { key: 'Q', does: 'Back' },
 ];
-async function showLeaderboard(screen, currentUser, dataManager) {
+async function showLeaderboard(screen, currentUser, dataManager, onNavigate) {
     return new Promise(async (resolve) => {
         screen.program.enableMouse();
         screen.clearRegion(0, screen.width, 0, screen.height);
@@ -22,11 +23,14 @@ async function showLeaderboard(screen, currentUser, dataManager) {
         // Note: Removed 200ms artificial delay for better responsiveness
         const users = await dataManager.loadUsers();
         const sortedUsers = Object.values(users).sort((a, b) => b.points - a.points);
+        // Menu bar row (ui/menu.ts): header and table slide down one row
+        // when it is up, and stay put below 60 columns.
+        const barH = screen.width >= 60 ? 1 : 0;
         // Header - NOT focusable
         const header = (0, blessed_helpers_1.createBox)({
             fixed: true,
             parent: screen,
-            top: 0,
+            top: barH,
             left: 0,
             width: '100%',
             height: 3,
@@ -45,7 +49,7 @@ async function showLeaderboard(screen, currentUser, dataManager) {
         const tableHeader = (0, blessed_helpers_1.createBox)({
             fixed: true,
             parent: screen,
-            top: 3,
+            top: barH + 3,
             left: 1,
             width: '98%',
             height: 2,
@@ -61,10 +65,10 @@ async function showLeaderboard(screen, currentUser, dataManager) {
         const table = (0, blessed_helpers_1.createBox)({
             fixed: true,
             parent: screen,
-            top: 5,
+            top: barH + 5,
             left: 1,
             width: '98%',
-            height: '100%-8',
+            height: `100%-${barH + 8}`,
             border: { type: 'line' },
             label: ' Leaderboard ',
             scrollable: true,
@@ -139,10 +143,22 @@ async function showLeaderboard(screen, currentUser, dataManager) {
             }
         };
         screen.on('keypress', keyHandler);
+        // Menu picks leave this screen for wherever the app loop sends them.
+        let menu = null;
+        const pickFromBar = (value) => {
+            onNavigate?.(value);
+            cleanup();
+            resolve();
+        };
+        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => table.focus());
         const cleanup = () => {
             // First: a rail timer still writing after these widgets are gone would
             // paint into a screen that no longer holds them.
             chrome.stop();
+            if (menu) {
+                menu.destroy();
+                menu = null;
+            }
             screen.off('keypress', keyHandler);
             screen.remove(header);
             screen.remove(tableHeader);

@@ -16,8 +16,22 @@
 import assert from 'assert';
 import { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { showMainMenu } from '../ui/main-menu';
+import { WHIP_MENUS } from '../ui/menu';
+import type { MenuSelection } from '../types/session';
 
-const GROUPS = ['Task', 'Project', 'Board', 'Party', 'Stars', 'Quit'];
+const GROUPS = ['Task', 'Project', 'Board', 'Party', 'Stars', 'Me', 'Quit'];
+
+export async function menuCoversEveryDestination(): Promise<void> {
+  const seen = WHIP_MENUS.flatMap((g) => g.entries.map((e) => e.value));
+  const all: MenuSelection[] = [
+    'quick-task', 'new-project', 'view-projects', 'kanban', 'my-tasks',
+    'parties', 'leaderboard', 'achievements', 'my-profile', 'quit',
+  ];
+  for (const dest of all) {
+    assert.ok(seen.includes(dest), `WHIP_MENUS reaches ${dest}`);
+  }
+  assert.strictEqual(seen.length, all.length, 'no destination twice, none missing');
+}
 
 function open(width = 80): any {
   return new Screen({ title: 'whip', width, height: 25, focusKeys: false } as any);

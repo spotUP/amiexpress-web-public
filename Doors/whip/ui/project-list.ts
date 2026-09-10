@@ -8,6 +8,8 @@ import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Project, ProjectType, ProjectStatus } from '../types/project';
 import type { UserStats } from '../types/user';
+import { attachWhipMenu, type WhipMenuBar } from './menu';
+import type { MenuSelection } from '../types/session';
 import type { DataManager } from '../core/data-manager';
 import type { AchievementManager } from '../core/achievements';
 import { v4 as uuidv4 } from 'uuid';
@@ -37,7 +39,8 @@ export async function showProjectList(
   user: UserStats,
   dataManager: DataManager,
   achievementManager: AchievementManager,
-  bbsApi?: any
+  bbsApi?: any,
+  onNavigate?: (sel: MenuSelection) => void
 ): Promise<Project | null> {
   return new Promise(async (resolve) => {
     screen.program.enableMouse();
@@ -48,11 +51,15 @@ export async function showProjectList(
     let projects = await dataManager.loadProjects();
     let selectedIndex = 0;
 
+    // Menu bar row (ui/menu.ts): header and list slide down one row
+    // when it is up, and stay put below 60 columns.
+    const barH = screen.width >= 60 ? 1 : 0;
+
     // Header - NOT focusable
     const header = createBox({
       fixed: true,
       parent: screen,
-      top: 0,
+      top: barH,
       left: 0,
       width: '100%',
       height: 3,
@@ -71,10 +78,10 @@ export async function showProjectList(
     const listBox = createBox({
       fixed: true,
       parent: screen,
-      top: 3,
+      top: barH + 3,
       left: 1,
       width: '98%',
-      height: '100%-6',
+      height: `100%-${barH + 6}`,
       border: { type: 'line' },
       label: ' Projects ',
       style: {
@@ -139,6 +146,10 @@ export async function showProjectList(
       // First: a rail timer still writing after these widgets are gone would
       // paint into a screen that no longer holds them.
       chrome.stop();
+      if (menu) {
+        menu.destroy();
+        menu = null;
+      }
       screen.off('keypress', keyHandler);
       screen.remove(header);
       screen.remove(listBox);
@@ -208,6 +219,16 @@ export async function showProjectList(
 
     screen.on('keypress', keyHandler);
     list.focus();
+
+    // Menu picks navigate out (the app loop jumps); the pick flow
+    // resolves null alongside so the kanban picker simply cancels.
+    let menu: WhipMenuBar | null = null;
+    const pickFromBar = (value: MenuSelection) => {
+      onNavigate?.(value);
+      cleanup();
+      resolve(null);
+    };
+    menu = attachWhipMenu(screen, pickFromBar, () => list.focus());
     screen.render();
   });
 }

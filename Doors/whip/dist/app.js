@@ -25,10 +25,17 @@ const door_theme_1 = require("./door-theme");
 class WhipApp {
     constructor(session) {
         this.exited = false;
+        // Menu picks on subpages stash their destination here; the screen
+        // resolves itself right after, and the loop jumps instead of showing
+        // the menu (ui/menu.ts).
+        this.pendingNav = null;
         // Alt+Enter responsive switch (ui/responsive.ts). Created at startup
         // like livechat's - the call site runs in run(), and the proof is a
         // started door, never a grep.
         this.terminalMode = null;
+        this.onNavigate = (sel) => {
+            this.pendingNav = sel;
+        };
         this.session = session;
         // The board's theme, before any widget reads a colour from it.
         (0, door_theme_1.applyTheme)(session.bbs);
@@ -113,7 +120,10 @@ class WhipApp {
     }
     async showMainMenu() {
         while (!this.exited) {
-            const selection = await (0, main_menu_1.showMainMenu)(this.screen, this.currentUser, this.dataManager);
+            // A menu pick on any subpage lands here instead of the menu: the
+            // screen resolved itself after stashing the destination.
+            const selection = this.pendingNav ?? await (0, main_menu_1.showMainMenu)(this.screen, this.currentUser, this.dataManager);
+            this.pendingNav = null;
             switch (selection) {
                 case 'quick-task':
                     await this.showQuickTask();
@@ -179,7 +189,7 @@ class WhipApp {
     async showProjectList() {
         // Selecting a project opens its board - returning to the menu
         // instead is the dead end reported 2026-09-10.
-        const selected = await (0, project_list_1.showProjectList)(this.screen, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi);
+        const selected = await (0, project_list_1.showProjectList)(this.screen, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi, this.onNavigate);
         if (selected) {
             await this.showKanbanBoard(selected);
         }
@@ -216,10 +226,10 @@ class WhipApp {
     }
     async showKanbanBoard(project) {
         this.lastProjectId = project.id;
-        await (0, kanban_board_1.showKanbanBoard)(this.screen, project, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi);
+        await (0, kanban_board_1.showKanbanBoard)(this.screen, project, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi, this.onNavigate);
     }
     async showMyTasks() {
-        await (0, my_tasks_1.showMyTasks)(this.screen, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi);
+        await (0, my_tasks_1.showMyTasks)(this.screen, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi, this.onNavigate);
     }
     ;
     async showMyProfile() {
@@ -238,13 +248,13 @@ class WhipApp {
         this.currentUser = user;
     }
     async showPartyTimeline() {
-        await (0, party_timeline_1.showPartyTimeline)(this.screen, this.currentUser, this.dataManager, this.partyCalendar);
+        await (0, party_timeline_1.showPartyTimeline)(this.screen, this.currentUser, this.dataManager, this.partyCalendar, this.onNavigate);
     }
     async showLeaderboard() {
-        await (0, leaderboard_1.showLeaderboard)(this.screen, this.currentUser, this.dataManager);
+        await (0, leaderboard_1.showLeaderboard)(this.screen, this.currentUser, this.dataManager, this.onNavigate);
     }
     async showAchievements() {
-        await (0, achievements_2.showAchievements)(this.screen, this.currentUser, this.dataManager);
+        await (0, achievements_2.showAchievements)(this.screen, this.currentUser, this.dataManager, this.onNavigate);
     }
     showMessage(message) {
         // Create a temporary message box

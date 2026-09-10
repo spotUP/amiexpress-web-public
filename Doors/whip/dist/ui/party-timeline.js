@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.showPartyTimeline = showPartyTimeline;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const gamification_1 = require("../core/gamification");
+const menu_1 = require("./menu");
 const door_theme_1 = require("../door-theme");
 const chrome_1 = require("./chrome");
 /** The keys this screen answers to, and the same keys shortened for 40 columns. */
@@ -16,7 +17,7 @@ const COMPACT_HINTS = [
     { key: 'R', does: 'Refresh' },
     { key: 'Q', does: 'Back' },
 ];
-async function showPartyTimeline(screen, user, dataManager, partyCalendar) {
+async function showPartyTimeline(screen, user, dataManager, partyCalendar, onNavigate) {
     return new Promise(async (resolve) => {
         screen.program.enableMouse();
         screen.clearRegion(0, screen.width, 0, screen.height);
@@ -37,10 +38,13 @@ async function showPartyTimeline(screen, user, dataManager, partyCalendar) {
         // these two elements, and an element replaced under a running timer is an
         // element the timer keeps painting after it has left the screen. Same
         // geometry, same place, built once.
+        // Menu bar row (ui/menu.ts): header and list slide down one row
+        // when it is up, and stay put below 60 columns.
+        const barH = screen.width >= 60 ? 1 : 0;
         const header = (0, blessed_helpers_1.createBox)({
             fixed: true,
             parent: screen,
-            top: 0,
+            top: barH,
             left: 0,
             width: '100%',
             height: 3,
@@ -79,10 +83,10 @@ async function showPartyTimeline(screen, user, dataManager, partyCalendar) {
             listBox = (0, blessed_helpers_1.createBox)({
                 fixed: true,
                 parent: screen,
-                top: 3,
+                top: barH + 3,
                 left: 1,
                 width: '98%',
-                height: '100%-6',
+                height: `100%-${barH + 6}`,
                 border: { type: 'line' },
                 label: ' Parties ',
                 style: {
@@ -216,10 +220,23 @@ async function showPartyTimeline(screen, user, dataManager, partyCalendar) {
             }
         };
         screen.on('keypress', keyHandler);
+        // Menu picks leave this screen for wherever the app loop sends them.
+        // Bound once: render() rebuilds the pane, never this scope.
+        let menu = null;
+        const pickFromBar = (value) => {
+            onNavigate?.(value);
+            cleanup();
+            resolve();
+        };
+        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => listBox?.focus());
         const cleanup = () => {
             // First: a rail timer still writing after these widgets are gone would
             // paint into a screen that no longer holds them.
             chrome.stop();
+            if (menu) {
+                menu.destroy();
+                menu = null;
+            }
             screen.off('keypress', keyHandler);
             screen.remove(header);
             if (listBox)

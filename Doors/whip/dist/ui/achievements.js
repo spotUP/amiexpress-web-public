@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.showAchievements = showAchievements;
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const menu_1 = require("./menu");
 const door_theme_1 = require("../door-theme");
 const chrome_1 = require("./chrome");
 /** The keys this screen answers to, and the same keys shortened for 40 columns. */
@@ -31,7 +32,7 @@ function padName(name, maxLength) {
     }
     return name + ' '.repeat(maxLength - name.length);
 }
-async function showAchievements(screen, currentUser, dataManager) {
+async function showAchievements(screen, currentUser, dataManager, onNavigate) {
     return new Promise(async (resolve) => {
         screen.program.enableMouse();
         screen.clearRegion(0, screen.width, 0, screen.height);
@@ -41,11 +42,14 @@ async function showAchievements(screen, currentUser, dataManager) {
         const allAchievements = Object.values(achievements);
         const unlocked = allAchievements.filter(a => currentUser.achievements.includes(a.id));
         const locked = allAchievements.filter(a => !currentUser.achievements.includes(a.id));
+        // Menu bar row (ui/menu.ts): header and content slide down one
+        // row when it is up, and stay put below 60 columns.
+        const barH = screen.width >= 60 ? 1 : 0;
         // Header - NOT focusable
         const header = (0, blessed_helpers_1.createBox)({
             fixed: true,
             parent: screen,
-            top: 0,
+            top: barH,
             left: 0,
             width: '100%',
             height: 3,
@@ -64,10 +68,10 @@ async function showAchievements(screen, currentUser, dataManager) {
         const content = (0, blessed_helpers_1.createBox)({
             fixed: true,
             parent: screen,
-            top: 3,
+            top: barH + 3,
             left: 1,
             width: '98%',
-            height: '100%-6',
+            height: `100%-${barH + 6}`,
             border: { type: 'line' },
             label: ' Achievements ',
             scrollable: true,
@@ -145,10 +149,22 @@ async function showAchievements(screen, currentUser, dataManager) {
             }
         };
         screen.on('keypress', keyHandler);
+        // Menu picks leave this screen for wherever the app loop sends them.
+        let menu = null;
+        const pickFromBar = (value) => {
+            onNavigate?.(value);
+            cleanup();
+            resolve();
+        };
+        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => content.focus());
         const cleanup = () => {
             // First: a rail timer still writing after these widgets are gone would
             // paint into a screen that no longer holds them.
             chrome.stop();
+            if (menu) {
+                menu.destroy();
+                menu = null;
+            }
             screen.off('keypress', keyHandler);
             screen.remove(header);
             screen.remove(content);

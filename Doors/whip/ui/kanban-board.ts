@@ -10,6 +10,8 @@ import type { DataManager } from '../core/data-manager';
 import type { AchievementManager } from '../core/achievements';
 import { getPriorityColor, calculateLevel } from '../core/gamification';
 import { editTask, createTask } from './task-editor';
+import { attachWhipMenu, type WhipMenuBar } from './menu';
+import type { MenuSelection } from '../types/session';
 import { T } from '../door-theme';
 import { confirmDelete } from './confirm-delete';
 import { attachWhipChrome, type FooterHint } from './chrome';
@@ -119,7 +121,8 @@ export async function showKanbanBoard(
   user: UserStats,
   dataManager: DataManager,
   achievementManager: AchievementManager,
-  bbsApi?: any
+  bbsApi?: any,
+  onNavigate?: (sel: MenuSelection) => void
 ): Promise<void> {
   return new Promise(async (resolve) => {
     screen.program.enableMouse();
@@ -173,10 +176,14 @@ export async function showKanbanBoard(
       }
     }
 
+    // Menu bar row (ui/menu.ts): headers and columns slide down one
+    // row when it is up, and stay put below 60 columns.
+    const barH = screen.width >= 60 ? 1 : 0;
+
     // Header - NOT focusable
     const header = createBox({
       parent: screen,
-      top: 0,
+      top: barH,
       left: 0,
       width: '100%',
       height: 3,
@@ -207,10 +214,10 @@ export async function showKanbanBoard(
 
       const box = createBox({
         parent: screen,
-        top: 3,
+        top: barH + 3,
         left: leftMargin + (i * colWidth),
         width: colWidth,
-        height: '100%-6',
+        height: `100%-${barH + 6}`,
         fixed: true,
         border: { type: 'line' },
         label: ` ${label} `,
@@ -539,10 +546,23 @@ export async function showKanbanBoard(
     // Listen on each column for mouseup in case screen doesn't get it
     columnLists.forEach(list => list.on('mouse', elementMouseHandler));
 
+    // Menu picks leave this board for wherever the app loop sends them.
+    let menu: WhipMenuBar | null = null;
+    const pickFromBar = (value: MenuSelection) => {
+      onNavigate?.(value);
+      cleanup();
+      resolve();
+    };
+    menu = attachWhipMenu(screen, pickFromBar, () => columnLists[currentColumn].focus());
+
     const cleanup = () => {
       // First: a rail timer still writing after these widgets are gone would
       // paint into a screen that no longer holds them.
       chrome.stop();
+      if (menu) {
+        menu.destroy();
+        menu = null;
+      }
       if (updateTimeout) clearTimeout(updateTimeout);
       screen.off('keypress', keyHandler);
       screen.off('mouse', mouseHandler);

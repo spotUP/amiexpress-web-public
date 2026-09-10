@@ -10,6 +10,7 @@ const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helper
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const gamification_1 = require("../core/gamification");
 const task_editor_1 = require("./task-editor");
+const menu_1 = require("./menu");
 const door_theme_1 = require("../door-theme");
 const confirm_delete_1 = require("./confirm-delete");
 const chrome_1 = require("./chrome");
@@ -106,7 +107,7 @@ function formatKanbanCard(task, width, assigneeHandle, carried = false) {
         return rows.join('\n');
     return rows.map((row) => `{inverse}${row}{/inverse}`).join('\n');
 }
-async function showKanbanBoard(screen, project, user, dataManager, achievementManager, bbsApi) {
+async function showKanbanBoard(screen, project, user, dataManager, achievementManager, bbsApi, onNavigate) {
     return new Promise(async (resolve) => {
         screen.program.enableMouse();
         screen.clearRegion(0, screen.width, 0, screen.height);
@@ -148,10 +149,13 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
                 partyInfo = ` | Party: ${party.name} in ${days} days`;
             }
         }
+        // Menu bar row (ui/menu.ts): headers and columns slide down one
+        // row when it is up, and stay put below 60 columns.
+        const barH = screen.width >= 60 ? 1 : 0;
         // Header - NOT focusable
         const header = (0, blessed_helpers_1.createBox)({
             parent: screen,
-            top: 0,
+            top: barH,
             left: 0,
             width: '100%',
             height: 3,
@@ -179,10 +183,10 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
             const label = COLUMN_LABELS[status];
             const box = (0, blessed_helpers_1.createBox)({
                 parent: screen,
-                top: 3,
+                top: barH + 3,
                 left: leftMargin + (i * colWidth),
                 width: colWidth,
-                height: '100%-6',
+                height: `100%-${barH + 6}`,
                 fixed: true,
                 border: { type: 'line' },
                 label: ` ${label} `,
@@ -482,10 +486,22 @@ async function showKanbanBoard(screen, project, user, dataManager, achievementMa
         screen.on('mouse', mouseHandler);
         // Listen on each column for mouseup in case screen doesn't get it
         columnLists.forEach(list => list.on('mouse', elementMouseHandler));
+        // Menu picks leave this board for wherever the app loop sends them.
+        let menu = null;
+        const pickFromBar = (value) => {
+            onNavigate?.(value);
+            cleanup();
+            resolve();
+        };
+        menu = (0, menu_1.attachWhipMenu)(screen, pickFromBar, () => columnLists[currentColumn].focus());
         const cleanup = () => {
             // First: a rail timer still writing after these widgets are gone would
             // paint into a screen that no longer holds them.
             chrome.stop();
+            if (menu) {
+                menu.destroy();
+                menu = null;
+            }
             if (updateTimeout)
                 clearTimeout(updateTimeout);
             screen.off('keypress', keyHandler);

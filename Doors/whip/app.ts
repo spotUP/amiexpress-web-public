@@ -32,6 +32,10 @@ export class WhipApp {
   private currentUser!: UserStats;
   private exited = false;
   private bbsApi: any; // BBS API for event emission
+  // Menu picks on subpages stash their destination here; the screen
+  // resolves itself right after, and the loop jumps instead of showing
+  // the menu (ui/menu.ts).
+  private pendingNav: MenuSelection | null = null;
   // Alt+Enter responsive switch (ui/responsive.ts). Created at startup
   // like livechat's - the call site runs in run(), and the proof is a
   // started door, never a grep.
@@ -152,7 +156,10 @@ export class WhipApp {
 
   private async showMainMenu(): Promise<void> {
     while (!this.exited) {
-      const selection = await showMainMenu(this.screen, this.currentUser, this.dataManager);
+      // A menu pick on any subpage lands here instead of the menu: the
+      // screen resolved itself after stashing the destination.
+      const selection = this.pendingNav ?? await showMainMenu(this.screen, this.currentUser, this.dataManager);
+      this.pendingNav = null;
 
       switch (selection) {
         case 'quick-task':
@@ -237,7 +244,8 @@ export class WhipApp {
       this.currentUser,
       this.dataManager,
       this.achievementManager,
-      this.bbsApi
+      this.bbsApi,
+      this.onNavigate
     );
     if (selected) {
       await this.showKanbanBoard(selected);
@@ -286,6 +294,10 @@ export class WhipApp {
     }
   }
 
+  private onNavigate = (sel: MenuSelection): void => {
+    this.pendingNav = sel;
+  };
+
   private async showKanbanBoard(project: Project): Promise<void> {
     this.lastProjectId = project.id;
     await showKanbanBoard(
@@ -294,12 +306,13 @@ export class WhipApp {
       this.currentUser,
       this.dataManager,
       this.achievementManager,
-      this.bbsApi
+      this.bbsApi,
+      this.onNavigate
     );
   }
 
   private async showMyTasks(): Promise<void> {
-    await showMyTasks(this.screen, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi);
+    await showMyTasks(this.screen, this.currentUser, this.dataManager, this.achievementManager, this.bbsApi, this.onNavigate);
   };
 
   private async showMyProfile(): Promise<void> {
@@ -319,16 +332,17 @@ export class WhipApp {
       this.screen,
       this.currentUser,
       this.dataManager,
-      this.partyCalendar
+      this.partyCalendar,
+      this.onNavigate
     );
   }
 
   private async showLeaderboard(): Promise<void> {
-    await showLeaderboard(this.screen, this.currentUser, this.dataManager);
+    await showLeaderboard(this.screen, this.currentUser, this.dataManager, this.onNavigate);
   }
 
   private async showAchievements(): Promise<void> {
-    await showAchievements(this.screen, this.currentUser, this.dataManager);
+    await showAchievements(this.screen, this.currentUser, this.dataManager, this.onNavigate);
   }
 
   private showMessage(message: string): void {

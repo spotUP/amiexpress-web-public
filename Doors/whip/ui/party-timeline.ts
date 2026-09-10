@@ -5,6 +5,8 @@ import type { UserStats } from '../types/user';
 import type { DataManager } from '../core/data-manager';
 import type { PartyCalendar } from '../core/party-calendar';
 import { createProgressBar } from '../core/gamification';
+import { attachWhipMenu, type WhipMenuBar } from './menu';
+import type { MenuSelection } from '../types/session';
 import { T } from '../door-theme';
 import { attachWhipChrome, type FooterHint } from './chrome';
 
@@ -24,7 +26,8 @@ export async function showPartyTimeline(
   screen: Screen,
   user: UserStats,
   dataManager: DataManager,
-  partyCalendar: PartyCalendar
+  partyCalendar: PartyCalendar,
+  onNavigate?: (sel: MenuSelection) => void
 ): Promise<void> {
   return new Promise(async (resolve) => {
     screen.program.enableMouse();
@@ -49,10 +52,14 @@ export async function showPartyTimeline(
     // these two elements, and an element replaced under a running timer is an
     // element the timer keeps painting after it has left the screen. Same
     // geometry, same place, built once.
+    // Menu bar row (ui/menu.ts): header and list slide down one row
+    // when it is up, and stay put below 60 columns.
+    const barH = screen.width >= 60 ? 1 : 0;
+
     const header = createBox({
       fixed: true,
       parent: screen,
-      top: 0,
+      top: barH,
       left: 0,
       width: '100%',
       height: 3,
@@ -93,10 +100,10 @@ export async function showPartyTimeline(
       listBox = createBox({
         fixed: true,
         parent: screen,
-        top: 3,
+        top: barH + 3,
         left: 1,
         width: '98%',
-        height: '100%-6',
+        height: `100%-${barH + 6}`,
         border: { type: 'line' },
         label: ' Parties ',
         style: {
@@ -253,10 +260,24 @@ export async function showPartyTimeline(
 
     screen.on('keypress', keyHandler);
 
+    // Menu picks leave this screen for wherever the app loop sends them.
+    // Bound once: render() rebuilds the pane, never this scope.
+    let menu: WhipMenuBar | null = null;
+    const pickFromBar = (value: MenuSelection) => {
+      onNavigate?.(value);
+      cleanup();
+      resolve();
+    };
+    menu = attachWhipMenu(screen, pickFromBar, () => listBox?.focus());
+
     const cleanup = () => {
       // First: a rail timer still writing after these widgets are gone would
       // paint into a screen that no longer holds them.
       chrome.stop();
+      if (menu) {
+        menu.destroy();
+        menu = null;
+      }
       screen.off('keypress', keyHandler);
       screen.remove(header);
       if (listBox) screen.remove(listBox);
