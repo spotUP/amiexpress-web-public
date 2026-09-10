@@ -892,7 +892,7 @@ console.log(`[Grumpy Bot] SUCCESS - Using ${label} response (tool loop)`);
       const answered = result.calls.filter((c) => c.outcome === 'ok');
       if (answered.length > 0 && result.toolResults.length > 0) {
 console.log('[Grumpy Bot] No reply from the model, but the board answered - sending the tool result');
-        return `Straight from the board, since I am typing slowly today:\n${result.toolResults.join('\n')}`;
+        return `Straight from the board:\n${result.toolResults.join('\n')}`;
       }
       rotate();
       continue;
@@ -1085,7 +1085,7 @@ console.log('[Grumpy Bot] SUCCESS - Using OpenRouter response (tool loop)');
       const answered = result.calls.filter((c) => c.outcome === 'ok');
       if (answered.length > 0 && result.toolResults.length > 0) {
 console.log('[Grumpy Bot] No reply from the model, but the board answered - sending the tool result');
-        return `Straight from the board, since I am typing slowly today:\n${result.toolResults.join('\n')}`;
+        return `Straight from the board:\n${result.toolResults.join('\n')}`;
       }
       return null;
     }
