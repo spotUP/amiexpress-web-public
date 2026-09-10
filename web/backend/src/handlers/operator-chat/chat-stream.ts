@@ -14,29 +14,34 @@ import { emitterForUserId } from '../../server/session-emitter-registry';
 import { planNaturalTyping } from '../grumpy-sysop-bot.handler';
 
 /**
- * Model markup to terminal bytes. Titles (<title>) paint cyan; everything
- * else renders plain. <color>/<colour> tags are stripped to their inner
- * text (sysop, 2026-09-10: no colors, just cyan titles) - and any other
- * angle brackets are left literally: eating a caller's "a < b" would be
- * worse than showing it. Unclosed tags run to end of string (a cut reply
- * still paints).
+ * Model markup to terminal bytes. Titles (<title>) paint cyan; color tags
+ * paint their color: <color>/<colour> with c/cyan or g/green (bare <color>
+ * defaults cyan, matching what the models mean by it). Unknown tags and
+ * stray brackets stay literal: eating a caller's "a < b" would be worse
+ * than showing it. Unclosed tags run to end of string (a cut reply still
+ * paints).
  */
+const CHAT_MARKUP_COLORS: Record<string, string> = {
+  c: '36', cyan: '36', g: '32', green: '32',
+};
+
 export function renderChatMarkup(text: string): string {
-  const paint = (inner: string): string => `\x1b[0;36m${inner}\x1b[0m`;
-  const strip = (inner: string): string => inner;
+  const paint = (inner: string, code: string): string => `\x1b[0;${code}m${inner}\x1b[0m`;
+  const paintTag = (tag: string, attr: string | undefined, inner: string): string => {
+    const t = tag.toLowerCase();
+    if (t === 'title' || t === 'cyan') return paint(inner, '36');
+    if (t === 'green') return paint(inner, '32');
+    const code = CHAT_MARKUP_COLORS[(attr ?? '').toLowerCase() || 'c'];
+    return code ? paint(inner, code) : inner;
+  };
   let out = text.replace(
-    /<(title|colou?r)(?:\s+([a-z]))?\s*>([\s\S]*?)(?:<\/colou?r(?:\s+[a-z])?\s*>|<\/title\s*>)/gi,
-    (_m, tag: string, _attr: string | undefined, inner: string) => {
-      return tag.toLowerCase() === 'title' ? paint(inner) : strip(inner);
-    },
+    /<(title|colou?r|cyan|green)(?:\s+([a-z]))?\s*>([\s\S]*?)(?:<\/(?:colou?r|cyan|green|title)(?:\s+[a-z])?\s*>)/gi,
+    (_m, tag: string, attr: string | undefined, inner: string) => paintTag(tag, attr, inner),
   );
-  // Unclosed trailing tag: a title paints to the end, a color tag just opens
-  // into plain text rather than leaking brackets.
+  // Unclosed trailing tag paints to the end rather than leaking brackets.
   out = out.replace(
-    /<(title|colou?r)(?:\s+([a-z]))?\s*>([^<]*)$/i,
-    (_m, tag: string, _attr: string | undefined, inner: string) => {
-      return tag.toLowerCase() === 'title' ? paint(inner) : inner;
-    },
+    /<(title|colou?r|cyan|green)(?:\s+([a-z]))?\s*>([^<]*)$/i,
+    (_m, tag: string, attr: string | undefined, inner: string) => paintTag(tag, attr, inner),
   );
   return out;
 }

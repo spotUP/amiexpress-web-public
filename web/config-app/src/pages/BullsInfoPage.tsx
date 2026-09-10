@@ -35,6 +35,7 @@ export function BullsInfoPage() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [modalFile, setModalFile] = useState<string | null>(null);
+  const [browserKey, setBrowserKey] = useState(0);
 
   const applyData = (data: any) => {
     setEntries(data.entries);
@@ -175,10 +176,10 @@ export function BullsInfoPage() {
         </button>
       </div>
 
-      <BulletinBrowser onOpen={setModalFile} />
+      <BulletinBrowser key={browserKey} onOpen={setModalFile} />
 
       {modalFile && (
-        <BulletinModal name={modalFile} onClose={() => setModalFile(null)} />
+        <BulletinModal name={modalFile} onClose={() => setModalFile(null)} onSaved={() => setBrowserKey((k) => k + 1)} />
       )}
     </div>
   );
@@ -275,7 +276,7 @@ function BulletinBrowser({ onOpen }: { onOpen: (name: string) => void }) {
 }
 
 /** Read/edit one bulletin in a modal. Missing files show the miss plainly. */
-function BulletinModal({ name, onClose }: { name: string; onClose: () => void }) {
+function BulletinModal({ name, onClose, onSaved }: { name: string; onClose: () => void; onSaved?: () => void }) {
   const [content, setContent] = useState<string | null>(null);
   const [editable, setEditable] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -336,6 +337,7 @@ function BulletinModal({ name, onClose }: { name: string; onClose: () => void })
     try {
       await apiClient.saveBulletin(name, content ?? '');
       setStatus(`Saved ${name}.`);
+      onSaved?.();
     } catch (e: unknown) {
       setStatus(`Error: ${e instanceof Error ? e.message : 'Save failed'}`);
     } finally {
@@ -354,6 +356,7 @@ function BulletinModal({ name, onClose }: { name: string; onClose: () => void })
       await apiClient.saveBulletin(name, text);
       setContent(text);
       setStatus(`Saved ${name} (editor canvas format).`);
+      onSaved?.();
     } catch (e: unknown) {
       setStatus(`Error: ${e instanceof Error ? e.message : 'Save failed'}`);
     } finally {

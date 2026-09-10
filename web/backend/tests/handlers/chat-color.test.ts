@@ -11,17 +11,20 @@ describe('model markup renders', () => {
   it('paints titles cyan and resets after', () => {
     expect(renderChatMarkup('<title>Top callers</title>')).toBe('\x1b[0;36mTop callers\x1b[0m');
   });
-  it('color tags render unpainted, inner text kept', () => {
-    expect(renderChatMarkup('<color g>1. spot - 0 pts</color>')).toBe('1. spot - 0 pts');
-    expect(renderChatMarkup('<color g>x</color g>')).toBe('x');
-    expect(renderChatMarkup('<colour c>y</colour>')).toBe('y');
+  it('paints color tags: green g, cyan c/bare, forgiving closes', () => {
+    expect(renderChatMarkup('<color g>1. spot - 0 pts</color>')).toBe('\x1b[0;32m1. spot - 0 pts\x1b[0m');
+    expect(renderChatMarkup('<color g>x</color g>')).toBe('\x1b[0;32mx\x1b[0m');
+    expect(renderChatMarkup('<colour c>y</colour>')).toBe('\x1b[0;36my\x1b[0m');
+    expect(renderChatMarkup('<color>z</color>')).toBe('\x1b[0;36mz\x1b[0m');
+    expect(renderChatMarkup('<cyan>h</cyan>')).toBe('\x1b[0;36mh\x1b[0m');
+    expect(renderChatMarkup('<green>h</green>')).toBe('\x1b[0;32mh\x1b[0m');
   });
   it('forgives a miscased title', () => {
     expect(renderChatMarkup('<TITLE>Z</TITLE>')).toBe('\x1b[0;36mZ\x1b[0m');
   });
-  it('an unclosed title paints to the end, an unclosed color stays plain', () => {
+  it('an unclosed tag paints to the end instead of leaking brackets', () => {
     expect(renderChatMarkup('From the board: <title>Turrican')).toBe('From the board: \x1b[0;36mTurrican\x1b[0m');
-    expect(renderChatMarkup('Score: <color g>42')).toBe('Score: 42');
+    expect(renderChatMarkup('Score: <color g>42')).toBe('Score: \x1b[0;32m42\x1b[0m');
   });
   it('leaves non-markup angle brackets alone', () => {
     expect(renderChatMarkup('a < b and <blink>x</blink>')).toBe('a < b and <blink>x</blink>');
