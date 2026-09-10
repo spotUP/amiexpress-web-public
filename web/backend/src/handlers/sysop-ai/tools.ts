@@ -195,7 +195,7 @@ export const CALLER_TOOLS: SysopTool[] = [
   },
   {
     name: 'search_doors',
-    description: 'The Up Rough door archive: BBS doors by keyword (name, author, group, description, DIZ). kind is exactly one of search, detail, random, stats - there is no party kind (demoparties are search_demozoo). kind=search needs query; kind=detail needs an archive name like MST-CM20.LHA; kind=random needs nothing; kind=stats gives archive totals. Use it for "find me a door about X", "tell me about door Y", "surprise me".',
+    description: 'The Up Rough door archive: BBS doors by keyword (name, author, group, description, DIZ). kind is exactly one of search, detail, random, stats - there is no party kind (demoparties are search_demozoo). kind=search needs query; kind=detail needs an archive name like MST-CM20.LHA; kind=random needs nothing; kind=stats gives archive totals. Use it for "find me a door about X", "tell me about door Y", "surprise me with a door".',
     parameters: { type: 'object', properties: { kind: { type: 'string', enum: ['search', 'detail', 'random', 'stats'] }, query: { type: 'string' } }, required: ['kind'], additionalProperties: false },
     tier: 'caller',
     async run(_ctx, args) {
@@ -216,7 +216,7 @@ export const CALLER_TOOLS: SysopTool[] = [
   },
   {
     name: 'search_listing',
-    description: 'The BBS file listing (Up Rough releases archive): files by filename/description keyword. kind=search needs query; kind=detail needs a numeric file id; kind=random needs nothing; kind=stats gives listing totals; kind=facts gives span, first art-DIZ, peaks and records. Use it for "find files about X", "tell me about file N", "surprise me", "how big is the listing". For the caller\'s own conference uploads, search_files is the one. For asciiarena art and artists, ask_scene is the one - never this.',
+    description: 'The BBS file listing (Up Rough releases archive): files by filename/description keyword. kind=search needs query; kind=detail needs a numeric file id; kind=random needs nothing; kind=stats gives listing totals; kind=facts gives span, first art-DIZ, peaks and records. Use it for "find files about X", "tell me about file N", "surprise me with a file", "how big is the listing". For the caller\'s own conference uploads, search_files is the one. For asciiarena art and artists, ask_scene is the one - never this.',
     parameters: { type: 'object', properties: { kind: { type: 'string', enum: ['search', 'detail', 'random', 'stats', 'facts'] }, query: { type: 'string' } }, required: ['kind'], additionalProperties: false },
     tier: 'caller',
     async run(_ctx, args) {
@@ -238,7 +238,7 @@ export const CALLER_TOOLS: SysopTool[] = [
   },
   {
     name: 'ask_scene',
-    description: 'The wider scene beyond our own archives: a demo/intro/musicdisk by title, a demoparty, an ANSI/ASCII logo, a film, "surprise me", latest arrivals, "is this download link alive". kind=search needs query; kind=random and kind=latest need nothing; kind=check needs an https URL. Not for scene groups/handles (search_demozoo), retail games (lookup_game), or our doors/files (search_doors/search_files). Answers carry their source - quote it.',
+    description: 'The wider scene beyond our own archives: a demo/intro/musicdisk by title, a demoparty, an ASCII logo from AsciiArena ("show me an ASCII logo", "logos by X"), a film, "surprise me with anything", latest arrivals, "is this download link alive". kind=search needs query; kind=random and kind=latest need nothing; kind=check needs an https URL. Not for scene groups/handles (search_demozoo), retail games (lookup_game), or our doors/files (search_doors/search_files). Answers carry their source - quote it.',
     parameters: { type: 'object', properties: { kind: { type: 'string', enum: ['search', 'random', 'latest', 'check'] }, query: { type: 'string' } }, required: ['kind'], additionalProperties: false },
     tier: 'caller',
     async run(_ctx, args) {
