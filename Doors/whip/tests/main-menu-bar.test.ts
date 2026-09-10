@@ -1,20 +1,23 @@
 /**
- * The main menu carries a menu bar: every action, one row, clickable.
+ * The main menu carries the SDK's grouped menu bar: six dropdowns over
+ * the same nine actions (Task, Project, Board, Party, Stars, Quit).
  *
- * Nine actions lived behind single-key hotkeys only; the bar maps them
- * all (Task, Project, Boards, Kanban, Mine, Parties, Stars, Medals,
- * Quit) for the mouse. It never takes focus - the list keeps the
- * arrows - and it hides below 60 columns where the footer hints carry
- * the same keys.
+ * The first bar was a flat blessed.listbar - every new feature would
+ * have squeezed another key onto one row. Groups are where features
+ * land from here. The bar is mouse and keyboard driven; Escape hands
+ * focus back to the list; below 60 columns there is no bar and the
+ * hotkeys carry.
  *
- * Driven: the real menu, a real click (button press) on Kanban.
+ * Driven: the real menu. Group labels read off the paint; a Board >
+ * Kanban action fires through the dropdown's own item list; narrow
+ * screens keep hotkeys.
  */
 
 import assert from 'assert';
 import { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { showMainMenu } from '../ui/main-menu';
 
-const EXPECTED = ['Task', 'Project', 'Boards', 'Kanban', 'Mine', 'Parties', 'Stars', 'Medals', 'Quit'];
+const GROUPS = ['Task', 'Project', 'Board', 'Party', 'Stars', 'Quit'];
 
 function open(width = 80): any {
   return new Screen({ title: 'whip', width, height: 25, focusKeys: false } as any);
@@ -29,34 +32,37 @@ const dataManager: any = {
   loadParties: async () => [],
 };
 
-function buttonsOf(screen: any): any[] {
-  const out: any[] = [];
+function menuBarOf(screen: any): any {
+  let found: any;
   const walk = (el: any): void => {
-    if (String(el.type ?? '') === 'button') out.push(el);
+    if (Array.isArray(el.menuButtons) && el.menuButtons.length > 0) found = el;
     (el.children || []).forEach(walk);
   };
   walk(screen);
-  return out;
+  return found;
 }
 
-const textOf = (el: any): string =>
-  String(el.options?.content ?? el.content ?? '').replace(/\{[^}]*\}/g, '').trim();
-
-export async function menuBarMapsEveryAction(): Promise<void> {
+export async function menuBarGroupsEveryAction(): Promise<void> {
   const screen = open();
   try {
     const done = showMainMenu(screen, user, dataManager);
     await settle();
 
-    const labels = buttonsOf(screen).map(textOf).filter((t) => t.length > 0);
-    for (const want of EXPECTED) {
-      assert.ok(labels.some((t) => t.includes(want)), `the bar carries ${want} (saw: ${labels.join('|')})`);
+    const bar = menuBarOf(screen);
+    assert.ok(bar, 'the SDK menu bar is on screen');
+    const labels = bar.menuButtons.map((b: any) =>
+      String(b.options?.content ?? b.content ?? '').replace(/\{[^}]*\}/g, '').trim());
+    for (const want of GROUPS) {
+      assert.ok(labels.some((t: string) => t.includes(want)), `the bar carries ${want}`);
     }
 
-    const kanban = buttonsOf(screen).find((b) => textOf(b).includes('Kanban'));
-    assert.ok(kanban, 'the Kanban button exists');
-    kanban.emit('press');
-    assert.strictEqual(await done, 'kanban', 'clicking Kanban opens the board');
+    // Board > Kanban through the dropdown's own items.
+    const boardMenu = bar.getMenu(2);
+    assert.ok(boardMenu, 'the Board dropdown exists');
+    const kanban = boardMenu.items.find((i: any) => String(i.label).includes('Kanban'));
+    assert.ok(kanban, 'Kanban sits under Board');
+    kanban.action();
+    assert.strictEqual(await done, 'kanban', 'the action opens the board');
   } finally { screen.destroy(); }
 }
 
@@ -69,7 +75,7 @@ export async function narrowScreensSkipTheBar(): Promise<void> {
     const done = showMainMenu(screen, user, dataManager);
     await settle();
 
-    assert.strictEqual(buttonsOf(screen).length, 0, 'no menu buttons below 60 columns');
+    assert.strictEqual(menuBarOf(screen), undefined, 'no menu bar below 60 columns');
 
     // The menu itself still works: hotkey K opens the board.
     screen.program.emit('keypress', 'k', { name: 'k', full: 'k' });

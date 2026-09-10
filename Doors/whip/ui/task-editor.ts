@@ -1,5 +1,8 @@
 import {
   createButton,
+  guardDoubleSubmit,
+  advanceFocus,
+  retreatFocus,
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
@@ -356,10 +359,7 @@ async function showTaskEditor(
     // saves store the same task object twice - the board then shows the
     // task duplicated under one id (2026-09-09). Set synchronously so the
     // second entry bails before its first await.
-    let saving = false;
-    const save = async () => {
-      if (saving) return;
-      saving = true;
+    const save = guardDoubleSubmit(async () => {
       task.title = titleInput.getValue();
       task.category = CATEGORIES[categoryList.selected!] as TaskCategory;
       task.priority = PRIORITIES[priorityList.selected!] as TaskPriority;
@@ -373,7 +373,6 @@ async function showTaskEditor(
         projectOptions.find((o) => o.id === id)?.label ?? id ?? '';
 
       if (!task.title.trim()) {
-        saving = false;
         const msg = blessed.message({
           parent: screen,
           top: 'center',
@@ -421,7 +420,7 @@ async function showTaskEditor(
 
       cleanup();
       resolve();
-    };
+    });
 
     saveBtn.on('press', () => { save(); });
     cancelBtn.on('press', () => { cleanup(); resolve(); });
@@ -432,18 +431,9 @@ async function showTaskEditor(
     // which is also why a focus TRAP is not used here: a trap suppresses
     // screen-level key handlers, and this dialog's keys live on the screen.
     const focusables: any[] = [titleInput, categoryList, priorityList, projectList, assigneeList, pointsInput, descInput, saveBtn, cancelBtn];
-    const advanceFrom = (current: any) => {
-      if (closed) return;
-      const i = focusables.indexOf(current);
-      focusables[(i + 1) % focusables.length].focus();
-      screen.render();
-    };
-    const retreatFrom = (current: any) => {
-      if (closed) return;
-      const i = focusables.indexOf(current);
-      focusables[(i - 1 + focusables.length) % focusables.length].focus();
-      screen.render();
-    };
+    const advanceFrom = (_current: any) => { if (!closed) advanceFocus(screen, focusables); };
+    const retreatFrom = (_current: any) => { if (!closed) retreatFocus(screen, focusables); };
+
 
     // Enter in a text field advances to the next field (the textbox consumes
     // Enter as submit); Enter on a focused button presses it. Ctrl+Enter

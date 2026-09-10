@@ -322,11 +322,7 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
         // saves store the same task object twice - the board then shows the
         // task duplicated under one id (2026-09-09). Set synchronously so the
         // second entry bails before its first await.
-        let saving = false;
-        const save = async () => {
-            if (saving)
-                return;
-            saving = true;
+        const save = (0, blessed_helpers_1.guardDoubleSubmit)(async () => {
             task.title = titleInput.getValue();
             task.category = CATEGORIES[categoryList.selected];
             task.priority = PRIORITIES[priorityList.selected];
@@ -339,7 +335,6 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
                 task.projectId = chosenProject.id;
             const projectNameOf = (id) => projectOptions.find((o) => o.id === id)?.label ?? id ?? '';
             if (!task.title.trim()) {
-                saving = false;
                 const msg = blessed_1.default.message({
                     parent: screen,
                     top: 'center',
@@ -382,7 +377,7 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
             }
             cleanup();
             resolve();
-        };
+        });
         saveBtn.on('press', () => { save(); });
         cancelBtn.on('press', () => { cleanup(); resolve(); });
         // Tab order for the dialog. WHIP runs with focusKeys:false (arrows must
@@ -391,20 +386,10 @@ async function showTaskEditor(screen, task, user, dataManager, isNew, project, b
         // which is also why a focus TRAP is not used here: a trap suppresses
         // screen-level key handlers, and this dialog's keys live on the screen.
         const focusables = [titleInput, categoryList, priorityList, projectList, assigneeList, pointsInput, descInput, saveBtn, cancelBtn];
-        const advanceFrom = (current) => {
-            if (closed)
-                return;
-            const i = focusables.indexOf(current);
-            focusables[(i + 1) % focusables.length].focus();
-            screen.render();
-        };
-        const retreatFrom = (current) => {
-            if (closed)
-                return;
-            const i = focusables.indexOf(current);
-            focusables[(i - 1 + focusables.length) % focusables.length].focus();
-            screen.render();
-        };
+        const advanceFrom = (_current) => { if (!closed)
+            (0, blessed_helpers_1.advanceFocus)(screen, focusables); };
+        const retreatFrom = (_current) => { if (!closed)
+            (0, blessed_helpers_1.retreatFocus)(screen, focusables); };
         // Enter in a text field advances to the next field (the textbox consumes
         // Enter as submit); Enter on a focused button presses it. Ctrl+Enter
         // saves from anywhere.

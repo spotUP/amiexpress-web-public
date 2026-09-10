@@ -215,11 +215,7 @@ async function showProjectEditor(screen, project, user, dataManager, isNew, bbsA
         };
         // Double-submit guard, same as the task editor: one project object
         // saved twice shows up duplicated under one id.
-        let saving = false;
-        const save = async () => {
-            if (saving)
-                return;
-            saving = true;
+        const save = (0, blessed_helpers_1.guardDoubleSubmit)(async () => {
             project.name = nameInput.getValue();
             project.type = PROJECT_TYPES[typeList.selected];
             project.status = PROJECT_STATUSES[statusList.selected];
@@ -232,7 +228,6 @@ async function showProjectEditor(screen, project, user, dataManager, isNew, bbsA
                 project.partyId = upcomingParties[partyIndex - 1].id;
             }
             if (!project.name.trim()) {
-                saving = false;
                 const msg = blessed_1.default.message({
                     parent: screen,
                     top: 'center',
@@ -269,27 +264,17 @@ async function showProjectEditor(screen, project, user, dataManager, isNew, bbsA
             }
             cleanup();
             resolve(project);
-        };
+        });
         saveBtn.on('press', () => { save(); });
         cancelBtn.on('press', () => { cleanup(); resolve(null); });
         // Tab order for the dialog - same trap-free ring as the task editor:
         // WHIP's focusKeys:false turns off the screen default, and a focus trap
         // would suppress this dialog's screen-level keys, so the ring lives here.
         const focusables = [nameInput, typeList, statusList, partyList, descInput, saveBtn, cancelBtn];
-        const advanceFrom = (current) => {
-            if (closed)
-                return;
-            const i = focusables.indexOf(current);
-            focusables[(i + 1) % focusables.length].focus();
-            screen.render();
-        };
-        const retreatFrom = (current) => {
-            if (closed)
-                return;
-            const i = focusables.indexOf(current);
-            focusables[(i - 1 + focusables.length) % focusables.length].focus();
-            screen.render();
-        };
+        const advanceFrom = (_current) => { if (!closed)
+            (0, blessed_helpers_1.advanceFocus)(screen, focusables); };
+        const retreatFrom = (_current) => { if (!closed)
+            (0, blessed_helpers_1.retreatFocus)(screen, focusables); };
         nameInput.on('submit', () => advanceFrom(nameInput));
         descInput.on('submit', () => advanceFrom(descInput));
         const keyHandler = (ch, key) => {

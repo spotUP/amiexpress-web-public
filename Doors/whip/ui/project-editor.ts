@@ -1,5 +1,8 @@
 import {
   createButton,
+  guardDoubleSubmit,
+  advanceFocus,
+  retreatFocus,
 } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
@@ -249,10 +252,7 @@ async function showProjectEditor(
 
     // Double-submit guard, same as the task editor: one project object
     // saved twice shows up duplicated under one id.
-    let saving = false;
-    const save = async () => {
-      if (saving) return;
-      saving = true;
+    const save = guardDoubleSubmit(async () => {
       project.name = nameInput.getValue();
       project.type = PROJECT_TYPES[typeList.selected!] as ProjectType;
       project.status = PROJECT_STATUSES[statusList.selected!] as ProjectStatus;
@@ -266,7 +266,6 @@ async function showProjectEditor(
       }
 
       if (!project.name.trim()) {
-        saving = false;
         const msg = blessed.message({
           parent: screen,
           top: 'center',
@@ -304,7 +303,7 @@ async function showProjectEditor(
 
       cleanup();
       resolve(project);
-    };
+    });
 
     saveBtn.on('press', () => { save(); });
     cancelBtn.on('press', () => { cleanup(); resolve(null); });
@@ -313,18 +312,9 @@ async function showProjectEditor(
     // WHIP's focusKeys:false turns off the screen default, and a focus trap
     // would suppress this dialog's screen-level keys, so the ring lives here.
     const focusables: any[] = [nameInput, typeList, statusList, partyList, descInput, saveBtn, cancelBtn];
-    const advanceFrom = (current: any) => {
-      if (closed) return;
-      const i = focusables.indexOf(current);
-      focusables[(i + 1) % focusables.length].focus();
-      screen.render();
-    };
-    const retreatFrom = (current: any) => {
-      if (closed) return;
-      const i = focusables.indexOf(current);
-      focusables[(i - 1 + focusables.length) % focusables.length].focus();
-      screen.render();
-    };
+    const advanceFrom = (_current: any) => { if (!closed) advanceFocus(screen, focusables); };
+    const retreatFrom = (_current: any) => { if (!closed) retreatFocus(screen, focusables); };
+
 
     nameInput.on('submit', () => advanceFrom(nameInput));
     descInput.on('submit', () => advanceFrom(descInput));

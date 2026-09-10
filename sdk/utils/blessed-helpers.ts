@@ -1656,6 +1656,55 @@ export function bindKeys(
  *     ...
  *     restore();                              // panel closes
  */
+/**
+ * Double-submit guard for dialog save paths (2026-09-10).
+ *
+ * Save is reachable from a button, Ctrl+Enter and (via focus) plain
+ * Enter in quick succession, and two interleaved saves store the same
+ * record twice - WHIP showed the task duplicated under one id. The
+ * wrapper drops the second entry while the first is in flight and
+ * re-arms after, so a validation error still allows a retry. Replaces
+ * the hand-rolled `saving` flag every dialog carried.
+ */
+export function guardDoubleSubmit<Args extends unknown[]>(
+  fn: (...args: Args) => Promise<void>
+): (...args: Args) => Promise<void> {
+  let running = false;
+  return async (...args: Args): Promise<void> => {
+    if (running) return;
+    running = true;
+    try {
+      await fn(...args);
+    } finally {
+      running = false;
+    }
+  };
+}
+
+/**
+ * Focus-ring step for modal dialogs (2026-09-10).
+ *
+ * WHIP runs with focusKeys:false (arrows must never yank focus out of
+ * its lists), so the screen's default Tab navigation is off and every
+ * dialog advanced focus itself down a hand-rolled ring - same index
+ * math in each one. The ring stays the door's (order is layout), the
+ * stepping is shared. A focused element missing from the ring restarts
+ * at the front rather than stranding focus.
+ */
+export function advanceFocus(screen: any, ring: any[]): void {
+  if (ring.length === 0) return;
+  const i = ring.indexOf(screen.getFocused?.());
+  ring[(i + 1) % ring.length].focus();
+  screen.render();
+}
+
+export function retreatFocus(screen: any, ring: any[]): void {
+  if (ring.length === 0) return;
+  const i = ring.indexOf(screen.getFocused?.());
+  ring[(i - 1 + ring.length) % ring.length].focus();
+  screen.render();
+}
+
 export function borrowListKeys(list: unknown): () => void {
   const target = list as {
     listeners?: (event: string) => Array<(...args: unknown[]) => void>;
