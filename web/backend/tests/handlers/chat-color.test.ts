@@ -8,23 +8,23 @@
 import { renderChatMarkup, chatCharBytes } from '../../src/handlers/operator-chat/chat-stream';
 
 describe('model markup renders', () => {
-  it('paints titles cyan and facts green, resets after', () => {
+  it('paints titles cyan and resets after', () => {
     expect(renderChatMarkup('<title>Top callers</title>')).toBe('\x1b[0;36mTop callers\x1b[0m');
-    expect(renderChatMarkup('<color g>1. spot - 0 pts</color>')).toBe('\x1b[0;32m1. spot - 0 pts\x1b[0m');
   });
-  it('forgives the variants the models actually emit', () => {
-    expect(renderChatMarkup('<color g>x</color g>')).toBe('\x1b[0;32mx\x1b[0m');
-    expect(renderChatMarkup('<colour c>y</colour>')).toBe('\x1b[0;36my\x1b[0m');
+  it('color tags render unpainted, inner text kept', () => {
+    expect(renderChatMarkup('<color g>1. spot - 0 pts</color>')).toBe('1. spot - 0 pts');
+    expect(renderChatMarkup('<color g>x</color g>')).toBe('x');
+    expect(renderChatMarkup('<colour c>y</colour>')).toBe('y');
+  });
+  it('forgives a miscased title', () => {
     expect(renderChatMarkup('<TITLE>Z</TITLE>')).toBe('\x1b[0;36mZ\x1b[0m');
   });
-  it('an unclosed tag paints to the end instead of leaking brackets', () => {
+  it('an unclosed title paints to the end, an unclosed color stays plain', () => {
     expect(renderChatMarkup('From the board: <title>Turrican')).toBe('From the board: \x1b[0;36mTurrican\x1b[0m');
+    expect(renderChatMarkup('Score: <color g>42')).toBe('Score: 42');
   });
   it('leaves non-markup angle brackets alone', () => {
     expect(renderChatMarkup('a < b and <blink>x</blink>')).toBe('a < b and <blink>x</blink>');
-  });
-  it('an unknown color keeps the words, drops the paint', () => {
-    expect(renderChatMarkup('<color z>plain</color>')).toBe('plain');
   });
 });
 

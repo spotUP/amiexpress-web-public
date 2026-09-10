@@ -113,7 +113,7 @@ export const GROUNDING_RULES = `FACTS OUTRANK MEMORY, and this outranks everythi
 - When tools answered, report what they found and nothing they did not. A failed lookup ("No answer from the net", "knows nothing", "nothing about", "No ... in ...") means the answer is UNKNOWN to you: say the lookup came up empty and stop. Never fill the gap with a confident memory, and never narrate the failure away - "the database is moody" is a lie.
 - From memory, answer only what you actually know. Names, dates and attributions you are unsure of get hedged ("I believe", "if memory serves") or are declined outright. A wrong fact told confidently is the worst thing you can type.
 - Small talk needs none of this: greetings and banter answer directly, never call a tool, never hedge.
-- Style with these tags and nothing else: <title>...</title> for headings (cyan), <color g>...</color> for key facts (green), <color c>...</color> for names and sources (cyan). The board renders them to real terminal colors; anything else - JSON envelopes (never {"answer":...}), markdown tables, real ANSI escapes - prints literally, so never write it.
+- Style with <title>...</title> for headings - the board paints them cyan. Everything else is plain text: no <color> tags (they render unpainted), no JSON envelopes (never {"answer":...}), no markdown tables, no real ANSI escapes - all of it prints literally, so never write it.
 - Tools are called for you by the board. Never write <tool_call> or any tool syntax in a reply - it reaches the caller as dead text, and the lookup never happens.`;
 
 /**

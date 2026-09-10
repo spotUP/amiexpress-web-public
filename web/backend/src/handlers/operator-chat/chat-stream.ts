@@ -14,32 +14,28 @@ import { emitterForUserId } from '../../server/session-emitter-registry';
 import { planNaturalTyping } from '../grumpy-sysop-bot.handler';
 
 /**
- * Model markup to terminal bytes. The co-sysop writes <title>, <color c>
- * (cyan) and <color g> (green) - <colour> spelling and repeated close-tag
- * attributes forgiven - and the board renders real SGR (plain 0;XX, never
- * bold, per the output rules). Anything else in angle brackets is left
- * literally: eating a caller's "a < b" would be worse than showing it.
- * Unclosed tags run to end of string (a cut reply still paints).
+ * Model markup to terminal bytes. Titles (<title>) paint cyan; everything
+ * else renders plain. <color>/<colour> tags are stripped to their inner
+ * text (sysop, 2026-09-10: no colors, just cyan titles) - and any other
+ * angle brackets are left literally: eating a caller's "a < b" would be
+ * worse than showing it. Unclosed tags run to end of string (a cut reply
+ * still paints).
  */
-const CHAT_MARKUP_COLORS: Record<string, string> = { c: '36', g: '32' };
-
 export function renderChatMarkup(text: string): string {
-  const paint = (inner: string, code: string): string => `\x1b[0;${code}m${inner}\x1b[0m`;
+  const paint = (inner: string): string => `\x1b[0;36m${inner}\x1b[0m`;
+  const strip = (inner: string): string => inner;
   let out = text.replace(
     /<(title|colou?r)(?:\s+([a-z]))?\s*>([\s\S]*?)(?:<\/colou?r(?:\s+[a-z])?\s*>|<\/title\s*>)/gi,
-    (_m, tag: string, attr: string | undefined, inner: string) => {
-      if (tag.toLowerCase() === 'title') return paint(inner, '36');
-      const code = CHAT_MARKUP_COLORS[(attr ?? '').toLowerCase()];
-      return code ? paint(inner, code) : inner;
+    (_m, tag: string, _attr: string | undefined, inner: string) => {
+      return tag.toLowerCase() === 'title' ? paint(inner) : strip(inner);
     },
   );
-  // Unclosed trailing tag paints to the end rather than leaking brackets.
+  // Unclosed trailing tag: a title paints to the end, a color tag just opens
+  // into plain text rather than leaking brackets.
   out = out.replace(
     /<(title|colou?r)(?:\s+([a-z]))?\s*>([^<]*)$/i,
-    (_m, tag: string, attr: string | undefined, inner: string) => {
-      if (tag.toLowerCase() === 'title') return paint(inner, '36');
-      const code = CHAT_MARKUP_COLORS[(attr ?? '').toLowerCase()];
-      return code ? paint(inner, code) : inner;
+    (_m, tag: string, _attr: string | undefined, inner: string) => {
+      return tag.toLowerCase() === 'title' ? paint(inner) : inner;
     },
   );
   return out;
