@@ -132,6 +132,28 @@ test('a ghost is cleared, not refused: session rows but no live transport', asyn
   expect(userSessions.has('u4')).toBe(false);
   expect(socketToUser.has('long-gone')).toBe(false);
   expect(socketToNodeId.has('long-gone')).toBe(false);
+  // THE liveness entry the login refusal trusts: leaving it made the ghost
+  // permanent - every fresh login refused, "i never get reloggedin".
+  expect(sessions.has('4')).toBe(false);
+});
+
+test('a kicked caller reads offline everywhere, so the next login is admitted', async () => {
+  const session: any = {
+    user: { id: 'u5', username: 'backsoon' }, nodeId: 5, connectionType: 'web',
+    socketId: 'kicked-socket',
+  };
+  const emitted: string[] = [];
+  const socket = { emit: (event: string) => emitted.push(event), disconnect: () => emitted.push('disconnect') };
+  setSession('kicked-socket', session);
+  userSessions.set('u5', session);
+
+  const res = await request(app(ioWith('kicked-socket', socket)))
+    .post('/api/nodes/5/kick').send({});
+
+  expect(res.status).toBe(200);
+  expect(emitted).toContain('disconnect');
+  expect(sessions.has('5')).toBe(false);
+  expect(userSessions.has('u5')).toBe(false);
 });
 
 test('a node nobody is on is still a 404', async () => {

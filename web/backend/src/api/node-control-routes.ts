@@ -20,10 +20,10 @@
 
 import express, { Request, Response } from 'express';
 import { Server as SocketIOServer } from 'socket.io';
-import { sessions, socketToNodeId, getSocketIdByNodeId } from '../server/session-manager';
+import { sessions, socketToNodeId, getSocketIdByNodeId, clearPendingDisconnect } from '../server/session-manager';
 import { userSessions, socketToUser } from '../server/session-manager';
 import { nodeFileManager } from '../services/NodeFileManager';
-import { emitterForNodeId } from '../server/session-emitter-registry';
+import { emitterForNodeId, unregisterConnectionEmitter } from '../server/session-emitter-registry';
 import { getSystemTime } from '../utils/date-time.util';
 import {
   setNodeReservation,
@@ -61,8 +61,13 @@ type BBSSessionLike = { socketId?: string; user?: { id?: unknown }; sysopKicked?
  * Both kick paths use it: the live-emitter path (before disconnect) and
  * the ghost path (no emitter at all). Every delete is idempotent, so a
  * disconnect teardown that does run repeats them harmlessly. Never
- * deletes another live session's userSessions row - only the victim's
- * own, or nobody's.
+ * deletes another live session's rows - only the victim's own, or nobody's.
+ *
+ * The `sessions` entry is the one that matters most: the login refusal
+ * trusts exactly `sessions.has(nodeId)` as liveness, so a kick that left
+ * it made the ghost permanent - every fresh login refused, and kicking
+ * again re-entered the ghost branch forever ("i never get reloggedin",
+ * 2026-09-11). It is deleted only while it still names the victim.
  */
 function clearKickPresence(
   nodeId: number,
@@ -73,6 +78,16 @@ function clearKickPresence(
   const userId = victim.user?.id === undefined || victim.user?.id === null
     ? undefined
     : String(victim.user.id);
+  const key = nodeId.toString();
+  if (sessions.get(key) === (victim as unknown)) sessions.delete(key);
+  unregisterConnectionEmitter(victim as never);
+  if (userId !== undefined) clearPendingDisconnect(userId);
+  try {
+    const { multicomManager } = require('../nodes/MulticomManager.js');
+    multicomManager.clearNode(nodeId);
+  } catch {
+    // A node outside Multicom, or a manager that never loaded: not presence.
+  }
   if (victim.socketId) {
     socketToNodeId.delete(victim.socketId);
     socketToUser.delete(victim.socketId);
