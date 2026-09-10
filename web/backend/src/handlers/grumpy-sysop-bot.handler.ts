@@ -45,6 +45,9 @@ export function looksCutOff(text: string): boolean {
   // A trailing '**' alone is a closed bold, not a cut - unless a colon
   // opened it ("about Turrican: **", live 2026-09-10).
   if (/:\s*\*\*$/.test(t)) return true;
+  // A trailing preposition or article ("aspect of", "one of the"): a
+  // finished reply never ends on one (transcript 2026-09-10).
+  if (/\b(of|in|on|to|about|for|with|and|or|the|a|an)\s*$/i.test(t)) return true;
   return /[:,\[("']$/.test(t);
 }
 
