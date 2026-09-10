@@ -222,6 +222,11 @@ export function ScreenEditor({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [surface, cursor, cols, rows, onChange, readOnly]);
 
+  // Selected tools, colours and brushes all read the same: a ring in the
+  // board's accent, not a slightly stronger border (sysop, 2026-09-10:
+  // "not clear enough which brushes and colors are selected").
+  const selectedRing = (on: boolean) =>
+    on ? 'border-border-strong ring-2 ring-accent' : 'border-border';
   const swatches = (which: 'fg' | 'bg') => (
     <div className="flex flex-wrap gap-1">
       {ANSI_PALETTE.map((color, index) => (
@@ -231,11 +236,7 @@ export function ScreenEditor({
           aria-label={`${ANSI_COLOR_NAMES[index]} ${which === 'fg' ? 'foreground' : 'background'}`}
           title={which === 'fg' ? `Ctrl+${index}` : `Alt+${index}`}
           aria-pressed={(which === 'fg' ? surface.fg : surface.bg) === index}
-          className={`w-5 h-5 border ${
-            (which === 'fg' ? surface.fg : surface.bg) === index
-              ? 'border-border-strong'
-              : 'border-border'
-          }`}
+          className={`w-5 h-5 border ${selectedRing((which === 'fg' ? surface.fg : surface.bg) === index)}`}
           style={{ backgroundColor: color }}
           onClick={() => onChange?.({ ...surface, [which]: index })}
         />
@@ -267,8 +268,8 @@ export function ScreenEditor({
             type="button"
             aria-pressed={surface.tool === tool}
             title={hotkey}
-            className={`px-2 py-1 text-sm border ${
-              surface.tool === tool ? 'border-border-strong text-content-primary' : 'border-border text-content-secondary'
+            className={`px-2 py-1 text-sm border ${selectedRing(surface.tool === tool)} ${
+              surface.tool === tool ? 'text-content-primary' : 'text-content-secondary'
             }`}
             onClick={() => onChange?.({ ...surface, tool })}
           >
@@ -302,9 +303,7 @@ export function ScreenEditor({
                 type="button"
                 aria-label={`Draw with ${char === ' ' ? 'a space' : char}`}
                 aria-pressed={surface.char === char}
-                className={`w-6 h-6 font-topaz border ${
-                  surface.char === char ? 'border-border-strong' : 'border-border'
-                }`}
+                className={`w-6 h-6 font-topaz border ${selectedRing(surface.char === char)}`}
                 onClick={() => onChange?.({ ...surface, char })}
               >
                 {char}
