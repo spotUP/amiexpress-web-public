@@ -99,6 +99,12 @@ export interface WhipParty {
 export interface WhipUser {
   userId: string;
   handle: string;
+  discordName?: string;
+}
+
+export interface ResolveResult {
+  userId: string;
+  username: string;
 }
 
 export interface CreateProjectInput {
@@ -206,6 +212,17 @@ export class WhipApiClient {
       params: { discordId },
     });
     return envelopeData<LinkStatus>(res.status, res.data);
+  }
+
+  /** Which BBS user owns this handle (case-insensitive). 404 = no such user. */
+  async resolve(handle: string): Promise<ResolveResult> {
+    const res = await this.request({
+      method: 'get',
+      url: '/api/whip/resolve',
+      headers: this.headers(),
+      params: { handle },
+    });
+    return envelopeData<ResolveResult>(res.status, res.data);
   }
 
   async listProjects(): Promise<WhipProject[]> {
