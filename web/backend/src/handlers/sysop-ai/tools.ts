@@ -216,7 +216,7 @@ export const CALLER_TOOLS: SysopTool[] = [
   },
   {
     name: 'search_listing',
-    description: 'The BBS file listing (Up Rough releases archive): files by filename/description keyword. kind=search needs query; kind=detail needs a numeric file id; kind=random needs nothing; kind=stats gives listing totals; kind=facts gives span, first art-DIZ, peaks and records. Use it for "find files about X", "tell me about file N", "surprise me", "how big is the listing". For the caller\'s own conference uploads, search_files is the one.',
+    description: 'The BBS file listing (Up Rough releases archive): files by filename/description keyword. kind=search needs query; kind=detail needs a numeric file id; kind=random needs nothing; kind=stats gives listing totals; kind=facts gives span, first art-DIZ, peaks and records. Use it for "find files about X", "tell me about file N", "surprise me", "how big is the listing". For the caller\'s own conference uploads, search_files is the one. For asciiarena art and artists, ask_scene is the one - never this.',
     parameters: { type: 'object', properties: { kind: { type: 'string', enum: ['search', 'detail', 'random', 'stats', 'facts'] }, query: { type: 'string' } }, required: ['kind'], additionalProperties: false },
     tier: 'caller',
     async run(_ctx, args) {
