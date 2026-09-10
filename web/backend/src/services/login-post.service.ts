@@ -30,6 +30,7 @@ import {
   sessions,
   userSessions,
   socketToUser,
+  reclaimGraceGhost,
 } from "../server/session-manager";
 import { callersLog } from "../server/database-helpers";
 import { triggerSamiLogRefresh } from "../services/SamiLogService";
@@ -463,6 +464,24 @@ export async function runPostAuthLogin(
    * Between the deleted-account gate (29701) and the lockout (29775), which is
    * express's order.
    */
+  /**
+   * GHOST RECLAIM (ghostlogoff 2026-09-10): a re-login landing while the
+   * previous socket's disconnect grace is still pending meets its own
+   * ghost - the maps still name the dead socket, the already-on check
+   * below refuses, and the pending timer would later wipe the fresh
+   * login's maps. Reclaim first (only what still names the dead socket;
+   * a live tab is never touched), so the check reads the board as it is.
+   */
+  {
+    const userKey = String((user as any)?.id ?? '');
+    if (userKey !== '') {
+      const nspSockets = (emitter as any)?.nsp?.sockets as
+        | { has?: (id: string) => boolean }
+        | undefined;
+      reclaimGraceGhost(userKey, (id) => nspSockets?.has?.(id) === true);
+    }
+  }
+
   {
     const alreadyOn = userAlreadyOnNode(
       appConfig.get('dataDir'),

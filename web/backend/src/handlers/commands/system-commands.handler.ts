@@ -248,6 +248,10 @@ console.error('[LOGOFF] Failed to save flagged files:', err);
   }
 
   // Normal logout - express.e:8284-8289
+  // Deliberate goodbye, not a drop: the disconnect handler skips both
+  // grace periods for this session (ghostlogoff 2026-09-10 - a G caller
+  // who re-logs within 15 s met his own not-yet-cleaned session).
+  session.cleanLogoff = true;
   session.state = BBSState.AWAIT;
 
   // express.e:8222 + 8230-8231 — sysop lifecycle hooks on disconnect.

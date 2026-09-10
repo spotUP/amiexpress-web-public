@@ -888,6 +888,22 @@ console.error('[COMMAND ERROR] Stack:', error.stack);
 }
 
 /**
+ * Whether this session tears down the moment its socket dies, skipping
+ * every grace period. Two cases, both deliberate ends:
+ * - sysopKicked: the sysop threw the caller off via NM.
+ * - cleanLogoff: the caller said goodbye with G (ghostlogoff 2026-09-10 -
+ *   a 15 s wait only serves drops, and a fast re-login reads its own
+ *   not-yet-cleaned session as "already on another node").
+ * Anything else (drops, timeouts, bumps) keeps the grace so a blip does
+ * not become a logoff.
+ */
+export function wantsImmediateTeardown(
+  session: { sysopKicked?: boolean; cleanLogoff?: boolean } | null | undefined,
+): boolean {
+  return session?.sysopKicked === true || session?.cleanLogoff === true;
+}
+
+/**
  * Register disconnect handler.
  *
  * Exported so a test can drive the real teardown path
@@ -901,12 +917,14 @@ console.log(`[DISCONNECT] Client disconnected, reason: ${reason}, socket: ${sock
 
     // GRACE PERIOD: Wait 3 seconds for potential reconnection before cleanup
     // This prevents kicking users out during brief network hiccups
-    // Skip grace period if sysop explicitly kicked the user via NM command
+    // Skip grace period if sysop explicitly kicked the user via NM command,
+    // or the caller said goodbye with G (cleanLogoff - a deliberate leave
+    // waits for nothing; ghostlogoff 2026-09-10).
     const reconnectGracePeriod = 3000; // 3 seconds
     const sessionBeforeDelay = getSession(socket.id);
 
-console.log(`[DISCONNECT] sessionBeforeDelay.sysopKicked=${sessionBeforeDelay?.sysopKicked}, nodeId=${sessionBeforeDelay?.nodeId}`);
-    if (sessionBeforeDelay && !sessionBeforeDelay.sysopKicked) {
+console.log(`[DISCONNECT] sessionBeforeDelay.sysopKicked=${sessionBeforeDelay?.sysopKicked}, cleanLogoff=${sessionBeforeDelay?.cleanLogoff}, nodeId=${sessionBeforeDelay?.nodeId}`);
+    if (sessionBeforeDelay && !wantsImmediateTeardown(sessionBeforeDelay)) {
 console.log(`[DISCONNECT] Waiting ${reconnectGracePeriod}ms for potential reconnection...`);
       await new Promise(resolve => setTimeout(resolve, reconnectGracePeriod));
 
@@ -918,8 +936,8 @@ console.log(`[DISCONNECT] Waiting ${reconnectGracePeriod}ms for potential reconn
 console.log(`[DISCONNECT] User reconnected during grace period on socket ${sessionAfterDelay!.socketId}, skipping cleanup`);
         return; // User reconnected, skip cleanup
       }
-    } else if (sessionBeforeDelay?.sysopKicked) {
-console.log(`[DISCONNECT] Sysop kicked user, skipping grace period`);
+    } else if (sessionBeforeDelay && wantsImmediateTeardown(sessionBeforeDelay)) {
+console.log(`[DISCONNECT] Immediate teardown (kicked or clean G logoff), skipping grace period`);
     }
 
     // End session log tracking
@@ -954,9 +972,11 @@ console.log(`[DISCONNECT] User ${userId} still has other sockets connected - kee
         return;
       }
 
-      // Skip 15-second grace period if sysop explicitly kicked the user
-      if (session.sysopKicked) {
-console.log(`[DISCONNECT] Sysop kicked user ${userId}, skipping disconnect grace period`);
+      // Skip 15-second grace period if sysop explicitly kicked the user,
+      // or the caller said goodbye with G (cleanLogoff - same shape:
+      // a deliberate end waits for nothing).
+      if (wantsImmediateTeardown(session)) {
+console.log(`[DISCONNECT] Immediate teardown (kicked or clean G logoff) for user ${userId}, skipping disconnect grace period`);
         await finalizeDisconnectCleanup(socket, session, socket.id);
         return;
       }

@@ -319,6 +319,35 @@ export function clearPendingDisconnect(userId: string): { socketId: string; node
 }
 
 /**
+ * Reclaim a grace-period ghost at login time (ghostlogoff 2026-09-10).
+ *
+ * A caller who drops and logs back in inside DISCONNECT_GRACE_MS meets
+ * his own not-yet-cleaned session: the maps still name the dead socket,
+ * so the already-on check refuses him, and the pending timer - if it
+ * ever fires - wipes the fresh login's maps by node/user id. G-logoffs
+ * skip the grace now, but idle timeouts, kicks and drops still defer,
+ * so the window is real for them.
+ *
+ * Only dismantles what still names the dead socket: if the maps have
+ * already moved on (a live tab holds them now), or the pending socket
+ * is somehow alive, nothing is touched and the normal already-on rules
+ * decide. Returns true when it reclaimed.
+ */
+export function reclaimGraceGhost(
+  userId: string,
+  isSocketAlive: (socketId: string) => boolean,
+): boolean {
+  const pending = pendingDisconnects.get(userId);
+  if (!pending) return false;
+  if (isSocketAlive(pending.socketId)) return false;
+  const cur = userSessions.get(userId);
+  if (cur && (cur as { socketId?: string }).socketId !== pending.socketId) return false;
+  clearPendingDisconnect(userId);
+  deleteSession(pending.socketId);
+  return true;
+}
+
+/**
  * Delete session by socket ID
  * CRITICAL: Removes both the nodeId → session mapping and socket.id → nodeId mapping
  */
