@@ -6,8 +6,10 @@ import { ANSI_COLOR_NAMES, ANSI_PALETTE } from '../utils/ansi-palette';
 import { canvasToScreen } from '../pages/screen-bytes';
 import {
   pointerToCanvas, typeCharacter, typeText, undo, redo, type EditorSurface, selectionHighlightRuns,
-  copySelectedRegion, pasteRegion, cutSelectedRegion, type ClipboardRegion,
+  copySelectedRegion, pasteRegion, cutSelectedRegion, selectedRegionToText, pasteText,
+  type ClipboardRegion,
 } from '../pages/screen-editor-state';
+import { writeSystemText, readSystemText } from './system-clipboard';
 import { getSelection } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/tools/drawing-tools';
 import { findMciTokens, type MciToken, type MciReferenceShape } from '../pages/mci-tokens';
 import { editorShortcut } from './editor-shortcuts';
@@ -147,17 +149,35 @@ export function ScreenEditor({
           case 'delete':
             onChange?.(typeCharacter(surface, cursor.x, cursor.y, ' '));
             return;
-          case 'copy':
+          case 'copy': {
+            // Both clipboards: the system one carries plain text out to the
+            // sysop's own editor, the internal one keeps colours for
+            // canvas-to-canvas pastes. Either may be absent; Alt+V prefers
+            // the system's and falls back to the internal.
             clipboard.current = copySelectedRegion(surface);
+            const text = selectedRegionToText(surface);
+            if (text) void writeSystemText(text);
             return;
+          }
           case 'cut': {
             const cut = cutSelectedRegion(surface);
             clipboard.current = cut.region;
+            const text = selectedRegionToText(surface);
             if (cut.region) onChange?.(cut.surface);
+            // Read the text BEFORE the blanking above: cut.surface already
+            // committed, but `surface` still holds the lifted cells.
+            if (cut.region && text) void writeSystemText(text);
             return;
           }
           case 'paste':
-            if (clipboard.current) onChange?.(pasteRegion(surface, cursor.x, cursor.y, clipboard.current));
+            // Async: the system read may ask permission. The surface in this
+            // closure is the one Alt+V was pressed on - a stroke drawn in the
+            // meantime still applies, last write wins like everywhere else.
+            void (async () => {
+              const text = await readSystemText();
+              if (text) onChange?.(pasteText(surface, cursor.x, cursor.y, text));
+              else if (clipboard.current) onChange?.(pasteRegion(surface, cursor.x, cursor.y, clipboard.current));
+            })();
             return;
         }
       }
@@ -216,7 +236,11 @@ export function ScreenEditor({
     // was inherited by every label, button and heading in the editor, so the
     // tool looked like the thing it edits. The canvas draws its own font and
     // the character picker below shows real board glyphs; those keep it.
-    <section className="space-y-3 border border-border p-3">
+    <section className="w-fit max-w-full space-y-3 border border-border p-3">
+      {/* The editor is exactly as wide as the art: the section hugs the
+          canvas instead of stretching to the dialog, so 80 columns on the
+          board is 80 columns here. The viewport scrolls a wider screen
+          inside rather than widening the tools with it. */}
       {/* The tools, the palette and the brushes: what a read-only view has no
           use for. The art below is the same in both modes. */}
       {!readOnly && (
@@ -240,7 +264,8 @@ export function ScreenEditor({
       <p className="text-xs text-content-secondary">
         Shortcuts: Alt+D/L/B/E/F/S/T/P tools (Shift for filled shapes), Ctrl+Digit foreground,
         Alt+Digit background, Ctrl+Z / Ctrl+Shift+Z undo/redo, arrows/Home/End/PageUp/PageDown/Delete move.
-        Alt+S then drag selects; Alt+C/X/V copies, cuts and pastes at the cursor.
+        Alt+S then drag selects; Alt+C/X copies/cuts to the system clipboard as text (and colours internally),
+        Alt+V pastes it back at the cursor - click where you want it first.
       </p>
 
       <div className="flex flex-wrap items-start gap-6 text-sm">
@@ -298,8 +323,12 @@ export function ScreenEditor({
             x: token.column, y: token.line, length: token.length, broken: !token.resolves,
           })), ...selectionHighlights]}
           onCellPointer={readOnly ? undefined : (x, y, phase) => {
+            // The paste cursor follows the mouse in EVERY tool, not just
+            // Type: Alt+V stamps at the cursor, and a sysop who selected
+            // with the mouse never touched the text cursor - without this
+            // every paste landed at 0,0 (sysop, 2026-09-10).
+            if (phase === 'down') setCursor({ x, y });
             if (surface.tool === 'text') {
-              if (phase === 'down') setCursor({ x, y });
               return;
             }
             onChange?.(pointerToCanvas(surface, x, y, phase));

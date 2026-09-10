@@ -8,6 +8,7 @@ import { editorShortcut } from './editor-shortcuts';
 import {
   blankCanvas, createSurface, pointerToCanvas, typeText,
   copySelectedRegion, pasteRegion, cutSelectedRegion, undo,
+  selectedRegionToText, pasteText,
   type EditorSurface,
 } from '../pages/screen-editor-state';
 
@@ -65,5 +66,30 @@ describe('copy/paste/cut regions', () => {
   it('cuts nothing with no marquee', () => {
     const s = createSurface(blankCanvas(25, 80));
     expect(cutSelectedRegion(s).region).toBeNull();
+  });
+});
+
+describe('system clipboard text', () => {
+  it('reads the marquee as trimmed text rows', () => {
+    expect(selectedRegionToText(selectedAb())).toBe('AB');
+  });
+  it('reads nothing with no marquee', () => {
+    expect(selectedRegionToText(createSurface(blankCanvas(25, 80)))).toBeNull();
+  });
+  it('stamps system text in current colours and undoes in one step', () => {
+    const s = selectedAb();
+    const pasted = pasteText({ ...s, fg: 2, bg: 4 }, 10, 5, 'Hi\nYo');
+    expect(pasted.canvas[5][10]).toMatchObject({ char: 'H', fg: 2, bg: 4 });
+    expect(pasted.canvas[6][10].char).toBe('Y');
+    expect(pasted.canvas[6][11].char).toBe('o');
+    const undone = undo(pasted);
+    expect(undone.canvas[5][10].char).toBe(' ');
+    expect(undone.canvas[1][0].char).toBe('A');
+  });
+  it('clips system text at the canvas edge', () => {
+    const s = createSurface(blankCanvas(25, 80));
+    const pasted = pasteText(s, 79, 24, 'AB\nCD');
+    expect(pasted.canvas[24][79].char).toBe('A');
+    expect(pasted.canvas).toHaveLength(25);
   });
 });

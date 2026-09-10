@@ -217,13 +217,54 @@ export function selectionHighlightRuns(sel: SelectionShape | null): HighlightRun
 }
 
 /**
- * The editor clipboard: what Alt+C lifted, waiting for Alt+V.
- *
- * A rect of cells exactly as they were - character, colours, blink. The
- * SDK's own copy/paste pair owns the shapes (`drawing-tools.ts:752`); these
- * only carry them through surfaces the way the undo history's EditorState
- * is carried.
+ * The committed marquee as plain text rows, for the SYSTEM clipboard - so
+ * art leaves the canvas into the sysop's own text editor. Trailing spaces
+ * trimmed per line (an ANSI editor pads everything to full width) and
+ * trailing blank lines dropped. Null when nothing is selected. Colours do
+ * not survive: the system clipboard holds text, not cells.
  */
+export function selectedRegionToText(surface: EditorSurface): string | null {
+  const bounds = getSelectionBounds(surface.state);
+  const canvas = surface.canvas;
+  if (!bounds || !canvas) return null;
+  const lines: string[] = [];
+  for (let y = bounds.y1; y <= bounds.y2; y++) {
+    const row = canvas[y] ?? [];
+    let line = '';
+    for (let x = bounds.x1; x <= bounds.x2; x++) line += row[x]?.char ?? ' ';
+    lines.push(line.replace(/\s+$/, ''));
+  }
+  while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+  return lines.length > 0 ? lines.join('\n') : null;
+}
+
+/**
+ * Stamp plain TEXT at a cell - what came back from the system clipboard.
+ * One undo step (snapshot, then write, like `typeText`). Newlines start a
+ * new row; overhang past the canvas edge is dropped, never grows the
+ * screen. Characters arrive in the current foreground/background: text
+ * from outside has no colours of its own.
+ */
+export function pasteText(
+  surface: EditorSurface,
+  x: number,
+  y: number,
+  text: string,
+): EditorSurface {
+  const state = apply(surface);
+  snapshotUndoState(state);
+  const rows = surface.canvas.length;
+  const cols = rows > 0 ? surface.canvas[0].length : 0;
+  text.split('\n').forEach((line, dy) => {
+    [...line].forEach((char, dx) => {
+      const cx = x + dx, cy = y + dy;
+      if (cx < cols && cy < rows) {
+        state.setCanvasCell(cx, cy, { char, fg: surface.fg, bg: surface.bg });
+      }
+    });
+  });
+  return settle(surface, surface.pending);
+}
 export type ClipboardRegion = Cell[][];
 
 /**
