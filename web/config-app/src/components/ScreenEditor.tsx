@@ -5,9 +5,11 @@ import { AnsiCanvas } from './AnsiCanvas';
 import { ANSI_COLOR_NAMES, ANSI_PALETTE } from '../utils/ansi-palette';
 import { canvasToScreen } from '../pages/screen-bytes';
 import {
-  pointerToCanvas, typeCharacter, typeText, undo, redo, type EditorSurface,
+  pointerToCanvas, typeCharacter, typeText, undo, redo, type EditorSurface, selectionHighlightRuns,
 } from '../pages/screen-editor-state';
+import { getSelection } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/tools/drawing-tools';
 import { findMciTokens, type MciToken, type MciReferenceShape } from '../pages/mci-tokens';
+import { editorShortcut } from './editor-shortcuts';
 import { MciPicker } from './MciPicker';
 import { CodeChip } from './CodeChip';
 import { tokenEdit, tokenRemoval } from '../pages/screen-mci';
@@ -31,15 +33,17 @@ function tokenText(canvas: { char?: string }[][], token: MciToken): string {
  */
 
 /** The tools that make sense on a screen. Named as the SDK names them. */
-const TOOLS: { tool: DrawingTool; label: string }[] = [
-  { tool: 'text', label: 'Type' },
-  { tool: 'draw', label: 'Draw' },
-  { tool: 'line', label: 'Line' },
-  { tool: 'box', label: 'Box' },
-  { tool: 'box-fill', label: 'Filled box' },
-  { tool: 'ellipse', label: 'Ellipse' },
-  { tool: 'fill', label: 'Fill' },
-  { tool: 'select', label: 'Select' },
+const TOOLS: { tool: DrawingTool; label: string; hotkey: string }[] = [
+  { tool: 'text', label: 'Type', hotkey: 'Alt+T' },
+  { tool: 'draw', label: 'Draw', hotkey: 'Alt+D' },
+  { tool: 'line', label: 'Line', hotkey: 'Alt+L' },
+  { tool: 'box', label: 'Box', hotkey: 'Alt+B' },
+  { tool: 'box-fill', label: 'Filled box', hotkey: 'Alt+Shift+B' },
+  { tool: 'ellipse', label: 'Ellipse', hotkey: 'Alt+E' },
+  { tool: 'ellipse-fill', label: 'Filled ellipse', hotkey: 'Alt+Shift+E' },
+  { tool: 'fill', label: 'Fill', hotkey: 'Alt+F' },
+  { tool: 'pick', label: 'Pick', hotkey: 'Alt+P' },
+  { tool: 'select', label: 'Select', hotkey: 'Alt+S' },
 ];
 
 /** The characters ANSI art is actually drawn with, in the order a picker wants. */
@@ -95,6 +99,10 @@ export function ScreenEditor({
   // Re-found on every change rather than tracked: a code is edited character by
   // character, and half of one is not a code.
   const tokens = useMemo(() => findMciTokens(surface.canvas, mci), [surface.canvas, mci]);
+  // The select tool tracked its marquee internally and never showed it:
+  // dragging selected invisibly (sysop, 2026-09-10: "can't select anything
+  // with the mouse"). Live points first, committed bounds after mouse-up.
+  const selectionHighlights = selectionHighlightRuns(getSelection(surface.state));
 
   const rows = surface.canvas.length;
   const cols = rows > 0 ? surface.canvas[0].length : 0;
@@ -103,20 +111,46 @@ export function ScreenEditor({
     const onKeyDown = (event: KeyboardEvent) => {
       // Nothing typed reaches a screen that is not the artist's to change.
       if (readOnly) return;
+
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+
+      // Moebius shortcuts first: undo/redo, colours, tools, cursor. Typing
+      // and text-mode keys fall through to the branch below.
+      const sc = editorShortcut(event);
+      if (sc.action !== 'none') {
+        event.preventDefault();
+        switch (sc.action) {
+          case 'undo': onChange?.(undo(surface)); return;
+          case 'redo': onChange?.(redo(surface)); return;
+          case 'tool': onChange?.({ ...surface, tool: sc.tool }); return;
+          case 'fg': onChange?.({ ...surface, fg: sc.index }); return;
+          case 'bg': onChange?.({ ...surface, bg: sc.index }); return;
+          case 'move':
+            setCursor(c => ({
+              x: Math.min(cols - 1, Math.max(0, c.x + sc.dx)),
+              y: Math.min(rows - 1, Math.max(0, c.y + sc.dy)),
+            }));
+            return;
+          case 'row':
+            setCursor(c => ({ ...c, x: sc.edge === 'start' ? 0 : cols - 1 }));
+            return;
+          case 'page':
+            setCursor(c => ({ ...c, y: Math.min(rows - 1, Math.max(0, c.y + sc.dy)) }));
+            return;
+          case 'delete':
+            onChange?.(typeCharacter(surface, cursor.x, cursor.y, ' '));
+            return;
+        }
+      }
+
       // Typing belongs to the canvas only while the Type tool is chosen -
       // otherwise the sysop is searching, or filling in a field, and a screen
       // that ate those keystrokes would be unusable.
       if (surface.tool !== 'text') return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
 
-      const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
-
-      if (event.key === 'ArrowLeft') { setCursor(c => ({ ...c, x: Math.max(0, c.x - 1) })); }
-      else if (event.key === 'ArrowRight') { setCursor(c => ({ ...c, x: Math.min(cols - 1, c.x + 1) })); }
-      else if (event.key === 'ArrowUp') { setCursor(c => ({ ...c, y: Math.max(0, c.y - 1) })); }
-      else if (event.key === 'ArrowDown') { setCursor(c => ({ ...c, y: Math.min(rows - 1, c.y + 1) })); }
-      else if (event.key === 'Enter') { setCursor(c => ({ x: 0, y: Math.min(rows - 1, c.y + 1) })); }
+      if (event.key === 'Enter') { setCursor(c => ({ x: 0, y: Math.min(rows - 1, c.y + 1) })); }
       else if (event.key === 'Backspace') {
         const x = Math.max(0, cursor.x - 1);
         onChange?.(typeCharacter(surface, x, cursor.y, ' '));
@@ -142,6 +176,7 @@ export function ScreenEditor({
           key={`${which}-${index}`}
           type="button"
           aria-label={`${ANSI_COLOR_NAMES[index]} ${which === 'fg' ? 'foreground' : 'background'}`}
+          title={which === 'fg' ? `Ctrl+${index}` : `Alt+${index}`}
           aria-pressed={(which === 'fg' ? surface.fg : surface.bg) === index}
           className={`w-5 h-5 border ${
             (which === 'fg' ? surface.fg : surface.bg) === index
@@ -169,11 +204,12 @@ export function ScreenEditor({
       {!readOnly && (
       <>
       <div className="flex flex-wrap items-center gap-2">
-        {TOOLS.map(({ tool, label }) => (
+        {TOOLS.map(({ tool, label, hotkey }) => (
           <button
             key={tool}
             type="button"
             aria-pressed={surface.tool === tool}
+            title={hotkey}
             className={`px-2 py-1 text-sm border ${
               surface.tool === tool ? 'border-border-strong text-content-primary' : 'border-border text-content-secondary'
             }`}
@@ -183,6 +219,10 @@ export function ScreenEditor({
           </button>
         ))}
       </div>
+      <p className="text-xs text-content-secondary">
+        Shortcuts: Alt+D/L/B/E/F/S/T/P tools (Shift for filled shapes), Ctrl+Digit foreground,
+        Alt+Digit background, Ctrl+Z / Ctrl+Shift+Z undo/redo, arrows/Home/End/PageUp/PageDown/Delete move.
+      </p>
 
       <div className="flex flex-wrap items-start gap-6 text-sm">
         <label className="space-y-1">
@@ -235,9 +275,9 @@ export function ScreenEditor({
         <AnsiCanvas
           canvas={surface.canvas}
           cursor={!readOnly && surface.tool === 'text' ? cursor : null}
-          highlights={tokens.map(token => ({
+          highlights={[...tokens.map(token => ({
             x: token.column, y: token.line, length: token.length, broken: !token.resolves,
-          }))}
+          })), ...selectionHighlights]}
           onCellPointer={readOnly ? undefined : (x, y, phase) => {
             if (surface.tool === 'text') {
               if (phase === 'down') setCursor({ x, y });
