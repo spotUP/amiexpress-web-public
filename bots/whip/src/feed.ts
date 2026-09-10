@@ -104,6 +104,16 @@ function defaultConnect(
         // Disconnect handling must never throw into the socket.
       }
     });
+    // A socket that never connects emits connect_error, never
+    // disconnect - without this the loop waits forever on a dead
+    // board (seen live 2026-09-10: retries silently stopped).
+    socket.on('connect_error', (err: Error) => {
+      try {
+        onDisconnect(`connect_error: ${err?.message ?? err}`);
+      } catch {
+        // Same as above.
+      }
+    });
   }
   return { close: () => void socket.close() };
 }

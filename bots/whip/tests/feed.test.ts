@@ -137,8 +137,7 @@ export async function resilientReconnectsAfterADrop(): Promise<void> {
   } finally { feed.stop(); }
 }
 
-export async function resilientStopEndsTheLoop(): Promise<void> {
-  let logins = 0;
+export async function resilientStopEndsTheLoop(): Promise<void> {  let logins = 0;
   const deps = resilientDeps({
     login: async () => { logins++; throw new Error('always down'); },
   });
@@ -149,4 +148,23 @@ export async function resilientStopEndsTheLoop(): Promise<void> {
   feed.stop();
   await new Promise((r) => setTimeout(r, 20));
   assert.strictEqual(logins, seen, 'no further attempts after stop');
+}
+
+export async function resilientRecoversFromConnectError(): Promise<void> {
+  // socket.io emits connect_error (not disconnect) for a socket that
+  // never connected - the loop must treat it as a drop, or retries
+  // silently stop while the board is unreachable (live 2026-09-10).
+  let logins = 0;
+  const deps = resilientDeps({
+    login: async () => { logins++; return 't'; },
+    connect: (_u: string, _t: string, _e: unknown, onDisconnect?: (r: string) => void) => {
+      setTimeout(() => onDisconnect?.('connect_error: refused'), 1);
+      return { close: () => {} };
+    },
+  });
+  const feed = startFeedResilient(deps, FAST);
+  try {
+    await new Promise((r) => setTimeout(r, 30));
+    assert.ok(logins >= 2, 'a connect_error triggers a fresh login');
+  } finally { feed.stop(); }
 }
