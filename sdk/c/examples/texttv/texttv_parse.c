@@ -12,7 +12,12 @@
 void texttv_config_defaults(texttv_config *cfg)
 {
     memset(cfg, 0, sizeof *cfg);
-    strcpy(cfg->host, "bbs.uprough.net");
+    /* Loopback: the door usually runs on the same host as the board
+       (in-container or localhost dev), where the public hostname
+       hairpins out and back - or blackholes, costing the full timeout
+       on every page turn (measured 2026-09-10). A sysop serving another
+       board points Host at it; a classic Amiga uses the LAN IP. */
+    strcpy(cfg->host, "127.0.0.1");
     cfg->port = 3001;
     cfg->timeout_secs = TEXTTV_TIMEOUT_DEFAULT;
     cfg->start_page = TEXTTV_START_DEFAULT;

@@ -166,26 +166,15 @@ static int door_pending(void *ctx) { (void)ctx; return ae_input_pending(); }
 static void door_settle(void *ctx) { (void)ctx; ae_delay_ticks(1); }
 static void door_flush(void *ctx) { (void)ctx; ui_screen_flush(&screen); }
 
-static int rail_tick;
-static const char *masthead_title = "TEXT-TV";
-
 static void draw_masthead(const char *title)
 {
-    masthead_title = title;
-    ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, title,
-                          theme->rail, UI_TOKEN(UI_T_BAR_INK),
-                          UI_TOKEN(UI_T_BAR), rail_tick);
-}
-
-static void door_idle(void *ctx)
-{
-    (void)ctx;
-    rail_tick++;
-    ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, masthead_title,
-                          theme->rail, UI_TOKEN(UI_T_BAR_INK),
-                          UI_TOKEN(UI_T_BAR), rail_tick);
-    ui_screen_flush(&screen);
-    ae_delay_ticks(10);
+    /* Static, not the sliding rail: a 68K content door has no timers, and
+       the rail's 200 ms idle flushes cost ~700 bytes a second for
+       decoration - on a slow link that is the caller's bandwidth, and
+       it drowns every repaint measurement in idle noise. The masthead
+       looks identical standing still. */
+    ui_masthead_draw(&screen.buf, 1, 1, screen.cols, title,
+                     UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
 }
 
 static void say(int row, const char *text)
@@ -526,7 +515,7 @@ int main(int argc, char **argv)
     keys.next = door_key;
     keys.pending = door_pending;
     keys.settle = door_settle;
-    keys.idle = door_idle;
+    keys.idle = 0; /* no rail animation - see draw_masthead */
     keys.flush = door_flush;
     keys.ctx = 0;
 

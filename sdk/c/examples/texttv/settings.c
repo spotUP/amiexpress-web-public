@@ -14,8 +14,8 @@
 #include "ae_settings.h"
 
 AE_SETTINGS_BEGIN(TEXTTV, "TEXTTV.cfg")
-  AE_SETTING_STR_HELP("host", "Text-TV proxy host", "bbs.uprough.net", "Host",
-    "Board serving /api/texttv over plain HTTP. api.texttv.nu is HTTPS-only and the 68K stack cannot do TLS, so the door fetches through the board's proxy.")
+  AE_SETTING_STR_HELP("host", "Text-TV proxy host", "127.0.0.1", "Host",
+    "Board serving /api/texttv over plain HTTP. Loopback: the door runs beside the board (container or localhost), where the public hostname hairpins and stalls. Point at the LAN IP for a classic Amiga.")
   AE_SETTING_INT_RANGE("port", "Port", 3001, 1, 65535, "Port",
     "3001 is the board's backend port, plain HTTP, on this host and live.")
   AE_SETTING_INT_RANGE("timeout", "Request timeout (seconds)", 15, 1, 120, "Timeout", NULL)

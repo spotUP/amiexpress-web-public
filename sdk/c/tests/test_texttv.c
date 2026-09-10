@@ -99,7 +99,7 @@ static void test_favs(void)
     texttv_config cfg;
     texttv_config_defaults(&cfg);
     CHECK(cfg.fav_count == 0);
-    CHECK(strcmp(cfg.host, "bbs.uprough.net") == 0);
+    CHECK(strcmp(cfg.host, "127.0.0.1") == 0);
     CHECK(cfg.port == 3001);
     CHECK(texttv_fav_parse(&cfg, "100,300,401") == 3);
     CHECK(texttv_fav_has(&cfg, 300) == 1);
