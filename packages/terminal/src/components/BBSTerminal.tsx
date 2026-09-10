@@ -36,7 +36,7 @@ import { readCookieModemSpeed, writeCookieModemSpeed } from '../utils/session-co
 import { getZmodem } from '../utils/zmodem';
 import { MediaHandler } from '../utils/media-handler';
 import { ModemEmulator } from '../utils/modem-emulator';
-import { classifyKey } from '../utils/key-overrides';
+import { classifyKey, trackKeyId, repeatAlive } from '../utils/key-overrides';
 import { toggleFullscreen } from '../utils/fullscreen';
 import { GamepadManager } from '../utils/gamepad-manager';
 import type { AnyGamepadEvent } from '@amiexpress/bbs-door-sdk';
@@ -325,7 +325,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const doorMessageBuffer = useRef<Record<string, any[]>>({});
   const doorScripts = useRef<Record<string, HTMLScriptElement | null>>({});
   const keyState = useRef<Record<string, boolean>>({});
-  const keyRepeatTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});  // Key repeat timers
+  const keyRepeatTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});  // Key repeat timers, by physical key
+  const keyLastSeen = useRef<Record<string, number>>({});  // Last keydown edge per physical key (repeat heartbeat)
+  const keyNames = useRef<Record<string, string>>({});  // Physical key -> last character (for key-up emits)
   const gameMode = useRef<boolean>(false);  // When true, send raw keydown/keyup events
   // Game-mode press/release, published by the init effect so the imperative
   // ref (on-screen game controls) drives the SAME code path as the window
@@ -1293,6 +1295,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // Reset game mode state at initialization to prevent stuck state from previous sessions
     gameMode.current = false;
     keyState.current = {};
+    keyNames.current = {};
+    keyLastSeen.current = {};
     // Clear any lingering key repeat timers
     Object.keys(keyRepeatTimers.current).forEach(key => {
       clearTimeout(keyRepeatTimers.current[key]);
@@ -1398,29 +1402,41 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (NO_REPEAT_KEYS.has(key)) {
         return;
       }
+      // Physical identity: 'L'-down + 'l'-up (Shift released first) is one
+      // key, and tracking by character strands the timer on the down-case.
+      const id = trackKeyId({ key, code });
 
       // Clear any existing timer for this key
-      if (keyRepeatTimers.current[key]) {
-        clearTimeout(keyRepeatTimers.current[key]);
+      if (keyRepeatTimers.current[id]) {
+        clearTimeout(keyRepeatTimers.current[id]);
       }
 
       const repeatKey = () => {
-        const canRepeat = keyState.current[key] && gameMode.current && socketRef.current?.connected;
+        // An orphaned timer (missed keyup, blur race, mode toggle) stops
+        // itself: a held key keeps producing OS auto-repeats, so silence
+        // means nobody is holding anything.
+        if (!repeatAlive(keyLastSeen.current[id] ?? 0, Date.now())) {
+          delete keyRepeatTimers.current[id];
+          return;
+        }
+        const canRepeat = keyState.current[id] && gameMode.current && socketRef.current?.connected;
         if (canRepeat) {
-          socketRef.current!.emit('key-down', { key, code, repeat: true });
-          keyRepeatTimers.current[key] = setTimeout(repeatKey, KEY_REPEAT_RATE);
+          socketRef.current!.emit('key-down', { key: keyNames.current[id] ?? key, code, repeat: true });
+          keyRepeatTimers.current[id] = setTimeout(repeatKey, KEY_REPEAT_RATE);
         }
       };
 
       // Start repeat after initial delay (allows single character typing)
-      keyRepeatTimers.current[key] = setTimeout(repeatKey, KEY_REPEAT_DELAY);
+      keyRepeatTimers.current[id] = setTimeout(repeatKey, KEY_REPEAT_DELAY);
     };
 
     const stopKeyRepeat = (key: string) => {
-      if (keyRepeatTimers.current[key]) {
-        clearTimeout(keyRepeatTimers.current[key]);
-        delete keyRepeatTimers.current[key];
+      const id = trackKeyId({ key, code: key });
+      if (keyRepeatTimers.current[id]) {
+        clearTimeout(keyRepeatTimers.current[id]);
+        delete keyRepeatTimers.current[id];
       }
+      delete keyLastSeen.current[id];
     };
 
     // Cursor, text selection and xterm pointer events, in one place so the
@@ -1442,9 +1458,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // this, so a touch press is indistinguishable from a physical one.
     const pressGameKey = (key: string, code: string, mods?: { alt?: boolean; ctrl?: boolean; shift?: boolean }) => {
       if (!gameMode.current || !socketRef.current?.connected) return;
+      // Physical identity (see trackKeyId): 'L'-down and 'l'-up are one key.
+      const id = trackKeyId({ key, code });
       // Only send if key wasn't already pressed (prevents duplicate downs)
-      if (keyState.current[key]) return;
-      keyState.current[key] = true;
+      if (keyState.current[id]) return;
+      keyState.current[id] = true;
+      keyNames.current[id] = key;
+      keyLastSeen.current[id] = Date.now();
       // The MODIFIERS travel with the key. Without them a door in game mode
       // received Alt+Enter as a bare Enter - which in GRANDMASTER's menu is
       // "select" - so the size toggle could not work there however well the
@@ -1454,10 +1474,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     };
 
     const releaseGameKey = (key: string, code: string) => {
+      // Physical identity, like the press: a Shift-released 'l'-up releases
+      // the 'L'-down. And unconditional: a release with no tracked press
+      // still stops the timer and tells the backend, so a desync heals
+      // instead of typing for ever.
+      const id = trackKeyId({ key, code });
+      stopKeyRepeat(id);
+      delete keyState.current[id];
+      delete keyNames.current[id];
       if (!socketRef.current?.connected) return;
-      if (!keyState.current[key]) return;
-      delete keyState.current[key];
-      stopKeyRepeat(key);
       socketRef.current.emit('key-up', { key, code });
     };
 
@@ -1483,8 +1508,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
       // Game mode: send raw keydown events with custom key repeat
       if (gameMode.current && socketRef.current?.connected) {
-        // Ignore browser key repeat - we handle our own repeat logic
+        // Browser auto-repeat is the heartbeat, not input: it proves the
+        // key is still down (see repeatAlive), so stamp it and swallow it.
         if (ev.repeat) {
+          keyLastSeen.current[trackKeyId(ev)] = Date.now();
           ev.preventDefault();
           return;
         }
@@ -1509,13 +1536,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const clearAllKeyState = () => {
       // Game mode: send key-up for all held keys so backend knows they're released
       if (gameMode.current) {
-        for (const key of Object.keys(keyState.current)) {
-          if (keyState.current[key] && socketRef.current?.connected) {
-            socketRef.current.emit('key-up', { key, code: '' });
+        for (const id of Object.keys(keyState.current)) {
+          if (keyState.current[id] && socketRef.current?.connected) {
+            socketRef.current.emit('key-up', { key: keyNames.current[id] ?? id, code: '' });
           }
-          stopKeyRepeat(key);
+          stopKeyRepeat(id);
         }
         keyState.current = {};
+        keyNames.current = {};
       }
       // Normal mode: clear tracked keys to prevent stale repeat detection
       normalPressedKeys.clear();
