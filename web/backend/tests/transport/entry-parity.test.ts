@@ -63,8 +63,7 @@ describe('the connect banner', () => {
     expect(text).not.toContain('via web connection');
   });
 
-  it('holds only where a pause is wanted, and returns at once otherwise', async () => {
-    const caller = recorder();
+  it('holds only where a pause is wanted, and returns at once otherwise', async () => {    const caller = recorder();
 
     const started = Date.now();
     await emitConnectBanner(caller.emitter, sessionOn('telnet'), 0);
@@ -78,6 +77,17 @@ describe('the connect banner', () => {
     // a telnet connect would be a regression, not parity.
     expect(withoutDelay).toBeLessThan(100);
     expect(withDelay).toBeGreaterThanOrEqual(110);
+  });
+
+  it('clears stale glass before the banner draws', async () => {
+    // A caller redialing after a refusal or a reboot still sees whatever
+    // was last painted. express.e never clears here - a dial-up terminal
+    // came up blank - but ours persist, so the banner clears first.
+    const caller = recorder();
+
+    await emitConnectBanner(caller.emitter, sessionOn('telnet'), 0);
+
+    expect(caller.said[0]).toBe('\x1b[2J\x1b[H');
   });
 });
 

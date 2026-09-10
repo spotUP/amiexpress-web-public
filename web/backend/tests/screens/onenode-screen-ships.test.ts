@@ -8,9 +8,10 @@
  *
  * Pins the shipped file: present, non-empty, MCI-enabled (first line
  * opens with `~`, screen.handler.ts:2150), every row at most 80 printable
- * cells, single-line box frame (the only corners the PETSCII transducer
- * maps — a C64 caller served the ANSI order degrades to glyphs, not `?`),
- * and carrying express's own refusal line.
+ * cells, single-line box frame in CP437 single bytes (the only corners the
+ * PETSCII transducer maps — and UTF-8 multibyte sequences print as
+ * mojibake on every terminal, live 2026-09-10), and carrying express's
+ * own refusal line.
  */
 
 import * as fs from 'fs';
@@ -22,7 +23,9 @@ const artPath = path.join(repoRoot, 'Screens', 'ONENODE.TXT');
 const stripSgr = (line: string) => line.replace(/\x1b\[[0-9;]*m/g, '');
 
 describe('ONENODE screen ships (express.e:29715-29727)', () => {
-  const art = fs.readFileSync(artPath, 'utf8');
+  // latin1: the file is CP437 bytes like every shipped screen (BBSTITLE);
+  // reading as UTF-8 would fold the box corners into replacement chars.
+  const art = fs.readFileSync(artPath, 'latin1');
   const rows = art.split('\n');
 
   test('file exists and is not a placeholder', () => {
@@ -39,12 +42,13 @@ describe('ONENODE screen ships (express.e:29715-29727)', () => {
     }
   });
 
-  test('single-line box frame (PETSCII-mappable corners)', () => {
-    expect(art).toContain('┌');
-    expect(art).toContain('┐');
-    expect(art).toContain('└');
-    expect(art).toContain('┘');
-    expect(art).not.toMatch(/[╔╗╚╝═║]/);
+  test('single-line box frame in single bytes, never UTF-8', () => {
+    expect(art).toContain('Ú');
+    expect(art).toContain('¿');
+    expect(art).toContain('À');
+    expect(art).toContain('Ù');
+    expect(art).not.toMatch(/[É»È¼Íº]/);
+    expect(Buffer.from(art, 'latin1').includes(Buffer.from([0xe2, 0x94]))).toBe(false);
   });
 
   test("carries express's refusal line", () => {

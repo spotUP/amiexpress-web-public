@@ -138,6 +138,13 @@ export async function emitConnectBanner(
 
   const say = (text: string) => emitter.emit("ansi-output", text);
 
+  // Fresh connect, stale glass: a caller redialing after a refusal or a
+  // reboot still sees whatever was last painted (the ONENODE art, a dropped
+  // door). express.e never clears here - a dial-up terminal came up blank -
+  // but ours persist, so the banner clears first. (A real C64 never reaches
+  // this service - telnet short-circuits to handleC64Detected - so ANSI
+  // clear needs no PETSCII twin here.)
+  say("\x1b[2J\x1b[H");
   say("\r\n/X Native Telnet:  Searching for free node...\r\n");
   say(`/X Native Telnet:  Successful connection to node ${nodeId}\r\n`);
   say("\r\nCONNECT 19200\r\n");
