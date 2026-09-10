@@ -58,7 +58,12 @@ export interface FeedDeps {
   bbsPassword: string;
   post: (line: string) => Promise<void> | void;
   login?: (apiUrl: string, username: string, password: string) => Promise<string>;
-  connect?: (apiUrl: string, token: string, onEvent: (payload: BbsEventPayload) => void) => { close: () => void };
+  connect?: (
+    apiUrl: string,
+    token: string,
+    onEvent: (payload: BbsEventPayload) => void,
+    onDisconnect?: (reason: string) => void
+  ) => { close: () => void };
   log?: (message: string) => void;
 }
 
@@ -74,7 +79,8 @@ async function defaultLogin(apiUrl: string, username: string, password: string):
 function defaultConnect(
   apiUrl: string,
   token: string,
-  onEvent: (payload: BbsEventPayload) => void
+  onEvent: (payload: BbsEventPayload) => void,
+  onDisconnect?: (reason: string) => void
 ): { close: () => void } {
   // Same session shape as LiveChat: chat token in handshake auth so the
   // backend builds a chatOnly BBS session (web/backend/src/index.ts).
@@ -86,6 +92,15 @@ function defaultConnect(
       // A bad payload must never kill the feed socket.
     }
   });
+  if (onDisconnect) {
+    socket.on('disconnect', (reason: string) => {
+      try {
+        onDisconnect(reason);
+      } catch {
+        // Disconnect handling must never throw into the socket.
+      }
+    });
+  }
   return { close: () => void socket.close() };
 }
 
@@ -102,4 +117,96 @@ export async function startFeed(deps: FeedDeps): Promise<{ stop: () => void }> {
     }
   });
   return { stop: () => handle.close() };
+}
+
+export type FeedConnState = 'connecting' | 'live' | 'retrying';
+
+export interface ResilientFeedOpts {
+  /** First backoff step (default 5000). Tests pass 1. */
+  initialDelayMs?: number;
+  /** Backoff cap (default 60000). */
+  maxDelayMs?: number;
+  onState?: (state: FeedConnState, detail?: string) => void;
+}
+
+/**
+ * Feed with a pulse (2026-09-10): startFeed connects once and a board
+ * restart after the bot leaves it feeding nothing ("bot stays up").
+ * This loops login -> connect until stopped: a disconnect (or a login
+ * against a board that is still booting) waits out a backoff and
+ * re-logs-in for a fresh token. Returns the handle synchronously so
+ * stop() works even before the first connection; first live connection
+ * arrives as onState('live').
+ */
+export function startFeedResilient(
+  deps: FeedDeps,
+  opts?: ResilientFeedOpts
+): { stop: () => void } {
+  const log = deps.log ?? (() => {});
+  const login = deps.login ?? defaultLogin;
+  const connect = deps.connect ?? defaultConnect;
+  const initial = opts?.initialDelayMs ?? 5000;
+  const cap = opts?.maxDelayMs ?? 60000;
+  const onState = opts?.onState ?? (() => {});
+  let stopped = false;
+  let handle: { close: () => void } | null = null;
+  let failures = 0;
+  let liveDone = false;
+  let wake: (() => void) | null = null;
+
+  const onEvent = (payload: BbsEventPayload) => {
+    const line = formatWhipEvent(payload);
+    if (line) {
+      void Promise.resolve(deps.post(line)).catch((err) => log(`[whip-bot] Feed post failed: ${String(err)}`));
+    }
+  };
+
+  const sleep = (ms: number) =>
+    new Promise<void>((r) => {
+      const t = setTimeout(() => { wake = null; r(); }, ms);
+      wake = () => { clearTimeout(t); wake = null; r(); };
+    });
+
+  const stop = () => {
+    stopped = true;
+    wake?.();
+    handle?.close();
+    handle = null;
+  };
+
+  void (async () => {
+    while (!stopped) {
+      onState(failures === 0 ? 'connecting' : 'retrying');
+      try {
+        const token = await login(deps.apiUrl, deps.bbsUser, deps.bbsPassword);
+        if (stopped) return;
+        const dropped = await new Promise<string | null>((resolve) => {
+          const h = connect(deps.apiUrl, token, onEvent, (reason) => resolve(reason));
+          handle = h;
+          wake = () => resolve(null);
+          if (!liveDone) {
+            liveDone = true;
+            onState('live');
+          }
+        });
+        wake = null;
+        handle = null;
+        if (stopped) return;
+        failures++;
+        const wait = Math.min(cap, initial * 2 ** (failures - 1));
+        log(`[whip-bot] Feed socket dropped (${dropped ?? 'closed'}), retrying in ${Math.round(wait / 1000)}s`);
+        onState('retrying', dropped ?? undefined);
+        await sleep(wait);
+      } catch (err) {
+        if (stopped) return;
+        failures++;
+        const wait = Math.min(cap, initial * 2 ** (failures - 1));
+        log(`[whip-bot] Feed attempt failed (${(err as Error)?.message ?? err}), retrying in ${Math.round(wait / 1000)}s`);
+        onState('retrying', (err as Error)?.message);
+        await sleep(wait);
+      }
+    }
+  })();
+
+  return { stop };
 }

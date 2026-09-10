@@ -40,7 +40,7 @@ import {
 } from 'discord.js';
 import { loadConfig, type BotConfig } from './config';
 import { WhipApiClient, WhipApiError } from './whip-api';
-import { startFeed } from './feed';
+import { startFeedResilient } from './feed';
 import { createHealthState, startHealthServer, type HealthState } from './health';
 import {
   formatAchievements,
@@ -728,7 +728,7 @@ function maybeStartFeed(client: Client, config: BotConfig, apiUrl: string, healt
   }
   health.feedEnabled = true;
   const { feedChannelId, bbsUser, bbsPassword } = config;
-  startFeed({
+  startFeedResilient({
     apiUrl,
     bbsUser,
     bbsPassword,
@@ -740,9 +740,14 @@ function maybeStartFeed(client: Client, config: BotConfig, apiUrl: string, healt
       }
     },
     log: (message) => console.log(message),
-  })
-    .then(() => console.log('[whip-bot] Live WHIP feed started'))
-    .catch((err) => console.error('[whip-bot] Feed failed to start, bot stays up:', err?.message ?? err));
+  }, {
+    onState: (state) => {
+      const was = health.feedState;
+      health.feedState = state;
+      if (state === 'live' && was !== 'live') console.log('[whip-bot] Live WHIP feed started');
+      if (state === 'retrying') health.feedReconnects += 1;
+    },
+  });
 }
 
 async function main(): Promise<void> {

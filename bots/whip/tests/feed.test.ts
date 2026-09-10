@@ -4,7 +4,7 @@
  * Pure function tests only — no Discord, no sockets.
  */
 import assert from 'assert';
-import { formatWhipEvent, type BbsEventPayload } from '../src/feed';
+import { formatWhipEvent, startFeedResilient, type BbsEventPayload, type FeedDeps } from '../src/feed';
 
 const WHIP_EVENT_TYPES = [
   'project_created',
@@ -74,4 +74,79 @@ export async function missingMessageReturnsNull(): Promise<void> {
 export async function emptyPayloadReturnsNull(): Promise<void> {
   assert.strictEqual(formatWhipEvent(null), null);
   assert.strictEqual(formatWhipEvent(undefined), null);
+}
+
+function resilientDeps(over: Partial<FeedDeps> = {}): FeedDeps & {
+  logins: () => number;
+  posts: string[];
+  disconnect: () => void;
+} {
+  let logins = 0;
+  const posts: string[] = [];
+  let drop: ((reason: string) => void) | null = null;
+  return {
+    apiUrl: 'https://board.test',
+    bbsUser: 'bridge',
+    bbsPassword: 'pw',
+    post: async (line: string) => { posts.push(line); },
+    login: async () => { logins++; return `token-${logins}`; },
+    connect: (_url: string, _token: string, onEvent: (p: BbsEventPayload) => void, onDisconnect?: (r: string) => void) => {
+      drop = (reason: string) => onDisconnect?.(reason);
+      void onEvent;
+      return { close: () => { drop = null; } };
+    },
+    ...over,
+    logins: () => logins,
+    posts,
+    disconnect: () => drop?.('transport close'),
+  };
+}
+
+const FAST = { initialDelayMs: 1, maxDelayMs: 2 };
+
+export async function resilientSurvivesLoginFailures(): Promise<void> {
+  let attempts = 0;
+  const deps = resilientDeps({
+    login: async () => {
+      attempts++;
+      if (attempts < 3) throw new Error('board booting');
+      return 'token';
+    },
+  });
+  const states: string[] = [];
+  const feed = startFeedResilient(deps, { ...FAST, onState: (s) => states.push(s) });
+  try {
+    await new Promise((r) => setTimeout(r, 30));
+    assert.strictEqual(attempts, 3, 'two failures then a login');
+    assert.ok(states.includes('live'), 'reaches live');
+    assert.ok(states.includes('retrying'), 'retrying seen on the way');
+  } finally { feed.stop(); }
+}
+
+export async function resilientReconnectsAfterADrop(): Promise<void> {
+  const deps = resilientDeps();
+  const states: string[] = [];
+  const feed = startFeedResilient(deps, { ...FAST, onState: (s) => states.push(s) });
+  try {
+    await new Promise((r) => setTimeout(r, 10));
+    assert.strictEqual(deps.logins(), 1, 'one login to go live');
+    deps.disconnect();
+    await new Promise((r) => setTimeout(r, 20));
+    assert.strictEqual(deps.logins(), 2, 'a drop re-logs-in for a fresh token');
+    assert.ok(states.includes('retrying'), 'drop surfaces as retrying');
+  } finally { feed.stop(); }
+}
+
+export async function resilientStopEndsTheLoop(): Promise<void> {
+  let logins = 0;
+  const deps = resilientDeps({
+    login: async () => { logins++; throw new Error('always down'); },
+  });
+  const feed = startFeedResilient(deps, FAST);
+  await new Promise((r) => setTimeout(r, 20));
+  const seen = logins;
+  assert.ok(seen >= 1, 'it tried while down');
+  feed.stop();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.strictEqual(logins, seen, 'no further attempts after stop');
 }

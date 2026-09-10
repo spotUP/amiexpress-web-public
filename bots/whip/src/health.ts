@@ -20,6 +20,8 @@ export interface BotHealth {
   feed: {
     enabled: boolean;
     lastEventAt: string | null;
+    state: 'off' | 'connecting' | 'live' | 'retrying';
+    reconnects: number;
   };
 }
 
@@ -28,10 +30,12 @@ export interface HealthState {
   discordReady: boolean;
   feedEnabled: boolean;
   lastFeedEventAt: string | null;
+  feedState: 'off' | 'connecting' | 'live' | 'retrying';
+  feedReconnects: number;
 }
 
 export function createHealthState(): HealthState {
-  return { startedAt: Date.now(), discordReady: false, feedEnabled: false, lastFeedEventAt: null };
+  return { startedAt: Date.now(), discordReady: false, feedEnabled: false, lastFeedEventAt: null, feedState: 'off', feedReconnects: 0 };
 }
 
 export function toHealth(botId: string, state: HealthState): BotHealth {
@@ -41,7 +45,7 @@ export function toHealth(botId: string, state: HealthState): BotHealth {
     startedAt: new Date(state.startedAt).toISOString(),
     uptimeSec: Math.floor((Date.now() - state.startedAt) / 1000),
     discordReady: state.discordReady,
-    feed: { enabled: state.feedEnabled, lastEventAt: state.lastFeedEventAt },
+    feed: { enabled: state.feedEnabled, lastEventAt: state.lastFeedEventAt, state: state.feedState, reconnects: state.feedReconnects },
   };
 }
 
