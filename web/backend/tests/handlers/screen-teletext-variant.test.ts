@@ -150,3 +150,56 @@ describe('loadScreenFile - teletext variant lists (structural pins)', () => {
     expect(src).toMatch(/session\?\.texttvMode === true[\s\S]*?'\.tti', '\.TTI'/);
   });
 });
+
+describe('shipped teletext seeds resolve through the loader', () => {
+  // The board's own .tti art, COPIED into a scratch board and served by the
+  // real loader pointed at it: the bytes are the shipped seeds, the board
+  // is not. The jest live-data guard forbids reading the checkout as a
+  // board, so the seeds travel. The property asserted is the VARIANT
+  // preference (a behaviour of this change), never a byte of the art.
+  const REPO_ROOT = path.resolve(__dirname, '../../../..');
+  let board = '';
+  let oldDataDir = '';
+
+  beforeEach(() => {
+    board = fs.mkdtempSync(path.join(os.tmpdir(), 'tti-seeds-'));
+    for (const rel of ['Node1/BBSTITLE.tti', 'Node1/BBSTITLE.txt', 'Conf1/Menu.tti', 'Conf1/Menu.txt']) {
+      const dst = path.join(board, rel);
+      fs.mkdirSync(path.dirname(dst), { recursive: true });
+      fs.copyFileSync(path.join(REPO_ROOT, rel), dst);
+    }
+    const { config } = require('../../src/config');
+    oldDataDir = config.getConfig().dataDir;
+    config.set('dataDir', board);
+  });
+
+  afterEach(() => {
+    const { config } = require('../../src/config');
+    config.set('dataDir', oldDataDir);
+    fs.rmSync(board, { recursive: true, force: true });
+  });
+
+  test('Node1/BBSTITLE.tti wins for a teletext session', () => {
+    const { loadScreenFile } = require('../../src/handlers/screen.handler');
+    const screen = loadScreenFile('BBSTITLE', undefined, 1, { texttvMode: true });
+    expect(screen).not.toBeNull();
+    expect(screen!.filePath.toLowerCase().endsWith('.tti')).toBe(true);
+    expect(screen!.isTeletext).toBe(true);
+  });
+
+  test('Node1/BBSTITLE.txt still wins without the flag', () => {
+    const { loadScreenFile } = require('../../src/handlers/screen.handler');
+    const screen = loadScreenFile('BBSTITLE', undefined, 1, { texttvMode: false });
+    expect(screen).not.toBeNull();
+    expect(screen!.filePath.toLowerCase().endsWith('.txt')).toBe(true);
+    expect(screen!.isTeletext).toBeFalsy();
+  });
+
+  test('Conf1/Menu.tti wins for a teletext session', () => {
+    const { loadScreenFile } = require('../../src/handlers/screen.handler');
+    const screen = loadScreenFile('MENU', 1, 1, { texttvMode: true });
+    expect(screen).not.toBeNull();
+    expect(screen!.filePath.toLowerCase().endsWith('.tti')).toBe(true);
+    expect(screen!.isTeletext).toBe(true);
+  });
+});
