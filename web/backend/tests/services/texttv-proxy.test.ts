@@ -88,6 +88,51 @@ describe('texttv-proxy.service', () => {
     expect(calls.n).toBe(0);
   });
 
+  describe('stale-while-revalidate', () => {
+    const BODY_OLD =
+      '[{"num":"100","title":"Old","content":[],"content_plain":["old"],' +
+      '"next_page":"101","prev_page":"100"}]';
+    const BODY_NEW =
+      '[{"num":"100","title":"New","content":[],"content_plain":["new"],' +
+      '"next_page":"101","prev_page":"100"}]';
+
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    test('a page past TTL serves stale instantly and refreshes behind it', async () => {
+      const calls = { n: 0 };
+      await fetchTextTvPage(100, stubFetcher(200, BODY_OLD, calls));
+      expect(calls.n).toBe(1);
+      await jest.advanceTimersByTimeAsync(TEXTTV_CACHE_MS + 1000);
+      // Stale serves synchronously: no new fetch has completed yet the
+      // answer is already there. A door that waited reads as broken.
+      const stale = await fetchTextTvPage(100, stubFetcher(200, BODY_NEW, calls));
+      expect(JSON.parse(stale.body)[0].title).toBe('Old');
+      expect(stale.stale).toBe(true);
+      // The background refresh lands: the next turn is fresh.
+      await jest.advanceTimersByTimeAsync(1000);
+      await Promise.resolve();
+      const fresh = await fetchTextTvPage(100, stubFetcher(200, BODY_NEW, calls));
+      expect(JSON.parse(fresh.body)[0].title).toBe('New');
+      expect(fresh.stale).toBeFalsy();
+      expect(fresh.cached).toBe(true);
+    });
+
+    test('a failed background refresh keeps serving the stale page', async () => {
+      const calls = { n: 0 };
+      await fetchTextTvPage(300, stubFetcher(200, BODY_OLD, calls));
+      await jest.advanceTimersByTimeAsync(TEXTTV_CACHE_MS + 1000);
+      const failing = async () => {
+        throw new Error('mirror down');
+      };
+      const stale = await fetchTextTvPage(300, failing as any);
+      expect(JSON.parse(stale.body)[0].title).toBe('Old');
+      expect(stale.stale).toBe(true);
+      await jest.advanceTimersByTimeAsync(1000);
+      await Promise.resolve();
+    });
+  });
+
   test('slims the HTML content away but keeps the door fields verbatim', () => {
     const fat =
       '[{"num":"100","title":"T","content":["<div>26KB of divs</div>"],' +

@@ -55,6 +55,82 @@ export interface TextTvPage {
   status: number;
   body: string;
   cached: boolean;
+  /** Served past TTL while a refresh runs behind it (see below). */
+  stale?: boolean;
+}
+
+const refreshing = new Set<number>();
+
+async function fetchFresh(
+  page: number,
+  fetcher: TextTvFetcher,
+  onSlow: (ms: number) => void = () => {},
+): Promise<TextTvPage> {
+  const started = Date.now();
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), TEXTTV_TIMEOUT_MS);
+  try {
+    const res = await fetcher(texttvPageUrl(page), {
+      signal: ctl.signal,
+      headers: {
+        'User-Agent': 'amiexpress-web-bbs/1.0 (BBS Text-TV proxy; https://bbs.uprough.net)',
+        Accept: 'application/json',
+      },
+    });
+    const body = await res.text();
+    if (res.status !== 200) {
+      throw new Error(`texttv: upstream answered ${res.status}`);
+    }
+    const slim = slimTextTvBody(body);
+    cache.set(page, { at: Date.now(), status: res.status, body: slim });
+    const took = Date.now() - started;
+    if (took > 5000) onSlow(took);
+    return { status: res.status, body: slim, cached: false };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function refreshInBackground(page: number, fetcher: TextTvFetcher): void {
+  if (refreshing.has(page)) return;
+  refreshing.add(page);
+  fetchFresh(
+    page,
+    fetcher,
+    (ms) => console.warn(`[texttv] upstream slow: page ${page} took ${ms}ms`),
+  )
+    .catch((err) => console.warn(`[texttv] background refresh failed: ${(err as Error).message}`))
+    .finally(() => refreshing.delete(page));
+}
+
+/**
+ * Fetch one page's slim JSON (the door parses and converts). Throws on
+ * transport failure or non-200 upstream; the route turns that into a 502
+ * so a door can tell "mirror silent" from "no page".
+ *
+ * STALE-WHILE-REVALIDATE: measured 2026-09-10, texttv.nu itself takes
+ * ~15 s end to end sometimes (live trace: door GET at :09, bytes at :24),
+ * and a door that waits the whole of it reads as broken ("nothing is
+ * displayed"). A page past TTL is served instantly from cache while a
+ * refresh runs behind it; only a page never fetched at all blocks.
+ */
+export async function fetchTextTvPage(
+  page: number,
+  fetcher: TextTvFetcher = defaultFetcher,
+): Promise<TextTvPage> {
+  if (!isTextTvPage(page)) {
+    throw new Error(`texttv: page ${String(page)} is not 100-999`);
+  }
+  const now = Date.now();
+  const hit = cache.get(page);
+  if (hit && now - hit.at < TEXTTV_CACHE_MS) {
+    return { status: hit.status, body: hit.body, cached: true };
+  }
+  if (hit) {
+    refreshInBackground(page, fetcher);
+    return { status: hit.status, body: hit.body, cached: true, stale: true };
+  }
+  return fetchFresh(page, fetcher);
 }
 
 /**
@@ -188,43 +264,4 @@ export function slimTextTvBody(upstreamBody: string): string {
     };
   });
   return JSON.stringify(slim);
-}
-
-/**
- * Fetch one page's JSON array (verbatim bytes - the door parses and
- * converts). Throws on transport failure or non-200 upstream; the route
- * turns that into a 502 so a door can tell "mirror silent" from "no page".
- */
-export async function fetchTextTvPage(
-  page: number,
-  fetcher: TextTvFetcher = defaultFetcher,
-): Promise<TextTvPage> {
-  if (!isTextTvPage(page)) {
-    throw new Error(`texttv: page ${String(page)} is not 100-999`);
-  }
-  const now = Date.now();
-  const hit = cache.get(page);
-  if (hit && now - hit.at < TEXTTV_CACHE_MS) {
-    return { status: hit.status, body: hit.body, cached: true };
-  }
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), TEXTTV_TIMEOUT_MS);
-  try {
-    const res = await fetcher(texttvPageUrl(page), {
-      signal: ctl.signal,
-      headers: {
-        'User-Agent': 'amiexpress-web-bbs/1.0 (BBS Text-TV proxy; https://bbs.uprough.net)',
-        Accept: 'application/json',
-      },
-    });
-    const body = await res.text();
-    if (res.status !== 200) {
-      throw new Error(`texttv: upstream answered ${res.status}`);
-    }
-    const slim = slimTextTvBody(body);
-    cache.set(page, { at: now, status: res.status, body: slim });
-    return { status: res.status, body: slim, cached: false };
-  } finally {
-    clearTimeout(timer);
-  }
 }
