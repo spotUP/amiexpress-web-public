@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { SkeletonRows } from '../components/ui/states';
+import { ScreenEditor } from '../components/ScreenEditor';
+import { AnsiCanvas } from '../components/AnsiCanvas';
+import { createSurface, type EditorSurface } from './screen-editor-state';
+import { screenToCanvas, base64ToLatin1, latin1ToBase64 } from './screen-bytes';
 
 interface BullsEntry {
   line: number;
@@ -230,6 +234,9 @@ function BulletinModal({ name, onClose }: { name: string; onClose: () => void })
   const [editable, setEditable] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [ansiMode, setAnsiMode] = useState(false);
+  const [surface, setSurface] = useState<EditorSurface | null>(null);
+  const [building, setBuilding] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -243,14 +250,34 @@ function BulletinModal({ name, onClose }: { name: string; onClose: () => void })
     let live = true;
     setContent(null);    setEditable(false);
     setStatus(null);
+    setSurface(null);
+    setAnsiMode(false);
     apiClient.listBulletins().then((res: any) => {
       const data = res?.data ?? res;
       const info = data?.bulletins?.find((b: BulletinInfo) => b.name.toLowerCase() === name.toLowerCase());
       if (live) setEditable(!!info && !info.generated);
     }).catch(() => {});
-    apiClient.getBulletin(name).then((res: any) => {
+    apiClient.getBulletin(name).then(async (res: any) => {
       const data = res?.data ?? res;
-      if (live) setContent(typeof data?.content === 'string' ? data.content : '');
+      const text = typeof data?.content === 'string' ? data.content : '';
+      if (!live) return;
+      setContent(text);
+      // ANSI art opens in the ANSI editor - the same ScreenEditor the
+      // screens use, over the same SDK canvas. Plain text keeps the box.
+      if (/\x1b\[/.test(text)) {
+        setBuilding(true);
+        try {
+          const canvas = await screenToCanvas(latin1ToBase64(text));
+          if (live) {
+            setSurface(createSurface(canvas));
+            setAnsiMode(true);
+          }
+        } catch (e: unknown) {
+          if (live) setStatus(`Art preview failed, text follows: ${e instanceof Error ? e.message : 'parse error'}`);
+        } finally {
+          if (live) setBuilding(false);
+        }
+      }
     }).catch((e: unknown) => {
       if (live) setStatus(`Error: ${e instanceof Error ? e.message : 'Failed'}`);
     });
@@ -263,6 +290,24 @@ function BulletinModal({ name, onClose }: { name: string; onClose: () => void })
     try {
       await apiClient.saveBulletin(name, content ?? '');
       setStatus(`Saved ${name}.`);
+    } catch (e: unknown) {
+      setStatus(`Error: ${e instanceof Error ? e.message : 'Save failed'}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveSurface = async (base64: string) => {
+    // Base64 bytes to latin1: measured 2026-09-10, spacing/line-endings
+    // normalize and bold flattens, but no byte means another. Said below
+    // so the sysop is never surprised by the diff.
+    setSaving(true);
+    setStatus(null);
+    try {
+      const text = base64ToLatin1(base64);
+      await apiClient.saveBulletin(name, text);
+      setContent(text);
+      setStatus(`Saved ${name} (editor canvas format).`);
     } catch (e: unknown) {
       setStatus(`Error: ${e instanceof Error ? e.message : 'Save failed'}`);
     } finally {
@@ -287,20 +332,58 @@ function BulletinModal({ name, onClose }: { name: string; onClose: () => void })
           <p className="text-sm text-content-secondary">Loading...</p>
         ) : content !== null && (
           <>
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              readOnly={!editable}
-              rows={18}
-              spellCheck={false}
-              className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs whitespace-pre"
-            />
-            {editable ? (
-              <button onClick={saveContent} disabled={saving} className="px-4 py-2 bg-accent text-white rounded disabled:opacity-50">
-                {saving ? 'Saving...' : `Save ${name}`}
-              </button>
+            {editable && surface && (
+              <div className="flex gap-2 text-sm">
+                <button
+                  onClick={() => setAnsiMode(false)}
+                  className={`px-3 py-1 rounded border ${!ansiMode ? 'border-accent text-content-primary' : 'border-border text-content-secondary'}`}
+                >
+                  Text
+                </button>
+                <button
+                  onClick={() => setAnsiMode(true)}
+                  className={`px-3 py-1 rounded border ${ansiMode ? 'border-accent text-content-primary' : 'border-border text-content-secondary'}`}
+                >
+                  ANSI editor
+                </button>
+              </div>
+            )}
+            {building ? (
+              <p className="text-sm text-content-secondary">Building canvas...</p>
+            ) : ansiMode && surface ? (
+              editable ? (
+                <>
+                  <ScreenEditor
+                    surface={surface}
+                    mci={[]}
+                    filePath={name}
+                    onChange={setSurface}
+                    onSave={saveSurface}
+                    onCancel={onClose}
+                  />
+                  <p className="text-xs text-content-secondary">Saving rewrites spacing and line endings to canvas format and flattens bold; bytes otherwise survive.</p>
+                </>
+              ) : (
+                <AnsiCanvas canvas={surface.canvas} />
+              )
             ) : (
-              <p className="text-xs text-content-secondary">Generated bulletin - read-only, edit at its source.</p>
+              <>
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  readOnly={!editable}
+                  rows={18}
+                  spellCheck={false}
+                  className="w-full px-3 py-2 bg-surface-0 border border-border text-content-primary rounded font-mono text-xs whitespace-pre"
+                />
+                {editable ? (
+                  <button onClick={saveContent} disabled={saving} className="px-4 py-2 bg-accent text-white rounded disabled:opacity-50">
+                    {saving ? 'Saving...' : `Save ${name}`}
+                  </button>
+                ) : (
+                  <p className="text-xs text-content-secondary">Generated bulletin - read-only, edit at its source.</p>
+                )}
+              </>
             )}
           </>
         )}
