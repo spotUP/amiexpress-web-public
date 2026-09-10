@@ -146,4 +146,16 @@ describe('filtering the doors list', () => {
     expect(screen.getByText('No door matches "zzzz".')).toBeInTheDocument();
     expect(screen.getByText('0 of 3 doors')).toBeInTheDocument();
   });
+
+  // The whole row opens the dialog: the sysop asked for it after finding
+  // only the pencil icon. The icon buttons stop propagation in the table,
+  // so they keep their own jobs.
+  it('opens the edit dialog from anywhere on the row', async () => {
+    renderPage();
+    await screen.findByText('Ganja Wars');
+
+    await userEvent.click(screen.getByText('Global Requests'));
+
+    expect(await screen.findByText('Update Door')).toBeInTheDocument();
+  });
 });

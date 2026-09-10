@@ -28,6 +28,8 @@ export interface DoorSetting {
   secret?: boolean;
   /** Group heading the form renders this setting under. */
   group?: string;
+  /** Hidden from the generic form; a bespoke editor owns it. Still read/written by the API. */
+  hidden?: boolean;
 }
 
 export interface DoorSettingsFormProps {
@@ -150,7 +152,7 @@ export function DoorSettingsForm({ command, onPendingChange }: DoorSettingsFormP
           is the wrong tool for art.
         </p>
       )}
-      {view.manifest.settings.map(setting => {
+      {view.manifest.settings.filter(setting => !setting.hidden).map(setting => {
         const value = values[setting.key];
         const id = `door-setting-${setting.key}`;
         const secretIsSet = setting.secret && view.secretsSet?.includes(setting.key);

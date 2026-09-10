@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { SkeletonRows } from '../components/ui/states';
+import { BullsMasksMatrix } from '../components/BullsMasksMatrix';
 import { ScreenEditor } from '../components/ScreenEditor';
 import { AnsiCanvas } from '../components/AnsiCanvas';
 import { createSurface, type EditorSurface } from './screen-editor-state';
@@ -175,6 +176,8 @@ export function BullsInfoPage() {
           Reload
         </button>
       </div>
+
+      <BullsMasksMatrix titles={draft.map(row => row.title)} />
 
       <BulletinBrowser key={browserKey} onOpen={setModalFile} />
 

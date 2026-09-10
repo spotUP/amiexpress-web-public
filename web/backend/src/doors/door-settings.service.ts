@@ -75,6 +75,14 @@ export interface DoorSetting {
    */
   group?: string;
   /**
+   * Hide this setting from the generic form. It stays a real setting - the
+   * API reads and writes it - but a bespoke editor owns it (the Bulls
+   * conference masks live in a checkbox matrix on the Bulls Menu page; 39
+   * raw mask strings in the form would be the wall groups were built to
+   * avoid).
+   */
+  hidden?: boolean;
+  /**
    * Regex a string value must match (e.g. `^[X-]{20}$` for an Empire access
    * mask). Validated on save; must itself compile.
    */
@@ -155,6 +163,7 @@ const SettingSchema = z.object({
   cfgKey: z.string().min(1).max(64).optional(),
   fromSystemConfig: z.string().min(1).max(64).optional(),
   group: z.string().min(1).max(40).optional(),
+  hidden: z.boolean().optional(),
   pattern: z.string().min(1).max(200).optional(),
   cfgFile: z.string().min(1).max(64).regex(BARE_FILE_RE).optional(),
   cfgRow: CfgRowSchema.optional(),

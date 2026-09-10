@@ -190,4 +190,30 @@ describe('the door settings form', () => {
     // Art notes where it lives instead of rendering a textarea for it.
     expect(screen.getByText(/drawn in/)).toBeTruthy();
   });
+
+  // A setting a bespoke editor owns (Bulls masks live in the checkbox
+  // matrix) stays a real setting - read, written, validated - but the
+  // generic form skips it instead of drawing a second editor.
+  it('hides settings a bespoke editor owns', async () => {
+    getDoorSettings.mockImplementationOnce(async () => ({
+      success: true,
+      data: {
+        manifest: {
+          command: 'B',
+          settings: [
+            { key: 'dual_listing', label: 'Dual listing', type: 'choice', group: 'Listing',
+              choices: [{ value: 'YES', label: 'Yes' }, { value: 'NO', label: 'No' }], default: 'YES' },
+            { key: 'conf_1_mask', label: 'Conference 1 bulletin mask', type: 'string',
+              default: '--------------------', hidden: true },
+          ],
+        },
+        values: { dual_listing: 'YES', conf_1_mask: 'XXXX----------------' },
+        secretsSet: [],
+      },
+    } as any));
+    renderForm();
+
+    await waitFor(() => expect(screen.getByLabelText('Dual listing')).toBeTruthy());
+    expect(screen.queryByLabelText('Conference 1 bulletin mask')).toBeNull();
+  });
 });
