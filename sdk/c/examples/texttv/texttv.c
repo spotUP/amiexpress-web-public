@@ -270,8 +270,15 @@ static char page_body[8192];
 static char page_next[8];
 static char page_prev[8];
 
-/* Fetch page into the statics. Returns HTTP status, 0 for transport
- * failure, -1 for "not on air" (valid answer, no such page). */
+/* Fetch page into the statics. Returns HTTP status, -100 and below for
+ * transport failure (the ae_http code negated and shifted, so the layer
+ * survives: -101 is AE_HTTP_ERR_CONNECT and so on), -1 for "not on air"
+ * (valid answer, no such page). show_page turns each into its own
+ * sentence - one "did not answer" for every layer cost a whole evening
+ * of guessing on live (2026-09-10: the request left, the backend stayed
+ * silent, and the status line could not say which). */
+static int last_fetch_err;
+
 static int fetch_page(int page)
 {
     ae_http_target target;
@@ -286,6 +293,7 @@ static int fetch_page(int page)
     page_next[0] = '\0';
     page_prev[0] = '\0';
     status_line[0] = '\0';
+    last_fetch_err = 0;
 
     if (texttv_page_path(page, path, sizeof path) != 0) return 0;
 
@@ -300,7 +308,7 @@ static int fetch_page(int page)
     body_truncated = 0;
     memset(&resp, 0, sizeof resp);
     rc = ae_http_get(&target, path, &resp, collect, 0);
-    if (rc != AE_HTTP_OK) return 0;
+    if (rc != AE_HTTP_OK) { last_fetch_err = -100 + rc; return last_fetch_err; }
     if (resp.status != 200) return resp.status;
 
     if (texttv_pick_body(body, plain, sizeof plain) != 0) return -1;
@@ -315,6 +323,29 @@ static int fetch_page(int page)
     return 200;
 }
 
+/* ae_http codes are negative (0 ok, -1 args ... -11 header abort);
+ * last_fetch_err carries -100 + code, so -101 is ERR_ARGS and so on. */
+static void explain_fetch_err(char *out, unsigned long cap)
+{
+    int code = last_fetch_err + 100;
+    const char *what;
+    (void)cap;
+    switch (code) {
+    case -2: what = "no route to the board proxy"; break;
+    case -3: what = "request never left"; break;
+    case -4: what = "board went silent mid-reply"; break;
+    case -5:
+    case -6: what = "proxy answered garbage"; break;
+    case -7: what = "proxy speaks chunked"; break;
+    case -8: what = "proxy cut the reply short"; break;
+    case -9: what = "door dropped the reply"; break;
+    case -10:
+    case -11: what = "request too long"; break;
+    default: what = "board proxy unreachable"; break;
+    }
+    sprintf(out, "[ERROR] Text-TV: %s (%d).", what, code);
+}
+
 static void show_page(int page)
 {
     int rc = fetch_page(page);
@@ -322,12 +353,16 @@ static void show_page(int page)
         strcpy(status_line, "[ERROR] Text-TV did not answer. Try again.");
         return;
     }
+    if (rc <= -100) {
+        explain_fetch_err(status_line, sizeof status_line);
+        return;
+    }
     if (rc == -1) {
         sprintf(status_line, "[INFO] Page %d is not on air.", page);
         return;
     }
     if (rc != 200) {
-        sprintf(status_line, "[ERROR] Text-TV answered %d.", rc);
+        sprintf(status_line, "[ERROR] Text-TV proxy answered %d.", rc);
         return;
     }
     strcpy(status_line, "");
