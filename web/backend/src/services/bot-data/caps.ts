@@ -17,7 +17,9 @@ export function BOT_clampLimit(asked: unknown, def = BOT_DEFAULT_LIMIT): number 
 
 export function BOT_cut(text: string, max = BOT_MAX_TEXT): { text: string; truncated: boolean } {
   if (text.length <= max) return { text, truncated: false };
-  return { text: text.slice(0, max), truncated: true };
+  // Never hand the terminal half an escape sequence (2026-09-10: ANSI
+  // list output gets cut like everything else).
+  return { text: text.slice(0, max).replace(/\x1b\[[0-9;]*$/, ''), truncated: true };
 }
 
 export function BOT_more(total: number, shown: number): string {

@@ -21,16 +21,44 @@ export interface BOTWhip {
 
 const noWhip: BOTResult = { text: 'The task board is unreachable right now.', truncated: false };
 
-function taskLine(t: any): string {
-  const state = t.status ?? t.state ?? t.column ?? '?';
-  return `${t.title ?? t.name ?? '(untitled)'} [${state}]${t.assignee ?? t.owner ? ` - ${t.assignee ?? t.owner}` : ''}`;
+/**
+ * Terminal colors for list output (2026-09-10): the BBS renders ANSI,
+ * Discord does not, so color is OPT-IN per caller - the operator-chat
+ * tools pass ansi:true, the /api/bot/v1 JSON surface stays plain.
+ * Plain `\x1b[0;3Xm` (never bold) per the BBS output rules, every span
+ * self-reset so a cut line cannot leak color.
+ */
+const ANSI_RESET = '\x1b[0m';
+function ansiState(state: string): string {
+  const s = state.toLowerCase();
+  if (/done|complete|released/.test(s)) return '\x1b[0;32m';
+  if (/progress|doing|active|test|review/.test(s)) return '\x1b[0;36m';
+  if (/block|hold|wait|stuck/.test(s)) return '\x1b[0;31m';
+  return '\x1b[0;33m';
 }
 
-export async function BOT_whipProjects(whip: BOTWhip | undefined): Promise<BOTResult> {
+export interface WhipTextOpts {
+  ansi?: boolean;
+}
+
+function taskLine(t: any, ansi = false): string {
+  const state = t.status ?? t.state ?? t.column ?? '?';
+  const tag = `[${state}]`;
+  const who = t.assignee ?? t.owner ? ` - ${t.assignee ?? t.owner}` : '';
+  const title = t.title ?? t.name ?? '(untitled)';
+  if (!ansi) return `${title} ${tag}${who}`;
+  return `${title} ${ansiState(state)}${tag}${ANSI_RESET}${who}`;
+}
+
+export async function BOT_whipProjects(whip: BOTWhip | undefined, opts?: WhipTextOpts): Promise<BOTResult> {
   if (!whip) return noWhip;
   const rows = await whip.listProjects();
   if (!rows.length) return { text: 'No projects on the board.', truncated: false };
-  const { text, truncated } = BOT_cut(rows.map((p: any) => `${p.name ?? p.title} (${p.id ?? p.projectId})`).join('\n'));
+  const line = (p: any) => {
+    const name = `${p.name ?? p.title} (${p.id ?? p.projectId})`;
+    return opts?.ansi ? `\x1b[0;36m${name}${ANSI_RESET}` : name;
+  };
+  const { text, truncated } = BOT_cut(rows.map(line).join('\n'));
   return { text, truncated, total: rows.length };
 }
 
@@ -38,6 +66,7 @@ export async function BOT_whipTasks(
   whip: BOTWhip | undefined,
   projectId: unknown,
   limit?: unknown,
+  opts?: WhipTextOpts,
 ): Promise<BOTResult> {
   if (!whip) return noWhip;
   const pid = String(projectId ?? '').trim().slice(0, 60);
@@ -46,7 +75,7 @@ export async function BOT_whipTasks(
   const rows = await whip.listTasks(pid);
   if (!rows.length) return { text: `No tasks in project ${pid}.`, truncated: false };
   const shown = rows.slice(0, n);
-  const { text, truncated } = BOT_cut(shown.map(taskLine).join('\n') + BOT_more(rows.length, shown.length));
+  const { text, truncated } = BOT_cut(shown.map((t) => taskLine(t, opts?.ansi)).join('\n') + BOT_more(rows.length, shown.length));
   return { text, truncated: truncated || rows.length > shown.length, total: rows.length };
 }
 
@@ -54,6 +83,7 @@ export async function BOT_whipMyTasks(
   whip: BOTWhip | undefined,
   userId: unknown,
   limit?: unknown,
+  opts?: WhipTextOpts,
 ): Promise<BOTResult> {
   if (!whip) return noWhip;
   const uid = String(userId ?? '').trim().slice(0, 60);
@@ -63,18 +93,22 @@ export async function BOT_whipMyTasks(
   const rows: any[] = Array.isArray(mine) ? mine : (mine?.tasks ?? []);
   if (!rows.length) return { text: 'No open tasks for that user.', truncated: false };
   const shown = rows.slice(0, n);
-  const { text, truncated } = BOT_cut(shown.map(taskLine).join('\n') + BOT_more(rows.length, shown.length));
+  const { text, truncated } = BOT_cut(shown.map((t) => taskLine(t, opts?.ansi)).join('\n') + BOT_more(rows.length, shown.length));
   return { text, truncated: truncated || rows.length > shown.length, total: rows.length };
 }
 
-export async function BOT_whipLeaderboard(whip: BOTWhip | undefined, limit?: unknown): Promise<BOTResult> {
+export async function BOT_whipLeaderboard(whip: BOTWhip | undefined, limit?: unknown, opts?: WhipTextOpts): Promise<BOTResult> {
   if (!whip) return noWhip;
   const n = BOT_clampLimit(limit);
   const rows = await whip.leaderboard();
   if (!rows.length) return { text: 'No scores yet.', truncated: false };
   const shown = rows.slice(0, n);
+  const line = (e: any, i: number) => {
+    const s = `${i + 1}. ${e.handle ?? e.username ?? e.userId} - ${e.points ?? e.score ?? 0} pts`;
+    return opts?.ansi ? `\x1b[0;33m${i + 1}.\x1b[0m ${e.handle ?? e.username ?? e.userId} - ${e.points ?? e.score ?? 0} pts` : s;
+  };
   const { text, truncated } = BOT_cut(
-    shown.map((e: any, i: number) => `${i + 1}. ${e.handle ?? e.username ?? e.userId} - ${e.points ?? e.score ?? 0} pts`).join('\n'),
+    shown.map(line).join('\n'),
   );
   return { text, truncated: truncated || rows.length > shown.length, total: rows.length };
 }

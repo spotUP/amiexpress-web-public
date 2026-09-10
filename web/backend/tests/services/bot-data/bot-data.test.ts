@@ -153,6 +153,40 @@ describe('whip readers', () => {
   it('refuses honestly without the service', async () => {
     expect((await BOT_whipProjects(undefined)).text).toMatch(/unreachable/);
   });
+  it('plain lists carry no escape codes (the Discord/API surface)', async () => {
+    expect((await BOT_whipTasks(whip, 'p1')).text).not.toContain('\x1b');
+    expect((await BOT_whipMyTasks(whip, 'u1')).text).not.toContain('\x1b');
+    expect((await BOT_whipLeaderboard(whip)).text).not.toContain('\x1b');
+  });
+  it('ansi lists color state, self-reset, plain bold never', async () => {
+    const states = {
+      listProjects: async () => [{ name: 'Board', id: 'p1' }],
+      listTasks: async () => [
+        { title: 'Open', status: 'todo' },
+        { title: 'Busy', status: 'in-progress' },
+        { title: 'Shipped', status: 'done' },
+        { title: 'Stuck', status: 'blocked' },
+      ],
+      listUserTasks: async () => ({ tasks: [] }),
+      leaderboard: async () => [],
+      achievementsFor: async () => ({}),
+      listParties: async () => [],
+      listUsers: async () => [],
+    };
+    const text = (await BOT_whipTasks(states, 'p1', undefined, { ansi: true })).text;
+    expect(text).toContain('\x1b[0;33m[todo]\x1b[0m');
+    expect(text).toContain('\x1b[0;36m[in-progress]\x1b[0m');
+    expect(text).toContain('\x1b[0;32m[done]\x1b[0m');
+    expect(text).toContain('\x1b[0;31m[blocked]\x1b[0m');
+    expect(text).not.toContain('\x1b[1;');
+    const projects = (await BOT_whipProjects(states, { ansi: true })).text;
+    expect(projects).toContain('\x1b[0;36mBoard (p1)\x1b[0m');
+  });
+  it('a cut never leaves half an escape sequence', async () => {
+    const cut = BOT_cut('\x1b[0;33m[todo]\x1b[0m plenty more text here', 5);
+    expect(cut.text).toBe('');
+    expect(cut.truncated).toBe(true);
+  });
 });
 
 describe('generic door data: allowlist, never per-door branches', () => {

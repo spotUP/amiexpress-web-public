@@ -10,7 +10,7 @@
  */
 process.env.SKIP_SERVER_START = '1';
 
-import { looksLikeGameQuestion, gameCardFor, setGamesFetcher } from '../../../src/handlers/sysop-ai/external/games';
+import { looksLikeGameQuestion, gameCardFor, extractGameTitle, lookupGame, setGamesFetcher } from '../../../src/handlers/sysop-ai/external/games';
 import { resetExternalCache } from '../../../src/handlers/sysop-ai/external/demozoo';
 
 beforeEach(() => { resetExternalCache(); setGamesFetcher(null); });
@@ -41,8 +41,7 @@ describe('looksLikeGameQuestion', () => {
   });
 });
 
-describe('gameCardFor', () => {
-  it('returns RAWG rows as a prompt card', async () => {
+describe('gameCardFor', () => {  it('returns RAWG rows as a prompt card', async () => {
     let fetched = '';
     setGamesFetcher(async (url) => { fetched = url; return RAWG_ROWS; });
     const card = await gameCardFor('who made Turrican?', 'KEY');
@@ -77,5 +76,30 @@ describe('gameCardFor', () => {
   it('never throws into the chat path on a dead net', async () => {
     setGamesFetcher(async () => { throw new Error('net gone'); });
     await expect(gameCardFor('who made Turrican?', 'KEY')).resolves.toBeUndefined();
+  });
+});
+
+describe('extractGameTitle', () => {
+  it.each([
+    ['who made Turrican?', 'Turrican'],
+    ['when was Turrican released?', 'Turrican'],
+    ['tell me about Turrican', 'Turrican'],
+    ['what is the metacritic score of Turrican?', 'Turrican'],
+    ['Turrican', 'Turrican'],
+    ['  Turrican  ', 'Turrican'],
+  ])('strips "%s" to "%s"', (msg, title) => {
+    expect(extractGameTitle(msg)).toBe(title);
+  });
+
+  it('a whole question reaches RAWG as its title', async () => {
+    let searched = '';
+    setGamesFetcher(async (url) => {
+      searched = url;
+      return RAWG_ROWS;
+    });
+    const card = await gameCardFor('who made Turrican?', 'KEY');
+    expect(searched).toContain('search=Turrican');
+    expect(searched).not.toContain('who');
+    expect(card).toContain('Turrican');
   });
 });

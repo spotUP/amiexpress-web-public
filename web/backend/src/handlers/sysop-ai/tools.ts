@@ -392,40 +392,40 @@ export const CALLER_TOOLS: SysopTool[] = [
   },
   {
     name: 'whip_projects',
-    description: 'The WHIP task board\'s projects. Use it for "what projects exist", then whip_tasks for what is in one.',
+    description: 'The WHIP task board\'s projects. Use it for "what projects exist", then whip_tasks for what is in one. Lines carry terminal colors - quote them exactly as returned.',
     parameters: noArgs,
     tier: 'caller',
     async run() {
-      return { content: (await BOT_whipProjects(whipService)).text };
+      return { content: (await BOT_whipProjects(whipService, { ansi: true })).text };
     },
   },
   {
     name: 'whip_tasks',
-    description: 'Tasks in a WHIP project, by project name or id, with state and assignee.',
+    description: 'Tasks in a WHIP project, by project name or id, with state and assignee. Lines carry terminal colors - quote them exactly as returned.',
     parameters: { type: 'object', properties: { project: { type: 'string' } }, required: ['project'], additionalProperties: false },
     tier: 'caller',
     async run(_ctx, args) {
-      return { content: (await BOT_whipTasks(whipService, args.project)).text };
+      return { content: (await BOT_whipTasks(whipService, args.project, undefined, { ansi: true })).text };
     },
   },
   {
     name: 'whip_my_tasks',
-    description: 'The caller\'s own open WHIP tasks.',
+    description: 'The caller\'s own open WHIP tasks. Lines carry terminal colors - quote them exactly as returned.',
     parameters: noArgs,
     tier: 'caller',
     async run(ctx) {
       const id = ctx.session.user?.id;
       if (id === undefined || id === null) return { content: 'No account behind this chat.' };
-      return { content: (await BOT_whipMyTasks(whipService, String(id))).text };
+      return { content: (await BOT_whipMyTasks(whipService, String(id), undefined, { ansi: true })).text };
     },
   },
   {
     name: 'whip_leaderboard',
-    description: 'The WHIP points leaderboard.',
+    description: 'The WHIP points leaderboard. Lines carry terminal colors - quote them exactly as returned.',
     parameters: noArgs,
     tier: 'caller',
     async run() {
-      return { content: (await BOT_whipLeaderboard(whipService)).text };
+      return { content: (await BOT_whipLeaderboard(whipService, undefined, { ansi: true })).text };
     },
   },
   {

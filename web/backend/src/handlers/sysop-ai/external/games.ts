@@ -24,7 +24,8 @@ export function setGamesFetcher(f: ((url: string) => Promise<any>) | null): void
   fetcher = f ?? (async (url) => (await axios.get(url, { timeout: TIMEOUT, headers: { 'User-Agent': UA, Accept: 'application/json' } })).data);
 }
 
-export async function lookupGame(title: string, rawgKey?: string): Promise<string> {  const q = title.trim().slice(0, 80);
+export async function lookupGame(title: string, rawgKey?: string): Promise<string> {
+  const q = extractGameTitle(title);
   if (!q) return 'Which game?';
   return cachedLookup(`game:${rawgKey ? 'rawg' : 'wiki'}:${q.toLowerCase()}`, async () => {
     if (rawgKey) {
@@ -76,6 +77,23 @@ export function looksLikeGameQuestion(message: string): boolean {
 }
 
 const MISS_PREFIXES = ['Nothing known about a game', 'No answer from the net', 'Which game?'];
+
+/**
+ * Title extraction (2026-09-10): the pre-fetch hands over whole
+ * questions ("who made turrican?"), which match no RAWG title and then
+ * 404 Wikipedia too. Strip the question scaffolding down to the likely
+ * title; clean titles pass through unchanged (idempotent - the tool
+ * path calls lookupGame with bare titles already).
+ */
+export function extractGameTitle(message: string): string {
+  let s = message.trim().slice(0, 80).replace(/\?+$/g, '').trim();
+  s = s.replace(/^(who (made|developed|published|created|designed)|when (was|were|did|is)|what (is|are|was|were)|tell me about|tell me|show me|find me|search for|looking for|do you know|have you heard of|i mean)\b\s*/i, '');
+  s = s.replace(/\bmetacritic( score| rating)? of\b\s*/i, '');
+  s = s.replace(/\b(the )?(release date|release|released|launch|game|games|review|reviews|gameplay|remake|sequel)\b\s*$/i, '');
+  s = s.replace(/^(the|a|an)\b\s+/i, '');
+  s = s.replace(/\s+/g, ' ').trim();
+  return s || message.trim().slice(0, 80);
+}
 
 /** RAWG card for the prompt, or undefined when there is nothing worth saying. Never throws. */
 export async function gameCardFor(message: string, rawgKey?: string): Promise<string | undefined> {
